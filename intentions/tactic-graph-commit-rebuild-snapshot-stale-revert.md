@@ -61,7 +61,28 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is the implicit merge-base compare-and-swap the right default for
+      graph-commit's rebuild path, given it trades silent-revert-if-stale for
+      more frequent visible parking (and a --prune against a concurrently edited
+      node always parks)?
+    answer: "(Ruled 2026-08-05, author office-hours sign-off, Ruling 36.) ACCEPT as
+      shipped — the implicit merge-base CAS is the right default, no code
+      change, park cleared. Trading a silent stale-revert for a loud park is the
+      direction .claude/rules/code-style.md already points (clear error over
+      silent fallback), which is the same convention the two Sonnet skeptics
+      cited when they argued this was decidable without the author; the
+      fix-planner was right to leave the call standing, and the call is now
+      made. The --base skip carve-out stays as-is: check_base_freshness has
+      already verified and reconciled those ids, and test-graph-commit.sh case
+      40 together with test-transition-node.sh Case 1 both depend on that
+      carve-out remaining in place, so narrowing it is not a local edit. The
+      always-park --prune branch was considered in the same sitting and accepted
+      rather than narrowed — a deletion has no content to merge, so parking is
+      the only honest outcome. Interlock preserved — this node's Unit 1a is the
+      same one-line fix as tactic-graph-commit-intentions-base-stale-restore's
+      Unit 1, and this node's CAS depends on it: the two land together or not at
+      all."
 tooling_goals: []
 success_signal: null
 attention:
@@ -74,6 +95,7 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
+  tier: 1
 phase: qa
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
@@ -85,7 +107,9 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-graph-commit-rebuild-snapshot-stale-revert
+  - tactic-graph-commit-intentions-base-stale-restore
 office_hours: null
 pace_exempt: false
 rounds: null

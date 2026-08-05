@@ -54,11 +54,94 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
+  tier: 1
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    Parked at an /align-tactics tactic-target round, 2026-08-03. Two independent
+
+    findings block finalizing this tactic's plan today.
+
+
+    (1) Recorded ordering unmet, one leg unverifiable. This tactic's own
+    rationale
+
+    directs it be planned AFTER both tactic-claim-containment-durable-anchor and
+
+    tactic-terminal-declaration-verified-against-node close the two leaks that
+
+    make the underlying claim-freeze mechanism sound ("Two leaks must be closed
+
+    for this fuse to be sound... This tactic should be planned after both.").
+
+    Neither has landed. tactic-claim-containment-durable-anchor is itself
+
+    born-parked (since 2026-07-31) awaiting an author ratification of WHERE the
+
+    durable claim anchor lives (graph field vs. reservation-ledger extension vs.
+
+    no new record) — and that park's own text says the answer determines whether
+
+    condition 10 ("Breaker state never lives outside the graph") binds THIS
+
+    tactic's per-claim evidence anchor or only the tripped-breaker incident
+
+    record. tactic-terminal-declaration-verified-against-node is an unplanned
+
+    draft (phase: null). This session cannot ratify the claim-anchor location
+
+    itself, so the ordering blocker is unverifiable from the graph alone.
+
+
+    (2) Major scope collision, newly discovered this round. This tactic's
+
+    re-scoped (2026-07-29) design says "what remains for this tactic is the
+
+    residual backstop only" — a per-node one-strike fuse parking a node to
+
+    office_hours on reap-without-declaration. That exact mechanism has since
+    been
+
+    designed, built, and merged under a DIFFERENT, independently-filed tactic:
+
+    tactic-phase-terminal-requires-disposition (PR #3004, merged
+
+    2026-07-31T20:15:44Z — terminal_without_disposition_sweep in
+
+    lib-frozen-session-park.sh, wired into dispatch-tick on both cadences,
+
+    now at phase: main-qa). It was filed the same week from a different angle
+
+    (grouped with tactic-denied-command-parks-node and
+
+    tactic-standdown-winner-liveness) with no cross-reference to this tactic. So
+
+    the per-node-fuse half of this tactic's statement is very likely moot, and
+
+    only the systemic-breaker half (correlated-dead-claim quorum tripping a
+
+    born-parked incident tactic gating all selection) remains live scope — but
+
+    rewriting this tactic's own statement/scope on that judgment is an author
+
+    call, since it changes what the tactic is for, not something this session
+
+    should decide unilaterally.
+  since: 2026-08-03
+  recommendation: |-
+    In one /align-strategy or office-hours sitting citing this park: (a) ratify
+    tactic-claim-containment-durable-anchor's durable-claim-anchor location —
+    this decision also settles the systemic breaker's evidence-anchor design,
+    per that park's own cross-reference; (b) confirm the per-node fuse half of
+    this tactic is superseded by tactic-phase-terminal-requires-disposition and
+    re-scope this tactic's statement/body to the systemic-breaker half only (or
+    close it outright if the breaker gets refiled as its own tactic). Then clear
+    this park and re-run /align-tactics tactic-router-failure-fuses to finalize
+    the (now narrower) plan.
+  session_type: requirement-discovery
 pace_exempt: false
 rounds: null
 attributes: {}

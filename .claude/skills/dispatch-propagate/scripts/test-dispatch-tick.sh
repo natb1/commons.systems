@@ -32,6 +32,63 @@ tick_setup() {
   # paused-branch reservation_sweep genuinely runs instead of source-failing.
   cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib-reservation-ledger.sh" "$TMPDIR_TEST/lib-reservation-ledger.sh"
+  # lib-standdown-recheck.sh (Unit 3 wiring) and its own sourced siblings, so
+  # the tick's paused-branch and normal-path standdown_recheck_sweep calls
+  # genuinely run instead of source-failing, matching the lib-claude-agents.sh
+  # / lib-reservation-ledger.sh copies above.
+  cp "$SCRIPT_DIR/lib-standdown-recheck.sh" "$TMPDIR_TEST/lib-standdown-recheck.sh"
+  cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-decision-log.sh" "$TMPDIR_TEST/lib-decision-log.sh"
+  # lib-stale-hold-recheck.sh (tactic-stale-hold-auto-resolve Unit 5 wiring) and
+  # the two of its own sourced siblings not already copied above (lib.sh,
+  # lib-claude-agents.sh, lib-reservation-ledger.sh, and lib-decision-log.sh are
+  # already copied for the sweeps above), so the tick's paused-branch and
+  # normal-path stale_hold_recheck_sweep calls genuinely run instead of
+  # source-failing.
+  cp "$SCRIPT_DIR/lib-stale-hold-recheck.sh" "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+  cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$TMPDIR_TEST/lib-graph-worktree.sh"
+  cp "$SCRIPT_DIR/lib-worktree-residue.sh" "$TMPDIR_TEST/lib-worktree-residue.sh"
+  # Isolate the sweep's repo root and enumerator, mirroring the standdown
+  # sweep's ledger-dir isolation above. DISPATCH_HOLD_RECHECK_REPO_ROOT points at
+  # a scratch dir with an empty intentions/ subdirectory (never the real repo),
+  # and DISPATCH_HOLD_RECHECK_ENUM (a documented test seam — see
+  # lib-stale-hold-recheck.sh's env-override header) replaces the default
+  # `node --import tsx/esm .../list-recheckable-holds.ts` invocation, which would
+  # otherwise fail to resolve the `tsx` package from a bare scratch directory
+  # with no node_modules. The fake enumerator prints no TSV rows and exits 0, so
+  # the REAL stale_hold_recheck_sweep body runs against zero candidates and
+  # simply logs its sweep-complete summary line, which is all these invocation
+  # tests need.
+  export DISPATCH_HOLD_RECHECK_REPO_ROOT="$TMPDIR_TEST/stale-hold-repo"
+  mkdir -p "$DISPATCH_HOLD_RECHECK_REPO_ROOT/intentions"
+  export DISPATCH_HOLD_RECHECK_ENUM="$TMPDIR_TEST/fake-stale-hold-enum"
+  cat > "$DISPATCH_HOLD_RECHECK_ENUM" <<'FAKE'
+#!/usr/bin/env bash
+exit 0
+FAKE
+  chmod +x "$DISPATCH_HOLD_RECHECK_ENUM"
+  # Isolate the sweep's own ledger dir from the host's real
+  # tmp/dispatch-standdown, and give it a scratch repo root so its lazy
+  # `git fetch` / `git show origin/main:...` reads never touch the real repo.
+  # An empty scratch ledger dir means the sweep's re-check loop finds no
+  # markers and simply logs the sweep-complete summary line, which is all these
+  # invocation tests need.
+  export DISPATCH_STANDDOWN_DIR="$TMPDIR_TEST/standdown"
+  mkdir -p "$DISPATCH_STANDDOWN_DIR"
+  # The scratch repo root the comment above promises. Without it the sweep falls
+  # back to resolve_project_root — the developer's REAL checkout — so the moment
+  # a future test here seeds a marker, the pass would `git fetch origin main`
+  # and `git show origin/main:intentions/...` against it.
+  export DISPATCH_STANDDOWN_REPO_ROOT="$TMPDIR_TEST/standdown-repo"
+  mkdir -p "$DISPATCH_STANDDOWN_REPO_ROOT"
+  # Copied (not chmod +x — sourced, not executed) so dispatch-tick's
+  # SCRIPT_DIR-relative `source "$SCRIPT_DIR/lib-frozen-session-park.sh"` calls
+  # resolve inside the copied tmpdir on both cadences (paused branch, normal
+  # path) and the frozen-session sweep genuinely runs instead of source-failing.
+  cp "$SCRIPT_DIR/lib-frozen-session-park.sh" "$TMPDIR_TEST/lib-frozen-session-park.sh"
+  # lib-frozen-session-park.sh also sources lib-decision-log.sh non-fatally at
+  # load time (best-effort decision-log sink); the stand-down block above
+  # already copies it, so a single copy serves both sweeps.
   chmod +x "$TMPDIR_TEST/dispatch-tick"
   # Pin the canonical main worktree so the advisory diagnose-main / jit-reminder
   # spawns get a deterministic --cwd independent of the host repo layout and the
@@ -62,6 +119,38 @@ tick_setup() {
   export DISPATCH_RESERVATION_DIR="$TMPDIR_TEST/reservations"
   mkdir -p "$TMPDIR_TEST/reservations"
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
+  # Isolate every input the frozen-session sweep (lib-frozen-session-park.sh)
+  # reads, mirroring the reservation-ledger isolation above. Same defensive
+  # default: CLAUDE_AGENTS_CMD already points at a non-existent binary, so
+  # claude_agents_list_blocked_workers returns UNKNOWN and the sweep parks
+  # nothing by default — a tick test can never touch or park a real production
+  # node. The repo/projects/park-node/decision-log paths are pointed at scratch
+  # locations regardless, so a test that DOES install a live fake-claude still
+  # cannot reach the host's real graph, transcripts, or park-node.
+  export DISPATCH_FROZEN_SESSION_PROJECTS_ROOT="$TMPDIR_TEST/frozen-projects"
+  mkdir -p "$TMPDIR_TEST/frozen-projects"
+  # The scratch repo must look like a real primary checkout, because the sweep
+  # asserts it: HEAD on `main` (set explicitly — CI has no init.defaultBranch),
+  # and the fake `park-node` at the only path the sweep will execute,
+  # <repo-root>/packages/intentionsutil/scripts/park-node.
+  export DISPATCH_FROZEN_SESSION_REPO_ROOT="$TMPDIR_TEST/frozen-repo"
+  mkdir -p "$TMPDIR_TEST/frozen-repo/intentions" \
+           "$TMPDIR_TEST/frozen-repo/packages/intentionsutil/scripts"
+  git -C "$TMPDIR_TEST/frozen-repo" init -q
+  git -C "$TMPDIR_TEST/frozen-repo" symbolic-ref HEAD refs/heads/main
+  git -C "$TMPDIR_TEST/frozen-repo" config user.email "test@example.com"
+  git -C "$TMPDIR_TEST/frozen-repo" config user.name "Test"
+  export DISPATCH_FROZEN_SESSION_PARK_NODE="$TMPDIR_TEST/frozen-repo/packages/intentionsutil/scripts/park-node"
+  cat > "$DISPATCH_FROZEN_SESSION_PARK_NODE" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/park-node.log"
+echo "park" >> "$TMPDIR_TEST/logs/order.log"
+exit \${TICK_PARK_NODE_RC:-0}
+FAKE
+  chmod +x "$DISPATCH_FROZEN_SESSION_PARK_NODE"
+  export DISPATCH_DECISION_LOG_DIR="$TMPDIR_TEST/decisions"
+  mkdir -p "$TMPDIR_TEST/decisions"
 
   # Fake dispatch-select-tick: echoes any TICK_SEL_PRE passthrough lines, then
   # the test-controlled decision line (TICK_DECISION) as the LAST line. Exits
@@ -131,10 +220,53 @@ tick_teardown() {
   unset TICK_DECISION TICK_SEL_RC TICK_GRAPH_EXEC_RC \
     TICK_SEL_PRE TICK_GRAPH_EXEC_PRE TICK_SPAWN_RESULT DISPATCH_TICK_MAIN_WORKTREE \
     DISPATCH_LOCK_FILE TICK_REFRESH_RC TICK_CONVERGE_RC DISPATCH_PAUSE_FLAG \
-    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH
+    DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_SWEEP_NOW_EPOCH \
+    DISPATCH_STANDDOWN_DIR DISPATCH_STANDDOWN_REPO_ROOT \
+    DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_REPO_ROOT \
+    DISPATCH_FROZEN_SESSION_PARK_NODE \
+    DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
+    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM
+  export DISPATCH_DECISION_LOG_DIR="$DISPATCH_TEST_DECISION_LOG_DIR"
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
+run_tick_stderr() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>&1 1>/dev/null; }
+
+# tick_frozen_add_blocked_candidate <sid> <node-id> — configure the Unit 2 test
+# seams (fake `claude agents` registry, an aged transcript, and an unparked node
+# committed to the scratch repo's origin/main) so the frozen-session sweep finds
+# exactly one aged, parkable candidate. Fixed clock: idle = 2000s, well past the
+# 900s default grace.
+tick_frozen_add_blocked_candidate() {
+  local sid="$1" node="$2"
+  local now=1700000000
+  export DISPATCH_FROZEN_SESSION_NOW_EPOCH="$now"
+
+  cat > "$TMPDIR_TEST/frozen-repo/intentions/$node.md" <<NODE
+---
+id: $node
+kind: tactic
+office_hours: null
+---
+
+Body text.
+NODE
+  git -C "$TMPDIR_TEST/frozen-repo" add -A
+  git -C "$TMPDIR_TEST/frozen-repo" commit -q -m "node $node"
+  git -C "$TMPDIR_TEST/frozen-repo" update-ref refs/remotes/origin/main HEAD
+
+  mkdir -p "$TMPDIR_TEST/frozen-projects/proj-a"
+  printf '{}\n' > "$TMPDIR_TEST/frozen-projects/proj-a/$sid.jsonl"
+  touch -d "@$(( now - 2000 ))" "$TMPDIR_TEST/frozen-projects/proj-a/$sid.jsonl"
+
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+printf '[{"sessionId":"$sid","name":"$node","state":"blocked","status":"busy","cwd":"/tmp/$node"}]'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude"
+}
 
 # --- busy → exit 0, no graph-execute, no spawn-job -----------------------------
 echo "Test: dispatch-tick busy → exit 0, no graph-execute/spawn"
@@ -192,6 +324,27 @@ assert_eq "paused: no spawn-job" "0" \
   "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
 assert_eq "paused: paused-path sweep still reclaimed the dead-session marker" "0" \
   "$([ -f "$DISPATCH_RESERVATION_DIR/910-slug" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-denied-command-parks-node: paused tick still runs the frozen-session
+# sweep -------------------------------------------------------------------------
+# The pause branch is documented as the only autonomous path that never reaches
+# dispatch-select-tick's own sweeps, so it must sweep the frozen-session detector
+# itself (mirroring the reservation-ledger sweep covered above) before its
+# `exit 0`. Configure one aged blocked candidate via the Unit 2 test seams and
+# assert the fake park-node's argv log records the park.
+echo "Test: dispatch-tick paused, one aged blocked candidate → frozen-session sweep parks it, still exits 0 paused"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+tick_frozen_add_blocked_candidate "0aa1-1111" "tactic-frozen-paused"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-frozen: exit 0" "0" "$rc"
+assert_eq "paused-frozen: stdout still announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused-frozen: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused-frozen: park-node invoked exactly once" "1" \
+  "$(grep -cF "tactic-frozen-paused" "$TMPDIR_TEST/logs/park-node.log" 2>/dev/null || echo 0)"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
@@ -690,6 +843,226 @@ out=$(run_tick) && rc=0 || rc=$?
 assert_eq "refresh-failsafe: exit 0 despite probe failure" "0" "$rc"
 assert_eq "refresh-failsafe: tick still ran select after failed refresh" \
   "$(printf 'refresh\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
+tick_teardown
+
+# --- tactic-standdown-winner-liveness Unit 3: standdown_recheck_sweep wiring --
+# Both call sites run the REAL standdown_recheck_sweep (lib-standdown-recheck.sh,
+# copied into TMPDIR_TEST by tick_setup, same idiom as lib-reservation-ledger.sh
+# for the sibling reservation_sweep call) against an empty scratch ledger dir
+# (DISPATCH_STANDDOWN_DIR), so the sweep finds no markers and simply emits its
+# one-line "sweep complete" summary to stderr — sufficient to assert invocation.
+# There is no existing ordering-assertion mechanism for the sibling
+# reservation_sweep call (it has no counterpart on the normal path at all), so
+# per the unit's scope, only invocation is asserted here, not ordering.
+
+echo "Test: dispatch-tick paused branch invokes standdown_recheck_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-standdown: exit 0" "0" "$rc"
+assert_eq "paused-standdown: standdown_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes standdown_recheck_sweep"
+tick_setup
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-standdown: exit 0" "0" "$rc"
+assert_eq "normal-standdown: standdown_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-standdown-recheck.sh fails to load → loud diagnostic, tick still completes ---
+# Replace the copied lib with an unsourceable file (invalid bash syntax) so the
+# tick's `source` fails and `declare -f standdown_recheck_sweep` comes back
+# false on BOTH call sites. Both must log the loud diagnostic and the tick must
+# still complete (exit 0) rather than abort.
+echo "Test: dispatch-tick lib-standdown-recheck.sh load failure → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-standdown-recheck.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "standdown-load-fail: tick still exits 0 (paused branch)" "0" "$rc"
+assert_eq "standdown-load-fail: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "standdown-load-fail: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-standdown-recheck: sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-standdown-recheck.sh load failure on normal path → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-standdown-recheck.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "standdown-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "standdown-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick' && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-stale-hold-auto-resolve Unit 5: stale_hold_recheck_sweep wiring ---
+# Both call sites run the REAL stale_hold_recheck_sweep (lib-stale-hold-recheck.sh,
+# copied into TMPDIR_TEST by tick_setup, same idiom as lib-standdown-recheck.sh
+# above) with its enumerator faked out via DISPATCH_HOLD_RECHECK_ENUM (see
+# tick_setup) to report zero candidates, so the sweep simply emits its one-line
+# "sweep complete" summary to stderr — sufficient to assert invocation. As with
+# the standdown sweep, only invocation is asserted here, not ordering.
+
+echo "Test: dispatch-tick paused branch invokes stale_hold_recheck_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-stale-hold: exit 0" "0" "$rc"
+assert_eq "paused-stale-hold: stale_hold_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes stale_hold_recheck_sweep"
+tick_setup
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-stale-hold: exit 0" "0" "$rc"
+assert_eq "normal-stale-hold: stale_hold_recheck_sweep ran (sweep-complete line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-stale-hold-recheck.sh fails to load → loud diagnostic, tick still completes ---
+# Replace the copied lib with an unsourceable file (invalid bash syntax) so the
+# tick's `source` fails and `declare -f stale_hold_recheck_sweep` comes back
+# false on BOTH call sites. Both must log the loud diagnostic and the tick must
+# still complete (exit 0) rather than abort, and no "sweep complete" line must
+# appear anywhere in that run's stderr.
+echo "Test: dispatch-tick lib-stale-hold-recheck.sh load failure → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "stale-hold-load-fail: tick still exits 0 (paused branch)" "0" "$rc"
+assert_eq "stale-hold-load-fail: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "stale-hold-load-fail: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-stale-hold-recheck: sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-stale-hold-recheck.sh load failure on normal path → loud diagnostic, tick still completes"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-stale-hold-recheck.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "stale-hold-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "stale-hold-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick' && echo 1 || echo 0)"
+assert_eq "stale-hold-load-fail-normal: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'lib-stale-hold-recheck: sweep complete')"
+tick_teardown
+
+# --- tactic-denied-command-parks-node: normal-path frozen-session sweep --------
+# On the normal (non-paused) path the sweep must run AFTER the per-tick agents
+# snapshot capture and BEFORE Step 1's dispatch-select-tick invocation, so that a
+# node it parks this tick is excluded from this tick's own selection. Assert the
+# ordering directly: the fake park-node and the fake select-tick both append to
+# the shared order.log, so "park" must precede "select".
+echo "Test: dispatch-tick normal path — frozen-session sweep runs before select-tick (ordering)"
+tick_setup
+export TICK_DECISION="empty"
+tick_frozen_add_blocked_candidate "0bb2-2222" "tactic-frozen-normal"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "normal-frozen-ordering: exit 0" "0" "$rc"
+assert_eq "normal-frozen-ordering: park-node invoked exactly once" "1" \
+  "$(grep -cF "tactic-frozen-normal" "$TMPDIR_TEST/logs/park-node.log" 2>/dev/null || echo 0)"
+assert_eq "normal-frozen-ordering: park precedes select in order.log" \
+  "$(printf 'refresh\npark\nselect')" "$(cat "$TMPDIR_TEST/logs/order.log")"
+tick_teardown
+
+# --- tactic-denied-command-parks-node: lib-frozen-session-park.sh missing ------
+# A missing/failed-to-load sweep library must never gate the tick: the loud
+# "failed to load" line is printed and the tick still completes its normal
+# routing (select-tick still runs, its decision is still routed).
+echo "Test: dispatch-tick normal path — lib-frozen-session-park.sh absent → loud failure line, tick still completes"
+tick_setup
+rm -f "$TMPDIR_TEST/lib-frozen-session-park.sh"
+export TICK_DECISION="empty"
+err=$(run_tick_stderr) && rc=0 || rc=$?
+assert_eq "lib-absent: exit 0 (empty routes to 0)" "0" "$rc"
+assert_eq "lib-absent: loud failure line printed" "1" \
+  "$(printf '%s' "$err" | grep -cF 'dispatch-tick: lib-frozen-session-park.sh failed to load; frozen-session sweep NOT run this tick')"
+assert_eq "lib-absent: select-tick still ran (tick was not aborted)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-phase-terminal-requires-disposition: terminal-disposition sweep --
+# wiring ------------------------------------------------------------------------
+# terminal_without_disposition_sweep (lib-frozen-session-park.sh, Unit 2) is
+# wired into dispatch-tick on the same two cadences as frozen_session_sweep
+# (paused early-exit, normal pre-selection). claude_agents_list_terminal_workers
+# queries CLAUDE_AGENTS_CMD DIRECTLY (bypassing the tick's ACTIVE snapshot, per
+# its own header note), so a fake `claude` that returns `[]` gives a definite
+# "no terminal workers" and the sweep completes with its own greppable summary
+# line — distinct from frozen_session_sweep's "sweep complete" line
+# ("terminal-disposition sweep complete") — sufficient to assert invocation
+# without needing a real repo/park-node fixture.
+tick_fake_claude_empty_terminal() {
+  cat > "$TMPDIR_TEST/fake-claude-terminal" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude-terminal"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-claude-terminal"
+}
+
+echo "Test: dispatch-tick paused branch invokes terminal_without_disposition_sweep"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+tick_fake_claude_empty_terminal
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-terminal-disposition: exit 0" "0" "$rc"
+assert_eq "paused-terminal-disposition: terminal_without_disposition_sweep ran (summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'terminal-disposition sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick normal path invokes terminal_without_disposition_sweep"
+tick_setup
+tick_fake_claude_empty_terminal
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "normal-terminal-disposition: exit 0" "0" "$rc"
+assert_eq "normal-terminal-disposition: terminal_without_disposition_sweep ran (summary line on stderr)" "1" \
+  "$(printf '%s' "$err" | grep -qF 'terminal-disposition sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+# --- lib-frozen-session-park.sh fails to load → loud diagnostic, tick still ---
+# completes. Replace the copied lib with an unsourceable file (invalid bash
+# syntax) so BOTH `declare -f frozen_session_sweep` and
+# `declare -f terminal_without_disposition_sweep` come back false on both call
+# sites, and assert the terminal-disposition-specific loud line is printed
+# alongside the tick still completing.
+echo "Test: dispatch-tick lib-frozen-session-park.sh load failure → terminal-disposition loud diagnostic, tick still completes (paused)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-frozen-session-park.sh"
+: > "$TMPDIR_TEST/paused"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "terminal-disposition-load-fail-paused: tick still exits 0" "0" "$rc"
+assert_eq "terminal-disposition-load-fail-paused: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick' && echo 1 || echo 0)"
+assert_eq "terminal-disposition-load-fail-paused: no sweep-complete line (sweep never ran)" "0" \
+  "$(printf '%s' "$err" | grep -cF 'terminal-disposition sweep complete')"
+tick_teardown
+
+echo "Test: dispatch-tick lib-frozen-session-park.sh load failure → terminal-disposition loud diagnostic, tick still completes (normal path)"
+tick_setup
+printf 'this is not valid bash ((( \n' > "$TMPDIR_TEST/lib-frozen-session-park.sh"
+export TICK_DECISION="empty"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "terminal-disposition-load-fail-normal: tick still exits 0" "0" "$rc"
+assert_eq "terminal-disposition-load-fail-normal: loud diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick' && echo 1 || echo 0)"
 tick_teardown
 
 # <<< END MOVED <<<

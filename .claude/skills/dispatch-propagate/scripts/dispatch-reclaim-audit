@@ -21,7 +21,13 @@
 # RATE vs CAUSE — the two-source design
 #   RATE (how many, ground truth): read from the reservation sweep's own stderr
 #     lines, retained on the host in the systemd user journal
-#     (`journalctl --user -u dispatch-tick -o short-iso`). The exact lines are:
+#     (`journalctl --user -t dispatch-tick -o short-iso`). The identifier match
+#     (-t, matching SYSLOG_IDENTIFIER) is used instead of the unit match (-u,
+#     matching _SYSTEMD_UNIT) because the ticks that emit reclaim log lines run
+#     either as transient `dispatch-reseed-*.service` units or as children of the
+#     durable heartbeat under `user@1000.service` — none of which have
+#     _SYSTEMD_UNIT=dispatch-tick, so a -u match silently drops them all. The
+#     exact lines are:
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
 #     where <wt> is the worktree basename and the leading field is the event's
@@ -75,7 +81,7 @@
 # WHAT IT SCANS
 #   Sweep log: $DISPATCH_RECLAIM_SWEEP_LOG if set (a file of pre-captured
 #     `-o short-iso` journal text — used by the test fixture); otherwise the live
-#     output of `journalctl --user -u dispatch-tick -o short-iso`, windowed to
+#     output of `journalctl --user -t dispatch-tick -o short-iso`, windowed to
 #     --since. If journalctl is missing or errors (host without systemd, or
 #     sandboxed), the sweep log is reported unavailable and the script continues
 #     with zero counts rather than crashing.
@@ -94,18 +100,42 @@
 #   Env overrides:
 #     DISPATCH_RECLAIM_SWEEP_LOG       path to pre-captured `-o short-iso` text.
 #     DISPATCH_RECLAIM_PROJECTS_ROOT   override the projects root.
+#     DISPATCH_RECLAIM_JOURNALCTL_CMD  override the journalctl command (test stub).
 #
 # BEHAVIOR CONTRACT
 #   - The window filter uses an explicit timestamp computed from `date -d`. The
 #     relative `find -newermt '7 days ago'` form is BROKEN in this environment
 #     (matches 0 files), so it is never used.
 #   - Missing journalctl / empty-or-absent projects root / unparseable jsonl →
-#     clear stderr note + clean continue, never a crash
+#     clear stderr note, the FULL report still printed (never a crash, never a
+#     suppressed report), AND a non-zero exit status when the sweep counts are
+#     not trustworthy — so "could not measure" is never read as "zero reclaims"
 #     (.claude/rules/code-style.md: clear errors over defensive fallbacks).
+#   - Sweep trustworthiness is carried by two explicit status sentinels, never a
+#     boolean silently coerced to a healthy state (same shape as
+#     dispatch-graph-main-red-sync's UNKNOWN sentinel):
+#       SWEEP_STATUS     ok | unavailable
+#       SWEEP_CROSSCHECK ok | mismatch | inconsistent | unavailable | skipped
+#     On the live-journal path the read is cross-checked against a SECOND,
+#     identifier-UNfiltered `--grep` probe over the SAME CLOSED window (both
+#     probes are bounded `--since`/`--until`, so neither can see records the
+#     other could not). If the journal holds more reclaim lines than the
+#     `-t dispatch-tick` filter matched, the filter is undercounting and the
+#     rate is only a LOWER BOUND (`mismatch`). The unfiltered probe is a strict
+#     superset of the filtered read, so the reverse (journal < filtered) is a
+#     contradiction between the two probes: it is graded `inconsistent`, never
+#     `ok` — an inequality in either direction means the cross-check established
+#     nothing.
 #
 # EXIT CODES
 #   0  ok
 #   2  usage error (bad/unknown arg, non-integer --days, no GNU date)
+#   3  sweep counts are not trustworthy (SWEEP_STATUS != ok or
+#      SWEEP_CROSSCHECK == mismatch) — the report was still emitted in full
+#      `inconsistent` and `unavailable` do NOT set 3: like a `--grep`-less
+#      journalctl, they say the cross-check could not establish anything, which
+#      is not itself evidence the `-t` counts undercount. Both print their own
+#      distinct stderr warning and report NOTE.
 set -euo pipefail
 
 # Fail fast if GNU date is not available (BSD/macOS date uses a different syntax).
@@ -117,6 +147,7 @@ fi
 DAYS=7
 JSON_OUT=0
 PROJECTS_ROOT="${DISPATCH_RECLAIM_PROJECTS_ROOT:-$HOME/.claude/projects}"
+JOURNALCTL="${DISPATCH_RECLAIM_JOURNALCTL_CMD:-journalctl}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -157,37 +188,100 @@ trap 'rm -rf "$TMP"' EXIT
 # The leading field of each line is the event ISO timestamp (-o short-iso).
 # ---------------------------------------------------------------------------
 SWEEP_RAW="$TMP/sweep.txt"
-SWEEP_AVAILABLE=1
+# Status sentinels — never a boolean silently coerced to a healthy state.
+#   SWEEP_STATUS     ok | unavailable
+#   SWEEP_CROSSCHECK ok | mismatch | inconsistent | unavailable | skipped
+SWEEP_STATUS=ok
+SWEEP_CROSSCHECK=skipped
 SWEEP_SOURCE=""
+# Cross-check counts (meaningful only when SWEEP_CROSSCHECK == mismatch).
+CROSSCHECK_JOURNAL_LINES=0
+CROSSCHECK_FILTERED_LINES=0
+
+# The ALL-REASONS reclaim pattern. The cross-check must compare the FULL reclaim
+# population, not the two reason-specific patterns this audit buckets: the ledger
+# also emits spawn-handoff-expired and <origin>-ttl-expired reclaims, so a
+# reason-specific comparison against an unfiltered journal probe would false-fire
+# forever.
+ALL_RECLAIM_RE='lib-reservation-ledger: reclaimed reservation '
 
 if [[ -n "${DISPATCH_RECLAIM_SWEEP_LOG:-}" ]]; then
   SWEEP_SOURCE="$DISPATCH_RECLAIM_SWEEP_LOG"
+  # A pre-captured fixture file has no live journal behind it to cross-check
+  # against.
+  SWEEP_CROSSCHECK=skipped
   if [[ -r "$DISPATCH_RECLAIM_SWEEP_LOG" ]]; then
     cat -- "$DISPATCH_RECLAIM_SWEEP_LOG" >"$SWEEP_RAW" 2>/dev/null || : >"$SWEEP_RAW"
   else
     echo "dispatch-reclaim-audit: sweep log '$DISPATCH_RECLAIM_SWEEP_LOG' not readable; continuing with zero sweep counts" >&2
-    SWEEP_AVAILABLE=0
+    SWEEP_STATUS=unavailable
     : >"$SWEEP_RAW"
   fi
 else
-  SWEEP_SOURCE="journalctl --user -u dispatch-tick -o short-iso"
-  if command -v journalctl >/dev/null 2>&1; then
+  SWEEP_SOURCE="journalctl --user -t dispatch-tick -o short-iso"
+  if command -v "$JOURNALCTL" >/dev/null 2>&1; then
     # Capture explicitly so a non-zero exit (no systemd, sandboxed) cannot kill
     # the script under `set -e`. -o short-iso puts a parseable ISO timestamp at
-    # the start of each line. Window to --since so the denominator matches the
-    # transcript window.
-    if journalctl --user -u dispatch-tick -o short-iso --no-pager --since "$SINCE" >"$SWEEP_RAW" 2>/dev/null; then
-      :
+    # the start of each line. Window to the CLOSED [--since .. --until] interval
+    # so the denominator matches the transcript window AND matches, exactly, the
+    # window the cross-check probe below scans: an open-ended read would end at
+    # its own invocation instant, and the ~0.1s gap between the two probes would
+    # manufacture a false `mismatch` whenever a reclaim landed in that gap.
+    if "$JOURNALCTL" --user -t dispatch-tick -o short-iso --no-pager \
+         --since "$SINCE" --until "$UNTIL" >"$SWEEP_RAW" 2>/dev/null; then
+      # CROSS-CHECK — a SECOND probe over the same closed window with NO
+      # identifier filter at all. If the journal holds more reclaim lines than
+      # the `-t dispatch-tick` filter matched, the filter is undercounting and
+      # the rate below is a lower bound, not a measurement. This is the direct
+      # guard against the class of bug where the filter flag silently drops
+      # emitters. The --grep pre-filter uses the same ALL_RECLAIM_RE constant as
+      # both authoritative `grep -c` counts below, so the two sides of the
+      # comparison cannot drift apart.
+      CROSSCHECK_RAW="$TMP/crosscheck.txt"
+      if "$JOURNALCTL" --user --no-pager -o cat --since "$SINCE" --until "$UNTIL" \
+           --grep "$ALL_RECLAIM_RE" >"$CROSSCHECK_RAW" 2>/dev/null; then
+        CROSSCHECK_JOURNAL_LINES=$(grep -cE "$ALL_RECLAIM_RE" "$CROSSCHECK_RAW" || true)
+        CROSSCHECK_FILTERED_LINES=$(grep -cE "$ALL_RECLAIM_RE" "$SWEEP_RAW" || true)
+        CROSSCHECK_JOURNAL_LINES=${CROSSCHECK_JOURNAL_LINES:-0}
+        CROSSCHECK_FILTERED_LINES=${CROSSCHECK_FILTERED_LINES:-0}
+        if (( CROSSCHECK_JOURNAL_LINES > CROSSCHECK_FILTERED_LINES )); then
+          SWEEP_CROSSCHECK=mismatch
+          echo "dispatch-reclaim-audit: sweep filter UNDERCOUNT — the journal holds $CROSSCHECK_JOURNAL_LINES reclaim lines in this window but the -t dispatch-tick filter matched only $CROSSCHECK_FILTERED_LINES; rate counts are a LOWER BOUND" >&2
+        elif (( CROSSCHECK_JOURNAL_LINES < CROSSCHECK_FILTERED_LINES )); then
+          # The unfiltered probe is a strict superset of the filtered read, so it
+          # can never legitimately see FEWER lines. The two probes contradict
+          # each other (journal rotation between them, or a broken journalctl),
+          # which means the cross-check established nothing — grading it `ok`
+          # would be exactly the silent coercion to a healthy state this sentinel
+          # exists to prevent.
+          SWEEP_CROSSCHECK=inconsistent
+          echo "dispatch-reclaim-audit: sweep cross-check INCONSISTENT — the unfiltered probe returned $CROSSCHECK_JOURNAL_LINES reclaim lines but the -t dispatch-tick filter matched $CROSSCHECK_FILTERED_LINES over the same window; the probes contradict each other, so no undercount check was established" >&2
+        else
+          SWEEP_CROSSCHECK=ok
+        fi
+      else
+        # e.g. a journalctl too old for --grep / built without PCRE. NOT ok — an
+        # undercount would go undetected.
+        SWEEP_CROSSCHECK=unavailable
+        echo "dispatch-reclaim-audit: unfiltered --grep cross-check probe failed; an undercounting identifier filter would NOT have been detected" >&2
+      fi
     else
-      echo "dispatch-reclaim-audit: journalctl --user -u dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
-      SWEEP_AVAILABLE=0
+      echo "dispatch-reclaim-audit: journalctl --user -t dispatch-tick unavailable (no systemd or sandboxed); continuing with zero sweep counts" >&2
+      SWEEP_STATUS=unavailable
       : >"$SWEEP_RAW"
     fi
   else
     echo "dispatch-reclaim-audit: journalctl not found; continuing with zero sweep counts" >&2
-    SWEEP_AVAILABLE=0
+    SWEEP_STATUS=unavailable
     : >"$SWEEP_RAW"
   fi
+fi
+
+# Trustworthiness of the sweep counts drives the exit code (0 ok / 3 untrusted).
+# The full report is ALWAYS emitted first; only the status differs.
+EXIT_CODE=0
+if [[ "$SWEEP_STATUS" != ok || "$SWEEP_CROSSCHECK" == mismatch ]]; then
+  EXIT_CODE=3
 fi
 
 # Event counts for the RATE (count every matching line).
@@ -371,7 +465,10 @@ GRP_FALSELIVE=${BUCKET[alive-across]}
 if (( JSON_OUT )); then
   jq -n \
     --argjson days "$DAYS" --arg since "$SINCE" --arg until "$UNTIL" \
-    --arg sweep_source "$SWEEP_SOURCE" --argjson sweep_available "$SWEEP_AVAILABLE" \
+    --arg sweep_source "$SWEEP_SOURCE" \
+    --arg sweep_status "$SWEEP_STATUS" --arg sweep_crosscheck "$SWEEP_CROSSCHECK" \
+    --argjson crosscheck_journal_lines "$CROSSCHECK_JOURNAL_LINES" \
+    --argjson crosscheck_filtered_lines "$CROSSCHECK_FILTERED_LINES" \
     --argjson dead_events "$DEAD_EVENTS" --argjson redundant_events "$REDUNDANT_EVENTS" \
     --argjson dead_distinct "$DEAD_DISTINCT" \
     --argjson transcripts_scanned "$TRANSCRIPTS_SCANNED" \
@@ -387,7 +484,16 @@ if (( JSON_OUT )); then
     '{
       window: {days:$days, since:$since, until:$until},
       sweep: {
-        source: $sweep_source, available: ($sweep_available==1),
+        source: $sweep_source,
+        status: $sweep_status,
+        crosscheck: $sweep_crosscheck,
+        # Retained for callers reading the pre-sentinel key; derived from status.
+        available: ($sweep_status == "ok"),
+        # Always emitted; meaningful only when crosscheck == "mismatch" or
+        # "inconsistent" (0/0 otherwise, i.e. when the unfiltered probe did not
+        # run).
+        crosscheck_journal_lines: $crosscheck_journal_lines,
+        crosscheck_filtered_lines: $crosscheck_filtered_lines,
         dead_session_stranded_events: $dead_events,
         live_worker_redundant_events: $redundant_events,
         dead_session_stranded_distinct_worktrees: $dead_distinct
@@ -408,7 +514,8 @@ if (( JSON_OUT )); then
         "unclassified-no-timestamp": $unclassified
       }
     }'
-  exit 0
+  # Full JSON document emitted above; the status only colors the exit code.
+  exit "$EXIT_CODE"
 fi
 
 # --- human-readable report ---
@@ -425,8 +532,19 @@ echo
 
 echo "--- RECLAIM RATE (sweep journal ground truth) ---"
 printf 'source: %s\n' "$SWEEP_SOURCE"
-if (( SWEEP_AVAILABLE == 0 )); then
+if [[ "$SWEEP_STATUS" != ok ]]; then
   echo "NOTE: sweep log unavailable — rate counts are zero (not measured)."
+fi
+if [[ "$SWEEP_CROSSCHECK" == mismatch ]]; then
+  printf 'NOTE: sweep filter UNDERCOUNT — journal holds %d reclaim lines in this window, the identifier filter matched %d. Rate counts below are a LOWER BOUND, not a measurement.\n' \
+    "$CROSSCHECK_JOURNAL_LINES" "$CROSSCHECK_FILTERED_LINES"
+fi
+if [[ "$SWEEP_CROSSCHECK" == inconsistent ]]; then
+  printf 'NOTE: sweep filter cross-check INCONSISTENT — the unfiltered probe returned %d reclaim lines but the identifier filter matched %d over the same window. The probes contradict each other, so no undercount check was established.\n' \
+    "$CROSSCHECK_JOURNAL_LINES" "$CROSSCHECK_FILTERED_LINES"
+fi
+if [[ "$SWEEP_CROSSCHECK" == unavailable ]]; then
+  echo "NOTE: sweep filter cross-check could not run — an undercounting identifier filter would NOT have been detected here."
 fi
 printf '  dead-session-stranded reclaims (events) ..... %d\n' "$DEAD_EVENTS"
 printf '  live-worker-redundant reclaims (events) ..... %d\n' "$REDUNDANT_EVENTS"
@@ -475,4 +593,5 @@ echo "    Reclaim lines whose timestamp would not parse — counted for the rate
 echo "    reported here, never dropped."
 echo
 
-exit 0
+# Full report printed above; the status only colors the exit code.
+exit "$EXIT_CODE"

@@ -20,8 +20,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-demo-saas-scaffold
+  pr: 3039
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-04
+    attempt: 2
+    pushed_sha: da18fb8ad7f98e9e517912725995c44dd27387f2
+  completion: null
 validates: []
 blocked_by:
   - tactic-demo-saas-provision

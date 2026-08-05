@@ -143,11 +143,16 @@ trap 'rc=$?; [[ -n "$TMPDIR_HOLD" ]] && rm -rf "$TMPDIR_HOLD"; [[ "$RESTORE_ON_F
 # rule the selector applies): that is how a conflict hold this sweep already
 # landed stops it from re-holding the same conflict on every subsequent tick —
 # the hold stays open until /dispatch-conflict resolves it.
+#
+# Enumeration is STRICT (`listNodesStrict`): `blockersComplete` reads a
+# `blocked_by` id ABSENT from `byId` as COMPLETE, so under the tolerant reader a
+# corrupt blocker file would silently satisfy the open-blocker gate above and
+# let this sweep re-hold a node whose conflict hold is still open.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
   const { REVIEWED_MARKER } = await import("./packages/intentionsutil/src/transitions.js");
   const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
-  const nodes = listNodes("./intentions");
+  const nodes = listNodesStrict("./intentions");
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const n of nodes) {
     if (n.kind !== "tactic") continue;

@@ -35,8 +35,21 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-provision-exit11-worktree-residue
+  pr: 2992
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-07-31T03:45:50Z
+    mergeCommitSha: 78d576ec8dfa756a9e9882dc636a01775c086079
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -694,3 +707,28 @@ Manual checks, outside the verify block:
   be denied by the permission classifier. Complete every unit, leave the branch
   staged, and route to the office-hours self-modification drain rather than
   reshaping the change to dodge the denial.
+
+## needs-main residue
+
+Filed by `/qa-fix` on PR #2992. All items below were classified `needs-main`
+by the Step 3.5 disposition Workflow (planned deferrals — non-assertable at
+merge time, no Opus-fixable defect). Drained after `review → main-qa` fires
+post-merge.
+
+- **id**: 13
+  **title**: Deviation from node's Verification section (new test-file host) is sound
+  **url_path**: n/a
+  **expected_outcome**: A human confirms the deviation improves coverage rather than routing around the plan, and that the sibling node remains implementable against the new host.
+  **finding**: planned-deferral — the PR body flags this as a deliberate plan deviation with rationale in the new file's header; accepting or rejecting a scope deviation is a human call, not assertable by any command. The plan's own Verification section and the sibling node `intentions/tactic-provision-worktree-script-tests.md` both originally named `test-dispatch-scripts.sh` as the target; the PR instead created a purpose-built `test-provision-node-worktree.sh` and repointed the sibling node's `statement` to match (confirmed: the sibling's frontmatter statement now names `test-provision-node-worktree.sh`).
+
+- **id**: 14
+  **title**: Deliberate incompleteness of graph-commit rebase backstop (SIGKILL gap)
+  **url_path**: n/a
+  **expected_outcome**: A human accepts the layered defense (provision-side guard primary, graph-commit trap secondary) as adequate, or decides a stronger backstop is warranted.
+  **finding**: planned-deferral — the PR explicitly ships this as incomplete by design (a SIGKILL fires no trap at all, so `graph-commit`'s `cleanup()` rebase-abort backstop cannot fire); whether the residual SIGKILL window is acceptable is a risk judgment, not a machine-checkable outcome. Unit 1's `provision-node-worktree` precondition guard (confirmed passing) is the primary defense; this is a secondary, best-effort backstop only.
+
+- **id**: 15
+  **title**: Self-mod note: `.claude/skills/**` commit landed without anticipated denial
+  **url_path**: n/a
+  **expected_outcome**: A human confirms this is a benign stale assumption in the node text rather than a signal that the commits bypassed an intended control.
+  **finding**: planned-deferral — routing implications of a self-modifying tactic are an operator judgment call about the dispatch process, not verifiable from the diff. The PR body's own "Self-modification note" states the commits landed normally via script-first `commit-merge-push`, with no denial encountered, contrary to the node's own "Notes for the implementer" anticipating a permission-classifier denial.

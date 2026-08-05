@@ -38,12 +38,51 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: implement
-execution: null
+  tier: 1
+phase: main-qa
+execution:
+  branch: tactic-attention-tier-ranking
+  pr: 2997
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-01T17:46:53Z
+    mergeCommitSha: 7876d5f91041fd806e7fea4084f26727c21cb763
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
-pace_exempt: false
+office_hours:
+  reason: Item 11 asks a human to confirm the strategy-graph-native-dispatch
+    soft-freeze blast radius is proportionate and intended -- a subjective
+    scope/product judgment call, not something any tool can decide; the finding
+    text itself says so explicitly.
+  since: 2026-08-03
+  recommendation: "Machine research already done: ran 'npx tsx
+    packages/intentionsutil/scripts/select-targets.ts' (sandbox-off) against the
+    live 400+ node store and filtered its emitted freeze events to
+    strategy-graph-native-dispatch. Result: currently ZERO open tactics carry a
+    stale strategy_fingerprint stamp against this strategy, so the observed
+    blast radius right now is zero re-surfaced tactics, not the dozens one might
+    assume from the plan prose. (163 tactics serve this strategy total, 123 of
+    them open by phase, but none of the open ones hold a strategy_fingerprint
+    map entry for this strategy id predating the 2026-07-31
+    attributes.conditions amendment -- most never got a per-strategy stamp at
+    all.) The graph-wide freeze mechanism itself is confirmed live and working:
+    it correctly reported 5 unrelated freeze events on other strategies
+    (strategy-autonomous-execution x3, strategy-explicit-intent x1,
+    strategy-reversible-institution x1) in the same run. Ask: given the
+    currently-measured blast radius is zero, confirm this (rather than the
+    larger hypothetical set) is the intended/acceptable outcome -- note the
+    count is a live snapshot and will grow as more tactics serving
+    strategy-graph-native-dispatch get planned/stamped over time, so re-check if
+    the concern is about future growth rather than the current state."
+  session_type: other
+pace_exempt: true
 rounds: null
 attributes: {}
 ---
@@ -684,3 +723,63 @@ sum across tier namespaces without filtering — is the resolution of a question
 the 2026-07-21 clarification explicitly left open. Flag it in the PR body as an
 author-reviewable decision, with the rival (filter to same-namespace sources) and
 the reason for divergence, so the author can overturn it cheaply if they disagree.
+
+## Author ruling 2026-07-31 — design decision (b): FILTER to same-tier-namespace
+
+The office-hours park is cleared. Design decision (b) — whether authored
+attention claims inherited down `parent`/`serves` edges from ancestors whose
+boost was authored in a *different* tier namespace keep summing unfiltered, or
+are filtered to same-tier-namespace sources before summing — is ruled by the
+author as **(B): filter to same-tier-namespace sources.**
+
+**Philosophy on record: tier is an isolation boundary.** Authored authority does
+not flow across a tier namespace; tier does not merely order within a shared
+global pool of authored claims. Any future question about cross-tier attention
+flow resolves against this statement.
+
+**Why B rather than ratifying the shipped A.** Both were measured safe — QA found
+zero tier-inversions across 186 real candidates, and structurally none is
+possible, since tier inherits down the same edges and is max-based, so a
+receiver's effective tier is always at least every source's and a tier-1-scale
+number can only reorder nodes already inside the same higher tier. The residual
+risk under A is intra-tier miscalibration, not tier inversion. So this is a
+consistency call, not a risk call, and consistency points at B:
+
+- The pathology that motivated this node in the first place was an **authored
+  term summing over distinct sources** — the fingerprint-custody cluster
+  compounding at a `blocked_by` sink, which together with a large authored boost
+  produced the attention saturation that stalled the pipeline.
+- This node already converts blocking lift from **sum to max** for exactly that
+  reason. Leaving `parent`/`serves` inheritance summing unfiltered would keep one
+  unfiltered summation path alive inside the very change that exists to remove
+  them, and would leave the door open to the same compounding reappearing along a
+  different edge set.
+- An isolation boundary is also the cheaper invariant to reason about later: it
+  can be stated in one sentence and checked locally, whereas "authored authority
+  flows globally, tier only orders" requires simulating the whole graph to
+  predict any single node's rank.
+
+**Implementation.** One place to edit, in the compose step of `resolveAttention`
+— the sum loop at `packages/intentionsutil/src/attention.ts:507-511`. Filter
+contributing authored claims to same-tier-namespace sources before summing.
+
+**This is a code change, so the park clearing routes the node back through the
+fix lane, not straight to review.** Re-QA must re-run the tier-inversion sweep
+over the live store and confirm it still reports zero, and must additionally
+confirm that at least one node whose rank changes under B changes in the
+predicted direction — a re-run that reports "no change anywhere" would mean the
+filter is not actually engaging.
+
+## needs-main residue
+
+QA pass (attempt 2, PR #2997) triaged one item as `needs-human-judgment` with a
+`planned-deferral` flag; the Step 3.5 disposition Workflow routed it to class
+`needs-main` (a planned deferral is non-assertable at merge time by definition,
+so it is not opus-fixable now and is deferred to post-merge verification rather
+than an immediate office-hours escalation).
+
+- **id**: 11
+- **title**: strategy-graph-native-dispatch soft-freeze of open child tactics is the intended blast radius, not an accident
+- **url_path**: current
+- **expected_outcome**: A human confirms the soft-freeze scope (the open child tactics of `strategy-graph-native-dispatch` that re-surface for `align-tactics` re-evaluation due to this tactic's amended `attributes.conditions` bullet) is proportionate and intended, not an accidental over-broad blast radius.
+- **finding**: Design/scope judgment call, not machine-verifiable: amending the strategy's `attributes.conditions` bullet intentionally changes its substance fingerprint (`strategyFingerprint` hashes `attributes.conditions`) and soft-freezes every open child tactic serving `strategy-graph-native-dispatch` for `align-tactics` re-evaluation. This PR's body asserts the freeze is designed/intended behavior (a necessary consequence of any condition edit), but which and how many tactics get swept in, and whether that fleet cost is proportionate, is an author judgment call to make once the freeze is observable post-merge, not something a script can decide at QA time.

@@ -42,7 +42,7 @@ rl_teardown() {
   RL_FAKE=""
   unset DISPATCH_RESERVATION_DIR CLAUDE_AGENTS_CMD DISPATCH_RESERVATION_NOW \
     DISPATCH_RESERVATION_SWEEP_NOW_EPOCH DISPATCH_RESERVATION_BOOT_GRACE_S \
-    DISPATCH_RESERVATION_STANDALONE_TTL_S
+    DISPATCH_RESERVATION_STANDALONE_TTL_S DISPATCH_RESERVATION_HANDOFF_TTL_S
 }
 
 # rl_write_fake_claude <json-array> — install a fake `claude` that prints the
@@ -253,6 +253,39 @@ else
 fi
 rl_teardown
 
+# --- Test 5e: the TTL also covers `origin=office-hours` (the drain claim) -----
+# tactic-office-hours-drain-claim: the `/office-hours <node-id>` graph lane
+# stamps its dedup claim `origin=office-hours`. Its reserving session is a
+# long-lived HUMAN review session that is usually NOT named the node id, so
+# rules (a) and (c) never fire and the marker would be immortal — and every
+# outstanding marker is subtracted from the dispatch fan-out budget
+# (`effective_live = busy_workers + RESV`), so a handful of open reviews would
+# pin LIVE_COUNT at the ceiling and stall the fleet. Rule (c-ttl) must treat
+# `office-hours` exactly like `standalone`/`explicit`. Same fixture shape as 5d.
+echo "Test: reservation_sweep TTL-reclaims an aged origin=office-hours marker even though its reserving session is still live"
+rl_setup
+reservation_write "tactic-oh-aged" "tactic-oh-aged" "live-sess" "office-hours"
+reservation_write "tactic-oh-young" "tactic-oh-young" "live-sess" "office-hours"
+rl_write_fake_claude '[{"sessionId":"live-sess","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_STANDALONE_TTL_S=600
+# Inside the TTL first: a just-issued drain claim is in-flight and must be KEPT.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 599))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-office-hours-ttl-young: young office-hours marker kept" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-oh-young" ] && echo 1 || echo 0)"
+# Past the TTL: reclaimed despite the reserving session still being live.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 601))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-office-hours-ttl: aged office-hours marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'office-hours-ttl-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-office-hours-ttl: note mentions office-hours-ttl-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-office-hours-ttl: note mentions office-hours-ttl-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
 # --- Test 6: sweep reclaims NOTHING when the daemon is UNKNOWN ----------------
 
 echo "Test: reservation_sweep reclaims nothing (fail safe) when the daemon is UNKNOWN"
@@ -265,6 +298,40 @@ if reservation_sweep 2>/dev/null; then rc=0; else rc=$?; fi
 cnt=$(reservation_count)
 assert_eq "rl-sweep-unknown: returns 0 (fail safe)" "0" "$rc"
 assert_eq "rl-sweep-unknown: marker survives (count unchanged)" "1" "$cnt"
+rl_teardown
+
+# --- Test 6b: sweep reclaims NOTHING on an uncorroborated empty read ---------
+# (tactic-graph-router-live-worker-read-robust) — distinct from Test 6's
+# missing-binary UNKNOWN: here `claude agents --json` exits 0 and prints
+# exactly `[]`, the payload a blocked/sandboxed read is indistinguishable from
+# a genuine empty registry. claude_agents_list_all (lib-claude-agents.sh) only
+# trusts that `[]` when a `claude daemon` process corroborates it; with the
+# probe unreachable it must fold to UNKNOWN (return 1), and reservation_sweep's
+# rule (c) branch must therefore reclaim nothing — the outstanding marker must
+# NOT collapse alongside a (falsely) zero busy-worker count.
+
+echo "Test: reservation_sweep reclaims nothing on an uncorroborated empty registry read"
+rl_setup
+reservation_write "945-slug" "945" "dead-sess"
+rl_write_fake_claude '[]'
+# rl_setup/rl_write_fake_claude set no default corroboration probe stub in this
+# file — point it at an explicit unreachable stub so this ambiguous-`[]` case
+# is deterministic rather than depending on whether the HOST happens to be
+# running a `claude daemon` process.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$RL_DIR/fake-pgrep-unreachable"
+chmod +x "$RL_DIR/fake-pgrep-unreachable"
+CLAUDE_AGENTS_PGREP_CMD="$RL_DIR/fake-pgrep-unreachable"
+err=$(reservation_sweep 2>&1 1>/dev/null)
+cnt=$(reservation_count)
+unset CLAUDE_AGENTS_PGREP_CMD
+assert_eq "rl-sweep-uncorroborated-empty: marker survives (count unchanged)" "1" "$cnt"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'daemon unqueryable; reclaiming nothing'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-uncorroborated-empty: stderr reports the daemon-unqueryable fail-safe path"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-uncorroborated-empty: stderr reports the daemon-unqueryable fail-safe path"
+  echo "    stderr: $err"
+fi
 rl_teardown
 
 # --- Test 7: sweep is a no-op on an empty/absent ledger ----------------------
@@ -411,6 +478,138 @@ else
 fi
 rl_teardown
 
+# --- Test D: reservation_mark_spawned re-stamps the claim as origin=spawned ----
+# The spawn handoff: dispatch-graph-execute calls this INSTEAD of
+# reservation_clear on a successful kick, so the claim stays in force until the
+# worker registers. The existing session=/issue= values are preserved and the
+# timestamp is refreshed to spawn time.
+# The two DISPATCH_RESERVATION_NOW values are DISTINCT on purpose: the refresh is
+# load-bearing (selection→spawn includes provision-node-worktree's fetch/
+# worktree-add and can take minutes, so carrying the selection stamp forward
+# could hand back an already-expired handoff). Pinning both writes to one value
+# would let a regression that preserved the ORIGINAL stamp pass this assertion.
+echo "Test: reservation_mark_spawned re-stamps an existing marker as origin=spawned, preserving session/issue and refreshing the timestamp"
+rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # selection time
+reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time, 10min later
+if reservation_mark_spawned "tactic-x"; then rc=0; else rc=$?; fi
+assert_eq "rl-mark-spawned-content: exits 0" "0" "$rc"
+assert_eq "rl-mark-spawned-content: marker is the 4 documented lines with origin=spawned and the SPAWN-time stamp" \
+  "$(printf 'session=headless:abc\nissue=tactic-x\norigin=spawned\ntimestamp=2026-01-01T00:00:00Z')" \
+  "$(cat "$DISPATCH_RESERVATION_DIR/tactic-x")"
+rl_teardown
+
+# --- Test D2: the refreshed stamp is what the sweep's handoff TTL measures -----
+# End-to-end guard for the refresh: a marker whose ORIGINAL (selection) stamp is
+# older than the handoff TTL, but whose spawn re-stamp is fresh, must SURVIVE the
+# sweep. A regression that carried the selection stamp forward would hand back an
+# already-expired handoff and the marker would be reclaimed here.
+echo "Test: an origin=spawned marker whose ORIGINAL stamp predates the handoff TTL survives the sweep on its refreshed stamp"
+rl_setup
+export DISPATCH_RESERVATION_NOW="2025-12-31T23:50:00Z"   # 600s before spawn time
+reservation_write "tactic-x" "tactic-x" "headless:abc"
+export DISPATCH_RESERVATION_NOW="2026-01-01T00:00:00Z"   # spawn time (epoch 1767225600)
+reservation_mark_spawned "tactic-x"
+# Neither the reserving session nor a worker named tactic-x is live.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+# 90s past SPAWN time — well inside the 300s handoff TTL, but 690s past the
+# selection stamp, i.e. past it had the refresh not happened.
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+reservation_sweep 2>/dev/null
+assert_eq "rl-mark-spawned-refresh: handoff measured from the SPAWN stamp, marker kept (count 1)" "1" \
+  "$(reservation_count)"
+rl_teardown
+
+# --- Test E: reservation_mark_spawned creates a marker when none exists --------
+# A caller that reached spawn without a ledger entry must still get covered, and
+# the synthesized session= must be NON-EMPTY: reservation_write rejects an empty
+# session id, and an empty session= would land the marker on sweep rule (b),
+# which KEEPS it forever (an immortal slot).
+echo "Test: reservation_mark_spawned creates a covering marker with a non-empty session when none exists"
+rl_setup
+if reservation_mark_spawned "tactic-y"; then rc=0; else rc=$?; fi
+assert_eq "rl-mark-spawned-absent: exits 0" "0" "$rc"
+assert_eq "rl-mark-spawned-absent: marker created" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-y" ] && echo 1 || echo 0)"
+assert_eq "rl-mark-spawned-absent: origin=spawned stamped" "1" \
+  "$(grep -qx 'origin=spawned' "$DISPATCH_RESERVATION_DIR/tactic-y" && echo 1 || echo 0)"
+assert_eq "rl-mark-spawned-absent: session= line is non-empty" "1" \
+  "$([ -n "$(sed -n 's/^session=//p' "$DISPATCH_RESERVATION_DIR/tactic-y" | head -n1)" ] && echo 1 || echo 0)"
+rl_teardown
+
+# --- Test F: sweep HOLDS an origin=spawned marker with a dead reserving session -
+# The core regression guard. The tick's reserving session is the synthetic
+# `headless:<INVOCATION_ID>`, which never appears in `claude agents` — so without
+# rule (a-handoff) this marker is reclaimed as dead-session-stranded the moment
+# the 30s boot grace lapses, reopening the duplicate-worker window while the
+# spawned worker is still booting (90s registration latency observed 2026-07-30).
+echo "Test: reservation_sweep HOLDS an origin=spawned marker past the boot grace when its reserving session is dead"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+# Neither the reserving session nor a worker named tactic-x is live.
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-spawned-held: handoff marker kept at +90s (count 1)" "1" "$(reservation_count)"
+rl_teardown
+
+# --- Test G: sweep reclaims an origin=spawned marker past the handoff TTL ------
+echo "Test: reservation_sweep reclaims an origin=spawned marker once it ages past the handoff TTL"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 301))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-spawned-expired: aged handoff marker reclaimed (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'spawn-handoff-expired'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-expired: note mentions spawn-handoff-expired"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-expired: note mentions spawn-handoff-expired"
+  echo "    stderr: $err"
+fi
+rl_teardown
+
+# --- Test H: a registered worker releases the handoff via rule (a) -------------
+# The handoff's intended release is an EVENT, not a timeout: the instant a live
+# session named by the worktree basename appears, rule (a) reclaims the marker.
+echo "Test: reservation_sweep releases an origin=spawned marker as soon as its worker registers (rule (a))"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"x","pid":1,"status":"busy","name":"tactic-x"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 90))
+err=$(reservation_sweep 2>&1 1>/dev/null)
+assert_eq "rl-sweep-spawned-released: handoff released on registration (count 0)" "0" "$(reservation_count)"
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'live-worker-redundant'; then
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-released: note mentions live-worker-redundant"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-released: note mentions live-worker-redundant"
+  echo "    stderr: $err"
+fi
+# A benign release is NOT a dead-strand: the launch-log diagnostic must stay off.
+TOTAL=$((TOTAL + 1))
+if printf '%s' "$err" | grep -q 'inspect tmp/dispatch-launch'; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: rl-sweep-spawned-released: benign release stays silent (no launch-log diagnostic)"
+  echo "    stderr: $err"
+else
+  PASS=$((PASS + 1)); echo "  PASS: rl-sweep-spawned-released: benign release stays silent (no launch-log diagnostic)"
+fi
+rl_teardown
+
+# --- Test I: the boot grace still short-circuits a young spawned marker --------
+# Control for Tests F/G: a handoff marker inside the boot grace is kept by the
+# grace branch, which precedes the new rule — the new rule did not disturb it.
+echo "Test: reservation_sweep keeps a young origin=spawned marker via the boot grace (unchanged)"
+rl_setup
+reservation_write "tactic-x" "tactic-x" "headless:abc" "spawned"
+rl_write_fake_claude '[{"sessionId":"other","pid":1,"status":"busy","name":"someworker"}]'
+export DISPATCH_RESERVATION_SWEEP_NOW_EPOCH=$((1767225600 + 5))
+reservation_sweep 2>/dev/null
+assert_eq "rl-sweep-spawned-young: young handoff marker kept (count 1)" "1" "$(reservation_count)"
+rl_teardown
+
 # --- Test 13: reservation_exists tracks write/clear and guards its arg --------
 
 echo "Test: reservation_exists is true after write, false after clear, and guards its argument"
@@ -508,6 +707,32 @@ if printf '%s' "$err" | grep -q 'fail open'; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: rl-union-failopen: stderr diagnostic mentions fail open"
 fi
+rl_teardown
+
+# --- Test 19: reservation_owner reads the session= owner and guards its arg ---
+# reservation_owner distinguishes "no claim" (reservation_exists false) from
+# "claim held by another/my session" (reservation_exists true, owner known)
+# from "claim with unknown owner" (reservation_exists true, owner fails) — the
+# fail-safe case mirroring reservation_sweep's own malformed-marker handling.
+echo "Test: reservation_owner returns the marker's session owner and guards its argument"
+rl_setup
+reservation_write "995-slug" "995" "sess-owner"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: exits 0 for a freshly written marker" "0" "$rc"
+assert_eq "rl-owner: stdout is the marker's session id" "sess-owner" "$out"
+# Absent marker → return 1, no stdout.
+if out=$(reservation_owner "996-absent"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: absent marker → return 1" "1" "$rc"
+assert_eq "rl-owner: absent marker → empty stdout" "" "$out"
+# Malformed marker (session= line stripped) → return 1, empty stdout.
+sed -i '/^session=/d' "$DISPATCH_RESERVATION_DIR/995-slug"
+if out=$(reservation_owner "995-slug"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: malformed marker (no session= line) → return 1" "1" "$rc"
+assert_eq "rl-owner: malformed marker → empty stdout" "" "$out"
+# Unsafe basename → return 1 (path-safety guard).
+if out=$(reservation_owner "../escape"); then rc=0; else rc=$?; fi
+assert_eq "rl-owner: unsafe basename → return 1" "1" "$rc"
+assert_eq "rl-owner: unsafe basename → empty stdout" "" "$out"
 rl_teardown
 
 # <<< END MOVED <<<

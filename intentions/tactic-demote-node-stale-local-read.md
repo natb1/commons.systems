@@ -1,11 +1,15 @@
 ---
 id: tactic-demote-node-stale-local-read
 kind: tactic
-statement: demote-node-to-implement derives its repo root from the script's own
-  on-disk location and reads the node from the local worktree with no
-  origin/main refresh and no --base CAS, so a scope-stale demotion invoked from
-  a node worktree silently reverts body sections and markers that landed on
-  origin/main after the worktree was provisioned
+statement: Make graph-script repo-root resolution uniform and explicit — today
+  demote-node-to-implement and dump-node.ts root from the script's own on-disk
+  location, validate-graph.ts from a cwd-relative default, and graph-commit from
+  -C/cwd, so a read or verify invoked from the wrong directory silently targets
+  the wrong tree and can report a vacuous pass; additionally give
+  demote-node-to-implement an origin/main refresh and a --base CAS, without
+  which a scope-stale demotion invoked from a node worktree silently reverts
+  body sections and markers that landed on origin/main after the worktree was
+  provisioned
 owner: ai
 status: raw
 parent: null
@@ -46,7 +50,29 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Should this node stay scoped to demote-node-to-implement, or widen
+      to own root-resolution consistency across all the graph scripts?
+    answer: "(Recorded 2026-08-04, author-directed.) Widen. The hazard is not any
+      single script but that scripts used together in one graph-write recipe
+      resolve their target tree three different ways: dump-node.ts and
+      demote-node-to-implement from the script's own on-disk location,
+      validate-graph.ts from a cwd-relative default argument (`process.argv[2] ??
+      \"intentions\"`), and graph-commit from -C/cwd via `git rev-parse
+      --show-toplevel` (explicitly never from script location, per
+      tactic-graph-commit-cwd-repo-resolution). Passing the same absolute script
+      path to all three therefore silently targets different trees. Concrete new
+      instance found 2026-08-04 during bootstrap step 1a: validate-graph.ts
+      invoked by absolute worktree path while cwd was the main checkout
+      validated the MAIN checkout's intentions/, not the edited worktree, and
+      printed 'ok — 500 nodes' at exit 0 — a vacuous pass indistinguishable from
+      a real one, and exactly the sensor failure mode the standing
+      instruments rule warns about (ask what a check prints when it cannot
+      see). This node now owns making root resolution uniform and explicit
+      across the graph scripts. Fixing them one site at a time is what let the
+      class recur after tactic-graph-commit-cwd-repo-resolution and
+      tactic-clear-park-repo-targeting-guard already closed the write-path
+      half; the read/verify path was never swept."
 tooling_goals: []
 success_signal: null
 attention:

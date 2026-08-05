@@ -49,6 +49,15 @@ selfclose_setup() {
   #     emitting no reseed timer.
   # Helpers below let a test flip either to a continuation-present state.
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake-agents"
+  # lib-claude-agents only trusts an exactly-`[]` registry payload when a
+  # `claude daemon` process corroborates it (CLAUDE_AGENTS_PGREP_CMD probe).
+  # `selfclose_set_workers` with no specs emits exactly that payload, so without
+  # this stub the "no busy worker" default would depend on whether the host
+  # running the suite happens to have a daemon — and would read UNKNOWN in CI.
+  # Exit 0 = daemon visible, keeping the default a definite "zero busy workers".
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPDIR_TEST/fake-pgrep"
+  chmod +x "$TMPDIR_TEST/fake-pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/fake-pgrep"
   export DISPATCH_SELF_CLOSE_SYSTEMCTL_CMD="$TMPDIR_TEST/fake-systemctl"
   selfclose_set_workers   # default: no workers
   selfclose_set_no_timer  # default: no reseed timer

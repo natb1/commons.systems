@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
-# dispatch-sweep — reconcile worktrees: reap merged/closed worktrees. Fired by the worker Stop-hook via dispatch-spawn-sweep (the retired /dispatch-propagate router was the old caller).
+# dispatch-sweep — reconcile the fleet's leftovers: reap merged/closed worktrees, AND reap terminal worker sessions the daemon silently declined to remove. Fired by the worker Stop-hook via dispatch-spawn-sweep (the retired /dispatch-propagate router was the old caller).
 #
 # Usage:
-#   dispatch-sweep   — cleanup merged worktrees.
+#   dispatch-sweep   — cleanup merged worktrees and stranded sessions.
 #
-# Behavior, in order:
+# Two arms run per invocation:
+#   A. the WORKTREE arm (steps 1-4 below), which reaps worktrees and their
+#      branches;
+#   B. the SESSION arm (`session_reap_sweep`, lib-session-reap.sh), which reaps
+#      terminal `tactic-*` / `strategy-*` worker SESSIONS that `claude rm` exited
+#      0 on without actually removing. It removes the session's worktree FIRST —
+#      that is what makes the daemon accept the removal — then `claude rm`s, then
+#      VERIFIES the post-state by re-querying rather than trusting exit 0, and
+#      logs REAP_DECLINED when the id survives. Unlike arm A it NEVER deletes a
+#      branch. See that file's header for the full gate list and the reasoning.
+#      Arm B runs last; the placement comment at its call site says why.
+#
+# Behavior of the WORKTREE arm, in order:
 #   1. Enumerate registered worktrees under <project-root>/worktrees/, excluding
 #      the main worktree and detached HEADs.
 #   2. For each worktree, query its PR state directly with `gh pr list --head
@@ -31,9 +43,12 @@
 #                             reach before the NODE arm may reap it. Precedence:
 #                             sweep config nodeMinAgeSeconds -> this env override
 #                             -> baked default (3600).
+#   DISPATCH_SESSION_REAP_*   The SESSION arm's own seams (grace, roots, cap,
+#                             clock) — see lib-session-reap.sh's header.
 #
 # Exit codes:
-#   0  normal sweep completed (merged worktrees removed where possible).
+#   0  normal sweep completed (merged worktrees removed where possible; the
+#      session arm never changes the exit code — it always returns 0).
 #   2  invalid invocation (not in a git repo).
 #
 # NOT set -e: per-worktree errors should not abort the sweep — bookkeeping
@@ -51,6 +66,8 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=./lib-worktree-reap.sh
 source "$SCRIPT_DIR/lib-worktree-reap.sh"
+# shellcheck source=./lib-session-reap.sh
+source "$SCRIPT_DIR/lib-session-reap.sh"
 
 # Resolve project root via resolve_project_root (lib.sh); native worktrees live
 # under <repo>/.claude/worktrees/ (the standard Claude Code layout).
@@ -520,6 +537,56 @@ if marker_dir=$(reap_marker_dir "$PROJECT_ROOT") && [[ -d "$marker_dir" ]]; then
     fi
   done
   shopt -u nullglob
+fi
+
+# ---- Session reap: terminal worker sessions `claude rm` silently declined ---
+# `claude rm <id>` exits 0 while DECLINING to remove a session whose worktree has
+# no verifiable repository, and dispatch-self-close's `exec claude rm` cannot
+# notice (exec replaces the process). The declined session stays registered
+# forever, holding a worker slot and — because worktree_has_live_session is
+# NAME-keyed — making its node permanently unselectable. session_reap_sweep
+# removes the worktree FIRST (which is what makes the daemon accept), then
+# `claude rm`s, then VERIFIES the post-state. See lib-session-reap.sh.
+#
+# PLACEMENT. After the per-worktree loop and the marker GC, and before the
+# held-for-debug metric:
+#   - after the loop, because Step 1 captured WT_PATHS up front: an arm that
+#     removed worktrees earlier would leave the loop iterating over paths that no
+#     longer exist. Running last also means the loop's own merged/closed/node
+#     reaps have already cleared whatever they could, so this arm usually takes
+#     its cheap "no worktree" path;
+#   - before HELD_FOR_DEBUG_COUNT, so that metric reports the state this sweep
+#     LEAVES BEHIND. Counting held sessions first would report sessions the
+#     sweep then removed, and the count exists precisely to show what is stuck.
+# It is passed $LOG_FILE so its disposition lines land in the same timestamped,
+# tagged log as every other decision here. Its stderr copy is deliberately NOT
+# redirected: it is the same text, and it reaches journald for the headless
+# systemd/Stop-hook callers that never read tmp/dispatch-sweep.log.
+# `|| true` is belt-and-suspenders — the function always returns 0 by contract.
+session_reap_sweep "$LOG_FILE" "dispatch-sweep" || true
+
+# ---- Held-for-debug session count (hygiene/observability metric) ------------
+# Log how many worker-keyspace sessions are sitting in a terminal state under
+# the narrowed auto-close default (tactic-frozen-session-debug-count).
+# This is not a control-flow signal — nothing downstream acts on it. UNKNOWN
+# is logged distinctly from 0 because "daemon unqueryable" and "zero held
+# sessions" are different facts and must not be conflated.
+#
+# The n=0 reading is only meaningful when the sweep runs UNSANDBOXED, which is
+# how it actually runs (the worker Stop hook / systemd-launched dispatch-tick).
+# Under a sandboxed Bash call the daemon's Unix socket is unreachable and
+# `claude agents --json` returns `[]` with exit 0 (.claude/rules/sandbox.md),
+# which reads here as a definite n=0 — the UNKNOWN branch cannot catch it
+# because nothing failed. Read an n=0 from a sandboxed run as "not measured".
+if held_out=$(claude_agents_count_held_for_debug); then
+  held_rc=0
+else
+  held_rc=$?
+fi
+if [[ "$held_rc" -eq 0 ]]; then
+  log "HELD_FOR_DEBUG_COUNT: n=$held_out"
+else
+  log "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)"
 fi
 
 exit 0

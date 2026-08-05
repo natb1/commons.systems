@@ -479,4 +479,865 @@ rm -rf "$ehu_tmp"
 
 # <<< END MOVED <<<
 
+# ============================================================================
+# cleanup_stale_sweep_units: path-change disable (tactic-sweep-timer-unit-dir-leak)
+# ============================================================================
+# Mirrors the cleanup_stale_heartbeat_units cases above for the sweep pair.
+# Called DIRECTLY (not via ensure_sweep_timer): the "paths match" case would
+# otherwise hit the hot-path early-return before reaching the cleanup call.
+echo ""
+echo "=== cleanup_stale_sweep_units: path-change disable ==="
+esu_tmp=$(mktemp -d)
+mkdir -p "$esu_tmp/bin" "$esu_tmp/main-worktree" "$esu_tmp/systemd-user"
+cat > "$esu_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+exit 0
+STUB
+chmod +x "$esu_tmp/bin/systemctl"
+esu_svc="$esu_tmp/systemd-user/dispatch-sweep-periodic.service"
+esu_log="$esu_tmp/systemctl.log"
+
+# 1. Installed WorkingDirectory differs from current → disable fires, naming the
+#    SWEEP units (not the heartbeat pair).
+: > "$esu_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$esu_svc"
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-sweep-periodic.timer dispatch-sweep-periodic.service' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units did not disable on path change"
+fi
+
+# 2. Installed WorkingDirectory matches current → no disable.
+: > "$esu_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$esu_tmp/main-worktree" > "$esu_svc"
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units disabled despite matching path"
+fi
+
+# 3. No prior service unit → no-op (returns 0, no disable).
+: > "$esu_log"
+esu_cleanup_rc=0
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_tmp/systemd-user/does-not-exist.service" \
+    "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null || esu_cleanup_rc=$?
+assert_eq "cleanup_stale_sweep_units: missing unit → returns 0" "0" "$esu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units ran disable with no prior units"
+fi
+
+# 4. [Service] section present but no WorkingDirectory= line → early return: no
+#    disable, returns 0.
+: > "$esu_log"
+printf '%s\n' '[Service]' > "$esu_svc"
+esu_cleanup_rc=0
+(
+  export STUB_LOG="$esu_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_sweep_units "$esu_svc" "$esu_tmp/main-worktree" "$esu_tmp/bin/systemctl"
+) 2>/dev/null || esu_cleanup_rc=$?
+assert_eq "cleanup_stale_sweep_units: no WorkingDirectory= → returns 0" "0" "$esu_cleanup_rc"
+# Counts the inline grep check below; the assert_eq above counts itself.
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$esu_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_sweep_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_sweep_units ran disable with no WorkingDirectory="
+fi
+
+rm -rf "$esu_tmp"
+
+# ============================================================================
+# ensure_healer_units: correct unit content + idempotency
+# ============================================================================
+# Mirrors ensure_heartbeat_units' cold/hot-path structure, but the hot-path
+# check is `is-active --quiet` (monotonic OnBootSec=/OnUnitActiveSec= timer,
+# like ensure_sweep_timer) rather than SubState=waiting.
+echo ""
+echo "=== ensure_healer_units: unit content + idempotency ==="
+ehl_tmp=$(mktemp -d)
+mkdir -p "$ehl_tmp/bin" "$ehl_tmp/main-worktree"
+cat > "$ehl_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable)    exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+    disable)   exit "${STUB_DISABLE_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$ehl_tmp/bin/systemctl"
+ehl_unit_dir="$ehl_tmp/systemd-user"
+ehl_svc="$ehl_unit_dir/dispatch-heal.service"
+ehl_tmr="$ehl_unit_dir/dispatch-heal.timer"
+ehl_log="$ehl_tmp/systemctl.log"
+
+# --- 1. Cold path: writes both unit files, runs daemon-reload + enable --now -
+: > "$ehl_log"
+if (
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=1 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+); then
+  if [ -f "$ehl_svc" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heal.service"
+    grep -qF '/dispatch-heal-units' "$ehl_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service ExecStart= references dispatch-heal-units"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service ExecStart= missing dispatch-heal-units"; }
+    grep -q '^SuccessExitStatus=1 2$' "$ehl_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has SuccessExitStatus=1 2"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing SuccessExitStatus=1 2"; }
+    grep -q '^SyslogIdentifier=dispatch-heal-units$' "$ehl_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has SyslogIdentifier=dispatch-heal-units"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing SyslogIdentifier=dispatch-heal-units"; }
+    ehl_wd_line=$(grep '^WorkingDirectory=' "$ehl_svc" || true)
+    TOTAL=$((TOTAL + 1))
+    if [[ "$ehl_wd_line" == "WorkingDirectory=$ehl_tmp/main-worktree" ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: WorkingDirectory= is the bare absolute path (no quotes)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: WorkingDirectory= line is wrong or quoted: $ehl_wd_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-heal.service"
+  fi
+  if [ -f "$ehl_tmr" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-heal.timer"
+    grep -q '^OnBootSec=1min$' "$ehl_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnBootSec=1min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnBootSec=1min"; }
+    grep -q '^OnUnitActiveSec=2min$' "$ehl_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnUnitActiveSec=2min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnUnitActiveSec=2min"; }
+    TOTAL=$((TOTAL + 1))
+    if ! grep -q '^Persistent=' "$ehl_tmr"; then
+      PASS=$((PASS + 1)); echo "  PASS: timer has no Persistent= (no-op for monotonic triggers)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: timer unexpectedly has Persistent="
+    fi
+    TOTAL=$((TOTAL + 1))
+    if ! grep -q '^\[Install\]' "$ehl_svc"; then
+      PASS=$((PASS + 1)); echo "  PASS: service has no [Install] section"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: service unexpectedly has [Install]"
+    fi
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-heal.timer"
+  fi
+  grep -q 'daemon-reload' "$ehl_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
+  grep -q 'enable --now dispatch-heal.timer' "$ehl_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-heal.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-heal.timer"; }
+else
+  TOTAL=$((TOTAL + 12)); FAIL=$((FAIL + 12))
+  echo "  FAIL: ensure_healer_units (cold path) returned non-zero"
+fi
+
+# --- 2. Hot path: both units byte-identical + timer active → no-op -----------
+: > "$ehl_log"
+if (
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$ehl_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not rewrite units (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path ran daemon-reload (spurious rewrite)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'enable' "$ehl_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_healer_units (hot path) returned non-zero"
+fi
+
+# --- 3. Path guards: newline/space/quote/backslash → non-zero, WARNING, no file
+for ehl_case in newline space double-quote backslash; do
+  ehl_bad_tmp=$(mktemp -d)
+  case "$ehl_case" in
+    newline)      ehl_bad_path=$'has\na newline' ;;
+    space)        ehl_bad_path="has a space" ;;
+    double-quote) ehl_bad_path='has"a"quote' ;;
+    backslash)    ehl_bad_path='has\a\backslash' ;;
+  esac
+  ehl_bad_svc="$ehl_bad_tmp/systemd-user/dispatch-heal.service"
+  ehl_bad_err="$ehl_bad_tmp/stderr"
+  ehl_bad_rc=0
+  (
+    export DISPATCH_HEALER_UNIT_DIR="$ehl_bad_tmp/systemd-user"
+    export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+    export STUB_LOG="$ehl_bad_tmp/log"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_healer_units "$ehl_bad_path"
+  ) 2>"$ehl_bad_err" || ehl_bad_rc=$?
+  assert_eq "ensure_healer_units rejects a $ehl_case path: non-zero return" "1" "$ehl_bad_rc"
+  TOTAL=$((TOTAL + 1))
+  if grep -q "WARNING: ensure_healer_units: main worktree path contains a $ehl_case" "$ehl_bad_err"; then
+    PASS=$((PASS + 1)); echo "  PASS: ensure_healer_units emitted WARNING for $ehl_case path"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: ensure_healer_units did not emit expected WARNING for $ehl_case path"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$ehl_bad_svc" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: no unit file written for $ehl_case path"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite $ehl_case path"
+  fi
+  rm -rf "$ehl_bad_tmp"
+done
+
+# --- 4. cleanup_stale_healer_units: path-change disable -----------------------
+mkdir -p "$ehl_unit_dir"
+
+# 4a. installed WorkingDirectory differs from current → disable fires.
+: > "$ehl_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$ehl_svc"
+(
+  export STUB_LOG="$ehl_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_healer_units "$ehl_svc" "$ehl_tmp/main-worktree" "$ehl_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-heal.timer dispatch-heal.service' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_healer_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_healer_units did not disable on path change"
+fi
+
+# 4b. installed WorkingDirectory matches current → no disable.
+: > "$ehl_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$ehl_tmp/main-worktree" > "$ehl_svc"
+(
+  export STUB_LOG="$ehl_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_healer_units "$ehl_svc" "$ehl_tmp/main-worktree" "$ehl_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_healer_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_healer_units disabled despite matching path"
+fi
+
+# 4c. no prior service unit → no-op (returns 0, no disable).
+: > "$ehl_log"
+ehl_cleanup_rc=0
+(
+  export STUB_LOG="$ehl_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_healer_units "$ehl_unit_dir/does-not-exist.service" "$ehl_tmp/main-worktree" "$ehl_tmp/bin/systemctl"
+) || ehl_cleanup_rc=$?
+assert_eq "cleanup_stale_healer_units: missing unit → returns 0" "0" "$ehl_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_healer_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_healer_units ran disable with no prior units"
+fi
+
+# 4d. [Service] section present but no WorkingDirectory= line → early return.
+: > "$ehl_log"
+printf '%s\n' '[Service]' > "$ehl_svc"
+ehl_cleanup_rc=0
+(
+  export STUB_LOG="$ehl_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_healer_units "$ehl_svc" "$ehl_tmp/main-worktree" "$ehl_tmp/bin/systemctl"
+) || ehl_cleanup_rc=$?
+assert_eq "cleanup_stale_healer_units: no WorkingDirectory= → returns 0" "0" "$ehl_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_healer_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_healer_units ran disable with no WorkingDirectory="
+fi
+
+# --- 5. Manual-disable sentinel: enable --now is skipped, per-unit, honored --
+# (tactic-ensure-units-respect-manual-disable) Reuses the cold-path scaffolding
+# above (ehl_tmp/ehl_unit_dir/ehl_svc/ehl_tmr/ehl_log, the recording systemctl
+# stub). DISPATCH_UNIT_DISABLE_DIR is overridden per sub-case to a scratch dir
+# under ehl_tmp — the fixture already pins the ambient DISPATCH_UNIT_DISABLE_DIR
+# to a never-created path, so these overrides do not leak.
+ehl_disable_dir="$ehl_tmp/disabled"
+
+# --- 5a. cold path, marker present: unit files written, enable --now skipped -
+rm -f "$ehl_svc" "$ehl_tmr"
+mkdir -p "$ehl_disable_dir"
+: > "$ehl_disable_dir/dispatch-heal.timer"
+: > "$ehl_log"
+ehl_5a_err="$ehl_tmp/5a-stderr"
+ehl_5a_rc=0
+(
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+) >/dev/null 2>"$ehl_5a_err" || ehl_5a_rc=$?
+assert_eq "5a: ensure_healer_units returns 0 (cold path, marker present)" "0" "$ehl_5a_rc"
+TOTAL=$((TOTAL + 1))
+if [ -f "$ehl_svc" ] && [ -f "$ehl_tmr" ]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a wrote both unit files"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a did not write both unit files"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'daemon-reload' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a ran daemon-reload"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a did not run daemon-reload"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable --now dispatch-heal.timer' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a did not run enable --now dispatch-heal.timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a ran enable --now dispatch-heal.timer despite the marker"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'skipping enable --now' "$ehl_5a_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a stderr mentions skipping enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a stderr missing 'skipping enable --now'"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'WARNING' "$ehl_5a_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a stderr has no WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a stderr unexpectedly contains WARNING"
+fi
+
+# --- 5b. steady state, marker present, unit files already current ------------
+# Reuses the SAME unit files 5a just wrote (no removal) — proves the hot-path
+# extension short-circuits before touching systemctl at all.
+: > "$ehl_log"
+ehl_5b_rc=0
+(
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+) >/dev/null 2>&1 || ehl_5b_rc=$?
+assert_eq "5b: ensure_healer_units returns 0 (steady state, marker present)" "0" "$ehl_5b_rc"
+assert_eq "5b: stub log empty (no daemon-reload/enable/is-active call)" "" "$(cat "$ehl_log")"
+
+# --- 5c. marker absent → unchanged cold-path behavior (regression guard) -----
+rm -f "$ehl_svc" "$ehl_tmr"
+rm -rf "$ehl_disable_dir"
+mkdir -p "$ehl_disable_dir"
+: > "$ehl_log"
+ehl_5c_rc=0
+(
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+) >/dev/null 2>&1 || ehl_5c_rc=$?
+assert_eq "5c: ensure_healer_units returns 0 (no marker)" "0" "$ehl_5c_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-heal.timer' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5c ran enable --now dispatch-heal.timer (no marker → unchanged behavior)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5c did not run enable --now dispatch-heal.timer"
+fi
+
+# --- 5d. marker present for a DIFFERENT unit → per-unit granularity ----------
+rm -f "$ehl_svc" "$ehl_tmr"
+rm -rf "$ehl_disable_dir"
+mkdir -p "$ehl_disable_dir"
+: > "$ehl_disable_dir/dispatch-fleet-watch.timer"
+: > "$ehl_log"
+ehl_5d_rc=0
+(
+  export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+  export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+  export STUB_LOG="$ehl_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_healer_units "$ehl_tmp/main-worktree"
+) >/dev/null 2>&1 || ehl_5d_rc=$?
+assert_eq "5d: ensure_healer_units returns 0 (other-unit marker)" "0" "$ehl_5d_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-heal.timer' "$ehl_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5d ran enable --now dispatch-heal.timer (marker names a different unit)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5d did not run enable --now dispatch-heal.timer despite an other-unit marker"
+fi
+
+# --- 5e. unit-disable sentinel dir unreadable → unknown, proceed + WARNING ---
+# chmod 000 does not deny root, so root would spuriously see this as
+# searchable. Skip-but-count as PASS in that case, matching the root-invariant
+# permission-test idiom in test-lib-pause-state.sh.
+if [[ "$(id -u)" == "0" ]]; then
+  echo "  (running as root — mode bits do not deny search; skipping 5e, counted as pass)"
+  TOTAL=$((TOTAL + 2))
+  PASS=$((PASS + 2))
+else
+  rm -f "$ehl_svc" "$ehl_tmr"
+  ehl_disable_dir_5e="$ehl_tmp/disabled-5e"
+  mkdir -p "$ehl_disable_dir_5e"
+  chmod 000 "$ehl_disable_dir_5e"
+  : > "$ehl_log"
+  ehl_5e_err="$ehl_tmp/5e-stderr"
+  ehl_5e_rc=0
+  (
+    export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
+    export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
+    export STUB_LOG="$ehl_log"
+    export STUB_IS_ACTIVE_RC=1
+    export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir_5e"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_healer_units "$ehl_tmp/main-worktree"
+  ) >/dev/null 2>"$ehl_5e_err" || ehl_5e_rc=$?
+  chmod -R u+rwx "$ehl_disable_dir_5e"
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'enable --now dispatch-heal.timer' "$ehl_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: 5e ran enable --now dispatch-heal.timer (unreadable sentinel dir → unknown, proceed)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: 5e did not run enable --now dispatch-heal.timer"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'WARNING' "$ehl_5e_err"; then
+    PASS=$((PASS + 1)); echo "  PASS: 5e stderr contains WARNING"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: 5e stderr missing WARNING"
+  fi
+  rm -rf "$ehl_disable_dir_5e"
+fi
+
+rm -rf "$ehl_disable_dir"
+rm -rf "$ehl_tmp"
+
+# ============================================================================
+# ensure_watcher_units: correct unit content + idempotency
+# ============================================================================
+echo ""
+echo "=== ensure_watcher_units: unit content + idempotency ==="
+ewa_tmp=$(mktemp -d)
+mkdir -p "$ewa_tmp/bin" "$ewa_tmp/main-worktree"
+cat > "$ewa_tmp/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+for a in "$@"; do
+  case "$a" in
+    is-active) exit "${STUB_IS_ACTIVE_RC:-0}" ;;
+    enable)    exit "${STUB_ENABLE_RC:-0}" ;;
+    daemon-reload) exit "${STUB_RELOAD_RC:-0}" ;;
+    disable)   exit "${STUB_DISABLE_RC:-0}" ;;
+  esac
+done
+exit 0
+STUB
+chmod +x "$ewa_tmp/bin/systemctl"
+ewa_unit_dir="$ewa_tmp/systemd-user"
+ewa_svc="$ewa_unit_dir/dispatch-fleet-watch.service"
+ewa_tmr="$ewa_unit_dir/dispatch-fleet-watch.timer"
+ewa_log="$ewa_tmp/systemctl.log"
+
+# --- 1. Cold path: writes both unit files, runs daemon-reload + enable --now -
+: > "$ewa_log"
+if (
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=1 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+); then
+  if [ -f "$ewa_svc" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-fleet-watch.service"
+    grep -qF '/dispatch-fleet-watch' "$ewa_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service ExecStart= references dispatch-fleet-watch"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service ExecStart= missing dispatch-fleet-watch"; }
+    grep -q '^SuccessExitStatus=1 2$' "$ewa_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has SuccessExitStatus=1 2"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing SuccessExitStatus=1 2"; }
+    grep -q '^SyslogIdentifier=dispatch-fleet-watch$' "$ewa_svc" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has SyslogIdentifier=dispatch-fleet-watch"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing SyslogIdentifier=dispatch-fleet-watch"; }
+    ewa_wd_line=$(grep '^WorkingDirectory=' "$ewa_svc" || true)
+    TOTAL=$((TOTAL + 1))
+    if [[ "$ewa_wd_line" == "WorkingDirectory=$ewa_tmp/main-worktree" ]]; then
+      PASS=$((PASS + 1)); echo "  PASS: WorkingDirectory= is the bare absolute path (no quotes)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: WorkingDirectory= line is wrong or quoted: $ewa_wd_line"
+    fi
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-fleet-watch.service"
+  fi
+  if [ -f "$ewa_tmr" ]; then
+    TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path wrote dispatch-fleet-watch.timer"
+    grep -q '^OnBootSec=3min$' "$ewa_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnBootSec=3min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnBootSec=3min"; }
+    grep -q '^OnUnitActiveSec=5min$' "$ewa_tmr" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: timer has OnUnitActiveSec=5min"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: timer missing OnUnitActiveSec=5min"; }
+    TOTAL=$((TOTAL + 1))
+    if ! grep -q '^Persistent=' "$ewa_tmr"; then
+      PASS=$((PASS + 1)); echo "  PASS: timer has no Persistent= (no-op for monotonic triggers)"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: timer unexpectedly has Persistent="
+    fi
+    TOTAL=$((TOTAL + 1))
+    if ! grep -q '^\[Install\]' "$ewa_svc"; then
+      PASS=$((PASS + 1)); echo "  PASS: service has no [Install] section"
+    else
+      FAIL=$((FAIL + 1)); echo "  FAIL: service unexpectedly has [Install]"
+    fi
+  else
+    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    echo "  FAIL: cold path did not write dispatch-fleet-watch.timer"
+  fi
+  grep -q 'daemon-reload' "$ewa_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran daemon-reload"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run daemon-reload"; }
+  grep -q 'enable --now dispatch-fleet-watch.timer' "$ewa_log" \
+    && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran enable --now dispatch-fleet-watch.timer"; } \
+    || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run enable --now dispatch-fleet-watch.timer"; }
+else
+  TOTAL=$((TOTAL + 12)); FAIL=$((FAIL + 12))
+  echo "  FAIL: ensure_watcher_units (cold path) returned non-zero"
+fi
+
+# --- 2. Hot path: both units byte-identical + timer active → no-op -----------
+: > "$ewa_log"
+if (
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=0 STUB_ENABLE_RC=0 STUB_RELOAD_RC=0
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+); then
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'daemon-reload' "$ewa_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not rewrite units (no daemon-reload)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path ran daemon-reload (spurious rewrite)"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if ! grep -q 'enable' "$ewa_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: hot path did not re-run enable"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: hot path re-ran enable"
+  fi
+else
+  TOTAL=$((TOTAL + 2)); FAIL=$((FAIL + 2))
+  echo "  FAIL: ensure_watcher_units (hot path) returned non-zero"
+fi
+
+# --- 3. Path guards: newline/space/quote/backslash → non-zero, WARNING, no file
+for ewa_case in newline space double-quote backslash; do
+  ewa_bad_tmp=$(mktemp -d)
+  case "$ewa_case" in
+    newline)      ewa_bad_path=$'has\na newline' ;;
+    space)        ewa_bad_path="has a space" ;;
+    double-quote) ewa_bad_path='has"a"quote' ;;
+    backslash)    ewa_bad_path='has\a\backslash' ;;
+  esac
+  ewa_bad_svc="$ewa_bad_tmp/systemd-user/dispatch-fleet-watch.service"
+  ewa_bad_err="$ewa_bad_tmp/stderr"
+  ewa_bad_rc=0
+  (
+    export DISPATCH_WATCHER_UNIT_DIR="$ewa_bad_tmp/systemd-user"
+    export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+    export STUB_LOG="$ewa_bad_tmp/log"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_watcher_units "$ewa_bad_path"
+  ) 2>"$ewa_bad_err" || ewa_bad_rc=$?
+  assert_eq "ensure_watcher_units rejects a $ewa_case path: non-zero return" "1" "$ewa_bad_rc"
+  TOTAL=$((TOTAL + 1))
+  if grep -q "WARNING: ensure_watcher_units: main worktree path contains a $ewa_case" "$ewa_bad_err"; then
+    PASS=$((PASS + 1)); echo "  PASS: ensure_watcher_units emitted WARNING for $ewa_case path"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: ensure_watcher_units did not emit expected WARNING for $ewa_case path"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -e "$ewa_bad_svc" ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: no unit file written for $ewa_case path"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: unit file was written despite $ewa_case path"
+  fi
+  rm -rf "$ewa_bad_tmp"
+done
+
+# --- 4. cleanup_stale_watcher_units: path-change disable ----------------------
+mkdir -p "$ewa_unit_dir"
+
+# 4a. installed WorkingDirectory differs from current → disable fires.
+: > "$ewa_log"
+printf '%s\n' '[Service]' 'WorkingDirectory=/old/path' > "$ewa_svc"
+(
+  export STUB_LOG="$ewa_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_watcher_units "$ewa_svc" "$ewa_tmp/main-worktree" "$ewa_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if grep -q 'disable --now dispatch-fleet-watch.timer dispatch-fleet-watch.service' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_watcher_units disabled stale units on path change"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_watcher_units did not disable on path change"
+fi
+
+# 4b. installed WorkingDirectory matches current → no disable.
+: > "$ewa_log"
+printf '%s\n' '[Service]' "WorkingDirectory=$ewa_tmp/main-worktree" > "$ewa_svc"
+(
+  export STUB_LOG="$ewa_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_watcher_units "$ewa_svc" "$ewa_tmp/main-worktree" "$ewa_tmp/bin/systemctl"
+)
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_watcher_units did not disable when path matches"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_watcher_units disabled despite matching path"
+fi
+
+# 4c. no prior service unit → no-op (returns 0, no disable).
+: > "$ewa_log"
+ewa_cleanup_rc=0
+(
+  export STUB_LOG="$ewa_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_watcher_units "$ewa_unit_dir/does-not-exist.service" "$ewa_tmp/main-worktree" "$ewa_tmp/bin/systemctl"
+) || ewa_cleanup_rc=$?
+assert_eq "cleanup_stale_watcher_units: missing unit → returns 0" "0" "$ewa_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_watcher_units no-op when no prior units"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_watcher_units ran disable with no prior units"
+fi
+
+# 4d. [Service] section present but no WorkingDirectory= line → early return.
+: > "$ewa_log"
+printf '%s\n' '[Service]' > "$ewa_svc"
+ewa_cleanup_rc=0
+(
+  export STUB_LOG="$ewa_log"
+  source "$SCRIPT_DIR/lib.sh"
+  cleanup_stale_watcher_units "$ewa_svc" "$ewa_tmp/main-worktree" "$ewa_tmp/bin/systemctl"
+) || ewa_cleanup_rc=$?
+assert_eq "cleanup_stale_watcher_units: no WorkingDirectory= → returns 0" "0" "$ewa_cleanup_rc"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'disable' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: cleanup_stale_watcher_units no-op when WorkingDirectory= absent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: cleanup_stale_watcher_units ran disable with no WorkingDirectory="
+fi
+
+# --- 5. Manual-disable sentinel: enable --now is skipped, per-unit, honored --
+# (tactic-ensure-units-respect-manual-disable) Mirrors ensure_healer_units'
+# case 5 above — both timers must respect a manual disable, not just one.
+# Reuses the cold-path scaffolding above (ewa_tmp/ewa_unit_dir/ewa_svc/ewa_tmr/
+# ewa_log, the recording systemctl stub).
+ewa_disable_dir="$ewa_tmp/disabled"
+
+# --- 5a. cold path, marker present: unit files written, enable --now skipped -
+rm -f "$ewa_svc" "$ewa_tmr"
+mkdir -p "$ewa_disable_dir"
+: > "$ewa_disable_dir/dispatch-fleet-watch.timer"
+: > "$ewa_log"
+ewa_5a_err="$ewa_tmp/5a-stderr"
+ewa_5a_rc=0
+(
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+) >/dev/null 2>"$ewa_5a_err" || ewa_5a_rc=$?
+assert_eq "5a: ensure_watcher_units returns 0 (cold path, marker present)" "0" "$ewa_5a_rc"
+TOTAL=$((TOTAL + 1))
+if [ -f "$ewa_svc" ] && [ -f "$ewa_tmr" ]; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a wrote both unit files"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a did not write both unit files"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'daemon-reload' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a ran daemon-reload"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a did not run daemon-reload"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'enable --now dispatch-fleet-watch.timer' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a did not run enable --now dispatch-fleet-watch.timer"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a ran enable --now dispatch-fleet-watch.timer despite the marker"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'skipping enable --now' "$ewa_5a_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a stderr mentions skipping enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a stderr missing 'skipping enable --now'"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'WARNING' "$ewa_5a_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5a stderr has no WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5a stderr unexpectedly contains WARNING"
+fi
+
+# --- 5b. steady state, marker present, unit files already current ------------
+# Reuses the SAME unit files 5a just wrote (no removal) — proves the hot-path
+# extension short-circuits before touching systemctl at all.
+: > "$ewa_log"
+ewa_5b_rc=0
+(
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+) >/dev/null 2>&1 || ewa_5b_rc=$?
+assert_eq "5b: ensure_watcher_units returns 0 (steady state, marker present)" "0" "$ewa_5b_rc"
+assert_eq "5b: stub log empty (no daemon-reload/enable/is-active call)" "" "$(cat "$ewa_log")"
+
+# --- 5c. marker absent → unchanged cold-path behavior (regression guard) -----
+rm -f "$ewa_svc" "$ewa_tmr"
+rm -rf "$ewa_disable_dir"
+mkdir -p "$ewa_disable_dir"
+: > "$ewa_log"
+ewa_5c_rc=0
+(
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+) >/dev/null 2>&1 || ewa_5c_rc=$?
+assert_eq "5c: ensure_watcher_units returns 0 (no marker)" "0" "$ewa_5c_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-fleet-watch.timer' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5c ran enable --now dispatch-fleet-watch.timer (no marker → unchanged behavior)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5c did not run enable --now dispatch-fleet-watch.timer"
+fi
+
+# --- 5d. marker present for a DIFFERENT unit → per-unit granularity ----------
+rm -f "$ewa_svc" "$ewa_tmr"
+rm -rf "$ewa_disable_dir"
+mkdir -p "$ewa_disable_dir"
+: > "$ewa_disable_dir/dispatch-heal.timer"
+: > "$ewa_log"
+ewa_5d_rc=0
+(
+  export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+  export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+  export STUB_LOG="$ewa_log"
+  export STUB_IS_ACTIVE_RC=1
+  export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir"
+  source "$SCRIPT_DIR/lib.sh"
+  ensure_watcher_units "$ewa_tmp/main-worktree"
+) >/dev/null 2>&1 || ewa_5d_rc=$?
+assert_eq "5d: ensure_watcher_units returns 0 (other-unit marker)" "0" "$ewa_5d_rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'enable --now dispatch-fleet-watch.timer' "$ewa_log"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5d ran enable --now dispatch-fleet-watch.timer (marker names a different unit)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5d did not run enable --now dispatch-fleet-watch.timer despite an other-unit marker"
+fi
+
+# --- 5e. unit-disable sentinel dir unreadable → unknown, proceed + WARNING ---
+# chmod 000 does not deny root, so root would spuriously see this as
+# searchable. Skip-but-count as PASS in that case, matching the root-invariant
+# permission-test idiom in test-lib-pause-state.sh.
+if [[ "$(id -u)" == "0" ]]; then
+  echo "  (running as root — mode bits do not deny search; skipping 5e, counted as pass)"
+  TOTAL=$((TOTAL + 2))
+  PASS=$((PASS + 2))
+else
+  rm -f "$ewa_svc" "$ewa_tmr"
+  ewa_disable_dir_5e="$ewa_tmp/disabled-5e"
+  mkdir -p "$ewa_disable_dir_5e"
+  chmod 000 "$ewa_disable_dir_5e"
+  : > "$ewa_log"
+  ewa_5e_err="$ewa_tmp/5e-stderr"
+  ewa_5e_rc=0
+  (
+    export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
+    export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
+    export STUB_LOG="$ewa_log"
+    export STUB_IS_ACTIVE_RC=1
+    export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir_5e"
+    source "$SCRIPT_DIR/lib.sh"
+    ensure_watcher_units "$ewa_tmp/main-worktree"
+  ) >/dev/null 2>"$ewa_5e_err" || ewa_5e_rc=$?
+  chmod -R u+rwx "$ewa_disable_dir_5e"
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'enable --now dispatch-fleet-watch.timer' "$ewa_log"; then
+    PASS=$((PASS + 1)); echo "  PASS: 5e ran enable --now dispatch-fleet-watch.timer (unreadable sentinel dir → unknown, proceed)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: 5e did not run enable --now dispatch-fleet-watch.timer"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if grep -q 'WARNING' "$ewa_5e_err"; then
+    PASS=$((PASS + 1)); echo "  PASS: 5e stderr contains WARNING"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: 5e stderr missing WARNING"
+  fi
+  rm -rf "$ewa_disable_dir_5e"
+fi
+
+rm -rf "$ewa_disable_dir"
+rm -rf "$ewa_tmp"
+
 report_results

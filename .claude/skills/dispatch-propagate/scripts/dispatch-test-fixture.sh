@@ -27,6 +27,13 @@ HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
 # four levels below the repo root.
 UTIL_SCRIPT_DIR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts"
 
+# Routing-decision-log leak guard: redirects DISPATCH_DECISION_LOG_DIR into a
+# per-run tmp sandbox at source time and defines
+# dispatch_decision_log_guard_check. Sourced here — alongside the host systemd
+# leak guard below — so EVERY suite inherits it.
+# shellcheck source=lib-test-decision-log-guard.sh
+source "$SCRIPT_DIR/lib-test-decision-log-guard.sh"
+
 # --- test helpers -----------------------------------------------------------
 
 PASS=0
@@ -48,11 +55,153 @@ assert_eq() {
 }
 
 report_results() {
+  # Count the host-systemd leak guard as a real assertion of THIS suite, so a
+  # leak shows up in the tally and turns report_results non-zero. The guard is
+  # idempotent — the EXIT trap re-call is a no-op after this one.
+  dispatch_host_systemd_guard_check || true
+  # Same treatment for the routing-decision-log leak guard: count it as a real
+  # assertion of THIS suite so a leak turns report_results non-zero. Idempotent
+  # — the EXIT trap re-call is a no-op after this one.
+  dispatch_decision_log_guard_check || true
   echo ""
   echo "================================"
   echo "Results: $PASS/$TOTAL passed, $FAIL failed"
   echo "================================"
   [[ "$FAIL" -eq 0 ]]
+}
+
+# --- host systemd leak guard (tactic-sweep-timer-unit-dir-leak) -------------
+#
+# Every suite that drives a script touching lib.sh's unit installers
+# (ensure_recover_unit, ensure_sweep_timer, ensure_heartbeat_units) must
+# redirect the matching *_UNIT_DIR **and** *_SYSTEMCTL_CMD into its tmp
+# sandbox. Miss either half and the suite mutates the developer's real user
+# systemd state: a missing *_UNIT_DIR rewrites the host's unit files, and a
+# missing *_SYSTEMCTL_CMD runs a real `systemctl --user daemon-reload` /
+# `enable --now` / `disable --now` against the host's user manager (which
+# changes no file content, so a file-hash-only guard never sees it).
+#
+# This guard is armed here — at fixture-source time — so EVERY suite inherits
+# it, and it fires from two places: report_results (the normal terminal path,
+# where it counts as an assertion) and the EXIT trap below (so an abort under
+# `set -e` still reports the leak). It covers:
+#
+#   1. the WorkingDirectory= value of every unit lib.sh can write, in the REAL
+#      unit dir resolved the way lib.sh resolves it —
+#      ${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user (a hardcoded $HOME/.config
+#      would watch absent files and pass vacuously on a host that sets
+#      XDG_CONFIG_HOME, e.g. home-manager/NixOS). WorkingDirectory=, not the
+#      file's content hash: the host's live dispatch chain legitimately rewrites
+#      these .service files whenever a launcher runs with a different PATH
+#      (Environment="PATH=..." is captured at write time), so a content hash
+#      would fail the suite on a concurrent-but-innocent rewrite. The installed
+#      WorkingDirectory= is the host's own main worktree and is stable across
+#      those rewrites, while a leak from this suite necessarily points it at a
+#      per-run temp sandbox — so the value change is unambiguous leak evidence;
+#   2. the dispatch-* entry set of that dir plus the timers.target.wants symlink
+#      set, so an enable/disable that only moves symlinks is caught;
+#   3. a recording `systemctl` stub prepended to PATH, so any code path that
+#      falls back to the bare `systemctl` default is recorded and fails the
+#      suite instead of reaching the host's user manager. The stub exits 1,
+#      matching what a real `systemctl --user` does where no user manager is
+#      reachable (CI), so probe-shaped calls still read as "no".
+DISPATCH_HOST_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+# Units lib.sh writes: ensure_recover_unit (lib.sh:2585), ensure_sweep_timer
+# (lib.sh:2748), ensure_heartbeat_units (lib.sh:3023), ensure_healer_units and
+# ensure_watcher_units (dispatch-heal.* / dispatch-fleet-watch.*, below
+# ensure_sweep_timer in lib.sh).
+DISPATCH_HOST_UNIT_FILES=(
+  dispatch-tick-recover.service
+  dispatch-sweep-periodic.service
+  dispatch-sweep-periodic.timer
+  dispatch-heartbeat.service
+  dispatch-heartbeat.timer
+  dispatch-heal.service
+  dispatch-heal.timer
+  dispatch-fleet-watch.service
+  dispatch-fleet-watch.timer
+)
+
+_dispatch_host_unit_fingerprint() (
+  # Runs in a subshell (the `(...)` body): the nullglob change stays local.
+  shopt -s nullglob
+  local f e
+  for f in "${DISPATCH_HOST_UNIT_FILES[@]}"; do
+    if [[ -f "$DISPATCH_HOST_UNIT_DIR/$f" ]]; then
+      printf 'unit %s workdir=%s\n' "$f" \
+        "$(sed -n 's/^WorkingDirectory=//p' "$DISPATCH_HOST_UNIT_DIR/$f" | head -1)"
+    else
+      printf 'unit %s absent\n' "$f"
+    fi
+  done
+  for e in "$DISPATCH_HOST_UNIT_DIR"/dispatch-*; do
+    printf 'entry %s\n' "${e##*/}"
+  done
+  for e in "$DISPATCH_HOST_UNIT_DIR"/timers.target.wants/*; do
+    printf 'wants %s\n' "${e##*/}"
+  done
+)
+
+DISPATCH_GUARD_BIN_DIR=$(mktemp -d)
+DISPATCH_GUARD_SYSTEMCTL_LOG="$DISPATCH_GUARD_BIN_DIR/real-systemctl-calls.log"
+cat > "$DISPATCH_GUARD_BIN_DIR/systemctl" <<STUB
+#!/usr/bin/env bash
+# Leak guard: a suite that reaches the bare \`systemctl\` default has not wired
+# its *_SYSTEMCTL_CMD seam. Record the argv and refuse, exactly as a real
+# \`systemctl --user\` does where no user manager is reachable.
+echo "\$*" >> "$DISPATCH_GUARD_SYSTEMCTL_LOG"
+echo "REFUSED: the test suite reached the real 'systemctl' (argv: \$*)" >&2
+exit 1
+STUB
+chmod +x "$DISPATCH_GUARD_BIN_DIR/systemctl"
+# Prepend BEFORE SAVED_PATH is captured, so teardown's PATH restore keeps it.
+export PATH="$DISPATCH_GUARD_BIN_DIR:$PATH"
+
+# Every suite reads the unit-disable sentinel through lib-unit-disable-state.sh.
+# Pin it at a path that is never created, so no suite can be perturbed by a
+# timer the developer running the suite has genuinely disabled on this host.
+export DISPATCH_UNIT_DISABLE_DIR="$DISPATCH_GUARD_BIN_DIR/no-disabled-units"
+
+_DISPATCH_HOST_UNIT_FINGERPRINT_BEFORE="$(_dispatch_host_unit_fingerprint)"
+_DISPATCH_HOST_GUARD_DONE=0
+
+# dispatch_host_systemd_guard_check — compare the host fingerprint against the
+# source-time snapshot and assert no real systemctl was reached. Counts one
+# assertion; idempotent (later calls are no-ops). Returns non-zero on a leak.
+dispatch_host_systemd_guard_check() {
+  [[ "$_DISPATCH_HOST_GUARD_DONE" == "1" ]] && return 0
+  _DISPATCH_HOST_GUARD_DONE=1
+  local after calls=""
+  after="$(_dispatch_host_unit_fingerprint)"
+  if [[ -s "$DISPATCH_GUARD_SYSTEMCTL_LOG" ]]; then
+    calls="$(cat "$DISPATCH_GUARD_SYSTEMCTL_LOG")"
+  fi
+  TOTAL=$((TOTAL + 1))
+  if [[ "$after" == "$_DISPATCH_HOST_UNIT_FINGERPRINT_BEFORE" && -z "$calls" ]]; then
+    PASS=$((PASS + 1))
+    echo "  PASS: host systemd state untouched (no unit-dir write, no real systemctl)"
+    return 0
+  fi
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: host systemd state untouched (no unit-dir write, no real systemctl)"
+  {
+    echo "FAIL: a harness in this suite leaked into the host's user systemd state."
+    echo "  unit dir: $DISPATCH_HOST_UNIT_DIR"
+    if [[ "$after" != "$_DISPATCH_HOST_UNIT_FINGERPRINT_BEFORE" ]]; then
+      echo "  --- unit-dir fingerprint BEFORE ---"
+      printf '%s\n' "$_DISPATCH_HOST_UNIT_FINGERPRINT_BEFORE"
+      echo "  --- unit-dir fingerprint AFTER ----"
+      printf '%s\n' "$after"
+    fi
+    if [[ -n "$calls" ]]; then
+      echo "  --- real 'systemctl' invocations (a *_SYSTEMCTL_CMD seam is unwired) ---"
+      printf '%s\n' "$calls"
+    fi
+    echo "  Fix: export the matching DISPATCH_*_UNIT_DIR and DISPATCH_*_SYSTEMCTL_CMD"
+    echo "  into the suite's tmp sandbox before invoking the script under test."
+  } >&2
+  return 1
 }
 
 # --- harness ----------------------------------------------------------------
@@ -200,6 +349,19 @@ STUB
   # no test reaches the real `claude` daemon. Per-test calls to
   # select_target_fake_claude override this to model live or orphan worktrees.
   export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/no-such-claude"
+
+  # Default the empty-read corroboration probe to "daemon visible". The library
+  # only trusts an exactly-`[]` registry payload when a `claude daemon` process
+  # corroborates it; without this stub the probe would shell out to the HOST's
+  # real pgrep, making every `[]`-payload case depend on whether the developer's
+  # machine happens to be running a daemon. Exiting 0 preserves the pre-existing
+  # meaning of every `[]` fake: a definite "no sessions".
+  cat > "$TMPDIR_TEST/pgrep-daemon-visible" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/pgrep-daemon-visible"
+  export CLAUDE_AGENTS_PGREP_CMD="$TMPDIR_TEST/pgrep-daemon-visible"
 
   # Point the reservation ledger (#1046) at a scratch dir that is absent by
   # default — no marker files, so reservation_exists is false for every row and
@@ -1235,17 +1397,45 @@ teardown() {
   unset GH_RETRY_BASE_DELAY
   # Per-test exports for the liveness gate must not leak across tests.
   unset CLAUDE_AGENTS_CMD
+  # The empty-read corroboration probe override must not leak either — its stub
+  # lives under the just-removed TMPDIR_TEST, so a leaked value would point at a
+  # deleted path and silently classify every `[]` as uncorroborated.
+  unset CLAUDE_AGENTS_PGREP_CMD
   unset CLAUDE_CODE_SESSION_ID
   # The #1452 tick-snapshot / trace-cache exports must not leak across tests
   # either — both default OFF so existing tests keep the live/uncached path.
-  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR
+  # DISPATCH_AGENTS_SNAPSHOT_ALL is the REGISTERED-view (`--json --all`) snapshot
+  # counterpart; it must not leak either, or a later test would silently read a
+  # previous test's registered snapshot instead of its own fake daemon.
+  unset DISPATCH_AGENTS_SNAPSHOT DISPATCH_TRACE_CACHE_DIR DISPATCH_AGENTS_SNAPSHOT_ALL
   # The reservation-ledger override (#1046) must not leak across tests either.
   unset DISPATCH_RESERVATION_DIR
   # The attention-rank seam (Attention v2) must not leak either — a per-test rank
   # override would otherwise poison the next test's baseline.
   unset DISPATCH_RANK_MAP_JSON
 }
-trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
+# EXIT trap: tmp cleanup PLUS the leak guards (host systemd, routing-decision
+# log). The guards run here too (not only in report_results) so a suite that
+# aborts early under `set -e` still reports a leak instead of skipping the
+# check; each guard is idempotent, so the normal path (report_results ran) does
+# not double-count. A leak forces a non-zero exit even when the suite otherwise
+# ended clean.
+_dispatch_test_exit_trap() {
+  local rc=$?
+  if [ -n "${TMPDIR_TEST:-}" ]; then
+    rm -rf "$TMPDIR_TEST"
+  fi
+  if ! dispatch_host_systemd_guard_check; then
+    rc=1
+  fi
+  if ! dispatch_decision_log_guard_check; then
+    rc=1
+  fi
+  rm -rf "$DISPATCH_GUARD_BIN_DIR"
+  rm -rf "$DISPATCH_TEST_DECISION_LOG_DIR"
+  exit "$rc"
+}
+trap _dispatch_test_exit_trap EXIT
 
 # Write the REST check-runs fixture for <sha> from an uppercase GraphQL-shape
 # rollup. The real `commits/<sha>/check-runs` endpoint returns status/conclusion

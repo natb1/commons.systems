@@ -5,8 +5,8 @@
 # spawns a top-level sonnet orchestrator session that invokes the phase skill
 # DIRECTLY (never a runner session that invokes a workflow). Covers the per-phase
 # skill map, the strategy/tactic lane split, and every provision-exit disposition
-# (0/10/11/12/13/2) — routed here at zero token cost with no `claude` session on
-# any non-zero path.
+# (0/10/11/12/13/14/2) — routed here at zero token cost with no `claude` session
+# on any non-zero path.
 #
 # Harness (mirrors the per-SUT test-*.sh files sharing dispatch-test-fixture.sh):
 # copy the SUT + its sourced libs
@@ -123,6 +123,7 @@ run_exec() {
 # Case 1: tactic:implement -> /implement, sonnet, --cwd worktree, --effort medium
 # ============================================================================
 echo "Case 1: tactic:implement launches /implement directly"
+printf 'session=headless:t\nissue=tactic-foo\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-foo"
 run_exec "tactic-foo:tactic:implement"
 SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "implement stdout" "launched tactic-foo /implement" "$OUT"
@@ -137,6 +138,16 @@ assert_contains "implement --effort medium" "--effort medium" "$SPAWN"
 GT_NEEDLE="dispatch-graph""-tick"
 assert_not_contains "implement carries no retired-workflow string" "$GT_NEEDLE" "$SPAWN"
 assert_not_contains "implement does not invoke the Workflow tool" "Invoke the Workflow tool" "$SPAWN"
+assert_eq "implement hands off the reservation marker, does not clear it" "present" \
+  "$([ -e "$RES_DIR/tactic-foo" ] && echo present || echo gone)"
+assert_contains "implement marker is re-stamped origin=spawned" "origin=spawned" \
+  "$(cat "$RES_DIR/tactic-foo")"
+# The re-stamp preserves the selection marker's identity fields rather than
+# falling back to the synthesized create-if-absent values (Case 15).
+assert_contains "implement handoff preserves the selection session=" "session=headless:t" \
+  "$(cat "$RES_DIR/tactic-foo")"
+assert_contains "implement handoff preserves the selection issue=" "issue=tactic-foo" \
+  "$(cat "$RES_DIR/tactic-foo")"
 
 # ============================================================================
 # Case 2: per-phase skill map (review/qa/fix/main-qa)
@@ -164,6 +175,7 @@ assert_not_contains "main-qa has no --effort (unmapped phase)" "--effort" "$SPAW
 # Case 3: strategy lane — no pre-provision, cwd=project root, /align-tactics
 # ============================================================================
 echo "Case 3: strategy lane spawns /align-tactics at the project root"
+printf 'session=headless:s\nissue=strategy-x\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/strategy-x"
 run_exec "strategy-x:strategy:align"
 SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "strategy stdout" "launched strategy-x /align-tactics" "$OUT"
@@ -171,6 +183,10 @@ assert_eq "strategy exit 0" "0" "$RC"
 assert_contains "strategy invokes /align-tactics" "/align-tactics strategy-x" "$SPAWN"
 assert_contains "strategy cwd is the project root" "--cwd $MAIN_WT" "$SPAWN"
 assert_contains "strategy model sonnet" "--model sonnet" "$SPAWN"
+assert_eq "strategy hands off the reservation marker, does not clear it" "present" \
+  "$([ -e "$RES_DIR/strategy-x" ] && echo present || echo gone)"
+assert_contains "strategy marker is re-stamped origin=spawned" "origin=spawned" \
+  "$(cat "$RES_DIR/strategy-x")"
 
 # ============================================================================
 # Case 4: provision exit 10 -> ci-waiting (no spawn)
@@ -184,19 +200,25 @@ assert_eq "waiting spawns nothing" "" "$(cat "$SPAWN_LOG")"
 # ============================================================================
 # Case 5: provision exit 11 -> the /dispatch-conflict Lane 3 session is the
 # first responder: it is spawned in the node's own worktree, the reservation is
-# cleared, and NO strike file, NO hold-node call and NO park-node write happen.
+# HANDED OFF (re-stamped origin=spawned, not cleared), and NO strike file, NO
+# hold-node call and NO park-node write happen.
 # ============================================================================
 echo "Case 5: provision exit 11 -> conflict lane spawned, no strike, no graph write"
 rm -f "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
-touch "$RES_DIR/tactic-c"
+# A WELL-FORMED selection-time marker, not a bare `touch`: the handoff must carry
+# the existing session=/issue= forward. An empty marker would instead exercise the
+# create-if-absent fallback, which Case 15 already covers.
+printf 'session=headless:c\nissue=tactic-c\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-c"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
 SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "conflict-lane stdout" "conflict-lane tactic-c" "$OUT"
 assert_eq "conflict-lane exit 0" "0" "$RC"
 assert_contains "conflict-lane invokes /dispatch-conflict on the node id" \
   "/dispatch-conflict tactic-c" "$SPAWN"
-assert_contains "conflict-lane --cwd is the node's own worktree" \
-  "--cwd $MAIN_WT/.claude/worktrees/tactic-c" "$SPAWN"
+assert_contains "conflict-lane --cwd is the project root" \
+  "--cwd $MAIN_WT --model" "$SPAWN"
+assert_not_contains "conflict-lane --cwd is NOT the node's own worktree" \
+  "$MAIN_WT/.claude/worktrees/tactic-c" "$SPAWN"
 assert_contains "conflict-lane --name is the node id" "--name tactic-c" "$SPAWN"
 assert_contains "conflict-lane orchestrator model sonnet" "--model sonnet" "$SPAWN"
 assert_contains "conflict-lane spawns with --no-verify" "--no-verify" "$SPAWN"
@@ -204,14 +226,22 @@ assert_eq "conflict-lane makes no park-node write" "" "$(cat "$PARK_LOG")"
 assert_eq "conflict-lane makes no hold-node write" "" "$(cat "$HOLD_LOG")"
 assert_eq "conflict-lane writes no strike file" "gone" \
   "$([ -e "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes" ] && echo present || echo gone)"
-assert_eq "conflict-lane clears the reservation marker" "gone" \
+assert_eq "conflict-lane hands off the reservation marker, does not clear it" "present" \
   "$([ -e "$RES_DIR/tactic-c" ] && echo present || echo gone)"
+assert_contains "conflict-lane marker is re-stamped origin=spawned" "origin=spawned" \
+  "$(cat "$RES_DIR/tactic-c")"
+# The re-stamp must PRESERVE the selection marker's identity fields, not
+# overwrite them with the create-if-absent fallback (session=spawn-handoff).
+assert_contains "conflict-lane handoff preserves the selection session=" "session=headless:c" \
+  "$(cat "$RES_DIR/tactic-c")"
+assert_contains "conflict-lane handoff preserves the selection issue=" "issue=tactic-c" \
+  "$(cat "$RES_DIR/tactic-c")"
 
 # A successful kick must also CLEAR a strike file left by earlier failed kicks:
 # the backstop's counter means "consecutive failures to launch the lane", which
 # is what its hold reason asserts.
 printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
-touch "$RES_DIR/tactic-c"
+printf 'session=headless:c\nissue=tactic-c\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-c"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
 assert_eq "conflict-lane stdout after prior strikes" "conflict-lane tactic-c" "$OUT"
 assert_eq "a successful kick resets the strike counter" "gone" \
@@ -277,11 +307,14 @@ assert_eq "stale clears the reservation marker" "gone" \
 # Case 7: provision exit 13 -> scope-stale, demote called, no spawn
 # ============================================================================
 echo "Case 7: provision exit 13 -> scope-stale via demote, no spawn"
+touch "$RES_DIR/tactic-d"
 PROV_RC=13 run_exec "tactic-d:tactic:qa"
 assert_eq "scope-stale stdout" "scope-stale tactic-d" "$OUT"
 assert_eq "scope-stale exit 0" "0" "$RC"
 assert_eq "scope-stale spawns nothing" "" "$(cat "$SPAWN_LOG")"
 assert_contains "scope-stale demotes the node" "tactic-d" "$(cat "$DEMOTE_LOG")"
+assert_eq "scope-stale clears the reservation marker" "gone" \
+  "$([ -e "$RES_DIR/tactic-d" ] && echo present || echo gone)"
 
 # ============================================================================
 # Case 8: provision exit 2 (or other) -> parked, no spawn
@@ -294,12 +327,43 @@ assert_eq "prov-error spawns nothing" "" "$(cat "$SPAWN_LOG")"
 assert_contains "prov-error parks the node" "tactic-e" "$(cat "$PARK_LOG")"
 
 # ============================================================================
+# Case 8b: provision exit 14 -> a worktree-residue tracked hold, born on the
+# FIRST occurrence. No strike ladder, no conflict-lane spawn, no park-node
+# write — the residue is not a content conflict and the source's own
+# office_hours is never written by this producer.
+# ============================================================================
+echo "Case 8b: provision exit 14 -> held via a worktree-residue hold, first occurrence"
+PROV_RC=14 run_exec "tactic-res:tactic:qa"
+HOLD=$(cat "$HOLD_LOG")
+assert_eq "residue stdout" "held tactic-res worktree-residue" "$OUT"
+assert_eq "residue exit 0" "0" "$RC"
+assert_eq "residue spawns nothing" "" "$(cat "$SPAWN_LOG")"
+assert_eq "residue makes no park-node write" "" "$(cat "$PARK_LOG")"
+assert_contains "residue calls hold-node with --kind worktree-residue" \
+  "tactic-res --kind worktree-residue" "$HOLD"
+
+# ============================================================================
+# Case 8c: exit 14 where hold-node itself fails -> failed, exit 1
+# ============================================================================
+echo "Case 8c: provision exit 14 with a failing hold-node -> failed, exit 1"
+PROV_RC=14 HOLD_RC=1 run_exec "tactic-resf:tactic:qa"
+assert_eq "residue hold-fail stdout" "failed tactic-resf hold-failed" "$OUT"
+assert_eq "residue hold-fail exit 1" "1" "$RC"
+
+# ============================================================================
 # Case 9: a failed spawn kick -> failed, exit 1
 # ============================================================================
 echo "Case 9: spawn kick failure -> failed, exit 1"
+printf 'session=headless:k\nissue=tactic-k\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-k"
 SPAWN_RC=1 run_exec "tactic-k:tactic:implement"
 assert_eq "kick-fail stdout" "failed tactic-k spawn-failed" "$OUT"
 assert_eq "kick-fail exit 1" "1" "$RC"
+# A failed kick leaves the selection claim for the sweep — it does NOT stamp a
+# spawn handoff, since no worker session was actually launched.
+assert_eq "kick-fail leaves the reservation marker" "present" \
+  "$([ -e "$RES_DIR/tactic-k" ] && echo present || echo gone)"
+assert_not_contains "kick-fail marker is not stamped origin=spawned" "origin=spawned" \
+  "$(cat "$RES_DIR/tactic-k")"
 
 # ============================================================================
 # Case 10: hold-node failure once the conflict strike cap is exceeded ->
@@ -337,6 +401,23 @@ echo "Case 13: unmapped kind:phase -> failed, exit 1"
 run_exec "tactic-u:tactic:bogus"
 assert_eq "unmapped stdout" "failed tactic-u unmapped-kind-phase:tactic:bogus" "$OUT"
 assert_eq "unmapped exit 1" "1" "$RC"
+
+# ============================================================================
+# Case 15: no reservation marker present at spawn time -> a successful kick
+# still creates one, stamped origin=spawned. This covers a spawn racing ahead
+# of (or outliving) whatever wrote the original selection-time marker.
+# ============================================================================
+echo "Case 15: a successful kick creates a marker even if none existed at spawn time"
+rm -f "$RES_DIR/tactic-nomark"
+run_exec "tactic-nomark:tactic:implement"
+assert_eq "no-prior-marker stdout" "launched tactic-nomark /implement" "$OUT"
+assert_eq "no-prior-marker exit 0" "0" "$RC"
+assert_eq "no-prior-marker creates the reservation marker" "present" \
+  "$([ -e "$RES_DIR/tactic-nomark" ] && echo present || echo gone)"
+assert_contains "no-prior-marker is stamped origin=spawned" "origin=spawned" \
+  "$(cat "$RES_DIR/tactic-nomark")"
+assert_contains "no-prior-marker has a non-empty session= line" "session=" \
+  "$(cat "$RES_DIR/tactic-nomark")"
 
 # ============================================================================
 # Case 14: usage error (no args) -> exit 2
