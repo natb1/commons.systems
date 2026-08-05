@@ -109,7 +109,29 @@ execution:
 validates: []
 blocked_by:
   - tactic-graph-commit-intentions-base-stale-restore
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-08-05
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.VFV4cKB1ck/tactic-graph-commit-rebuild-snapshot-stale-revert.md
+    (this machine only — may not survive past this session). Recommended: the
+    losing writer re-reads the current origin/main content, manually merges in
+    its intended edit, and re-runs graph-commit on the merged result — that same
+    commit clears this office_hours park. A third session encountering this park
+    while the loser is still working should wait rather than attempt its own
+    merge (the mailbox discipline).
+
+
+    Unresolved conflict on tactic-graph-commit-rebuild-snapshot-stale-revert:
+    list-entry removal vs. concurrent edit — this write removes frontmatter list
+    entries that origin/main still carries (execution[planned]), and the
+    field-level merge unions list fields base-free, so auto-merging would
+    silently restore them
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -544,3 +566,26 @@ Manual and judgment checks, outside the automated blocks:
   graph-commit's `concurrent-edit conflict ... parking node(s)` message. A park
   from this new path is the fix working, not a new failure — the parked node
   carries the writer's content in the kept `SNAP_DIR` for a manual merge.
+
+## needs-main residue
+
+- **id 11 — PR body's regression-case citation is stale (case numbers 36-40 vs
+  the actual 48-52).** The PR body's Unit 1 section cites the new
+  `test-graph-commit.sh` regression cases reproducing the silent revert as
+  "cases 36-40." An unrelated `origin/main` commit independently inserted its
+  own new cases 36-47 into `test-graph-commit.sh` after this PR's body text was
+  written, shifting this PR's own five regression cases to case numbers 48-52
+  (far-ahead disjoint fields both land; far-ahead same-field edit parks;
+  far-ahead prune racing a concurrent edit parks; far-ahead list-entry removal
+  parks; far-ahead + stale `--base` reconciliation survives the rebuild). QA
+  confirmed all five cases exist under their current numbers, correctly
+  implement the scenarios the PR body describes, and pass
+  (`test-graph-commit.sh` 68/68 as of the qa-fix attempt-2 pass). This looks
+  like stale prose caused by unrelated `origin/main` churn, not a functional
+  gap — but the PR body's own text should be corrected post-merge so a future
+  reader isn't misled by the wrong case numbers.
+  - Expected outcome: the merged PR body (or a follow-up doc fix) cites the
+    correct case numbers, or a comment confirms the citation is deliberately
+    left as historical text.
+  - Verifiability: MACHINE
+  - Check: `grep -n 'Case 4[89]\|Case 5[0-2]' packages/intentionsutil/scripts/test-graph-commit.sh` on `origin/main` post-merge — confirm the five cases described above are present at whatever numbers they land at, and that they cover the disjoint-lands / same-field-parks / prune-race-parks / list-entry-removal-parks / stale-base-survives-rebuild scenarios.

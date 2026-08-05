@@ -129,7 +129,7 @@ success_signal:
     landed-then-skipped count trends to zero across re-runs after the merge
   is_proxy: false
 attention: null
-phase: implement
+phase: main-qa
 execution:
   branch: tactic-align-tactics-mark-terminal-skipped
   pr: 3047
@@ -140,7 +140,10 @@ execution:
     since: 2026-08-05
     attempt: 3
     pushed_sha: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T20:31:54Z
+    mergeCommitSha: 1c7dc4fb1e528099d64990564eb62e803a22bf18
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
