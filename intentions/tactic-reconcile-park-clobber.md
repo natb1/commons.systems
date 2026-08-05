@@ -76,7 +76,22 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "phase session ended without declaring a disposition — `claude agents
+    --all` reports the session for this node in a terminal state and it has had
+    no transcript activity for `1512`s, while `origin/main` still shows the node
+    at a working phase with `office_hours: null`; the node is therefore both
+    re-selectable and held, so the dispatch-tick terminal-without-disposition
+    sweep parked it"
+  since: 2026-08-05
+  recommendation: Read the session's transcript or attach the held job (`claude
+    agents --all`, `claude attach <job-id>`) to see what it concluded. Decide
+    the judgment item it stopped on, then either answer it here and `clear-park
+    <node-id>`, or stop the session (`claude stop <job-id>`), let
+    `dispatch-sweep` reap the worktree, and `clear-park <node-id>` to return the
+    node to the lane. Do NOT simply reap the terminal session and release the
+    node — that is what restarts the churn loop.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
