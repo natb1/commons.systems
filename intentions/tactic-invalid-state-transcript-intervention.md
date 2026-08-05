@@ -27,13 +27,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-invalid-state-transcript-intervention
   pr: 3049
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   completion: null
@@ -707,3 +706,53 @@ Manual and judgment checks:
 - The PR title must be `tactic-invalid-state-transcript-intervention: <short
   description>` — the literal node id verbatim, per the standing PR-title
   condition.
+
+## needs-main residue
+
+### 20. Rehearsal before arming against a synthetic registry and scratch dirs
+
+- URL path: `.claude/skills/dispatch-propagate/scripts/`
+- Expected outcome: With a synthetic terminal registry row, a fixture
+  transcript, and scratch projects/intentions/job dirs, the three scripts
+  compose correctly end to end: one follow-up node minted and schema-valid,
+  correct reap verdict, no write to the source node, `--dry-run` producing no
+  commits, and the real `intentions/` untouched.
+- Finding: Requires a synthetic registry/daemon fixture harness and scratch
+  roots this reasons-only QA pass could not stand up interactively. The PR
+  body claims this rehearsal was already run pre-merge; independent
+  re-verification against the landed scripts is deferred here.
+- Verifiability: WAIT — awaiting PR merge (sibling `tactic-invalid-state-lane`
+  / #3048 already on `main`) before a fixture-based rehearsal can be driven
+  against the landed scripts.
+
+### 21. Observe in production, one tick after merge
+
+- URL path: current
+- Expected outcome: On the next dispatch tick with a terminal-held node: the
+  journal shows the `invalid-state:` sweep line, the router logs `intervened
+  <id> 1/3`, the intervention session appears and self-closes, a
+  `tactic-invalid-state-rc-*` node exists on `origin/main` with exactly one
+  occurrence, and the previously-frozen node is selectable again.
+- Finding: Requires real post-merge fleet state with a genuinely
+  terminal-held node; not reproducible before merge.
+- Verifiability: WAIT — awaiting merge plus one dispatch tick that observes a
+  genuinely terminal-held node.
+- Check: grep dispatch-tick journal/log output for the `invalid-state:` sweep
+  line and `intervened <id> 1/3`; confirm a `tactic-invalid-state-rc-*` node
+  lands on `origin/main` with one occurrence; confirm the previously-frozen
+  node becomes selectable again.
+
+### 22. Self-reap non-regression on the intervention's own session
+
+- URL path: `.claude/skills/dispatch-propagate/scripts/lib-session-reap.sh`
+- Expected outcome: After a real post-merge intervention run declares its
+  disposition, its own session (registered under the same node name as the
+  corpse it targeted) is reaped normally by the ordinary
+  `session_reap_sweep` rather than becoming permanently unreapable — the
+  self-target refusal must not trade the old freeze for a new one.
+- Finding: Observable only after a real post-merge intervention run
+  completes; the refusal path and the ordinary sweep path cannot both be
+  exercised against the same live session before merge.
+- Verifiability: WAIT — awaiting a real post-merge intervention run to
+  complete and declare its disposition, followed by the next
+  `session_reap_sweep` tick.
