@@ -39,78 +39,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA plan clean (16/16 script-verifiable PASS, 2 judgment items
-    independently confirmed already-satisfied, 3 planned-deferral items filed as
-    needs-main residue on the node body). One residual item (arming sequence —
-    sibling #3048 must land before this PR merges, since merging arms autonomous
-    intervention fleet-wide) was reclassified opus-fixable by disposition triage
-    but the gated fix-planner refused with a scope-deviation: merge-order
-    authorization is not a code fix. Escalating to office-hours for that
-    authorization call only."
-  since: 2026-08-05
-  recommendation: >-
-    ## Recommendation: one merge-order authorization call
-
-
-    **Run the check first:**
-
-
-    ```
-
-    gh pr view 3048 --json state,mergedAt
-
-    ```
-
-
-    That is the entire open question. PR #3048 (node
-    `tactic-invalid-state-lane`) builds the invalid-state router whose
-    intervention tier is gated purely on the existence of
-    `.claude/skills/dispatch-invalid-state/SKILL.md` — the exact file this PR
-    (#3049) adds.
-
-
-    **If #3048 shows `state: MERGED` with a non-null `mergedAt`:** the ordering
-    constraint is satisfied and #3049 is merge-eligible. Before merging, be
-    deliberate about one thing: the merge itself arms autonomous intervention
-    across the whole dispatch fleet the instant it lands on `main` — there is no
-    staged rollout and no feature flag between merge and armed. Do a final skim
-    of `.claude/skills/dispatch-invalid-state/SKILL.md` against the router's
-    tier gate in the landed #3048 (confirm the path the router probes is
-    byte-identical to the path this PR creates), then merge and watch the next
-    few dispatch ticks.
-
-
-    **If #3048 is still open or draft:** hold #3049. No code action, no edits,
-    no new commits — merging now would land a skill file whose companion router
-    does not exist on `main`, which is the failure mode the PR body calls out
-    ("#3048 must land first, or this arms a router that is not there"). Park it
-    back on office-hours or leave it queued, and re-run the same `gh pr view
-    3048` check once #3048 lands.
-
-
-    **Disarm path, if arming turns out premature or buggy post-merge:** revert
-    exactly one file — `.claude/skills/dispatch-invalid-state/SKILL.md`. Its
-    absence returns the router to its pre-intervention tier. Nothing else in
-    #3049 needs to be touched, and no revert of #3048 is required.
-
-
-    **Everything else in this PR is QA-clean.** 16 script-verifiable items
-    passed (full PR-scripts unit suite, lint, `packages/intentionsutil` vitest
-    820/820, and the doctrine greps: no direct `claude rm` / `git worktree
-    remove` outside the extracted library function, no `hold-node` outside its
-    prohibition list, no write to the source node from the followup script,
-    anchored root-cause id regex, closing-keyword refusal, timestamp-free dedup
-    key). The two judgment items — declaration coverage on every terminal path
-    of the new SKILL.md, and the five-state classification with its
-    fail-toward-keep posture — were independently confirmed by Opus code review.
-    Three deferrals (synthetic-registry rehearsal, post-merge production
-    observation, self-reap non-regression) are already appended as `##
-    needs-main residue` on the node body (commit `0215311`, on `origin/main`)
-    and drain automatically once this merges and the phase advances `review →
-    main-qa`. No code defects were found in the diff. The merge-order
-    authorization is the only thing waiting on a human.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
