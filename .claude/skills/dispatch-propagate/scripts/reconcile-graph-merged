@@ -21,7 +21,13 @@
 #     on, distinct from silent deletion.
 #   - The serving strategy's round is still stamped here, at the done-transition,
 #     when its last non-draft child reaches `done`.
-# The whole plan (edits only) lands as ONE graph-commit.
+# The whole plan (edits only) lands as ONE graph-commit, under a diagnosis-time
+# compare-and-swap: each edited id's pre-mutation on-disk blob is pinned and
+# passed as `graph-commit --base <id>=<blob>`, so an edit that lands on
+# origin/main between this sweep's read and its commit is three-way merged
+# rather than silently overwritten. See Step 2 for why the pin is the DISK blob
+# and why `hash-object -w` is mandatory, and
+# .claude/skills/ref-diagnosis-time-cas/SKILL.md for the doctrine.
 #
 # Manual completion backfill (office-hours workflow, no script): when a tactic's
 # PR is closed-unmerged but its content genuinely landed on `main` out-of-band,
@@ -123,42 +129,89 @@ if [[ "$STATES" == "{}" ]]; then
 fi
 
 # --- Decide + apply the store mutations --------------------------------------
-# Plan-then-apply for a rollback path: a --no-apply run yields the plan's exact
-# edit id set WITHOUT touching disk; we snapshot each of those ids from
-# origin/main, THEN run the real apply. Both runs read the same unmutated
-# intentions/ dir (nothing else writes it between them), so the plan is
-# deterministic — the snapshotted ids match the ids the apply run mutates. The
-# plan is edit-only (nothing is pruned here anymore), so on any failure of the
-# apply run or the graph-commit, RESTORE_ON_FAILURE simply dumps each snapshot
-# blob back over its file, leaving intentions/ clean rather than tripping
-# graph-commit's assert_clean_outside_ids guard for every other node.
+# Plan-then-apply: a --no-apply run yields the plan's exact edit id set WITHOUT
+# touching disk; we pin each of those ids' pre-mutation on-disk blob, THEN run
+# the real apply. Both runs read the same unmutated intentions/ dir (nothing
+# else writes it between them), so the plan is deterministic — the pinned ids
+# match the ids the apply run mutates.
+#
+# The pinned blob is the diagnosis-time compare-and-swap base handed to
+# graph-commit as --base <id>=<blob>. Without it, graph-commit's
+# check_base_freshness() short-circuits on its first line and the sweep lands
+# whatever reconcile-graph.ts's writeNode put on disk, silently overwriting any
+# edit that landed on origin/main between this sweep's read and its commit.
+# That lost update is bug X: writeNode rewrites the WHOLE node from the
+# in-memory read, so a live office_hours park landed by another writer inside
+# that window was erased with `phase` left untouched.
+#
+# Ruling 31, read side vs write side — do NOT "simplify" this pin away as
+# redundant with the read-side ungating. This sweep deliberately stays UNGATED
+# on office_hours for its phase/merge decisions: it must keep advancing and
+# merging parked nodes. The pin governs the WRITE side only. It makes the sweep
+# skip nothing; it makes graph-commit merge a concurrently landed field instead
+# of clobbering it. Both properties hold at once.
+#
+# graph-commit MERGES rather than refuses on drift: on a stale base it runs the
+# structural three-way merge (base = the pinned blob, ours = our on-disk edit,
+# theirs = origin/main's landed content) and parks only when a divergence is
+# genuinely unresolvable. office_hours is a SCALAR_FIELD this sweep never
+# touches, so ours == base and scalarMerge takes theirs — the concurrent park
+# survives — while our phase/completion edits take the "theirs unchanged → take
+# ours" leg. Absorbing the park beats refusing the whole sweep.
 STATES_FILE="$(mktemp)" || { echo "reconcile-graph-merged: mktemp failed" >&2; exit 1; }
-declare -A SNAPSHOT=()
+declare -A BASE_BLOB=()
 RESTORE_ON_FAILURE=0
-restore_snapshot() {
-  local sid blob
-  for sid in "${!SNAPSHOT[@]}"; do
-    blob="${SNAPSHOT[$sid]}"
-    git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$sid.md"
+# Roll the apply run's disk mutations back to the checkout's CURRENT HEAD — not
+# to a captured blob. Restoring captured bytes is wrong on graph-commit's park
+# path: park_and_exit() does `git reset --hard FETCH_HEAD`, lands an office_hours
+# park, and exits non-zero, so HEAD has MOVED. Writing pre-park bytes back would
+# leave the tree dirty with stale, park-erased content — the shared-checkout
+# residue that bricks graph-commit's assert_clean_outside_ids guard for every
+# other writer, and that re-erases the very park this node exists to protect.
+# `checkout --` is correct on every failure path uniformly: after a park the
+# files already match HEAD (no-op, park preserved); before any commit HEAD is
+# unmoved (reverts the apply run exactly as the old restore did). It also closes
+# a latent residue bug — when this checkout sits behind origin/main, the old
+# restore wrote origin/main bytes over files whose HEAD version differed,
+# leaving them dirty. Precedent: resolve-hold's clean_node_file(), same guard,
+# same reason.
+restore_node_files() {
+  local sid
+  for sid in "${!BASE_BLOB[@]}"; do
+    git -C "$REPO_ROOT" checkout -- "intentions/$sid.md" ||
+      echo "reconcile-graph-merged: rollback could not restore intentions/$sid.md to HEAD" >&2
   done
 }
 # Single EXIT trap (bash traps REPLACE on a signal, not stack): always drop the
-# temp file, and roll the write back when a post-snapshot step armed the flag.
-trap 'rc=$?; rm -f "$STATES_FILE"; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
+# temp file, and roll the write back when a post-pin step armed the flag.
+trap 'rc=$?; rm -f "$STATES_FILE"; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_node_files; exit $rc' EXIT
 printf '%s' "$STATES" > "$STATES_FILE"
 
-# Step 1: plan-only run (no disk mutation) to learn the id set to snapshot.
+# Step 1: plan-only run (no disk mutation) to learn the id set to pin.
 PLAN_ONLY="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE" --no-apply) )" || {
   echo "reconcile-graph-merged: reconcile-graph.ts --no-apply failed" >&2; exit 1; }
 
-# Step 2: snapshot every planned edit id from origin/main. All planned ids are
-# landed nodes present on origin/main; a rev-parse miss is a hard error —
-# that id can't be safely mutated without a rollback path.
+# Step 2: pin every planned edit id's diagnosis-time base blob — the blob of the
+# ON-DISK file, which is exactly the content reconcile-graph.ts's readNode reads
+# in Step 3. NOT origin/main's blob: graph-commit defines base as "the blob the
+# writer read", and when this checkout sits behind origin/main the two differ.
+# Pinning origin/main would make scalarMerge compute a spurious "ours" delta on
+# fields this sweep never touched and could revert landed content — the exact
+# failure class the pin exists to close. In the normal synced case the two are
+# byte-identical and the distinction is a no-op.
+#
+# `-w` is MANDATORY, not an optimization: check_base_freshness resolves the base
+# with `git cat-file -p <sha>` and die()s with "base blob … is unreadable in the
+# local object database" when it misses. A disk blob differing from every
+# committed blob is absent from the object database unless -w writes it there,
+# so omitting -w would convert a benign stale base into a hard die. Keep the
+# hard-error posture (.claude/rules/code-style.md: clear errors over fallbacks)
+# — a hash-object failure on a planned edit id is a real error, not a skip.
 while IFS= read -r sid; do
   [[ -n "$sid" ]] || continue
-  blob=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$sid.md" 2>/dev/null) || {
-    echo "reconcile-graph-merged: cannot snapshot $sid from origin/main (no rollback path)" >&2; exit 1; }
-  SNAPSHOT[$sid]="$blob"
+  blob=$(git -C "$REPO_ROOT" hash-object -w -- "intentions/$sid.md") || {
+    echo "reconcile-graph-merged: cannot pin base blob for $sid (no CAS base, no rollback path)" >&2; exit 1; }
+  BASE_BLOB[$sid]="$blob"
 done < <(jq -r '.edit[]?' <<<"$PLAN_ONLY")
 
 # Step 3: real apply run — mutates disk; its stdout drives the rest of the
@@ -182,6 +235,19 @@ if [[ "${#EDIT[@]}" -eq 0 ]]; then
 fi
 
 GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile terminal tactics (record completion)")
+# Thread the diagnosis-time pins as repeated --base flags. graph-commit accepts
+# both a manifest file and repeated flags; the repeated form drops straight into
+# the existing edit-id loop. The <id>=<sha> PAIR form (never a bare sha) is
+# required for a multi-id call and is a free correctness guard — graph-commit
+# die()s on a malformed pair. Every planned edit id was pinned in Step 2 from
+# the same deterministic plan, so a missing pin means the plan drifted between
+# the two runs: hard-error rather than land an unprotected write.
+for id in "${EDIT[@]}"; do
+  [[ -n "${BASE_BLOB[$id]:-}" ]] || {
+    echo "reconcile-graph-merged: no pinned base blob for planned edit id $id (plan drifted between the --no-apply and apply runs)" >&2
+    exit 1; }
+  GC_ARGS+=(--base "$id=${BASE_BLOB[$id]}")
+done
 for id in "${EDIT[@]}"; do GC_ARGS+=("$id"); done
 
 if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then

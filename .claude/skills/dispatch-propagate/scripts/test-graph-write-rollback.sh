@@ -41,6 +41,26 @@
 #      land / reset-back dance, and the freshness computation
 #      dispatch-graph-scope-sweep runs afterward reports scopeStale=false. This
 #      is the ONE case whose graph-commit stub SUCCEEDS.
+#   6. reconcile-graph-merged pins exactly one `--base <id>=<blob>` per planned
+#      edit id, and pins the ON-DISK blob rather than origin/main's (bug X,
+#      tactic-reconcile-park-clobber Unit 1).
+#   7. The race itself: an office_hours park landed between the sweep's read and
+#      its commit SURVIVES, while the sweep's own phase→done and merge evidence
+#      still land. This case runs the REAL graph-commit (only `gh` is stubbed) —
+#      its check_base_freshness three-way merge is the machinery under test.
+#   8. The graph-commit park path — which Unit 1 makes reachable from this
+#      script for the first time — rolls back to HEAD, leaving a clean tree and
+#      preserving the park rather than restoring stale park-erased bytes
+#      (Unit 2).
+#
+# Cases 6 and 7 are both verified to go RED when Unit 1's `--base` threading is
+# reverted. Case 7 needed care to avoid being vacuous: if the checkout is left
+# BEHIND origin/main, graph-commit's push is rejected, it rebases, git reports a
+# textual conflict, and layer-2's field-level auto-merge preserves the park all
+# on its own — passing with or without the fix. The fixture therefore
+# fast-forwards HEAD onto the park commit (see the wrapper in case 7), which is
+# the shape production erasures actually took: no conflict to rescue, so --base
+# is the only thing that can catch the lost update.
 #
 # No network needed; requires bash + git + jq + a real node/npx tsx (resolved
 # against a read-only node_modules symlink to this repo's own — never written).
@@ -93,6 +113,12 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
   cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
   cp "$UTIL_SCRIPTS_SRC/restamp-scope-fingerprint.ts" "$dst/packages/intentionsutil/scripts/restamp-scope-fingerprint.ts"
+  # reconcile-graph.ts is the real decision+write primitive behind
+  # reconcile-graph-merged (cases 6-8); merge-node.ts is the layer-2/3 field
+  # merge CLI the REAL graph-commit shells out to via `npx tsx` when a --base
+  # pin is stale (case 7's whole point).
+  cp "$UTIL_SCRIPTS_SRC/reconcile-graph.ts" "$dst/packages/intentionsutil/scripts/reconcile-graph.ts"
+  cp "$UTIL_SCRIPTS_SRC/merge-node.ts" "$dst/packages/intentionsutil/scripts/merge-node.ts"
   chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
@@ -567,6 +593,369 @@ else
   printf 'landed residue lines: %s / worktree residue lines: %s\n' \
     "$(grep -c 'needs-main' <<<"$landed_body" || true)" \
     "$(grep -c 'needs-main' <<<"$worktree_body" || true)"
+fi
+
+# ===========================================================================
+# Cases 6-8: reconcile-graph-merged's diagnosis-time compare-and-swap
+# (tactic-reconcile-park-clobber, bug X).
+#
+# The defect: reconcile-graph.ts rewrites the WHOLE node from its in-memory
+# read, and reconcile-graph-merged used to hand graph-commit ZERO --base flags —
+# so check_base_freshness() short-circuited and the sweep silently overwrote any
+# edit that landed on origin/main between its read and its commit. Measured
+# effect: a live office_hours park erased with `phase` untouched.
+#
+# Case 6 guards the pin's construction, case 7 the end-to-end race outcome, and
+# case 8 the park-path rollback Unit 1 newly makes reachable.
+# ===========================================================================
+
+# reconcile_gh_stub <bin-dir> <fixture-dir> — a `gh` standing in for both API
+# surfaces this family touches:
+#   - `gh api repos/{owner}/{repo}/pulls/<n>` → a REST-shaped MERGED PR (REST
+#     reports a merged PR as state "closed" with merged_at set; the
+#     merged/closed discriminator is merged_at, never the state string).
+#   - `gh api .../check-runs --jq <prog>` → runs graph-commit's REAL --jq
+#     program against an all-green fixture, so the filter itself is exercised
+#     rather than a hardcoded count string (test-park-node.sh's approach).
+# `app.slug` is required, not decorative: graph-commit's required-check gate
+# only counts rows authored by the github-actions App.
+reconcile_gh_stub() {
+  local bindir="$1" fixdir="$2"
+  mkdir -p "$bindir" "$fixdir"
+  cat >"$fixdir/green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success", "id": 2, "app": {"slug": "github-actions"}},
+  {"name": "lint", "status": "completed", "conclusion": "success", "id": 3, "app": {"slug": "github-actions"}},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 4, "app": {"slug": "github-actions"}}
+]}
+JSON
+  cat >"$bindir/gh" <<'SH'
+#!/usr/bin/env bash
+# Args always arrive as: gh api <path> [--jq <prog>] ...
+path=""
+jq_program=""
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --jq) jq_program="$a" ;;
+  esac
+  case "$a" in
+    */pulls/*|*/check-runs) path="$a" ;;
+  esac
+  prev="$a"
+done
+case "$path" in
+  */check-runs)
+    jq -r "$jq_program" "$GC_FIXTURE_DIR/green.json" ;;
+  */pulls/*)
+    num="${path##*/}"
+    jq -n --argjson n "$num" '{
+      number: $n, title: "harness pr", body: "",
+      state: "closed",
+      merged_at: "2026-08-01T00:00:00Z",
+      merge_commit_sha: "0123456789abcdef0123456789abcdef01234567",
+      mergeable: true, mergeable_state: "clean",
+      head: {ref: "harness-branch", sha: "89abcdef0123456789abcdef0123456789abcdef"},
+      labels: []
+    }' ;;
+  *)
+    echo "gh stub: unhandled invocation: $*" >&2; exit 1 ;;
+esac
+SH
+  chmod +x "$bindir/gh"
+}
+
+# reconcile_node <file> <id> <pr> — a tactic at an OPEN phase carrying a PR and
+# NO `## needs-main residue` section, so the sweep classifies it merged→done.
+reconcile_node() {
+  cat >"$1" <<NODE
+---
+id: $2
+kind: tactic
+statement: harness node for the reconcile CAS test
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution:
+  branch: $2
+  pr: $3
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion: null
+office_hours: null
+---
+# harness node for the reconcile CAS test
+NODE
+}
+
+# Fixed clock: GRACE=0 + a pinned NOW keeps every case off real time.
+RECON_ENV=(GRAPH_RECONCILE_GRACE=0 GRAPH_RECONCILE_NOW=1800000000)
+
+# ===========================================================================
+# Case 6: reconcile-graph-merged pins one --base per planned edit id, and pins
+# the ON-DISK blob rather than origin/main's.
+#
+# t-r2's copy on origin/main is deliberately moved AHEAD of the clone's checkout
+# after cloning, so disk and origin/main genuinely differ for that node. The
+# pin must follow the disk (what reconcile-graph.ts's readNode actually reads) —
+# pinning origin/main would make scalarMerge compute a spurious "ours" delta on
+# untouched fields and could revert landed content.
+# ===========================================================================
+T6="$WORK/t6-seed"
+build_seed_repo "$T6"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T6/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T6/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T6/intentions/t-r1.md" t-r1 101
+reconcile_node "$T6/intentions/t-r2.md" t-r2 102
+new_origin t6
+init_and_push "$T6"
+
+C6="$WORK/t6-clone"
+clone_with_node_modules "$C6"
+BIN6="$WORK/t6-bin"; FIX6="$WORK/t6-fixtures"
+reconcile_gh_stub "$BIN6" "$FIX6"
+# graph-commit stub: record argv, succeed.
+cat >"$C6/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t6-argv.txt"
+exit 0
+SH
+chmod +x "$C6/packages/intentionsutil/scripts/graph-commit"
+
+# Move t-r2's copy on origin/main ahead of the clone (the clone never pulls),
+# so hash-object(disk) != rev-parse(origin/main:...) for t-r2.
+printf '\nlanded on origin after the clone\n' >>"$T6/intentions/t-r2.md"
+git -C "$T6" commit -qam 'move t-r2 ahead on origin/main'
+git -C "$T6" push -q origin main
+git -C "$C6" fetch -q origin
+
+# The pre-apply disk blobs — exactly what the pin must equal.
+disk_r1_before="$(git -C "$C6" hash-object -- intentions/t-r1.md)"
+disk_r2_before="$(git -C "$C6" hash-object -- intentions/t-r2.md)"
+origin_r2="$(git -C "$C6" rev-parse origin/main:intentions/t-r2.md)"
+
+out="$(
+  cd "$C6" || exit 99
+  export PATH="$BIN6:$PATH" GC_FIXTURE_DIR="$FIX6"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+argv6="$(cat "$WORK/t6-argv.txt" 2>/dev/null || true)"
+base_count="$(grep -c -- '^--base$' <<<"$argv6" || true)"
+pin_r1="$(grep -o '^t-r1=[0-9a-f]\{40\}$' <<<"$argv6" || true)"
+pin_r2="$(grep -o '^t-r2=[0-9a-f]\{40\}$' <<<"$argv6" || true)"
+
+if [[ $rc -eq 0 ]] \
+   && [[ "$base_count" -eq 2 ]] \
+   && [[ "$pin_r1" == "t-r1=$disk_r1_before" ]] \
+   && [[ "$pin_r2" == "t-r2=$disk_r2_before" ]] \
+   && [[ "$disk_r2_before" != "$origin_r2" ]] \
+   && [[ "$pin_r2" != "t-r2=$origin_r2" ]]; then
+  ok "reconcile-graph-merged --base construction: exactly one pin per planned edit id, each the PRE-apply on-disk blob (t-r2 proves it follows disk, not origin/main)"
+else
+  no "reconcile-graph-merged --base construction (rc=$rc, --base count=$base_count)"
+  printf '%s\n' "$out"
+  printf 'argv: %s\n' "$argv6"
+  printf 'want t-r1=%s t-r2=%s (origin t-r2=%s)\n' "$disk_r1_before" "$disk_r2_before" "$origin_r2"
+fi
+
+# ===========================================================================
+# Case 7: THE RACE — a park landed between the sweep's read and its commit
+# survives the reconcile. This is the case that actually reproduces bug X, and
+# the one that runs the REAL graph-commit (its check_base_freshness is the
+# machinery under test; only `gh` is stubbed).
+#
+# There is no natural injection point between reconcile-graph-merged's pin and
+# graph-commit's fetch — they are back-to-back in one synchronous process — so,
+# exactly as test-park-node.sh:486-520 does, graph-commit is moved aside to
+# graph-commit.real and a thin wrapper lands the concurrent park ONCE (sentinel
+# guarded) before delegating. The real check_base_freshness then re-fetches,
+# sees origin's blob no longer matches the pinned base, and three-way merges:
+# office_hours is a SCALAR_FIELD the sweep never touches (ours == base) so
+# scalarMerge takes THEIRS (the park survives), while `phase` is unchanged on
+# origin (theirs == base) so it takes OURS (done).
+#
+# REVERT UNIT 1's --base threading and this case goes red with
+# office_hours: null — the exact erasure this node exists to stop.
+# ===========================================================================
+T7="$WORK/t7-seed"
+build_seed_repo "$T7"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T7/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T7/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T7/intentions/t-race.md" t-race 4242
+
+# The concurrent-park wrapper is installed in the SEED and pushed, so the clone
+# sits EXACTLY at origin/main. This is load-bearing, not tidiness: installing it
+# in the clone instead requires committing it (graph-commit's
+# assert_clean_outside_ids refuses to start on a dirty tracked file), and that
+# commit makes the worktree "ahead of origin/main with non-intentions changes".
+# graph-commit then takes its ensure_intentions_only_base() path, whose
+# `git reset --hard FETCH_HEAD` DISCARDS the file check_base_freshness just
+# merged and re-materializes the caller's pre-merge edit — so the park is lost
+# and this case fails for a reason that has nothing to do with the code under
+# test. The production reconciler runs from a main checkout at-or-behind
+# origin/main and never takes that path, so seeding the wrapper reproduces the
+# real shape. (The far-ahead path's interaction with a CAS merge is a separate
+# latent concern, deliberately out of scope for this node.)
+mv "$T7/packages/intentionsutil/scripts/graph-commit" \
+   "$T7/packages/intentionsutil/scripts/graph-commit.real"
+cat >"$T7/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -f "$SD/.concurrent-landed" ]]; then
+  # Another writer (a main-qa pass, an office-hours park) lands an office_hours
+  # park on the SAME node AFTER the sweep pinned its base but before this land.
+  D="$(mktemp -d)"
+  git clone -q "$GC_ORIGIN" "$D"
+  git -C "$D" config user.email other@test
+  git -C "$D" config user.name other
+  awk '
+    /^office_hours: null$/ {
+      print "office_hours:"
+      print "  reason: concurrent park landed between the sweep read and its commit"
+      print "  since: 2026-08-05"
+      print "  recommendation: harness fixture park"
+      print "  session_type: other"
+      next
+    }
+    { print }
+  ' "$D/intentions/$GC_NODE.md" >"$D/intentions/$GC_NODE.md.new"
+  mv "$D/intentions/$GC_NODE.md.new" "$D/intentions/$GC_NODE.md"
+  git -C "$D" commit -qam 'concurrent office_hours park (bypassing the sweep)'
+  git -C "$D" push -q origin main
+  rm -rf "$D"
+  # Fast-forward THIS checkout's HEAD onto the park commit while leaving the
+  # working-tree node file (the sweep's stale-read edit) untouched. This is what
+  # makes the case a real bug-X reproduction rather than a layer-2 test:
+  #
+  # If HEAD stays behind, graph-commit's push is rejected, it rebases, git
+  # reports a textual conflict on the node file, and layer-2's field-level
+  # auto-merge rescues the park all by itself — the park survives with or
+  # without --base and the case proves nothing. Production erasures had no
+  # conflict to rescue: the park commit was ALREADY in the new commit's
+  # ancestry, so the sweep's whole-file rewrite from its stale in-memory read
+  # fast-forwarded cleanly and silently dropped the park. `reset --mixed` puts
+  # the checkout in exactly that state, leaving --base as the ONLY thing that
+  # can still catch the lost update.
+  git -C "$GC_CLONE" fetch -q origin main
+  git -C "$GC_CLONE" reset -q --mixed FETCH_HEAD
+  : >"$SD/.concurrent-landed"
+fi
+exec "$SD/graph-commit.real" "$@"
+SH
+chmod +x "$T7/packages/intentionsutil/scripts/graph-commit"
+chmod +x "$T7/packages/intentionsutil/scripts/graph-commit.real"
+new_origin t7
+init_and_push "$T7"
+
+C7="$WORK/t7-clone"
+clone_with_node_modules "$C7"
+BIN7="$WORK/t7-bin"; FIX7="$WORK/t7-fixtures"
+reconcile_gh_stub "$BIN7" "$FIX7"
+
+out="$(
+  cd "$C7" || exit 99
+  export PATH="$BIN7:$PATH" GC_FIXTURE_DIR="$FIX7"
+  export GC_ORIGIN="$ORIGIN" GC_NODE=t-race GC_CLONE="$C7"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=1 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=20
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+
+landed7="$(git -C "$C7" fetch -q origin && git -C "$C7" show origin/main:intentions/t-race.md)"
+phase7="$(grep -m1 '^phase:' <<<"$landed7" | awk '{print $2}')"
+if [[ $rc -eq 0 ]] \
+   && [[ "$phase7" == "done" ]] \
+   && grep -q 'concurrent park landed between the sweep read and its commit' <<<"$landed7" \
+   && grep -q 'mergedAt: .*2026-08-01' <<<"$landed7" \
+   && grep -q '0123456789abcdef0123456789abcdef01234567' <<<"$landed7"; then
+  ok "reconcile-graph-merged CAS race: a concurrently landed office_hours park SURVIVES the reconcile while the sweep's own phase→done + merge evidence still land"
+else
+  no "reconcile-graph-merged CAS race (rc=$rc, phase=$phase7)"
+  printf '%s\n' "$out"
+  printf 'landed:\n%s\n' "$landed7"
+fi
+
+# ===========================================================================
+# Case 8: the park-path rollback leaves a CLEAN tree (Unit 2's guard).
+#
+# Unit 1 makes graph-commit's park_and_exit() path reachable from this script
+# for the first time. On that path graph-commit resets to origin/main, lands an
+# office_hours park, and exits NON-ZERO — so HEAD has MOVED. The old rollback
+# wrote each pinned blob back over its file, which under a moved HEAD leaves the
+# tree dirty with stale, PARK-ERASED content: the shared-checkout residue that
+# bricks graph-commit's assert_clean_outside_ids guard for every other writer.
+# Restoring to HEAD instead is clean-by-construction.
+# ===========================================================================
+T8="$WORK/t8-seed"
+build_seed_repo "$T8"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T8/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T8/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T8/intentions/t-parked.md" t-parked 808
+new_origin t8
+init_and_push "$T8"
+
+C8="$WORK/t8-clone"
+clone_with_node_modules "$C8"
+BIN8="$WORK/t8-bin"; FIX8="$WORK/t8-fixtures"
+reconcile_gh_stub "$BIN8" "$FIX8"
+# graph-commit stub standing in for park_and_exit(): land a park commit (moving
+# HEAD), then fail — exactly the shape that makes a blob-restore leave residue.
+cat >"$C8/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  awk '
+    /^office_hours: null$/ {
+      print "office_hours:"
+      print "  reason: graph-commit parked this node on an unresolvable divergence"
+      print "  since: 2026-08-05"
+      print "  recommendation: harness fixture park"
+      print "  session_type: other"
+      next
+    }
+    { print }
+  ' "intentions/$id.md" >"intentions/$id.md.new"
+  mv "intentions/$id.md.new" "intentions/$id.md"
+  git add "intentions/$id.md"
+done
+git commit -qm 'graph-commit stub: park_and_exit stand-in'
+echo "graph-commit: parked on unresolvable divergence" >&2
+exit 1
+SH
+chmod +x "$C8/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C8" || exit 99
+  export PATH="$BIN8:$PATH" GC_FIXTURE_DIR="$FIX8"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+status8="$(git -C "$C8" status --porcelain intentions/)"
+node8="$(cat "$C8/intentions/t-parked.md")"
+if [[ $rc -ne 0 ]] \
+   && [[ -z "$status8" ]] \
+   && grep -q 'graph-commit parked this node on an unresolvable divergence' <<<"$node8"; then
+  ok "reconcile-graph-merged park-path rollback: restoring to HEAD leaves a clean tree and preserves the park graph-commit just landed"
+else
+  no "reconcile-graph-merged park-path rollback (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status8"
+  printf 'node:\n%s\n' "$node8"
 fi
 
 echo
