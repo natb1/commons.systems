@@ -42,7 +42,32 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 9b (graph-auto-merge's fail-closed 'held <id>
+    (scope-stale)' / 'held <id> (missing-stamp)' hold at the review->merge
+    arming point) has not fired in production. Re-verified 2026-08-05:
+    journalctl --user SYSLOG_IDENTIFIER=dispatch-tick over its full retained
+    history (2026-06-03 through 2026-08-05T18:16 EDT) returns zero lines
+    matching 'held <id> (scope-stale)' or 'held <id> (missing-stamp)'. The
+    park-clearing commit's claim that the scope-drift demote path fired on all
+    three 2026-08-05 merges (#3047, #2990, #3049) is only partly accurate: the
+    scope-sweep DEMOTE path (item 9a, a distinct already-discharged mechanism)
+    fired for exactly one of the three --
+    tactic-align-tactics-mark-terminal-skipped, same tick as its #3047 merge --
+    and did not fire for the #2990 or #3049 nodes. Neither event is item 9b: 9b
+    is graph-auto-merge's own pre-merge arming hold, separate from the tick's
+    scope-sweep. This is a narrow race (a node going scope-stale in the window
+    between review completion and the tick's merge-arming pass) with no
+    predictable recheck interval; re-check after further tick cycles
+    accumulate."
+  since: 2026-08-05
+  recommendation: No author decision needed -- re-selection only. Items 7, 8, and
+    9a remain discharged exactly as recorded in the node body on 2026-07-31.
+    Only 9b is outstanding. When a 'held <id> (scope-stale)' or 'held <id>
+    (missing-stamp)' line appears for a real node in a dispatch-tick journal
+    line, record it under id 9b in the node's needs-main residue section and
+    re-select for /qa-main.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
