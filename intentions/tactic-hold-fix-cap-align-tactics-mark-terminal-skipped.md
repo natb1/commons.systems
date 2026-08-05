@@ -17,23 +17,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/fix-checks retry budget exhausted: 3 attempts concluded with PR #3047
-    still red (execution.fix.attempt=4, since 2026-08-05) — the 3-attempt cap is
-    exhausted."
-  since: 2026-08-05
-  recommendation: "Review the fix-checks accumulator (tmp/fix-checks-summary.md in
-    the node's worktree, also posted in PR comments; folded into this hold's
-    body when present) to diagnose why 3 automated attempts did not resolve CI.
-    Resolve THIS HOLD TACTIC (phase: done, then prune) to unblock
-    tactic-align-tactics-mark-terminal-skipped with a fresh retry budget
-    (attempt was reset to 1), or abandon/redesign the tactic if the current
-    approach cannot work."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
