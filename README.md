@@ -1,7 +1,7 @@
 # commons.systems
 
 **A data structure for managing project goals and alignment. A harness that 
-uses the data structure for agent context management and long horizon orchestration.**
+uses that data structure for agent context management and long horizon orchestration.**
 
 The **intention graph** is a versioned graph of goals. It is human authored
 with AI assistance. The graph is rooted by unconditional *virtues*
