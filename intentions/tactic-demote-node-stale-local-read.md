@@ -13,52 +13,74 @@ statement: Make graph-script repo-root resolution uniform and explicit — today
 owner: ai
 status: raw
 parent: null
-rationale: "Surfaced 2026-07-26 during /qa-fix on
-  tactic-mechanical-park-producers (PR #2970). A qa->review transition-node call
-  demoted the node to implement on a false scope-drift reading (that false
-  positive is a separate, already-tracked defect owned by
-  tactic-scope-fingerprint-plan-substance), and the demotion primitive it
-  delegated to then destroyed landed state: commit 41e90a51 dropped the entire
-  `## needs-main residue` section and the `planned` marker from the node body,
-  because demote-node-to-implement computed the new node from a worktree copy
-  that predated both. Recovery cost a hand-rebuild via dump-node/write-node plus
-  a --base graph-commit (d95f7f46). The defect is independent of what triggers
-  the demotion: any correct demotion invoked from a node worktree that is even
-  slightly behind origin/main clobbers the interval. Three concrete sites on
-  origin/main, all in packages/intentionsutil/scripts/demote-node-to-implement:
-  (1) line 36 sets REPO_ROOT from $SCRIPT_DIR/../../.. rather than the caller's
-  cwd, so from a node worktree the root is the worktree, not the main checkout
-  -- its own caller transition-node:51 gets this right via resolve_project_root,
-  and graph-commit was fixed for exactly this class by
+rationale: >-
+  Surfaced 2026-07-26 during /qa-fix on tactic-mechanical-park-producers (PR
+  #2970). A qa->review transition-node call demoted the node to implement on a
+  false scope-drift reading (that false positive is a separate, already-tracked
+  defect owned by tactic-scope-fingerprint-plan-substance), and the demotion
+  primitive it delegated to then destroyed landed state: commit 41e90a51 dropped
+  the entire `## needs-main residue` section and the `planned` marker from the
+  node body, because demote-node-to-implement computed the new node from a
+  worktree copy that predated both. Recovery cost a hand-rebuild via
+  dump-node/write-node plus a --base graph-commit (d95f7f46). The defect is
+  independent of what triggers the demotion: any correct demotion invoked from a
+  node worktree that is even slightly behind origin/main clobbers the interval.
+  Three concrete sites on origin/main, all in
+  packages/intentionsutil/scripts/demote-node-to-implement: (1) line 36 sets
+  REPO_ROOT from $SCRIPT_DIR/../../.. rather than the caller's cwd, so from a
+  node worktree the root is the worktree, not the main checkout -- its own
+  caller transition-node:51 gets this right via resolve_project_root, and
+  graph-commit was fixed for exactly this class by
   tactic-graph-commit-cwd-repo-resolution; (2) line 46 therefore looks for the
   scope-fingerprint stamp under the wrong root, so the provenance range a
   demotion reports is computed against a stamp that is usually absent; (3) lines
-  126-127 call readNode(\"./intentions\", ...) with no prior fetch (the script's
+  126-127 call readNode("./intentions", ...) with no prior fetch (the script's
   own comment at line 69 notes it has no fetch step, unlike park-node) and line
   115 lands via graph-commit with no --base token, so the read is stale and the
   write is a lost update rather than a detected conflict. Ownership is currently
   a gap, not an oversight: tactic-transition-node-stamp-landed-body explicitly
-  scopes demote-node-to-implement out (\"it only reads the stamp; it writes
-  none\" -- true of the stamp, but it does not address the stale body read), and
+  scopes demote-node-to-implement out ("it only reads the stamp; it writes none"
+  -- true of the stamp, but it does not address the stale body read), and
   tactic-graph-write-recipes-base-cas:165 names demote-node-to-implement:77 as
-  the same class and \"strongly recommended as the immediate follow-up\" while
+  the same class and "strongly recommended as the immediate follow-up" while
   declaring it outside its own forward-field-write scope. Author-directed
   2026-07-26: filed as a new tracked bug tactic and boosted to the top of the
-  selectable queue."
+  selectable queue.
+
+
+  Widened 2026-08-05 by the bootstrap monitor pass, under Ruling 27
+  (root-resolution defects widen this node rather than minting siblings), to add
+  the TEST-HARNESS case of the same root-resolution class. Contract to add: a
+  library-invoked executable with durable side effects must resolve its root
+  from a FIXTURE-CONTROLLABLE root, never from its own ${BASH_SOURCE[0]}. When
+  it roots from its own location, a test that merely SOURCES the library reaches
+  the real production executable and mutates production state -- the fixture has
+  no way to redirect it, because the path is baked in at the callee rather than
+  passed by the caller. Measured instance: one suite run reached the real router
+  and drove a fleet-latch counter to 156 observations before the run's node mint
+  incidentally failed and stopped it; had the mint succeeded the counter would
+  have kept climbing against production. This is the same failure shape as the
+  cwd-vs-script-location confusion already in scope here, but with a strictly
+  worse blast radius -- the other variants report against the wrong tree,
+  whereas this one WRITES to it. The one known site is already fixed in PR #3048
+  (tactic-invalid-state-lane, merged 2026-08-05); what remains in scope for this
+  node is the AUDIT of every other library-invoked executable with durable
+  effects for the same shape, plus the contract statement itself so the pattern
+  is refused at review rather than rediscovered.
 reading: null
 gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Should this node stay scoped to demote-node-to-implement, or widen
-      to own root-resolution consistency across all the graph scripts?
+  - question: Should this node stay scoped to demote-node-to-implement, or widen to
+      own root-resolution consistency across all the graph scripts?
     answer: "(Recorded 2026-08-04, author-directed.) Widen. The hazard is not any
       single script but that scripts used together in one graph-write recipe
       resolve their target tree three different ways: dump-node.ts and
       demote-node-to-implement from the script's own on-disk location,
-      validate-graph.ts from a cwd-relative default argument (`process.argv[2] ??
-      \"intentions\"`), and graph-commit from -C/cwd via `git rev-parse
+      validate-graph.ts from a cwd-relative default argument (`process.argv[2]
+      ?? \"intentions\"`), and graph-commit from -C/cwd via `git rev-parse
       --show-toplevel` (explicitly never from script location, per
       tactic-graph-commit-cwd-repo-resolution). Passing the same absolute script
       path to all three therefore silently targets different trees. Concrete new
@@ -66,13 +88,13 @@ clarifications:
       invoked by absolute worktree path while cwd was the main checkout
       validated the MAIN checkout's intentions/, not the edited worktree, and
       printed 'ok — 500 nodes' at exit 0 — a vacuous pass indistinguishable from
-      a real one, and exactly the sensor failure mode the standing
-      instruments rule warns about (ask what a check prints when it cannot
-      see). This node now owns making root resolution uniform and explicit
-      across the graph scripts. Fixing them one site at a time is what let the
-      class recur after tactic-graph-commit-cwd-repo-resolution and
-      tactic-clear-park-repo-targeting-guard already closed the write-path
-      half; the read/verify path was never swept."
+      a real one, and exactly the sensor failure mode the standing instruments
+      rule warns about (ask what a check prints when it cannot see). This node
+      now owns making root resolution uniform and explicit across the graph
+      scripts. Fixing them one site at a time is what let the class recur after
+      tactic-graph-commit-cwd-repo-resolution and
+      tactic-clear-park-repo-targeting-guard already closed the write-path half;
+      the read/verify path was never swept."
 tooling_goals: []
 success_signal: null
 attention:
@@ -96,6 +118,7 @@ attention:
     the authored boost (50), not the resolved rank. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
+  tier: 1
 phase: null
 execution: null
 validates: []

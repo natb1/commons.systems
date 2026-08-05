@@ -14,6 +14,7 @@
 #   claude_agents_list_registered
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
+#   worktree_occupancy_state           <worktree-path> [exclude_sid]
 #   claude_agents_count_busy_workers
 #   claude_agents_list_blocked_workers
 #   claude_agents_count_held_for_debug
@@ -389,6 +390,25 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   _LIB_CLAUDE_AGENTS_LOADED=1
 
   set -uo pipefail
+
+  # CLAUDE_AGENTS_TERMINAL_STATES_JQ — the SINGLE definition of what "terminal"
+  # means, as a jq `def` fragment prepended to every program that needs it.
+  # Three consumers share it verbatim: `claude_agents_count_held_for_debug`,
+  # `claude_agents_list_terminal_workers`, and `worktree_occupancy_state`. They
+  # previously each carried their own copy of the same nine-state list; a
+  # divergence between them would mean the counter, the lister and the occupancy
+  # classifier disagreed about which sessions are dead, so the list lives here
+  # once and cannot drift.
+  #
+  # The enumeration is deliberate, not an oversight: a NEW state the daemon
+  # introduces reads as live (not terminal) until it is added here, which
+  # under-reports rather than inventing frozen nodes that do not exist. Keep
+  # that posture when extending the list.
+  CLAUDE_AGENTS_TERMINAL_STATES_JQ='
+      def terminal_states:
+        ["done","stopped","killed","failed","errored","error",
+         "cancelled","canceled","terminated"];
+'
 
   # _claude_agents_raw — emit the raw `claude agents --json` array on stdout.
   # Reads the tick snapshot (DISPATCH_AGENTS_SNAPSHOT) when set and readable —
@@ -973,6 +993,79 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       printf 'lib-claude-agents: worktree_has_live_session requires a <path> argument\n' >&2
       return 0  # fail safe: treat as occupied
     fi
+    # Thin wrapper over `worktree_occupancy_state` — the granular classifier
+    # below. The boolean contract is UNCHANGED for every existing caller:
+    # only a definite `free` releases the worktree; `live`, `terminal` and
+    # `unknown` all report occupied, which preserves the fail-safe UNKNOWN fold
+    # verbatim. A terminal holder still blocks its node exactly as before; the
+    # only thing that changed is that callers who WANT to tell the two apart can
+    # now ask for the token instead of the exit code.
+    local _st
+    _st="$(worktree_occupancy_state "$pth" "${2:-}")"
+    [[ "$_st" == "free" ]] && return 1
+    return 0
+  }
+
+  # WORKTREE_OCCUPANCY_STATE / WORKTREE_OCCUPANCY_SESSION_ID — the granular
+  # verdict and the matched holder's sessionId from the most recent
+  # `worktree_occupancy_state` call. Initialized here so a read before the first
+  # call under `set -u` is not an unbound-variable error (same idiom as
+  # CLAUDE_SESSION_ID_LIVE_STATE).
+  WORKTREE_OCCUPANCY_STATE="unknown"
+  WORKTREE_OCCUPANCY_SESSION_ID=""
+
+  # worktree_occupancy_state <path> [exclude_sid] — the granular OCCUPANCY
+  # classifier behind `worktree_has_live_session`.
+  #
+  # Prints exactly ONE token on stdout and ALWAYS returns 0. The TOKEN, not the
+  # exit code, is the contract — the same shape `dispatch_pause_state`
+  # (`lib-pause-state.sh:30-45`) uses, and the reason this function cannot be
+  # written as a predicate: it has four outcomes, not two.
+  #
+  #   free      — the daemon answered and no session claims this worktree.
+  #   live      — a registered session claims it and is NOT in a terminal state.
+  #               A valid claim: callers skip the node and never spawn into it.
+  #   terminal  — a registered session claims it but its state is terminal
+  #               (see CLAUDE_AGENTS_TERMINAL_STATES_JQ). Nothing is running, yet
+  #               the claim survives until an explicit release. This is an
+  #               INVALID STATE — the distinction this function exists to make.
+  #   unknown   — the daemon could not be queried. NOT evidence of anything.
+  #               Callers MUST fold it toward occupied and MUST NOT treat it as
+  #               an invalid state: a daemon hiccup must never manufacture an
+  #               intervention.
+  #
+  # Also sets WORKTREE_OCCUPANCY_STATE (mirrors stdout) and
+  # WORKTREE_OCCUPANCY_SESSION_ID (the matched row's sessionId; empty for `free`
+  # and `unknown`) for callers that need the evidence rather than the verdict.
+  #
+  # CAVEAT — the two globals are observable ONLY on a DIRECT call:
+  #     worktree_occupancy_state "$wt" >/dev/null   # globals set
+  #     st=$(worktree_occupancy_state "$wt")        # globals NOT set in caller
+  # Command substitution runs the function in a subshell, so assignments made
+  # inside it die with that subshell. This is why the TOKEN, not a global, is
+  # the contract: a caller that reads `$st` is always correct, while a caller
+  # that reads the globals after a `$( )` call silently sees the previous call's
+  # values (or the file-scope initializers). Need the sessionId? Call directly
+  # and redirect stdout, as `dispatch-invalid-state-sweep` does.
+  #
+  # Everything about candidate matching is inherited unchanged from the
+  # `worktree_has_live_session` this function was extracted from: ONE
+  # `claude_agents_list_registered` fetch (never two round-trips per worktree),
+  # the two-name check (worktree basename, plus `office-hours-<N>` only for a
+  # genuine numeric prefix), exact column-3 matching (never a substring grep),
+  # and the `exclude_sid` semantics.
+  worktree_occupancy_state() {
+    WORKTREE_OCCUPANCY_STATE="unknown"
+    WORKTREE_OCCUPANCY_SESSION_ID=""
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
+      printf 'lib-claude-agents: worktree_occupancy_state requires a <path> argument\n' >&2
+      # Fail safe: no path is not evidence of freedom. `unknown` folds to
+      # occupied in every caller, matching worktree_has_live_session's own
+      # empty-arg handling.
+      printf 'unknown\n'
+      return 0
+    fi
     local exclude_sid="${2:-}"
     local base oh
     base="$(basename "$pth")"
@@ -999,7 +1092,12 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # clean worktree on dispatch-sweep's hot path.
     local all
     if ! all=$(claude_agents_list_registered); then
-      # Unknown — the daemon could not be queried. Fail safe: occupied.
+      # Unknown — the daemon could not be queried. Fail safe: the caller folds
+      # this toward occupied, but it is NOT reported as `terminal`: no positive
+      # evidence exists, and a blocked read must never manufacture an invalid
+      # state.
+      WORKTREE_OCCUPANCY_STATE="unknown"
+      printf 'unknown\n'
       return 0
     fi
 
@@ -1032,21 +1130,45 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       # diagnostic. `%%`/`#` preserve empty fields on both sides.
       msid="${matched%%$'\t'*}"
       mstate="${matched#*$'\t'}"
-      # A `done` holder is the non-obvious case: nothing is running, yet the
-      # worktree stays blocked until a human releases it. Say so — on EVERY
-      # probe that matches it, one line per probe (there is no dedup: the
-      # per-skip diagnostic IS the pressure valve, and each skip is a distinct
-      # decision worth a trace line). Name the release act. Any other state
-      # (including empty) stays silent.
-      if [[ "$mstate" == "done" ]]; then
-        printf "lib-claude-agents: %s held by a done-but-not-removed session %s — release it with 'claude rm %s' (a stopped session keeps blocking its node by design)\n" \
-          "$pth" "$msid" "$msid" >&2
+      WORKTREE_OCCUPANCY_SESSION_ID="$msid"
+
+      # Classify the matched row's state against the single shared terminal
+      # enumeration. jq (not a bash case) so this cannot drift from the two
+      # other consumers of CLAUDE_AGENTS_TERMINAL_STATES_JQ. A jq failure here
+      # is treated as NOT terminal — under-report rather than invent a frozen
+      # node, the same posture the enumeration itself documents.
+      local is_terminal
+      if ! is_terminal=$(jq -rn --arg st "$mstate" \
+          "$CLAUDE_AGENTS_TERMINAL_STATES_JQ"'
+          if (terminal_states | index($st)) then "yes" else "no" end' 2>/dev/null); then
+        is_terminal="no"
       fi
+
+      if [[ "$is_terminal" == "yes" ]]; then
+        # A terminal holder is the non-obvious case: nothing is running, yet the
+        # worktree stays blocked until a human (or the invalid-state lane's
+        # intervention session) releases it. Say so — on EVERY probe that
+        # matches it, one line per probe (there is no dedup: the per-skip
+        # diagnostic IS the pressure valve, and each skip is a distinct decision
+        # worth a trace line). Name the release act, and name whichever terminal
+        # state actually matched rather than assuming `done`.
+        printf "lib-claude-agents: %s held by a %s-but-not-removed session %s — release it with 'claude rm %s' (a stopped session keeps blocking its node by design)\n" \
+          "$pth" "${mstate:-terminal}" "$msid" "$msid" >&2
+        WORKTREE_OCCUPANCY_STATE="terminal"
+        printf 'terminal\n'
+        return 0
+      fi
+
+      # Any other state (including empty) is a live claim, and stays silent.
+      WORKTREE_OCCUPANCY_STATE="live"
+      printf 'live\n'
       return 0
     fi
 
     # The query succeeded and matched neither name: definitely free.
-    return 1
+    WORKTREE_OCCUPANCY_STATE="free"
+    printf 'free\n'
+    return 0
   }
 
   # CLAUDE_SESSION_ID_LIVE_STATE — the granular verdict of the most recent
@@ -1250,7 +1372,10 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # The predicate keys on `(.state // .status)` and matches the SAME terminal
   # enumeration `claude_session_id_is_live` uses
   # (done|stopped|killed|failed|errored|error|cancelled|canceled|terminated),
-  # so the two agree on what "terminal" means. `.state` is the granular field
+  # so the two agree on what "terminal" means. That list lives in exactly one
+  # place — CLAUDE_AGENTS_TERMINAL_STATES_JQ at the top of this file — shared
+  # with `claude_agents_list_terminal_workers` and `worktree_occupancy_state`.
+  # `.state` is the granular field
   # the `--all` listing carries — a terminal row is
   # `{"state":"done"}` with NO `.status` key at all, while a live row is
   # `{"state":"working","status":"busy"|"idle"}`. A complement predicate
@@ -1290,10 +1415,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # row that has no `.state`, and "" for a row with neither (which is NOT
     # terminal → not counted).
     local count
-    if ! count=$(jq -r '
-      def terminal_states:
-        ["done","stopped","killed","failed","errored","error",
-         "cancelled","canceled","terminated"];
+    if ! count=$(jq -r "$CLAUDE_AGENTS_TERMINAL_STATES_JQ"'
       if type == "array"
       then [ .[]
         | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))
@@ -1326,8 +1448,10 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # no `.id` emits an empty column (`@tsv` renders null as ""), which callers
   # must treat as "no job dir", never as a match.
   #
-  # Reuses `claude_agents_count_held_for_debug`'s `terminal_states` jq `def`
-  # verbatim, and its `(.state // .status) // ""` resolution: `.state` is the
+  # Shares the single `terminal_states` jq `def`
+  # (CLAUDE_AGENTS_TERMINAL_STATES_JQ, defined once at the top of this file) with
+  # `claude_agents_count_held_for_debug` and `worktree_occupancy_state`, and its
+  # `(.state // .status) // ""` resolution: `.state` is the
   # granular field the `--all` listing carries — a terminal row is
   # `{"state":"done"}` with NO `.status` key at all — falling back to the
   # coarse `.status` for a row that has no `.state`, and "" for a row with
@@ -1370,10 +1494,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     # a terminal (.state // .status), and projects the TSV. Non-array input
     # errors out and the result is UNKNOWN.
     local lines
-    if ! lines=$(jq -r '
-      def terminal_states:
-        ["done","stopped","killed","failed","errored","error",
-         "cancelled","canceled","terminated"];
+    if ! lines=$(jq -r "$CLAUDE_AGENTS_TERMINAL_STATES_JQ"'
       if type == "array"
       then .[]
         | select(.name | type == "string" and test("^[0-9]+-|^tactic-|^strategy-"))

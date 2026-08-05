@@ -26,16 +26,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-invalid-state-lane
   pr: 3048
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T16:52:33Z
+    mergeCommitSha: 62ac5bb140307707b95ac5bfc96f3f74a7a42b1f
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -729,3 +734,13 @@ Manual and judgment checks:
   candidate must fall through to the existing park).
 - The PR title must be `tactic-invalid-state-lane: <short description>` — the
   literal node id verbatim, per the standing PR-title condition.
+
+## needs-main residue
+
+- id: 16
+  title: One real tick with a terminal-held node routes through the lane and behaves identically to today
+  url_path: current
+  expected_outcome: Observable behavior identical to pre-merge, with two new artifacts present — the `terminal-session` skip reason and the router's skill-absent log lines. On the next real `dispatch-select-tick` with a genuinely terminal-held node, the tick journal shows the `invalid-state:` prefixed summary line (`candidates=… intervened=… kept=… escalate-deferred=…`), the router logs its skill-absent line and exits 10, the defensive sweep then parks exactly as it would have before this PR, the selector reports `terminal-session` rather than `live-session` for that node, and no node is spawned into, no session reaped, and no fleet-latch node minted.
+  finding: This is the node's own declared "Observe in production, one tick" planned deferral (see the Verification section above) — not a defect found by QA. All 15 script-verifiable QA items passed this qa-fix pass (router exit-code contract, mechanical-tier keep/escalate logic, the retry/human class discrimination, the anchored fleet-latch regex, the lane-never-reaps grep, the unchanged park-machinery fallback, and the full 675-assertion PR-scripts suite plus 820/820 intentionsutil vitest), giving strong static/test confidence this production observation will also hold. Recorded here per the disposition workflow's needs-main routing for planned-deferral items.
+  Verifiability: WAIT — awaits a future tick episode where the live registry holds a genuinely terminal-held node (a session that ended without declaring a disposition but is still registered); no such episode has occurred yet against this PR's merged code.
+  Check: `journalctl` (or the tick-log equivalent) grep for a `dispatch-select-tick` run whose output contains `invalid-state:` — confirm it names a `terminal-session` skip in `graph-select-target`'s stderr and a matching decision-log record with disposition `terminal-session` / `routed-to-lane` / `kept-by-lane`, cross-referenced against `dispatch-invalid-state-route`'s own stderr line naming the skill-absent escalation.
