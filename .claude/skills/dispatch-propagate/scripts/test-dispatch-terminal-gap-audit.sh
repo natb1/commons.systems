@@ -134,6 +134,91 @@ else
   echo "  FAIL: dispatch-terminal-gap-audit's SYNTHESIZED_REASON_PREFIX is a literal substring of lib-frozen-session-park.sh's synthesized reason"
 fi
 
+# --- doctrine ratchet: the selector's --list contract the audit parses --------
+#
+# The audit enumerates the parked population by shelling out to
+# `npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list --ref
+# <ref>` and parsing each row POSITIONALLY with
+# `IFS=$'\t' read -r _rank _stype nid _since`. Everything left of that in this
+# suite is a hand-written `npx` STUB — which is what keeps the suite offline,
+# but it also means no fixture here touches the real producer. Without this
+# ratchet, reordering `formatQueueRow`'s columns or renaming `--list`/`--ref`
+# leaves the whole suite green while the audit misparses `$nid` in production
+# (a reorder is silent — every id lookup misses and the parked population reads
+# false-empty; a flag rename exits 4).
+#
+# Read the real source only — never invoke it. A real `npx tsx` here would try
+# to FETCH tsx, breaking the suite's offline contract. `office-hours.test.ts`
+# already covers the TS side; this case covers the bash side's dependence on it.
+OFFICE_HOURS_SELECT="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts/office-hours-select.ts"
+
+# select_row_template <file> — the template literal `formatQueueRow` returns,
+# with the `return \`` prefix and the closing backtick+semicolon stripped.
+# Empty when the function or its return cannot be found (never silently "ok").
+select_row_template() {
+  awk '
+    /^export function formatQueueRow\(/ { infn = 1; next }
+    infn && /return `/ {
+      line = $0
+      sub(/^[[:space:]]*return `/, "", line)
+      sub(/`;[[:space:]]*$/, "", line)
+      print line
+      exit
+    }
+    infn && /^}/ { exit }
+  ' "$1"
+}
+
+# The column order the audit depends on, spelled as the producer spells it. Not
+# a fourth hand-kept copy of a prose literal (cf. the ratchet above) — this is
+# the assertion itself, and it is the only place the expected order is written.
+EXPECTED_ROW_TEMPLATE='${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}'
+
+ROW_LABEL="office-hours-select.ts formatQueueRow still returns <rank>\\t<sessionType>\\t<nodeId>\\t<since>"
+if [[ ! -f "$OFFICE_HOURS_SELECT" ]]; then
+  TOTAL=$((TOTAL + 1))
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: $ROW_LABEL: file missing: $OFFICE_HOURS_SELECT"
+else
+  ACTUAL_ROW_TEMPLATE=$(select_row_template "$OFFICE_HOURS_SELECT")
+  if [[ -z "$ACTUAL_ROW_TEMPLATE" ]]; then
+    # Guard the vacuous pass: an extraction that silently yields "" must fail
+    # loudly rather than compare-equal to nothing.
+    TOTAL=$((TOTAL + 1))
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $ROW_LABEL"
+    echo "    could not extract formatQueueRow's returned template literal from $OFFICE_HOURS_SELECT"
+  else
+    assert_eq "$ROW_LABEL" "$EXPECTED_ROW_TEMPLATE" "$ACTUAL_ROW_TEMPLATE"
+  fi
+fi
+
+# The two flags the audit passes. A rename on the producer side makes the
+# selector exit 2 (unknown `--`-prefixed token) and the audit exit 4.
+for flag_spec in "BOOLEAN_FLAGS --list" "VALUE_FLAGS --ref"; do
+  const_name="${flag_spec%% *}"
+  flag_name="${flag_spec##* }"
+  label="office-hours-select.ts still registers $flag_name in $const_name (dispatch-terminal-gap-audit passes it)"
+  TOTAL=$((TOTAL + 1))
+  if [[ ! -f "$OFFICE_HOURS_SELECT" ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label: file missing: $OFFICE_HOURS_SELECT"
+    continue
+  fi
+  flag_line=$(grep -m1 "^const $const_name" "$OFFICE_HOURS_SELECT") || flag_line=""
+  if [[ -z "$flag_line" ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label: no \`const $const_name\` declaration found"
+  elif [[ "$flag_line" == *"\"$flag_name\""* ]]; then
+    PASS=$((PASS + 1))
+    echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label"
+    echo "    declaration: $flag_line"
+  fi
+done
+
 # write_node <id> <reason-yaml-block> — a minimal but schema-shaped node file.
 write_node() {
   local id="$1" reason_block="$2"
