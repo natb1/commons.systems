@@ -107,7 +107,8 @@ execution:
   fix: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-graph-commit-rebuild-snapshot-stale-revert
 office_hours: null
 pace_exempt: false
 rounds: null
