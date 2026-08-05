@@ -66,8 +66,8 @@ clarifications:
   - question: The 2026-08-04 park (commit 13f4efa7) blocked this node's finalize
       round on its serving strategy's own office_hours park. Does that block
       still stand?
-    answer: "No — it was already void when it was written, and is now disproven
-      by direct observation. (Ruled 2026-08-05, author-directed, during the
+    answer: "No — it was already void when it was written, and is now disproven by
+      direct observation. (Ruled 2026-08-05, author-directed, during the
       bootstrap monitor pass.) 13f4efa7 landed at 23:25:02Z and gave as its sole
       reason that the /align-tactics drift-review gate 'requires the serving
       strategy's office_hours be null before it authors any plan, tactic-mode
@@ -77,8 +77,8 @@ clarifications:
       eligibility.decomposable=true by construction (align-tactics.js:728) and
       the plan gate reads planProceed = isTactic ? proceed : proceed &&
       decomposable (align-tactics.js:474), so a parked serving strategy no
-      longer blocks a tactic-mode finalize. Behavioural proof, not inference:
-      at 00:50Z tactic-reconcile-park-clobber — which also carries serves:
+      longer blocks a tactic-mode finalize. Behavioural proof, not inference: at
+      00:50Z tactic-reconcile-park-clobber — which also carries serves:
       [strategy-graph-native-dispatch], still parked — cleared its drift review
       with proceed=true and no parks, authored a full three-unit plan, and
       landed as status codified / phase implement (commit 4d737d0e). That is the
@@ -115,59 +115,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "This tactic's /align-tactics finalize round (2026-08-04) could not
-    author a plan: its serving strategy (strategy-graph-native-dispatch) is
-    itself office_hours-parked at origin/main since 2026-08-04 for an unresolved
-    measurement-instrument ratification hold (success_signal.sensor no longer
-    resolves to any registered sensor under SensorRegistry.resolve's exact-match
-    design, sensors.ts:49-59; success_signal.threshold's two quantitative terms
-    -- the maintenance-burden band and the sample-history home -- are
-    undeclared). The /align-tactics Workflow's drift-review gate requires the
-    serving strategy's office_hours be null before it authors any plan,
-    tactic-mode included, so this round's drift phase returned
-    decomposable=false and disposition=escalated before writing a body for this
-    node (Workflow run wf_d7572c90-18f, 2026-08-04). This tactic's own scope was
-    not found deficient -- the drift review confirmed the tactic's three-item
-    scope (Step 2 hardening, correcting lib-frozen-session-park.sh's
-    park-recommendation text, the one-time cross-check audit) is unchanged; the
-    block is entirely upstream, in the serving strategy's own measurement
-    instrument. Separately, this round's drift review surfaced three
-    record-completeness gaps on the strategy itself, none of which are written
-    here -- a tactic-target /align-tactics session never edits the serving
-    strategy's frontmatter: (a) the strategy record supplied to the drift
-    agent's input dump omitted the strategy's own office_hours field entirely,
-    so a reviewer trusting its input would have proceeded to plan against a live
-    park -- worth checking whether the dump path strips office_hours or was
-    simply taken before this park landed; (b) rounds.count reads 0 and
-    rounds.last_aligned reads null at origin/main despite a dozen-plus
-    documented re-evaluation rounds on this strategy since 2026-07-03, so the
-    round-cap and fresh-reading gates that read those fields have never actually
-    contained anything; (c) three attributes.conditions entries (the 2026-07-26
-    pause-config-field migration, the PR-title CI guard, the
-    bounded-ancestry-projection script) narrate landed mechanisms that are in
-    fact still open, unplanned tactics. Recommend: do not re-plan this tactic
-    directly against this park. First clear the strategy's own standing park via
-    an /align interview ratifying its sensor-name and threshold premises (see
-    strategy-graph-native-dispatch's own office_hours.reason for the two
-    ratification options), landing the three drift-surfaced record-completeness
-    gaps above as dated clarifications in that same sitting if the author judges
-    them worth recording; then re-run /align-tactics
-    tactic-align-tactics-mark-terminal-skipped to finalize this tactic. Until
-    the strategy's park clears, leaving this tactic unparked would let the
-    router's frozenTacticSelectable gate keep re-selecting it every tick (the
-    draft-tactic candidate emission in router.ts checks only this tactic's own
-    office_hours, never its serving strategy's), re-spawning a session that
-    would hit this identical block every time -- this park exists to stop that
-    churn, not to flag a defect in this tactic's own content."
-  since: 2026-08-04
-  recommendation: Run an /align interview against strategy-graph-native-dispatch
-    to ratify its own pending office_hours hold (sensor-name drift + unreadable
-    threshold), clear that park, then re-run /align-tactics
-    tactic-align-tactics-mark-terminal-skipped to finalize this tactic. Do not
-    attempt to plan this tactic while the strategy park is live -- the
-    Workflow's drift gate will re-park identically.
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
