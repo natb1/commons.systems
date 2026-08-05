@@ -141,7 +141,144 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: qa-fix attempt cap reached (ATTEMPT_N=3, CAP=3) with real
+    opus-fixable residue found this pass (3 findings: CI-coverage gap in
+    test-dispatch-terminal-gap-audit.sh's ratchet over office-hours-select.ts;
+    stale PR-body verification counts; a park-recommendation prose readability
+    item adversarially refuted as needs-human and reclassified opus-fixable) --
+    escalating to office-hours for manual fix or attempt-cap reset"
+  since: 2026-08-05
+  recommendation: >-
+    ## PR #3047 — budget-exhaustion park, not a judgment call
+
+
+    This PR parked on office-hours because the qa-fix lane hit its attempt cap
+
+    (`ATTEMPT_N=3`, `CAP=3`), not because anything here needs your judgment. The
+
+    4th QA pass found three real findings, all confirmed by running commands in
+    the
+
+    worktree, and all three have a named, mechanical fix. Six of ten triage
+    items
+
+    passed clean; the three prior passes already fixed seven real defects. The
+    code
+
+    itself (the `land-align-round` wrapper, the corrected park-recommendation
+    text,
+
+    the `dispatch-terminal-gap-audit` diagnostic) is solid.
+
+
+    Fastest path: land the three fixes yourself, or hand them to an agent. Don't
+
+    deliberate — there's nothing to decide.
+
+
+    ### The three fixes
+
+
+    **1. CI-coverage gap (the only one with production risk).**
+
+    `test-dispatch-terminal-gap-audit.sh` only runs when `run-unit-tests.sh`'s
+
+    auto-discovery sets `RUN_PR_SCRIPTS=true`, which fires on changed paths
+    under
+
+    `.claude/skills/dispatch-propagate/scripts/*`. But this PR added
+
+    doctrine-ratchet cases to that suite that assert against
+
+    `packages/intentionsutil/scripts/office-hours-select.ts` — outside that
+
+    directory. A future PR touching only `office-hours-select.ts` (reordering
+
+    `formatQueueRow`'s columns, renaming `--list`/`--ref`) merges green while
+
+    breaking `dispatch-terminal-gap-audit` in production. Pick either fix:
+
+
+    - Add a `packages/intentionsutil/scripts/*` arm to `run-unit-tests.sh`'s
+      changed-file switch that also sets `RUN_PR_SCRIPTS=true`; or
+    - Wire `test-dispatch-terminal-gap-audit.sh` unconditionally into the
+      `hook-tests` job in `.github/workflows/unit-tests.yml`, the same way this PR
+      already wires `test-align-tactics-terminal-marker.sh` and
+      `test-land-align-round.sh`.
+
+    One or two files either way. The second option is more direct — it removes
+    the
+
+    dependence on path heuristics entirely.
+
+
+    **2. Stale counts in the PR body.** The Verification section says
+
+    `test-land-align-round.sh` 7/7, `test-lib-frozen-session-park.sh` 244/244,
+
+    `test-dispatch-terminal-gap-audit.sh` 38/38. Current actuals from running
+    all
+
+    four suites in the worktree: 9/9, 8/8 (already correct), 247/247, 50/50 —
+    all
+
+    green. The counts grew across three fix passes and the body was never
+    updated.
+
+    Edit the PR body to the current numbers. Documentation only.
+
+
+    **3. Park-recommendation prose.** The terminal-without-disposition
+
+    recommendation in `lib-frozen-session-park.sh` and its mirror in
+
+    `dispatch-terminal-gap-audit`'s `print_remediation()` has been amended three
+
+    times into one long paragraph. The disposition Workflow ran two independent
+
+    skeptic passes against calling this a human-judgment item; both refuted it.
+
+    It's editorial restructuring, not a decision — turn it into a short numbered
+
+    sequence (1: reap; 2: verify the a/b/c destructive-fallback gate before
+    falling
+
+    back to `git worktree remove`; 3: exception — if already reaped,
+    `clear-park`
+
+    alone is correct), preserving every fact from the three amendments. Have
+    Opus
+
+    do the rewrite; review the wording after if you care about the phrasing.
+
+
+    ### If you'd rather let the fleet finish it
+
+
+    Resetting the attempt counter re-opens the autonomous lane. `ATTEMPT_N` is
+    read
+
+    as the highest `dispatch:qa-fix-attempt-<n>` label on the PR, so removing
+
+    `dispatch:qa-fix-attempt-3` (`gh pr edit 3047 --remove-label
+
+    dispatch:qa-fix-attempt-3`) drops the counter back and buys another pass —
+    the
+
+    label state is the only budget record. Alternatively raise the ceiling for
+    the
+
+    run via `DISPATCH_QA_FIX_ATTEMPT_CAP` (default 3 in
+
+    `dispatch-qa-fix-attempt`). Either way you also need to clear the
+    office-hours
+
+    park so the router picks the node back up. Given the fixes are this small,
+
+    doing them by hand is probably still cheaper than another full QA
+    round-trip.
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
