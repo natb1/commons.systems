@@ -25,8 +25,8 @@ pace_exempt: true
 rounds: null
 attributes: {}
 ---
-tracked hold(s) have blocked top-ranked work while unclaimed by any session or reservation: tactic-hold-conflict-manual-path-reservation-sweep -> tactic-manual-path-reservation-sweep; tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage -> tactic-strategy-fingerprint-stamp-coverage
+tracked hold(s) have blocked top-ranked work while unclaimed by any session or reservation: tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage -> tactic-strategy-fingerprint-stamp-coverage
 
 Thresholds: DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=86400s,
 DISPATCH_FLEET_WATCH_HOLD_TOP_K=10
-Pause state: paused (unclaimed holds are evaluated regardless of pause)
+Pause state: not-paused (unclaimed holds are evaluated regardless of pause)
