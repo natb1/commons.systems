@@ -41,14 +41,12 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: >-
-      On graph-commit failure, restore_node_files() rolls intentions/<id>.md
+  - question: On graph-commit failure, restore_node_files() rolls intentions/<id>.md
       back to HEAD via `git checkout --`, silently discarding the reconciler's
       in-flight edit intent. Accept as-is, or surface the discarded intent?
-    answer: >-
-      (Ruled 2026-08-05, author office-hours sign-off, Ruling 37.) ACCEPT as-is
-      — PR #3046 merges unchanged, no code change. The behavior is exactly what
-      this node's own Unit 2 acceptance criteria mandate (roll back to HEAD
+    answer: "(Ruled 2026-08-05, author office-hours sign-off, Ruling 37.) ACCEPT
+      as-is — PR #3046 merges unchanged, no code change. The behavior is exactly
+      what this node's own Unit 2 acceptance criteria mandate (roll back to HEAD
       rather than to a captured blob), and the identical checkout-to-HEAD
       pattern already ships in resolve-hold's clean_node_file()
       (packages/intentionsutil/scripts/resolve-hold:271-299) for the same
@@ -60,17 +58,18 @@ clarifications:
       framing, and the gated fix-planner declined with zero units. The rejected
       alternative was a one-line stderr notice inside restore_node_files()
       before the checkout; it is recorded here as considered and declined, not
-      overlooked, so a later QA pass does not re-escalate the same question.
+      overlooked, so a later QA pass does not re-escalate the same question."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-reconcile-park-clobber
   pr: 3046
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null
