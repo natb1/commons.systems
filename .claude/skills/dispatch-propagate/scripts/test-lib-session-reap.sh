@@ -725,4 +725,211 @@ assert_eq "logfile: the line carries the dispatch-sweep tag" "yes" \
   "$(grep -q '\[dispatch-sweep\] SESSION_REAP_COMPLETE' "$SR_DIR/sweep.log" && printf 'yes' || printf 'no')"
 sr_teardown
 
+# ============================================================================
+# session_reap_node — the extracted reap act, called DIRECTLY
+# ============================================================================
+#
+# Everything above drives the act through `session_reap_sweep` and is the
+# regression oracle for the extraction: those 21 tests pin that the sweep's
+# behaviour, log lines and summary counters did not move. What follows pins the
+# extracted function's OWN contract, which the sweep cannot exercise — the
+# verdict token, and the fact that it is reachable without a `node-terminal`
+# marker (the sweep's gate (4) would reject exactly the class
+# `/dispatch-invalid-state` is sent to handle).
+#
+# Note what is deliberately NOT set up in these cases: no job dir, no marker, no
+# transcript, no registry grace. The act does not consult any of them; those are
+# the sweep's candidate policy. If a future edit makes the act read one of them,
+# these tests go red, which is the point.
+
+echo ""
+echo "=== session_reap_node (direct) ==="
+
+# srn_run <name> <sid> <jid> — capture the verdict token and stderr separately.
+# The token is on stdout, which means the call runs in a SUBSHELL; that is the
+# documented calling convention, so the tests use it too.
+srn_run() {
+  SRN_TOKEN=$(session_reap_node "$1" "$2" "$3" 2>"$SR_DIR/err") || SRN_TOKEN="<returned-nonzero>"
+  SR_ERR=$(cat "$SR_DIR/err")
+}
+
+# --- Test 22: reaped, with NO node-terminal marker anywhere ------------------
+# The headline case for the invalid-state lane: a session that went terminal
+# without declaring anything. The sweep would skip it at gate (4); the act
+# reaps it.
+echo "Test: session_reap_node reaps a clean worktree with no terminal marker"
+sr_setup
+sr_worktree "tactic-direct" clean
+sr_add_session "0dd1-1111" "dddd1111" "tactic-direct"
+sr_install_registry
+srn_run "tactic-direct" "0dd1-1111" "dddd1111"
+assert_eq "direct: verdict is reaped" "reaped" "$SRN_TOKEN"
+assert_eq "direct: the worktree is gone from disk" "gone" \
+  "$( [ -d "$SR_WTROOT/tactic-direct" ] && printf 'present' || printf 'gone')"
+assert_eq "direct: the worktree was removed BEFORE claude rm" "yes" \
+  "$( [ "$(sr_line_of 'git-worktree-remove')" -lt "$(sr_line_of 'claude-rm')" ] && printf 'yes' || printf 'no')"
+assert_eq "direct: the reap line is still emitted" "yes" \
+  "$(sr_contains 'SESSION_REAPED: name=tactic-direct')"
+# idle/cwd are diagnostic-only and optional — omitted, they render as `unknown`.
+assert_eq "direct: an omitted idle renders as unknown, not as an empty field" "yes" \
+  "$(sr_contains 'idle_seconds=unknown')"
+sr_teardown
+
+# --- Test 23: skip-dirty — uncommitted work is never destroyed ---------------
+echo "Test: session_reap_node refuses a dirty worktree"
+sr_setup
+sr_worktree "tactic-dirty2" dirty
+sr_add_session "0dd2-2222" "dddd2222" "tactic-dirty2"
+sr_install_registry
+srn_run "tactic-dirty2" "0dd2-2222" "dddd2222"
+assert_eq "dirty: verdict is skip-dirty" "skip-dirty" "$SRN_TOKEN"
+assert_eq "dirty: the worktree survives" "present" \
+  "$( [ -d "$SR_WTROOT/tactic-dirty2" ] && printf 'present' || printf 'gone')"
+assert_eq "dirty: claude rm was never called" "0" "$(sr_rm_calls)"
+sr_teardown
+
+# --- Test 24: skip-unlanded-content — content diff outside intentions/ -------
+echo "Test: session_reap_node refuses a branch with unlanded content"
+sr_setup
+sr_worktree "tactic-content2" content
+sr_add_session "0dd3-3333" "dddd3333" "tactic-content2"
+sr_install_registry
+srn_run "tactic-content2" "0dd3-3333" "dddd3333"
+assert_eq "content: verdict is skip-unlanded-content" "skip-unlanded-content" "$SRN_TOKEN"
+assert_eq "content: the worktree survives" "present" \
+  "$( [ -d "$SR_WTROOT/tactic-content2" ] && printf 'present' || printf 'gone')"
+assert_eq "content: claude rm was never called" "0" "$(sr_rm_calls)"
+sr_teardown
+
+# --- Test 25: a graph-only branch IS reapable -------------------------------
+# The ':!intentions' carve-out: a node's own graph commits ride along on its
+# branch and are landed separately by graph-commit's direct push to main.
+# Counting them as unlanded divergence would block the reap of every node that
+# ever wrote to its own record — i.e. all of them.
+echo "Test: session_reap_node reaps a branch whose only divergence is intentions/"
+sr_setup
+sr_worktree "tactic-graphonly2" intentions
+sr_add_session "0dd4-4444" "dddd4444" "tactic-graphonly2"
+sr_install_registry
+srn_run "tactic-graphonly2" "0dd4-4444" "dddd4444"
+assert_eq "graph-only: verdict is reaped" "reaped" "$SRN_TOKEN"
+sr_teardown
+
+# --- Test 26: skip-open-pr — an open PR is a human's call -------------------
+echo "Test: session_reap_node refuses a branch with an OPEN PR"
+sr_setup
+sr_worktree "tactic-pr2" clean
+sr_open_pr "tactic-pr2"
+sr_add_session "0dd5-5555" "dddd5555" "tactic-pr2"
+sr_install_registry
+srn_run "tactic-pr2" "0dd5-5555" "dddd5555"
+assert_eq "open-pr: verdict is skip-open-pr" "skip-open-pr" "$SRN_TOKEN"
+assert_eq "open-pr: the worktree survives" "present" \
+  "$( [ -d "$SR_WTROOT/tactic-pr2" ] && printf 'present' || printf 'gone')"
+assert_eq "open-pr: claude rm was never called" "0" "$(sr_rm_calls)"
+sr_teardown
+
+# --- Test 27: skip-pr-fetch-failed — an unreadable PR probe fails toward KEEP
+echo "Test: session_reap_node fails toward keep when the PR probe fails"
+sr_setup
+sr_worktree "tactic-ghfail2" clean
+: > "$SR_DIR/gh-fail"
+sr_add_session "0dd6-6666" "dddd6666" "tactic-ghfail2"
+sr_install_registry
+srn_run "tactic-ghfail2" "0dd6-6666" "dddd6666"
+assert_eq "gh-fail: verdict is skip-pr-fetch-failed" "skip-pr-fetch-failed" "$SRN_TOKEN"
+assert_eq "gh-fail: claude rm was never called" "0" "$(sr_rm_calls)"
+sr_teardown
+
+# --- Test 28: an ABSENT worktree proceeds straight to claude rm -------------
+# The three reap-safety gates exist to protect worktree CONTENT from
+# `git worktree remove`. With no worktree there is nothing to remove and nothing
+# to lose, so they are vacuous rather than blocking.
+echo "Test: session_reap_node with no worktree proceeds to claude rm"
+sr_setup
+sr_add_session "0dd7-7777" "dddd7777" "tactic-nowt2"
+sr_install_registry
+srn_run "tactic-nowt2" "0dd7-7777" "dddd7777"
+assert_eq "no-worktree: verdict is reaped" "reaped" "$SRN_TOKEN"
+assert_eq "no-worktree: the absence is logged" "yes" \
+  "$(sr_contains 'SESSION_REAP_NO_WORKTREE: name=tactic-nowt2')"
+assert_eq "no-worktree: claude rm was called once" "1" "$(sr_rm_calls)"
+sr_teardown
+
+# --- Test 29: declined — `claude rm` exits 0 but the row survives ------------
+# THE original bug. Exit 0 is not evidence; only the re-queried post-state is.
+echo "Test: session_reap_node reports declined when the daemon keeps the session"
+sr_setup
+sr_mode decline
+sr_worktree "tactic-declined2" clean
+sr_add_session "0dd8-8888" "dddd8888" "tactic-declined2"
+sr_install_registry
+srn_run "tactic-declined2" "0dd8-8888" "dddd8888"
+assert_eq "declined: verdict is declined, not reaped" "declined" "$SRN_TOKEN"
+assert_eq "declined: the decline is logged loudly" "yes" "$(sr_contains 'REAP_DECLINED')"
+assert_eq "declined: no success line is emitted" "no" "$(sr_contains 'SESSION_REAPED')"
+sr_teardown
+
+# --- Test 30: unverified — the post-state read is UNKNOWN -------------------
+# Three outcomes, never two. Collapsing UNKNOWN into success would reproduce the
+# silent-PASS bug this whole file exists to fix.
+echo "Test: session_reap_node reports unverified when the post-state is unreadable"
+sr_setup
+sr_mode unknown-post
+# `unknown-post` fails the SECOND `agents` query, counted from the sweep's two
+# (candidate list, then post-state). A direct call makes only ONE — the
+# post-state read — so prime the counter to make that call the second, and thus
+# the failing one. This targets the same failure the sweep tests target; it does
+# not soften it.
+printf '1' > "$SR_DIR/agents-count"
+sr_worktree "tactic-unverified2" clean
+sr_add_session "0dd9-9999" "dddd9999" "tactic-unverified2"
+sr_install_registry
+srn_run "tactic-unverified2" "0dd9-9999" "dddd9999"
+assert_eq "unverified: verdict is unverified, not reaped" "unverified" "$SRN_TOKEN"
+assert_eq "unverified: no success line is emitted" "no" "$(sr_contains 'SESSION_REAPED')"
+sr_teardown
+
+# --- Test 31: the contract is the TOKEN — it always returns 0 ---------------
+# A caller that branched on the exit code would see "success" for skip-dirty and
+# for declined alike. Every one of these returns 0; only the token distinguishes
+# them.
+echo "Test: session_reap_node always returns 0, on every outcome"
+sr_setup
+sr_worktree "tactic-rc" dirty
+sr_add_session "0dda-aaaa" "ddddaaaa" "tactic-rc"
+sr_install_registry
+srn_rc=0
+session_reap_node "tactic-rc" "0dda-aaaa" "ddddaaaa" >/dev/null 2>&1 || srn_rc=$?
+assert_eq "rc: a refusing outcome still returns 0" "0" "$srn_rc"
+sr_teardown
+
+sr_setup
+sr_mode decline
+sr_worktree "tactic-rc2" clean
+sr_add_session "0ddb-bbbb" "ddddbbbb" "tactic-rc2"
+sr_install_registry
+srn_rc=0
+session_reap_node "tactic-rc2" "0ddb-bbbb" "ddddbbbb" >/dev/null 2>&1 || srn_rc=$?
+assert_eq "rc: a declined outcome still returns 0" "0" "$srn_rc"
+sr_teardown
+
+# --- Test 32: idle/cwd pass-through keeps the sweep's log line byte-identical
+# These two arguments are diagnostic-only and trailing precisely so they cannot
+# become load-bearing — but the sweep does pass them, and the SESSION_REAPED
+# line must read exactly as it did before the extraction.
+echo "Test: idle/cwd are rendered into the terminal reap line when supplied"
+sr_setup
+sr_worktree "tactic-diag" clean
+sr_add_session "0ddc-cccc" "ddddcccc" "tactic-diag"
+sr_install_registry
+SRN_TOKEN=$(session_reap_node "tactic-diag" "0ddc-cccc" "ddddcccc" "" "dispatch-sweep" 4000 "/some/cwd" 2>"$SR_DIR/err")
+SR_ERR=$(cat "$SR_DIR/err")
+assert_eq "diag: verdict is reaped" "reaped" "$SRN_TOKEN"
+assert_eq "diag: idle_seconds is rendered from the argument" "yes" \
+  "$(sr_contains 'idle_seconds=4000')"
+assert_eq "diag: cwd is rendered from the argument" "yes" \
+  "$(sr_contains 'cwd=/some/cwd')"
+sr_teardown
+
 report_results
