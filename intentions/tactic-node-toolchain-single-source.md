@@ -32,9 +32,10 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint:
-    hash: 191979ad4ab22b48e2bb9e463c9d8240301157cca6344c3380fb84c8680e108b
-    sha: 64eba22370600ebd7b5d102a1efe2983cba202be
+    hash: 1b4010bd0ef97663a511f2ea60d27d7edd89b7c0f53ca29dcaa98c1f1881ec62
+    sha: b8d2e250fcd9188e40f678cd8408933a3edac3ef
   fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

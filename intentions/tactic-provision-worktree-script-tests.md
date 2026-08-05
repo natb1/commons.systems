@@ -3,7 +3,7 @@ id: tactic-provision-worktree-script-tests
 kind: tactic
 statement: Add script-level test coverage for provision-node-worktree's
   worker-start gate integration (selected-phase arg, exit 12/13 pass-through,
-  scope-fingerprint stamp write) in test-dispatch-scripts.sh
+  scope-fingerprint stamp write) in test-provision-node-worktree.sh
 owner: ai
 status: raw
 parent: null

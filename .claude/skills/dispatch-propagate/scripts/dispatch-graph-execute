@@ -42,11 +42,16 @@
 #          `<skill> <id>`. Mechanical provision dispositions are handled here at
 #          zero token cost (no `claude` session), mirroring
 #          dispatch-launch-worker.
-#   4. Clears the node's reservation-ledger marker on a successful kick — the
-#      live node-id-named session carries the claim from there (mirrors
-#      dispatch-launch-worker's release-on-resolve). On a failed kick the marker
-#      is LEFT for the sweep, so the budget still counts the slot until
-#      reconciliation.
+#   4. Hands off (does not drop) the node's reservation-ledger marker on a
+#      successful kick: it is re-stamped `origin=spawned` with a fresh
+#      timestamp (reservation_mark_spawned) instead of cleared outright, so the
+#      claim survives the boot window before the worker's own live session
+#      registers. It is released by reservation_sweep rule (a) once that
+#      session registers, or by the handoff TTL if it never does. The
+#      stale-selection (exit 12) and scope-stale (exit 13) dispositions still
+#      clear the marker outright — no spawn happened there. On a failed kick
+#      the marker is still LEFT for the sweep, so the budget still counts the
+#      slot until reconciliation.
 #
 # Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
 #
@@ -69,6 +74,16 @@
 #                           consecutive failure — a tracked hold tactic was
 #                           born/re-entered via hold-node; the source's own
 #                           office_hours is never written.
+#   held <id> worktree-residue
+#                           provision exit 14 (worktree unusable — mechanical
+#                           residue from a dead session, NOT a content
+#                           conflict). A `worktree-residue` tracked hold tactic
+#                           was born/re-entered via hold-node, carrying the
+#                           `git status` / `git diff --stat` evidence. Escalates
+#                           on the FIRST occurrence — no strike ladder, because
+#                           the state is steady and has no autonomous repair
+#                           path. Never routed to the conflict lane; the
+#                           source's own office_hours is never written.
 #   failed <id> <reason>    the node could neither launch nor cleanly dispose.
 #                           On exit 11 below the cap this is
 #                           `failed <id> spawn-failed (strike N/CAP)`: the
@@ -76,7 +91,8 @@
 #                           counter was bumped, and no graph write was made.
 #
 # Exit codes: 0 every node launched or cleanly disposed (launched/waiting/
-# skipped/scope-stale/parked/conflict-lane/held are all RC-0 dispositions);
+# skipped/scope-stale/parked/conflict-lane/held — including the exit-14
+# `held <id> worktree-residue` disposition — are all RC-0 dispositions);
 # 1 at least one node could neither launch nor cleanly dispose (a spawn kick
 # failed — no park is attempted, the marker is left for the sweep — or a
 # park-node/hold-node/demote call itself failed); 2 usage/configuration error.
@@ -130,6 +146,20 @@ CONFLICT_STRIKE_CAP=5
 
 FAILURES=0
 
+# hand_off_reservation <id> — the spawn handoff, at every successful-kick site.
+# Non-fatal by design: the worker is already launched, so failing the kick here
+# would be worse than the degradation. But the degradation is NOT silent — if the
+# re-stamp fails (unwritable ledger dir, failed mv), the OLD marker survives with
+# its selection-time origin, so reservation_sweep falls back to the pre-handoff
+# lifecycle and reclaims it as dead-session-stranded once the 30s boot grace
+# lapses. That is exactly the duplicate-worker window this handoff exists to
+# close, so name the consequence on stderr where a log grep can find it.
+hand_off_reservation() {
+  local node_id="$1"
+  reservation_mark_spawned "$node_id" || \
+    echo "dispatch-graph-execute: WARNING: spawn handoff re-stamp failed for $node_id; the claim reverts to the pre-handoff sweep lifecycle and the boot-window duplicate-worker guard is OFF for this node" >&2
+}
+
 for spec in "$@"; do
   IFS=: read -r id kind phase <<<"$spec"
   if [[ -z "$id" || -z "$kind" || -z "$phase" ]]; then
@@ -179,7 +209,9 @@ for spec in "$@"; do
     if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
         --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
         "$SKILL $id" 1>&2; then
-      reservation_clear "$id" || true
+      # Hold the claim through the boot window; reservation_sweep rule (a)
+      # releases it once the worker registers.
+      hand_off_reservation "$id"
       echo "launched $id $SKILL"
     else
       echo "failed $id spawn-failed"
@@ -204,7 +236,9 @@ for spec in "$@"; do
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
           --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
           "$SKILL $id" 1>&2; then
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        hand_off_reservation "$id"
         echo "launched $id $SKILL"
       else
         # Leave the reservation for the sweep — the budget keeps counting the
@@ -245,7 +279,6 @@ for spec in "$@"; do
       # expected to be replaced wholesale at that point, not extended. That
       # interrupt is simply a SECOND entry path into the same Lane 3 this
       # branch now kicks directly.
-      CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"
       # The backstop ladder's sidecar counts CONSECUTIVE failures to LAUNCH the
       # lane — that is what its hold reason asserts verbatim below. A successful
       # kick therefore has to reset it, exactly as the exit-0 path resets it
@@ -253,18 +286,32 @@ for spec in "$@"; do
       # successful kicks accumulate into a hold whose stated reason ("could not
       # be launched for N consecutive ticks") is false.
       STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
-      # REAP CONTRACT: `--name "$id"` under the node's own worktree makes this
-      # session a graph-native NODE WORKER — dispatch-stop.sh's discriminator 2
-      # matches it (name == node id, `intentions/<id>.md` present) and hands it
-      # to `dispatch-self-close --node "$id"`, which reaps only on a
+      # REAP CONTRACT: `--name "$id"` alone makes this session a graph-native
+      # NODE WORKER — dispatch-stop.sh's discriminator 2 matches it (name ==
+      # node id, `intentions/<id>.md` present) and hands it to
+      # `dispatch-self-close --node "$id"`, which reaps only on a
       # `$CLAUDE_JOB_DIR/node-terminal` marker naming this node and otherwise
-      # HOLDS the job alive. A held job stays live in `claude agents --json`, and
+      # HOLDS the job alive. Both the name match and the `intentions/<id>.md`
+      # presence hold in the primary checkout (graph writes are direct-push to
+      # `main`), so this contract does not depend on which tree the session
+      # spawns in. A held job stays live in `claude agents --json`, and
       # graph-select-target's `worktree_has_live_session` check is name-keyed on
       # the node id — so a Lane 3 session that never declares its terminal
       # disposition would make the node permanently unselectable AND permanently
       # occupy a live-session slot. Lane 3 therefore declares it on BOTH terminal
       # paths (`mark-node-terminal "$SOURCE_ID" conflict-resolved` at its Step 9,
       # `... conflict-hold` at its Step 10; Step 7's park-node writes its own).
+      #
+      # The spawn cwd is PROJECT_ROOT, not the node's own worktree: that
+      # worktree is guaranteed stale on this path — its origin/main merge is
+      # what just failed and was aborted, so a session spawned there reads its
+      # own skill body and helpers out of a tree already known to be behind.
+      # This has twice landed a session running a stale skill body — once
+      # missing office_hours handling, once predating the terminal-declaration
+      # contract above, deadlocking a worker slot for over an hour. Lane 3
+      # instead drives the node worktree by absolute path (`git -C`) once it
+      # needs it.
+      #
       # Do not spawn this session under a name that is NOT the node id without
       # first teaching the selector's occupancy check about that name.
       #
@@ -272,10 +319,12 @@ for spec in "$@"; do
       # node's own phase skill, and this session runs /dispatch-conflict
       # instead — it inherits the session default.
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
-          --cwd "$CONFLICT_WT" --model "$ORCH_MODEL" \
+          --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
         rm -f "$STRIKE_FILE"
-        reservation_clear "$id" || true
+        # Hold the claim through the boot window; reservation_sweep rule (a)
+        # releases it once the worker registers.
+        hand_off_reservation "$id"
         echo "conflict-lane $id"
         continue
       fi
@@ -317,8 +366,15 @@ for spec in "$@"; do
         }
         REASON_FILE="$TMPDIR_HOLD11/reason"
         RECOMMENDATION_FILE="$TMPDIR_HOLD11/recommendation"
-        printf '%s\n' "origin/main has not merged clean into this tactic's branch (provision exit 11), and the /dispatch-conflict Lane 3 session that resolves it could not be launched for $STRIKES consecutive ticks." > "$REASON_FILE"
-        printf '%s\n' "Run \`/dispatch-conflict $id\` by hand (Lane 3 reproduces and resolves the merge on the node's own branch), or resolve the conflict directly in \`.claude/worktrees/$id\` and push the branch. Either way, also check why the autonomous launch kept failing. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
+        # Exit 11 has TWO causes, and this producer cannot tell them apart: the
+        # branch does not merge origin/main clean, OR it does not merge its OWN
+        # pushed tip origin/<id> clean (provision-node-worktree's pushed-tip
+        # alignment, which runs first). Naming only origin/main here
+        # would state something false half the time — exactly the wrong-reason
+        # failure this hold path exists to avoid. The provision stderr line in
+        # the tick journal names the actual conflicting ref.
+        printf '%s\n' "This tactic's branch does not merge clean (provision exit 11) — either against \`origin/main\` or against its own pushed tip \`origin/$id\`; the provision stderr line in the tick journal names which ref — and the /dispatch-conflict Lane 3 session that resolves it could not be launched for $STRIKES consecutive ticks." > "$REASON_FILE"
+        printf '%s\n' "Run \`/dispatch-conflict $id\` by hand (Lane 3 reproduces and resolves the merge on the node's own branch; it merges \`origin/$id\` before reproducing the \`origin/main\` merge, which covers both causes), or resolve the conflict directly in \`.claude/worktrees/$id\` and push the branch. Either way, also check why the autonomous launch kept failing. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source." > "$RECOMMENDATION_FILE"
         if "$HOLD_NODE" "$id" --kind provision-conflict \
             --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
           rm -f "$STRIKE_FILE"
@@ -356,6 +412,58 @@ for spec in "$@"; do
         echo "failed $id demote-failed"
         FAILURES=$(( FAILURES + 1 ))
       fi
+      ;;
+    14)
+      # worktree-residue: provision-node-worktree's precondition guard refused
+      # the worktree because it carries MECHANICAL RESIDUE from a dead session
+      # (a dirty tracked tree, or a detached HEAD / in-progress operation it
+      # could not auto-repair). This is NOT a content conflict — origin/main
+      # merges clean the instant the residue is cleared — so it must never be
+      # routed to /dispatch-conflict's Lane 3, whose whole contract assumes a
+      # clean tree with a reproducible merge conflict.
+      #
+      # NO STRIKE LADDER. Exit 14 is a steady state with no autonomous repair
+      # path: nothing a later tick does clears a dirty file or an unreferenced
+      # detached HEAD, and the one repair that IS safe (aborting an in-progress
+      # operation) already happened inside provision-node-worktree before it
+      # chose this exit. So it escalates on the FIRST occurrence — deliberately
+      # not reusing CONFLICT_STRIKE_CAP or the `.conflict-strikes` sidecar,
+      # which count consecutive failures of a thing that could have succeeded.
+      #
+      # Like the exit-11 backstop, this births a born-parked HOLD TACTIC via
+      # hold-node and adds a blocked_by edge from the source; the source's own
+      # office_hours is never written, so NO park-node call belongs here.
+      RESIDUE_WT="$PROJECT_ROOT/.claude/worktrees/$id"
+      TMPDIR_HOLD14=$(mktemp -d) || {
+        echo "failed $id hold-mktemp-failed"
+        FAILURES=$(( FAILURES + 1 ))
+        continue
+      }
+      REASON_FILE="$TMPDIR_HOLD14/reason"
+      RECOMMENDATION_FILE="$TMPDIR_HOLD14/recommendation"
+      # The evidence is captured HERE, once, so the drain has the diff in hand
+      # without re-entering the worktree. The script runs `set -uo pipefail`
+      # (no -e) and each git call is `|| echo`-guarded, so an unreadable
+      # worktree yields an explanatory line rather than a silently empty
+      # section — and cannot abort the loop.
+      {
+        printf '%s\n\n' "provision-node-worktree refused to provision this tactic's worktree: it carries mechanical residue from a dead session (exit 14), not a content conflict. \`origin/main\` merges clean once the residue is cleared — with one exception the status output below distinguishes: on the \`failed-merge-abort\` condition a merge git could NOT abort is still in progress (MERGE_HEAD present, \`UU\` paths), and that merge has to be finished or aborted before anything else."
+        printf '%s\n' "\`git -C $RESIDUE_WT status --porcelain --untracked-files=no\`:"
+        git -C "$RESIDUE_WT" status --porcelain --untracked-files=no 2>&1 \
+          || echo "(could not read the worktree at $RESIDUE_WT)"
+        printf '\n%s\n' "\`git -C $RESIDUE_WT diff --stat\`:"
+        git -C "$RESIDUE_WT" diff --stat 2>&1 \
+          || echo "(could not read the worktree at $RESIDUE_WT)"
+      } > "$REASON_FILE"
+      printf '%s\n' "Inspect the diff recorded above in \`.claude/worktrees/$id\` and decide what the uncommitted content IS. If it is unlanded work, land it — \`graph-commit\` for an intentions/ node write, or commit and push the branch for code — and never discard it sight-unseen; the uncommitted edit may be its only copy. If it is safely discardable (build output, a half-applied edit already landed elsewhere), clear it with \`git restore\` — but NOT while a merge is live: if the status above shows \`UU\` paths or the worktree has a MERGE_HEAD, abort or complete THAT merge first, since \`git restore\` inside one discards the wrong side. A detached HEAD with commits on it needs a branch before anything is reset, and a worktree sitting on a branch other than \`$id\` (the \`wrong-branch\` condition) needs that branch's own state settled before it is switched back. Once the worktree is clean, the next tick provisions it normally. Then resolve THIS HOLD TACTIC to \`phase: done\` and prune it — clearing \`office_hours\` alone does not unblock the source. \`resolve-hold $id --kind worktree-residue\` does the resolve and the source's \`blocked_by\` clear in one landed write." > "$RECOMMENDATION_FILE"
+      if "$HOLD_NODE" "$id" --kind worktree-residue \
+          --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
+        echo "held $id worktree-residue"
+      else
+        echo "failed $id hold-failed"
+        FAILURES=$(( FAILURES + 1 ))
+      fi
+      rm -rf "$TMPDIR_HOLD14"
       ;;
     *)
       # 2 / any other: a mechanical error (bad node id, unresolvable project

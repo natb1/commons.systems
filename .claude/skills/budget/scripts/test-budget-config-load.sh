@@ -4,8 +4,9 @@
 # XDG_CONFIG_HOME override (it sources nothing, so no copy is needed). No
 # network, no emulator — deterministic and CI-safe.
 #
-# Mirrors the budget-etl config cases 7i-7o from
-# .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh, adapted to
+# Mirrors the budget-etl config cases 7i-7o from what was
+# .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh (now split
+# into per-SUT test-*.sh files sharing dispatch-test-fixture.sh), adapted to
 # drive the standalone resolver via XDG_CONFIG_HOME instead of the
 # DISPATCH_CONFIG_DIR override plus a <type> argument.
 set -euo pipefail

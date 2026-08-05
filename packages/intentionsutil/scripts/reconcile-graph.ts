@@ -47,7 +47,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes, readNode, readNodeBody, writeNode } from "../src/store.js";
+import { listNodesStrict, readNode, readNodeBody, writeNode } from "../src/store.js";
 import { PHASES } from "../src/schema.js";
 import { servingStrategyIds } from "../src/router.js";
 import {
@@ -138,7 +138,12 @@ function isOpen(phase: string | null): boolean {
 
 export function reconcileGraph(args: Args): Plan {
   const prStates: Record<string, PrState> = JSON.parse(readFileSync(args.prStatesFile, "utf8"));
-  const nodes = listNodes(args.dir);
+  // STRICT enumeration: reconciliation writes phase transitions back to disk,
+  // and every id it does NOT see is treated as "not a graph node" (skipped).
+  // Under the tolerant `listNodes` a corrupt node file would silently drop out
+  // of `byId`, so its merged PR would never be reconciled and the node would
+  // sit at a stale phase forever. A corrupt file must refuse loudly instead.
+  const nodes = listNodesStrict(args.dir);
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   const plan: Plan = { edit: [], deferred: [], reconciled: [] };

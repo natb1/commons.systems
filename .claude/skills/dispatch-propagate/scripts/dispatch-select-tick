@@ -216,7 +216,11 @@ refresh_lock() {
 # name, rule (c) needs the reserving session dead), so each failed explicit
 # dispatch would permanently add 1 to LIVE_COUNT. Omitted (empty) on the
 # autonomous and manual lanes, whose claims are consumed by the same tick's
-# fan-out and are covered by rules (a)/(c).
+# fan-out: a claim that reaches a successful spawn is re-stamped
+# `origin=spawned` by dispatch-graph-execute and covered by the sweep's
+# handoff rule (released once the worker registers as live, or via the
+# bounded handoff TTL if it never does); the old rule (c) (dead-session
+# reclamation) now only reclaims claims that never reached a spawn.
 #   return 0 — decision line emitted; the caller exits 0.
 #   return 1 — stdin held no node lines; the caller falls through to the
 #              legacy selector.
@@ -584,8 +588,16 @@ refresh_lock
 # wait for worker registration. Under cap: GAP bounds how many workers a fan-out
 # run may spawn, and normal selection (Step 3) already runs rank-first, so a
 # high-rank item under budget is handled there. Daemon UNKNOWN (the busy-worker
-# read fails; reservation_count never fails) → fail open (GAP=1); the
-# per-worktree dedup in dispatch-spawn-job is the last-line defense.
+# read fails; reservation_count never fails) → fail CLOSED: release the lock,
+# schedule the reseed, and emit `concurrency-cap` (see the `else` branch below)
+# rather than assume GAP=1. Before this fix (2026-07-21 incident), an
+# uncorroborated empty `claude agents --json` read (sandboxed/blocked, exit 0,
+# `[]`) was indistinguishable from a genuine "no live sessions" and fell
+# through to GAP=1, letting a manual tick launch a duplicate `/implement`
+# worker onto a worktree that already had a live session — dispatch-spawn-job's
+# own per-worktree dedup consumes that same ambiguous read (see
+# lib-claude-agents.sh's EMPTY-READ CORROBORATION section), so it was never an
+# independent last-line defense.
 #
 # AT cap (LIVE_COUNT >= TARGET_N) the budget no longer hard-stops the run. The
 # budget paces only NON-pace-exempt autonomous fan-out; pace-exempt/main-broken
@@ -701,8 +713,20 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
       exit 0
     fi
     GAP=$(( TARGET_N - LIVE_COUNT ))
+  else
+    # daemon UNKNOWN (busy-worker read failed/uncorroborated, #lib-claude-agents
+    # EMPTY-READ CORROBORATION): we cannot tell true occupancy, so this must NOT
+    # be treated as headroom. Fail CLOSED — mirror the at-cap disposition above
+    # (release lock, schedule reseed, concurrency-cap) rather than assume GAP=1
+    # and risk spawning a duplicate worker onto an already-occupied worktree.
+    release_lock
+    "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+    DLOG_DISPOSITION="concurrency-cap"
+    DLOG_SKIP_REASON="live-read-unverified"
+    echo "router: busy-worker read unverified (daemon unreachable/uncorroborated); deferring rather than assuming headroom" >&2
+    echo "concurrency-cap"
+    exit 0
   fi
-  # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open).
 elif [[ -n "$MANUAL" ]]; then
   # --- manual context-dependent fan-out (#1458) ------------------------------
   # A bare human-typed `/dispatch` spawns enough workers to cover available
@@ -723,13 +747,19 @@ elif [[ -n "$MANUAL" ]]; then
   # dispatch-materialize-spawn's existing --gap N machinery (the highest rank level
   # is globally exhausted first; the `priority` label is the cap bypass, not an
   # ordering signal). LIVE_COUNT mirrors the
-  # autonomous block's effective-live count (busy workers + reservations); the
-  # manual path does NOT sweep the reservation ledger (a possibly-stale count
-  # can only make manual fan-out more conservative, which is safe).
+  # autonomous block's effective-live count (busy workers + reservations), and —
+  # like that block — it SWEEPS the ledger before counting. The sweep is
+  # load-bearing since the spawn handoff landed: a claim is no longer cleared at
+  # the spawn kick but re-stamped `origin=spawned` and held until the worker
+  # registers, so between registration and the next sweep the SAME node is both a
+  # busy worker and an outstanding reservation. Counting unswept would charge it
+  # twice and shrink manual fan-out for up to a full tick interval. Sweep rule (a)
+  # drops exactly those redundant markers.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
+  reservation_sweep 1>&2 || true
   if BUSY=$(claude_agents_count_busy_workers); then
     RESV=$(reservation_count)
     LIVE_COUNT=$(( BUSY + RESV ))
@@ -779,9 +809,25 @@ elif [[ -n "$MANUAL" ]]; then
     (( SPAWN_N < 1 )) && SPAWN_N=1
     echo "router: manual fan-out: SPAWN_N=$SPAWN_N (headroom=$HEADROOM, n_prio=$N_PRIO, gap=$GAP_BUDGET, live=$LIVE_COUNT, max=$MAX_WORKERS)"
     GAP=$SPAWN_N
+  else
+    # daemon UNKNOWN (busy-worker read failed/uncorroborated). This deliberately
+    # overrides human-dispatch-is-sovereign's floor-of-1 (documented above and
+    # near the autonomous block's own bypass comments): sovereignty is meant to
+    # override a KNOWN ceiling, not license spawning while blind to true
+    # occupancy — a manual run here cannot tell a genuinely-idle worktree from
+    # one a live worker already owns, and spawning onto the latter produces a
+    # silent duplicate worker (a documented failure mode elsewhere in this
+    # skill). No reseed — a manual run is one-shot; the autonomous chain owns
+    # reseeds. The human's remedy is legible: re-run with
+    # dangerouslyDisableSandbox: true so the daemon probe can actually reach
+    # the socket, unlike a silent duplicate worker's remedy (there isn't one).
+    release_lock
+    DLOG_DISPOSITION="concurrency-cap"
+    DLOG_SKIP_REASON="manual-live-read-unverified"
+    echo "router: manual fan-out: busy-worker read unverified (daemon unreachable/uncorroborated); deferring rather than assuming headroom" >&2
+    echo "concurrency-cap"
+    exit 0
   fi
-  # daemon UNKNOWN (busy-worker read failed) → GAP stays 1 (fail open), matching
-  # the autonomous fallback and today's one-worker manual behavior.
 elif [[ -n "$NODE_ARG" ]]; then
   # Explicit single-node dispatch (tactic-graph-explicit-node-dispatch): skip
   # the pace-curve throttle and the MAX_WORKERS ceiling entirely — an explicit

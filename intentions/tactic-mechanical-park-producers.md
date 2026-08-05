@@ -11,16 +11,17 @@ parent: null
 rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   implementing the park-taxonomy clarification recorded the same day. A park
   asserts that no autonomous path forward exists and a human is required, but a
-  merge conflict against a moving main frequently self-resolves. At recording
-  time roughly five of the most recent commits on main were provision-exit-11
-  parks, burying the genuinely author-required parks. Finalized 2026-07-25
-  /align-tactics (per-node finalize): the plan converts both named producers to
-  a shared hold-node primitive (find-or-create a born-parked incident tactic +
-  blocked_by edge on the source, never office_hours on the source itself),
-  reusing the graph-census-debt.ts decision/land split and park-node's
-  fresh-main/rollback mechanics. Producer 1's ideal greenfield (an orthogonal
-  execution.conflict interrupt routed to /dispatch-conflict) is already specced
-  and in-flight as tactic-graph-router-conflict-routing (blocked_by
+  merge conflict against a moving main has an autonomous resolver to route to.
+  At recording time roughly five of the most recent commits on main were
+  provision-exit-11 parks, burying the genuinely author-required parks.
+  Finalized 2026-07-25 /align-tactics (per-node finalize): the plan converts
+  both named producers to a shared hold-node primitive (find-or-create a
+  born-parked incident tactic + blocked_by edge on the source, never
+  office_hours on the source itself), reusing the graph-census-debt.ts
+  decision/land split and park-node's fresh-main/rollback mechanics. Producer
+  1's ideal greenfield (an orthogonal execution.conflict interrupt routed to
+  /dispatch-conflict) is already specced and in-flight as
+  tactic-graph-router-conflict-routing (blocked_by
   tactic-dispatch-conflict-branch-merge-lane, repointed 2026-07-27 after
   tactic-dispatch-conflict-greenfield shipped as PR #2951 and was pruned) — this
   tactic ships the interim brownfield bridge (a free local-retry tier, then a
@@ -31,7 +32,64 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is "a merge conflict against a moving main frequently self-resolves" a
+      valid premise for de-parking the mechanical retry producers?
+    answer: "(Recorded 2026-08-01, author-directed.) No — the premise is factually
+      invalid and is struck from this node's text. It was already superseded on
+      2026-07-29: `intentions/strategy-graph-native-dispatch.md` clarification
+      134 AMENDS the 2026-07-25 park-taxonomy clarification's stated premise —
+      'a merge conflict is not expected to self-heal ... the 2026-07-25
+      clarification's CONCLUSION survives unchanged (a conflict is not an
+      office_hours park), but its REASON is corrected: conflicts are de-parked
+      because an autonomous resolver exists to route them to, not because they
+      resolve themselves.' This node's own text simply had not been updated to
+      match until now. The correction is textual only: the conclusion, the unit
+      list, and the explicitly-out-of-scope list are unchanged. Corrected in
+      four places — the `rationale` field, the `## Context` producer-1
+      paragraph, the out-of-scope catch-all bullet ('not a self-resolving retry
+      state' → 'no autonomous resolver to route it to ... not a mechanical retry
+      state'), and the Unit `case 0` parenthetical ('the conflict self-resolved'
+      → 'the conflict is resolved')."
+  - question: Does the provision-conflict producer keep the hold-node shape once the
+      greenfield conflict interrupt lands, as this node's convergence note
+      directs?
+    answer: "(Recorded 2026-08-03, author-confirmed.) No — that direction is
+      SUPERSEDED for the conflict producer, and the supersession runs the
+      opposite way from what this node's `## Context` convergence note states.
+      That note says [[tactic-graph-router-conflict-routing]]'s
+      `execution.conflict.attempt` cap will call `hold-node` instead of parking;
+      the target design is the reverse — that cap calls `park-node` on the
+      SOURCE node, and the two interim provision-conflict hold producers
+      (`/dispatch-conflict` Lane 3's `hold-node --kind provision-conflict`, and
+      `dispatch-graph-execute` case 11's strike/hold ladder) collapse into the
+      same direct park. WHY: a conflict is handled exactly like a failing CI
+      check — detecting it interrupts phase progression and launches the
+      resolution skill directly; the worker is selected by normal ranking on the
+      source; it assesses mechanical-vs-author-intention; and only when author
+      attention is required does it park, on the source's own `office_hours`,
+      with the reason and recommended next step. That is precisely
+      `/fix-checks`' and `/qa-fix`' existing escalation shape, and the hold
+      indirection buys nothing over it here while costing the source's real
+      queue priority (the defect [[tactic-unclaimed-hold-alerting]] measured:
+      hold 5.33 vs source 60.33). Of this node's five original reasons for
+      hold-over-direct-park, three no longer bear on the conflict producer:
+      reason 1 (conflicts self-resolve) was struck in the clarification above;
+      reasons 2 and 5 (no autonomous ladder can execute cross-branch
+      remediation; a laundered retry loop) describe a generic unattended re-run,
+      which the shipped first-responder design never does — case 11 already
+      dispatches a real resolver against the node's own branch. WHAT SURVIVES:
+      `hold-node` is NOT deleted. It stays for the `fix-attempt-cap` producer
+      and any future kind, on a reason specific to those: `blocked_by` is a
+      LIST, so a hold node can represent a source blocked by several
+      independent, separately-resolvable things at once, and resolving one
+      auto-resumes the source through `blockersComplete` with zero writes on the
+      source. The conflict producer needs neither property — a conflict is a
+      single condition whose resolution is the resolver's own terminal state.
+      Retiring it for conflicts is therefore a narrowing of this node's scope,
+      not a reversal of its doctrine. This node's `## Context` convergence note
+      and Unit 3's in-code comment both need updating to match when the
+      greenfield lands; until then this clarification is the authority."
 tooling_goals: []
 success_signal: null
 attention:
@@ -42,6 +100,7 @@ attention:
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
+  tier: 1
 phase: main-qa
 execution:
   branch: tactic-mechanical-park-producers
@@ -126,9 +185,14 @@ itself** rather than an incident:
 1. **provision-exit-11** — `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:197-204`
    calls `park-node` when `provision-node-worktree` (`:118-123`) cannot merge
    `origin/main` into the tactic's own persistent worktree branch. A conflict
-   against a moving main frequently self-resolves within a tick or two. At
-   recording time roughly five of the most recent commits on main were
-   exit-11 parks, burying genuinely author-required parks beneath them.
+   against a moving main is not expected to self-heal — but it has an
+   autonomous resolver to route it to (the conflict-resolution lane), which is
+   why it is not a park (`intentions/strategy-graph-native-dispatch.md`,
+   clarification 134, 2026-07-29 interview: *"conflicts are de-parked because
+   an autonomous resolver exists to route them to, not because they resolve
+   themselves"*). At recording time roughly five of the most recent commits on
+   main were exit-11 parks, burying genuinely author-required parks beneath
+   them.
 2. **fix-attempt-cap** — `packages/intentionsutil/scripts/apply-fix-state.ts:259-285`
    (`applyParkCheck`, mode `--park-if-capped`), called from
    `.claude/skills/dispatch-propagate/scripts/graph-select-target:306-320`,
@@ -246,8 +310,9 @@ leaves the source blocked forever. Every hold recommendation text must say:
 - `dispatch-graph-execute`'s default catch-all case (any `provision-node-worktree`
   exit other than 0/10/11/12/13 — bad node id, unresolvable project root,
   failed git fetch/worktree-add) stays an `office_hours` park. It is a genuine
-  environment/infra failure, not a self-resolving retry state, and the
-  doctrine names only the merge-conflict case (11).
+  environment/infra failure with no autonomous resolver to route it to, not a
+  mechanical retry state, and the doctrine names only the merge-conflict case
+  (11).
 - `packages/intentionsutil/scripts/graph-commit`'s own concurrent-edit-conflict
   park (`graph-commit:900`) and `.claude/skills/dispatch-conflict/SKILL.md`'s
   Lane 2 (which already autonomously resolves and clears most of these via an
@@ -436,7 +501,7 @@ Replace the `$PARK_NODE` call at `:199-204` with a two-tier disposition:
   hold-failed` and bump `FAILURES` (identical shape to today's `park-failed`
   branch at `:203-206`). Reset the strike file after a successful hold.
 - `case 0`: delete the strike sidecar on a successful provision (the
-  conflict self-resolved). This reset is what makes the counter mean
+  conflict is resolved). This reset is what makes the counter mean
   "consecutive".
 - Update the `case 11` comment block at `:198-201` to record the convergence
   note: this strike/hold branch is the interim step and is **replaced** by
