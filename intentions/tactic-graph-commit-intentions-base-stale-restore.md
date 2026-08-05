@@ -46,7 +46,32 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Finding 7 / item 7 sign-off — accept the fail-closed
+      stop-the-whole-invocation park (park_and_exit parks every id in the
+      invocation, hard-resets, and discards the local commit), or send it back
+      for a narrower per-node park that lands the undiverged ids?
+    answer: "(Ruled 2026-08-05, author office-hours sign-off, Ruling 36.) ACCEPT as
+      shipped — the fail-closed whole-invocation park stands, no code change,
+      park cleared. Consistent with .claude/rules/code-style.md (clear error
+      over silent fallback) and with what this PR actually delivers. Measured
+      against the park's own decisive question (how often the fleet calls
+      graph-commit with more than one id): across 30 days of origin/main, 2343
+      commits touch intentions/ and only 368 of them (15.7%) touch more than one
+      node file — so in the other 84% a whole-invocation park and a per-node
+      park are the same thing. The multi-id tail is dominated by two cheap
+      classes — automated retryable sweeps (reconcile merged/closed tactics,
+      reconcile terminal tactics, tick transitions, tick prune), where a forced
+      full re-run costs one tick of latency; and /align-tactics decomposition
+      rounds, which land mostly NEW nodes, and a brand-new node has no prior
+      blob to diverge on, so a round's real divergence exposure is the one or
+      two edited nodes, not the many created ones. The narrower per-node design
+      (partial-success exit semantics, per-id land/park bookkeeping) is a
+      behavior change this PR does not deliver and was NOT made a condition of
+      merge. Interlock preserved — this node's Unit 1 is the same one-line fix
+      as tactic-graph-commit-rebuild-snapshot-stale-revert's Unit 1a, whose
+      implicit merge-base CAS depends on it: the two land together or not at
+      all."
 tooling_goals: []
 success_signal: null
 attention:
@@ -59,105 +84,22 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: qa
+  tier: 1
+phase: review
 execution:
   branch: tactic-graph-commit-intentions-base-stale-restore
   pr: 2989
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human sign-off (planner scope-deviation, permanent
-    — not attempt-cap related). All 6 script-verifiable QA items PASS
-    (test-graph-commit.sh 50/50, test-park-node.sh 21/21,
-    test-transition-node.sh 3/3, intentionsutil vitest 717/717, lint clean, code
-    inspection) — no code defects found. One needs-human-judgment item (item 7):
-    Finding 7 is a human sign-off item, not a defect: it asks an operator to
-    accept-or-reject the fail-closed stop-the-whole-invocation park tradeoff
-    (vs. a narrower per-node park), judge whether the park diagnostics are
-    actionable enough, and confirm the two test-shim fixture adjustments
-    preserved conflict-coverage intent — all decisions the tactic node does not
-    authorize, and the only concrete alternative (per-node park + continue
-    landing others) would change behavior this PR does not deliver. Escalating
-    to office-hours for final design sign-off."
-  since: 2026-07-31
-  recommendation: >-
-    ## Recommendation — office-hours sign-off on the fail-closed park (PR #2989,
-    `tactic-graph-commit-intentions-base-stale-restore`)
-
-
-    Nothing is broken. All six script-verifiable QA items pass (50/50, 21/21,
-    3/3, 717/717, lint clean) and no code defects were found. What is parked is
-    a single product decision that the tactic node does not authorize, plus two
-    confirmation checks. Budget ~20-30 minutes.
-
-
-    **The decision (the only blocking one): accept fail-closed whole-invocation
-    park, or send it back for a per-node park.**
-
-
-    Read `packages/intentionsutil/scripts/graph-commit`, `park_and_exit()` (line
-    1352). On an unresolvable divergence it parks `${ALL_IDS[*]}` — *every* id
-    in the invocation, not just the diverged one — then `git fetch origin main
-    && git reset --hard FETCH_HEAD`, discarding this writer's local commit
-    (content preserved in `SNAP_DIR`, `KEEP_SNAP=1`) and exiting 1. Its callers
-    are `check_base_freshness()` (line 366, layer-3) and the far-ahead replay in
-    `ensure_intentions_only_base()` (line ~576). The concrete tradeoff: a
-    one-node conflict inside a multi-id `graph-commit` invocation costs the
-    caller *all* of that invocation's landings, and they must re-run. The
-    alternative — park only the diverged node and land the rest — is not
-    implemented here and is a behavior change of its own (partial-success exit
-    semantics, per-id land/park bookkeeping). Judge it on the multi-id case
-    specifically: how often does the fleet call `graph-commit` with more than
-    one id, and is a forced full re-run acceptable there? Accepting is
-    consistent with `.claude/rules/code-style.md` (clear error over silent
-    fallback) and with what the PR actually delivers; rejecting means filing a
-    follow-up tactic for the narrower design, not blocking this merge.
-
-
-    **Secondary check 1 — are the park diagnostics actionable by hand?**
-    `park_write()` (line 1261) upgrades the park reason to the greppable
-    `mechanical-unresolved — N field(s) diverged ...` and renders
-    `build_recommendation()`'s per-field ours/theirs breakdown into
-    `office_hours.recommendation`, on top of the base per-id recovery text
-    (snapshot pointer / prune-vs-edit). The unlanded content pointer
-    (`$SNAP_DIR`) is also echoed to stderr at lines 1359-1360. Ask one question:
-    if you found a node in this state cold, with only the node's `office_hours`
-    block in front of you (no stderr scrollback), could you locate your unlanded
-    content and redo the merge? Easiest way to answer — run the far-ahead /
-    conflict cases in `packages/intentionsutil/scripts/test-graph-commit.sh` and
-    read the resulting `office_hours.recommendation` verbatim rather than
-    reasoning about it.
-
-
-    **Secondary check 2 — did the two test-shim upgrades preserve conflict
-    coverage?** Diff `packages/intentionsutil/scripts/test-park-node.sh` and
-    `packages/intentionsutil/scripts/test-transition-node.sh` against
-    `origin/main`. Both replaced an `npx merge-node.ts` stub that hardcoded
-    every three-way merge to fail with a real simplified merge (disjoint fields
-    → clean; same field differing → conflict; transition-node's also handles the
-    multi-line YAML `blocked_by` list). Each file's Case 2 concurrent-write
-    fixture was then retargeted to collide on the same field the writer under
-    test writes — transition-node's is now `sed -i 's/^phase: .*/phase:
-    main-qa/'` with the assertion `grep -q '^phase: main-qa'`. Confirm each Case
-    2 still fails for the *right* reason (genuine same-field collision, other
-    writer's landed content wins) rather than because the shim is over-eager.
-    Cheap adversarial check: temporarily revert the Unit 2 hunk in
-    `ensure_intentions_only_base()` and confirm the new far-ahead cases in
-    `test-graph-commit.sh` go red — if they stay green, the shim has made them
-    vacuous.
-
-
-    **Outcome to record:** accept → clear the office-hours park and let the node
-    proceed to merge; reject → clear the park with a note requesting the
-    per-node park design as a separate tactic, since it is out of scope for what
-    this PR delivers.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

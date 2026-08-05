@@ -27,10 +27,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-invalid-state-transcript-intervention
+  pr: 3049
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-invalid-state-lane
 office_hours: null
 pace_exempt: false
 rounds: null

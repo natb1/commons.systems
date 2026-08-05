@@ -249,6 +249,36 @@ fs_log_dispositions() {
   jq -r 'select(.site == "frozen-session-sweep") | .disposition' "$DECISION_LOG_FILE"
 }
 
+# fs_write_route_stub <exit-code> [sleep-seconds] — install a fake
+# dispatch-invalid-state-route for the lane pre-tier. The gate resolves the
+# router under the sweep's own $repo_root (NOT this library's location, so a
+# suite run can never reach the real router and its graph-minting side effects),
+# so the stub must live in the fixture repo's own scripts dir.
+FS_ROUTELOG=""
+# fs_write_route_stub <exit-code> [sleep-seconds] [repo-root] [log-dir] — the
+# repo root and log dir default to the frozen-session fixture's, and the
+# terminal-disposition fixture passes its own.
+fs_write_route_stub() {
+  local rc="$1" nap="${2:-0}" repo="${3:-$FS_REPO}" logdir="${4:-$FS_DIR}"
+  local dir="$repo/.claude/skills/dispatch-propagate/scripts"
+  mkdir -p "$dir"
+  FS_ROUTELOG="$logdir/route.log"
+  : > "$FS_ROUTELOG"
+  cat > "$dir/dispatch-invalid-state-route" <<ROUTESTUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FS_ROUTELOG"
+[[ "$nap" != "0" ]] && sleep "$nap"
+exit $rc
+ROUTESTUB
+  chmod +x "$dir/dispatch-invalid-state-route"
+}
+
+fs_route_calls() {
+  local c=0
+  [[ -n "$FS_ROUTELOG" && -f "$FS_ROUTELOG" ]] && { c=$(wc -l < "$FS_ROUTELOG"); }
+  printf '%s' "${c// /}"
+}
+
 # --- Test 1: an aged blocked node worker is parked ---------------------------
 
 echo "Test: an aged blocked node worker with an unparked node is parked"
@@ -1849,6 +1879,165 @@ assert_eq "race: the escalation marker is retained" "present" \
 # park-node at all. Assert the race actually fired.
 assert_eq "race: non-vacuity — the fake park-node's CAS actually raced" "yes" \
   "$(grep -q '^RACED=1$' "$TD_PARKLOG" && printf 'yes' || printf 'no')"
+td_teardown
+
+# ============================================================================
+# Unit 5 — the invalid-state lane PRE-TIER in frozen_session_sweep
+# ============================================================================
+# The oracle for every fall-through case below is Test 1's own park assertion,
+# reused verbatim: with the pre-tier declining, the park path must run EXACTLY
+# as it does today. The failure mode this guards is the worst one in the change
+# set — deleting a session's only copy of its escalation text.
+
+echo "Test: lane pre-tier — a handled verdict defers the candidate instead of parking"
+fs_setup
+fs_write_route_stub 0
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "lane: the router was consulted exactly once" "1" "$(fs_route_calls)"
+assert_eq "lane: a handled verdict parks NOTHING" "0" "$(fs_park_calls)"
+assert_eq "lane: the decision record says routed-to-lane" "routed-to-lane" "$(fs_log_dispositions)"
+assert_eq "lane: stderr says deferred, not parked" "yes" \
+  "$(fs_contains 'routed tactic-frozen-one to the invalid-state lane')"
+assert_eq "lane: the pre-tier line reports the routed count" "yes" \
+  "$(fs_contains 'frozen-session lane pre-tier (routed=1 kept-by-lane=0)')"
+# The router is called with the node id and the kind this sweep owns.
+route_argv=$(head -1 "$FS_ROUTELOG")
+case "$route_argv" in *"--node tactic-frozen-one"*) a=yes ;; *) a="no: $route_argv" ;; esac
+assert_eq "lane: the router call names the node" "yes" "$a"
+case "$route_argv" in *"--kind frozen-session"*) a=yes ;; *) a="no: $route_argv" ;; esac
+assert_eq "lane: frozen_session_sweep passes --kind frozen-session" "yes" "$a"
+fs_teardown
+
+echo "Test: lane pre-tier — a keep verdict parks nothing and is recorded"
+fs_setup
+fs_write_route_stub 4
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "lane: a keep verdict parks nothing" "0" "$(fs_park_calls)"
+assert_eq "lane: the decision record says kept-by-lane" "kept-by-lane" "$(fs_log_dispositions)"
+fs_teardown
+
+echo "Test: lane pre-tier — an escalate verdict falls through to the park path unchanged"
+fs_setup
+fs_write_route_stub 10
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+# Test 1's assertions, reused as the oracle: the park path must be untouched.
+assert_eq "lane/escalate: park-node invoked exactly once" "1" "$(fs_park_calls)"
+assert_eq "lane/escalate: node id is still \$3 (after --base <id>=<sha>)" \
+  "tactic-frozen-one" "$(fs_park_arg 3)"
+assert_eq "lane/escalate: the decision record says parked" "parked" "$(fs_log_dispositions)"
+assert_eq "lane/escalate: the summary is byte-identical to today's" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=1 observing=0 unmeasurable=0 deferred=0)')"
+assert_eq "lane/escalate: no pre-tier line is printed when nothing was routed" "no" \
+  "$(fs_contains 'lane pre-tier')"
+fs_teardown
+
+echo "Test: lane pre-tier — an ABSENT router falls through to the park path (fail toward escalate)"
+fs_setup
+# No fs_write_route_stub at all: this is the state on landing, before the
+# router's own PR merges. Today's behavior must be preserved exactly.
+FS_ROUTELOG=""
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "lane/absent: park-node invoked exactly once" "1" "$(fs_park_calls)"
+assert_eq "lane/absent: the summary is byte-identical to today's" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=1 observing=0 unmeasurable=0 deferred=0)')"
+fs_teardown
+
+echo "Test: lane pre-tier — a router that hangs past its timeout falls through to the park path"
+fs_setup
+# 3s nap against a 1s budget: the gate must abandon it and park, not stall the
+# tick. An unbounded router call on the scheduling path is a fleet stall.
+fs_write_route_stub 0 3
+DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S=1
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "lane/timeout: a hung router still parks" "1" "$(fs_park_calls)"
+assert_eq "lane/timeout: the park path ran unchanged" "parked" "$(fs_log_dispositions)"
+unset DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S
+fs_teardown
+
+echo "Test: lane pre-tier — a router outside the checkout's scripts dir is refused"
+fs_setup
+fs_write_route_stub 0
+# Provenance: an executable outside $repo_root's scripts dir must never be run,
+# even when named explicitly. This is what makes honouring the env override safe.
+ROGUE_ROUTE="$FS_DIR/rogue-route"
+cat > "$ROGUE_ROUTE" <<'ROGUE'
+#!/usr/bin/env bash
+exit 0
+ROGUE
+chmod +x "$ROGUE_ROUTE"
+DISPATCH_INVALID_STATE_ROUTE_CMD="$ROGUE_ROUTE"
+fs_write_node "tactic-frozen-one" unparked
+fs_commit_nodes
+fs_write_transcript "0aa1-1111" $(( FS_NOW - 2000 ))
+fs_add_session "0aa1-1111" "tactic-frozen-one" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "lane/provenance: a rogue router path is refused" "yes" \
+  "$(fs_contains 'does not resolve inside')"
+assert_eq "lane/provenance: the refusal falls through to the park path" "1" "$(fs_park_calls)"
+unset DISPATCH_INVALID_STATE_ROUTE_CMD
+fs_teardown
+
+# ============================================================================
+# Unit 5 — the invalid-state lane PRE-TIER in terminal_without_disposition_sweep
+# ============================================================================
+# This is the sweep whose park block deletes the job dir's office-hours-*
+# markers on landing proof. A routed candidate must keep them: the pass has
+# proven nothing and the intervention may still need them.
+
+echo "Test: lane pre-tier (terminal) — a handled verdict defers and leaves markers intact"
+td_setup
+fs_write_route_stub 0 0 "$TD_REPO" "$TD_DIR"
+td_write_node "tactic-terminal-one" unparked
+td_commit_nodes
+td_write_transcript "0cc3-3333" $(( TD_NOW - 2000 ))
+td_add_session "0cc3-3333" "tactic-terminal-one" "done" "job-td-1"
+td_install_claude 0
+td_run
+assert_eq "lane/td: the router was consulted" "1" "$(fs_route_calls)"
+assert_eq "lane/td: a handled verdict parks NOTHING" "0" "$(td_park_calls)"
+assert_eq "lane/td: stderr says deferred and markers intact" "yes" \
+  "$(td_contains 'routed tactic-terminal-one to the invalid-state lane')"
+route_argv=$(head -1 "$FS_ROUTELOG")
+case "$route_argv" in *"--kind terminal-session"*) a=yes ;; *) a="no: $route_argv" ;; esac
+assert_eq "lane/td: this sweep passes --kind terminal-session" "yes" "$a"
+td_teardown
+
+echo "Test: lane pre-tier (terminal) — an escalate verdict falls through to the park path unchanged"
+td_setup
+fs_write_route_stub 10 0 "$TD_REPO" "$TD_DIR"
+td_write_node "tactic-terminal-one" unparked
+td_commit_nodes
+td_write_transcript "0cc3-3333" $(( TD_NOW - 2000 ))
+td_add_session "0cc3-3333" "tactic-terminal-one" "done" "job-td-1"
+td_install_claude 0
+td_run
+assert_eq "lane/td-escalate: park-node invoked exactly once" "1" "$(td_park_calls)"
 td_teardown
 
 report_results

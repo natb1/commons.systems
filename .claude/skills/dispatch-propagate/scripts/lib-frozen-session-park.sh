@@ -233,6 +233,83 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
   set -uo pipefail
 
+  # invalid_state_route_gate <repo-root> <node> <kind> <sid> [job-id] — the invalid-state
+  # lane's PRE-TIER, consulted by both sweeps immediately before their park block
+  # and AFTER every one of their existing gates (name shape, session-id shape,
+  # idle grace, stand-down interlock, `phase: done` gate, park cap, base-blob
+  # pin). This is the lane's second detection point; the first is
+  # dispatch-invalid-state-sweep at selection time.
+  #
+  # Returns the router's exit code, which the callers map as:
+  #     0  handled  → count `routed`, log `routed-to-lane`, DO NOT park, and DO
+  #                   NOT delete the job dir's office-hours-* markers.
+  #     4  keep     → count `kept`, log `kept-by-lane`.
+  #     anything else (10 escalate, 1 router failure, 2 usage, a timeout, or a
+  #                   missing/unresolvable router) → the caller FALLS THROUGH to
+  #                   its existing park path unchanged. Fail toward escalate.
+  #
+  # A routed candidate is DEFERRED, not resolved: the freeze persists until the
+  # intervention session (or a human) reaps. The sweep still owns escalation this
+  # round — extracting the park-with-landing-proof block into the router is a
+  # declared residual, deliberately not attempted here.
+  #
+  # Provenance and bounding mirror what this file already applies to `park-node`,
+  # INCLUDING where the executable is resolved from: the router is taken from the
+  # sweep's own `$repo_root` (which provenance check 1 has already asserted is a
+  # primary checkout on `main`), NOT from this library's own location. That is
+  # deliberate and load-bearing for two reasons:
+  #
+  #   1. Production: the router must run out of the same checkout the sweep is
+  #      operating on, the same reason park-node is invoked BY PATH under
+  #      $repo_root — it resolves its own repo root from its script location.
+  #   2. Testing: resolving from ${BASH_SOURCE[0]} would make the REAL router
+  #      reachable from a test that merely sources this library, and the router
+  #      has durable side effects (the fleet-latch sidecar and, at threshold, a
+  #      graph-commit that mints a node). An early draft did exactly that and one
+  #      suite run drove the real counter to 156 observations.
+  #
+  # The router must be an executable regular file whose REAL directory is that
+  # checkout's scripts dir (canonicalized with `pwd -P`, so `..` segments and
+  # symlinked temp roots cannot slip an arbitrary executable past a string prefix
+  # test), and the call is wrapped in the same `timeout` binary the file resolves
+  # and refuses to run without — an unbounded router call on the tick path is a
+  # fleet stall. DISPATCH_INVALID_STATE_ROUTE_CMD overrides the path for tests,
+  # safely, because the provenance check still applies to it.
+  invalid_state_route_gate() {
+    local repo_root="$1" node="$2" kind="$3" sid="${4:-}" jid="${5:-}"
+
+    [[ -n "$repo_root" && -d "$repo_root" ]] || return 10
+    local scripts_dir scripts_dir_real route route_dir_real
+    scripts_dir="$repo_root/.claude/skills/dispatch-propagate/scripts"
+    scripts_dir_real=$(cd "$scripts_dir" 2>/dev/null && pwd -P) || scripts_dir_real=""
+    [[ -n "$scripts_dir_real" ]] || return 10
+    route="${DISPATCH_INVALID_STATE_ROUTE_CMD:-$scripts_dir_real/dispatch-invalid-state-route}"
+    route_dir_real=$(cd "$(dirname -- "$route")" 2>/dev/null && pwd -P) || route_dir_real=""
+    if [[ -z "$route_dir_real" || "$route_dir_real" != "$scripts_dir_real" ]]; then
+      printf 'lib-frozen-session-park: invalid-state router path %s does not resolve inside %s; falling through to the park path\n' \
+        "$route" "$scripts_dir_real" >&2
+      return 10
+    fi
+    if [[ ! -f "$route" || ! -x "$route" ]]; then
+      # Expected until the lane's router lands; not an error, just a fall-through.
+      return 10
+    fi
+
+    local tbin
+    tbin=$(command -v timeout 2>/dev/null) || tbin=""
+    if [[ -z "$tbin" ]]; then
+      printf 'lib-frozen-session-park: `timeout` not found; refusing an unbounded invalid-state router call; falling through to the park path\n' >&2
+      return 10
+    fi
+    local budget="${DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S:-60}"
+    [[ "$budget" =~ ^[0-9]+$ ]] || budget=60
+
+    local rc=0
+    "$tbin" "$budget" "$route" --node "$node" --kind "$kind" \
+      --session "$sid" --job-id "$jid" >/dev/null 2>&1 </dev/null || rc=$?
+    return "$rc"
+  }
+
   # _frozen_session_log_decision <node> <session> <idle> <disposition> — append
   # one best-effort JSONL decision record. Mirrors dispatch-select-tick's
   # _dlog_select_emit: build with `jq -c -n`, hand to `decision_log_append`
@@ -274,6 +351,10 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     fi
 
     local blocked=0 parked_count=0 observing=0 unmeasurable=0 deferred=0
+    # Invalid-state lane pre-tier dispositions (see invalid_state_route_gate).
+    # `routed` candidates are DEFERRED, not resolved: the freeze persists until
+    # the intervention session or a human reaps.
+    local routed_count=0 kept_by_lane_count=0
 
     if [[ -z "$candidates" ]]; then
       printf 'lib-frozen-session-park: sweep complete (blocked=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
@@ -537,6 +618,25 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # holds, so a specific human-facing park that landed in the window is
       # silently overwritten with this sweep's generic boilerplate. Pinning the
       # step-(7b) blob turns that race into an exit-3 refusal instead.
+      # (9b) INVALID-STATE LANE PRE-TIER. Consulted after every gate above and
+      # immediately before the park below. A `handled` verdict means an
+      # intervention session was launched, so this candidate is DEFERRED (not
+      # resolved) and must not be parked this pass; a `keep` verdict is positive
+      # evidence to do nothing. Anything else falls through to the park path
+      # unchanged — fail toward escalate. This sweep still owns escalation.
+      local lane_rc=0
+      invalid_state_route_gate "$repo_root" "$name" "frozen-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( lane_rc == 0 )); then
+        routed_count=$(( routed_count + 1 ))
+        printf 'lib-frozen-session-park: routed %s to the invalid-state lane (frozen-session; session=%s) — deferred, not parked\n' "$name" "$sid" >&2
+        _frozen_session_log_decision "$name" "$sid" "$idle" "routed-to-lane"
+        continue
+      elif (( lane_rc == 4 )); then
+        kept_by_lane_count=$(( kept_by_lane_count + 1 ))
+        _frozen_session_log_decision "$name" "$sid" "$idle" "kept-by-lane"
+        continue
+      fi
+
       local reason recommendation
       printf -v reason \
         'worker session froze at a permission/classifier denial — claude agents reports state=blocked and the transcript has had no activity for %ss; the session cannot make progress and cannot park itself (a blocked session never reaches the Stop hook), so the dispatch-tick frozen-session sweep parked this node' \
@@ -588,6 +688,12 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
     printf 'lib-frozen-session-park: sweep complete (blocked=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
       "$blocked" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+    # Reported separately, and only when non-empty — see the sibling sweep's
+    # note: the summary line above is matched exactly by existing consumers.
+    if (( routed_count > 0 || kept_by_lane_count > 0 )); then
+      printf 'lib-frozen-session-park: frozen-session lane pre-tier (routed=%s kept-by-lane=%s) — routed candidates are DEFERRED, not resolved\n' \
+        "$routed_count" "$kept_by_lane_count" >&2
+    fi
     return 0
   }
 
@@ -762,6 +868,11 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     fi
 
     local terminal=0 parked_count=0 observing=0 unmeasurable=0 deferred=0
+    # Invalid-state lane pre-tier dispositions (see invalid_state_route_gate).
+    # `routed` candidates are DEFERRED, not resolved: the freeze persists until
+    # the intervention session or a human reaps, and their job-dir markers are
+    # deliberately left intact.
+    local routed_count=0 kept_by_lane_count=0
 
     if [[ -z "$candidates" ]]; then
       printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
@@ -1161,6 +1272,32 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         recommendation="Reap THEN clear — this order is mandatory, not a choice between two options. (1) Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded; deciding the judgment item the session stopped on is done IN ADDITION to the reap, never instead of it. (2) Reap the terminal session: whenever the terminal session is still present, reap it before clearing the park — that order is mandatory — by stopping it (\`claude stop <job-id>\`) and letting \`dispatch-sweep\` reap the worktree. (3) Only if step (2) does not clear the session (e.g. an unpushed branch whose content is already landed elsewhere), verify the worktree is safe to discard BEFORE the destructive fallback, using the same reap-safety gate \`lib-session-reap.sh\` applies: (a) \`git -C <worktree> status --porcelain --untracked-files=no\` prints nothing (no uncommitted work), (b) \`git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'\` exits 0 (tree content already landed; the \`intentions/\` carve-out is deliberate — graph commits land separately), and (c) no OPEN PR still has that branch as its head; judge by that content diff, never by a commits-ahead count: GitHub squash-merges, so a safe branch routinely reads many commits ahead. If any of (a)-(c) does not pass, do NOT remove the worktree — the work in it is not yet landed. Only once they all pass, fall back to \`git worktree remove\` plus \`claude rm <job-id>\`. (4) ONLY THEN \`clear-park <node-id>\` to return the node to the lane. Exception — if \`claude agents --all\` shows no session for this node, the session is already gone, the reap step is already satisfied, and \`clear-park <node-id>\` alone is the correct and sufficient action. Why the order is mandatory: clearing the park while the session is still present is a no-op — the same sweep re-parks the node on its next pass, because the condition it detects (a terminal, un-reaped session with no recorded disposition) is unchanged by the clear alone. (Observed: a park was cleared with the session left alive, and the same sweep re-parked the node twice.)"
       fi
 
+      # (11b) INVALID-STATE LANE PRE-TIER. Consulted after every gate above
+      # (name shape, session-id shape, idle grace, stand-down interlock, the
+      # `phase: done` gate, the park cap and the base-blob pin) and immediately
+      # before the park below. A `handled` verdict means an intervention session
+      # was launched, so this candidate is DEFERRED — do NOT park it, and do NOT
+      # delete the job dir's `office-hours-*` markers, because the intervention
+      # may still need them and this pass has proven nothing. A `keep` verdict is
+      # positive evidence to do nothing. Anything else — escalate, router
+      # failure, usage error, timeout, or a missing/unresolvable router — falls
+      # through to the park path completely unchanged. Fail toward escalate.
+      #
+      # This sweep still owns escalation this round; extracting the
+      # park-with-landing-proof block into the router is a declared residual.
+      local lane_rc=0
+      invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( lane_rc == 0 )); then
+        routed_count=$(( routed_count + 1 ))
+        printf 'lib-frozen-session-park: routed %s to the invalid-state lane (terminal-session; session=%s) — deferred, not parked; markers left intact\n' "$name" "$sid" >&2
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "routed-to-lane"
+        continue
+      elif (( lane_rc == 4 )); then
+        kept_by_lane_count=$(( kept_by_lane_count + 1 ))
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "kept-by-lane"
+        continue
+      fi
+
       # (12) Park. Invoked BY PATH under $repo_root, exactly as
       # frozen_session_sweep and lib-standdown-recheck.sh:699 do: `park-node`
       # resolves its repo root from its OWN script location, so a park-node path
@@ -1278,6 +1415,15 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
     printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
       "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+    # The lane pre-tier's dispositions are reported on their own line, and only
+    # when there is something to report. Appending them to the summary above
+    # would change a line other consumers (journald greps, the existing suite's
+    # oracles) match exactly, for no gain on the overwhelmingly common
+    # nothing-routed tick.
+    if (( routed_count > 0 || kept_by_lane_count > 0 )); then
+      printf 'lib-frozen-session-park: terminal-disposition lane pre-tier (routed=%s kept-by-lane=%s) — routed candidates are DEFERRED, not resolved\n' \
+        "$routed_count" "$kept_by_lane_count" >&2
+    fi
     return 0
   }
 
