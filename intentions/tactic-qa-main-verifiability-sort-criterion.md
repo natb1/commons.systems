@@ -90,7 +90,7 @@ attention:
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
   pr: 3009
