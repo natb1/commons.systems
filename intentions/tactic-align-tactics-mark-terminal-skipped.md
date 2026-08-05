@@ -129,21 +129,21 @@ success_signal:
     landed-then-skipped count trends to zero across re-runs after the merge
   is_proxy: false
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-align-tactics-mark-terminal-skipped
   pr: 3047
   attempts: {}
-  markers:
-    - planned
-    - qa-done
-    - reviewed
+  markers: []
   strategy_fingerprint: null
   fix:
     since: 2026-08-05
     attempt: 3
     pushed_sha: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T20:31:54Z
+    mergeCommitSha: 1c7dc4fb1e528099d64990564eb62e803a22bf18
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -785,4 +785,24 @@ in committed `.sh` files — both new scripts parse JSON):
   reap-then-clear-park mandate. Confirm the rendered `office_hours.recommendation`
   on that node reads correctly in context (the test asserts substrings; only a
   human can judge whether an operator following it would do the right thing).
+
+## needs-main residue
+
+- **id 10 — Post-merge baseline re-run of the gap audit against real host state.**
+  Expected outcome: a recorded `landed-then-skipped` baseline count from running
+  `dispatch-terminal-gap-audit` against the host's real `~/.claude/projects` and
+  a freshly-fetched `origin/main`, with a follow-up cadence confirming the count
+  stays flat (not growing) after `land-align-round` ships. Finding: this PR's own
+  body calls the baseline run out as a follow-up step, not automatable from CI —
+  the audit reads a live host transcript store and live `origin/main` park state,
+  neither of which exists at merge time. This is the plan's own Verification
+  section item ("Run the audit once and record the number"), carried here as
+  `needs-main` residue per the qa-fix disposition triage (PR #3047, first
+  qa-fix pass).
+  - Verifiability: MACHINE
+  - Check: `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit`
+    run on the host after `git fetch origin main`; record the printed
+    `landed-then-skipped=<N>` count as the baseline, then re-run periodically and
+    compare against it (see the plan's Verification § Manual bullets above for
+    the full remediation/observation cadence).
 

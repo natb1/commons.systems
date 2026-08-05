@@ -1820,6 +1820,12 @@ park_and_exit() {
   local park_msg
   if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
     park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"
+    # ANNOUNCEMENT ONLY — not a landing claim. This prints BEFORE the parking
+    # write is pushed, and that push can still fail (see the post-`land` branch
+    # below). Nothing downstream may treat this line as evidence that a park
+    # reached main; land-align-round deliberately keys its `park` terminal
+    # marker on the post-push CONFIRMATION instead (the load-bearing substring
+    # is marked there).
     echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
     echo "graph-commit: re-applying and landing bystander prune(s) not implicated in the conflict: ${bystander_prunes[*]}" >&2
     for id in "${bystander_prunes[@]}"; do
@@ -1827,6 +1833,8 @@ park_and_exit() {
     done
   else
     park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+    # ANNOUNCEMENT ONLY — see the note on the identical emission above: this
+    # precedes the parking push and is not evidence that a park reached main.
     echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
   fi
 
@@ -1838,6 +1846,18 @@ park_and_exit() {
   local prc=0
   land || prc=$?
   if [[ "$prc" -eq 0 ]]; then
+    # LOAD-BEARING SUBSTRING: both confirmations below share the literal
+    # "(office_hours set on the origin/main content)", and land-align-round
+    # (the /align-tactics landing wrapper) greps its captured stderr for
+    # exactly that to decide whether this rc-1 exit is a genuine terminal
+    # disposition (park) versus an exit with nothing landed and nothing parked
+    # ON MAIN — busy-main exhaustion, a usage error, or the failed-parking-push
+    # branch below. These lines print only AFTER `land` succeeded, which is
+    # what makes them safe to key on; the pre-push announcement is not. A
+    # wording change here silently breaks that downstream branch. The ratchet
+    # case in test-land-align-round.sh (packages/intentionsutil/scripts/)
+    # extracts land-align-round's needle from its real source and asserts it
+    # appears on exactly these two echo lines — keep them coupled.
     if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
       echo "graph-commit: parked ${park_ids[*]} (office_hours set on the origin/main content); landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
     else
