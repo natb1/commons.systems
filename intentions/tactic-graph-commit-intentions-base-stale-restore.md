@@ -46,7 +46,35 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: >-
+      Finding 7 / item 7 sign-off — accept the fail-closed
+      stop-the-whole-invocation park (park_and_exit parks every id in the
+      invocation, hard-resets, and discards the local commit), or send it back
+      for a narrower per-node park that lands the undiverged ids?
+    answer: >-
+      (Ruled 2026-08-05, author office-hours sign-off, Ruling 36.) ACCEPT as
+      shipped — the fail-closed whole-invocation park stands, no code change,
+      park cleared. Consistent with .claude/rules/code-style.md (clear error
+      over silent fallback) and with what this PR actually delivers. Measured
+      against the park's own decisive question (how often the fleet calls
+      graph-commit with more than one id): across 30 days of origin/main, 2343
+      commits touch intentions/ and only 368 of them (15.7%) touch more than
+      one node file — so in the other 84% a whole-invocation park and a
+      per-node park are the same thing. The multi-id tail is dominated by two
+      cheap classes — automated retryable sweeps (reconcile merged/closed
+      tactics, reconcile terminal tactics, tick transitions, tick prune), where
+      a forced full re-run costs one tick of latency; and /align-tactics
+      decomposition rounds, which land mostly NEW nodes, and a brand-new node
+      has no prior blob to diverge on, so a round's real divergence exposure is
+      the one or two edited nodes, not the many created ones. The narrower
+      per-node design (partial-success exit semantics, per-id land/park
+      bookkeeping) is a behavior change this PR does not deliver and was NOT
+      made a condition of merge. Interlock preserved — this node's Unit 1 is
+      the same one-line fix as
+      tactic-graph-commit-rebuild-snapshot-stale-revert's Unit 1a, whose
+      implicit merge-base CAS depends on it: the two land together or not at
+      all.
 tooling_goals: []
 success_signal: null
 attention:
