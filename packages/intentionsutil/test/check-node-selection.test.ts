@@ -157,6 +157,52 @@ describe("evaluateSelection", () => {
     expect(r.stderr[0]).toMatch(/selected fix but tactic-fx carries no execution\.fix interrupt/);
   });
 
+  it("passes a conflict selection while execution.conflict is set (ladder phase preserved)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-cf",
+        kind: "tactic",
+        phase: "review", // real ladder phase preserved; the interrupt is orthogonal
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: ["reviewed"],
+          strategy_fingerprint: null,
+          conflict: { since: "2026-08-03", attempt: 1 },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("exit 12 on a conflict selection once execution.conflict was cleared (resolved since selection)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-cf",
+        kind: "tactic",
+        phase: "review",
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: ["reviewed"],
+          strategy_fingerprint: null,
+          conflict: null,
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/selected conflict but tactic-cf carries no execution\.conflict interrupt/);
+  });
+
   it("exit 12 when parked first-class (office_hours set after selection)", () => {
     const dir = tempDir();
     seed(
