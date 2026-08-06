@@ -21,8 +21,8 @@ serves:
   - strategy-token-economy
 recovers: []
 clarifications:
-  - question: Does the minimally-scoped instrument-verify agent adequately resist
-      a hostile finding-description payload steering it to a false
+  - question: Does the minimally-scoped instrument-verify agent adequately resist a
+      hostile finding-description payload steering it to a false
       `verified:true`? (main-qa residue item 5, the node's last author item)
     answer: "(Recorded 2026-08-04, author-directed.) Yes — item 5 is CLOSED, the
       isolation is sufficient. Basis verified by direct inspection of
@@ -41,9 +41,9 @@ clarifications:
   - question: Has the post-merge transcript sweep (main-qa residue item 3)
       accumulated enough history to call it swept, and does it show any lane
       substituting itself under a failed instrument's name?
-    answer: "(Recorded 2026-08-04, machine-swept — no author decision needed.)
-      Yes, swept: zero violations. When this node was parked (2026-07-31) only
-      ~1h40m and a single in-flight run were available, which is why item 3 was
+    answer: "(Recorded 2026-08-04, machine-swept — no author decision needed.) Yes,
+      swept: zero violations. When this node was parked (2026-07-31) only ~1h40m
+      and a single in-flight run were available, which is why item 3 was
       deferred. Re-run 2026-08-04 over ~/.claude/projects/*/*.jsonl modified
       since the 2026-07-31T22:45:49Z merge, excluding this reading session's own
       transcript: 20 distinct review-fix outcome envelopes were emitted. Three
@@ -134,8 +134,8 @@ office_hours:
     non-empty `instrument_failures` naming code-review as NOT invoked, and all
     three carry `disposition: escalated` — the guard fired and the lane refused
     to report under the instrument's name. The other 17 carry an empty
-    `instrument_failures`. No envelope credits a failed instrument's output.
-    See this node's dated clarification for the full method.
+    `instrument_failures`. No envelope credits a failed instrument's output. See
+    this node's dated clarification for the full method.
 
     4. Token-economy sensor reading — Verifiability: MACHINE (checked,
     insufficient history yet). intentions/strategy-token-economy.md's `reading`
@@ -171,8 +171,8 @@ office_hours:
     review-fix pass; item 3 was machine-swept 2026-08-04 across 20 post-merge
     envelopes with zero violations; item 5 was closed 2026-08-04 by author
     ruling on structurally-enforced verifier isolation. A human reviewer does
-    not need to re-derive any of those. EXACTLY ONE item remains open, and it
-    is a WAIT, not an author decision:
+    not need to re-derive any of those. EXACTLY ONE item remains open, and it is
+    a WAIT, not an author decision:
 
 
     4. Token-economy sensor reading — wait for strategy-token-economy's sensor

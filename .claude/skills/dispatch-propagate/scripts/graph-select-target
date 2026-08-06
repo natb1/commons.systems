@@ -793,11 +793,42 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
     [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: reserved" >&2
     continue
   fi
-  if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
-    skip_note "$id" "live-session"
-    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
-    continue
-  fi
+  # `worktree_occupancy_state` is the granular form of the same check: it makes
+  # the same claimed-set decision (everything but `free` is skipped) while
+  # naming WHY. `terminal` is an INVALID state — nothing is running, yet the
+  # claim survives — and folding it into `live-session`, as this call did
+  # before, made it invisible at the exact moment the router noticed it. The
+  # node is still skipped in all four cases; this unit adds no routing, no
+  # spawn and no graph write. The routing act lives in
+  # `dispatch-invalid-state-sweep`, which runs before selection over the same
+  # predicate, keeping session spawning out of a script humans invoke standalone.
+  # Called DIRECTLY with stdout redirected, not via `$( )`: the evidence
+  # globals are set in a subshell by a command substitution and would be lost,
+  # so the diagnostic below would name a stale session id. See the CAVEAT in
+  # `worktree_occupancy_state`'s header.
+  worktree_occupancy_state "$NATIVE_ROOT/.claude/worktrees/$id" >/dev/null
+  occupancy="$WORKTREE_OCCUPANCY_STATE"
+  case "$occupancy" in
+    free)
+      : # fall through to the sensor gate
+      ;;
+    terminal)
+      skip_note "$id" "terminal-session"
+      if [[ -n "$NODE_TARGET" ]]; then
+        echo "graph-select-target: terminal-session — $id is occupied-by-terminal (an INVALID state), not occupied-by-live: session ${WORKTREE_OCCUPANCY_SESSION_ID:-unknown} is registered but no longer running, and the claim survives until it is released" >&2
+      fi
+      continue
+      ;;
+    *)
+      # `live` (a valid claim) and `unknown` (a daemon read that failed) both
+      # report the unchanged `live-session` reason. UNKNOWN must NEVER surface
+      # as an invalid state: a daemon hiccup would otherwise manufacture
+      # interventions out of healthy nodes.
+      skip_note "$id" "live-session"
+      [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
+      continue
+      ;;
+  esac
 
   # sensor_gate returns the PHASE TO EMIT on stdout when satisfied — it may
   # differ from the candidate's `phase` (a fresh CI-fix interrupt emits `fix`

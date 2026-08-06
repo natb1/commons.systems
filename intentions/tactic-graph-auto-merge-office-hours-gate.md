@@ -30,20 +30,20 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Item 10 — ratify or reject the ungated-reconciler asymmetry (a
-      node advanced to phase done while its office_hours park stays live)?
-    answer: "(Ruled 2026-08-04 /align interview.) Option A ratified, plus
-      option B's follow-up: done-but-parked is a VALID state — phase and
-      office_hours are conceptually orthogonal dimensions (a park means a human
-      owes a decision; the merge and phase advance are orthogonal to that debt,
-      and author escalation may be required even after the code lands). The
-      reconciler stays ungated per Unit 2's design. PR #3033 lands unchanged;
-      item 10 closes as accepted-behavior. Greenfield consequence: the
-      office-hours queue presents BOTH dimensions — parked entries annotate the
-      node's phase (e.g. phase done, underlying work already merged) —
-      retained as draft tactic-office-hours-queue-phase-annotation. The
-      orthogonality doctrine is recorded on strategy-graph-native-dispatch
-      (2026-08-04 clarification). Park cleared on this ruling."
+  - question: Item 10 — ratify or reject the ungated-reconciler asymmetry (a node
+      advanced to phase done while its office_hours park stays live)?
+    answer: "(Ruled 2026-08-04 /align interview.) Option A ratified, plus option B's
+      follow-up: done-but-parked is a VALID state — phase and office_hours are
+      conceptually orthogonal dimensions (a park means a human owes a decision;
+      the merge and phase advance are orthogonal to that debt, and author
+      escalation may be required even after the code lands). The reconciler
+      stays ungated per Unit 2's design. PR #3033 lands unchanged; item 10
+      closes as accepted-behavior. Greenfield consequence: the office-hours
+      queue presents BOTH dimensions — parked entries annotate the node's phase
+      (e.g. phase done, underlying work already merged) — retained as draft
+      tactic-office-hours-queue-phase-annotation. The orthogonality doctrine is
+      recorded on strategy-graph-native-dispatch (2026-08-04 clarification).
+      Park cleared on this ruling."
 tooling_goals: []
 success_signal:
   observable: "graph-auto-merge's per-candidate gate skips (holds, does not merge)
@@ -62,13 +62,14 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-auto-merge-office-hours-gate
   pr: 3033
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   completion: null

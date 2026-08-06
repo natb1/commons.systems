@@ -61,7 +61,28 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is the implicit merge-base compare-and-swap the right default for
+      graph-commit's rebuild path, given it trades silent-revert-if-stale for
+      more frequent visible parking (and a --prune against a concurrently edited
+      node always parks)?
+    answer: "(Ruled 2026-08-05, author office-hours sign-off, Ruling 36.) ACCEPT as
+      shipped — the implicit merge-base CAS is the right default, no code
+      change, park cleared. Trading a silent stale-revert for a loud park is the
+      direction .claude/rules/code-style.md already points (clear error over
+      silent fallback), which is the same convention the two Sonnet skeptics
+      cited when they argued this was decidable without the author; the
+      fix-planner was right to leave the call standing, and the call is now
+      made. The --base skip carve-out stays as-is: check_base_freshness has
+      already verified and reconciled those ids, and test-graph-commit.sh case
+      40 together with test-transition-node.sh Case 1 both depend on that
+      carve-out remaining in place, so narrowing it is not a local edit. The
+      always-park --prune branch was considered in the same sitting and accepted
+      rather than narrowed — a deletion has no content to merge, so parking is
+      the only honest outcome. Interlock preserved — this node's Unit 1a is the
+      same one-line fix as tactic-graph-commit-intentions-base-stale-restore's
+      Unit 1, and this node's CAS depends on it: the two land together or not at
+      all."
 tooling_goals: []
 success_signal: null
 attention:
@@ -74,132 +95,26 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-phase: qa
+  tier: 1
+phase: main-qa
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
   pr: 2990
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-05T21:47:35Z
+    mergeCommitSha: 156ce3a18929dd0c85f80db6be4f35c32ad45a7d
+    graphCommitSha: null
 validates: []
-blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human (judgment item, bug, or failed pre-QA check);
-    escalating to office-hours -- design call: is the implicit merge-base CAS
-    the right default for graph-commit's rebuild path? No code change resolves
-    it (fix-planner scope-deviation): altering that default would change
-    behavior PR #2990 deliberately delivers."
-  since: 2026-07-31
-  recommendation: >-
-    # Office-hours: design sign-off on the implicit merge-base CAS (PR #2990)
-
-
-    ## What you are deciding
-
-
-    One question, no code attached:
-
-
-    **Is the implicit merge-base compare-and-swap the right default for
-    `graph-commit`'s rebuild path?**
-
-
-    Answer either:
-
-
-    - **Accept** — the default and its park-on-divergence behavior are fine for
-    the fleet's normal shape. → clear the office-hours park, let the PR go to
-    review/merge unchanged.
-
-    - **Name a counterexample** — a concrete case where this over-parks. → see
-    "If you disagree" below.
-
-
-    ## The tradeoff in two sentences
-
-
-    Before: the rebuild path reset to fresh `origin/main` and overwrote each
-    node with the writer's on-disk copy by content — a writer holding a stale
-    node silently reverted whatever had landed in between, no conflict, no
-    warning. After: every id with no explicit `--base` gets its merge-base blob
-    compared against fresh `origin/main`; equal → same fast path as before,
-    different → three-way merge, or a loud park when that can't resolve. A
-    `--prune` against a node that got a concurrent edit **always** parks — a
-    deletion has no content to merge, so there is nothing to reconcile.
-
-
-    Net: silent-revert-if-stale is traded for more frequent, visible parking.
-    The `--base`-present skip is deliberate — `check_base_freshness()` has
-    already verified and reconciled those ids, and re-deriving a base there
-    would override the caller's declared read point.
-
-
-    ## This is not a bug hunt
-
-
-    QA ran the full triage: 6 script-verifiable checks passed, including an
-    adversarial re-derivation confirming the new regression tests genuinely fail
-    against the pre-PR scripts and pass after. Zero code-correctness issues. The
-    only thing left is this policy call — no test run can decide it, because the
-    shipped tests assert the implemented semantics, not that those semantics are
-    the right choice.
-
-
-    **If you agree: clear the park. No code change needed.**
-
-
-    ## If you disagree, or want a narrower default
-
-
-    The semantics live in one block,
-    `packages/intentionsutil/scripts/graph-commit`, inside
-    `ensure_intentions_only_base()` (starts line 594):
-
-
-    - CAS block: lines ~612–701, everything between `ORIG_HEAD`/`RESTORE_HEAD`
-    being set and the `git reset --hard "$base_sha"` at line 703.
-
-    - The `--base` skip carve-out: line 643, `[[ -n "${BASE[$id]:-}" ]] &&
-    continue`.
-
-    - The always-park prune branch: the `PRUNE_IDS` loop, lines ~685–701.
-
-
-    Any change there must be re-verified against
-    `packages/intentionsutil/scripts/test-graph-commit.sh`, which already covers
-    this function:
-
-
-    - **16–18** — far-ahead worktree rebuild, edit-vs-prune park recommendation,
-    far-ahead + `--prune`
-
-    - **27–28** — fail-loud guard, differing blob and benign equal blob
-
-    - **36–40** — the new CAS cases: non-overlapping stale (reconciles),
-    overlapping stale (parks), fresh node (unchanged fast path), `--prune` vs.
-    concurrent edit (parks), `--base` keeps layer-3 reconciliation
-
-
-    Note that case 40 and `test-transition-node.sh` Case 1 both depend on the
-    `--base` skip staying in place — narrowing that carve-out is not a local
-    edit.
-
-
-    ## For context
-
-
-    Two Sonnet skeptics argued this was decidable without you, citing
-    `.claude/rules/code-style.md` ("prefer clear errors over defensive
-    fallbacks") and the repo's history of silent-stale-revert incidents. The
-    fix-planner overruled them: changing the default would alter behavior the PR
-    deliberately ships, so it declined to write a change and left the sign-off
-    standing. If you find that reasoning persuasive, accepting is the
-    low-friction path — the convention already points the same direction the PR
-    went.
-  session_type: other
+blocked_by:
+  - tactic-graph-commit-intentions-base-stale-restore
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -634,3 +549,26 @@ Manual and judgment checks, outside the automated blocks:
   graph-commit's `concurrent-edit conflict ... parking node(s)` message. A park
   from this new path is the fix working, not a new failure — the parked node
   carries the writer's content in the kept `SNAP_DIR` for a manual merge.
+
+## needs-main residue
+
+- **id 11 — PR body's regression-case citation is stale (case numbers 36-40 vs
+  the actual 48-52).** The PR body's Unit 1 section cites the new
+  `test-graph-commit.sh` regression cases reproducing the silent revert as
+  "cases 36-40." An unrelated `origin/main` commit independently inserted its
+  own new cases 36-47 into `test-graph-commit.sh` after this PR's body text was
+  written, shifting this PR's own five regression cases to case numbers 48-52
+  (far-ahead disjoint fields both land; far-ahead same-field edit parks;
+  far-ahead prune racing a concurrent edit parks; far-ahead list-entry removal
+  parks; far-ahead + stale `--base` reconciliation survives the rebuild). QA
+  confirmed all five cases exist under their current numbers, correctly
+  implement the scenarios the PR body describes, and pass
+  (`test-graph-commit.sh` 68/68 as of the qa-fix attempt-2 pass). This looks
+  like stale prose caused by unrelated `origin/main` churn, not a functional
+  gap — but the PR body's own text should be corrected post-merge so a future
+  reader isn't misled by the wrong case numbers.
+  - Expected outcome: the merged PR body (or a follow-up doc fix) cites the
+    correct case numbers, or a comment confirms the citation is deliberately
+    left as historical text.
+  - Verifiability: MACHINE
+  - Check: `grep -n 'Case 4[89]\|Case 5[0-2]' packages/intentionsutil/scripts/test-graph-commit.sh` on `origin/main` post-merge — confirm the five cases described above are present at whatever numbers they land at, and that they cover the disjoint-lands / same-field-parks / prune-race-parks / list-entry-removal-parks / stale-base-survives-rebuild scenarios.

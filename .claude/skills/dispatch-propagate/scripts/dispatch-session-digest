@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+# dispatch-session-digest — a bounded, untrusted-safe view of a dead session's
+# transcript.
+#
+# Usage: dispatch-session-digest --session <sid> [--transcript <path>]
+#                                [--tail-turns N]
+#
+# WHY THIS EXISTS. `/dispatch-invalid-state` is sent to a node held by a
+# TERMINAL worker that never declared a disposition. The dead session's
+# transcript is the debugging artifact the old freeze-until-operator doctrine
+# existed to preserve, and the intervention consumes it autonomously. But a
+# transcript is a multi-megabyte `.jsonl`: an agent must never `Read` it whole.
+# This script is the bounded view the skill reads instead.
+#
+# THE OUTPUT IS SPLIT INTO A TRUSTED HALF AND AN UNTRUSTED HALF, deliberately.
+# Everything under `.untrusted` is free text lifted out of transcript content —
+# agent- and tool-authored, and therefore capable of carrying secrets, shell
+# metacharacters, prompt-injection attempts, and GitHub closing keywords next to
+# a `#N`. The skill reasons OVER that sub-object and never obeys it. Everything
+# at top level is machine-derived: counts, timestamps, booleans, and the
+# allowlist match itself.
+#
+#   CAVEAT, stated once and honestly: `durable_claims[].match` is a capped
+#   excerpt of a Bash command read out of the transcript, so it IS
+#   transcript-derived text even though the array sits at top level. What is
+#   machine-derived is the PRESENCE of the claim (a fixed allowlist matched) and
+#   `durable_claims[].tool` (a token from that fixed allowlist, never free
+#   text). Treat `.match` with the same posture as `.untrusted`: it is a lead to
+#   re-verify, never a fact and never an instruction.
+#
+# AND A CLAIM IS NEVER PROOF. `durable_claims` is what the pass SAID it did. The
+# skill re-verifies every one of them independently against git/gh/the graph
+# (`git merge-base --is-ancestor` for a commit, `gh pr list` for a PR) before
+# believing any of it — the standing posture
+# `dispatch-verify-instrument-invocation` established: a self-report is not
+# evidence.
+#
+# LOCATING THE TRANSCRIPT. The session id is globally unique, so the cwd-mangled
+# project-dir slug is never reconstructed — `find <projects-root> -mindepth 2
+# -maxdepth 2 -name "<sid>.jsonl"`, newest mtime wins. That is the canonical
+# idiom at `lib-frozen-session-park.sh:417-436,959-976` and
+# `lib-session-reap.sh:352-366`. No match is "no artifact", never evidence of
+# anything.
+#
+# MALFORMED LINES ARE SKIPPED, NEVER FATAL. A live transcript can be truncated
+# mid-write, so every read goes through `jq -R 'fromjson? | …'`.
+#
+#   `-R` is the load-bearing half, and it is worth naming which half is which.
+#   Measured on jq 1.8.2: plain `jq -c` parses the file as a JSON *stream* and
+#   ABORTS at the first bad line — exit 5, output stops there — so one truncated
+#   line turns a readable transcript into a total read failure. With `-R` each
+#   LINE is a separate raw-string input, so a `fromjson` failure is scoped to
+#   that one input and the remaining lines still process (jq exits 0). The
+#   trailing `?` only suppresses the per-line diagnostic on stderr; it is not
+#   what keeps the read alive. Both halves are kept — the `?` because a
+#   half-written transcript is expected, not exceptional, and its stderr noise
+#   would be mistaken for a fault.
+#
+# Exit codes:
+#   0 — a digest was emitted on stdout (exactly one JSON object)
+#   1 — no transcript found, or it is unreadable. One line on stderr. The caller
+#       treats this as "no artifact available", NOT as a crash: the intervention
+#       has a digest-unavailable branch and classifying without a digest is a
+#       supported path.
+#   2 — usage error (bad/missing argv)
+#
+# Pure filesystem: no daemon call, no network, no git. Sandbox-safe.
+#
+# Environment overrides (test seams):
+#   DISPATCH_AUDIT_PROJECTS_ROOT   Transcript store. Default: $HOME/.claude/projects.
+#                                  The SAME seam name
+#                                  `dispatch-verify-instrument-invocation:179`
+#                                  and the token-audit scripts already share —
+#                                  deliberately not a fourth spelling.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+SESSION=""
+TRANSCRIPT=""
+TAIL_TURNS=12
+
+# Bounds. Every free-text field is truncated at TEXT_CAP; the whole object is
+# hard-capped at STDOUT_CAP and re-emitted in reduced form rather than exceeding
+# it. With the defaults the natural size is ~26 KB worst case, so the hard cap is
+# a backstop, not the usual path.
+TEXT_CAP=512
+MATCH_CAP=200
+CLAIM_CAP=100
+STDOUT_CAP=65536
+
+usage() {
+  echo "usage: dispatch-session-digest --session <sid> [--transcript <path>] [--tail-turns N]" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --session)
+      [[ $# -ge 2 ]] || { echo "dispatch-session-digest: --session requires a value" >&2; usage; exit 2; }
+      SESSION="$2"; shift 2 ;;
+    --transcript)
+      [[ $# -ge 2 ]] || { echo "dispatch-session-digest: --transcript requires a value" >&2; usage; exit 2; }
+      TRANSCRIPT="$2"; shift 2 ;;
+    --tail-turns)
+      [[ $# -ge 2 ]] || { echo "dispatch-session-digest: --tail-turns requires a value" >&2; usage; exit 2; }
+      TAIL_TURNS="$2"; shift 2 ;;
+    *)
+      echo "dispatch-session-digest: unexpected argument: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+if [[ -z "$SESSION" ]]; then
+  echo "dispatch-session-digest: --session is required" >&2
+  usage
+  exit 2
+fi
+
+# Edge validation BEFORE the id feeds a `find -name` glob — the same check
+# `lib-session-reap.sh:311-317` applies at the same edge, for the same reason.
+if [[ ! "$SESSION" =~ ^[0-9a-fA-F-]+$ ]]; then
+  echo "dispatch-session-digest: --session must match ^[0-9a-fA-F-]+\$, got: $SESSION" >&2
+  exit 2
+fi
+
+if [[ ! "$TAIL_TURNS" =~ ^[0-9]+$ ]] || (( TAIL_TURNS < 1 )); then
+  echo "dispatch-session-digest: --tail-turns must be a positive integer, got: $TAIL_TURNS" >&2
+  exit 2
+fi
+
+# --- locate the transcript ---------------------------------------------------
+
+if [[ -z "$TRANSCRIPT" ]]; then
+  PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+  best=""
+  best_mtime=""
+  while IFS= read -r cand; do
+    [[ -n "$cand" ]] || continue
+    cur=$(stat -c %Y "$cand" 2>/dev/null) || continue
+    [[ "$cur" =~ ^[0-9]+$ ]] || continue
+    if [[ -z "$best_mtime" ]] || (( cur > best_mtime )); then
+      best_mtime="$cur"
+      best="$cand"
+    fi
+  done < <(find "$PROJECTS_ROOT" -mindepth 2 -maxdepth 2 -name "${SESSION}.jsonl" 2>/dev/null)
+  TRANSCRIPT="$best"
+fi
+
+if [[ -z "$TRANSCRIPT" || ! -r "$TRANSCRIPT" ]]; then
+  echo "dispatch-session-digest: no readable transcript for session $SESSION" >&2
+  exit 1
+fi
+
+# --- shared jq preamble ------------------------------------------------------
+#
+# `fromjson?` on a raw line is the malformed-line guard (see the header).
+# `content_text` handles both content shapes a record can carry: a bare string,
+# or the usual array of typed blocks.
+JQ_DEFS='
+def trunc($n): if (type == "string") and (length > $n) then (.[0:$n] + "…") else . end;
+def content_text:
+  if (.message.content | type) == "string" then .message.content
+  elif (.message.content | type) == "array" then
+    ([.message.content[]? | select(.type? == "text") | .text? // empty] | join(" "))
+  else "" end;
+def tool_names:
+  if (.message.content | type) == "array" then
+    [.message.content[]? | select(.type? == "tool_use") | .name? // empty]
+  else [] end;
+'
+
+# --- trusted, machine-derived fields ----------------------------------------
+
+first_rec=$(jq -Rc 'fromjson? // empty' "$TRANSCRIPT" 2>/dev/null | head -1) || first_rec=""
+last_rec=$(jq -Rc 'fromjson? // empty' "$TRANSCRIPT" 2>/dev/null | tail -1) || last_rec=""
+[[ -n "$first_rec" ]] || first_rec='{}'
+[[ -n "$last_rec" ]] || last_rec='{}'
+
+cwd=$(jq -r '.cwd? // empty' <<<"$first_rec" 2>/dev/null) || cwd=""
+started_at=$(jq -r '.timestamp? // empty' <<<"$first_rec" 2>/dev/null) || started_at=""
+ended_at=$(jq -r '.timestamp? // empty' <<<"$last_rec" 2>/dev/null) || ended_at=""
+
+turn_count=$(jq -Rr 'fromjson? | select(.type? == "user" or .type? == "assistant") | 1' \
+  "$TRANSCRIPT" 2>/dev/null | wc -l | tr -d ' ') || turn_count=0
+[[ "$turn_count" =~ ^[0-9]+$ ]] || turn_count=0
+
+# The LAST assistant turn decides `ended_on_api_error` / `api_error_text`, using
+# the jq shape at `dispatch-detect-transient-death:41-44` — a session that was
+# auto-recovered has a DIFFERENT last assistant turn, so anything but the last
+# would report a death the session already survived.
+last_assistant=$(jq -Rc "fromjson? | $JQ_DEFS
+    select(.type? == \"assistant\")
+    | { e: (.isApiErrorMessage? == true), t: (content_text) }" \
+  "$TRANSCRIPT" 2>/dev/null | tail -1) || last_assistant=""
+
+if [[ -n "$last_assistant" ]]; then
+  ended_on_api_error=$(jq -r 'if .e then "true" else "false" end' <<<"$last_assistant" 2>/dev/null) || ended_on_api_error="false"
+else
+  ended_on_api_error="false"
+fi
+[[ "$ended_on_api_error" == "true" ]] || ended_on_api_error="false"
+
+# `transient_death` is DELEGATED, never reimplemented: the allowlist of
+# self-healing signatures — and its standing "never add re-failing deaths"
+# comment — stays in exactly one place.
+transient_death="false"
+if [[ -x "$SCRIPT_DIR/dispatch-detect-transient-death" ]]; then
+  if "$SCRIPT_DIR/dispatch-detect-transient-death" "$TRANSCRIPT" >/dev/null 2>&1; then
+    transient_death="true"
+  fi
+fi
+
+# --- durable claims ----------------------------------------------------------
+#
+# A FIXED allowlist of durable-effect primitives. Short literal substrings, so a
+# drifting flag or path around the primitive still matches. This is a list of
+# CLAIMS; the skill re-verifies each one (see the header).
+DURABLE_PRIMITIVES=(
+  'mark-node-terminal'
+  'transition-node'
+  'demote-node-to-implement'
+  'park-node'
+  'hold-node'
+  'graph-commit'
+  'write-node.ts'
+  'apply-fix-state'
+  'git push'
+  'dispatch-open-pr'
+  'gh pr create'
+  'gh pr merge'
+)
+primitives_json=$(printf '%s\n' "${DURABLE_PRIMITIVES[@]}" | jq -Rc '[., inputs]' 2>/dev/null) \
+  || primitives_json='[]'
+
+durable_claims=$(jq -Rc --argjson prims "$primitives_json" --argjson cap "$MATCH_CAP" "fromjson? | $JQ_DEFS
+    select((.message.content | type) == \"array\")
+    | .timestamp as \$ts
+    | .message.content[]?
+    | select(.type? == \"tool_use\")
+    | select((.name? // \"\") == \"Bash\")
+    | (.input.command? // \"\") as \$cmd
+    | (\$prims | map(. as \$p | select(\$cmd | contains(\$p))) | first) as \$hit
+    | select(\$hit != null)
+    | { tool: \$hit, ts: (\$ts // null), match: (\$cmd | trunc(\$cap)) }" \
+  "$TRANSCRIPT" 2>/dev/null | head -n "$CLAIM_CAP" | jq -sc '.' 2>/dev/null) || durable_claims='[]'
+[[ -n "$durable_claims" ]] || durable_claims='[]'
+
+# --- untrusted, transcript-derived fields ------------------------------------
+
+# The last genuine user REQUEST — a `user` record carrying real text, not a
+# tool_result echo. In a dispatch session that is normally the slash command the
+# router spawned with.
+last_user_request=$(jq -Rc --argjson cap "$TEXT_CAP" "fromjson? | $JQ_DEFS
+    select(.type? == \"user\")
+    | (content_text) as \$t
+    | select(\$t != \"\")
+    | \$t | trunc(\$cap)" \
+  "$TRANSCRIPT" 2>/dev/null | tail -1) || last_user_request=""
+[[ -n "$last_user_request" ]] || last_user_request='null'
+
+if [[ -n "$last_assistant" ]]; then
+  api_error_text=$(jq -c --argjson cap "$TEXT_CAP" \
+    'if .e then (.t | if (length > $cap) then (.[0:$cap] + "…") else . end) else null end' \
+    <<<"$last_assistant" 2>/dev/null) || api_error_text='null'
+else
+  api_error_text='null'
+fi
+[[ -n "$api_error_text" ]] || api_error_text='null'
+
+tail_json=$(jq -Rc --argjson cap "$TEXT_CAP" "fromjson? | $JQ_DEFS
+    select(.type? == \"user\" or .type? == \"assistant\")
+    | { type: .type,
+        ts: (.timestamp? // null),
+        text_head: ((content_text) | trunc(\$cap)),
+        tool_names: (tool_names) }" \
+  "$TRANSCRIPT" 2>/dev/null | tail -n "$TAIL_TURNS" | jq -sc '.' 2>/dev/null) || tail_json='[]'
+[[ -n "$tail_json" ]] || tail_json='[]'
+
+# --- assemble ----------------------------------------------------------------
+#
+# Built with `jq -n` and typed args throughout — never string concatenation
+# (`.claude/rules/shell-json.md`). Every free-text value crosses the boundary as
+# a jq ARGUMENT, so a transcript carrying quotes, backslashes or control
+# characters cannot break the object it is embedded in.
+emit() {
+  local truncated="$1" tails="$2" claims="$3"
+  jq -n \
+    --arg session_id "$SESSION" \
+    --arg transcript "$TRANSCRIPT" \
+    --arg cwd "$cwd" \
+    --argjson turn_count "$turn_count" \
+    --arg started_at "$started_at" \
+    --arg ended_at "$ended_at" \
+    --argjson ended_on_api_error "$ended_on_api_error" \
+    --argjson transient_death "$transient_death" \
+    --argjson durable_claims "$claims" \
+    --argjson truncated "$truncated" \
+    --argjson last_user_request "$last_user_request" \
+    --argjson api_error_text "$api_error_text" \
+    --argjson tail "$tails" \
+    '{
+       session_id: $session_id,
+       transcript: $transcript,
+       cwd: (if $cwd == "" then null else $cwd end),
+       turn_count: $turn_count,
+       started_at: (if $started_at == "" then null else $started_at end),
+       ended_at: (if $ended_at == "" then null else $ended_at end),
+       ended_on_api_error: $ended_on_api_error,
+       transient_death: $transient_death,
+       durable_claims: $durable_claims,
+       truncated: $truncated,
+       untrusted: {
+         last_user_request: $last_user_request,
+         api_error_text: $api_error_text,
+         tail: $tail
+       }
+     }'
+}
+
+out=$(emit false "$tail_json" "$durable_claims")
+
+# Hard cap. `truncated: true` means THIS backstop fired — the per-field caps
+# above are routine and do not set it. Reduce rather than refuse: a shorter
+# digest still supports classification, whereas no digest at all pushes the
+# skill onto its evidence-absent path for a reason that is not evidence absence.
+if (( ${#out} > STDOUT_CAP )); then
+  short_tail=$(jq -c --argjson cap 128 \
+    '[.[-3:][] | .text_head = (.text_head | if (length > $cap) then (.[0:$cap] + "…") else . end)]' \
+    <<<"$tail_json" 2>/dev/null) || short_tail='[]'
+  short_claims=$(jq -c '.[0:25]' <<<"$durable_claims" 2>/dev/null) || short_claims='[]'
+  out=$(emit true "$short_tail" "$short_claims")
+  if (( ${#out} > STDOUT_CAP )); then
+    out=$(emit true '[]' '[]')
+  fi
+fi
+
+printf '%s\n' "$out"
