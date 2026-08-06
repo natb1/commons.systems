@@ -4548,6 +4548,106 @@ clarifications:
       launch is claim-safe without selecting at all, and no bypass is needed.
       Honest limit stated when the question was put to the author: what else
       depends on --standalone was not enumerated in this round."
+  - question: The WAIT design names `dispatch-sweep` as the host for the wait_until
+      release predicate, but that script reaps worktrees and sessions and writes
+      no graph node state. Which sweep actually hosts the predicate, and do the
+      design's line citations still resolve?
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release, re-verifying the WAIT design's cited
+      evidence against origin/main HEAD.) The WAIT release predicate's HOST is
+      the per-tick sweep family invoked from `dispatch-tick`, not the script
+      literally named `dispatch-sweep`. The two recorded pointers disagree on
+      the name: the WAIT ratification (2026-07-31, first round) names \"the
+      EXISTING tick sweep framework — the one landed by
+      tactic-denied-command-parks-node as PR #2994\", while the calendar-release
+      entry of the same date names \"dispatch-sweep, which already reads
+      nodeMinAgeSeconds from its config\". Both facts are individually true and
+      they point at different scripts. `dispatch-sweep` does read
+      `nodeMinAgeSeconds` (dispatch-sweep:139-152, sweep.example.json), but its
+      job is reaping merged/closed worktrees and stranded worker SESSIONS, fired
+      by the worker Stop-hook via dispatch-spawn-sweep and by the
+      dispatch-sweep-periodic systemd timer (lib.sh:2840-3042); it performs no
+      graph node phase/attributes write at all. The PR #2994 lineage is the set
+      of predicates sourced into `dispatch-tick` and run before selection each
+      tick — `reservation_sweep`, `standdown_recheck_sweep`,
+      `stale_hold_recheck_sweep`, `frozen_session_sweep`,
+      `terminal_without_disposition_sweep` (dispatch-tick:319-409 and 576-629) —
+      each added with the same idempotent `declare -f` source-and-call idiom,
+      which is exactly the \"one more predicate, never a second sweep\" shape
+      this strategy's one-framework rule requires. `stale_hold_recheck_sweep`
+      (lib-stale-hold-recheck.sh) is the direct analog: re-check a parked
+      predicate, resolve through a dedicated CLI that owns fresh-origin/main +
+      --base CAS, always return 0, never a gate. The plan therefore hosts the
+      wait_until predicate there and amends this node's statement accordingly;
+      no second sweep is created, so the strategy's rule is honored under either
+      name. Also recorded so future rounds do not read them as errors: the line
+      citations carried in the WAIT clarifications and node body have drifted
+      with unrelated edits — `router.ts:168-175` (blockersComplete) is now
+      ~237-241, `router.ts:343-355` (draft-candidate loop) is now ~518-573, and
+      dispatch-select-tick's dispatch-jit-engine/dispatch-jit-calendar-import
+      calls at :844/:938 are now ~:980/:993. Every mechanism they cite was
+      re-verified as accurate in substance."
+  - question: "Who owns the WAIT producer wiring — the qa-phase mint, the /qa-main
+      re-arm, and flipping tactic-qa-main-verifiability-sort-criterion's interim
+      park branch — and are the existing `Verifiability: WAIT` residue marks
+      backfilled?"
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release.) The producer side of the WAIT mechanism is
+      this node's work, and the boundary with the already-landed sort tactic is
+      now explicit. tactic-qa-main-verifiability-sort-criterion is phase done /
+      status codified: it landed the per-item `Verifiability:
+      MACHINE|AUTHOR|WAIT` sub-line on `## needs-main residue` bullets and an
+      INTERIM /qa-main WAIT branch that takes the same terminal action a
+      deploy-lag cannot-verify takes (a park), stating in its own body that it
+      must not mint WAIT hold nodes and that \"once that node lands, this branch
+      emits a WAIT hold node instead of parking\". It never says who makes that
+      edit; since it is done, this node does. So this node's plan covers three
+      producer-side items beyond the sweep predicate and router exclusion: (a)
+      the qa-phase mint that creates `tactic-wait-<source-id>` with the initial
+      `attributes.wait_until` at needs-main-residue record time (default 24h)
+      and adds the source's `blocked_by` edge, per the calendar-release
+      clarification's placement; (b) /qa-main's re-arm write that revises
+      `wait_until` and increments `attributes.attempts`; and (c) flipping the
+      sibling's interim WAIT branch from park to hold-node emission, which is
+      the only thing that gives a WAIT mark a consumer. Recorded corpus fact
+      bearing on scope: about 20 nodes in intentions/ already carry live
+      `Verifiability: WAIT` residue items (e.g.
+      tactic-flake-preview-and-smoke-dpkg-lock, tactic-invalid-state-lane,
+      tactic-terminal-disposition-sweep-park-without-cas), written before any
+      hold mechanism existed and therefore carrying no WAIT node, no wait_until,
+      and no blocked_by edge. They are not backfilled by this node — the
+      mechanism applies to marks recorded after it lands, and the existing ones
+      continue to drain through the interim park path. Most of them also await
+      an EPISODE (N further CI runs, elapsed fleet runtime, a live tick
+      observing a condition) rather than a deadline, which is precisely the case
+      the calendar wait's recorded concession bounds: the clock schedules when
+      the observation is taken and never substitutes for it."
+  - question: Should the WAIT router exclusion and enumerator key on the
+      deterministic `tactic-wait-` id prefix, as the hold precedent (holdIdFor /
+      isCanonicalHoldId) suggests?
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release.) The WAIT exclusion and the WAIT enumerator
+      key on `attributes.wait_until` presence together with a resolvable source
+      node — never on a bare `tactic-wait-` id prefix. The hold precedent this
+      design otherwise mirrors (packages/intentionsutil/src/holds.ts,
+      `holdIdFor` / `isCanonicalHoldId`, whose doc comment makes id-derivation
+      binding a security property) would suggest an id-keyed set, but the WAIT
+      id scheme `tactic-wait-<source-id>` collides with this implementing node's
+      own id: `tactic-wait-calendar-release` parses as a WAIT on a source named
+      `calendar-release`, which does not exist. An id-prefix-keyed exclusion in
+      the router's draft-candidate loop would therefore silently drop this node
+      itself from /align-tactics candidacy, and an id-prefix-keyed enumerator
+      would emit it as a WAIT candidate with an unresolvable source. Keying on
+      the attribute plus source resolution avoids both and keeps the exclusion
+      honest for a re-armed node (which returns to phase-null and re-enters that
+      loop). Verified at HEAD this round: the draft-candidate loop
+      (router.ts:565-586) still skips only `subtreeParentIds`, so the exclusion
+      the WAIT design calls mandatory remains ABSENT; `officeHoursQueue`'s `if
+      (n.office_hours === null) continue` (officeHours.ts:82, duplicated at
+      :256) still keeps an office_hours-null WAIT out of the human queue by
+      construction; and `blockersComplete` (router.ts:237-241) still returns
+      false for any non-done blocker, so a phase-less WAIT genuinely holds its
+      source and a `phase: done` write alone releases it."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
