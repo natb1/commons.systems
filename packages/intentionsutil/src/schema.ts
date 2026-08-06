@@ -1,5 +1,6 @@
 import { IntentionSchemaError } from "./errors.js";
 import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
+import { parseWaitUntil, waitIdFor } from "./waits.js";
 
 // --- Enums -----------------------------------------------------------------
 
@@ -1124,6 +1125,89 @@ function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): v
 }
 
 /**
+ * Rule 21: WAIT-node shape. A WAIT node is a `kind: "tactic"` node carrying
+ * `attributes.wait_for` — the id of the source tactic it holds (via that
+ * source's `blocked_by` naming the WAIT). This check fires on exactly that
+ * signature (`kind === "tactic"` AND `wait_for` present) and is otherwise
+ * completely inert, so no ordinary tactic is affected.
+ *
+ * The invariants, and why each one is load-bearing:
+ *  - `wait_for` is a non-empty string, and the node's own id equals
+ *    `waitIdFor(wait_for)`. The canonical-id tie is what lets a sweep enumerate
+ *    waits BY THEIR OWN ID while a writer derives the id FROM the source — a
+ *    decoy node carrying someone else's `wait_for` would otherwise be swept as
+ *    if it were the genuine wait. A `waitIdFor` throw (a `wait_for` whose
+ *    derivation does not fit the node-id slug shape) is itself the violation.
+ *  - `wait_until` is present and parses via `parseWaitUntil` (an ISO 8601 UTC
+ *    instant, `YYYY-MM-DDTHH:MM:SSZ`). It is the release predicate; an
+ *    unparseable one would leave the node armed forever.
+ *  - `wait_attempts`, when present, is an integer >= 1. It is the re-arm
+ *    counter feeding the finite attempt cap; absence is legal (a
+ *    freshly-armed wait has made no attempt yet), a malformed value is not —
+ *    it would make the cap unreachable.
+ *  - `wait_reason` and `wait_recommendation` are present non-empty strings.
+ *    They are what the author reads when the cap escalates the wait to
+ *    office-hours, so an armed wait with neither is an un-actionable hold.
+ *  - `phase` is `null` (armed) or `"done"` (released). A WAIT never carries a
+ *    ladder phase: it is a hold, not executable work, and enforcing that here
+ *    is what makes a separate router exclusion for the executable-tactic loop
+ *    unnecessary.
+ */
+function checkWaitNodeShape(node: IntentionNode, problems: string[]): void {
+  if (node.kind !== "tactic") return;
+  const waitFor = node.attributes.wait_for;
+  if (waitFor === undefined) return;
+
+  if (typeof waitFor !== "string" || waitFor === "") {
+    problems.push(
+      `${node.id}: attributes.wait_for must be a non-empty string naming the source node this wait holds, got ${JSON.stringify(waitFor)} — set attributes.wait_for to the source tactic's id`,
+    );
+  } else {
+    let expected: string | null = null;
+    try {
+      expected = waitIdFor(waitFor);
+    } catch (err) {
+      problems.push(
+        `${node.id}: attributes.wait_for "${waitFor}" does not derive a usable wait id — ${(err as Error).message}; pick a source id whose derived wait id fits the node-id slug shape`,
+      );
+    }
+    if (expected !== null && node.id !== expected) {
+      problems.push(
+        `${node.id}: a WAIT node's id must equal waitIdFor(attributes.wait_for), which is "${expected}" — rename the node to "${expected}" or correct attributes.wait_for, since the sweep enumerates waits by their own id and a mismatch would apply the release/re-arm decision to the wrong node`,
+      );
+    }
+  }
+
+  if (parseWaitUntil(node.attributes.wait_until) === null) {
+    problems.push(
+      `${node.id}: attributes.wait_until must be an ISO 8601 UTC instant of the form YYYY-MM-DDTHH:MM:SSZ, got ${JSON.stringify(node.attributes.wait_until)} — set the calendar instant the tick sweep releases this wait at`,
+    );
+  }
+
+  const attempts = node.attributes.wait_attempts;
+  if (attempts !== undefined && (typeof attempts !== "number" || !Number.isInteger(attempts) || attempts < 1)) {
+    problems.push(
+      `${node.id}: attributes.wait_attempts must be an integer >= 1 when present, got ${JSON.stringify(attempts)} — omit it on a freshly-armed wait, otherwise record the re-arm count that feeds the attempt cap`,
+    );
+  }
+
+  for (const field of ["wait_reason", "wait_recommendation"] as const) {
+    const value = node.attributes[field];
+    if (typeof value !== "string" || value === "") {
+      problems.push(
+        `${node.id}: attributes.${field} must be a non-empty string, got ${JSON.stringify(value)} — it is what the author reads when the attempt cap escalates this wait to office-hours`,
+      );
+    }
+  }
+
+  if (node.phase !== null && node.phase !== "done") {
+    problems.push(
+      `${node.id}: a WAIT node's phase must be null (armed) or "done" (released), got ${JSON.stringify(node.phase)} — a wait is a hold, not executable work, so it never carries a ladder phase`,
+    );
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1237,6 +1321,25 @@ function checkBlockedByCycles(
  *      check deliberately uses the own tier, not the effective one: an
  *      effective-tier check would cascade, invalidating every boosted
  *      descendant the moment any ancestor gained a mark.
+ *  21. WAIT-node shape: a `kind: "tactic"` node carrying `attributes.wait_for`
+ *      (the id of the source tactic it holds) is a WAIT node, and must be
+ *      completely formed as one. Its `wait_for` is a non-empty string and its
+ *      own id equals `waitIdFor(wait_for)` — that canonical-id tie is what
+ *      lets the tick sweep enumerate waits by their own id while a writer
+ *      derives the id from the source, so a decoy carrying someone else's
+ *      `wait_for` cannot be swept in the genuine wait's place. Its
+ *      `attributes.wait_until` is a parseable ISO 8601 UTC instant
+ *      (`YYYY-MM-DDTHH:MM:SSZ`) — the calendar release predicate, without
+ *      which the hold never releases. Its `attributes.wait_attempts`, when
+ *      present, is an integer >= 1 (absent is legal on a freshly-armed wait;
+ *      malformed is not, since it feeds the finite re-arm cap). Its
+ *      `attributes.wait_reason` and `attributes.wait_recommendation` are
+ *      non-empty strings — what the author reads when the cap escalates the
+ *      wait to office-hours. And its `phase` is `null` (armed) or `"done"`
+ *      (released), never a ladder phase: a wait is a hold, not executable
+ *      work, and enforcing that here is what makes a separate router
+ *      exclusion for the executable-tactic loop unnecessary. The rule is
+ *      entirely inert on any node without `attributes.wait_for`.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1287,6 +1390,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierMarkShape(node, problems);
     // Rule 20: attention.tier tags the node's own tier namespace.
     checkAttentionTierNamespace(node, problems);
+    // Rule 21: a WAIT node's id, calendar predicate and hold fields are well-shaped.
+    checkWaitNodeShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

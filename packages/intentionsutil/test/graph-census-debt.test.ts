@@ -91,6 +91,59 @@ describe("computeDebt", () => {
     expect(debt.total).toBe(1);
   });
 
+  // tactic-wait-calendar-release: a released WAIT whose source is still live is
+  // a re-arm target, not owed-prune debt.
+
+  /** A released WAIT node (phase done) holding `sourceId`. */
+  function releasedWait(sourceId: string): IntentionNode {
+    return validateNode({
+      id: `tactic-wait-${sourceId.replace(/^tactic-/, "")}`,
+      kind: "tactic",
+      statement: "wait",
+      owner: "ai",
+      status: "codified",
+      serves: [STRATEGY],
+      phase: "done",
+      attributes: {
+        wait_for: sourceId,
+        wait_until: "2026-08-07T00:00:00Z",
+        wait_reason: "not yet observed",
+        wait_recommendation: "re-check next tick",
+      },
+    });
+  }
+
+  it("excludes a released WAIT whose source is still present and open", () => {
+    const nodes = [strategy(), openTactic("tactic-src"), releasedWait("tactic-src")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual([]);
+    expect(debt.total).toBe(0);
+  });
+
+  it("counts a released WAIT whose source is itself done", () => {
+    const nodes = [strategy(), doneTactic("tactic-src"), releasedWait("tactic-src")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent.sort()).toEqual(["tactic-src", "tactic-wait-src"]);
+  });
+
+  it("counts a released WAIT whose source is gone from the store", () => {
+    const nodes = [strategy(), releasedWait("tactic-src")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual(["tactic-wait-src"]);
+  });
+
+  it("still counts an ordinary done node alongside an excluded WAIT (no regression)", () => {
+    const nodes = [
+      strategy(),
+      openTactic("tactic-src"),
+      releasedWait("tactic-src"),
+      doneTactic("tactic-ordinary"),
+    ];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual(["tactic-ordinary"]);
+    expect(debt.total).toBe(1);
+  });
+
   it("reports an open census node in openCensus (the latch)", () => {
     const nodes = [strategy(), openCensusTactic("tactic-graph-census-2026-07-01")];
     const debt = computeDebt(nodes, new Set());

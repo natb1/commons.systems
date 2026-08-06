@@ -1833,6 +1833,178 @@ describe("validateGraph", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
+
+  // Rule 21: WAIT-node shape.
+
+  /** The attributes a well-formed WAIT node holding `tactic-source` carries. */
+  function waitAttrs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      wait_for: "tactic-source",
+      wait_until: "2026-08-07T00:00:00Z",
+      wait_reason: "the deployed behavior has not been observed yet",
+      wait_recommendation: "re-check after the next production deploy",
+      ...overrides,
+    };
+  }
+
+  /**
+   * A kind set, the held source tactic, and one node under test carrying the
+   * WAIT signature. `id` defaults to the canonical `waitIdFor("tactic-source")`.
+   */
+  function waitNodes(partial: Partial<IntentionNode> = {}): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          goal_layer: true,
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        },
+      }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified" }),
+      gnode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      gnode({ id: "strategy-1", kind: "strategy", serves: ["virtue-root"] }),
+      gnode({
+        id: "tactic-source",
+        kind: "tactic",
+        serves: ["strategy-1"],
+        blocked_by: ["tactic-wait-source"],
+      }),
+      gnode({
+        id: "tactic-wait-source",
+        kind: "tactic",
+        serves: ["strategy-1"],
+        attributes: waitAttrs(),
+        ...partial,
+      }),
+    ];
+  }
+
+  it("Rule 21: accepts a well-formed armed WAIT node", () => {
+    expect(() => validateGraph(waitNodes())).not.toThrow();
+  });
+
+  it("Rule 21: accepts a released WAIT node (phase done) and one carrying wait_attempts", () => {
+    const nodes = waitNodes({ phase: "done", attributes: waitAttrs({ wait_attempts: 2 }) });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: is inert on an ordinary tactic with no attributes.wait_for", () => {
+    const nodes = waitNodes({
+      // No wait_* attributes at all: none of Rule 21's requirements apply.
+      attributes: { status_vocabulary: { raw: "Not yet started.", codified: "Complete." } },
+      phase: "implement",
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: is inert on a non-tactic node carrying wait_for (the gate is kind + wait_for)", () => {
+    const nodes = waitNodes();
+    // A strategy carrying the WAIT signature is not a WAIT node — the rule
+    // never fires, so its id mismatch and missing fields go unreported here.
+    nodes.push(
+      gnode({
+        id: "strategy-decoy",
+        kind: "strategy",
+        serves: ["virtue-root"],
+        attributes: { wait_for: "tactic-source" },
+      }),
+    );
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: rejects a non-string attributes.wait_for", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: 7 }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_for must be a non-empty string/,
+    );
+  });
+
+  it("Rule 21: rejects an empty attributes.wait_for", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_for must be a non-empty string/,
+    );
+  });
+
+  it("Rule 21: rejects an id that is not waitIdFor(wait_for)", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "tactic-other" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: a WAIT node's id must equal waitIdFor\(attributes\.wait_for\), which is "tactic-wait-other"/,
+    );
+  });
+
+  it("Rule 21: reports a wait_for whose derived id fails the node-id slug shape", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "Tactic_Source!" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_for "Tactic_Source!" does not derive a usable wait id — .*does not match the node-id slug shape/,
+    );
+  });
+
+  it("Rule 21: rejects a missing attributes.wait_until", () => {
+    const attrs = waitAttrs();
+    delete attrs.wait_until;
+    const nodes = waitNodes({ attributes: attrs });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until must be an ISO 8601 UTC instant/,
+    );
+  });
+
+  it("Rule 21: rejects a date-only attributes.wait_until (sub-day precision is required)", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "2026-08-07" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until must be an ISO 8601 UTC instant/,
+    );
+  });
+
+  it("Rule 21: rejects a well-shaped but unparseable attributes.wait_until", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "2026-13-45T99:99:99Z" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until must be an ISO 8601 UTC instant/,
+    );
+  });
+
+  it("Rule 21: rejects a non-integer attributes.wait_attempts when present", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_attempts: 1.5 }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_attempts must be an integer >= 1 when present/,
+    );
+  });
+
+  it("Rule 21: rejects attributes.wait_attempts: 0 (the counter starts at 1)", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_attempts: 0 }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_attempts must be an integer >= 1 when present/,
+    );
+  });
+
+  it("Rule 21: rejects a missing attributes.wait_reason", () => {
+    const attrs = waitAttrs();
+    delete attrs.wait_reason;
+    const nodes = waitNodes({ attributes: attrs });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_reason must be a non-empty string/,
+    );
+  });
+
+  it("Rule 21: rejects a missing attributes.wait_recommendation", () => {
+    const attrs = waitAttrs();
+    delete attrs.wait_recommendation;
+    const nodes = waitNodes({ attributes: attrs });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_recommendation must be a non-empty string/,
+    );
+  });
+
+  it("Rule 21: rejects a ladder phase on a WAIT node", () => {
+    const nodes = waitNodes({ phase: "implement" });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: a WAIT node's phase must be null \(armed\) or "done" \(released\), got "implement"/,
+    );
+  });
 });
 
 describe("validateGraphProseRefs", () => {
