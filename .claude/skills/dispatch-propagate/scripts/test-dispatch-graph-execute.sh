@@ -165,6 +165,12 @@ run_exec "tactic-f:tactic:fix"
 assert_eq "fix stdout" "launched tactic-f /fix-checks" "$OUT"
 assert_contains "fix invokes /fix-checks directly" "/fix-checks tactic-f" "$(cat "$SPAWN_LOG")"
 
+run_exec "tactic-c:tactic:conflict"
+SPAWN=$(cat "$SPAWN_LOG")
+assert_eq "conflict stdout" "launched tactic-c /dispatch-conflict" "$OUT"
+assert_contains "conflict invokes /dispatch-conflict directly" "/dispatch-conflict tactic-c" "$SPAWN"
+assert_not_contains "conflict has no --effort (unmapped phase)" "--effort" "$SPAWN"
+
 run_exec "tactic-m:tactic:main-qa"
 SPAWN=$(cat "$SPAWN_LOG")
 assert_eq "main-qa stdout" "launched tactic-m /qa-main" "$OUT"
