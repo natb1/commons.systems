@@ -76,3 +76,4 @@ command whose exit code is not evidence.
 ## Occurrences
 
 - 2026-08-06T06:18:55Z — source node tactic-fleet-alarm-watch-unknown, session 3dc03651-34f4-468c-997a-cdc7c60a4501
+- 2026-08-06T11:18:12Z — source node tactic-fleet-alarm-busy-stall, session 009c5443-da01-4c6f-87b1-bbdbb1c23766
