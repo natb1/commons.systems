@@ -3,6 +3,7 @@ import { computeSignalPath, isSignalUnvalidated, resolveAttention } from "./atte
 import { isStrategyStale, REVIEWED_MARKER } from "./transitions.js";
 import { ownTier, PHASES } from "./schema.js";
 import type { FixState, IntentionNode, Phase } from "./schema.js";
+import { isWaitNode } from "./waits.js";
 
 // Graph router v2, first half: selection (tactic-graph-router-selector).
 //
@@ -521,6 +522,17 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (t.parent !== null) subtreeParentIds.add(t.parent);
   }
 
+  // Armed WAIT node ids: an armed WAIT node is phase-null and office_hours-null
+  // by construction (the design that keeps it out of the human queue and lets
+  // a subsequent re-arm find it undisturbed) — so without this exclusion it
+  // would pass BOTH of the draft-candidate loop's existing gates and the
+  // router would spawn an `/align-tactics` worker on it every tick, treating
+  // a calendar hold as an undecomposed draft.
+  const waitNodeIds = new Set<string>();
+  for (const t of tactics) {
+    if (isWaitNode(t)) waitNodeIds.add(t.id);
+  }
+
   // --- Tactic candidates -------------------------------------------------------
   for (const t of tactics) {
     if (t.office_hours !== null) continue;
@@ -571,6 +583,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (!blockersComplete(t, byId)) continue;
     if (isDraft(t)) {
       if (subtreeParentIds.has(t.id)) continue; // permanent container, not an undecomposed draft
+      if (waitNodeIds.has(t.id)) continue;      // armed calendar WAIT, not an undecomposed draft
       candidates.push({
         id: t.id,
         kind: "tactic",
