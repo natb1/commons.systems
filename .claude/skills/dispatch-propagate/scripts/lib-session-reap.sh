@@ -89,12 +89,16 @@
 #     6. reap-safety, ALL of:
 #          - the worktree is clean (`git status --porcelain
 #            --untracked-files=no` empty),
-#          - `git diff origin/main HEAD -- . ':!intentions'` is EMPTY,
+#          - `git rev-list --count origin/main..HEAD` is 0 (the branch has
+#            nothing of its own) OR `git diff origin/main HEAD -- .
+#            ':!intentions'` is EMPTY,
 #          - no OPEN PR has this branch as its head.
 #     7. `git worktree remove` FIRST, then `claude rm`, then verify.
 #
-#   WHY THE REAP-SAFETY GATE IS A CONTENT DIFF, NOT A COMMIT COUNT. This was
-#   measured, and it corrects earlier guidance. GitHub squash-merges, so a
+#   WHY THE REAP-SAFETY GATE IS A DISJUNCTION. Neither arm alone is sufficient;
+#   each covers a shape the other gets wrong. Arm 2 (the CONTENT DIFF) is why
+#   the gate is not a pure commit count. This was measured, and it corrects
+#   earlier guidance. GitHub squash-merges, so a
 #   branch's individual commits are NEVER ancestors of `main` — only their
 #   CONTENT is. Both sessions reaped by hand on 2026-08-03 read 11 and 12 commits
 #   "ahead" of `origin/main` and were entirely safe. A commit-count gate fails
@@ -106,6 +110,24 @@
 #   the same squash-merge reason — but it compares the WHOLE tree, with no way to
 #   exclude a path, so it cannot express the `intentions/` carve-out below. The
 #   gate is written explicitly rather than bending either helper.
+#
+#   AND WHY ARM 1 (THE AHEAD COUNT) IS NEEDED ALONGSIDE IT. A content diff is
+#   SYMMETRIC: `git diff origin/main HEAD` reports everything the two trees
+#   disagree about, which includes every change `origin/main` GAINED since the
+#   branch was cut — rendered as deletions on the branch side. So a worktree
+#   that is strictly BEHIND (zero commits of its own, N behind) reads to arm 2
+#   as a tree full of "unlanded content" and is refused a reap FOREVER, even
+#   though it holds nothing whose loss is possible. Measured live: the session
+#   on node `tactic-fleet-alarm-unclaimed-hold` was 0 ahead / 182 behind,
+#   clean, with no open PR, and was skipped every ~15 minutes for hours; 32 of
+#   66 worktrees surveyed at the same time were in the identical
+#   0-ahead-and-clean shape. Arm 1 asks the only question that matters for that
+#   shape — does the branch have anything of its OWN? — and a zero answer means
+#   there is nothing that could have failed to land. Arm 1 is
+#   `origin/main..HEAD` (commits HEAD has that main does not — AHEAD), NOT
+#   `HEAD..origin/main` (BEHIND). Transposing the arguments inverts the gate: it
+#   would read 0 for a branch carrying unlanded work whose base is current, and
+#   reap it.
 #
 #   THE `':!intentions'` EXCLUSION. A node's own graph commits legitimately ride
 #   along on its branch and are landed separately by `graph-commit`'s direct push
@@ -240,7 +262,8 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
   #   declined                      `claude rm` returned, the job is STILL listed
   #   unverified                    post-state unreadable; removal NOT confirmed
   #   skip-dirty                    worktree has uncommitted changes
-  #   skip-unlanded-content         tree differs from origin/main outside intentions/
+  #   skip-unlanded-content         the branch has commits of its own AND their
+  #                                 content has not landed outside intentions/
   #   skip-open-pr                  an OPEN PR has this branch as its head
   #   skip-status-error             `git status` failed (UNKNOWN → keep)
   #   skip-diff-error               `git diff` failed (UNKNOWN → keep)
@@ -320,27 +343,50 @@ if [[ -z "${_LIB_SESSION_REAP_LOADED:-}" ]]; then
         return 0
       fi
 
-      # (7b) CONTENT gate — see the header for why this is a content diff and
-      # not a commit count. `--quiet` exits 0 for "no diff", 1 for "diff", >1
-      # for an error (which is UNKNOWN → keep). `-C` puts the cwd at the
-      # worktree root, so `.` and `:!intentions` are both anchored there.
-      local diff_rc=0
-      git -C "$wt_path" diff --quiet origin/main HEAD -- . ':!intentions' 2>/dev/null || diff_rc=$?
-      case "$diff_rc" in
-        0) ;;
-        1)
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_UNLANDED_CONTENT: name=$name session=$sid worktree=$wt_path branch=$branch (tree differs from origin/main outside intentions/)"
-          printf '%s\n' "skip-unlanded-content"
-          return 0
-          ;;
-        *)
-          _lsr_log "$log_file" "$log_tag" \
-            "SESSION_REAP_SKIP_DIFF_ERROR: name=$name session=$sid worktree=$wt_path (git diff vs origin/main failed, rc=$diff_rc)"
-          printf '%s\n' "skip-diff-error"
-          return 0
-          ;;
-      esac
+      # (7b) REAP-SAFETY gate — a DISJUNCTION. Either arm independently
+      # proves the worktree holds nothing that removing it would lose. See
+      # the header for why neither arm alone is sufficient.
+      #
+      # Arm 1 — AHEAD COUNT. `rev-list --count origin/main..HEAD` counts the
+      # commits HEAD has that origin/main does not. ZERO means the branch has
+      # NOTHING of its own (in sync, or merely BEHIND), so there is nothing
+      # that could have failed to land. This arm exists because arm 2 is
+      # SYMMETRIC: a strictly-behind branch diffs against origin/main by
+      # main's own newer content, rendered as deletions, and arm 2 alone
+      # reads that as the branch's unlanded work.
+      #
+      # A `rev-list` failure or non-numeric output emits NO token of its own:
+      # the count is simply unknown and the gate falls through to arm 2,
+      # which fails closed on its own error. Both probes resolve the same
+      # `origin/main`, so a ref that arm 1 cannot read is one arm 2 cannot
+      # read either (both exit 128) — an unknown count can never reach a reap.
+      local ahead=""
+      ahead=$(git -C "$wt_path" rev-list --count origin/main..HEAD 2>/dev/null) || ahead=""
+      if [[ "$ahead" == "0" ]]; then
+        _lsr_log "$log_file" "$log_tag" \
+          "SESSION_REAP_NOTHING_AHEAD: name=$name session=$sid worktree=$wt_path branch=$branch (0 commits ahead of origin/main; content diff not consulted)"
+      else
+        # Arm 2 — CONTENT DIFF. `--quiet` exits 0 for "no diff", 1 for
+        # "diff", >1 for an error (UNKNOWN → keep). `-C` puts the cwd at the
+        # worktree root, so `.` and `:!intentions` are both anchored there.
+        local diff_rc=0
+        git -C "$wt_path" diff --quiet origin/main HEAD -- . ':!intentions' 2>/dev/null || diff_rc=$?
+        case "$diff_rc" in
+          0) ;;
+          1)
+            _lsr_log "$log_file" "$log_tag" \
+              "SESSION_REAP_SKIP_UNLANDED_CONTENT: name=$name session=$sid worktree=$wt_path branch=$branch (tree differs from origin/main outside intentions/)"
+            printf '%s\n' "skip-unlanded-content"
+            return 0
+            ;;
+          *)
+            _lsr_log "$log_file" "$log_tag" \
+              "SESSION_REAP_SKIP_DIFF_ERROR: name=$name session=$sid worktree=$wt_path (git diff vs origin/main failed, rc=$diff_rc)"
+            printf '%s\n' "skip-diff-error"
+            return 0
+            ;;
+        esac
+      fi
 
       # (7c) No OPEN PR on this branch. A `gh` failure fails toward KEEP —
       # never toward reap.
