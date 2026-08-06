@@ -141,8 +141,10 @@
 #                        genuine token exhaustion is a hard stop no flag
 #                        overrides (prints `empty`); otherwise consider ONLY
 #                        nodes authored `pace_exempt: true`. The caller admits
-#                        at most one gate-exempt worker — the flag bypasses the
-#                        pace GATE, not the worker count or the rank order.
+#                        up to its computed ceiling headroom via `--top` — the
+#                        flag bypasses the pace GATE, not the worker count,
+#                        the `max_concurrent_workers` ceiling, or the rank
+#                        order.
 #   --node <id>          Explicit single-node dispatch: bypass rank order and
 #                        --top truncation and consider ONLY the named node id.
 #                        Every existing environmental gate (claim-safety,

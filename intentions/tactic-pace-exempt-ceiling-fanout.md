@@ -50,17 +50,18 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-pace-exempt-ceiling-fanout
   pr: 3034
   attempts: {}
-  markers:
-    - planned
-    - qa-done
+  markers: []
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-06T02:00:47Z
+    mergeCommitSha: e8f06d1dcfc3a33064d4646f578d9adfc8984582
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -488,3 +489,34 @@ Manual / observe-in-production checks:
   now redirects, but rows written before that landed are still in the file — a
   reading of historical records must tolerate them (filter on plausible node ids
   / timestamps rather than assuming every row is production).
+
+## needs-main residue
+
+- **item-15-endstate-observation** — End-state observation: the live fleet
+  fills to but never exceeds the ceiling
+  - URL path: current
+  - Expected outcome: No tick admits a worker beyond `max_concurrent_workers`;
+    pace-exempt bursts fill available headroom in a single decision rather than
+    trickling one per tick; `at-cap-ceiling-full` appears in the log when the
+    fleet is genuinely saturated; `at-cap-ceiling-unreadable` never fires in
+    normal operation.
+  - Finding: the cross-tick compounding behavior this tactic fixes (the old
+    code re-evaluated the gate every tick with no memory of a prior bypass, so
+    the unbounded half could compound across many ticks) is only observable
+    over multiple real dispatch ticks against a live fleet, not assertable at
+    merge time. This is a planned deferral, not a QA gap — the unit tests
+    (`test-dispatch-select-tick.sh`) are the merge-time gate; this is the
+    downstream confirmation.
+  - Verifiability: WAIT — awaited event: several days of live dispatch ticks
+    during which the pace-exempt lane fires at cap with more than one
+    selectable `pace_exempt` candidate available (ticks run roughly every 15
+    minutes; the queue must hold multiple candidates at a moment when the pace
+    curve is closed for this to be observable).
+  - Check: read
+    `${DISPATCH_DECISION_LOG_DIR:-$HOME/.local/share/commons-dispatch}/routing-decisions.jsonl`
+    for `site == "select-tick"` records across several days; confirm no
+    `pace-exempt-bypass-at-cap` record's granted width exceeds
+    `max_concurrent_workers - effective_live` at decision time, and that
+    `at-cap-ceiling-unreadable` does not appear (see the "End-state
+    observation" and "The discriminator is the routing decision log" bullets
+    above for the full read recipe).
