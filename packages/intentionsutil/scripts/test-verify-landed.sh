@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+#
+# test-verify-landed.sh — functional harness for the `verify-landed` primitive
+# (tactic-graph-commit-landing-signal-unreliable, Unit 1).
+#
+# Shape follows test-park-node.sh: a throwaway bare origin plus a clone. Unlike
+# that harness, nothing is shimmed and nothing is copied into the scratch tree —
+# verify-landed is read-only and resolves the repo it inspects from `-C`, so the
+# REAL script (next to this file, with the real node_modules behind it for the
+# `@<jq-filter>` mode's tsx call) is pointed at the scratch clone. That is
+# itself part of the contract under test: a script invoked by absolute path
+# from one checkout must answer about the checkout it was given.
+#
+# Covers:
+#   1. blob-equal                       → landed, exit 0
+#   2. blob-differs                     → not-landed, exit 4
+#   3. absent, expected absent          → landed, exit 0
+#   4. present, expected absent         → not-landed, exit 4
+#   5. unreachable origin               → unknown, exit 1, and the word
+#                                         'not-landed' appears NOWHERE in the
+#                                         output (the collapse this primitive
+#                                         exists to prevent)
+#   6. jq predicate true                → landed, exit 0
+#   7. jq predicate false               → not-landed, exit 4
+#   8. jq predicate on an absent node   → not-landed, exit 4
+#   9. malformed spec                   → usage error, exit 2, before any fetch
+#  10. --json emits one parseable object with the documented shape
+#  11. multi-spec: one unsatisfied spec decides the whole verdict
+#  12. the working tree is never written (no fetch-into-tree, no index touch)
+set -uo pipefail
+
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VL_SCRIPT="$HARNESS_DIR/verify-landed"
+[[ -x "$VL_SCRIPT" ]] || { echo "error: verify-landed not executable at $VL_SCRIPT" >&2; exit 1; }
+command -v jq >/dev/null || { echo "error: jq not found (required by verify-landed)" >&2; exit 1; }
+
+WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
+trap 'rm -rf "$WORK"' EXIT
+
+PASS=0; FAIL=0
+ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
+no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+
+# --- Scratch origin + seed content -------------------------------------------
+ORIGIN="$WORK/origin.git"
+git init -q --bare "$ORIGIN"
+git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+
+SEED="$WORK/seed"
+mkdir -p "$SEED/intentions"
+git -C "$SEED" init -q -b main
+git -C "$SEED" config user.email harness@test
+git -C "$SEED" config user.name harness
+git -C "$SEED" remote add origin "$ORIGIN"
+
+cat >"$SEED/intentions/t-plain.md" <<'NODE'
+---
+id: t-plain
+kind: tactic
+statement: harness node with no office_hours
+owner: ai
+status: codified
+---
+# harness node with no office_hours
+NODE
+
+cat >"$SEED/intentions/t-parked.md" <<'NODE'
+---
+id: t-parked
+kind: tactic
+statement: harness node that is parked to office hours
+owner: ai
+status: codified
+office_hours:
+  reason: harness park
+  since: "2026-08-05"
+  recommendation: null
+---
+# harness node that is parked to office hours
+NODE
+
+git -C "$SEED" add -A
+git -C "$SEED" commit -qm seed
+git -C "$SEED" push -q origin main
+
+CLONE="$WORK/clone"
+git clone -q "$ORIGIN" "$CLONE"
+git -C "$CLONE" config user.email harness@test
+git -C "$CLONE" config user.name harness
+
+PLAIN_BLOB="$(git -C "$CLONE" rev-parse origin/main:intentions/t-plain.md)"
+WRONG_BLOB="0000000000000000000000000000000000000000"
+
+# run <expected-exit> <label> -- <verify-landed args...>
+# Captures stdout+stderr into $OUT for follow-up assertions.
+OUT=""
+run() {
+  local want="$1" label="$2"; shift 3
+  OUT="$("$VL_SCRIPT" "$@" 2>&1)"; local rc=$?
+  if [[ $rc -eq $want ]]; then
+    ok "$label (exit $rc)"
+  else
+    no "$label (expected exit $want, got $rc)"
+    echo "$OUT" | sed 's/^/    /'
+  fi
+  return 0
+}
+
+# --- 1. blob-equal → landed ---------------------------------------------------
+run 0 "blob-equal is landed" -- -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB"
+grep -q "verdict=landed" <<<"$OUT" || no "case 1: terminal line does not say verdict=landed"
+
+# --- 2. blob-differs → not-landed --------------------------------------------
+run 4 "blob-differs is not-landed" -- -C "$CLONE" --no-fetch "t-plain=$WRONG_BLOB"
+grep -q "verdict=not-landed" <<<"$OUT" || no "case 2: terminal line does not say verdict=not-landed"
+
+# --- 3. absent, expected absent → landed -------------------------------------
+run 0 "absent-and-expected-absent is landed" -- -C "$CLONE" --no-fetch "t-never-existed=absent"
+
+# --- 4. present, expected absent → not-landed --------------------------------
+run 4 "present-but-expected-absent is not-landed" -- -C "$CLONE" --no-fetch "t-plain=absent"
+
+# --- 5. unreachable origin → unknown, never not-landed ------------------------
+BROKEN="$WORK/broken"
+git clone -q "$ORIGIN" "$BROKEN"
+git -C "$BROKEN" remote set-url origin "$WORK/no-such-origin.git"
+run 1 "unreachable origin is unknown" -- -C "$BROKEN" "t-plain=$PLAIN_BLOB"
+if grep -q "not-landed" <<<"$OUT"; then
+  no "case 5: the word 'not-landed' appears in an UNKNOWN result — the collapse this primitive prevents"
+else
+  ok "case 5: unknown output never says 'not-landed'"
+fi
+grep -q "verdict=unknown" <<<"$OUT" || no "case 5: terminal line does not say verdict=unknown"
+
+# --- 6/7/8. jq predicates -----------------------------------------------------
+run 0 "jq predicate true is landed" -- -C "$CLONE" --no-fetch 't-parked@.office_hours != null'
+run 4 "jq predicate false is not-landed" -- -C "$CLONE" --no-fetch 't-parked@.office_hours == null'
+run 4 "jq predicate on an absent node is not-landed" -- -C "$CLONE" --no-fetch 't-never-existed@.office_hours != null'
+
+# --- 9. malformed spec → usage error -----------------------------------------
+run 2 "spec with no delimiter is a usage error" -- -C "$CLONE" --no-fetch "t-plain"
+run 2 "spec with a non-sha, non-absent value is a usage error" -- -C "$CLONE" --no-fetch "t-plain=maybe"
+run 2 "no specs at all is a usage error" -- -C "$CLONE" --no-fetch
+run 2 "a repo path outside any git repo is a usage error" -- -C "$WORK" --no-fetch "t-plain=$PLAIN_BLOB"
+
+# --- 10. --json shape ---------------------------------------------------------
+JSON_OUT="$("$VL_SCRIPT" -C "$CLONE" --no-fetch --json "t-plain=$PLAIN_BLOB" "t-parked=absent" 2>/dev/null)"
+JSON_RC=$?
+[[ $JSON_RC -eq 4 ]] || no "case 10: expected exit 4 from the mixed --json run, got $JSON_RC"
+# The JSON object is the tail of stdout, after the per-spec and terminal lines.
+JSON_BODY="$(sed -n '/^{/,$p' <<<"$JSON_OUT")"
+if jq -e '
+      .verdict == "not-landed"
+      and (.main | type) == "string"
+      and (.specs | length) == 2
+      and (.specs[0] | .id == "t-plain" and .mode == "blob" and .status == "satisfied")
+      and (.specs[1] | .id == "t-parked" and .status == "unsatisfied" and .expected == "absent")
+    ' <<<"$JSON_BODY" >/dev/null 2>&1; then
+  ok "case 10: --json emits one parseable object with the documented shape"
+else
+  no "case 10: --json object missing or malformed"
+  echo "$JSON_OUT" | sed 's/^/    /'
+fi
+
+# --- 11. multi-spec: one unsatisfied decides ---------------------------------
+run 4 "one unsatisfied spec decides a multi-spec verdict" -- \
+  -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB" "t-parked=$WRONG_BLOB"
+run 0 "all-satisfied multi-spec is landed" -- \
+  -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB" 't-parked@.office_hours != null'
+
+# --- 12. never writes ---------------------------------------------------------
+BEFORE_STATUS="$(git -C "$CLONE" status --porcelain)"
+BEFORE_HEAD="$(git -C "$CLONE" rev-parse HEAD)"
+"$VL_SCRIPT" -C "$CLONE" "t-plain=$PLAIN_BLOB" >/dev/null 2>&1
+AFTER_STATUS="$(git -C "$CLONE" status --porcelain)"
+AFTER_HEAD="$(git -C "$CLONE" rev-parse HEAD)"
+if [[ "$BEFORE_STATUS" == "$AFTER_STATUS" && "$BEFORE_HEAD" == "$AFTER_HEAD" ]]; then
+  ok "case 12: a real fetching run leaves the working tree and HEAD untouched"
+else
+  no "case 12: verify-landed mutated the checkout (status or HEAD changed)"
+fi
+
+echo
+echo "test-verify-landed: $PASS passed, $FAIL failed"
+[[ $FAIL -eq 0 ]]
