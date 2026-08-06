@@ -69,8 +69,17 @@ attention:
     (tactic-graph-execute-fresh-main-read, tactic-probe-unknown-never-clear),
     which carry the identical boost."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-reap-safety-behind-branch-false-positive
+  pr: 3052
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
