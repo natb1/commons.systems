@@ -50,7 +50,7 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
+phase: main-qa
 execution:
   branch: tactic-pace-exempt-ceiling-fanout
   pr: 3034
@@ -58,7 +58,10 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-06T02:00:47Z
+    mergeCommitSha: e8f06d1dcfc3a33064d4646f578d9adfc8984582
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
