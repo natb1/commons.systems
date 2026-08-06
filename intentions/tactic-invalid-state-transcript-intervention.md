@@ -38,6 +38,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-05T21:47:40Z
     mergeCommitSha: 0e953cadc578a5be0d07d43e8e12cf20ceebf8b8

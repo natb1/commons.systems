@@ -58,6 +58,7 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-06T02:00:47Z
     mergeCommitSha: e8f06d1dcfc3a33064d4646f578d9adfc8984582

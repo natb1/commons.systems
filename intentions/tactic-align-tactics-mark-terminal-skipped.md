@@ -140,6 +140,7 @@ execution:
     since: 2026-08-05
     attempt: 3
     pushed_sha: null
+  conflict: null
   completion:
     mergedAt: 2026-08-05T20:31:54Z
     mergeCommitSha: 1c7dc4fb1e528099d64990564eb62e803a22bf18
