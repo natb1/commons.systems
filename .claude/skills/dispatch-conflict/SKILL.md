@@ -743,10 +743,18 @@ writes the source node's `office_hours` at all — it lands a tracked **hold**
 instead (`hold-node`: a born-parked `tactic-hold-conflict-*` tactic plus a
 `blocked_by` edge on the source). Lane 3's input is the **live git tree**.
 
-Lane 3 is **entry-path-agnostic**: it takes a node id and reads live git state.
-It has no dependency on the strike counter or on any particular caller.
-`tactic-graph-router-conflict-routing`'s future `execution.conflict` interrupt is
-simply a second entry path into this same lane.
+Lane 3 is **entry-path-agnostic** in how it *resolves*: it takes a node id and
+reads live git state, with no dependency on the strike counter or on any
+particular caller. `tactic-graph-router-conflict-routing`'s `execution.conflict`
+interrupt is the second entry path into this same lane — the router emits phase
+`conflict` and `dispatch-graph-execute` spawns this session.
+
+That entry path adds **one** obligation the provisioning path does not have:
+Step 7b, declaring the mechanical-vs-intention disposition of the resolution on
+`execution.conflict`. It is conditional on the field being set, so the
+provisioning path skips it, but on the router path it is required — it is the
+only place the system decides whether the completed review verdict still covers
+the code that will merge.
 
 Run every `gh` call, and every script that invokes `gh`/`git` over the network,
 with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -998,9 +1006,11 @@ A non-zero exit is expected (the merge conflicts).
 the branch already carries `origin/main` and GitHub's `mergeable` is stale — there
 is nothing to resolve. Skip Steps 4-7 entirely (no conflicted set, no subagent, no
 commit) and go straight to the **`resolved`** tail: when `PR_NUM` is non-empty
-`git -C "$WT" push origin HEAD` to let GitHub recompute `mergeable`, then un-hold
-(Step 8) and write the marker (Step 9). This is analogous to `/fix-checks`'s "main
-already fixed it" outcome.
+`git -C "$WT" push origin HEAD` to let GitHub recompute `mergeable`, then declare
+the disposition (Step 7b — **`mechanical`**, and only here is that verdict
+automatic: this session changed nothing at all), un-hold (Step 8) and write the
+marker (Step 9). This is analogous to `/fix-checks`'s "main already fixed it"
+outcome.
 
 Otherwise capture the conflicted-file list **before resolving** — staging in
 Step 6 is scoped to exactly these paths:
@@ -1243,6 +1253,84 @@ is **not durable state** — a later session sees none of it. It must name:
 This is the self-modification doctrine's **fallback** lane. The human's only
 interaction is **approving the permission prompt**; everything else is already
 done and recorded.
+
+### 7b. Declare the conflict-interrupt disposition
+
+**This step is required whenever the node carries an in-flight
+`execution.conflict`** — i.e. whenever this session was dispatched by the
+router's conflict interrupt rather than by provision exit 11. It is the
+**terminal act of the resolution**: nothing else in the system classifies what
+the resolution changed, so skipping it means the merge lands on whatever the
+selector's backstop decides.
+
+Read the node's `execution.conflict` from the `NODE_MD` copy the preamble took
+off fresh `origin/main`. If it is `null` (the provision-exit-11 entry — no
+interrupt was ever set), **skip this step entirely** and go to Step 8.
+
+Otherwise decide the **verdict** — this is a judgment only this session can make,
+because only it saw the hunks and the resolution:
+
+- **mechanical** — the resolution is textual reconciliation with no behavior
+  change: import ordering, adjacent-line edits, a rename applied consistently,
+  taking both sides of an additive list. The code that will merge does the same
+  thing the completed review approved.
+- **intention** — the resolution made a *choice*: it dropped or reworded one
+  side's behavior, reconciled two incompatible implementations, changed a
+  signature or a default, or resolved a semantic (not textual) conflict. Also
+  choose this whenever you are **unsure**: the cost of an unnecessary re-review
+  is one review pass; the cost of a wrong `mechanical` is conflict-resolution
+  code merged to `main` that no review ever saw.
+
+Then land the verdict on the node. `apply-conflict-state` is pure of git/gh — it
+only writes `intentions/$SOURCE_ID.md` — so `graph-commit` lands it. Run both out
+of `$PROJECT_ROOT` (the fresh primary checkout), never out of `$WT`: a graph
+write from a stale checkout is a known `origin/main`-reverting hazard. Both calls
+need `dangerouslyDisableSandbox: true` (`npx` writes the npm cache; `graph-commit`
+pushes over the network).
+
+**mechanical** — the `reviewed` marker and the ladder phase are preserved, so
+`graph-auto-merge` lands the PR once GitHub reports MERGEABLE:
+
+```bash
+( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
+    "$SOURCE_ID" --clear-conflict-mechanical --dir "$PROJECT_ROOT/intentions" )
+"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
+  -m "graph: clear conflict-interrupt on $SOURCE_ID (mechanical resolution)" "$SOURCE_ID"
+```
+
+**intention** — re-draft the PR first (when `PR_NUM` is non-empty) so no merge
+lane can take it while the graph write lands, then strip the `reviewed` marker so
+the review pass actually re-runs against the resolved tree:
+
+```bash
+gh pr ready --undo "$PR_NUM"
+( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
+    "$SOURCE_ID" --clear-conflict-intention --dir "$PROJECT_ROOT/intentions" )
+"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
+  -m "graph: clear conflict-interrupt on $SOURCE_ID (intention changed — re-review)" "$SOURCE_ID"
+```
+
+The `( cd … && npx … )` **scoped subshell** is the same shape Step 6's
+verification pipe uses and carries the same rationale: the session's own cwd is
+never mutated.
+
+A **non-zero exit from either call is a hard stop** — do not go on to Step 8/9.
+Leaving `execution.conflict` set is the safe failure: no merge lane will touch
+the PR while it is set, and the selector re-dispatches or parks the node.
+
+**Do not declare a disposition on the `ambiguous` path** (Step 10). There the
+resolution was abandoned and the tree restored, so the interrupt is still live
+and must stay live.
+
+The selector's own MERGEABLE arm (`_gate_conflict_active` in
+`graph-select-target`) is a **backstop for a session that died before reaching
+this step**, not a substitute for it. It never takes anyone's word that a
+resolution was mechanical: it clears through the evidence-checked
+`--clear-conflict-guarded` mode, which keeps the `reviewed` marker only when the
+PR's head is still the exact sha recorded at interrupt entry (nothing was pushed
+at all — the PR went mergeable because main moved) and otherwise strips it and
+forces a re-review. So a resolution that actually rewrote the tree keeps its
+review verdict **only** by declaring `mechanical` here.
 
 ### 8. Un-hold
 

@@ -191,7 +191,34 @@ describe("validateNode", () => {
         conflict: { since: "2026-08-03", attempt: 1 },
       },
     });
-    expect(result.execution?.conflict).toEqual({ since: "2026-08-03", attempt: 1 });
+    // A conflict object with no `head_sha` (a legacy interrupt, entered before
+    // the review-binding head guard existed) validates to an explicit null —
+    // which the guarded clear reads as "unrecognized head", failing closed to a
+    // re-review rather than preserving the reviewed marker.
+    expect(result.execution?.conflict).toEqual({
+      since: "2026-08-03",
+      attempt: 1,
+      head_sha: null,
+    });
+  });
+
+  it("round-trips execution.conflict.head_sha", () => {
+    const result = validateNode({
+      id: "tactic-x",
+      kind: "tactic",
+      statement: "s",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        conflict: { since: "2026-08-03", attempt: 1, head_sha: "deadbeef" },
+      },
+    });
+    expect(result.execution?.conflict?.head_sha).toBe("deadbeef");
   });
 
   it("accepts a null execution.conflict", () => {

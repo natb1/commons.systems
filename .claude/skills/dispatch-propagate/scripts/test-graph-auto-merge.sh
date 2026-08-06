@@ -62,8 +62,9 @@ cp "$SCRIPT_DIR"/graph-auto-merge "$SCRIPT_DIR"/dispatch-config-load \
    "$SCRIPT_DIR"/lib.sh "$GAM_SCRIPTS/"
 GAM_SCRIPT="$GAM_SCRIPTS/graph-auto-merge"
 
-# Fake node: enumeration ( -e inline ) applies the id/phase/pr/reviewed-marker
-# filter over stub/nodes.json; compute-freshness.ts <id> serves stub/freshness-<id>.json.
+# Fake node: enumeration ( -e inline ) applies the
+# id/phase/pr/conflict/reviewed-marker filter over stub/nodes.json;
+# compute-freshness.ts <id> serves stub/freshness-<id>.json.
 cat > "$GAM_ROOT/bin/node" <<'GAMNODE'
 #!/usr/bin/env bash
 STUB="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -80,6 +81,7 @@ fi
 jq -r '.[]
   | select(.kind=="tactic" and .phase=="review"
            and (.execution.pr != null)
+           and (.execution.conflict == null)
            and ((.execution.markers // []) | index("reviewed")))
   | "\(.id)\t\(.execution.pr)"' "$STUB/nodes.json"
 exit 0
@@ -205,6 +207,25 @@ gam_em_out=$(run_gam 2>/dev/null)
 assert_eq "graph-auto-merge (e): missing stamp is held" "held tactic-e (missing-stamp)" "$gam_em_out"
 if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_em_m=present; else gam_em_m=absent; fi
 assert_eq "graph-auto-merge (e): missing-stamp hold issues no merge" "absent" "$gam_em_m"
+
+# ---- (g) in-flight execution.conflict → excluded from the candidate set ----
+# The load-bearing conflict-interrupt guard: the PR is otherwise fully
+# mergeable (reviewed marker, green CI, MERGEABLE, fresh stamp) — a resolved
+# conflict flipped it back to MERGEABLE before the selector pass self-healed
+# the interrupt. It must NOT merge; the re-review path owns it.
+gam_reset
+printf '%s\n' '[{"id":"tactic-g","kind":"tactic","phase":"review","execution":{"pr":107,"markers":["planned","qa-done","reviewed"],"conflict":{"since":"2026-08-05","attempt":1}}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":107,"title":"Tactic G","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-g","sha":"sha107"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-107.json"
+echo passing > "$GAM_ROOT/cache/sha107"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-g.scope-fingerprint"
+gam_fresh tactic-g
+gam_g_out=$(run_gam 2>/dev/null); gam_g_rc=$?
+assert_eq "graph-auto-merge (g): node with an in-flight conflict interrupt is not merged" "" "$gam_g_out"
+assert_eq "graph-auto-merge (g): exit 0" "0" "$gam_g_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_g_m=present; else gam_g_m=absent; fi
+assert_eq "graph-auto-merge (g): conflict-interrupt node issues no merge" "absent" "$gam_g_m"
 
 # ---- (f) config kill-switch (enabled:false) suppresses all merges ----------
 gam_reset

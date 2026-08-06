@@ -3,18 +3,23 @@
 // Unit 4).
 //
 // The consumer is `.claude/skills/dispatch-propagate/scripts/dispatch-auto-merge`,
-// the tick-wide merge reconciler. That script works purely off the GitHub PR
-// list and merges anything GitHub reports `MERGEABLE`. A node can flip
-// `CONFLICTING → MERGEABLE` while `execution.conflict` is STILL set — the
-// per-node selector pass that self-heals the interrupt has not run yet this
+// the legacy label-gated issue-lane merge reconciler. That script works purely
+// off the GitHub PR list and merges anything GitHub reports `MERGEABLE`. A node
+// can flip `CONFLICTING → MERGEABLE` while `execution.conflict` is STILL set —
+// the per-node selector pass that self-heals the interrupt has not run yet this
 // tick, or observed a stale mergeable read — and merging in that window lands
 // conflict-resolution code the completed review never saw. This enumeration is
-// what lets the merge sweep exclude those PRs.
+// what lets that merge sweep exclude those PRs.
+//
+// The node-lane copy of the same exclusion does NOT go through this script:
+// `graph-auto-merge` (the only code that merges a node-lane PR) applies the
+// `execution.conflict == null` filter inline in its `listNodesStrict`
+// enumeration, so it inherits that reader's fail-closed posture.
 //
 // Read-only: no graph writes, no git, no gh. It reads through the TOLERANT
-// `listNodes` (not `listNodesStrict`): this is a best-effort guard for a merge
-// race, not a fail-closed integrity gate, so one unparseable file must not take
-// the whole merge sweep down.
+// `listNodes` (not `listNodesStrict`) so one unparseable node file does not
+// abort the enumeration. A process-level failure IS still fatal to the caller:
+// dispatch-auto-merge exits 1 rather than degrading to an empty exclusion set.
 //
 // Usage:
 //   node --import tsx/esm list-conflict-nodes.ts --dir <intentions-dir>

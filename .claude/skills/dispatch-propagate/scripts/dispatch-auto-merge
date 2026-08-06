@@ -19,8 +19,13 @@
 # security, or enhancement issue.
 #
 # Eligibility ALSO excludes any PR belonging to a graph node with an in-flight
-# `execution.conflict` interrupt (tactic-graph-router-conflict-routing). That
-# guard is load-bearing, not defense-in-depth — see Step 1b and the per-PR gate.
+# `execution.conflict` interrupt (tactic-graph-router-conflict-routing). Here
+# that guard is defense-in-depth: this script is the LEGACY label-gated
+# issue-lane merger (it requires `dispatch:reviewed` AND a non-empty closing
+# set), and graph-native node-lane PRs — opened label-free with no `Closes #N`
+# — never reach it. The load-bearing copy of the conflict-interrupt exclusion
+# lives in `graph-auto-merge`'s candidate enumeration, which is the only code
+# that merges a node-lane PR. See Step 1b and the per-PR gate.
 #
 # Config gate (ON by default): read from dispatch-config-load auto-merge. The
 # config file is an opt-OUT kill-switch (incident response), inverting the usual
@@ -74,15 +79,20 @@ fi
 # number. Captured ONCE here rather than per-PR: the set is small and the read
 # is a process spawn.
 #
-# A fetch failure is NOT fatal. An empty set is exactly the pre-guard behavior
-# (the merge race this guard closes), so degrading to it keeps the sweep
-# running rather than stranding every ready PR on one bad read — the same
-# fail-safe posture as the per-PR merge failures below. It is logged to stderr
-# so the degradation is visible rather than silently swallowed.
-CONFLICT_PRS=$( (cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/list-conflict-nodes.ts --dir "$REPO_ROOT/intentions") ) || {
-  echo "dispatch-auto-merge: warning: list-conflict-nodes failed; proceeding with an empty conflict set (merge-race guard degraded this pass)" >&2
-  CONFLICT_PRS=""
-}
+# A read failure IS fatal to the sweep, matching the pr_list_open guard below:
+# degrading to an empty set would silently make every PR under an in-flight
+# conflict interrupt merge-eligible for this pass, landing conflict-resolution
+# commits the completed review never saw. A skipped merge sweep self-heals on
+# the next tick; an unreviewed merge does not. Any non-zero exit (missing or
+# partial node_modules, an npx cache miss under a re-enabled sandbox, a store
+# read error, exit 2 on a usage/malformed-store error) aborts before the
+# per-PR loop with nothing merged.
+CONFLICT_PRS_RC=0
+CONFLICT_PRS=$( (cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/list-conflict-nodes.ts --dir "$REPO_ROOT/intentions") ) || CONFLICT_PRS_RC=$?
+if [[ "$CONFLICT_PRS_RC" -ne 0 ]]; then
+  echo "dispatch-auto-merge: error: list-conflict-nodes failed (rc=$CONFLICT_PRS_RC); cannot compute the conflict-interrupt set — merging nothing this pass" >&2
+  exit 1
+fi
 
 # Exact whole-line match against the captured set (-x -F: no regex, no substring
 # — #12 must not match #123).
@@ -115,11 +125,15 @@ while IFS= read -r pr; do
   [[ "$IS_DRAFT" == "false" ]] || continue
   [[ "$MERGEABLE" == "MERGEABLE" ]] || continue
 
-  # ---- Conflict-interrupt guard (LOAD-BEARING, not defense-in-depth) --------
+  # ---- Conflict-interrupt guard (defense-in-depth on this lane) -------------
   # A node can flip CONFLICTING → MERGEABLE while `execution.conflict` is STILL
   # set: the per-node selector pass that self-heals the interrupt has not run
   # yet this tick, or it observed a stale mergeable read. Merging in that window
-  # lands conflict-resolution code the completed review never actually saw.
+  # lands conflict-resolution code the completed review never actually saw. The
+  # load-bearing copy of this exclusion is in graph-auto-merge's candidate
+  # enumeration — node-lane PRs are label-free and never reach this loop's
+  # dispatch:reviewed / closing-set gates; this copy only covers the legacy
+  # issue lane and any node whose PR also carries the label.
   # The `intention` resolution path (stripped dispatch:reviewed label, PR
   # re-drafted via `gh pr ready --undo`) is already covered by the isDraft and
   # dispatch:reviewed gates around this one; this guard closes the remaining

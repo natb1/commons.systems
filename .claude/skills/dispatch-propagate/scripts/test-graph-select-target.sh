@@ -871,6 +871,12 @@ GSCINPX
   cat > "$GSCI_ROOT/bin/gh" <<'GSCIGH'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/.." && pwd)"
+# `gh pr ready --undo <n>` — the conflict backstop's PR re-draft. Logged so the
+# case can assert the disarm ran; matched before the REST paths below.
+if [[ "$1" == "pr" && "$2" == "ready" ]]; then
+  printf '%s\n' "$*" >> "$_root/gh-pr-ready.log"
+  exit 0
+fi
 for _a in "$@"; do
   case "$_a" in
     */pulls/2999) cat "$_root/pr-2999.json"; exit 0 ;;
@@ -1092,6 +1098,10 @@ assert_eq "graph-select-target conflict: CONFLICTING pending-merge emits conflic
   "node tactic-fixture tactic conflict" "$gsci7_out"
 assert_eq "graph-select-target conflict: the entry call carries --set-conflict" \
   "1" "$(grep -q -- "--set-conflict" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+# The review-binding guard: entry records the head the completed review examined,
+# so the self-heal below can tell "main moved" from "the branch was rewritten".
+assert_eq "graph-select-target conflict: the entry call records the PR's head sha" \
+  "1" "$(grep -q -- "--head-sha deadbee" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
 # --- Case 8: pending-merge + MERGEABLE is left to dispatch-auto-merge --------
@@ -1148,19 +1158,70 @@ assert_eq "graph-select-target conflict: a capped interrupt never spends another
   "0" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
-# --- Case 12: MERGEABLE again self-heals the stale interrupt -----------------
-# Mechanical clear only: the node keeps its ladder phase and `reviewed` marker,
-# and dispatch-auto-merge lands it — no `conflict` emission.
-echo "Test: graph-select-target — an active conflict interrupt on a now-MERGEABLE PR self-heals mechanically"
+# --- Case 12: MERGEABLE again backstop-clears the undeclared interrupt -------
+# Reaching this arm means the worker never declared a disposition (a declared
+# one nulls execution.conflict, so the router stops emitting `conflict`). The
+# backstop therefore must NOT keep the review verdict on its own say-so: it
+# clears through a mode that re-reviews unless the tree is provably the reviewed
+# one (`--clear-conflict-guarded`, whose default outcome is the intention clear),
+# and it re-drafts the PR so no merge lane takes it meanwhile. The one thing it
+# may never do is assert `--clear-conflict-mechanical` itself — that verdict
+# belongs to `/dispatch-conflict` Lane 3, which saw the resolution.
+echo "Test: graph-select-target — an undeclared conflict interrupt on a now-MERGEABLE PR is backstop-cleared for re-review"
 gsc_interrupt_setup
 gsci_candidate conflict
 gsci_pr true
 gsci12_out=$(gsci_run)
-assert_eq "graph-select-target conflict: a self-healed interrupt emits nothing" "empty" "$gsci12_out"
-assert_eq "graph-select-target conflict: the self-heal clears MECHANICALLY (review verdict preserved)" \
-  "1" "$(grep -q -- "--clear-conflict-mechanical" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
-assert_eq "graph-select-target conflict: the self-heal never clears by intention" \
-  "0" "$(grep -q -- "--clear-conflict-intention" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: a backstop-cleared interrupt emits nothing" "empty" "$gsci12_out"
+assert_eq "graph-select-target conflict: the backstop clears through a re-review-defaulting mode" \
+  "1" "$(grep -qE -- "--clear-conflict-(guarded|intention)" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the backstop never asserts the mechanical verdict itself" \
+  "0" "$(grep -q -- "--clear-conflict-mechanical" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the backstop re-drafts the PR to disarm the merge lanes" \
+  "1" "$(grep -q -- "--undo 2999" "$GSCI_ROOT/gh-pr-ready.log" && echo 1 || echo 0)"
+# The guard's INPUT: the clear is decided against the PR's CURRENT head, not
+# against the caller's assertion that nothing important changed.
+assert_eq "graph-select-target conflict: the backstop clear carries the PR's current head sha" \
+  "1" "$(grep -q -- "--head-sha deadbee" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 13: a head-match guarded clear hands the PR back to auto-merge -----
+# The one arm that keeps the `reviewed` marker: the primitive reports
+# `reset: false` (the head never moved, so the tree that will merge IS the
+# reviewed tree). The selector must then undo its defensive re-draft, or the
+# node would sit as a draft forever waiting on an auto-merge that cannot fire.
+echo "Test: graph-select-target — a head-match guarded clear re-readies the PR for the armed auto-merge"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci_pr true
+printf '%s\n' '{"mode":"clear","id":"tactic-fixture","wrote":true,"reset":false,"phase":"review","guard":"head-match"}' \
+  > "$GSCI_ROOT/conflict-result.json"
+gsci13_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a head-match clear emits nothing" "empty" "$gsci13_out"
+assert_eq "graph-select-target conflict: a head-match clear re-readies the PR" \
+  "1" "$(grep -qx "pr ready 2999" "$GSCI_ROOT/gh-pr-ready.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 14: the lane's per-pass graph-commit budget bounds the write arms --
+# Every conflict write arm lands a commit and then returns NOT-SELECTED, so
+# `--top` does not bound them. Unbounded, one push to main conflicting with N
+# reviewed PRs would serialize N landing-lock waits inside ONE dispatch-lock
+# hold and get the tick's lock reclaimed mid-selection (duplicate workers). With
+# the budget set to 1, exactly ONE of the two matching candidates may write this
+# pass; the other is deferred to the next tick, where it matches again.
+echo "Test: graph-select-target — the conflict lane spends at most GRAPH_CONFLICT_COMMIT_BUDGET commits per pass"
+gsc_interrupt_setup
+printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false},{"id":"tactic-fixture-2","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false}],"events":[]}' \
+  > "$GSCI_ROOT/candidates.json"
+gsci_pr true
+export GRAPH_CONFLICT_COMMIT_BUDGET=1
+gsci14_out=$(gsci_run)
+unset GRAPH_CONFLICT_COMMIT_BUDGET
+assert_eq "graph-select-target conflict: a budgeted pass still emits nothing" "empty" "$gsci14_out"
+assert_eq "graph-select-target conflict: only ONE candidate's clear runs under a budget of 1" \
+  "1" "$(grep -c -- "--clear-conflict-guarded" "$GSCI_ROOT/apply-conflict-calls.log")"
+assert_eq "graph-select-target conflict: the deferred candidate is logged as budget-spent" \
+  "1" "$(grep -q "conflict-commit-budget-spent" "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
 report_results

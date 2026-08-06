@@ -71,7 +71,24 @@ describe("applyConflictState store round-trip", () => {
     const node = readNode(dir, "tactic-syn");
     expect(node.phase).toBe("review"); // ladder phase preserved — the interrupt is orthogonal
     expect(node.execution?.markers).toEqual(["reviewed"]);
-    expect(node.execution?.conflict).toEqual({ since: r.since, attempt: 1 });
+    expect(node.execution?.conflict).toEqual({ since: r.since, attempt: 1, head_sha: null });
+  });
+
+  it("--set-conflict records --head-sha as the review-binding head", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    const r = applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "aaaa111" });
+    expect(r.head_sha).toBe("aaaa111");
+    expect(readNode(dir, "tactic-syn").execution?.conflict?.head_sha).toBe("aaaa111");
+  });
+
+  it("--set-conflict on an already-set interrupt never re-stamps head_sha", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "aaaa111" });
+    // A second observation must NOT re-bind the review verdict to a newer head.
+    applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "bbbb222" });
+    expect(readNode(dir, "tactic-syn").execution?.conflict?.head_sha).toBe("aaaa111");
   });
 
   it("--set-conflict on an already-set interrupt bumps attempt and preserves since", () => {
@@ -217,6 +234,139 @@ describe("applyConflictState store round-trip", () => {
     );
   });
 
+  it("--clear-conflict-guarded clears MECHANICALLY when the head still matches the reviewed one", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["planned", "qa-done", "reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "aaaa111" });
+    const r = applyConflictState({
+      id: "tactic-syn",
+      mode: "clear-guarded",
+      dir,
+      headSha: "aaaa111",
+    });
+    expect(r.guard).toBe("head-match");
+    expect(r.reset).toBe(false);
+    const node = readNode(dir, "tactic-syn");
+    expect(node.execution?.conflict).toBeNull();
+    // Nothing about the branch changed — the review verdict still binds.
+    expect(node.execution?.markers).toEqual(["planned", "qa-done", "reviewed"]);
+  });
+
+  it("--clear-conflict-guarded clears BY INTENTION when the head advanced past the reviewed one", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["planned", "qa-done", "reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "aaaa111" });
+    const r = applyConflictState({
+      id: "tactic-syn",
+      mode: "clear-guarded",
+      dir,
+      headSha: "bbbb222",
+    });
+    expect(r.guard).toBe("head-advanced");
+    expect(r.reset).toBe(true);
+    expect(r.phase).toBe("review");
+    const node = readNode(dir, "tactic-syn");
+    expect(node.execution?.conflict).toBeNull();
+    // The tree that would merge is not the tree review saw: re-review.
+    expect(node.execution?.markers).toEqual(["planned", "qa-done"]);
+  });
+
+  it("--clear-conflict-guarded fails closed on an interrupt with no recorded head", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir }); // legacy: no --head-sha
+    const r = applyConflictState({
+      id: "tactic-syn",
+      mode: "clear-guarded",
+      dir,
+      headSha: "aaaa111",
+    });
+    expect(r.guard).toBe("head-unrecorded");
+    expect(r.reset).toBe(true);
+    expect(readNode(dir, "tactic-syn").execution?.markers).toEqual([]);
+  });
+
+  it("--clear-conflict-guarded without a head sha is an error, never a silent clear", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir, headSha: "aaaa111" });
+    expect(() => applyConflictState({ id: "tactic-syn", mode: "clear-guarded", dir })).toThrow(
+      /requires --head-sha/,
+    );
+    // The refusal made no write: the interrupt is still in flight.
+    expect(readNode(dir, "tactic-syn").execution?.conflict?.attempt).toBe(1);
+  });
+
+  it("--clear-conflict-guarded with no active interrupt is an error", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    expect(() =>
+      applyConflictState({ id: "tactic-syn", mode: "clear-guarded", dir, headSha: "aaaa111" }),
+    ).toThrow(/execution\.conflict is null/);
+  });
+
+  it("records the lifetime spend on execution.attempts.conflict", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts.conflict).toBe(1);
+    applyConflictState({ id: "tactic-syn", mode: "spend", dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts.conflict).toBe(2);
+  });
+
+  it("a mechanical clear does NOT refund the lifetime budget — re-entry continues the count", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir }); // attempt 1
+    applyConflictState({ id: "tactic-syn", mode: "clear-mechanical", dir });
+    expect(readNode(dir, "tactic-syn").execution?.conflict).toBeNull();
+    expect(readNode(dir, "tactic-syn").execution?.attempts.conflict).toBe(1);
+    const r = applyConflictState({ id: "tactic-syn", mode: "set", dir });
+    expect(r.attempt).toBe(2); // NOT 1 — the flap does not reset the budget
+  });
+
+  it("an intention clear does NOT refund the lifetime budget either", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    applyConflictState({ id: "tactic-syn", mode: "set", dir });
+    applyConflictState({ id: "tactic-syn", mode: "clear-intention", dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts.conflict).toBe(1);
+    expect(applyConflictState({ id: "tactic-syn", mode: "set", dir }).attempt).toBe(2);
+  });
+
+  it("mergeability flapping still reaches the cap — the attack the lifetime counter closes", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    // Each cycle is one CONFLICTING tick (set, which dispatches a worker) plus
+    // one transient MERGEABLE tick (the selector's backstop clear).
+    for (let i = 0; i < CONFLICT_ATTEMPT_CAP; i++) {
+      const set = applyConflictState({ id: "tactic-syn", mode: "set", dir });
+      expect(set.attempt).toBe(i + 1);
+      const capped = applyConflictState({ id: "tactic-syn", mode: "park-if-capped", dir }).capped;
+      expect(capped).toBe(i + 1 >= CONFLICT_ATTEMPT_CAP);
+      applyConflictState({ id: "tactic-syn", mode: "clear-mechanical", dir });
+    }
+    // The next re-entry is over the cap: the caller parks instead of dispatching.
+    applyConflictState({ id: "tactic-syn", mode: "set", dir });
+    expect(applyConflictState({ id: "tactic-syn", mode: "park-if-capped", dir })).toMatchObject({
+      capped: true,
+      attempt: CONFLICT_ATTEMPT_CAP + 1,
+    });
+  });
+
+  it("--park-if-capped reads the persisted lifetime spend, not the in-flight attempt", () => {
+    const dir = tempDir();
+    seedTactic(dir, "review", ["reviewed"]);
+    // A node whose budget was spent under an earlier, since-cleared interrupt.
+    for (let i = 0; i < CONFLICT_ATTEMPT_CAP; i++) {
+      applyConflictState({ id: "tactic-syn", mode: "set", dir });
+      applyConflictState({ id: "tactic-syn", mode: "clear-mechanical", dir });
+    }
+    const set = applyConflictState({ id: "tactic-syn", mode: "set", dir });
+    expect(set.attempt).toBe(CONFLICT_ATTEMPT_CAP + 1);
+    expect(applyConflictState({ id: "tactic-syn", mode: "park-if-capped", dir }).capped).toBe(true);
+  });
+
   it("leaves execution.fix untouched — the two interrupts are independent", () => {
     const dir = tempDir();
     seedTactic(dir, "review", ["reviewed"]);
@@ -273,6 +423,34 @@ describe("apply-conflict-state parseArgs", () => {
       id: "tactic-syn",
       mode: "clear-intention",
     });
+  });
+
+  it("parses --clear-conflict-guarded with --head-sha", () => {
+    expect(parseArgs(["tactic-syn", "--clear-conflict-guarded", "--head-sha", "abc123"])).toMatchObject({
+      id: "tactic-syn",
+      mode: "clear-guarded",
+      headSha: "abc123",
+    });
+  });
+
+  it("parses --set-conflict with --head-sha", () => {
+    expect(parseArgs(["tactic-syn", "--set-conflict", "--head-sha", "abc123"])).toMatchObject({
+      id: "tactic-syn",
+      mode: "set",
+      headSha: "abc123",
+    });
+  });
+
+  it("rejects --clear-conflict-guarded without --head-sha", () => {
+    expect(() => parseArgs(["tactic-syn", "--clear-conflict-guarded"])).toThrow(
+      /requires --head-sha/,
+    );
+  });
+
+  it("rejects --head-sha with no value", () => {
+    expect(() => parseArgs(["tactic-syn", "--set-conflict", "--head-sha"])).toThrow(
+      /--head-sha requires a sha argument/,
+    );
   });
 
   it("rejects combining two modes", () => {
