@@ -40,6 +40,7 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-04T09:01:13Z
     mergeCommitSha: 8cce4045f46367de2c1717abe1ffcfa88d8ce3f4
