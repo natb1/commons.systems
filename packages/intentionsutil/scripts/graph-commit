@@ -69,6 +69,53 @@
 #   nothing) while the caller's real edit sits dirty elsewhere.
 #   Omit entirely to keep pre-assertion behavior.
 #
+# ORPHANED LOCAL COMMITS — THE RECOVERY RULE
+# ------------------------------------------
+# An ORPHAN is a commit this checkout carries that origin/main does not: what a
+# graph-commit run leaves behind when it is killed after making its local commit
+# and before that commit reaches main. The sequence commit → stamp → push is not
+# atomic and CANNOT be made atomic — git has no commit-and-push primitive — so
+# the window is NARROWED, never closed:
+#
+#   - The local commit is made inside try_land(), after the landing lock is
+#     acquired and immediately before the rebase. The lock wait (up to
+#     LOCK_WAIT_SECONDS on a contended lock) is therefore OUTSIDE the window; a
+#     kill there leaves nothing committed at all. That wait is where the observed
+#     incidents died.
+#   - The residual window is commit → stamp → push. A kill inside it still leaves
+#     an orphan. There is no trap-based defense for it: a SIGKILL fires no trap
+#     (see cleanup()), and `trap 'exit 130' INT TERM` covers only INT/TERM.
+#
+# So the defense is DETECTION plus a stated recovery, not prevention:
+#   - At startup (after MAIN_SHA is pinned), detect_pre_existing_orphan() prints
+#     a `graph-commit: orphan-detected: ...` line on EVERY path — the dirty-tree
+#     path as well as the nothing-staged one.
+#   - At a terminal `not-landed`/`unknown` verdict, print_orphan_recovery_line()
+#     names the commit left behind (`graph-commit: orphan=<sha> ...`).
+#
+# THE RECOVERY IS TO RE-RUN THE SAME INVOCATION, from the same repo, with the
+# same argv. It is safe and idempotent: id_files_dirty() finds the id files
+# clean (their content is already in the local commit), main() takes the
+# nothing-staged branch, and land() rebases HEAD onto fresh origin/main and
+# pushes it — which is exactly the orphan being landed. (Per the rc-1 caller
+# contract below, an already-landed `--prune <id>` must be dropped from the
+# retry argv; nothing else about the argv changes.)
+#
+# That branch's DIVERGED-AND-NOTHING-STAGED wrong-repo refusal is scoped to an
+# unpushed-commit count of ZERO precisely so it cannot fire on this recovery —
+# it used to fire on every orphan (an orphan's whole point is that HEAD's blob
+# differs from origin/main's), which made the documented recovery unreachable.
+#
+# `git reset --hard origin/main` is NOT a prerequisite for that retry, and the
+# older tribal advice to run it first is retired: it DISCARDS the orphan, which
+# is the right move only when the intent is to ABANDON the write. Retry to land
+# the write; reset to abandon it.
+#
+# NEVER `git push` an orphan to main by hand. It bypasses the rebase, the
+# layer-2/3 merge ladder, and the landing lock, so it can silently clobber a
+# concurrent writer's landed edit — the exact failure the fail-closed park path
+# exists to prevent.
+#
 # THE VERDICT LINE — THE CALLER CONTRACT
 # --------------------------------------
 # Every terminal path prints exactly one line of this shape to stderr, and that
@@ -1077,6 +1124,34 @@ id_files_dirty() {
   [[ -n "$(git status --porcelain -- "${paths[@]}")" ]]
 }
 
+# --- Pre-existing orphan detection ------------------------------------------
+# An ORPHAN is a local commit this repo carries that origin/main does not: the
+# residue of an EARLIER graph-commit run killed between its local commit and a
+# successful push (see the ORPHAN-WINDOW CONTAINMENT comment in try_land()).
+# Announce it at startup, on EVERY path — the dirty-tree path as much as the
+# nothing-staged one. The nothing-staged branch used to be the only place that
+# said anything about unpushed local commits, so a run that also had new content
+# to stage landed the orphan silently and the operator never learned it had
+# existed (and, not knowing the sanctioned recovery, was liable to hand-push it).
+#
+# Called once from main(), right after MAIN_SHA is pinned.
+#
+# Deliberately silent for a far-ahead PR-branch checkout (HEAD ahead of
+# origin/main with NON-intentions commits): that is a legitimate worktree state
+# ensure_intentions_only_base() rebuilds against and cleanup() restores, not an
+# abandoned write. Only an intentions/-only ahead-ness can be this script's own
+# residue.
+detect_pre_existing_orphan() {
+  local count nonint shas
+  count="$(git rev-list --count "$MAIN_SHA..HEAD" 2>/dev/null || echo 0)"
+  [[ "${count:-0}" -gt 0 ]] || return 0
+  nonint="$(git diff --name-only "$MAIN_SHA"...HEAD | grep -v '^intentions/' || true)"
+  [[ -z "$nonint" ]] || return 0
+  shas="$(git rev-list --abbrev-commit "$MAIN_SHA..HEAD" 2>/dev/null | tr '\n' ' ')"
+  shas="${shas% }"
+  echo "graph-commit: orphan-detected: $count local commit(s) not on origin/main ($shas) — re-running this invocation rebases and lands them; do NOT git push them by hand" >&2
+}
+
 # --- Commit ----------------------------------------------------------------
 # Stage exactly our id files (edits AND prunes — `git add -- <path>` stages a
 # deletion for a tracked file that is missing from the working tree just as
@@ -1403,16 +1478,52 @@ _emit_verdict_line() {
   echo "graph-commit: verdict: $status ids=$ids_csv pushed=${PUSHED_SHA:-none} main=${main_sha:-unknown} context=$context${reason:+ — $reason}" >&2
 }
 
+# print_orphan_recovery_line — on a terminal verdict that did NOT put this
+# invocation's content on origin/main, say whether a local commit was
+# nonetheless left behind, and how to recover it. Printed as its own line
+# immediately after the verdict line rather than appended to it: the verdict
+# line is the parsed caller contract and several paths (die(), park_and_exit())
+# have already emitted it by the time this runs, so there is no single line
+# still open to append to.
+#
+# Scoped to `not-landed` / `unknown` — the two statuses that leave the question
+# open. `landed` / `landed-equivalent` / `parked` all mean origin/main carries
+# the intent, and `refused` means no commit was ever made.
+#
+# Silent when the far-ahead rebuild is in play (RESTORE_HEAD=1): cleanup() is
+# about to `git reset --hard "$ORIG_HEAD"`, so the commit that is currently
+# ahead of origin/main will not survive this process and calling it an orphan
+# left on disk would be false.
+print_orphan_recovery_line() {
+  case "$LAST_VERDICT" in
+    not-landed|unknown) ;;
+    *) return 0 ;;
+  esac
+  [[ "$RESTORE_HEAD" -eq 1 ]] && return 0
+  local base count sha
+  base="$(git rev-parse FETCH_HEAD 2>/dev/null || true)"
+  [[ -n "$base" ]] || base="$MAIN_SHA"
+  [[ -n "$base" ]] || return 0
+  count="$(git rev-list --count "$base..HEAD" 2>/dev/null || echo 0)"
+  [[ "${count:-0}" -gt 0 ]] || return 0
+  sha="$(git rev-parse HEAD 2>/dev/null || true)"
+  [[ -n "$sha" ]] || return 0
+  echo "graph-commit: orphan=$sha — committed locally, NOT on origin/main. Recovery: re-run this same graph-commit invocation from $REPO_ROOT; it rebases onto origin/main and lands it. NEVER git push this commit to main by hand — it bypasses the rebase/layer-2 merge ladder and can clobber a concurrent landing." >&2
+}
+
 # emit_verdict_and_exit <context> — print the verdict (if not already printed)
 # and exit on it. `landed` and `landed-equivalent` are the ONLY statuses that
 # exit 0; `unknown` never does. Usage errors (exit 2) and --base staleness
-# (exit 3) do not route through here and keep their own codes.
+# (exit 3) do not route through here and keep their own codes. On the two
+# statuses that leave the outcome unsatisfied, name any local commit left
+# behind and its recovery before exiting.
 emit_verdict_and_exit() { # <context>
   print_verdict "$1"
   case "$LAST_VERDICT" in
     landed|landed-equivalent) exit 0 ;;
-    *) exit 1 ;;
   esac
+  print_orphan_recovery_line
+  exit 1
 }
 
 # --- Prune-id membership ----------------------------------------------------
@@ -1708,6 +1819,31 @@ try_land() {
     if ! lock_claim_or_renew; then
       LAST_LAND_REASON="the landing lock was not acquired within the ${LOCK_WAIT_SECONDS}s wait window (another writer held it)"
       break
+    fi
+
+    # ORPHAN-WINDOW CONTAINMENT: the local commit is made HERE — after the lock
+    # is held and immediately before the rebase — not in main() before land().
+    # A wrapper killed while this process blocks in lock_claim_or_renew() (up to
+    # LOCK_WAIT_SECONDS on a contended lock) would otherwise die with a local
+    # commit already made and never pushed, leaving an orphan; that lock-wait
+    # window is where the observed incidents died. Committing after the wait
+    # removes the whole window from the interval a kill can orphan in. The
+    # residual commit → stamp → push window CANNOT be removed (git has no atomic
+    # commit-and-push), so an orphan is narrower, not impossible — see the
+    # header block's recovery rule.
+    #
+    # Idempotent by the same discriminator main() used: once the commit exists
+    # the id files are clean against HEAD, so every retry iteration (and
+    # park_and_exit()'s own land(), which commits the parking write before
+    # calling it) finds nothing to stage and no-ops here.
+    #
+    # `|| die` is load-bearing HERE in a way it was not in main(): land() calls
+    # this function as `try_land || rc=$?`, which suppresses errexit for its
+    # whole body, so a failing commit_files would otherwise fall through and
+    # this attempt would go on to stamp and push a SHA that does not carry the
+    # writer's content (clear error over a silent fallback, code-style.md).
+    if id_files_dirty; then
+      commit_files || die "could not create the local commit for ${ALL_IDS[*]} — nothing was pushed"
     fi
 
     if ! git pull --rebase origin main >&2; then
@@ -2392,6 +2528,11 @@ main() {
   git fetch origin main >&2
   MAIN_SHA="$(git rev-parse FETCH_HEAD)"
 
+  # Announce any pre-existing orphan (an earlier run's local commit that never
+  # reached origin/main) on every path, not just the nothing-staged one, and
+  # state the sanctioned recovery: this very invocation lands it.
+  detect_pre_existing_orphan
+
   # Capture the writer's intended on-disk content BEFORE check_base_freshness.
   # Layer 3's stale-base park (park_and_exit, reached from inside
   # check_base_freshness on an unresolvable same-field divergence) runs
@@ -2412,15 +2553,15 @@ main() {
     msg="graph: ${ALL_IDS[*]}"
   fi
 
-  # Capture the writer's on-disk content, then commit-and-land it.
-  # Three states, discriminated by id_files_dirty():
-  #   - dirty: normal case — stage + commit the new content, then land it.
+  # Two states, discriminated by id_files_dirty():
+  #   - dirty: normal case — land it; try_land() stages and commits the new
+  #     content itself, once it holds the landing lock.
   #   - clean: nothing new to stage — either the desired content is already on
   #     origin/main (truly nothing to do) or a prior attempt already committed it
-  #     locally and only failed to push. Both are handled by skipping
-  #     commit_files() and landing whatever HEAD already is, which makes the same
-  #     invocation safe to just retry after any partial failure between
-  #     commit_files() and a successful push.
+  #     locally and only failed to push (an ORPHAN). Both are handled by landing
+  #     whatever HEAD already is, which makes the same invocation safe to just
+  #     retry after any partial failure between the local commit and a
+  #     successful push — the sanctioned orphan recovery (header block).
   CURRENT_MSG="$msg"
   # If this is a far-ahead PR-branch worktree, rebuild the edit on an
   # intentions/-only base so the fast path can stamp it (cleanup() restores the
@@ -2428,9 +2569,12 @@ main() {
   # worktrees. Runs after snapshot() (taken above, before check_base_freshness)
   # so the writer's content is captured before the reset overwrites the tree.
   ensure_intentions_only_base
-  if id_files_dirty; then
-    commit_files
-  else
+  # NOTE: the dirty branch no longer commits here. try_land() makes the local
+  # commit itself, after it holds the landing lock and immediately before the
+  # rebase, so a kill during the lock wait cannot leave an orphaned local commit
+  # (see the ORPHAN-WINDOW CONTAINMENT comment there). What remains here is the
+  # CLEAN branch's diagnosis, which must still run before land().
+  if ! id_files_dirty; then
     # Nothing staged for any id. Under the caller-derived repo resolution above,
     # a "clean" tree has two possible meanings, and they must be told apart:
     #   - benign: this id already matches origin/main (already landed
@@ -2438,24 +2582,46 @@ main() {
     #     current HEAD (a trivial no-op push when HEAD == origin/main).
     #   - DIVERGED-AND-NOTHING-STAGED: the resolved repo holds content for this
     #     id that DIFFERS from origin/main yet nothing is staged. TWO causes
-    #     produce it, and the die() below names both — a mis-pointed -C/--repo
-    #     (the caller's edit lives in another checkout), or a PRIOR RUN OF THIS
-    #     SCRIPT killed after it created the local commit (HEAD carries it, so
-    #     the tree is clean and there is nothing left to stage). Naming only the
-    #     first is what misdirected an earlier diagnosis. Emitting the "landed"
-    #     success here would repeat the incident bug — a false success for a
-    #     tree that was never going to change origin/main.
+    #     produce it — a mis-pointed -C/--repo (the caller's edit lives in
+    #     another checkout), or a PRIOR RUN OF THIS SCRIPT killed after it
+    #     created the local commit (HEAD carries it, so the tree is clean and
+    #     there is nothing left to stage: an ORPHAN). Naming only the first is
+    #     what misdirected an earlier diagnosis.
+    #
+    # The two are told apart by the unpushed-commit count, exactly the
+    # discriminator the die() below already prescribed to its reader:
+    #   - count > 0 → the ORPHAN case. THIS IS THE SANCTIONED RECOVERY PATH
+    #     (see the header block's recovery rule): re-running the same invocation
+    #     rebases HEAD onto fresh origin/main and pushes it, which lands the
+    #     orphan. It must therefore PROCEED, not die. It used to die: the per-id
+    #     blob comparison fires on every orphan (an orphan's whole point is that
+    #     HEAD's blob differs from origin/main's), so the documented recovery was
+    #     unreachable and an operator following it got a wrong-repo accusation
+    #     instead. The remaining risk that the die covered — a false "landed" —
+    #     is covered elsewhere now: nothing is claimed landed except off a
+    #     post-push read of origin/main (print_verdict()).
+    #   - count == 0 → HEAD is at or behind origin/main, so no local commit can
+    #     explain the differing blob. That is the mis-pointed-repo case, and it
+    #     still dies. (--expect is the robust check for wrong-repo targeting;
+    #     this stays as the no-flag backstop.)
+    local head_sha main_sha unpushed
+    head_sha="$(git rev-parse HEAD)"
+    main_sha="$(git rev-parse FETCH_HEAD)"
+    unpushed="$(git rev-list --count "$main_sha..$head_sha")"
+
     # Compare per id against origin/main as pinned by main()'s single fetch
     # ($MAIN_SHA, taken above — do NOT fetch again). Both blobs absent/empty (id
     # absent both places) is benign (equal empty strings).
-    local id local_blob main_blob
-    for id in "${ALL_IDS[@]}"; do
-      local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
-      main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
-      if [[ "$local_blob" != "$main_blob" ]]; then
-        die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>}). TWO causes produce this state, and naming only the first has already misdirected a diagnosis: (1) a mis-pointed -C/--repo (or cwd targeting the wrong checkout), so the edit the caller made lives in a DIFFERENT checkout; or (2) a PRIOR RUN OF THIS SCRIPT was killed after it had already created the local commit — HEAD carries that commit, the tree is therefore clean, and nothing remains to stage. Tell them apart by asking whether HEAD is ahead of origin/main ('git -C $REPO_ROOT rev-list --count $MAIN_SHA..HEAD'): a non-zero count is cause (2) and the commit only needs pushing; zero is cause (1). Refusing to emit a false 'landed' for a tree that was never going to change origin/main."
-      fi
-    done
+    if [[ "$unpushed" -eq 0 ]]; then
+      local id local_blob main_blob
+      for id in "${ALL_IDS[@]}"; do
+        local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
+        main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
+        if [[ "$local_blob" != "$main_blob" ]]; then
+          die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit, and HEAD carries NO local commit that could explain it (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>}; 'git -C $REPO_ROOT rev-list --count $MAIN_SHA..HEAD' is 0, so HEAD is at or behind origin/main). That rules out the killed-prior-run cause — an unpushed local commit, which this script now detects and simply lands — and leaves a mis-pointed -C/--repo (or a cwd targeting the wrong checkout), so the edit the caller made lives in a DIFFERENT checkout. Refusing to emit a false 'landed' for a tree that was never going to change origin/main."
+        fi
+      done
+    fi
 
     # Nothing is staged AND every id already matches origin/main. If HEAD is
     # also exactly origin/main there is, by definition, nothing to push: the
@@ -2463,9 +2629,6 @@ main() {
     # push to main) is pure cost on a SHA that already carries its checks.
     # Exit success here rather than buying a stamp cycle that cannot change
     # main (tactic-graph-commit-noop-landing-false-failure, Defect 1).
-    local head_sha main_sha
-    head_sha="$(git rev-parse HEAD)"
-    main_sha="$(git rev-parse FETCH_HEAD)"
     if [[ "$head_sha" == "$main_sha" ]]; then
       echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} and HEAD is already origin/main (${head_sha:0:8}) — nothing to push; skipping the landing cycle" >&2
       # Still route through the verdict rather than a bare `exit 0`: the "HEAD
@@ -2481,10 +2644,10 @@ main() {
     # of them: an unpushed-commit count of 0 means HEAD is BEHIND origin/main
     # (a stale checkout), where telling the reader "a prior attempt committed
     # but did not push" would point at a commit that does not exist.
-    local unpushed
-    unpushed="$(git rev-list --count "$main_sha..$head_sha")"
+    # ($unpushed was computed above, where it also decides whether the
+    # wrong-repo die applies.)
     if [[ "$unpushed" -gt 0 ]]; then
-      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push)" >&2
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push — this is the sanctioned orphan recovery; see the orphan-detected line above)" >&2
     else
       echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (HEAD ${head_sha:0:8} is behind origin/main ${main_sha:0:8}; no unpushed local commit, so the landing cycle will fast-forward)" >&2
     fi
