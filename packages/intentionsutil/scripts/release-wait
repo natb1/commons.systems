@@ -1,0 +1,416 @@
+#!/usr/bin/env bash
+# release-wait — release one armed WAIT node whose `attributes.wait_until` has
+# passed, by setting `phase: "done"` (tactic-wait-calendar-release, unit 6).
+# The WRITE half of the tick sweep: a later unit's shell library enumerates the
+# due waits (via `list-recheckable-waits.ts` over `../src/wait-sweep.ts`) and
+# calls this script once per due node.
+#
+# WHAT A RELEASE IS. A WAIT node is a mechanical hold: while it is armed
+# (`phase: null`, `office_hours: null`) the source's `blocked_by` edge naming it
+# keeps the source unselectable. Releasing it means marking the wait `phase:
+# done` — the same thing `resolve-hold` does for a tracked hold. Deliberately
+# NOT part of a release: removing the source's `blocked_by` edge. The design
+# KEEPS that edge across a release precisely so a later re-arm (`arm-wait`'s
+# REARM disposition) finds it already in place and never has to re-add it. That
+# is why this script is a SINGLE node, SINGLE graph-commit — it never removes a
+# list-field entry, so it does not need resolve-hold's two-separate-commits
+# split (which exists only because graph-commit's layer-2 union-dedup merge can
+# silently re-add a REMOVED `blocked_by` entry).
+#
+# THE RE-ASSERT OBLIGATION. This script does NOT trust its caller's
+# classification. Minutes can pass between the sweep enumerating a due wait and
+# this write executing, and in that window the node can be released by another
+# writer, extended (`wait_until` pushed out), or parked at the attempt cap. So
+# after refreshing from origin/main it re-reads the node and re-verifies every
+# release precondition — canonical WAIT identity, `phase: null`, `office_hours:
+# null`, and `now >= wait_until` — and refuses (exit 1) if any of them no
+# longer holds. A caller whose classification has gone stale must re-enumerate,
+# never force a release.
+#
+# POST-LAND RE-READ (the reason this is not just a transition-node call).
+# graph-commit's layer-2 structural field merge has a documented history of
+# reporting a successful land while silently dropping part of the write. A
+# reported-success land therefore has to be independently VERIFIED by
+# re-reading origin/main afterward, exactly as `resolve-hold` verifies its own
+# writes ("Verify A"). So after the commit this script fetches origin/main
+# again, re-reads the node, and asserts `phase === "done"` actually landed.
+#
+# Fresh-origin/main invariant (mirrors park-node/hold-node/resolve-hold): the
+# read-modify-write below operates on origin/main's CURRENT content, never a
+# possibly-stale local worktree copy, and graph-commit gets a `--base
+# <id>=<blobsha>` compare-and-swap token pinned to the blob that was read.
+#
+# Write-failure rollback (mirrors park-node): every exit path that does not land
+# restores intentions/<wait-id>.md to the state this script FOUND it in — from a
+# PRE-REFRESH copy, not from FRESH_BLOB, because a FRESH_BLOB restore leaves
+# origin/main's content behind as a local modification in the far-behind
+# checkout this script routinely runs from. The restore is itself conditional on
+# the checkout still being the one this script wrote (HEAD unmoved AND the node
+# file still hashing to what this script wrote): graph-commit has failure paths
+# that commit locally or `git reset --hard` before exiting non-zero, and putting
+# the pre-refresh bytes back over those would be an uncommitted REVERT of an
+# already-committed release.
+#
+# Diagnosis-time pin (`--base`, same three forms park-node accepts): a bare
+# 40-hex blob sha, an `<id>=<sha>` pair whose id must match this invocation's
+# node id, or a path to a dump-node.ts base-manifest file whose matching line is
+# selected. The pin is compared against the freshly-resolved origin/main blob
+# BEFORE any mutation; a mismatch exits 3 (`stale-diagnosis`) having written
+# nothing. The pin is NOT the CAS token: graph-commit always receives the
+# FRESH blob. See .claude/skills/ref-diagnosis-time-cas/SKILL.md.
+#
+# Usage: release-wait <wait-node-id> [--base <blobsha>|<id>=<blobsha>|<manifest-file>] [--now <iso>]
+#
+# --now <iso> overrides the release-predicate clock (an ISO 8601 UTC instant,
+#   YYYY-MM-DDTHH:MM:SSZ); it exists for testability and for a sweep that wants
+#   every node in one tick judged against one instant. Default: now, at second
+#   precision.
+#
+# Stdout on success (landed AND post-land-verified): exactly one line —
+# `released <wait-id>`.
+#
+# Exit codes: 0 released and verified; 1 the write, the graph-commit (including
+# a refused compare-and-swap), the re-assert of armed state, or the post-land
+# verification failed — the sweep treats every non-zero exit the same way
+# (`resolve-failed`, retry next tick), so these share code 1 and are told apart
+# by their stderr messages instead; 2 usage error (including a malformed or
+# unresolvable --base); 3 the supplied --base no longer matches origin/main
+# (`stale-diagnosis` — re-diagnose and retry, nothing was written).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+WAITS_MODULE="$REPO_ROOT/packages/intentionsutil/src/waits.js"
+DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
+WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
+GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
+
+USAGE="usage: release-wait <wait-node-id> [--base <blobsha>|<id>=<blobsha>|<manifest-file>] [--now <iso>]"
+
+WAIT_ID=""
+BASE_ARG=""
+# Flag PRESENCE is tracked separately from the flag's VALUE: an explicitly
+# supplied but empty base (`--base ''`) must be a usage error, not a silent
+# degradation to an unpinned release.
+BASE_SUPPLIED=0
+NOW=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base) BASE_ARG="${2:-}"; BASE_SUPPLIED=1; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --base=*) BASE_ARG="${1#--base=}"; BASE_SUPPLIED=1; shift ;;
+    --now) NOW="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --now=*) NOW="${1#--now=}"; shift ;;
+    -*) echo "release-wait: unknown option \"$1\"" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      if [[ -n "$WAIT_ID" ]]; then
+        echo "release-wait: unexpected extra positional argument \"$1\"" >&2
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      WAIT_ID="$1"; shift
+      ;;
+  esac
+done
+
+if [[ -z "$WAIT_ID" ]]; then
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# Validate the node-id slug BEFORE it reaches a filesystem path or a git
+# pathspec: everything below interpolates it into "$INTENTIONS_DIR/$id.md" and
+# `origin/main:intentions/$id.md`, and the rollback's `rm -f` targets the first
+# of those, so a value containing `/` or `..` would read and delete outside the
+# intentions store.
+if [[ ! "$WAIT_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "release-wait: invalid node id \"$WAIT_ID\" (expected a lowercase slug like tactic-wait-foo-bar)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+if [[ -z "$NOW" ]]; then
+  NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+elif [[ ! "$NOW" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+  echo "release-wait: --now must be an ISO 8601 UTC instant (YYYY-MM-DDTHH:MM:SSZ), got \"$NOW\"" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# Resolve --base (if supplied) to a 40-hex blob sha, before any network call, so
+# a malformed base is a cheap usage error rather than a mid-flight failure.
+# Same three accepted forms park-node takes.
+PINNED_BASE=""
+if [[ $BASE_SUPPLIED -eq 1 && -z "$BASE_ARG" ]]; then
+  echo "release-wait: --base requires a non-empty <blobsha>|<id>=<blobsha>|<manifest-file> value" >&2
+  exit 2
+fi
+if [[ $BASE_SUPPLIED -eq 1 ]]; then
+  if [[ -f "$BASE_ARG" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      line_id="${line%%=*}"
+      line_sha="${line#*=}"
+      if [[ "$line_id" == "$WAIT_ID" ]]; then
+        PINNED_BASE="$line_sha"
+        break
+      fi
+    done <"$BASE_ARG"
+    if [[ -z "$PINNED_BASE" ]]; then
+      echo "release-wait: manifest '$BASE_ARG' has no entry for node id '$WAIT_ID'" >&2
+      exit 2
+    fi
+  elif [[ "$BASE_ARG" == *=* ]]; then
+    pair_id="${BASE_ARG%%=*}"
+    pair_sha="${BASE_ARG#*=}"
+    if [[ "$pair_id" != "$WAIT_ID" ]]; then
+      echo "release-wait: --base id '$pair_id' does not match node id '$WAIT_ID'" >&2
+      exit 2
+    fi
+    PINNED_BASE="$pair_sha"
+  else
+    PINNED_BASE="$BASE_ARG"
+  fi
+  if [[ ! "$PINNED_BASE" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "release-wait: --base resolved to '$PINNED_BASE', not a full 40-hex blob sha" >&2
+    exit 2
+  fi
+fi
+
+TMPD="$(mktemp -d)" || { echo "release-wait: mktemp -d failed" >&2; exit 1; }
+
+# TMPORIG holds the node file exactly as this script found it, captured BEFORE
+# the origin/main refresh below overwrites it (see the header for why the
+# pre-refresh copy, not FRESH_BLOB, is the restore target).
+TMPORIG="$TMPD/orig.md"
+ORIG_EXISTED=0
+if [[ -f "$INTENTIONS_DIR/$WAIT_ID.md" ]]; then
+  if ! cp "$INTENTIONS_DIR/$WAIT_ID.md" "$TMPORIG"; then
+    echo "release-wait: could not capture the pre-refresh copy of intentions/$WAIT_ID.md" >&2
+    rm -rf "$TMPD"
+    exit 1
+  fi
+  ORIG_EXISTED=1
+fi
+# HEAD_BEFORE pins the commit the checkout was on when the pre-refresh copy was
+# taken; restore_node declines once HEAD has moved (graph-commit committed or
+# reset). An empty value (unborn HEAD, git unavailable) disables the comparison
+# rather than failing the rollback.
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+
+restore_node() {
+  local head_now blob_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "release-wait: HEAD moved from $HEAD_BEFORE to $head_now during the release — graph-commit already committed or reset intentions/$WAIT_ID.md, so the pre-refresh copy is no longer the correct restore target; leaving the file as graph-commit left it" >&2
+    return
+  fi
+  # EXPECT_BLOB is only set once this script's own phase write has landed on
+  # disk; before that there is nothing to compare against.
+  if [[ -n "${EXPECT_BLOB:-}" ]]; then
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$WAIT_ID.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && "$blob_now" != "$EXPECT_BLOB" ]]; then
+      echo "release-wait: intentions/$WAIT_ID.md is no longer the content release-wait wrote ($blob_now != $EXPECT_BLOB) — graph-commit already committed or reset it; leaving it in place rather than restoring the pre-refresh copy" >&2
+      return
+    fi
+  fi
+
+  if [[ "$ORIG_EXISTED" == 1 ]]; then
+    if cp "$TMPORIG" "$INTENTIONS_DIR/$WAIT_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$WAIT_ID.md.rollback" "$INTENTIONS_DIR/$WAIT_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$WAIT_ID.md.rollback"
+      echo "release-wait: CRITICAL — could not restore intentions/$WAIT_ID.md from its pre-refresh copy; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  elif git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$WAIT_ID.md" >/dev/null 2>&1; then
+    # Absent at capture time but TRACKED now: graph-commit reset the checkout
+    # onto an origin/main where this node file exists. `rm -f` would manufacture
+    # a deletion of a live node file; restore from the index instead.
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$WAIT_ID.md"; then
+      echo "release-wait: CRITICAL — intentions/$WAIT_ID.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$WAIT_ID.md"
+  fi
+}
+
+# MUTATED gates the rollback: only restore if this script actually wrote to the
+# file (the origin/main refresh below is the first such write).
+MUTATED=0
+trap '
+  rc=$?
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    restore_node
+  fi
+  rm -rf "$TMPD"
+' EXIT
+
+# --- Fresh-origin/main refresh ------------------------------------------------
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "release-wait: could not fetch origin/main to refresh $WAIT_ID before releasing" >&2
+  exit 1
+fi
+if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$WAIT_ID.md" 2>/dev/null)"; then
+  # A release target absent from origin/main is a hard error, not a staleness
+  # condition: a re-diagnosis retry loop would spin forever rather than
+  # converge. Stays exit 1 even when --base was supplied (the pin check below
+  # never runs in this branch).
+  echo "release-wait: intentions/$WAIT_ID.md does not exist on origin/main — cannot release a wait that is not landed" >&2
+  exit 1
+fi
+
+# The pin check runs before ANY mutation — before the local-file overwrite below
+# and before MUTATED is set to 1 — so a stale pin has zero side effects to roll
+# back.
+if [[ -n "$PINNED_BASE" && "$PINNED_BASE" != "$FRESH_BLOB" ]]; then
+  echo "release-wait: stale-diagnosis — intentions/$WAIT_ID.md on origin/main is now $FRESH_BLOB but the pinned --base is $PINNED_BASE; the node changed between diagnosis and execution. Re-enumerate the due waits and retry with a freshly captured base. Nothing was written." >&2
+  exit 3
+fi
+
+MUTATED=1
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$WAIT_ID.md" > "$INTENTIONS_DIR/$WAIT_ID.md"; then
+  echo "release-wait: could not refresh intentions/$WAIT_ID.md from origin/main" >&2
+  exit 1
+fi
+
+# --- Re-assert armed state on the FRESH content ------------------------------
+# The sweep's own re-verification obligation (see the header): every release
+# precondition is re-checked here, against origin/main's current bytes, not
+# against whatever the caller classified minutes ago.
+cat >"$TMPD/reassert.mts" <<'TS'
+// argv: <storeModule> <waitsModule> <intentionsDir> <id> <nowIso>
+const [storePath, waitsPath, intentionsDir, id, nowIso] = process.argv.slice(2);
+const { readNode } = await import(storePath);
+const { isWaitNode, parseWaitUntil } = await import(waitsPath);
+
+const node = readNode(intentionsDir, id);
+const problems: string[] = [];
+
+if (!isWaitNode(node)) {
+  problems.push(
+    `${id} is not a canonical WAIT node (its id must equal waitIdFor(attributes.wait_for))`,
+  );
+}
+if (node.phase !== null) {
+  problems.push(
+    `${id}.phase is ${JSON.stringify(node.phase)}, not null — the wait is not armed ` +
+      `(already released, or carrying a ladder phase it should never have)`,
+  );
+}
+if (node.office_hours !== null) {
+  problems.push(
+    `${id}.office_hours is non-null — the wait is parked (the re-arm attempt cap ` +
+      `fired); releasing it would erase that escalation, so a human must clear the park first`,
+  );
+}
+const untilMs = parseWaitUntil(node.attributes?.wait_until);
+if (untilMs === null) {
+  problems.push(
+    `${id}.attributes.wait_until is ${JSON.stringify(node.attributes?.wait_until)}, ` +
+      `not an ISO 8601 UTC instant of the form YYYY-MM-DDTHH:MM:SSZ`,
+  );
+} else {
+  const nowMs = parseWaitUntil(nowIso);
+  if (nowMs === null) {
+    process.stderr.write(`release-wait: --now "${nowIso}" is not a valid ISO 8601 UTC instant\n`);
+    process.exit(2);
+  }
+  if (nowMs < untilMs) {
+    problems.push(
+      `${id}.attributes.wait_until (${node.attributes.wait_until}) has NOT passed as of ` +
+        `${nowIso} — the wait is still armed and must not be released`,
+    );
+  }
+}
+
+if (problems.length > 0) {
+  process.stderr.write(
+    `release-wait: refusing to release ${id} — the release preconditions no longer hold ` +
+      `on origin/main:\n${problems.map((p) => `  - ${p}`).join("\n")}\n`,
+  );
+  process.exit(1);
+}
+TS
+
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$TMPD/reassert.mts" \
+        "$STORE_MODULE" "$WAITS_MODULE" "$INTENTIONS_DIR" "$WAIT_ID" "$NOW" >&2); then
+  echo "release-wait: re-assert of armed state failed for $WAIT_ID; nothing was released" >&2
+  exit 1
+fi
+
+# --- Write phase: done -------------------------------------------------------
+# dump-node → jq → write-node, the same read-modify-write idiom hold-node uses
+# for the source's blocked_by edit. `phase` is the ONLY field that changes.
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
+  echo "release-wait: dump-node failed for $WAIT_ID" >&2
+  exit 1
+fi
+if ! jq '.phase = "done"' "$TMPD/wait/$WAIT_ID.json" > "$TMPD/released.json"; then
+  echo "release-wait: could not compose the release edit for $WAIT_ID" >&2
+  exit 1
+fi
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/released.json") >/dev/null; then
+  echo "release-wait: write-node failed for $WAIT_ID (phase: done)" >&2
+  exit 1
+fi
+
+# EXPECT_BLOB captures what this script just wrote, for restore_node's
+# "graph-commit already moved this file" guard above.
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$WAIT_ID.md" 2>/dev/null)"; then
+  echo "release-wait: could not hash intentions/$WAIT_ID.md after the release write" >&2
+  exit 1
+fi
+
+# --- Land in ONE graph-commit ------------------------------------------------
+# The CAS token is always the FRESH blob resolved above, never the --base pin
+# (the pin's only job was the staleness comparison).
+if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" --base "$WAIT_ID=$FRESH_BLOB" \
+        -m "graph: release $WAIT_ID (wait_until passed)" "$WAIT_ID"); then
+  echo "release-wait: graph-commit failed for $WAIT_ID; the release write was rolled back" >&2
+  exit 1
+fi
+
+# --- Post-land verification: re-read off a FRESH origin/main ------------------
+# graph-commit reported success. That is not enough: its layer-2 structural
+# merge can land a commit while dropping part of the write. Re-read origin/main
+# and assert the release actually survived (resolve-hold's "Verify A").
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "release-wait: could not fetch origin/main to verify the release of $WAIT_ID" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$WAIT_ID.md" >/dev/null 2>&1; then
+  echo "release-wait: post-land verification failed for $WAIT_ID — the node is absent from origin/main after its release landed; the write did not survive" >&2
+  exit 1
+fi
+# The verification reads origin/main's bytes into a TEMP file and parses them
+# there — deliberately NOT by overwriting intentions/<wait-id>.md again. On a
+# verification FAILURE the rollback must still be able to put the file back to
+# its pre-refresh state, and restore_node declines once the file no longer
+# hashes to what this script wrote; a verification re-read into the working tree
+# would trip exactly that guard and strand origin/main's content there as a
+# dirty tracked file.
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$WAIT_ID.md" > "$TMPD/verify.md"; then
+  echo "release-wait: could not re-read intentions/$WAIT_ID.md from origin/main to verify the release" >&2
+  exit 1
+fi
+cat >"$TMPD/verify.mts" <<'TS'
+// argv: <storeModule> <rawFile> <id>
+const [storePath, rawFile, id] = process.argv.slice(2);
+const { readFileSync } = await import("node:fs");
+const { parseNodeRaw } = await import(storePath);
+const node = parseNodeRaw(readFileSync(rawFile, "utf8"), id);
+process.stdout.write(JSON.stringify(node.phase) + "\n");
+TS
+if ! VERIFIED_PHASE="$( (cd "$REPO_ROOT" && node --import tsx/esm "$TMPD/verify.mts" \
+        "$STORE_MODULE" "$TMPD/verify.md" "$WAIT_ID") )"; then
+  echo "release-wait: could not parse origin/main's copy of $WAIT_ID for post-land verification" >&2
+  exit 1
+fi
+if [[ "$VERIFIED_PHASE" != '"done"' ]]; then
+  echo "release-wait: post-land verification failed for $WAIT_ID — graph-commit reported success but origin/main still carries phase=$VERIFIED_PHASE, not \"done\" (a reported-success land whose write was dropped; see this script's header)" >&2
+  exit 1
+fi
+
+echo "released $WAIT_ID"
+exit 0

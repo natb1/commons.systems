@@ -256,6 +256,10 @@ jobs:
         run: packages/intentionsutil/scripts/test-transition-node.sh
       - name: Run demote-node-to-implement CAS-guard tests
         run: packages/intentionsutil/scripts/test-demote-node-to-implement.sh
+      - name: Run arm-wait CAS-guard tests
+        run: packages/intentionsutil/scripts/test-arm-wait.sh
+      - name: Run release-wait CAS-guard tests
+        run: packages/intentionsutil/scripts/test-release-wait.sh
       - name: Run graph-commit tests
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run budget-config-load tests

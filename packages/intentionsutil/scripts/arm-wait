@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+# arm-wait — land a "tracked wait" for a source node that is blocked on a
+# calendar-release predicate: a verdict that cannot be observed yet and only
+# becomes checkable once some `wait_until` instant passes
+# (tactic-wait-calendar-release, unit 6). The LANDING half of the decision/land
+# split whose DECISION half is the network-free `wait-node-decide.ts` (this
+# script makes no decisions of its own: it refreshes from origin/main, asks
+# that tool what to do, writes what it says, and lands it). Modeled directly on
+# the sibling `hold-node`.
+#
+# Doctrine: a WAIT is a MECHANICAL retry state, not a park. A park
+# (`office_hours`) means "no autonomous path exists, a human is required"; "the
+# answer is not observable until Thursday" is not that. So the SOURCE node is
+# never parked. Instead a small WAIT TACTIC at the deterministic id
+# `waitIdFor(source)` carries the wait — born UNPARKED (`office_hours: null`,
+# `phase: null`) — and the source gains an idempotent `blocked_by` edge naming
+# it. **The source's own `office_hours` is never written by this script** — it
+# does not appear anywhere below, and that absence is load-bearing. The wait
+# only gains a park after the finite re-arm attempt cap (`WAIT_ATTEMPT_CAP`,
+# ../src/waits.ts) is exhausted, and that cap-park is a later unit's tick
+# sweep, not this script's.
+#
+# The wait node and the source's edge land in ONE `graph-commit`: both ids are
+# passed positionally to a single invocation.
+#
+# Fresh-origin/main invariant (mirrors hold-node/park-node): every
+# read-modify-write below operates on origin/main's CURRENT content, never a
+# possibly-stale local worktree copy. This script fetches origin/main,
+# overwrites the local node file(s) with origin/main's version, THEN
+# reads/mutates/writes, and passes graph-commit a `--base <id>=<blobsha>`
+# compare-and-swap token per PRE-EXISTING file. If origin/main advances again
+# before the land, graph-commit refuses the write (arm-wait exits 1) rather
+# than silently reverting newer landed content. The wait node's own file gets
+# the same treatment when it already exists; when it does not, absence is the
+# EXPECTED born-fresh case (the inverted probe), not an error — and no `--base`
+# token is emitted for it.
+#
+# Usage:
+#   arm-wait <source-node-id> --until <iso>
+#            --reason-file <f> --recommendation-file <f> [--body-file <f>]
+#
+# --until <iso> is an ISO 8601 UTC instant (YYYY-MM-DDTHH:MM:SSZ) strictly in
+#   the future; it becomes the wait node's `attributes.wait_until`, the instant
+#   the tick sweep releases the wait at.
+# --reason-file / --recommendation-file are FILES (not inline strings): both are
+#   multi-line diagnostic text, passed through to wait-node-decide.ts verbatim.
+# --body-file <f>: optional extra diagnosis prose folded into the wait body.
+#
+# `--now` is NOT a flag here: this script always stamps the decision with the
+# current UTC instant at SECOND precision (`date -u +%Y-%m-%dT%H:%M:%SZ`) and
+# passes it explicitly. That is deliberate and load-bearing — wait-node-decide.
+# ts's own `--now` default is `new Date().toISOString()`, whose milliseconds
+# field does not match `WAIT_UNTIL_RE`, so an omitted `--now` makes that tool
+# throw. Passing a second-precision instant is also what makes the two decide
+# calls below agree with each other.
+#
+# Stdout: exactly one line — `armed <wait-id> (<disposition>)`, where
+# <disposition> is NONE (born fresh) | REARM (re-arm of a released wait, i.e.
+# one at `phase: done`) | EXTEND (a still-armed wait's `wait_until` pushed out,
+# NOT a new attempt).
+#
+# Exit codes (park-node's scheme): 0 armed and landed on main; 1 the write or
+# graph-commit failed (including a refused compare-and-swap because origin/main
+# advanced, or an unreachable/absent-node origin/main); 2 usage error — which,
+# mirroring hold-node's mapping of its decision tool's exit codes, also covers
+# wait-node-decide.ts's own refusals (a bad `--until`, an `--until` not after
+# now, or a wait node that already carries a cap-park `office_hours` and must
+# be `clear-park`ed before it can re-arm). Nothing is written on any of those.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+DECIDE_TS="$SCRIPT_DIR/wait-node-decide.ts"
+WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
+DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
+GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
+
+USAGE="usage: arm-wait <source-node-id> --until <iso> --reason-file <f> --recommendation-file <f> [--body-file <f>]"
+
+SOURCE_ID=""
+UNTIL=""
+REASON_FILE=""
+RECOMMENDATION_FILE=""
+BODY_FILE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --until) UNTIL="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --reason-file) REASON_FILE="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --recommendation-file) RECOMMENDATION_FILE="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    --body-file) BODY_FILE="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
+    -*) echo "arm-wait: unknown option \"$1\"" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      if [[ -n "$SOURCE_ID" ]]; then
+        echo "arm-wait: unexpected extra positional argument \"$1\"" >&2
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      SOURCE_ID="$1"; shift
+      ;;
+  esac
+done
+
+if [[ -z "$SOURCE_ID" || -z "$UNTIL" || -z "$REASON_FILE" || -z "$RECOMMENDATION_FILE" ]]; then
+  echo "$USAGE" >&2
+  exit 2
+fi
+for f in "$REASON_FILE" "$RECOMMENDATION_FILE" ${BODY_FILE:+"$BODY_FILE"}; do
+  [[ -f "$f" ]] || { echo "arm-wait: no such file: $f" >&2; exit 2; }
+done
+
+# Second-precision, computed ONCE so both decide calls below see the same
+# instant (see the header for why `--now` is passed at all).
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+DECIDE_ARGS=(--source "$SOURCE_ID" --until "$UNTIL" --now "$NOW"
+             --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE")
+[[ -n "$BODY_FILE" ]] && DECIDE_ARGS+=(--body-file "$BODY_FILE")
+
+# Sets DECIDE_OUT to the decision JSON. Deliberately NOT a command-substitution
+# helper: it exits on failure, and an `exit` inside `$(...)` would only kill the
+# substitution subshell, leaving the caller running with an empty decision.
+DECIDE_OUT=""
+run_decide() {
+  DECIDE_OUT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$DECIDE_TS" "${DECIDE_ARGS[@]}") )"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    # wait-node-decide.ts exits 2 on its own refusals (a missing/malformed
+    # flag, an --until not strictly after now, a still-parked wait node);
+    # anything else is an environment/read failure. Preserve the distinction so
+    # a caller sees the same 2-means-"this invocation was wrong" contract
+    # hold-node offers.
+    echo "arm-wait: wait-node-decide failed for $SOURCE_ID (rc=$rc)" >&2
+    exit $(( rc == 2 ? 2 : 1 ))
+  fi
+}
+
+# --- Fresh-origin/main refresh (source) --------------------------------------
+# Refresh the LOCAL source file from origin/main BEFORE reading it, so the
+# blocked_by mutation lands on top of the current landed content rather than a
+# stale worktree copy (the invocation typically comes from a far-behind
+# PR-branch worktree). An unreachable origin/main or a source absent from
+# origin/main is genuine environment breakage — fail with a clear error, never
+# fall back to the local copy (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "arm-wait: could not fetch origin/main to refresh $SOURCE_ID before arming" >&2
+  exit 1
+fi
+if ! SOURCE_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$SOURCE_ID.md" 2>/dev/null)"; then
+  echo "arm-wait: intentions/$SOURCE_ID.md does not exist on origin/main — cannot arm a wait for a node that is not landed" >&2
+  exit 1
+fi
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$SOURCE_ID.md" > "$INTENTIONS_DIR/$SOURCE_ID.md"; then
+  echo "arm-wait: could not refresh intentions/$SOURCE_ID.md from origin/main" >&2
+  exit 1
+fi
+
+# --- Fresh-origin/main refresh (wait) ----------------------------------------
+# The wait id is DETERMINISTIC but derived by wait-node-decide.ts (`waitIdFor`
+# lives in ../src/waits.ts, and re-deriving the prefix rule here would be a
+# second source of truth). So run the decision once purely to learn the id,
+# refresh that file from origin/main, then run it AGAIN for the decision that
+# is actually acted on — the second run is the one that reads fresh wait state
+# (present/absent, phase done or null, parked or not), which is exactly the
+# read a stale worktree would get wrong.
+run_decide
+WAIT_ID="$(jq -r '.wait_id' <<<"$DECIDE_OUT")"
+[[ -n "$WAIT_ID" && "$WAIT_ID" != "null" ]] || {
+  echo "arm-wait: could not derive the wait id for $SOURCE_ID" >&2; exit 1; }
+
+# Inverted absent-node probe: here absence is the EXPECTED born-fresh case and
+# presence is the re-arm/extend case. WAIT_BLOB set ⇒ emit a --base token for it
+# and restore it on rollback; WAIT_BLOB unset ⇒ no --base token, and rollback
+# deletes the freshly born file.
+WAIT_BLOB=""
+if git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$WAIT_ID.md" >/dev/null 2>&1; then
+  WAIT_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$WAIT_ID.md")"
+  if ! git -C "$REPO_ROOT" show "origin/main:intentions/$WAIT_ID.md" > "$INTENTIONS_DIR/$WAIT_ID.md"; then
+    echo "arm-wait: could not refresh intentions/$WAIT_ID.md from origin/main" >&2
+    exit 1
+  fi
+elif [[ -f "$INTENTIONS_DIR/$WAIT_ID.md" ]]; then
+  # Present locally, absent on origin/main: an unlanded/stray wait file. Acting
+  # on it would either clobber it or read a disposition origin/main does not
+  # have. Clear error, no fallback.
+  echo "arm-wait: intentions/$WAIT_ID.md exists locally but not on origin/main — resolve that unlanded file first" >&2
+  exit 1
+fi
+
+run_decide
+DECISION="$DECIDE_OUT"
+DISPOSITION="$(jq -r '.disposition' <<<"$DECISION")"
+SOURCE_EDGE_NEEDED="$(jq -r '.source_edge_needed' <<<"$DECISION")"
+
+# Consistency guard: the on-origin/main probe and the decision must agree about
+# whether the wait pre-exists. A disagreement means the store and origin/main
+# have drifted; fail rather than emit a wrong --base token set.
+if [[ -n "$WAIT_BLOB" && "$DISPOSITION" == "NONE" ]] \
+   || [[ -z "$WAIT_BLOB" && "$DISPOSITION" != "NONE" ]]; then
+  echo "arm-wait: disposition $DISPOSITION disagrees with origin/main presence of $WAIT_ID" >&2
+  exit 1
+fi
+
+TMPD="$(mktemp -d)" || { echo "arm-wait: mktemp -d failed" >&2; exit 1; }
+# MUTATED gates the rollback: only undo the on-disk writes if this script
+# actually began writing (armed immediately before the first mutation below). A
+# pre-mutation failure must not touch files this script never wrote. A failed
+# land must leave NO dirty intentions/*.md — otherwise graph-commit's
+# assert_clean_outside_ids guard trips for every OTHER unrelated node on the
+# next run.
+MUTATED=0
+# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
+# owns the temp cleanup AND both files' rollback: restore each pre-existing file
+# from the immutable blob SHA captured before the mutation (not the moving
+# origin/main ref), and delete a wait file that was born fresh in this run.
+trap '
+  rc=$?
+  rm -rf "$TMPD"
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    if git -C "$REPO_ROOT" show "$SOURCE_BLOB" > "$INTENTIONS_DIR/$SOURCE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$SOURCE_ID.md.rollback" "$INTENTIONS_DIR/$SOURCE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$SOURCE_ID.md.rollback"
+    fi
+    if [[ -n "$WAIT_BLOB" ]]; then
+      if git -C "$REPO_ROOT" show "$WAIT_BLOB" > "$INTENTIONS_DIR/$WAIT_ID.md.rollback"; then
+        mv "$INTENTIONS_DIR/$WAIT_ID.md.rollback" "$INTENTIONS_DIR/$WAIT_ID.md"
+      else
+        rm -f "$INTENTIONS_DIR/$WAIT_ID.md.rollback"
+      fi
+    else
+      rm -f "$INTENTIONS_DIR/$WAIT_ID.md"
+    fi
+  fi
+' EXIT
+
+MUTATED=1
+
+# --- Write the wait node -----------------------------------------------------
+WAIT_MD="$INTENTIONS_DIR/$WAIT_ID.md"
+if [[ "$DISPOSITION" == "NONE" ]]; then
+  # NONE carries a FULLY-CONSTRUCTED node object; write-node.ts is the single
+  # validation gate (frontmatter only).
+  jq -c '.node' <<<"$DECISION" > "$TMPD/node.json"
+else
+  # REARM / EXTEND carry a PARTIAL patch, not a whole node (REARM: `phase` plus
+  # the refreshed `attributes` subset; EXTEND: `attributes.wait_until` alone) —
+  # this is where wait-node-decide.ts differs from hold-node-decide.ts, whose
+  # REOPENED case emits a full node. write-node.ts's validateNode requires a
+  # COMPLETE node, so the patch is merged onto the freshly-refreshed on-disk
+  # node first. `jq -s '.[0] * .[1]'` is a RECURSIVE object merge, which is
+  # what `attributes` needs: the patch's wait_until/wait_attempts/wait_reason/
+  # wait_recommendation overwrite in place while `wait_for` (absent from the
+  # patch) survives.
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
+    echo "arm-wait: dump-node failed for $WAIT_ID" >&2
+    exit 1
+  fi
+  if ! jq -c '.node' <<<"$DECISION" > "$TMPD/patch.json"; then
+    echo "arm-wait: could not extract the $DISPOSITION patch for $WAIT_ID" >&2
+    exit 1
+  fi
+  if ! jq -s '.[0] * .[1]' "$TMPD/wait/$WAIT_ID.json" "$TMPD/patch.json" > "$TMPD/node.json"; then
+    echo "arm-wait: could not merge the $DISPOSITION patch onto $WAIT_ID" >&2
+    exit 1
+  fi
+fi
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/node.json") >/dev/null; then
+  echo "arm-wait: write-node failed for $WAIT_ID" >&2
+  exit 1
+fi
+if [[ ! -f "$WAIT_MD" ]]; then
+  echo "arm-wait: expected $WAIT_MD after the wait write, not found" >&2
+  exit 1
+fi
+
+if [[ "$DISPOSITION" == "NONE" ]]; then
+  # Replace the body WHOLESALE. writeNode does not leave a new node body-less:
+  # it generates a `# <statement>` placeholder body (readExistingBody returns
+  # null for a not-yet-existing file). Appending here would produce a malformed
+  # two-H1 body (the placeholder H1 followed by the wait body's own H1). So keep
+  # the frontmatter through the closing `---` fence, drop the generated
+  # placeholder, and write the real wait body directly after the fence (the
+  # store's node-file convention: the body starts on the line after the closing
+  # fence, no blank line).
+  FRONTMATTER=$(awk '{print} /^---$/{c++; if(c==2) exit}' "$WAIT_MD")
+  if [[ "$(tail -n1 <<<"$FRONTMATTER")" != "---" ]]; then
+    echo "arm-wait: could not locate closing frontmatter fence in $WAIT_MD" >&2
+    exit 1
+  fi
+  { printf '%s\n' "$FRONTMATTER"; jq -r '.node_body' <<<"$DECISION"; } > "$WAIT_MD"
+else
+  # REARM / EXTEND: APPEND the dated stanza — never replace. The existing body
+  # is the wait's accumulated history, and writeNode already preserved it
+  # verbatim on the frontmatter write above.
+  jq -r '.node_body_append' <<<"$DECISION" >> "$WAIT_MD"
+fi
+
+# --- Write the source's blocked_by edge --------------------------------------
+# Idempotent by construction: wait-node-decide.ts emits source_blocked_by
+# already containing the wait id exactly once, and source_edge_needed is false
+# when the edge is already present (so no write happens at all). By design the
+# edge is added once, at mint, and is deliberately KEPT across a release so a
+# later re-arm finds it — so in practice this fires on NONE only.
+#
+# This goes through write-node.ts + graph-commit, NOT transition-node: that
+# script only handles `phase`/`--set-pr` and has no blocked_by support.
+SOURCE_CHANGED=0
+if [[ "$SOURCE_EDGE_NEEDED" == "true" ]]; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/src" "$SOURCE_ID") >/dev/null; then
+    echo "arm-wait: dump-node failed for $SOURCE_ID" >&2
+    exit 1
+  fi
+  if ! jq --argjson bb "$(jq -c '.source_blocked_by' <<<"$DECISION")" \
+        '.blocked_by = $bb' "$TMPD/src/$SOURCE_ID.json" > "$TMPD/src-edge.json"; then
+    echo "arm-wait: could not compose the blocked_by edit for $SOURCE_ID" >&2
+    exit 1
+  fi
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/src-edge.json") >/dev/null; then
+    echo "arm-wait: write-node failed for $SOURCE_ID (blocked_by edge)" >&2
+    exit 1
+  fi
+  SOURCE_CHANGED=1
+fi
+
+# --- Land the wait AND the edge in ONE graph-commit ---------------------------
+# Both ids go into a single invocation (multi-id and repeatable --base are both
+# supported). A --base token is emitted only for a file that PRE-EXISTED on
+# origin/main: the source always (when it changed), the wait only on
+# REARM/EXTEND (a born-fresh NONE wait has no prior blob to compare against).
+COMMIT_ARGS=()
+IDS=()
+if [[ "$SOURCE_CHANGED" == 1 ]]; then
+  COMMIT_ARGS+=(--base "$SOURCE_ID=$SOURCE_BLOB")
+  IDS+=("$SOURCE_ID")
+fi
+if [[ -n "$WAIT_BLOB" ]]; then
+  COMMIT_ARGS+=(--base "$WAIT_ID=$WAIT_BLOB")
+fi
+IDS+=("$WAIT_ID")
+
+if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" "${COMMIT_ARGS[@]}" \
+        -m "graph: arm $WAIT_ID for $SOURCE_ID ($DISPOSITION)" "${IDS[@]}"); then
+  echo "arm-wait: graph-commit failed for $WAIT_ID; the wait and edge writes were rolled back" >&2
+  exit 1
+fi
+
+echo "armed $WAIT_ID ($DISPOSITION)"
+exit 0
