@@ -325,7 +325,7 @@ Baseline before the change: `118/118 passed, 0 failed`.
    (`test-lib-session-reap.sh:503-526`), using that block's exact call sequence
    (`sr_setup` / `sr_worktree` / `sr_job` / `sr_transcript` / `sr_add_session` /
    `sr_install_registry` / `sr_run` / `assert_eq` / `sr_teardown`) and a header
-   comment naming the defect. Use fresh, unused ids (e.g. node `tactic-behind`,
+   comment naming the defect. Use fresh, unused ids (e.g. node tactic-behind,
    job `7777aaaa`, sid `07b1-1111`). Assert, in order:
    - the fixture really is 0 ahead:
      `"$REAL_GIT" -C "$SR_WTROOT/tactic-behind" rev-list --count origin/main..HEAD` is `0`;
