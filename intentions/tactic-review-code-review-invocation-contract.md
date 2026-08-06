@@ -56,7 +56,40 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "A /qa-main graph-node-lane pass verified all three needs-main residue
+    items and reached a mixed verdict, but died before its park landed:
+    origin/main still showed phase main-qa with office_hours null, and no
+    node-terminal marker was written, so the node froze. Re-parked by the
+    invalid-state intervention on that pass's own independently re-verified
+    findings. Item 1 (a real nested code-review low --fix pre-stage completes
+    and writes the working tree on a real PR diff) PASS, confirmed across three
+    merged PRs. Item 2 (--comment actually posts a PR comment) CONTRADICTED:
+    zero inline PR comments and zero PR reviews across all three despite
+    --comment being passed on every run and residue findings being generated on
+    at least two; already filed as
+    tactic-review-code-review-invocation-contract-main-qa-regression, which is
+    landed on origin/main and carries the fix direction. Item 3 is the only open
+    item and is not autonomously decidable: whether low is the right
+    cost-versus-quality point for the review phase is a subjective tradeoff this
+    node's own plan defers to a strategy-token-economy follow-up, and deciding
+    it needs a /dispatch-token-audit run, a full skill invocation outside a
+    bounded read-only qa-main pass. The lane defect that lost the original park
+    is recorded as tactic-invalid-state-rc-f1c843b1."
+  since: 2026-08-06
+  recommendation: "Decide item 3, then release the dead session. (1) Judgment: run
+    /dispatch-token-audit 3d over the window since the source PR merged and
+    compare the review phase cost and the <none> attribution share against the
+    Unit 1 baseline in references/code-review-invocation.md. If low holds as the
+    right point, no code change is owed for item 3 and this node can go main-qa
+    to done with: packages/intentionsutil/scripts/transition-node
+    tactic-review-code-review-invocation-contract. If it does not hold, file a
+    tactic for the effort-level change first, then transition. (2) Release the
+    frozen slot, which this intervention deliberately did not reap because the
+    park path owns it: git worktree remove
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-review-code-review-\
+    invocation-contract && claude rm 361f3b83-0fa7-4ea0-828c-0d611f68eaf3"
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}
