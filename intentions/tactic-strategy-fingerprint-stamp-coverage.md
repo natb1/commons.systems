@@ -60,10 +60,10 @@ execution:
     since: 2026-08-03
     attempt: 1
     pushed_sha: null
+  conflict: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-fix-cap-strategy-fingerprint-stamp-coverage
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
