@@ -254,7 +254,7 @@ sr_transcript() {
   touch -d "@$2" "$SR_PROJ/proj-a/$1.jsonl"
 }
 
-# sr_worktree <node-id> <clean|squash|content|intentions|dirty>
+# sr_worktree <node-id> <clean|squash|content|intentions|dirty|behind>
 # Create a real worktree on a branch named for the node (what
 # provision-node-worktree does), then shape its divergence from origin/main.
 sr_worktree() {
@@ -291,6 +291,19 @@ sr_worktree() {
       rm "$w/scratch.txt"
       "$REAL_GIT" -C "$w" add -A
       "$REAL_GIT" -C "$w" commit -q -m "net zero"
+      ;;
+    behind)
+      # Zero commits of its own, several commits BEHIND origin/main — the
+      # normal resting state of a fleet worktree. The two-dot diff renders
+      # main's own newer content as deletions; the ahead-count arm must see
+      # through that. origin/main is a static snapshot taken in sr_setup, so
+      # move it forward explicitly after the worktree was cut.
+      for i in 1 2 3; do
+        printf '%s\n' "$i" > "$SR_REPO/main-only.txt"
+        "$REAL_GIT" -C "$SR_REPO" add -A
+        "$REAL_GIT" -C "$SR_REPO" commit -q -m "main advances $i"
+      done
+      "$REAL_GIT" -C "$SR_REPO" update-ref refs/remotes/origin/main HEAD
       ;;
   esac
 }
@@ -523,6 +536,34 @@ assert_eq "squash: the reap proceeds despite the commit count" "yes" \
 assert_eq "squash: no unlanded-content skip" "no" "$(sr_contains 'SESSION_REAP_SKIP_UNLANDED_CONTENT')"
 assert_eq "squash: the worktree is gone" "gone" \
   "$([[ -d "$SR_WTROOT/tactic-squash" ]] && printf 'present' || printf 'gone')"
+sr_teardown
+
+# --- Test 9b: THE STRICTLY-BEHIND REGRESSION ---------------------------------
+#
+# Regression test for the gate 7b false positive: a worktree that is 0 commits
+# ahead of origin/main and N commits BEHIND it (the normal resting state of an
+# idle fleet worktree — clean, no open PR, nothing of its own). Before the
+# ahead-count arm was added, the two-dot content diff alone read main's own
+# newer commits as deletions and permanently refused this worktree a reap.
+
+echo "Test: a branch strictly BEHIND origin/main (0 ahead) is reaped, not skipped as unlanded content"
+sr_setup
+sr_worktree "tactic-behind" behind
+sr_job "1abc2233" "tactic-behind" "tactic-behind"
+sr_transcript "01ab-2233" $(( SR_NOW - 4000 ))
+sr_add_session "01ab-2233" "1abc2233" "tactic-behind"
+sr_install_registry
+SR_BEHIND_AHEAD=$("$REAL_GIT" -C "$SR_WTROOT/tactic-behind" rev-list --count origin/main..HEAD)
+assert_eq "behind: the fixture really is 0 commits ahead" "0" "$SR_BEHIND_AHEAD"
+SR_BEHIND_COUNT=$("$REAL_GIT" -C "$SR_WTROOT/tactic-behind" rev-list --count HEAD..origin/main)
+assert_eq "behind: the fixture really is behind" "3" "$SR_BEHIND_COUNT"
+sr_run
+assert_eq "behind: sweep returns 0" "0" "$SR_RC"
+assert_eq "behind: the reap proceeds" "yes" "$(sr_contains 'SESSION_REAPED: name=tactic-behind')"
+assert_eq "behind: no unlanded-content skip — the bug this test pins" "no" \
+  "$(sr_contains 'SESSION_REAP_SKIP_UNLANDED_CONTENT')"
+assert_eq "behind: the worktree is gone" "gone" \
+  "$([[ -d "$SR_WTROOT/tactic-behind" ]] && printf 'present' || printf 'gone')"
 sr_teardown
 
 # --- Test 10: the ':!intentions' exclusion -----------------------------------
@@ -930,6 +971,40 @@ assert_eq "diag: idle_seconds is rendered from the argument" "yes" \
   "$(sr_contains 'idle_seconds=4000')"
 assert_eq "diag: cwd is rendered from the argument" "yes" \
   "$(sr_contains 'cwd=/some/cwd')"
+sr_teardown
+
+# --- Test 33: THE STRICTLY-BEHIND REGRESSION, direct call --------------------
+# Same regression as Test 9b (0 ahead of origin/main, N behind), exercised
+# through session_reap_node directly so the extracted act's own contract —
+# the verdict TOKEN, not just the sweep's log summary — pins the fix too.
+echo "Test: session_reap_node reaps a branch strictly BEHIND origin/main (0 ahead)"
+sr_setup
+sr_worktree "tactic-behind2" behind
+sr_add_session "02ab-3344" "2abc3344" "tactic-behind2"
+sr_install_registry
+srn_run "tactic-behind2" "02ab-3344" "2abc3344"
+assert_eq "behind: verdict is reaped, not skip-unlanded-content" "reaped" "$SRN_TOKEN"
+assert_eq "behind: the worktree is gone from disk" "gone" \
+  "$( [ -d "$SR_WTROOT/tactic-behind2" ] && printf 'present' || printf 'gone')"
+sr_teardown
+
+# --- Test 34: an unreadable origin/main fails closed — never reaches a reap --
+# If `rev-list --count origin/main..HEAD` cannot be read (e.g. the ref is
+# gone), arm 1 must fall through SILENTLY rather than fabricate a "0 ahead"
+# verdict — and arm 2's `git diff` against the same missing ref fails too,
+# landing on the existing skip-diff-error path. This pins that an unknown
+# ahead-count can never reach a reap.
+echo "Test: session_reap_node fails closed when origin/main is unreadable"
+sr_setup
+sr_worktree "tactic-noref" clean
+"$REAL_GIT" -C "$SR_REPO" update-ref -d refs/remotes/origin/main
+sr_add_session "03ab-4455" "3abc4455" "tactic-noref"
+sr_install_registry
+srn_run "tactic-noref" "03ab-4455" "3abc4455"
+assert_eq "no-ref: verdict is skip-diff-error, not a new token" "skip-diff-error" "$SRN_TOKEN"
+assert_eq "no-ref: the worktree survives" "present" \
+  "$( [ -d "$SR_WTROOT/tactic-noref" ] && printf 'present' || printf 'gone')"
+assert_eq "no-ref: claude rm was never called" "0" "$(sr_rm_calls)"
 sr_teardown
 
 report_results
