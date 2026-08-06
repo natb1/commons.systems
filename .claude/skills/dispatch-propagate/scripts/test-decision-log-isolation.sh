@@ -109,6 +109,7 @@ KNOWN_UNISOLATED=(
   test-dispatch-daemon-liveness.sh
   test-dispatch-fleet-alarm.sh
   test-dispatch-heal-units.sh
+  test-dispatch-terminal-gap-audit.sh
   test-graph-write-rollback.sh
   test-lib-claude-agents-zsh-path-clobber.sh
   test-pid-cleanup.sh

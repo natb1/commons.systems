@@ -39,10 +39,16 @@
 #      past FRESH_BLOB.
 #   3. A node absent from origin/main is refused before any write (exit 1).
 #   4. park-node byte-identical restore-on-failure (tactic-graph-write-failure-
-#      rollback Unit 1): when graph-commit fails AFTER the office_hours write
-#      lands on disk, the trap restores intentions/<id>.md from origin/main —
-#      asserted via `git diff` against the clone's HEAD being empty (byte
-#      identical), not just "file exists".
+#      rollback Unit 1; restore-target corrected by
+#      tactic-park-node-rollback-dirty-tree-blocks-tick-sync): when graph-commit
+#      fails AFTER the office_hours write lands on disk, the trap restores
+#      intentions/<id>.md to its PRE-REFRESH local state (captured before the
+#      origin/main overwrite, NOT from FRESH_BLOB itself) — asserted via
+#      `git status --porcelain` against the clone's HEAD being empty (byte
+#      identical AND untracked-residue-free), not just "file exists". This
+#      clone is a FRESH clone taken immediately before the run, so its own HEAD
+#      blob and origin/main's blob are identical here; case 22 below is the one
+#      that makes them differ.
 #   5. demote-node-to-implement byte-identical restore-on-failure (same Unit):
 #      identical shape, but demote-node-to-implement's mutation runs through
 #      the REAL apply-node-transition.ts (node --import tsx/esm), so this case
@@ -68,8 +74,9 @@
 #  13. A stale `--base` pin (captured before a park that has since advanced
 #      origin/main) refuses BEFORE any mutation: exit 3, a `stale-diagnosis`
 #      marker on stderr, origin/main byte-unchanged, and no local working-tree
-#      diff left behind for the trap to roll back — the pin check in park-node
-#      runs before the local file is even overwritten from origin/main.
+#      residue (git status --porcelain empty) left behind for the trap to roll
+#      back — the pin check in park-node runs before the local file is even
+#      overwritten from origin/main.
 #  14. The manifest-file form of `--base` selects the line matching this
 #      node's id out of a multi-node manifest (dump-node.ts's base-manifest.txt
 #      format): a stale entry for t-pinned still refuses with exit 3, and a
@@ -88,14 +95,17 @@
 #  17. clear-park idempotent no-op: re-running on an already-cleared node exits
 #      0 with a "nothing to do" note, leaves origin/main byte-unchanged, and
 #      restores the node file the origin/main refresh had overwritten (no
-#      working-tree diff) — the explicit restore-before-exit-0 path.
+#      working-tree residue, git status --porcelain empty) — the explicit
+#      restore-before-exit-0 path.
 #  18. clear-park byte-identical restore-on-failure: with graph-commit swapped
 #      for a wrapper that fails AFTER the office_hours clear landed on disk,
-#      the trap restores intentions/<id>.md exactly (git diff empty).
+#      the trap restores intentions/<id>.md exactly (git status --porcelain
+#      empty).
 #  19. clear-park `--base` diagnosis-time pin, mirroring cases 12-13: a
 #      matching pin is transparent (exit 0, cleared on origin); a stale pin
 #      refuses BEFORE any mutation (exit 3, `stale-diagnosis` on stderr,
-#      origin/main unchanged, no local diff).
+#      origin/main unchanged, no local working-tree residue — git status
+#      --porcelain empty).
 #  20. clear-park repo targeting — THE regression guard for
 #      tactic-clear-park-repo-targeting-guard. clear-park derives REPO_ROOT
 #      from its own script location and writes there, but graph-commit resolves
@@ -110,8 +120,26 @@
 #  21. resolve-park repo targeting: the same construction for resolve-park
 #      --ratify — invoked from a foreign cwd, `gh pr ready` still fires, the
 #      clear lands on origin/main, and the foreign clone stays clean.
+#  22. park-node's rollback restores a CLEAN tree even when the local clone's
+#      HEAD blob for the target node has fallen behind origin/main (the
+#      2026-08-01 outage condition,
+#      tactic-park-node-rollback-dirty-tree-blocks-tick-sync): a second writer
+#      lands a concurrent advance on origin/main for the same node through the
+#      REAL graph-commit while the writer under test is cloned beforehand and
+#      never synced, so its local HEAD blob deliberately differs from
+#      origin/main's for that path — unlike case 4, whose fresh clone makes the
+#      two blobs identical and so cannot distinguish a restore from FRESH_BLOB
+#      (buggy) from a restore from the pre-touch local copy (correct). With
+#      graph-commit forced to fail after the office_hours write lands, the
+#      assertion is `git status --porcelain -- intentions/` being EMPTY
+#      afterward — not `git diff`, which cannot see an index-vs-worktree
+#      mismatch or a leaked untracked `.rollback` sibling, and is exactly what
+#      dispatch-tick's own `git merge --ff-only` and graph-commit's
+#      `assert_clean_outside_ids` actually consult. A precondition guard fails
+#      the case explicitly (rather than passing vacuously) if the fixture ever
+#      fails to make the two blobs differ.
 #
-# No network needed. Cases 1-3 and 6-15 need only bash + git + jq (the gh and
+# No network needed. Cases 1-3, 6-15, and 22 need only bash + git + jq (the gh and
 # npx PATH shims stand in for the GitHub API and the tsx writers). Cases 4-5
 # need a real `node`/`npx tsx` too (case 5's apply-node-transition.ts is real
 # TypeScript, resolved against a node_modules SYMLINK to this repo's own —
@@ -189,7 +217,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
   } >"$SEED/intentions/$1.md"
 }
 for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked t-pinned \
-          t-clear-happy t-clear-noop t-clear-rollback t-clear-pinned t-clear-cwd t-resolve-cwd; do
+          t-clear-happy t-clear-noop t-clear-rollback t-clear-pinned t-clear-cwd t-resolve-cwd t-restore-stale; do
   seed_node "$id"
 done
 # t-demote: a schema-VALID node (only id/kind/statement/owner/status are
@@ -286,14 +314,113 @@ cat >"$WORK/bin/npx" <<'SH'
 #       never is).
 #   (c) graph-commit's merge-node.ts 3-way text merge (flag-based argv:
 #       --base/--ours/--theirs/--out, no store-module positional arg at all —
-#       does not fit (a)/(b)'s shape). No real merge tool exists in this
-#       no-node harness, so this always reports failure, which is what makes
-#       graph-commit's layers 1-3 fall through to the layer-3 conflict-park
-#       path — exactly the refusal behavior this file's case 2 verifies.
+#       does not fit (a)/(b)'s shape). This does NOT reimplement the real
+#       three-way YAML field merge (that primitive, mergeIntentionNodes, is
+#       Unit 1's job and its correctness is covered by
+#       packages/intentionsutil/test/node-merge.test.ts — the source of
+#       truth); it only proves graph-commit invokes merge-node.ts at the right
+#       point and branches correctly on its resolved/unresolved verdict, via a
+#       SIMPLIFIED three-way merge over bare `key: value` lines (ported from
+#       test-graph-commit.sh's identical shim — works against this file's
+#       flat line1..line12 fixtures the same way). For each key appearing in
+#       ours and/or theirs: if both sides agree (or only one side touched
+#       it), that value wins (a disjoint addition on either side never
+#       conflicts — this is exactly why case 1's far-ahead rebuild, which adds
+#       office_hours on one side and a disjoint body edit on the other, now
+#       resolves cleanly instead of parking); if both sides changed it away
+#       from base to DIFFERENT values (or there is no base to compare against
+#       and the two sides disagree), it is an unresolved conflict — the
+#       layer-3 conflict-park path case 2 verifies, which now forces the
+#       concurrent write to collide on the SAME field (office_hours) park-node
+#       itself writes, since a disjoint field addition would resolve cleanly
+#       under this real merge instead of parking.
 [[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
 if [[ "$2" == *merge-node.ts ]]; then
-  echo "npx shim: no real 3-way merge tool available (test harness stub)" >&2
-  exit 1
+  shift 2
+  m_base=""; m_ours=""; m_theirs=""; m_out=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) m_base="$2"; shift 2 ;;
+      --ours) m_ours="$2"; shift 2 ;;
+      --theirs) m_theirs="$2"; shift 2 ;;
+      --out) m_out="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # theirs genuinely absent (the id no longer exists on the landed side):
+  # ours is the only content, so ours wins outright (mirrors merge-node.ts's
+  # real documented behavior for an empty --theirs).
+  if [[ -z "$m_theirs" ]]; then
+    [[ -n "$m_out" && -n "$m_ours" ]] && cp -- "$m_ours" "$m_out"
+    printf '{"resolved":true,"conflicts":[]}\n'
+    exit 0
+  fi
+
+  declare -A M_BASE_V=() M_OURS_V=() M_THEIRS_V=()
+  declare -a M_ALL_KEYS=()
+  if [[ -n "$m_base" && -f "$m_base" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      [[ -n "${M_BASE_V[$k]+x}" ]] || M_BASE_V["$k"]="$v"
+    done <"$m_base"
+  fi
+  if [[ -n "$m_ours" && -f "$m_ours" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      if [[ -z "${M_OURS_V[$k]+x}" ]]; then M_OURS_V["$k"]="$v"; M_ALL_KEYS+=("$k"); fi
+    done <"$m_ours"
+  fi
+  if [[ -n "$m_theirs" && -f "$m_theirs" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == *:* ]] || continue
+      k="${line%%:*}"; v="${line#*: }"
+      [[ -n "${M_THEIRS_V[$k]+x}" ]] || M_THEIRS_V["$k"]="$v"
+      m_seen=0
+      for m_existing in "${M_ALL_KEYS[@]:-}"; do [[ "$m_existing" == "$k" ]] && { m_seen=1; break; }; done
+      [[ $m_seen -eq 1 ]] || M_ALL_KEYS+=("$k")
+    done <"$m_theirs"
+  fi
+
+  m_conflicts_json="[]"
+  m_resolved=true
+  m_merged_lines=()
+  for k in "${M_ALL_KEYS[@]}"; do
+    have_b=0; [[ -n "${M_BASE_V[$k]+x}" ]] && have_b=1
+    have_o=0; [[ -n "${M_OURS_V[$k]+x}" ]] && have_o=1
+    have_t=0; [[ -n "${M_THEIRS_V[$k]+x}" ]] && have_t=1
+    bv="${M_BASE_V[$k]-}"; ov="${M_OURS_V[$k]-}"; tv="${M_THEIRS_V[$k]-}"
+    final=""
+    if [[ $have_o -eq 1 && $have_t -eq 1 && "$ov" == "$tv" ]]; then
+      final="$ov"
+    elif [[ $have_b -eq 1 && $have_o -eq 1 && "$ov" == "$bv" && $have_t -eq 1 ]]; then
+      final="$tv"
+    elif [[ $have_b -eq 1 && $have_t -eq 1 && "$tv" == "$bv" && $have_o -eq 1 ]]; then
+      final="$ov"
+    elif [[ $have_o -eq 1 && $have_t -eq 0 ]]; then
+      final="$ov"
+    elif [[ $have_t -eq 1 && $have_o -eq 0 ]]; then
+      final="$tv"
+    else
+      m_resolved=false
+      m_conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+        '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+      continue
+    fi
+    m_merged_lines+=("$k: $final")
+  done
+
+  if [[ "$m_resolved" == true ]]; then
+    if [[ -n "$m_out" ]]; then
+      printf '%s\n' "${m_merged_lines[@]}" >"$m_out"
+    fi
+    printf '{"resolved":true,"conflicts":[]}\n'
+  else
+    printf '{"resolved":false,"conflicts":%s}\n' "$m_conflicts_json"
+  fi
+  exit 0
 fi
 helper="$2"
 # (d) resolve-park's two helpers — state-read (dir, id) and clear-write
@@ -466,12 +593,20 @@ fi
 # concurrent change on origin/main for the node, then delegates to the real
 # graph-commit (graph-commit.real). The real graph-commit's check_base_freshness
 # then re-fetches, sees origin's blob no longer matches the FRESH_BLOB token
-# park-node resolved; its layers-1-3 auto-merge fails to mechanically resolve
-# the raw content collision, so it falls through to its documented
-# park_and_exit() fallback — office_hours is set on the node (reason containing
-# "mechanical-unresolved") and that parking write is pushed to origin/main.
-# park-node still exits non-zero, since its OWN writer's edit is what didn't
-# land.
+# park-node resolved, and attempts the layers-1-3 mechanical auto-merge against
+# it. The npx merge-node.ts shim now performs a real (if simplified) key:value
+# three-way merge (see the shim's own comment above), so a concurrent write
+# touching a field DISJOINT from park-node's own edit would resolve cleanly
+# instead of parking — that clean-resolve case is exactly what case 1 proves.
+# To keep this case a genuine unresolvable conflict, the concurrent writer
+# below sets `office_hours` itself — the SAME field park-node's own edit
+# writes — to a different value than park-node's, with neither side's value
+# equal to base (which has no office_hours at all): a real same-field
+# divergence, not a disjoint addition. The auto-merge reports it unresolved,
+# so graph-commit falls through to its documented park_and_exit() fallback —
+# office_hours is set on the node (reason containing "mechanical-unresolved")
+# and that parking write is pushed to origin/main. park-node still exits
+# non-zero, since its OWN writer's edit is what didn't land.
 C="$WORK/c"
 make_clone "$C" writer-c
 # Install the wrapper in park-node's SCRIPT_DIR (the same dir park-node lives in
@@ -485,11 +620,14 @@ SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ ! -f "$SD/.concurrent-landed" ]]; then
   # Land a concurrent change to the SAME node on origin/main, simulating another
   # writer committing after park-node resolved FRESH_BLOB but before this check.
+  # This must collide with park-node's own edit on the SAME field (office_hours)
+  # — a disjoint new field would now resolve cleanly under the real merge-node.ts
+  # shim (see case 1) instead of parking, which would defeat this case's purpose.
   D="$(mktemp -d)"
   git clone -q "$GC_ORIGIN" "$D"
   git -C "$D" config user.email other@test
   git -C "$D" config user.name other
-  printf 'line14: concurrent edit\n' >>"$D/intentions/$GC_NODE.md"
+  printf 'office_hours: {reason: "competing office_hours from another writer", since: 2026-01-01}\n' >>"$D/intentions/$GC_NODE.md"
   git -C "$D" commit -qam 'concurrent edit (bypassing park-node)'
   git -C "$D" push -q origin main
   rm -rf "$D"
@@ -524,7 +662,7 @@ content="$(origin_show t-concurrent)"
 # expected in the post-state (it is graph-commit's park, not this writer's).
 if [[ $rc -ne 0 ]] \
    && grep -q 'concurrent-edit conflict' <<<"$out" \
-   && grep -q 'line14: concurrent edit' <<<"$content" \
+   && grep -q 'competing office_hours from another writer' <<<"$content" \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'mechanical-unresolved' <<<"$content"; then
   ok "concurrent origin/main advance triggers auto-park: park-node/graph-commit exit non-zero, concurrent content survives, node is auto-parked via office_hours"
@@ -550,15 +688,20 @@ fi
 
 # ---------------------------------------------------------------------------
 # Case 4: park-node byte-identical restore-on-failure
-# (tactic-graph-write-failure-rollback Unit 1).
+# (tactic-graph-write-failure-rollback Unit 1; restore-target corrected by
+# tactic-park-node-rollback-dirty-tree-blocks-tick-sync).
 # ---------------------------------------------------------------------------
 # graph-commit is swapped for a wrapper that unconditionally fails AFTER the
 # real office_hours write already landed on disk (park-node's own npx-tsx
 # write runs for real; only the downstream graph-commit call is faked). The
-# trap this guards restores intentions/t-restore-pn.md from origin/main on any
-# non-zero exit once MUTATED=1 — assert byte-identical restore via `git diff`
-# against the clone's own HEAD (which still holds the pre-mutation seed
-# content) being EMPTY, not merely "the file exists".
+# trap this guards restores intentions/t-stale.md to its PRE-REFRESH local
+# state on any non-zero exit once MUTATED=1 — assert byte-identical restore via
+# `git status --porcelain` against the clone's own HEAD (which still holds the
+# pre-mutation seed content) being EMPTY, not merely "the file exists". This
+# clone (D) is FRESH — cloned immediately before the run — so its HEAD blob and
+# origin/main's blob are identical here; case 22 below deliberately makes them
+# differ, since that is the only construction that can tell a correct
+# pre-refresh-local restore apart from the pre-fix FRESH_BLOB restore.
 D="$WORK/d"
 make_clone "$D" writer-d
 mv "$D/packages/intentionsutil/scripts/graph-commit" \
@@ -575,13 +718,14 @@ chmod +x "$D/packages/intentionsutil/scripts/graph-commit"
 # keep that pre-flight guard happy for the tracked path).
 
 out="$(run_pn "$D" t-stale 'simulated post-mutation failure' 2>&1)"; rc=$?
-diff_after="$(git -C "$D" diff -- intentions/t-stale.md)"
-if [[ $rc -ne 0 ]] && grep -q 'office_hours write was rolled back' <<<"$out" \
-   && [[ -z "$diff_after" ]]; then
-  ok "park-node byte-identical restore: graph-commit failure rolls back the office_hours write (git diff empty)"
+porcelain_after="$(git -C "$D" status --porcelain -- intentions/t-stale.md)"
+porcelain_after_dir="$(git -C "$D" status --porcelain -- intentions/)"
+if [[ $rc -ne 0 ]] && grep -q 'rolling back the office_hours write' <<<"$out" \
+   && [[ -z "$porcelain_after" ]] && [[ -z "$porcelain_after_dir" ]]; then
+  ok "park-node byte-identical restore: graph-commit failure rolls back the office_hours write (git status --porcelain empty)"
 else
   no "park-node byte-identical restore (rc=$rc)"
-  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+  printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"; printf 'porcelain-dir: %s\n' "$porcelain_after_dir"
 fi
 
 # ---------------------------------------------------------------------------
@@ -606,13 +750,14 @@ out="$(
   cd "$G" || exit 99
   bash packages/intentionsutil/scripts/demote-node-to-implement t-demote 2>&1
 )"; rc=$?
-diff_after="$(git -C "$G" diff -- intentions/t-demote.md)"
-if [[ $rc -ne 0 ]] && grep -q 'demotion write was rolled back' <<<"$out" \
-   && [[ -z "$diff_after" ]]; then
-  ok "demote-node-to-implement byte-identical restore: real apply-node-transition.ts mutation is rolled back on graph-commit failure (git diff empty)"
+porcelain_after="$(git -C "$G" status --porcelain -- intentions/t-demote.md)"
+porcelain_after_dir="$(git -C "$G" status --porcelain -- intentions/)"
+if [[ $rc -ne 0 ]] && grep -q 'graph-commit failed for' <<<"$out" \
+   && [[ -z "$porcelain_after" ]] && [[ -z "$porcelain_after_dir" ]]; then
+  ok "demote-node-to-implement byte-identical restore: real apply-node-transition.ts mutation is rolled back on graph-commit failure (git status --porcelain empty)"
 else
   no "demote-node-to-implement byte-identical restore (rc=$rc)"
-  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+  printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"; printf 'porcelain-dir: %s\n' "$porcelain_after_dir"
 fi
 
 # ---------------------------------------------------------------------------
@@ -745,15 +890,15 @@ fi
 # working-tree diff left over for the trap to roll back.
 before_sha="$(origin_sha)"
 out="$(run_pn "$H" --base "$pin" t-pinned 'second reason' 2>&1)"; rc=$?
-diff_after="$(git -C "$H" diff -- intentions/t-pinned.md)"
+porcelain_after="$(git -C "$H" status --porcelain -- intentions/t-pinned.md)"
 if [[ $rc -eq 3 ]] \
    && grep -q 'stale-diagnosis' <<<"$out" \
    && [[ "$(origin_sha)" == "$before_sha" ]] \
-   && [[ -z "$diff_after" ]]; then
-  ok "stale --base pin: refuses before any mutation (exit 3, stale-diagnosis, main unchanged, no local diff)"
+   && [[ -z "$porcelain_after" ]]; then
+  ok "stale --base pin: refuses before any mutation (exit 3, stale-diagnosis, main unchanged, git status --porcelain empty)"
 else
   no "stale --base pin (rc=$rc before_sha=$before_sha)"
-  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+  printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"
 fi
 
 # ---------------------------------------------------------------------------
@@ -859,15 +1004,15 @@ fi
 # merely that the command exited 0.
 before_sha="$(origin_sha)"
 out="$(run_cp "$M_CLEAR" t-clear-happy 'second call' 2>&1)"; rc=$?
-diff_after="$(git -C "$M_CLEAR" diff -- intentions/t-clear-happy.md)"
+porcelain_after="$(git -C "$M_CLEAR" status --porcelain -- intentions/t-clear-happy.md)"
 if [[ $rc -eq 0 ]] \
    && grep -q 'nothing to do' <<<"$out" \
    && [[ "$(origin_sha)" == "$before_sha" ]] \
-   && [[ -z "$diff_after" ]]; then
-  ok "clear-park idempotent no-op: exit 0 with 'nothing to do', main unchanged, refresh overwrite restored (git diff empty)"
+   && [[ -z "$porcelain_after" ]]; then
+  ok "clear-park idempotent no-op: exit 0 with 'nothing to do', main unchanged, refresh overwrite restored (git status --porcelain empty)"
 else
   no "clear-park idempotent no-op (rc=$rc)"
-  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+  printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"
 fi
 
 # ---------------------------------------------------------------------------
@@ -893,14 +1038,15 @@ SH
 chmod +x "$N_CLEAR/packages/intentionsutil/scripts/graph-commit"
 
 out="$(run_cp "$N_CLEAR" t-clear-rollback 'simulated failure' 2>&1)"; rc=$?
-diff_after="$(git -C "$N_CLEAR" diff -- intentions/t-clear-rollback.md)"
+porcelain_after="$(git -C "$N_CLEAR" status --porcelain -- intentions/t-clear-rollback.md)"
+porcelain_after_dir="$(git -C "$N_CLEAR" status --porcelain -- intentions/)"
 if [[ $rc -eq 1 ]] \
    && grep -q 'office_hours write was rolled back' <<<"$out" \
-   && [[ -z "$diff_after" ]]; then
-  ok "clear-park byte-identical restore: graph-commit failure rolls back the office_hours clear (git diff empty)"
+   && [[ -z "$porcelain_after" ]] && [[ -z "$porcelain_after_dir" ]]; then
+  ok "clear-park byte-identical restore: graph-commit failure rolls back the office_hours clear (git status --porcelain empty)"
 else
   no "clear-park byte-identical restore (rc=$rc)"
-  printf '%s\n' "$out"; printf 'diff: %s\n' "$diff_after"
+  printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"; printf 'porcelain-dir: %s\n' "$porcelain_after_dir"
 fi
 
 # ---------------------------------------------------------------------------
@@ -921,17 +1067,17 @@ content="$(origin_show t-clear-pinned)"
 
 before_sha="$(origin_sha)"
 out_stale="$(run_cp "$P_PIN" --base "$clear_pin" t-clear-pinned 2>&1)"; rc_stale=$?
-diff_after="$(git -C "$P_PIN" diff -- intentions/t-clear-pinned.md)"
+porcelain_after="$(git -C "$P_PIN" status --porcelain -- intentions/t-clear-pinned.md)"
 
 if [[ $rc_match -eq 0 ]] && grep -q 'office_hours: null' <<<"$content" \
    && [[ $rc_stale -eq 3 ]] && grep -q 'stale-diagnosis' <<<"$out_stale" \
    && [[ "$(origin_sha)" == "$before_sha" ]] \
-   && [[ -z "$diff_after" ]]; then
-  ok "clear-park --base: matching pin clears normally (exit 0); stale pin refuses before any mutation (exit 3, stale-diagnosis, main unchanged, no local diff)"
+   && [[ -z "$porcelain_after" ]]; then
+  ok "clear-park --base: matching pin clears normally (exit 0); stale pin refuses before any mutation (exit 3, stale-diagnosis, main unchanged, git status --porcelain empty)"
 else
   no "clear-park --base pin (rc_match=$rc_match rc_stale=$rc_stale)"
   printf 'match: %s\n' "$out_match"; printf 'stale: %s\n' "$out_stale"
-  printf 'diff: %s\n' "$diff_after"
+  printf 'porcelain: %s\n' "$porcelain_after"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1166,70 @@ if [[ $rc -eq 0 ]] \
 else
   no "resolve-park repo targeting (rc=$rc porcelain='$porcelain')"
   printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+
+# ---------------------------------------------------------------------------
+# Case 22: park-node's rollback restores a CLEAN tree when the local clone's
+# HEAD blob for the target node is STALE relative to origin/main
+# (tactic-park-node-rollback-dirty-tree-blocks-tick-sync).
+# ---------------------------------------------------------------------------
+# Case 4 is structurally blind to this defect: its clone D is a FRESH clone
+# taken immediately before the failing run, so FRESH_BLOB (origin/main's blob)
+# and D's own HEAD blob for t-stale are IDENTICAL — a restore from FRESH_BLOB
+# and a restore from D's pre-touch local bytes are byte-for-byte the same, so
+# case 4 cannot tell a correct restore from the buggy one. This case makes
+# them differ: clone R is cloned BEFORE a second writer (S) lands a concurrent
+# advance on origin/main for the SAME node, and R is never synced afterward —
+# mirroring the production condition (park-node's own `git fetch origin main`
+# moves R's origin/main ref but never touches R's HEAD or worktree).
+R="$WORK/r"
+make_clone "$R" writer-r
+
+S="$WORK/s"
+make_clone "$S" writer-s
+sync_clone "$S"
+edit_line "$S" t-restore-stale 1 concurrent-advance
+(
+  cd "$S" || exit 99
+  export PATH="$WORK/bin:$PATH" GC_FIXTURE_DIR="$FIXTURE_DIR"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=0 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+  bash packages/intentionsutil/scripts/graph-commit -m 'test: land concurrent advance' t-restore-stale
+) >/dev/null 2>&1
+
+# Precondition: R's local HEAD blob for t-restore-stale must now DIFFER from
+# origin/main's blob, or this case is vacuous — a future refactor could
+# silently re-create case 4's blindness without any test noticing. Guard it
+# explicitly rather than trusting the construction above.
+r_head_blob="$(git -C "$R" rev-parse "HEAD:intentions/t-restore-stale.md")"
+origin_blob_restore_stale="$(git -C "$ORIGIN" rev-parse "main:intentions/t-restore-stale.md")"
+degenerate=0
+if [[ "$r_head_blob" == "$origin_blob_restore_stale" ]]; then
+  no "fixture degenerate — local HEAD blob equals origin/main blob, this case cannot distinguish the two restore targets"
+  degenerate=1
+fi
+
+if [[ "$degenerate" -eq 0 ]]; then
+  mv "$R/packages/intentionsutil/scripts/graph-commit" \
+     "$R/packages/intentionsutil/scripts/graph-commit.real"
+  cat >"$R/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+  chmod +x "$R/packages/intentionsutil/scripts/graph-commit"
+  # graph-commit is UNTRACKED in R's index (never committed) — exempt from
+  # assert_clean_outside_ids by its '??' skip, same as case 4.
+
+  out="$(run_pn "$R" t-restore-stale 'simulated post-mutation failure with stale local HEAD' 2>&1)"; rc=$?
+  porcelain_after="$(git -C "$R" status --porcelain -- intentions/)"
+  if [[ $rc -ne 0 ]] && grep -q 'rolling back the office_hours write' <<<"$out" \
+     && [[ -z "$porcelain_after" ]]; then
+    ok "park-node stale-local-HEAD restore: rollback leaves a CLEAN tree (git status --porcelain empty) even when the local clone's HEAD blob differs from origin/main's"
+  else
+    no "park-node stale-local-HEAD restore (rc=$rc)"
+    printf '%s\n' "$out"; printf 'porcelain: %s\n' "$porcelain_after"
+  fi
 fi
 
 echo

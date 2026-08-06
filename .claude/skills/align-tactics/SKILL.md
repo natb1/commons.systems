@@ -261,7 +261,11 @@ args = {
 The eligibility sanity check (`office_hours` null, signal unvalidated, the
 fresh-reading gate, no non-draft child already on the signal path,
 `rounds.count < 2`) is the Workflow's drift phase — do **not** re-decide it here;
-just supply the inputs it judges from.
+just supply the inputs it judges from. This check is **strategy-mode only**. A
+per-node `/align-tactics <tactic-id>` run does not evaluate it — a sibling
+tactic (in-flight or completed-but-unpruned) sitting on the strategy's signal
+path never blocks a per-node finalize; that run's drift review judges Side A /
+Side B against the one target node and parks the tactic, never the strategy.
 
 **Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
 `args`. This skill is a sanctioned caller of that Workflow — no `ultracode`
@@ -295,7 +299,8 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   human-decided) and Side B (the round's plans depend on an *unrecorded* premise
   → a **material** premise parks the strategy for author ratification, an
   **immaterial** one lands as a dated `clarifications` entry without
-  interrupting). Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
+  interrupting). (In `mode: "tactic"`, both sides park **the target tactic**
+  instead of the strategy.) Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
   merged-work-overlap review, with the graph as the corpus. Every clarification
   answer carries a dated provenance clause (`validateGraph` rule 17 enforces the
   date-presence half).
@@ -339,12 +344,16 @@ pre-existing node this round touches (`dump-node.ts`), write each node's
 `origin/main` for every id about to receive a body write
 (`assert-node-fresh`), `Edit` in each planned tactic's **body** (the
 Workflow's `body_markdown`), **land** the whole round in one or a few
-`graph-commit --base` calls, then **validate**
-(`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
-`office_hours: {reason, since}` on the target node. `graph-commit` has two
-distinct exit-1 cases — a parking message (a concurrent writer landed first;
-this session's content is unlanded but preserved on disk) versus a
-busy-main-exhaustion error (nothing landed, no park) — either way, report and
+`graph-commit --base` calls — the round's **final** call through
+`land-align-round --terminal <target-node-id>`, which bundles the
+terminal-disposition marker into the same process as the land — then
+**validate** (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
+`office_hours: {reason, since}` on the target node. `graph-commit` has three
+distinct exit-1 cases — a park that landed on `main` (a concurrent writer
+landed first; this session's content is unlanded but preserved on disk), a
+park whose own push failed (nothing on `main` at all — the parking
+*announcement* prints before the push, so it does not distinguish these two),
+and busy-main exhaustion (nothing landed, no park) — in every case, report and
 stop rather than retry automatically. See `references/write-path.md` for the
 full write-node.ts/dump-node.ts/assert-node-fresh/graph-commit mechanics,
 exit-1 discrimination, park-writing, and the fingerprint/round-accounting
@@ -352,19 +361,31 @@ details (per-strategy `execution.strategy_fingerprint` map via
 `strategy-fingerprint.ts`, and the strategy's
 `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
-Once the round has landed and `validate-graph.ts` is clean, record the
-terminal disposition:
-
-```bash
-packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
-```
+The round's **final** landing call goes through
+`packages/intentionsutil/scripts/land-align-round --terminal <target-node-id>
+...` rather than a bare `graph-commit`. That wrapper writes this session's
+terminal disposition marker (`align-round`, or `park` when `graph-commit`'s
+concurrent-edit fallback parked the node **and pushed that park to main**) in
+the **same process** as the land. When the park itself failed to push, no
+marker is written and the session stays held — same as busy-main exhaustion.
+There is no separate marker step to run.
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
 only on positive evidence that the pass ended — `Stop` fires on every turn
 yield, not only on terminal exit, so an unmarked session is held alive instead
-of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
-this job's own name is `<target-node-id>`, so a round that lands *child*
-tactics cannot authorize a reap on their behalf.
+of reaped. Bundling the marker into the landing process is what makes that
+evidence unmissable: as a separate call a turn or more later, it was skipped
+whenever the session died in between, leaving the round landed on `main` with
+no declared disposition for the tick's terminal-without-disposition sweep to
+read (confirmed 3x in production). The wrapper's marker call is safe
+unconditionally — `mark-node-terminal` writes nothing unless this job's own
+name is `<target-node-id>`, so a round that lands *child* tactics cannot
+authorize a reap on their behalf.
+
+Consequently `validate-graph.ts` runs AFTER the marker, not before it. A
+`validate-graph.ts` failure on an already-landed round is **reported and filed
+as a follow-up**, not held as a live session: the graph is already invalid on
+`main`, and holding this session open does not fix it.
 
 ## Re-evaluation mode
 
