@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateNode, type IntentionNode } from "../src/schema.js";
-import { WAIT_RELEASE_SENTENCE, waitIdFor } from "../src/waits.js";
+import { WAIT_RELEASE_SENTENCE, WAIT_UNTIL_RE, waitIdFor } from "../src/waits.js";
 import { decideWait, type WaitInput } from "../scripts/wait-node-decide.js";
 
 // tactic-wait-calendar-release Unit 5 — the network-free WAIT node decision.
@@ -58,6 +58,22 @@ function input(overrides: Partial<WaitInput> = {}): WaitInput {
     ...overrides,
   };
 }
+
+describe("CLI --now default shape", () => {
+  // Regression test for a bug where the CLI's `--now` default was
+  // `new Date().toISOString()`, which always emits millisecond precision
+  // (e.g. `2026-08-06T00:29:55.123Z`). `WAIT_UNTIL_RE` requires whole-second
+  // precision with no milliseconds, and `decideWait` validates `now` through
+  // `parseWaitUntil` (which uses `WAIT_UNTIL_RE`) — so the un-fixed default
+  // failed validation on every CLI invocation that omitted `--now`. The fix
+  // strips the milliseconds before assignment; `parseArgs`/`main` aren't
+  // exported from wait-node-decide.ts, so this asserts the corrected
+  // expression's output shape directly.
+  it("produces a whole-second ISO instant matching WAIT_UNTIL_RE", () => {
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+    expect(now).toMatch(WAIT_UNTIL_RE);
+  });
+});
 
 describe("decideWait dispositions", () => {
   it("returns NONE with a constructed node and body when no wait exists", () => {

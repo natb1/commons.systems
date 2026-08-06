@@ -301,7 +301,7 @@ function parseArgs(argv: string[]): Args {
   if (reasonFile === null) fail("--reason-file <file> is required");
   if (recommendationFile === null) fail("--recommendation-file <file> is required");
 
-  if (now === null) now = new Date().toISOString();
+  if (now === null) now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
   return {
     intentionsDir,
