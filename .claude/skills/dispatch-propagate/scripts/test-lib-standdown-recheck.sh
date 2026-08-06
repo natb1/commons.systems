@@ -93,16 +93,31 @@ sd_teardown() {
         DISPATCH_STANDDOWN_PARK_MAX DISPATCH_DECISION_LOG_DIR || true
 }
 
-# sd_write_park_node <exit-code> — install the fake park-node: it appends its
-# argc and each positional argument to the log, then exits <exit-code>.
+# sd_write_park_node <exit-code> [landing-mode] — install the fake park-node:
+# it appends its argc and each positional argument to the log, then — for a
+# zero exit code — LANDS the park on origin/main (default `land`; `none`
+# exits 0 with no write, modeling the `graph-commit` exit-0-but-nothing-landed
+# shape the sweep's verify-landed confirmation regression-tests), then exits
+# <exit-code>. The sweep calls `park_node` with the node id as `$1` (no
+# leading flags, unlike lib-frozen-session-park.sh's callers), so no
+# flag-skip loop is needed here.
 sd_write_park_node() {
+  local rc="$1" mode="${2:-land}"
   cat > "$SD_PARK" <<PARK
 #!/usr/bin/env bash
 {
   printf 'ARGC=%s\n' "\$#"
   for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
 } >> "$SD_PARKLOG"
-exit $1
+if [ "$rc" = 0 ] && [ "$mode" != none ]; then
+  node="\$1"
+  f="$SD_REPO/intentions/\$node.md"
+  sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  since: 2026-01-01\n  recommendation: null/' "\$f"
+  git -C "$SD_REPO" add -A
+  git -C "$SD_REPO" commit -q -m 'fake park-node: land'
+  git -C "$SD_REPO" update-ref refs/remotes/origin/main HEAD
+fi
+exit $rc
 PARK
   chmod +x "$SD_PARK"
 }
@@ -140,14 +155,23 @@ FAKE
 sd_write_node() {
   local id="$1" kind="$2"
   local f="$SD_REPO/intentions/$id.md"
+  # `statement`/`owner`/`status` are the IntentionSchema's required core
+  # (schema.ts validateNode) — present on every fixture below so a
+  # verify-landed jq-mode confirmation (readNodeAtRef, which validates
+  # strictly) can actually read these nodes rather than throwing on a missing
+  # required field.
   case "$kind" in
     parked)
       cat > "$f" <<NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours:
   reason: parked earlier by something else
+  since: 2026-01-01
   recommendation: null
 ---
 
@@ -162,6 +186,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours: null
 ---
 
@@ -176,6 +203,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours: null
 ---
 

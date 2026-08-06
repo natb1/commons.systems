@@ -133,6 +133,7 @@
 # real git remote). Each holds a command line, split on whitespace — the paths
 # must not contain spaces:
 #   DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
+#   DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
 #   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts
 #   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts
 #   DISPATCH_FLEET_ALARM_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
@@ -282,11 +283,16 @@ STAMP_FILE="$STATE_DIR/$KIND.last-refresh"
 
 # Command seams. `read -r -a` splits on whitespace; production defaults contain
 # no spaces (see the header note).
-declare -a GRAPH_COMMIT_CMD WRITE_NODE_CMD DUMP_NODE_CMD CLASSIFY_CMD
+declare -a GRAPH_COMMIT_CMD WRITE_NODE_CMD DUMP_NODE_CMD CLASSIFY_CMD VERIFY_LANDED_CMD
 if [[ -n "${DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD:-}" ]]; then
   read -r -a GRAPH_COMMIT_CMD <<<"$DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD"
 else
   GRAPH_COMMIT_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/graph-commit")
+fi
+if [[ -n "${DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD:-}" ]]; then
+  read -r -a VERIFY_LANDED_CMD <<<"$DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD"
+else
+  VERIFY_LANDED_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/verify-landed")
 fi
 # write-node.ts / dump-node.ts resolve intentions/ from import.meta.url, NOT
 # cwd — so the copies invoked must be the ones inside the checkout being
@@ -479,28 +485,43 @@ run_graph_commit() {
 
 # verify_landed — graph-commit exit 0 is not evidence anything landed. Confirm
 # by comparing the node's blob on origin/main against the local file's hash.
+#
+# Delegates to the shared `verify-landed` primitive (three-valued:
+# landed/not-landed/unknown, `unknown` never collapsed into `landed` — see
+# that script's own header) rather than re-deriving the hash/compare sequence
+# inline. `<id>=<blobsha>` is the exact predicate this call site needs: "does
+# origin/main:intentions/<id>.md hash to what I just wrote locally".
+#
+# The fetch stays HERE, explicit, exactly as it was before this call site
+# adopted verify-landed (`--no-fetch` below suppresses verify-landed's own):
+# `9>&-` closes the graph-write mutex fd across it, for the same reason as
+# run_graph_commit — a network-touching git that forks a credential helper
+# must not inherit, and pin, the mutex fd — and verify-landed's own header is
+# explicit that this discipline belongs to the CALLER, not to itself, which is
+# exactly why its fetch cannot be the one used here.
 verify_landed() {
-  # Refresh the remote-tracking ref where possible; the comparison itself is
-  # authoritative, so a fetch failure is reported, not fatal.
-  # `9>&-` for the same reason as run_graph_commit: a network-touching git that
-  # forks a credential helper must not inherit — and pin — the mutex fd.
+  # A fetch failure is reported, not fatal: the comparison below is
+  # authoritative against whatever `origin/main` ref this checkout already
+  # has, and verify-landed (called with `--no-fetch`) will itself report
+  # `unknown` rather than a false negative if that ref cannot resolve at all.
   if ! git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null 9>&-; then
     log "could not fetch origin/main before verification; comparing against the local remote-tracking ref"
   fi
-  local local_blob remote_blob
+  local local_blob
   if ! local_blob=$(git -C "$REPO_ROOT" hash-object -- "$NODE_FILE"); then
     log "could not hash $NODE_FILE for post-write verification"
     return 1
   fi
-  if ! remote_blob=$(origin_blob) || [[ -z "$remote_blob" ]]; then
-    log "post-write verification failed: $NODE_REL is absent from origin/main after a graph-commit that exited 0"
-    return 1
+  local vl_out vl_rc=0
+  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" "$ID=$local_blob" 2>&1 9>&-) || vl_rc=$?
+  if (( vl_rc == 0 )); then
+    return 0
   fi
-  if [[ "$remote_blob" != "$local_blob" ]]; then
-    log "post-write verification failed: origin/main:$NODE_REL is $remote_blob but the local write hashes to $local_blob — graph-commit exited 0 without landing this content"
-    return 1
-  fi
-  return 0
+  # Any non-zero verify-landed exit (not-landed, unknown, or a usage/env
+  # error) is treated uniformly as "not confirmed landed" — this function's
+  # own contract is binary (0/1), and `unknown` must never be read as success.
+  log "post-write verification failed (verify-landed exit $vl_rc) for $NODE_REL: $vl_out"
+  return 1
 }
 
 # --- Graph-write mutex --------------------------------------------------------
