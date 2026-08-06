@@ -869,8 +869,9 @@ clarifications:
       measurement against this target, not a revision of it."
   - question: Does disabling verbose output for unsupervised dispatch workers reduce
       token draw, and what is terser conversation prose actually worth?
-    answer: "(Recorded 2026-08-04 interview; measured this round.) The config lever
-      is void and the underlying hypothesis is real but small; no tactic is
+    answer: >
+      (Recorded 2026-08-04 interview; measured this round.) The config lever is
+      void and the underlying hypothesis is real but small; no tactic is
       created. (a) VOID MECHANISM: the `verbose` settings key and the
       `--verbose` flag are a display/logging mode — the CLI documents the flag
       as 'Override verbose mode setting from config', and it changes what the
@@ -922,7 +923,49 @@ clarifications:
       reading of `verbose` rests on the CLI's own help text rather than a
       controlled A/B. Both would need tightening before any figure here is
       treated as a threshold. No `recovers` edge — this round reduces no
-      reliance on delegation-anthropic-claude."
+      reliance on delegation-anthropic-claude.
+
+
+      (Amended 2026-08-04, same-day follow-up to an author question — 'does the
+      input-side 86% include outputs from previous rounds?'.) Two corrections.
+      FIRST, an axis correction that the original wording invited: the 86%/14%
+      figures in (b) are a BILLING-category split — input-priced tokens (input +
+      cache_creation + cache_read) against output-priced tokens — and NOT a
+      provenance split. The 86% input side is the entire re-sent conversation
+      prefix, so it already contains every prior turn's assistant output,
+      conversation prose included, alongside the system prompt, skill bodies,
+      file reads and tool results. It follows that (b)'s ~0.8% prose figure and
+      (d)'s 86% lie on different axes and must NEVER be summed: prose's
+      generation sits inside the 14% and prose's re-send tail sits inside the
+      86%, which is exactly why (b) costed prose all-in. The ~0.8% remains the
+      correct answer to 'what would terser prose save', unchanged by this
+      amendment. SECOND, a substantive retraction: sub-claim (c)'s parenthetical
+      that thinking 'is not re-sent as context' was asserted without
+      measurement, and the evidence is against it. Tested by comparing per-turn
+      context growth against the visible content added between turns across 59
+      transcripts since 2026-08-01: measured context growth was 3,601,271 tokens
+      while all visible added content — assistant prose, tool-use arguments,
+      tool results and user text — accounts for 2,081,399 tokens at 4 characters
+      per token or 2,775,198 at 3, leaving between 826,073 and 1,519,872 tokens
+      of growth unexplained by anything visible in the transcript. That residue
+      is of the same order as the thinking volume inferred in (c) from the
+      output side. The reading that best fits is that thinking blocks are
+      RETAINED in the re-sent prefix within an agentic turn rather than dropped.
+      Consequences, both strengthening rather than weakening this
+      clarification's conclusion: thinking's share of total draw is HIGHER than
+      the ~12% recorded in (c), because it then draws on the input side as well
+      as the output side; and phase-to-effort routing is correspondingly a
+      STRONGER lever than (c) claimed. What does not change: the (a) refutation
+      of the verbose config lever, the ~0.8% prose ceiling in (b), and the
+      author ruling in (e) that no tactic is created. CAVEAT, recorded rather
+      than buried: the characters-per-token conversion drives how decisive this
+      test is — at 3 characters per token the unexplained residue roughly halves
+      — so this is directional evidence about context composition, never a
+      figure to be used as a threshold, and thinking retention remains an
+      inference from usage fields rather than a documented harness guarantee.
+      Recorded under the same discipline as clarification 25: a claim that
+      entered the record unverified is corrected in the record rather than left
+      to be contradicted later.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

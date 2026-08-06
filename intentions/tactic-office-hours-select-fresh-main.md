@@ -48,20 +48,36 @@ validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
 office_hours:
-  reason: "phase session ended without declaring a disposition — `claude agents
-    --all` reports the session for this node in a terminal state and it has had
-    no transcript activity for `888`s, while `origin/main` still shows the node
-    at a working phase with `office_hours: null`; the node is therefore both
-    re-selectable and held, so the dispatch-tick terminal-without-disposition
-    sweep parked it"
-  since: 2026-08-04
-  recommendation: Read the session's transcript or attach the held job (`claude
-    agents --all`, `claude attach <job-id>`) to see what it concluded. Decide
-    the judgment item it stopped on, then either answer it here and `clear-park
-    <node-id>`, or stop the session (`claude stop <job-id>`), let
-    `dispatch-sweep` reap the worktree, and `clear-park <node-id>` to return the
-    node to the lane. Do NOT simply reap the terminal session and release the
-    node — that is what restarts the churn loop.
+  reason: 'Awaited event still has not occurred: no live
+    office-hours-graph/office-hours-select.ts invocation (targeted launch,
+    not-parked message, or held/liveness line) appears in journalctl since PR
+    #2976 merged 2026-08-04T09:01:13Z, now ~33h and ~130 dispatch-sweep ticks
+    later. Re-checked journalctl --user across
+    dispatch-claude-daemon/dispatch-sweep-periodic/dispatch-heartbeat since the
+    merge: zero office-hours: prefixed runtime lines. Also checked ~565 session
+    transcripts modified since the merge for a "/office-hours" command
+    invocation: none found. Root cause: office-hours-graph is a
+    human/interactively-invoked entry point — dispatch-route and
+    graph-select-target never select or dispatch office_hours-phase nodes, and
+    dispatch-sweep/-tick/-heartbeat only reference office-hours-graph in
+    comments, never exec it. So the awaited event depends on an actual
+    /office-hours session or manual office-hours-graph run happening at least
+    once post-merge, not on tick cadence alone. Earliest useful re-check: after
+    the next completed /office-hours session (human-run or dispatched) of ANY
+    node, or after a direct grep of journalctl for an "office-hours:" runtime
+    line.'
+  since: 2026-08-05
+  recommendation: 'No author decision needed — re-selection only. Blocker
+    tactic-office-hours-concurrency-dedup confirmed phase: done at origin/main.
+    PR #2976 confirmed MERGED (gh pr view 2976: state MERGED, mergedAt
+    2026-08-04T09:01:13Z). Both needs-main residue items (wrapper-live-dispatch,
+    stale-worktree-live-repro) remain Verifiability: WAIT for the same reason:
+    no live office-hours-select.ts/office-hours-graph invocation has landed in
+    journalctl or session transcripts since the merge. Do not re-park
+    indefinitely on a fixed timer — the next /qa-main re-read should first
+    confirm whether any /office-hours session has actually run (grep transcripts
+    for a "/office-hours" command, or journalctl for an "office-hours:" runtime
+    line) before concluding the wait is still warranted.'
   session_type: other
 pace_exempt: false
 rounds: null

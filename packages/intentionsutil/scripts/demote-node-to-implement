@@ -26,6 +26,23 @@
 # body alone is sufficient for correctness; the range is a focus aid. When
 # `execution.pr` exists the same provenance is posted as a PR comment.
 #
+# Write-failure rollback (mirrors park-node's identical block): every exit path
+# that does NOT land a commit restores intentions/<node-id>.md to the state this
+# script found it in — from a pre-refresh copy captured below, NOT from
+# FRESH_BLOB. A FRESH_BLOB restore would both leave origin/main's content behind
+# as a local modification in the far-behind checkout this script routinely runs
+# from, and silently discard whatever uncommitted node-body content that
+# checkout was holding. The restore is itself conditional on the checkout still
+# being the one this script wrote: graph-commit has failure paths that commit
+# locally, `git reset --hard` onto a fresher origin/main, or — on a `--base`
+# staleness refusal — WRITE AND PUSH an office_hours park to main, all before
+# exiting non-zero, and it only rewinds HEAD when its own RESTORE_HEAD=1, which
+# it does NOT set for the main-checkout/clean-worktree callers here. So
+# restore_node declines (with a diagnostic) when HEAD has moved or when the node
+# file no longer hashes to the blob this script wrote; in those cases the
+# pre-refresh bytes would be an uncommitted REVERT of a park that is already
+# landed on main — the very dirty tree this rollback exists to prevent.
+#
 # Usage: demote-node-to-implement <node-id>
 #
 # Exit codes: 0 demoted and landed on main; 1 the write or graph-commit failed;
@@ -34,12 +51,24 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
 APPLY="$SCRIPT_DIR/apply-node-transition.ts"
 
 NODE_ID="${1:-}"
 if [[ $# -ne 1 || -z "$NODE_ID" ]]; then
   echo "usage: demote-node-to-implement <node-id>" >&2
   exit 2
+fi
+
+# --- Refresh origin/main before any read -------------------------------------
+# Fetch first so the provenance range below (git log against origin/main) and
+# the FRESH_BLOB resolution further down are both computed against origin/main's
+# CURRENT state, not a possibly-stale local ref. An unreachable origin/main is
+# genuine environment breakage — fail loudly, never fall back to a stale local
+# ref (code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "demote-node-to-implement: could not fetch origin/main to refresh $NODE_ID before demoting" >&2
+  exit 1
 fi
 
 # --- Provenance range from the phase-start stamp -----------------------------
@@ -61,59 +90,169 @@ else
 fi
 
 # --- Pre-mutation capture ----------------------------------------------------
-# Capture origin/main's current blob for the node before mutating, so a
-# post-mutation failure (the write below, or the graph-commit landing it) can
-# restore the file instead of leaking a dirty intentions/*.md that trips
-# graph-commit's assert_clean_outside_ids guard for every later unrelated
-# call. Unlike park-node, this script has no prior fetch step — best-effort
-# capture against whatever origin/main ref is already known locally is fine —
-# but a node absent from origin/main is a hard pre-condition failure: there is
-# no landed content to roll back to, so refuse before mutating at all.
+# Capture origin/main's current blob for the node before mutating, so the
+# `--base` compare-and-swap below pins the land to exactly the content this
+# script read. The fetch above means this resolves against the freshly
+# refreshed origin/main ref, not a stale local one — but a node absent from
+# origin/main is still a hard pre-condition failure: there is no landed content
+# to demote, so refuse before mutating at all.
 if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)" || [[ -z "$FRESH_BLOB" ]]; then
   echo "demote-node-to-implement: intentions/$NODE_ID.md does not exist on origin/main — cannot demote a node with no landed content to roll back to" >&2
   exit 1
 fi
 
+# TMPORIG holds the node file exactly as this script found it, captured BEFORE
+# the origin/main refresh below overwrites it (mirrors park-node's identical
+# block). Every non-landing exit path restores from it — NOT from FRESH_BLOB —
+# because a FRESH_BLOB restore both leaves origin/main's content behind as a
+# local modification in the far-behind checkout this script routinely runs
+# from, and silently discards whatever uncommitted node-body content the
+# checkout was holding (the `## needs-main` residue class of edit). A leaked
+# dirty node file trips graph-commit's assert_clean_outside_ids guard for every
+# other unrelated node in that worktree, AND blocks dispatch-tick's own
+# `git merge --ff-only` sync fleet-wide for as long as it persists.
+TMPORIG="$(mktemp)" \
+  || { echo "demote-node-to-implement: could not create temp file for the pre-refresh node copy" >&2; exit 1; }
+ORIG_EXISTED=0
+if [[ -f "$INTENTIONS_DIR/$NODE_ID.md" ]]; then
+  if ! cp "$INTENTIONS_DIR/$NODE_ID.md" "$TMPORIG"; then
+    echo "demote-node-to-implement: could not capture the pre-refresh copy of intentions/$NODE_ID.md" >&2
+    rm -f "$TMPORIG"
+    exit 1
+  fi
+  ORIG_EXISTED=1
+fi
+
+# HEAD_BEFORE pins the commit the checkout was on when the pre-refresh copy was
+# taken. The rollback below is only valid while HEAD has not moved: graph-commit
+# has non-zero exit paths that FIRST commit something locally (or `git reset
+# --hard FETCH_HEAD` onto a fresher origin/main) and only rewind when its own
+# RESTORE_HEAD=1 — which it deliberately leaves at 0 for the
+# main-checkout/clean-worktree callers this script routinely runs from. Most
+# consequentially, `--base` staleness routes graph-commit into its fail-closed
+# park path (check_base_freshness → park_and_exit), which WRITES an office_hours
+# park, commits it, and PUSHES it to main before exiting non-zero. Restoring the
+# pre-refresh bytes over a HEAD that already contains that park would write an
+# uncommitted REVERT of a landed human-attention hold into the tree. An empty
+# HEAD_BEFORE (unborn HEAD, or git unavailable) disables the comparison rather
+# than failing the rollback.
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+
+# restore_node — put intentions/$NODE_ID.md back to its pre-refresh state
+# (ported verbatim in behavior from park-node's restore_node). Copies to a temp
+# sibling and mv's into place only on success, so a failed copy never truncates
+# the node file to zero bytes. When the file did not exist before (a worktree
+# branch predating the node), the restore returns the tree to clean — a delete
+# only when the path is genuinely untracked.
+#
+# Both guards below detect "graph-commit has already committed, pushed, or reset
+# this file, so the pre-refresh bytes are no longer the correct restore target"
+# and decline to write, printing a diagnostic instead.
+restore_node() {
+  local head_now blob_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "demote-node-to-implement: HEAD moved from $HEAD_BEFORE to $head_now during the demotion — graph-commit already committed, parked, or reset intentions/$NODE_ID.md, so the pre-refresh copy is no longer the correct restore target; leaving the file as graph-commit left it (check 'git -C $REPO_ROOT log -1' and whether the demotion needs a retry)" >&2
+    return
+  fi
+  # EXPECT_BLOB is only set once this script's own demotion write has landed on
+  # disk; before that there is nothing to compare against.
+  if [[ -n "${EXPECT_BLOB:-}" ]]; then
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && "$blob_now" != "$EXPECT_BLOB" ]]; then
+      echo "demote-node-to-implement: intentions/$NODE_ID.md is no longer the content this script wrote ($blob_now != $EXPECT_BLOB) — graph-commit already committed, parked, or reset it; leaving it in place rather than restoring the pre-refresh copy" >&2
+      return
+    fi
+  fi
+
+  if [[ "$ORIG_EXISTED" == 1 ]]; then
+    if cp "$TMPORIG" "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+      echo "demote-node-to-implement: CRITICAL — could not restore intentions/$NODE_ID.md from its pre-refresh copy; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  elif git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$NODE_ID.md" >/dev/null 2>&1; then
+    # Absent at capture time but TRACKED now: graph-commit reset the checkout
+    # onto an origin/main where this node file exists. `rm -f` here would
+    # manufacture a deletion of a live node file — one that blocks
+    # `git merge --ff-only`, and that the next graph-commit naming this node
+    # from this checkout would stage and land, pruning the node off main.
+    # Restore from the index instead, which returns the tree to clean.
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$NODE_ID.md"; then
+      echo "demote-node-to-implement: CRITICAL — intentions/$NODE_ID.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$NODE_ID.md"
+  fi
+}
+
 # --- Apply the demotion write ------------------------------------------------
 # apply-node-transition's --scope-stale path sets phase=implement and clears
 # markers regardless of the (unused here) CI verdict.
 #
-# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
-# origin/main if this script actually wrote to it. Set right before the first
-# mutating call so a pre-mutation failure never triggers a restore of a file
-# this script never touched.
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md if this
+# script actually wrote to it. Set right before the first mutating call so a
+# pre-mutation failure never triggers a restore of a file this script never
+# touched.
 MUTATED=0
 trap '
   rc=$?
   if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    # Restore from the immutable pre-mutation blob ($FRESH_BLOB), not the
-    # moving origin/main ref: a concurrent fetch that prunes/relocates the node
-    # would make a `show origin/main:...` fail AFTER `>` already truncated the
-    # file to zero bytes, leaking the exact corrupt-empty node this rollback
-    # exists to prevent. Write to a temp path and mv only on success, so a
-    # failed show never leaves a truncated node file.
-    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$REPO_ROOT/intentions/$NODE_ID.md.rollback"; then
-      mv "$REPO_ROOT/intentions/$NODE_ID.md.rollback" "$REPO_ROOT/intentions/$NODE_ID.md"
-    else
-      rm -f "$REPO_ROOT/intentions/$NODE_ID.md.rollback"
-    fi
+    restore_node
   fi
+  rm -f "$TMPORIG"
 ' EXIT
 
+# MUTATED is set here, immediately before the refresh below, because the
+# refresh is the FIRST write to intentions/$NODE_ID.md in this script (not the
+# apply-node-transition.ts call further down) — it overwrites the local node
+# file with origin/main's content so the demotion write below lands on top of
+# origin/main's current content rather than a stale worktree copy (the
+# invocation may come from a far-behind PR-branch worktree). The EXIT trap
+# above restores the PRE-REFRESH copy (TMPORIG) on any non-zero exit once
+# MUTATED=1, so an aborted demotion returns the tree to the state it was found
+# in rather than to origin/main's content.
 MUTATED=1
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
+  echo "demote-node-to-implement: could not refresh intentions/$NODE_ID.md from origin/main" >&2
+  exit 1
+fi
+
 if ! RESULT="$(cd "$REPO_ROOT" && node --import tsx/esm "$APPLY" "$NODE_ID" --scope-stale)"; then
   echo "demote-node-to-implement: failed to write the demotion for $NODE_ID" >&2
   exit 1
 fi
 echo "$RESULT" >&2
 
+# EXPECT_BLOB captures the blob this script just wrote to intentions/$NODE_ID.md
+# under its OWN REPO_ROOT. restore_node compares against it to detect that
+# graph-commit has since committed/parked/reset the file, and graph-commit's
+# --expect below asserts it resolved -C to the same tree this script wrote.
+# Hashing failure is genuine environment breakage — fail loudly rather than
+# omitting --expect (code-style.md).
+if ! EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null)"; then
+  echo "demote-node-to-implement: could not hash intentions/$NODE_ID.md after the demotion write" >&2
+  exit 1
+fi
+
 # --- Land it on main ---------------------------------------------------------
 MSG="graph: demote $NODE_ID to implement (scope drift)"
 if [[ -n "$PROVENANCE" ]]; then
   MSG="$MSG"$'\n\n'"$PROVENANCE"
 fi
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" -m "$MSG" "$NODE_ID"; then
-  echo "demote-node-to-implement: graph-commit failed for $NODE_ID; the demotion write was rolled back" >&2
+# --base pins the land to the exact origin/main blob this script read and
+# refreshed against (FRESH_BLOB): if origin/main advances again before the
+# land, graph-commit refuses the write rather than silently reconciling through
+# the implicit merge-base heuristic alone. Note that a refusal routes through
+# graph-commit's own fail-closed park path, which lands an office_hours park on
+# main before exiting non-zero — restore_node's HEAD/blob guards above exist so
+# this script never reverts that landed park back out of the tree.
+# --expect asserts graph-commit's -C resolution lands on the same tree this
+# script wrote, and catches a concurrent writer that touched the node file
+# between the hash above and graph-commit's staging.
+if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "$MSG" "$NODE_ID"; then
+  echo "demote-node-to-implement: graph-commit failed for $NODE_ID" >&2
   exit 1
 fi
 
