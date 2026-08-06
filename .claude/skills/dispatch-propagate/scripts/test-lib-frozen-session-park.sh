@@ -769,6 +769,43 @@ assert_eq "stale-frozen: summary counts zero parks" "yes" \
   "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
 
+# --- Test: park-node exits 0 but nothing landed (frozen sweep) ---------------
+#
+# THE regression test for this sweep's landing confirmation. `park-node` lands
+# through `graph-commit`, which pushes to origin/main — and invariant I2 says a
+# `graph-commit` exit 0 is NEVER evidence that anything reached origin/main (it
+# can exit 0 after a push that never made it). Counting the exit code as a park
+# reports work the graph does not carry: the node stays unparked, nothing shows
+# up in office hours, and the summary claims otherwise.
+#
+# The fake park-node's `none` mode is exactly that shape: exit 0, no write. The
+# sweep must re-read origin/main via verify-landed, refuse to count it, and say
+# so distinctly. (Unlike terminal_without_disposition_sweep below, this sweep
+# owns no escalation markers, so there is nothing for it to keep — what it must
+# not do is COUNT the park; the marker-retention half of the property is
+# asserted by the terminal sweep's own not-landed tests.)
+
+echo "Test: park-node exits 0 but origin/main still shows office_hours: null → not counted (frozen sweep)"
+fs_setup
+fs_write_park_node 0 0 none
+fs_write_node "tactic-frozen-notlanded" unparked
+fs_commit_nodes
+fs_write_transcript "0ccc-2222" $(( FS_NOW - 4000 ))
+fs_add_session "0ccc-2222" "tactic-frozen-notlanded" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "frozen-notlanded: sweep returns 0" "0" "$FS_RC"
+assert_eq "frozen-notlanded: park-node was invoked" "1" "$(fs_park_calls)"
+assert_eq "frozen-notlanded: stderr carries the distinct park-not-landed line" "yes" \
+  "$(fs_contains 'park-not-landed for tactic-frozen-notlanded — park-node exited 0 but origin/main still shows no office_hours')"
+assert_eq "frozen-notlanded: it is NOT reported as a park" "no" \
+  "$(fs_contains 'parked tactic-frozen-notlanded (denied-command-frozen')"
+assert_eq "frozen-notlanded: the decision record says park-not-landed" "park-not-landed" \
+  "$(fs_log_dispositions)"
+assert_eq "frozen-notlanded: the summary counts zero parks" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+fs_teardown
+
 echo ""
 echo "=== terminal_without_disposition_sweep ==="
 
