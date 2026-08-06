@@ -81,7 +81,7 @@ jq -r '.[]
   | select(.kind=="tactic" and .phase=="review"
            and (.execution.pr != null)
            and ((.execution.markers // []) | index("reviewed")))
-  | "\(.id)\t\(.execution.pr)"' "$STUB/nodes.json"
+  | "\(.id)\t\(.execution.pr)\t\(if .office_hours == null then "clean" else "parked" end)"' "$STUB/nodes.json"
 exit 0
 GAMNODE
 
@@ -221,6 +221,22 @@ assert_eq "graph-auto-merge (f): kill-switch suppresses output" "" "$gam_f_out"
 assert_eq "graph-auto-merge (f): kill-switch exit 0" "0" "$gam_f_rc"
 if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_f_m=present; else gam_f_m=absent; fi
 assert_eq "graph-auto-merge (f): kill-switch issues no merge" "absent" "$gam_f_m"
+
+# ---- (g) live office_hours park → held (declines, no merge) ---------------
+gam_reset
+printf '%s\n' '[{"id":"tactic-g","kind":"tactic","phase":"review","execution":{"pr":107,"markers":["planned","qa-done","reviewed"]},"office_hours":{"reason":"fixture park","since":"2026-08-01","recommendation":null,"session_type":"other"}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":107,"title":"Tactic G","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-g","sha":"sha107"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-107.json"
+echo passing > "$GAM_ROOT/cache/sha107"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-g.scope-fingerprint"
+gam_fresh tactic-g
+gam_g_out=$(run_gam 2>/dev/null); gam_g_rc=$?
+assert_eq "graph-auto-merge (g): office_hours-parked node is held" \
+  "held tactic-g (office-hours)" "$gam_g_out"
+assert_eq "graph-auto-merge (g): exit 0" "0" "$gam_g_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_g_m=present; else gam_g_m=absent; fi
+assert_eq "graph-auto-merge (g): office_hours hold issues no merge" "absent" "$gam_g_m"
 
 rm -rf "$GAM_ROOT" "$GAM_BARE"
 

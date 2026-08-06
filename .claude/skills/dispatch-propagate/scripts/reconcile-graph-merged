@@ -43,6 +43,18 @@
 # GRACE window: a just-merged PR is not reconciled until it has aged past the
 # grace window, so the sweep never races a merge that is still settling.
 #
+# office_hours: this sweep does NOT gate on a live office_hours park, and never
+# should. graph-auto-merge gates on the park because it DECIDES — squash-merging
+# is an irreversible autonomous action a park revokes authority for. This
+# reconciler only RECORDS REALITY: the PR is already merged or closed on
+# GitHub, so refusing to reconcile a parked node would strand it at a stale
+# phase while GitHub disagrees with graph state — the exact divergence this
+# reconciler exists to prevent. The park is not lost: office_hours is
+# frontmatter the phase write never touches, and officeHoursQueue
+# (packages/intentionsutil/src/officeHours.ts:48-75) keys only on
+# office_hours !== null with no phase filter, so the node stays queued after
+# reconciliation.
+#
 # Doctrine: run from a main-based checkout (the sweep writes state-only commits
 # on main). Sandbox: the CALLER wraps every invocation with
 # dangerouslyDisableSandbox — gh needs network + TLS, and node --import tsx/esm
