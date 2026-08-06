@@ -85,11 +85,26 @@
 # be wrong and must route back to re-diagnosis, never to a park. See
 # .claude/skills/ref-diagnosis-time-cas/SKILL.md for the full caller loop.
 #
+# Landing signal (tactic-graph-commit-landing-signal-unreliable, Unit 4):
+# graph-commit's own exit code is NOT trusted as the verdict on whether the
+# park landed. graph-commit can report failure over a write that actually
+# reached origin/main (Direction B), or success over one that didn't. After
+# the graph-commit invocation below — success or failure — this script asks
+# the sibling `verify-landed` primitive directly: `verify-landed -C
+# "$REPO_ROOT" "$NODE_ID@.office_hours != null"`. Its three-valued verdict
+# (landed/not-landed/unknown), not graph-commit's rc, decides park-node's own
+# exit and whether the pre-park local copy is restored. The "HEAD moved
+# locally" comparison inside restore_node() (above) stays as a diagnostic aid
+# for choosing the correct restore target, but it is no longer the primary
+# evidence that a park landed — verify-landed is.
+#
 # Usage: park-node [--pr <n>] [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]
 #
-# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
-# (including a refused compare-and-swap because origin/main advanced, or an
-# unreachable/absent-node origin/main — absent-node stays exit 1 even when
+# Exit codes: 0 parked and landed on main, per verify-landed; 1 the write
+# failed before graph-commit ever ran, OR verify-landed's post-graph-commit
+# check came back not-landed or unknown (see the distinct stderr messages at
+# the call site — an unknown verdict never claims a rollback happened), OR an
+# unreachable/absent-node origin/main (absent-node stays exit 1 even when
 # --base is supplied, since a node missing from origin/main is a hard
 # cannot-park state, not a staleness condition); 2 usage error (including a
 # malformed or unresolvable --base, or a non-integer --pr); 3 the supplied
@@ -393,10 +408,33 @@ fi
 # intentions/$NODE_ID.md between the hash above and graph-commit's staging.
 # The wrong-repo case --expect exists for (graph-commit's header) is reached by
 # callers that pass -C and the hash from different trees, not by this one.
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
-  echo "park-node: graph-commit failed for $NODE_ID; rolling back the office_hours write" >&2
-  exit 1
-fi
+GC_RC=0
+"$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID" || GC_RC=$?
+
+# graph-commit's rc is discarded as the landing signal (see the header note).
+# Ask verify-landed directly, unconditionally — including when GC_RC is 0 —
+# because a reported success is exactly as untrustworthy as a reported
+# failure until origin/main itself confirms it.
+VL_OUT="$("$SCRIPT_DIR/verify-landed" -C "$REPO_ROOT" "$NODE_ID@.office_hours != null" 2>&1)"; VL_RC=$?
+echo "$VL_OUT" >&2
+
+case "$VL_RC" in
+  0)
+    # Landed, per origin/main itself, regardless of graph-commit's own exit
+    # code. The park is really there — restoring the pre-park local copy over
+    # it (the EXIT trap's job on a non-zero rc) would silently look like an
+    # undo of a landed park, so make MUTATED=0 so the trap declines.
+    MUTATED=0
+    ;;
+  4)
+    echo "park-node: office_hours park for $NODE_ID did NOT land on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=not-landed)" >&2
+    exit 1
+    ;;
+  *)
+    echo "park-node: could not determine whether the office_hours park for $NODE_ID landed on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=unknown) — re-read $NODE_ID from origin/main before any retry; this is NOT a confirmed rollback, only an unresolved check" >&2
+    exit 1
+    ;;
+esac
 
 # A landed park is a terminal disposition: record it so this node worker's Stop
 # hook may reap the job (dispatch-self-close's node-worker invariant). Called

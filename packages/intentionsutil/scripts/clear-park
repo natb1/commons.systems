@@ -44,13 +44,25 @@
 # assert_clean_outside_ids guard for every other unrelated node in that
 # worktree.
 #
+# Landing signal (tactic-graph-commit-landing-signal-unreliable, Unit 4):
+# graph-commit's own exit code is NOT trusted as the verdict on whether the
+# clear landed. graph-commit can report failure over a write that actually
+# reached origin/main (Direction B), or success over one that didn't. After
+# every graph-commit invocation below — success or failure — this script asks
+# the sibling `verify-landed` primitive directly: `verify-landed -C
+# "$REPO_ROOT" "$NODE_ID@.office_hours == null"`. Its three-valued verdict
+# (landed/not-landed/unknown), not graph-commit's rc, decides clear-park's own
+# exit and whether the pre-clear local copy is restored.
+#
 # Usage: clear-park [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> [note]
 #
-# Exit codes: 0 cleared and landed on main (or already-clear no-op); 1 the
-# write, the origin/main refresh, or graph-commit failed (including a refused
-# stale-base compare-and-swap); 2 usage error (including a malformed or
-# unresolvable --base); 3 the supplied --base no longer matches origin/main
-# (stale-diagnosis) — nothing was written.
+# Exit codes: 0 cleared and landed on main, per verify-landed (or already-clear
+# no-op); 1 the write or the origin/main refresh failed before graph-commit
+# ever ran, OR verify-landed's post-graph-commit check came back not-landed or
+# unknown (see the distinct stderr messages at each call site — an unknown
+# verdict never claims a rollback happened); 2 usage error (including a
+# malformed or unresolvable --base); 3 the supplied --base no longer matches
+# origin/main (stale-diagnosis) — nothing was written.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -293,9 +305,31 @@ fi
 # and it guards against a concurrent writer touching intentions/$NODE_ID.md
 # between the hash above and graph-commit's staging. See park-node's fuller
 # note at the same call site.
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "$MESSAGE" "$NODE_ID"; then
-  echo "clear-park: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
-  exit 1
-fi
+GC_RC=0
+"$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "$MESSAGE" "$NODE_ID" || GC_RC=$?
 
-exit 0
+# graph-commit's rc is discarded as the landing signal (see the header note).
+# Ask verify-landed directly, unconditionally — including when GC_RC is 0 —
+# because a reported success is exactly as untrustworthy as a reported
+# failure until origin/main itself confirms it.
+VL_OUT="$("$SCRIPT_DIR/verify-landed" -C "$REPO_ROOT" "$NODE_ID@.office_hours == null" 2>&1)"; VL_RC=$?
+echo "$VL_OUT" >&2
+
+case "$VL_RC" in
+  0)
+    # Landed, per origin/main itself, regardless of graph-commit's own exit
+    # code. The clear is really there — restoring the pre-clear local copy
+    # over it (the EXIT trap's job on a non-zero rc) would silently look like
+    # an undo of a landed clear, so make MUTATED=0 so the trap declines.
+    MUTATED=0
+    exit 0
+    ;;
+  4)
+    echo "clear-park: office_hours clear for $NODE_ID did NOT land on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=not-landed)" >&2
+    exit 1
+    ;;
+  *)
+    echo "clear-park: could not determine whether the office_hours clear for $NODE_ID landed on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=unknown) — re-read $NODE_ID from origin/main before any retry; this is NOT a confirmed rollback, only an unresolved check" >&2
+    exit 1
+    ;;
+esac
