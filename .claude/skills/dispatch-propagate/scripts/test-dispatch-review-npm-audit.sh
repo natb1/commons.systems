@@ -163,4 +163,77 @@ DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE="$WORK/not-a-report.json" \
   "$SUT" deadbeefdeadbeef >/dev/null 2>&1 || rc=$?
 assert_eq "npm-audit: non-audit JSON document → non-zero exit" "1" "$rc"
 
+# 9. LIVE PATH: THE REGISTRY IS PINNED AND A DIFFED .npmrc IS A HARD STOP.
+#    These cases exercise the non-fixture branch, so they need a git repo and an
+#    `npm` — but both are LOCAL: a throwaway repo under $WORK and a stub `npm`
+#    that records its argv and prints a clean audit report. Still no network.
+NPM_STUB_DIR="$WORK/stub-bin"
+mkdir -p "$NPM_STUB_DIR"
+cat > "$NPM_STUB_DIR/npm" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >> "$NPM_ARGLOG"
+printf '{"auditReportVersion":2,"vulnerabilities":{}}\n'
+EOF
+chmod +x "$NPM_STUB_DIR/npm"
+
+LIVE_REPO="$WORK/live-repo"
+mkdir -p "$LIVE_REPO"
+(
+  cd "$LIVE_REPO"
+  git init -q .
+  git config user.email test@example.com
+  git config user.name "npm audit test"
+  printf '{"name":"x","version":"1.0.0"}\n' > package.json
+  printf '{"name":"x","lockfileVersion":3,"packages":{}}\n' > package-lock.json
+  git add -A
+  git commit -qm base
+)
+LIVE_BASE=$(git -C "$LIVE_REPO" rev-parse HEAD)
+
+NPM_ARGLOG="$WORK/npm-args.log"
+: > "$NPM_ARGLOG"
+rc=0
+live_out=$(cd "$LIVE_REPO" && PATH="$NPM_STUB_DIR:$PATH" NPM_ARGLOG="$NPM_ARGLOG" \
+  "$SUT" "$LIVE_BASE") || rc=$?
+assert_eq "npm-audit: live path with no .npmrc → exit 0, empty findings" \
+  "0|{\"findings\":[]}" "$rc|$live_out"
+
+# Both invocations must carry the pinned registry and the empty user/global
+# config — otherwise a repo-supplied .npmrc could choose who answers the
+# advisory query, and an ambient token could be disclosed to that host.
+assert_eq "npm-audit: BOTH audits pin --registry to the public registry" \
+  "2" "$(grep -c -- '--registry=https://registry.npmjs.org/$' "$NPM_ARGLOG")"
+assert_eq "npm-audit: BOTH audits pin --userconfig away from the ambient npmrc" \
+  "2" "$(grep -c -- '--userconfig=' "$NPM_ARGLOG")"
+assert_eq "npm-audit: BOTH audits pin --globalconfig away from the ambient npmrc" \
+  "2" "$(grep -c -- '--globalconfig=' "$NPM_ARGLOG")"
+pinned_empty=yes
+while IFS= read -r cfg; do
+  [[ -s "${cfg#*=}" ]] && pinned_empty=no
+done < <(grep -- '--userconfig=\|--globalconfig=' "$NPM_ARGLOG")
+assert_eq "npm-audit: the pinned npm config file is empty" "yes" "$pinned_empty"
+
+# An UNTRACKED .npmrc is invisible to `git diff` yet fully live for npm.
+printf 'registry=https://attacker.example/\n' > "$LIVE_REPO/.npmrc"
+rc=0
+err=$(cd "$LIVE_REPO" && PATH="$NPM_STUB_DIR:$PATH" NPM_ARGLOG="$NPM_ARGLOG" \
+  "$SUT" "$LIVE_BASE" 2>&1 >/dev/null) || rc=$?
+assert_eq "npm-audit: untracked .npmrc in the tree → non-zero exit" "1" "$rc"
+untrusted=no
+[[ "$err" == *"could not be trusted"* && "$err" == *"NOT clean"* ]] && untrusted=yes
+assert_eq "npm-audit: .npmrc refusal names the audit untrusted, not clean" "yes" "$untrusted"
+
+# A COMMITTED .npmrc anywhere under the tree is caught the same way.
+rm "$LIVE_REPO/.npmrc"
+mkdir -p "$LIVE_REPO/app"
+printf '@scope:registry=https://attacker.example/\n' > "$LIVE_REPO/app/.npmrc"
+(cd "$LIVE_REPO" && git add -A && git commit -qm 'add scoped npmrc')
+rc=0
+err=$(cd "$LIVE_REPO" && PATH="$NPM_STUB_DIR:$PATH" NPM_ARGLOG="$NPM_ARGLOG" \
+  "$SUT" "$LIVE_BASE" 2>&1 >/dev/null) || rc=$?
+assert_eq "npm-audit: committed nested .npmrc in the diff → non-zero exit" "1" "$rc"
+names_path=no
+[[ "$err" == *"app/.npmrc"* ]] && names_path=yes
+assert_eq "npm-audit: .npmrc refusal names the offending path" "yes" "$names_path"
+
 report_results

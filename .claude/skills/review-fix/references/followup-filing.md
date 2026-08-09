@@ -20,14 +20,30 @@ Each draft's body records the finding provenance:
 discards unknown keys, and a new node's body is always regenerated from
 `statement` as a `# <statement>` placeholder
 (`packages/intentionsutil/src/store.ts:47`). So write each draft's provenance as
-a separate step, folded into the one-build-plus-one-commit sequence above:
+a separate step, folded into the one-build-plus-one-commit sequence above.
+
+**Redaction applies to the provenance written in steps 1–2.** These bodies are
+`graph-commit`ed and pushed to `origin/main` in this **public** repository —
+permanently, in git history — and the structures they are built from carry each
+finder's verbatim `Description` and `Recommended fix`, including the roster's
+dedicated `secrets` lens, whose text can quote the credential material it found
+in the diff. The untrusted-data framing the Step-5 prompt carries is a
+prompt-injection guard only, not a redaction guard. The canonical rule is
+`.claude/skills/review-fix/SKILL.md`, "Redaction rule for the office-hours park
+reason" (its one home; do not restate the bullets): reference each finding by
+`file:line` and failure category only, never copy a `Description` or
+`Recommended fix` verbatim into a node body, and never emit any string that
+looks like a token, credential, or key — even one that appears already masked.
+Fidelity is preserved by `result.result_path` staying on disk in the worktree
+for the human reviewer, not by pasting finding text into a pushed record.
 
 1. *(subagent)* Run `write-node.ts` with only the frontmatter fields above
    (including `status: raw`).
 2. *(subagent)* Then edit each `intentions/<draft-id>.md` directly, replacing the
    generated `# <statement>` placeholder that appears after the closing `---`
    fence with the provenance content (`file:line`, failure scenario, adversarial
-   verdict, and `execution.pr`). The subagent then returns
+   verdict, and `execution.pr`). Create new draft files only — never modify or
+   delete an existing node. The subagent then returns
    `{ node_ids: [...], count: <N> }` — `count` is the number of NEW draft nodes
    it created — and runs no `graph-commit` itself.
 3. *(main thread, after the subagent returns)* Then run `graph-commit`, once.

@@ -57,6 +57,33 @@
 #   Callers must treat a non-zero exit as "dependency audit could not run",
 #   NOT as "no new advisories".
 #
+# THE AUDITED-AGAINST REGISTRY IS PINNED, NEVER INHERITED FROM THE PR.
+#   `npm audit` asks a registry which advisories affect the tree, so whoever
+#   answers that question decides the verdict. The HEAD audit runs in the
+#   inherited worktree cwd, so without pinning it would honour a repo-root
+#   `.npmrc` the PR ITSELF adds — `registry=https://attacker.example/` returns a
+#   well-formed, empty advisory document, the MERGE_BASE audit (which runs under
+#   `--prefix "$AUDIT_DIR/baseline"`, a directory with no `.npmrc`) still asks
+#   the real registry, and the differential collapses to `{"findings":[]}`:
+#   a clean bill of health byte-identical to a genuinely clean audit.
+#   `validate_audit_doc` cannot catch that — a hostile registry returns a valid
+#   `auditReportVersion` report, not an npm error document. Two defenses:
+#
+#   1. BOTH invocations pass `--registry=<NPM_REGISTRY>` plus `--userconfig` /
+#      `--globalconfig` pointing at an empty file in $AUDIT_DIR. CLI flags
+#      outrank every npmrc layer, so the default registry is fixed regardless of
+#      repo config, and the ambient user/global npmrc — which may hold `_auth`
+#      or a token — is never loaded, so no credential can be disclosed to
+#      whatever host is queried. (`npm audit` also uploads the dependency tree,
+#      so the destination is not a cosmetic detail.)
+#   2. `--registry` fixes only the DEFAULT registry; a scoped override
+#      (`@scope:registry=…`) in a repo `.npmrc` still redirects the packages the
+#      PR introduces. That residue is not defensible by flags, so a `.npmrc`
+#      anywhere in the diff (tracked change or untracked new file) is treated as
+#      "dependency audit could not be trusted" and exits non-zero, exactly like
+#      the npm-error-document path. A legitimate `.npmrc` change is therefore a
+#      loud stop for human inspection, never a silent clean differential.
+#
 # SANDBOX: `npm audit` writes the npm cache and reaches the registry — callers
 # must use dangerouslyDisableSandbox: true.
 #
@@ -65,8 +92,10 @@
 #                                                `npm audit --json` at HEAD would
 #                                                have emitted.
 #   DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE — same, for the MERGE_BASE audit.
-#   When BOTH are set, no `npm` and no `git show` runs at all, so the test suite
-#   is fully offline.
+#   When BOTH are set, no `npm` and no `git` runs at all, so the test suite is
+#   fully offline — which also means the registry pinning and the `.npmrc` gate
+#   below belong to the live path only; a fixture IS the audit document, so
+#   there is no registry to pin and no diff to inspect.
 set -euo pipefail
 
 MERGE_BASE="${1:-}"
@@ -137,17 +166,58 @@ if [[ -n "$HEAD_FIXTURE" && -n "$BASE_FIXTURE" ]]; then
   validate_audit_doc "$HEAD_JSON" "HEAD"
   validate_audit_doc "$BASE_JSON" "MERGE_BASE"
 else
+  # A `.npmrc` ANYWHERE IN THE DIFF POISONS THE QUESTION (see header). The
+  # explicit --registry below fixes only the DEFAULT registry; a scoped override
+  # the PR adds still redirects the very packages it introduces, and the hostile
+  # answer is a valid audit report that validate_audit_doc cannot distinguish
+  # from a clean one. So refuse to produce ANY differential in that case —
+  # non-zero, same contract as the npm-error-document path: "dependency audit
+  # could not run", NOT "no new advisories".
+  #
+  # Both tracked changes (merge base → working tree) and untracked new files are
+  # inspected: an untracked `.npmrc` is invisible to `git diff` yet fully live
+  # for npm. A git failure here is itself fatal — an unknown diff means an
+  # unverifiable audit (.claude/rules/code-style.md: clear errors, no fallbacks).
+  if ! TRACKED_CHANGES="$(git diff --name-only "$MERGE_BASE" --)"; then
+    echo "dispatch-review-npm-audit: 'git diff --name-only $MERGE_BASE' failed — cannot establish whether the diff touches .npmrc, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    exit 1
+  fi
+  if ! UNTRACKED_FILES="$(git ls-files --others --exclude-standard)"; then
+    echo "dispatch-review-npm-audit: 'git ls-files --others' failed — cannot establish whether an untracked .npmrc is present, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    exit 1
+  fi
+  NPMRC_TOUCHED="$(printf '%s\n%s\n' "$TRACKED_CHANGES" "$UNTRACKED_FILES" \
+    | grep -E '(^|/)\.npmrc$' || true)"
+  if [[ -n "$NPMRC_TOUCHED" ]]; then
+    echo "dispatch-review-npm-audit: the diff adds or modifies an .npmrc, so the dependency audit could not be trusted — npm registry resolution (including scoped overrides) is under the diff's control, and its advisory answer is therefore UNKNOWN (NOT clean)." >&2
+    sed 's/^/    /' <<<"$NPMRC_TOUCHED" >&2
+    echo "  Review the .npmrc change by hand, then re-run the audit against a tree whose registry configuration is trusted." >&2
+    exit 1
+  fi
+
+  # Registry/config pinning (see header): CLI flags outrank every npmrc layer,
+  # and an EMPTY user/global config keeps ambient credentials (`_auth`, tokens)
+  # out of a request whose destination the repo could otherwise influence.
+  NPM_REGISTRY="https://registry.npmjs.org/"
+  EMPTY_NPMRC="$AUDIT_DIR/empty.npmrc"
+  : > "$EMPTY_NPMRC"
+  NPM_PINNED=(
+    "--registry=$NPM_REGISTRY"
+    "--userconfig=$EMPTY_NPMRC"
+    "--globalconfig=$EMPTY_NPMRC"
+  )
+
   # Audit HEAD (current working tree). npm audit exits non-zero whenever it finds
   # any vulnerability, so tolerate the exit code and validate the document
   # instead. npm's stderr is CAPTURED (not discarded) so a failed audit can be
   # reported with npm's own diagnostics.
-  npm audit --json > "$HEAD_JSON" 2>"$HEAD_ERR" || true
+  npm audit --json "${NPM_PINNED[@]}" > "$HEAD_JSON" 2>"$HEAD_ERR" || true
 
   # Audit the MERGE_BASE lockfile without touching the working tree.
   mkdir -p "$AUDIT_DIR/baseline"
   git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
   git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
-  npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
+  npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" "${NPM_PINNED[@]}" \
     > "$BASE_JSON" 2>"$BASE_ERR" || true
 
   validate_audit_doc "$HEAD_JSON" "HEAD" "$HEAD_ERR"

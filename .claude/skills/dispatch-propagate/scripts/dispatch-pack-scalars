@@ -53,68 +53,87 @@
 #     decoy (region 1), earlier than any file-list decoy (region 2).
 #
 # Deriving "the real DIFF section start" is itself the security-critical step,
-# because the obvious rule — "the FIRST '^=== DIFF (base ' line" — is forgeable
-# from region 1: pasting
+# because every individual marker line the pack emits is reproducible inside
+# untrusted text: a PR body can paste anything, a filename in the '--- files ---'
+# list is printed raw, and even the hunk text can synthesise a bare
+# '^--- hunks ---$' (git renders a DELETED source line whose content is
+# '-- hunks ---' as '-' + '-- hunks ---'). So NO single marker may be used as
+# the anchor. Two structural facts about the pack's own output do the work
+# instead, and neither is a text match against attacker-supplied content:
 #
-#     === PHASE-LOG #9 ===
-#     evil
-#     === DIFF (base 0000000) ===
+#   FACT 1 — `git diff` output can never begin a line with '='. Every line it
+#     emits carries a prefix ('diff --git ', 'index ', 'old/new mode ',
+#     'new file mode ', 'deleted file mode ', 'similarity index ',
+#     'rename from/to ', '--- ', '+++ ', '@@ ', 'Binary files ',
+#     '\ No newline at end of file', or a content line prefixed with ' ' / '+'
+#     / '-'), and build_diff_section's own optional tail line is
+#     'truncated: N files omitted'. So no '=== ' pack section header can ever
+#     be forged from inside the hunks region.
+#   FACT 2 — `git diff --stat` indents EVERY line with a space, and
+#     `git diff --name-only` can never emit a blank line (a path is never
+#     empty, and paths containing newlines are C-quoted onto one line). So the
+#     exact shape build_diff_section emits —
 #
-# into the PR body moves that bound in FRONT of the real PHASE-LOG header and
-# re-opens the body-forgery hole. The bound must come from a marker the
-# attacker cannot place after the real one. That marker is '--- hunks ---':
+#         === DIFF (base <sha>) ===
+#         <blank>
+#         --- stat ---
+#         <space-indented stat lines, possibly none>
+#         <blank>
+#         --- files ---
+#         <non-blank filenames, possibly none>
+#         <blank>
+#         --- hunks ---
 #
-#   a. last_hunks_line = the LAST '^--- hunks ---$' line. Everything the pack
-#      emits after the real '--- hunks ---' marker is `git diff` output, whose
-#      lines always carry a prefix ('diff --git ', 'index ', '--- a/',
-#      '+++ b/', '@@', and content lines prefixed with a space / '+' / '-'),
-#      plus an optional 'truncated: N files omitted' line — none of which can
-#      produce a bare '^--- hunks ---$'. A file literally NAMED '--- hunks ---'
-#      shows up only in the earlier '--- files ---' list, i.e. BEFORE the real
-#      marker, so tail -n1 still lands on the real one.
-#   b. real_files_line = the real '^--- files ---$' marker, found by walking
-#      BACKWARDS from last_hunks_line over BLANK-LINE STRUCTURE ONLY — never by
-#      matching text an attacker supplies. `build_diff_section` emits
-#      "\n--- files ---\n<git diff --name-only>\n" then "\n--- hunks ---\n", so
-#      immediately above the real hunks marker there is a run of blank
-#      separator line(s), then a CONTIGUOUS run of non-blank lines that is
-#      exactly [ '--- files ---', <filenames...> ], then a blank line. Walk up
-#      past the blanks, then up past the whole non-blank run; the topmost line
-#      of that run is the real marker. `git diff --name-only` can never emit a
-#      blank line (a path is never empty, and paths containing newlines are
-#      C-quoted onto one line), so the run cannot be split early, and the
-#      filenames themselves are consumed as OPAQUE text — their content is
-#      never inspected, so no forged filename can move this bound.
-#   c. real_diff_start = the LAST '^=== DIFF (base ' line occurring BEFORE
-#      real_files_line — NOT before last_hunks_line. Bounding at
-#      real_files_line is what makes the rule sound: the only pack-generated
-#      region between the real header and '--- files ---' is a blank line, the
-#      '--- stat ---' marker, and the `git diff --stat` block, whose lines are
-#      all space-indented and so cannot match. (The '--- files ---' LIST is raw
-#      attacker text and DOES lie between the real header and last_hunks_line —
-#      a PR adding a file literally named '=== DIFF (base 0000000) ===' plants a
-#      matching line there — which is exactly why the bound must be
-#      real_files_line and not last_hunks_line. Bounding at last_hunks_line
-#      would push real_diff_start past the real header, breaking
-#      changed_file_count and leaving the PHASE-LOG anchor's correctness resting
-#      on nothing but `git diff --name-only`'s byte-sort collation happening to
-#      order a forged '=== DIFF (base ' filename before a forged
-#      '=== PHASE-LOG #' one.)
-#   d. no '^--- hunks ---$' line at all => the pack has NO real DIFF section
-#      (a '=== DIFF (base ' line without one can only be body forgery). The
-#      PHASE-LOG search then runs to EOF — safe, because with no diff section
-#      nothing attacker-controlled follows the real PHASE-LOG header — and
+#     cannot be broken by any filename or stat content an attacker chooses.
+#
+# The derivation is therefore FORWARD grammar validation, never a backward walk
+# from "the last marker of some kind":
+#
+#   a. every '^=== DIFF \(base <hex>\) ===$' line in the input is a CANDIDATE
+#      header — including ones pasted into the PR body and ones that are merely
+#      raw filenames inside a '--- files ---' list.
+#   b. a candidate is VALIDATED by matching the FACT-2 shape forward from it:
+#      blank, '--- stat ---', space-indented lines, blank(s), '--- files ---',
+#      a contiguous run of non-blank OPAQUE filenames (consumed without ever
+#      being inspected, so no forged filename can move any bound), blank(s),
+#      '--- hunks ---'. A candidate that is really a filename in a file list
+#      fails at the very first step: file lists contain no blank lines, so the
+#      required blank after the header is absent. Taking the FIRST
+#      '--- hunks ---' this walk reaches — rather than the LAST one in the
+#      whole input — is what makes ordinary diff content immune: a PR that
+#      merely DELETES a line reading '-- hunks ---' would otherwise move the
+#      anchor into its own hunk text and wedge this script.
+#   c. a validated candidate is REJECTED when any line after its
+#      '--- hunks ---' begins with '=' (FACT 1). Real diff output cannot do
+#      that, so a pack section header down there proves this candidate is a
+#      skeleton sitting in untrusted text with the real sections still to come.
+#      This is what defeats a COMPLETE forged diff skeleton pasted into the PR
+#      body: grammar alone cannot tell it from the real thing, but its position
+#      relative to the real headers can.
+#   d. real_diff_start = the LAST candidate surviving (b) and (c). The real
+#      DIFF section is the pack's final section, so any later candidate can
+#      only be a filename, which never validates.
+#   e. no surviving candidate and NO '^--- hunks ---$' line anywhere => the
+#      pack has no DIFF section (built without --diff). The PHASE-LOG search
+#      then runs to EOF — safe, because with no diff section nothing
+#      attacker-controlled follows the real PHASE-LOG header — and
 #      changed_file_count is omitted, exactly as when --diff was not requested.
-#   e. a '^--- hunks ---$' line whose backward walk does NOT land on a literal
-#      '--- files ---' marker (or that has no '=== DIFF (base ' header before
-#      that marker) is not a pack-emitted diff marker at all — it can only be a
-#      forged '--- hunks ---' pasted into untrusted body text. Every anchor
-#      below would then be attacker-chosen, so the script REFUSES (exit 1)
-#      rather than emit scalars it cannot vouch for.
+#   f. no surviving candidate but a '^--- hunks ---$' line IS present => either
+#      untrusted text carries a pack-shaped skeleton, or dispatch-context-pack's
+#      format drifted out from under this script. Every anchor below would then
+#      be a guess, so the script REFUSES (exit 1) rather than emit scalars it
+#      cannot vouch for.
 #
-# changed_file_count is the count of non-empty lines strictly between
-# real_files_line and last_hunks_line — the same opaque filename run step (b)
-# walked, so a forged filename inflates nothing and hijacks nothing.
+# changed_file_count is the count of non-empty lines strictly between the
+# VALIDATED '--- files ---' and '--- hunks ---' markers — the same opaque
+# filename run step (b) walked, so a forged filename inflates nothing and
+# hijacks nothing.
+#
+# Residual, accepted: a skeleton forged inside the PHASE-LOG comment body (a
+# dispatch-authored, author-id-filtered comment — NOT PR-author text) survives
+# (c) when no real DIFF section follows it. It still cannot move the PHASE-LOG
+# anchor (the real header precedes it), only fabricate changed_file_count,
+# which is a sanity-check scalar with no security role.
 #
 # pr_num and labels are read POSITIONALLY from the two lines immediately after
 # the real PR header, never by grepping the whole input — grepping for e.g.
@@ -212,48 +231,73 @@ fi
 # === Real DIFF section start (bounds the PHASE-LOG search) ===
 # ============================================================================
 #
-# See "Anchoring rules" above: start from the LAST '--- hunks ---' marker
-# (unforgeable after the fact), walk BACKWARDS over blank-line structure to the
-# real '--- files ---' marker — consuming the file list as opaque text rather
-# than grepping it — and only then take the LAST '=== DIFF (base ' header
-# before that marker. Empty real_diff_start = this pack has no real DIFF
-# section.
+# See "Anchoring rules" above: treat EVERY '=== DIFF (base <hex>) ===' line as a
+# candidate, validate each one FORWARD against the exact shape
+# build_diff_section emits (consuming the file list as opaque text rather than
+# grepping it), reject any whose hunks region is followed by a '='-initial line
+# (only untrusted text can put a pack header after real diff output), and take
+# the last survivor. Empty real_diff_start = this pack has no DIFF section.
 #
-# One awk pass does the walk and prints "<real_diff_start> <changed_file_count>",
-# or the literal 'ERR' when the '--- hunks ---' line is not a real pack diff
-# marker (rule (e) above — refuse rather than anchor on attacker-chosen lines).
+# One awk pass prints "<real_diff_start> <changed_file_count>", or "0 0" when
+# the pack has no DIFF section at all, or the literal 'ERR' when a
+# '--- hunks ---' line is present but no candidate validates (rule (f) above —
+# refuse rather than anchor on attacker-chosen lines).
 
-last_hunks_line=$(grep -n '^--- hunks ---$' <<<"$input" | tail -n1 | cut -d: -f1 || true)
+diff_anchors=$(awk '
+  { line[NR] = $0 }
+  END {
+    n = NR
+    saw_hunks = 0
+    for (i = 1; i <= n; i++) if (line[i] == "--- hunks ---") { saw_hunks = 1; break }
+
+    start = 0; files = 0; hunks = 0
+    for (d = 1; d <= n; d++) {
+      if (line[d] !~ /^=== DIFF \(base [0-9a-f]+\) ===$/) continue
+      # (b) header, blank, "--- stat ---"
+      if (line[d + 1] != "" || line[d + 2] != "--- stat ---") continue
+      # ... space-indented `git diff --stat` lines, blank(s), "--- files ---"
+      i = d + 3
+      while (i <= n && substr(line[i], 1, 1) == " ") i++
+      while (i <= n && line[i] == "") i++
+      if (i > n || line[i] != "--- files ---") continue
+      f = i
+      # ... the OPAQUE filename run (never inspected), blank(s), "--- hunks ---".
+      # Stopping at the FIRST "--- hunks ---" reached this way is what keeps a
+      # deleted "-- hunks ---" source line inside the hunk text from hijacking
+      # the anchor.
+      i = f + 1
+      while (i <= n && line[i] != "") i++
+      while (i <= n && line[i] == "") i++
+      if (i > n || line[i] != "--- hunks ---") continue
+      h = i
+      # (c) FACT 1: real `git diff` output never starts a line with "=", so a
+      # pack header after this hunks marker means the candidate is a skeleton
+      # pasted into untrusted text with the real sections still to come.
+      ok = 1
+      for (j = h + 1; j <= n; j++) if (substr(line[j], 1, 1) == "=") { ok = 0; break }
+      if (!ok) continue
+      # (d) keep the LAST survivor.
+      start = d; files = f; hunks = h
+    }
+
+    if (start == 0) {
+      if (saw_hunks) { print "ERR"; exit }
+      print "0 0"; exit
+    }
+    c = 0
+    for (j = files + 1; j < hunks; j++) if (line[j] != "") c++
+    print start, c
+  }' <<<"$input")
+
+if [[ "$diff_anchors" == "ERR" ]]; then
+  echo "dispatch-pack-scalars: error: a '--- hunks ---' line is present but no '=== DIFF (base <sha>) ===' section validates against the pack's diff-section shape" >&2
+  echo "dispatch-pack-scalars: (pack-shaped text pasted into an untrusted region, or a dispatch-context-pack format change) — refusing to anchor on forged pack text" >&2
+  exit 1
+fi
 
 real_diff_start=""
 real_file_count=""
-if [[ -n "$last_hunks_line" ]]; then
-  diff_anchors=$(awk -v hunks="$last_hunks_line" '
-    { line[NR] = $0 }
-    END {
-      i = hunks - 1
-      # (b) blank separator line(s) emitted before "--- hunks ---" ...
-      while (i >= 1 && line[i] == "") i--
-      # ... then the contiguous non-blank run: [ "--- files ---", filenames... ].
-      # Filenames are consumed as OPAQUE text — never matched against anything.
-      while (i >= 1 && line[i] != "") i--
-      files = i + 1
-      if (files >= hunks || line[files] != "--- files ---") { print "ERR"; exit }
-      # (c) the real DIFF header: last "=== DIFF (base " STRICTLY BEFORE the
-      # real files marker, so no forged filename in the list can be selected.
-      start = 0
-      for (j = 1; j < files; j++)
-        if (index(line[j], "=== DIFF (base ") == 1) start = j
-      if (start == 0) { print "ERR"; exit }
-      n = 0
-      for (j = files + 1; j < hunks; j++) if (line[j] != "") n++
-      print start, n
-    }' <<<"$input")
-  if [[ "$diff_anchors" == "ERR" ]]; then
-    echo "dispatch-pack-scalars: error: the last '--- hunks ---' line is not a real diff-section marker" >&2
-    echo "dispatch-pack-scalars: (no '--- files ---' marker above it, or no '=== DIFF (base ' header before that) — refusing to anchor on forged pack text" >&2
-    exit 1
-  fi
+if [[ "${diff_anchors%% *}" != "0" ]]; then
   real_diff_start=${diff_anchors%% *}
   real_file_count=${diff_anchors##* }
 fi
@@ -264,6 +308,8 @@ fi
 
 if [[ -n "$real_diff_start" ]]; then
   # The LAST '=== PHASE-LOG #' header strictly before the real DIFF section.
+  # By construction this is also strictly BEFORE real_diff_start, so a body
+  # forgery (which precedes the real header) can never win the bounded search.
   last_phaselog_line=$(grep -n '^=== PHASE-LOG #' <<<"$input" \
     | awk -F: -v bound="$real_diff_start" '$1 < bound { n = $1 } END { if (n) print n }' || true)
 else
@@ -294,8 +340,8 @@ fi
 # ============================================================================
 #
 # Reuses the count the anchor walk above already produced: the non-empty lines
-# strictly between the REAL '--- files ---' marker (found by blank-line
-# structure, not by text matching) and the real '--- hunks ---' marker. A
+# strictly between the VALIDATED '--- files ---' marker (reached by forward
+# blank-line structure, not by text matching) and its '--- hunks ---' marker. A
 # forged '=== DIFF (base 0000000) ===' or '--- files ---' planted in the file
 # list is just another opaque filename here — it is counted as the changed file
 # it actually is, and hijacks no bound. Omitted (not an error) when the pack has

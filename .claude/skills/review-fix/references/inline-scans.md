@@ -35,6 +35,16 @@ and, on failure, report "dependency audit could not run" (with the stderr text)
 as the outcome of this scan — never treat the empty `NPM_AUDIT_JSON` as a clean
 audit.
 
+The same non-zero refusal fires when the diff adds or modifies an `.npmrc`
+(anywhere in the tree, tracked or untracked). An `.npmrc` decides which registry
+answers the advisory query, so a diff that carries one can choose its own
+verdict — a hostile or merely private registry returns a well-formed, empty
+report the script cannot distinguish from a clean audit. The script pins
+`--registry`, `--userconfig`, and `--globalconfig` on both audits, but a scoped
+`@scope:registry=` override survives that, so a diffed `.npmrc` is reported as
+"dependency audit could not be trusted" and the `.npmrc` change is reviewed by
+hand.
+
 The differential rules the script applies, unchanged: advisories present at head
 but **not** at `MERGE_BASE` are CVEs the PR's dependency changes newly expose —
 emitted with `introduced_by_diff=true` in the Description; these are in-scope and
