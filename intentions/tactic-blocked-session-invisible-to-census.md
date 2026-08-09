@@ -66,8 +66,17 @@ attention:
     resumes, so this is the observability gap that let the outage run undetected
     rather than an active outage."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-blocked-session-invisible-to-census
+  pr: 3054
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
