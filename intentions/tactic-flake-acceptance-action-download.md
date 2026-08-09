@@ -22,7 +22,52 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: tactic-flake-acceptance-action-download's plan declares no
+    code scope (no ## Unit N sections, Scope forbids touching pr-checks.yml,
+    Verification is manual-only) - nothing for /implement-unit to build and no
+    diff to put in a PR. Escalating for a human decision on whether to
+    transition this node straight to done without a PR, or reclassify. Sibling
+    node tactic-flake-firestore-query-bounds-sensor-action-download has the
+    identical pattern from the same PR #3052 / CI run."
+  since: 2026-08-09
+  recommendation: >-
+    **Recommendation: agree with the park — but the routing, not the node, is
+    what needs deciding.**
+
+
+    1. **Nothing to implement.** The plan has no `## Unit N` sections, its Scope
+    explicitly forbids touching `pr-checks.yml`, and its Verification is
+    manual-only. A `Service Unavailable` from GitHub's action-resolution service
+    before `actions/checkout` runs is not fixable in this repo. Forcing a no-op
+    PR just to satisfy the implement→review marker would put a fake diff in
+    history. Don't do that.
+
+
+    2. **Unblock by transitioning phase, not by opening a PR.** These nodes are
+    incident records: their whole value is the fingerprint plus the recurrence
+    link. The transition should take the node straight from `implement` to
+    `done` with a short body note recording the disposition (re-run passed / no
+    code remedy). Use the repo's node-transition tooling
+    (`.claude/skills/dispatch-propagate/scripts/transition-node`) rather than
+    hand-editing the frontmatter — hand edits in a stale worktree are a known
+    way to lose the body. Before transitioning, confirm the `acceptance` job
+    actually passed on a re-run of PR #3052; if it failed again with the same
+    fingerprint, that changes the answer (recurring → real signal, escalate
+    upstream).
+
+
+    3. **Same sitting, both nodes.**
+    `tactic-flake-firestore-query-bounds-sensor-action-download` is stuck
+    identically — same PR, same run, same empty scope. Dispatch the same
+    disposition to both.
+
+
+    **Worth deciding once:** whether flake-tracking nodes with no code scope
+    should ever be routed to `implement` at all, or be born at
+    `done`/observational in align-tactics. Otherwise this recurs on every
+    CI-infra flake.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
