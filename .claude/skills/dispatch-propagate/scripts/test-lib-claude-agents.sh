@@ -1681,4 +1681,185 @@ esac
 assert_eq "wrapper: the operator diagnostic still reaches stderr" "yes" "$diag_ok"
 ca_teardown
 
+# --- claude_agents_list_sessions_in_cwd_all -----------------------------------
+# The cwd-exact, keyspace-UNFILTERED registered-view lister. Emits
+# sessionId<TAB>id<TAB>name<TAB>state<TAB>status for every session whose .cwd
+# equals the argument exactly — routers, sync-repair, jit jobs and human
+# sessions included, since the worker keyspace filter is what made the
+# main-checkout `sync-repair` incident invisible.
+
+# --- Test 73: exact-cwd match emits only the matching rows -------------------
+echo "Test: claude_agents_list_sessions_in_cwd_all emits only rows whose cwd matches exactly"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-here","id":"job-here","state":"working","status":"busy","name":"tactic-a","cwd":"/main"},
+  {"sessionId":"s-elsewhere","id":"job-else","state":"working","status":"busy","name":"tactic-b","cwd":"/other"}
+]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-exact: exits 0" "0" "$rc"
+assert_eq "cwd-all-exact: only the /main row" \
+  "$(printf 's-here\tjob-here\ttactic-a\tworking\tbusy')" "$out"
+ca_teardown
+
+# --- Test 74: a prefix-extended cwd is NOT matched ---------------------------
+# A prefix/substring test rooted at the project root would match every worktree
+# under .claude/worktrees/, i.e. the whole fleet. Only exact equality counts.
+echo "Test: claude_agents_list_sessions_in_cwd_all does not match a prefix-extended cwd"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-wt","id":"job-wt","state":"working","status":"busy","name":"tactic-x","cwd":"/main/.claude/worktrees/x"}
+]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-prefix: exits 0" "0" "$rc"
+assert_eq "cwd-all-prefix: the worktree row under /main is not matched" "" "$out"
+ca_teardown
+
+# --- Test 75: a sync-repair row IS emitted (keyspace-filter-free ratchet) ----
+# `sync-repair` matches none of ^[0-9]+- / ^tactic- / ^strategy-, so every
+# keyspace-filtered lister hides it. This function must not.
+echo "Test: claude_agents_list_sessions_in_cwd_all emits a non-worker-keyspace sync-repair row"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-sync","id":"job-sync","state":"blocked","status":"idle","name":"sync-repair","cwd":"/main"},
+  {"sessionId":"s-router","id":"job-router","state":"working","status":"busy","name":"dispatch-abc123","cwd":"/main"}
+]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-keyspace: exits 0" "0" "$rc"
+assert_eq "cwd-all-keyspace: sync-repair and the router are both emitted" \
+  "$(printf 's-sync\tjob-sync\tsync-repair\tblocked\tidle\ns-router\tjob-router\tdispatch-abc123\tworking\tbusy')" \
+  "$out"
+ca_teardown
+
+# --- Test 76: a blocked row keeps `blocked` in the state column --------------
+# state (blocked) and status (idle) are projected RAW and unresolved; a probe
+# keying on status alone would read this session as merely idle.
+echo "Test: claude_agents_list_sessions_in_cwd_all projects state=blocked alongside status=idle"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-b","id":"job-b","state":"blocked","status":"idle","name":"sync-repair","cwd":"/main"}
+]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-blocked: exits 0" "0" "$rc"
+assert_eq "cwd-all-blocked: state column reads blocked" \
+  "$(printf 's-b\tjob-b\tsync-repair\tblocked\tidle')" "$out"
+ca_teardown
+
+# --- Test 77: a terminal row with no .status key is emitted ------------------
+echo "Test: claude_agents_list_sessions_in_cwd_all emits a done row that carries no .status"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-done","id":"job-done","state":"done","name":"tactic-done","cwd":"/main"}
+]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-done: exits 0" "0" "$rc"
+assert_eq "cwd-all-done: the absent status renders as an empty column" \
+  "$(printf 's-done\tjob-done\ttactic-done\tdone\t')" "$out"
+ca_teardown
+
+# --- Test 78: empty [] registry → rc 0, empty stdout (definite none) ---------
+echo "Test: claude_agents_list_sessions_in_cwd_all returns 0 with empty stdout for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "cwd-all-empty: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 79: daemon failure → rc 1, empty stdout ----------------------------
+echo "Test: claude_agents_list_sessions_in_cwd_all returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "cwd-all-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 80: non-array JSON → rc 1 ------------------------------------------
+echo "Test: claude_agents_list_sessions_in_cwd_all returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_list_sessions_in_cwd_all /main); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-non-array: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "cwd-all-non-array: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 81: a missing <path> argument → rc 1 -------------------------------
+echo "Test: claude_agents_list_sessions_in_cwd_all returns rc 1 when <path> is missing"
+ca_setup
+write_fake_claude '[{"sessionId":"s","id":"j","state":"working","status":"busy","name":"tactic-a","cwd":"/main"}]' 0
+if out=$(claude_agents_list_sessions_in_cwd_all 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cwd-all-no-arg: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "cwd-all-no-arg: prints nothing" "" "$out"
+ca_teardown
+
+# --- claude_agents_count_by_state ---------------------------------------------
+# The full-state census: `state<TAB>count` lines over every registered session
+# (no keyspace filter), plus `<keyspace><TAB><state><TAB><count>` lines over the
+# total worker/other partition and a per-keyspace `terminal` roll-up drawn from
+# the shared terminal_states enumeration (which excludes `blocked`).
+
+# --- Test 82: a mixed registry produces the expected census lines ------------
+# The `other  blocked  1` line is the regression ratchet for the incident: a
+# `sync-repair` session parked in state `blocked` was invisible to every probe.
+echo "Test: claude_agents_count_by_state censuses a mixed registry, sync-repair included"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","name":"tactic-a","state":"working","status":"busy","cwd":"/wt/a"},
+  {"sessionId":"s2","name":"sync-repair","state":"blocked","status":"idle","cwd":"/main"},
+  {"sessionId":"s3","name":"tactic-b","state":"done","cwd":"/wt/b"},
+  {"sessionId":"s4","name":"dispatch-abc123","state":"working","status":"busy","cwd":"/main"}
+]' 0
+if out=$(claude_agents_count_by_state); then rc=0; else rc=$?; fi
+assert_eq "census-mixed: exits 0" "0" "$rc"
+assert_eq "census-mixed: overall + keyspace census lines" \
+  "$(printf 'blocked\t1\ndone\t1\nworking\t2\nother\tblocked\t1\nother\tterminal\t0\nother\tworking\t1\nworker\tdone\t1\nworker\tterminal\t1\nworker\tworking\t1')" \
+  "$out"
+ca_teardown
+
+# --- Test 83: a stateless row lands in the <none> bucket ---------------------
+echo "Test: claude_agents_count_by_state buckets a row with neither state nor status as <none>"
+ca_setup
+write_fake_claude '[{"sessionId":"s-bare","cwd":"/main"}]' 0
+if out=$(claude_agents_count_by_state); then rc=0; else rc=$?; fi
+assert_eq "census-none: exits 0" "0" "$rc"
+assert_eq "census-none: the stateless row is counted under <none>, not dropped" \
+  "$(printf '<none>\t1\nother\t<none>\t1\nother\tterminal\t0')" "$out"
+ca_teardown
+
+# --- Test 84: the terminal roll-up counts done+errored but NOT blocked -------
+# `blocked` is deliberately absent from CLAUDE_AGENTS_TERMINAL_STATES_JQ (two
+# other consumers depend on it reading as a live claim), so it must show only in
+# its own state row, never in the roll-up.
+echo "Test: claude_agents_count_by_state rolls up done and errored as terminal, excluding blocked"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s1","name":"tactic-a","state":"done","cwd":"/wt/a"},
+  {"sessionId":"s2","name":"tactic-b","state":"errored","cwd":"/wt/b"},
+  {"sessionId":"s3","name":"tactic-c","state":"blocked","status":"idle","cwd":"/wt/c"}
+]' 0
+if out=$(claude_agents_count_by_state); then rc=0; else rc=$?; fi
+assert_eq "census-terminal: exits 0" "0" "$rc"
+assert_eq "census-terminal: roll-up is 2 (done+errored), blocked stands alone" \
+  "$(printf 'blocked\t1\ndone\t1\nerrored\t1\nworker\tblocked\t1\nworker\tdone\t1\nworker\terrored\t1\nworker\tterminal\t2')" \
+  "$out"
+ca_teardown
+
+# --- Test 85: empty [] registry → rc 0, empty stdout ------------------------
+echo "Test: claude_agents_count_by_state returns 0 with empty stdout for an empty registry"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_agents_count_by_state); then rc=0; else rc=$?; fi
+assert_eq "census-empty: exits 0 (definite zero, not UNKNOWN)" "0" "$rc"
+assert_eq "census-empty: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 86: daemon failure → rc 1, empty stdout ---------------------------
+echo "Test: claude_agents_count_by_state returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_count_by_state); then rc=0; else rc=$?; fi
+assert_eq "census-daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "census-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
 report_results
