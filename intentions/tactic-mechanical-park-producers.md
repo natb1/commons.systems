@@ -111,6 +111,7 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-26T05:07:00Z
     mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
@@ -118,56 +119,42 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-main: needs-main residue item #15 on
-    tactic-mechanical-park-producers (\"Queue-noise reduction: fewer tracked
-    holds than today's exit-11 park rate\") is not browser-verifiable. Its
-    url_path is the literal string \"current\", not a real page — the expected
-    outcome is a week-over-time count of
-    tactic-hold-conflict-*/tactic-hold-fix-cap-* node creations on origin/main
-    compared to the ~5/week exit-11-park baseline named in the plan, a
-    graph/git-history query, not a page Claude-in-Chrome can observe. It also
-    cannot be judged yet on timing alone: source PR #2970 merged
-    2026-07-26T05:07:00Z, only 2 days before this check, short of the week-long
-    observation window the plan's own Verification section specifies."
-  since: 2026-07-28
-  recommendation: >-
-    Wait until at least 2026-08-02 (one week after the PR #2970 merge on
-    2026-07-26) before judging this item.
-
-
-    Then check the rate directly against origin/main:
-
-
-    ```bash
-
-    git -C <repo> log --since=2026-07-26 --diff-filter=A --name-only --oneline
-    -- 'intentions/tactic-hold-conflict-*.md'
-    'intentions/tactic-hold-fix-cap-*.md' origin/main
-
-    ```
-
-
-    Count the created hold nodes in that window. The plan's success signal
-    (Verification section, "Queue-noise outcome") is materially fewer than
-    ~5/week — ideally zero in a week where main is moving normally. Any
-    tactic-hold-conflict-* node that does appear is expected signal for a
-    genuine structural conflict (not noise); if the count is high, check whether
-    `CONFLICT_STRIKE_CAP=5` in
-    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute` needs to
-    be tuned looser.
-
-
-    Also spot-check hygiene per the plan's other manual checks: confirm the
-    strike-counter sidecar (`.claude/worktrees/<id>.conflict-strikes`) is being
-    deleted on successful provisions rather than accumulating for reaped
-    worktrees, and confirm any hold tactic that landed carries the mandatory
-    "clearing office_hours alone does not unblock the source" sentence in its
-    body.
-
-
-    If the count and hygiene look right, this residue item is satisfied and the
-    node's main-qa phase can be advanced to done via the normal graph-transition
-    path.
+  reason: "needs-main residue item 15 (queue-noise reduction) resolves to a
+    genuinely ambiguous, time-varying signal, not a clean pass or contradiction.
+    Lane-M check: git log origin/main --diff-filter=A --since <date> --
+    intentions/tactic-hold-conflict-*.md intentions/tactic-hold-fix-cap-*.md
+    against the 2026-07-26T05:07Z merge of PR #2970. Result category: mixed
+    trend, not stable. Week 1 (2026-07-26 to 2026-08-02, the item own named
+    observation window) shows a real drop for the conflict producer -- 2
+    tactic-hold-conflict-* creations vs the ~5/week exit-11-park baseline, a
+    genuine reduction. But the most recent 3 days (2026-08-03 to 2026-08-05)
+    alone produced 7 new holds (4 conflict + 3 fix-cap), a pace well above the
+    baseline if sustained. 12 tactic-hold-* nodes exist on origin/main total (6
+    conflict-kind, 6 fix-cap-kind), none yet resolved to phase:done. The
+    comparison is further confounded because the free-retry tier
+    (CONFLICT_STRIKE_CAP=5) means self-resolved conflicts produce zero graph
+    record, so the underlying raw exit-11 incidence rate this fix was meant to
+    filter is not independently observable from git history, and general
+    fleet/main-churn growth since the ~5/week baseline was recorded is an
+    uncontrolled variable no Lane-M command can isolate."
+  since: 2026-08-05
+  recommendation: "Author judgment needed, exactly the question this node own
+    Verification section anticipated: does the observed hold-creation rate count
+    as the intended materially fewer queue-noise reduction, or does the
+    days-8-10 spike (4 conflict + 3 fix-cap holds in 3 days) mean
+    CONFLICT_STRIKE_CAP=5 is tuned too tight (real conflicts blow through 5
+    retries too easily) or that main/fleet churn has grown enough since the
+    baseline that a higher raw hold rate is expected regardless of the fix
+    effectiveness? Data already gathered (all on origin/main, PR #2970 merged
+    2026-07-26T05:07Z): week 1 (07-26 to 08-02) = 2 conflict-kind + 3
+    fix-cap-kind holds; days 8-10 (08-03 to 08-05) = 4 conflict-kind + 3
+    fix-cap-kind holds; running total to date = 6 conflict-kind + 6 fix-cap-kind
+    (12 nodes, all intentions/tactic-hold-conflict-*.md and
+    tactic-hold-fix-cap-*.md files present on origin/main, none yet phase:done).
+    No further Lane-M command resolves this -- it needs a human read of whether
+    the trend is a one-off cluster or a real regression, optionally by
+    inspecting a few of the most recent hold nodes bodies to see if the
+    underlying conflicts look genuinely structural or like routine noise."
   session_type: other
 pace_exempt: false
 rounds: null

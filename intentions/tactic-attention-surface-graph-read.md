@@ -28,6 +28,7 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-10T13:52:25Z
     mergeCommitSha: 2e63b186a7e12e4f9922d51cea28f5973ac5e6fe

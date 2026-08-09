@@ -155,6 +155,37 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
 }
 
 /**
+ * The SIGNAL STRING an open tactic's candidate is emitted at — what the shell
+ * layer routes on, which is not always the node's persisted ladder `phase`.
+ *
+ * `fix`, `conflict`, and `pending-merge` are shell-facing signal strings, NOT
+ * `Phase` enum members (`PHASES`, schema.ts): the CI-fix and merge-conflict
+ * interrupts are carried ORTHOGONALLY on `execution.fix` / `execution.conflict`
+ * while the node's real ladder phase stays put, and `pending-merge` names a
+ * state (reviewed, awaiting auto-merge) rather than a rung. That is the same
+ * precedent that kept `fix` out of `PHASES` when the CI-fix interrupt landed.
+ *
+ * Precedence, highest first:
+ *  1. an active CI-fix interrupt → `fix` (unchanged; fix outranks everything,
+ *     including a simultaneously-set conflict interrupt);
+ *  2. else an active merge-conflict interrupt → `conflict`;
+ *  3. else a reviewed-awaiting-merge node (`phase: review` carrying
+ *     `REVIEWED_MARKER`) → `pending-merge`, emitted ONLY when no interrupt is
+ *     active — a node under a conflict interrupt emits `conflict` directly and
+ *     never `pending-merge`;
+ *  4. else the real ladder phase.
+ *
+ * A reviewed node is therefore NEVER re-emitted as a plain `review` candidate:
+ * the review pass already ran, and re-running it would discard its verdict.
+ */
+function tacticSignalPhase(t: IntentionNode & { phase: Phase }): string {
+  if (t.execution?.fix != null) return "fix";
+  if (t.execution?.conflict != null) return "conflict";
+  if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER)) return "pending-merge";
+  return t.phase;
+}
+
+/**
  * The strategies a tactic belongs to: its own `serves` plus the `serves` of
  * every `parent` ancestor (a subtree's root tactic serves the strategy; its
  * descendants belong through the chain). Cycle-safe.
@@ -496,28 +527,26 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     if (!isOpenTactic(t)) continue;
     if (frozenTacticIds.has(t.id)) continue;
     if (!blockersComplete(t, byId)) continue;
-    // A clean reviewed node (no active fix) stays excluded from re-selection —
-    // its armed auto-merge is tick-owned, not selector-owned. But once a
-    // review-stall reconciler (tactic-graph-review-exclusion-stall-recovery)
-    // enters execution.fix on a stranded node — because its armed merge
-    // cannot complete on RED CI and the normal graph-select-target CI-red gate
-    // never got a chance to run on it (candidates it never sees can't be
-    // gated) — the node must resume being surfaced, now as a `fix` candidate
-    // via the phase-override below, so /fix-checks can act and
-    // apply-fix-state --clear-fix can later resolve it. A stranded node whose
-    // merge is blocked by a CONFLICT instead does NOT come through here: the
-    // sweep routes it to the conflict lane (a provision-conflict hold), which
-    // keeps the `reviewed` marker intact — _gate_fix_active reads CI, not
-    // mergeability, so an execution.fix carrying a conflict would be cleared
-    // as "green" on the next tick and throw the review verdict away.
-    if (t.phase === "review" && t.execution?.markers.includes(REVIEWED_MARKER) && t.execution?.fix == null) continue;
+    // NO reviewed-marker exclusion here (tactic-graph-router-conflict-routing):
+    // a reviewed node awaiting its armed auto-merge is SURFACED, as a
+    // `pending-merge` candidate, not dropped. That is what lets the shell's
+    // sensor gate read the PR's mergeability every tick and, on CONFLICTING,
+    // enter the orthogonal `execution.conflict` interrupt — after which the
+    // same node re-surfaces as a `conflict` candidate (see
+    // `tacticSignalPhase`) and routes to /dispatch-conflict, resolving via
+    // apply-conflict-state without ever touching the review verdict. The
+    // out-of-band review-stall sweep no longer detects CONFLICTING at all (its
+    // conflict arm is retired); a stranded RED node still reaches `fix` through
+    // that sweep's surviving CI arm, and `fix` outranks `pending-merge` in
+    // `tacticSignalPhase`. A reviewed node is never re-emitted as `review`.
     candidates.push({
       id: t.id,
       kind: "tactic",
-      // A tactic under an active CI-fix interrupt (`execution.fix` set) is
-      // emitted as a `fix` candidate regardless of its preserved ladder `phase`;
-      // its real `phase` stays put and the interrupt is carried orthogonally.
-      phase: t.execution?.fix != null ? "fix" : t.phase,
+      // Signal string, not necessarily the persisted ladder phase: an active
+      // interrupt (`execution.fix` / `execution.conflict`) or the
+      // reviewed-awaiting-merge state overrides it, while the node's real
+      // `phase` stays put and the interrupt is carried orthogonally.
+      phase: tacticSignalPhase(t),
       rank: attention.get(t.id)?.value ?? 0,
       tier: tierOf(t),
       precedence: precedenceOf(t),

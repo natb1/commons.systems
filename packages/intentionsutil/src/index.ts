@@ -29,6 +29,7 @@ export {
   LADDER,
   forwardPhase,
   fixInterrupt,
+  conflictInterrupt,
   interruptRoute,
   decideTransition,
   addMarker,

@@ -5,6 +5,8 @@ import {
   QA_DONE_MARKER,
   forwardPhase,
   fixInterrupt,
+  conflictInterrupt,
+  CONFLICT_ATTEMPT_CAP,
   decideTransition,
   addMarker,
   incrementAttempt,
@@ -106,6 +108,23 @@ describe("fixInterrupt", () => {
     for (const phase of ["fix", "done", "main-qa"]) {
       expect(fixInterrupt(phase, "failing")).toBe(false);
     }
+  });
+});
+
+describe("conflictInterrupt", () => {
+  it("fires only on a CONFLICTING mergeable value", () => {
+    expect(conflictInterrupt("CONFLICTING")).toBe(true);
+  });
+
+  it("never fires on MERGEABLE or UNKNOWN", () => {
+    expect(conflictInterrupt("MERGEABLE")).toBe(false);
+    expect(conflictInterrupt("UNKNOWN")).toBe(false);
+  });
+});
+
+describe("CONFLICT_ATTEMPT_CAP", () => {
+  it("matches legacy /fix-conflicts' attempt cap of 3", () => {
+    expect(CONFLICT_ATTEMPT_CAP).toBe(3);
   });
 });
 

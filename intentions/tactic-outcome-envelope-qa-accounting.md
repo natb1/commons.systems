@@ -28,7 +28,7 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-outcome-envelope-qa-accounting
   pr: 2774
@@ -39,7 +39,10 @@ execution:
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-10T16:52:57Z
+    mergeCommitSha: eda7afa2a2192d0abcb2b5eadffa9afd43e1cd63
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

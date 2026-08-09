@@ -50,6 +50,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T03:00:25Z
     mergeCommitSha: 7c7728296e47420017e4e9949dffc26fba7d3e62
@@ -57,28 +58,38 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: "Three needs-main residue items on
-    tactic-review-code-review-invocation-contract (PR #3007, merged
-    2026-08-03T03:00:25Z) require a real subsequent /review-fix pass that has
-    not happened yet: (1) a live nested claude -p '/code-review low --fix' run
-    actually completing and writing the working tree, (2) --comment actually
-    posting the review to a PR, and (3) whether low effort is the right
-    cost/quality point, which additionally needs 3-5 real passes plus a
-    dispatch-token-audit run per the node's own Verification section. Checked at
-    re-selection time (2026-08-03T03:32Z, 32 minutes post-merge): gh pr list
-    --repo natb1/commons.systems --state merged --limit 15 shows PR #3007 as the
-    most recently merged PR with nothing merged after it, so no /review-fix pass
-    has run on this repo since the mechanism landed. journalctl --since the
-    merge time shows no dispatch/review-fix activity. Earliest useful re-check:
-    after the next PR goes through the review phase post-merge (or after 3-5
-    such passes for item 3)."
-  since: 2026-08-03
-  recommendation: No author decision needed — re-selection only. When re-checked,
-    look for a subsequent review-fix run's transcript or the
-    dispatch-code-review out-dir (tmp/code-review-<N>) on a later PR to confirm
-    status=ok and a real PR comment from --comment; after 3-5 such passes, run
-    /dispatch-token-audit and compare against the Unit 1 baseline in
-    references/code-review-invocation.md to decide item 3.
+  reason: "A /qa-main graph-node-lane pass verified all three needs-main residue
+    items and reached a mixed verdict, but died before its park landed:
+    origin/main still showed phase main-qa with office_hours null, and no
+    node-terminal marker was written, so the node froze. Re-parked by the
+    invalid-state intervention on that pass's own independently re-verified
+    findings. Item 1 (a real nested code-review low --fix pre-stage completes
+    and writes the working tree on a real PR diff) PASS, confirmed across three
+    merged PRs. Item 2 (--comment actually posts a PR comment) CONTRADICTED:
+    zero inline PR comments and zero PR reviews across all three despite
+    --comment being passed on every run and residue findings being generated on
+    at least two; already filed as
+    tactic-review-code-review-invocation-contract-main-qa-regression, which is
+    landed on origin/main and carries the fix direction. Item 3 is the only open
+    item and is not autonomously decidable: whether low is the right
+    cost-versus-quality point for the review phase is a subjective tradeoff this
+    node's own plan defers to a strategy-token-economy follow-up, and deciding
+    it needs a /dispatch-token-audit run, a full skill invocation outside a
+    bounded read-only qa-main pass. The lane defect that lost the original park
+    is recorded as tactic-invalid-state-rc-f1c843b1."
+  since: 2026-08-06
+  recommendation: "Decide item 3, then release the dead session. (1) Judgment: run
+    /dispatch-token-audit 3d over the window since the source PR merged and
+    compare the review phase cost and the <none> attribution share against the
+    Unit 1 baseline in references/code-review-invocation.md. If low holds as the
+    right point, no code change is owed for item 3 and this node can go main-qa
+    to done with: packages/intentionsutil/scripts/transition-node
+    tactic-review-code-review-invocation-contract. If it does not hold, file a
+    tactic for the effort-level change first, then transition. (2) Release the
+    frozen slot, which this intervention deliberately did not reap because the
+    park path owns it: git worktree remove
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-review-code-review-\
+    invocation-contract && claude rm 361f3b83-0fa7-4ea0-828c-0d611f68eaf3"
   session_type: other
 pace_exempt: true
 rounds: null
