@@ -84,7 +84,10 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-analyze-go
+  - tactic-flake-acceptance-action-download
+  - tactic-flake-firestore-query-bounds-sensor-action-download
 office_hours: null
 pace_exempt: false
 rounds: null
