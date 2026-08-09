@@ -33,6 +33,9 @@ attributes: {}
 ---
 # PR #2990's body still cites the stale regression-case numbers
 
+**Recommended model**: sonnet — mechanical: edit a merged PR's body text (or
+post a confirming comment) via `gh`; no code change.
+
 ## Expected outcome
 
 The merged PR #2990's body (or a follow-up doc fix) cites the correct
@@ -70,3 +73,15 @@ citation is deliberately left as historical text.
   because of unrelated churn), or post a `gh pr comment 2990` confirming the
   citation is deliberately left as historical text. Either satisfies the
   expected outcome above.
+
+## Verification
+
+Pick one of the two fix options in Context and apply it with `gh`
+(`dangerouslyDisableSandbox: true` — `gh` needs it per `.claude/rules/sandbox.md`):
+
+```verify
+gh pr view 2990 --json body --jq .body | grep -q 'cases 48-52\|48, 49, 50, 51, 52\|48-52' && echo "PR body corrected" || echo "PR body not corrected — check for a confirming comment instead"
+```
+
+Manual check: if the body wasn't edited, confirm a comment exists on PR #2990
+stating the "cases 36-40" citation is deliberately left as historical text.
