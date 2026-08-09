@@ -136,9 +136,19 @@ assert_eq "Part A: dispatch-graph-execute's literal /dispatch-conflict Lane 3 sp
 # above. Each row names which terminal path(s) each call belongs to.
 
 declare -A NTC_MARK_TERMINAL_EXPECTED=(
-  # align-round (SKILL.md, decomposition-round completion) + no-claim
-  # (SKILL.md, the exit-12 stale-selection early exit). Two calls, two paths.
-  [align-tactics]=2
+  # ONE, not two: the only fenced mark-node-terminal invocation left in this
+  # skill's markdown file set is the `no-claim` exit-12 stale-selection bailout
+  # (SKILL.md:134). The align-round path's call is NOT gone — origin/main
+  # 1c7dc4fb ("bundle terminal-disposition marker into land-align-round") moved
+  # it out of SKILL.md prose and into
+  # packages/intentionsutil/scripts/land-align-round, where it is bundled into
+  # the SAME process as the landing graph-commit write. That path is out of
+  # THIS scan's scope BY FILE TYPE (ntc_skill_files reads SKILL.md +
+  # references/*.md only — markdown, not shell), not because it stopped
+  # declaring. Part B2 below asserts the script-hosted call directly, so the
+  # align-round declaration stays under real coverage rather than merely
+  # uncounted.
+  [align-tactics]=1
   # Lane 3 only: conflict-resolved (Step 9, SKILL.md:1281) + conflict-hold
   # (Step 10, SKILL.md:1361), each ALSO illustrated once earlier in the doc's
   # Step 7/8 walkthrough (SKILL.md:903, :926) — four fenced occurrences total.
@@ -173,6 +183,62 @@ for skill in "${!NTC_MARK_TERMINAL_EXPECTED[@]}"; do
   assert_eq "Part B: $skill: mark-node-terminal fenced-invocation count (a change here means a terminal path was added/removed or a call was dropped — confirm which, then update this count)" \
     "${NTC_MARK_TERMINAL_EXPECTED[$skill]}" "$actual"
 done
+
+# ============================================================================
+# Part B2 — script-hosted declaration sites: the terminal paths that moved out
+# of SKILL.md prose into a shell script, which Part B's markdown-only file set
+# (ntc_skill_files) structurally cannot see.
+# ============================================================================
+# Today that is exactly one script: packages/intentionsutil/scripts/land-align-
+# round, which /align-tactics calls instead of a bare `graph-commit` so the
+# align-round marker write is bundled into the SAME process as the landing
+# write (origin/main 1c7dc4fb; the script's own header states the rationale).
+# Without these rows, dropping [align-tactics] from 2 to 1 in Part B would have
+# left the align-round path merely UNCOUNTED — green, but no longer verified to
+# declare at all. That is the coverage-methodology failure this file's header
+# forbids ("never delete a row, or bump a count, just to make this suite
+# green").
+#
+# Counting anchors on the `"$SCRIPT_DIR/..."`-quoted invocation form, not the
+# bare command name: land-align-round discusses mark-node-terminal at length in
+# comments, and a comment is not a declaration.
+
+NTC_LAR="$NTC_ROOT/packages/intentionsutil/scripts/land-align-round"
+
+if [[ ! -f "$NTC_LAR" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: Part B2: file missing: packages/intentionsutil/scripts/land-align-round — /align-tactics' align-round terminal path lived here (origin/main 1c7dc4fb) and Part B's [align-tactics]=1 baseline is written on that basis; if the script was renamed or deleted, find where align-round declares now and re-point these assertions (or restore the SKILL.md fenced call and raise Part B back to 2)"
+else
+  # (b) exactly one executable marker invocation.
+  LAR_MARK_CALLS=$({ grep -cF -- '"$SCRIPT_DIR/mark-node-terminal"' "$NTC_LAR" || true; } | head -1)
+  assert_eq "Part B2: land-align-round: \"\$SCRIPT_DIR/mark-node-terminal\" invocation count (this is where /align-tactics' align-round path declares; 0 means the declaration was dropped and the node will freeze on every landed round — restore it or state where align-round declares instead)" \
+    "1" "$LAR_MARK_CALLS"
+
+  # (c) exactly two call sites — one per disposition (clean land, park) — with
+  #     the function DEFINITION line excluded (it is a definition, not a call:
+  #     the call form is `mark_terminal_best_effort <disposition>`, the
+  #     definition is `mark_terminal_best_effort() {`).
+  LAR_BEST_EFFORT_CALLS=$({ grep -cE '^[[:space:]]*mark_terminal_best_effort[[:space:]]+[A-Za-z]' "$NTC_LAR" || true; } | head -1)
+  assert_eq "Part B2: land-align-round: mark_terminal_best_effort call-site count, definition line excluded (2 = both dispositions of the align-round terminal path: \`align-round\` on graph-commit exit 0, \`park\` on the exit-1 park-LANDED branch; a drop to 1 means one disposition no longer declares — decide which, and whether that path is meant to stay held instead)" \
+    "2" "$LAR_BEST_EFFORT_CALLS"
+
+  # (d) ordering (timing-invariant): the marker must be written AFTER the
+  #     durable graph write, never before — same invariant Part D asserts for
+  #     the markdown-hosted paths, expressed here over script line numbers.
+  LAR_LAST_MARK_LINE=$({ grep -nE '^[[:space:]]*mark_terminal_best_effort[[:space:]]+[A-Za-z]' "$NTC_LAR" || true; } | tail -1 | cut -d: -f1)
+  LAR_GRAPH_COMMIT_LINE=$({ grep -nF -- '"$SCRIPT_DIR/graph-commit"' "$NTC_LAR" || true; } | tail -1 | cut -d: -f1)
+  TOTAL=$((TOTAL + 1))
+  if [[ -z "$LAR_LAST_MARK_LINE" || -z "$LAR_GRAPH_COMMIT_LINE" ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: Part B2: land-align-round: cannot locate both anchors for the ordering check (mark_terminal_best_effort call line: '${LAR_LAST_MARK_LINE:-none}', \"\$SCRIPT_DIR/graph-commit\" invocation line: '${LAR_GRAPH_COMMIT_LINE:-none}') — the script was restructured; re-derive the anchors, or state where the landing write and the marker write now live relative to each other"
+  elif [[ "$LAR_LAST_MARK_LINE" -gt "$LAR_GRAPH_COMMIT_LINE" ]]; then
+    PASS=$((PASS + 1))
+    echo "  PASS: Part B2: land-align-round: last mark_terminal_best_effort call (line $LAR_LAST_MARK_LINE) is after the graph-commit invocation (line $LAR_GRAPH_COMMIT_LINE)"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: Part B2: land-align-round: last mark_terminal_best_effort call (line $LAR_LAST_MARK_LINE) is at or BEFORE the graph-commit invocation (line $LAR_GRAPH_COMMIT_LINE) — the terminal marker must be written only after the durable graph write lands, or a marker can declare a disposition for a round that never reached main (dispatch-self-close would then reap the job and its worktree, destroying the only copy of the content); decide whether the reordering is intentional and how the unlanded case is kept undeclared"
+  fi
+fi
 
 # ============================================================================
 # Part C — legacy-completion tripwire (the load-bearing half): pin
@@ -306,17 +372,23 @@ else
   echo "  FAIL: Part D: file missing: .claude/skills/qa-fix/references/auto-fix-lane.md"
 fi
 
-# 3. /fix-checks (SKILL.md's numbered Step 9) and /align-tactics (SKILL.md's
-#    no-claim and align-round paths) do NOT sit under a "## "/"### " heading —
-#    they are items inside a numbered/bulleted list, so ntc_section's
-#    heading-bounded extraction cannot isolate them without a brittle,
-#    list-item-specific pattern. Per the plan's own fallback ("where a section
-#    boundary makes the ordering ambiguous, assert only the membership"),
-#    assert membership only here: the invocation count already pinned in
-#    Parts B/C is the ordering-independent guarantee that the call exists at
-#    all; a human review (this tactic's Verification section) confirms
-#    ordering by hand for these two skills instead of a brittle assertion.
-echo "  NOTE: Part D: fix-checks Step 9 and align-tactics no-claim/align-round are membership-only (list-item sections, no heading boundary) — see the plan's Verification section for the by-hand ordering check"
+# 3. /fix-checks (SKILL.md's numbered Step 9) and /align-tactics' no-claim
+#    path (SKILL.md:134) do NOT sit under a "## "/"### " heading — they are
+#    items inside a numbered/bulleted list, so ntc_section's heading-bounded
+#    extraction cannot isolate them without a brittle, list-item-specific
+#    pattern. Per the plan's own fallback ("where a section boundary makes the
+#    ordering ambiguous, assert only the membership"), assert membership only
+#    for those two: the invocation count already pinned in Parts B/C is the
+#    ordering-independent guarantee that the call exists at all; a human review
+#    (this tactic's Verification section) confirms ordering by hand there
+#    instead of a brittle assertion.
+#
+#    /align-tactics' align-round path is NO LONGER membership-only: since it
+#    moved into packages/intentionsutil/scripts/land-align-round it has a real
+#    ordering assertion — Part B2's marker-after-graph-commit line-number
+#    check. Bundling the marker into the landing script is what made the
+#    ordering mechanically checkable.
+echo "  NOTE: Part D: fix-checks Step 9 and align-tactics' no-claim path are membership-only (list-item sections, no heading boundary) — see the plan's Verification section for the by-hand ordering check; align-tactics' align-round path is covered by Part B2's ordering assertion instead"
 
 # ============================================================================
 # GAP rows — /dispatch-conflict Lane 2's two paths are registered as explicit,
