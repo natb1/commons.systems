@@ -112,21 +112,23 @@ fi
 
 REACHABLE_ACTUAL=$(grep -oE 'SKILL="/[a-z-]+"' "$NTC_EXECUTE" \
   | sed -E 's/SKILL="(.*)"/\1/' | sort -u | tr '\n' ' ' | sed 's/ $//')
-REACHABLE_EXPECTED="/align-tactics /fix-checks /implement /qa-fix /qa-main /review-fix"
+REACHABLE_EXPECTED="/align-tactics /dispatch-conflict /fix-checks /implement /qa-fix /qa-main /review-fix"
 
 assert_eq "Part A: dispatch-graph-execute's SKILL=\"...\" case-arm set (a new one un-registered here fails) — a new node-worker-reachable skill was added; register its node-lane terminal paths in this ratchet's inventory" \
   "$REACHABLE_EXPECTED" "$REACHABLE_ACTUAL"
 
-# The Lane 3 spawn arm does not assign SKILL= (it hardcodes the literal
-# spawn string on the provision-exit-11 path), so it is asserted separately.
+# /dispatch-conflict is reachable two ways: a `tactic:conflict) SKILL="/dispatch-conflict"`
+# case arm (counted in REACHABLE_ACTUAL above) AND a separate literal Lane 3
+# spawn string on the provision-exit-11 path that does not assign SKILL=, so
+# that spawn arm is asserted here too.
 LANE3_SPAWN_COUNT=$(grep -coE '"/dispatch-conflict \$id"' "$NTC_EXECUTE" || true)
 assert_eq "Part A: dispatch-graph-execute's literal /dispatch-conflict Lane 3 spawn arm still present" \
   "1" "$LANE3_SPAWN_COUNT"
 
 # ============================================================================
 # Part B — declaration-site inventory: mark-node-terminal fenced-invocation
-# count per reachable skill (plus dispatch-conflict, registered separately
-# below since it is Lane-3-reachable, not case-arm-reachable).
+# count per reachable skill, including dispatch-conflict — reachable both via
+# the tactic:conflict case arm and the literal Lane 3 spawn string above.
 # ============================================================================
 # Baselines re-derived against THIS tree at implementation time (the planning-
 # time baselines in the node body are NOT trusted blind, per the plan's own
