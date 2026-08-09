@@ -20,7 +20,7 @@ success_signal:
     (or neutral/skipped)"
   is_proxy: false
 attention: null
-phase: null
+phase: done
 execution: null
 validates:
   - strategy-main-health
