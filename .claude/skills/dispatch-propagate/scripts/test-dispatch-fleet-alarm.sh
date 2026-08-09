@@ -589,6 +589,66 @@ git -C "$FR" update-ref refs/remotes/origin/main "$SAVED_ORIGIN_MAIN"
 BARE_RESTORE_HITS=$(grep -cE '^[[:space:]]*restore_from_blob ' "$SUT" || true)
 assert_eq "(20) no unchecked restore_from_blob call in $SUT" "0" "${BARE_RESTORE_HITS:-0}"
 
+# --- (21) kind acceptance: main-checkout-held --------------------------------
+# The KINDS enum is closed and the anchored id regex is BUILT from it, so a new
+# kind is only genuinely accepted if it survives the whole round trip: mint,
+# refresh with a differing body, resolve. Case (1) already pins that an unknown
+# kind exits 64; the near-miss below pins that the new entry did not widen the
+# enum into a prefix match.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+BODY21="$WORK/body21.md"
+printf 'A stuck session is holding the shared main checkout.\n' > "$BODY21"
+run_alarm STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --kind main-checkout-held --statement 'A stuck session is holding the shared main checkout dirty' \
+  --body-file "$BODY21"
+assert_eq "(21) mint exits 0" "0" "$RC"
+MINT21="$FR/intentions/tactic-fleet-alarm-main-checkout-held.md"
+assert_contains "(21) graph-commit got the alarm id" "tactic-fleet-alarm-main-checkout-held" \
+  "$(log_lines graph-commit.log)"
+assert_eq "(21) node id" "tactic-fleet-alarm-main-checkout-held" \
+  "$(jq -r .id "$LOG/write-node-input.json")"
+assert_eq "(21) body spliced over the placeholder" \
+  "A stuck session is holding the shared main checkout." \
+  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINT21")"
+
+# Re-detection with an IDENTICAL body must not churn a commit...
+run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
+  --kind main-checkout-held --statement 'A stuck session is holding the shared main checkout dirty' \
+  --body-file "$BODY21"
+assert_eq "(21) identical-body re-detection exits 0" "0" "$RC"
+assert_eq "(21) NO graph-commit on an identical body" "" "$(log_lines graph-commit.log)"
+
+# ...and a DIFFERING body refreshes through the --base path.
+BODY21B="$WORK/body21b.md"
+printf 'A different set of offending sessions.\n' > "$BODY21B"
+run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
+  --kind main-checkout-held --statement 'A stuck session is holding the shared main checkout dirty' \
+  --body-file "$BODY21B"
+assert_eq "(21) differing-body refresh exits 0" "0" "$RC"
+assert_contains "(21) refresh ran with --base" "--base" "$(log_lines graph-commit.log)"
+assert_eq "(21) refreshed body landed on disk" "A different set of offending sessions." \
+  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINT21")"
+
+# ...and the condition resolves to phase done.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+run_alarm STUB_STATE=open STUB_GC_LAND=1 \
+  STUB_NODE_JSON='{"id":"tactic-fleet-alarm-main-checkout-held","phase":"implement","execution":null}' -- \
+  --resolve --kind main-checkout-held
+assert_eq "(21) resolve exits 0" "0" "$RC"
+assert_eq "(21) write-node got phase done" "done" "$(jq -r .phase "$LOG/write-node-input.json")"
+assert_contains "(21) resolve message" "graph: resolve fleet alarm main-checkout-held" \
+  "$(log_lines graph-commit.log)"
+assert_eq "(21) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# The enum is still CLOSED: a near-miss of the new kind is rejected, and no
+# unknown kind reaches a write.
+run_alarm -- --kind main-checkout --statement 'x' --body-file "$BODY21"
+assert_eq "(21) a near-miss kind still exits 64" "64" "$RC"
+assert_eq "(21) near-miss made no write-node"   "" "$(log_lines write-node.log)"
+assert_eq "(21) near-miss made no graph-commit" "" "$(log_lines graph-commit.log)"
+
 # --- results -----------------------------------------------------------------
 echo ""
 echo "================================"

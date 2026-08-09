@@ -177,7 +177,7 @@ if ! source "$SCRIPT_DIR/lib.sh"; then
 fi
 
 # The closed enum of alarm kinds. Extending it is a deliberate edit here.
-KINDS=(tick-stale daemon-degraded busy-stall automerge-suppressed unclaimed-hold watch-unknown heal-fired heal-unknown)
+KINDS=(tick-stale daemon-degraded busy-stall automerge-suppressed unclaimed-hold main-checkout-held watch-unknown heal-fired heal-unknown)
 
 usage() {
   cat <<'USAGE'
@@ -186,7 +186,7 @@ usage: dispatch-fleet-alarm --kind <kind> --statement <text> --body-file <path>
        dispatch-fleet-alarm -h|--help
 
 kinds: tick-stale daemon-degraded busy-stall automerge-suppressed
-       unclaimed-hold watch-unknown heal-fired heal-unknown
+       unclaimed-hold main-checkout-held watch-unknown heal-fired heal-unknown
 
 Records an out-of-band fleet-health reading as the graph node
 tactic-fleet-alarm-<kind> (find-or-create; body refreshed on re-detection).

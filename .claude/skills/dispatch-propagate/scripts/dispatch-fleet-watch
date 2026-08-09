@@ -2,7 +2,7 @@
 #
 # dispatch-fleet-watch — ONE-SHOT fleet-health watcher pass.
 #
-# Reads five independent fleet-health predicates, reports each one, and turns
+# Reads six independent fleet-health predicates, reports each one, and turns
 # every finding (and every unreadable input) into a graph node through
 # dispatch-fleet-alarm. Then it exits. It does NOT loop and it takes no deadline
 # argument: cadence belongs to the systemd timer that invokes it, not to the
@@ -30,6 +30,8 @@
 #   4. automerge-suppressed  open tactic-main-red-* latch held too long
 #   5. unclaimed-hold        a tracked hold blocking top-ranked work that no
 #                            session and no reservation claims
+#   6. main-checkout-held    the shared main checkout is dirty/unpushed AND a
+#                            stuck (non-working) session is sitting in it
 #
 # WHY TWO SNAPSHOTS, BOTH CAPTURED AT THE INPUT BOUNDARY:
 #   Predicate 3 reads the live session array through
@@ -59,7 +61,8 @@
 #   predicate 5 below. Each snapshot's READABILITY is therefore recorded at its
 #   capture site (SNAPSHOT_OK for the active view, SNAPSHOT_ALL_OK for the
 #   registered one), and predicate 5 gates on SNAPSHOT_ALL_OK — the bit for the
-#   view its claim ladder actually reads.
+#   view its claim ladder actually reads. Predicate 6 gates on the same bit, for
+#   the same reason: its session read is the REGISTERED view too.
 #
 # TWO DETAIL STRINGS PER PREDICATE, ON PURPOSE:
 #   D_<P>  the READING — carries the live numbers (elapsed spans, ages, counts,
@@ -115,7 +118,12 @@
 #              manual-only dispatch is a supported STANDING operating mode, and
 #              a top-ranked node blocked by a hold nobody is holding is exactly
 #              what the human driving that paused fleet needs told.
-#   unknown  — ALL FIVE predicates evaluate and emit as normal, each tagged
+#              Predicate 6 evaluates under pause for the sharpest version of the
+#              same reason: the incident it watches for HAPPENED during a
+#              correct pause. A dirty shared main checkout is not a consequence
+#              of pausing, and it blocks every graph write the human still makes
+#              by hand.
+#   unknown  — ALL SIX predicates evaluate and emit as normal, each tagged
 #              `pause=unknown`, AND the pass emits a watch-unknown finding
 #              naming the unreadable pause state. Silencing on an unreadable
 #              input is exactly the failure class this rewrite exists to close.
@@ -142,6 +150,12 @@
 #   DISPATCH_FLEET_WATCH_HOLD_TOP_K        default 10 (a COUNT, not seconds) —
 #       how many top-ranked live nodes count as "important" for predicate 5's
 #       blocked-source gate. Both are passed straight through to the enumerator.
+#   DISPATCH_FLEET_WATCH_MAIN_HELD_GRACE_S default 1800 (30m) — how long a
+#       non-working session sitting in the main checkout must have been idle
+#       before predicate 6 will call it stuck. Below the grace it is merely
+#       OBSERVED, never alarmed (the convention at lib-frozen-session-park.sh
+#       :495-529, including its deliberate treatment of a negative,
+#       future-stamped idle as `< grace`).
 #
 # Paths:
 #   DISPATCH_DECISION_LOG_FILE / DISPATCH_DECISION_LOG_DIR
@@ -197,10 +211,10 @@ usage() {
 usage: dispatch-fleet-watch [--json]
        dispatch-fleet-watch -h|--help
 
-One-shot fleet-health watcher pass. Evaluates five predicates (tick-stale,
-daemon-degraded, busy-stall, automerge-suppressed, unclaimed-hold), ALWAYS all
-five, and records findings / unreadable inputs as graph nodes via
-dispatch-fleet-alarm.
+One-shot fleet-health watcher pass. Evaluates six predicates (tick-stale,
+daemon-degraded, busy-stall, automerge-suppressed, unclaimed-hold,
+main-checkout-held), ALWAYS all six, and records findings / unreadable inputs as
+graph nodes via dispatch-fleet-alarm.
 
 exit: 0 all clear, 1 finding, 2 unknown, 64 usage, 69 environment.
 USAGE
@@ -230,7 +244,8 @@ IDLE_LIMIT="${DISPATCH_FLEET_WATCH_IDLE_LIMIT:-2700}"
 SUPPRESSION_LIMIT="${DISPATCH_FLEET_WATCH_SUPPRESSION_LIMIT:-21600}"
 HOLD_MIN_AGE="${DISPATCH_FLEET_WATCH_HOLD_MIN_AGE:-86400}"
 HOLD_TOP_K="${DISPATCH_FLEET_WATCH_HOLD_TOP_K:-10}"
-for t in "$TICK_MAX_AGE" "$IDLE_LIMIT" "$SUPPRESSION_LIMIT" "$HOLD_MIN_AGE" "$HOLD_TOP_K"; do
+MAIN_HELD_GRACE="${DISPATCH_FLEET_WATCH_MAIN_HELD_GRACE_S:-1800}"
+for t in "$TICK_MAX_AGE" "$IDLE_LIMIT" "$SUPPRESSION_LIMIT" "$HOLD_MIN_AGE" "$HOLD_TOP_K" "$MAIN_HELD_GRACE"; do
   [[ "$t" =~ ^[0-9]+$ ]] || { log "threshold must be a non-negative integer, got '$t'"; exit 64; }
 done
 
@@ -688,6 +703,166 @@ else
   fi
 fi
 
+# --- 6. a stuck session holding the shared main checkout ---------------------
+# The incident, observed in production: a background session (`sync-repair`, cwd
+# = the main checkout, name outside the worker keyspace) sat in a non-`working`
+# state for three days after an API error, leaving the shared main checkout's
+# tree dirty. That tree is a fleet-wide resource — dispatch-select-tick's
+# `--ff-only` sync and every graph write through the main checkout refuse to run
+# against a dirty tree — so the whole fleet stalled while every health probe
+# read green. Nothing watched it, because every probe classified sessions on
+# `state: done` alone and this session was in neither `done` nor `working`.
+#
+# A CONJUNCTION, DELIBERATELY:
+#   finding  <=>  (the main checkout's tree is dirty OR has unpushed commits)
+#                 AND (>=1 registered session whose cwd IS the main checkout is
+#                      not working/busy and has been idle >= the grace)
+# Why not the session alone: an interactive human session started in the repo
+# root registers with cwd == the main checkout and sits idle for hours as a
+# matter of course. Alarming on that would mint a graph node against ordinary
+# human use and train the reader to ignore this kind. The HARM is the shared
+# tree being unusable; the session is the ATTRIBUTION. Together they are exactly
+# the incident and nothing else.
+#
+# THIS PREDICATE ACTS ON NOTHING. It does not reap, kill, park or otherwise
+# touch the session — `state: done` is the discriminator for REAPING, and this
+# predicate deliberately does not extend that set. It surfaces, and a human
+# decides. The recommended first act is READING THE SESSION'S TRANSCRIPT: a
+# session stopped on an error holds the only record of why it died, and a blind
+# removal destroys it.
+#
+# FAIL DIRECTION, same as predicate 5 and for the same reason: an unreadable
+# daemon or an unreadable tree is `unknown`, NEVER `clear`. A `clear` here does
+# not merely stay silent — dispatch_predicate sends `--resolve --kind
+# main-checkout-held`, closing an already-open alarm node. So the tree is read
+# THREE-WAY (clean / dirty / unreadable), each git command's status captured
+# separately, mirroring lib-worktree-residue.sh:185. worktree_in_sync
+# (lib-worktree-in-sync.sh:38-78) is the canonical definition of "clean AND zero
+# unpushed" and is the precedent for WHAT to check, but it is deliberately not
+# CALLED here: it collapses "git failed" into the same non-zero return as
+# "dirty", which is the wrong fail direction for an alarm.
+#
+# WHICH SESSION VIEW: claude_agents_list_sessions_in_cwd_all reads the
+# REGISTERED view (`claude agents --json --all`), so the readability gate is
+# SNAPSHOT_ALL_OK, not SNAPSHOT_OK — see predicate 5's FAIL DIRECTION note. That
+# function queries `--all` DIRECTLY rather than through the pre-captured
+# DISPATCH_AGENTS_SNAPSHOT_ALL variable, but SNAPSHOT_ALL_OK is still the
+# correct gate: it certifies that the same underlying view answered this pass,
+# which is the bit that decides whether a "no sessions here" read can be
+# trusted.
+#
+# Idle age comes from _standdown_session_idle_s (lib-standdown-recheck.sh:321).
+# That helper's own comment records that it is already triplicated (copies at
+# lib-frozen-session-park.sh:495-529 and :1069-1094) and that extraction is a
+# follow-up — so this predicate CALLS it rather than writing a fourth copy. It
+# returns rc 1 with no output on no match, which is UNKNOWN: such a row can be
+# judged neither way, so it contributes to neither the finding nor the clear,
+# and if it is the ONLY candidate the verdict is `unknown`.
+#
+# Not quiet under pause — see the PAUSE block in the header.
+V_MAIN="unknown"; D_MAIN=""; B_MAIN=""
+MAIN_HELD_COUNT=0
+MAIN_HELD_IDENTS=""   # identity: one `<name>:<state>` per line
+MAIN_HELD_READINGS="" # reading: the same sessions with ids and idle ages
+MAIN_ROOT="$HOLD_ROOT"
+# Guarded source, dispatch-tick's idiom (dispatch-tick:354, 388, 406, 531, 578):
+# source only when the function is absent, verify it arrived, and on failure log
+# loudly and degrade THIS predicate to `unknown`. Nothing here aborts the pass.
+if ! declare -f _standdown_session_idle_s >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-standdown-recheck.sh" 2>/dev/null
+fi
+if [[ -z "$MAIN_ROOT" ]]; then
+  D_MAIN="repo root unresolvable (no worktree has main checked out and DISPATCH_GRAPH_MAIN_WORKTREE is unset) — the shared main checkout could not be inspected"
+elif ! declare -f _standdown_session_idle_s >/dev/null 2>&1; then
+  log "lib-standdown-recheck.sh failed to load; main-checkout-held session idle age is unmeasurable this pass"
+  D_MAIN="lib-standdown-recheck.sh failed to load, so _standdown_session_idle_s is unavailable — how long a session has been sitting in the main checkout is unmeasurable this pass"
+  B_MAIN="lib-standdown-recheck.sh failed to load, so session idle age in the main checkout is unmeasurable"
+elif [[ "$SNAPSHOT_ALL_OK" -ne 1 ]]; then
+  # Same gate and same reasoning as predicate 5: the lister reads the REGISTERED
+  # view, and an unreadable registered view would emit zero rows — which reads
+  # identically to "nobody is sitting in the main checkout" and would RESOLVE an
+  # open alarm node.
+  D_MAIN="the machine-wide claude agents daemon snapshot (registered view, 'claude agents --json --all') could not be captured this pass — whether a stuck session is sitting in the main checkout is unreadable, and an unreadable session view must NOT be folded into 'nobody is there' here (that would suppress this alarm)"
+else
+  # THREE-WAY tree read. Each git command's status is captured separately; a
+  # FAILED command is `unknown`, never `clear` and never `finding`.
+  MAIN_TREE_OK=1
+  MAIN_TREE_FAIL=""
+  MAIN_PORCELAIN=""
+  MAIN_UNPUSHED=""
+  if ! MAIN_PORCELAIN=$(git -C "$MAIN_ROOT" status --porcelain --untracked-files=no 2>/dev/null); then
+    MAIN_TREE_OK=0
+    MAIN_TREE_FAIL="git status --porcelain --untracked-files=no failed"
+  elif ! MAIN_UNPUSHED=$(git -C "$MAIN_ROOT" rev-list --count HEAD --not --remotes 2>/dev/null) \
+       || [[ ! "$MAIN_UNPUSHED" =~ ^[0-9]+$ ]]; then
+    MAIN_TREE_OK=0
+    MAIN_TREE_FAIL="git rev-list --count HEAD --not --remotes failed or returned a non-numeric count"
+  fi
+  MAIN_DIRTY_COUNT=0
+  [[ -n "${MAIN_PORCELAIN//[[:space:]]/}" ]] && MAIN_DIRTY_COUNT=$(grep -c . <<<"$MAIN_PORCELAIN")
+  if [[ "$MAIN_TREE_OK" -ne 1 ]]; then
+    D_MAIN="the shared main checkout's tree state could not be read at $MAIN_ROOT ($MAIN_TREE_FAIL) — whether the tree is being held is unreadable, and an unreadable tree is NOT a clean tree"
+    B_MAIN="the shared main checkout's tree state could not be read at $MAIN_ROOT ($MAIN_TREE_FAIL)"
+  elif (( MAIN_DIRTY_COUNT == 0 && MAIN_UNPUSHED == 0 )); then
+    # THE FALSE-POSITIVE GUARD. An idle human session in the repo root is
+    # ordinary and must never alarm: with the shared tree clean and fully
+    # pushed, nothing is being held, whoever is sitting there.
+    V_MAIN="clear"
+    D_MAIN="the shared main checkout at $MAIN_ROOT is clean and fully pushed (0 modified tracked file(s), 0 unpushed commit(s)) — nothing is holding it"
+  else
+    MAIN_SESSIONS=""
+    if ! MAIN_SESSIONS=$(claude_agents_list_sessions_in_cwd_all "$MAIN_ROOT" 2>/dev/null); then
+      D_MAIN="the shared main checkout at $MAIN_ROOT is dirty/unpushed, but the registered session list for that cwd is UNREADABLE (claude_agents_list_sessions_in_cwd_all returned UNKNOWN) — a dirty tree with no attributable session is not a clear"
+      B_MAIN="the shared main checkout at $MAIN_ROOT is dirty/unpushed and the registered session list for that cwd is unreadable"
+    else
+      MAIN_IDLE_UNKNOWN=0
+      while IFS=$'\t' read -r M_SID M_JOBID M_NAME M_STATE M_STATUS; do
+        [[ -n "${M_SID}${M_NAME}${M_STATE}" ]] || continue
+        # Someone is ACTIVELY WORKING here — that is the normal way the shared
+        # tree goes dirty, and it is not an incident. `state` is the granular
+        # field the `--all` listing carries; `status` is the coarse sibling.
+        # Either saying "working" exonerates the row.
+        [[ "$M_STATE" == "working" || "$M_STATUS" == "busy" ]] && continue
+        if ! M_IDLE=$(_standdown_session_idle_s "$M_SID" "$NOW" 2>/dev/null) \
+           || [[ ! "$M_IDLE" =~ ^-?[0-9]+$ ]]; then
+          # UNKNOWN idle: this row can be judged neither way. It contributes to
+          # neither the finding nor the clear.
+          MAIN_IDLE_UNKNOWN=$(( MAIN_IDLE_UNKNOWN + 1 ))
+          continue
+        fi
+        # Grace, following lib-frozen-session-park.sh:495-529 exactly, INCLUDING
+        # its deliberate treatment of a negative (future-stamped) idle as
+        # `< grace`: observe, never act.
+        (( M_IDLE < MAIN_HELD_GRACE )) && continue
+        MAIN_HELD_COUNT=$(( MAIN_HELD_COUNT + 1 ))
+        MAIN_HELD_IDENTS+="${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"$'\n'
+        MAIN_HELD_READINGS+="${M_NAME:-<unnamed>} (session ${M_SID:-<sid?>}, job ${M_JOBID:-<id?>}, state ${M_STATE:-<state?>}/${M_STATUS:-<status?>}, idle ${M_IDLE}s); "
+      done <<<"$MAIN_SESSIONS"
+      if (( MAIN_HELD_COUNT > 0 )); then
+        V_MAIN="finding"
+        D_MAIN="$MAIN_HELD_COUNT stuck session(s) sitting in the shared main checkout $MAIN_ROOT while it holds $MAIN_DIRTY_COUNT modified tracked file(s) and $MAIN_UNPUSHED unpushed commit(s): ${MAIN_HELD_READINGS%; }"
+        # IDENTITY ONLY. Session ids, idle ages and the porcelain/unpushed
+        # counts are READINGS — they move on every pass while the condition
+        # merely persists, and a body carrying them would push to origin/main
+        # once per 5-minute pass. Sorted so the same set of sessions always
+        # renders the same bytes regardless of registry ordering.
+        B_MAIN="a stuck session is holding the shared main checkout $MAIN_ROOT dirty or unpushed. Offending session(s) as <name>:<state>: $(printf '%s' "$MAIN_HELD_IDENTS" | sort | tr '\n' ';' | sed 's/;$//' | sed 's/;/; /g')"
+      elif (( MAIN_IDLE_UNKNOWN > 0 )); then
+        # Every candidate row's idle age was unmeasurable (no transcript, or an
+        # unreadable mtime). "I could not measure it" is not evidence the
+        # session is fine — and reporting clear here would resolve the alarm.
+        V_MAIN="unknown"
+        D_MAIN="the shared main checkout at $MAIN_ROOT is dirty/unpushed and $MAIN_IDLE_UNKNOWN candidate session(s) sit in it whose transcript idle age is UNMEASURABLE — no verdict is possible"
+        B_MAIN="the shared main checkout at $MAIN_ROOT is dirty/unpushed and the idle age of the session(s) sitting in it is unmeasurable"
+      else
+        V_MAIN="clear"
+        D_MAIN="the shared main checkout at $MAIN_ROOT is dirty/unpushed ($MAIN_DIRTY_COUNT modified tracked file(s), $MAIN_UNPUSHED unpushed commit(s)) but no session sitting in it is stuck past the ${MAIN_HELD_GRACE}s grace"
+      fi
+    fi
+  fi
+fi
+
 # =============================================================================
 # Reporting — runs ONCE, over the complete verdict set.
 # =============================================================================
@@ -703,6 +878,7 @@ B_DAEMON="${B_DAEMON:-$D_DAEMON}"
 B_BUSY="${B_BUSY:-$D_BUSY}"
 B_AUTOMERGE="${B_AUTOMERGE:-$D_AUTOMERGE}"
 B_HOLD="${B_HOLD:-$D_HOLD}"
+B_MAIN="${B_MAIN:-$D_MAIN}"
 
 FINDING_COUNT=0
 UNKNOWN_COUNT=0
@@ -721,6 +897,7 @@ note_verdict "$V_DAEMON"    "daemon-degraded: $B_DAEMON"
 note_verdict "$V_BUSY"      "busy-stall: $B_BUSY"
 note_verdict "$V_AUTOMERGE" "automerge-suppressed: $B_AUTOMERGE"
 note_verdict "$V_HOLD"      "unclaimed-hold: $B_HOLD"
+note_verdict "$V_MAIN"      "main-checkout-held: $B_MAIN"
 
 # An unreadable PAUSE state is itself an unreadable input — it must raise
 # watch-unknown even when all five predicates happened to read cleanly.
@@ -833,6 +1010,36 @@ Thresholds: DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=${HOLD_MIN_AGE}s,
 DISPATCH_FLEET_WATCH_HOLD_TOP_K=${HOLD_TOP_K}
 Pause state: $PAUSE_STATE (unclaimed holds are evaluated regardless of pause)"
 
+# Identity only: the offending `<name>:<state>` session pairs, the main checkout
+# path, and the threshold NAME. NOT the sessionIds, NOT the idle ages, NOT the
+# porcelain or unpushed counts — those change on every pass while the condition
+# merely persists, and each change is a push to origin/main. The operator needs
+# the sessionId to act, so the body says where to find it, exactly as the
+# daemon-degraded body does for its raw liveness JSON.
+dispatch_predicate "$V_MAIN" main-checkout-held \
+  "A stuck session is holding the shared main checkout dirty" \
+  "$B_MAIN
+
+Blast radius: the main checkout's tree is shared fleet-wide. While it is dirty
+or carries unpushed commits, dispatch-select-tick's 'git merge --ff-only
+origin/main' sync refuses to run and every graph write committed through that
+checkout fails — so the fleet stalls on work that has nothing to do with the
+stuck session.
+
+RECOMMENDED FIRST ACT: READ THE SESSION'S TRANSCRIPT. A session sitting in a
+non-working state may hold the only record of why it stopped (an API error, a
+denial, a crash mid-write) and may hold uncommitted work in that tree. Do not
+remove it blind. This alarm surfaces the condition and takes no action on the
+session itself: it does not reap, kill or park anything.
+
+The offending session ids and their idle ages are in this pass's journald
+output, not here: they change every pass and would push a commit per pass.
+
+Threshold: DISPATCH_FLEET_WATCH_MAIN_HELD_GRACE_S=${MAIN_HELD_GRACE}s
+Pause state: $PAUSE_STATE (a held main checkout is evaluated regardless of
+pause — the incident that motivated this predicate happened during a correct
+pause)"
+
 # THE most important single behavior in this script: any unknown, for any
 # reason, is announced. A watcher that cannot read its inputs must say so
 # loudly rather than emit a false all-clear.
@@ -864,6 +1071,8 @@ if [[ "$JSON" -eq 1 ]]; then
     --arg v_automerge "$V_AUTOMERGE" --arg d_automerge "$D_AUTOMERGE" \
     --arg v_hold "$V_HOLD" --arg d_hold "$D_HOLD" \
     --argjson hold_count "$HOLD_COUNT" \
+    --arg v_main "$V_MAIN" --arg d_main "$D_MAIN" \
+    --argjson main_held_count "$MAIN_HELD_COUNT" \
     --arg busy_count "${BUSY_COUNT:-}" \
     --arg busy_zero_since "${BUSY_SINCE_AFTER:-}" \
     --arg suppression_since "${SUPPRESSION_SINCE_AFTER:-}" \
@@ -888,7 +1097,9 @@ if [[ "$JSON" -eq 1 ]]; then
                                    suppression_since: ($suppression_since | blank_null | if . == null then null else tonumber end),
                                    open_main_red_nodes: ($red_nodes | blank_null | if . == null then [] else split("\n") end) },
         "unclaimed-hold":        { verdict: $v_hold,      detail: $d_hold,
-                                   candidate_count: $hold_count }
+                                   candidate_count: $hold_count },
+        "main-checkout-held":    { verdict: $v_main,      detail: $d_main,
+                                   held_session_count: $main_held_count }
       },
       unknown_reasons: ($unknown_reasons | blank_null)
     }'
@@ -901,6 +1112,7 @@ printf '  daemon-degraded:      %-8s %s%s\n' "$V_DAEMON"    "$D_DAEMON"    "$PAU
 printf '  busy-stall:           %-8s %s%s\n' "$V_BUSY"      "$D_BUSY"      "$PAUSE_TAG"
 printf '  automerge-suppressed: %-8s %s%s\n' "$V_AUTOMERGE" "$D_AUTOMERGE" "$PAUSE_TAG"
 printf '  unclaimed-hold:       %-8s %s%s\n' "$V_HOLD"      "$D_HOLD"      "$PAUSE_TAG"
+printf '  main-checkout-held:   %-8s %s%s\n' "$V_MAIN"      "$D_MAIN"      "$PAUSE_TAG"
 
 # Never print a bare `ok` when anything is unknown — that is the false
 # all-clear this watcher exists to prevent.
