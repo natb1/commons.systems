@@ -2080,4 +2080,115 @@ else
 fi
 sweep_teardown
 
+# --- Test N10a: SESSION_STATE_CENSUS logs one line per row ------------------
+# claude_agents_count_by_state (tactic-blocked-session-invisible-to-census
+# Unit 1) emits two interleaved views: 2-column `state<TAB>count` (overall)
+# and 3-column `keyspace<TAB>state<TAB>count` (per-keyspace, plus a
+# `terminal` roll-up). A single blocked tactic-* session should produce both
+# an overall `state=blocked n=1` line and a keyspace-partitioned
+# `keyspace=worker state=blocked n=1` line.
+echo "Test: N10a SESSION_STATE_CENSUS logs one line per emitted row"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/66-census-rows"
+sweep_register_wt "$WT_PATH" "66-census-rows"
+echo "OPEN" > "$STUB_DIR/issue-state-66.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args; always return the fixed payload regardless of --json/--all/--cwd.
+cat <<'JSON'
+[
+  {"sessionId":"s1","state":"blocked","name":"66-census-rows","cwd":""}
+]
+JSON
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N10a sweep exits 0" "0" "$rc"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SESSION_STATE_CENSUS: state=blocked n=1" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N10a logs the overall state=blocked n=1 row"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N10a logs the overall state=blocked n=1 row"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SESSION_STATE_CENSUS: keyspace=worker state=blocked n=1" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N10a logs the keyspace=worker state=blocked n=1 row"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N10a logs the keyspace=worker state=blocked n=1 row"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N10b: SESSION_STATE_CENSUS logs "none" on an empty registry -------
+echo "Test: N10b SESSION_STATE_CENSUS logs none on an empty registry"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/67-census-empty"
+sweep_register_wt "$WT_PATH" "67-census-empty"
+echo "OPEN" > "$STUB_DIR/issue-state-67.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore all args; always return an empty registry.
+echo '[]'
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N10b sweep exits 0" "0" "$rc"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SESSION_STATE_CENSUS: none (empty registry)" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N10b logs none on an empty registry"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N10b logs none on an empty registry"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test N10c: SESSION_STATE_CENSUS logs UNKNOWN when daemon unqueryable ---
+echo "Test: N10c SESSION_STATE_CENSUS logs UNKNOWN when the daemon is unqueryable"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/68-census-unknown"
+sweep_register_wt "$WT_PATH" "68-census-unknown"
+echo "OPEN" > "$STUB_DIR/issue-state-68.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+fake="$TMPDIR_TEST/fake/claude"
+cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Simulate a down/unqueryable daemon: nonzero exit, no stdout.
+exit 1
+FAKE
+chmod +x "$fake"
+export CLAUDE_AGENTS_CMD="$fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "N10c sweep exits 0" "0" "$rc"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SESSION_STATE_CENSUS: UNKNOWN (daemon unqueryable)" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: N10c logs UNKNOWN, never a literal none"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: N10c logs UNKNOWN, never a literal none"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
 report_results

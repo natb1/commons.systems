@@ -589,4 +589,48 @@ else
   log "HELD_FOR_DEBUG_COUNT: n=UNKNOWN (daemon unqueryable)"
 fi
 
+# ---- Session state census (hygiene/observability metric) --------------------
+# Log every registered session's state via claude_agents_count_by_state, so a
+# session parked in a non-terminal, non-`working` state (e.g. `blocked`) is
+# visible in this log instead of silently falling into an unemitted remainder
+# — see tactic-blocked-session-invisible-to-census. This is not a
+# control-flow signal — nothing downstream acts on it. UNKNOWN is logged
+# distinctly from an empty census, same convention as HELD_FOR_DEBUG_COUNT
+# above: "daemon unqueryable" and "zero sessions" are different facts and
+# must not be conflated.
+#
+# The sandbox caveat above HELD_FOR_DEBUG_COUNT applies here too: under a
+# sandboxed Bash call the daemon's Unix socket is unreachable and `claude
+# agents --json` returns `[]` with exit 0, which reads here as a definite
+# empty census — the UNKNOWN branch cannot catch it because nothing failed.
+# Read an empty census from a sandboxed run as "not measured".
+#
+# claude_agents_count_by_state emits two interleaved views, distinguished by
+# column count: 2-column `state<TAB>count` (overall, no keyspace filter) and
+# 3-column `keyspace<TAB>state<TAB>count` (per-keyspace, plus a `terminal`
+# roll-up row per keyspace). Reading 3 fields off a 2-column line leaves the
+# third variable empty, which is exactly what distinguishes the two shapes
+# below — no upfront column-counting needed.
+if census_out=$(claude_agents_count_by_state); then
+  census_rc=0
+else
+  census_rc=$?
+fi
+if [[ "$census_rc" -eq 0 ]]; then
+  if [[ -z "$census_out" ]]; then
+    log "SESSION_STATE_CENSUS: none (empty registry)"
+  else
+    while IFS=$'\t' read -r census_c1 census_c2 census_c3; do
+      [[ -z "$census_c1" ]] && continue
+      if [[ -n "$census_c3" ]]; then
+        log "SESSION_STATE_CENSUS: keyspace=$census_c1 state=$census_c2 n=$census_c3"
+      else
+        log "SESSION_STATE_CENSUS: state=$census_c1 n=$census_c2"
+      fi
+    done <<<"$census_out"
+  fi
+else
+  log "SESSION_STATE_CENSUS: UNKNOWN (daemon unqueryable)"
+fi
+
 exit 0
