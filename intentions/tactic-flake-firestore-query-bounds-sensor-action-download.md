@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-flake-firestore-query-bounds-sensor-action-download
   pr: 3053
@@ -28,7 +28,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-09T22:36:31Z
+    mergeCommitSha: 69626f6afbca4c40795f5dc61cc75a39660af735
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
