@@ -59,7 +59,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-align-tactics-tactic-mode-drift-gate
   pr: 2982
@@ -67,12 +67,16 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-05T00:15:46Z
+    mergeCommitSha: b8d2e250fcd9188e40f678cd8408933a3edac3ef
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-align-tactics-tactic-mode-drift-gate
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -64,6 +64,25 @@ clarifications:
       claim could ever be earned. Until then the claims discipline on
       strategy-show-not-tell bounds what may be asserted. Recorded 2026-07-08
       interview."
+  - question: What does selection over conversion mean operationally for outreach copy?
+    answer: "(Recorded 2026-08-04 interview, from the README steelman challenge.)
+      Binding guidance for all copy surfaces, not only the README: translation,
+      not persuasion — discovery optimization (SEO/AIO) means using the
+      practitioner field’s real vocabulary for what the artifacts already are,
+      so self-selecting practitioners and their agents can find and recognize
+      the work; compelling narrative is bounded by demonstrability
+      (strategy-show-not-tell’s claims discipline — no claim beyond what is
+      demonstrated); funnel conversion is re-read as selection — funnels serve
+      self-selected arrivals; urgency mechanics, social proof, and dark patterns
+      never enter copy. Additionally (author, 2026-08-04): prospective
+      practitioners are expected to react badly to philosophical language, so
+      practitioner-facing copy avoids the philosophical vocabulary (periagoge,
+      dialectic, hexis, and similar) while describing the same concepts in plain
+      language — e.g. the README runbook describes the mount dialectic as
+      probing what the practitioner already believes and teaching the
+      load-bearing concepts, without naming the method; the philosophical terms
+      remain first-class in the graph record itself. This is the operational
+      form of the recorded ‘selection over conversion’ method."
 tooling_goals: []
 success_signal:
   observable: adoption with migration freedom — users who can leave, forks,
@@ -108,6 +127,7 @@ office_hours:
     /align-tactics."
   since: 2026-07-13
   recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:

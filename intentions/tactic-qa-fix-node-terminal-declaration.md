@@ -37,8 +37,20 @@ attention:
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-qa-fix-node-terminal-declaration
+  pr: 3044
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-09
+    attempt: 3
+    pushed_sha: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

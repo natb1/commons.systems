@@ -282,3 +282,81 @@ discriminator (occupied-by-terminal vs occupied-by-live) as the detection
 point and the sweeps as the second. This node's remaining scope narrows to
 making the fast path's decline detectable and loud — verify the post-state
 instead of trusting exit 0.
+
+## Correction 2026-08-06: the decline is a WRONG-PATH bug, not a no-worktree case
+
+The 2026-08-03 diagnosis above attributes the `claude rm` decline to the node
+branch never having been pushed to `origin` ("the unverifiable-worktree
+condition holds whenever the node's branch was never pushed"). Measured
+2026-08-06 during an N+7 monitor pass, that is **not** the operative cause of
+the observed permanent declines, and the recorded remedy — "remove the worktree
+first" — was being applied to the wrong directory.
+
+`lib-session-reap.sh:291` derives the worktree path from the node id:
+
+```sh
+local wt_path="$worktrees_root/$name"
+```
+
+with the standing comment that its path "is derived, never taken from the
+registry's `cwd`: provision-node-worktree puts a node's checkout at exactly
+`<project-root>/.claude/worktrees/<node-id>`". **That premise does not hold for
+`/align-tactics` sessions**, whose checkout is provisioned at
+`<worktrees>/align-tactics-<suffix>` while the session registers under the bare
+node id. The sweep therefore probes a path that either does not exist — logging
+`SESSION_REAP_NO_WORKTREE` and proceeding — or, worse, exists as an unrelated
+stale checkout it then gates on. Either way it never removes the directory the
+daemon is actually holding, so `claude rm` declines, and the sweep re-attempts
+and re-declines on every interval indefinitely.
+
+### Reproduced twice, same shape
+
+Session `3dc03651`, node `tactic-fleet-alarm-watch-unknown`:
+
+```
+SESSION_REAP_NO_WORKTREE: ... worktree=.../tactic-fleet-alarm-watch-unknown
+  (nothing to remove; proceeding to claude rm)
+REAP_DECLINED: ... claude_rm_rc=1
+```
+
+`claude rm` itself names the real path in its decline text:
+
+```
+kept 3dc03651 — worktree has files but no repository to verify them against
+  worktree kept at .../.claude/worktrees/align-tactics-fleet-alarm-watch-unknown
+```
+
+Removing **that** directory made `claude rm` succeed immediately (rc=0). The
+same sequence held for session `2551a780` /
+`tactic-fleet-alarm-unclaimed-hold`: the sweep gated on
+`<worktrees>/tactic-fleet-alarm-unclaimed-hold`, `claude rm` was holding
+`<worktrees>/align-tactics-fleet-alarm-unclaimed-hold`, and the reap completed
+the moment the latter was removed. Both align-prefixed worktrees were 0 commits
+ahead of `origin/main`, clean, and carried no open PR.
+
+### What this means for this node's plan
+
+The remaining scope — make the decline detectable and loud — stands and is
+unaffected. But loudness alone leaves the loop running: a decline that is
+correctly detected every 15 minutes and correctly reported is still a decline.
+The plan must additionally cover **path resolution**, because the removal step
+the remedy depends on is aimed at the wrong directory:
+
+- The daemon is the authority on which worktree a session holds. Its decline
+  text carries the path verbatim, and the registry row is queryable; the
+  node-id-derived path is an assumption that is false for every
+  `/align-tactics`-provisioned worktree.
+- The derivation comment at `lib-session-reap.sh:288-291` asserts an invariant
+  that `provision-node-worktree` does not actually guarantee across lanes.
+  Either the invariant is enforced at provisioning time, or the sweep stops
+  deriving and starts resolving. That choice is a design call, not an
+  implementation detail.
+- `SESSION_REAP_NO_WORKTREE` is currently benign-sounding and precedes a reap
+  attempt. When the daemon *does* hold a worktree, that log line is a false
+  negative and should not read as "nothing to remove".
+
+Recorded, not taken: this node stays `status: raw` under the 2026-08-05
+author decision deferring raw tactics to the fleet. The separate two-dot
+reap-safety defect found in the same pass is owned by
+`tactic-reap-safety-behind-branch-false-positive`, which is a different gate
+(7b) earlier in the same sweep.

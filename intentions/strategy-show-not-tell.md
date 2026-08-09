@@ -39,6 +39,16 @@ clarifications:
       already owns per-artifact review at office-hours. The open question itself
       is held on strategy-promote-progressive-detachment next to the privilege
       gradient, deferred to external calibration. Recorded 2026-07-08 interview.
+  - question: Does compelling copy conflict with demonstration over argument?
+    answer: "(Recorded 2026-08-04 interview.) Not when bounded: compelling narrative
+      is legitimate translation — naming what the artifacts demonstrably are in
+      the vocabulary practitioners actually search — and stays inside the claims
+      discipline (every claim demonstrable; the README’s ‘this repo migrated off
+      GitHub Issues and manages itself with the graph’ is a demonstration claim,
+      not persuasion). Persuasion mechanics — urgency, social proof, dark
+      patterns — remain excluded from all copy. The canonical operational
+      guidance lives on strategy-promote-progressive-detachment’s 2026-08-04
+      entry; this entry records the claims-discipline binding."
 tooling_goals: []
 success_signal:
   observable: public artifacts deliver value with zero philosophical framing —
