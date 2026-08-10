@@ -161,7 +161,8 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-residue-bounded-work-in-progress
 office_hours: null
 pace_exempt: false
 rounds: null
