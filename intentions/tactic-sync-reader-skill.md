@@ -13,7 +13,6 @@ rationale: "Retained from the 2026-07-06 /align-strategy interview
   chunk-node lifecycle is the retirement trigger. Full requirement and interview
   design decisions in the node body."
 reading: null
-gap: null
 serves:
   - strategy-philosophical-grounding
 recovers: []

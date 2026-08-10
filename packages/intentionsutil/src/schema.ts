@@ -177,7 +177,6 @@ export interface IntentionNode {
   recovers: string[]; // ids of delegation records this node's work unwinds; meaningful on strategies
   rationale: string | null;
   reading: string | null; // current measured value of success_signal.observable; null until a sensor populates it
-  gap: string | null;
   clarifications: Clarification[];
   tooling_goals: ToolingGoal[];
   success_signal: SuccessSignal | null;
@@ -213,7 +212,6 @@ export interface IntentionNodeInput {
   recovers?: string[];
   rationale?: string | null;
   reading?: string | null;
-  gap?: string | null;
   clarifications?: Clarification[];
   tooling_goals?: ToolingGoal[];
   success_signal?: SuccessSignal | null;
@@ -779,7 +777,6 @@ export function validateNode(value: unknown): IntentionNode {
     parent: optionalString(value.parent, "parent"),
     rationale: optionalString(value.rationale, "rationale"),
     reading: optionalString(value.reading, "reading"),
-    gap: optionalString(value.gap, "gap"),
 
     // Optional structured — absent/null tolerated, defaults [] / {} / null.
     serves: value.serves == null ? [] : validateIdArray(value.serves, "serves"),

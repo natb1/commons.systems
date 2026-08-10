@@ -24,7 +24,6 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -494,7 +493,7 @@ describe("evaluateSelection", () => {
   describe("align-tactics (strategy phase:null) selection", () => {
     it("passes a codified, phase:null strategy the selector would emit (exit 0)", () => {
       const dir = tempDir();
-      // reading:null, gap:null => unvalidated signal => an align candidate.
+      // reading:null => deriveGap non-null => unvalidated signal => an align candidate.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", status: "codified" }));
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
       expect(r.exitCode).toBe(0);
@@ -518,7 +517,7 @@ describe("evaluateSelection", () => {
 
     it("exit 12 when the signal became validated (no longer align-eligible)", () => {
       const dir = tempDir();
-      // reading set, gap null => validated signal => selector drops the strategy.
+      // reading set, no success_signal => deriveGap null => validated signal => selector drops the strategy.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", reading: "holding at threshold" }));
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
       expect(r.exitCode).toBe(12);
@@ -550,7 +549,6 @@ describe("evaluateSelection", () => {
         anode({
           id: "strategy-a",
           kind: "strategy",
-          gap: "still gapped",
           reading: "fresh 2026-07-10",
           rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
         }),

@@ -22,8 +22,11 @@ rationale: >-
   recovery: a delegation moved to portable terms is far cheaper to unwind later.
   This is the graph's first strategy whose primary axis is divergence rather
   than irreversibility.
-reading: null
-gap: null
+reading: "high-divergence: 5 records; 4 covered by recovers; uncovered:
+  delegation-communications"
+gap: 'reading "high-divergence: 5 records; 4 covered by recovers; uncovered:
+  delegation-communications" does not meet threshold "every high-divergence
+  record is covered by a recovers edge or a recorded re-alignment"'
 serves:
   - virtue-alignment-of-attachments
 recovers: []
@@ -59,6 +62,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - fee-aligned vendors exist on portable terms (owned domains, open formats,

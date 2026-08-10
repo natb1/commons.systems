@@ -1,6 +1,7 @@
 import { IntentionSchemaError } from "./errors.js";
 import { ownTier } from "./schema.js";
 import type { IntentionNode } from "./schema.js";
+import { deriveGap } from "./sensors.js";
 
 // --- Types -------------------------------------------------------------------
 
@@ -64,9 +65,18 @@ function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A strategy's signal is unvalidated iff it has a gap, or no reading yet. */
+/**
+ * A strategy's signal is unvalidated iff it has a gap, or no reading yet.
+ *
+ * `reading === null` is checked directly (not folded into the `deriveGap`
+ * check alone) because `deriveGap` returns `null` whenever `success_signal`
+ * is itself null — a strategy with no signal at all and no reading would
+ * then read as "validated," which is wrong: a strategy that has not even
+ * named a signal yet is exactly the unvalidated case this predicate exists
+ * to flag. Keeping the `reading === null` disjunct preserves that case.
+ */
 export function isSignalUnvalidated(strategy: IntentionNode): boolean {
-  return strategy.gap !== null || strategy.reading === null;
+  return strategy.reading === null || deriveGap(strategy) !== null;
 }
 
 // --- Capture-resolution scoring ------------------------------------------------

@@ -49,7 +49,6 @@ describe("store round-trip", () => {
       recovers: ["delegation-1"],
       rationale: "Alignment is the project's reason for being.",
       reading: "See the alignment principles.",
-      gap: "No automated alignment check exists yet.",
       clarifications: [
         { question: "Who arbitrates conflicts?", answer: "The charter owner." },
         { question: "How often is it reviewed?", answer: "Each digest cycle." },
@@ -95,7 +94,6 @@ describe("store round-trip", () => {
       recovers: [],
       rationale: null,
       reading: null,
-      gap: null,
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
@@ -136,7 +134,6 @@ describe("store round-trip", () => {
         "Block scalars in YAML can silently strip trailing newlines\nor fold long lines.\n\nThis test pins the guarantee that neither transformation occurs.\n",
       reading:
         "See yaml.org/spec/1.2/spec.html section 8.1.1.2 on block scalar chomping.\n\nAlso review the 'clip', 'strip', and 'keep' indicators.",
-      gap: "No automated check for block-scalar fidelity existed before this test.",
       clarifications: [
         {
           question: "Does the yaml library clip trailing newlines?",
@@ -193,7 +190,6 @@ describe("store round-trip", () => {
       recovers: [],
       rationale: null,
       reading: null,
-      gap: null,
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
@@ -224,7 +220,6 @@ describe("writeNode body preservation", () => {
       recovers: [],
       rationale: null,
       reading: null,
-      gap: null,
       clarifications: [],
       tooling_goals: [],
       success_signal: null,
