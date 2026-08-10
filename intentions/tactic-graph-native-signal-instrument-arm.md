@@ -58,7 +58,8 @@ phase: implement
 execution: null
 validates:
   - strategy-graph-native-dispatch
-blocked_by: []
+blocked_by:
+  - tactic-hold-residue-graph-native-signal-instrument-arm
 office_hours: null
 pace_exempt: false
 rounds: null
