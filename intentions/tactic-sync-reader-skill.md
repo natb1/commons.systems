@@ -48,6 +48,7 @@ execution:
     since: 2026-07-22
     attempt: 1
     pushed_sha: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []

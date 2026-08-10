@@ -77,7 +77,7 @@ drifted from the growing test file by finalize time):
   (`worktree_has_live_session` …), the claim is held" (same file, Unit 1).
 - **Describes the pre-#1474 behavior** that was deliberately replaced. The
   actual shipped test —
-  `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`
+  `.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh`
   (verified at finalize time: the `# Test: graph-select-target — a
   human-created node-id worktree is a held claim (tactic-align-session-claiming
   Unit 3)` block, ~line 30408, and its `live_session_claimed_nums (#1474)`
@@ -140,7 +140,7 @@ Scope:
   `phase: done`, `execution`, etc. — is untouched by a text correction to its
   body).
 - `.claude/skills/dispatch-propagate/scripts/graph-select-target` and
-  `test-dispatch-scripts.sh` — the ground truth the corrected Unit 3 text must
+  `test-graph-select-target.sh` — the ground truth the corrected Unit 3 text must
   match; re-read both directly rather than trusting this plan's line numbers,
   which will have drifted further by execution time.
 

@@ -4,7 +4,8 @@
 # code that merges a node-lane PR.
 #
 # For every graph-native tactic at phase:review that carries an execution.pr AND
-# the `reviewed` completion marker in execution.markers, it senses the PR and —
+# the `reviewed` completion marker in execution.markers AND no in-flight
+# execution.conflict interrupt, it senses the PR and —
 # when it is OPEN, MERGEABLE, green on CI, and the node's scope fingerprint is
 # fresh — squash-merges it label-free. The `reviewed` marker is the label-free
 # replacement for dispatch-auto-merge's `dispatch:reviewed` label check: a
@@ -16,10 +17,20 @@
 # a single owned-shell sweep with no agent turn inside the merge loop.
 #
 # Merge gates, in order (a failed gate SKIPS silently, it never demotes):
+#   - office_hours park. A non-null node.office_hours HOLDS (emits
+#     `held <id> (office-hours)`, no merge) — a parked node awaits a human
+#     decision, and merging its PR would ship the code the park is flagging.
+#     Never demotes: the node stays at phase:review for a human to drain via
+#     office-hours. Evaluated first, before any GitHub sensing, so a parked
+#     node needs no PR fetch at all.
 #   - PR state OPEN. MERGED/CLOSED are absorbed by reconcile-graph-merged, not
 #     here.
 #   - mergeable MERGEABLE. A CONFLICTING/UNKNOWN PR is the provision-time
 #     conflict path's job, not this sweep's.
+#   - no in-flight execution.conflict (applied in the Step 2 enumeration). A
+#     resolved conflict can flip the PR back to MERGEABLE before the selector
+#     pass self-heals the interrupt and routes the re-review; merging then
+#     lands code the completed review never saw.
 #   - CI passing. `pending` retries next tick; `failing` belongs to the fix
 #     interrupt (do NOT merge, do NOT route the fix here — the next
 #     transition-node / selection tick routes it).
@@ -36,8 +47,9 @@
 # script sets NOTHING sandbox-related; that is the caller's responsibility.
 #
 # Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged, and
-# `held <id> (<reason>)` per fail-closed freshness hold; NOTHING for a plain
-# skip (an ineligible PR is silently passed over).
+# `held <id> (<reason>)` per hold, where <reason> is one of `office-hours`,
+# `missing-stamp`, or `scope-stale`; NOTHING for a plain skip (an ineligible
+# PR is silently passed over).
 #
 # Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored (node
 # enumeration failure, a gh sense/merge error, or a freshness computation
@@ -81,6 +93,23 @@ fi
 # index("dispatch:reviewed") label check; a phase:review node without it is
 # review-in-progress, not a candidate.
 #
+# A node carrying an in-flight `execution.conflict` interrupt is EXCLUDED here
+# — the load-bearing copy of the conflict-interrupt merge guard (the copy in
+# the legacy label-gated dispatch-auto-merge is defense-in-depth only, since
+# node-lane PRs are opened label-free and never reach it). A node can flip
+# CONFLICTING → MERGEABLE while `execution.conflict` is STILL set: the conflict
+# was resolved by /dispatch-conflict or by any push to the head branch, but the
+# per-node selector pass that self-heals the interrupt and routes the re-review
+# has not run yet this tick (graph-auto-merge runs BEFORE selection in the
+# tick). Merging in that window lands conflict-resolution code the completed
+# review never saw, and defeats the re-review path — this sweep runs
+# `gh pr ready` first, undoing the `gh pr ready --undo` re-draft the resolution
+# path relies on. The check lives in this strict enumeration rather than in a
+# second process spawn so it inherits `listNodesStrict`'s fail-closed posture:
+# an unreadable store aborts the pass instead of yielding an empty exclusion
+# set. It reads the FIRST-CLASS `execution.conflict` field only — never the
+# `attributes` squatter path some other readers tolerate.
+#
 # Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
 # a corrupt node file must abort the pass loudly rather than silently vanish
 # from the candidate set (or, via a dropped blocker, silently qualify one).
@@ -91,9 +120,10 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     if (n.phase !== "review") continue;
     const pr = n.execution && n.execution.pr;
     if (pr === null || pr === undefined) continue;
+    if (n.execution.conflict !== null && n.execution.conflict !== undefined) continue;
     const markers = (n.execution && n.execution.markers) || [];
     if (!markers.includes("reviewed")) continue;
-    process.stdout.write(n.id + "\t" + pr + "\n");
+    process.stdout.write(n.id + "\t" + pr + "\t" + (n.office_hours == null ? "clean" : "parked") + "\n");
   }
 ') )" || { echo "graph-auto-merge: node enumeration failed" >&2; exit 1; }
 
@@ -116,8 +146,18 @@ fi
 
 # ---- Step 4: per-candidate sense + fail-closed freshness gate + merge --------
 HARD_ERROR=0
-while IFS=$'\t' read -r id pr; do
+while IFS=$'\t' read -r id pr parked; do
   [[ -n "$id" && -n "$pr" ]] || continue
+
+  # ---- office_hours park gate (fail closed, before any GitHub sensing) -----
+  # A parked node awaits a human decision; merging its PR would ship the code
+  # the park was flagging. Decline VISIBLY and never demote — same posture as
+  # the freshness gate below. Fail closed: anything other than the literal
+  # `clean` (an empty third field from a desynced enumeration included) HOLDS.
+  if [[ "$parked" != "clean" ]]; then
+    echo "held $id (office-hours)"
+    continue
+  fi
 
   # ---- Sense the PR (REST) --------------------------------------------------
   rc=0

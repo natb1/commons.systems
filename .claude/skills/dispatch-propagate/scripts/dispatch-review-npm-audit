@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+# Dependency-audit differential finder: audit HEAD against the merge base's
+# lockfile and emit ONLY the normalized differential, already in the review-fix
+# Per-finding schema.
+# Usage: dispatch-review-npm-audit <MERGE_BASE>
+#
+# Replaces the two raw `npm audit --json` blocks that used to run inline in the
+# /review-fix parent thread (see
+# .claude/skills/review-fix/references/inline-scans.md). The parent used to read
+# BOTH raw audit documents and diff them by hand; now only the normalized
+# {"findings":[...]} document crosses into its context. Raw npm audit JSON never
+# reaches stdout.
+#
+# MERGE_BASE IS TRUSTED AS GIVEN. It arrives as a positional argument computed by
+# the caller with a direct `git merge-base HEAD origin/main`, and is used AS-IS.
+# It is NEVER recomputed here and NEVER derived from pack text, a PR body, or a
+# `=== DIFF (base <sha>) ===` header — a forged header must not be able to steer
+# the dependency-audit baseline (#1522 defect class). Positional arg, not an
+# inline `VAR=val` prefix, per .claude/rules/sandbox.md.
+#
+# DIFFERENTIAL RULES (transcribed from inline-scans.md, unchanged):
+#   - advisory at HEAD but not at MERGE_BASE  -> emitted, introduced_by_diff=true
+#     (in-scope; the orchestrator classifies it `required`)
+#   - advisory in BOTH, severity high|critical -> emitted, introduced_by_diff=false
+#     (out-of-scope; feeds follow-up filing)
+#   - advisory in BOTH, severity moderate|low  -> OMITTED entirely (below the
+#     meaningfulness threshold)
+#   The introduced_by_diff flag rides in the Description text (the literal token
+#   `introduced_by_diff=true|false`), NOT as an extra schema field: the
+#   Per-finding schema is `additionalProperties: false` and this script must not
+#   extend it.
+#
+# "SKIPS A PUBLISHED SECURITY-PATCH RELEASE" SUB-CASE — PARTIALLY COVERED.
+#   inline-scans.md also asks to flag "any dependency the PR adds or upgrades
+#   whose resolved version skips a published security-patch release".
+#   `npm audit --json` reports advisories affecting the INSTALLED version only;
+#   it carries no published-version list, so the general form of that question
+#   ("was there a newer patch release the PR could have taken?") is not answerable
+#   from the audit document alone — it needs a registry query per package, which
+#   is materially more machinery than this script should carry.
+#   What IS answerable, and is covered here: an advisory the diff newly exposes
+#   whose containing vulnerability reports `fixAvailable` truthy means the PR
+#   landed a version that is still vulnerable even though npm knows of a fixed
+#   release — i.e. the resolved version skipped the published security patch.
+#   Those findings lead their Description with `skipped_published_patch=true` so
+#   the orchestrator can see the sub-case, and are emitted as part of the
+#   introduced set rather than duplicated as a second finding for the same
+#   advisory. The un-answerable remainder (a version bump that skipped a patch
+#   release with NO advisory affecting the head version) is a known gap, called
+#   out here rather than silently dropped.
+#
+# FAILED AUDIT IS AN ERROR, NEVER AN EMPTY DIFFERENTIAL. Both documents are
+#   validated as actual audit reports before differencing (see
+#   `validate_audit_doc`). npm's JSON error document parses fine and would
+#   otherwise normalize to zero advisories — indistinguishable from a clean
+#   audit — so the script exits non-zero with npm's own error text on stderr.
+#   Callers must treat a non-zero exit as "dependency audit could not run",
+#   NOT as "no new advisories".
+#
+# THE AUDITED-AGAINST REGISTRY IS PINNED, NEVER INHERITED FROM THE PR.
+#   `npm audit` asks a registry which advisories affect the tree, so whoever
+#   answers that question decides the verdict. The HEAD audit runs in the
+#   inherited worktree cwd, so without pinning it would honour a repo-root
+#   `.npmrc` the PR ITSELF adds — `registry=https://attacker.example/` returns a
+#   well-formed, empty advisory document, the MERGE_BASE audit (which runs under
+#   `--prefix "$AUDIT_DIR/baseline"`, a directory with no `.npmrc`) still asks
+#   the real registry, and the differential collapses to `{"findings":[]}`:
+#   a clean bill of health byte-identical to a genuinely clean audit.
+#   `validate_audit_doc` cannot catch that — a hostile registry returns a valid
+#   `auditReportVersion` report, not an npm error document. Two defenses:
+#
+#   1. BOTH invocations pass `--registry=<NPM_REGISTRY>` plus `--userconfig` /
+#      `--globalconfig` pointing at an empty file in $AUDIT_DIR. CLI flags
+#      outrank every npmrc layer, so the default registry is fixed regardless of
+#      repo config, and the ambient user/global npmrc — which may hold `_auth`
+#      or a token — is never loaded, so no credential can be disclosed to
+#      whatever host is queried. (`npm audit` also uploads the dependency tree,
+#      so the destination is not a cosmetic detail.)
+#   2. `--registry` fixes only the DEFAULT registry; a scoped override
+#      (`@scope:registry=…`) in a repo `.npmrc` still redirects the packages the
+#      PR introduces. That residue is not defensible by flags, so a `.npmrc`
+#      anywhere in the diff (tracked change or untracked new file) is treated as
+#      "dependency audit could not be trusted" and exits non-zero, exactly like
+#      the npm-error-document path. A legitimate `.npmrc` change is therefore a
+#      loud stop for human inspection, never a silent clean differential.
+#
+# SANDBOX: `npm audit` writes the npm cache and reaches the registry — callers
+# must use dangerouslyDisableSandbox: true.
+#
+# TEST SEAMS (mirror DISPATCH_AUDIT_PROJECTS_ROOT in aggregate-usage.sh)
+#   DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE     — path to a JSON file holding what
+#                                                `npm audit --json` at HEAD would
+#                                                have emitted.
+#   DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE — same, for the MERGE_BASE audit.
+#   When BOTH are set, no `npm` and no `git` runs at all, so the test suite is
+#   fully offline — which also means the registry pinning and the `.npmrc` gate
+#   below belong to the live path only; a fixture IS the audit document, so
+#   there is no registry to pin and no diff to inspect.
+set -euo pipefail
+
+MERGE_BASE="${1:-}"
+if [[ -z "$MERGE_BASE" ]]; then
+  echo "dispatch-review-npm-audit: MERGE_BASE required (positional arg)" >&2
+  exit 1
+fi
+
+HEAD_FIXTURE="${DISPATCH_REVIEW_NPM_AUDIT_HEAD_FIXTURE:-}"
+BASE_FIXTURE="${DISPATCH_REVIEW_NPM_AUDIT_BASELINE_FIXTURE:-}"
+
+AUDIT_DIR="$(mktemp -d)"
+trap 'rm -rf "$AUDIT_DIR"' EXIT
+
+HEAD_JSON="$AUDIT_DIR/audit-head.json"
+BASE_JSON="$AUDIT_DIR/audit-baseline.json"
+HEAD_ERR="$AUDIT_DIR/audit-head.err"
+BASE_ERR="$AUDIT_DIR/audit-baseline.err"
+
+# A document that parses as JSON is NOT yet an audit report. When npm cannot
+# audit the tree (desynchronized/hand-edited package-lock.json, a downgraded
+# lockfileVersion, an unresolvable workspace, an unreachable registry in
+# .npmrc) it still writes a well-formed JSON ERROR document —
+# {"error":{"code":"EUSAGE","summary":...,"detail":...}} — which has no
+# .vulnerabilities key. Differencing it yields an empty advisory set, i.e. a
+# clean bill of health byte-identical to a genuinely clean audit. That is a
+# silent suppression an author can trigger, so reject it loudly instead
+# (.claude/rules/code-style.md: clear errors over defensive fallbacks).
+validate_audit_doc() {
+  local f="$1" label="$2" errf="${3:-}"
+  if ! jq -e . "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label audit produced no parseable JSON at $f" >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+  if jq -e 'has("error")' "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label dependency audit could not run — npm returned an error document, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    jq -r '.error | "  npm error code: \(.code // "?")\n  npm error summary: \(.summary // "")\n  npm error detail: \(.detail // "")"' "$f" >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+  if ! jq -e 'has("auditReportVersion") or has("vulnerabilities")' "$f" >/dev/null 2>&1; then
+    echo "dispatch-review-npm-audit: $label audit document is not an npm audit report (no auditReportVersion and no vulnerabilities key) — the dependency differential is UNKNOWN (NOT clean)." >&2
+    emit_npm_stderr "$errf"
+    exit 1
+  fi
+}
+
+emit_npm_stderr() {
+  local errf="${1:-}"
+  if [[ -n "$errf" && -s "$errf" ]]; then
+    echo "  npm stderr:" >&2
+    sed 's/^/    /' "$errf" >&2
+  fi
+}
+
+if [[ -n "$HEAD_FIXTURE" && -n "$BASE_FIXTURE" ]]; then
+  for f in "$HEAD_FIXTURE" "$BASE_FIXTURE"; do
+    if [[ ! -f "$f" ]]; then
+      echo "dispatch-review-npm-audit: fixture not found: $f" >&2
+      exit 1
+    fi
+  done
+  cp "$HEAD_FIXTURE" "$HEAD_JSON"
+  cp "$BASE_FIXTURE" "$BASE_JSON"
+  # Fixtures go through the SAME validation as real audits — a fixture is a
+  # stand-in for an npm audit document, so the test suite exercises the guard.
+  validate_audit_doc "$HEAD_JSON" "HEAD"
+  validate_audit_doc "$BASE_JSON" "MERGE_BASE"
+else
+  # A `.npmrc` ANYWHERE IN THE DIFF POISONS THE QUESTION (see header). The
+  # explicit --registry below fixes only the DEFAULT registry; a scoped override
+  # the PR adds still redirects the very packages it introduces, and the hostile
+  # answer is a valid audit report that validate_audit_doc cannot distinguish
+  # from a clean one. So refuse to produce ANY differential in that case —
+  # non-zero, same contract as the npm-error-document path: "dependency audit
+  # could not run", NOT "no new advisories".
+  #
+  # Both tracked changes (merge base → working tree) and untracked new files are
+  # inspected: an untracked `.npmrc` is invisible to `git diff` yet fully live
+  # for npm. A git failure here is itself fatal — an unknown diff means an
+  # unverifiable audit (.claude/rules/code-style.md: clear errors, no fallbacks).
+  if ! TRACKED_CHANGES="$(git diff --name-only "$MERGE_BASE" --)"; then
+    echo "dispatch-review-npm-audit: 'git diff --name-only $MERGE_BASE' failed — cannot establish whether the diff touches .npmrc, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    exit 1
+  fi
+  if ! UNTRACKED_FILES="$(git ls-files --others --exclude-standard)"; then
+    echo "dispatch-review-npm-audit: 'git ls-files --others' failed — cannot establish whether an untracked .npmrc is present, so the dependency differential is UNKNOWN (NOT clean)." >&2
+    exit 1
+  fi
+  NPMRC_TOUCHED="$(printf '%s\n%s\n' "$TRACKED_CHANGES" "$UNTRACKED_FILES" \
+    | grep -E '(^|/)\.npmrc$' || true)"
+  if [[ -n "$NPMRC_TOUCHED" ]]; then
+    echo "dispatch-review-npm-audit: the diff adds or modifies an .npmrc, so the dependency audit could not be trusted — npm registry resolution (including scoped overrides) is under the diff's control, and its advisory answer is therefore UNKNOWN (NOT clean)." >&2
+    sed 's/^/    /' <<<"$NPMRC_TOUCHED" >&2
+    echo "  Review the .npmrc change by hand, then re-run the audit against a tree whose registry configuration is trusted." >&2
+    exit 1
+  fi
+
+  # Registry/config pinning (see header): CLI flags outrank every npmrc layer,
+  # and an EMPTY user/global config keeps ambient credentials (`_auth`, tokens)
+  # out of a request whose destination the repo could otherwise influence.
+  NPM_REGISTRY="https://registry.npmjs.org/"
+  EMPTY_NPMRC="$AUDIT_DIR/empty.npmrc"
+  : > "$EMPTY_NPMRC"
+  NPM_PINNED=(
+    "--registry=$NPM_REGISTRY"
+    "--userconfig=$EMPTY_NPMRC"
+    "--globalconfig=$EMPTY_NPMRC"
+  )
+
+  # Audit HEAD (current working tree). npm audit exits non-zero whenever it finds
+  # any vulnerability, so tolerate the exit code and validate the document
+  # instead. npm's stderr is CAPTURED (not discarded) so a failed audit can be
+  # reported with npm's own diagnostics.
+  npm audit --json "${NPM_PINNED[@]}" > "$HEAD_JSON" 2>"$HEAD_ERR" || true
+
+  # Audit the MERGE_BASE lockfile without touching the working tree.
+  mkdir -p "$AUDIT_DIR/baseline"
+  git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
+  git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
+  npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" "${NPM_PINNED[@]}" \
+    > "$BASE_JSON" 2>"$BASE_ERR" || true
+
+  validate_audit_doc "$HEAD_JSON" "HEAD" "$HEAD_ERR"
+  validate_audit_doc "$BASE_JSON" "MERGE_BASE" "$BASE_ERR"
+fi
+
+# Normalize. `npm audit --json` (auditReportVersion 2) nests each advisory as an
+# OBJECT entry in .vulnerabilities[<pkg>].via[]; string entries there are just
+# transitive back-references to another package's entry, not advisories.
+jq -n -c --slurpfile head "$HEAD_JSON" --slurpfile base "$BASE_JSON" '
+  def advisories:
+    [ (.vulnerabilities // {}) | to_entries[] as $e
+      | ($e.value.via // [])[]
+      | select(type == "object")
+      | { id: (.source // .url // .title),
+          name: (.name // $e.key),
+          title: (.title // "npm advisory"),
+          url: (.url // ""),
+          severity: (.severity // "low"),
+          range: (.range // ""),
+          fix_available: (($e.value.fixAvailable // false) != false) } ];
+
+  # Collapse duplicate advisory rows (the same advisory is repeated once per
+  # affected package entry); keep fix_available true if ANY row reports it.
+  def dedupe:
+    group_by(.id) | map(.[0] + {fix_available: (map(.fix_available) | any)});
+
+  ($head[0] // {} | advisories | dedupe) as $h
+  | ($base[0] // {} | advisories | dedupe | map(.id)) as $bids
+  | def confidence_of($sev):
+      if $sev == "critical" or $sev == "high" then "high"
+      elif $sev == "moderate" then "medium"
+      else "low" end;
+    [ $h[]
+      | . as $a
+      | ($bids | index($a.id)) as $pre
+      | if $pre == null then
+          {kind: "introduced", a: $a}
+        elif ($a.severity == "high" or $a.severity == "critical") then
+          {kind: "pre-existing", a: $a}
+        else
+          empty
+        end
+    ]
+  | {
+      findings: [
+        .[]
+        | .a as $a
+        | (.kind == "introduced") as $new
+        | ($new and $a.fix_available) as $skipped
+        | {
+            Location: "package-lock.json (\($a.name))",
+            Description: (
+              (if $skipped then "skipped_published_patch=true — the resolved version of \($a.name) is still vulnerable although npm reports a fixed release is available. " else "" end)
+              + "introduced_by_diff=\(if $new then "true" else "false" end) — \($a.title) (\($a.name)\(if $a.range != "" then " " + $a.range else "" end), severity \($a.severity), advisory \($a.id)\(if $a.url != "" then ", " + $a.url else "" end))."
+              + (if $new then " The PR'"'"'s dependency changes newly expose this advisory." else " Pre-existing at the merge base — the diff did not introduce it." end)
+            ),
+            Source: "npm",
+            OWASP: "A06:2021 Vulnerable and Outdated Components",
+            STRIDE: "Tampering",
+            Confidence: confidence_of($a.severity),
+            "Recommended fix": (
+              if $a.fix_available then
+                "Upgrade \($a.name) past \($a.range) — npm reports a fixed release is published (`npm audit fix`, or bump the direct dependency that pulls it in)."
+              else
+                "No fixed release is published for \($a.name) \($a.range) yet — pin or replace the dependency, or accept and track the advisory."
+              end
+            ),
+            Disposition: "skipped"
+          }
+      ]
+    }
+'

@@ -462,6 +462,35 @@ export interface FixState {
 }
 
 /**
+ * A pending-merge conflict interrupt in flight on a tactic, orthogonal to
+ * `phase` — exactly parallel to `FixState`, but for a reviewed-awaiting-merge
+ * node whose PR reports `mergeable == CONFLICTING` rather than failing CI.
+ * `since` is the interrupt date (`date -u +%Y-%m-%d`); `attempt` is the
+ * conflict-resolution attempt counter.
+ *
+ * `head_sha` is the REVIEW-BINDING guard, the conflict lane's counterpart to
+ * `FixState.pushed_sha`: the PR's `headRefOid` observed at the moment the
+ * interrupt was entered — i.e. the head the completed review verdict
+ * (`reviewed` marker) examined. A conflicting node keeps that marker while the
+ * interrupt is in flight, so an unguarded "GitHub now says MERGEABLE" clear
+ * would re-arm auto-merge on WHATEVER tree currently sits at the head,
+ * including one pushed after the review. Every mechanical clear (marker
+ * preserved) must therefore be conditioned on the current head still equalling
+ * this sha; any other head — the conflict resolver's rewritten branch, or an
+ * arbitrary push — must clear by INTENTION instead (marker stripped, review
+ * re-runs). Null means "no head recorded" (a legacy interrupt entered before
+ * this field existed), which is treated as unrecognized: fail closed to the
+ * by-intention clear. Optional at the type level for the same additive-only
+ * reason `Execution.conflict` itself is; `validateConflictState` always
+ * populates it.
+ */
+export interface ConflictState {
+  since: string;
+  attempt: number;
+  head_sha?: string | null;
+}
+
+/**
  * Merge-verification evidence recorded on `Execution` at the done-transition,
  * so a merge-verification gate need not trust `execution.pr` alone. There are
  * two independent sufficient proofs:
@@ -499,6 +528,13 @@ export interface Execution {
    * it (to a validated object or `null`) on any value it returns.
    */
   fix?: FixState | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  conflict?: ConflictState | null;
   completion?: Completion | null;
 }
 
@@ -623,6 +659,23 @@ function validateFixState(value: unknown, field: string): FixState | null {
 }
 
 /**
+ * Nullable `ConflictState` object: string `since`, number `attempt`, nullable
+ * string `head_sha` (the review-binding head guard — see `ConflictState`).
+ * Mirrors `validateFixState`, whose `pushed_sha` is the CI-lane analogue.
+ */
+function validateConflictState(value: unknown, field: string): ConflictState | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    since: requireDateString(value.since, `${field}.since`),
+    attempt: requireNonNegativeInt(value.attempt, `${field}.attempt`),
+    head_sha: optionalString(value.head_sha, `${field}.head_sha`),
+  };
+}
+
+/**
  * Nullable `Completion` object: nullable strings `mergedAt`, `mergeCommitSha`,
  * `graphCommitSha`. Deliberately uses `optionalString` (not
  * `optionalDateString`) for `mergedAt` — GitHub's `merged_at` is a full
@@ -652,6 +705,7 @@ function validateExecution(value: unknown, field: string): Execution {
     markers: validateIdArray(value.markers, `${field}.markers`),
     strategy_fingerprint: validateStrategyFingerprint(value.strategy_fingerprint, `${field}.strategy_fingerprint`),
     fix: validateFixState(value.fix, `${field}.fix`),
+    conflict: validateConflictState(value.conflict, `${field}.conflict`),
     completion: validateCompletion(value.completion, `${field}.completion`),
   };
 }

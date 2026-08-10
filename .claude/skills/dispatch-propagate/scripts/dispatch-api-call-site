@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Classify a unified diff for the presence of an API/network/Firestore call
+# site among its ADDED lines.
+# Usage: dispatch-api-call-site < diff.patch
+#
+# Reads a unified diff on stdin. Prints exactly one line to stdout:
+#   api_call_site=true|false
+#
+# No network access, no git, no gh — pure stdin -> stdout classification.
+#
+# Detection rule: only lines matching ^\+ (added lines), excluding the
+# ^\+\+\+ file-header line, are considered. Context lines and removed lines
+# (`-` prefix) are ignored. If any considered line matches the call-site
+# pattern set below, api_call_site=true; otherwise (including empty stdin),
+# api_call_site=false. Exit 0 in both cases — this is a classifier, not a
+# check.
+#
+# Pattern set (design property, not a measurement): fetch(, axios,
+# getDocs(, getDoc(, addDoc(, setDoc(, updateDoc(, deleteDoc(, onSnapshot(,
+# query(, collection(, collectionGroup(, XMLHttpRequest. This list is a
+# tunable design property — no one has counted how many dispatch runs
+# actually contain such a call site. The realized fire rate is to be
+# recorded after this gate lands, and the pattern set revisited against
+# that data.
+#
+# Deliberate omission: bare amplifier patterns (setInterval, setTimeout,
+# polling loops) do NOT fire this gate on their own. This was considered
+# and left out because setTimeout appears in nearly every code diff
+# (debouncing, retries, UI timing) and would collapse the gate into
+# "always true" — defeating its purpose as a targeted widen. Revisit only
+# with measured fire-rate data showing the omission misses real cost
+# call-site diffs.
+set -euo pipefail
+
+CALL_SITE_RE='fetch\(|axios|getDocs\(|getDoc\(|addDoc\(|setDoc\(|updateDoc\(|deleteDoc\(|onSnapshot\(|query\(|collection\(|collectionGroup\(|XMLHttpRequest'
+
+# The terminal stage must be `grep -cE`, NOT `grep -qE`. `grep -q` exits on its
+# first match, closing the pipe while the producer upstream (a real `git diff`)
+# is still writing; the upstream stages then die of SIGPIPE with status 141, and
+# under `pipefail` bash reports the pipeline's status as the rightmost non-zero
+# stage — 141 — so a genuine match was read as "no match" (PIPESTATUS on a real
+# invocation: 141 141 141 0). `grep -c` reads stdin to EOF, so no stage is ever
+# SIGPIPE'd. The `|| true` guard is required because grep exits 1 on zero
+# matches even though `-c` still prints `0` (and the upstream `grep -E '^\+'`
+# likewise exits 1 on a diff with no added lines) — under `set -e` either would
+# abort the script before it could print a verdict.
+match_count=$(grep -E '^\+' | grep -vE '^\+\+\+' | grep -cE "$CALL_SITE_RE" || true)
+
+if [[ "${match_count:-0}" -gt 0 ]]; then
+  echo "api_call_site=true"
+else
+  echo "api_call_site=false"
+fi

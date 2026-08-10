@@ -68,7 +68,7 @@ attention:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-align-tactics-target-node-context-dropped
   pr: 3017
@@ -79,39 +79,14 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T05:46:04Z
     mergeCommitSha: 64ec89dce3e81cfe562c478b16cfcbc569bbd285
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Both needs-main residue items on PR #3017 (merged) require subjective
-    judgment on LLM-generated plan quality that no tool can decide: id 12 asks
-    whether a live /align-tactics finalize round's authored body_markdown
-    'visibly carries forward' the target node's prior rationale/body evidence
-    rather than reading as statement-only, and id 13 asks whether a live re-plan
-    round reconciles the whole node without silent content loss (units preserved
-    verbatim, ## Context states what changed, no unit left contradicting the
-    amendment, phase not relabeled). Both are judgment calls on generated prose
-    against a doctrine bar (tactic-target.md clarification 32), not
-    deterministic checks — no MACHINE item exists on this node to run first."
-  since: 2026-08-03
-  recommendation: "Author: on the next live /align-tactics <tactic-id> run for a
-    finalize, confirm the authored body_markdown carries forward the target
-    node's prior root-cause analysis, path:line anchors, and caveats rather than
-    reading as authored from the bare statement alone (id 12). On the next
-    re-plan of a soft-frozen tactic, confirm every unit the current strategy
-    substance does not invalidate is preserved verbatim, ## Context explicitly
-    states what changed and why, no sibling unit or verification step is left
-    contradicting the amendment, and the in-flight phase is not
-    relabeled/renumbered (id 13). All 11 machine-verifiable QA items on PR #3017
-    already PASSed (node --check, the new target-context probe and driver, the
-    sibling tempref probe, prose-rule lint, sentinel-count/wiring/call-site
-    greps — see the PR's dispatch:qa-summary comment). No code defect is
-    suspected; this is planned deferral to the first live run, per the node's
-    own ## Verification 'End-to-end, observe in production' note."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -769,3 +744,51 @@ autonomously fixable now).
 Both items are drained at `main-qa` (post-merge, `review → main-qa`), where
 `office_hours` review is the correct venue for an AUTHOR-only judgment call —
 neither is autonomously verifiable.
+
+## Office-hours sitting 2026-08-09 — id 12 confirmed, id 13 retired
+
+**Disposition: id 12 confirmed on live output; id 13 retired as unanswerable as
+scoped.** Author ruling at the 2026-08-09 sitting. `phase: done`, park cleared.
+All 11 machine-verifiable QA items on #3017 had already passed; these two prose
+judgments were the whole remainder.
+
+### id 12 — carry-forward on a finalize round: CONFIRMED
+
+Judged against a real round rather than in the abstract, per the park's own
+instruction. Subject: commit `a58beafc` (2026-08-09), the `/align-tactics`
+finalize of `tactic-blocked-session-invisible-to-census`. That node is an
+unusually clean test because it was *filed* hours earlier the same day
+(`5b12d9ce`) with a dense root-cause record, so there was specific prior
+analysis available to either carry forward or lose.
+
+The authored `body_markdown` carries it forward visibly. Every specific from the
+prior filing survives into the finalized body — session `f2416fda` (3
+mentions), the `ENOTIMP` API error (3), local commit `6886ffa9` (2), the
+`sync-repair` job name (23), `HELD_FOR_DEBUG_COUNT` (7), the ~71-hour outage
+duration (3), and the absorbing-state caveat about a blocked background session
+having no interlocutor (2). It carries **48 `path:line` anchor mentions** across
+15+ distinct anchors, and lands the standard structure: `## Context`, four
+`## Unit` sections, `## Verification`.
+
+That is the opposite of the failure mode the item was written to catch — a body
+authored from the bare `statement` with the prior investigation discarded.
+
+### id 13 — re-plan preservation: RETIRED, not answered
+
+No true re-plan round has occurred since the park was written on 2026-08-03, so
+there is nothing live to judge and the item was retired rather than answered on
+a hypothetical.
+
+Searched at the sitting across `origin/main`: four nodes were scope-drift
+demoted on 2026-08-05 (`tactic-align-tactics-mark-terminal-skipped`,
+`tactic-pace-exempt-ceiling-fanout`,
+`tactic-invalid-state-transcript-intervention`, `tactic-invalid-state-lane`),
+but every one re-entered the implement lane directly without a further
+`/align-tactics` pass. The two 2026-08-06 commits whose subjects both read
+`finalize tactic-reap-safety-behind-branch-false-positive` are one real finalize
+plus a one-character follow-up that de-backticked a prose-ref placeholder id —
+not a re-plan.
+
+The doctrine bar for id 13 remains `tactic-target.md` clarification 32. It is
+unenforced by this node from here on; if a future re-plan round should be
+checked against it, that needs its own node.

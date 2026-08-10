@@ -29,7 +29,21 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Item 10 — ratify or reject the ungated-reconciler asymmetry (a node
+      advanced to phase done while its office_hours park stays live)?
+    answer: "(Ruled 2026-08-04 /align interview.) Option A ratified, plus option B's
+      follow-up: done-but-parked is a VALID state — phase and office_hours are
+      conceptually orthogonal dimensions (a park means a human owes a decision;
+      the merge and phase advance are orthogonal to that debt, and author
+      escalation may be required even after the code lands). The reconciler
+      stays ungated per Unit 2's design. PR #3033 lands unchanged; item 10
+      closes as accepted-behavior. Greenfield consequence: the office-hours
+      queue presents BOTH dimensions — parked entries annotate the node's phase
+      (e.g. phase done, underlying work already merged) — retained as draft
+      tactic-office-hours-queue-phase-annotation. The orthogonality doctrine is
+      recorded on strategy-graph-native-dispatch (2026-08-04 clarification).
+      Park cleared on this ruling."
 tooling_goals: []
 success_signal:
   observable: "graph-auto-merge's per-candidate gate skips (holds, does not merge)
@@ -48,66 +62,44 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-graph-auto-merge-office-hours-gate
   pr: 3033
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-06T02:00:42Z
+    mergeCommitSha: 09468eac70282674cd7df38eec0b1a14ff296cf3
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-fix: QA needs a human (doctrine/product-intent judgment on the
-    ungated-reconciler asymmetry, item 10 — the gated fix-planner refused with a
-    scope-deviation, no code fix authored); escalating to office-hours"
-  since: 2026-08-04
-  recommendation: >-
-    ## Decision: ratify or annotate the ungated-reconciler asymmetry
-
-
-    **The call:** when a parked node's PR is merged outside graph-auto-merge,
-    the reconciler advances the node to `phase:done` while its `office_hours`
-    park is still live — do you accept "a done node sitting in the office-hours
-    queue" as-is, or does the queue need to say the work already shipped?
-
-
-    ### Option A — Ratify as-is (no code change)
-
-    Confirm in a review comment on PR #3033 that a done-but-parked node is
-    intended and readable: the park still means "a human owes a decision here,"
-    and the merge is orthogonal. Nothing else to do; the PR lands unchanged and
-    item 10 closes as accepted-behavior. Pick this if you read the park as being
-    about the *decision*, not the *code state*.
-
-
-    ### Option B — Ratify + file a follow-up tactic
-
-    Land PR #3033 unchanged, and file a new tactic scoped strictly to
-    office-hours **queue presentation** (annotate parked entries whose node is
-    `phase:done` — e.g. "underlying work already merged"). No reconciler filter,
-    no gate change. That scope is explicitly outside this node's diff and its
-    "Out of scope" section, which is exactly why the fix-planner refused to
-    author it here. Pick this if a reviewer opening the queue would be misled
-    about whether action is still needed.
-
-
-    ### Option C — Reject the asymmetry
-
-    Only if you believe the reconciler itself must respect `office_hours`. This
-    contradicts Unit 2's stated purpose ("the whole point is that they stay
-    ungated") and would require re-planning the node, not a follow-up.
-
-
-    **This PR is not blocked on the answer.** The `office_hours` merge-gate is
-    fully implemented, 9/9 script-verifiable QA items pass, both suites green,
-    and the ungated-reconciler behavior has a deliberate regression test with
-    doctrine comments. The decision only determines whether a separate follow-up
-    gets filed. A second item (no live incident to reproduce) is already
-    deferred to post-merge main-qa and needs nothing from you now.
+  reason: needs-main residue item 11 asks whether to invest in a one-time backward
+    audit of already-merged node-lane PRs against their nodes' office_hours park
+    history — a scoping/prioritization call on the user's product intent, not an
+    objective check any tool can settle; no MACHINE items exist on this node to
+    run first
+  since: 2026-08-09
+  recommendation: "Decide: is a backward audit of already-merged node-lane PRs vs
+    their office_hours park history worth running as separate follow-up work?
+    Context from the merged PR #3033 (merged 2026-08-06T02:00:42Z, confirmed via
+    gh pr view): this tactic hardens graph-auto-merge to hold (not merge) any
+    phase:review node carrying a live office_hours park, closing a gap that was
+    never observed firing in production (the original motivating case, PR #3006,
+    was investigated and confirmed benign — its park was set post-merge at the
+    downstream main-qa phase). Acceptance evidence is the two new/updated test
+    suites cited in the PR body (test-graph-auto-merge.sh and the intentionsutil
+    vitest reconcile-graph suite), not a before/after production comparison,
+    since there is no historical incident to reproduce. If a backward audit is
+    wanted, scope and file it as a new tactic; otherwise this residue item can
+    be dismissed as accepted-risk."
   session_type: other
 pace_exempt: false
 rounds: null

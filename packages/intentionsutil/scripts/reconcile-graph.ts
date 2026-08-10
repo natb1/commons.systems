@@ -152,6 +152,17 @@ export function reconcileGraph(args: Args): Plan {
   // Pass 1: classify each terminal-PR tactic into main-qa-transition vs done.
   // doneSet maps each done-transitioning id to its pr-states entry so Pass 3 can
   // record the right completion evidence; mainQaTargets carries the entry too.
+  //
+  // Deliberately NO office_hours filter here. graph-auto-merge gates on a live
+  // office_hours park because it DECIDES — it takes the irreversible autonomous
+  // action of squash-merging, and a park revokes that authority. This pass only
+  // RECORDS REALITY: the PR is already terminal on GitHub, and refusing to
+  // reconcile a parked node would strand it at a stale phase with graph state
+  // contradicting GitHub — exactly what this reconciler exists to prevent. The
+  // park survives the write untouched: office_hours is a frontmatter field the
+  // phase write never touches, and officeHoursQueue (src/officeHours.ts:48-75)
+  // keys only on office_hours !== null with no phase filter, so the node stays
+  // in the office-hours queue after reconciliation.
   const doneSet = new Map<string, PrState>();
   const mainQaTargets: { id: string; entry: PrState }[] = [];
   for (const [id, entry] of Object.entries(prStates)) {

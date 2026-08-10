@@ -50,9 +50,11 @@
 #   does NOT immediately emit `concurrency-cap`. It first probes
 #   `graph-select-target --pace-exempt-only` (the authored `pace_exempt` flag is
 #   the graph home of the legacy `priority` label); a hit holds the lock and
-#   spawns exactly ONE gate-exempt worker (`GAP=1`). If that lane is empty, it
-#   checks `repo-health --main-broken-sha` — a main that breaks while at the
-#   worker cap still surfaces and spawns the diagnose job even at cap. Either
+#   spawns up to `max_concurrent_workers - LIVE_COUNT` gate-exempt workers (0
+#   closes the lane) — the ceiling is absolute for autonomous scheduling. If
+#   that lane is empty, it checks `repo-health --main-broken-sha` — a main
+#   that breaks while at the worker cap still surfaces and spawns the
+#   diagnose job even at cap. Either
 #   bypass still counts toward `LIVE_COUNT` and suppresses non-pace-exempt fan-out
 #   on later ticks: it bypasses the GATE, not the COUNT. If both are empty, the
 #   tick falls back to the normal `concurrency-cap` disposition and reseed. (The
