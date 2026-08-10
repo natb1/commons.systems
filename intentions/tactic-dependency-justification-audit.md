@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-dependency-justification-audit
   pr: 2875
@@ -34,7 +34,10 @@ execution:
     attempt: 2
     pushed_sha: 249a457063e05d372f3e7b9eb10a7003788989e6
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T13:48:27Z
+    mergeCommitSha: 717742b97063753d23939b7f9778a08f261acba5
+    graphCommitSha: null
 validates:
   - strategy-owned-web-platform
 blocked_by: []
