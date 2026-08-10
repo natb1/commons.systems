@@ -145,8 +145,14 @@ fi
 # path on disk (RUN_PROSE comes from lib.sh's is_shell_script, which returns
 # false for a file this diff deleted). Gating it would leave exactly the case it
 # exists to catch uncovered.
+#
+# --repo-root is passed explicitly: $SCRIPTS is this script's own location,
+# which is NOT always the tree under test — running main's copy of run-lint.sh
+# with a worktree CWD is routine. Without the flag the checker would resolve its
+# own root and scan main's intentions/ while eslint/prose scanned the worktree,
+# passing on a branch it never examined.
 echo "=== verify-fence path lint ==="
-if "$SCRIPTS/lint-verify-fence-paths.sh"; then
+if "$SCRIPTS/lint-verify-fence-paths.sh" --repo-root "$REPO_ROOT"; then
   echo "PASS: verify-fence paths"
 else
   echo "FAIL: verify-fence paths" >&2

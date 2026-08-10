@@ -24,23 +24,29 @@ echo "=== lint-verify-fence-paths.sh ==="
 #   packages/keep.ts          — exists
 #   .claude/dead-script.sh    — committed then DELETED: the incident class
 #   .claude/never-existed.sh  — no history at all: a plan's forward reference
+#   gone-pkg/tool.sh          — committed, then the WHOLE top-level `gone-pkg`
+#                               tree deleted: the largest-blast-radius case,
+#                               where the leading path segment itself is gone
 # No EXIT trap here: dispatch-test-fixture.sh installs its own leak-guard EXIT
 # traps and overriding them would silently disable those guards. The fixture
 # repo is removed explicitly at the end instead.
 FIXTURE_REPO="$(mktemp -d)"
 
-mkdir -p "$FIXTURE_REPO/.claude" "$FIXTURE_REPO/packages" "$FIXTURE_REPO/intentions"
+mkdir -p "$FIXTURE_REPO/.claude" "$FIXTURE_REPO/packages" "$FIXTURE_REPO/intentions" \
+         "$FIXTURE_REPO/gone-pkg"
 : > "$FIXTURE_REPO/.claude/live-script.sh"
 : > "$FIXTURE_REPO/.claude/dead-script.sh"
 : > "$FIXTURE_REPO/packages/keep.ts"
+: > "$FIXTURE_REPO/gone-pkg/tool.sh"
 git -C "$FIXTURE_REPO" init -q
 git -C "$FIXTURE_REPO" config user.email test@example.com
 git -C "$FIXTURE_REPO" config user.name Test
 git -C "$FIXTURE_REPO" add -A
 git -C "$FIXTURE_REPO" commit -qm "seed"
 rm "$FIXTURE_REPO/.claude/dead-script.sh"
+rm -rf "$FIXTURE_REPO/gone-pkg"
 git -C "$FIXTURE_REPO" add -A
-git -C "$FIXTURE_REPO" commit -qm "delete dead-script.sh"
+git -C "$FIXTURE_REPO" commit -qm "delete dead-script.sh and the whole gone-pkg tree"
 
 EMPTY_BASELINE="$FIXTURE_REPO/baseline.json"
 echo '[]' > "$EMPTY_BASELINE"
@@ -216,6 +222,34 @@ bash .claude/never-existed.sh
 run_lint
 assert_eq "forward reference exits 0" "0" "$RC"
 assert_eq "forward reference prints nothing" "" "$OUT"
+
+# --- whole top-level tree deleted (the fail-open case) ----------------------
+# The leading-segment filter must not be read off the POST-deletion working
+# tree: when the deletion removes or renames the top-level directory itself,
+# every orphaned path beneath it loses its key and would be silently skipped —
+# the guard failing open at exactly its largest blast radius.
+echo "Test: a path orphaned by deleting its whole top-level tree is caught"
+reset_nodes
+write_node gone-tree implement '## Verification
+```verify
+bash gone-pkg/tool.sh
+```'
+run_lint
+assert_eq "orphan under a deleted top-level tree exits 1" "1" "$RC"
+assert_eq "orphan under a deleted top-level tree is named" \
+  "gone-tree: gone-pkg/tool.sh" "$OUT"
+
+# ...and widening the candidate set does not widen what is REPORTED: a never-
+# existed path under the same deleted tree is still a forward reference.
+echo "Test: a forward reference under a deleted top-level tree is not flagged"
+reset_nodes
+write_node gone-tree-forward implement '## Verification
+```verify
+bash gone-pkg/brand-new.sh
+```'
+run_lint
+assert_eq "forward reference under a deleted tree exits 0" "0" "$RC"
+assert_eq "forward reference under a deleted tree prints nothing" "" "$OUT"
 
 # --- baseline grandfathering ----------------------------------------------
 echo "Test: a baselined violation is grandfathered; a new one still fails"

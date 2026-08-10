@@ -28,15 +28,24 @@
 #   - it contains `/`
 #   - it contains none of  $ * ? { } ( )   (no variables, no globs, no subshell)
 #   - it is not a URL (no `://`)
-#   - its first path segment is an existing top-level entry of the repo
-#     (read live from the repo root, never a hardcoded list)
+#   - its first path segment is a top-level entry of the repo — live on disk,
+#     present at HEAD or origin/main, or one git history shows once existed
+#     (all read live, never a hardcoded list)
 # A trailing `:<line>` or `:<line>-<line>` anchor is stripped before the
 # existence test. Everything else is ignored.
+#
+# The leading-segment filter must NOT be derived from the post-deletion working
+# tree alone. The largest deletions — removing or renaming a whole top-level
+# app/package — take the segment itself away, so every orphaned path beneath it
+# would lose its key and be silently skipped: the guard would fail OPEN at
+# exactly its highest blast radius. Hence the union with HEAD, origin/main and
+# the history snapshot below. Widening the CANDIDATE set adds no false
+# positives — the `-e` and ever-existed gates still do the deciding.
 #
 # ORPHAN vs FORWARD REFERENCE: a missing path is reported only if git history
 # shows it once existed. Plans legitimately name files their own unit will
 # CREATE, and those never existed — flagging them would park the node this
-# guard protects. See the `git log -1` check below.
+# guard protects. See the EVER snapshot below.
 #
 # Output: one `<node-id>: <path>` line per miss on stdout; that message IS the
 # remediation (it names exactly what to fix and where). Exit 1 if any miss
@@ -45,6 +54,10 @@
 # Usage:
 #   lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR]
 #                              [--baseline FILE]
+#
+# --repo-root defaults to the repo containing the CWD (not the one containing
+# this script). When the script is invoked from a checkout other than the one
+# it lives in, --repo-root is REQUIRED — see the resolution block below.
 #
 # Exit codes:
 #   0  no violations (or every violation is grandfathered by the baseline)
@@ -83,8 +96,25 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$REPO_ROOT" ]]; then
-  if ! REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"; then
-    echo "lint-verify-fence-paths.sh: could not resolve the repo root" >&2
+  # Resolve from the CALLER's CWD — the same rule every sibling linter uses
+  # (lint-prose-rules.sh, lint-ds-drift.sh, get-changed-apps.sh). The tree under
+  # test is the one the caller is standing in, never the one this script file
+  # happens to live in: resolving from $SCRIPT_DIR would make main's copy of the
+  # script scan main's intentions/ while the rest of run-lint.sh scanned the
+  # worktree, and report PASS for a branch it never looked at.
+  if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "lint-verify-fence-paths.sh: could not resolve the repo root from $PWD" >&2
+    exit 2
+  fi
+  # Running one checkout's copy of this script against a DIFFERENT checkout is a
+  # routine dispatch pattern (main's scripts, a worktree CWD), but it is only
+  # safe when the target is named explicitly. With no --repo-root the two trees
+  # disagree and either guess is silently wrong, so refuse and name the flag
+  # that resolves it.
+  SCRIPT_REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "$SCRIPT_REPO_ROOT" && "$SCRIPT_REPO_ROOT" != "$REPO_ROOT" ]]; then
+    echo "lint-verify-fence-paths.sh: script lives in $SCRIPT_REPO_ROOT but the CWD resolves to $REPO_ROOT;" >&2
+    echo "  pass --repo-root to name the tree to scan" >&2
     exit 2
   fi
 fi
@@ -118,15 +148,58 @@ while IFS= read -r key; do
   BASELINE["$key"]=1
 done <<<"$BASELINE_KEYS"
 
+# --- History snapshot: every path that ever existed -------------------------
+# ONE bulk history query per run, never one `git log` fork per candidate token.
+# A per-token fork is pathological: for a path with NO history git walks the
+# whole commit graph to the root before returning empty, so the cost is set by
+# node-body content — a single node body carrying a few thousand nonexistent
+# path tokens turned a 7.5s scan into ~2 minutes, and every branch's lint job
+# pays it for as long as the body lives on main. One `git log` gives the same
+# discriminator (did this path EVER exist?) at a fixed cost.
+#
+# `--no-renames` is load-bearing: with rename detection on, a rename is one `R`
+# entry naming only the NEW path, so the old path — orphaned by that very commit
+# — would never enter the map. `--no-renames` decomposes it into A + D.
+#
+# Directory tokens: git tracks files, not directories, so each path is expanded
+# into its ancestor prefixes. That preserves the old `git log -- <path>`
+# pathspec behaviour, where naming a directory matched the files beneath it.
+declare -A EVER=()
+if ! HISTORY_RAW="$(git -C "$REPO_ROOT" -c core.quotePath=false log --no-renames \
+                      --diff-filter=AD --name-only --pretty=format: HEAD 2>&1)"; then
+  echo "lint-verify-fence-paths.sh: could not read git history under $REPO_ROOT: $HISTORY_RAW" >&2
+  exit 2
+fi
+while IFS= read -r hist_path; do
+  [[ -n "$hist_path" ]] || continue
+  EVER["$hist_path"]=1
+done < <(printf '%s\n' "$HISTORY_RAW" |
+           awk 'NF { print; while (sub(/\/[^\/]*$/, "")) print }' | sort -u)
+unset HISTORY_RAW
+
 # --- Top-level repo entries -------------------------------------------------
 # Read live rather than hardcoded, so the leading-segment filter tracks the repo
-# instead of a stale guess.
+# instead of a stale guess — and unioned with HEAD, origin/main and the history
+# snapshot, so a commit that DELETES or RENAMES a whole top-level tree still
+# qualifies the tokens beneath it as candidates (see the header note).
 declare -A TOPLEVEL=()
 for entry in "$REPO_ROOT"/* "$REPO_ROOT"/.*; do
   base="$(basename "$entry")"
   [[ "$base" == "." || "$base" == ".." ]] && continue
   [[ -e "$entry" ]] || continue
   TOPLEVEL["$base"]=1
+done
+for ref in HEAD origin/main; do
+  # A missing ref (no origin remote in a fixture repo, say) is not an error —
+  # the other sources still populate the filter.
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    TOPLEVEL["$name"]=1
+  done < <(git -C "$REPO_ROOT" -c core.quotePath=false ls-tree --name-only "$ref" 2>/dev/null || true)
+done
+for hist_path in "${!EVER[@]}"; do
+  [[ "$hist_path" == */* ]] && continue
+  TOPLEVEL["$hist_path"]=1
 done
 
 # Read a node file's frontmatter `phase` value (empty when absent). Only the
@@ -149,12 +222,25 @@ node_phase() {
 FOUND=0
 declare -A SEEN=()
 
+# Per-node scan cap. The body is slurped whole into a shell variable, so an
+# oversized node is unbounded memory on the runner. The cap is generous — well
+# above the largest real node — and a skip is REPORTED on stderr rather than
+# silently swallowed, so a node that outgrows it is visible instead of quietly
+# unchecked.
+MAX_NODE_BYTES=1048576
+
 for file in "$INTENTIONS_DIR"/*.md; do
   [[ -e "$file" ]] || continue
   node_id="$(basename "$file" .md)"
 
   # Archive exemption: a `done` node's body is a historical record.
   [[ "$(node_phase "$file")" == "done" ]] && continue
+
+  node_bytes="$(wc -c < "$file")"
+  if (( node_bytes > MAX_NODE_BYTES )); then
+    echo "lint-verify-fence-paths.sh: skipped $node_id: ${node_bytes}B exceeds the ${MAX_NODE_BYTES}B per-node scan cap" >&2
+    continue
+  fi
 
   body="$(tr -d '\0' < "$file")"
   declare -a blocks=()
@@ -203,13 +289,11 @@ for file in "$INTENTIONS_DIR"/*.md; do
         # block routinely names files the unit will CREATE (its own new test
         # file, a new script) — those never existed, have no git history, and
         # flagging them would be a false positive that parks the very node the
-        # guard exists to protect. `git log -1 -- <path>` over HEAD's history is
-        # the exact discriminator: empty for a forward reference, non-empty for
-        # a path a commit created and a later commit deleted — including the
+        # guard exists to protect. The EVER snapshot of HEAD's history is the
+        # exact discriminator: absent for a forward reference, present for a
+        # path a commit created and a later commit deleted — including the
         # deleting commit itself, which is when this guard must fire.
-        if [[ -z "$(git -C "$REPO_ROOT" log -1 --format=%H -- "$stripped" 2>/dev/null)" ]]; then
-          continue
-        fi
+        [[ -n "${EVER["$stripped"]:-}" ]] || continue
 
         key="$node_id|$stripped"
         [[ -n "${SEEN[$key]:-}" ]] && continue
