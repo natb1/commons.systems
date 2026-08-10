@@ -53,6 +53,7 @@ import { listNodes, writeNode } from "../src/store.js";
 import { strategyBacklogBand } from "../src/census.js";
 import { listNodesAtRef } from "./lib-store-at-ref.js";
 import { SensorRegistry, type Sensor } from "../src/sensors.js";
+import { attributeSpend, type SpendBucket } from "../src/rsi.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { computeDependencyAudit } from "./dependency-audit.js";
@@ -1267,6 +1268,150 @@ export function makeIntentionStoreSensor(
   };
 }
 
+// --- rsi sensor --------------------------------------------------------------
+// Name is the exact `success_signal.sensor` string
+// `strategy-recursive-self-improvement` declares — same match-the-declared-name
+// contract as `token-economy`/lifecycle above.
+//
+// Why it is registered HERE rather than in a metrics registry of its own: that
+// strategy's condition 8 says rsi metrics are "sensors registered in the graph's
+// existing success_signal/readings machinery on their owning strategies — never
+// a parallel metric registry". Registering here is what makes `rsi-plan.md`'s
+// metrics section a render of readings rather than a side system, and it drops
+// the graph's standing unregistered-sensor count by one.
+//
+// Reading format (stable and parseable), one segment per source the declared
+// sensor names, plus the token attribution the fitness function needs:
+//   `pause: <state>; backlog: <B>/<T> = <P>% (band ≤35%); parked: <N> (<M> blocking); worktrees: <W>; tokens <window>: dispatch <x>% / office-hours <y>% / rsi <z>%`
+// Every segment degrades independently to `unknown` and never throws (the
+// total-sensor contract at the top of this file).
+
+/** The verbatim `success_signal.sensor` name strategy-recursive-self-improvement declares. */
+export const RSI_SENSOR_NAME =
+  "the rsi-plan.md metrics section — sensors registered in the graph's existing " +
+  "success_signal/readings machinery on their owning strategies (backlog band, " +
+  "parked critical-path count, held-session/worktree census, pause state), " +
+  "rendered by render-rsi-plan.ts each iteration, plus per-workflow token " +
+  "attribution across dispatch, office-hours, and rsi";
+
+/**
+ * Dispatch pause state, delegated to the canonical shell helper
+ * (`lib-pause-state.sh`'s `dispatch_pause_state`) rather than re-testing the
+ * sentinel path here. The helper already distinguishes `paused` /`not-paused` /
+ * `unknown` — an unsearchable state directory means the sentinel's presence
+ * cannot be determined, and a second implementation of that logic would drift
+ * from the gate the tick itself consults.
+ */
+export function readPauseState(repoDir: string): string {
+  const lib = join(
+    repoDir,
+    ".claude/skills/dispatch-propagate/scripts/lib-pause-state.sh",
+  );
+  try {
+    return execFileSync(
+      "bash",
+      ["-c", `source ${JSON.stringify(lib)} && dispatch_pause_state`],
+      execOpts,
+    ).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Count of provisioned worktrees under `.claude/worktrees/`. */
+function readWorktreeCount(repoDir: string): string {
+  try {
+    const out = execFileSync(
+      "git",
+      ["-C", repoDir, "worktree", "list", "--porcelain"],
+      execOpts,
+    );
+    return String(out.split("\n").filter((l) => l.startsWith("worktree ")).length);
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Parked-node census over the store: how many nodes are parked, and how many of
+ * those actually BLOCK an open node (`blocked_by` edge onto them). The second
+ * number is the critical-path one — a park nothing depends on costs nothing,
+ * whereas a park holding open work is what `rsi-plan.md` §3 exists to surface.
+ */
+export function readParkedCensus(storeDir: string): string {
+  let nodes: IntentionNode[];
+  try {
+    nodes = listNodes(storeDir);
+  } catch {
+    return "unknown";
+  }
+  const parked = new Set(nodes.filter((n) => n.office_hours !== null).map((n) => n.id));
+  const blocking = new Set<string>();
+  for (const node of nodes) {
+    if (node.office_hours !== null || node.phase === null || node.phase === "done") continue;
+    for (const blocker of node.blocked_by) {
+      if (parked.has(blocker)) blocking.add(blocker);
+    }
+  }
+  return `${parked.size} (${blocking.size} blocking)`;
+}
+
+/**
+ * Per-workflow token shares from an already-produced usage aggregate.
+ *
+ * The aggregate is NOT produced here. `aggregate-usage.sh` parses every session
+ * transcript in the window — far too heavy for a batch sensor driver that runs
+ * over the whole store. `/rsi-plan` runs it once per iteration and this sensor
+ * reads the artifact, reporting `unavailable` when there is none. Reporting
+ * absence honestly matters more than usual here: a fabricated 0% for rsi would
+ * silently satisfy the recorded "dispatch dominates spend" expectation, which is
+ * a review trigger, not a formality.
+ */
+export function readWorkflowSpend(usagePath: string): string {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(readFileSync(usagePath, "utf8"));
+  } catch {
+    return "unavailable";
+  }
+  if (typeof doc !== "object" || doc === null) return "unavailable";
+  const byPhase = (doc as Record<string, unknown>).by_phase;
+  if (typeof byPhase !== "object" || byPhase === null) return "unavailable";
+  const spend = attributeSpend(byPhase as Record<string, SpendBucket>);
+  return spend
+    .map((s) => `${s.workflow} ${(s.share * 100).toFixed(0)}%`)
+    .join(" / ");
+}
+
+/**
+ * Compose the full rsi reading from its segments. Exported for unit tests,
+ * which inject a fixture repo, a fixture store and a fixture usage aggregate.
+ */
+export function readRsiReading(
+  repoDir: string,
+  storeDir: string,
+  usagePath: string,
+  window: string,
+): string {
+  return (
+    `pause: ${readPauseState(repoDir)}; ` +
+    `backlog: ${readBacklogBand(storeDir, BACKLOG_STRATEGY_ID)}; ` +
+    `parked: ${readParkedCensus(storeDir)}; ` +
+    `worktrees: ${readWorktreeCount(repoDir)}; ` +
+    `tokens ${window}: ${readWorkflowSpend(usagePath)}`
+  );
+}
+
+const rsiSensor: Sensor = {
+  name: RSI_SENSOR_NAME,
+  read(): string {
+    const usagePath =
+      process.env.RSI_USAGE_AGGREGATE_PATH ?? join(repoRoot, "tmp", "usage-audit.json");
+    const window = process.env.RSI_USAGE_WINDOW ?? "7d";
+    return readRsiReading(repoRoot, intentionsDir, usagePath, window);
+  },
+};
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -1279,6 +1424,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
   registry.register(dependencyAuditSensor);
+  registry.register(rsiSensor);
   registry.register(makeDelegationRecordsSensor(() => listNodes(intentionsDir)));
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
@@ -1292,6 +1438,20 @@ export function buildDefaultRegistry(): SensorRegistry {
     ),
   );
   return registry;
+}
+
+/**
+ * The names the default registry resolves — the set a consumer needs to answer
+ * "is this node's declared sensor actually measured?".
+ *
+ * `render-rsi-plan.ts` uses it to decide which graph signals are real metrics
+ * (measured, with a threshold) versus declared-but-unread aspirations. Derived
+ * from the registry itself, never hand-listed, for the same reason
+ * `makeIntentionStoreSensor` derives its set: a hand-list silently drifts the
+ * moment a sensor is added above.
+ */
+export function registeredSensorNames(): ReadonlySet<string> {
+  return buildDefaultRegistry().names();
 }
 
 // --- Core driver -----------------------------------------------------------
