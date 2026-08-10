@@ -4648,6 +4648,75 @@ clarifications:
       construction; and `blockersComplete` (router.ts:237-241) still returns
       false for any non-done blocker, so a phase-less WAIT genuinely holds its
       source and a `phase: done` write alone releases it."
+  - question: Does the manual `dispatch <node-id>` lane (Lane 2) actually reach
+      dispatch-graph-execute without a preceding origin/main sync, as
+      tactic-graph-execute-fresh-main-read's original rationale premised?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.) No — verified against HEAD
+      7c3e2a99. `dispatch` and `dispatch <node-id>`
+      (nix/packages/dispatch.nix:9-35) exec dispatch-tick, which runs
+      dispatch-select-tick synchronously in-process (dispatch-tick:637-650)
+      before routing the `graph` decision to dispatch-graph-execute
+      (dispatch-tick:735-750); the only standalone dispatch-graph-execute
+      invocations are test harnesses. A failed sync also does not leak a launch:
+      on fetch/merge failure dispatch-select-tick emits
+      `sync-failed`/`sync-broken` and exits before selection
+      (dispatch-select-tick:379-429). The I17 exposure is real but sits
+      elsewhere: (a) dispatch-select-tick:297-298 guards the whole Step 1
+      fetch+merge on the invoking checkout being on `main`, so a `dispatch
+      <node-id>` issued from any worktree skips the sync entirely, and (b)
+      provision-node-worktree fetches origin/main (line 115) but hands the gate
+      the un-merged main-checkout working tree (lines 129-130) rather than a
+      snapshot of what it just fetched. The ratified 2026-08-09 design (explicit
+      ref/sha/fetchedAt snapshot parameter on check-node-selection.ts,
+      refuse-by-default on unprovable freshness, recorded --allow-stale
+      override) is unchanged by this correction and is, if anything, better
+      motivated by it. Planned as part of tactic-graph-execute-fresh-main-read."
+  - question: Where does tactic-graph-execute-fresh-main-read's freshness-read scope
+      sit relative to the two adjacent raw nodes tactic-explicit-ref-graph-reads
+      and tactic-graph-execute-claimless-manual-launch?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.)
+      tactic-graph-execute-fresh-main-read is planned as the narrow
+      check-node-selection.ts slice of the broader principle stated by
+      tactic-explicit-ref-graph-reads (raw, no phase, \"every graph read
+      resolves its tree from an explicit ref\") — strategy clarification R3
+      (2026-08-05) is the adopted general form, and the 2026-08-09 office-hours
+      ratification is the controlling, more specific direction for this one
+      primitive, so the node is an instance with a cross-reference, not absorbed
+      into or superseding the broader node. Separately,
+      tactic-graph-execute-claimless-manual-launch (raw, no phase) edits the
+      same file, dispatch-graph-execute, for a different concern (claim-safety
+      on direct launches, not snapshot freshness) — the two are independent in
+      substance; whichever lands second rebases onto the other, neither
+      supersedes it. The ratified shape's production precedent (wrapper acquires
+      provenance, pure function consumes it as an explicit parameter) does not
+      depend on the still-unexercised sibling
+      tactic-office-hours-select-fresh-main: the same split is already in
+      production at transition-node:161,182,186 feeding compute-freshness.ts's
+      explicit --snapshot argument."
+  - question: Does any recorded attributes.conditions entry on
+      strategy-graph-native-dispatch fail in a way that bears on the
+      check-node-selection.ts freshness work
+      (tactic-graph-execute-fresh-main-read), or leave any Side-A condition
+      falsified?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.) No condition was found to have
+      failed in a way bearing on this work; the sweep is recorded for the author
+      as non-blocking implementation-status observations. Conditions on
+      thin/offline-testable composition, freshly-fetched-state reads for
+      align-family sessions, and mechanical invalid-state handling all verified
+      holding and support the ratified direction. Two adjacent
+      implementation-status gaps were noted, neither a falsified premise: the
+      node-assigned bounded-ancestry-projection condition is not yet true on
+      origin/main (packages/intentionsutil/scripts/node-ancestry.ts does not
+      exist there; its implementing tactic tactic-node-ancestry-context sits at
+      phase implement on unmerged PR #2946 — an in-flight commitment); and the
+      PR-title CI-guard condition has no in-repo implementation this sweep could
+      find (.github/workflows/pr-checks.yml carries no title check,
+      dispatch-open-pr passes --title through unvalidated) — recorded as an
+      unverified gap (the guard may be GitHub-side branch protection invisible
+      to a repo search), not a finding of absence."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
