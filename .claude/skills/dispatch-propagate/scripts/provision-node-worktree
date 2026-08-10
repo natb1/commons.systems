@@ -43,7 +43,7 @@
 #      worktree's `.envrc` being byte-identical to origin/main's, because the
 #      warm-up EXECUTES it on the operator's host with the sandbox disabled.
 #
-# Usage: provision-node-worktree <node-id> <selected-phase>
+# Usage: provision-node-worktree [--allow-stale] <node-id> <selected-phase>
 #
 # Stdout: the worktree path (exit 0 only).
 # Exit codes:
@@ -85,6 +85,11 @@
 #       with git on this code, which is why `orphan-directory` routes here
 #       rather than to exit 14 (whose evidence capture would serialize the
 #       MAIN checkout's status into a hold node).
+#   15  unknown-freshness: the selection gate (check-node-selection.ts) could
+#       not prove the materialized snapshot's freshness, and `--allow-stale`
+#       was not given. An ENVIRONMENT condition, not a node defect — the
+#       caller (dispatch-graph-execute case 15) clears the reservation and
+#       makes no graph write, exactly as it does for exit 12.
 #
 # Requires `dangerouslyDisableSandbox: true` from a Claude session: git push
 # fetch/worktree writes, gh (inside dispatch-ci-ready), and direnv.
@@ -104,10 +109,19 @@ source "$SCRIPT_DIR/lib-worktree-residue.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-main-snapshot.sh"
 
+# --allow-stale: an operator override forwarded from the manual `dispatch`
+# lane, through dispatch-graph-execute, down to the gate below. Parsed as a
+# single optional leading flag ahead of the two positional args.
+ALLOW_STALE=""
+if [[ "${1:-}" == "--allow-stale" ]]; then
+  ALLOW_STALE=1
+  shift
+fi
+
 NODE_ID="${1:-}"
 SELECTED_PHASE="${2:-}"
 if [[ $# -ne 2 || -z "$NODE_ID" || -z "$SELECTED_PHASE" ]]; then
-  echo "usage: provision-node-worktree <node-id> <selected-phase>" >&2
+  echo "usage: provision-node-worktree [--allow-stale] <node-id> <selected-phase>" >&2
   exit 2
 fi
 if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || [[ "$NODE_ID" =~ ^[0-9] ]]; then
@@ -169,9 +183,9 @@ fi
 # it is refreshed by every transition write and removed with the worktree.
 STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 GATE_FP=$(cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
-  "$NODE_ID" "$SELECTED_PHASE" --dir "$SNAP_DIR/intentions" --stamp "$STAMP_PATH" "${MAIN_SNAPSHOT_FLAGS[@]}")
+  "$NODE_ID" "$SELECTED_PHASE" --dir "$SNAP_DIR/intentions" --stamp "$STAMP_PATH" "${MAIN_SNAPSHOT_FLAGS[@]}" ${ALLOW_STALE:+--allow-stale})
 GATE_RC=$?
-if [[ "$GATE_RC" -eq 12 || "$GATE_RC" -eq 13 ]]; then
+if [[ "$GATE_RC" -eq 12 || "$GATE_RC" -eq 13 || "$GATE_RC" -eq 15 ]]; then
   # stderr already carries the one-line stale-selection / scope-stale reason.
   exit "$GATE_RC"
 fi

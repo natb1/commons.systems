@@ -53,7 +53,7 @@
 #      the marker is still LEFT for the sweep, so the budget still counts the
 #      slot until reconciliation.
 #
-# Usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]
+# Usage: dispatch-graph-execute [--allow-stale] <id:kind:phase> [<id:kind:phase> ...]
 #
 # Stdout: one line per node — one of:
 #   launched <id> <skill>   the phase session was kicked.
@@ -84,6 +84,12 @@
 #                           the state is steady and has no autonomous repair
 #                           path. Never routed to the conflict lane; the
 #                           source's own office_hours is never written.
+#   refused <id> unknown-freshness
+#                           provision exit 15 — the selection gate could not
+#                           prove the store snapshot is fresh. An ENVIRONMENT
+#                           condition, not a node defect: no graph write, no
+#                           park. The reservation is cleared (mirrors exit 12)
+#                           so the next tick re-selects once the fetch works.
 #   failed <id> <reason>    the node could neither launch nor cleanly dispose.
 #                           On exit 11 below the cap this is
 #                           `failed <id> spawn-failed (strike N/CAP)`: the
@@ -106,9 +112,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
+# Best-effort decision-log attestation (tactic-graph-execute-fresh-main-read
+# Unit 3) for a launch made with --allow-stale. Tolerant of a missing lib —
+# the `command -v decision_log_append` guard below never wedges a launch.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-decision-log.sh" 2>/dev/null || true
+
+# --allow-stale: an operator override forwarded from the manual `dispatch`
+# lane, parsed here as a single optional leading flag ahead of the
+# <id:kind:phase> specs.
+ALLOW_STALE=""
+while [[ $# -gt 0 && "$1" == "--allow-stale" ]]; do
+  ALLOW_STALE=1
+  shift
+done
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: dispatch-graph-execute <id:kind:phase> [<id:kind:phase> ...]" >&2
+  echo "usage: dispatch-graph-execute [--allow-stale] <id:kind:phase> [<id:kind:phase> ...]" >&2
   exit 2
 fi
 
@@ -225,7 +245,7 @@ for spec in "$@"; do
   # skill derives its target from the branch). Route on the provision exit code;
   # NO `claude` session spawns on any non-zero path (mirrors the retired graph
   # tick workflow's per-node routing, moved up here at zero token cost).
-  WT=$("$SCRIPT_DIR/provision-node-worktree" "$id" "$phase")
+  WT=$("$SCRIPT_DIR/provision-node-worktree" ${ALLOW_STALE:+--allow-stale} "$id" "$phase")
   prov_rc=$?
   case "$prov_rc" in
     0)
@@ -240,6 +260,24 @@ for spec in "$@"; do
         # Hold the claim through the boot window; reservation_sweep rule (a)
         # releases it once the worker registers.
         hand_off_reservation "$id"
+        # Attestation (tactic-graph-execute-fresh-main-read Unit 3): when this
+        # launch was made with an operator's --allow-stale override, record it
+        # in the decision log so a stale dispatch is attributable after the
+        # fact rather than silent (I17). Best-effort only — a missing lib, a
+        # missing sidecar, or a jq failure must never wedge an already-kicked
+        # launch, so every step here is guarded and non-fatal.
+        if [[ -n "${ALLOW_STALE:-}" ]] && command -v decision_log_append >/dev/null 2>&1; then
+          SNAPSHOT_SIDECAR="$PROJECT_ROOT/.claude/worktrees/$id.snapshot-provenance"
+          allow_stale_json=$(jq -c -n \
+            --arg ts       "$(date -u +%FT%TZ)" \
+            --arg site     "graph-execute" \
+            --arg target   "$id" \
+            --arg phase    "$phase" \
+            --arg disp     "allow-stale" \
+            --argjson snapshot "$(cat "$SNAPSHOT_SIDECAR" 2>/dev/null || echo null)" \
+            '{ts: $ts, site: $site, target: $target, phase: $phase, disposition: $disp, snapshot: $snapshot}' \
+            2>/dev/null) && decision_log_append "$allow_stale_json" || true
+        fi
         echo "launched $id $SKILL"
       else
         # Leave the reservation for the sweep — the budget keeps counting the
@@ -465,6 +503,14 @@ for spec in "$@"; do
         FAILURES=$(( FAILURES + 1 ))
       fi
       rm -rf "$TMPDIR_HOLD14"
+      ;;
+    15)
+      # unknown-freshness: the selection gate could not prove the store snapshot
+      # is at a freshly-fetched ref. An ENVIRONMENT condition, not a node defect —
+      # no graph write, no park. Clear the reservation (mirrors case 12: no spawn
+      # happened) so the next tick re-selects the node once the fetch works.
+      reservation_clear "$id" || true
+      echo "refused $id unknown-freshness"
       ;;
     *)
       # 2 / any other: a mechanical error (bad node id, unresolvable project

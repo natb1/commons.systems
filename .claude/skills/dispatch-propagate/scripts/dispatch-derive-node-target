@@ -226,6 +226,7 @@ case "$GATE_RC" in
   0)  ;;
   12) exit 3 ;;
   13) exit 5 ;;
+  15) exit 1 ;;  # unknown-freshness: an explicit mechanical error, not the catch-all.
   *)  exit 1 ;;
 esac
 

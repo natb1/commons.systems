@@ -426,6 +426,23 @@ assert_contains "no-prior-marker has a non-empty session= line" "session=" \
   "$(cat "$RES_DIR/tactic-nomark")"
 
 # ============================================================================
+# Case 16: provision exit 15 -> refused unknown-freshness, reservation cleared,
+# no spawn, no park/hold/demote (an environment condition, not a node defect —
+# mirrors Case 6's exit-12 assertions).
+# ============================================================================
+echo "Case 16: provision exit 15 -> refused unknown-freshness, reservation cleared"
+touch "$RES_DIR/tactic-uf"
+PROV_RC=15 run_exec "tactic-uf:tactic:qa"
+assert_eq "unknown-freshness stdout" "refused tactic-uf unknown-freshness" "$OUT"
+assert_eq "unknown-freshness exit 0" "0" "$RC"
+assert_eq "unknown-freshness spawns nothing" "" "$(cat "$SPAWN_LOG")"
+assert_eq "unknown-freshness makes no park-node write" "" "$(cat "$PARK_LOG")"
+assert_eq "unknown-freshness makes no hold-node write" "" "$(cat "$HOLD_LOG")"
+assert_eq "unknown-freshness makes no demote write" "" "$(cat "$DEMOTE_LOG")"
+assert_eq "unknown-freshness clears the reservation marker" "gone" \
+  "$([ -e "$RES_DIR/tactic-uf" ] && echo present || echo gone)"
+
+# ============================================================================
 # Case 14: usage error (no args) -> exit 2
 # ============================================================================
 echo "Case 14: no args -> exit 2"
