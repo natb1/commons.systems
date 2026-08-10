@@ -43,7 +43,7 @@ cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh
 # without touching gh, so no further environmental dependency is exercised.
 cat > "$GSC_ROOT/bin/npx" <<'GSCNPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCNPX
 chmod +x "$GSC_ROOT/bin/npx"
@@ -183,7 +183,7 @@ gsc_standalone_setup() {
   # this unit covers is exercised.
   cat > "$GSCS_ROOT/bin/npx" <<'GSCSNPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCSNPX
   chmod +x "$GSCS_ROOT/bin/npx"
@@ -404,7 +404,7 @@ claude_agents_count_busy_workers() { return 1; }
 GSCS6LIB
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS6NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS6NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -452,7 +452,7 @@ GSCS6BPGREP
 chmod +x "$GSCS_ROOT/bin/pgrep-daemon-unreachable"
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS6BNPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS6BNPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -497,7 +497,7 @@ echo "Test: graph-select-target --standalone with a healthy busy-worker read and
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS7NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS7NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -540,7 +540,7 @@ echo "Test: graph-select-target --standalone with a non-numeric --max ceiling fa
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS8NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS8NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -594,7 +594,7 @@ GSCS9DTW
 chmod +x "$GSCS_SCRIPTS/dispatch-target-workers"
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS9NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS9NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -696,7 +696,7 @@ echo "Test: graph-select-target --standalone clamps TOP to the pace-curve gap wh
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS12NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-fixture-2","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS12NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -735,7 +735,7 @@ echo "Test: graph-select-target --standalone rolls back claims written before a 
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS13NPX'
 #!/usr/bin/env bash
-echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-abort","kind":"tactic","phase":"qa","pr":"777","pace_exempt":false}],"events":[]}'
+echo '{"candidates":[{"id":"tactic-standalone-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false},{"id":"tactic-standalone-abort","kind":"tactic","phase":"qa","pr":"777","pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
 exit 0
 GSCS13NPX
 chmod +x "$GSCS_ROOT/bin/npx"
@@ -940,7 +940,7 @@ GSCICLAUDE
 
 # gsci_candidate <phase> — rewrite the select-targets.ts candidate list.
 gsci_candidate() {
-  printf '%s\n' "{\"candidates\":[{\"id\":\"tactic-fixture\",\"kind\":\"tactic\",\"phase\":\"$1\",\"pr\":\"2999\",\"pace_exempt\":false}],\"events\":[]}" \
+  printf '%s\n' "{\"candidates\":[{\"id\":\"tactic-fixture\",\"kind\":\"tactic\",\"phase\":\"$1\",\"pr\":\"2999\",\"pace_exempt\":false}],\"events\":[],\"wip\":{\"in_flight\":0,\"limit\":null,\"restricted\":false,\"bypassed\":0,\"failed_open\":false}}" \
     > "$GSCI_ROOT/candidates.json"
 }
 
@@ -1073,6 +1073,119 @@ assert_eq "graph-select-target interrupt: a failed cascade eval is reported on s
 gsc_interrupt_teardown
 
 # <<< END MOVED <<<
+
+# ============================================================================
+# Test: graph-select-target — the WIP ceiling threads from dispatch.config/
+# wip.json through to select-targets.ts as --wip-limit (tactic-bounded-work-
+# in-progress). A minimal fixture mirroring the file's earliest (Case 1) shape:
+# one implement-phase candidate with pr null, so sensor_gate returns 0 without
+# touching gh — the fixture exercises ONLY the config-read + --node-bypass
+# gating this unit adds, not any downstream sensor path.
+# ============================================================================
+gsc_wip_setup() {
+  GSCW_ROOT=$(mktemp -d)
+  GSCW_BARE=$(mktemp -d)
+  GSCW_SCRIPTS="$GSCW_ROOT/.claude/skills/dispatch-propagate/scripts"
+  mkdir -p "$GSCW_SCRIPTS" "$GSCW_ROOT/bin"
+  # Physical copies: graph-select-target derives REPO_ROOT from its own
+  # on-disk location, and now also shells out to a sibling dispatch-config-load.
+  cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/dispatch-config-load \
+     "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCW_SCRIPTS/"
+  chmod +x "$GSCW_SCRIPTS/graph-select-target" "$GSCW_SCRIPTS/dispatch-config-load"
+  # Fake npx: logs its full argv (so a case can assert whether --wip-limit was
+  # passed and with what value), then emits one selectable implement-phase
+  # candidate.
+  cat > "$GSCW_ROOT/bin/npx" <<'GSCWNPX'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+printf '%s\n' "$*" >> "$_root/npx-calls.log"
+echo '{"candidates":[{"id":"tactic-wip-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}'
+exit 0
+GSCWNPX
+  chmod +x "$GSCW_ROOT/bin/npx"
+  # Fake `claude agents --json`: empty registry (no live session claims the id).
+  cat > "$GSCW_ROOT/bin/claude" <<'GSCWCLAUDE'
+#!/usr/bin/env bash
+echo '[]'
+exit 0
+GSCWCLAUDE
+  chmod +x "$GSCW_ROOT/bin/claude"
+  # Empty-read corroboration stub (#lib-claude-agents EMPTY-READ CORROBORATION)
+  # — see the header note on the file's Case 2 fixture for why this is needed.
+  cat > "$GSCW_ROOT/bin/pgrep-daemon-visible" <<'GSCWPGREP'
+#!/usr/bin/env bash
+exit 0
+GSCWPGREP
+  chmod +x "$GSCW_ROOT/bin/pgrep-daemon-visible"
+  # A git repo whose origin/main carries an intentions/ tree, main checked out
+  # at the fixture root so NATIVE_ROOT resolves there.
+  git init -q -b main "$GSCW_ROOT"
+  git -C "$GSCW_ROOT" config user.email t@t
+  git -C "$GSCW_ROOT" config user.name t
+  mkdir -p "$GSCW_ROOT/intentions"
+  echo '# placeholder' > "$GSCW_ROOT/intentions/placeholder.md"
+  git -C "$GSCW_ROOT" add -A
+  git -C "$GSCW_ROOT" commit -q -m seed
+  git init -q --bare -b main "$GSCW_BARE"
+  git -C "$GSCW_ROOT" remote add origin "$GSCW_BARE"
+  git -C "$GSCW_ROOT" push -q origin main
+  git -C "$GSCW_ROOT" fetch -q origin
+  GSCW_GST="$GSCW_SCRIPTS/graph-select-target"
+}
+
+gsc_wip_teardown() {
+  rm -rf "$GSCW_ROOT" "$GSCW_BARE"
+  GSCW_ROOT="" ; GSCW_BARE="" ; GSCW_SCRIPTS="" ; GSCW_GST=""
+}
+
+# gsc_wip_run — invoke the selector with the fixture's env, stderr to gscw.err.
+# DISPATCH_CONFIG_DIR always points inside the fixture, present or absent per
+# case.
+gsc_wip_run() {
+  PATH="$GSCW_ROOT/bin:$SAVED_PATH" \
+    CLAUDE_AGENTS_CMD="$GSCW_ROOT/bin/claude" \
+    CLAUDE_AGENTS_PGREP_CMD="$GSCW_ROOT/bin/pgrep-daemon-visible" \
+    DISPATCH_RESERVATION_DIR="$GSCW_ROOT/reservations" \
+    DISPATCH_SELECTION_LOG_DIR="$GSCW_ROOT/seldir" \
+    DISPATCH_CONFIG_DIR="$GSCW_ROOT/dispatch.config" \
+    "$GSCW_GST" "$@" 2>"$GSCW_ROOT/gscw.err"
+}
+
+# --- Case (a): a configured limit threads through on a normal --top run -----
+echo "Test: graph-select-target — a configured wip.json limit is passed to select-targets.ts as --wip-limit"
+gsc_wip_setup
+mkdir -p "$GSCW_ROOT/dispatch.config"
+printf '%s\n' '{"limit":5}' > "$GSCW_ROOT/dispatch.config/wip.json"
+gscwa_out=$(gsc_wip_run --top 1)
+assert_eq "graph-select-target wip: a normal --top run still selects as usual" \
+  "node tactic-wip-fixture tactic implement" "$gscwa_out"
+assert_eq "graph-select-target wip: --wip-limit 5 is passed to select-targets.ts" \
+  "1" "$(grep -q -- "--wip-limit 5" "$GSCW_ROOT/npx-calls.log" && echo 1 || echo 0)"
+gsc_wip_teardown
+
+# --- Case (b): --node bypasses the configured limit entirely -----------------
+# An explicitly named node is not "starting unbounded new work" — the human/
+# operator naming one node is sovereign over the bound.
+echo "Test: graph-select-target — --node bypasses the configured wip.json limit"
+gsc_wip_setup
+mkdir -p "$GSCW_ROOT/dispatch.config"
+printf '%s\n' '{"limit":5}' > "$GSCW_ROOT/dispatch.config/wip.json"
+gscwb_out=$(gsc_wip_run --node tactic-wip-fixture)
+assert_eq "graph-select-target wip: --node still selects the named node" \
+  "node tactic-wip-fixture tactic implement" "$gscwb_out"
+assert_eq "graph-select-target wip: --node passes NO --wip-limit to select-targets.ts" \
+  "0" "$(grep -q -- "--wip-limit" "$GSCW_ROOT/npx-calls.log" && echo 1 || echo 0)"
+gsc_wip_teardown
+
+# --- Case (c): no wip.json present -> unbounded, no --wip-limit passed ------
+echo "Test: graph-select-target — absent wip.json config passes NO --wip-limit (unbounded, today's behavior)"
+gsc_wip_setup
+gscwc_out=$(gsc_wip_run --top 1)
+assert_eq "graph-select-target wip: absent config still selects as usual" \
+  "node tactic-wip-fixture tactic implement" "$gscwc_out"
+assert_eq "graph-select-target wip: absent config passes NO --wip-limit to select-targets.ts" \
+  "0" "$(grep -q -- "--wip-limit" "$GSCW_ROOT/npx-calls.log" && echo 1 || echo 0)"
+gsc_wip_teardown
 
 # ============================================================================
 # Test: graph-select-target — the merge-conflict interrupt
@@ -1211,7 +1324,7 @@ gsc_interrupt_teardown
 # pass; the other is deferred to the next tick, where it matches again.
 echo "Test: graph-select-target — the conflict lane spends at most GRAPH_CONFLICT_COMMIT_BUDGET commits per pass"
 gsc_interrupt_setup
-printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false},{"id":"tactic-fixture-2","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false}],"events":[]}' \
+printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false},{"id":"tactic-fixture-2","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false}],"events":[],"wip":{"in_flight":0,"limit":null,"restricted":false,"bypassed":0,"failed_open":false}}' \
   > "$GSCI_ROOT/candidates.json"
 gsci_pr true
 export GRAPH_CONFLICT_COMMIT_BUDGET=1
