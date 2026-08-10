@@ -5,9 +5,16 @@
 > **derived dashboard**: the graph is the sole tracker, and every task below
 > references a graph node. Eventually integrates into the office-hours GUI.
 >
+> **Target state (2026-08-10 review round): fully rendered.** Every section of
+> this file is produced by `render-rsi-plan.ts` from graph state — the three
+> queue summaries land first as dated readings on their owning strategy nodes
+> and render from there; a hand-edited section is a defect (strategy
+> condition 5).
+>
 > **Bootstrap draft, authored 2026-08-10** by the `/align` round that recorded
-> `strategy-recursive-self-improvement`. The first real `/rsi` iteration
-> (bootstrapped from the compacted authoring session) re-derives every number.
+> `strategy-recursive-self-improvement` (hand-authored, permitted only until
+> `render-rsi-plan.ts` exists). The first real `/rsi` iteration (bootstrapped
+> from the compacted authoring session) re-derives every number.
 
 ## 1. Top author priorities
 
@@ -50,8 +57,16 @@ do not hand-roll this list.
 
 ## 4. Metrics
 
-Subset of graph signals; each carries a review threshold. To be refreshed by
-`/rsi-plan` scripts each iteration.
+Subset of graph signals; each carries a review threshold. Target
+implementation: sensors registered in the graph's existing
+success_signal/readings machinery on their owning strategies, rendered here by
+`render-rsi-plan.ts` (strategy condition 8 — never a parallel registry).
+
+**Fitness function (strategy clarification 10):** rsi optimizes value
+delivered by the combined dispatch + office-hours + rsi system toward author
+goals — closure velocity plus strategy signal progress, per token, attributed
+per workflow. Greenfield expectation: dispatch spend significantly outpaces
+office-hours and rsi; a deviation is a review trigger.
 
 | metric | value (2026-08-10 12:12 EDT) | review threshold |
 |---|---|---|
@@ -89,13 +104,17 @@ specified; default session budget 1.
 - **R1** (cost 0) — Land the `/align` round recording
   `strategy-recursive-self-improvement` + 5 draft tactics + this file.
   *Status: this session.*
-- **R2** (cost 1, `/rsi-implement` once skills exist; hand-orchestrated
-  bootstrap otherwise) — Build `/rsi` + `/rsi-plan`
-  (`tactic-rsi-skill`, `tactic-rsi-plan-skill`): iteration loop, serialization
-  guard, scripted metrics refresh for §4.
-- **R3** (cost 1) — Build `/rsi-implement` + extract common standards
-  (`tactic-rsi-implement-skill`, `tactic-dispatch-skill-standards-extraction`).
-  Extraction first; the `/dispatch-*` renames land when the queue is stable.
+- **R2** (cost 1, hand-orchestrated bootstrap) — Build `/rsi` + `/rsi-plan`
+  (`tactic-rsi-skill`, `tactic-rsi-plan-skill`): iteration loop with
+  claim-primitive serialization, `render-rsi-plan.ts`, sensor registration in
+  the existing readings machinery, queue summaries as readings, per-workflow
+  token attribution.
+- **R3** (cost 1) — Build the rsi-implement loop inside `/rsi`
+  (`tactic-rsi-implement-skill`): spawned dispatch phase sessions via
+  `dispatch-graph-execute` / `dispatch-spawn-job`, reused verbatim — no
+  extraction, no separate subskills. The `/dispatch-*` renames
+  (`tactic-dispatch-skill-standards-extraction`, re-scoped) are low priority
+  and land when the queue is stable.
 - **R4** (cost 0, recurring) — Watch REAPGATE (#3052) through tick-merge; then
   re-measure the five resume criteria; **un-pause dispatch when all hold**
   (rsi pause/resume authority, resume criteria recorded — never lift early
