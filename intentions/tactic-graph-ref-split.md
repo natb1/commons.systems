@@ -263,9 +263,10 @@ must be rolled back, whatever the test suites say.
 
 - `tactic-census-scripted-tick` **deletes**
   `.claude/skills/dispatch-propagate/scripts/dispatch-graph-census`.
-- `tactic-dispatch-test-monolith-split` **deletes or splits**
-  `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, which
-  Unit 7 extends.
+- `tactic-dispatch-test-monolith-split` **deletes or splits** the old
+  `.claude/skills/dispatch-propagate/scripts/` test monolith into per-SUT
+  files, including `test-provision-node-worktree.sh` and
+  `test-assert-worktree-fresh.sh`, which Unit 7 extends.
 - `tactic-legacy-office-hours-entry-removal` **rewrites**
   `.claude/hooks/worktree-create.sh`, which Unit 3 edits.
 
@@ -828,11 +829,12 @@ before the CI guard job is safe to delete).
   just a `graph-main` ref with a node-file tree to land onto). Add a case
   asserting the new `validate-graph.ts` pre-push gate refuses to push invalid
   content with no retry.
-- `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` — add
-  coverage asserting each of Unit 3's four provisioning entrypoints creates
-  the `intentions` symlink pointed at the resolved `GRAPH_WT`, is a no-op
-  when the symlink already exists, and that `assert-worktree-fresh` fails
-  when `GRAPH_WT` is behind `origin/graph-main`.
+- `.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh`
+  and `.claude/skills/dispatch-propagate/scripts/test-assert-worktree-fresh.sh`
+  — add coverage asserting each of Unit 3's four provisioning entrypoints
+  creates the `intentions` symlink pointed at the resolved `GRAPH_WT`, is a
+  no-op when the symlink already exists, and that `assert-worktree-fresh`
+  fails when `GRAPH_WT` is behind `origin/graph-main`.
 
 **Recommended model:** sonnet — every change is directly dictated by Units
 2-3's now-fully-specified contracts; no open design decisions remain.
@@ -931,10 +933,11 @@ test "$(git -C .claude/worktrees/.graph-store log --oneline | wc -l)" -gt 1
 ```
 
 ```verify
-# Units 2, 7 — end to end: rewritten graph-commit harness and dispatch-scripts
-# suite both green.
+# Units 2, 7 — end to end: rewritten graph-commit harness and provisioning
+# test suites both green.
 bash packages/intentionsutil/scripts/test-graph-commit.sh
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+bash .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
+bash .claude/skills/dispatch-propagate/scripts/test-assert-worktree-fresh.sh
 ```
 
 ```verify

@@ -427,7 +427,18 @@ time: `test-dispatch-select-tick.sh` reports 109/220 with `sync-failed` under
 the sandbox and **220/220 sandbox-off** — a sandbox artifact, not a defect. A
 sandboxed run of the suite blocks below will false-fail.
 
-No non-`done` node still names the dead path (proves Unit 1 complete):
+No non-`done` node still names the dead path (proves Unit 1 complete). One
+exception, found during implementation and deliberately excluded: the
+`computePhaseGates: sliced + eval'd by test-dispatch-scripts.sh (align-tactics)`
+line in `tactic-align-tactics-tactic-mode-drift-gate.md` is not a dead path
+reference at all — it is a byte-identical sentinel *comment string* that
+`align-tactics-gates-probe.mjs`'s slice-and-eval mechanism matches verbatim
+against the same string shipped in `.claude/workflows/align-tactics.js:466`
+and `align-tactics-gates-probe.mjs:30`. Renaming it would break the probe's
+exact-match slicing, not fix anything — the sentinel's *name* is historical and
+does not assert the file exists (it never did double as a path check). The
+check below therefore ignores lines containing that sentinel phrase and no
+other:
 
 ```verify
 cd "$(git rev-parse --show-toplevel)"
@@ -435,7 +446,7 @@ fail=0
 for f in intentions/*.md; do
   ph=$(sed -n '/^---$/,/^---$/p' "$f" | grep -m1 '^phase:' | awk '{print $2}')
   [ "$ph" = "done" ] && continue
-  if grep -qF 'test-dispatch-scripts.sh' "$f"; then
+  if grep -qF 'test-dispatch-scripts.sh' "$f" && grep -F 'test-dispatch-scripts.sh' "$f" | grep -qv "sliced + eval'd by test-dispatch-scripts.sh"; then
     echo "DEAD PATH still present: $f"
     fail=1
   fi
