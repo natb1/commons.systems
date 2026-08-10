@@ -79,8 +79,20 @@ attention:
     dispatch-containment fixes, and the sibling tactic-probe-unknown-never-clear
     carries the same boost."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-execute-fresh-main-read
+  pr: 3056
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-10
+    attempt: 1
+    pushed_sha: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
