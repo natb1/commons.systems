@@ -1109,6 +1109,165 @@ describe("ordering", () => {
   });
 });
 
+describe("wip bound", () => {
+  const parked = {
+    reason: "needs a human",
+    since: "2026-07-01",
+    recommendation: null,
+    session_type: "other" as const,
+  };
+
+  /**
+   * Two in-flight tactics, one draft, one align-eligible strategy — the draft
+   * and the strategy are the "start new work" candidates the bound withholds.
+   */
+  const wipGraph = (): IntentionNode[] => [
+    tactic({ id: "tactic-impl", phase: "implement" }),
+    tactic({ id: "tactic-qa", phase: "qa" }),
+    tactic({ id: "tactic-draft", phase: "draft" }),
+    strategy({ id: "strategy-s" }),
+  ];
+
+  it("is unbounded with no options: nothing restricted, candidate list unchanged", () => {
+    const nodes = wipGraph();
+    const sel = selectGraphTargets(nodes);
+    expect(sel.wip).toEqual({
+      in_flight: 2,
+      limit: null,
+      restricted: false,
+      bypassed: 0,
+      failed_open: false,
+    });
+    expect(sel.candidates.map((c) => c.id)).toEqual([
+      "tactic-qa",
+      "tactic-impl",
+      "strategy-s",
+      "tactic-draft",
+    ]);
+  });
+
+  it("below the limit, nothing is restricted", () => {
+    const nodes = wipGraph();
+    const sel = selectGraphTargets(nodes, { wipLimit: 5 });
+    expect(sel.wip).toMatchObject({ in_flight: 2, limit: 5, restricted: false, bypassed: 0 });
+    expect(sel.candidates.map((c) => c.id)).toEqual(candidateIds(nodes));
+  });
+
+  it("at the limit, drafts and strategies are dropped and in-flight order is unchanged", () => {
+    const nodes = wipGraph();
+    const sel = selectGraphTargets(nodes, { wipLimit: 2 });
+    expect(sel.wip).toEqual({
+      in_flight: 2,
+      limit: 2,
+      restricted: true,
+      bypassed: 0,
+      failed_open: false,
+    });
+    // Same relative order as the unrestricted list, minus the withheld starts.
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-qa", "tactic-impl"]);
+  });
+
+  it("a frozen-tactic re-evaluation candidate survives the restriction (node-keyed, not rung-keyed)", () => {
+    const nodes = [
+      strategy({ id: "strategy-s", reading: "validated" }),
+      // Open (in flight) but soft-frozen: its only path forward is the
+      // align-tactics re-evaluation candidate.
+      tactic({
+        id: "tactic-stale",
+        serves: ["strategy-s"],
+        phase: "implement",
+        execution: exec({ strategy_fingerprint: "stale-fingerprint" }),
+      }),
+      tactic({ id: "tactic-draft", phase: "draft" }),
+    ];
+    const sel = selectGraphTargets(nodes, { wipLimit: 1 });
+    expect(sel.wip).toMatchObject({ in_flight: 1, restricted: true, bypassed: 0 });
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-stale"]);
+    expect(sel.candidates[0]).toMatchObject({ phase: "align-tactics", reevaluation: true });
+  });
+
+  it("a PARKED in-flight tactic counts toward in_flight but is not a candidate", () => {
+    const nodes = [
+      tactic({ id: "tactic-parked", phase: "implement", office_hours: parked }),
+      tactic({ id: "tactic-open", phase: "implement" }),
+      tactic({ id: "tactic-draft", phase: "draft" }),
+    ];
+    expect(selectGraphTargets(nodes).wip.in_flight).toBe(2);
+    const sel = selectGraphTargets(nodes, { wipLimit: 2 });
+    expect(sel.wip).toMatchObject({ in_flight: 2, restricted: true });
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-open"]);
+    expect(sel.candidates.map((c) => c.id)).not.toContain("tactic-parked");
+  });
+
+  it("a BLOCKED in-flight tactic counts toward in_flight but is not a candidate", () => {
+    const nodes = [
+      tactic({ id: "tactic-blocker", phase: "implement" }),
+      tactic({ id: "tactic-blocked", phase: "qa", blocked_by: ["tactic-blocker"] }),
+      tactic({ id: "tactic-draft", phase: "draft" }),
+    ];
+    expect(selectGraphTargets(nodes).wip.in_flight).toBe(2);
+    const sel = selectGraphTargets(nodes, { wipLimit: 2 });
+    expect(sel.wip).toMatchObject({ in_flight: 2, restricted: true });
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-blocker"]);
+  });
+
+  it("a tier-2 draft bypasses the bound", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-open", phase: "implement" }),
+      tactic({ id: "tactic-draft-t2", phase: "draft", attributes: { bug_fix: true } }),
+      tactic({ id: "tactic-draft-t1", phase: "draft" }),
+    ];
+    const sel = selectGraphTargets(nodes, { wipLimit: 1 });
+    expect(sel.wip).toMatchObject({ in_flight: 1, restricted: true, bypassed: 1 });
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-draft-t2", "tactic-open"]);
+  });
+
+  it("a tier-1 draft LIFTED to precedence tier 2 by blocking a tier-2 node also bypasses", () => {
+    const nodes = [
+      ...kinds(),
+      tactic({ id: "tactic-open", phase: "implement" }),
+      tactic({ id: "tactic-draft-lift", phase: "draft" }),
+      // Tier-2 and blocked by the draft: itself ineligible, so its urgency
+      // reaches selection only as the lift onto the draft.
+      tactic({
+        id: "tactic-t2-blocked",
+        phase: "implement",
+        attributes: { bug_fix: true },
+        blocked_by: ["tactic-draft-lift"],
+      }),
+    ];
+    const sel = selectGraphTargets(nodes, { wipLimit: 2 });
+    expect(sel.wip).toMatchObject({ in_flight: 2, restricted: true, bypassed: 1 });
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-draft-lift", "tactic-open"]);
+    // Its OWN tier is still 1; only the lifted precedence pair reaches tier 2.
+    expect(sel.candidates[0]).toMatchObject({ tier: 1, precedence: { tier: 2, rank: 0 } });
+  });
+
+  it("fails open rather than emitting an empty list", () => {
+    const nodes = [
+      tactic({ id: "tactic-parked", phase: "implement", office_hours: parked }),
+      tactic({ id: "tactic-draft", phase: "draft" }),
+    ];
+    const sel = selectGraphTargets(nodes, { wipLimit: 1 });
+    expect(sel.wip).toEqual({
+      in_flight: 1,
+      limit: 1,
+      restricted: false,
+      bypassed: 0,
+      failed_open: true,
+    });
+    // The full UNRESTRICTED list, not an empty one.
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-draft"]);
+  });
+
+  it("throws on a malformed wipLimit", () => {
+    const nodes = wipGraph();
+    expect(() => selectGraphTargets(nodes, { wipLimit: -1 })).toThrow(/non-negative integer/);
+    expect(() => selectGraphTargets(nodes, { wipLimit: 1.5 })).toThrow(/non-negative integer/);
+  });
+});
+
 describe("strategyFingerprint", () => {
   it("state writes (reading/gap/rounds/office_hours/attention) never change it", () => {
     const base = strategy({ id: "strategy-s" });

@@ -84,6 +84,33 @@ export interface SelectionEvent {
   detail: string;
 }
 
+/**
+ * Caller-supplied environmental options. Config lives in the shell layer; this
+ * module stays pure — same nodes plus same options in, same output out.
+ */
+export interface SelectionOptions {
+  /**
+   * The work-in-progress ceiling: at or above this many in-flight tactics,
+   * restrict the candidate set to in-flight nodes. `null`/absent = unbounded
+   * (today's behavior, byte-identical output apart from the `wip` block).
+   */
+  wipLimit?: number | null;
+}
+
+/** What the WIP bound did on this pass — always present, never optional. */
+export interface WipBound {
+  /** In-flight tactics over the FULL node array: isOpenTactic, parked and blocked included. */
+  in_flight: number;
+  /** The limit in force, or null when unbounded. */
+  limit: number | null;
+  /** True iff the restriction actually applied to the emitted candidate list. */
+  restricted: boolean;
+  /** Candidates admitted past the bound by the tier-2 escape hatch (0 unless restricted). */
+  bypassed: number;
+  /** True iff at/above the limit but the restricted set was EMPTY, so normal selection was used. */
+  failed_open: boolean;
+}
+
 export interface GraphSelection {
   /**
    * Eligible nodes in selection order: lexicographic `(tier, rank)` over each
@@ -93,6 +120,14 @@ export interface GraphSelection {
   candidates: GraphCandidate[];
   /** Freeze / cap / gate events observed during the scan. */
   events: SelectionEvent[];
+  /**
+   * What the work-in-progress bound did on this pass. Always present: an
+   * unbounded call reports `limit: null, restricted: false`. Additive wire
+   * format — `select-targets.ts` serializes it verbatim and
+   * `graph-select-target` parses it; existing consumers reading only
+   * `candidates` are unaffected.
+   */
+  wip: WipBound;
 }
 
 // --- Strategy substance fingerprint -------------------------------------------
@@ -460,8 +495,51 @@ function progressionIndex(candidate: GraphCandidate, byId: Map<string, Intention
  * gates and serializes eligibility; it never boosts. Within one precedence pair
  * the progression ordinal (full `PHASES` order) sorts the more-progressed
  * candidate first; id ascending as the deterministic tiebreak.
+ *
+ * WORK-IN-PROGRESS BOUND (`options.wipLimit`, opt-in; absent/null = unbounded,
+ * which is the historical behavior with the `wip` block as the only added
+ * output). It is a START THROTTLE applied once, to the emitted candidate list —
+ * never an eligibility gate on an individual node:
+ *
+ *  - `wip.in_flight` counts `isOpenTactic` over the FULL tactic array — a phase
+ *    is set and is neither `draft` nor `done`. PARKED (`office_hours`) and
+ *    BLOCKED in-flight tactics COUNT: they occupy a slot even though the
+ *    candidacy gates keep them unselectable. Strategies never count.
+ *  - Below the limit (or unbounded), nothing is restricted.
+ *  - At or above it, the emitted list keeps only (a) candidates whose NODE is in
+ *    flight — membership is node-keyed (`kind: "tactic"` and not `isDraft`),
+ *    never rung-keyed, so a soft-freeze `reevaluation` candidate (emitted at the
+ *    `align-tactics` rung for a node that IS in flight and whose normal phase
+ *    skill is suppressed) survives; re-evaluation is that node's only path
+ *    forward, and dropping it would strand an in-flight node that can never
+ *    drain — and (b) any candidate at `precedence.tier >= 2`, the escape hatch.
+ *    Draft-tactic and strategy `align-tactics` candidates are "start new work"
+ *    and are what the bound withholds.
+ *  - The tier bypass reads `precedence.tier`, the LIFTED pair the candidate
+ *    actually sorts at, not its own `tier`: a draft that blocks a tier-2 node is
+ *    lifted to tier 2 and must get through, because it is holding up exactly the
+ *    urgent work the escape hatch exists for. Admitted non-in-flight candidates
+ *    are counted in `wip.bypassed`.
+ *  - FAIL OPEN: if the restricted set would be empty (e.g. every in-flight node
+ *    is parked or blocked and nothing reaches tier 2), the UNRESTRICTED list is
+ *    emitted with `failed_open: true, restricted: false`. The bound never empties
+ *    the candidate list.
+ *
+ * Throws on a malformed `wipLimit` (must be null/absent or a non-negative
+ * integer). That is a caller-argument defect at a public boundary; the cycle
+ * guard's degrade-don't-throw posture applies to malformed STORE data on the
+ * fleet's read path and is deliberately not copied here.
  */
-export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
+export function selectGraphTargets(
+  nodes: IntentionNode[],
+  options: SelectionOptions = {},
+): GraphSelection {
+  const wipLimit = options.wipLimit ?? null;
+  if (wipLimit !== null && (!Number.isInteger(wipLimit) || wipLimit < 0)) {
+    throw new Error(
+      `selectGraphTargets: wipLimit must be null or a non-negative integer, got ${JSON.stringify(options.wipLimit)}`,
+    );
+  }
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const attention = resolveAttention(nodes);
   // Computed over the FULL node array: a blocked node is never a candidate, so
@@ -480,6 +558,12 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
 
   const strategies = nodes.filter((n) => n.kind === "strategy");
   const tactics = nodes.filter((n) => n.kind === "tactic");
+
+  // The WIP number, tallied BEFORE and independently of the candidacy loops:
+  // every open tactic occupies a slot, including the parked and the blocked ones
+  // that the candidacy gates below will drop. `isOpenTactic` already ignores
+  // office_hours and blocked_by, which is exactly the wanted semantics.
+  const inFlight = tactics.filter(isOpenTactic).length;
 
   // Child tactics per strategy (serves-edge membership, parent-chain inherited).
   const childrenOf = new Map<string, IntentionNode[]>();
@@ -670,8 +754,38 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     candidates.push(asCandidate(false));
   }
 
+  // --- WIP bound ---------------------------------------------------------------
+  // Applied to the emitted list before the sort: a filter cannot change relative
+  // order, so filter-then-sort is equivalent to sort-then-filter and reads
+  // better. See the doc block above for the rule.
+  const wip: WipBound = {
+    in_flight: inFlight,
+    limit: wipLimit,
+    restricted: false,
+    bypassed: 0,
+    failed_open: false,
+  };
+  let emitted = candidates;
+  if (wipLimit !== null && inFlight >= wipLimit) {
+    // Node-keyed, not rung-keyed: a `reevaluation` candidate sits at the
+    // align-tactics rung but its NODE is in flight, so it stays.
+    const isInFlightCandidate = (c: GraphCandidate): boolean =>
+      c.kind === "tactic" && !isDraft(byId.get(c.id)!);
+    const restricted = candidates.filter(
+      (c) => isInFlightCandidate(c) || c.precedence.tier >= 2,
+    );
+    if (restricted.length === 0) {
+      // Fail open: never emit an empty list on account of the bound.
+      wip.failed_open = true;
+    } else {
+      emitted = restricted;
+      wip.restricted = true;
+      wip.bypassed = restricted.filter((c) => !isInFlightCandidate(c)).length;
+    }
+  }
+
   // --- Order -------------------------------------------------------------------
-  candidates.sort((a, b) => {
+  emitted.sort((a, b) => {
     // Lexicographic (tier, rank) over the LIFTED precedence pair, tier outermost.
     if (a.precedence.tier !== b.precedence.tier) return b.precedence.tier - a.precedence.tier;
     if (a.precedence.rank !== b.precedence.rank) return b.precedence.rank - a.precedence.rank;
@@ -681,7 +795,7 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
-  return { candidates, events };
+  return { candidates: emitted, events, wip };
 }
 
 /**
@@ -702,6 +816,13 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
  * `office_hours` gating is intentionally in scope (a parked strategy is not
  * emitted), but the gate applies its dedicated not-parked check first, so in
  * practice this is only reached for an unparked node.
+ *
+ * Calls `selectGraphTargets(nodes)` UNBOUNDED by design, and must stay that way:
+ * the WIP bound is a START throttle applied once at selection, never an
+ * eligibility gate. This helper backs the worker-start re-validation gate
+ * (`scripts/check-node-selection.ts`), so re-validating an already-claimed,
+ * already-launched worker under a bound that flipped on since its selection
+ * would exit-12 it.
  */
 export function strategyAlignSelectable(strategy: IntentionNode, nodes: IntentionNode[]): boolean {
   return selectGraphTargets(nodes).candidates.some(
@@ -723,6 +844,12 @@ export function strategyAlignSelectable(strategy: IntentionNode, nodes: Intentio
  * node behind the first qualifying candidate, so ranking/tiebreaks match the
  * real selection exactly. Returns null for a zero-tactic strategy or one whose
  * descendants are all non-frozen.
+ *
+ * Calls `selectGraphTargets(nodes)` UNBOUNDED by design, and must stay that way:
+ * the WIP bound is a START throttle applied once at selection, never an
+ * eligibility gate. Resolving a frozen descendant at worker start under a bound
+ * that flipped on since selection would exit-12 an already-claimed,
+ * already-launched worker (`scripts/check-node-selection.ts`).
  */
 export function resolveFrozenDescendant(
   strategy: IntentionNode,
@@ -752,6 +879,12 @@ export function resolveFrozenDescendant(
  * blockers). The worker-start re-validation gate calls it so a tactic selected
  * at `align-tactics` re-validates against exactly the selector's current
  * verdict.
+ *
+ * Calls `selectGraphTargets(nodes)` UNBOUNDED by design, and must stay that way:
+ * the WIP bound is a START throttle applied once at selection, never an
+ * eligibility gate. Re-validating at worker start
+ * (`scripts/check-node-selection.ts`) under a bound that flipped on since
+ * selection would exit-12 an already-claimed, already-launched worker.
  */
 export function frozenTacticSelectable(tactic: IntentionNode, nodes: IntentionNode[]): boolean {
   return selectGraphTargets(nodes).candidates.some(
