@@ -36,6 +36,10 @@
 # .claude/rules/code-style.md.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-verify-fence.sh
+source "$SCRIPT_DIR/lib-verify-fence.sh"
+
 usage() {
   cat <<'EOF'
 Usage: dispatch-read-plan <issue-num> | dispatch-run-verification
@@ -75,68 +79,17 @@ if [[ -z "${PLAN//[[:space:]]/}" ]]; then
 fi
 
 # --- Extract the verify block bodies from the Verification section ----------
-# Walk the plan line by line. `in_section` is true once we pass the first
-# "## Verification..." heading and false again at the next "## " heading at the
-# section's top level. `in_fence` tracks whether we are inside ANY fenced block,
-# so that (a) a "## " line inside a fence does not end the section, and (b) we
-# can tell a fence open from a fence close. When a `verify` fence opens inside
-# the section, `capturing` is set and subsequent lines are appended to the
-# current block until the closing fence.
-#
+# The section/fence state machine lives in lib-verify-fence.sh so this script
+# and lint-verify-fence-paths.sh share ONE parser rather than drifting copies.
 # Blocks are emitted into an array; element i is the full body of block i+1.
 declare -a BLOCKS=()
-in_section=0
-in_fence=0
-capturing=0
-current=""
-
-while IFS= read -r line || [[ -n "$line" ]]; do
-  if [[ "$in_fence" -eq 0 ]]; then
-    # Outside a fence: a "## " heading drives section boundaries.
-    if [[ "$line" =~ ^##[[:space:]]+Verification ]]; then
-      in_section=1
-      continue
-    fi
-    if [[ "$in_section" -eq 1 && "$line" =~ ^##[[:space:]] ]]; then
-      # Next top-level section heading ends Verification.
-      in_section=0
-      continue
-    fi
-    # A fence opening. Match exactly three backticks plus an optional info string.
-    if [[ "$line" =~ ^'```'(.*)$ ]]; then
-      info="${BASH_REMATCH[1]}"
-      in_fence=1
-      # Capture only when inside the section and the info string is exactly
-      # `verify` (optional trailing whitespace, nothing else).
-      if [[ "$in_section" -eq 1 && "$info" =~ ^verify[[:space:]]*$ ]]; then
-        capturing=1
-        current=""
-      else
-        capturing=0
-      fi
-      continue
-    fi
-  else
-    # Inside a fence: only a closing triple-backtick fence matters.
-    if [[ "$line" =~ ^'```'[[:space:]]*$ ]]; then
-      in_fence=0
-      if [[ "$capturing" -eq 1 ]]; then
-        BLOCKS+=("$current")
-        capturing=0
-      fi
-      continue
-    fi
-    if [[ "$capturing" -eq 1 ]]; then
-      current+="$line"$'\n'
-    fi
-    continue
-  fi
-done <<<"$PLAN"
+UNCLOSED=0
+extract_verify_blocks "$PLAN" BLOCKS UNCLOSED
 
 # An unclosed verify fence (opened with ```verify but reaching EOF before its
-# closing ```) leaves capturing=1 with the partial block never appended. Surface
-# it as a malformed plan rather than silently treating it as "no verify blocks".
-if [[ "$capturing" -eq 1 ]]; then
+# closing ```) leaves the partial block never appended. Surface it as a
+# malformed plan rather than silently treating it as "no verify blocks".
+if [[ "$UNCLOSED" -eq 1 ]]; then
   echo "dispatch-run-verification: unclosed verify block at end of input (malformed plan)" >&2
   exit 5
 fi
