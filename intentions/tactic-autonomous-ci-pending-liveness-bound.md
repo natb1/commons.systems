@@ -52,6 +52,7 @@ attention:
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
+  tier: 1
 phase: qa
 execution:
   branch: tactic-autonomous-ci-pending-liveness-bound
@@ -64,10 +65,12 @@ execution:
     since: 2026-07-31
     attempt: 2
     pushed_sha: null
+  conflict: null
   completion: null
 validates: []
 blocked_by:
   - tactic-flake-preview-and-smoke-dpkg-lock
+  - tactic-hold-conflict-autonomous-ci-pending-liveness-bound
 office_hours: null
 pace_exempt: false
 rounds: null

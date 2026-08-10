@@ -44,9 +44,43 @@
 # `hold-node --kind fix-attempt-cap --reset-fix-attempt` writes a born-parked
 # hold tactic plus a `blocked_by` edge on the source, in one graph-commit) —
 # dropping the node out of the eligible set via that edge rather than
-# re-arming another retry forever. These graph-commit writes (this script's
-# own via `_graph_commit_fix`, and hold-node's own internal commit) are the
-# only writes selection makes.
+# re-arming another retry forever.
+#
+# The SECOND exception is the merge-conflict interrupt
+# (tactic-graph-router-conflict-routing). A reviewed awaiting-merge node is no
+# longer excluded from candidates: the router emits it as `pending-merge`, and
+# `_gate_pending_merge` reads the PR's mergeability each tick. On CONFLICTING it
+# ENTERS the orthogonal `execution.conflict` interrupt (`apply-conflict-state
+# --set-conflict --head-sha <the PR's current head>` + `graph-commit`) and emits
+# `conflict`, which
+# dispatch-graph-execute routes to `/dispatch-conflict`. On a subsequent tick the
+# node arrives as a `conflict` candidate and `_gate_conflict_active` spends one
+# attempt per re-dispatch, parks the node once `CONFLICT_ATTEMPT_CAP` is spent
+# (a LIFETIME budget — apply-conflict-state persists the spend on
+# `execution.attempts.conflict`, so clearing and re-entering the interrupt does
+# not refund attempts), or — only when the worker left NO disposition of its own
+# — clears the interrupt as a BACKSTOP once GitHub reports the PR MERGEABLE
+# again. That backstop is GUARDED (`--clear-conflict-guarded --head-sha`): it
+# keeps the `reviewed` marker only when the PR's head is still the sha recorded
+# at interrupt entry — the tree review actually examined, mergeable now only
+# because main moved — and otherwise clears by INTENTION (strips the marker,
+# re-drafts the PR, re-review runs), because a head that advanced is not
+# evidence that what would merge is what review approved. `/dispatch-conflict`
+# Lane 3 owns the mechanical-vs-intention verdict for a resolution it actually
+# performed and declares it explicitly as its terminal act. UNKNOWN mergeability
+# is never acted on — GitHub computes it asynchronously.
+#
+# Every write arm of this lane lands a commit and then returns NOT-SELECTED, so
+# `--top` does not bound them: they spend an explicit per-pass budget instead
+# (`GRAPH_CONFLICT_COMMIT_BUDGET`, default 2), refreshing the dispatch lock's
+# heartbeat after each landing, so one wide conflict fan-out cannot serialize N
+# landing-lock waits inside a single lock hold and get the tick's lock reclaimed
+# mid-selection. Nodes past the budget are deferred to the next tick — every
+# conflict gate is idempotent.
+#
+# These graph-commit writes (this script's own via `_graph_commit_fix` /
+# `_graph_commit_conflict`, and hold-node's and park-node's own internal
+# commits) are the only writes selection makes.
 #
 # Usage: graph-select-target [--top <n>] [--pace-exempt-only] [--standalone] [--node <id>]
 #
@@ -107,8 +141,10 @@
 #                        genuine token exhaustion is a hard stop no flag
 #                        overrides (prints `empty`); otherwise consider ONLY
 #                        nodes authored `pace_exempt: true`. The caller admits
-#                        at most one gate-exempt worker — the flag bypasses the
-#                        pace GATE, not the worker count or the rank order.
+#                        up to its computed ceiling headroom via `--top` — the
+#                        flag bypasses the pace GATE, not the worker count,
+#                        the `max_concurrent_workers` ceiling, or the rank
+#                        order.
 #   --node <id>          Explicit single-node dispatch: bypass rank order and
 #                        --top truncation and consider ONLY the named node id.
 #                        Every existing environmental gate (claim-safety,
@@ -118,6 +154,14 @@
 #                        (usage error, exit 2, when combined). Combining it with
 #                        --standalone is allowed but IS ceiling-gated — see the
 #                        EXPLICIT-NODE DIVERGENCE note under --standalone.
+#
+# Env:
+#   GRAPH_CONFLICT_COMMIT_BUDGET  Max graph-commits the merge-conflict lane may
+#                        land in ONE selection pass (enter/spend/clear/park —
+#                        park-node's own commit counts). Positive integer,
+#                        default 2. Candidates past it are skipped with
+#                        `conflict-commit-budget-spent` and re-matched next tick.
+#                        See the budget block above `_graph_commit_conflict`.
 #
 # Stdout protocol:
 #   node <id> <kind> <phase>   zero to <top> lines, in selection order.
@@ -478,6 +522,107 @@ _graph_commit_fix() {
     && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
 }
 
+# --- Merge-conflict interrupt helpers (tactic-graph-router-conflict-routing) --
+# Structural siblings of _apply_fix/_graph_commit_fix above, for the orthogonal
+# `execution.conflict` interrupt entered on a reviewed awaiting-merge node whose
+# PR reports mergeable == CONFLICTING.
+
+# _apply_conflict <id> <mode-flag...> — run apply-conflict-state against the
+# main store. Its JSON result is on stdout for the caller to capture.
+_apply_conflict() {
+  ( cd "$NATIVE_ROOT" \
+    && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts "$@" --dir "$NATIVE_ROOT/intentions" )
+}
+
+# --- The conflict lane's per-selection graph-commit budget -------------------
+# Every write arm of the conflict gates below LANDS A COMMIT (this script's own
+# graph-commit, or park-node's internal one) and then returns rc 1 — the node is
+# NOT selected, so `--top` does not bound how many of them one selection pass
+# runs. Left unbounded, a single push to main that conflicts with N reviewed
+# awaiting-merge PRs at once (routine after a wide refactor) makes this loop
+# serialize N landing-lock waits inside ONE hold of the dispatch lock:
+# graph-commit waits up to LOCK_WAIT_SECONDS (1050s) for the landing lock while
+# dispatch-acquire-lock reclaims a holder whose heartbeat is older than
+# MAX_HOLD_SECONDS (300s). The tick then loses the lock mid-selection, a second
+# tick starts selecting, and both spawn workers for the same nodes — the
+# duplicate-worker / double-booked-worktree failure.
+#
+# So the lane spends an explicit budget of graph-commits per selection pass —
+# the same reasoning reconcile-graph-review-stall records for its own ONE-commit
+# cap — and the lock heartbeat is refreshed after each landed commit. Nodes past
+# the budget are skipped with `conflict-commit-budget-spent` and picked up next
+# tick: every conflict gate is idempotent (mergeability is re-read from GitHub,
+# the interrupt state from the store), so nothing is lost by deferring.
+#
+# The counter lives in a FILE, not a variable: the gates run inside
+# `emit_phase=$(sensor_gate ...)`, a command substitution, so any increment to a
+# shell variable dies with that subshell.
+CONFLICT_COMMIT_BUDGET="${GRAPH_CONFLICT_COMMIT_BUDGET:-2}"
+if ! [[ "$CONFLICT_COMMIT_BUDGET" =~ ^[0-9]+$ ]] || (( CONFLICT_COMMIT_BUDGET < 1 )); then
+  echo "graph-select-target: GRAPH_CONFLICT_COMMIT_BUDGET must be a positive integer, got '$CONFLICT_COMMIT_BUDGET'" >&2
+  exit 2
+fi
+# The counter file lives inside SNAPSHOT_DIR (already created above, and removed
+# by the EXIT trap), so the budget is scoped to exactly this selection pass.
+CONFLICT_BUDGET_FILE="$SNAPSHOT_DIR/conflict-commit-budget"
+printf '0\n' > "$CONFLICT_BUDGET_FILE" 2>/dev/null || true
+
+# _conflict_budget_exhausted — rc 0 when the pass has already spent its budget.
+# A missing/garbled counter file reads as 0 spent: the budget is a lock-hold
+# safety valve, not an accounting record, and refusing every write on an
+# unreadable counter would wedge the lane.
+_conflict_budget_exhausted() {
+  local spent
+  spent=$(cat "$CONFLICT_BUDGET_FILE" 2>/dev/null) || spent=0
+  [[ "$spent" =~ ^[0-9]+$ ]] || spent=0
+  (( spent >= CONFLICT_COMMIT_BUDGET ))
+}
+
+# _conflict_budget_charge — spend one commit against the budget. Charged BEFORE
+# the commit is attempted, so a commit that blocks and then fails still counts:
+# what the budget bounds is time spent holding the dispatch lock, which a failed
+# commit consumes exactly as a successful one does.
+_conflict_budget_charge() {
+  local spent
+  spent=$(cat "$CONFLICT_BUDGET_FILE" 2>/dev/null) || spent=0
+  [[ "$spent" =~ ^[0-9]+$ ]] || spent=0
+  printf '%s\n' "$(( spent + 1 ))" > "$CONFLICT_BUDGET_FILE" 2>/dev/null || true
+}
+
+# _refresh_lock — bump the dispatch lock's heartbeat so a landed commit's wait
+# cannot age the CALLER's hold past MAX_HOLD_SECONDS. Strict-owner and
+# best-effort: a no-op when this process does not hold the lock (the
+# --standalone lane holds it; under dispatch-select-tick the tick does, and
+# dispatch-acquire-lock keys the refresh on the session, not the process). This
+# is the "between sub-steps" refresh dispatch-select-tick's INVARIANT #2
+# permits — it fires after a completed landing, never inside a retry/poll loop.
+_refresh_lock() {
+  [[ -x "$SCRIPT_DIR/dispatch-acquire-lock" ]] || return 0
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
+# _graph_commit_conflict <message> <id> — land the on-disk conflict-state write,
+# charging the pass's commit budget and refreshing the lock heartbeat around it.
+# Callers MUST have checked _conflict_budget_exhausted BEFORE making the on-disk
+# apply-conflict-state write: a write with no commit behind it leaves intentions/
+# dirty, which trips graph-commit's assert_clean_outside_ids for every graph
+# writer in this checkout.
+_graph_commit_conflict() {
+  local rc=0
+  _conflict_budget_charge
+  ( cd "$NATIVE_ROOT" \
+    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1 || rc=$?
+  _refresh_lock
+  return $rc
+}
+
+# CONFLICT_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's
+# constant of the same name (currently 3) — used only for the park reason's
+# diagnostic prose, never for the capped decision itself (that stays
+# apply-conflict-state.ts's `--park-if-capped`, the single source of truth for
+# the comparison). Keep this literal in sync if the source constant changes.
+CONFLICT_ATTEMPT_CAP=3
+
 # FIX_ATTEMPT_CAP mirrors packages/intentionsutil/src/transitions.ts's constant
 # of the same name (currently 3) — used only for the hold reason's diagnostic
 # prose below, never for the capped decision itself (that stays
@@ -705,6 +850,173 @@ _gate_fix_active() {
   esac
 }
 
+# _park_conflict_cap <id> <pr> <attempt> — park the source node once the
+# automated conflict-resolution budget is exhausted. Unlike the fix lane's
+# _hold_node_fix_cap (a tracked hold tactic + blocked_by edge, because a fix
+# retry budget is RESETTABLE by resolving the hold), a capped conflict has no
+# reset flag to offer — park-node takes <reason> and <recommendation> as plain
+# positional arguments (packages/intentionsutil/scripts/park-node's usage line),
+# so no reason/recommendation FILES are involved here. rc mirrors park-node's.
+_park_conflict_cap() {
+  local id="$1" pr="$2" attempt="$3" reason rec
+  reason=$(printf 'Automated conflict resolution exhausted: PR #%s still reports mergeable == CONFLICTING after %s lifetime attempt(s) — the %s-attempt cap (CONFLICT_ATTEMPT_CAP) is spent. The count is the node'"'"'s LIFETIME conflict spend (`execution.attempts.conflict`), which clearing and re-entering the interrupt deliberately does not refund.' \
+    "$pr" "$attempt" "$CONFLICT_ATTEMPT_CAP")
+  rec=$(printf 'Run `/dispatch-conflict %s` by hand, or resolve the merge conflict directly in that node'"'"'s worktree and push the branch. Then clear `office_hours` on %s to return it to the queue; the reviewed marker and its armed auto-merge are untouched, so dispatch-auto-merge lands it once GitHub reports MERGEABLE. Clearing the park alone does NOT hand back automated retries — the lifetime budget stays spent, so a still-conflicting node parks again on the next tick. To grant a fresh automated budget, zero `execution.attempts.conflict` on %s as well.' \
+    "$id" "$id" "$id")
+  ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/park-node "$id" "$reason" "$rec" ) \
+    >/dev/null 2>&1
+}
+
+# _gate_pending_merge <id> <pr> — the candidate is reviewed and awaiting its
+# armed auto-merge (router emitted phase `pending-merge`), carrying NO conflict
+# interrupt yet. Read the PR's mergeability and, on CONFLICTING, ENTER the
+# interrupt this tick.
+#   rc 0 — conflict interrupt entered (caller emits `conflict`).
+#   rc 1 — not satisfied; a short skip-reason token is on stdout.
+#   rc 3 — an interrupt was due but could not be acted on (write/commit failed,
+#          or an unreadable `.mergeable`); a reason token is on stdout and the
+#          caller skips the node.
+_gate_pending_merge() {
+  local id="$1" pr="$2"
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  # A merge landed out of band — the merged-tactic reconciler's job, not this
+  # gate's; it absorbs the node to `done` on the next tick.
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_MERGEABLE" in
+    CONFLICTING)
+      # Budget first — the check must precede the on-disk write, or a refused
+      # commit would leave intentions/ dirty (see _graph_commit_conflict).
+      if _conflict_budget_exhausted; then
+        echo "conflict-commit-budget-spent"; return 1
+      fi
+      # --head-sha records the head the completed review examined. It is the
+      # evidence the self-heal below is gated on: a clear that preserves the
+      # `reviewed` marker is only safe while the PR still points at THIS tree.
+      if _apply_conflict "$id" --set-conflict --head-sha "$_CI_HEAD" >/dev/null 2>&1 \
+         && _graph_commit_conflict "graph: enter conflict-interrupt on $id" "$id"; then
+        return 0
+      fi
+      echo "conflict-write-failed"; return 3 ;;
+    MERGEABLE)
+      # Clean: dispatch-auto-merge (a separate tick-wide reconciler) lands it.
+      echo "mergeable-clean"; return 1 ;;
+    UNKNOWN|"")
+      # GitHub computes mergeability asynchronously and self-heals; wait and
+      # retry next tick. NEVER route a conflict lane off an UNKNOWN.
+      echo "mergeable-unknown"; return 1 ;;
+    *)
+      echo "graph-select-target: unexpected .mergeable '$_CI_MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      echo "mergeable-unreadable"; return 3 ;;
+  esac
+}
+
+# _gate_conflict_active <id> <pr> — the candidate ALREADY carries an active
+# conflict interrupt (router emitted phase `conflict`). Spend an attempt and
+# re-dispatch while the PR is still conflicted, park at the lifetime cap, or —
+# as a BACKSTOP for a worker that declared no disposition — clear the interrupt
+# once GitHub reports the PR mergeable again.
+#   rc 0 — still conflicted, an attempt was spent (caller emits `conflict`).
+#   rc 1 — not satisfied; a short skip-reason token is on stdout (including the
+#          capped-and-parked and the backstop-cleared paths — neither emits a
+#          phase).
+#   rc 3 — a due write could not be made; reason token on stdout.
+_gate_conflict_active() {
+  local id="$1" pr="$2" out capped attempt
+  if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+  if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
+  if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  case "$_CI_MERGEABLE" in
+    CONFLICTING)
+      # Retry cap first: --park-if-capped is a PURE READ (no write, no park of
+      # its own), so the park below is this script's to make.
+      out=$(_apply_conflict "$id" --park-if-capped 2>/dev/null) \
+        || { echo "conflict-cap-check-failed"; return 1; }
+      capped=$(jq -r '.capped' <<<"$out" 2>/dev/null) || capped=""
+      if [[ "$capped" == "true" ]]; then
+        # park-node lands its OWN graph-commit, so it spends the same budget as
+        # this script's commits — the lock-hold cost is identical.
+        if _conflict_budget_exhausted; then
+          echo "conflict-commit-budget-spent"; return 1
+        fi
+        attempt=$(jq -r '.attempt' <<<"$out" 2>/dev/null)
+        _conflict_budget_charge
+        if ! _park_conflict_cap "$id" "$pr" "$attempt"; then
+          _refresh_lock
+          echo "conflict-cap-park-failed"; return 1
+        fi
+        _refresh_lock
+        echo "conflict-capped-parked"; return 1
+      fi
+      if _conflict_budget_exhausted; then
+        echo "conflict-commit-budget-spent"; return 1
+      fi
+      if _apply_conflict "$id" --spend-attempt >/dev/null 2>&1 \
+         && _graph_commit_conflict "graph: spend conflict-interrupt attempt on $id" "$id"; then
+        return 0
+      fi
+      echo "conflict-spend-failed"; return 3 ;;
+    MERGEABLE)
+      # BACKSTOP for an undeclared resolution — never the normal exit from the
+      # conflict lane. `/dispatch-conflict` Lane 3 owns the mechanical-vs-
+      # intention verdict and declares it as its terminal act
+      # (`--clear-conflict-mechanical` / `--clear-conflict-intention` +
+      # graph-commit). A declared disposition sets execution.conflict to null, so
+      # the router stops emitting `conflict` and this gate is not reached at all:
+      # arriving here means the interrupt is STILL set while GitHub says the PR
+      # merges — the worker died, was reaped, or never ran, and nobody classified
+      # what changed.
+      #
+      # So the clear is GUARDED (`--clear-conflict-guarded --head-sha`), never
+      # the caller's assertion that nothing meaningful changed. The primitive
+      # compares the PR's current head against `execution.conflict.head_sha` —
+      # the head recorded when the interrupt was entered, i.e. the tree the
+      # `reviewed` verdict was earned on — and clears:
+      #
+      #   - MECHANICALLY (marker preserved) ONLY on an exact head match. Then
+      #     nothing about this branch changed at all: the PR became mergeable
+      #     because MAIN moved out from under the conflict, and the tree that
+      #     will land is byte-identical to the reviewed one. There is no
+      #     unreviewed diff to re-review.
+      #   - BY INTENTION (marker stripped, phase held at `review`) in EVERY
+      #     other case — the head advanced (a resolver rewrite, a force-push, a
+      #     fresh commit; this gate cannot and must not try to tell them apart)
+      #     or no head was ever recorded (a legacy interrupt). The `reviewed`
+      #     verdict was taken against a tree that is no longer what would merge,
+      #     and a mechanical clear would re-arm auto-merge on code no review saw.
+      #     Re-review is the recoverable error (one wasted review pass); the
+      #     alternative is unreviewed code on main.
+      #
+      # Re-draft the PR FIRST, before the verdict is known, so the legacy label
+      # lane's isDraft gate holds across the whole window; the mechanical branch
+      # re-readies it below. Best-effort both ways: the LOAD-BEARING disarm is
+      # the marker strip (graph-auto-merge gates on the `reviewed` marker and
+      # re-readies drafts itself), so a `gh` failure must not block the clear.
+      if _conflict_budget_exhausted; then
+        echo "conflict-commit-budget-spent"; return 1
+      fi
+      gh pr ready --undo "$pr" >/dev/null 2>&1 || true
+      if out=$(_apply_conflict "$id" --clear-conflict-guarded --head-sha "$_CI_HEAD" 2>/dev/null) \
+         && _graph_commit_conflict "graph: guarded-clear undeclared conflict-interrupt on $id" "$id"; then
+        if [[ "$(jq -r '.reset' <<<"$out" 2>/dev/null)" == "false" ]]; then
+          # Head unchanged: the review verdict still binds, so hand the PR back
+          # to the armed auto-merge it was waiting on.
+          gh pr ready "$pr" >/dev/null 2>&1 || true
+          echo "conflict-cleared-mergeable"; return 1
+        fi
+        # NOT an emitted phase: the node is now a fresh `review` candidate and
+        # the review lane picks it up on a later tick.
+        echo "conflict-cleared-rereview"; return 1
+      fi
+      echo "conflict-clear-failed"; return 3 ;;
+    UNKNOWN|"")
+      echo "mergeable-unknown"; return 1 ;;
+    *)
+      echo "graph-select-target: unexpected .mergeable '$_CI_MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      echo "mergeable-unreadable"; return 3 ;;
+  esac
+}
+
 # sensor_gate <id> <phase> <pr> <pushed_sha> — the phase's environmental sensor
 # and CI-routing authority (§3.1; tactic-fix-interrupt-orthogonal-state).
 #   0 = satisfied, the PHASE TO EMIT is on stdout (may differ from <phase>: a
@@ -716,6 +1028,23 @@ sensor_gate() {
     fix)
       # An active interrupt (router override). Resolve/guard/retry.
       _gate_fix_active "$id" "$pr" "$pushed_sha" "$fix_since"; return $? ;;
+    pending-merge)
+      # Reviewed, awaiting the armed auto-merge (tactic-graph-router-conflict-
+      # routing). CONFLICTING enters the interrupt and emits `conflict`; every
+      # other outcome is a skip whose reason token _gate_pending_merge already
+      # printed on stdout (rc 1 and rc 3 alike).
+      _gate_pending_merge "$id" "$pr"
+      case $? in
+        0) echo "conflict"; return 0 ;;
+      esac
+      return 1 ;;
+    conflict)
+      # An active conflict interrupt (router override). Spend/park/self-heal.
+      _gate_conflict_active "$id" "$pr"
+      case $? in
+        0) echo "conflict"; return 0 ;;
+      esac
+      return 1 ;;
     align-tactics)
       echo "align-tactics"; return 0 ;;
     implement)
@@ -791,11 +1120,42 @@ while IFS=$'\t' read -r id kind phase pr pace_exempt pushed_sha fix_since; do
     [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: reserved" >&2
     continue
   fi
-  if worktree_has_live_session "$NATIVE_ROOT/.claude/worktrees/$id"; then
-    skip_note "$id" "live-session"
-    [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
-    continue
-  fi
+  # `worktree_occupancy_state` is the granular form of the same check: it makes
+  # the same claimed-set decision (everything but `free` is skipped) while
+  # naming WHY. `terminal` is an INVALID state — nothing is running, yet the
+  # claim survives — and folding it into `live-session`, as this call did
+  # before, made it invisible at the exact moment the router noticed it. The
+  # node is still skipped in all four cases; this unit adds no routing, no
+  # spawn and no graph write. The routing act lives in
+  # `dispatch-invalid-state-sweep`, which runs before selection over the same
+  # predicate, keeping session spawning out of a script humans invoke standalone.
+  # Called DIRECTLY with stdout redirected, not via `$( )`: the evidence
+  # globals are set in a subshell by a command substitution and would be lost,
+  # so the diagnostic below would name a stale session id. See the CAVEAT in
+  # `worktree_occupancy_state`'s header.
+  worktree_occupancy_state "$NATIVE_ROOT/.claude/worktrees/$id" >/dev/null
+  occupancy="$WORKTREE_OCCUPANCY_STATE"
+  case "$occupancy" in
+    free)
+      : # fall through to the sensor gate
+      ;;
+    terminal)
+      skip_note "$id" "terminal-session"
+      if [[ -n "$NODE_TARGET" ]]; then
+        echo "graph-select-target: terminal-session — $id is occupied-by-terminal (an INVALID state), not occupied-by-live: session ${WORKTREE_OCCUPANCY_SESSION_ID:-unknown} is registered but no longer running, and the claim survives until it is released" >&2
+      fi
+      continue
+      ;;
+    *)
+      # `live` (a valid claim) and `unknown` (a daemon read that failed) both
+      # report the unchanged `live-session` reason. UNKNOWN must NEVER surface
+      # as an invalid state: a daemon hiccup would otherwise manufacture
+      # interventions out of healthy nodes.
+      skip_note "$id" "live-session"
+      [[ -n "$NODE_TARGET" ]] && echo "graph-select-target: live-session" >&2
+      continue
+      ;;
+  esac
 
   # sensor_gate returns the PHASE TO EMIT on stdout when satisfied — it may
   # differ from the candidate's `phase` (a fresh CI-fix interrupt emits `fix`

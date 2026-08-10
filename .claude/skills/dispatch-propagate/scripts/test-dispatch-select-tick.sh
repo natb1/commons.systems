@@ -82,7 +82,7 @@ FAKE
   cat > "$TMPDIR_TEST/graph-select-target" <<FAKE
 #!/usr/bin/env bash
 if [[ " \$* " == *" --pace-exempt-only "* ]]; then
-  echo called >> "$TMPDIR_TEST/logs/graph-select-pace-exempt.log"
+  echo "\$*" >> "$TMPDIR_TEST/logs/graph-select-pace-exempt.log"
   printf '%s\n' "\${SEL_GRAPH_PACE_EXEMPT:-empty}"
   exit 0
 fi
@@ -514,10 +514,11 @@ assert_eq "graph empty: decision line" "empty" \
 assert_eq "graph empty: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
 sel_tick_teardown
 
-# --- at-cap: graph pace-exempt probe admits ONE gate-exempt worker -------------
+# --- at-cap: graph pace-exempt probe admits this single candidate --------------
 # strategy clarification 14: at the worker cap (not exhausted) the graph
 # pace-exempt probe runs BEFORE the legacy --priority-only probe; a hit admits
-# exactly one gate-exempt worker and the legacy probe must not run.
+# this single candidate here, and the legacy probe must not run. The lane's
+# general width is the ceiling headroom PACE_GAP = max(0, MAX_WORKERS - LIVE_COUNT).
 echo "Test: select-tick at-cap graph pace-exempt probe → graph decision, legacy priority probe skipped"
 sel_tick_setup
 export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
@@ -545,6 +546,107 @@ assert_eq "at-cap fallback: graph pace-exempt probe consulted" "1" \
 assert_eq "at-cap fallback: decision line" "concurrency-cap" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "at-cap fallback: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "at-cap fallback: decision log .skip_reason" "at-cap-no-priority" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- at-cap: PACE_GAP > 1 admits multiple pace-exempt nodes (tactic-pace-exempt-ceiling-fanout Unit 1) ---
+# PACE_GAP = max(0, MAX_WORKERS - LIVE_COUNT) = max(0, 3 - 1) = 2. The probe is
+# invoked with `--top 2` and both nodes it returns are admitted in one decision.
+echo "Test: select-tick at-cap pace-exempt gap=2 → both nodes admitted, gap recorded"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_MAX_WORKERS=3
+export SEL_GRAPH_PACE_EXEMPT=$'node tactic-p1 tactic implement\nnode tactic-p2 tactic qa'
+out=$(run_sel_tick) || true
+assert_eq "pace-exempt gap=2: probe invoked with --top 2" "1" \
+  "$(tail -n1 "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" | grep -c -- '--top 2')"
+assert_eq "pace-exempt gap=2: decision line" \
+  "graph 2 tactic-p1:tactic:implement tactic-p2:tactic:qa" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "pace-exempt gap=2: tactic-p1 reserved" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-p1" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt gap=2: tactic-p2 reserved" "1" \
+  "$([ -f "$DISPATCH_RESERVATION_DIR/tactic-p2" ] && echo 1 || echo 0)"
+assert_eq "pace-exempt gap=2: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "pace-exempt gap=2: decision log .skip_reason" "pace-exempt-bypass-at-cap" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+assert_eq "pace-exempt gap=2: decision log .gap" "2" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.gap')"
+sel_tick_teardown
+
+# --- at-cap: PACE_GAP == 0 (ceiling full) → probe never runs -------------------
+# LIVE_COUNT == MAX_WORKERS → PACE_GAP = 0. The pace-exempt lane must not be
+# probed at all — a node is available but the ceiling is already full.
+echo "Test: select-tick at-cap ceiling full (gap=0) → probe never runs, concurrency-cap"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=3 SEL_MAX_WORKERS=3
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+out=$(run_sel_tick) || true
+assert_eq "ceiling full: probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+assert_eq "ceiling full: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "ceiling full: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+assert_eq "ceiling full: reseed scheduled" "called" \
+  "$(cat "$TMPDIR_TEST/logs/schedule-reseed.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "ceiling full: decision log .skip_reason" "at-cap-ceiling-full" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- at-cap: non-numeric ceiling closes the lane without wedging the tick ------
+# dispatch-target-workers --max returns something non-numeric (a misconfigured
+# environment). PACE_GAP fails closed to 0 rather than crashing the tick.
+echo "Test: select-tick at-cap non-numeric ceiling → closes lane, exit 0, concurrency-cap"
+sel_tick_setup
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1 SEL_MAX_WORKERS="not-a-number"
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+rc=0; out=$(run_sel_tick) || rc=$?
+assert_eq "unreadable ceiling: exit 0" "0" "$rc"
+assert_eq "unreadable ceiling: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "unreadable ceiling: probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "unreadable ceiling: decision log .skip_reason" "at-cap-ceiling-unreadable" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+assert_eq "unreadable ceiling: decision log .max_workers is null" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
+sel_tick_teardown
+
+# --- at-cap: crashed dispatch-target-workers --max closes the lane (item 9) ----
+# A crashed dispatch-target-workers prints nothing for --max; empty stdout also
+# fails the `^[0-9]+$` regex, so this is the "tool crashed" sibling of the
+# non-numeric-string case above (mirrors the TARGET_N crashed-stub test further
+# below, "select-tick empty TARGET_N -> release + exit 2", but for MAX_WORKERS,
+# where the correct behavior is NOT exit 2: the lane fails closed to
+# concurrency-cap at exit 0, keeping the main-broken probe and reseed
+# reachable).
+echo "Test: select-tick crashed dispatch-target-workers --max -> closes lane, exit 0, concurrency-cap"
+sel_tick_setup
+cat > "$TMPDIR_TEST/dispatch-target-workers" <<'FAKE'
+#!/usr/bin/env bash
+if [[ "$1" == "--exhausted" ]]; then echo "${SEL_EXHAUSTED:-ok}"; exit 0; fi
+# --max: emit nothing (simulate a crashed dispatch-target-workers)
+if [[ "$1" == "--max" ]]; then exit 0; fi
+echo "${SEL_TARGET_N:-1}"
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-target-workers"
+export SEL_TARGET_N=1 SEL_LIVE_COUNT=1
+export SEL_GRAPH_PACE_EXEMPT="node tactic-p tactic implement"
+rc=0; out=$(run_sel_tick) || rc=$?
+assert_eq "crashed max: exit 0" "0" "$rc"
+assert_eq "crashed max: decision line" "concurrency-cap" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "crashed max: probe not consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select-pace-exempt.log" ] && echo 1 || echo 0)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "crashed max: decision log .skip_reason" "at-cap-ceiling-unreadable" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+assert_eq "crashed max: decision log .max_workers is null" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- exhausted at cap: neither probe runs (hard floor) -------------------------
@@ -1049,6 +1151,9 @@ case "$err" in
 esac
 assert_eq "non-numeric TARGET_N → error + exit 2" "ok" "$status"
 assert_eq "non-numeric TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "non-numeric TARGET_N: decision log .max_workers resolved before the guard" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- TARGET_N validation: empty stdout → release + exit 2 (#1315) ------------
@@ -1142,6 +1247,29 @@ out=$(run_sel_tick) || true
 assert_eq "under-cap: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "under-cap: decision log .target_n" "4" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.target_n')"
+assert_eq "under-cap: decision log .max_workers" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
+sel_tick_teardown
+
+# --- throttled ceiling shape is visible in the decision log (2026-08-01) -----
+# Before Unit 1, a throttled ceiling (MAX_WORKERS < the usual default) was
+# invisible on the decision line — only target_n appeared, so an operator
+# reading the log could not tell a deliberately-throttled ceiling apart from a
+# normal low pace-curve target. This locks in that the ceiling now appears
+# alongside target_n under cap.
+echo "Test: select-tick throttled ceiling (2026-08-01 shape) is visible in the decision log"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=1 SEL_MAX_WORKERS=1
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+out=$(run_sel_tick) || true
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "throttled-ceiling: decision log .target_n" "1" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.target_n')"
+assert_eq "throttled-ceiling: decision log .max_workers" "1" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- daemon UNKNOWN → fails CLOSED to concurrency-cap, reseed armed ----------
@@ -1322,6 +1450,9 @@ sel_tick_setup
 export SEL_LIVE_COUNT=6 SEL_TARGET_N=10 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
 assert_eq "manual-gap-clamped: graph selector called --top 2 (headroom clamps gap)" "--top 2" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "manual-gap-clamped: decision log .max_workers" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # Case 4: at-max-live. LIVE=8 → HEADROOM=0 → per human-dispatch-is-sovereign the
@@ -1404,6 +1535,82 @@ assert_eq "manual-uncorroborated-empty: no reseed" "0" \
 DLOG_FILE3="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
 assert_eq "manual-uncorroborated-empty: decision log records skip_reason manual-live-read-unverified" \
   "manual-live-read-unverified" "$(tail -n1 "$DLOG_FILE3" | jq -r '.skip_reason')"
+sel_tick_teardown
+
+# --- --manual sweeps a stale dead-session reservation before counting -------
+# A reservation marker whose session= id is absent from SEL_AGENTS_TSV (i.e.
+# no live session claims it) and whose timestamp is well past the boot grace
+# is stale/dead. reservation_sweep runs immediately before reservation_count
+# in the --manual fan-out block, so the stale marker is both excluded from
+# RESV and physically reclaimed (the marker file is deleted) by the time the
+# gap is computed: with BUSY=0 and RESV=0, gap == TARGET_N exactly as if the
+# marker never existed.
+echo "Test: select-tick --manual sweeps a stale dead-session reservation before counting"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=4
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+printf 'session=resv-dead\nissue=900\ntimestamp=2026-01-01T00:00:00Z\n' \
+  > "$DISPATCH_RESERVATION_DIR/900-test"
+out=$(run_sel_tick --manual)
+assert_eq "manual-sweep: gap = 4 − 0 (stale reservation swept, not counted)" "--top 4" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "manual-sweep: stale reservation marker was reclaimed (deleted)" "0" \
+  "$([ -e "$DISPATCH_RESERVATION_DIR/900-test" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- --manual sweeps an orphan-SATURATED ledger at/over the ceiling ---------
+# The adjacent manual-sweep test above plants a SINGLE stale marker well below
+# the worker ceiling — it proves the sweep runs, but a weak assertion there
+# would still pass even if the sweep were deleted: SPAWN_N has a floor of 1
+# that re-asserts itself past the ceiling regardless of RESV, so "non-zero
+# fan-out" alone proves nothing. This case is distinct: it plants SEVEN
+# dead-session markers — enough to saturate the ledger AT the MAX_WORKERS
+# ceiling (7 >= MAX_WORKERS − BUSY = 8 − 1) — reproducing the SHAPE of the
+# 2026-07-23 phantom-worker incident (`router: manual fan-out: SPAWN_N=1 ...
+# live=10` with no live worker actually running). The shape, not its cause:
+# the manual sweep is not the ledger's only reaper (dispatch-tick's paused
+# branch reaps too, ahead of its short-circuit), so what this test pins is the
+# manual path's own cross-mode freshness guarantee — a deliberate human
+# dispatch must count against a ledger reconciled AS OF THIS RUN, not one up
+# to a heartbeat interval (or an unfired/stopped heartbeat) stale. Only with
+# the sweep
+# reclaiming all 7 markers does LIVE_COUNT stay at 1 (BUSY only, RESV=0),
+# HEADROOM=7, GAP=6−1=5, SPAWN_N=5 → graph --top 5. If reservation_sweep were
+# removed (the regression this test must catch), the 7 dead markers would
+# count toward LIVE_COUNT (1+7=8), HEADROOM would clamp to 0, and the SPAWN_N
+# floor-of-1 would re-assert past the ceiling → --top 1. So `--top 5` vs
+# `--top 1` is the discriminator that makes this a real regression test
+# rather than a restatement of manual-sweep.
+#
+# The single-line SEL_GRAPH_TARGET fake always reports exactly one selectable
+# node regardless of --top's width, so the `graph <count> ...` decision line's
+# count is fixed at 1 (specs array length) in both worlds — it does not carry
+# the discriminator; --top does. The graph selection also
+# reservation_writes a fresh marker for the selected node id (t1) via
+# emit_graph_selection, so the ledger is never truly empty after a successful
+# selection: with the sweep it holds exactly that one fresh marker (the 7 dead
+# ones reclaimed); without it, the 7 dead markers would remain alongside it
+# (8 total) — so the marker-count assertion below targets 1, not 0.
+echo "Test: select-tick --manual sweeps an orphan-saturated ledger at the ceiling before counting"
+sel_tick_setup
+export SEL_MAX_WORKERS=8 SEL_LIVE_COUNT=1 SEL_TARGET_N=6
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+# SEL_AGENTS_TSV is left unset: claude_agents_list_all returns rc 0 with an
+# empty live-session set, so every marker planted below is dead-session (no
+# live session claims it).
+for n in 901 902 903 904 905 906 907; do
+  printf 'session=resv-dead-%s\nissue=%s\ntimestamp=2026-01-01T00:00:00Z\n' "$n" "$n" \
+    > "$DISPATCH_RESERVATION_DIR/$n-test"
+done
+out=$(run_sel_tick --manual)
+assert_eq "manual-orphan-saturated: graph decision" "graph 1 t1:tactic:implement" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "manual-orphan-saturated: gap = 6 − 1 (7 dead markers swept, not counted)" "--top 5" \
+  "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+assert_eq "manual-orphan-saturated: only the fresh t1 marker remains (7 dead markers reclaimed)" "1" \
+  "$(find "$DISPATCH_RESERVATION_DIR" -type f | wc -l | tr -d ' ')"
+assert_eq "manual-orphan-saturated: router line reports live=1, not live=8 (incident signature inverse)" "1" \
+  "$(printf '%s\n' "$out" | grep -c 'router: manual fan-out:.*live=1,')"
 sel_tick_teardown
 
 # --- autonomous no-arg at cap, not exhausted, no priority item → concurrency-cap ---
@@ -1543,6 +1750,9 @@ assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implemen
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
   "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "node-explicit at-cap: decision log .max_workers is null (no ceiling consulted)" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- explicit node-id, stale reservation reclaimed by sweep → still selects ---

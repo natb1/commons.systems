@@ -9,69 +9,93 @@ Workflow.
 
 Run inline in this parent thread — not a subagent — when `deps=true`. The `deps`
 gate already confirms the diff touches `package.json` / `package-lock.json`, so
-produce the differential audit directly (use a private temp dir):
+produce the differential audit directly. `dispatch-review-npm-audit` does the
+whole thing — its own temp dir, the HEAD audit, the `git show`-materialized
+`MERGE_BASE` baseline, and the differential — and emits ONLY the normalized
+result (use `dangerouslyDisableSandbox: true` — `npm` writes the npm cache, see
+`.claude/rules/sandbox.md`):
 
 ```bash
-AUDIT_DIR=$(mktemp -d)
-trap 'rm -rf "$AUDIT_DIR"' EXIT
 # MERGE_BASE is already set above — reuse it here.
-
-# Audit HEAD (current working tree)
-npm audit --json > "$AUDIT_DIR/audit-head.json"
-
-# Audit MERGE_BASE lockfile without modifying the working tree
-mkdir -p "$AUDIT_DIR/baseline"
-git show "$MERGE_BASE":package-lock.json > "$AUDIT_DIR/baseline/package-lock.json"
-git show "$MERGE_BASE":package.json      > "$AUDIT_DIR/baseline/package.json"
-npm audit --package-lock-only --json --prefix "$AUDIT_DIR/baseline" \
-  > "$AUDIT_DIR/audit-baseline.json"
+# Pass as positional arg (not an inline VAR=val prefix — breaks allowlist matching).
+NPM_AUDIT_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-npm-audit "$MERGE_BASE")
 ```
 
-Advisories whose ID appears in `$AUDIT_DIR/audit-head.json` but **not** in
-`$AUDIT_DIR/audit-baseline.json` are CVEs the PR's dependency changes newly
-expose — normalize each into the **Per-finding schema** with
-`introduced_by_diff=true`; these are in-scope and classify `required`. Also flag
-any dependency the PR adds or upgrades whose resolved version skips a published
-security-patch release.
+The script emits `{"findings":[...]}` with `Source="npm"` already in the
+per-finding schema. Raw `npm audit` JSON never reaches this thread. Extract the
+`findings` array for `prescanned_findings`.
 
-Advisories whose ID appears in **both** head and baseline rated `high` or
-`critical` are pre-existing — the diff did not introduce them. Normalize each into
-the **Per-finding schema** with `introduced_by_diff=false` and classify
-`out-of-scope`: they feed the follow-up-filing step (Step 6), not the PR's
-required-fix set. Pre-existing advisories rated `moderate` or `low` are below the
-meaningfulness threshold — do not surface them.
+**A non-zero exit means the dependency audit could not run — it does NOT mean
+"no new advisories".** When `npm audit` cannot audit the tree (desynchronized or
+hand-edited `package-lock.json`, a downgraded `lockfileVersion`, an unresolvable
+workspace, an unreachable registry) npm emits a well-formed JSON *error*
+document; the script rejects it and exits non-zero with npm's error text on
+stderr rather than differencing it to an empty finding set. Check the exit code
+and, on failure, report "dependency audit could not run" (with the stderr text)
+as the outcome of this scan — never treat the empty `NPM_AUDIT_JSON` as a clean
+audit.
+
+The same non-zero refusal fires when the diff adds or modifies an `.npmrc`
+(anywhere in the tree, tracked or untracked). An `.npmrc` decides which registry
+answers the advisory query, so a diff that carries one can choose its own
+verdict — a hostile or merely private registry returns a well-formed, empty
+report the script cannot distinguish from a clean audit. The script pins
+`--registry`, `--userconfig`, and `--globalconfig` on both audits, but a scoped
+`@scope:registry=` override survives that, so a diffed `.npmrc` is reported as
+"dependency audit could not be trusted" and the `.npmrc` change is reviewed by
+hand.
+
+The differential rules the script applies, unchanged: advisories present at head
+but **not** at `MERGE_BASE` are CVEs the PR's dependency changes newly expose —
+emitted with `introduced_by_diff=true` in the Description; these are in-scope and
+classify `required`. Where such an advisory reports a published fix, the
+Description also leads with `skipped_published_patch=true` — the resolved version
+skipped a published security-patch release. Advisories present in **both** head
+and baseline rated `high` or `critical` are pre-existing — emitted with
+`introduced_by_diff=false` and classified `out-of-scope`: they feed the
+follow-up-filing step (Step 6), not the PR's required-fix set. Pre-existing
+advisories rated `moderate` or `low` are below the meaningfulness threshold and
+the script omits them entirely.
 
 ## CodeQL alerts (inline, when `surface=code`)
 
 Run inline in this parent thread — not a subagent — whenever `surface=code`.
-Fetch the PR's open code-scanning alerts from GitHub Advanced Security (use
+`dispatch-review-codeql` fetches the PR's open code-scanning alerts from GitHub
+Advanced Security and returns them already normalized (use
 `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
-gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/pull/<pr-num>/head"
+CODEQL_JSON=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-codeql "<pr-num>")
 ```
 
-`<pr-num>` is the PR number from the idempotency preamble; `{owner}/{repo}`
-resolve automatically. `--paginate` covers repos with many alerts; the `ref`
-filter scopes to the PR — it includes pre-existing alerts in code the PR did not
-change. Normalize each alert to the **Per-finding schema**:
+`<pr-num>` is the PR number from the idempotency preamble. The script runs
+`gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts?state=open&ref=refs/pull/<pr-num>/head"`
+— `{owner}/{repo}` resolve automatically, `--paginate` covers repos with many
+alerts, and the `ref` filter scopes to the PR (it includes pre-existing alerts in
+code the PR did not change). Raw alert JSON never reaches this thread.
+
+The script emits `{"findings":[...]}` with `Source="codeql"` already in the
+per-finding schema. Extract the `findings` array for `prescanned_findings`. The
+normalization it applies, unchanged:
 
 - **Location** — from `most_recent_instance.location` (path and lines).
 - **Description** — from `rule.description` / `most_recent_instance.message`;
-  include the alert `number`, `rule.id`, and `html_url` so the finding is
+  includes the alert `number`, `rule.id`, and `html_url` so the finding is
   traceable.
-- **OWASP** and **STRIDE** — inferred from `rule` (id, tags, description).
+- **OWASP** and **STRIDE** — inferred from `rule` (its `external/cwe/cwe-NNN`
+  tags, via a deterministic table in the script).
 - **Confidence** — from `rule.security_severity_level`: `critical`/`high` →
   `high`, `medium` → `medium`, `low` → `low`. For non-security rules
-  (`security_severity_level` is null), fall back to `rule.severity` (always
+  (`security_severity_level` is null), falls back to `rule.severity` (always
   present): `error` → `medium`, `warning`/`note` → `low`. This preserves signal
   from non-security rules instead of collapsing them all to `low`.
 - **Recommended fix** — the rule's remediation guidance.
 
 If the branch has no open PR (the pack's `=== PR ===` section printed `PR: none`),
-skip the fetch and record the CodeQL scan as "could not run (no PR
-ref)" with no findings. An empty alert array is normal — no open CodeQL alerts —
-and is not an error.
+pass `""` (or `none`) as `<pr-num>`: the script skips the fetch and returns
+`{"findings":[],"status":"skipped-no-pr"}` — record the CodeQL scan as "could not
+run (no PR ref)" with no findings. An empty alert array is normal — no open
+CodeQL alerts — and is not an error.
 
 ## Erosion metrics (inline, when `surface=code`)
 
@@ -91,11 +115,16 @@ The script emits `{"findings":[...]}` with `Source="erosion"` already in the
 per-finding schema. Extract the `findings` array for `prescanned_findings`.
 
 Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
-to pass to the Workflow.
+to pass to the Workflow. All three scans now return the same shape — a
+`{"findings":[...]}` document with the per-finding schema and `Source` already
+set — so assembling `prescanned_findings` is just concatenating the `.findings`
+array from each of the three script outputs. No raw API, audit, or metric JSON
+crosses this thread.
 
 ## Finder agents (when `surface=code`)
 
-The Workflow fans out agent finders based on `surface` and `app_or_rules`. The
+The Workflow fans out agent finders based on `surface`, `app_or_rules`, and
+`api_call_site`. The
 Workflow's own agent fan-out contains only the surface-gated security/domain
 lenses plus `security-review` — **`code-review` is not among them.** It runs as
 the exclusive `claude -p '/code-review low --fix'` pre-stage in SKILL.md Step 1b,
@@ -109,13 +138,25 @@ agent finders at all. When `surface === 'code'`, the following domain finders
 run. Four agents are gated on `surface=code` alone (`input-validation`,
 `domain-sweep`, `red-team`, `security-review`) — `domain-sweep` folds what were
 three separate always-vs-conditional lenses into one agent, so this is still
-four AGENTS at this tier, not four lenses; two agents additionally require
-`app_or_rules=true` (application/functions/rules source): `firebase` and
-`cost`, down from four before the fold. The fold itself does not change the
-lens content or the `Source` taxonomy — it only removes the redundant cost of
-three agents each independently re-reading the same diff, by having one agent
-read the diff once and carry the `secrets`/`auth`/`data-exposure` lenses as
-labelled sections instead.
+four AGENTS at this tier, not four lenses; one further agent, `api-cost`, runs
+when `app_or_rules=true` **or** `api_call_site=true` — it folds the `firebase`
+and `cost` lenses the same way, so this is one AGENT where there were two. The
+folds do not change the lens content or the `Source` taxonomy — they only remove
+the redundant cost of several agents each independently re-reading the same
+diff, by having one agent read the diff once and carry the lenses as labelled
+sections instead.
+
+The two `api-cost` sections keep SEPARATE gates, and the agent is briefed only
+on the sections whose gate is true:
+
+- `firebase` (security) — `app_or_rules || api_call_site`. Its `app_or_rules`
+  trigger is unchanged from before the fold; `api_call_site` only widens it.
+  This matters: the `api_call_site` classifier matches added API/query call
+  sites, and matches none of what this lens reviews (a Firestore rules diff,
+  `connectFirestoreEmulator`, `apiKey`/`initializeApp`), so gating it on that
+  flag alone would silently drop the reviewer on exactly the diffs it exists
+  for.
+- `cost` (advisory) — `api_call_site` alone.
 
 `code-review` and `security-review` are still Lane A: they trust the built-in
 `/code-review` and `/security-review` skills to do their own review-and-fix
@@ -161,10 +202,15 @@ throttle probe, launched as wave 1); `code-review` is the Step-1b pre-stage.
 **`surface === 'code' && app_or_rules=true`** (app/functions/rules source):
 - See **domain-sweep** above — the `auth` and `data-exposure` sections it carries
   when `app_or_rules=true`.
-- **firebase** — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
+- The **api-cost** agent's `firebase` section (below).
+
+**`surface === 'code'` and the `api-cost` agent fires** (`app_or_rules=true` or
+`api_call_site=true`) — one agent, the sections below, each briefed only when its
+own gate is true:
+- **firebase** (`app_or_rules || api_call_site`) — Firebase-specific: Firestore rules permissiveness (overly broad `allow`
   conditions, missing field constraints), emulator-only code reachable on production
   paths, Firebase API key or config exposure.
-- **cost** — Cost/scaling lens: flags three Firestore cost/scaling patterns introduced in
+- **cost** (`api_call_site` only) — Cost/scaling lens: flags three Firestore cost/scaling patterns introduced in
   the diff: (1) unbounded queries — `getDocs`/collection scans with no `limit()` over a
   collection that grows without bound; (2) new high-frequency amplifiers layered over
   collection scans — a new interval, scheduler, polling loop, or refresh (e.g. a 5-minute

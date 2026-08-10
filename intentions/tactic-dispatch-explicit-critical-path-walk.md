@@ -80,7 +80,7 @@ how precedence itself is computed.
 
 ## Verification
 
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` and the existing
+`.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh` and the existing
 `tactic-graph-select-target-node-tests` suite are the natural homes for closure/precedence/announce
 cases. Manual: name a known-blocked node and confirm the blocker is dispatched with the substitution
 announced; name a dispatchable node and confirm it is dispatched unchanged.

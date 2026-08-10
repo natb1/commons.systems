@@ -11,11 +11,29 @@ statement: "The spawn-handoff reservation
   attempt into a 300s reservation with zero work performed, and a fleet with
   enough such nodes can pin LIVE_COUNT >= TARGET_N and hard-stop every
   subsequent tick at concurrency-cap: a self-sustaining stall driven purely by
-  phantom claims"
+  phantom claims; and symmetrically, the same post-spawn registration probe
+  false-negatives in the opposite direction -- returning rc=1 while the session
+  is in fact live -- so the node owns making that probe correct, not choosing
+  which way it may be wrong"
 owner: ai
 status: raw
 parent: null
-rationale: null
+rationale: "Widened 2026-08-05 by the bootstrap monitor pass to own BOTH
+  directions of the same unreliable boot-window probe, because they are one
+  defect in the post-spawn registration check and splitting them would leave
+  each half looking like an isolated flake. Direction A (the original statement
+  above): dispatch-spawn-job --no-verify returns 0 and NO session ever
+  registers, so a phantom reservation holds a budget slot for the full 300s TTL.
+  Direction B (Finding 11, measured repeatedly across this session): the
+  post-spawn registration poll FALSE-NEGATIVES -- it returns rc=1, reporting
+  that no session registered, while the session is in fact live and working.
+  Direction B is why --no-verify is passed as standing practice in the bootstrap
+  spawn recipe, which in turn is what exposes Direction A: the workaround for
+  the false negative disables the only check that would have caught the phantom.
+  Any fix must therefore make the probe correct rather than choosing which way
+  it is allowed to be wrong -- a fix that only hardens the reservation side
+  leaves operators still passing --no-verify to dodge B, and a fix that only
+  corrects B leaves every existing --no-verify caller unguarded."
 reading: null
 gap: null
 serves:
