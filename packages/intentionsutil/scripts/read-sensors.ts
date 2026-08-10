@@ -53,7 +53,7 @@ import { listNodes, writeNode } from "../src/store.js";
 import { strategyBacklogBand } from "../src/census.js";
 import { listNodesAtRef } from "./lib-store-at-ref.js";
 import { SensorRegistry, type Sensor } from "../src/sensors.js";
-import { attributeSpend, type SpendBucket } from "../src/rsi.js";
+import { attributeSpend, spendBucketsFrom } from "../src/rsi.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { computeDependencyAudit } from "./dependency-audit.js";
@@ -1374,10 +1374,9 @@ export function readWorkflowSpend(usagePath: string): string {
   } catch {
     return "unavailable";
   }
-  if (typeof doc !== "object" || doc === null) return "unavailable";
-  const byPhase = (doc as Record<string, unknown>).by_phase;
-  if (typeof byPhase !== "object" || byPhase === null) return "unavailable";
-  const spend = attributeSpend(byPhase as Record<string, SpendBucket>);
+  const buckets = spendBucketsFrom(doc);
+  if (buckets === null) return "unavailable";
+  const spend = attributeSpend(buckets);
   return spend
     .map((s) => `${s.workflow} ${(s.share * 100).toFixed(0)}%`)
     .join(" / ");

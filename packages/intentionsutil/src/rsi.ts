@@ -59,13 +59,6 @@ export const DISPATCH_STRATEGY_ID = "strategy-graph-native-dispatch";
 /** Owner of the office-hours queue summary. */
 export const OFFICE_HOURS_STRATEGY_ID = "strategy-attention-surface";
 
-/** The three queues, in render order, each keyed to the strategy that owns it. */
-export const QUEUE_OWNERS: ReadonlyArray<{ queue: string; strategyId: string }> = [
-  { queue: "dispatch", strategyId: DISPATCH_STRATEGY_ID },
-  { queue: "office-hours", strategyId: OFFICE_HOURS_STRATEGY_ID },
-  { queue: "rsi", strategyId: RSI_STRATEGY_ID },
-];
-
 /**
  * How many days a queue summary may age before the render flags it. An /rsi
  * iteration re-drafts all three, so anything older than a week means either no
@@ -287,10 +280,14 @@ export function workflowOfSkill(skill: string): string {
  * alongside as the truthful bill.
  */
 export function attributeSpend(byPhase: Record<string, SpendBucket>): WorkflowSpend[] {
-  const order = ["dispatch", "office-hours", "rsi", "other"];
-  const totals = new Map<string, { proxy: number; cost: number; turns: number }>(
-    order.map((w) => [w, { proxy: 0, cost: 0, turns: 0 }]),
-  );
+  // Insertion order IS render order, so iterating the map at the end needs no
+  // second ordered list to look values back up through.
+  const totals = new Map<string, { proxy: number; cost: number; turns: number }>([
+    ["dispatch", { proxy: 0, cost: 0, turns: 0 }],
+    ["office-hours", { proxy: 0, cost: 0, turns: 0 }],
+    ["rsi", { proxy: 0, cost: 0, turns: 0 }],
+    ["other", { proxy: 0, cost: 0, turns: 0 }],
+  ]);
   for (const [skill, bucket] of Object.entries(byPhase)) {
     const acc = totals.get(workflowOfSkill(skill));
     if (acc === undefined) continue;
@@ -299,16 +296,45 @@ export function attributeSpend(byPhase: Record<string, SpendBucket>): WorkflowSp
     acc.turns += bucket.turns ?? 0;
   }
   const grandProxy = [...totals.values()].reduce((sum, t) => sum + t.proxy, 0);
-  return order.map((workflow) => {
-    const t = totals.get(workflow)!;
-    return {
-      workflow,
-      priceProxyUsd: t.proxy,
-      costUsd: t.cost,
-      turns: t.turns,
-      share: grandProxy === 0 ? 0 : t.proxy / grandProxy,
+  return [...totals.entries()].map(([workflow, t]) => ({
+    workflow,
+    priceProxyUsd: t.proxy,
+    costUsd: t.cost,
+    turns: t.turns,
+    share: grandProxy === 0 ? 0 : t.proxy / grandProxy,
+  }));
+}
+
+/**
+ * The per-skill spend buckets inside an `aggregate-usage.sh --json-out`
+ * document, or `null` when the document is not one.
+ *
+ * Validates rather than asserts: the document comes off disk and may be
+ * truncated, from an older schema, or another file entirely, so each bucket's
+ * fields are re-derived as numbers instead of being cast into shape. A bucket
+ * that is not an object is skipped rather than defaulted to zeros — the
+ * difference between "this skill spent nothing" and "this row was unreadable"
+ * is exactly what the dispatch-dominance check turns on.
+ *
+ * Shared by `render-rsi-plan.ts` and the rsi sensor in `read-sensors.ts` so the
+ * two cannot drift on what counts as a readable aggregate.
+ */
+export function spendBucketsFrom(doc: unknown): Record<string, SpendBucket> | null {
+  if (!isPlainObject(doc)) return null;
+  const byPhase = doc.by_phase;
+  if (!isPlainObject(byPhase)) return null;
+  const finite = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const out: Record<string, SpendBucket> = {};
+  for (const [skill, bucket] of Object.entries(byPhase)) {
+    if (!isPlainObject(bucket)) continue;
+    out[skill] = {
+      price_proxy_usd: finite(bucket.price_proxy_usd),
+      cost_usd: finite(bucket.cost_usd),
+      turns: finite(bucket.turns),
     };
-  });
+  }
+  return out;
 }
 
 // --- Render helpers ---------------------------------------------------------
@@ -488,8 +514,10 @@ function renderDispatchQueue(
     "| phase | count | nodes |",
     "|---|---|---|",
   );
-  for (const phase of [...byPhase.keys()].sort()) {
-    const ids = byPhase.get(phase)!.map((t) => t.id).sort();
+  for (const [phase, tactics] of [...byPhase.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    const ids = tactics.map((t) => t.id).sort();
     out.push(
       `| \`${phase}\` | ${ids.length} | ${clip(ids.map((i) => `\`${i}\``).join(", "), 220)} |`,
     );
@@ -618,15 +646,19 @@ function renderMetrics(input: RsiRenderInput, flags: StalenessFlag[]): string[] 
     "|---|---|---|---|",
   ];
 
+  // Carry the signal alongside the node rather than re-reaching for it below:
+  // the filter narrows `success_signal` but the narrowing does not survive into
+  // the loop, and re-asserting it there would assert what this flatMap already
+  // proved.
   const measured = input.nodes
-    .filter(
-      (n) =>
-        n.success_signal !== null &&
-        input.registeredSensors.has(n.success_signal.sensor),
-    )
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .flatMap((node) => {
+      const signal = node.success_signal;
+      if (signal === null || !input.registeredSensors.has(signal.sensor)) return [];
+      return [{ node, signal }];
+    })
+    .sort((a, b) => a.node.id.localeCompare(b.node.id));
 
-  for (const node of measured) {
+  for (const { node, signal } of measured) {
     const gap = deriveGap(node);
     if (node.reading === null) {
       flags.push({
@@ -643,7 +675,7 @@ function renderMetrics(input: RsiRenderInput, flags: StalenessFlag[]): string[] 
     }
     out.push(
       `| \`${node.id}\` | ${clip(node.reading ?? "*(unread)*", 220)} | ` +
-        `${clip(node.success_signal!.threshold, 180)} | ${gap === null ? "**met**" : "shortfall"} |`,
+        `${clip(signal.threshold, 180)} | ${gap === null ? "**met**" : "shortfall"} |`,
     );
   }
   if (measured.length === 0) out.push("| — | no registered sensor resolves to a node | — | — |");

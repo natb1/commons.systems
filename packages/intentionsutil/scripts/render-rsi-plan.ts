@@ -47,9 +47,9 @@ import { registeredSensorNames } from "./read-sensors.js";
 import {
   attributeSpend,
   renderRsiPlan,
+  spendBucketsFrom,
   type ParkedItem,
   type RsiRender,
-  type SpendBucket,
   type WorkflowSpend,
 } from "../src/rsi.js";
 
@@ -236,15 +236,14 @@ function readSpend(usagePath: string): WorkflowSpend[] | null {
     process.stderr.write(`render-rsi-plan: usage aggregate unreadable (${String(err)})\n`);
     return null;
   }
-  if (typeof doc !== "object" || doc === null) return null;
-  const byPhase = (doc as Record<string, unknown>).by_phase;
-  if (typeof byPhase !== "object" || byPhase === null) {
+  const buckets = spendBucketsFrom(doc);
+  if (buckets === null) {
     process.stderr.write(
       `render-rsi-plan: usage aggregate at ${usagePath} has no by_phase object\n`,
     );
     return null;
   }
-  return attributeSpend(byPhase as Record<string, SpendBucket>);
+  return attributeSpend(buckets);
 }
 
 // --- Main -------------------------------------------------------------------

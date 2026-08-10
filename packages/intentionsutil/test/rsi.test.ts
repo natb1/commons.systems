@@ -11,6 +11,7 @@ import {
   queueSummaryOf,
   renderRsiPlan,
   rsiTaskCost,
+  spendBucketsFrom,
   workflowOfSkill,
   type ParkedItem,
   type RsiRenderInput,
@@ -165,6 +166,32 @@ describe("workflowOfSkill / attributeSpend", () => {
   });
 });
 
+describe("spendBucketsFrom", () => {
+  it("extracts by_phase buckets, coercing each field to a finite number", () => {
+    expect(
+      spendBucketsFrom({
+        by_phase: { "qa-fix": { price_proxy_usd: 5, cost_usd: 1, turns: 2 } },
+      }),
+    ).toEqual({ "qa-fix": { price_proxy_usd: 5, cost_usd: 1, turns: 2 } });
+  });
+
+  it("zeroes a missing or non-finite field rather than propagating NaN", () => {
+    expect(
+      spendBucketsFrom({ by_phase: { "qa-fix": { price_proxy_usd: "5", turns: null } } }),
+    ).toEqual({ "qa-fix": { price_proxy_usd: 0, cost_usd: 0, turns: 0 } });
+  });
+
+  it("skips an unreadable bucket instead of inventing a zero-spend row for it", () => {
+    expect(spendBucketsFrom({ by_phase: { "qa-fix": "not-a-bucket" } })).toEqual({});
+  });
+
+  it("returns null — not an empty map — for a document that is not an aggregate", () => {
+    expect(spendBucketsFrom(null)).toBeNull();
+    expect(spendBucketsFrom("[]")).toBeNull();
+    expect(spendBucketsFrom({ totals: {} })).toBeNull();
+  });
+});
+
 describe("parseParkedList", () => {
   it("parses tab-separated rows and binds a following NOTE to the row above", () => {
     const rows = parseParkedList(
@@ -246,8 +273,7 @@ describe("renderRsiPlan", () => {
     const flag = renderRsiPlan(input({ nodes })).flags.find(
       (f) => f.kind === "summary-stale" && f.subject === RSI_STRATEGY_ID,
     );
-    expect(flag).toBeDefined();
-    expect(flag!.detail).toContain(`limit ${SUMMARY_STALE_DAYS}d`);
+    expect(flag?.detail).toContain(`limit ${SUMMARY_STALE_DAYS}d`);
   });
 
   it("renders only registered sensors as metrics, and flags unread ones and breaches", () => {
@@ -310,8 +336,7 @@ describe("renderRsiPlan", () => {
     const flag = renderRsiPlan(input({ spend })).flags.find(
       (f) => f.kind === "spend-deviation",
     );
-    expect(flag).toBeDefined();
-    expect(flag!.detail).toContain("rsi");
+    expect(flag?.detail).toContain("rsi");
   });
 
   it("does not flag a window where dispatch dominates", () => {
