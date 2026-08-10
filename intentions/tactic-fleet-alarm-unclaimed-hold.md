@@ -29,4 +29,4 @@ tracked hold(s) have blocked top-ranked work while unclaimed by any session or r
 
 Thresholds: DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=86400s,
 DISPATCH_FLEET_WATCH_HOLD_TOP_K=10
-Pause state: not-paused (unclaimed holds are evaluated regardless of pause)
+Pause state: paused (unclaimed holds are evaluated regardless of pause)
