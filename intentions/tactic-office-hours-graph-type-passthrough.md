@@ -123,5 +123,5 @@ uses.
   than silently ignoring one of the two.
 - Consider adding an `office-hours-graph` smoke test alongside the
   `dispatch-sweep` cases in
-  `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, using
+  `.claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh`, using
   the existing `OFFICE_HOURS_CLAUDE_CMD` stub hook.

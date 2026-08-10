@@ -31,10 +31,40 @@ execution:
     - planned
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/qa-fix: QA disposition Workflow classified 4 residue items
+    opus-fixable but the fix-planner emitted zero units (deviation=true):
+    delegation-connectivity's recovery_cost (item12, high vs moderate) and
+    delegation-health-records' captured flip (item13) need the author's
+    ratification per the tactic's own 'do not guess: park rather than invent'
+    rule, and item12's possible resolution is entangled with the PR body's
+    flip-count text (item5, currently 8 but would become a true 9 if
+    connectivity flips to moderate) -- no unit can land safely until the author
+    decides. Escalating to office-hours as one batch."
+  since: 2026-08-10
+  recommendation: "Read intentions/delegation-connectivity.md's rationale (Reading
+    A vs Reading B for recovery_cost) and
+    intentions/delegation-health-records.md's rationale (the largely -> large
+    gated-band mapping). Ratify or override each. If delegation-connectivity's
+    recovery_cost is overridden to `moderate`, the record's derived
+    classification flips platform -> tool, becoming a real 9th classification
+    flip -- in that case also correct the PR body's \"flips 9 of 22\" sentence
+    to describe the actual final flip set (it would then be accurate as written;
+    if recovery_cost stays `high`, correct the sentence to \"8 of 22\" instead,
+    since the current flip set is 8, not 9). Separately and independently of the
+    above, intentions/kind-delegation.md's attributes.fields entry for
+    irreversibility.recovery_cost/gated is stale -- it still describes free text
+    (\"bounded description\" / \"whether recovery knowledge is held by the
+    delegatee\") rather than naming the enum shapes this PR introduces, even
+    though the sibling divergence/classification lines in the same entry were
+    already modernized. Update it to match (recovery_cost:
+    none|low|moderate|high|prohibitive|unassessed; gated: {level:
+    none|partial|large, note: <why>})."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

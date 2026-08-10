@@ -99,15 +99,28 @@
 #          "mechanical-unresolved" and office_hours.recommendation holds a
 #          per-diverged-field breakdown; a park with no captured field detail
 #          keeps the plain "concurrent-edit conflict — manual merge needed"
-#          reason and no recommendation. Carve-out: a --prune id that is NOT
-#          itself part of the conflicted set is a bystander — its deletion is
-#          independent of whatever id(s) failed to resolve, so it is
-#          re-applied and lands WITH the park commit rather than parking (see
-#          park_and_exit()). Only a prune id that IS part of the conflicted
-#          set keeps this "content is NOT landed" fate. The park commit
-#          subject (and, on a failed land, the unlanded-park error) names the
-#          parked set and the landed-deletion set separately, so a bystander
-#          prune is never described as parked.
+#          reason and no recommendation. A delete/modify divergence (a
+#          concurrent writer's already-landed change deleted the node while
+#          this session's edit was in flight) keeps the LANDED DELETION: the
+#          node is re-materialized from this session's snapshot only in the
+#          local worktree — untracked, never staged, never pushed — carrying
+#          the park text, and origin/main still shows it deleted. Nothing is
+#          parked ON MAIN for such an id (there is no node there to park), so
+#          the stderr says exactly that and deliberately omits the landed-park
+#          confirmation substring; a human decides between overriding the
+#          deletion and confirming it (see the `deletedSet`-branch
+#          recommendation text for the exact two options). Resurrecting a
+#          deleted node onto main autonomously would push unreviewed content
+#          past the PR/CI gate on the strength of a losing writer's stale
+#          --base — e.g. silently reverting a redaction.
+#          Carve-out: a --prune id that is NOT itself part of the conflicted
+#          set is a bystander — its deletion is independent of whatever id(s)
+#          failed to resolve, so it is re-applied and lands WITH the park
+#          commit rather than parking (see park_and_exit()). Only a prune id
+#          that IS part of the conflicted set keeps this "content is NOT
+#          landed" fate. The park commit subject (and, on a failed land, the
+#          unlanded-park error) names the parked set and the landed-deletion
+#          set separately, so a bystander prune is never described as parked.
 #        refused-by-die — a die() call (see `die()` below) prints
 #          `error: graph-commit: <msg>` to stderr and exits 1. This sub-case is
 #          the PRE-WRITE validation refusals specifically: the existence guards
@@ -182,8 +195,8 @@
 #          a caller check.
 #   2  usage error — reserved for the paths that call `exit 2` directly: an
 #      unknown `-*` option, no node ids given at all, an id rejected by
-#      validate_id_chars (empty, containing a path separator, or exactly `.`
-#      or `..`), and `--expect <id>=...` naming a --prune id. rc 2 does NOT
+#      validate_id_chars (empty, containing a path separator or a comma, or
+#      exactly `.` or `..`), and `--expect <id>=...` naming a --prune id. rc 2 does NOT
 #      cover every argument problem: the die()-based validation refusals listed
 #      under rc 1 above exit 1.
 #
@@ -343,6 +356,26 @@ RESOLVED_VIA_MERGE=0
 # rewrite via jq so the file stays valid JSON throughout (a pushable array, not
 # JSONL). Unit 3/4 also read/write it.
 CONFLICT_FIELDS_JSON=""
+# RESURRECTED_IDS — the ids park_write() re-materialized on disk from SNAP_DIR
+# because a concurrent writer's ALREADY-LANDED change deleted them from
+# origin/main (the delete/modify divergence). Populated out of band by the tsx
+# helper (GRAPH_COMMIT_RESURRECTED_FILE, NUL-delimited) and empty on every other
+# path. These ids are deliberately EXCLUDED from commit_files()' `git add` set:
+# the already-landed deletion wins, exactly as the already-landed edit wins
+# everywhere else on the fail-closed park path. Re-materialization exists only so
+# readNode/writeNode can compose the office_hours record over the writer's real
+# authored body and leave it on disk for the human — it is a LOCAL, untracked
+# artifact, never content this script pushes back onto main.
+RESURRECTED_IDS=()
+
+# True iff <id> was re-materialized by park_write() (see RESURRECTED_IDS).
+is_resurrected_id() { # <id>
+  local want="$1" got
+  for got in ${RESURRECTED_IDS[@]+"${RESURRECTED_IDS[@]}"}; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
+}
 
 die() {
   echo "error: graph-commit: $*" >&2
@@ -364,9 +397,21 @@ validate_id_chars() {
   # cannot traverse once `/` and `\` are banned (the id is only ever used as
   # the single path component intentions/<id>.md), so ids like
   # `v1..v2-migration` are legal.
+  #
+  # A comma is rejected for a DELIMITER reason, not a path reason: park_write()
+  # carries PRUNE_IDS to its tsx helper as a comma-joined argv value, and the
+  # helper decides prune-vs-edit (and therefore whether a missing target file is
+  # expected) by membership in that split set. An id containing a comma splits
+  # into fragments, the membership test misses, and a prune is misclassified as
+  # an edit on the park path — where the misclassification is not merely wrong
+  # prose but a failed park. Banning the character at the edge keeps the split
+  # total; the helper re-asserts it defensively.
   case "$id" in
     */*|*'\'*)
       echo "error: graph-commit: invalid node id '$id' (path separators not allowed)" >&2
+      exit 2 ;;
+    *,*)
+      echo "error: graph-commit: invalid node id '$id' (commas are not allowed — ids are carried over a comma-delimited channel internally)" >&2
       exit 2 ;;
     .|..)
       echo "error: graph-commit: invalid node id '$id' ('.' and '..' are reserved path names)" >&2
@@ -988,11 +1033,20 @@ ensure_intentions_only_base() {
 #               local commit(s) forward when HEAD is ahead.
 # Scoped strictly to the requested id paths, so incidental dirt elsewhere in the
 # tree (e.g. an unrelated package-lock.json diff) never flips this to "dirty".
+# Resurrected ids (park_write()'s delete/modify re-materialization) are excluded
+# for the same reason commit_files() refuses to stage them: their on-disk file is
+# a local artifact that must never be committed, and counting it as "dirty" here
+# would send commit_files() into a `git commit` with an empty index (which fails
+# under `set -e`) whenever it is the only dirty path.
 id_files_dirty() {
   local id paths=()
   for id in "${ALL_IDS[@]}"; do
+    is_resurrected_id "$id" && continue
     paths+=("intentions/$id.md")
   done
+  # Nothing committable at all (every id was resurrected): explicitly not dirty.
+  # `git status --porcelain --` with no pathspec would scan the WHOLE tree.
+  [[ "${#paths[@]}" -gt 0 ]] || return 1
   [[ -n "$(git status --porcelain -- "${paths[@]}")" ]]
 }
 
@@ -1001,9 +1055,17 @@ id_files_dirty() {
 # deletion for a tracked file that is missing from the working tree just as
 # readily as it stages new/changed content), run the guard, then commit with
 # CURRENT_MSG.
+#
+# One exclusion: an id in RESURRECTED_IDS. park_write() re-materializes a node
+# another writer's already-landed change DELETED from origin/main, and staging
+# that path would push the deleted node's content straight back onto main — no
+# PR, no CI, no review — silently reverting a landed deletion (a redaction, a
+# retraction) on the strength of a losing writer's stale --base. The landed
+# deletion wins; the re-materialized file stays local and untracked.
 commit_files() {
   local id
   for id in "${ALL_IDS[@]}"; do
+    is_resurrected_id "$id" && continue
     git add -- "intentions/$id.md"
   done
   assert_staged_safe
@@ -1664,7 +1726,10 @@ park_write() {
   # populated by main()'s arg parsing) so the tsx helper can tell a prune id (no
   # on-disk snapshot — a deletion has nothing to preserve) from an ordinary edit
   # id (snapshotted to SNAP_DIR/<id>.md by snapshot(), graph-commit:272-280) when
-  # composing each node's base recovery recommendation.
+  # composing each node's base recovery recommendation — and, more load-bearing,
+  # whether a MISSING target file is expected (prune) or a delete/modify
+  # divergence (edit). The split is total because validate_id_chars() rejects a
+  # comma in any id; the helper re-asserts that rather than trusting it.
   prune_csv="$(IFS=,; echo "${PRUNE_IDS[*]:-}")"
   tmpts="$(mktemp --suffix=.mts)" || die "could not create temp file for the parking write"
   cat >"$tmpts" <<'TS'
@@ -1676,16 +1741,98 @@ park_write() {
 // breakdown — passed OUT OF BAND via GRAPH_COMMIT_RECOMMENDATION_FILE — is
 // appended after it when a mechanical merge left field divergence
 // (unset/empty env var → base recovery text only).
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, lstatSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 const [storePath, intentionsDir, since, reason, snapDir, pruneCsv, ...ids] = process.argv.slice(2);
 const pruneSet = new Set(pruneCsv ? pruneCsv.split(",") : []);
 const recFile = process.env.GRAPH_COMMIT_RECOMMENDATION_FILE || "";
 const fieldBreakdown = recFile ? readFileSync(recFile, "utf8").trimEnd() : "";
+// Out-of-band report back to the shell: the ids re-materialized below, NUL-
+// delimited. park_and_exit() reads it into RESURRECTED_IDS and excludes those
+// ids from the park commit's `git add` set.
+const resurrectedFile = process.env.GRAPH_COMMIT_RESURRECTED_FILE || "";
 const { readNode, writeNode } = await import(storePath);
-// Two-pass for atomicity: read every node up front so an unreadable id fails
-// BEFORE any write — a single read-modify-write loop that threw mid-way would
-// leave the earlier ids mutated on disk, uncommitted.
-const nodes = ids.map((id) => readNode(intentionsDir, id));
+// lstat, never stat: it does NOT follow symlinks, so a symlink (dangling or
+// not) at the target path is seen as a symlink rather than as its target's
+// existence. `null` means "no entry at all".
+const lstatOrNull = (p) => { try { return lstatSync(p); } catch { return null; } };
+// PASS 1 — classification and reads only. Performs NO writes to intentionsDir,
+// so an id that fails validation here fails BEFORE anything on disk changed.
+//
+// Delete/modify divergence: park_and_exit() reset --hard to fresh origin/main
+// BEFORE calling us, so a node another writer's already-landed change deleted
+// is ABSENT on disk here. A naive readNode() would throw ENOENT and crash the
+// park before it records office_hours. For a non-prune id whose target file is
+// missing (a prune id genuinely has no snapshot) we re-materialize this
+// session's in-flight edit from its snapshot at the TARGET path so readNode
+// succeeds AND writeNode's body-preservation (readExistingBody reads
+// intentionsDir/<id>.md) sees the writer's real authored body instead of
+// falling back to a generated placeholder — avoiding silent body loss. That
+// file is LOCAL ONLY: commit_files() refuses to stage a resurrected id, so the
+// other writer's landed deletion still stands on main.
+const pending = new Map(); // id -> snapshot bytes to materialize (read here, written in pass 2)
+for (const id of ids) {
+  // Defense in depth: validate_id_chars() bans a comma at the edge precisely so
+  // pruneCsv's split is total. Re-assert it — a comma here would silently
+  // misclassify a prune as an edit and turn this into a hard park failure.
+  if (id.includes(",")) {
+    throw new Error(`graph-commit: node id '${id}' contains a comma — ids are carried over a comma-delimited channel and cannot contain one`);
+  }
+  const target = join(intentionsDir, `${id}.md`);
+  const st = lstatOrNull(target);
+  if (st && !st.isFile()) {
+    // A concurrent writer can land ANY blob at intentions/<id>.md, including a
+    // symlink pointing outside the repo (git stores the link text verbatim).
+    // existsSync() reports false for a DANGLING symlink and copyFileSync()
+    // follows a link at its destination, which together would write this node's
+    // markdown to an attacker-chosen absolute path. Refuse instead.
+    throw new Error(`graph-commit: refusing to park '${id}': ${target} exists but is not a regular file (symlink or other special entry)`);
+  }
+  if (st) continue; // present on fresh origin/main — ordinary read below
+  const snap = join(snapDir, `${id}.md`);
+  const sst = lstatOrNull(snap);
+  if (!sst || !sst.isFile()) {
+    // No target and no snapshot. Either a --prune id (snapshot() deliberately
+    // skips prunes — a deletion has no content to preserve) that the other
+    // writer also deleted, or a classification miss. Name both paths: a raw
+    // ENOENT out of readNode here would abort the park AFTER park_and_exit()
+    // already reset --hard, losing the local commit and the office_hours record.
+    throw new Error(`graph-commit: cannot park '${id}': it is absent from origin/main and no snapshot exists at ${snap}${pruneSet.has(id) ? " (it is a --prune id, which by design has no snapshot — the concurrent writer appears to have deleted it too)" : " (this session captured no content for it — check its prune-vs-edit classification)"}`);
+  }
+  // Belt and braces: a --prune id is never resurrected (it reached the missing-
+  // snapshot throw above), so only an EDIT id can ever enter `pending`.
+  if (!pruneSet.has(id)) pending.set(id, readFileSync(snap));
+}
+// PASS 2 — materialize, then read. Every file created here is tracked in
+// `materialized` and unlinked if ANY later step throws, so a failed park never
+// leaves an untracked resurrection behind: such a file is invisible to the
+// unrelated-dirty-TRACKED-file preflight and a later `graph-commit <id>` would
+// land it as an ordinary edit, reverting the landed deletion with no park and
+// no office_hours marker anywhere.
+const deletedSet = new Set();
+const materialized = [];
+try {
+  for (const [id, bytes] of pending) {
+    // 'wx' — exclusive create, and it never follows a symlink at the target.
+    // Fails loudly if anything appeared at the path since pass 1.
+    writeFileSync(join(intentionsDir, `${id}.md`), bytes, { flag: "wx" });
+    materialized.push(join(intentionsDir, `${id}.md`));
+    deletedSet.add(id);
+  }
+  // Read every node up front so an unreadable id fails BEFORE any writeNode — a
+  // single read-modify-write loop that threw mid-way would leave the earlier ids
+  // mutated on disk, uncommitted.
+  const nodes = ids.map((id) => readNode(intentionsDir, id));
+  writeParked(nodes);
+} catch (err) {
+  for (const p of materialized) { try { unlinkSync(p); } catch { /* best effort */ } }
+  throw err;
+}
+if (resurrectedFile) {
+  writeFileSync(resurrectedFile, [...deletedSet].map((id) => `${id}\0`).join(""));
+}
+
+function writeParked(nodes) {
 for (let i = 0; i < nodes.length; i++) {
   const node = nodes[i];
   const id = ids[i];
@@ -1698,6 +1845,26 @@ for (let i = 0; i < nodes.length; i++) {
       "result — that same commit clears this office_hours park. A third " +
       "session encountering this park while the loser is still working should " +
       "wait rather than attempt its own merge (the mailbox discipline)."
+    : deletedSet.has(id)
+    ? `This is a delete/modify divergence: a concurrent writer's already-landed ` +
+      `change DELETED this node from origin/main while this session's edit was ` +
+      `in flight. The landed deletion WINS: nothing about this node was pushed ` +
+      `to main, and this office_hours record itself is LOCAL ONLY — it exists ` +
+      `nowhere on origin/main, because the node does not. This session's edit ` +
+      `was re-materialized at ${intentionsDir}/${id}.md as an untracked local ` +
+      `file (with its authored body preserved) and is also preserved at ` +
+      `${snapDir}/${id}.md (this machine only — may not survive past this ` +
+      `session).\n` +
+      `Recommended: a human picks ONE of two intents — no autonomous session ` +
+      `may override a landed deletion.\n` +
+      `(1) OVERRIDE the deletion (this session's edit is intentional and should ` +
+      `win): review the re-materialized file, delete its office_hours block, ` +
+      `then re-run \`graph-commit ${id}\` — that re-lands the node explicitly.\n` +
+      `(2) CONFIRM the other writer's deletion (this session's edit is ` +
+      `obsolete): \`rm ${intentionsDir}/${id}.md\`. origin/main already has the ` +
+      `node deleted, so nothing needs to be committed.\n` +
+      `A third session encountering this state while the loser is still working ` +
+      `should wait rather than attempt its own merge (the mailbox discipline).`
     : `A concurrent writer landed an overlapping edit to this node while this ` +
       `session's edit was in flight; this writer's content was NOT landed. ` +
       `This session's unlanded content is preserved at ${snapDir}/${id}.md ` +
@@ -1710,15 +1877,35 @@ for (let i = 0; i < nodes.length; i++) {
   const recommendation = fieldBreakdown ? `${base}\n\n${fieldBreakdown}` : base;
   node.office_hours = { reason, since, recommendation };
   writeNode(intentionsDir, node);
-  process.stderr.write(`graph-commit: set office_hours on ${id} (since=${since})\n`);
+  process.stderr.write(
+    deletedSet.has(id)
+      ? `graph-commit: set office_hours on ${id} LOCALLY ONLY (since=${since}) — the node is deleted on origin/main and is not re-landed\n`
+      : `graph-commit: set office_hours on ${id} (since=${since})\n`
+  );
+}
 }
 TS
+  local resurrected_file="$SNAP_DIR/resurrected-ids"
+  : >"$resurrected_file"
   if ! GRAPH_COMMIT_RECOMMENDATION_FILE="$rec_file" \
+       GRAPH_COMMIT_RESURRECTED_FILE="$resurrected_file" \
        npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "$@" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
   rm -f "$tmpts"
+
+  # Read back the delete/modify divergences the helper re-materialized (NUL-
+  # delimited, so no id character can split a record). commit_files() /
+  # id_files_dirty() consult this set and refuse to stage those paths — the
+  # other writer's landed deletion is never reverted by this park.
+  RESURRECTED_IDS=()
+  if [[ -s "$resurrected_file" ]]; then
+    local rid
+    while IFS= read -r -d '' rid; do
+      [[ -n "$rid" ]] && RESURRECTED_IDS+=("$rid")
+    done <"$resurrected_file"
+  fi
 }
 
 # --- Shared fail-closed park path (never returns) ---------------------------
@@ -1839,12 +2026,39 @@ park_and_exit() {
   fi
 
   park_write "${park_ids[@]}"
+
+  # Delete/modify divergence (RESURRECTED_IDS, set by park_write): those nodes
+  # no longer exist on origin/main, so nothing about them is committed or pushed
+  # — their office_hours record lives only in the local untracked file. Report
+  # them separately and drop them from the "parked on main" set, so neither the
+  # human nor land-align-round's needle below can read a landed park where there
+  # is none.
+  local landed_park_ids=() pid
+  for pid in "${park_ids[@]}"; do
+    is_resurrected_id "$pid" && continue
+    landed_park_ids+=("$pid")
+  done
+  if [[ "${#RESURRECTED_IDS[@]}" -gt 0 ]]; then
+    echo "graph-commit: delete/modify divergence on ${RESURRECTED_IDS[*]} — a concurrent writer's already-landed change DELETED these node(s) from origin/main; the deletion STANDS (their content is not re-pushed to main)" >&2
+    echo "graph-commit: their office_hours record is LOCAL ONLY, in the untracked re-materialized file(s) under $INTENTIONS_DIR (unlanded content also at $SNAP_DIR); a human must decide whether to override the deletion" >&2
+  fi
+
   CURRENT_MSG="$park_msg"
+  local committed=0
   if id_files_dirty; then
     commit_files
+    committed=1
   fi
+  # committed=0 → nothing to push: this function reset --hard to FETCH_HEAD, so
+  # HEAD IS origin/main and land() would burn a full stamp cycle only to no-op
+  # (or, if main advanced meanwhile, be REJECTED and report a landing failure
+  # for a write that never existed). Reachable when every park id was a
+  # delete/modify divergence (its file is deliberately unstaged) or when the
+  # nodes already carry byte-identical office_hours on main.
   local prc=0
-  land || prc=$?
+  if [[ "$committed" -eq 1 ]]; then
+    land || prc=$?
+  fi
   if [[ "$prc" -eq 0 ]]; then
     # LOAD-BEARING SUBSTRING: both confirmations below share the literal
     # "(office_hours set on the origin/main content)", and land-align-round
@@ -1857,11 +2071,21 @@ park_and_exit() {
     # wording change here silently breaks that downstream branch. The ratchet
     # case in test-land-align-round.sh (packages/intentionsutil/scripts/)
     # extracts land-align-round's needle from its real source and asserts it
-    # appears on exactly these two echo lines — keep them coupled.
-    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
-      echo "graph-commit: parked ${park_ids[*]} (office_hours set on the origin/main content); landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
+    # appears on exactly these two echo lines — keep them coupled. The
+    # every-id-resurrected branch below is the third arm and must NOT carry the
+    # needle: nothing reached main there.
+    if [[ "${#landed_park_ids[@]}" -eq 0 ]]; then
+      # Every id was a delete/modify divergence, so NOTHING was parked on main.
+      # Deliberately omits the load-bearing substring: this is not a terminal
+      # park disposition, it is an escalation that needs a human.
+      echo "error: graph-commit: nothing was parked ON MAIN — every parked id in this invocation (${RESURRECTED_IDS[*]}) is a delete/modify divergence whose node no longer exists on origin/main; the office_hours record is local only" >&2
+      if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+        echo "graph-commit: landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
+      fi
+    elif [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "graph-commit: parked ${landed_park_ids[*]} (office_hours set on the origin/main content); landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
     else
-      echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+      echo "graph-commit: parked ${landed_park_ids[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
     fi
   else
     if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then

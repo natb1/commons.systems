@@ -48,6 +48,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
+import { strategyBacklogBand } from "../src/census.js";
+import { listNodesAtRef } from "./lib-store-at-ref.js";
 import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
@@ -430,17 +432,37 @@ const tokenEconomySensor: Sensor = {
 // Name is the exact `success_signal.sensor` string
 // `strategy-graph-native-dispatch` declares — the driver resolves a sensor by
 // that verbatim name (`token-economy` uses the same match-the-declared-name
-// contract). The reading is dual, mirroring the strategy's dual source:
-//   (a) the phase-transition history in the local `intentions/` git log, and
-//   (b) the router's own selection log (emitted by graph-select-target).
+// contract). The reading has four segments, mirroring the strategy's sources:
+//   (a) the phase-transition history in the local `intentions/` git log,
+//   (b) the router's own selection log (emitted by graph-select-target),
+//   (c) the CURRENT open machinery-defect backlog share over the tactic
+//       population serving this strategy — the same classification
+//       `align-tactics-census.ts` applies, reused from `../src/census.js`, and
+//   (d) that same share SAMPLED BACKWARD through the `intentions/` git history,
+//       so the band reads as a trend rather than a single instant.
 // Format (stable and parseable):
-//   `lifecycle: <id> implement→qa→review→done (<YYYY-MM-DD>); router selections: <R> records, <D> nodes`
-// with the lifecycle half degrading to `none yet` (no completed graph-native
-// tactic lifecycle in history) and the selections half to `unknown` (missing or
-// unreadable log) — never a throw (total-sensor contract above).
+//   `lifecycle: <id> implement→qa→review→done (<YYYY-MM-DD>); router selections: <R> records, <D> nodes; backlog: <B>/<T> = <P>% (band ≤35%); backlog series <W>d: <P1>% → <P2>% → … (<verdict>)`
+// Every segment degrades independently and never throws (total-sensor contract
+// above): the lifecycle half to `none yet`, the selections half to `unknown`
+// (missing or unreadable log), the backlog half to `unknown` (store unreadable)
+// or `0/0 = n/a` (no tactics serve the strategy yet), and the series to
+// `unknown` (git history unavailable), `insufficient history` (fewer than two
+// distinct sampled store states), or a per-sample `skipped` token (that
+// historical ref's store does not read/validate).
 
 /** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
-const LIFECYCLE_SENSOR_NAME = "the intention store and the router's selection log";
+export const LIFECYCLE_SENSOR_NAME =
+  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions";
+
+/** The band the recorded threshold declares ("at or below 35%"). */
+export const BACKLOG_BAND_PCT = 35;
+
+/** The strategy whose tactic population the band is measured over. */
+const BACKLOG_STRATEGY_ID = "strategy-graph-native-dispatch";
+
+/** Trailing window the backlog-share series samples over, and its step. */
+const BACKLOG_SERIES_WINDOW_DAYS = 28;
+const BACKLOG_SERIES_STEP_DAYS = 7;
 
 /**
  * Phases a graph-native tactic passes through; a full lifecycle observes ALL of
@@ -632,13 +654,129 @@ export function readSelectionLog(selectionLogPath: string): string {
 }
 
 /**
- * Compose the full lifecycle reading from its two halves. Exported for unit
- * tests, which inject a fixture git repo and a fixture selection log.
+ * Backlog half: the CURRENT open machinery-defect share over the tactic
+ * population serving `strategyId`, against the band the recorded threshold
+ * declares. Classification is `../src/census.js`'s `strategyBacklogBand` — the
+ * same rules `align-tactics-census.ts` applies, so the sensor and the census
+ * can never disagree.
+ *
+ * Enumeration uses the TOLERANT `listNodes` (a single unreadable node file must
+ * not blind the whole reading), wrapped in try/catch so a missing or unreadable
+ * store dir reads `unknown` rather than throwing — the total-sensor contract at
+ * the top of this file. `total === 0` (no tactic serves the strategy yet) reads
+ * `0/0 = n/a` rather than dividing by zero.
  */
-export function readLifecycleReading(repoDir: string, selectionLogPath: string): string {
+export function readBacklogBand(storeDir: string, strategyId: string): string {
+  let nodes: IntentionNode[];
+  try {
+    nodes = listNodes(storeDir);
+  } catch {
+    return "unknown";
+  }
+  const { backlog, total, pct } = strategyBacklogBand(nodes, strategyId);
+  if (pct === null) {
+    return `0/0 = n/a (band ≤${BACKLOG_BAND_PCT}%)`;
+  }
+  return `${backlog}/${total} = ${(pct * 100).toFixed(1)}% (band ≤${BACKLOG_BAND_PCT}%)`;
+}
+
+/**
+ * Series half: the same backlog share sampled backward through the local
+ * clone's `intentions/` git history, so the band reads as a trend rather than a
+ * single instant. One sample per `stepDays` step across the trailing
+ * `windowDays` window (28/7 → offsets 21, 14, 7, 0 days ago), each resolved to
+ * the last `intentions/`-touching commit before that instant.
+ *
+ * Samples that resolve to no commit are dropped, and consecutive identical SHAs
+ * are collapsed, so every element is a DISTINCT committed store state rather
+ * than a repeated flat value.
+ *
+ * Failure posture matches `readTacticVelocity` / `readLifecyclePhaseHistory`: a
+ * git failure (not a repo, no commits) reads `unknown`. Per sample, the read is
+ * `listNodesAtRef`, which is STRICT and throws when any node at that historical
+ * ref is unreadable or schema-invalid — a real possibility for old refs, so each
+ * sample is caught individually and degrades to the literal token `skipped`
+ * (as does a `null` pct: no tactic served the strategy at that ref). A throw
+ * never propagates out of this function.
+ *
+ * The trend verdict is computed over the ROUNDED values actually printed, so
+ * the rendered series and the verdict can never disagree through float noise.
+ */
+export function readBacklogSeries(
+  repoDir: string,
+  strategyId: string,
+  windowDays: number = BACKLOG_SERIES_WINDOW_DAYS,
+  stepDays: number = BACKLOG_SERIES_STEP_DAYS,
+): string {
+  const shas: string[] = [];
+  try {
+    for (let d = windowDays - stepDays; d >= 0; d -= stepDays) {
+      const sha = execFileSync(
+        "git",
+        ["-C", repoDir, "rev-list", "-1", `--before=${d} days ago`, "HEAD", "--", "intentions"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      if (sha === "") {
+        continue;
+      }
+      if (shas.length > 0 && shas[shas.length - 1] === sha) {
+        continue;
+      }
+      shas.push(sha);
+    }
+  } catch {
+    return "unknown";
+  }
+
+  const rendered: string[] = [];
+  const usable: number[] = [];
+  for (const sha of shas) {
+    let pct: number | null;
+    try {
+      pct = strategyBacklogBand(listNodesAtRef(repoDir, sha), strategyId).pct;
+    } catch {
+      rendered.push("skipped");
+      continue;
+    }
+    if (pct === null) {
+      rendered.push("skipped");
+      continue;
+    }
+    const value = Number((pct * 100).toFixed(1));
+    usable.push(value);
+    rendered.push(`${value.toFixed(1)}%`);
+  }
+
+  if (usable.length < 2) {
+    return "insufficient history";
+  }
+  let nonIncreasing = true;
+  for (let i = 0; i + 1 < usable.length; i += 1) {
+    if (usable[i + 1] > usable[i]) {
+      nonIncreasing = false;
+      break;
+    }
+  }
+  return `${rendered.join(" → ")} (${nonIncreasing ? "non-increasing" : "increasing"})`;
+}
+
+/**
+ * Compose the full lifecycle reading from its four segments. Exported for unit
+ * tests, which inject a fixture git repo and a fixture selection log. The store
+ * dir is derived from `repoDir` so the current band and the sampled history come
+ * from the same repository.
+ */
+export function readLifecycleReading(
+  repoDir: string,
+  selectionLogPath: string,
+  strategyId: string = BACKLOG_STRATEGY_ID,
+): string {
+  const storeDir = join(repoDir, "intentions");
   return (
     `lifecycle: ${readLifecyclePhaseHistory(repoDir)}; ` +
-    `router selections: ${readSelectionLog(selectionLogPath)}`
+    `router selections: ${readSelectionLog(selectionLogPath)}; ` +
+    `backlog: ${readBacklogBand(storeDir, strategyId)}; ` +
+    `backlog series ${BACKLOG_SERIES_WINDOW_DAYS}d: ${readBacklogSeries(repoDir, strategyId)}`
   );
 }
 

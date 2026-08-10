@@ -56,8 +56,8 @@ The **non-live-wired** half never landed. It was written only onto the branch
 and `git merge-base --is-ancestor ee12fc1b origin/main` returns non-zero. Every
 file that half claimed to delete is still present on `origin/main` today. Do not
 attempt to reuse `origin/tactic-legacy-router-removal`: it is ~851 commits behind
-(merge-base `444bf41a`) and its sides of `worktree-create.sh` and
-`test-dispatch-scripts.sh` are stale enough to revert landed work. The remote ref
+(merge-base `444bf41a`) and its sides of `worktree-create.sh` and the (now-split)
+dispatch-scripts test suite are stale enough to revert landed work. The remote ref
 is retained as a record of the intended shape (its `office-hours.nix` header
 rewrite is a useful draft) — read it if useful, but write fresh from `origin/main`.
 
@@ -146,33 +146,37 @@ them, so a split leaves `main` red or broken between commits.
   narrative at lines 578-588 stands on its own); do not invent a graph-lane
   equivalent — `office-hours-graph` has no `parked-router` disposition.
 
-**Delete the orphaned test blocks** in
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` (31264
-lines today):
+**Delete the orphaned test blocks.** The former monolithic dispatch-scripts
+test file has since been split into per-SUT files
+(`tactic-dispatch-test-monolith-split`); the sections below now live in
+`.claude/skills/dispatch-propagate/scripts/test-office-hours-select-target.sh`,
+`.claude/skills/dispatch-propagate/scripts/test-office-hours.sh`, and
+`.claude/skills/dispatch-propagate/scripts/test-dispatch-office-hours-strip-hook.sh`.
+Re-locate each item below by grepping for its name/comment text — do not trust
+the old monolith line numbers, which no longer apply post-split:
 
-- The `office-hours-select-target` section, header at line 3851, through the end
-  of the `office-hours (entry point)` section, header at line 4654 — i.e. the
-  contiguous span from the section separator preceding line 3851 up to (not
-  including) the separator preceding the `gh_retry tests` header at line 5149.
+- The `office-hours-select-target` section (now the whole of
+  `test-office-hours-select-target.sh`) and the `office-hours (entry point)`
+  section (now the whole of `test-office-hours.sh`) — since Unit 1 deletes
+  both scripts outright, these two files themselves become dead and should be
+  deleted, along with their `unit-tests.yml` steps.
 - The three test-local `claude` fakes that exist only for those sections:
-  `office_hours_fake_claude` (line 3712), `office_hours_fresh_fake_claude`
-  (line 3748), `office_hours_state_fake_claude` (line 3809). Confirm by grep
-  that no surviving test calls them before deleting.
-- The `dispatch-office-hours-strip hook` section, header at line 19004, through
-  the separator preceding the `dispatch-stop hook tests` header at line 19183.
-- Shared-setup lines that copy the deleted scripts: line 68 (`cp
-  "$SCRIPT_DIR/office-hours-select-target" …`) with its comment at lines 69-72,
-  lines 73-74 (`cp "$SCRIPT_DIR/dispatch-recover-session-id"` + `chmod`) **only
-  if** no surviving test uses `dispatch-recover-session-id` — grep first; line
-  75 (`cp "$SCRIPT_DIR/office-hours" …`); the matching entries in the `chmod +x`
-  list around lines 130-145 (`"$TMPDIR_TEST/office-hours-select-target"`,
-  `"$TMPDIR_TEST/office-hours"`).
-- Fixture/stub branches whose only consumer is the deleted sections: the
-  `oh-issue-list.json` arm at lines 379-382 inside the
-  `dispatch:office-hours` REST-label stub, and the `ls-remote --exit-code
-  --heads origin` git-stub arm at lines 1096-1105 whose comment names
-  `office-hours-select-target`. Grep each for other consumers before removing;
-  the `trace-parked.json` arm just above belongs to `dispatch-trace-leaf` and is
+  `office_hours_fake_claude`, `office_hours_fresh_fake_claude`,
+  `office_hours_state_fake_claude`. Confirm by grep that no surviving test
+  calls them before deleting (moot if the whole files above are deleted).
+- The `dispatch-office-hours-strip hook` section — now the whole of
+  `test-dispatch-office-hours-strip-hook.sh` — becomes dead once
+  `.claude/hooks/dispatch-office-hours-strip.sh` is deleted; delete the file
+  and its `unit-tests.yml` step too.
+- Shared-setup lines in any still-surviving shared fixture file that copy the
+  deleted scripts (`office-hours-select-target`, `office-hours`, and — **only
+  if** no surviving test uses it — `dispatch-recover-session-id`): the `cp`
+  lines and their matching `chmod +x` entries. Grep first.
+- Fixture/stub branches whose only consumer is a deleted section: the
+  `oh-issue-list.json` arm inside the `dispatch:office-hours` REST-label stub,
+  and the `ls-remote --exit-code --heads origin` git-stub arm whose comment
+  names `office-hours-select-target`. Grep each for other consumers before
+  removing; the `trace-parked.json` arm belongs to `dispatch-trace-leaf` and is
   a separate concern — leave whatever a grep shows is still consumed.
 
 **Mandatory check before deleting the test blocks** (test-integrity, see
@@ -228,10 +232,10 @@ Reduce it to the graph `<node-id>` lane only:
 **Out of scope:** the `LANE`-variable removal must not change the graph lane's
 behavior in any way. Do not touch `lib-graph-worktree.sh`.
 
-**No test coverage to remove:** `worktree-create.sh` has no test section in
-`test-dispatch-scripts.sh` (the only mention is an incidental comment at line
-9042 about the marker shape, which Unit 2 makes stale — update that comment or
-leave it, but do not delete the surrounding test).
+**No test coverage to remove:** `worktree-create.sh` has no dedicated test
+section in any of the split per-SUT test files (the only mention is an
+incidental comment about the marker shape, which Unit 2 makes stale — update
+that comment or leave it, but do not delete the surrounding test).
 
 ## Dependencies
 
@@ -269,7 +273,8 @@ leave it, but do not delete the surrounding test).
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-office-hours-select-target.sh
+.claude/skills/dispatch-propagate/scripts/test-office-hours.sh
 ```
 
 ```verify

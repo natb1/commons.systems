@@ -39,7 +39,7 @@ attention:
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
@@ -57,40 +57,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "A /qa-main graph-node-lane pass verified all three needs-main residue
-    items and reached a mixed verdict, but died before its park landed:
-    origin/main still showed phase main-qa with office_hours null, and no
-    node-terminal marker was written, so the node froze. Re-parked by the
-    invalid-state intervention on that pass's own independently re-verified
-    findings. Item 1 (a real nested code-review low --fix pre-stage completes
-    and writes the working tree on a real PR diff) PASS, confirmed across three
-    merged PRs. Item 2 (--comment actually posts a PR comment) CONTRADICTED:
-    zero inline PR comments and zero PR reviews across all three despite
-    --comment being passed on every run and residue findings being generated on
-    at least two; already filed as
-    tactic-review-code-review-invocation-contract-main-qa-regression, which is
-    landed on origin/main and carries the fix direction. Item 3 is the only open
-    item and is not autonomously decidable: whether low is the right
-    cost-versus-quality point for the review phase is a subjective tradeoff this
-    node's own plan defers to a strategy-token-economy follow-up, and deciding
-    it needs a /dispatch-token-audit run, a full skill invocation outside a
-    bounded read-only qa-main pass. The lane defect that lost the original park
-    is recorded as tactic-invalid-state-rc-f1c843b1."
-  since: 2026-08-06
-  recommendation: "Decide item 3, then release the dead session. (1) Judgment: run
-    /dispatch-token-audit 3d over the window since the source PR merged and
-    compare the review phase cost and the <none> attribution share against the
-    Unit 1 baseline in references/code-review-invocation.md. If low holds as the
-    right point, no code change is owed for item 3 and this node can go main-qa
-    to done with: packages/intentionsutil/scripts/transition-node
-    tactic-review-code-review-invocation-contract. If it does not hold, file a
-    tactic for the effort-level change first, then transition. (2) Release the
-    frozen slot, which this intervention deliberately did not reap because the
-    park path owns it: git worktree remove
-    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-review-code-review-\
-    invocation-contract && claude rm 361f3b83-0fa7-4ea0-828c-0d611f68eaf3"
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -823,3 +790,54 @@ classified all three `needs-main`:
    Planned deferral — the PR's own "Out of scope" section defers effort-level
    tuning to the `strategy-token-economy` follow-up; needs 3-5 real passes plus a
    `/dispatch-token-audit` run to inform.
+
+## Office-hours sitting 2026-08-09 — all three residue items closed
+
+**Disposition: closed. Item 3 answered against `low`; the replacement work is
+filed as its own node.** Author ruling at the 2026-08-09 sitting. `phase: done`,
+park cleared.
+
+| item | outcome |
+|---|---|
+| 1 — nested `code-review low --fix` pre-stage completes and writes the tree on a real PR diff | PASS, confirmed across three merged PRs |
+| 2 — `--comment` actually posts a PR comment | CONTRADICTED; carried by `tactic-review-code-review-invocation-contract-main-qa-regression` |
+| 3 — is `low` the right cost/quality point? | ANSWERED: no |
+
+### Item 2 is not closed here, it is owned elsewhere
+
+Zero inline comments and zero reviews were observed across all three merged PRs
+despite `--comment` on every run. That defect is already filed as
+`tactic-review-code-review-invocation-contract-main-qa-regression`, which at the
+sitting read `phase: implement`, `status: raw`, unparked — i.e. moving. Nothing
+about item 2 is discharged by closing this node.
+
+### Item 3 — `low` does not hold; `max` directed
+
+The author ruled that `low` is not the right cost/quality point for the review
+phase and directed `max`. The token-audit evidence the park called for was not
+gathered: the author decided on quality grounds without it, so the audit spend
+was not incurred.
+
+**`max` cannot be reached by changing the effort argument.** This is a measured
+constraint, surfaced at the sitting from this node's own reference doc
+(`.claude/skills/review-fix/references/code-review-invocation.md` section 1.2):
+a `max` review of a real diff ran 2363 s (39 m 23 s), produced no output, and
+was killed with `exit=143` and 0 bytes captured. It exceeds both the Bash tool's
+600 000 ms cap and the proposed `DISPATCH_CODE_REVIEW_TIMEOUT:-540`. Because
+`claude -p` buffers all output until completion, a timed-out run is a total loss
+of a very expensive run, not a degraded result. The doc's own conclusion is
+explicit: run it detached with a resume-poll, or drop the effort — and
+`Design this deliberately; do not just raise the timeout constant.`
+
+**Filed as `tactic-review-effort-max-detached-resume-poll`** (`status: raw`,
+`attention.boost: 20`), which couples the effort raise and the detached
+resume-poll harness into ONE deliverable so `max` can never land without the
+harness that makes it viable. That node, not this one, carries the remaining
+work.
+
+### Park recommendation already discharged
+
+The park told the operator to release a frozen slot with `git worktree remove …`
+plus `claude rm 361f3b83-0fa7-4ea0-828c-0d611f68eaf3`. Verified at the sitting:
+the session is absent from `claude agents --json --all` and the worktree does not
+exist. Do not re-run those commands.

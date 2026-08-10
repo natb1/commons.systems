@@ -96,7 +96,7 @@ attention:
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
   pr: 2990

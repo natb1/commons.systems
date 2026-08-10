@@ -406,7 +406,13 @@ registration timing. With an empty ledger `effective_live` equals the old
 busy-worker count, so this change is behavior-preserving. The `gap` it computes
 is carried on the decision line and bounds the `dispatch-materialize-spawn`
 fan-out (see *Fan-out*) — `materialize-spawn` no longer evaluates the gate per
-target.
+target. The per-tick decision line also carries `max_workers` — the resolved
+`max_concurrent_workers` ceiling — alongside `target_n` / `effective_live` /
+`gap`. `max_workers` carries the resolved ceiling on every lane that consults
+it (the autonomous no-arg lane, which resolves it once up front, and
+`--manual`), and is `null` on the explicit NODE_ARG single-node lane (which
+skips both the pace curve and the ceiling by design) and on the early exits
+(busy, usage-error, sync-*) that return before either bound is read.
 
 The reservation ledger is a directory of marker files at
 `<project-root>/tmp/dispatch-reservations/` (project-root-shared like

@@ -81,3 +81,65 @@ Add the same `EXHAUSTED=$("$SCRIPT_DIR/dispatch-target-workers" --exhausted 2>/d
 - A live pass with `dispatch-target-workers` reading `0` and `--exhausted: ok` reports `quiet` (or the existing pause-style non-alarming verdict), not `finding`, regardless of `busy_zero_since` span.
 - A live pass with `dispatch-target-workers --exhausted: exhausted`, or with busy workers genuinely stuck despite a nonzero target, still reports `finding` once past `DISPATCH_FLEET_WATCH_IDLE_LIMIT` — the pace-awareness only suppresses the *paced* case, it does not blind the predicate to a real stall.
 - `test-dispatch-fleet-watch.sh` gains a case covering both branches.
+
+## New evidence, 2026-08-09 — this is load-bearing, not cosmetic
+
+The diagnosis above is unchanged and not revisited. What follows is added
+severity evidence measured during a ~71-hour fleet outage (2026-08-06 11:08 EDT
+through 2026-08-09; commits/day went 168 → 219 → 207 → 20 → 0 → 0 → 0).
+
+**1. The false positive is not merely noisy — it drives a failing write loop.**
+Each pass on which busy-stall reads `finding` calls `dispatch-fleet-alarm` to
+*mint* `tactic-fleet-alarm-busy-stall`, and each pass that clears calls it to
+*resolve*. During the outage the main checkout was left dirty and one commit
+ahead (see below), so every one of those writes failed:
+
+```
+error: graph-commit: the resolved repo (/home/n8/natb1/commons.systems) holds
+intentions/tactic-fleet-alarm-busy-stall.md content differing from origin/main
+but has nothing staged to commit ... refusing to emit a false 'landed'
+dispatch-fleet-alarm: graph-commit failed after 3 attempt(s)
+dispatch-fleet-alarm: minting tactic-fleet-alarm-busy-stall failed; the write was rolled back
+```
+
+Three failed `graph-commit` attempts per pass, every ~2 minutes, for three days.
+The mint/resolve churn this predicate generates is therefore a continuous write
+load against `origin/main`, not a once-per-incident annotation — which is what
+turns a cosmetic false positive into a load-bearing one.
+
+**2. Its known-false status is why a real defect went undetected for 71 hours.**
+The actual fleet-stalling defect was a background session in `state: blocked`
+holding the main checkout dirty (filed as
+tactic-blocked-session-invisible-to-census). The only probe that fired during
+the entire outage was this one:
+
+```
+busy-stall:           finding  0 busy workers for 257700s (limit 2700s)
+result: finding (1)
+note: at least one dispatch-fleet-alarm graph write FAILED this pass
+```
+
+Because `busy-stall: finding` was correctly recognized as this node's known
+false positive — the pace curve *was* closed, `target_n: 0`, `--exhausted: ok`
+— the whole pass was discounted, and the `note:` line directly beneath it went
+unread for three days. A genuine defect hid inside the blind spot of an alarm
+already written off as noise.
+
+This is the standing cost of a chronically-firing false positive: it does not
+just waste a reader's attention, it trains the reader to skip the surface the
+real signal arrives on.
+
+**3. The 2026-08-05 reading reproduced exactly.** Measured 2026-08-09 10:51 EDT:
+`dispatch-target-workers` → `0`, `--exhausted` → `ok`, `--reopen-at` →
+`1786307400` (2026-08-09 16:30 EDT), with `busy-stall` reporting `finding` at a
+257700s span. Same shape as the original capture, four days later — the
+predicate has no pace-awareness and the false positive recurs on every pace
+pause, as diagnosed.
+
+**Consequence for the "How to resolve" section above: none.** The fix direction
+is unchanged and still correct. What changes is the priority argument for
+scheduling it, and one addition to the verification list:
+
+- A pass that is suppressed to `quiet` by pace-awareness must make **no**
+  `dispatch-fleet-alarm` mint or resolve call at all — suppressing the verdict
+  while still churning the graph write would leave the write loop in place.

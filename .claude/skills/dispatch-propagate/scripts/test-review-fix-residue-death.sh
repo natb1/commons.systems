@@ -99,14 +99,17 @@ assert_eq "residue death: results pushed into laneADispositions" "1" \
 assert_eq "residue death: results pushed into laneADeferred" "1" \
   "$(grep -c 'laneADeferred.push(...undisposed.deferred)' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
-# coverage_incomplete = true appears at seven sites in the current file: the
+# coverage_incomplete = true appears at eight sites in the current file: the
 # throttle path, the instrument gate, an interior residue-processing site, the
-# dead-Lane-B-finder accounting after the gather loop, this residue-death
-# wire-in, and the two batched-skeptic coverage gaps (a verify-phase batch that
-# left findings unvoted, and a code-review residue pre-gate item still unvoted
-# after its single-item re-ask). A future edit that drops any site's flag (or
+# dead-Lane-B-finder accounting after the gather loop, the two batched-skeptic
+# coverage gaps (a verify-phase batch that left findings unvoted, and a
+# code-review residue pre-gate item still unvoted after its single-item
+# re-ask), this residue-death wire-in, and the dump phase's shared
+# noteDumpCoverage helper (BOTH dump causes — an unverifiable size check and a
+# reduced-record fallback — degrade coverage through that one site rather than
+# discarding a completed review). A future edit that drops any site's flag (or
 # adds an unrelated one) should be investigated, not silently absorbed.
-assert_eq "residue death: coverage_incomplete = true site count" "7" \
+assert_eq "residue death: coverage_incomplete = true site count" "8" \
   "$(grep -c 'coverage_incomplete = true' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
 report_results
