@@ -15,7 +15,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-graph-select-target-node-tests
   pr: 2985
@@ -27,7 +27,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T09:55:41Z
+    mergeCommitSha: 40a8852f92ca96e384fccab4c9dbbca069092a31
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
