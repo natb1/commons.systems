@@ -77,8 +77,17 @@ attention:
     the observation is not lost when tactic-ensure-units-respect-manual-disable
     closes.
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-unit-disable-skip-silent-in-steady-state
+  pr: 3059
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
