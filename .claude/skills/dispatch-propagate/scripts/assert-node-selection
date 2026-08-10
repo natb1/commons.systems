@@ -19,10 +19,12 @@
 #       strategy's substance changed since the stamp. NOT a defect.
 #   13  scope-stale — the tactic's scope changed after the previous phase ran.
 #       NOT a defect; the node wants demoting to `implement`.
+#   15  unknown-freshness — the caller's snapshot provenance could not be
+#       proven fresh. NOT a defect; stderr carries the detail.
 #   1   could not obtain a fresh origin/main intentions store (fetch or
 #       `git archive` failed).
 #   2   usage error, unresolvable project root, or the gate itself failed
-#       mechanically (any check-node-selection exit other than 0/12/13).
+#       mechanically (any check-node-selection exit other than 0/12/13/15).
 #
 # Requires `dangerouslyDisableSandbox: true` from a Claude session for the
 # `git fetch`/`git archive` it runs when `--dir` is not supplied.
@@ -168,10 +170,10 @@ case "$GATE_RC" in
   0)
     printf '%s\n' "$GATE_FP"
     exit 0 ;;
-  12|13)
-    # stderr already carries the one-line stale-selection / scope-stale
-    # reason from check-node-selection — emit nothing extra here, re-wrapping
-    # it would bury the detail.
+  12|13|15)
+    # stderr already carries the one-line stale-selection / scope-stale /
+    # unknown-freshness reason from check-node-selection — emit nothing
+    # extra here, re-wrapping it would bury the detail.
     exit "$GATE_RC" ;;
   *)
     echo "assert-node-selection: check-node-selection failed (exit $GATE_RC)" >&2

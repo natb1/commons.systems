@@ -8,6 +8,7 @@ import type { IntentionNode, Phase } from "../src/schema.js";
 import {
   classifySnapshot,
   evaluateSelection,
+  EXIT_UNKNOWN_FRESHNESS,
   MAX_SNAPSHOT_AGE_MS,
   MAX_SNAPSHOT_CLOCK_SKEW_MS,
 } from "../scripts/check-node-selection.js";
@@ -706,7 +707,7 @@ describe("evaluateSelection", () => {
     });
   });
 
-  describe("check 0 — snapshot freshness (warn-only in this unit)", () => {
+  describe("check 0 — snapshot freshness (refuse by default, --allow-stale to proceed)", () => {
     it("a fresh snapshot with a matching directive passes with NO warning noise", () => {
       const dir = tempDir();
       seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
@@ -721,7 +722,7 @@ describe("evaluateSelection", () => {
       expect(r.stderr).toEqual([]);
     });
 
-    it("a null snapshot warns exactly once and still passes (enforcement not yet flipped)", () => {
+    it("a null snapshot REFUSES with exit 15 and exactly one unknown-freshness line", () => {
       const dir = tempDir();
       seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
       const r = evaluateSelection({
@@ -731,10 +732,52 @@ describe("evaluateSelection", () => {
         stamp: null,
         snapshot: null,
       });
-      expect(r.exitCode).toBe(0);
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stdout).toBeNull();
       expect(r.stderr).toHaveLength(1);
       expect(r.stderr[0]).toMatch(/^unknown-freshness:/);
-      expect(r.stderr[0]).toContain("not yet enforced");
+    });
+
+    it("a snapshot older than the age limit REFUSES with exit 15", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const now = new Date("2026-08-09T12:00:00.000Z");
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: {
+          ref: "origin/main",
+          sha: "a".repeat(40),
+          fetchedAt: new Date(now.getTime() - (MAX_SNAPSHOT_AGE_MS + 1)).toISOString(),
+        },
+        now,
+      });
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stdout).toBeNull();
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:.*over the 600s limit/);
+    });
+
+    it("a snapshot exactly AT the age limit is still proven — exit 0, no warning", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const now = new Date("2026-08-09T12:00:00.000Z");
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: {
+          ref: "origin/main",
+          sha: "a".repeat(40),
+          fetchedAt: new Date(now.getTime() - MAX_SNAPSHOT_AGE_MS).toISOString(),
+        },
+        now,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toEqual([]);
     });
 
     it("--allow-stale records an ATTESTED unverified read, distinguishable from the un-attested one", () => {
@@ -755,10 +798,11 @@ describe("evaluateSelection", () => {
       expect(r.stderr[0]).not.toContain("not yet enforced");
     });
 
-    it("a PARKED node under a null snapshot still exits 12 in this unit (pre-flip ordering)", () => {
-      // Records the CURRENT ordering deliberately: the freshness verdict warns
-      // and falls through, so the park verdict still wins. Unit 5 flips this to
-      // exit 15 — this assertion is expected to change there, on purpose.
+    it("freshness refuses BEFORE the parked check even runs — a PARKED node under a null snapshot exits 15, not 12", () => {
+      // The ordering is the point: check 0 returns immediately, so check 3
+      // (not-parked) never executes and its exit-12 verdict is never computed.
+      // Both refuse the launch; 15 is the honest reason, because the gate
+      // cannot see whether the node is parked through an unproven snapshot.
       const dir = tempDir();
       seed(
         dir,
@@ -776,9 +820,10 @@ describe("evaluateSelection", () => {
         stamp: null,
         snapshot: null,
       });
-      expect(r.exitCode).toBe(12);
-      expect(r.stderr.some((l) => /^unknown-freshness:/.test(l))).toBe(true);
-      expect(r.stderr.some((l) => /not-parked/.test(l))).toBe(true);
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:/);
+      expect(r.stderr.some((l) => /not-parked/.test(l))).toBe(false);
     });
   });
 });

@@ -25,10 +25,19 @@
 // Checks, in order (each failing with one line on stderr):
 //   0. freshness   — the caller's snapshot provenance proves the store was
 //                    materialized from a recently-fetched ref
-//                    (`classifySnapshot`). WARN-ONLY today: an unprovable
-//                    snapshot emits one `unknown-freshness:` line and falls
-//                    through to the checks below. Enforcement (exit 15) lands
-//                    in a later unit of tactic-graph-execute-fresh-main-read.
+//                    (`classifySnapshot`). ENFORCED: an unprovable snapshot
+//                    REFUSES the selection outright with one
+//                    `unknown-freshness:` line and exit 15 — no other verdict
+//                    is computed from a store whose currency cannot be
+//                    proven. `--allow-stale` is the recorded operator escape
+//                    hatch: it downgrades the refusal to one warning line and
+//                    proceeds through the checks below, so the unverified read
+//                    stays attributable after the fact. exit 15
+//                    Consequence of running FIRST: a node parked on
+//                    origin/main but read through an unprovable snapshot exits
+//                    15, NOT 12 — check 3 is never reached. Both refuse the
+//                    launch; 15 is the honest reason, because the gate cannot
+//                    see whether the node is parked at all.
 //   1. exists      — intentions/<node-id>.md present (a pruned node is a
 //                    completed/removed selection).            exit 12
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
@@ -153,7 +162,10 @@ export interface SelectionOpts {
    * what stops a future caller from silently skipping the freshness question.
    */
   snapshot: SnapshotProvenance | null;
-  /** Operator override recorded on the warning line; load-bearing in a LATER unit. */
+  /**
+   * Operator override for an unprovable snapshot: downgrades the exit-15
+   * refusal to one recorded warning line and proceeds. Load-bearing.
+   */
   allowStale?: boolean;
   /** Injectable clock for the freshness classifier; `main` passes `new Date()`. */
   now?: Date;
@@ -314,16 +326,26 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   };
 
   // 0. freshness — no other verdict may be computed from an unproven store, so
-  //    this runs FIRST. Today the unknown branch is WARN-ONLY: it records the
-  //    unprovable read and falls through, changing no exit code. Refuse-by-
-  //    default (exit 15, with --allow-stale as the recorded operator override)
-  //    lands in a later unit of tactic-graph-execute-fresh-main-read.
+  //    this runs FIRST and REFUSES BY DEFAULT: an unprovable snapshot returns
+  //    exit 15 immediately, before checks 1-5 read a single node file. That
+  //    ordering is the point — a verdict derived from a store whose currency
+  //    cannot be proven is not a verdict. `--allow-stale` is the recorded
+  //    operator override: it downgrades the refusal to one warning line and
+  //    falls through, so the unverified read stays attributable afterwards.
+  //    Consequence: a PARKED node read through an unprovable snapshot exits 15,
+  //    not the 12 check 3 would have produced — check 3 never runs. Both refuse
+  //    the launch; 15 is the honest reason, since the gate cannot see the park.
   const freshness = classifySnapshot(snapshot, now);
   if (freshness.kind === "unknown") {
+    if (!allowStale) {
+      return {
+        exitCode: EXIT_UNKNOWN_FRESHNESS,
+        stdout: null,
+        stderr: [...warnings, `unknown-freshness: ${freshness.detail}`],
+      };
+    }
     warnings.push(
-      allowStale
-        ? `unknown-freshness: ${freshness.detail} (--allow-stale: the operator accepted an unverified snapshot)`
-        : `unknown-freshness: ${freshness.detail} (WARNING — not yet enforced; enforcement lands in this tactic's Unit 5)`,
+      `unknown-freshness: ${freshness.detail} (--allow-stale: the operator accepted an unverified snapshot)`,
     );
   }
 

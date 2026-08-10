@@ -24,7 +24,12 @@
 #      The snapshot's provenance (ref/sha/fetch instant) is captured
 #      immediately after the fetch and passed to the gate explicitly via
 #      `--snapshot-ref`/`--snapshot-sha`/`--snapshot-fetched-at`
-#      (tactic-graph-execute-fresh-main-read Unit 2).
+#      (tactic-graph-execute-fresh-main-read Unit 2). A FAILED fetch no longer
+#      exits 2 outright: when a previously-fetched origin/main still resolves
+#      locally the snapshot is materialized from it and passed WITHOUT a
+#      fetched-at attestation, so the gate refuses it as unknown-freshness
+#      (exit 15) — or, with --allow-stale, proceeds on the recorded unverified
+#      read. Only a fully unresolvable origin/main is still exit 2.
 #   4. Assert the worktree is USABLE before touching it — the precondition
 #      guard: an in-progress rebase/merge/cherry-pick is auto-repaired
 #      (aborted) and re-checked; a detached HEAD, a branch other than
@@ -78,7 +83,9 @@
 #       and `git diff --stat` evidence. The caller routes it to a tracked
 #       hold, not to the conflict lane.
 #   2   usage or mechanical error (bad node id, unresolvable project root,
-#       failed add/fetch, an `orphan-directory` that is not the node's linked
+#       failed add, a failed `git fetch origin main` whose origin/main does not
+#       resolve LOCALLY either — a broken checkout, as distinct from a merely
+#       unattested one, which routes to 15 — an `orphan-directory` that is not the node's linked
 #       worktree, or an `.envrc` that differs from origin/main's). The caller
 #       parks the node via the office_hours graph write (park-node) — never an
 #       office-hours label. Note the caller does NOT re-enter the directory
@@ -87,7 +94,10 @@
 #       MAIN checkout's status into a hold node).
 #   15  unknown-freshness: the selection gate (check-node-selection.ts) could
 #       not prove the materialized snapshot's freshness, and `--allow-stale`
-#       was not given. An ENVIRONMENT condition, not a node defect — the
+#       was not given. Reached either because the gate rejected the passed
+#       attestation (too old / malformed) or because `git fetch origin main`
+#       failed and this script fell back to the locally-resolved origin/main
+#       with no fetched-at attestation. An ENVIRONMENT condition, not a node defect — the
 #       caller (dispatch-graph-execute case 15) clears the reservation and
 #       makes no graph write, exactly as it does for exit 12.
 #
@@ -140,21 +150,49 @@ fi
 
 WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
 
-if ! git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
-  echo "provision-node-worktree: git fetch origin main failed" >&2
-  exit 2
-fi
-
-# Capture the just-fetched snapshot's provenance immediately after the fetch
-# succeeded (main_snapshot_capture's contract: fetchedAt attests the fetch, not
-# this rev-parse). A failure here right after a successful fetch indicates a
-# deeper problem (e.g. origin/main unresolvable) — not a fallback case, so it
-# is a hard exit like every other mechanical failure in this script. The
-# refuse-by-default policy for an UNPROVABLE snapshot is a later unit's job;
-# this unit only wires acquisition through.
-if ! main_snapshot_capture "$PROJECT_ROOT"; then
-  echo "provision-node-worktree: main_snapshot_capture failed for $PROJECT_ROOT immediately after a successful fetch" >&2
-  exit 2
+if git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
+  # Capture the just-fetched snapshot's provenance immediately after the fetch
+  # succeeded (main_snapshot_capture's contract: fetchedAt attests the fetch,
+  # not this rev-parse). A failure here right after a successful fetch
+  # indicates a deeper problem (e.g. origin/main unresolvable) — not a fallback
+  # case, so it is a hard exit like every other mechanical failure here.
+  if ! main_snapshot_capture "$PROJECT_ROOT"; then
+    echo "provision-node-worktree: main_snapshot_capture failed for $PROJECT_ROOT immediately after a successful fetch" >&2
+    exit 2
+  fi
+else
+  # The fetch FAILED — an ENVIRONMENT condition (network down, remote
+  # unreachable), not a node defect. A blunt exit 2 here would be routed by
+  # dispatch-graph-execute's catch-all into a park-node graph write, recording
+  # a transient outage as if the node were broken. Instead degrade into the
+  # freshness gate's own refusal path, which is exactly the question being
+  # asked: can this snapshot's currency be PROVEN?
+  #
+  # If a previously-fetched origin/main still resolves locally, the store can
+  # still be materialized from it — the read is simply UNATTESTED. Provenance
+  # is assembled by hand here rather than through main_snapshot_capture,
+  # deliberately: that function's contract is that `fetchedAt` attests a fetch
+  # that just succeeded, and no fetch succeeded. So ref and sha are recorded
+  # honestly and `--snapshot-fetched-at` is OMITTED ENTIRELY — the gate's arg
+  # parser reads partial provenance as `snapshot: null`, classifies it
+  # `unknown`, and refuses with exit 15 unless the operator passed
+  # --allow-stale (in which case it warns and proceeds, and the sidecar below
+  # records `fetchedAt: null` so the unverified read stays attributable).
+  #
+  # Only a fully unresolvable origin/main is a genuinely broken checkout, and
+  # that keeps the old exit 2.
+  echo "provision-node-worktree: git fetch origin main failed; falling back to the locally-resolved origin/main (UNATTESTED read)" >&2
+  if ! LOCAL_MAIN_SHA=$(git -C "$PROJECT_ROOT" rev-parse origin/main 2>/dev/null); then
+    echo "provision-node-worktree: git fetch origin main failed and origin/main does not resolve locally either" >&2
+    exit 2
+  fi
+  MAIN_SNAPSHOT_REF="origin/main"
+  MAIN_SNAPSHOT_SHA="$LOCAL_MAIN_SHA"
+  MAIN_SNAPSHOT_FETCHED_AT=""
+  # No --snapshot-fetched-at: partial provenance is `snapshot: null` at the
+  # gate (check-node-selection.ts's parseArgs), which is the honest encoding of
+  # "materialized from a ref nobody just proved current".
+  MAIN_SNAPSHOT_FLAGS=(--snapshot-ref "$MAIN_SNAPSHOT_REF" --snapshot-sha "$MAIN_SNAPSHOT_SHA")
 fi
 
 # Materialize THIS SCRIPT's OWN intentions/ snapshot from the ref it just

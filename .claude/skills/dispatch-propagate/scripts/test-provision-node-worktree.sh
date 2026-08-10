@@ -98,10 +98,26 @@ exit 0
 STUB
 chmod +x "$SUT_DIR/dispatch-ci-ready"
 
-# npx shim: the SUT runs `npx tsx …/check-node-selection.ts …`; ignore the
-# args and always report a fixed passing fingerprint.
+# npx shim: the SUT runs `npx tsx …/check-node-selection.ts …`. It reports a
+# fixed passing fingerprint, but it EMULATES the one gate policy this file
+# exercises (tactic-graph-execute-fresh-main-read Unit 5): provenance missing
+# its `--snapshot-fetched-at` attestation is unknown-freshness, which refuses
+# with exit 15 unless `--allow-stale` was forwarded. Everything else about the
+# gate stays out of scope here.
 cat >"$BIN_DIR/npx" <<'STUB'
 #!/usr/bin/env bash
+HAS_FETCHED_AT=0
+ALLOW_STALE=0
+for arg in "$@"; do
+  case "$arg" in
+    --snapshot-fetched-at) HAS_FETCHED_AT=1 ;;
+    --allow-stale) ALLOW_STALE=1 ;;
+  esac
+done
+if [[ "$HAS_FETCHED_AT" -eq 0 && "$ALLOW_STALE" -eq 0 ]]; then
+  echo "unknown-freshness: no snapshot provenance was supplied by the caller" >&2
+  exit 15
+fi
 echo "test-fixed-fingerprint"
 exit 0
 STUB
@@ -160,6 +176,18 @@ run_prov() {
   set +e
   PROV_OUT=$(PATH="$BIN_DIR:$PATH" DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT" \
     "$SUT_DIR/provision-node-worktree" "$id" "$phase" 2>"$STDERR_FILE")
+  PROV_RC=$?
+  set -e
+  PROV_STDERR=$(cat "$STDERR_FILE")
+}
+
+# run_prov_stale <node-id> [phase] — same, with the operator's --allow-stale
+# override in front of the positional args.
+run_prov_stale() {
+  local id="$1" phase="${2:-implement}"
+  set +e
+  PROV_OUT=$(PATH="$BIN_DIR:$PATH" DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT" \
+    "$SUT_DIR/provision-node-worktree" --allow-stale "$id" "$phase" 2>"$STDERR_FILE")
   PROV_RC=$?
   set -e
   PROV_STDERR=$(cat "$STDERR_FILE")
@@ -467,5 +495,52 @@ assert_eq "case14 sidecar .sha equals origin/main" "$EXPECTED14_SHA" "$SIDECAR14
 SIDECAR14_FETCHED_AT=$(jq -r '.fetchedAt' <<<"$SIDECAR14_JSON")
 assert_eq "case14 sidecar .fetchedAt is non-null" "yes" \
   "$([[ -n "$SIDECAR14_FETCHED_AT" && "$SIDECAR14_FETCHED_AT" != "null" ]] && echo yes || echo no)"
+
+# ==========================================================================
+# Cases 15-17: a FAILED `git fetch origin main`
+# (tactic-graph-execute-fresh-main-read Unit 5). Break the remote URL while
+# the fixture's LOCAL origin/main ref survives from the earlier pushes. The
+# fetch failure is an ENVIRONMENT condition, not a node defect, so it must NOT
+# exit 2 (which dispatch-graph-execute's catch-all turns into a park-node
+# graph write): the snapshot is materialized from the locally-resolved
+# origin/main and passed WITHOUT a fetched-at attestation, which the gate
+# refuses as unknown-freshness (15) or — with --allow-stale — proceeds on,
+# recording the unverified read in the sidecar as `fetchedAt: null`.
+# From here on origin is unreachable; no later case may need it.
+# ==========================================================================
+echo "Cases 15-17: failed fetch with a locally-resolved origin/main"
+STALE_TIP=$(git -C "$MAIN_WT" rev-parse origin/main)
+git -C "$MAIN_WT" remote set-url origin "$TMP/nonexistent-origin.git"
+
+# Case 15: no --allow-stale -> exit 15 (refuse), not 2.
+id15="prov-case-fetch-failed-refuse"
+make_plain_branch "$id15" "$STALE_TIP"
+run_prov "$id15"
+assert_eq "case15 exit 15 (unattested read refused, NOT the exit-2 park path)" "15" "$PROV_RC"
+assert_contains "case15 stderr names the unattested fallback" \
+  "falling back to the locally-resolved origin/main" "$PROV_STDERR"
+
+# Case 16: --allow-stale -> exit 0, sidecar records fetchedAt: null.
+id16="prov-case-fetch-failed-allow-stale"
+make_plain_branch "$id16" "$STALE_TIP"
+run_prov_stale "$id16"
+assert_eq "case16 exit 0 with --allow-stale" "0" "$PROV_RC"
+SIDECAR16="$MAIN_WT/.claude/worktrees/$id16.snapshot-provenance"
+assert_eq "case16 sidecar file exists" "yes" "$([[ -f "$SIDECAR16" ]] && echo yes || echo no)"
+SIDECAR16_JSON=$(cat "$SIDECAR16")
+assert_eq "case16 sidecar .fetchedAt is JSON null" "null" "$(jq -r '.fetchedAt | tojson' <<<"$SIDECAR16_JSON")"
+assert_eq "case16 sidecar .sha equals the locally-resolved origin/main" \
+  "$(git -C "$MAIN_WT" rev-parse origin/main)" "$(jq -r '.sha' <<<"$SIDECAR16_JSON")"
+
+# Case 17: fetch fails AND origin/main does not resolve locally either — a
+# genuinely broken checkout, which keeps the old exit 2. Runs LAST: it deletes
+# the fixture's origin/main ref.
+id17="prov-case-fetch-failed-no-local-ref"
+make_plain_branch "$id17" "$STALE_TIP"
+git -C "$MAIN_WT" update-ref -d refs/remotes/origin/main
+run_prov "$id17"
+assert_eq "case17 exit 2 (origin/main unresolvable — a broken checkout)" "2" "$PROV_RC"
+assert_contains "case17 stderr names the unresolvable ref" \
+  "does not resolve locally either" "$PROV_STDERR"
 
 report_results
