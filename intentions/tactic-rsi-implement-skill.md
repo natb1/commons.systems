@@ -1,14 +1,16 @@
 ---
 id: tactic-rsi-implement-skill
 kind: tactic
-statement: Build the /rsi-implement skill — shortcut implementation
-  orchestration for high-impact critical-path nodes under dispatch-equivalent
-  standards
+statement: Build the rsi-implement orchestration loop in /rsi — serially drive a
+  claimed node through the existing dispatch phase skills as spawned sessions,
+  to merge and main-qa
 owner: ai
 status: raw
 parent: null
-rationale: Surfaced in the 2026-08-10 /align interview; the budgeted
-  implementation arm of /rsi.
+rationale: "Surfaced in the 2026-08-10 /align interview; re-scoped in the same
+  day's review round: not a separate skill surface — a thin loop reusing the
+  dispatch phase skills verbatim via dispatch-graph-execute /
+  dispatch-spawn-job."
 reading: null
 serves:
   - strategy-recursive-self-improvement
@@ -26,27 +28,26 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Build the /rsi-implement skill — shortcut implementation orchestration for high-impact critical-path nodes under dispatch-equivalent standards
 
-## Draft context (2026-08-10 /align interview)
+## Draft context (2026-08-10 /align interview; re-scoped same-day review round)
 
-- Invoked as a sonnet subagent by /rsi for shortcut implementation of
-  high-impact, critical-path items (e.g. critical bugs affecting harness
-  integrity), bypassing the harness's orchestration scripts while keeping the
-  harness's quality standards.
-- Orchestrates a node all the way through merge and main-qa; on a blocker the
-  subagent cannot complete and the main thread cannot mechanically resolve, it
-  throws to the main-thread rsi session, which conducts an office-hours
-  session and updates rsi-plan.
-- Invokes the subset of dispatch-skill instructions extracted as common skills
-  (tactic-dispatch-skill-standards-extraction): planning standards from
-  /align-tactics (unit breakdown, per-unit model selection per the
-  model-selection heuristic), QA strategies from /qa-fix, review standards from
-  /review-fix, variance/conflict handling shared with /dispatch-conflict and
-  the dispatch scripts.
-- Claims its node under the same serialization discipline as dispatch
-  (worktree-as-claim, launch-path refusal) — a node is never worked
-  concurrently by dispatch and rsi.
-- Inefficiencies surfaced by orchestration are tracked in the graph and in the
-  rsi-plan.
+- Not a separate orchestration surface and not an Agent-tool subagent (an
+  Agent subagent cannot run the Workflow-dependent phase skills). A thin loop
+  in /rsi:
+  1. Claim the node under the standard discipline (worktree-as-claim,
+     launch-path refusal of an already-claimed node).
+  2. Serially spawn the existing dispatch phase skill for the node's persisted
+     phase via dispatch-graph-execute / dispatch-spawn-job — the monitor's
+     proven hand-dispatch path.
+  3. Await the session's terminal disposition; verify the transition off
+     origin/main; repeat for the next phase.
+  4. Merge is the tick's merge lane, which runs while paused — never
+     hand-merge.
+  5. On a park or non-mechanical blocker: throw to the /rsi main thread, which
+     conducts an office-hours session attended and updates rsi-plan.
+- Reuses the dispatch skills verbatim — quality bar identical because the
+  skills are identical (strategy condition 3). Unit-level model selection
+  stays inside the phase skills' own heuristics.
+- Inefficiencies surfaced by orchestration are tracked in the graph and
+  reflected in rsi-plan.
 - Costs 1 against the rsi session budget.

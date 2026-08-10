@@ -1,16 +1,17 @@
 ---
 id: tactic-dispatch-skill-standards-extraction
 kind: tactic
-statement: Extract the dispatch skills' core standards into common skills and
-  rename the family — /align-tactics to /dispatch-plan, /qa-fix to /dispatch-qa,
-  /review-fix to /dispatch-review — so rsi and dispatch share one quality bar
+statement: Rename the dispatch skill family for uniform /dispatch-* naming —
+  /align-tactics to /dispatch-plan, /qa-fix to /dispatch-qa, /review-fix to
+  /dispatch-review; extract common standards only if a concrete consumer emerges
 owner: ai
 status: raw
 parent: null
-rationale: Surfaced in the 2026-08-10 /align interview recording
-  strategy-recursive-self-improvement. The dispatch skills are owned by
-  strategy-graph-native-dispatch (artifact owner); rsi consumes the extracted
-  standards.
+rationale: "Surfaced in the 2026-08-10 /align interview as a standards
+  extraction for rsi; re-scoped in the same day's review round: rsi reuses the
+  dispatch skills verbatim, so no consumer requires extraction today — the
+  renames (naming uniformity) are the remaining scope, low priority, landed when
+  the queue is stable."
 reading: null
 serves:
   - strategy-graph-native-dispatch
@@ -29,20 +30,17 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Extract the dispatch skills' core standards into common skills and rename the family — /align-tactics to /dispatch-plan, /qa-fix to /dispatch-qa, /review-fix to /dispatch-review — so rsi and dispatch share one quality bar
 
-## Draft context (2026-08-10 /align interview)
+## Draft context (2026-08-10 /align interview; re-scoped same-day review round)
 
-- Extract core standards from the dispatch skill family into common skills so
-  rsi and dispatch invoke one shared quality bar with different orchestration:
-  planning standards from /align-tactics (to be renamed /dispatch-plan),
-  including breaking implementation into units delegated to subagents with the
-  appropriate model; QA strategies from /qa-fix (to be renamed /dispatch-qa);
-  review standards from /review-fix (to be renamed /dispatch-review);
-  variance/conflict handling extracted for /dispatch-conflict and shared with
-  the dispatch scripts; tactic-drafting standards extracted from /align.
-- Sequencing judgment retained from the interview: extraction can precede the
-  renames; renames mid-bootstrap touch live dispatch surfaces, so land them
-  when the queue is stable or behind explicit compatibility shims.
-- The renames also serve discoverability: the dispatch skill family becomes
-  uniformly /dispatch-*.
+- Original scope (extraction of common standards from /align-tactics, /qa-fix,
+  /review-fix, /dispatch-conflict, /align for rsi consumption) is retired: the
+  review round resolved that rsi reuses the dispatch phase skills verbatim via
+  spawned sessions, so no consumer requires an extraction today. Extraction
+  returns to scope only if a concrete consumer emerges.
+- Remaining scope: renames for uniform /dispatch-* naming — /align-tactics →
+  /dispatch-plan, /qa-fix → /dispatch-qa, /review-fix → /dispatch-review
+  (/dispatch-conflict already conforms).
+- Sequencing: low priority; renames touch live dispatch surfaces and many
+  node bodies/plans reference the current names — land when the queue is
+  stable, with compatibility aliases during the transition.

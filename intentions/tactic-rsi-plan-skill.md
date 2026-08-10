@@ -1,12 +1,15 @@
 ---
 id: tactic-rsi-plan-skill
 kind: tactic
-statement: Build the /rsi-plan skill — subagent that refreshes rsi-plan.md
-  metrics and summaries and re-evaluates the rsi task plan
+statement: Build the /rsi-plan rendering skill and render-rsi-plan.ts —
+  regenerate rsi-plan.md from graph state, draft the three queue summaries as
+  readings, flag mechanical staleness
 owner: ai
 status: raw
 parent: null
-rationale: Surfaced in the 2026-08-10 /align interview; step 1 of every /rsi iteration.
+rationale: "Surfaced in the 2026-08-10 /align interview; re-scoped in the same
+  day's review round: rendering only — the judgment step (graph updates,
+  routing, align-need, task-plan revision) moved to the /rsi main thread."
 reading: null
 serves:
   - strategy-recursive-self-improvement
@@ -24,21 +27,29 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Build the /rsi-plan skill — subagent that refreshes rsi-plan.md metrics and summaries and re-evaluates the rsi task plan
 
-## Draft context (2026-08-10 /align interview)
+## Draft context (2026-08-10 /align interview; re-scoped same-day review round)
 
-- Runs as a subagent invoked by /rsi step 1. Delegates to scripts wherever the
-  content is mechanical (metrics, censuses); prose judgment stays in the skill.
-- Refreshes rsi-plan.md's six required sections: top author priorities (with
-  the dispatch-delegated and rsi-planned subsets); status of dispatch-delegated
-  priorities with expected completion dates; critical office-hours parked nodes
-  and what each blocks (dispatch vs other priorities); metrics — a subset of
-  graph-collected signals with review thresholds; recommended additional
-  telemetry for author comprehension (if any); the rsi task plan.
-- Re-evaluates the task plan: removes completed tasks, identifies critical
-  tasks not yet on the plan.
-- Candidate scripted metrics (from the bootstrap monitor practice): backlog
-  band (open+born-parked share, threshold 35% non-increasing), parked
-  critical-path count via office-hours-select --list rank-lift NOTE lines,
-  held-session and worktree census, pause state, done-count trend.
+- Rendering only — judgment moved to the /rsi main thread. Runs as a subagent
+  invoked by /rsi step 1.
+- render-rsi-plan.ts regenerates every rsi-plan.md section from graph state:
+  priorities from tier/rank; dispatch status from node phases and PR state;
+  critical parked nodes from office-hours-select --list (rank-lifted NOTE
+  lines — never a hand-rolled probe); metrics from registered sensors/readings;
+  the task plan from its graph nodes. A hand-edited section is a defect
+  (strategy condition 5).
+- The three model-generated queue summaries (dispatch queue, office-hours
+  queue, rsi plan) are drafted by this skill and landed as dated readings on
+  their owning strategy nodes — dispatch → strategy-graph-native-dispatch,
+  office-hours → strategy-attention-surface, rsi →
+  strategy-recursive-self-improvement — then rendered from there. Source of
+  truth is the graph, never the .md.
+- Flags mechanical staleness for the main thread's judgment step: completed
+  tasks whose nodes are done, thresholds breached, expected-completion dates
+  passed.
+- Metric implementation registers sensors in the existing
+  success_signal/readings machinery on the owning strategies (strategy
+  condition 8), reducing the standing unregistered-sensor gap
+  (strategy-graph-drives-dispatch reading) rather than adding a registry.
+- Includes per-workflow token attribution (dispatch / office-hours / rsi) —
+  reuse /dispatch-token-audit's attribution machinery where possible.
