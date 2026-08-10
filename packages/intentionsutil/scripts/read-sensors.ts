@@ -937,12 +937,98 @@ export function renderDelegationRecordsReport(dir: string): string {
   return [header, ...rows].join("\n");
 }
 
-const delegationRecordsSensor: Sensor = {
-  name: DELEGATION_RECORDS_SENSOR_NAME,
-  read(): string {
-    return readDelegationRecordsReading(intentionsDir);
-  },
-};
+/**
+ * The `strategy-exercise-recovery-paths` branch: a plain count over ALL
+ * `kind: delegation` records (no declined-origin special-casing — this
+ * strategy's threshold, unlike `readDelegationRecordsReading`'s clarification-7
+ * aggregate, just asks how many records have `last_exercised` set). The
+ * `review_trigger firing not recorded` clause is fixed prose: there is no
+ * firing/actioned surface on the records to mechanically detect a "fired
+ * review_trigger left unactioned", so the reading says so rather than guessing.
+ */
+function readExerciseRecoveryPathsReading(dir: string): string {
+  const records = readDelegationRecords(dir);
+  const n = records.length;
+  const k = records.filter((r) => r.lastExercised !== null).length;
+  const m = n - k;
+  return `exercised: ${k}/${n} records; ${m} null last_exercised; review_trigger firing not recorded`;
+}
+
+/**
+ * True when a `kind: delegation` node's `attributes.divergence.level` (trimmed,
+ * lowercased) starts with `"high"`. Defensively parsed — missing or malformed
+ * `divergence`/`level` is treated as NOT high-divergence rather than throwing,
+ * mirroring this file's existing defensive-attributes precedent (`src/attention.ts:89-107`).
+ */
+function isHighDivergence(node: IntentionNode): boolean {
+  const attrs = node.attributes;
+  if (!isPlainObject(attrs)) {
+    return false;
+  }
+  const divergence = attrs.divergence;
+  if (!isPlainObject(divergence)) {
+    return false;
+  }
+  const level = divergence.level;
+  if (typeof level !== "string") {
+    return false;
+  }
+  return level.trim().toLowerCase().startsWith("high");
+}
+
+/**
+ * The `strategy-realign-attachments` branch: over `kind: delegation` nodes with
+ * high divergence, how many are covered by ANY node's `recovers` edge naming
+ * that record's id. There is no "recorded re-alignment" attribute convention on
+ * the ledger yet (per the strategy's own 2026-07-11-era clarification 7), so
+ * only the `recovers`-edge half is mechanically checked — the reading does not
+ * invent a convention that doesn't exist.
+ */
+function readRealignAttachmentsReading(nodes: IntentionNode[]): string {
+  const recoveredIds = new Set<string>();
+  for (const node of nodes) {
+    for (const id of node.recovers) {
+      recoveredIds.add(id);
+    }
+  }
+  const highDivergenceIds = nodes
+    .filter((node) => node.kind === "delegation" && isHighDivergence(node))
+    .map((node) => node.id);
+  const h = highDivergenceIds.length;
+  const covered = highDivergenceIds.filter((id) => recoveredIds.has(id));
+  const c = covered.length;
+  const uncovered = highDivergenceIds.filter((id) => !recoveredIds.has(id)).sort();
+  const uncoveredList = uncovered.length > 0 ? uncovered.join(", ") : "none";
+  return `high-divergence: ${h} records; ${c} covered by recovers; uncovered: ${uncoveredList}`;
+}
+
+/**
+ * Build the delegation-records sensor. Dispatches on the asking node's `id`:
+ * `strategy-exercise-recovery-paths` gets the plain exercised/null count,
+ * `strategy-realign-attachments` gets the high-divergence/recovers-coverage
+ * count, and any other id gets a total fallback string (never throws) rather
+ * than the old id-blind generic aggregate — the two strategies' thresholds
+ * measure different things and neither matched the old shared reading.
+ * `loadNodes` is injected (same pattern as `makeIntentionStoreSensor`) so unit
+ * tests can supply fixture arrays without touching the live store; the
+ * exercise-recovery-paths branch still reads `readDelegationRecords(intentionsDir)`
+ * directly since its narrower `DelegationRecordReading` shape is sufficient
+ * there (it doesn't need `divergence`, which isn't in that shape).
+ */
+export function makeDelegationRecordsSensor(loadNodes: () => IntentionNode[]): Sensor {
+  return {
+    name: DELEGATION_RECORDS_SENSOR_NAME,
+    read(node): string {
+      if (node.id === "strategy-exercise-recovery-paths") {
+        return readExerciseRecoveryPathsReading(intentionsDir);
+      }
+      if (node.id === "strategy-realign-attachments") {
+        return readRealignAttachmentsReading(loadNodes());
+      }
+      return `no per-node rule for ${node.id}`;
+    },
+  };
+}
 
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
@@ -1068,7 +1154,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(mainHealthSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
-  registry.register(delegationRecordsSensor);
+  registry.register(makeDelegationRecordsSensor(() => listNodes(intentionsDir)));
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs
