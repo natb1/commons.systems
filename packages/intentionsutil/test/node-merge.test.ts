@@ -15,7 +15,6 @@ function node(overrides: Partial<IntentionNode> = {}): IntentionNode {
     recovers: [],
     rationale: null,
     reading: null,
-    gap: null,
     clarifications: [],
     tooling_goals: [],
     success_signal: null,
@@ -67,12 +66,12 @@ describe("mergeIntentionNodes", () => {
   });
 
   it("(d) merges two distinct scalar fields each edited by a different side", () => {
-    const base = pair({ rationale: null, gap: null });
-    const ours = pair({ rationale: "ours edited rationale", gap: null });
-    const theirs = pair({ rationale: null, gap: "theirs edited gap" });
+    const base = pair({ rationale: null, reading: null });
+    const ours = pair({ rationale: "ours edited rationale", reading: null });
+    const theirs = pair({ rationale: null, reading: "theirs edited reading" });
     const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
     expect(merged.rationale).toBe("ours edited rationale");
-    expect(merged.gap).toBe("theirs edited gap");
+    expect(merged.reading).toBe("theirs edited reading");
     expect(conflicts).toHaveLength(0);
   });
 

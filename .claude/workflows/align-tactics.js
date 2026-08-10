@@ -33,7 +33,10 @@
  *   { mode: "strategy" | "tactic",
  *     strategy: {                 // the serving strategy (required in strategy mode;
  *       id, statement, rationale, //  present in tactic mode as the serving strategy)
- *       success_signal, reading, gap, clarifications:[...],
+ *       success_signal, reading, derived_gap, clarifications:[...],
+ *       // `derived_gap` is DERIVED on read by the caller via `deriveGap`
+ *       // (packages/intentionsutil/src/sensors.ts) — it is NOT a stored
+ *       // frontmatter field and must never be read off the node.
  *       conditions:[...],         // attributes.conditions entries (Side-A drift)
  *       rounds:{count,last_completed,last_aligned} },
  *     target_node: {              // tactic mode ONLY: the single tactic being (re)planned
@@ -656,7 +659,7 @@ function buildCorpusPrompt(strategy, existingChildren) {
         `statement: ${strategy.statement || ''}`,
         `success_signal: ${strategy.success_signal || ''}`,
         `reading: ${strategy.reading == null ? 'null' : strategy.reading}`,
-        `gap: ${strategy.gap == null ? 'null' : strategy.gap}`,
+        `gap: ${strategy.derived_gap == null ? 'null' : strategy.derived_gap}`,
       ].join('\n')
     ),
     '',
@@ -737,8 +740,9 @@ function buildDriftPrompt(strategy, gather, mode, targetNode) {
       ].join('\n')
     : [
         'ELIGIBILITY SANITY CHECK. The strategy is decomposable this round only when:',
-        'office_hours is null, the signal is unvalidated (gap non-null OR reading',
-        'null), the fresh-reading gate holds (rounds.last_aligned is null, or a',
+        'office_hours is null, the signal is unvalidated (the derived gap is',
+        'non-null OR reading is null), the fresh-reading gate holds',
+        '(rounds.last_aligned is null, or a',
         'reading exists dated strictly newer than rounds.last_aligned — a null reading',
         'never satisfies "newer than"), it has no non-draft child tactic already on',
         'its signal path, and rounds.count < 2. If rounds.count is at the cap with no',
@@ -797,7 +801,7 @@ function buildDriftPrompt(strategy, gather, mode, targetNode) {
         rationale: strategy.rationale,
         success_signal: strategy.success_signal,
         reading: strategy.reading,
-        gap: strategy.gap,
+        gap: strategy.derived_gap,
         conditions: strategy.conditions || [],
         clarifications: strategy.clarifications || [],
         rounds: strategy.rounds || null,
@@ -900,7 +904,7 @@ function buildDecomposePrompt(strategy, drafts, gather, drift) {
         rationale: strategy.rationale,
         success_signal: strategy.success_signal,
         reading: strategy.reading,
-        gap: strategy.gap,
+        gap: strategy.derived_gap,
         conditions: strategy.conditions || [],
         clarifications: strategy.clarifications || [],
       })
@@ -976,7 +980,7 @@ function buildPlanPrompt(strategy, tactic, gather, mode) {
             rationale: strategy.rationale,
             success_signal: strategy.success_signal,
             reading: strategy.reading,
-            gap: strategy.gap,
+            gap: strategy.derived_gap,
             conditions: strategy.conditions || [],
             clarifications: strategy.clarifications || [],
             rounds: strategy.rounds || null,

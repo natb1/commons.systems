@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import { readingDate } from "../src/router.js";
-import { SensorRegistry } from "../src/sensors.js";
+import { SensorRegistry, deriveGap } from "../src/sensors.js";
 import { listNodes, readNode, writeNode } from "../src/store.js";
 import type { IntentionNodeInput } from "../src/schema.js";
 import {
@@ -273,7 +273,6 @@ describe("makeDelegationRecordsSensor", () => {
         recovers: [],
         rationale: null,
         reading: null,
-        gap: null,
         clarifications: [],
         tooling_goals: [],
         success_signal: null,
@@ -444,7 +443,7 @@ function makeDelegationRecordsSensorForDir(dir: string) {
 }
 
 describe("readStoreSensors end-to-end", () => {
-  it("writes reading and a non-null gap onto a strategy naming this sensor (exercise-recovery-paths format)", () => {
+  it("writes reading (from which deriveGap derives a non-null gap) onto a strategy naming this sensor (exercise-recovery-paths format)", () => {
     const dir = tempStore();
     writeNode(dir, strategyNode("strategy-exercise-recovery-paths"));
     // Fixture records the sensor counts: 1 of 2 exercised, 1 null.
@@ -472,7 +471,7 @@ describe("readStoreSensors end-to-end", () => {
     // The persisted reading carries the date the router's fresh-reading gate
     // parses — the whole point of the clause.
     expect(readingDate(strategy.reading ?? "")).toBe(FIXED_READ_DATE);
-    expect(strategy.gap).not.toBeNull();
+    expect(deriveGap(strategy)).not.toBeNull();
     rmSync(dir, { recursive: true, force: true });
   });
 });

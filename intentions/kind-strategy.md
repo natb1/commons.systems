@@ -30,7 +30,29 @@ rationale: >-
 
 
   `success_signal` on a strategy names the observable that would show the
-  strategy working; `reading` and `gap` are sensor-populated against it.
+  strategy working; `reading` is sensor-populated against it, and `gap` is
+  derived on read from `reading` vs `success_signal.threshold` via
+  `deriveGap` (`packages/intentionsutil/src/sensors.ts`) — never stored.
+  `deriveGap` has exactly four outcomes. A null `success_signal` derives
+  null: with no threshold there is nothing to fall short of, so at this
+  level no signal reads the same as met. A signal with a null `reading`
+  derives "no reading yet (threshold: ...)" — an unread signal is a known
+  shortfall, not a neutral state. A `reading` equal to the threshold after
+  trimming and lowercasing derives null, met; that exact string match is the
+  only met condition, and there is no numeric or approximate comparison. Any
+  other reading derives "reading ... does not meet threshold ...", naming
+  both untrimmed values. That is the mechanical rule and nothing more:
+  whether a reading really satisfies the intent is the assessor's judgment,
+  not `deriveGap`'s. Do not hand-author a `gap:` key in a node's
+  frontmatter — it is a silent no-op. `validateNode`
+  (`packages/intentionsutil/src/schema.ts`) builds each node by whitelisting
+  the known fields into an explicit returned object, so an unrecognized
+  `gap:` key is dropped at parse time: never validated, never surfaced,
+  never read, and gone from the file on the next `write-node` rewrite. A
+  stored `gap:` value cannot influence anything — the residual `gap: null`
+  keys still sitting in node files, including this one, are inert and
+  disappear the same way. To change what a reader sees, change `reading`
+  (sensor-populated) or `success_signal.threshold`.
 
 
   `recovers` is the strategy→delegation edge: the ids of the delegation records

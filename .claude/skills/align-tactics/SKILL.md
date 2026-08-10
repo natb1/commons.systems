@@ -228,8 +228,13 @@ this session no longer re-types a `model:` at each subagent callsite.
 
 **Gather the input.** Read the strategy node's frontmatter (`readNode` via a
 small `tsx` one-liner, or just read the file — only the frontmatter is
-authoritative): `statement`, `rationale`, `success_signal`, `reading`, `gap`,
-`clarifications`, `attributes.conditions`, and `rounds`. Read its draft child
+authoritative): `statement`, `rationale`, `success_signal`, `reading`,
+`clarifications`, `attributes.conditions`, and `rounds`. `gap` is **not** a
+stored field — it is derived on every read via `deriveGap`
+(`packages/intentionsutil/src/sensors.ts`). Take the strategy's derived gap from
+the `=== Serving strategy ===` block the Idempotency section's census script
+prints (`npx tsx packages/intentionsutil/scripts/align-tactics-census.ts
+<strategy-id> intentions`); never read it off frontmatter. Read its draft child
 tactics (their bodies carry retained tactical context from `/align`)
 and its existing non-draft children — the Idempotency section's census script
 finds both, and its `classification` field tells a draft (`phase` absent **and**
@@ -245,7 +250,9 @@ Dump the base manifest for every pre-existing node this round will edit
 args = {
   mode:              "strategy",
   strategy: {
-    id, statement, rationale, success_signal, reading, gap,
+    id, statement, rationale, success_signal, reading,
+    derived_gap,                              // from the census `=== Serving strategy ===` block:
+                                              //   derived on read via deriveGap, never stored
     clarifications:  [ ... ],                 // the strategy's clarifications array
     conditions:      [ ... ],                 // attributes.conditions entries (Side-A drift)
     rounds:          { count, last_completed, last_aligned },

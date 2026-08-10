@@ -9,8 +9,9 @@ statement: An /align-tactics tactic-mode session's Workflow can complete cleanly
 owner: ai
 status: codified
 parent: null
-rationale: "Confirmed THREE times in one 08-01 investigation session, all the
-  same shape: (1) tactic-stale-hold-auto-resolve -- Workflow disposition
+rationale: >-
+  Confirmed THREE times in one 08-01 investigation session, all the same shape:
+  (1) tactic-stale-hold-auto-resolve -- Workflow disposition
   completed_with_fixes, 0 parks, plan landed at 668186a7, session died before
   mark-node-terminal, park cleared ab63dbda; (2) tactic-attention-boost-scripts
   -- plan landed earlier at c1773223, mark-node-terminal skipped, caught by a
@@ -29,12 +30,16 @@ rationale: "Confirmed THREE times in one 08-01 investigation session, all the
   pushed to a remote) AND the park cleared afterward, together, in that order --
   final clear 241489ee. Direct proof that 'clear the park' and 'reap the
   session' are two separate required actions, and doing only the first is a
-  no-op that gets re-undone by the same sweep that originally caught it."
+  no-op that gets re-undone by the same sweep that originally caught it.
+
+
+  Sizing note: this was sized by the round's Unit 3
+  (dispatch-terminal-gap-audit), not resolved at plan time -- the audit is a
+  re-runnable report-only script, not a one-time count. Run it post-merge per
+  the plan's Verification section and record the landed-then-skipped baseline in
+  this node's needs-main residue.
 reading: null
-gap: Sized by this round's Unit 3 (dispatch-terminal-gap-audit), not resolved at
-  plan time -- the audit is a re-runnable report-only script, not a one-time
-  count; run it post-merge per the plan's Verification section and record the
-  landed-then-skipped baseline in this node's needs-main residue.
+gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

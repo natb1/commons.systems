@@ -133,7 +133,6 @@ its correct default, so nothing is left to guess at runtime:
   "recovers": [],
   "rationale": "Auto-created by dispatch-diagnose-main on a failing main-health sensor read.",
   "reading": null,
-  "gap": null,
   "clarifications": [],
   "tooling_goals": [],
   "success_signal": {

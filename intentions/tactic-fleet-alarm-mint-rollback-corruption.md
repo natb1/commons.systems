@@ -7,15 +7,16 @@ statement: dispatch-fleet-alarm's mint-failure rollback can leave a corrupted
 owner: ai
 status: codified
 parent: null
-rationale: "Discovered 2026-08-01 while investigating why the fleet showed 0
-  busy workers for 6+ hours. Root cause: two untracked, 0-byte files —
+rationale: >-
+  Discovered 2026-08-01 while investigating why the fleet showed 0 busy workers
+  for 6+ hours. Root cause: two untracked, 0-byte files —
   intentions/tactic-fleet-alarm-busy-stall.md and
   intentions/tactic-fleet-alarm-watch-unknown.md — existed on disk in the main
   checkout (/home/n8/natb1/commons.systems) but were absent from git entirely
   (git ls-files empty, git status showed `??`).
   packages/intentionsutil/src/store.ts's listNodes() throws IntentionSchemaError
-  (\"missing an opening \\\"---\\\" frontmatter fence\") on ANY malformed file
-  in intentions/, uncaught, which crashes every caller that enumerates the whole
+  ("missing an opening \"---\" frontmatter fence") on ANY malformed file in
+  intentions/, uncaught, which crashes every caller that enumerates the whole
   directory — confirmed crashing dispatch-graph-main-red-sync (reported UNKNOWN
   instead of a real red-sync read) and strongly suspected of crashing
   dispatch-select-tick's node enumeration (routing-decisions.jsonl showed
@@ -26,39 +27,42 @@ rationale: "Discovered 2026-08-01 while investigating why the fleet showed 0
   tactic-fleet-watchdogs-session-scoped / PR #3008, whose broken systemd install
   this same investigation session had just repaired) calling
   dispatch-fleet-alarm to mint an alarm node for a detected busy-stall
-  condition, and dispatch-fleet-alarm's own log recorded \"minting
-  tactic-fleet-alarm-watch-unknown failed; the write was rolled back\" — i.e.
-  the script's OWN rollback path (dispatch-fleet-alarm lines 568-579: on
-  failure, restore_from_blob if a PRE_BLOB existed, else `rm -f \"$NODE_FILE\"
-  \"$NODE_FILE.tmp\"`) ran and still left a 0-byte file behind. Not yet pinned
-  to one exact line: write-node.ts's own writeNode() (store.ts:44-55) writes via
-  a single atomic writeFileSync of fully-assembled content, which should not
+  condition, and dispatch-fleet-alarm's own log recorded "minting
+  tactic-fleet-alarm-watch-unknown failed; the write was rolled back" — i.e. the
+  script's OWN rollback path (dispatch-fleet-alarm lines 568-579: on failure,
+  restore_from_blob if a PRE_BLOB existed, else `rm -f "$NODE_FILE"
+  "$NODE_FILE.tmp"`) ran and still left a 0-byte file behind. Not yet pinned to
+  one exact line: write-node.ts's own writeNode() (store.ts:44-55) writes via a
+  single atomic writeFileSync of fully-assembled content, which should not
   itself produce a 0-byte file, so the corruption's precise origin (a step
   before writeNode failing to have created anything yet contradicts the observed
   0-byte file existing at all; or the splice_body shell function at
-  dispatch-fleet-alarm:341-344, whose `{ awk ...; cat \"$BODY_FILE\"; } >
-  \"$NODE_FILE.tmp\" && mv \"$NODE_FILE.tmp\" \"$NODE_FILE\"` idiom
-  creates/truncates NODE_FILE.tmp via shell redirection regardless of whether
-  the awk/cat pipeline inside actually produced content, is the strongest
-  remaining suspect) needs a session with time to trace it with captured stderr
-  from a live failure, not reconstructed after the fact. Removing both stray
-  files (git status confirmed untracked, so deletion was purely a local
-  filesystem cleanup, no git history at risk) immediately fixed listNodes()
-  (verified: 468 nodes enumerate cleanly again) and is presumed but not yet
-  confirmed to have unstuck the fleet — the next tick's outcome is the actual
-  confirmation."
+  dispatch-fleet-alarm:341-344, whose `{ awk ...; cat "$BODY_FILE"; } >
+  "$NODE_FILE.tmp" && mv "$NODE_FILE.tmp" "$NODE_FILE"` idiom creates/truncates
+  NODE_FILE.tmp via shell redirection regardless of whether the awk/cat pipeline
+  inside actually produced content, is the strongest remaining suspect) needs a
+  session with time to trace it with captured stderr from a live failure, not
+  reconstructed after the fact. Removing both stray files (git status confirmed
+  untracked, so deletion was purely a local filesystem cleanup, no git history
+  at risk) immediately fixed listNodes() (verified: 468 nodes enumerate cleanly
+  again) and is presumed but not yet confirmed to have unstuck the fleet — the
+  next tick's outcome is the actual confirmation.
+
+
+  Still unconfirmed as of this record: (1) the exact code path that leaves the
+  0-byte file despite the rollback branch executing (splice_body's
+  redirection-before-pipeline-check idiom is the leading suspect but unverified
+  against a live repro); (2) whether this was the ROOT cause of the 6h
+  busy-stall or a compounding secondary failure that started ~2h16m after the
+  stall began (busy-stall counter read 22515s since epoch 1785555951 =
+  2026-08-01T03:45:51Z; the corrupted files' mtime was 2026-08-01T06:01:08Z) --
+  the earlier gap (03:45Z-06:01Z) has a separate, still-unexplained cause; (3)
+  whether the fleet actually resumed dispatching after this session removed the
+  corrupted files, or whether some other blocker remains -- check the next
+  tick's routing-decisions.jsonl entries and BUSY count once enough time has
+  passed.
 reading: null
-gap: "Not yet confirmed: (1) the exact code path that leaves the 0-byte file
-  despite the rollback branch executing (splice_body's redirection-before-
-  pipeline-check idiom is the leading suspect but unverified against a live
-  repro); (2) whether this was the ROOT cause of the 6h busy-stall or a
-  compounding secondary failure that started ~2h16m after the stall began
-  (busy-stall counter read 22515s since epoch 1785555951 = 2026-08-01T03:45:51Z;
-  the corrupted files' mtime was 2026-08-01T06:01:08Z) — the earlier gap
-  (03:45Z-06:01Z) has a separate, still-unexplained cause; (3) whether the fleet
-  actually resumed dispatching after this session removed the corrupted files,
-  or whether some other blocker remains — check the next tick's
-  routing-decisions.jsonl entries and BUSY count once enough time has passed."
+gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -92,6 +96,7 @@ execution:
     since: 2026-08-01
     attempt: 2
     pushed_sha: 0f907409486ebab29008069e86a63aeecc799bfc
+  conflict: null
   completion:
     mergedAt: 2026-08-03T02:45:58Z
     mergeCommitSha: 6fcfd6931c2143334598a0fbdcd1d9025cdd8645
