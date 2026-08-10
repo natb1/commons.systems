@@ -109,12 +109,21 @@ fs_teardown() {
         DISPATCH_DECISION_LOG_DIR DISPATCH_STANDDOWN_DIR || true
 }
 
-# fs_write_park_node <exit-code> [sleep-seconds] — install the fake park-node: it
-# appends its argc, each positional argument, and the inherited
-# GRAPH_COMMIT_LOCK_WAIT_SECONDS to the log, optionally sleeps (to exercise the
-# `timeout` bound), then exits <exit-code>.
+# fs_write_park_node <exit-code> [sleep-seconds] [landing-mode] — install the
+# fake park-node: it appends its argc, each positional argument, and the
+# inherited GRAPH_COMMIT_LOCK_WAIT_SECONDS to the log, optionally sleeps (to
+# exercise the `timeout` bound), then — for a zero exit code — LANDS the park
+# on origin/main (default `land`; `none` exits 0 with no write, modeling the
+# `graph-commit` exit-0-but-nothing-landed shape frozen_session_sweep's own
+# verify-landed confirmation regression-tests), then exits <exit-code>.
+#
+# The landing half mirrors td_write_park_node's (this same file), added
+# because frozen_session_sweep now confirms every rc-0 park against
+# origin/main via verify-landed instead of trusting the exit code — a fake
+# that only exits 0 would model a park-node that returned success without
+# landing, which is no longer enough to be COUNTED as a park.
 fs_write_park_node() {
-  local sleep_s="${2:-0}"
+  local rc="$1" sleep_s="${2:-0}" mode="${3:-land}"
   cat > "$FS_PARK" <<PARK
 #!/usr/bin/env bash
 {
@@ -123,7 +132,23 @@ fs_write_park_node() {
   printf 'LOCK=%s\n' "\${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-unset}"
 } >> "$FS_PARKLOG"
 sleep $sleep_s
-exit $1
+if [ "$rc" = 0 ] && [ "$mode" != none ]; then
+  # Same leading-flags-only skip as the sweep's own park-node invocation, so
+  # this fake survives a changed flag set ahead of the node id.
+  while [ "\$#" -gt 0 ]; do
+    case "\$1" in
+      --*) shift 2 ;;
+      *) break ;;
+    esac
+  done
+  node="\$1"
+  f="$FS_REPO/intentions/\$node.md"
+  sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  since: 2026-01-01\n  recommendation: null/' "\$f"
+  git -C "$FS_REPO" add -A
+  git -C "$FS_REPO" commit -q -m 'fake park-node: land'
+  git -C "$FS_REPO" update-ref refs/remotes/origin/main HEAD
+fi
+exit $rc
 PARK
   chmod +x "$FS_PARK"
 }
@@ -156,14 +181,23 @@ fs_write_node() {
   # so `f=".../$id.md"` on the same line would read an unset $id under `set -u`.
   local id="$1" kind="$2"
   local f="$FS_REPO/intentions/$id.md"
+  # `statement`/`owner`/`status` are the IntentionSchema's required core
+  # (schema.ts validateNode) — present on every fixture below so a
+  # verify-landed jq-mode confirmation (readNodeAtRef, which validates
+  # strictly) can actually read these nodes rather than throwing on a missing
+  # required field.
   case "$kind" in
     parked)
       cat > "$f" <<NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 office_hours:
   reason: parked earlier by something else
+  since: 2026-01-01
   recommendation: null
 ---
 
@@ -178,6 +212,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 office_hours: null
 ---
 
@@ -192,6 +229,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 office_hours: null
 ---
 
@@ -647,6 +687,22 @@ cat >/dev/null
   printf 'ARGC=%s\n' "\$#"
   for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
 } >> "$FS_PARKLOG"
+# LANDS the park, exactly like fs_write_park_node's default 'land' mode, so
+# the sweep's verify-landed confirmation counts it — this test is about the
+# stdin-drain hazard, not about the confirmation step, so it must not
+# incidentally exercise the not-landed branch.
+while [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --*) shift 2 ;;
+    *) break ;;
+  esac
+done
+node="\$1"
+f="$FS_REPO/intentions/\$node.md"
+sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  since: 2026-01-01\n  recommendation: null/' "\$f"
+git -C "$FS_REPO" add -A
+git -C "$FS_REPO" commit -q -m 'fake park-node: land'
+git -C "$FS_REPO" update-ref refs/remotes/origin/main HEAD
 exit 0
 PARK
 chmod +x "$FS_PARK"
@@ -710,6 +766,43 @@ assert_eq "stale-frozen: stderr does NOT report a park failure" "no" \
   "$(fs_contains 'park failed for tactic-stale-frozen')"
 assert_eq "stale-frozen: the decision record says stale-diagnosis" "stale-diagnosis" "$(fs_log_dispositions)"
 assert_eq "stale-frozen: summary counts zero parks" "yes" \
+  "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
+fs_teardown
+
+# --- Test: park-node exits 0 but nothing landed (frozen sweep) ---------------
+#
+# THE regression test for this sweep's landing confirmation. `park-node` lands
+# through `graph-commit`, which pushes to origin/main — and invariant I2 says a
+# `graph-commit` exit 0 is NEVER evidence that anything reached origin/main (it
+# can exit 0 after a push that never made it). Counting the exit code as a park
+# reports work the graph does not carry: the node stays unparked, nothing shows
+# up in office hours, and the summary claims otherwise.
+#
+# The fake park-node's `none` mode is exactly that shape: exit 0, no write. The
+# sweep must re-read origin/main via verify-landed, refuse to count it, and say
+# so distinctly. (Unlike terminal_without_disposition_sweep below, this sweep
+# owns no escalation markers, so there is nothing for it to keep — what it must
+# not do is COUNT the park; the marker-retention half of the property is
+# asserted by the terminal sweep's own not-landed tests.)
+
+echo "Test: park-node exits 0 but origin/main still shows office_hours: null → not counted (frozen sweep)"
+fs_setup
+fs_write_park_node 0 0 none
+fs_write_node "tactic-frozen-notlanded" unparked
+fs_commit_nodes
+fs_write_transcript "0ccc-2222" $(( FS_NOW - 4000 ))
+fs_add_session "0ccc-2222" "tactic-frozen-notlanded" "blocked"
+fs_install_claude 0
+fs_run
+assert_eq "frozen-notlanded: sweep returns 0" "0" "$FS_RC"
+assert_eq "frozen-notlanded: park-node was invoked" "1" "$(fs_park_calls)"
+assert_eq "frozen-notlanded: stderr carries the distinct park-not-landed line" "yes" \
+  "$(fs_contains 'park-not-landed for tactic-frozen-notlanded — park-node exited 0 but origin/main still shows no office_hours')"
+assert_eq "frozen-notlanded: it is NOT reported as a park" "no" \
+  "$(fs_contains 'parked tactic-frozen-notlanded (denied-command-frozen')"
+assert_eq "frozen-notlanded: the decision record says park-not-landed" "park-not-landed" \
+  "$(fs_log_dispositions)"
+assert_eq "frozen-notlanded: the summary counts zero parks" "yes" \
   "$(fs_contains 'sweep complete (blocked=1 parked=0 observing=0 unmeasurable=0 deferred=0)')"
 fs_teardown
 
@@ -855,7 +948,7 @@ f="$TD_REPO/intentions/\${node}.md"
 # 1. Land a concurrent writer's SPECIFIC park FIRST — the guard-to-write
 # window this fix closes. Distinctive sentinels let the test assert the exact
 # text survived, not just that some office_hours block exists.
-sed -i 's/^office_hours: null\$/office_hours:\n  reason: RACE_SENTINEL_REASON_7f3a\n  recommendation: RACE_SENTINEL_RECOMMENDATION_9c2e/' "\$f"
+sed -i 's/^office_hours: null\$/office_hours:\n  reason: RACE_SENTINEL_REASON_7f3a\n  since: 2026-01-01\n  recommendation: RACE_SENTINEL_RECOMMENDATION_9c2e/' "\$f"
 git -C "$TD_REPO" add -A
 git -C "$TD_REPO" commit -q -m 'fake park-node: race concurrent writer'
 git -C "$TD_REPO" update-ref refs/remotes/origin/main HEAD
@@ -897,7 +990,7 @@ if [ "$rc" = 0 ] && [ "$mode" != none ]; then
   node="\$1"
   f="$TD_REPO/intentions/\$node.md"
   case "$mode" in
-    land)   sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  recommendation: null/' "\$f" ;;
+    land)   sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  since: 2026-01-01\n  recommendation: null/' "\$f" ;;
     body)   printf '\noffice_hours:\n  reason: a BODY line, not frontmatter\n' >> "\$f" ;;
     delete) rm -f "\$f" ;;
   esac
@@ -939,12 +1032,20 @@ FAKE
 td_write_node() {
   local id="$1" kind="$2"
   local f="$TD_REPO/intentions/$id.md"
+  # `statement`/`owner`/`status` are the IntentionSchema's required core
+  # (schema.ts validateNode) — present on every fixture below so a
+  # verify-landed jq-mode confirmation (readNodeAtRef, which validates
+  # strictly) can actually read these nodes rather than throwing on a missing
+  # required field. `phase` is not part of the schema and is ignored by it.
   case "$kind" in
     done)
       cat > "$f" <<NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 phase: done
 office_hours: null
 ---
@@ -957,9 +1058,13 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 phase: qa
 office_hours:
   reason: parked earlier by something else
+  since: 2026-01-01
   recommendation: null
 ---
 
@@ -971,6 +1076,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 phase: qa
 office_hours: null
 ---
@@ -986,6 +1094,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-frozen-session-park tests
+owner: ai
+status: working
 phase: qa
 office_hours: null
 ---

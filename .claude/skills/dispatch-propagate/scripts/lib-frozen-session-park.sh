@@ -432,6 +432,19 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       return 0
     fi
 
+    # verify-landed — the shared primitive that confirms a park actually landed
+    # on origin/main after park-node's rc-0 (see step (10) below). Resolved from
+    # THIS FILE's own on-disk location (`_lfsp_dir`), not from `$repo_root`
+    # (the repo being SWEPT, which in tests is a bare scratch fixture with no
+    # `node_modules`): verify-landed's own header explains why it must run out
+    # of its OWN checkout (for `npx tsx`/`node --import tsx/esm` to resolve)
+    # while taking the repo to inspect as a `-C` argument. This is the opposite
+    # split from `park-node` above, which deliberately DOES execute out of
+    # `$repo_root` because it WRITES (a provenance requirement that does not
+    # apply to a read-only primitive). A missing/non-executable copy just falls
+    # back to "not landed" at the call site (fail-safe).
+    local verify_landed="$_lfsp_dir/../../../../packages/intentionsutil/scripts/verify-landed"
+
     # The stand-down interlock's second signal (see the header): the set of node
     # names with two or more LIVE sessions. Computed once, from the same
     # registry read the candidate list came from (snapshot-backed inside a
@@ -660,9 +673,50 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
         "$timeout_bin" "$park_timeout" "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
       if (( rc == 0 )); then
-        parked_count=$(( parked_count + 1 ))
-        printf 'lib-frozen-session-park: parked %s (denied-command-frozen after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
-        _frozen_session_log_decision "$name" "$sid" "$idle" "parked"
+        # Confirm the park actually LANDED before counting it. `park-node` lands
+        # through `graph-commit`, and invariant I2 is explicit that a
+        # `graph-commit` exit 0 is never evidence that anything reached
+        # `origin/main` — so the exit code alone does not get to authorize
+        # counting this as a park. Re-read the node from a freshly fetched
+        # `origin/main` via the shared `verify-landed` primitive (three-valued:
+        # `unknown` is never treated as landed, same fail-safe direction as
+        # `terminal_without_disposition_sweep`'s step (13) below). The fetch is
+        # mandatory here, not latched with step (6)'s: the park just run is
+        # exactly what made this checkout's `origin/main` stale, so a
+        # confirmation read against the pre-park ref would report every park as
+        # not-landed. `--no-fetch` on the verify-landed call itself: this
+        # explicit fetch is the one that counts against the sweep's fetch
+        # budget, so verify-landed must not fetch a second time.
+        git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+        # The node id and the predicate are SEPARATE arguments (`--node` /
+        # `--jq`). A concatenated `"${name}@..."` spec let an id containing `@`
+        # become jq source — an id ending in `@true #` comments out the
+        # predicate and forges `landed` for any node — and `$name` here comes
+        # from a session name, not from this file. The id is charset-checked
+        # first so a malformed one is NOT counted as a park (verify-landed would
+        # exit 2, which is already treated as not-landed, but the local check
+        # names the reason).
+        local landed=0 vl_rc=0
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
+            >/dev/null 2>&1 || vl_rc=$?
+          (( vl_rc == 0 )) && landed=1
+        fi
+        if (( landed )); then
+          parked_count=$(( parked_count + 1 ))
+          printf 'lib-frozen-session-park: parked %s (denied-command-frozen after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
+          _frozen_session_log_decision "$name" "$sid" "$idle" "parked"
+        else
+          # Exit 0, but nothing landed (or verify-landed itself could not
+          # determine the outcome — `unknown` is never counted as landed). Loud
+          # and distinctly greppable: the park is NOT counted, and the next
+          # tick's own diagnosis-time read decides whether to retry.
+          printf 'lib-frozen-session-park: park-not-landed for %s — park-node exited 0 but origin/main still shows no office_hours on intentions/%s.md; graph-commit exit 0 is not evidence a write landed (I2)\n' \
+            "$name" "$name" >&2
+          _frozen_session_log_decision "$name" "$sid" "$idle" "park-not-landed"
+        fi
       elif (( rc == 3 )); then
         # NOT a park failure. park-node refused the compare-and-swap because the
         # node changed on origin/main after this sweep read it — it is already
@@ -965,6 +1019,14 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
       return 0
     fi
+
+    # verify-landed — the shared primitive step (13) below uses to confirm a
+    # park actually landed on origin/main. Resolved from `_lfsp_dir` (see the
+    # identical comment on frozen_session_sweep's copy above), not from
+    # `$repo_root`, for the same reason: verify-landed needs its OWN
+    # checkout's tsx/node_modules, and takes the repo it inspects as `-C`. A
+    # missing/non-executable copy just falls back to "not landed" (fail-safe).
+    local verify_landed="$_lfsp_dir/../../../../packages/intentionsutil/scripts/verify-landed"
 
     # The lazy-fetch latch: at most one `git fetch` per sweep invocation, and
     # none at all when no candidate ages past the grace.
@@ -1334,33 +1396,42 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         # `graph-commit`, and invariant I2 says a `graph-commit` exit 0 is never
         # evidence that anything reached `origin/main` — so the exit code alone
         # does not get to authorize deleting the session's escalation markers,
-        # which are the only surviving copy of its own escalation text. Re-read
-        # the node from origin/main and require `office_hours` to be non-null
-        # there; marker deletion is the PROOF the park landed, not a cleanup step
-        # that trusts an exit code (see the header).
+        # which are the only surviving copy of its own escalation text. Marker
+        # deletion is the PROOF the park landed, not a cleanup step that trusts
+        # an exit code (see the header). DELETING THE ESCALATION MARKERS ON A
+        # BARE EXIT 0 WOULD CONVERT A RECOVERABLE FAILURE INTO AN UNRECOVERABLE
+        # ONE: the markers are the only surviving copy of the session's own
+        # escalation text, so losing them on an unconfirmed park strands the
+        # node held-and-unparked with nothing left to retry from. That is why
+        # the confirmation below, not the exit code, gates the `rm -f` further
+        # down.
         #
-        # The fetch is mandatory here, not latched with step (6)'s: the park we
-        # just ran is exactly what made this checkout's `origin/main` stale, so a
+        # Delegates to the shared `verify-landed` primitive (three-valued:
+        # landed/not-landed/unknown, `unknown` never collapsed into `landed` —
+        # see that script's own header, which cross-references this rationale)
+        # rather than re-deriving the git-show/awk/grep check inline. The fetch
+        # is mandatory here, not latched with step (6)'s: the park we just ran
+        # is exactly what made this checkout's `origin/main` stale, so a
         # confirmation read against the pre-park ref would report every park as
-        # not-landed. A failed fetch is non-fatal and falls through to a stale
-        # read, which reads as NOT LANDED — the fail-safe direction.
+        # not-landed. It is done explicitly by this sweep (not by verify-landed
+        # itself, called with `--no-fetch`) so it counts against this sweep's
+        # own documented fetch budget; a failed fetch is non-fatal and falls
+        # through to a stale read, which verify-landed reports as `unknown` —
+        # the fail-safe direction, since `unknown` is never `landed`.
         git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
 
-        # Same frontmatter-scoped idiom as step (8), in the OPPOSITE polarity:
-        # there it answers "was this already parked before we touched it", here
-        # "did OUR park land". Non-null under the YAML fences is the only thing
-        # that counts as landed; a null value, a missing `office_hours` key, and
-        # an unreadable/absent node file are all NOT landed. The frontmatter
-        # scoping is load-bearing for the same reason it is there: a column-0
-        # `office_hours:` line in the markdown BODY must never certify a park.
-        local landed=0 confirm_body confirm_frontmatter
-        if confirm_body=$(git -C "$repo_root" show "origin/main:intentions/${name}.md" 2>/dev/null); then
-          confirm_frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$confirm_body")
-          if grep -q '^office_hours:' <<<"$confirm_frontmatter"; then
-            if ! grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$confirm_frontmatter"; then
-              landed=1
-            fi
-          fi
+        # Separate `--node` / `--jq` arguments, and a charset check on the id
+        # first: see the denied-command sweep's fuller note at its own
+        # verify-landed call. Here the stake is higher — a forged `landed` is
+        # what authorizes the `rm -f` of this session's only escalation copy
+        # below — so a malformed id must fail closed, keeping the markers.
+        local landed=0 vl_rc=0
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$; KEEPING the escalation markers\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
+            >/dev/null 2>&1 || vl_rc=$?
+          (( vl_rc == 0 )) && landed=1
         fi
 
         if (( landed )); then
