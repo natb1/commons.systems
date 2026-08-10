@@ -1,144 +1,163 @@
 # rsi-plan
 
-> Maintained by the `/rsi` skill (single writer, serialized, direct-pushed to
-> main — see `strategy-recursive-self-improvement` condition 5). This is a
-> **derived dashboard**: the graph is the sole tracker, and every task below
-> references a graph node. Eventually integrates into the office-hours GUI.
+> **Generated file — do not hand-edit.** Rendered by `packages/intentionsutil/scripts/render-rsi-plan.ts` on 2026-08-10 from the intention store at `origin/main` (`0f2e1412`).
 >
-> **Target state (2026-08-10 review round): fully rendered.** Every section of
-> this file is produced by `render-rsi-plan.ts` from graph state — the three
-> queue summaries land first as dated readings on their owning strategy nodes
-> and render from there; a hand-edited section is a defect (strategy
-> condition 5).
->
-> **Bootstrap draft, authored 2026-08-10** by the `/align` round that recorded
-> `strategy-recursive-self-improvement` (hand-authored, permitted only until
-> `render-rsi-plan.ts` exists). The first real `/rsi` iteration (bootstrapped
-> from the compacted authoring session) re-derives every number.
+> Single writer: the `/rsi` skill, serialized on the `strategy-recursive-self-improvement` worktree claim, direct-pushed to main (`strategy-recursive-self-improvement` condition 5). The graph is the sole tracker — every section here is derived, and a hand-edited section is a defect. To change what this file says, change the graph and re-render.
 
 ## 1. Top author priorities
 
-| priority | owner |
-|---|---|
-| Main stays green (`strategy-main-health`, tier 3 — structurally outranks all) | dispatch |
-| **Bootstrap a stable graph-native dispatch workflow** (`strategy-graph-native-dispatch`) — WIP for several weeks since the gh-issue workflow was sunset | **rsi-plan (primary)** + dispatch |
-| Token economy — allowance converts to closed tactics (`strategy-token-economy`) | dispatch; rsi evaluates each iteration (context, model choice, redundant work, repeated errors) |
-| Bootstrap the rsi skill family itself (`strategy-recursive-self-improvement`) | rsi-plan |
-| The wider strategy portfolio (grounding, curriculum, income lanes, apps) | dispatch, post-bootstrap |
+Ordered by the graph's own attention resolution — effective tier first, then
+composed rank (`resolveAttention`, `src/attention.ts`). No hand-ranking: to
+move an item, author an `attention` boost or a tier on its node.
 
-## 2. Dispatch-delegated priorities — status and expected completion
+| # | tier | rank | strategy | open / total tactics |
+|---|---|---|---|---|
+| 1 | 3 | 1.0 | `strategy-main-health` — origin/main stays green: a continuously releasable trunk, red episodes self-healing throu… | 0 / 4 |
+| 2 | 1 | 8.0 | `strategy-graph-review-curriculum` — The entire graph is subject to a recurring, ever-expanding office-hours review curriculum… | 0 / 0 |
+| 3 | 1 | 6.3 | `strategy-graph-native-dispatch` — Dispatch runs on the graph — orchestration state lives in intention nodes, worked through… | 46 / 236 |
+| 4 | 1 | 4.2 | `strategy-attention-surface` — Office hours runs on the graph — one local-first surface (status signals and goals explor… | 11 / 18 |
+| 5 | 1 | 2.0 | `strategy-author-approved-copy` — Author approval gates all outward-facing copy — user-, practitioner-, collaborator-, and… | 0 / 0 |
+| 6 | 1 | 1.8 | `strategy-own-audience` — Own the audience relationship — readers connect by feed and webmention, not by platform a… | 1 / 5 |
+| 7 | 1 | 1.8 | `strategy-recover-attention` — Recover attention allocation with owned reading and listening tools | 0 / 1 |
+| 8 | 1 | 1.8 | `strategy-recover-discovery` — Recover discovery and filtering — own what reaches the attention queue | 0 / 1 |
+| 9 | 1 | 1.8 | `strategy-recover-publishing` — Publish creative work on owned infrastructure, IndieWeb-style | 0 / 4 |
+| 10 | 1 | 1.7 | `strategy-recover-finance` — Recover financial visibility with owned, local-first budgeting | 1 / 5 |
 
-Dispatch is **PAUSED** (author directive 2026-08-10, sentinel file); healing
-sweeps still run; hand-dispatch only. Five resume criteria are recorded in the
-N+11 bootstrap plan and mirrored in §6 task R4.
+## 2. Dispatch queue — delegated priorities
 
-| item | node | status (2026-08-10) | expected completion |
-|---|---|---|---|
-| REAPGATE — reap gate refuses provably-safe branches; blocks ALL reaping | `tactic-reap-safety-behind-branch-false-positive` (#3052) | all 3 blockers `done`; PR MERGEABLE/CLEAN; node in hand-dispatched qa | merge within ~1–2 days; then sweep reaps 7 held sessions / 47 worktrees with no operator action |
-| Landing-signal reliability — `graph-commit` can exit 0 landing nothing | `tactic-graph-commit-landing-signal-unreliable` (#3050) | `phase: review`, MERGEABLE/CLEAN | days; retires interim invariants I2/I14/I20 |
-| WAIT-class main-qa release calendar | `tactic-wait-calendar-release` (#3051) | `phase: review`, MERGEABLE/CLEAN | days; owns 17 parked main-qa nodes |
-| Backlog band | graph-wide | 26.2% of 233 (threshold 35%), non-increasing 4 samples | holding |
-| Remaining raw tactics | ~deferred set | author ruling 2026-08-05: fleet decomposes them; no `/align-tactics` fan-out | post-unpause |
+**dispatch queue summary** (drafted 2026-08-10, source of truth `strategy-graph-native-dispatch`):
 
-## 3. Critical office-hours parked nodes
+Paused under rsi pause authority; the tick's merge lane still runs, so review-phase nodes keep landing while nothing new is selected. Backlog is 58/236 = 24.6%, inside the recorded 35% band and non-increasing across the 28d series (47.6% then 38.2% then 31.4% then 24.6%). The queue's mass is in verification rather than construction — 31 of the 58 open nodes sit in qa or main-qa against 12 in implement — so resuming adds implement-phase arrivals to a queue whose bottleneck is downstream of them, and the band alone is not the resume test. Resume is gated on R4's five recorded criteria, re-measured at the time of the decision and never lifted early without recording why.
 
-Canonical view: `npx tsx packages/intentionsutil/scripts/office-hours-select.ts
---list` — parked blockers are already rank-lifted from what they block (I30);
-do not hand-roll this list.
+Backlog band: **24.6%** (58/236 tactics serving `strategy-graph-native-dispatch`; recorded threshold 35% and non-increasing).
 
-| parked node | blocks |
-|---|---|
-| `tactic-session-reap-authorization-durability` (D2, born-parked) | dispatch doctrine (reap authorization durability); the last author-bound sitting item |
-| `tactic-hold-conflict-strategy-fingerprint-stamp-coverage` (unclaimed hold; Lane-3 pass launched 2026-08-10) | top-10 work via `blocked_by`; structurally unclaimable — human-initiated only |
-| `tactic-hold-conflict-autonomous-ci-pending-liveness-bound` (unclaimed hold; second gate: `tactic-flake-preview-and-smoke-dpkg-lock`) | same |
-| `tactic-hold-fix-cap-qa-fix-node-terminal-declaration` (unclaimed hold) | QAFIXDECL ratchet chain |
-| `tactic-fleet-alarm-node-park-clobber-loop` (ALARMLOOP, born-parked) | awaits an author choice between two exclusive fixes; continuous failing write load meanwhile |
-| 27 `blocked_by` edges onto parked nodes (18 blocked live nodes) | **expected behavior** (author ruling 2026-08-10 / I30) — a health number, not a defect |
+| phase | count | nodes |
+|---|---|---|
+| `implement` | 12 | `tactic-dispatch-stop-backstop-comment`, `tactic-graph-auto-merge-up-to-date-gate`, `tactic-graph-ref-split`, `tactic-legacy-office-hours-entry-removal`, `tactic-node-ancestry-context`, `tactic-node-merge-list-removal-l… |
+| `main-qa` | 18 | `tactic-align-tactics-mark-terminal-skipped`, `tactic-align-tactics-tactic-mode-drift-gate`, `tactic-conflict-outranks-ci-precedence`, `tactic-decision-log-append-noncompact-corruption`, `tactic-graph-auto-merge-office-… |
+| `qa` | 13 | `tactic-align-session-claiming-liveness-correction`, `tactic-autonomous-ci-pending-liveness-bound`, `tactic-blocked-session-invisible-to-census`, `tactic-bounded-work-in-progress`, `tactic-census-scripted-tick`, `tactic… |
+| `review` | 3 | `tactic-graph-commit-landing-signal-unreliable`, `tactic-reap-safety-behind-branch-false-positive`, `tactic-wait-calendar-release` |
+
+## 3. Office-hours queue — parked nodes on the critical path
+
+**office-hours queue summary** (drafted 2026-08-10, source of truth `strategy-attention-surface`):
+
+156 parked nodes, of which 6 are rank-lifted from work they block and 150 are not; 16 live nodes are held by a blocked_by edge onto a park. The critical path is the lifted set — clearing those 6 releases named work — but rank alone does not order this queue: the highest-ranked park (tactic-drain-disposition-diagnosis-cas, 90.3, parked since 2026-07-28) outranks every lifted one and blocks nothing. Two provision-conflict holds (tactic-hold-conflict-autonomous-ci-pending-liveness-bound and tactic-hold-conflict-scope-fingerprint-plan-substance) have no autonomous re-attempt path — nothing re-runs conflict Lane 3 against an existing hold — so they persist until a session is launched by hand. A third, tactic-hold-conflict-strategy-fingerprint-stamp-coverage, resolved this way on 2026-08-10 and its source is now in qa.
+
+Canonical source: `office-hours-select.ts --list`, read at the same ref as the
+rest of this render. Parked blockers are already rank-lifted from what they
+block — the `blocks` column names the source a park inherited its rank from,
+which is what makes it critical-path. Never hand-roll this list.
+
+| rank | type | parked node | since | blocks |
+|---|---|---|---|---|
+| 55.3 | other | `tactic-graph-tick-node-lane-auto-merge` | 2026-08-05 | `tactic-graph-auto-merge-up-to-date-gate` |
+| 25.3 | other | `tactic-hold-conflict-autonomous-ci-pending-liveness-bound` | 2026-08-09 | `tactic-autonomous-ci-pending-liveness-bound` |
+| 25.3 | other | `tactic-hold-fix-cap-qa-fix-node-terminal-declaration` | 2026-08-09 | `tactic-qa-fix-node-terminal-declaration` |
+| 17.3 | other | `tactic-hold-residue-bounded-work-in-progress` | 2026-08-10 | `tactic-bounded-work-in-progress` |
+| 5.3 | other | `tactic-clarification-citation-ids` | 2026-08-10 | `tactic-graph-ref-split` |
+| 5.3 | other | `tactic-delegation-classification-derivation` | 2026-08-10 | `tactic-graph-ref-split` |
+| 90.3 | other | `tactic-drain-disposition-diagnosis-cas` | 2026-07-28 | — |
+| 61.3 | other | `tactic-lane-instrument-substitution-guard` | 2026-07-31 | — |
+| 55.3 | other | `tactic-node-merge-list-removal-loss` | 2026-07-31 | — |
+| 55.3 | other | `tactic-phase-terminal-requires-disposition` | 2026-08-05 | — |
+| 55.3 | other | `tactic-qa-main-park-base-cas` | 2026-07-31 | — |
+| 50.0 | other | `tactic-attention-tier-ranking` | 2026-08-03 | — |
+| 25.3 | other | `tactic-conflict-lane-exit11-retry-bound` | 2026-08-03 | — |
+| 25.3 | other | `tactic-conflict-outranks-ci-precedence` | 2026-08-03 | — |
+| 25.3 | other | `tactic-dispatch-config-untracked-pace-curve` | 2026-08-05 | — |
+| 25.3 | other | `tactic-probe-unknown-never-clear` | 2026-08-05 | — |
+
+Showing every rank-lifted park (6) and the top 10 of 150 unlifted parks by rank. The remaining **140** are not shown here — `npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list` is the full queue.
+
+Parked total: **156**, of which **6** are rank-lifted from a blocked source. Live nodes held by a `blocked_by` edge onto a parked node: **16**.
 
 ## 4. Metrics
 
-Subset of graph signals; each carries a review threshold. Target
-implementation: sensors registered in the graph's existing
-success_signal/readings machinery on their owning strategies, rendered here by
-`render-rsi-plan.ts` (strategy condition 8 — never a parallel registry).
+Every graph signal whose `success_signal.sensor` name is REGISTERED in the
+read-sensors registry (`scripts/read-sensors.ts`) — i.e. every signal that is
+actually measured, with a threshold to be measured against. This is a subset of
+graph signals rendered from the existing readings machinery, never a parallel
+metric registry (`strategy-recursive-self-improvement` condition 8). Registering a new rsi metric
+means adding a sensor there and naming it on the owning node.
 
-**Fitness function (strategy clarification 10):** rsi optimizes value
-delivered by the combined dispatch + office-hours + rsi system toward author
-goals — closure velocity plus strategy signal progress, per token, attributed
-per workflow. Greenfield expectation: dispatch spend significantly outpaces
-office-hours and rsi; a deviation is a review trigger.
+**Fitness function.** rsi optimizes the value the combined dispatch +
+office-hours + rsi system delivers toward author intentions — closure velocity
+plus strategy signal progress, per token, attributed per workflow. Greenfield
+expectation: dispatch spend significantly outpaces office-hours and rsi; a
+deviation from that is itself a review trigger, not a datum to note and pass.
 
-| metric | value (2026-08-10 12:12 EDT) | review threshold |
-|---|---|---|
-| backlog band (open + born-parked share of `strategy-graph-native-dispatch` tactics) | 26.2% (61/233), falling | >35% or increasing across samples |
-| done count | 79 (77 baseline same day) | stalling across iterations |
-| pause state | **paused** (sentinel) | paused with any resume criterion unmet >1 week |
-| held-for-debug sessions | 7 (`reaped=0 skipped=7`) | >3, or any held session with a MERGED PR |
-| worktrees / job dirs | 47 / 33 | count trending up |
-| parked critical-path count (rank-lifted NOTE lines) | 3 unclaimed holds + D2 | any parked node blocking top-tier work >1 week |
-| bug-J (unlanded parks) | clean | any hit |
-| fleet-watch findings | 1 (`unclaimed-hold`, latched by design) | any finding other than known-latched |
-| open PRs | 29 | growing while merges stall |
+| node | reading | threshold | gap |
+|---|---|---|---|
+| `strategy-exercise-recovery-paths` | exercised: 4/22 records; 18 null last_exercised; review_trigger firing not recorded (sensor read 2026-08-10) | no record's last_exercised is null, and no fired review_trigger is left unactioned | shortfall |
+| `strategy-graph-drives-dispatch` | serves: 121/121 open tactics; readings: 19/53 sensor-naming strategies (45 unregistered sensors) | every open tactic carries a non-empty serves edge and sensor-run readings exist for every strategy that names a sensor | shortfall |
+| `strategy-graph-native-dispatch` | lifecycle: tactic-gap-derive-on-read implement→qa→review→done (2026-08-10); router selections: 2374 records, 281 nodes; backlog: 58/236 = 24.6% (band ≤35%); backlog series 28d: 47.6% → 38.2% → 31.4% → 24.6% (non-increas… | the owned path carries tactics through the full lifecycle continuously, and the machinery's own open defect backlog — open (phase set, not done) plus born-parked tactics serving t… | shortfall |
+| `strategy-main-health` | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | **met** |
+| `strategy-owned-web-platform` | dependency-audit: 27 runtime deps, 0 unjustified, 1 dead-upstream | zero unjustified runtime dependencies and no unreviewed dependency growth between office-hours reviews | shortfall |
+| `strategy-realign-attachments` | high-divergence: 5 records; 4 covered by recovers; uncovered: delegation-communications (sensor read 2026-08-10) | every high-divergence record is covered by a recovers edge or a recorded re-alignment | shortfall |
+| `strategy-recursive-self-improvement` | pause: paused; backlog: 58/236 = 24.6% (band ≤35%); parked: 156 (21 blocking); worktrees: 54; tokens 7d: dispatch 91% / office-hours 0% / rsi 0% / other 9% | dispatch runs unpaused with the recorded resume criteria held, strategy-graph-native-dispatch's own 35% non-increasing band holds, and consecutive rsi iterations complete with zer… | shortfall |
+| `strategy-token-economy` | utilization: 27% weekly; tactics 28d: 310 created / 226 closed (net +84) | utilization near 100% of the weekly allowance while open claude-eligible tactics are non-increasing (closure at or above arrival); full utilization with a growing backlog fails th… | shortfall |
+| `tactic-main-red-ac908454` | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | **met** |
+
+**Per-workflow token attribution** — *unavailable.* No usage aggregate was
+read for this render. `/rsi-plan` produces one with
+`.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh --days 7
+--json-out tmp/usage-audit.json` before rendering. An absent aggregate is
+reported, never rendered as zero spend.
 
 ## 5. Recommended additional telemetry
 
-- **CONFLICTBLIND** (open follow-up, no node yet): the free-retry tier
-  (`CONFLICT_STRIKE_CAP=5`) leaves zero graph record of self-resolved
-  conflicts — every count is holds *created*, never conflicts *encountered*.
-  File the instrument as a tactic.
-- **Sweep observability** (I28 / `tactic-invalid-state-lane-diagnostics-unobservable`):
-  sweep summary counters name no node and no reason; adjacent-line reading is
-  operator lore, not telemetry.
-- **Blocked-session census** (I22 / `tactic-blocked-session-invisible-to-census`):
-  `HELD_FOR_DEBUG_COUNT` sees only terminal sessions.
-- **rsi-plan refresh automation**: everything in §4 should be one script run
-  (`/rsi-plan` delegates to scripts); hand-measured numbers rot.
+The graph's own record of instrumentation it wants and does not yet have:
+every `tooling_goals` entry of `kind: sensor`, with its owning node. A gap
+belongs here by being authored on the node that feels it — not by being
+listed here.
+
+| owning node | sensor goal |
+|---|---|
+| `strategy-attention-surface` | local signal adapters mapping non-versioned files (budget .benc, office-hours snapshot, pace telemetry, analytics exports) to their owning strategies' signals |
+| `strategy-autonomous-execution` | a managed dispatch daemon liveness sensor that reports whether the lingering dispatch-claude-daemon.service is up and ticking unattended, distinguishing it from a transient (--origin transient) daemon spawned by an interactive claude agent… |
+| `strategy-complete-grounding` | grounding gap analysis — tick-runnable: enumerate durable-layer nodes (virtue, strategy, kind, delegation) carrying neither attributes.traditions nor attributes.grounding, ranked by deference/capture exposure (delegation divergence level,… |
+| `strategy-data-structure-first` | README–graph alignment guard — CI floor checking every referenced node/file exists and retired-construct terms are absent; curriculum enrollment carries the judgment layer |
+| `strategy-firebase-demo-saas` | a firebase-import reachability audit distinguishing live consumers (production surface or demo) from dead code |
+| `strategy-graph-drives-dispatch` | frontier-view renders the resolved ranking |
+| `strategy-graph-integrity` | graph-digest.ts — token-bounded whole-graph digest: per-node summary lines plus derived check tables (tactic-graph-digest-tooling) |
+| `strategy-graph-mounts` | derived-degree computation — motivation flow across each mount boundary, compared against the record's hand-assessed level, with disagreement surfaced as a review signal |
+| `strategy-graph-native-dispatch` | lifecycle telemetry from the store itself — phase transition history and round counts readable from node state |
+| `strategy-graph-review-curriculum` | review-coverage table in the graph digest / align-audit report — per durable-layer node: mode, review path, last reviewed (tactic-review-curriculum-coverage-sensor) |
+| `strategy-graph-self-description` | CI drift guard comparing what schema.ts enforces (fields, rules, enums) against what the kind nodes declare |
+| `strategy-owned-web-platform` | a dependency-justification audit over the workspace manifests — every third-party runtime dependency carries a recorded justification, with upstream liveness reported alongside |
+| `strategy-philosophical-grounding` | office-hours reading-review skill — run one curriculum chunk's demonstration at office-hours as periagoge, never implantation: probe from the text before any account of Claude's appears, let the author articulate and commit first, surface… |
+| `strategy-token-economy` | token-audit aggregate with node-id attribution — weekly allowance utilization plus per-node/per-phase spend and yield, joined by the intention node id (extends /dispatch-token-audit) |
+| `strategy-token-economy` | velocity series — claude-eligible tactics created vs closed per strategy subtree (shared with strategy-autonomous-execution via tactic-attention-surface-velocity-pace) |
+| `strategy-verified-requirements` | map-integrity validator — per-clause verification-encoding coverage and mapped-suite health, wired into CI and the read-sensors run, status derived on read (tactic-requirement-map-integrity-validator) |
 
 ## 6. RSI task plan
 
-Budget semantics: `/rsi-implement` costs 1; other tasks cost 0 unless
-specified; default session budget 1.
+**rsi queue summary** (drafted 2026-08-10, source of truth `strategy-recursive-self-improvement`):
 
-**Bootstrap sequence (goal a — stable graph-native dispatch ASAP):**
+R2 shipped — /rsi, /rsi-plan, render-rsi-plan.ts and the claim primitive landed in #3065 — so this file is rendered from graph state rather than transcribed from a session's measurements. This iteration corrected two defects that only the first real render could expose: the renderer dropped the bug-ledger pointer, now carried as graph data in attributes.external_ledgers and rendered as section 7; and the rsi sensor had silently de-registered when 47219a1a reworded this node's success_signal.sensor prose, which the registry matches character-for-character. R3 (tactic-rsi-implement-skill, cost 1) is the next task and the only queued one that spends budget. rsi tasks are never dispatch-delegated — the rsi session executes them itself, serialized on this strategy's worktree claim.
 
-- **R1** (cost 0) — Land the `/align` round recording
-  `strategy-recursive-self-improvement` + 5 draft tactics + this file.
-  *Status: this session.*
-- **R2** (cost 1, hand-orchestrated bootstrap) — Build `/rsi` + `/rsi-plan`
-  (`tactic-rsi-skill`, `tactic-rsi-plan-skill`): iteration loop with
-  claim-primitive serialization, `render-rsi-plan.ts`, sensor registration in
-  the existing readings machinery, queue summaries as readings, per-workflow
-  token attribution.
-- **R3** (cost 1) — Build the rsi-implement loop inside `/rsi`
-  (`tactic-rsi-implement-skill`): spawned dispatch phase sessions via
-  `dispatch-graph-execute` / `dispatch-spawn-job`, reused verbatim — no
-  extraction, no separate subskills. The `/dispatch-*` renames
-  (`tactic-dispatch-skill-standards-extraction`, re-scoped) are low priority
-  and land when the queue is stable.
-- **R4** (cost 0, recurring) — Watch REAPGATE (#3052) through tick-merge; then
-  re-measure the five resume criteria; **un-pause dispatch when all hold**
-  (rsi pause/resume authority, resume criteria recorded — never lift early
-  without recording why).
-- **R5** (cost 0) — Surface the critical parked set (§3) for office-hours:
-  D2, ALARMLOOP, the unclaimed holds. rsi surfaces; the author disposes.
-- **R6** (cost 1) — `tactic-rsi-direct-push-condition-reconcile`: amend
-  `strategy-graph-native-dispatch`'s direct-push condition (requires
-  orthogonal re-stamp classification of open children).
-- **R7** (cost 0) — File the CONFLICTBLIND instrument tactic (§5).
+Every task is a graph node serving `strategy-recursive-self-improvement` — the graph is the
+sole tracker, so a task that is not a node does not exist. Budget: a session's
+default is 1; a task costs what its `attributes.rsi_cost` says (default 0).
+Execution continues until the budget is exhausted.
 
-**Recursive loop (goal b):** once R2–R3 land, each `/rsi` invocation runs
-step 1 (`/rsi-plan` refresh) → optional step 2 (`/align` escalation) → step 3a
-(draft tactics) or 3b (execute tasks to budget), and this section is
-re-derived every iteration — completed tasks removed, missing critical tasks
-added.
+| task | cost | phase | state | statement |
+|---|---|---|---|---|
+| `tactic-dispatch-skill-standards-extraction` | 0 | — | draft | Rename the dispatch skill family for uniform /dispatch-* naming — /align-tactics to /dispatch-plan, /qa-fix t… |
+| `tactic-review-tradition-agentic-engineering` | 0 | — | born-parked (parked) | Office-hours review sitting: verify tradition-agentic-engineering — the already-load-bearing claim, the initi… |
+| `tactic-rsi-implement-skill` | 1 | — | draft | Build the rsi-implement orchestration loop in /rsi — serially drive a claimed node through the existing dispa… |
+| `tactic-rsi-plan-skill` | 0 | done | done | Build the /rsi-plan rendering skill and render-rsi-plan.ts — regenerate rsi-plan.md from graph state, draft t… |
+| `tactic-rsi-research-skill` | 0 | — | draft | Build the /rsi-research skill and its weekly harness-cron schedule — the scheduled /deep-research sensor lane… |
+| `tactic-rsi-skill` | 0 | done | done | Build the /rsi skill — the serialized recursive-self-improvement iteration loop |
 
-## Bug ledger reference
+## 7. External operational ledgers
 
-The open bug ledger lives in the graph (see §2–§3 nodes) and, during
-bootstrap, in the N+11 monitor plan
-(`~/.claude/plans/task-notification-task-id-bwopwgmr1-tas-lucky-parasol.md`)
-whose ledger table names: REAPGATE, CONFLICTBLIND, QAMAINDECL, QAFIXDECL,
-SILENTSKIP, BLOCKEDSESS, PACEBLIND, ALARMLOOP, LANEBLIND, SWEEPCAS, RMDECLINE,
-LAND, WAIT, REAPDUR, TERMDECL, PROBE, PACECFG, SCOPE, STAMP, DEADPATH, AF, AG,
-recon-window. Graph nodes are authoritative; the plan file is bootstrap
-context only and is superseded as `/rsi-plan` scripts absorb its probes.
+Records that are still load-bearing and still live outside the graph. Each
+is a bootstrap carry: read it before acting on the operational layer, and
+retire the entry — by deleting it from `attributes.external_ledgers` on
+`strategy-recursive-self-improvement` — once the graph carries what it carries. Do not
+delete the file itself while its entry stands.
+
+- `~/.claude/plans/task-notification-task-id-bwopwgmr1-tas-lucky-parasol.md`
+  — Prototype-session operating record. Still the sole carrier for the numbered operational invariants I13-I30, the graph-write and --base CAS recipes, the reap traps, and the sandbox rules — this graph carries the strategy, not the operations. Most STANDING invariants are independently held in the session memory store (I13, I16, I18, I21, I24, I25); the residue is not (I15, I22's exact form, I27, I28, I29, I30). Retire this entry once that residue lands as graph nodes or memories, and do not delete the file while the entry stands.

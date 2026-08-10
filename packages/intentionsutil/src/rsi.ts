@@ -85,6 +85,24 @@ export interface QueueSummary {
 }
 
 /**
+ * A pointer to an operational record that lives OUTSIDE the graph — read from
+ * `attributes.external_ledgers` on the rsi strategy.
+ *
+ * These exist only during bootstrap. A prototype session's plan file can carry
+ * invariants, write recipes, and traps that no graph node has absorbed yet;
+ * until they are absorbed, that file is load-bearing and the rendered plan must
+ * say where it is. Recording the pointer as graph data rather than as renderer
+ * prose means supersession is a graph edit — delete the entry and the section
+ * stops rendering — instead of a code change.
+ */
+export interface ExternalLedger {
+  /** Filesystem path to the record. Rendered verbatim. */
+  path: string;
+  /** What it still carries that the graph does not, and what would retire it. */
+  note: string;
+}
+
+/**
  * One parked row as emitted by `office-hours-select.ts --list`. `note` carries
  * the selector's `NOTE —` advisory verbatim when the row has one: that line is
  * how a rank-LIFTED park declares the blocked source it inherited its rank
@@ -187,6 +205,31 @@ export function queueSummaryOf(node: IntentionNode | undefined): QueueSummary | 
   if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   if (typeof summary !== "string" || summary.trim() === "") return null;
   return { date, summary: summary.trim() };
+}
+
+/**
+ * The external operational ledgers recorded on a strategy node, or `[]` when
+ * the field is absent, malformed, or empty.
+ *
+ * An empty result is the terminal state, not an error: it means every ledger
+ * has been absorbed into the graph. So absence renders nothing and raises no
+ * flag — unlike a missing queue summary, which is a gap the judgment step must
+ * see. Individual malformed entries are skipped rather than aborting the render,
+ * on the same reasoning as `queueSummaryOf`.
+ */
+export function externalLedgersOf(node: IntentionNode | undefined): ExternalLedger[] {
+  if (node === undefined) return [];
+  const raw = node.attributes.external_ledgers;
+  if (!Array.isArray(raw)) return [];
+  const out: ExternalLedger[] = [];
+  for (const entry of raw) {
+    if (!isPlainObject(entry)) continue;
+    const { path, note } = entry;
+    if (typeof path !== "string" || path.trim() === "") continue;
+    if (typeof note !== "string" || note.trim() === "") continue;
+    out.push({ path: path.trim(), note: note.trim() });
+  }
+  return out;
 }
 
 /**
@@ -398,6 +441,7 @@ export function renderRsiPlan(input: RsiRenderInput): RsiRender {
   out.push(...renderMetrics(input, flags));
   out.push(...renderTelemetry(nodes));
   out.push(...renderTaskPlan(nodes, byId, generatedAt, flags));
+  out.push(...renderLedgers(byId));
 
   return { markdown: `${out.join("\n").replace(/\n+$/, "")}\n`, flags };
 }
@@ -811,4 +855,35 @@ function renderTaskPlan(
     ...rows,
     "",
   ];
+}
+
+// --- §7 ---------------------------------------------------------------------
+
+/**
+ * Pointers to operational records the graph has not absorbed yet.
+ *
+ * Omitted entirely when there are none — the section's absence IS the statement
+ * that the graph is self-sufficient. This is the one section whose disappearance
+ * is a result rather than a defect, so it renders last, after everything derived.
+ */
+function renderLedgers(byId: Map<string, IntentionNode>): string[] {
+  const ledgers = externalLedgersOf(byId.get(RSI_STRATEGY_ID));
+  if (ledgers.length === 0) return [];
+
+  const out = [
+    "## 7. External operational ledgers",
+    "",
+    "Records that are still load-bearing and still live outside the graph. Each",
+    "is a bootstrap carry: read it before acting on the operational layer, and",
+    "retire the entry — by deleting it from `attributes.external_ledgers` on",
+    "`" + RSI_STRATEGY_ID + "` — once the graph carries what it carries. Do not",
+    "delete the file itself while its entry stands.",
+    "",
+  ];
+  for (const ledger of ledgers) {
+    out.push(`- \`${ledger.path}\``);
+    out.push(`  — ${ledger.note}`);
+  }
+  out.push("");
+  return out;
 }
