@@ -1286,13 +1286,25 @@ export function makeIntentionStoreSensor(
 // Every segment degrades independently to `unknown` and never throws (the
 // total-sensor contract at the top of this file).
 
-/** The verbatim `success_signal.sensor` name strategy-recursive-self-improvement declares. */
+/**
+ * The verbatim `success_signal.sensor` name strategy-recursive-self-improvement
+ * declares.
+ *
+ * The registry matches this against the node's prose character-for-character, so
+ * any `/align` round that rewords the sensor field silently de-registers this
+ * sensor — the node stops getting a reading and only shows up in read-sensors'
+ * "skipped (unregistered sensor)" tail, which already runs 52 entries deep. That
+ * is exactly what happened when the research lane was appended in `47219a1a`;
+ * the trailing clause below is that amendment. Re-read the node's sensor field
+ * before trusting a null reading here.
+ */
 export const RSI_SENSOR_NAME =
   "the rsi-plan.md metrics section — sensors registered in the graph's existing " +
   "success_signal/readings machinery on their owning strategies (backlog band, " +
   "parked critical-path count, held-session/worktree census, pause state), " +
   "rendered by render-rsi-plan.ts each iteration, plus per-workflow token " +
-  "attribution across dispatch, office-hours, and rsi";
+  "attribution across dispatch, office-hours, and rsi; plus the research lane's " +
+  "weekly dated readings on this strategy (research-cycle landings)";
 
 /**
  * Dispatch pause state, delegated to the canonical shell helper
