@@ -57,7 +57,25 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: |-
+    standdown-winner-dead-work-unpushed: a session stood down for this node in favour of winner session (unattributed — observed duplicate, no winner declared), which is no longer registered with the Claude daemon (crash, OOM, API error, or classifier denial). The stand-down is unconditional on the winner living, so the standing-down session(s) 2ed76dcf-9c1f-496a-8ddd-6b1bcdcf5e5c are still waiting on a session that no longer exists, and the winner left work UNPUSHED in /home/n8/natb1/commons.systems/.claude/worktrees/tactic-decision-log-append-noncompact-corruption. Unpushed head (origin/main..HEAD): 7aa9f008 Merge remote-tracking branch 'origin/main' into tactic-decision-log-append-noncompact-corruption
+    abc82995 Merge remote-tracking branch 'origin/main' into tactic-decision-log-append-noncompact-corruption
+    77434da9 review fixes for tactic-decision-log-append-noncompact-corruption
+  since: 2026-08-10
+  recommendation: "Find the holding job with 'claude agents --all' and attach it
+    ('claude attach <job-id>') to see where it stopped. If the worktree at
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-decision-log-append\
+    -noncompact-corruption has unpushed commits, verify them and push them from
+    there FIRST. To release the holding session use 'claude stop <job-id>' —
+    NEVER 'claude rm', which deletes the session AND its worktree, destroying
+    any unpushed work still in the shared worktree. Once the work is safe and
+    the session is stopped, run 'clear-park
+    tactic-decision-log-append-noncompact-corruption' to return the node to the
+    lane. Accepted residual: while a live session still holds the node-id
+    session name, office-hours reports this node as 'all-held' rather than
+    launching a review session for it — that is expected, not a bug."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
