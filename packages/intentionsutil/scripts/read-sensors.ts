@@ -957,7 +957,7 @@ function readExerciseRecoveryPathsReading(dir: string): string {
 /**
  * True when a `kind: delegation` node's `attributes.divergence.level` (trimmed,
  * lowercased) starts with `"high"`. Defensively parsed — missing or malformed
- * `divergence`/`level` is treated as NOT high-divergence rather than throwing,
+ * `divergence`/`level` is treated as not high-divergence rather than throwing,
  * mirroring this file's existing defensive-attributes precedent (`src/attention.ts:89-107`).
  */
 function isHighDivergence(node: IntentionNode): boolean {

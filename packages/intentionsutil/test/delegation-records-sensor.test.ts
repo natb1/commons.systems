@@ -230,7 +230,7 @@ function delegationWithDivergence(
 ): IntentionNodeInput {
   const base = delegationNode(id);
   const attributes: Record<string, unknown> = {
-    ...(base.attributes as Record<string, unknown>),
+    ...base.attributes,
     ...(divergenceLevel === undefined ? {} : { divergence: { level: divergenceLevel } }),
     ...attributesOverride,
   };
