@@ -25,7 +25,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-first-sensor-pass
   pr: 3062
@@ -33,13 +33,17 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint:
     strategy-graph-drives-dispatch:
       hash: 99227b632204950956b9eb8f36c3837b121261ccba95dd830e863947c12a3802
       sha: c64859d398cbebfdabfa69c97e527b27f3ed71be
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T12:31:17Z
+    mergeCommitSha: f1e634f7547b8576ff11cb80b77b5ee72d6e1847
+    graphCommitSha: null
 validates:
   - strategy-graph-drives-dispatch
 blocked_by: []
