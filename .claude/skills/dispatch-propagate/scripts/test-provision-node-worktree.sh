@@ -71,6 +71,16 @@ git -C "$MAIN_WT" commit -q -m "seed"
 git -C "$MAIN_WT" push -q -u origin main
 mkdir -p "$MAIN_WT/.claude/worktrees"
 
+# provision-node-worktree now materializes its OWN intentions/ snapshot via
+# `git archive origin/main intentions` (tactic-graph-execute-fresh-main-read
+# Unit 2) — origin/main needs a tracked intentions/ tree for that archive to
+# succeed, even though the npx shim below never reads its contents.
+mkdir -p "$MAIN_WT/intentions"
+echo "placeholder" >"$MAIN_WT/intentions/.gitkeep"
+git -C "$MAIN_WT" add intentions/.gitkeep
+git -C "$MAIN_WT" commit -q -m "seed intentions/"
+git -C "$MAIN_WT" push -q origin main
+
 export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
 
 # Copy the SUT and its sourced libs so "$SCRIPT_DIR/<name>" inside the copy
@@ -78,6 +88,7 @@ export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
 cp "$SCRIPT_DIR/provision-node-worktree" "$SUT_DIR/provision-node-worktree"
 cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$SUT_DIR/lib-graph-worktree.sh"
 cp "$SCRIPT_DIR/lib-worktree-residue.sh" "$SUT_DIR/lib-worktree-residue.sh"
+cp "$SCRIPT_DIR/lib-main-snapshot.sh" "$SUT_DIR/lib-main-snapshot.sh"
 chmod +x "$SUT_DIR/provision-node-worktree"
 
 # dispatch-ci-ready stub: the CI gate is not under test here.
@@ -431,5 +442,30 @@ assert_eq "case13 exit 14" "14" "$PROV_RC"
 assert_contains "case13 stderr names wrong-branch" "wrong-branch" "$PROV_STDERR"
 assert_eq "case13 foreign branch still checked out, untouched" "$FOREIGN_HEAD13" \
   "$(git -C "$WT13" rev-parse HEAD)"
+
+# ==========================================================================
+# Case 14: successful provision writes the snapshot-provenance sidecar
+# (tactic-graph-execute-fresh-main-read Unit 2) — <node-id>.snapshot-provenance
+# next to the .scope-fingerprint sidecar, valid JSON, .sha matching
+# origin/main, .fetchedAt non-null.
+# ==========================================================================
+echo "Case 14: successful provision writes .snapshot-provenance sidecar"
+id14="prov-case-snapshot-sidecar"
+TIP14=$(git -C "$MAIN_WT" rev-parse origin/main)
+make_plain_branch "$id14" "$TIP14"
+
+run_prov "$id14"
+assert_eq "case14 exit 0" "0" "$PROV_RC"
+SIDECAR14="$MAIN_WT/.claude/worktrees/$id14.snapshot-provenance"
+assert_eq "case14 sidecar file exists" "yes" "$([[ -f "$SIDECAR14" ]] && echo yes || echo no)"
+SIDECAR14_JSON=$(cat "$SIDECAR14")
+SIDECAR14_VALID=$(jq -e . >/dev/null 2>&1 <<<"$SIDECAR14_JSON" && echo yes || echo no)
+assert_eq "case14 sidecar is valid JSON" "yes" "$SIDECAR14_VALID"
+SIDECAR14_SHA=$(jq -r '.sha' <<<"$SIDECAR14_JSON")
+EXPECTED14_SHA=$(git -C "$MAIN_WT" rev-parse origin/main)
+assert_eq "case14 sidecar .sha equals origin/main" "$EXPECTED14_SHA" "$SIDECAR14_SHA"
+SIDECAR14_FETCHED_AT=$(jq -r '.fetchedAt' <<<"$SIDECAR14_JSON")
+assert_eq "case14 sidecar .fetchedAt is non-null" "yes" \
+  "$([[ -n "$SIDECAR14_FETCHED_AT" && "$SIDECAR14_FETCHED_AT" != "null" ]] && echo yes || echo no)"
 
 report_results
