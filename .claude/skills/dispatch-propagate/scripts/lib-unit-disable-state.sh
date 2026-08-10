@@ -75,11 +75,42 @@
 #   rm ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer
 #   systemctl --user enable --now dispatch-fleet-watch.timer   # or wait for the next reseed
 #
+# Inventory the sentinels actually in effect (the FIRST check to run — it is
+# the only one that answers "is anything disabled here?" without depending on
+# any dispatch process still running; the journal check below goes silent when
+# every timer that would log is itself disabled):
+#   ls -1 ~/.local/share/commons-dispatch/disabled/ 2>/dev/null
+#   # → one line per manually-disabled unit. A name here you did not put here
+#   #   means someone else disarmed that timer — including, if the name is
+#   #   dispatch-heal.timer or dispatch-fleet-watch.timer, the unit-poisoning
+#   #   healer or the fleet watchdog. An empty listing (or a missing directory)
+#   #   means no unit is manually disabled.
+#
 # Confirm a disable is being honored (works in steady state, not only on the
 # reseed cycle that rewrites the unit files):
-#   journalctl --user -t dispatch-schedule-reseed --since '-1h' | grep 'skipping enable --now'
+#   journalctl --user -t dispatch-tick -t dispatch-heal-units --since '-1h' \
+#     | grep 'skipping enable --now'
 #   # → "...is marked manually disabled (<sentinel path>); unit files already
 #   #    current, skipping enable --now"   — and NO `WARNING:` for this unit.
+#
+#   The identifiers are `dispatch-tick` and `dispatch-heal-units`, NOT
+#   `dispatch-schedule-reseed`: the notice is written to stderr by
+#   unit_disable_skip_notice (lib.sh) inside ensure_healer_units /
+#   ensure_watcher_units, and journald labels the stream with the SERVICE's
+#   identifier, which children inherit. Those installers run either under the
+#   reseed path — `dispatch-schedule-reseed` and
+#   `dispatch-schedule-convergence-reseed` are child processes of
+#   `dispatch-select-tick`/`dispatch-tick`, and the transient units the reseed
+#   creates ExecStart `dispatch-tick` — or under the healer's own unit
+#   (`SyslogIdentifier=dispatch-heal-units`, lib.sh). No unit anywhere sets
+#   `SyslogIdentifier=dispatch-schedule-reseed`, so grepping that identifier
+#   returns empty output whether a disable is in effect or not — it cannot
+#   distinguish "honored" from "nothing logged".
+#
+#   Absent output here is NOT evidence that nothing is disabled: if the
+#   disabled timers are the ones whose runs would emit the notice, there is
+#   nothing left to log it. Use the sentinel inventory above as the
+#   state-of-record.
 # Only ensure_healer_units and ensure_watcher_units consult this sentinel; the
 # other ensure_*_units installers in lib.sh do not.
 #
