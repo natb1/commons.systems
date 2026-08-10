@@ -28,7 +28,12 @@ rationale: "The graph-native dispatch bootstrap has been in flight for several
   execution path; rsi exists to keep that path viable and improving, including
   where harness implementation of itself would deadlock. Goals: (a) accelerate
   bootstrap of a stable graph-native dispatch workflow; (b) establish a
-  recursive workflow for ongoing harness optimization and improvement."
+  recursive workflow for ongoing harness optimization and improvement. (Amended
+  2026-08-10 research-lane round: a scheduled /rsi-research sensor lane — weekly
+  /deep-research over the author-ratified seed texts of
+  tradition-agentic-engineering — feeds the fit-function evaluation with
+  external hypotheses; sensor-only, author-gated incorporation, recorded in the
+  clarifications and conditions of that date.)"
 reading: null
 serves:
   - virtue-progressive-detachment
@@ -155,7 +160,60 @@ clarifications:
       office-hours conduct when rsi-implement throws — assume the author is
       present; unattended recursion is the harness's job, and an unattended rsi
       would be a materially different, riskier design requiring its own
-      interview."
+      interview. (Amended 2026-08-10 research-lane round: this binds the /rsi
+      loop proper. The scheduled /rsi-research sensor lane is not /rsi — it
+      executes nothing, judges nothing, and writes only inert output for
+      author-gated incorporation — so its weekly cron schedule does not
+      contradict this answer; see the research-lane clarification of that
+      date.)"
+  - question: How does scheduled /deep-research extend rsi (the research lane)?
+    answer: "(Recorded 2026-08-10 interview.) A scheduled sensor lane,
+      /rsi-research, runs weekly via harness cron: it claims the
+      strategy-recursive-self-improvement worktree (fail-closed against a live
+      /rsi — the same worktree-as-claim serialization), runs /deep-research over
+      the seed texts recorded on tradition-agentic-engineering, and writes ONLY
+      inert output in one graph-commit: (1) a dated reading on this strategy —
+      rendered into rsi-plan.md by render-rsi-plan.ts, satisfying the
+      fully-rendered condition; (2) born-parked candidate curriculum chunks for
+      reading-worthy sources, in the grounding-research step-3 convention,
+      reviewed at office-hours sittings; (3) draft tactics for concrete
+      fit-function opportunities, serving this strategy, consumed by /rsi's
+      judgment step. New candidate seeds the research discovers follow the
+      curriculum's recursive-frontier rule: named in the cycle's reading as
+      candidates, promoted to the tradition record's texts only by author
+      ratification. The lane never writes grounding marks, never edits tradition
+      records or graph doctrine, and never executes work — the sensor/actuator
+      split of the grounding-gap precedent (autonomous sensor, author-gated
+      actuator). Skill build tracked at tactic-rsi-research-skill."
+  - question: Steelman — should fit-function optimization be endogenous-only (own
+      telemetry), external crawling being fashion-import and vocabulary capture?
+    answer: "(Adopted-in-part and diverged 2026-08-10, reasons recorded.) Adopted:
+      endogenous primacy — own telemetry (transcripts, token audits, closure
+      velocity, the readings machinery) stays the primary fit-function input,
+      and an external finding never outranks a measured internal signal:
+      findings are hypotheses to test against own telemetry, never directives.
+      Diverged from exclusivity: an individual-scale harness cannot rediscover
+      the frontier alone, so external findings enter — but every entry is
+      author-gated. Capture note: the lane has a self-curation bias — Claude
+      curates what the author reads about optimizing Claude's own harness (the
+      same framing-risk shape as strategy-graph-review-curriculum's capture
+      note). Mitigations are existing machinery: the seed list is
+      author-ratified on tradition-agentic-engineering, incorporation is
+      author-gated, and the selection-bias audit capstone /reading-review mints
+      covers the record."
+  - question: How is the scheduled lane reconciled with
+      strategy-complete-grounding's condition that /deep-research sourcing stays
+      author-invoked?
+    answer: "(Recorded 2026-08-10 interview.) Read as scoped: that condition governs
+      grounding-mark sourcing in complete-grounding's own workflow — the tick
+      never runs /deep-research to write grounding marks — and the rsi research
+      lane writes no grounding marks and no tradition-record content, so it does
+      not enter that workflow. The scoping is carried here as a recorded,
+      bounded reading, with tactic-grounding-deep-research-condition-reconcile
+      queued to narrow that condition's wording explicitly at
+      complete-grounding's next edit round — the same pattern as
+      tactic-rsi-direct-push-condition-reconcile, avoiding an open-child freeze
+      classification on a sibling strategy mid-bootstrap."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -165,7 +223,9 @@ success_signal:
     existing success_signal/readings machinery on their owning strategies
     (backlog band, parked critical-path count, held-session/worktree census,
     pause state), rendered by render-rsi-plan.ts each iteration, plus
-    per-workflow token attribution across dispatch, office-hours, and rsi
+    per-workflow token attribution across dispatch, office-hours, and rsi; plus
+    the research lane's weekly dated readings on this strategy (research-cycle
+    landings)
   threshold: dispatch runs unpaused with the recorded resume criteria held,
     strategy-graph-native-dispatch's own 35% non-increasing band holds, and
     consecutive rsi iterations complete with zero critical-path blockers
@@ -232,9 +292,31 @@ attributes:
       parallel metric registry; rsi-plan.md renders readings, and registering an
       rsi metric reduces the graph's standing unregistered-sensor gap rather
       than adding a side system
-    - /rsi is an attended, author-invoked loop — never scheduled or cron-driven;
-      unattended recursion is the harness's job, and the interactive limbs (the
-      /align escalation, the office-hours conduct on an rsi-implement throw)
-      exist precisely because the author is present
+    - "/rsi is an attended, author-invoked loop — never scheduled or
+      cron-driven; unattended recursion is the harness's job, and the
+      interactive limbs (the /align escalation, the office-hours conduct on an
+      rsi-implement throw) exist precisely because the author is present —
+      scoped 2026-08-10: this binds the /rsi loop proper; the scheduled
+      /rsi-research sensor lane (weekly, sensor-only, author-gated
+      incorporation) is not /rsi and is governed by the research-lane conditions
+      below"
+    - "the research lane is sensor-only: a scheduled /rsi-research run writes
+      only inert output — one dated reading on this strategy, born-parked
+      candidate curriculum chunks, and draft tactics — and never grounding
+      marks, tradition-record edits, graph-doctrine edits, or work execution;
+      every incorporation of a finding is author-gated (curriculum sitting, /rsi
+      judgment step, or /align), and the lane's token spend stays small relative
+      to dispatch under the existing per-workflow attribution — spend
+      approaching dispatch is itself a review trigger"
+    - the research lane runs weekly via harness cron invoking /rsi-research,
+      independent of the dispatch pause state (its output is inert, and research
+      continuing while dispatch is paused is the bootstrap case rsi exists for);
+      each run claims the strategy-recursive-self-improvement worktree
+      fail-closed against a live /rsi session, the same worktree-as-claim
+      serialization as /rsi itself
+    - "the research lane's unread pool stays bounded: research-produced
+      born-parked items (candidate chunks, review items) accumulating across
+      cycles without an office-hours sitting is a review trigger recorded in the
+      rsi-plan, never silent debt"
 ---
 # A serialized recursive self-improvement loop — /rsi — evaluates the harness each iteration, maintains rsi-plan.md as the author-facing status/plan surface, and shortcuts critical-path work that blocks model execution of author intention
