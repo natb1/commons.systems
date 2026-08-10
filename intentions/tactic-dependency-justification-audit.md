@@ -178,3 +178,32 @@ sensor `read()` returns a string (does not throw) on a simulated read error.
 Manual: at the next office-hours review, confirm the audit output is a usable
 review artifact (the reading names every unjustified dep and every dead
 upstream) — this is the "reviewed at office-hours" half of the sensor.
+
+## needs-main residue
+
+### 10. Three unrelated strategy readings were rewritten as a batch side effect
+- URL path: current
+- Expected outcome: the `read-sensors.ts` batch driver's rewrite of other
+  strategies' `reading`/`gap` fields — a side effect of registering the new
+  dependency-audit sensor, inherent to the batch driver running all registered
+  sensors — reflects accurate, non-corrupted sensor output when read against
+  merged main, not stale or nonsensical data.
+- Finding: planned-deferral — `read-sensors.ts` writes ALL registered sensors'
+  readings by design; separating them would require a per-sensor run mode that
+  is out of this PR's scope. Confirmed live during QA: re-running
+  `npx tsx packages/intentionsutil/scripts/read-sensors.ts` rewrote 8
+  `intentions/*.md` files (`strategy-exercise-recovery-paths`,
+  `strategy-graph-drives-dispatch`, `strategy-graph-native-dispatch`,
+  `strategy-main-health`, `strategy-owned-web-platform`,
+  `strategy-realign-attachments`, `strategy-token-economy`,
+  `tactic-main-red-ac908454`), most beyond this PR's own scope, with numeric
+  readings that shift each run against live graph state (e.g.
+  `strategy-graph-drives-dispatch`'s tactic count moved from the PR's committed
+  82/82 to a live 126/126 by QA time). Those reproduction changes were
+  reverted locally, not committed. Only verifiable against merged main since
+  the asserted values are inherently time-varying.
+- Verifiability: MACHINE
+- Check: `npx tsx packages/intentionsutil/scripts/read-sensors.ts` against
+  merged main; confirm `strategy-owned-web-platform`'s reading is a
+  `dependency-audit: ...` line (not a `read error —` fallback) and that no
+  other sensor's rewritten reading looks corrupted or malformed.
