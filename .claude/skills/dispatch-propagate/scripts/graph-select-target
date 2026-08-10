@@ -539,7 +539,10 @@ done
 # --- Report the WIP bound (every invocation, even when unset) -----------------
 # So in-flight count is observable from the first tick with no config written.
 WIP_JSON=$(jq -c '.wip' <<<"$SELECTION" 2>/dev/null) || WIP_JSON="null"
-echo "graph-select-target: wip in_flight=$(jq -r '.in_flight // "?"' <<<"$WIP_JSON") limit=$(jq -r 'if .limit == null then "unset" else .limit end' <<<"$WIP_JSON") restricted=$(jq -r '.restricted // "?"' <<<"$WIP_JSON") bypassed=$(jq -r '.bypassed // "?"' <<<"$WIP_JSON") failed_open=$(jq -r '.failed_open // "?"' <<<"$WIP_JSON")" >&2
+# restricted/failed_open use an explicit null test rather than jq's `//`
+# operator: `//` treats JSON `false` as absent, which would misrender a
+# legitimate `false` as "?".
+echo "graph-select-target: wip in_flight=$(jq -r '.in_flight // "?"' <<<"$WIP_JSON") limit=$(jq -r 'if .limit == null then "unset" else .limit end' <<<"$WIP_JSON") restricted=$(jq -r 'if .restricted == null then "?" else (.restricted | tostring) end' <<<"$WIP_JSON") bypassed=$(jq -r '.bypassed // "?"' <<<"$WIP_JSON") failed_open=$(jq -r 'if .failed_open == null then "?" else (.failed_open | tostring) end' <<<"$WIP_JSON")" >&2
 
 # --- Environmental gates, in selection order -----------------------------------
 # The native node-id worktree location (<project-root>/.claude/worktrees/<id>;

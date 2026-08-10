@@ -1185,6 +1185,8 @@ assert_eq "graph-select-target wip: absent config still selects as usual" \
   "node tactic-wip-fixture tactic implement" "$gscwc_out"
 assert_eq "graph-select-target wip: absent config passes NO --wip-limit to select-targets.ts" \
   "0" "$(grep -q -- "--wip-limit" "$GSCW_ROOT/npx-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target wip: the stderr summary renders restricted/failed_open as literal false, not ?" \
+  "1" "$(grep -q -F "graph-select-target: wip in_flight=0 limit=unset restricted=false bypassed=0 failed_open=false" "$GSCW_ROOT/gscw.err" && echo 1 || echo 0)"
 gsc_wip_teardown
 
 # ============================================================================
