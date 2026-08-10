@@ -54,13 +54,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-native-signal-instrument-arm
   pr: 3060
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   conflict: null
@@ -516,3 +517,13 @@ Manual / judgment checks:
   `git show origin/main:intentions/strategy-graph-native-dispatch.md`. Confirm
   exactly one node changed in that commit
   (`git show --stat origin/main -- intentions/`).
+
+## needs-main residue
+
+- id: 9
+- title: Unit 3 — land a fresh reading on strategy-graph-native-dispatch post-merge
+- url_path: current
+- expected_outcome: After this PR merges, running `npm run read-sensors --prefix packages/intentionsutil` against a clean `origin/main` checkout and landing the single-node result via `graph-commit` produces a non-null, four-segment reading (`lifecycle:`, `router selections:`, `backlog:`, `backlog series 28d:`) on `strategy-graph-native-dispatch`, verified against `origin/main` (not just locally) per this node's own Unit 3 scope.
+- finding: PR #3060 ships only Units 1-2 (the code: `LIFECYCLE_SENSOR_NAME` re-point, `src/census.ts`, `readBacklogBand`/`readBacklogSeries`, the four-segment `readLifecycleReading`). Unit 3 changes no files in the PR by design — it is post-merge work per this node's own plan above ("This unit changes no files in the PR. It is post-merge work and must be recorded by the qa phase as a `## needs-main residue` section..."). It is a planned, acceptance-relevant deferral documented at merge time, not a defect discoverable by this PR's QA — only verifiable once Units 1-2 are on `main`.
+- Verifiability: MACHINE
+- Check: `git -C <repo> fetch origin main && git -C <repo> show origin/main:intentions/strategy-graph-native-dispatch.md | grep '^reading:'` confirms a non-null `reading:` with all four documented segments, and `git -C <repo> show --stat origin/main -- intentions/` on the landing commit shows exactly one changed node (`intentions/strategy-graph-native-dispatch.md`).
