@@ -93,16 +93,31 @@ sd_teardown() {
         DISPATCH_STANDDOWN_PARK_MAX DISPATCH_DECISION_LOG_DIR || true
 }
 
-# sd_write_park_node <exit-code> — install the fake park-node: it appends its
-# argc and each positional argument to the log, then exits <exit-code>.
+# sd_write_park_node <exit-code> [landing-mode] — install the fake park-node:
+# it appends its argc and each positional argument to the log, then — for a
+# zero exit code — LANDS the park on origin/main (default `land`; `none`
+# exits 0 with no write, modeling the `graph-commit` exit-0-but-nothing-landed
+# shape the sweep's verify-landed confirmation regression-tests), then exits
+# <exit-code>. The sweep calls `park_node` with the node id as `$1` (no
+# leading flags, unlike lib-frozen-session-park.sh's callers), so no
+# flag-skip loop is needed here.
 sd_write_park_node() {
+  local rc="$1" mode="${2:-land}"
   cat > "$SD_PARK" <<PARK
 #!/usr/bin/env bash
 {
   printf 'ARGC=%s\n' "\$#"
   for a in "\$@"; do printf 'ARG=%s\n' "\$a"; done
 } >> "$SD_PARKLOG"
-exit $1
+if [ "$rc" = 0 ] && [ "$mode" != none ]; then
+  node="\$1"
+  f="$SD_REPO/intentions/\$node.md"
+  sed -i 's/^office_hours: null\$/office_hours:\n  reason: landed by the fake park-node\n  since: 2026-01-01\n  recommendation: null/' "\$f"
+  git -C "$SD_REPO" add -A
+  git -C "$SD_REPO" commit -q -m 'fake park-node: land'
+  git -C "$SD_REPO" update-ref refs/remotes/origin/main HEAD
+fi
+exit $rc
 PARK
   chmod +x "$SD_PARK"
 }
@@ -140,14 +155,23 @@ FAKE
 sd_write_node() {
   local id="$1" kind="$2"
   local f="$SD_REPO/intentions/$id.md"
+  # `statement`/`owner`/`status` are the IntentionSchema's required core
+  # (schema.ts validateNode) — present on every fixture below so a
+  # verify-landed jq-mode confirmation (readNodeAtRef, which validates
+  # strictly) can actually read these nodes rather than throwing on a missing
+  # required field.
   case "$kind" in
     parked)
       cat > "$f" <<NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours:
   reason: parked earlier by something else
+  since: 2026-01-01
   recommendation: null
 ---
 
@@ -162,6 +186,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours: null
 ---
 
@@ -176,6 +203,9 @@ NODE
 ---
 id: $id
 kind: tactic
+statement: fixture node for lib-standdown-recheck tests
+owner: ai
+status: working
 office_hours: null
 ---
 
@@ -566,6 +596,44 @@ assert_eq "park-fail: the marker is kept for the next pass" "declared" \
   "$(sd_marker_field tactic-park-fails origin)"
 assert_eq "park-fail: the decision record says park-failed" "park-failed" "$(sd_log_dispositions)"
 assert_eq "park-fail: summary counts zero parks" "yes" \
+  "$(sd_contains 'sweep complete (markers=1 recorded=0 parked=0 observing=0 cleared=0 deferred=0)')"
+sd_teardown
+
+# --- Test 12b: park-node exits 0 but nothing landed --------------------------
+#
+# THE regression test for this sweep's landing confirmation. `park-node` lands
+# through `graph-commit`, which pushes to origin/main — and invariant I2 says a
+# `graph-commit` exit 0 is NEVER evidence that anything reached origin/main (it
+# can exit 0 after a push that never made it). Trusting the exit code here
+# would delete the stand-down marker — the only record that this node's winner
+# died — while the node stays unparked and invisible to office hours, so the
+# stranded work is never picked up by anything again.
+#
+# The fake park-node's `none` mode is that shape: exit 0, no write. The sweep
+# must re-read origin/main via verify-landed, KEEP the marker, refuse to count
+# the park, and say so distinctly.
+
+echo "Test: park-node exits 0 but origin/main still shows office_hours: null → marker kept, not counted"
+sd_setup
+sd_write_park_node 0 none
+sd_write_node "tactic-sd-notlanded" unparked
+sd_commit_nodes
+sd_write_worktree "tactic-sd-notlanded" unpushed
+sd_add_session "0bb2-2222" "tactic-sd-notlanded"
+sd_install_claude 0
+standdown_write "tactic-sd-notlanded" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "sd-notlanded: sweep returns 0" "0" "$SD_RC"
+assert_eq "sd-notlanded: park-node was invoked" "1" "$(sd_park_calls)"
+assert_eq "sd-notlanded: stderr carries the distinct park-not-landed line" "yes" \
+  "$(sd_contains 'park-not-landed for tactic-sd-notlanded — park-node exited 0 but origin/main still shows no office_hours')"
+assert_eq "sd-notlanded: it is NOT reported as a park" "no" \
+  "$(sd_contains 'parked tactic-sd-notlanded')"
+assert_eq "sd-notlanded: the marker is KEPT for the next pass" "declared" \
+  "$(sd_marker_field tactic-sd-notlanded origin)"
+assert_eq "sd-notlanded: the decision record says park-not-landed" "park-not-landed" \
+  "$(sd_log_dispositions)"
+assert_eq "sd-notlanded: summary counts zero parks" "yes" \
   "$(sd_contains 'sweep complete (markers=1 recorded=0 parked=0 observing=0 cleared=0 deferred=0)')"
 sd_teardown
 

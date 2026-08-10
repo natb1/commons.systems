@@ -26,17 +26,26 @@ The decompose/plan judgment runs inside the Workflow
 (`.claude/workflows/align-tactics.js`), invoked in `mode: "tactic"`, where
 the `decompose` phase is skipped entirely (there is nothing to decompose;
 only this one node's plan body needs authoring, or its re-plan
-reconciliation). This session's job around it is the same three-part shape
-as Step 1/Step 2: assemble the input, invoke the Workflow, and land the
-single-node graph write it returns (via the write path in
+reconciliation). In `mode: "tactic"` the drift phase also runs with the
+round-eligibility sanity check **disabled** (round decomposability is a
+strategy-round question and this run opens no round), so the plan phase is
+gated only on a genuine per-node drift blocker; every park the run emits
+targets the tactic id, consistent with the "Autonomy contract binds
+unchanged" paragraph below. This session's job around it is the same
+three-part shape as Step 1/Step 2: assemble the input, invoke the Workflow,
+and land the single-node graph write it returns (via the write path in
 `references/write-path.md`).
 
 **Read the node and decide draft/raw vs soft-frozen.** A frozen tactic
 target is either draft/raw or soft-frozen; read its frontmatter to tell
 which. Capture the single-node base manifest here, at this read, before any
 write — see `references/write-path.md`'s "Capture a base manifest" section
-for the recipe; do not restate it here. This session picks the `phase` value
-it will land, but the
+for the recipe; do not restate it here. The serving strategy's derived gap
+cannot be read off frontmatter (`gap` is not stored — it is derived on read
+via `deriveGap`, `packages/intentionsutil/src/sensors.ts`); get it from the
+`=== Serving strategy ===` block by running the census (the same command
+cited below) on the **serving strategy's** id. This session picks the
+`phase` value it will land, but the
 finalize-vs-re-plan *judgment* (what the reconciled body should say) is the
 Workflow's tactic-mode job, not this thread's:
 
@@ -93,7 +102,9 @@ Workflow's tactic-mode job, not this thread's:
 ```
 args = {
   mode:         "tactic",
-  strategy:     { id, statement, rationale, success_signal, reading, gap,
+  strategy:     { id, statement, rationale, success_signal, reading,
+                  derived_gap,   // from the census `=== Serving strategy ===` block:
+                                 //   derived on read via deriveGap, never stored
                   clarifications: [ ... ], conditions: [ ... ],
                   rounds: { count, last_completed, last_aligned } },  // serving strategy, READ-ONLY context
   target_node:  { id, statement, rationale, body, phase },            // the single tactic being (re)planned

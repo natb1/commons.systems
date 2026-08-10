@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Execution, IntentionNode } from "../src/schema.js";
+import type { Execution, IntentionNode, SuccessSignal } from "../src/schema.js";
 import { PHASES } from "../src/schema.js";
 import {
   effectivePrecedence,
@@ -24,7 +24,6 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -47,12 +46,28 @@ function tactic(partial: Partial<IntentionNode> & { id: string }): IntentionNode
 
 /**
  * A strategy fixture. Defaults to an UNVALIDATED signal (`reading: null`,
- * `gap: null`) — the state in which a strategy is a candidate for an
+ * which alone makes `isSignalUnvalidated` true regardless of the derived
+ * `gap`) — the state in which a strategy is a candidate for an
  * `/align-tactics` session.
  */
 function strategy(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
   return anode({ ...partial, kind: "strategy" });
 }
+
+/**
+ * A `success_signal` whose threshold ("green") a fixture's `reading` string
+ * (e.g. "fresh 2026-07-06") never happens to equal, so `deriveGap` (see
+ * sensors.ts) reports a non-null gap — the "signal named, reading present,
+ * still gapped" fixture shape several `selectGraphTargets`/`strategyAlignSelectable`
+ * tests below need, now that `gap` is derived on read rather than authored
+ * directly on the fixture.
+ */
+const GAPPED_SIGNAL: SuccessSignal = {
+  observable: "o",
+  sensor: "s",
+  threshold: "green",
+  is_proxy: false,
+};
 
 /** An in-flight execution record fixture. */
 function exec(partial: Partial<Execution> = {}): Execution {
@@ -63,6 +78,7 @@ function exec(partial: Partial<Execution> = {}): Execution {
     markers: partial.markers ?? [],
     strategy_fingerprint: partial.strategy_fingerprint ?? null,
     fix: partial.fix ?? null,
+    conflict: partial.conflict ?? null,
   };
 }
 
@@ -173,7 +189,11 @@ describe("tactic eligibility", () => {
     expect(c?.fix).toBeNull();
   });
 
-  it("skips a phase:review tactic once execution.markers includes 'reviewed' (tick-owned)", () => {
+  it("surfaces a phase:review reviewed tactic as a pending-merge candidate", () => {
+    // tactic-graph-router-conflict-routing: the reviewed-marker EXCLUSION is
+    // retired. A reviewed node awaiting its armed auto-merge is emitted as
+    // `pending-merge` so the shell sensor gate can read its mergeability every
+    // tick — but never as `review`, which would re-run the finished review pass.
     const nodes = [
       tactic({
         id: "tactic-reviewed",
@@ -181,7 +201,57 @@ describe("tactic eligibility", () => {
         execution: exec({ markers: ["reviewed"] }),
       }),
     ];
-    expect(candidateIds(nodes)).toEqual([]);
+    const sel = selectGraphTargets(nodes);
+    expect(candidateIds(nodes)).toEqual(["tactic-reviewed"]);
+    expect(sel.candidates[0]).toMatchObject({ id: "tactic-reviewed", phase: "pending-merge" });
+  });
+
+  it("emits a reviewed tactic as 'conflict' — never pending-merge — while execution.conflict is set", () => {
+    const conflict = { since: "2026-08-03", attempt: 1 };
+    const nodes = [
+      tactic({
+        id: "tactic-conflicted",
+        phase: "review",
+        execution: exec({ markers: ["reviewed"], conflict }),
+      }),
+    ];
+    const sel = selectGraphTargets(nodes);
+    expect(candidateIds(nodes)).toEqual(["tactic-conflicted"]);
+    expect(sel.candidates[0]?.phase).toBe("conflict");
+  });
+
+  it("gives execution.fix precedence over execution.conflict", () => {
+    // Both interrupts set: `fix` wins, exactly as it already outranks the
+    // ladder phase.
+    const nodes = [
+      tactic({
+        id: "tactic-both",
+        phase: "review",
+        execution: exec({
+          markers: ["reviewed"],
+          fix: { since: "2026-08-01", attempt: 1, pushed_sha: null },
+          conflict: { since: "2026-08-03", attempt: 1 },
+        }),
+      }),
+    ];
+    expect(selectGraphTargets(nodes).candidates[0]?.phase).toBe("fix");
+  });
+
+  it("never emits a reviewed tactic at phase 'review', under any interrupt combination", () => {
+    const fix = { since: "2026-08-01", attempt: 1, pushed_sha: null };
+    const conflict = { since: "2026-08-03", attempt: 1 };
+    const combos: Array<Partial<Execution>> = [
+      { markers: ["reviewed"] },
+      { markers: ["reviewed"], fix },
+      { markers: ["reviewed"], conflict },
+      { markers: ["reviewed"], fix, conflict },
+    ];
+    for (const [i, partial] of combos.entries()) {
+      const nodes = [tactic({ id: `tactic-r${i}`, phase: "review", execution: exec(partial) })];
+      const sel = selectGraphTargets(nodes);
+      expect(sel.candidates).toHaveLength(1);
+      expect(sel.candidates[0]?.phase).not.toBe("review");
+    }
   });
 
   it("re-surfaces a phase:review reviewed tactic as a fix candidate once execution.fix is set", () => {
@@ -307,14 +377,24 @@ describe("strategy eligibility", () => {
     expect(candidateIds(nodes)).not.toContain("strategy-s");
   });
 
-  it("skips a strategy whose signal is validated (reading set, no gap)", () => {
-    const nodes = [strategy({ id: "strategy-s", reading: "holding at threshold" })];
+  it("skips a strategy whose signal is validated (reading meets threshold, no gap)", () => {
+    const nodes = [
+      strategy({
+        id: "strategy-s",
+        success_signal: { ...GAPPED_SIGNAL, threshold: "holding at threshold" },
+        reading: "holding at threshold",
+      }),
+    ];
     expect(candidateIds(nodes)).toEqual([]);
   });
 
   it("a validated-but-gapped signal keeps the strategy eligible", () => {
     const nodes = [
-      strategy({ id: "strategy-s", reading: "below threshold", gap: "reading under threshold" }),
+      strategy({
+        id: "strategy-s",
+        success_signal: GAPPED_SIGNAL,
+        reading: "below threshold",
+      }),
     ];
     expect(candidateIds(nodes)).toEqual(["strategy-s"]);
   });
@@ -323,7 +403,7 @@ describe("strategy eligibility", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
-        gap: "still gapped",
+        success_signal: GAPPED_SIGNAL,
         reading: "fresh 2026-07-06",
         rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
@@ -338,7 +418,7 @@ describe("strategy eligibility", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
-        gap: "gapped",
+        success_signal: GAPPED_SIGNAL,
         rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
     ]);
@@ -352,7 +432,7 @@ describe("strategy eligibility", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
-        gap: "gapped",
+        success_signal: GAPPED_SIGNAL,
         reading: "sampled 2026-06-20, still red",
         rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
@@ -367,7 +447,7 @@ describe("strategy eligibility", () => {
     const sel = selectGraphTargets([
       strategy({
         id: "strategy-s",
-        gap: "gapped",
+        success_signal: GAPPED_SIGNAL,
         reading: "sampled 2026-07-05, still red",
         rounds: { count: 1, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
       }),
@@ -387,7 +467,7 @@ describe("strategy eligibility", () => {
     const nodes = [
       strategy({
         id: "strategy-s",
-        gap: "gapped",
+        success_signal: GAPPED_SIGNAL,
         reading: "sampled 2026-06-20, still red",
         rounds: { count: 0, last_completed: null, last_aligned: "2026-07-01" },
       }),
@@ -1055,11 +1135,10 @@ describe("ordering", () => {
 });
 
 describe("strategyFingerprint", () => {
-  it("state writes (reading/gap/rounds/office_hours/attention) never change it", () => {
+  it("state writes (reading/rounds/office_hours/attention) never change it — `gap` is derived on read, not a stored field to fingerprint", () => {
     const base = strategy({ id: "strategy-s" });
     const fp = strategyFingerprint(base);
     expect(strategyFingerprint({ ...base, reading: "new reading" })).toBe(fp);
-    expect(strategyFingerprint({ ...base, gap: "new gap" })).toBe(fp);
     expect(
       strategyFingerprint({
         ...base,

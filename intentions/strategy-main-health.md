@@ -15,31 +15,20 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   validate this node and inherit its standing boost through the normal downward
   attention flow; the boost's dominance is maintained by a write-path guard
   (author override required to out-boost or reduce it), never by recompute.
-  2026-07-31: the standing boost 100 is migrated to attributes.tier: 3 under
-  the tier model — red-main fix tactics now inherit tier 3 through the same
-  downward parent/serves flow, and dominance is structural (this node is simply
-  in the top tier) rather than numeric (highest boost). The write-path guard
+  2026-07-31: the standing boost 100 is migrated to attributes.tier: 3 under the
+  tier model — red-main fix tactics now inherit tier 3 through the same downward
+  parent/serves flow, and dominance is structural (this node is simply in the
+  top tier) rather than numeric (highest boost). The write-path guard
   (validate-graph rule 18) is retargeted accordingly: no other node may author
   an explicit attributes.tier: 3 — an author may override that half by placing
   the ACK token in the authoring node's rationale or its attention.rationale —
   and this node must keep tier 3, an override that requires the ACK token in
   THIS node's own attention.rationale (its rationale, the field you are reading,
-  narrates the guard, so prose here must not exempt the node from it).
-  Earlier clarifications on
-  this node narrate 'boost 100'; they are dated historical records, superseded
-  in effect by this note, not rewritten."
-reading: "unreliable — signal under repair (hand-set 2026-07-23; the next
-  read-sensors run overwrites this with readMainHealth()'s literal output).
-  origin/main HEAD e2136ff9 carries eight check-runs, all concluding success,
-  but ALL inherited from a Graph Fast Path run on a graph/** branch sharing the
-  sha; none of unit-tests.yml's fifteen merge-gating jobs is present, so this
-  green is VACUOUS with respect to the trunk's own suite. Earlier the same day
-  HEAD 1edf47ee read red on two inherited `guard: failure` runs from the benign
-  fast-path race (tactic-graph-fastpath-guard-diff-base, PR 2898). Both readings
-  illustrate the attribution defect recorded in this round's clarifications
-  rather than main's actual content health. Supersedes the 2026-07-13 manual
-  stand-in, whose own instruction was to hand over once the sensor landed — it
-  has (readMainHealth, merged 2026-07-23)."
+  narrates the guard, so prose here must not exempt the node from it). Earlier
+  clarifications on this node narrate 'boost 100'; they are dated historical
+  records, superseded in effect by this note, not rewritten."
+reading: "green: every check on the current origin/main HEAD concludes success
+  (or neutral/skipped)"
 gap: null
 serves: []
 recovers: []

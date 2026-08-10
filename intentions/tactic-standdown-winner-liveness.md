@@ -286,7 +286,7 @@ them. Add at least:
 3. `sid-live-unknown` — fake `claude` exits non-zero (and, separately, prints
    non-array output) → **0** both times (fail safe to "live").
 4. `sid-live-empty-arg` — no argument → 0, with a stderr diagnostic.
-5. `dup-names-pair` — two rows named `tactic-x` plus one `tactic-y` and one
+5. `dup-names-pair` — two rows named `tactic-x` plus one tactic-y and one
    `dispatch-abc` and one `1234-slug` → exactly one output line,
    `tactic-x<TAB><sid1>,<sid2>`.
 6. `dup-names-none` — one row per name → return 0, empty stdout.

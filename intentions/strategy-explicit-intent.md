@@ -47,6 +47,19 @@ rationale: >-
   from capturing the author, and align delegatees with the good, periagoge
   extended to AI delegatees with recorded qualifications — detailed in the
   2026-07-08 and 2026-07-09 clarifications.
+
+
+  Instrument assessment (2026-07-28 review cycle): the threshold is met, but the
+  instrument is weak — 130 of the trace-decisions digest's 133 candidates are
+  co-occurrence, not causation. Its class-1 heuristic fires on any added
+  clarification (it does not check for a node-id citation, despite the
+  observable's wording), and all 43 class-3 events are dispatch attention-boost
+  writes, not calibration challenges. Both traced cases were found by hand-grep,
+  not by the digest. Rejected on the skeptic's test: the 2026-07-23 revert of
+  the successor-cadence resolution on this node (commit b522902) is
+  decision-changed-because-a-node-was-READ —
+  tactic-align-entrypoint-consolidation last changed 2026-07-18, before both
+  decisions.
 reading: "review cycle 2026-07-28: 2 decisions traced to node changes — (1) the
   2026-07-19 reap-scope-narrowing clarification on
   strategy-graph-native-dispatch (commit 8e310bfb) re-scoped
@@ -61,16 +74,7 @@ reading: "review cycle 2026-07-28: 2 decisions traced to node changes — (1) th
   strategy' clause firing literally. Threshold met. Taken from the
   trace-decisions digest (--since 2026-07-11, 133 candidate events) plus a
   hand-search of the intentions/ patch for causal-reversal language."
-gap: "Threshold met, but the instrument is weak: 130 of the digest's 133
-  candidates are co-occurrence, not causation — its class-1 heuristic fires on
-  any added clarification (it does not check for a node-id citation, despite the
-  observable's wording) and all 43 class-3 events are dispatch attention-boost
-  writes, not calibration challenges. Both traced cases were found by hand-grep,
-  not by the digest. Rejected on the skeptic's test: the 2026-07-23 revert of
-  the successor-cadence resolution on this node (commit b522902) is
-  decision-changed-because-a-node-was-READ —
-  tactic-align-entrypoint-consolidation last changed 2026-07-18, before both
-  decisions."
+gap: null
 serves:
   - virtue-philosophical-mobility
   - virtue-alignment-of-attachments

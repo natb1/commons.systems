@@ -155,7 +155,7 @@ structure.
 
 ## Gap 4 — the align skill family assumes worktrees, dispatch state fields, and router semantics
 
-**What breaks:** the align skills (`/align-strategy`, `/align-tactics`, and
+**What breaks:** the align skills (`/align`, `/align-tactics`, and
 peers) assume git worktrees, live-session detection, the dispatch `phase` /
 `execution` lifecycle, and router selection. None of that is available to a
 standalone adopter who only wants to author and validate a graph.
@@ -219,6 +219,14 @@ round-trip, derived attention) but has two concrete holes:
   standalone-adoption path and the extension fields are not. The fix is a
   `SCHEMA.md` addition (or a companion `USAGE.md`) covering the field gap and a
   standalone authoring walkthrough.
+
+**Superseded 2026-07-28:** the remediation above (extend `SCHEMA.md` / add a
+companion `USAGE.md`) no longer applies. `SCHEMA.md` has been deprecated and
+deleted; the still-accurate schema documentation it held was moved into the
+kind-node bodies, and `intentions/kind-kind.md` is now the sole doc home for
+this content (including, going forward, any standalone-adoption and
+dispatch-state-field documentation this gap called for). The dated audit
+narrative above is left as-is as a historical record.
 
 ## Summary
 

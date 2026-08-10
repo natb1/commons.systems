@@ -50,7 +50,6 @@ rationale: "Observed live 2026-07-31 during the dispatch-pipeline bootstrap, on
   promotion lifts no unblocked node and cannot compound until that dependency
   clears."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -82,6 +81,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T20:15:44Z
     mergeCommitSha: c06c72950f96061b392dedfb05aeeb2b0ee094d8
@@ -89,94 +89,42 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: >-
-    Corrected 2026-07-31 (bug L instance): the prior park's "none of the 4
-    needs-main residue items carry a url_path or name a browser-observable
-    outcome, so route to cannot-verify" reasoning was a blanket
-    not-browser-verifiable misroute. All 4 items are answerable from
-    dispatch-tick's own journal (a log/journal read, not a browser check) and
-    were actually checked, with real evidence, via `journalctl -t dispatch-tick
-    --since '-7d'` against the fleet since PR #3004 merged
-    (2026-07-31T16:15:43-04:00 = 20:15:43Z). Per-item:
-
-
-    1. design-2-grace-cap-defaults — Verifiability: MACHINE (checked,
-    inconclusive). Code confirms grace=300s and park_max=2
-    (lib-frozen-session-park.sh:686,690 — note the residue item's own text says
-    cap default "3"; the shipped default is 2, a stale-description mismatch, not
-    a code defect). In the ~4h since merge the journal shows 3 clean
-    terminal-without-disposition parks
-    (tactic-phase-terminal-requires-disposition at 748s idle,
-    tactic-lane-instrument-substitution-guard at 696s,
-    tactic-node-body-stale-in-worker-worktree at 716s) — all comfortably past
-    the 300s grace, none premature, and the park_max=2 cap was never approached
-    (max 1 park per sweep observed). No misconfiguration signal, but
-    same-day-merge means the window is too short to call the defaults validated
-    against "normal fleet volume" — needs a longer observation window (days, not
-    hours).
-
-    2. design-3-unmeasurable-keep — Verifiability: MACHINE (resolved).
-    `unmeasurable=0` on all 18 "terminal-disposition sweep complete" lines in
-    the journal since merge — zero occurrences of the fail-safe miss, no
-    accumulation.
-
-    3. design-4-daemon-unknown — Verifiability: MACHINE (checked, inconclusive).
-    Zero "daemon unqueryable" lines in the 7-day journal (no real daemon outage
-    occurred in the observed window). Confirmed via `journalctl -o json` that
-    this line, like every routine "sweep complete" line, is emitted at syslog
-    PRIORITY=6 with no elevation — so if a real outage occurs, it produces no
-    louder signal than routine ticks and would only be noticed by someone
-    actively grepping, exactly the concern the item raises. The mechanism is
-    confirmed machine-checkable; it has not yet been exercised by a genuine
-    outage.
-
-    4. design-5-best-effort-retry-forever — Verifiability: MACHINE (resolved).
-    Direct instance observed 2026-07-31: the sweep's own `park-node` call for
-    this node hit a concurrent-edit race with the /qa-main worker's own park
-    attempt and failed once at 17:32:22 ("park failed for
-    tactic-phase-terminal-requires-disposition (park-node exit 1); will retry
-    next tick"), then succeeded on the very next attempt at 18:01:34 (~29 min
-    later, "parked tactic-phase-terminal-requires-disposition
-    (terminal-without-disposition after 748s...)"). No node appears in "will
-    retry next tick" more than once across the 7-day journal —
-    retry-then-succeed, not retry-forever.
-
-
-    Net: 2 of 4 resolved clean with direct evidence (items 2, 4); 2 checked but
-    inconclusive for lack of elapsed time or a real daemon-outage occurrence
-    (items 1, 3) — not because they are unverifiable by machine, only because
-    the window since this same-day merge hasn't produced enough data yet.
-    Staying parked at main-qa; narrowing the open recommendation to items 1 and
-    3 only.
-  since: 2026-07-31
-  recommendation: >-
-    Items 2 (design-3-unmeasurable-keep) and 5
-    (design-5-best-effort-retry-forever) are resolved with direct journal
-    evidence above and do not need further review. What remains open:
-
-
-    1. design-2-grace-cap-defaults — once several days of tick history have
-    accumulated since the PR #3004 merge, re-run `journalctl -t dispatch-tick
-    --since '<merge-time>'` and grep for `lib-frozen-session-park: parked` and
-    `terminal-disposition sweep complete`; confirm the 300s grace / 2-park cap
-    still show no over-eager or too-slow parking against the fleet's real
-    terminal-worker volume over that longer window.
-
-    2. design-4-daemon-unknown — watch for (or force, in a controlled way) a
-    real `claude agents --json --all` daemon outage and confirm the resulting
-    "daemon unqueryable" line is actually noticed in practice — either because
-    someone routinely greps the journal for it, or because an alerting rule is
-    added — rather than passing unremarked among the many routine "sweep
-    complete" lines at the same log priority.
-
-    3. After either check lands real evidence, land the corresponding
-    Verifiability line above as MACHINE (resolved) and, once both are resolved,
-    clear-park this node.
-
-    Before reaping any terminal session found during this review, check its
-    node's phase/office_hours on origin/main first — reaping a done session
-    whose node never advanced is what restarts the exact churn loop this node
-    fixes.
+  reason: "Re-read at the full ~5-day/34k-line observation window (PR #3004 merged
+    2026-07-31T20:15:44Z to now 2026-08-05). 3 of 4 needs-main items now resolve
+    clean via journalctl -t dispatch-tick: (1) design-2-grace-cap-defaults — 86
+    real parks across 1218 sweeps, min idle-at-park 329s (grace=300s, zero
+    premature), park_max=2 cap hit exactly 9 times and never exceeded — defaults
+    hold against real volume (also confirms the stale-description mismatch the
+    prior pass flagged: residue text says cap default \"3\", shipped default is
+    2, doc-only, no code defect); (2) design-3-unmeasurable-keep —
+    unmeasurable=0 across all 1218 sweeps, re-confirmed over the fuller window;
+    (4) design-5-best-effort-retry-forever — 28 \"will retry next tick\" events
+    across 11 distinct nodes (more than the prior 4h sample's single instance,
+    some nodes retried up to 7x during a 2026-08-04 05:25-05:47 burst of
+    concurrent dispatch-tick contention), but every case resolved — none
+    retried-and-failed indefinitely. Item 3, design-4-daemon-unknown, is
+    genuinely WAIT rather than resolvable now: zero \"daemon unqueryable\" lines
+    occurred in the full window (grep -c against dispatch-tick journal) because
+    no real daemon outage has happened yet to exercise the noticed-vs-not
+    question — the mechanism itself is confirmed sound by code inspection (same
+    syslog PRIORITY=6 as routine lines, no elevation), it just has nothing to
+    observe yet."
+  since: 2026-08-05
+  recommendation: "No author decision needed — re-selection only, once a real
+    daemon outage occurs or enough further time has passed to make its continued
+    absence itself informative. On re-check: grep the dispatch-tick journal
+    since this park's `since` date for `lib-frozen-session-park: daemon
+    unqueryable` (also the duplicate-name-set and live-session-registry
+    unqueryable variants in the same file). If a real occurrence is found,
+    confirm from `journalctl -o json` whether it was emitted at an elevated
+    PRIORITY or stayed at routine PRIORITY=6, and whether the outage window
+    shows a gap in \"terminal-disposition sweep complete\" lines that nobody
+    flagged. Items 1 (design-2-grace-cap-defaults), 2
+    (design-3-unmeasurable-keep) and 4 (design-5-best-effort-retry-forever) are
+    resolved with direct 5-day journal evidence above and do not need further
+    review. Separately, worth a future editorial fix (not blocking): the residue
+    text above still describes the park-cap default as \"3\"; the shipped
+    default in lib-frozen-session-park.sh is 2."
   session_type: other
 pace_exempt: true
 rounds: null

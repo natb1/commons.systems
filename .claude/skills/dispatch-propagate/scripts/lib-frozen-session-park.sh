@@ -43,7 +43,14 @@
 #   evidence of staleness. An UNKNOWN daemon, an unreadable transcript, an
 #   unmeasurable mtime, or a missing node file all mean "keep", never "park".
 #   The only path that parks is: blocked + measured idle >= grace + NO other
-#   live session holding the node + a real, unparked node file on origin/main.
+#   live session holding the node + a real node file on origin/main that is
+#   unparked AT WRITE TIME. That last term is stronger than the read alone can
+#   make it: `origin/main` is fetched once per sweep and each candidate then
+#   burns minutes of wall clock before its write, so the "not parked" read is
+#   stale by the time the park runs. Every `park-node` call therefore carries
+#   `--base <id>=<blob>` pinned to the blob the decision was read from, and a
+#   park that landed inside that window makes park-node REFUSE (exit 3) instead
+#   of overwriting it — a stale-diagnosis skip, not a park failure.
 #
 #   The "no other live session" term is the stand-down interlock. A stood-down
 #   LOSER (the duplicate-worker protocol in lib-standdown-recheck.sh) has
@@ -226,6 +233,83 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
   set -uo pipefail
 
+  # invalid_state_route_gate <repo-root> <node> <kind> <sid> [job-id] — the invalid-state
+  # lane's PRE-TIER, consulted by both sweeps immediately before their park block
+  # and AFTER every one of their existing gates (name shape, session-id shape,
+  # idle grace, stand-down interlock, `phase: done` gate, park cap, base-blob
+  # pin). This is the lane's second detection point; the first is
+  # dispatch-invalid-state-sweep at selection time.
+  #
+  # Returns the router's exit code, which the callers map as:
+  #     0  handled  → count `routed`, log `routed-to-lane`, DO NOT park, and DO
+  #                   NOT delete the job dir's office-hours-* markers.
+  #     4  keep     → count `kept`, log `kept-by-lane`.
+  #     anything else (10 escalate, 1 router failure, 2 usage, a timeout, or a
+  #                   missing/unresolvable router) → the caller FALLS THROUGH to
+  #                   its existing park path unchanged. Fail toward escalate.
+  #
+  # A routed candidate is DEFERRED, not resolved: the freeze persists until the
+  # intervention session (or a human) reaps. The sweep still owns escalation this
+  # round — extracting the park-with-landing-proof block into the router is a
+  # declared residual, deliberately not attempted here.
+  #
+  # Provenance and bounding mirror what this file already applies to `park-node`,
+  # INCLUDING where the executable is resolved from: the router is taken from the
+  # sweep's own `$repo_root` (which provenance check 1 has already asserted is a
+  # primary checkout on `main`), NOT from this library's own location. That is
+  # deliberate and load-bearing for two reasons:
+  #
+  #   1. Production: the router must run out of the same checkout the sweep is
+  #      operating on, the same reason park-node is invoked BY PATH under
+  #      $repo_root — it resolves its own repo root from its script location.
+  #   2. Testing: resolving from ${BASH_SOURCE[0]} would make the REAL router
+  #      reachable from a test that merely sources this library, and the router
+  #      has durable side effects (the fleet-latch sidecar and, at threshold, a
+  #      graph-commit that mints a node). An early draft did exactly that and one
+  #      suite run drove the real counter to 156 observations.
+  #
+  # The router must be an executable regular file whose REAL directory is that
+  # checkout's scripts dir (canonicalized with `pwd -P`, so `..` segments and
+  # symlinked temp roots cannot slip an arbitrary executable past a string prefix
+  # test), and the call is wrapped in the same `timeout` binary the file resolves
+  # and refuses to run without — an unbounded router call on the tick path is a
+  # fleet stall. DISPATCH_INVALID_STATE_ROUTE_CMD overrides the path for tests,
+  # safely, because the provenance check still applies to it.
+  invalid_state_route_gate() {
+    local repo_root="$1" node="$2" kind="$3" sid="${4:-}" jid="${5:-}"
+
+    [[ -n "$repo_root" && -d "$repo_root" ]] || return 10
+    local scripts_dir scripts_dir_real route route_dir_real
+    scripts_dir="$repo_root/.claude/skills/dispatch-propagate/scripts"
+    scripts_dir_real=$(cd "$scripts_dir" 2>/dev/null && pwd -P) || scripts_dir_real=""
+    [[ -n "$scripts_dir_real" ]] || return 10
+    route="${DISPATCH_INVALID_STATE_ROUTE_CMD:-$scripts_dir_real/dispatch-invalid-state-route}"
+    route_dir_real=$(cd "$(dirname -- "$route")" 2>/dev/null && pwd -P) || route_dir_real=""
+    if [[ -z "$route_dir_real" || "$route_dir_real" != "$scripts_dir_real" ]]; then
+      printf 'lib-frozen-session-park: invalid-state router path %s does not resolve inside %s; falling through to the park path\n' \
+        "$route" "$scripts_dir_real" >&2
+      return 10
+    fi
+    if [[ ! -f "$route" || ! -x "$route" ]]; then
+      # Expected until the lane's router lands; not an error, just a fall-through.
+      return 10
+    fi
+
+    local tbin
+    tbin=$(command -v timeout 2>/dev/null) || tbin=""
+    if [[ -z "$tbin" ]]; then
+      printf 'lib-frozen-session-park: `timeout` not found; refusing an unbounded invalid-state router call; falling through to the park path\n' >&2
+      return 10
+    fi
+    local budget="${DISPATCH_INVALID_STATE_ROUTE_TIMEOUT_S:-60}"
+    [[ "$budget" =~ ^[0-9]+$ ]] || budget=60
+
+    local rc=0
+    "$tbin" "$budget" "$route" --node "$node" --kind "$kind" \
+      --session "$sid" --job-id "$jid" >/dev/null 2>&1 </dev/null || rc=$?
+    return "$rc"
+  }
+
   # _frozen_session_log_decision <node> <session> <idle> <disposition> — append
   # one best-effort JSONL decision record. Mirrors dispatch-select-tick's
   # _dlog_select_emit: build with `jq -c -n`, hand to `decision_log_append`
@@ -267,6 +351,10 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     fi
 
     local blocked=0 parked_count=0 observing=0 unmeasurable=0 deferred=0
+    # Invalid-state lane pre-tier dispositions (see invalid_state_route_gate).
+    # `routed` candidates are DEFERRED, not resolved: the freeze persists until
+    # the intervention session or a human reaps.
+    local routed_count=0 kept_by_lane_count=0
 
     if [[ -z "$candidates" ]]; then
       printf 'lib-frozen-session-park: sweep complete (blocked=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
@@ -343,6 +431,19 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       printf 'lib-frozen-session-park: park-node at %s is not an executable regular file; parking nothing\n' "$park_node" >&2
       return 0
     fi
+
+    # verify-landed — the shared primitive that confirms a park actually landed
+    # on origin/main after park-node's rc-0 (see step (10) below). Resolved from
+    # THIS FILE's own on-disk location (`_lfsp_dir`), not from `$repo_root`
+    # (the repo being SWEPT, which in tests is a bare scratch fixture with no
+    # `node_modules`): verify-landed's own header explains why it must run out
+    # of its OWN checkout (for `npx tsx`/`node --import tsx/esm` to resolve)
+    # while taking the repo to inspect as a `-C` argument. This is the opposite
+    # split from `park-node` above, which deliberately DOES execute out of
+    # `$repo_root` because it WRITES (a provenance requirement that does not
+    # apply to a read-only primitive). A missing/non-executable copy just falls
+    # back to "not landed" at the call site (fail-safe).
+    local verify_landed="$_lfsp_dir/../../../../packages/intentionsutil/scripts/verify-landed"
 
     # The stand-down interlock's second signal (see the header): the set of node
     # names with two or more LIVE sessions. Computed once, from the same
@@ -476,12 +577,28 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared. The frontmatter scoping is load-bearing:
-      # restricting the test to the YAML block (between the first two `---`
-      # fences) means a column-0 `office_hours:` line in the markdown BODY
-      # (documentation of the serialization) can never be misread as park state.
+      # (7b) Diagnosis-time base (ref-diagnosis-time-cas). The decision this
+      # sweep is about to make — "not parked, so park it" — is made against the
+      # blob read HERE, from a ref last fetched once at step (6). Pin that exact
+      # blob through park-node's --base so a park landing in the window between
+      # this read and the write below is REFUSED (exit 3) rather than
+      # overwritten. `rev-parse` is the identical expression park-node resolves
+      # FRESH_BLOB with (park-node:205), so the two are bit-for-bit comparable;
+      # hashing $body instead would not match, because command substitution
+      # strips its trailing newlines.
+      local diagnosis_blob
+      if ! diagnosis_blob=$(git -C "$repo_root" rev-parse "origin/main:intentions/${name}.md" 2>/dev/null); then
+        printf 'lib-frozen-session-park: keeping %s (could not resolve the origin/main blob sha for intentions/%s.md; refusing to park without a compare-and-swap base)\n' "$name" "$name" >&2
+        continue
+      fi
+
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY (documentation of the
+      # serialization) can never be misread as park state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -502,10 +619,37 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (10) Park. Three positional args: <node-id> <reason> [recommendation].
-      # No `--pr` (this caller is gh-free and has no PR number) and no `--base`
-      # (there is no diagnosis/execution gap to pin — park-node's own fresh
-      # origin/main re-read is the correct guard here).
+      # (10) Park. Three positional args: <node-id> <reason> [recommendation],
+      # preceded by `--base`. No `--pr` (this caller is gh-free and has no PR
+      # number), but `--base` IS threaded: there is a real diagnosis/execution
+      # gap to pin. `origin/main` is fetched ONCE per sweep at step (6), and each
+      # candidate then burns wall clock on transcript stats, job-dir reads, and
+      # (for earlier candidates) a full park-node landing — so the window between
+      # the step-(8) "not parked" read and the write below is minutes wide in
+      # practice. park-node's own fresh origin/main re-read is NOT a guard against
+      # that: it re-reads to build the write, not to verify the decision still
+      # holds, so a specific human-facing park that landed in the window is
+      # silently overwritten with this sweep's generic boilerplate. Pinning the
+      # step-(7b) blob turns that race into an exit-3 refusal instead.
+      # (9b) INVALID-STATE LANE PRE-TIER. Consulted after every gate above and
+      # immediately before the park below. A `handled` verdict means an
+      # intervention session was launched, so this candidate is DEFERRED (not
+      # resolved) and must not be parked this pass; a `keep` verdict is positive
+      # evidence to do nothing. Anything else falls through to the park path
+      # unchanged — fail toward escalate. This sweep still owns escalation.
+      local lane_rc=0
+      invalid_state_route_gate "$repo_root" "$name" "frozen-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( lane_rc == 0 )); then
+        routed_count=$(( routed_count + 1 ))
+        printf 'lib-frozen-session-park: routed %s to the invalid-state lane (frozen-session; session=%s) — deferred, not parked\n' "$name" "$sid" >&2
+        _frozen_session_log_decision "$name" "$sid" "$idle" "routed-to-lane"
+        continue
+      elif (( lane_rc == 4 )); then
+        kept_by_lane_count=$(( kept_by_lane_count + 1 ))
+        _frozen_session_log_decision "$name" "$sid" "$idle" "kept-by-lane"
+        continue
+      fi
+
       local reason recommendation
       printf -v reason \
         'worker session froze at a permission/classifier denial — claude agents reports state=blocked and the transcript has had no activity for %ss; the session cannot make progress and cannot park itself (a blocked session never reaches the Stop hook), so the dispatch-tick frozen-session sweep parked this node' \
@@ -518,13 +662,71 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # default. The tick must keep scheduling even when the lock is busy.
       # `</dev/null`: park-node runs a long chain of git/node subprocesses, none
       # of which has any business reading the sweep's inherited stdin.
+      #
+      # park-node's parse is leading-flags-only: the first non-flag argument ends
+      # flag parsing and everything after it is verbatim free text, so `--base`
+      # must come first. The `<id>=<sha>` pair form (rather than a bare sha) is a
+      # free guard — park-node rejects a pair whose id is not the node id, so a
+      # mis-threaded `$name` fails loudly instead of pinning the wrong file.
+      local -a park_args=(--base "$name=$diagnosis_blob" "$name" "$reason" "$recommendation")
       local rc=0
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
-        "$timeout_bin" "$park_timeout" "$park_node" "$name" "$reason" "$recommendation" >/dev/null </dev/null || rc=$?
+        "$timeout_bin" "$park_timeout" "$park_node" "${park_args[@]}" >/dev/null </dev/null || rc=$?
       if (( rc == 0 )); then
-        parked_count=$(( parked_count + 1 ))
-        printf 'lib-frozen-session-park: parked %s (denied-command-frozen after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
-        _frozen_session_log_decision "$name" "$sid" "$idle" "parked"
+        # Confirm the park actually LANDED before counting it. `park-node` lands
+        # through `graph-commit`, and invariant I2 is explicit that a
+        # `graph-commit` exit 0 is never evidence that anything reached
+        # `origin/main` — so the exit code alone does not get to authorize
+        # counting this as a park. Re-read the node from a freshly fetched
+        # `origin/main` via the shared `verify-landed` primitive (three-valued:
+        # `unknown` is never treated as landed, same fail-safe direction as
+        # `terminal_without_disposition_sweep`'s step (13) below). The fetch is
+        # mandatory here, not latched with step (6)'s: the park just run is
+        # exactly what made this checkout's `origin/main` stale, so a
+        # confirmation read against the pre-park ref would report every park as
+        # not-landed. `--no-fetch` on the verify-landed call itself: this
+        # explicit fetch is the one that counts against the sweep's fetch
+        # budget, so verify-landed must not fetch a second time.
+        git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+        # The node id and the predicate are SEPARATE arguments (`--node` /
+        # `--jq`). A concatenated `"${name}@..."` spec let an id containing `@`
+        # become jq source — an id ending in `@true #` comments out the
+        # predicate and forges `landed` for any node — and `$name` here comes
+        # from a session name, not from this file. The id is charset-checked
+        # first so a malformed one is NOT counted as a park (verify-landed would
+        # exit 2, which is already treated as not-landed, but the local check
+        # names the reason).
+        local landed=0 vl_rc=0
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
+            >/dev/null 2>&1 || vl_rc=$?
+          (( vl_rc == 0 )) && landed=1
+        fi
+        if (( landed )); then
+          parked_count=$(( parked_count + 1 ))
+          printf 'lib-frozen-session-park: parked %s (denied-command-frozen after %ss; session=%s)\n' "$name" "$idle" "$sid" >&2
+          _frozen_session_log_decision "$name" "$sid" "$idle" "parked"
+        else
+          # Exit 0, but nothing landed (or verify-landed itself could not
+          # determine the outcome — `unknown` is never counted as landed). Loud
+          # and distinctly greppable: the park is NOT counted, and the next
+          # tick's own diagnosis-time read decides whether to retry.
+          printf 'lib-frozen-session-park: park-not-landed for %s — park-node exited 0 but origin/main still shows no office_hours on intentions/%s.md; graph-commit exit 0 is not evidence a write landed (I2)\n' \
+            "$name" "$name" >&2
+          _frozen_session_log_decision "$name" "$sid" "$idle" "park-not-landed"
+        fi
+      elif (( rc == 3 )); then
+        # NOT a park failure. park-node refused the compare-and-swap because the
+        # node changed on origin/main after this sweep read it — it is already
+        # parked, or already under human review. Nothing was written, nothing is
+        # broken, and the correct response is to re-diagnose next tick, never to
+        # retry without the base and never to park again
+        # (.claude/skills/ref-diagnosis-time-cas/SKILL.md:73-83).
+        printf 'lib-frozen-session-park: stale-diagnosis skip for %s — intentions/%s.md on origin/main changed after this sweep read it (pinned base %s); park-node REFUSED rather than overwriting a park that landed in the meantime. Nothing was written; the next tick re-reads and re-decides\n' \
+          "$name" "$name" "$diagnosis_blob" >&2
+        _frozen_session_log_decision "$name" "$sid" "$idle" "stale-diagnosis"
       elif (( rc == 124 )); then
         # A timeout is just another park failure — same non-fatal handling, but
         # named distinctly so a contended landing lock is greppable as itself.
@@ -540,6 +742,12 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
     printf 'lib-frozen-session-park: sweep complete (blocked=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
       "$blocked" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+    # Reported separately, and only when non-empty — see the sibling sweep's
+    # note: the summary line above is matched exactly by existing consumers.
+    if (( routed_count > 0 || kept_by_lane_count > 0 )); then
+      printf 'lib-frozen-session-park: frozen-session lane pre-tier (routed=%s kept-by-lane=%s) — routed candidates are DEFERRED, not resolved\n' \
+        "$routed_count" "$kept_by_lane_count" >&2
+    fi
     return 0
   }
 
@@ -714,6 +922,11 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
     fi
 
     local terminal=0 parked_count=0 observing=0 unmeasurable=0 deferred=0
+    # Invalid-state lane pre-tier dispositions (see invalid_state_route_gate).
+    # `routed` candidates are DEFERRED, not resolved: the freeze persists until
+    # the intervention session or a human reaps, and their job-dir markers are
+    # deliberately left intact.
+    local routed_count=0 kept_by_lane_count=0
 
     if [[ -z "$candidates" ]]; then
       printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
@@ -806,6 +1019,14 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
       return 0
     fi
+
+    # verify-landed — the shared primitive step (13) below uses to confirm a
+    # park actually landed on origin/main. Resolved from `_lfsp_dir` (see the
+    # identical comment on frozen_session_sweep's copy above), not from
+    # `$repo_root`, for the same reason: verify-landed needs its OWN
+    # checkout's tsx/node_modules, and takes the repo it inspects as `-C`. A
+    # missing/non-executable copy just falls back to "not landed" (fail-safe).
+    local verify_landed="$_lfsp_dir/../../../../packages/intentionsutil/scripts/verify-landed"
 
     # The lazy-fetch latch: at most one `git fetch` per sweep invocation, and
     # none at all when no candidate ages past the grace.
@@ -983,13 +1204,30 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         continue
       fi
 
-      # (8) Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph` — deliberately
-      # inlined rather than shared (the same deliberate duplication
-      # frozen_session_sweep step (8) carries). The frontmatter scoping is
-      # load-bearing: restricting the test to the YAML block (between the first
-      # two `---` fences) means a column-0 `office_hours:` line in the markdown
-      # BODY can never be misread as park state.
+      # (7b) Diagnosis-time base (ref-diagnosis-time-cas), exactly as
+      # frozen_session_sweep step (7b) does it. The decision this sweep is about
+      # to make — "not parked, still at a working phase, so park it" — is made
+      # against the blob read HERE, from a ref last fetched once at step (6).
+      # Pin that exact blob through park-node's --base so a park landing in the
+      # window between this read and the write at step (12) is REFUSED (exit 3)
+      # rather than overwritten. `rev-parse` is the identical expression
+      # park-node resolves FRESH_BLOB with (park-node:205), so the two are
+      # bit-for-bit comparable; hashing $body instead would not match, because
+      # command substitution strips its trailing newlines.
+      local diagnosis_blob
+      if ! diagnosis_blob=$(git -C "$repo_root" rev-parse "origin/main:intentions/${name}.md" 2>/dev/null); then
+        printf 'lib-frozen-session-park: keeping %s (could not resolve the origin/main blob sha for intentions/%s.md; refusing to park without a compare-and-swap base)\n' "$name" "$name" >&2
+        continue
+      fi
+
+      # (8) Already parked. Idiom deliberately inlined rather than shared (same
+      # frontmatter-scoped, column-0-anchored idiom `node_kind_on_main` in
+      # `packages/intentionsutil/scripts/office-hours-graph` uses; also the same
+      # deliberate duplication frozen_session_sweep step (8) carries). The
+      # frontmatter scoping is load-bearing: restricting the test to the YAML
+      # block (between the first two `---` fences) means a column-0
+      # `office_hours:` line in the markdown BODY can never be misread as park
+      # state.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -1075,10 +1313,51 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         fi
       fi
       if [[ -z "$reason" ]]; then
+        # LOAD-BEARING: the leading clause "phase session ended without
+        # declaring a disposition" is dispatch-terminal-gap-audit's
+        # SYNTHESIZED_REASON_PREFIX classifier — it buckets any parked node
+        # whose reason does NOT start with this text as parked-by-design
+        # rather than landed-then-skipped. A reword of this clause silently
+        # moves real landed-then-skipped nodes into parked-by-design with no
+        # unmeasurable signal. test-dispatch-terminal-gap-audit.sh ratchets
+        # this: it extracts the audit's prefix and asserts it is still a
+        # literal substring of this file. Reword the tail after the em-dash
+        # freely; keep the leading clause in sync with the audit if you must
+        # change it.
         printf -v reason \
           'phase session ended without declaring a disposition — `claude agents --all` reports the session for this node in a terminal state and it has had no transcript activity for `%s`s, while `origin/main` still shows the node at a working phase with `office_hours: null`; the node is therefore both re-selectable and held, so the dispatch-tick terminal-without-disposition sweep parked it' \
           "$idle"
-        recommendation="Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded. Decide the judgment item it stopped on, then either answer it here and \`clear-park <node-id>\`, or stop the session (\`claude stop <job-id>\`), let \`dispatch-sweep\` reap the worktree, and \`clear-park <node-id>\` to return the node to the lane. Do NOT simply reap the terminal session and release the node — that is what restarts the churn loop."
+        # Structured as an explicit numbered sequence — steps (1)-(4) plus the
+        # already-reaped exception. dispatch-terminal-gap-audit's
+        # print_remediation() prints the same steps in the same order; keep the
+        # two copies saying the same thing.
+        recommendation="Reap THEN clear — this order is mandatory, not a choice between two options. (1) Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded; deciding the judgment item the session stopped on is done IN ADDITION to the reap, never instead of it. (2) Reap the terminal session: whenever the terminal session is still present, reap it before clearing the park — that order is mandatory — by stopping it (\`claude stop <job-id>\`) and letting \`dispatch-sweep\` reap the worktree. (3) Only if step (2) does not clear the session (e.g. an unpushed branch whose content is already landed elsewhere), verify the worktree is safe to discard BEFORE the destructive fallback, using the same reap-safety gate \`lib-session-reap.sh\` applies: (a) \`git -C <worktree> status --porcelain --untracked-files=no\` prints nothing (no uncommitted work), (b) \`git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'\` exits 0 (tree content already landed; the \`intentions/\` carve-out is deliberate — graph commits land separately), and (c) no OPEN PR still has that branch as its head; judge by that content diff, never by a commits-ahead count: GitHub squash-merges, so a safe branch routinely reads many commits ahead. If any of (a)-(c) does not pass, do NOT remove the worktree — the work in it is not yet landed. Only once they all pass, fall back to \`git worktree remove\` plus \`claude rm <job-id>\`. (4) ONLY THEN \`clear-park <node-id>\` to return the node to the lane. Exception — if \`claude agents --all\` shows no session for this node, the session is already gone, the reap step is already satisfied, and \`clear-park <node-id>\` alone is the correct and sufficient action. Why the order is mandatory: clearing the park while the session is still present is a no-op — the same sweep re-parks the node on its next pass, because the condition it detects (a terminal, un-reaped session with no recorded disposition) is unchanged by the clear alone. (Observed: a park was cleared with the session left alive, and the same sweep re-parked the node twice.)"
+      fi
+
+      # (11b) INVALID-STATE LANE PRE-TIER. Consulted after every gate above
+      # (name shape, session-id shape, idle grace, stand-down interlock, the
+      # `phase: done` gate, the park cap and the base-blob pin) and immediately
+      # before the park below. A `handled` verdict means an intervention session
+      # was launched, so this candidate is DEFERRED — do NOT park it, and do NOT
+      # delete the job dir's `office-hours-*` markers, because the intervention
+      # may still need them and this pass has proven nothing. A `keep` verdict is
+      # positive evidence to do nothing. Anything else — escalate, router
+      # failure, usage error, timeout, or a missing/unresolvable router — falls
+      # through to the park path completely unchanged. Fail toward escalate.
+      #
+      # This sweep still owns escalation this round; extracting the
+      # park-with-landing-proof block into the router is a declared residual.
+      local lane_rc=0
+      invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( lane_rc == 0 )); then
+        routed_count=$(( routed_count + 1 ))
+        printf 'lib-frozen-session-park: routed %s to the invalid-state lane (terminal-session; session=%s) — deferred, not parked; markers left intact\n' "$name" "$sid" >&2
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "routed-to-lane"
+        continue
+      elif (( lane_rc == 4 )); then
+        kept_by_lane_count=$(( kept_by_lane_count + 1 ))
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "kept-by-lane"
+        continue
       fi
 
       # (12) Park. Invoked BY PATH under $repo_root, exactly as
@@ -1097,10 +1376,17 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # The tick must keep scheduling even when the landing lock is busy — the
       # header's "retries on the next tick if a landing-lock wait is in progress"
       # is only true because of these two bounds.
+      #
+      # park-node's parse is leading-flags-only, so every flag precedes the
+      # positionals. The `<id>=<sha>` pair form of `--base` (rather than a bare
+      # sha) is a free guard — park-node rejects a pair whose id is not the node
+      # id, so a mis-threaded `$name` fails loudly instead of pinning the wrong
+      # file.
       local -a park_args=()
       if [[ -n "$pr" ]]; then
         park_args+=(--pr "$pr")
       fi
+      park_args+=(--base "$name=$diagnosis_blob")
       park_args+=("$name" "$reason" "$recommendation")
       local rc=0
       GRAPH_COMMIT_LOCK_WAIT_SECONDS="$lock_wait" \
@@ -1110,33 +1396,42 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         # `graph-commit`, and invariant I2 says a `graph-commit` exit 0 is never
         # evidence that anything reached `origin/main` — so the exit code alone
         # does not get to authorize deleting the session's escalation markers,
-        # which are the only surviving copy of its own escalation text. Re-read
-        # the node from origin/main and require `office_hours` to be non-null
-        # there; marker deletion is the PROOF the park landed, not a cleanup step
-        # that trusts an exit code (see the header).
+        # which are the only surviving copy of its own escalation text. Marker
+        # deletion is the PROOF the park landed, not a cleanup step that trusts
+        # an exit code (see the header). DELETING THE ESCALATION MARKERS ON A
+        # BARE EXIT 0 WOULD CONVERT A RECOVERABLE FAILURE INTO AN UNRECOVERABLE
+        # ONE: the markers are the only surviving copy of the session's own
+        # escalation text, so losing them on an unconfirmed park strands the
+        # node held-and-unparked with nothing left to retry from. That is why
+        # the confirmation below, not the exit code, gates the `rm -f` further
+        # down.
         #
-        # The fetch is mandatory here, not latched with step (6)'s: the park we
-        # just ran is exactly what made this checkout's `origin/main` stale, so a
+        # Delegates to the shared `verify-landed` primitive (three-valued:
+        # landed/not-landed/unknown, `unknown` never collapsed into `landed` —
+        # see that script's own header, which cross-references this rationale)
+        # rather than re-deriving the git-show/awk/grep check inline. The fetch
+        # is mandatory here, not latched with step (6)'s: the park we just ran
+        # is exactly what made this checkout's `origin/main` stale, so a
         # confirmation read against the pre-park ref would report every park as
-        # not-landed. A failed fetch is non-fatal and falls through to a stale
-        # read, which reads as NOT LANDED — the fail-safe direction.
+        # not-landed. It is done explicitly by this sweep (not by verify-landed
+        # itself, called with `--no-fetch`) so it counts against this sweep's
+        # own documented fetch budget; a failed fetch is non-fatal and falls
+        # through to a stale read, which verify-landed reports as `unknown` —
+        # the fail-safe direction, since `unknown` is never `landed`.
         git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
 
-        # Same frontmatter-scoped idiom as step (8), in the OPPOSITE polarity:
-        # there it answers "was this already parked before we touched it", here
-        # "did OUR park land". Non-null under the YAML fences is the only thing
-        # that counts as landed; a null value, a missing `office_hours` key, and
-        # an unreadable/absent node file are all NOT landed. The frontmatter
-        # scoping is load-bearing for the same reason it is there: a column-0
-        # `office_hours:` line in the markdown BODY must never certify a park.
-        local landed=0 confirm_body confirm_frontmatter
-        if confirm_body=$(git -C "$repo_root" show "origin/main:intentions/${name}.md" 2>/dev/null); then
-          confirm_frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$confirm_body")
-          if grep -q '^office_hours:' <<<"$confirm_frontmatter"; then
-            if ! grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$confirm_frontmatter"; then
-              landed=1
-            fi
-          fi
+        # Separate `--node` / `--jq` arguments, and a charset check on the id
+        # first: see the denied-command sweep's fuller note at its own
+        # verify-landed call. Here the stake is higher — a forged `landed` is
+        # what authorizes the `rm -f` of this session's only escalation copy
+        # below — so a malformed id must fail closed, keeping the markers.
+        local landed=0 vl_rc=0
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$; KEEPING the escalation markers\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
+            >/dev/null 2>&1 || vl_rc=$?
+          (( vl_rc == 0 )) && landed=1
         fi
 
         if (( landed )); then
@@ -1162,6 +1457,18 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
             "$name" "$name" >&2
           _terminal_disposition_log_decision "$name" "$sid" "$idle" "park-not-landed"
         fi
+      elif (( rc == 3 )); then
+        # NOT a park failure. park-node refused the compare-and-swap because the
+        # node changed on origin/main after this sweep read it — it is already
+        # parked, or already under human review. Nothing was written, nothing is
+        # broken, and the correct response is to re-diagnose next tick, never to
+        # retry without the base and never to park again
+        # (.claude/skills/ref-diagnosis-time-cas/SKILL.md:73-83). The escalation
+        # markers stay where the failure paths leave them: they are only ever
+        # deleted from the confirmed-landed branch above.
+        printf 'lib-frozen-session-park: stale-diagnosis skip for %s — intentions/%s.md on origin/main changed after this sweep read it (pinned base %s); park-node REFUSED rather than overwriting a park that landed in the meantime. Nothing was written, keeping the escalation markers; the next tick re-reads and re-decides\n' \
+          "$name" "$name" "$diagnosis_blob" >&2
+        _terminal_disposition_log_decision "$name" "$sid" "$idle" "stale-diagnosis"
       elif (( rc == 124 )); then
         # A timeout is just another park failure — same non-fatal handling, the
         # markers are retained, but it is named distinctly so a contended landing
@@ -1179,6 +1486,15 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
 
     printf 'lib-frozen-session-park: terminal-disposition sweep complete (terminal=%s parked=%s observing=%s unmeasurable=%s deferred=%s)\n' \
       "$terminal" "$parked_count" "$observing" "$unmeasurable" "$deferred" >&2
+    # The lane pre-tier's dispositions are reported on their own line, and only
+    # when there is something to report. Appending them to the summary above
+    # would change a line other consumers (journald greps, the existing suite's
+    # oracles) match exactly, for no gain on the overwhelmingly common
+    # nothing-routed tick.
+    if (( routed_count > 0 || kept_by_lane_count > 0 )); then
+      printf 'lib-frozen-session-park: terminal-disposition lane pre-tier (routed=%s kept-by-lane=%s) — routed candidates are DEFERRED, not resolved\n' \
+        "$routed_count" "$kept_by_lane_count" >&2
+    fi
     return 0
   }
 

@@ -29,8 +29,11 @@ rationale: "Claude access is prepaid (Max 20x plan): the marginal token is sunk
   vendor's growth via spend' divergence imported by delegation-anthropic-claude:
   on prepaid terms that import is bounded at plan price and reviewed at renewal,
   which is its alignment-of-attachments content."
-reading: null
-gap: null
+reading: "utilization: 10% weekly; tactics 28d: 304 created / 225 closed (net +79)"
+gap: 'reading "utilization: 10% weekly; tactics 28d: 304 created / 225 closed
+  (net +79)" does not meet threshold "utilization near 100% of the weekly
+  allowance while open claude-eligible tactics are non-increasing (closure at or
+  above arrival); full utilization with a growing backlog fails the signal"'
 serves:
   - virtue-alignment-of-attachments
 recovers: []
@@ -743,6 +746,229 @@ clarifications:
       strategy as never-aligned and never-read; correct the structured fields at
       the next sensor pass so the round cap and the fresh-reading gate operate
       on the real history.
+  - question: Which trigger predicate must the widened api-cost lens use, given that
+      the classifier gating it reads file paths only and can never express
+      "touches an API or query call site"?
+    answer: "(Recorded 2026-08-03, author interview; fills the mechanism gap
+      clarifications 18 and 28 left open.) The lens gets its OWN diff-content
+      gate, decoupled from the shared `app_or_rules` boolean. Compute a new
+      `api_call_site` flag at the review-fix args-build site
+      (.claude/skills/review-fix/SKILL.md:240), where MERGE_BASE is already in
+      scope, by scanning the diff for API/query call-site patterns
+      (fetch/axios/getDocs/query/collection), and gate api-cost on that flag
+      inside `agentFinderSet` (review-fix.js:499-511, within the `>>> domain
+      sweep gate` sentinels sliced by review-fix-domain-sweep-probe.mjs).
+      Measured this round: `dispatch-security-surface` receives a path list on
+      stdin (`dispatch-changed-files | dispatch-security-surface`) and gates on
+      extension/name regexes alone (APP_RE, RULES_RE at
+      dispatch-security-surface:26-35) — it never inspects diff content, so the
+      statement's requirement is not expressible there and a content probe
+      belongs at the args-build site rather than inside that script. Two
+      alternatives were put to the author and declined. Relaxing the shared
+      `app_or_rules` predicate was declined primarily because that boolean ALSO
+      selects the auth and data-exposure domain-sweep sections (`sweepDomains`,
+      review-fix.js:667-672), so relaxing it would silently widen SECURITY
+      review scope to every code diff including `.claude/` tooling — a larger
+      and less visible consequence than the ~3.6x draw overshoot; a per-lens
+      gate keyed on a widened PATH rule was declined because it still does not
+      express the call-site requirement and re-approximates it by path,
+      inheriting the same overshoot without the simplicity. UNMEASURED, and
+      flagged as such: nobody has counted how many of the 18 measured runs
+      contain such a call site, so the resulting fire rate is a tunable design
+      property of the pattern list, not a measurement. The decomposition must
+      record the realized fire rate once observed."
+  - question: Is clarification 18's "~$14 toward ~$25-30 proxy per 4-day window" a
+      gate the api-cost tactic's Verification block must assert, or an expected
+      consequence of the widening?
+    answer: "(Recorded 2026-08-03, author interview.) An expected range, not a gate.
+      The binding constraint is the statement's semantics — the lens fires on
+      diffs touching an API or query call site — and the realized draw is
+      measured and recorded afterward rather than asserted as a threshold. The
+      figure was derived from an assumed widening, so treating it as binding
+      would let a derived estimate constrain the mechanism it was derived from.
+      Same correction shape as the 2026-08-03 ruling that restated
+      tactic-review-verify-per-file-batching's 3.2x as an upper bound once the
+      arithmetic no longer supported it as a target. Consequence for
+      decomposition: Verification asserts that the merged lens fires on
+      materially more than 5 of 18 comparable runs and records the realized
+      draw, and does NOT assert a dollar ceiling or floor."
+  - question: (Recorded 2026-08-03 /align-tactics round; re-verifies a 2026-07-31
+      draft-body claim on tactic-token-audit-whole-session-phase-attribution.)
+      Does the session-type classifier still type phase-worker sessions
+      correctly, and are subagent transcripts still attributed correctly, after
+      tactic-align-tactics-workflow made /align-tactics Workflow-shaped?
+    answer: "Yes, still reliable. The draft body's Scope asserted the session-type
+      classifier already types phase-worker sessions correctly and that subagent
+      transcripts are attributed correctly today — a claim made 2026-07-31,
+      before sibling tactic-align-tactics-workflow reached phase:done and made
+      /align-tactics Workflow-shaped. Re-checked at HEAD: the $type classifier's
+      worker alternation
+      (.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh:319)
+      already lists align-tactics and review-fix, and Workflow fan-out subagents
+      are typed 'subagent' by transcript path (/subagents/, line 308) rather
+      than falling to 'other' — so a Workflow-shaped phase's parent session
+      still types worker and its fan-out still types subagent. The
+      whole-session-attribution design holds unchanged for the newer session
+      shape; no scope change follows."
+  - question: "(Recorded 2026-08-03 /align-tactics round.)
+      tactic-token-audit-whole-session-phase-attribution's draft Verification
+      asserted review-fix should rise toward its measured $754 true cost and
+      made the plan contingent on sequencing against
+      tactic-review-skill-body-decomposition. That sibling is stuck
+      (phase:review, blocked_by an office-hours-parked fix-attempt-cap hold on
+      PR #3025). Does the attribution fix wait for it?"
+    answer: No — re-baseline; do not assert the 2026-07-31 figures as gates.
+      Sequencing this measurement fix behind an office-hours-parked node would
+      stall it indefinitely, so it proceeds now and re-measures its own
+      baseline. Consistent with the same-day rulings that restated
+      tactic-review-verify-per-file-batching's 3.2x as an upper bound and
+      clarification 18's ~$14 toward ~$25-30 as an expected range rather than a
+      gate, the tactic's Verification asserts the structural outcome — a
+      single-phase worker session's phase map resolves to exactly one key, and
+      the <none> share of worker-session turns falls materially against a
+      freshly re-run baseline — and records the realized figures rather than
+      asserting the stale $614/$754/75% numbers as thresholds.
+  - question: (Recorded 2026-08-03 /align-tactics round; measured against HEAD.)
+      tactic-token-audit-whole-session-phase-attribution promotes the token
+      audit's worker-skill enumeration from a session-typing input to a
+      cost-attribution input. The phase-to-skill correspondence is actually
+      enumerated three times in non-identical form in aggregate-usage.sh. Does
+      whole-session attribution need to reconcile all three, or single-source
+      only the one it consumes?
+    answer: (Recorded 2026-08-03 /align-tactics round; measured against HEAD.)
+      Single-source only the one it consumes; reconciling all three is out of
+      scope for that tactic. The $type classifier's worker alternation
+      (aggregate-usage.sh:319) carries a superset — plan-issue, implement,
+      qa-fix, review-fix, fix-checks, fix-conflicts, dispatch-conflict, qa-main,
+      budget-parse-job, resolve-epic, office-hours, align-strategy,
+      align-tactics, align-init — while the stage-2 $phase_skill map (882-883)
+      and the shell _phase_map loop (108-113) each carry only the five-phase set
+      (implement/fix/qa/review/main-qa). Today a skill missing from the
+      alternation only mistypes a session as 'other'; once the whole session's
+      cost is attributed from that alternation, a missing entry would silently
+      park an entire worker session's spend in <none> — reproducing exactly the
+      condition-2 blindness the tactic exists to remove. Per
+      .claude/rules/code-style.md the failure must be loud rather than a silent
+      fallback, so the tactic's Unit 1 single-sources the classifier's own
+      alternation into a named jq def rather than adding a fourth independent
+      list; reconciling the other two enumerations remains explicitly out of
+      scope for that tactic and is a separate concern if it becomes
+      load-bearing.
+  - question: What is the weekly utilization target, and does 5-hour rolling-window
+      pacing qualify it?
+    answer: "(Recorded 2026-08-04 interview, author-dictated.) The target is 100% of
+      the weekly allowance, every week, regardless of current 5-hour
+      rolling-window pacing. Token economy is paramount in the sense of
+      maximizing functional throughput within that allowance — verbosity and
+      efficiency levers serve closure velocity, never spend reduction. This
+      fixes how success_signal.threshold's 'utilization near 100% of the weekly
+      allowance' is to be read: the window is weekly, the cadence is every week
+      rather than an average across weeks, and short-window 5-hour pacing is not
+      a qualifier — a week that under-uses the allowance because 5-hour windows
+      throttled it still fails the signal, and the response is to raise
+      throughput, not to restate the target. Restates clarification 2's
+      throughput-not-savings ruling as a standing target rather than only a
+      definition; the round-2 reading of ~7% utilization (clarification 11) is a
+      measurement against this target, not a revision of it."
+  - question: Does disabling verbose output for unsupervised dispatch workers reduce
+      token draw, and what is terser conversation prose actually worth?
+    answer: >
+      (Recorded 2026-08-04 interview; measured this round.) The config lever is
+      void and the underlying hypothesis is real but small; no tactic is
+      created. (a) VOID MECHANISM: the `verbose` settings key and the
+      `--verbose` flag are a display/logging mode — the CLI documents the flag
+      as 'Override verbose mode setting from config', and it changes what the
+      terminal renders, not what the model generates or what is re-sent as
+      context. Disabling it saves approximately zero tokens. No dispatch launch
+      path sets it today: a grep of `.claude/` finds no `verbose` key, and
+      workers spawn via `dispatch-spawn-job` as `claude --bg --name --model
+      --effort --permission-mode auto`, which carries no output-verbosity
+      argument. (b) SIZING OF THE REAL HYPOTHESIS — terser conversation prose
+      from the model, counting BOTH generation and the re-send-as-context tail
+      the author named: measured over 46 transcripts / 24 sessions / 2,646
+      assistant turns in the 3 days to 2026-08-04, price-proxy weighted, total
+      draw was ~$197 proxy, split 86% input side (input + cache_creation +
+      cache_read) and 14% output side. Assistant conversation prose totalled
+      ~37.5k tokens (~150k chars); costed all-in — generated at the output rate,
+      written to cache once, then read back on every remaining assistant turn of
+      its session — it is ~$1.53, about 0.8% of draw. Tool-use arguments (the
+      work itself: bash commands, file writes, subagent prompts, unreachable by
+      any prose-style change) are ~$10.07 all-in, about 5%. (c) WHERE THE OUTPUT
+      SIDE ACTUALLY GOES: thinking blocks are present (859 in the window) but
+      their text is not persisted in transcripts — the `.thinking` field is
+      empty and only a signature is stored — so thinking volume is not directly
+      measurable; reconciling 1,815,033 output tokens against ~1.17M chars of
+      visible content implies roughly 83% of output tokens are thinking, about
+      12% of total draw. Thinking is not re-sent as context, so the lever that
+      reaches it is the phase-to-effort routing already recorded in
+      tooling_goals, never prose style. (d) WHERE THE DRAW ACTUALLY IS: the
+      dominant 86% is the input side, dominated by cache_read — the context
+      re-read on every turn. The levers already recorded against it are
+      clarification 4 (context discipline), clarification 12 (SKILL-body prose
+      and boot boilerplate as per-session standup cost) and clarification 15
+      (prefer one script over a multi-step Claude turn loop, since every round
+      trip re-reads the whole context). Terse prose does not reach any of them;
+      reducing TURN COUNT and resident context does. (e) AUTHOR RULING: record
+      the evaluation, create NO draft tactic. Under the author's standing rule a
+      low-but-meaningful lever would still be recorded and merely left
+      unprioritized; at a ~0.8% ceiling the mechanism is declined outright
+      rather than parked. If it is ever revived, the mechanism is a
+      system-prompt or output-style-level terseness scoped to unsupervised
+      worker sessions, leaving edit and tool output untouched, and it must
+      preserve the background-job state-classifier lines (`result:` / `needs
+      input:` / `failed:` and restated outcomes, which that classifier reads
+      from message text only, never from tool output) plus enough narration to
+      debug a failed session — the same shape as the quality-preservation
+      condition, which forbids buying efficiency with lost signal. (f)
+      MEASUREMENT CAVEATS, flagged rather than buried: the re-send cost model is
+      a linear approximation (each prose block re-read once per remaining
+      assistant turn of its session, 4 chars per token), and the display-only
+      reading of `verbose` rests on the CLI's own help text rather than a
+      controlled A/B. Both would need tightening before any figure here is
+      treated as a threshold. No `recovers` edge — this round reduces no
+      reliance on delegation-anthropic-claude.
+
+
+      (Amended 2026-08-04, same-day follow-up to an author question — 'does the
+      input-side 86% include outputs from previous rounds?'.) Two corrections.
+      FIRST, an axis correction that the original wording invited: the 86%/14%
+      figures in (b) are a BILLING-category split — input-priced tokens (input +
+      cache_creation + cache_read) against output-priced tokens — and NOT a
+      provenance split. The 86% input side is the entire re-sent conversation
+      prefix, so it already contains every prior turn's assistant output,
+      conversation prose included, alongside the system prompt, skill bodies,
+      file reads and tool results. It follows that (b)'s ~0.8% prose figure and
+      (d)'s 86% lie on different axes and must NEVER be summed: prose's
+      generation sits inside the 14% and prose's re-send tail sits inside the
+      86%, which is exactly why (b) costed prose all-in. The ~0.8% remains the
+      correct answer to 'what would terser prose save', unchanged by this
+      amendment. SECOND, a substantive retraction: sub-claim (c)'s parenthetical
+      that thinking 'is not re-sent as context' was asserted without
+      measurement, and the evidence is against it. Tested by comparing per-turn
+      context growth against the visible content added between turns across 59
+      transcripts since 2026-08-01: measured context growth was 3,601,271 tokens
+      while all visible added content — assistant prose, tool-use arguments,
+      tool results and user text — accounts for 2,081,399 tokens at 4 characters
+      per token or 2,775,198 at 3, leaving between 826,073 and 1,519,872 tokens
+      of growth unexplained by anything visible in the transcript. That residue
+      is of the same order as the thinking volume inferred in (c) from the
+      output side. The reading that best fits is that thinking blocks are
+      RETAINED in the re-sent prefix within an agentic turn rather than dropped.
+      Consequences, both strengthening rather than weakening this
+      clarification's conclusion: thinking's share of total draw is HIGHER than
+      the ~12% recorded in (c), because it then draws on the input side as well
+      as the output side; and phase-to-effort routing is correspondingly a
+      STRONGER lever than (c) claimed. What does not change: the (a) refutation
+      of the verbose config lever, the ~0.8% prose ceiling in (b), and the
+      author ruling in (e) that no tactic is created. CAVEAT, recorded rather
+      than buried: the characters-per-token conversion drives how decisive this
+      test is — at 3 characters per token the unexplained residue roughly halves
+      — so this is directional evidence about context composition, never a
+      figure to be used as a threshold, and thinking retention remains an
+      inference from usage fields rather than a documented harness guarantee.
+      Recorded under the same discipline as clarification 25: a claim that
+      entered the record unverified is corrected in the record rather than left
+      to be contradicted later.
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance

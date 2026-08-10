@@ -51,7 +51,6 @@ rationale: "Found and empirically confirmed 2026-07-25 while running
   mode), CI vector, and doc-sync units are authored in the body below, ready for
   /implement.)"
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -59,7 +58,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-align-tactics-tactic-mode-drift-gate
   pr: 2982
@@ -67,12 +66,54 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-05T00:15:46Z
+    mergeCommitSha: b8d2e250fcd9188e40f678cd8408933a3edac3ef
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "phase session ended without declaring a disposition — `claude agents
+    --all` reports the session for this node in a terminal state and it has had
+    no transcript activity for `634`s, while `origin/main` still shows the node
+    at a working phase with `office_hours: null`; the node is therefore both
+    re-selectable and held, so the dispatch-tick terminal-without-disposition
+    sweep parked it"
+  since: 2026-08-10
+  recommendation: "Reap THEN clear — this order is mandatory, not a choice between
+    two options. (1) Read the session's transcript or attach the held job
+    (`claude agents --all`, `claude attach <job-id>`) to see what it concluded;
+    deciding the judgment item the session stopped on is done IN ADDITION to the
+    reap, never instead of it. (2) Reap the terminal session: whenever the
+    terminal session is still present, reap it before clearing the park — that
+    order is mandatory — by stopping it (`claude stop <job-id>`) and letting
+    `dispatch-sweep` reap the worktree. (3) Only if step (2) does not clear the
+    session (e.g. an unpushed branch whose content is already landed elsewhere),
+    verify the worktree is safe to discard BEFORE the destructive fallback,
+    using the same reap-safety gate `lib-session-reap.sh` applies: (a) `git -C
+    <worktree> status --porcelain --untracked-files=no` prints nothing (no
+    uncommitted work), (b) `git -C <worktree> diff --quiet origin/main HEAD -- .
+    ':!intentions'` exits 0 (tree content already landed; the `intentions/`
+    carve-out is deliberate — graph commits land separately), and (c) no OPEN PR
+    still has that branch as its head; judge by that content diff, never by a
+    commits-ahead count: GitHub squash-merges, so a safe branch routinely reads
+    many commits ahead. If any of (a)-(c) does not pass, do NOT remove the
+    worktree — the work in it is not yet landed. Only once they all pass, fall
+    back to `git worktree remove` plus `claude rm <job-id>`. (4) ONLY THEN
+    `clear-park <node-id>` to return the node to the lane. Exception — if
+    `claude agents --all` shows no session for this node, the session is already
+    gone, the reap step is already satisfied, and `clear-park <node-id>` alone
+    is the correct and sufficient action. Why the order is mandatory: clearing
+    the park while the session is still present is a no-op — the same sweep
+    re-parks the node on its next pass, because the condition it detects (a
+    terminal, un-reaped session with no recorded disposition) is unchanged by
+    the clear alone. (Observed: a park was cleared with the session left alive,
+    and the same sweep re-parked the node twice.)"
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -390,7 +431,7 @@ opus
 `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`, so a PR touching
 only `align-tactics.js` triggers no vitest suite. The only test that runs on
 every PR is the hook-tests job, which invokes
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` directly
+`.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh` directly
 (`.github/workflows/unit-tests.yml:199`). Coverage therefore lands as a
 sentinel-slice probe driven from that script — the pattern already established
 by `align-tactics-tempref-probe.mjs` and `qa-fix-partition-probe.mjs`.
@@ -433,11 +474,10 @@ Vectors to assert (`g = computePhaseGates(mode, drift)`):
    `computePhaseGates('strategy', {})` → both gates false in both calls.
 
 **Driver block** in
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`: insert
-immediately **after** the existing `=== align-tactics tempref (resolveTempRefs)
-===` block (which ends at the `assert_eq "align-tactics tempref: all probe
-vectors pass" ...` line, currently line 25040), using the same banner-comment +
-`echo` + `assert_eq` shape:
+`.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh`: insert
+using the same banner-comment + `echo` + `assert_eq` shape as its sibling
+`test-align-tactics-tempref.sh` (which drives the tempref probe from its own,
+now-separate file):
 
 ```bash
 # ============================================================================
@@ -460,10 +500,9 @@ assert_eq "align-tactics gates: computePhaseGates call site present" "1" "$(grep
 assert_eq "align-tactics gates: no phase gate reads raw !driftProceed" "0" "$(grep -c '!driftProceed' "$REPO_ROOT/.claude/workflows/align-tactics.js" || true)"
 ```
 
-`SCRIPT_DIR` and `REPO_ROOT` are already defined in that script
-(`test-dispatch-scripts.sh:8`, and `REPO_ROOT` is used by the adjacent qa-fix
-call-site assertion). Make the new `.mjs` file executable (`chmod +x`) to match
-its sibling probes.
+`SCRIPT_DIR` and `REPO_ROOT` are already available via the sourced
+`dispatch-test-fixture.sh` (see `test-align-tactics-gates.sh`'s own header).
+Make the new `.mjs` file executable (`chmod +x`) to match its sibling probes.
 
 Note for the shell edit: `.claude/rules/shell-json.md` is mechanically linted on
 net-new added lines in committed `.sh` files — do not pipe a captured variable
@@ -567,10 +606,10 @@ Unit 1 (the docs describe the landed behavior).
 - **`.claude/skills/dispatch-propagate/scripts/qa-fix-partition-probe.mjs`** —
   the second instance of the same pattern, confirming one probe file per pure
   function rather than one shared probe.
-- **`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:25025-25040`**
+- **`.claude/skills/dispatch-propagate/scripts/test-align-tactics-tempref.sh`**
   — the tempref probe driver block (banner comment, `echo`, `out_at=$(node …)`,
-  `assert_eq` on the `tail -n1` token) plus the adjacent qa-fix call-site
-  `grep -c` assertion. Unit 2's driver mirrors both.
+  `assert_eq` on the `tail -n1` token); `test-qa-fix-partition.sh` carries the
+  analogous qa-fix call-site `grep -c` assertion. Unit 2's driver mirrors both.
 - **`.claude/workflows/qa-fix.js:501-580`** — the fix-plan phase gated on the
   independent `plan_fix` flag. The cited precedent for gating a phase on a
   purpose-built flag rather than overloading one upstream boolean.
@@ -593,7 +632,7 @@ node .claude/skills/dispatch-propagate/scripts/align-tactics-gates-probe.mjs
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh
 ```
 
 ```verify

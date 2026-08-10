@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IntentionNode, Owner } from "../src/schema.js";
+import type { IntentionNode, Owner, SuccessSignal } from "../src/schema.js";
 import type { Goal } from "../src/goals.js";
 import {
   activeFrontier,
@@ -7,6 +7,14 @@ import {
   realizationForOwner,
   renderFrontier,
 } from "../src/goals.js";
+
+// `gap` is derived on read (deriveGap, sensors.ts) rather than stored, so a
+// fixture that needs a non-null gap sets `success_signal` with no `reading` —
+// deriveGap's "no reading yet" branch — instead of authoring a `gap` string
+// directly. GAP_SIGNAL's threshold appears verbatim in the derived message, so
+// tests below assert against `GAP_MESSAGE` rather than an arbitrary string.
+const GAP_SIGNAL: SuccessSignal = { observable: "o", sensor: "s", threshold: "t", is_proxy: false };
+const GAP_MESSAGE = `no reading yet (threshold: ${GAP_SIGNAL.threshold})`;
 
 /** Build an IntentionNode fixture, filling required/default fields. */
 function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
@@ -21,7 +29,6 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -88,7 +95,7 @@ describe("projectGoals", () => {
   });
 
   it("floats a non-null-gap node ahead of null-gap nodes regardless of input order", () => {
-    const withGap = node({ id: "z", status: "raw", gap: "missing tooling" });
+    const withGap = node({ id: "z", status: "raw", success_signal: GAP_SIGNAL });
     const noGapA = node({ id: "a", status: "raw" });
     const noGapB = node({ id: "b", status: "raw" });
 
@@ -96,6 +103,26 @@ describe("projectGoals", () => {
     // would place it last.
     const goals = projectGoals([noGapB, withGap, noGapA]);
     expect(goals.map((g) => g.node.id)).toEqual(["z", "a", "b"]);
+  });
+
+  it("derives the gap fresh from reading vs threshold rather than trusting any stale stored value — a met threshold does not float ahead", () => {
+    // Two nodes both name a success_signal (so a pre-derive-on-read model
+    // that trusted a possibly-stale stored `gap` field could disagree with
+    // this run's fresh reading). "met" has a reading that satisfies its
+    // threshold — deriveGap(met) is null. "unmet" has no reading yet —
+    // deriveGap(unmet) is non-null. Only "unmet" should float ahead.
+    // "met"'s id sorts before "unmet"'s, so a naive id tiebreak would rank
+    // met first; the gap criterion must override that.
+    const met = node({
+      id: "a-met",
+      status: "raw",
+      success_signal: GAP_SIGNAL,
+      reading: GAP_SIGNAL.threshold,
+    });
+    const unmet = node({ id: "z-unmet", status: "raw", success_signal: GAP_SIGNAL });
+
+    const goals = projectGoals([met, unmet]);
+    expect(goals.map((g) => g.node.id)).toEqual(["z-unmet", "a-met"]);
   });
 
   it("orders success_signal-present ahead of absent within the same gap class", () => {
@@ -160,8 +187,8 @@ describe("projectGoals attention ordering", () => {
     // so gap/id keys alone would rank it LAST.
     const injected = node({ id: "z-inject-tactic", kind: "tactic", status: "raw", parent: "strategy-s" });
     // Competing frontier leaves the pre-attention keys would rank first.
-    const gapA = node({ id: "a-tactic", kind: "tactic", status: "raw", gap: "g" });
-    const gapB = node({ id: "b-tactic", kind: "tactic", status: "raw", gap: "g" });
+    const gapA = node({ id: "a-tactic", kind: "tactic", status: "raw", success_signal: GAP_SIGNAL });
+    const gapB = node({ id: "b-tactic", kind: "tactic", status: "raw", success_signal: GAP_SIGNAL });
 
     const goals = projectGoals([gapA, gapB, injected, strategy, kindStrategy, kindTactic, kindKind]);
     expect(goals.map((g) => g.node.id)).toEqual(["z-inject-tactic", "a-tactic", "b-tactic"]);
@@ -271,11 +298,11 @@ describe("renderFrontier attention markers", () => {
     // No kind nodes → nothing eligible → every Goal.attention is null → no
     // markers. The exact expected string is the pre-change render.
     const goals = projectGoals([
-      node({ id: "z", status: "raw", gap: "missing tooling" }),
+      node({ id: "z", status: "raw", success_signal: GAP_SIGNAL }),
       node({ id: "a", status: "raw" }),
     ]);
     expect(renderFrontier(goals)).toBe(
-      "- **z** — Statement for z _(owner: human → issue/PR)_ — gap: missing tooling\n" +
+      `- **z** — Statement for z _(owner: human → issue/PR)_ — gap: ${GAP_MESSAGE}\n` +
         "- **a** — Statement for a _(owner: human → issue/PR)_\n",
     );
   });
@@ -284,7 +311,7 @@ describe("renderFrontier attention markers", () => {
 describe("renderFrontier", () => {
   it("is byte-identical across two calls with the same input", () => {
     const goals = projectGoals([
-      node({ id: "z", status: "raw", gap: "missing tooling" }),
+      node({ id: "z", status: "raw", success_signal: GAP_SIGNAL }),
       node({ id: "a", status: "raw" }),
       node({ id: "p", owner: "procedure", status: "raw" }),
     ]);
@@ -293,7 +320,7 @@ describe("renderFrontier", () => {
 
   it("contains no date-shaped substring (determinism guard)", () => {
     const goals = projectGoals([
-      node({ id: "z", status: "raw", gap: "missing tooling" }),
+      node({ id: "z", status: "raw", success_signal: GAP_SIGNAL }),
       node({ id: "a", status: "raw" }),
     ]);
     const out = renderFrontier(goals);
@@ -301,10 +328,10 @@ describe("renderFrontier", () => {
   });
 
   it("ends with a trailing newline and renders a gap when present", () => {
-    const goals = projectGoals([node({ id: "z", status: "raw", gap: "missing tooling" })]);
+    const goals = projectGoals([node({ id: "z", status: "raw", success_signal: GAP_SIGNAL })]);
     const out = renderFrontier(goals);
     expect(out.endsWith("\n")).toBe(true);
-    expect(out).toContain("gap: missing tooling");
+    expect(out).toContain(`gap: ${GAP_MESSAGE}`);
   });
 
   it("renders the stable placeholder for an empty frontier", () => {

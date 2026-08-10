@@ -5,6 +5,8 @@ import {
   QA_DONE_MARKER,
   forwardPhase,
   fixInterrupt,
+  conflictInterrupt,
+  CONFLICT_ATTEMPT_CAP,
   decideTransition,
   addMarker,
   incrementAttempt,
@@ -35,7 +37,6 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -106,6 +107,23 @@ describe("fixInterrupt", () => {
     for (const phase of ["fix", "done", "main-qa"]) {
       expect(fixInterrupt(phase, "failing")).toBe(false);
     }
+  });
+});
+
+describe("conflictInterrupt", () => {
+  it("fires only on a CONFLICTING mergeable value", () => {
+    expect(conflictInterrupt("CONFLICTING")).toBe(true);
+  });
+
+  it("never fires on MERGEABLE or UNKNOWN", () => {
+    expect(conflictInterrupt("MERGEABLE")).toBe(false);
+    expect(conflictInterrupt("UNKNOWN")).toBe(false);
+  });
+});
+
+describe("CONFLICT_ATTEMPT_CAP", () => {
+  it("matches legacy /fix-conflicts' attempt cap of 3", () => {
+    expect(CONFLICT_ATTEMPT_CAP).toBe(3);
   });
 });
 

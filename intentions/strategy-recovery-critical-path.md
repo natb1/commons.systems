@@ -6,27 +6,31 @@ statement: Sequence recovery work as a critical path to the deepest deferrals �
 owner: human
 status: refining
 parent: null
-rationale: "Recovery work now spans two queues — the delegation portfolio (three
-  records classified captured: delegation-attention-services,
-  delegation-finance-saas, delegation-social-publishing) and the tradition
-  curriculum (delegation-philosophical-articulation's relearn path) — and
-  nothing owned the order either is worked in. This strategy owns sequencing:
-  severity picks the target (the record's own audit axes — classification, then
-  divergence — tie-broken by load: how much daily life or graph doctrine flows
-  through the deferral), and dependency order picks the next step (critical-path
-  discipline: a foundation is done first only when it sits on the path to the
-  current highest-severity target; foundational work on no path waits). It
-  performs no recovery itself — the recovers edges stay on the strategies doing
-  the unwinding — and it owns nothing but the order. First application recorded
+rationale: >-
+  Recovery work now spans two queues — the delegation portfolio (three records
+  classified captured: delegation-attention-services, delegation-finance-saas,
+  delegation-social-publishing) and the tradition curriculum
+  (delegation-philosophical-articulation's relearn path) — and nothing owned the
+  order either is worked in. This strategy owns sequencing: severity picks the
+  target (the record's own audit axes — classification, then divergence —
+  tie-broken by load: how much daily life or graph doctrine flows through the
+  deferral), and dependency order picks the next step (critical-path discipline:
+  a foundation is done first only when it sits on the path to the current
+  highest-severity target; foundational work on no path waits). It performs no
+  recovery itself — the recovers edges stay on the strategies doing the
+  unwinding — and it owns nothing but the order. First application recorded
   2026-07-06 in tactic-recovery-critical-path: the portfolio ranking derived,
   and the reading program's capture-doctrine path completed by advancing one
-  chunk."
+  chunk.
+
+
+  Recurrence assessment: the recorded reading covers the first application only;
+  the threshold's "across review cycles" clause is unproven.
 reading: "first application recorded 2026-07-06: portfolio ranking derived
   (attention-services at the top) and the curriculum's capture path (Cave →
   hexis → phronesis) made contiguous by one move — recorded in
   tactic-recovery-critical-path and on tactic-tradition-reading-program"
-gap: reading covers the first application; the threshold's 'across review
-  cycles' clause is unproven
+gap: null
 serves:
   - virtue-progressive-detachment
   - virtue-philosophical-mobility
@@ -132,6 +136,7 @@ office_hours:
     /align-tactics round."
   since: 2026-07-13
   recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:

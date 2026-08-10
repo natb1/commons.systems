@@ -493,6 +493,16 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       return 0
     fi
     local park_node="${DISPATCH_STANDDOWN_PARK_NODE:-$repo_root/packages/intentionsutil/scripts/park-node}"
+    # verify-landed — the shared primitive that confirms a park actually
+    # landed on origin/main (see the park block below). Resolved from THIS
+    # FILE's own on-disk location (`_lsr_dir`), not from `$repo_root` (the
+    # repo being SWEPT, which in tests is a bare scratch fixture with no
+    # `node_modules`): verify-landed's own header explains it must run out of
+    # its OWN checkout (for `node --import tsx/esm` to resolve) while taking
+    # the repo to inspect as a `-C` argument — the same split
+    # lib-frozen-session-park.sh's two sweeps use. A missing/non-executable
+    # copy just falls back to "not landed" at the call site (fail-safe).
+    local verify_landed="$_lsr_dir/../../../../packages/intentionsutil/scripts/verify-landed"
 
     # The lazy-fetch latch: at most one `git fetch` per invocation, and none at
     # all when no marker reaches rule (f).
@@ -632,12 +642,13 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         continue
       fi
 
-      # Already parked. Idiom copied VERBATIM from `park_live_on_main` in
-      # `packages/intentionsutil/scripts/office-hours-graph`. The frontmatter
-      # scoping is load-bearing: restricting the test to the YAML block (between
-      # the first two `---` fences) means a column-0 `office_hours:` line in the
-      # markdown BODY (documentation of the serialization) can never be misread
-      # as park state.
+      # Already parked. The frontmatter scoping below is load-bearing:
+      # restricting the test to the YAML block (between the first two `---`
+      # fences) means a column-0 `office_hours:` line in the markdown BODY
+      # (documentation of the serialization) can never be misread as park
+      # state. Same frontmatter-scoped, column-0-anchored idiom
+      # `node_kind_on_main` in `packages/intentionsutil/scripts/office-hours-graph`
+      # uses, deliberately inlined here rather than shared.
       local frontmatter parked_already=0
       frontmatter=$(awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f' <<<"$body")
       if grep -q '^office_hours:' <<<"$frontmatter"; then
@@ -698,10 +709,50 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       local rc=0
       "$park_node" "$node" "$reason" "$recommendation" >/dev/null || rc=$?
       if (( rc == 0 )); then
-        parked_count=$(( parked_count + 1 ))
-        printf 'lib-standdown-recheck: parked %s (%s; winner=%s survivors=%s)\n' \
-          "$node" "$reason_tag" "${m_winner:-none}" "${survivors:-none}" >&2
-        _standdown_log_decision "$node" "$m_origin" "$m_winner" "$survivors" "$unpushed_flag" "parked"
+        # Confirm the park actually LANDED before counting it. `park-node`
+        # lands through `graph-commit`, and invariant I2 is explicit that a
+        # `graph-commit` exit 0 is never evidence that anything reached
+        # `origin/main` — so the exit code alone does not get to authorize
+        # counting this as a park. Re-read the node from a freshly fetched
+        # `origin/main` via the shared `verify-landed` primitive
+        # (three-valued: `unknown` is never treated as landed — the fail-safe
+        # direction). The fetch is mandatory here, not latched with rule
+        # (f)'s: the park just run is exactly what made this checkout's
+        # `origin/main` stale, so a confirmation read against the pre-park
+        # ref would report every park as not-landed. `--no-fetch` on the
+        # verify-landed call itself: this explicit fetch is the one that
+        # counts against the sweep's own fetch budget, so verify-landed must
+        # not fetch a second time.
+        git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+        # The node id and the predicate are SEPARATE arguments (`--node` /
+        # `--jq`), never a concatenated `"${node}@..."` spec: an id containing
+        # `@` used to become jq source, and an id ending in `@true #` comments
+        # out the predicate and forges `landed` for any node. `$node` here is
+        # read off a stand-down marker filename, not written in this file, so
+        # the charset is also checked locally — a malformed id fails closed
+        # (marker kept, park not counted).
+        local landed=0 vl_rc=0
+        if [[ ! "$node" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-standdown-recheck: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$; KEEPING the marker\n' "$node" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$node" --jq '.office_hours != null' \
+            >/dev/null 2>&1 || vl_rc=$?
+          (( vl_rc == 0 )) && landed=1
+        fi
+        if (( landed )); then
+          parked_count=$(( parked_count + 1 ))
+          printf 'lib-standdown-recheck: parked %s (%s; winner=%s survivors=%s)\n' \
+            "$node" "$reason_tag" "${m_winner:-none}" "${survivors:-none}" >&2
+          _standdown_log_decision "$node" "$m_origin" "$m_winner" "$survivors" "$unpushed_flag" "parked"
+        else
+          # Exit 0, but nothing landed (or verify-landed itself could not
+          # determine the outcome — `unknown` is never counted as landed).
+          # Loud and distinctly greppable: the marker is KEPT so the next
+          # pass retries, and the park is NOT counted.
+          printf 'lib-standdown-recheck: park-not-landed for %s — park-node exited 0 but origin/main still shows no office_hours on intentions/%s.md; graph-commit exit 0 is not evidence a write landed (I2). KEEPING the marker; will retry next tick\n' \
+            "$node" "$node" >&2
+          _standdown_log_decision "$node" "$m_origin" "$m_winner" "$survivors" "$unpushed_flag" "park-not-landed"
+        fi
       else
         # A park failure is never fatal to the sweep or the tick: log it, KEEP
         # the marker so the next pass retries, and move on.

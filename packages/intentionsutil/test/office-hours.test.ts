@@ -1,6 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 import type { Attention, IntentionNode, OfficeHours } from "../src/schema.js";
 import {
@@ -13,10 +16,41 @@ import {
 import type { SessionType } from "../src/schema.js";
 import {
   formatDisposition,
+  formatLiftNote,
   formatQueueRow,
   parseSelectorArgs,
   resolveSessionCwd,
 } from "../scripts/office-hours-select.js";
+import { extractFrontmatter } from "../src/frontmatter.js";
+
+// This test file lives at packages/intentionsutil/test/, so repo root is
+// three dirname() calls up from this file's own location — same pattern as
+// committed-store.test.ts and office-hours-select.ts.
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = dirname(dirname(dirname(testDir)));
+const selectScript = join(repoRoot, "packages/intentionsutil/scripts/office-hours-select.ts");
+
+/** True when `origin/main` resolves in this checkout — the CLI tests below can
+ * only run meaningfully against the real repo (office-hours-select.ts resolves
+ * its own repoRoot from import.meta.url), so they skip cleanly rather than
+ * false-failing in an isolated checkout with no `origin` remote. */
+function hasOriginMain(): boolean {
+  try {
+    execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "origin/main"], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runSelect(args: string[]): string {
+  return execFileSync("npx", ["tsx", selectScript, ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+}
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -31,7 +65,6 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -230,6 +263,198 @@ describe("officeHoursQueue", () => {
     expect(filtered.map((m) => m.nodeId)).toEqual(["tactic-reqdisc"]);
     expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
+
+  it("lifts a parked hold to the rank of the live work it blocks", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(60),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-unrelated",
+        kind: "tactic",
+        attention: boost(40),
+        office_hours: parked(),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-hold", "tactic-unrelated"]);
+    const hold = queue.find((m) => m.nodeId === "tactic-hold");
+    expect(hold?.rank).toBe(60);
+    expect(hold?.ownRank).toBe(0);
+    expect(hold?.liftedFrom).toBe("tactic-source");
+  });
+
+  it("lifts the tier when a blocking source is at a higher tier (tier dominates value)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(100), office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(1),
+        attributes: { tier: 2 },
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.tier).toBe(2);
+    expect(hold?.rank).toBe(1);
+    expect(hold?.ownTier).toBe(1);
+    expect(hold?.ownRank).toBe(100);
+    expect(hold?.liftedFrom).toBe("tactic-source");
+  });
+
+  it("takes the max over several blocking sources", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-src-low",
+        kind: "tactic",
+        attention: boost(5),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-src-high",
+        kind: "tactic",
+        attention: boost(30),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(30);
+    expect(hold?.liftedFrom).toBe("tactic-src-high");
+  });
+
+  it("breaks a tie between equal blocking sources by id ascending", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-src-z",
+        kind: "tactic",
+        attention: boost(9),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-src-a",
+        kind: "tactic",
+        attention: boost(9),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(9);
+    expect(hold?.liftedFrom).toBe("tactic-src-a");
+  });
+
+  it("does not lift from a blocking source already at phase done (cleared blocker)", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(2), office_hours: parked() }),
+      anode({
+        id: "tactic-src-done",
+        kind: "tactic",
+        attention: boost(50),
+        phase: "done",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(2);
+    expect(hold?.tier).toBe(1);
+    expect(hold?.liftedFrom).toBeNull();
+  });
+
+  it("keeps its own key when it outranks every blocking source", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-hold", kind: "tactic", attention: boost(20), office_hours: parked() }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(3),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+    ];
+
+    const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(20);
+    expect(hold?.ownRank).toBe(20);
+    expect(hold?.liftedFrom).toBeNull();
+  });
+
+  it("applies the session-type penalty to a lifted value without crossing a tier", () => {
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "tactic-hold",
+        kind: "tactic",
+        office_hours: parkedTyped("requirement-discovery"),
+      }),
+      anode({
+        id: "tactic-source",
+        kind: "tactic",
+        attention: boost(40),
+        phase: "implement",
+        blocked_by: ["tactic-hold"],
+      }),
+      anode({
+        id: "tactic-tier2",
+        kind: "tactic",
+        attention: boost(1),
+        attributes: { tier: 2 },
+        office_hours: parked(),
+      }),
+    ];
+
+    const queue = officeHoursQueue(nodes);
+    const hold = queue.find((m) => m.nodeId === "tactic-hold");
+
+    expect(hold?.rank).toBe(40 * SESSION_TYPE_PENALTY);
+    expect(hold?.ownRank).toBe(0);
+    expect(hold?.tier).toBe(1);
+    // The penalized lift is huge, but tier is still the hard outer axis.
+    expect(queue.map((m) => m.nodeId)).toEqual(["tactic-tier2", "tactic-hold"]);
+  });
+
+  it("leaves a parked node with no inbound blocked_by edges unchanged", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-alone", kind: "tactic", attention: boost(7), office_hours: parked() }),
+      anode({ id: "tactic-elsewhere", kind: "tactic", attention: boost(90), phase: "implement" }),
+    ];
+
+    const alone = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-alone");
+
+    expect(alone?.liftedFrom).toBeNull();
+    expect(alone?.rank).toBe(alone?.ownRank);
+    expect(alone?.tier).toBe(alone?.ownTier);
+    expect(alone?.rank).toBe(7);
+  });
 });
 
 describe("openBlockers", () => {
@@ -349,6 +574,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: undefined,
       target: "tactic-some-id",
+      ref: "origin/main",
     });
   });
 
@@ -358,6 +584,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: undefined,
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -367,6 +594,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: undefined,
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -376,6 +604,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -385,6 +614,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -426,6 +656,7 @@ describe("parseSelectorArgs", () => {
       wantList: false,
       sessionType: "curriculum-review",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -435,6 +666,7 @@ describe("parseSelectorArgs", () => {
       wantList: true,
       sessionType: "requirement-discovery",
       target: undefined,
+      ref: "origin/main",
     });
   });
 
@@ -463,6 +695,44 @@ describe("parseSelectorArgs", () => {
     expect(result.kind).toBe("error");
     expect(result.kind === "error" && result.message).toMatch(/--list takes no value/);
   });
+
+  it("sets ref for --ref <git-ref>, excluding the ref value from positionals", () => {
+    expect(parseSelectorArgs(["--ref", "HEAD"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: undefined,
+      ref: "HEAD",
+    });
+  });
+
+  it("accepts the --ref=<value> spelling alongside a node-id target", () => {
+    expect(parseSelectorArgs(["--ref=HEAD", "tactic-some-id"])).toEqual({
+      kind: "ok",
+      wantList: false,
+      sessionType: undefined,
+      target: "tactic-some-id",
+      ref: "HEAD",
+    });
+  });
+
+  it("errors when --ref is the last token", () => {
+    const result = parseSelectorArgs(["--ref"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors when --ref is followed by another flag", () => {
+    const result = parseSelectorArgs(["--ref", "--list"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/--ref requires a git-ref argument/);
+  });
+
+  it("errors on more than one node-id positional", () => {
+    const result = parseSelectorArgs(["tactic-a", "tactic-b"]);
+    expect(result.kind).toBe("error");
+    expect(result.kind === "error" && result.message).toMatch(/at most one node-id/);
+  });
 });
 
 describe("formatQueueRow", () => {
@@ -474,11 +744,47 @@ describe("formatQueueRow", () => {
       nodeId: "tactic-a",
       rank: 12.5,
       tier: 1,
+      ownTier: 1,
+      ownRank: 12.5,
+      liftedFrom: null,
       sessionType: "curriculum-review",
       since: "2026-07-01",
     });
     expect(row).toBe("12.5\tcurriculum-review\ttactic-a\t2026-07-01");
     expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
+  });
+
+  it("emits exactly four tab-separated fields, even for a lifted member", () => {
+    const row = formatQueueRow({
+      nodeId: "tactic-b",
+      rank: 30,
+      tier: 3,
+      ownTier: 1,
+      ownRank: 5,
+      liftedFrom: "tactic-blocked",
+      sessionType: "other",
+      since: "2026-08-01",
+    });
+    expect(row.split("\t")).toHaveLength(4);
+    expect(row).toBe("30\tother\ttactic-b\t2026-08-01");
+  });
+});
+
+describe("formatLiftNote", () => {
+  it("renders the advisory naming the lifted-from source and own values", () => {
+    const note = formatLiftNote({
+      nodeId: "tactic-b",
+      rank: 30,
+      tier: 3,
+      ownTier: 1,
+      ownRank: 5,
+      liftedFrom: "tactic-blocked",
+      sessionType: "other",
+      since: "2026-08-01",
+    });
+    expect(note).toBe(
+      "NOTE — tactic-b ranks at tier 3/30 inherited from blocked source tactic-blocked (own: tier 1/5)",
+    );
   });
 });
 
@@ -519,4 +825,48 @@ describe("formatDisposition", () => {
       stderr: "",
     });
   });
+});
+
+// These tests exercise the real CLI against THIS repo's actual `origin/main`
+// state, not in-memory fixtures — the direct regression test for the
+// main-authority invariant office-hours-select.ts now guarantees (every queued
+// node is genuinely parked on `origin/main`, not just in the local worktree).
+// They skip cleanly when no `origin/main` ref is resolvable (e.g. a stripped
+// checkout with no `origin` remote), matching the defensive posture of
+// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
+describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
+  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
+    const out = runSelect(["--list"]);
+    const lines = out.split("\n").filter((l) => l.length > 0);
+    for (const line of lines) {
+      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
+    }
+  }, 15000);
+
+  it("main-authority invariant: every listed node is parked on origin/main", () => {
+    const out = runSelect(["--list"]);
+    const lines = out.split("\n").filter((l) => l.length > 0);
+    // Column 2 (0-indexed) is the node id — see formatQueueRow's column contract.
+    const nodeIds = lines.map((line) => line.split("\t")[2]);
+    for (const id of nodeIds) {
+      const raw = execFileSync("git", ["-C", repoRoot, "show", `origin/main:intentions/${id}.md`], {
+        encoding: "utf8",
+      });
+      const frontmatter = extractFrontmatter(raw, id);
+      const parsed: unknown = parse(frontmatter);
+      expect(parsed).toBeTruthy();
+      expect((parsed as { office_hours?: unknown }).office_hours).not.toBeNull();
+    }
+  }, 15000);
+
+  it("targeted not-parked: a fabricated node id reports not-parked", () => {
+    const out = runSelect(["absent-node-id-xyz"]);
+    expect(out).toBe("empty not-parked absent-node-id-xyz\n");
+  }, 15000);
+
+  it("--ref plumbing: --ref origin/main matches the no-flag default", () => {
+    const withRef = runSelect(["--ref", "origin/main", "--list"]);
+    const withoutRef = runSelect(["--list"]);
+    expect(withRef).toBe(withoutRef);
+  }, 15000);
 });

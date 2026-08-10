@@ -34,7 +34,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-explicit-node-reservation-sweep-policy
   pr: 2952
@@ -45,6 +45,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-29T14:07:03Z
     mergeCommitSha: 30b51ea46cc279564a672bc0c96e01b39057d8ca
@@ -263,3 +264,30 @@ user-facing production surface.
   machine-assertable fact (`Flag: planned-deferral`); the qa-fix disposition
   workflow classified it `needs-main` per the planned-deferral rule
   (issue #1891) — verified downstream, not at this PR's merge.
+
+## Office-hours sitting 2026-08-09 — policy ratified, no code change
+
+**Disposition: ratified on both limbs.** Author ruling at the 2026-08-09
+sitting. `phase: done`, park cleared. Units 1 and 2 had already landed via the
+merged source PR (#2952); this was the sole remaining residue item and it
+carried no MACHINE checks.
+
+Ratified, in full:
+
+1. **Placement** — run `reservation_sweep` before `graph-select-target --node`
+   in the explicit-node dispatch branch, mirroring the autonomous block's
+   existing sweep call, so a stale dead-session marker can never refuse an
+   explicit human dispatch.
+2. **Non-fatal semantics** — a sweep failure must never block the explicit
+   dispatch (best-effort `|| true`).
+
+Both limbs were confirmed deliberately rather than as one bundled yes, because
+the second is the one that can surprise later: it means a broken sweep degrades
+silently into the pre-fix behaviour instead of announcing itself. That is the
+accepted trade — the explicit-node lane exists for deliberate human override,
+and failing that lane closed on a sweep error would defeat its purpose.
+
+The rejected alternative was option 2 from QA's triage: merely document the gap
+rather than sweep. QA's own triage subagent had already flagged this as a
+subjective policy call no git, journal, log, shell, or filesystem check could
+settle, which is why it reached a sitting at all.

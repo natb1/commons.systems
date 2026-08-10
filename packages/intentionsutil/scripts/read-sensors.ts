@@ -1,11 +1,13 @@
 // Read the local-first default sensors over every node in the store and write
-// each node's fresh `reading` + derived `gap` back to the local `intentions/`
-// store.
+// each node's fresh `reading` back to the local `intentions/` store. `gap` is
+// derived on read (`deriveGap`, sensors.ts) from `reading` vs
+// `success_signal.threshold` — it is never stored, so this driver does not
+// compute or persist it.
 //
 // This is the batch driver for the feedback arm's READ step: for every node in
 // the store that names a `success_signal.sensor`, it resolves that sensor in
-// a registry, reads the current measurement, derives the mechanical gap, and
-// persists `{ ...node, reading, gap }` — preserving every other field. It reads
+// a registry, reads the current measurement, and persists `{ ...node, reading
+// }` — preserving every other field. It reads
 // only the local store and runs only local own-execution commands (no gh API,
 // no analytics, no network) — with one deliberate exception: the main-health
 // sensor below shells to `gh` to read the trunk's OWN check-run conclusions.
@@ -25,8 +27,12 @@
 // artifact), per the local-first / no-mining principle in
 // `.claude/docs/signal-identification.md`. External sensors (site analytics,
 // PageSpeed Insights, anything that observes activity beyond one's own
-// execution) are FLAGGED, opt-in, and deliberately NOT registered here; they
-// live in `.claude/skills/align-init/scripts/fetch-*.sh` behind explicit flags.
+// execution) are FLAGGED, opt-in, and deliberately NOT registered here. They
+// used to live in `.claude/skills/align-init/scripts/fetch-*.sh` behind
+// explicit flags; those fetch scripts (fetch-analytics, fetch-psi,
+// fetch-forks) were retired outright by `tactic-align-entrypoint-consolidation`
+// and are not carried forward anywhere — see `origin/main` commit `44493733`
+// for the pre-deletion `.claude/skills/align-init/SKILL.md` and scripts.
 // Own-pipeline CI/check-run status is a different case: even where its probe
 // (below, main-health) shells to `gh`, it observes the repo's OWN execution
 // (own check-run conclusions), not external or analytics activity, so it is
@@ -44,9 +50,12 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
-import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
+import { strategyBacklogBand } from "../src/census.js";
+import { listNodesAtRef } from "./lib-store-at-ref.js";
+import { SensorRegistry, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
+import { computeDependencyAudit } from "./dependency-audit.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -115,8 +124,10 @@ const gitSensor: Sensor = {
 // check-run conclusions is the same "own pipeline" class as the vitest/git
 // sensors above — it is distinct from the deliberately-excluded
 // external/analytics sensors (site analytics, PageSpeed Insights, anything
-// observing activity beyond one's own execution) that stay opt-in behind
-// `.claude/skills/align-init/scripts/`.
+// observing activity beyond one's own execution) that used to stay opt-in
+// behind `.claude/skills/align-init/scripts/` — those fetch scripts were
+// retired by `tactic-align-entrypoint-consolidation` (see `origin/main`
+// commit `44493733` for the pre-deletion scripts).
 
 /** The short canonical `success_signal.sensor` key this sensor registers under. */
 const MAIN_HEALTH_SENSOR_NAME = "main-health";
@@ -424,17 +435,37 @@ const tokenEconomySensor: Sensor = {
 // Name is the exact `success_signal.sensor` string
 // `strategy-graph-native-dispatch` declares — the driver resolves a sensor by
 // that verbatim name (`token-economy` uses the same match-the-declared-name
-// contract). The reading is dual, mirroring the strategy's dual source:
-//   (a) the phase-transition history in the local `intentions/` git log, and
-//   (b) the router's own selection log (emitted by graph-select-target).
+// contract). The reading has four segments, mirroring the strategy's sources:
+//   (a) the phase-transition history in the local `intentions/` git log,
+//   (b) the router's own selection log (emitted by graph-select-target),
+//   (c) the CURRENT open machinery-defect backlog share over the tactic
+//       population serving this strategy — the same classification
+//       `align-tactics-census.ts` applies, reused from `../src/census.js`, and
+//   (d) that same share SAMPLED BACKWARD through the `intentions/` git history,
+//       so the band reads as a trend rather than a single instant.
 // Format (stable and parseable):
-//   `lifecycle: <id> implement→qa→review→done (<YYYY-MM-DD>); router selections: <R> records, <D> nodes`
-// with the lifecycle half degrading to `none yet` (no completed graph-native
-// tactic lifecycle in history) and the selections half to `unknown` (missing or
-// unreadable log) — never a throw (total-sensor contract above).
+//   `lifecycle: <id> implement→qa→review→done (<YYYY-MM-DD>); router selections: <R> records, <D> nodes; backlog: <B>/<T> = <P>% (band ≤35%); backlog series <W>d: <P1>% → <P2>% → … (<verdict>)`
+// Every segment degrades independently and never throws (total-sensor contract
+// above): the lifecycle half to `none yet`, the selections half to `unknown`
+// (missing or unreadable log), the backlog half to `unknown` (store unreadable)
+// or `0/0 = n/a` (no tactics serve the strategy yet), and the series to
+// `unknown` (git history unavailable), `insufficient history` (fewer than two
+// distinct sampled store states), or a per-sample `skipped` token (that
+// historical ref's store does not read/validate).
 
 /** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
-const LIFECYCLE_SENSOR_NAME = "the intention store and the router's selection log";
+export const LIFECYCLE_SENSOR_NAME =
+  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions";
+
+/** The band the recorded threshold declares ("at or below 35%"). */
+export const BACKLOG_BAND_PCT = 35;
+
+/** The strategy whose tactic population the band is measured over. */
+const BACKLOG_STRATEGY_ID = "strategy-graph-native-dispatch";
+
+/** Trailing window the backlog-share series samples over, and its step. */
+const BACKLOG_SERIES_WINDOW_DAYS = 28;
+const BACKLOG_SERIES_STEP_DAYS = 7;
 
 /**
  * Phases a graph-native tactic passes through; a full lifecycle observes ALL of
@@ -626,13 +657,129 @@ export function readSelectionLog(selectionLogPath: string): string {
 }
 
 /**
- * Compose the full lifecycle reading from its two halves. Exported for unit
- * tests, which inject a fixture git repo and a fixture selection log.
+ * Backlog half: the CURRENT open machinery-defect share over the tactic
+ * population serving `strategyId`, against the band the recorded threshold
+ * declares. Classification is `../src/census.js`'s `strategyBacklogBand` — the
+ * same rules `align-tactics-census.ts` applies, so the sensor and the census
+ * can never disagree.
+ *
+ * Enumeration uses the TOLERANT `listNodes` (a single unreadable node file must
+ * not blind the whole reading), wrapped in try/catch so a missing or unreadable
+ * store dir reads `unknown` rather than throwing — the total-sensor contract at
+ * the top of this file. `total === 0` (no tactic serves the strategy yet) reads
+ * `0/0 = n/a` rather than dividing by zero.
  */
-export function readLifecycleReading(repoDir: string, selectionLogPath: string): string {
+export function readBacklogBand(storeDir: string, strategyId: string): string {
+  let nodes: IntentionNode[];
+  try {
+    nodes = listNodes(storeDir);
+  } catch {
+    return "unknown";
+  }
+  const { backlog, total, pct } = strategyBacklogBand(nodes, strategyId);
+  if (pct === null) {
+    return `0/0 = n/a (band ≤${BACKLOG_BAND_PCT}%)`;
+  }
+  return `${backlog}/${total} = ${(pct * 100).toFixed(1)}% (band ≤${BACKLOG_BAND_PCT}%)`;
+}
+
+/**
+ * Series half: the same backlog share sampled backward through the local
+ * clone's `intentions/` git history, so the band reads as a trend rather than a
+ * single instant. One sample per `stepDays` step across the trailing
+ * `windowDays` window (28/7 → offsets 21, 14, 7, 0 days ago), each resolved to
+ * the last `intentions/`-touching commit before that instant.
+ *
+ * Samples that resolve to no commit are dropped, and consecutive identical SHAs
+ * are collapsed, so every element is a DISTINCT committed store state rather
+ * than a repeated flat value.
+ *
+ * Failure posture matches `readTacticVelocity` / `readLifecyclePhaseHistory`: a
+ * git failure (not a repo, no commits) reads `unknown`. Per sample, the read is
+ * `listNodesAtRef`, which is STRICT and throws when any node at that historical
+ * ref is unreadable or schema-invalid — a real possibility for old refs, so each
+ * sample is caught individually and degrades to the literal token `skipped`
+ * (as does a `null` pct: no tactic served the strategy at that ref). A throw
+ * never propagates out of this function.
+ *
+ * The trend verdict is computed over the ROUNDED values actually printed, so
+ * the rendered series and the verdict can never disagree through float noise.
+ */
+export function readBacklogSeries(
+  repoDir: string,
+  strategyId: string,
+  windowDays: number = BACKLOG_SERIES_WINDOW_DAYS,
+  stepDays: number = BACKLOG_SERIES_STEP_DAYS,
+): string {
+  const shas: string[] = [];
+  try {
+    for (let d = windowDays - stepDays; d >= 0; d -= stepDays) {
+      const sha = execFileSync(
+        "git",
+        ["-C", repoDir, "rev-list", "-1", `--before=${d} days ago`, "HEAD", "--", "intentions"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      if (sha === "") {
+        continue;
+      }
+      if (shas.length > 0 && shas[shas.length - 1] === sha) {
+        continue;
+      }
+      shas.push(sha);
+    }
+  } catch {
+    return "unknown";
+  }
+
+  const rendered: string[] = [];
+  const usable: number[] = [];
+  for (const sha of shas) {
+    let pct: number | null;
+    try {
+      pct = strategyBacklogBand(listNodesAtRef(repoDir, sha), strategyId).pct;
+    } catch {
+      rendered.push("skipped");
+      continue;
+    }
+    if (pct === null) {
+      rendered.push("skipped");
+      continue;
+    }
+    const value = Number((pct * 100).toFixed(1));
+    usable.push(value);
+    rendered.push(`${value.toFixed(1)}%`);
+  }
+
+  if (usable.length < 2) {
+    return "insufficient history";
+  }
+  let nonIncreasing = true;
+  for (let i = 0; i + 1 < usable.length; i += 1) {
+    if (usable[i + 1] > usable[i]) {
+      nonIncreasing = false;
+      break;
+    }
+  }
+  return `${rendered.join(" → ")} (${nonIncreasing ? "non-increasing" : "increasing"})`;
+}
+
+/**
+ * Compose the full lifecycle reading from its four segments. Exported for unit
+ * tests, which inject a fixture git repo and a fixture selection log. The store
+ * dir is derived from `repoDir` so the current band and the sampled history come
+ * from the same repository.
+ */
+export function readLifecycleReading(
+  repoDir: string,
+  selectionLogPath: string,
+  strategyId: string = BACKLOG_STRATEGY_ID,
+): string {
+  const storeDir = join(repoDir, "intentions");
   return (
     `lifecycle: ${readLifecyclePhaseHistory(repoDir)}; ` +
-    `router selections: ${readSelectionLog(selectionLogPath)}`
+    `router selections: ${readSelectionLog(selectionLogPath)}; ` +
+    `backlog: ${readBacklogBand(storeDir, strategyId)}; ` +
+    `backlog series ${BACKLOG_SERIES_WINDOW_DAYS}d: ${readBacklogSeries(repoDir, strategyId)}`
   );
 }
 
@@ -645,6 +792,46 @@ const lifecycleSensor: Sensor = {
         ? join(process.env.DISPATCH_SELECTION_LOG_DIR, "graph-selection.jsonl")
         : SELECTION_LOG_DEFAULT_PATH);
     return readLifecycleReading(repoRoot, selectionLogPath);
+  },
+};
+
+// --- dependency-audit sensor -------------------------------------------------
+// Name is the exact `success_signal.sensor` string `strategy-owned-web-platform`
+// declares — the driver resolves a sensor by that verbatim name (same
+// match-the-declared-name contract as `token-economy`/lifecycle above). The
+// reading measures the third-party runtime dependency surface against its
+// recorded justifications (`dependency-justifications.ts`): total count,
+// unjustified count, dead-upstream count. Unlike the other sensors in this
+// file — which are already-total library/git calls — `computeDependencyAudit`
+// intentionally THROWS on a genuine manifest read error (a misconfigured
+// environment, per `.claude/rules/code-style.md`), by design so a caller can
+// choose how to handle it. This sensor is that caller: its `read()` wraps the
+// call in try/catch so a thrown error degrades to an honest status string
+// rather than propagating and aborting the whole batch (the total-sensor
+// contract documented at the top of this file).
+//
+// The caught error is NEVER interpolated into the returned reading. `main()`
+// persists every reading into the node's `reading` field (and quotes it again
+// in the derived `gap`), and those nodes are committed and pushed to a PUBLIC
+// repository — so an environment-specific error string would publish local
+// filesystem detail. The failure collapses to the same kind of fixed status
+// token every other sensor in this file uses ("unknown"), and the detail goes
+// to stderr, which the driver does not persist.
+
+/** The verbatim `success_signal.sensor` name strategy-owned-web-platform declares. */
+const DEPENDENCY_AUDIT_SENSOR_NAME =
+  "dependency audit script over the workspace manifests (extending the knip ratchet), reviewed at office-hours";
+
+const dependencyAuditSensor: Sensor = {
+  name: DEPENDENCY_AUDIT_SENSOR_NAME,
+  read(): string {
+    try {
+      return computeDependencyAudit(repoRoot).summaryLine;
+    } catch (err) {
+      // stderr only — not persisted into the node, so it may carry detail.
+      console.error(`dependency audit sensor: read error — ${String(err)}`);
+      return "dependency audit: unknown";
+    }
   },
 };
 
@@ -793,12 +980,179 @@ export function renderDelegationRecordsReport(dir: string): string {
   return [header, ...rows].join("\n");
 }
 
-const delegationRecordsSensor: Sensor = {
-  name: DELEGATION_RECORDS_SENSOR_NAME,
-  read(): string {
-    return readDelegationRecordsReading(intentionsDir);
-  },
-};
+/**
+ * The `strategy-exercise-recovery-paths` branch: a plain count over ALL
+ * `kind: delegation` records (no declined-origin special-casing — this
+ * strategy's threshold, unlike `readDelegationRecordsReading`'s clarification-7
+ * aggregate, just asks how many records have `last_exercised` set). The
+ * `review_trigger firing not recorded` clause is fixed prose: there is no
+ * firing/actioned surface on the records to mechanically detect a "fired
+ * review_trigger left unactioned", so the reading says so rather than guessing.
+ *
+ * Ends with the read date in the same `(sensor read <YYYY-MM-DD>)` form
+ * `readDelegationRecordsReading` uses, and for the same reason: the router's
+ * fresh-reading gate (`readingDate`, `src/router.ts`) scrapes the newest ISO
+ * date out of the reading prose and, once `rounds.last_aligned` is stamped,
+ * drops any strategy whose reading carries no parseable date with a
+ * `stale-reading` event — permanently and silently starving an undated strategy
+ * out of align selection no matter how often the sensor re-runs.
+ */
+function readExerciseRecoveryPathsReading(dir: string, today: Date): string {
+  const records = readDelegationRecords(dir);
+  const n = records.length;
+  const k = records.filter((r) => r.lastExercised !== null).length;
+  const m = n - k;
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `exercised: ${k}/${n} records; ${m} null last_exercised; ` +
+    `review_trigger firing not recorded (sensor read ${readDate})`
+  );
+}
+
+/**
+ * The divergence levels `kind-delegation` declares for
+ * `attributes.divergence.level` (`intentions/kind-delegation.md`:
+ * `"divergence: {level: low|moderate|high, ...}"`).
+ */
+const DIVERGENCE_LEVELS = ["low", "moderate", "high"] as const;
+
+/**
+ * The declared divergence levels a `kind: delegation` node's
+ * `attributes.divergence.level` names — or a HALT naming the record.
+ *
+ * The live corpus authors this field as compound free prose AROUND the declared
+ * vocabulary (`low-moderate`, `moderate — would-be`), so the value is tokenized
+ * on non-letter runs and each token matched against `DIVERGENCE_LEVELS` rather
+ * than compared whole. A value naming NO declared level (`critical`, an empty
+ * string, a restructured `divergence` object, a missing `divergence`) is a
+ * schema-invalid delegation record — not a not-high-divergence one — and throws
+ * `IntentionSchemaError` naming the record, exactly as `readDelegationRecords`
+ * above does for the other delegation attributes.
+ *
+ * Deliberately fail-loud rather than defensively parsed: reading an
+ * unrecognized level as "not high" would drop the record from both numerator
+ * and denominator of `strategy-realign-attachments`' reading, turning a
+ * one-word edit in an unprivileged data file into a silent all-clear on the
+ * exact condition that strategy exists to detect — a fail-open measurement on
+ * its own control (`.claude/rules/code-style.md`).
+ */
+function divergenceLevels(node: IntentionNode): Set<string> {
+  const attrs = node.attributes;
+  const divergence = isPlainObject(attrs) ? attrs.divergence : undefined;
+  if (!isPlainObject(divergence)) {
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence must be an object naming a ` +
+        `level in {${DIVERGENCE_LEVELS.join(", ")}}.`,
+    );
+  }
+  const level = divergence.level;
+  if (typeof level !== "string") {
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence.level must be a string, ` +
+        `got ${typeof level}.`,
+    );
+  }
+  const recognized = new Set(
+    level
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((token): token is (typeof DIVERGENCE_LEVELS)[number] =>
+        (DIVERGENCE_LEVELS as readonly string[]).includes(token),
+      ),
+  );
+  if (recognized.size === 0) {
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence.level "${level}" names none of ` +
+        `the declared levels {${DIVERGENCE_LEVELS.join(", ")}}.`,
+    );
+  }
+  return recognized;
+}
+
+/**
+ * True when a `kind: delegation` node's divergence level names `high` at all —
+ * a compound value like `moderate-high` counts as high. Over-inclusion is the
+ * safe direction for a monitoring control: a record that might be high belongs
+ * in the uncovered list, never silently outside it.
+ */
+function isHighDivergence(node: IntentionNode): boolean {
+  return divergenceLevels(node).has("high");
+}
+
+/**
+ * The `strategy-realign-attachments` branch: over `kind: delegation` nodes with
+ * high divergence, how many are covered by ANY node's `recovers` edge naming
+ * that record's id. There is no "recorded re-alignment" attribute convention on
+ * the ledger yet (per the strategy's own 2026-07-11-era clarification 7), so
+ * only the `recovers`-edge half is mechanically checked — the reading does not
+ * invent a convention that doesn't exist.
+ *
+ * Ends with `(sensor read <YYYY-MM-DD>)` for the same fresh-reading-gate reason
+ * documented on `readExerciseRecoveryPathsReading` above: a reading with no
+ * parseable date is dropped by the router's gate once `rounds.last_aligned` is
+ * stamped, silently starving the strategy out of align selection.
+ */
+function readRealignAttachmentsReading(nodes: IntentionNode[], today: Date): string {
+  const recoveredIds = new Set<string>();
+  for (const node of nodes) {
+    for (const id of node.recovers) {
+      recoveredIds.add(id);
+    }
+  }
+  const highDivergenceIds = nodes
+    .filter((node) => node.kind === "delegation" && isHighDivergence(node))
+    .map((node) => node.id);
+  const h = highDivergenceIds.length;
+  const covered = highDivergenceIds.filter((id) => recoveredIds.has(id));
+  const c = covered.length;
+  const uncovered = highDivergenceIds.filter((id) => !recoveredIds.has(id)).sort();
+  const uncoveredList = uncovered.length > 0 ? uncovered.join(", ") : "none";
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `high-divergence: ${h} records; ${c} covered by recovers; ` +
+    `uncovered: ${uncoveredList} (sensor read ${readDate})`
+  );
+}
+
+/**
+ * Build the delegation-records sensor. Dispatches on the asking node's `id`:
+ * `strategy-exercise-recovery-paths` gets the plain exercised/null count,
+ * `strategy-realign-attachments` gets the high-divergence/recovers-coverage
+ * count, and any other id gets a total fallback string (never throws) rather
+ * than the old id-blind generic aggregate — the two strategies' thresholds
+ * measure different things and neither matched the old shared reading.
+ * Both store reads are injected so unit tests never touch the live store:
+ * `loadNodes` (same pattern as `makeIntentionStoreSensor`) feeds the
+ * realign-attachments branch, and `recordsDir` — defaulting to the real
+ * `intentionsDir` for production callers — feeds the exercise-recovery-paths
+ * branch, which reads `readDelegationRecords` directly since its narrower
+ * `DelegationRecordReading` shape is sufficient there (it doesn't need
+ * `divergence`, which isn't in that shape).
+ *
+ * `now` is the third injection point: both readings stamp the read date the
+ * router's fresh-reading gate parses, and it is read at `read()` time (not
+ * build time) so a long-lived registry never stamps a stale date. Tests pin it
+ * to a fixed clock so the asserted date clause cannot flake across UTC
+ * midnight.
+ */
+export function makeDelegationRecordsSensor(
+  loadNodes: () => IntentionNode[],
+  recordsDir: string = intentionsDir,
+  now: () => Date = () => new Date(),
+): Sensor {
+  return {
+    name: DELEGATION_RECORDS_SENSOR_NAME,
+    read(node): string {
+      if (node.id === "strategy-exercise-recovery-paths") {
+        return readExerciseRecoveryPathsReading(recordsDir, now());
+      }
+      if (node.id === "strategy-realign-attachments") {
+        return readRealignAttachmentsReading(loadNodes(), now());
+      }
+      return `no per-node rule for ${node.id}`;
+    },
+  };
+}
 
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
@@ -924,7 +1278,8 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(mainHealthSensor);
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
-  registry.register(delegationRecordsSensor);
+  registry.register(dependencyAuditSensor);
+  registry.register(makeDelegationRecordsSensor(() => listNodes(intentionsDir)));
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs
@@ -950,8 +1305,10 @@ export interface ReadSummary {
 
 /**
  * Walk EVERY node in the store and, for each that names a registered sensor,
- * read the sensor, derive the gap against the FRESH reading, and write the node
- * back preserving all other fields. Nodes with no signal are skipped silently;
+ * read the sensor and write the node back with the fresh `reading`, preserving
+ * all other fields. `gap` is derived on read (`deriveGap`) from `reading` vs
+ * `success_signal.threshold` — it is never computed or persisted here. Nodes
+ * with no signal are skipped silently;
  * nodes naming an unregistered sensor are collected for reporting (never crash,
  * never silently skipped). Exported for later unit testing.
  *
@@ -997,8 +1354,7 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
     }
 
     const reading = sensor.read(node);
-    const gap = deriveGap({ ...node, reading });
-    updates.push({ ...node, reading, gap });
+    updates.push({ ...node, reading });
   }
 
   // WRITE pass: persist every updated node now that all readings are computed.

@@ -54,15 +54,17 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: d5f6cfce402ebd1ddaf07b5969a9696072bc544eb269274b9ec9eb0481f80738
-      sha: 2aad2dc4106804ebcc55cf7b805868b5fdfff4d2
+      hash: 8ca07d4c8e5540539be1aa0092cdc45a16b28e49920d59358a48c559ff70fd80
+      sha: ba85a73587be52bb0d9f7f0a7960c97a65776b8f
   fix:
     since: 2026-08-03
-    attempt: 3
+    attempt: 1
     pushed_sha: null
+  conflict: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-strategy-fingerprint-stamp-coverage
 office_hours: null
 pace_exempt: false
 rounds: null

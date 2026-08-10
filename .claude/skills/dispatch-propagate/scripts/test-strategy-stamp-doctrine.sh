@@ -3,14 +3,15 @@
 # (tactic-strategy-fingerprint-stamp-coverage). Unit 2 wired transition-node
 # to seed/refresh each tactic's execution.strategy_fingerprint map on every
 # forward (not strategy-stale) transition, via apply-node-transition.ts, and
-# Unit 3 reconciled the align-tactics/align-strategy doctrine that previously
+# Unit 3 reconciled the align-tactics/align doctrine that previously
 # described this as an unimplemented "bootstrap-interim hand-stamp" gap. A
 # later fix pass closed two further gaps that let the mint-time doctrine
 # regress silently: write-path.md's earlier step-1 mint passage could drift
 # out of sync with its own "Closed: the mint-to-first-transition window"
 # section (commit 307fac5e reconciled it), and tactic-target.md /
-# align-strategy/SKILL.md never mentioned the mint-time flags at all (commit
-# 0d4c09a8 added them). This suite guards all of it so no part can silently
+# align/SKILL.md never mentioned the mint-time flags at all (commit 0d4c09a8
+# added them; that file was align-strategy/SKILL.md before /align-strategy
+# and /align-init were consolidated into /align). This suite guards all of it so no part can silently
 # regress: the router-side mechanism (assertions 1-2), the write-path.md
 # doctrine that describes it (assertions 3-4, 6-7), write-node.ts's
 # implementation of the mint-time flags (assertion 5), and the sibling
@@ -38,7 +39,7 @@ TRANSITION_NODE="$GUARD_ROOT/.claude/skills/dispatch-propagate/scripts/transitio
 WRITE_PATH="$GUARD_ROOT/.claude/skills/align-tactics/references/write-path.md"
 WRITE_NODE="$GUARD_ROOT/packages/intentionsutil/scripts/write-node.ts"
 TACTIC_TARGET="$GUARD_ROOT/.claude/skills/align-tactics/references/tactic-target.md"
-ALIGN_STRATEGY_SKILL="$GUARD_ROOT/.claude/skills/align-strategy/SKILL.md"
+ALIGN_SKILL="$GUARD_ROOT/.claude/skills/align/SKILL.md"
 
 # --- 1. transition-node constructs --strategy-fingerprint in APPLY_FLAGS ----
 #
@@ -211,13 +212,16 @@ else
     "present" "$actual"
 fi
 
-# --- 9. align-strategy/SKILL.md mentions the mint-time flags -----------------
+# --- 9. align/SKILL.md mentions the mint-time flags -------------------------
 #
-# Same gap as assertion 8, in the sibling align-strategy/SKILL.md doctrine.
+# Same gap as assertion 8, in the sibling align/SKILL.md doctrine. This file
+# was .claude/skills/align-strategy/SKILL.md until /align-strategy and
+# /align-init were consolidated into /align; the doctrine text moved with the
+# rename, so this assertion follows it to the new path.
 
-if [[ ! -f "$ALIGN_STRATEGY_SKILL" ]]; then
+if [[ ! -f "$ALIGN_SKILL" ]]; then
   TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
-  echo "  FAIL: align-strategy/SKILL.md mentions the mint-time flags: file missing: .claude/skills/align-strategy/SKILL.md"
+  echo "  FAIL: align/SKILL.md mentions the mint-time flags: file missing: .claude/skills/align/SKILL.md"
 else
   actual=$(awk '
     /write-node\.ts/ { has_write_node = 1 }
@@ -225,8 +229,8 @@ else
     END {
       if (has_write_node && has_flag) { print "present" } else { print "absent" }
     }
-  ' "$ALIGN_STRATEGY_SKILL")
-  assert_eq "align-strategy/SKILL.md mentions write-node.ts's mint-time stamp flags" \
+  ' "$ALIGN_SKILL")
+  assert_eq "align/SKILL.md mentions write-node.ts's mint-time stamp flags" \
     "present" "$actual"
 fi
 

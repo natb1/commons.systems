@@ -12,7 +12,6 @@ rationale: Surfaced by the 2026-07-31 review-fix token audit interview. Verify
   rejected folding the call into classify because that would destroy the gate's
   independence. See clarification 19 on strategy-token-economy.
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -27,19 +26,47 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-review-verify-per-file-batching
   pr: 3027
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-04T00:47:17Z
+    mergeCommitSha: 06ed374f375bcf56354a2e97d23ab7ec9204c65a
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Both needs-main residue items (item-9, item-10) are Verifiability:
+    WAIT, requiring accumulation of real review-fix runs against live findings
+    after PR #3027 merged (2026-08-04T00:47:17Z). Journal shows zero review-fix
+    activity in the ~17 minutes since merge (journalctl --since merge time,
+    dispatch* units: 0 matches for review-fix) -- no post-merge data exists yet
+    to compare against the pre-change baseline (131 agents / 41 (run,file)
+    groups / 18 runs, 69% refutation rate). Earliest useful re-check: after
+    several review-fix runs complete post-merge -- the original baseline itself
+    spanned 18 runs over 5 days, so a comparable window is the realistic bar."
+  since: 2026-08-04
+  recommendation: "No author decision needed -- re-selection only. When
+    re-checked, run /dispatch-token-audit over the post-merge window and read
+    the new verify:/residue: log lines review-fix now emits (this PR's Unit 2/3
+    changes). Compare observed subagent count per run against the pre-change
+    baseline (131 agents / 41 distinct (run,file) groups / 18 runs) -- note the
+    plan's Verification section states the 3.2x reduction is an upper bound, not
+    a threshold, since the high-confidence-per-file-group distribution was never
+    measured pre-change. Also compare refutation rate against the ~69% baseline
+    (91 refuted / 37 upheld) and check verify_report blocks in PR comments for
+    any verdict:\"unverified\" spike (would indicate batched agents dying and
+    fail-closing whole groups)."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

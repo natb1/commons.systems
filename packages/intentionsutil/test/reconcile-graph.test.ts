@@ -22,7 +22,6 @@ function node(dir: string, partial: Partial<IntentionNode> & { id: string; kind:
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -99,6 +98,42 @@ describe("reconcileGraph", () => {
     expect(s.rounds).toEqual({ count: 1, last_completed: "2026-07-10", last_aligned: null });
     expect(plan.edit).toContain("strategy-s");
     expect(plan.edit).toContain("tactic-done");
+  });
+
+  it("reconciles a merged tactic that carries a live office_hours park (recording reality is not an autonomous decision) and preserves the park", () => {
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    const officeHours = {
+      reason: "parked",
+      since: "2026-08-01",
+      recommendation: null,
+      session_type: "other" as const,
+    };
+    node(dir, {
+      id: "tactic-parked",
+      kind: "tactic",
+      phase: "review",
+      execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      office_hours: officeHours,
+    });
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-parked": { state: "merged", mergedAt: "2026-07-11T12:00:00Z", mergeCommitSha: "sha3" },
+      }),
+      date: "2026-07-10",
+    });
+
+    expect(plan.reconciled).toContainEqual({ id: "tactic-parked", target: "done" });
+    expect(readNode(dir, "tactic-parked").phase).toBe("done");
+    expect(readNode(dir, "tactic-parked").execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "sha3",
+      graphCommitSha: null,
+    });
+    // The point of this test: reconciling reality does not clear the park.
+    expect(readNode(dir, "tactic-parked").office_hours).toEqual(officeHours);
   });
 
   it("routes a closed-not-merged tactic to done with no completion evidence", () => {

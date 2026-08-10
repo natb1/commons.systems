@@ -21,7 +21,6 @@ rationale: "Byproduct of the 2026-07-18 /align-strategy tier-model round on
   landing. A later /align-tactics round should treat this body as unreviewed by
   the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-drives-dispatch
 recovers: []
@@ -50,6 +49,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-01T17:46:53Z
     mergeCommitSha: 7876d5f91041fd806e7fea4084f26727c21cb763

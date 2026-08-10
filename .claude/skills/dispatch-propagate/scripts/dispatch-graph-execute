@@ -183,6 +183,7 @@ for spec in "$@"; do
     tactic:align-tactics) SKILL="/align-tactics"; MODEL_PHASE="align-tactics" ;;
     tactic:implement)    SKILL="/implement";     MODEL_PHASE="implement" ;;
     tactic:fix)          SKILL="/fix-checks";    MODEL_PHASE="fix-checks" ;;
+    tactic:conflict)     SKILL="/dispatch-conflict"; MODEL_PHASE="conflict" ;;
     tactic:qa)           SKILL="/qa-fix";        MODEL_PHASE="qa" ;;
     tactic:review)       SKILL="/review-fix";    MODEL_PHASE="review" ;;
     tactic:main-qa)      SKILL="/qa-main";       MODEL_PHASE="main-qa" ;;

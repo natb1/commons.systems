@@ -162,7 +162,7 @@ stages anything else fails loudly. CI treats `intentions/`-only pushes as a
 docs-class change (validate the graph, skip app pipelines). A record is
 **schedulable once it is on `origin/main`** — the router only reads the
 store at `origin/main`, never a branch. The audit a PR checkpoint would
-have provided is supplied upstream: `/align-strategy` never writes
+have provided is supplied upstream: `/align` never writes
 substance the author did not decide in the interview.
 
 ### 1.3 Parking (office-hours)
@@ -178,46 +178,47 @@ substance the author did not decide in the interview.
 
 ## 2. The align skill family
 
-Three skills supersede `/file-issue` and `/plan-issue`. The legacy `/align`
-skill is retired outright and replaced by `/align-init`: rung-0 feeds the
-`/align-init` onboarding flow, `refine-workflow` is superseded by
-`/align-strategy`, and the rung-5 dialectic carries over into
-`/align-init` unchanged as the scheduled periodic review (the `align`
-jit's skill reference updates to `align-init`).
+Two skills supersede `/file-issue` and `/plan-issue`: `/align` — the single
+interactive entry point to the persistent layer, covering both the
+interview and the fork onboarding funnel — and `/align-tactics`. `/align`'s
+scope is the whole persistent layer (virtues, strategies, traditions,
+delegations), not strategy alone; there is no separate virtue-review phase.
+The scheduled `align` jit and its rung-5 dialectic engine are retired
+outright, along with the old no-prompt corpus-staleness improvement pass;
+their content is retained verbatim in `tactic-align-audit-legacy-review`,
+an office-hours sitting deciding a possible future `/align-audit` skill.
 
-### 2.1 `/align-init` (no arguments) — fork entrypoint and orientation; retires legacy `/align`
+### 2.1 `/align` (no prompt) — fork entrypoint and orientation
 
 1. **Orient.** Concise description: a harness for long-horizon autonomous
    workflows built around the intention graph — virtues (permanent
    dispositions, roots), strategies (persistent, condition-bearing,
    signal-carrying goals), tactics (transient, completable, delegable
    work), delegations (attachment records). Graph primitives in one screen.
-2. **Validate deployment.** intentionsutil installed and tests pass, store
-   readable, `validateGraph` clean, router heartbeat wired.
-3. **Review virtues.** Present inherited virtue roots (forks begin with the
-   upstream repo's; inherited virtues and strategies are assumed
-   preserved). Interview for additional or ambiguous virtues — Socratic,
-   one question at a time, per the existing rung-0 flow. Commit and push.
-4. **Delegate to `/align-strategy`.** Then confirm at least one new or
-   updated strategy exists; if none, tell the user the dispatch router has
-   no work until a strategy is recorded.
-5. **Retire legacy `/align`.** Delete `.claude/skills/align/` once
-   `/align-init` covers rung-0 and rung-5, so the scheduled dialectic is
-   never left without a home.
+2. **Validate deployment.** A scripted check (per mechanical-floor
+   doctrine — a script, not inline commands): intentionsutil installed and
+   tests pass, store readable, `validateGraph` clean, router heartbeat
+   wired.
+3. **Walk to a prompt.** Socratic, one question at a time, over the
+   inherited roots a fork begins with (the upstream repo's virtues and
+   strategies are assumed preserved), until the practitioner has a crafted
+   requirement prompt worth recording.
+4. **Fall through.** Continue in the *same* session into §2.2's "with
+   requirement text" branch using that crafted prompt — a direct
+   fall-through inside one skill, not a hand-off to a second skill and not
+   a re-invocation of the Skill tool on itself. If the session ends with no
+   new or updated strategy, tell the user the dispatch router has no work
+   until a strategy is recorded.
 
-*(Off the minimum path to the success signal — recorded as
-`tactic-align-init-skill`: fully planned and selectable, demoted at read
-time by the calculated-attention signal term (no chain to a
-validates-terminal reaches it; no stored flag — clarifications 9/11).
-Round 1 had deferred it by omission.)*
+### 2.2 `/align <optional requirement text>` — record or revise under interview
 
-### 2.2 `/align-strategy <optional requirements>` — record strategy under interview
-
-1. **Frame.** Identify virtues newly defined and lacking strategies; with
-   requirements input, evaluate as new strategy or edit to an existing one
-   (overlap detection against `strategy-*` nodes); with no input, evaluate
-   existing strategies for improvement (conditions failing, signals stale,
-   clarifications contradicted).
+1. **Frame.** Identify virtues newly defined and lacking strategies;
+   evaluate the requirement text as a new node or an edit to an existing
+   one (overlap detection against `strategy-*` nodes). A new strategy that
+   needs a virtue it can serve records that virtue here — there is no
+   separate virtue-review step. Invoked with no prompt, the session first
+   runs the §2.1 onboarding funnel, which walks the practitioner to a
+   crafted prompt and falls through into this same step.
 2. **Interview (dialectic).** Align with the author on: intent;
    justification by virtues or parent strategies (`serves`/`parent`
    placement); benefit; signals (`success_signal`); the author
@@ -249,7 +250,7 @@ Runs autonomously; parks on office-hours under the same conditions as
 1. **Scope.** Read the strategy node, clarifications, conditions, signal,
    round history, and any draft child tactics. Drift review is two-sided
    (clarification 8): a failed recorded condition parks the strategy back
-   to `/align-strategy` territory; AND the session sweeps for unrecorded
+   to `/align` territory; AND the session sweeps for unrecorded
    conditions the round's plans newly depend on — a material discovery is
    proposed as a dated clarification and parks for author ratification;
    immaterial observations land as clarifications without interrupting.
@@ -486,7 +487,7 @@ GitHub is a separate strategy; design TBD.)
 - One lock, one pace budget, one claimed set spanning both routers.
 - The legacy router only **drains**: it advances its existing gh
   issues/PRs, ordered by its own ladder (graph rank no longer reaches it);
-  new work enters exclusively via `/align-strategy` → `/align-tactics` as
+  new work enters exclusively via `/align` → `/align-tactics` as
   graph tactics.
 - **Removal:** when the gh queue is empty, delete the legacy
   selector/phase-derivation scripts and the `dispatch:*` label
@@ -577,12 +578,12 @@ git show 8e693b5d:.claude/skills/plan-issue/SKILL.md   # 691 lines
 Any future audit of this matrix's completeness must diff against those blobs,
 not against the stubs.
 
-### `/file-issue` → `/align-strategy` + `/align-tactics`
+### `/file-issue` → `/align` + `/align-tactics`
 
 | Legacy behavior | New home |
 |---|---|
-| Multi-topic separation into independent issues | `/align-strategy` frame step: multi-strategy separation; independent tactic subtrees per strategy |
-| Duplicate detection (keyword + corpus scan) | `/align-strategy` overlap detection over `strategy-*` nodes; `/align-tactics` over open tactic nodes |
+| Multi-topic separation into independent issues | `/align` frame step: multi-strategy separation; independent tactic subtrees per strategy |
+| Duplicate detection (keyword + corpus scan) | `/align` overlap detection over `strategy-*` nodes; `/align-tactics` over open tactic nodes |
 | 8-category quality evaluation | Interview dialectic (compliance/clarity/correctness/recommendations folded into interview probes); relevance + open-alignment = drift review in `/align-tactics` step 1 |
 | Decomposition hard gate (leaf = one PR) | `/align-tactics` step 2 — PR-sized leaf invariant, subtrees for larger shapes |
 | Epic structuring (sub-issues + epic label) | Tactic subtrees via `parent` edges; `resolve-epic` becomes subtree-completion pruning |

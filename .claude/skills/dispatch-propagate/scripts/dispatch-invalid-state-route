@@ -1,0 +1,610 @@
+#!/usr/bin/env bash
+# dispatch-invalid-state-route — the ONE common ladder for every invalid-state
+# kind. A dispatch node can reach a state its phase ladder cannot progress from:
+# a session that ended without declaring a disposition but is still registered,
+# a session frozen at a permission/classifier denial, a `claude rm` reap that
+# exited 0 while declining, a provision merge conflict, a red CI loop past its
+# cap. Each of those had its own ad-hoc handling, invented separately. This is
+# the generalization ratified by the 2026-08-04 /align interview (strategy
+# `strategy-graph-native-dispatch`, invalid-state-lane clarification):
+#
+#   detect (any detector) → dispatch-invalid-state-route --node <id> --kind <k>
+#       ├─ tier 1  mechanical resolution (per-kind, optional, fails toward keep)
+#       ├─ tier 2  intervention skill session (per-node attempt cap)
+#       └─ tier 3  escalation (CALLER-OWNED this round — see "Escalation")
+#
+# Usage:
+#   dispatch-invalid-state-route --node <id> --kind <kind> --evidence-file <f>
+#                                [--session <sid>] [--job-id <jid>] [--no-intervene]
+#
+# EXIT CODES — the contract every detector codes against:
+#     0   handled  — an intervention was launched. The caller must NOT escalate
+#                    this pass and must NOT delete any escalation markers.
+#     4   keep     — positive evidence to do nothing this pass.
+#     10  escalate — the ladder is exhausted; the CALLER runs its own escalation.
+#     1   router failure — callers treat this as escalate (fail toward escalate).
+#     2   usage error.
+#
+# ESCALATION — in this round the router performs NO escalation write. It never
+# calls `park-node`, `hold-node`, `claude rm`, or `graph-commit` (outside the
+# --fleet latch block, which mints a node and touches no source). Exit 10 means
+# "the caller owns the escalation". The kind table below records which primitive
+# each kind's escalation MUST use, so the follow-on extraction (declared residual
+# (a) of the plan) has no decisions left to make.
+#
+# THE RETRY/HUMAN DISCRIMINATION is the generic form of what the 2026-07-31
+# clarification resolved for the exit-11 lineage, and it is a standing rule this
+# script must not regress: a retry-shaped state (a merge conflict against a
+# moving main, a bounded retry short of its cap) routes to `hold-node` /
+# `blocked_by`, NEVER `office_hours` on the source. Only genuinely human-required
+# shapes park. Asking this router to write office_hours for a `retry`-class kind
+# is a usage error (exit 2).
+#
+# THE INTERVENTION SPAWN is `--cwd $PROJECT_ROOT`, never the node's own worktree:
+# `dispatch-graph-execute:296-322` records two incidents where spawning into the
+# node worktree ran a stale skill body and deadlocked a worker slot for over an
+# hour. `--name "$id"` is required — it is what makes
+# `.claude/hooks/dispatch-stop.sh` discriminator 2 hand the session to
+# `dispatch-self-close --node "$id"`, and therefore what OBLIGES the intervention
+# to declare a disposition (`mark-node-terminal:22-35`). A session spawned
+# without it would freeze the very node it was sent to unfreeze.
+#
+# THE PRIMARY-CHECKOUT GATE RUNS FIRST, before any fleet-latch code exists. The
+# latch's mint runs write-node.ts and graph-commit out of `$PROJECT_ROOT`, and
+# graph-commit force-pushes `refs/graph/**` and pushes `main`. Minting out of a
+# checkout that just FAILED the on-main assert would execute an unreviewed
+# branch's copy of exactly those scripts. That precondition therefore neither
+# observes nor mints — it logs and exits 10.
+#
+# Sandbox: reads the Claude daemon over a Unix socket (occupancy re-probe) and
+# spawns a session. Callers MUST run this with `dangerouslyDisableSandbox: true`
+# — a sandboxed daemon read yields `[]` indistinguishably from "nothing there"
+# (.claude/rules/sandbox.md).
+#
+# Test overrides (all resolve-inside-the-scripts-dir checked, the same posture
+# lib-frozen-session-park.sh applies to park-node):
+#   DISPATCH_INVALID_STATE_SPAWN_JOB   — replaces dispatch-spawn-job
+#   DISPATCH_INVALID_STATE_REPO_ROOT   — replaces resolve_project_root
+#   DISPATCH_INVALID_STATE_SKILL_DIR   — replaces the intervention skill dir
+#   CLAUDE_AGENTS_CMD                  — the registry fake (lib-claude-agents.sh)
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=lib-standdown-recheck.sh
+source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+# shellcheck source=lib-decision-log.sh
+source "$SCRIPT_DIR/lib-decision-log.sh"
+
+# Per-node intervention-attempt cap. A baked-in constant, deliberately NOT a
+# `dispatch.config` tunable — parity with FIX_ATTEMPT_CAP
+# (packages/intentionsutil/src/transitions.js, read via
+# `apply-fix-state.ts --check-cap`) and CONFLICT_STRIKE_CAP
+# (dispatch-graph-execute:145), the two bounded-attempt precedents this mirrors.
+# Lower than CONFLICT_STRIKE_CAP (3, not 5): an intervention spawns a whole
+# session, so its attempts are expensive where a conflict-lane tick is cheap.
+INVALID_STATE_INTERVENTION_CAP=3
+
+# Consecutive same-precondition failures before the fleet latch is minted
+# (--fleet mode / Unit 6). Two, not one, so a single transient drift (a dirty
+# `main`, a mid-fetch tree) does not mint a node.
+INVALID_STATE_FLEET_LATCH_MIN_OBSERVATIONS=2
+
+usage() {
+  sed -n '2,30p' "${BASH_SOURCE[0]}" >&2
+  exit 2
+}
+
+NODE_ID=""
+KIND=""
+EVIDENCE_FILE=""
+SESSION_ID=""
+JOB_ID=""
+NO_INTERVENE=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)          NODE_ID="${2:-}"; shift 2 || usage ;;
+    --kind)          KIND="${2:-}"; shift 2 || usage ;;
+    --evidence-file) EVIDENCE_FILE="${2:-}"; shift 2 || usage ;;
+    --session)       SESSION_ID="${2:-}"; shift 2 || usage ;;
+    --job-id)        JOB_ID="${2:-}"; shift 2 || usage ;;
+    --no-intervene)  NO_INTERVENE=1; shift ;;
+    -h|--help)       usage ;;
+    *) printf 'dispatch-invalid-state-route: unknown argument %q\n' "$1" >&2; usage ;;
+  esac
+done
+
+[[ -n "$NODE_ID" ]] || { printf 'dispatch-invalid-state-route: --node is required\n' >&2; exit 2; }
+[[ -n "$KIND" ]]    || { printf 'dispatch-invalid-state-route: --kind is required\n' >&2; exit 2; }
+
+# --- Kind table ------------------------------------------------------------
+# kind | mechanical tier | escalation class | escalation primitive
+# -----------------------------------------------------------------------------
+# terminal-session   | re-probe occupancy | human | park-node   (caller-owned)
+# frozen-session     | none               | human | park-node   (caller-owned)
+# provision-conflict | (reserved)         | retry | hold-node --kind provision-conflict
+# worktree-residue   | (reserved)         | retry | hold-node --kind worktree-residue
+# fix-attempt-cap    | (reserved)         | retry | hold-node --kind fix-attempt-cap
+#
+# The three `(reserved)` rows carry no caller in this round. They exist so the
+# follow-on call-site swap for dispatch-graph-execute cases 11/14 and the
+# fix-attempt cap is a one-line change, and so the class discrimination is
+# written down exactly once instead of being re-derived per call site.
+kind_class() {
+  case "$1" in
+    terminal-session|frozen-session)                     printf 'human\n' ;;
+    provision-conflict|worktree-residue|fix-attempt-cap) printf 'retry\n' ;;
+    *)                                                   printf '\n' ;;
+  esac
+}
+
+KIND_CLASS="$(kind_class "$KIND")"
+if [[ -z "$KIND_CLASS" ]]; then
+  printf 'dispatch-invalid-state-route: unknown --kind %q (known: terminal-session frozen-session provision-conflict worktree-residue fix-attempt-cap)\n' "$KIND" >&2
+  exit 2
+fi
+
+# A `retry`-class kind must never reach an office_hours write. This router makes
+# no escalation write at all, so the guard is a refusal at the edge: it exists so
+# the rule is enforced HERE, at the one place that knows the class, rather than
+# being re-litigated at each future call site.
+if [[ "$KIND_CLASS" == "retry" && "${DISPATCH_INVALID_STATE_WRITE_OFFICE_HOURS:-0}" == "1" ]]; then
+  printf 'dispatch-invalid-state-route: refusing to write office_hours for retry-class kind %q — a retry-shaped state routes to hold-node/blocked_by, never office_hours on the source (2026-07-25 clarification)\n' "$KIND" >&2
+  exit 2
+fi
+
+# --- Tier 0: preconditions -------------------------------------------------
+# Each failure is loud on stderr, never silent. A precondition failure exits 10
+# (escalate — the caller's existing path still runs), EXCEPT an invalid node id,
+# which is a usage error (exit 2).
+
+# The node-id regex, identical to mark-node-terminal:66 / dispatch-graph-execute:138.
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  printf 'dispatch-invalid-state-route: invalid node id %q\n' "$NODE_ID" >&2
+  exit 2
+fi
+
+PROJECT_ROOT=""
+
+# --- The primary-checkout gate, HOISTED ABOVE the fleet-latch machinery ------
+# Deliberately resolved and asserted here, before a single fleet-latch
+# definition or call site exists: `fleet_latch_mint` runs two PRIVILEGED
+# executables out of `$PROJECT_ROOT` — `write-node.ts`, and `graph-commit`,
+# which force-pushes `refs/graph/**` and pushes `main` — unattended, from the
+# headless tick, with the sandbox off. Minting out of a checkout that just
+# FAILED the on-main assert would execute an unreviewed branch's version of
+# exactly those scripts, which is the hazard the assert exists to prevent
+# (lib-frozen-session-park.sh:930-940 documents it verbatim). So this one
+# precondition never observes and never mints: it logs and exits 10 outright.
+# Every LATER precondition runs only after the checkout has been vouched for,
+# which is what makes routing them through `fail_precondition` safe.
+REPO_ROOT="${DISPATCH_INVALID_STATE_REPO_ROOT:-}"
+if [[ -z "$REPO_ROOT" ]]; then
+  REPO_ROOT=$(resolve_project_root) || REPO_ROOT=""
+fi
+if [[ -z "$REPO_ROOT" || ! -d "$REPO_ROOT" ]]; then
+  # No project root: nothing can be resolved, so the fleet latch cannot be
+  # written either (its sidecar lives under the project root). Loud exit.
+  printf 'dispatch-invalid-state-route: could not resolve the project root; escalating\n' >&2
+  exit 10
+fi
+PROJECT_ROOT="$REPO_ROOT"
+
+if ! assert_primary_checkout_on_main "$PROJECT_ROOT"; then
+  printf 'dispatch-invalid-state-route: primary checkout %s is not on main; escalating without acting, and WITHOUT observing or minting a fleet latch — the mint would have to run the graph-writing scripts of this same rejected checkout (they force-push refs/graph/** and push main)\n' \
+    "$PROJECT_ROOT" >&2
+  exit 10
+fi
+
+# --- Unit 6: the fleet-level latch -----------------------------------------
+# Some invalid states have no node to route: the router's own preconditions fail
+# FLEET-WIDE, so no node can be dispositioned and the failure would otherwise be
+# a silent exit. Per the ratified doctrine these mint a find-or-create latch node
+# that is simultaneously the alarm, the work item, and the dedup key — the
+# `tactic-main-red-*` shape.
+#
+# ANCHORED REGEX, ALWAYS. Any reader of these ids MUST use
+# `^tactic-invalid-state-[0-9a-f]{8}$`, never a bare prefix test. An unanchored
+# prefix match is a known live production bug: see dispatch-graph-main-red-sync:
+# 88-120 and the postmortem in intentions/tactic-main-red-sync-completion-test.md,
+# where a prefix match caught an unrelated hand-authored tactic id and deadlocked
+# auto-merge for weeks. Note `tactic-invalid-state-lane` — this very lane's own
+# node — shares the prefix and MUST NOT match.
+INVALID_STATE_FLEET_LATCH_ID_RE='^tactic-invalid-state-[0-9a-f]{8}$'
+
+# fleet_latch_id <kind> <slug> — the stable dedup key. sha256 over
+# "<kind>:<precondition-slug>" so the id is identical across ticks and sessions
+# for the same failure, and different for a different one.
+fleet_latch_id() {
+  local h
+  h=$(printf '%s' "$1:$2" | sha256sum 2>/dev/null | cut -c1-8) || h=""
+  [[ -n "$h" ]] || return 1
+  printf 'tactic-invalid-state-%s\n' "$h"
+}
+
+# fleet_latch_observe <precondition-slug> <message> — count CONSECUTIVE failures
+# of the same precondition and mint at the threshold. Bounded to at most one
+# latch per router invocation. A mint failure is logged and NEVER changes the
+# router's exit code for the node it was called about.
+fleet_latch_observe() {
+  local slug="$1" msg="$2"
+  [[ -n "$PROJECT_ROOT" && -d "$PROJECT_ROOT" ]] || return 0
+  local wt_dir="$PROJECT_ROOT/.claude/worktrees"
+  local sidecar="$wt_dir/.invalid-state-fleet-$slug"
+  mkdir -p "$wt_dir" 2>/dev/null || return 0
+
+  local n
+  n=$(cat "$sidecar" 2>/dev/null || echo 0)
+  [[ "$n" =~ ^[0-9]+$ ]] || n=0
+  n=$(( n + 1 ))
+  printf '%s\n' "$n" > "$sidecar" 2>/dev/null || true
+
+  if (( n < INVALID_STATE_FLEET_LATCH_MIN_OBSERVATIONS )); then
+    printf 'dispatch-invalid-state-route: fleet precondition %q failed (%d/%d observations); not minting yet\n' \
+      "$slug" "$n" "$INVALID_STATE_FLEET_LATCH_MIN_OBSERVATIONS" >&2
+    return 0
+  fi
+
+  local latch_id
+  latch_id=$(fleet_latch_id "$KIND" "$slug") || return 0
+  # Defensive: the id we just built MUST satisfy the anchored reader. If it does
+  # not, something changed in the id shape — refuse rather than mint into a
+  # keyspace no reader will match.
+  if [[ ! "$latch_id" =~ $INVALID_STATE_FLEET_LATCH_ID_RE ]]; then
+    printf 'dispatch-invalid-state-route: computed latch id %q does not match the anchored reader; not minting\n' "$latch_id" >&2
+    return 0
+  fi
+
+  if [[ "${DISPATCH_INVALID_STATE_FLEET_LATCH:-1}" != "1" ]]; then
+    printf 'dispatch-invalid-state-route: fleet latch disabled; would have minted %s\n' "$latch_id" >&2
+    return 0
+  fi
+
+  fleet_latch_mint "$latch_id" "$slug" "$msg" || \
+    printf 'dispatch-invalid-state-route: minting fleet latch %s failed (non-fatal)\n' "$latch_id" >&2
+  return 0
+}
+
+# fleet_latch_mint <id> <slug> <message> — classify / mint / edit-in-place, the
+# find-or-create idiom at .claude/skills/dispatch-diagnose-main/SKILL.md:80-135.
+#
+# `hold-node` is deliberately NOT reusable here: it requires a SOURCE node to
+# carry the `blocked_by` edge, and a fleet-level invalid state has none. Do not
+# "fix" this by reaching for it.
+fleet_latch_mint() {
+  local id="$1" slug="$2" msg="$3"
+  local store="$PROJECT_ROOT/packages/intentionsutil"
+  [[ -d "$store" ]] || return 1
+
+  # Provenance, the same posture the spawner gets below (and
+  # lib-frozen-session-park.sh:945-967 applies to park-node): the two privileged
+  # executables this mint runs must be regular files whose REAL directory is
+  # THIS project root's intentionsutil scripts dir. Canonicalize both sides with
+  # `pwd -P` so `..` segments and symlinked roots cannot slip an arbitrary
+  # executable past a string prefix test. It matters most for `graph-commit`,
+  # which force-pushes `refs/graph/**` and pushes `main` — unattended, from the
+  # headless tick, sandbox off, with push credentials available.
+  local scripts_dir scripts_dir_real
+  scripts_dir="$store/scripts"
+  scripts_dir_real=$(cd "$scripts_dir" 2>/dev/null && pwd -P) || scripts_dir_real=""
+  if [[ -z "$scripts_dir_real" ]]; then
+    printf 'dispatch-invalid-state-route: %s does not resolve; not minting\n' "$scripts_dir" >&2
+    return 1
+  fi
+  # Held in variables so the invocations below name no path of their own — the
+  # resolved-and-checked value is the ONLY thing that ever gets executed.
+  local write_node_exe commit_exe
+  write_node_exe="$scripts_dir/write-node.ts"
+  commit_exe="$scripts_dir/graph-commit"
+  local exe exe_dir_real
+  for exe in "$write_node_exe" "$commit_exe"; do
+    exe_dir_real=$(cd "$(dirname -- "$exe")" 2>/dev/null && pwd -P) || exe_dir_real=""
+    if [[ "$exe_dir_real" != "$scripts_dir_real" ]]; then
+      printf 'dispatch-invalid-state-route: %s does not resolve inside %s; not minting\n' "$exe" "$scripts_dir" >&2
+      return 1
+    fi
+    if [[ ! -f "$exe" ]]; then
+      printf 'dispatch-invalid-state-route: %s is not a regular file; not minting\n' "$exe" >&2
+      return 1
+    fi
+  done
+  # Only the committer is exec'd directly; the writer is a TypeScript source fed
+  # to `npx tsx`, and is checked in-repo non-executable (0644) on purpose, so an
+  # `-x` test on it would refuse every legitimate mint.
+  if [[ ! -x "$commit_exe" ]]; then
+    printf 'dispatch-invalid-state-route: %s is not executable; not minting\n' "$commit_exe" >&2
+    return 1
+  fi
+
+  # Classify against origin/main: open | closed | absent.
+  local state
+  if git -C "$PROJECT_ROOT" cat-file -e "origin/main:intentions/$id.md" 2>/dev/null; then
+    state="open"
+  else
+    state="absent"
+  fi
+
+  if [[ "$state" == "open" ]]; then
+    # Already latched — the node IS the dedup key, so there is nothing to add.
+    # Editing in place on every failing tick would churn a commit per tick for
+    # no new information; the occurrence count lives in the sidecar.
+    printf 'dispatch-invalid-state-route: fleet latch %s already open; not re-minting\n' "$id" >&2
+    return 0
+  fi
+
+  local tmp
+  tmp=$(mktemp) || return 1
+  # Born-parked: everything a fresh office-hours sitting needs must be IN the
+  # node, because session attach/resume is not a recovery path. The reason names
+  # the failing precondition and its observed values; the recommendation names
+  # the concrete operator act.
+  jq -n \
+    --arg id "$id" \
+    --arg slug "$slug" \
+    --arg msg "$msg" \
+    --arg kind "$KIND" \
+    --arg since "$(date -u +%FT%TZ)" \
+    '{id: $id, kind: "tactic", owner: "ai", status: "raw", parent: null,
+      statement: ("Fleet-level invalid state: the dispatch invalid-state router could not run its preconditions (" + $slug + ")"),
+      rationale: ("Auto-created by dispatch-invalid-state-route after " + $slug + " failed on consecutive observations. Kind: " + $kind + ". No source node could be dispositioned, so this latch node is simultaneously the alarm, the work item and the dedup key (the tactic-main-red-* shape)."),
+      reading: null,
+      serves: ["strategy-graph-native-dispatch"],
+      recovers: [], clarifications: [], tooling_goals: [],
+      success_signal: null, attention: null, phase: null, execution: null,
+      validates: [], blocked_by: [],
+      office_hours: {reason: $msg, since: $since,
+                     recommendation: ("Resolve the failing precondition on the primary checkout, then delete the sidecar .claude/worktrees/.invalid-state-fleet-" + $slug + " so the observation counter restarts.")},
+      pace_exempt: false, rounds: null, attributes: {}}' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+
+  # write-node.ts resolves intentions/ from the SCRIPT's own location, not cwd —
+  # invoke the copy under this project root. Both paths are the provenance-checked
+  # variables from above, never a freshly-composed string.
+  ( cd "$PROJECT_ROOT" && npx tsx "$write_node_exe" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  rm -f "$tmp"
+  ( cd "$PROJECT_ROOT" && "$commit_exe" -m "graph: latch fleet invalid state $slug" "$id" ) >/dev/null 2>&1 || return 1
+  printf 'dispatch-invalid-state-route: minted fleet latch %s\n' "$id" >&2
+  return 0
+}
+
+# fleet_latch_clear <precondition-slug> — reset the observation counter after a
+# successful precondition pass, so only CONSECUTIVE failures accumulate.
+fleet_latch_clear() {
+  [[ -n "$PROJECT_ROOT" && -d "$PROJECT_ROOT" ]] || return 0
+  rm -f "$PROJECT_ROOT/.claude/worktrees/.invalid-state-fleet-$1" 2>/dev/null || true
+  return 0
+}
+
+fail_precondition() { # <slug> <message>
+  local slug="$1" msg="$2"
+  printf 'dispatch-invalid-state-route: %s\n' "$msg" >&2
+  fleet_latch_observe "$slug" "$msg"
+  exit 10
+}
+
+# The node must exist on origin/main — the authoritative tree. A node that is
+# not there is not this lane's to route.
+if ! git -C "$PROJECT_ROOT" cat-file -e "origin/main:intentions/$NODE_ID.md" 2>/dev/null; then
+  fail_precondition "node-absent-on-origin-main" \
+    "intentions/$NODE_ID.md is not present on origin/main; escalating without acting"
+fi
+
+# Every precondition passed: reset the observation counters, so the fleet latch
+# only ever counts CONSECUTIVE failures. A single transient drift followed by a
+# healthy pass must not accumulate toward a mint. Only the latch-eligible
+# preconditions have a counter — `primary-checkout-not-on-main` deliberately has
+# none (see the hoisted gate above), so there is nothing to clear for it.
+fleet_latch_clear "node-absent-on-origin-main"
+
+# --- Tier 1: mechanical resolution -----------------------------------------
+# Per-kind, optional, and EVERY gate fails toward keep/escalate. This tier NEVER
+# reaps and NEVER writes the graph.
+
+WORKTREES_DIR="$PROJECT_ROOT/.claude/worktrees"
+ATTEMPT_FILE="$WORKTREES_DIR/$NODE_ID.invalid-state-attempts"
+
+# The stand-down interlock, for EVERY kind. A stood-down loser has exactly the
+# shape of an invalid state by design, so intervening on one would fight the
+# interlock. Rationale: lib-frozen-session-park.sh:649-661.
+if standdown_exists "$NODE_ID" 2>/dev/null; then
+  printf 'dispatch-invalid-state-route: %s carries a stand-down marker — a stood-down loser is not an invalid state; keeping\n' "$NODE_ID" >&2
+  exit 4
+fi
+
+# done-but-parked is a VALID state (2026-08-04 author ruling): phase and
+# office_hours are ORTHOGONAL dimensions. Never classify it as invalid and never
+# try to resolve it mechanically.
+#
+# The park test is a PRESENCE test over the frontmatter, NOT a value read. A
+# parked node serializes `office_hours` as a YAML BLOCK MAPPING — the key alone
+# on its line with `reason:`/`since:`/`recommendation:` indented beneath — so
+# reading the rest of the `office_hours:` line yields the empty string for every
+# parked node and the literal `null` for every unparked one, which makes a
+# value-based guard dead in both branches. Same frontmatter-scoped, column-0
+# anchored idiom the sweeps use (lib-frozen-session-park.sh:1167-1190); the
+# scoping is load-bearing, so a column-0 `office_hours:` line in the markdown
+# BODY can never be misread as park state.
+NODE_FRONTMATTER="$(git -C "$PROJECT_ROOT" show "origin/main:intentions/$NODE_ID.md" 2>/dev/null \
+  | awk 'NR==1&&/^---/{f=1;next} f&&/^---[[:space:]]*$/{exit} f')"
+_parked=0
+if grep -q '^office_hours:' <<<"$NODE_FRONTMATTER"; then
+  grep -qE '^office_hours:[[:space:]]*null[[:space:]]*$' <<<"$NODE_FRONTMATTER" || _parked=1
+fi
+_done=0
+grep -qE '^phase:[[:space:]]*done[[:space:]]*$' <<<"$NODE_FRONTMATTER" && _done=1
+if (( _done && _parked )); then
+  printf 'dispatch-invalid-state-route: %s is done-but-parked — phase and office_hours are orthogonal (2026-08-04 ruling), not an invalid state; keeping\n' "$NODE_ID" >&2
+  exit 4
+fi
+
+case "$KIND" in
+  terminal-session)
+    # Re-probe occupancy. The state may have resolved itself between detection
+    # and now — a sweep and this router do not run in the same instant.
+    worktree_occupancy_state "$WORKTREES_DIR/$NODE_ID" >/dev/null 2>&1
+    case "$WORKTREE_OCCUPANCY_STATE" in
+      free)
+        # Resolved itself (the session was reaped between detection and now).
+        # Clear the sidecar so a later, genuinely-new occurrence starts fresh.
+        rm -f "$ATTEMPT_FILE" 2>/dev/null || true
+        printf 'dispatch-invalid-state-route: %s is free — the state resolved itself; keeping\n' "$NODE_ID" >&2
+        exit 4
+        ;;
+      live)
+        # A live claim is a VALID skip, full stop. Never spawn into one.
+        printf 'dispatch-invalid-state-route: %s is held by a LIVE session — a valid claim, never an invalid state; keeping\n' "$NODE_ID" >&2
+        exit 4
+        ;;
+      terminal)
+        : # the invalid state is confirmed; continue down the ladder
+        ;;
+      *)
+        # UNKNOWN: no positive evidence. A daemon hiccup must never manufacture
+        # an intervention.
+        printf 'dispatch-invalid-state-route: occupancy of %s is UNKNOWN — no positive evidence; keeping\n' "$NODE_ID" >&2
+        exit 4
+        ;;
+    esac
+    ;;
+  frozen-session)
+    # No mechanical tier by design: a session frozen at a permission/classifier
+    # denial cannot be resolved by re-probing. Fall through to intervention.
+    :
+    ;;
+  *)
+    # The reserved kinds have no caller this round; if one arrives, escalate
+    # rather than guessing at a mechanical tier that was never designed.
+    printf 'dispatch-invalid-state-route: kind %q has no mechanical tier in this round; escalating to the caller\n' "$KIND" >&2
+    exit 10
+    ;;
+esac
+
+# A second live session registered under this node name is the duplicate-worker
+# shape, not an invalid state to intervene on.
+if command -v claude_agents_list_duplicate_node_names >/dev/null 2>&1; then
+  if dupes=$(claude_agents_list_duplicate_node_names 2>/dev/null); then
+    if printf '%s\n' "$dupes" | grep -qxF "$NODE_ID"; then
+      printf 'dispatch-invalid-state-route: %s has two or more LIVE sessions — a duplicate-worker shape, not an invalid state; keeping\n' "$NODE_ID" >&2
+      exit 4
+    fi
+  fi
+fi
+
+# --- Tier 2: intervention, bounded by a per-node attempt cap ---------------
+
+# Availability guard: the sibling tactic
+# (tactic-invalid-state-transcript-intervention) owns the skill. Until it lands,
+# this tier is INERT and today's behavior is preserved exactly — the caller's
+# existing escalation runs untouched.
+SKILL_DIR="${DISPATCH_INVALID_STATE_SKILL_DIR:-$PROJECT_ROOT/.claude/skills/dispatch-invalid-state}"
+if [[ ! -f "$SKILL_DIR/SKILL.md" ]]; then
+  printf 'dispatch-invalid-state-route: intervention skill absent at %s — tier inert; escalating to the caller\n' "$SKILL_DIR" >&2
+  exit 10
+fi
+
+if (( NO_INTERVENE )); then
+  printf 'dispatch-invalid-state-route: --no-intervene; escalating to the caller\n' >&2
+  exit 10
+fi
+
+# Attempt sidecar, OUTSIDE every checkout so it never dirties a tree and is never
+# a graph write — the same convention as dispatch-graph-execute's
+# `.conflict-strikes` and provision-node-worktree's `.scope-fingerprint`. Losing
+# it (daemon restart, reaped worktree) is deliberately fail-open: it grants more
+# free attempts rather than fewer.
+ATTEMPTS=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0)
+[[ "$ATTEMPTS" =~ ^[0-9]+$ ]] || ATTEMPTS=0
+
+_log_decision() { # <disposition> <detail>
+  command -v decision_log_append >/dev/null 2>&1 || return 0
+  local json
+  json=$(jq -c -n \
+    --arg ts "$(date -u +%FT%TZ)" \
+    --arg site "dispatch-invalid-state-route" \
+    --arg node "$NODE_ID" \
+    --arg kind "$KIND" \
+    --arg class "$KIND_CLASS" \
+    --arg disposition "$1" \
+    --arg detail "$2" \
+    --arg session "$SESSION_ID" \
+    --arg job_id "$JOB_ID" \
+    --arg attempt "$ATTEMPTS" \
+    --arg cap "$INVALID_STATE_INTERVENTION_CAP" \
+    '{ts: $ts, site: $site, node: $node, kind: $kind, class: $class,
+      disposition: $disposition, detail: $detail, session: $session,
+      job_id: $job_id, attempt: ($attempt | tonumber), cap: ($cap | tonumber)}' \
+    2>/dev/null) || return 0
+  decision_log_append "$json" || true
+}
+
+if (( ATTEMPTS >= INVALID_STATE_INTERVENTION_CAP )); then
+  # The ratified "cap parks to office-hours" guard is satisfied by the CALLER's
+  # escalation tier — this router makes no escalation write (see "Escalation").
+  # The distinction between cap-exhausted and spawn-failed is logged so the two
+  # are separable after the fact.
+  _log_decision "escalate" "cap-exhausted"
+  printf 'dispatch-invalid-state-route: %s has reached the intervention cap (%d/%d); escalating to the caller\n' \
+    "$NODE_ID" "$ATTEMPTS" "$INVALID_STATE_INTERVENTION_CAP" >&2
+  exit 10
+fi
+
+# Provenance: the resolved spawner must be an executable regular file whose REAL
+# directory is this scripts dir. Canonicalize both sides (`pwd -P`) so `..`
+# segments and symlinked temp roots cannot slip an arbitrary executable past a
+# string prefix test. Same posture lib-frozen-session-park.sh:333-352 applies to
+# park-node, and it is what makes honouring the env override safe.
+SPAWN_JOB="${DISPATCH_INVALID_STATE_SPAWN_JOB:-$SCRIPT_DIR/dispatch-spawn-job}"
+_spawn_dir_real=$(cd "$(dirname -- "$SPAWN_JOB")" 2>/dev/null && pwd -P) || _spawn_dir_real=""
+_scripts_dir_real=$(cd "$SCRIPT_DIR" 2>/dev/null && pwd -P) || _scripts_dir_real=""
+if [[ -z "$_scripts_dir_real" || "$_spawn_dir_real" != "$_scripts_dir_real" ]]; then
+  printf 'dispatch-invalid-state-route: spawner %s does not resolve inside %s; escalating\n' \
+    "$SPAWN_JOB" "$SCRIPT_DIR" >&2
+  _log_decision "escalate" "spawner-provenance-failed"
+  exit 10
+fi
+if [[ ! -f "$SPAWN_JOB" || ! -x "$SPAWN_JOB" ]]; then
+  printf 'dispatch-invalid-state-route: spawner %s is not an executable regular file; escalating\n' "$SPAWN_JOB" >&2
+  _log_decision "escalate" "spawner-not-executable"
+  exit 10
+fi
+
+# The prompt carries the evidence-file PATH, not its content: the intervention
+# reads it itself, and passing a path keeps an unbounded, untrusted transcript
+# excerpt out of the spawn argv.
+#
+# EVIDENCE-FILE LIFECYCLE. This router never creates the file and never deletes
+# it: the DETECTOR creates it and owns it until this router reports a launched
+# intervention (exit 0), at which point ownership passes to the spawned session,
+# which deletes it once it has read it. On every non-zero exit no session was
+# launched, so the detector still owns the file — see
+# dispatch-invalid-state-sweep's rc handling, the one detector that passes one
+# today. Stating the contract here is what keeps a future detector from creating
+# a file nobody reaps.
+PROMPT="/dispatch-invalid-state $NODE_ID"
+if [[ -n "$EVIDENCE_FILE" ]]; then
+  PROMPT="$PROMPT --evidence-file $EVIDENCE_FILE"
+fi
+
+# --cwd is the PROJECT ROOT, never the node worktree (see the header). --name is
+# the node id, which is what obliges the spawned session to declare a
+# disposition via the Stop hook's discriminator 2.
+if "$SPAWN_JOB" --no-verify --name "$NODE_ID" --cwd "$PROJECT_ROOT" \
+     --model opus "$PROMPT" >/dev/null 2>&1; then
+  ATTEMPTS=$(( ATTEMPTS + 1 ))
+  mkdir -p "$WORKTREES_DIR" 2>/dev/null || true
+  printf '%s\n' "$ATTEMPTS" > "$ATTEMPT_FILE" 2>/dev/null || true
+  _log_decision "intervened" "spawned"
+  printf 'intervened %s %d/%d\n' "$NODE_ID" "$ATTEMPTS" "$INVALID_STATE_INTERVENTION_CAP"
+  exit 0
+fi
+
+# A failed kick escalates. The sidecar is NOT incremented: the attempt cap counts
+# interventions actually launched, not failures to launch one — otherwise a
+# broken spawner would silently burn a node's whole intervention budget.
+_log_decision "escalate" "spawn-failed"
+printf 'dispatch-invalid-state-route: spawning the intervention for %s failed; escalating to the caller\n' "$NODE_ID" >&2
+exit 10

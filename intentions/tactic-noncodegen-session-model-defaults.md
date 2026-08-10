@@ -24,10 +24,10 @@ attention:
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes,
-    0 value drift onto non-target nodes, resolves to 20.00."
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: null
+phase: done
 execution:
   branch: tactic-noncodegen-session-model-defaults
   pr: 2776
@@ -37,13 +37,17 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
+  fix: null
+  completion:
+    mergedAt: 2026-07-10T17:48:04Z
+    mergeCommitSha: a2f52f10b4872d15f2449423cb07a1b564d704d1
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # Sonnet-by-default initialization for non-codegen sessions — fix the /qa-main routing gap and pass --model on the aux background-job spawns
 

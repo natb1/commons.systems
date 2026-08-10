@@ -13,7 +13,7 @@ source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 # (tactic-align-session-claiming Unit 3)
 # ============================================================================
 # Uniform node-id claiming (strategy clarification 13) must cover worktrees a
-# HUMAN-invoked /align-strategy or /align-tactics session created — sessions
+# HUMAN-invoked /align or /align-tactics session created — sessions
 # that claim by authoring in <root>/.claude/worktrees/<node-id> and never write
 # a router reservation-ledger marker. graph-select-target's claimed-set gate is
 # worktree_has_live_session, name-keyed on the worktree basename, so a live
@@ -103,7 +103,202 @@ gsc_sel=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
   DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
   DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
 assert_eq "graph-select-target: orphan node-id worktree (no session) is selected" "node tactic-fixture tactic implement" "$gsc_sel"
+
+# Case 3 — a TERMINAL session holds the worktree (tactic-invalid-state-lane
+# Unit 2). The node is still skipped, exactly as in Case 1 — but the skip is now
+# attributable: the decision log must carry `terminal-session`, not
+# `live-session`. Folding the two together is what made this invalid state
+# invisible at the moment the router noticed it.
+echo "Test: graph-select-target — a terminal-session holder is skipped as terminal-session, not live-session"
+printf '%s' '[{"sessionId":"s-dead","name":"tactic-fixture","state":"done","cwd":""}]' \
+  > "$GSC_ROOT/claude-payload.json"
+rm -rf "$GSC_ROOT/seldir"; mkdir -p "$GSC_ROOT/seldir"
+gsc_term=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_DECISION_LOG_DIR="$GSC_ROOT/seldir" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: a terminal-held node is still skipped" "empty" "$gsc_term"
+gsc_reason=$(cat "$GSC_ROOT/seldir"/*.jsonl 2>/dev/null \
+  | jq -r 'select(.site=="graph-select-target") | .skipped[]? | select(.id=="tactic-fixture") | .reason' \
+  2>/dev/null | tail -1)
+assert_eq "graph-select-target: the skip reason is attributable as terminal-session" \
+  "terminal-session" "$gsc_reason"
+
+# Case 4 — an UNKNOWN daemon read must keep reporting `live-session`. A blocked
+# read must never manufacture an invalid state out of a healthy node.
+echo "Test: graph-select-target — an UNKNOWN daemon read still reports live-session"
+cat > "$GSC_ROOT/bin/claude" <<'GSCCLAUDEFAIL'
+#!/usr/bin/env bash
+exit 1
+GSCCLAUDEFAIL
+chmod +x "$GSC_ROOT/bin/claude"
+rm -rf "$GSC_ROOT/seldir"; mkdir -p "$GSC_ROOT/seldir"
+gsc_unk=$(PATH="$GSC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSC_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSC_ROOT/reservations" \
+  DISPATCH_DECISION_LOG_DIR="$GSC_ROOT/seldir" \
+  DISPATCH_SELECTION_LOG_DIR="$GSC_ROOT/seldir" "$GSC_GST" 2>/dev/null)
+assert_eq "graph-select-target: an unknown read still skips the node" "empty" "$gsc_unk"
+gsc_ureason=$(cat "$GSC_ROOT/seldir"/*.jsonl 2>/dev/null \
+  | jq -r 'select(.site=="graph-select-target") | .skipped[]? | select(.id=="tactic-fixture") | .reason' \
+  2>/dev/null | tail -1)
+assert_eq "graph-select-target: an unknown read is NOT reported as terminal-session" \
+  "live-session" "$gsc_ureason"
 rm -rf "$GSC_ROOT" "$GSC_BARE"
+
+# ============================================================================
+# Test: graph-select-target --node — explicit-target dispatch
+# (tactic-graph-select-target-node-tests)
+# ============================================================================
+# --node lets a caller ask for one specific node id rather than the ranked-set
+# selection graph-select-target otherwise performs. The candidate-loop jq
+# filters the snapshot to `select(.id == $target)`; NODE_PRESENT then drives
+# the disposition: absent from candidates -> not-found (stderr explains why,
+# exit 0, stdout "empty"); present but gated (reserved / live-session) ->
+# gated (stderr names the gate, exit 0, stdout "empty"); present and clear ->
+# selected (stdout "node <id> <kind> <phase>", exit 0). --node is also
+# mutually exclusive with --top and --pace-exempt-only (exit 2). This fixture
+# reuses the Unit-3 real-git-repo + fake-npx + fake-`claude` shape verbatim
+# (graph-select-target derives REPO_ROOT from its own on-disk SCRIPT_DIR
+# location, so the script + every sourced lib*.sh must be physically copied,
+# not symlinked, and select-targets.ts is stubbed with a fake `npx` on PATH),
+# including that fixture's empty-read corroboration stub — see the
+# pgrep-daemon-visible note below.
+GSN_ROOT=$(mktemp -d)
+GSN_BARE=$(mktemp -d)
+GSN_SCRIPTS="$GSN_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GSN_SCRIPTS" "$GSN_ROOT/bin"
+cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSN_SCRIPTS/"
+# Fake npx: one selectable implement-phase candidate (same shape as the
+# Unit-3 fixture above).
+cat > "$GSN_ROOT/bin/npx" <<'GSNNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSNNPX
+chmod +x "$GSN_ROOT/bin/npx"
+# A git repo whose origin/main carries an intentions/ tree, main checked out at
+# the fixture root so NATIVE_ROOT resolves there.
+git init -q -b main "$GSN_ROOT"
+git -C "$GSN_ROOT" config user.email t@t
+git -C "$GSN_ROOT" config user.name t
+mkdir -p "$GSN_ROOT/intentions"
+echo '# placeholder' > "$GSN_ROOT/intentions/placeholder.md"
+git -C "$GSN_ROOT" add -A
+git -C "$GSN_ROOT" commit -q -m seed
+git init -q --bare -b main "$GSN_BARE"
+git -C "$GSN_ROOT" remote add origin "$GSN_BARE"
+git -C "$GSN_ROOT" push -q origin main
+git -C "$GSN_ROOT" fetch -q origin
+# Fake `claude agents --json`: payload driven by a rewritable file.
+cat > "$GSN_ROOT/bin/claude" <<'GSNCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSNCLAUDE
+chmod +x "$GSN_ROOT/bin/claude"
+# Empty-read corroboration stub, same as the Unit-3 fixture above: the real
+# (physically copied) lib-claude-agents.sh only trusts an exactly-`[]` registry
+# payload as a genuine "no live sessions" when a `claude daemon` process
+# corroborates it, and folds an UNCORROBORATED `[]` into UNKNOWN, which
+# worktree_has_live_session then fails safe to "occupied". Every `[]`-payload
+# case below therefore needs this probe defaulted to "daemon visible" (exit 0)
+# — otherwise it falls through to the REAL host `pgrep` and Case 1 reports the
+# live-session gate instead of selecting, on any host (CI included) not itself
+# running a claude daemon.
+cat > "$GSN_ROOT/bin/pgrep-daemon-visible" <<'GSNPGREP'
+#!/usr/bin/env bash
+exit 0
+GSNPGREP
+chmod +x "$GSN_ROOT/bin/pgrep-daemon-visible"
+mkdir -p "$GSN_ROOT/.claude/worktrees/tactic-fixture"
+GSN_GST="$GSN_SCRIPTS/graph-select-target"
+
+# Per-case baseline: no live sessions, no reservations. graph-select-target
+# checks the reserved gate BEFORE the live-session gate, so without an explicit
+# reset the live-session case would only observe its own gate because the
+# reserved case happened to clean up after itself — cases would silently change
+# meaning if reordered or run in isolation.
+gsn_reset() {
+  printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
+  rm -rf "$GSN_ROOT/reservations"
+  mkdir -p "$GSN_ROOT/reservations"
+}
+
+echo "Test: graph-select-target --node explicit dispatch (tactic-graph-select-target-node-tests)"
+
+# --- Case 1: present candidate, no gate -> selected -------------------------
+gsn_reset
+gsn1_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>/dev/null) && gsn1_rc=0 || gsn1_rc=$?
+assert_eq "graph-select-target --node: present candidate, no gate selects" "node tactic-fixture tactic implement" "$gsn1_out"
+assert_eq "graph-select-target --node: present candidate, no gate exits 0" "0" "$gsn1_rc"
+
+# --- Case 2: node absent from candidates -> not-found -----------------------
+gsn_reset
+gsn2_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-absent 2>"$GSN_ROOT/stderr.txt") && gsn2_rc=0 || gsn2_rc=$?
+gsn2_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: absent candidate emits empty" "empty" "$gsn2_out"
+assert_eq "graph-select-target --node: absent candidate exits 0" "0" "$gsn2_rc"
+assert_contains_local "graph-select-target --node: absent candidate explains not-selectable" \
+  "graph-select-target: node tactic-absent is not selectable (not found, done, parked, blocked, or already reviewed — inspect intentions/tactic-absent.md directly for the reason)" \
+  "$gsn2_err"
+
+# --- Case 3: present candidate, reserved -> gated ---------------------------
+gsn_reset
+touch "$GSN_ROOT/reservations/tactic-fixture"
+gsn3_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>"$GSN_ROOT/stderr.txt") && gsn3_rc=0 || gsn3_rc=$?
+gsn3_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: reserved candidate emits empty" "empty" "$gsn3_out"
+assert_eq "graph-select-target --node: reserved candidate exits 0" "0" "$gsn3_rc"
+assert_eq "graph-select-target --node: reserved candidate reports reserved" "graph-select-target: reserved" "$gsn3_err"
+
+# --- Case 4: present candidate, live session -> gated -----------------------
+gsn_reset
+printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
+  > "$GSN_ROOT/claude-payload.json"
+gsn4_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>"$GSN_ROOT/stderr.txt") && gsn4_rc=0 || gsn4_rc=$?
+gsn4_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: live-session candidate emits empty" "empty" "$gsn4_out"
+assert_eq "graph-select-target --node: live-session candidate exits 0" "0" "$gsn4_rc"
+assert_eq "graph-select-target --node: live-session candidate reports live-session" "graph-select-target: live-session" "$gsn4_err"
+
+# --- Case 5: --node + --top -> usage error ----------------------------------
+gsn_reset
+gsn5_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --top 2 2>"$GSN_ROOT/stderr.txt") && gsn5_rc=0 || gsn5_rc=$?
+gsn5_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: --node + --top exits 2" "2" "$gsn5_rc"
+assert_contains_local "graph-select-target --node: --node + --top reports mutual exclusion" \
+  "--node is mutually exclusive with --top and --pace-exempt-only" "$gsn5_err"
+
+# --- Case 6: --node + --pace-exempt-only -> usage error ---------------------
+gsn_reset
+gsn6_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --pace-exempt-only 2>"$GSN_ROOT/stderr.txt") && gsn6_rc=0 || gsn6_rc=$?
+gsn6_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: --node + --pace-exempt-only exits 2" "2" "$gsn6_rc"
+assert_contains_local "graph-select-target --node: --node + --pace-exempt-only reports mutual exclusion" \
+  "--node is mutually exclusive with --top and --pace-exempt-only" "$gsn6_err"
+
+rm -rf "$GSN_ROOT" "$GSN_BARE"
 
 # ============================================================================
 # Test: graph-select-target --standalone — lock + headroom + claim wrapping
@@ -788,6 +983,16 @@ GSCIPGREP
 exit 0
 GSCIGC
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit"
+  # park-node stub: _park_conflict_cap runs it from NATIVE_ROOT on the
+  # conflict-attempt-cap path. Logs its argv so the cap case can assert the park
+  # actually happened (and carried a reason + recommendation).
+  cat > "$GSCI_ROOT/packages/intentionsutil/scripts/park-node" <<'GSCIPARK'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+printf '%s\n' "$*" >> "$_root/park-node-calls.log"
+exit 0
+GSCIPARK
+  chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/park-node"
   # Fake npx: serves BOTH tsx entry points the selector shells out to —
   # select-targets.ts (the candidate list, from a per-case file) and
   # apply-fix-state.ts (the interrupt write, whose invocation is logged; the
@@ -800,6 +1005,10 @@ for _a in "$@"; do
     *apply-fix-state*)
       printf '%s\n' "$*" >> "$_root/apply-fix-calls.log"
       echo '{}'
+      exit 0 ;;
+    *apply-conflict-state*)
+      printf '%s\n' "$*" >> "$_root/apply-conflict-calls.log"
+      cat "$_root/conflict-result.json"
       exit 0 ;;
   esac
 done
@@ -815,6 +1024,12 @@ GSCINPX
   cat > "$GSCI_ROOT/bin/gh" <<'GSCIGH'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/.." && pwd)"
+# `gh pr ready --undo <n>` — the conflict backstop's PR re-draft. Logged so the
+# case can assert the disarm ran; matched before the REST paths below.
+if [[ "$1" == "pr" && "$2" == "ready" ]]; then
+  printf '%s\n' "$*" >> "$_root/gh-pr-ready.log"
+  exit 0
+fi
 for _a in "$@"; do
   case "$_a" in
     */pulls/2999) cat "$_root/pr-2999.json"; exit 0 ;;
@@ -856,6 +1071,10 @@ GSCICLAUDE
   gsci_pr false
   gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
   printf 'conflict' > "$GSCI_ROOT/route.txt"
+  # apply-conflict-state's default reply: an UNCAPPED --park-if-capped read (the
+  # other modes' JSON is never parsed by the selector).
+  printf '%s\n' '{"mode":"park-if-capped","id":"tactic-fixture","wrote":false,"capped":false,"attempt":1}' \
+    > "$GSCI_ROOT/conflict-result.json"
   # A git repo whose origin/main carries an intentions/ tree, main checked out
   # at the fixture root so NATIVE_ROOT resolves there.
   git init -q -b main "$GSCI_ROOT"
@@ -1007,5 +1226,155 @@ assert_eq "graph-select-target interrupt: a failed cascade eval is reported on s
 gsc_interrupt_teardown
 
 # <<< END MOVED <<<
+
+# ============================================================================
+# Test: graph-select-target — the merge-conflict interrupt
+# (tactic-graph-router-conflict-routing Unit 3)
+# ============================================================================
+# The router now SURFACES a reviewed awaiting-merge node (as `pending-merge`)
+# instead of excluding it, and this selector's two new gates own the orthogonal
+# `execution.conflict` interrupt: _gate_pending_merge ENTERS it on CONFLICTING,
+# _gate_conflict_active spends an attempt / parks at the cap / self-heals once
+# the PR is MERGEABLE again. The cases below reuse the interrupt fixture above
+# verbatim (its npx stub also serves apply-conflict-state.ts, and its
+# packages/intentionsutil/scripts/ carries graph-commit + park-node stubs) and
+# pin the SHELL seam only: which apply-conflict-state mode is called, and which
+# phase (if any) is emitted. Neither gate consults interruptRoute, so the fake
+# `node` is never exercised on these paths.
+
+# --- Case 7: pending-merge + CONFLICTING enters the interrupt ----------------
+echo "Test: graph-select-target — a CONFLICTING pending-merge node enters the conflict interrupt and emits conflict"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci7_out=$(gsci_run)
+assert_eq "graph-select-target conflict: CONFLICTING pending-merge emits conflict" \
+  "node tactic-fixture tactic conflict" "$gsci7_out"
+assert_eq "graph-select-target conflict: the entry call carries --set-conflict" \
+  "1" "$(grep -q -- "--set-conflict" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+# The review-binding guard: entry records the head the completed review examined,
+# so the self-heal below can tell "main moved" from "the branch was rewritten".
+assert_eq "graph-select-target conflict: the entry call records the PR's head sha" \
+  "1" "$(grep -q -- "--head-sha deadbee" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 8: pending-merge + MERGEABLE is left to dispatch-auto-merge --------
+echo "Test: graph-select-target — a MERGEABLE pending-merge node is skipped for dispatch-auto-merge"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci_pr true
+gsci8_out=$(gsci_run)
+assert_eq "graph-select-target conflict: MERGEABLE pending-merge emits nothing" "empty" "$gsci8_out"
+assert_eq "graph-select-target conflict: MERGEABLE pending-merge makes no apply-conflict-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-conflict-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 9: pending-merge + UNKNOWN never dispatches ------------------------
+# GitHub computes mergeability asynchronously; an UNKNOWN must wait, never route.
+echo "Test: graph-select-target — an UNKNOWN-mergeability pending-merge node waits for the next tick"
+gsc_interrupt_setup
+gsci_candidate pending-merge
+gsci_pr null
+gsci9_out=$(gsci_run)
+assert_eq "graph-select-target conflict: UNKNOWN pending-merge emits nothing" "empty" "$gsci9_out"
+assert_eq "graph-select-target conflict: UNKNOWN pending-merge makes no apply-conflict-state call" \
+  "0" "$([ -f "$GSCI_ROOT/apply-conflict-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 10: an active interrupt, still conflicted, spends one attempt ------
+echo "Test: graph-select-target — an active conflict interrupt still CONFLICTING spends an attempt and re-emits conflict"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci10_out=$(gsci_run)
+assert_eq "graph-select-target conflict: an uncapped active interrupt re-emits conflict" \
+  "node tactic-fixture tactic conflict" "$gsci10_out"
+assert_eq "graph-select-target conflict: the cap is read first via --park-if-capped" \
+  "1" "$(grep -q -- "--park-if-capped" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: an uncapped retry spends an attempt" \
+  "1" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: an uncapped retry never parks the node" \
+  "0" "$([ -f "$GSCI_ROOT/park-node-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 11: at the cap the node is parked, not re-dispatched ---------------
+echo "Test: graph-select-target — an active conflict interrupt at the attempt cap parks the node instead of retrying"
+gsc_interrupt_setup
+gsci_candidate conflict
+printf '%s\n' '{"mode":"park-if-capped","id":"tactic-fixture","wrote":false,"capped":true,"attempt":3}' \
+  > "$GSCI_ROOT/conflict-result.json"
+gsci11_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a capped interrupt emits nothing" "empty" "$gsci11_out"
+assert_eq "graph-select-target conflict: a capped interrupt parks the source node" \
+  "1" "$([ -f "$GSCI_ROOT/park-node-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the park names the node and its recommendation" \
+  "1" "$(grep -q "dispatch-conflict tactic-fixture" "$GSCI_ROOT/park-node-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: a capped interrupt never spends another attempt" \
+  "0" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 12: MERGEABLE again backstop-clears the undeclared interrupt -------
+# Reaching this arm means the worker never declared a disposition (a declared
+# one nulls execution.conflict, so the router stops emitting `conflict`). The
+# backstop therefore must NOT keep the review verdict on its own say-so: it
+# clears through a mode that re-reviews unless the tree is provably the reviewed
+# one (`--clear-conflict-guarded`, whose default outcome is the intention clear),
+# and it re-drafts the PR so no merge lane takes it meanwhile. The one thing it
+# may never do is assert `--clear-conflict-mechanical` itself — that verdict
+# belongs to `/dispatch-conflict` Lane 3, which saw the resolution.
+echo "Test: graph-select-target — an undeclared conflict interrupt on a now-MERGEABLE PR is backstop-cleared for re-review"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci_pr true
+gsci12_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a backstop-cleared interrupt emits nothing" "empty" "$gsci12_out"
+assert_eq "graph-select-target conflict: the backstop clears through a re-review-defaulting mode" \
+  "1" "$(grep -qE -- "--clear-conflict-(guarded|intention)" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the backstop never asserts the mechanical verdict itself" \
+  "0" "$(grep -q -- "--clear-conflict-mechanical" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the backstop re-drafts the PR to disarm the merge lanes" \
+  "1" "$(grep -q -- "--undo 2999" "$GSCI_ROOT/gh-pr-ready.log" && echo 1 || echo 0)"
+# The guard's INPUT: the clear is decided against the PR's CURRENT head, not
+# against the caller's assertion that nothing important changed.
+assert_eq "graph-select-target conflict: the backstop clear carries the PR's current head sha" \
+  "1" "$(grep -q -- "--head-sha deadbee" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 13: a head-match guarded clear hands the PR back to auto-merge -----
+# The one arm that keeps the `reviewed` marker: the primitive reports
+# `reset: false` (the head never moved, so the tree that will merge IS the
+# reviewed tree). The selector must then undo its defensive re-draft, or the
+# node would sit as a draft forever waiting on an auto-merge that cannot fire.
+echo "Test: graph-select-target — a head-match guarded clear re-readies the PR for the armed auto-merge"
+gsc_interrupt_setup
+gsci_candidate conflict
+gsci_pr true
+printf '%s\n' '{"mode":"clear","id":"tactic-fixture","wrote":true,"reset":false,"phase":"review","guard":"head-match"}' \
+  > "$GSCI_ROOT/conflict-result.json"
+gsci13_out=$(gsci_run)
+assert_eq "graph-select-target conflict: a head-match clear emits nothing" "empty" "$gsci13_out"
+assert_eq "graph-select-target conflict: a head-match clear re-readies the PR" \
+  "1" "$(grep -qx "pr ready 2999" "$GSCI_ROOT/gh-pr-ready.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 14: the lane's per-pass graph-commit budget bounds the write arms --
+# Every conflict write arm lands a commit and then returns NOT-SELECTED, so
+# `--top` does not bound them. Unbounded, one push to main conflicting with N
+# reviewed PRs would serialize N landing-lock waits inside ONE dispatch-lock
+# hold and get the tick's lock reclaimed mid-selection (duplicate workers). With
+# the budget set to 1, exactly ONE of the two matching candidates may write this
+# pass; the other is deferred to the next tick, where it matches again.
+echo "Test: graph-select-target — the conflict lane spends at most GRAPH_CONFLICT_COMMIT_BUDGET commits per pass"
+gsc_interrupt_setup
+printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false},{"id":"tactic-fixture-2","kind":"tactic","phase":"conflict","pr":"2999","pace_exempt":false}],"events":[]}' \
+  > "$GSCI_ROOT/candidates.json"
+gsci_pr true
+export GRAPH_CONFLICT_COMMIT_BUDGET=1
+gsci14_out=$(gsci_run)
+unset GRAPH_CONFLICT_COMMIT_BUDGET
+assert_eq "graph-select-target conflict: a budgeted pass still emits nothing" "empty" "$gsci14_out"
+assert_eq "graph-select-target conflict: only ONE candidate's clear runs under a budget of 1" \
+  "1" "$(grep -c -- "--clear-conflict-guarded" "$GSCI_ROOT/apply-conflict-calls.log")"
+assert_eq "graph-select-target conflict: the deferred candidate is logged as budget-spent" \
+  "1" "$(grep -q "conflict-commit-budget-spent" "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+gsc_interrupt_teardown
 
 report_results

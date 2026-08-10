@@ -69,7 +69,6 @@ rationale: "Discovered 2026-07-16 during a /qa-fix pass on
   planned as one unit, but if both are in flight simultaneously they will
   conflict textually in that file region."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -83,14 +82,45 @@ attention:
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes,
-    0 value drift onto non-target nodes, resolves to 20.00."
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: implement
-execution: null
+phase: main-qa
+execution:
+  branch: tactic-outcome-envelope-node-lane-parity
+  pr: 3030
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-04T02:45:28Z
+    mergeCommitSha: e05c1e78d1dc81a95cb2a6128f0a5740ac5ec65c
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 12 awaits the next live node-lane /qa-fix or
+    /review-fix session reaching terminal disposition post-merge (PR #3030
+    merged 2026-08-04T02:45:28Z, ~20min ago); journalctl -u dispatch-tick since
+    the merge shows no qa-fix/review-fix/node-id/dispatch:outcome activity yet
+    -- re-check after a node-lane qa-fix or review-fix session has completed
+    post-merge (likely several hours out, once one is next selected)"
+  since: 2026-08-04
+  recommendation: "No author decision needed, only re-selection once a node-lane
+    /qa-fix or /review-fix session has completed post-merge. Then: grep that
+    session's transcript for a <!-- dispatch:outcome:v1 --> block and confirm
+    issue is null and node_id is the node's slug; run aggregate-usage.sh over
+    the projects root and confirm .sessions[].outcome.node_id matches for that
+    session id. Unit-level mechanics (dispatch-emit-outcome --node-id emission,
+    aggregate-usage.sh passthrough) already pass their own test suites
+    (test-emit-outcome.sh, test-aggregate-usage.sh) -- only the live end-to-end
+    effect remains unconfirmed."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -295,3 +325,26 @@ Manual smoke checks (prose — quick shell one-liners against the built script):
   `--node-id 42` exits 2 (slug reject).
 - Read-review the two SKILLs: every `dispatch-emit-outcome` template honors its
   own node-lane "never pass `--issue`" preamble.
+
+## needs-main residue
+
+- **id:** 12 — Live node-lane envelope reaches token-audit aggregate
+  - URL path: current
+  - Expected outcome: a real node-lane `/qa-fix` or `/review-fix` session,
+    running after this PR merges, emits an outcome envelope with `"issue":
+    null, "node_id": "<slug>"`, and `aggregate-usage.sh` surfaces it on
+    `.sessions[].outcome.node_id`.
+  - Finding: not verifiable from this PR's own working tree by construction —
+    the unit mechanics are already covered by passing QA (`dispatch-emit-outcome`
+    correctly emits `node_id`; `test-aggregate-usage.sh`'s fixture-based
+    regression test already exercises a synthetic node-lane envelope end-to-end
+    through the aggregator and asserts the `.sessions[].outcome.node_id`
+    passthrough), but the live end-to-end effect — a real node-lane session's
+    transcript actually carrying the new envelope shape — can only be observed
+    after merge.
+  - Verifiability: WAIT — awaiting the next live node-lane `/qa-fix` or
+    `/review-fix` session that reaches its terminal disposition post-merge.
+  - Check: grep that session's transcript for a `<!-- dispatch:outcome:v1 -->`
+    block and confirm `"issue": null` / `"node_id": "<the node's id>"`; then run
+    `aggregate-usage.sh` over the projects root and confirm
+    `.sessions[].outcome.node_id` for that session id matches.

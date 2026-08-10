@@ -13,7 +13,6 @@ rationale: "Retained from the 2026-07-06 /align-strategy interview
   chunk-node lifecycle is the retirement trigger. Full requirement and interview
   design decisions in the node body."
 reading: null
-gap: null
 serves:
   - strategy-philosophical-grounding
 recovers: []
@@ -33,6 +32,7 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
+  tier: 1
 phase: implement
 execution:
   branch: tactic-sync-reader-skill
@@ -47,6 +47,7 @@ execution:
     since: 2026-07-22
     attempt: 1
     pushed_sha: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []

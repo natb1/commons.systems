@@ -33,6 +33,25 @@
 # failure the Stop-hook backstop treats as best-effort (markers left in place
 # for a retry).
 #
+# Write-failure rollback (tactic-park-node-rollback-dirty-tree-blocks-tick-sync,
+# mirrors clear-park's identical block): every exit path that does NOT land a
+# commit restores intentions/<node-id>.md to the state this script found it
+# in — from a pre-refresh copy captured below, NOT from FRESH_BLOB — because a
+# FRESH_BLOB restore leaves origin/main's content behind as a local
+# modification in the far-behind checkout this script routinely runs from. A
+# leaked dirty node file trips graph-commit's assert_clean_outside_ids guard
+# for every other unrelated node in that worktree, AND blocks dispatch-tick's
+# own `git merge --ff-only` sync fleet-wide for as long as it persists.
+# The restore is itself conditional on the checkout still being the one this
+# script wrote: graph-commit has failure paths that commit the park locally, or
+# `git reset --hard` onto a fresher origin/main, before exiting non-zero — and
+# it only rewinds HEAD when its own RESTORE_HEAD=1, which it deliberately does
+# NOT set for the main-checkout/clean-worktree callers here. So restore_node
+# declines (with a diagnostic) when HEAD has moved or when the node file no
+# longer hashes to the blob this script wrote; in those cases the pre-refresh
+# bytes would be an uncommitted REVERT of a park that is already committed,
+# which is the very dirty tree this rollback exists to prevent.
+#
 # The park-recommendation contract: a mechanical park must carry recoverable
 # context — a reason AND a best-next-steps recommendation. `office_hours.
 # recommendation` is a first-class schema.ts field (landed by
@@ -66,11 +85,27 @@
 # be wrong and must route back to re-diagnosis, never to a park. See
 # .claude/skills/ref-diagnosis-time-cas/SKILL.md for the full caller loop.
 #
+# Landing signal (tactic-graph-commit-landing-signal-unreliable, Unit 4):
+# graph-commit's own exit code is NOT trusted as the verdict on whether the
+# park landed. graph-commit can report failure over a write that actually
+# reached origin/main (Direction B), or success over one that didn't. After
+# the graph-commit invocation below — success or failure — this script asks
+# the sibling `verify-landed` primitive directly: `verify-landed -C
+# "$REPO_ROOT" --node "$NODE_ID" --jq '.office_hours != null'` (id and filter
+# as separate arguments — see that script's header). Its three-valued verdict
+# (landed/not-landed/unknown), not graph-commit's rc, decides park-node's own
+# exit and whether the pre-park local copy is restored. The "HEAD moved
+# locally" comparison inside restore_node() (above) stays as a diagnostic aid
+# for choosing the correct restore target, but it is no longer the primary
+# evidence that a park landed — verify-landed is.
+#
 # Usage: park-node [--pr <n>] [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> <reason> [recommendation]
 #
-# Exit codes: 0 parked and landed on main; 1 the write or graph-commit failed
-# (including a refused compare-and-swap because origin/main advanced, or an
-# unreachable/absent-node origin/main — absent-node stays exit 1 even when
+# Exit codes: 0 parked and landed on main, per verify-landed; 1 the write
+# failed before graph-commit ever ran, OR verify-landed's post-graph-commit
+# check came back not-landed or unknown (see the distinct stderr messages at
+# the call site — an unknown verdict never claims a rollback happened), OR an
+# unreachable/absent-node origin/main (absent-node stays exit 1 even when
 # --base is supplied, since a node missing from origin/main is a hard
 # cannot-park state, not a staleness condition); 2 usage error (including a
 # malformed or unresolvable --base, or a non-integer --pr); 3 the supplied
@@ -153,6 +188,17 @@ if [[ ${#ARGS[@]} -lt 2 || ${#ARGS[@]} -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]
   exit 2
 fi
 
+# The node id is interpolated into a path, a graph-commit --base/--expect pair,
+# and (via verify-landed) a landing check, so it is validated in FULL here — the
+# same charset verify-landed enforces. src/store.ts's assertPathSafeId rejects
+# only `/`, `\`, `.` and `..`, which leaves `@`, `#` and whitespace legal
+# upstream; this is the gate that keeps such an id from reaching a downstream
+# parser at all.
+if [[ ! "$NODE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "park-node: malformed node id '$NODE_ID' — ids must match ^[A-Za-z0-9._-]+\$" >&2
+  exit 2
+fi
+
 # Resolve --base (if supplied) to a 40-hex blob sha, before any network call,
 # so a malformed base is a cheap usage error rather than a mid-flight failure.
 PINNED_BASE=""
@@ -192,6 +238,100 @@ if [[ $BASE_SUPPLIED -eq 1 ]]; then
   fi
 fi
 
+TMPTS="$(mktemp --suffix=.mts)" \
+  || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
+# TMPORIG holds the node file exactly as this script found it, captured BEFORE
+# the origin/main refresh below overwrites it. Every non-landing exit path
+# restores from it (restore_node), so a failed invocation leaves
+# `git status --porcelain intentions/` as it was.
+TMPORIG="$(mktemp)" \
+  || { echo "park-node: could not create temp file for the pre-refresh node copy" >&2; exit 1; }
+ORIG_EXISTED=0
+if [[ -f "$INTENTIONS_DIR/$NODE_ID.md" ]]; then
+  if ! cp "$INTENTIONS_DIR/$NODE_ID.md" "$TMPORIG"; then
+    echo "park-node: could not capture the pre-refresh copy of intentions/$NODE_ID.md" >&2
+    rm -f "$TMPTS" "$TMPORIG"
+    exit 1
+  fi
+  ORIG_EXISTED=1
+fi
+# HEAD_BEFORE pins the commit the checkout was on when the pre-refresh copy was
+# taken. The rollback below is only valid while HEAD has not moved: graph-commit
+# has exit-1 paths that FIRST commit the park locally (or `git reset --hard
+# FETCH_HEAD` onto a fresher origin/main) and only rewind when its own
+# RESTORE_HEAD=1 — which ensure_intentions_only_base deliberately leaves at 0
+# for the main-checkout/clean-worktree callers this script routinely runs from.
+# Restoring the pre-refresh bytes over a HEAD that already contains the park
+# would write an uncommitted REVERT of the park into the tree: it blocks
+# dispatch-tick's `git merge --ff-only` sync fleet-wide, trips
+# assert_clean_outside_ids for every other node write from that checkout, and —
+# if a later writer commits intentions/ from there — silently clears the park a
+# human gate had frozen. An empty HEAD_BEFORE (unborn HEAD, or git unavailable)
+# disables the comparison rather than failing the rollback.
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+
+# restore_node — put intentions/$NODE_ID.md back to its pre-refresh state.
+# Copies to a temp sibling and mv's into place only on success, so a failed copy
+# never truncates the node file to zero bytes. When the file did not exist
+# before (a worktree branch predating the node), the restore returns the tree to
+# clean — a delete only when the path is genuinely untracked.
+#
+# Both guards below detect "graph-commit has already committed or reset this
+# file, so park-node's pre-refresh bytes are no longer the correct restore
+# target" and decline to write, printing a diagnostic instead.
+restore_node() {
+  local head_now blob_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "park-node: HEAD moved from $HEAD_BEFORE to $head_now during the park — graph-commit already committed or reset intentions/$NODE_ID.md, so the pre-refresh copy is no longer the correct restore target; leaving the file as graph-commit left it (check 'git -C $REPO_ROOT log -1' and whether the park needs a retry)" >&2
+    return
+  fi
+  # EXPECT_BLOB is only set once this script's own office_hours write has
+  # landed on disk; before that there is nothing to compare against.
+  if [[ -n "${EXPECT_BLOB:-}" ]]; then
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$NODE_ID.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && "$blob_now" != "$EXPECT_BLOB" ]]; then
+      echo "park-node: intentions/$NODE_ID.md is no longer the content park-node wrote ($blob_now != $EXPECT_BLOB) — graph-commit already committed or reset it; leaving it in place rather than restoring the pre-refresh copy" >&2
+      return
+    fi
+  fi
+
+  if [[ "$ORIG_EXISTED" == 1 ]]; then
+    if cp "$TMPORIG" "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
+      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
+    else
+      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
+      echo "park-node: CRITICAL — could not restore intentions/$NODE_ID.md from its pre-refresh copy; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  elif git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$NODE_ID.md" >/dev/null 2>&1; then
+    # Absent at capture time but TRACKED now: graph-commit reset the checkout
+    # onto an origin/main where this node file exists. `rm -f` here would
+    # manufacture a deletion of a live node file — one that blocks
+    # `git merge --ff-only`, and that the next graph-commit naming this node
+    # from this checkout would stage and land (assert_staged_safe permits
+    # intentions/$NODE_ID.md), pruning the node and its park off main. Restore
+    # from the index instead, which returns the tree to clean.
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$NODE_ID.md"; then
+      echo "park-node: CRITICAL — intentions/$NODE_ID.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$NODE_ID.md"
+  fi
+}
+
+# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md if this
+# script actually wrote to it (the origin/main refresh below is the first such
+# write). A pre-mutation failure (the fetch/blob-lookup above) must not
+# trigger a restore of a file this script never touched.
+MUTATED=0
+trap '
+  rc=$?
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    restore_node
+  fi
+  rm -f "$TMPTS" "$TMPORIG"
+' EXIT
+
 # Refresh the LOCAL node file from origin/main BEFORE reading it, so the
 # office_hours mutation lands on top of the current landed content rather than a
 # stale worktree copy (the invocation may come from a far-behind PR-branch
@@ -212,42 +352,23 @@ if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_I
   exit 1
 fi
 
-# The pin check runs before ANY mutation — before the local-file overwrite,
-# before mktemp, before MUTATED is set, before the EXIT trap is installed — so
-# a stale pin has zero side effects and nothing to roll back.
+# The pin check runs before ANY mutation — before the local-file overwrite
+# below and before MUTATED is set to 1. The temp files and the EXIT trap
+# already exist at this point (mktemp'd above, before the fetch), but the
+# trap's restore is a no-op while MUTATED is still 0, and the node file itself
+# has not been touched, so a stale pin has zero side effects to roll back.
 if [[ -n "$PINNED_BASE" && "$PINNED_BASE" != "$FRESH_BLOB" ]]; then
   echo "park-node: stale-diagnosis — intentions/$NODE_ID.md on origin/main is now $FRESH_BLOB but the pinned --base is $PINNED_BASE; the node changed between diagnosis and execution. Re-read the node, re-decide the disposition, and retry with a freshly captured base. Nothing was written." >&2
   exit 3
 fi
 
+MUTATED=1
 if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"; then
   echo "park-node: could not refresh intentions/$NODE_ID.md from origin/main" >&2
   exit 1
 fi
 
 SINCE="$(date -u +%Y-%m-%d)"
-TMPTS="$(mktemp --suffix=.mts)" \
-  || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }
-# MUTATED gates the rollback below: only restore intentions/$NODE_ID.md from
-# origin/main if this script actually wrote to it (the write at the npx tsx
-# call further down). A pre-mutation failure (the fetch/refresh above) must
-# not trigger a restore of a file this script never touched.
-MUTATED=0
-trap '
-  rc=$?
-  rm -f "$TMPTS"
-  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    # Restore from the immutable blob SHA captured before the mutation, not the
-    # moving origin/main ref (a concurrent fetch may have pruned/relocated the
-    # node). Write to a temp file and mv into place only on success, so a failed
-    # git-show never truncates the node file to zero bytes.
-    if git -C "$REPO_ROOT" show "$FRESH_BLOB" > "$INTENTIONS_DIR/$NODE_ID.md.rollback"; then
-      mv "$INTENTIONS_DIR/$NODE_ID.md.rollback" "$INTENTIONS_DIR/$NODE_ID.md"
-    else
-      rm -f "$INTENTIONS_DIR/$NODE_ID.md.rollback"
-    fi
-  fi
-' EXIT
 cat >"$TMPTS" <<'TS'
 // argv: <storeModule> <intentionsDir> <since> <reason> <recommendation> <id> <pr>
 const [storePath, intentionsDir, since, reason, recommendation, id, pr] = process.argv.slice(2);
@@ -267,7 +388,6 @@ writeNode(intentionsDir, node);
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 
-MUTATED=1
 if ! (cd "$REPO_ROOT" && npx tsx "$TMPTS" "$STORE_MODULE" "$INTENTIONS_DIR" "$SINCE" "$REASON" "$RECOMMENDATION" "$NODE_ID" "$PR_ARG" >&2); then
   echo "park-node: failed to write the office_hours record for $NODE_ID" >&2
   exit 1
@@ -300,10 +420,39 @@ fi
 # intentions/$NODE_ID.md between the hash above and graph-commit's staging.
 # The wrong-repo case --expect exists for (graph-commit's header) is reached by
 # callers that pass -C and the hash from different trees, not by this one.
-if ! "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID"; then
-  echo "park-node: graph-commit failed for $NODE_ID; the office_hours write was rolled back" >&2
-  exit 1
-fi
+GC_RC=0
+"$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" -m "graph: park $NODE_ID ($REASON)" "$NODE_ID" || GC_RC=$?
+
+# graph-commit's rc is discarded as the landing signal (see the header note).
+# Ask verify-landed directly, unconditionally — including when GC_RC is 0 —
+# because a reported success is exactly as untrustworthy as a reported
+# failure until origin/main itself confirms it.
+# The id and the predicate are SEPARATE arguments (`--node` / `--jq`), never a
+# concatenated `"$NODE_ID@..."` token: node ids are not delimiter-free upstream
+# (assertPathSafeId permits `@` and `#`), and an id spliced into the spec string
+# became jq source — an id ending in `@true #` forged a `landed` verdict for any
+# node, which here would suppress the rollback and write the terminal marker.
+# NODE_ID is charset-validated above; verify-landed re-validates it in full.
+VL_OUT="$("$SCRIPT_DIR/verify-landed" -C "$REPO_ROOT" --node "$NODE_ID" --jq '.office_hours != null' 2>&1)"; VL_RC=$?
+echo "$VL_OUT" >&2
+
+case "$VL_RC" in
+  0)
+    # Landed, per origin/main itself, regardless of graph-commit's own exit
+    # code. The park is really there — restoring the pre-park local copy over
+    # it (the EXIT trap's job on a non-zero rc) would silently look like an
+    # undo of a landed park, so make MUTATED=0 so the trap declines.
+    MUTATED=0
+    ;;
+  4)
+    echo "park-node: office_hours park for $NODE_ID did NOT land on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=not-landed)" >&2
+    exit 1
+    ;;
+  *)
+    echo "park-node: could not determine whether the office_hours park for $NODE_ID landed on origin/main (graph-commit exit=$GC_RC, verify-landed verdict=unknown) — re-read $NODE_ID from origin/main before any retry; this is NOT a confirmed rollback, only an unresolved check" >&2
+    exit 1
+    ;;
+esac
 
 # A landed park is a terminal disposition: record it so this node worker's Stop
 # hook may reap the job (dispatch-self-close's node-worker invariant). Called

@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# dispatch-node-reap — reap ONE terminal node-worker session, verified.
+#
+# Usage: dispatch-node-reap --node <id> --session <sid> --job-id <jid>
+#
+# A thin CLI over `session_reap_node` (`lib-session-reap.sh`), which owns the
+# proven reap act: worktree gates → `git worktree remove` FIRST → `claude rm` →
+# re-query the registry and believe only the post-state. This script adds argv
+# validation and ONE refusal the library cannot make for itself (see SELF-TARGET
+# below). It contains no reap logic of its own, deliberately: a second reap
+# implementation would be a second unproven one, and the failure mode of this
+# code path is destroying a worktree that still holds unlanded work.
+#
+# WHO CALLS IT. `/dispatch-invalid-state` — the invalid-state lane's
+# intervention session — which is sent to a node held by a TERMINAL worker that
+# never declared a disposition. It cannot use `session_reap_sweep` for this: the
+# sweep's candidate gate (4) requires a `node-terminal` marker, and this class of
+# session has none. The intervention supplies its own positive evidence instead
+# (an independent re-read of git/gh/the graph, per the skill's Step 3), then
+# calls this.
+#
+# NEVER call `claude rm` directly instead of this. Its exit 0 is not evidence —
+# it exits 0 while DECLINING to remove a session whose worktree has no verifiable
+# repository, printing `kept <id> — …`. That silent decline is the entire reason
+# `lib-session-reap.sh` exists (see its header for the postmortem).
+#
+# SELF-TARGET REFUSAL, and it is not optional. The intervention session is
+# registered under the SAME node name as the corpse it was sent to clear — that
+# is how the router spawns it (`--name "$id"`). A session that mis-identified its
+# target would therefore reap ITSELF mid-pass, killing the intervention before it
+# can declare a disposition and leaving the node frozen exactly as it found it.
+# So: refuse with `skip-self`, before any daemon call, when
+#   - <jid> equals `basename "$CLAUDE_JOB_DIR"`, or
+#   - <sid> equals `.sessionId` in `$CLAUDE_JOB_DIR/state.json`.
+# When `CLAUDE_JOB_DIR` is unset (an interactive operator run) there is no self
+# to compare against and no refusal is possible — that is correct, not a gap: an
+# operator driving this by hand is not the session being reaped.
+#
+# THE CONTRACT IS THE PRINTED TOKEN, NOT THE EXIT CODE. Exactly one token on
+# stdout; exit 0 on every reap outcome, including the ones that reaped nothing.
+# Exit 2 is reserved for a usage error — argv this script refused to act on at
+# all. Collapsing the ten outcomes into pass/fail would reproduce the very
+# "exit 0 is not evidence" bug this family of scripts exists to fix.
+#
+#   skip-self  + the full `session_reap_node` token set (see its header):
+#   reaped | declined | unverified | skip-dirty | skip-unlanded-content |
+#   skip-open-pr | skip-status-error | skip-diff-error | skip-pr-fetch-failed |
+#   skip-worktree-remove-failed | skip-repo-root-unresolvable
+#
+# Only `reaped` means the session is gone, and only because the post-state was
+# re-read. `declined` and `unverified` both mean the slot is still held.
+#
+# SANDBOX: callers MUST run this with `dangerouslyDisableSandbox: true`.
+# `claude agents --json --all` and `claude rm` reach the local Claude daemon over
+# a Unix socket, and `gh` needs the host TLS store. Under the sandbox's network-
+# namespace isolation the daemon query returns `[]` — indistinguishable from
+# "nothing there" — and the `gh` probe fails. See `.claude/rules/sandbox.md` and
+# `lib-session-reap.sh:174-179`.
+#
+# Environment: every seam `lib-session-reap.sh` documents applies unchanged —
+# DISPATCH_SESSION_REAP_REPO_ROOT, DISPATCH_SESSION_REAP_WORKTREES_ROOT,
+# CLAUDE_AGENTS_CMD.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib-session-reap.sh
+source "$SCRIPT_DIR/lib-session-reap.sh"
+
+NODE=""
+SESSION=""
+JOB_ID=""
+
+usage() {
+  echo "usage: dispatch-node-reap --node <id> --session <sid> --job-id <jid>" >&2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)
+      [[ $# -ge 2 ]] || { echo "dispatch-node-reap: --node requires a value" >&2; usage; exit 2; }
+      NODE="$2"; shift 2 ;;
+    --session)
+      [[ $# -ge 2 ]] || { echo "dispatch-node-reap: --session requires a value" >&2; usage; exit 2; }
+      SESSION="$2"; shift 2 ;;
+    --job-id)
+      [[ $# -ge 2 ]] || { echo "dispatch-node-reap: --job-id requires a value" >&2; usage; exit 2; }
+      JOB_ID="$2"; shift 2 ;;
+    *)
+      echo "dispatch-node-reap: unexpected argument: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+if [[ -z "$NODE" || -z "$SESSION" || -z "$JOB_ID" ]]; then
+  echo "dispatch-node-reap: --node, --session and --job-id are all required" >&2
+  usage
+  exit 2
+fi
+
+# Shape validation at the edge — all three become path components (the worktree
+# path, the job dir) or feed a `find -name` glob downstream. Same regexes
+# `mark-node-terminal:67` and `lib-session-reap.sh:304,312,323` apply.
+if [[ ! "$NODE" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "dispatch-node-reap: --node is not a valid node id: $NODE" >&2
+  exit 2
+fi
+if [[ ! "$SESSION" =~ ^[0-9a-fA-F-]+$ ]]; then
+  echo "dispatch-node-reap: --session must match ^[0-9a-fA-F-]+\$, got: $SESSION" >&2
+  exit 2
+fi
+if [[ ! "$JOB_ID" =~ ^[0-9a-fA-F-]+$ ]]; then
+  echo "dispatch-node-reap: --job-id must match ^[0-9a-fA-F-]+\$, got: $JOB_ID" >&2
+  exit 2
+fi
+
+# --- self-target refusal (see the header) ------------------------------------
+# Checked BEFORE anything reaches the daemon, so a self-targeted call makes no
+# `claude rm` invocation at all.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  self_jid="$(basename "$CLAUDE_JOB_DIR")"
+  if [[ "$JOB_ID" == "$self_jid" ]]; then
+    echo "dispatch-node-reap: refusing to reap this session's own job dir ($JOB_ID)" >&2
+    printf '%s\n' "skip-self"
+    exit 0
+  fi
+  # jq reads the file directly — never `echo "$VAR" | jq` (.claude/rules/shell-json.md).
+  self_sid="$(jq -r '.sessionId // empty' "$CLAUDE_JOB_DIR/state.json" 2>/dev/null)" || self_sid=""
+  if [[ -n "$self_sid" && "$SESSION" == "$self_sid" ]]; then
+    echo "dispatch-node-reap: refusing to reap this session's own session id ($SESSION)" >&2
+    printf '%s\n' "skip-self"
+    exit 0
+  fi
+fi
+
+verdict=$(session_reap_node "$NODE" "$SESSION" "$JOB_ID")
+printf '%s\n' "$verdict"
+exit 0

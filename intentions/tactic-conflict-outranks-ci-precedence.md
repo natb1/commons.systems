@@ -21,7 +21,6 @@ rationale: "Byproduct of the 2026-07-29 /align-strategy dispatch-containment
   siblings, each of which removes a special case that would otherwise be carried
   into the unified form."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -48,6 +47,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T10:16:05Z
     mergeCommitSha: 72683cbaaaf8d32aeb3d9b1b7e8f3f60c5e11f16

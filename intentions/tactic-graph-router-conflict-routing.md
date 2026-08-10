@@ -46,12 +46,13 @@ serves:
   - strategy-graph-native-dispatch
 recovers: []
 clarifications:
-  - question: Is a merge conflict handled exactly like a failing CI check — interrupt
-      phase progression, launch the conflict-resolution skill directly, and park
-      the source node itself only when the skill cannot resolve it mechanically?
-    answer: "(Recorded 2026-08-03, author-confirmed.) Yes, and that is this
-      tactic's design as already written — this clarification ratifies it as the
-      target and resolves one live contradiction against
+  - question: Is a merge conflict handled exactly like a failing CI check —
+      interrupt phase progression, launch the conflict-resolution skill
+      directly, and park the source node itself only when the skill cannot
+      resolve it mechanically?
+    answer: "(Recorded 2026-08-03, author-confirmed.) Yes, and that is this tactic's
+      design as already written — this clarification ratifies it as the target
+      and resolves one live contradiction against
       [[tactic-mechanical-park-producers]]. Four points. (1) PARITY IS EXACT.
       The conflict interrupt is the structural twin of the CI-fix interrupt, not
       a separate lane: `execution.conflict` mirrors `execution.fix`'s shape, the
@@ -73,8 +74,8 @@ clarifications:
       required → park. (4) THE PARK LANDS ON THE SOURCE NODE'S OWN
       `office_hours`, carrying the reason and the recommended next step — the
       same shape `/fix-checks` and `/qa-fix` already use for their own
-      escalations. This is what this node's Plan already specifies
-      (`park-node <id> conflict-attempt-cap \"<recommendation>\"` in
+      escalations. This is what this node's Plan already specifies (`park-node
+      <id> conflict-attempt-cap \"<recommendation>\"` in
       `_gate_conflict_active`), and it now explicitly SUPERSEDES
       [[tactic-mechanical-park-producers]]' direction that this cap call
       `hold-node` instead of parking. No hold node, no `blocked_by` edge, and no
@@ -96,11 +97,25 @@ attention:
   rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
     BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
     inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing:
-    0 tier changes, 0 value drift onto non-target nodes."
+    5.33 undecomposed baseline. Simulated over the live store before writing: 0
+    tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-graph-router-conflict-routing
+  pr: 3038
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-06T02:30:42Z
+    mergeCommitSha: fa9c43386d00268005d874fd4f96f896cc7f7cb3
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-dispatch-conflict-branch-merge-lane

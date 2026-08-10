@@ -15,12 +15,44 @@ rationale: Surfaced by the 2026-07-31 /code-review investigation. Across 18
   clarification on strategy-graph-native-dispatch and clarification 25 on
   strategy-token-economy.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
   - strategy-token-economy
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does the minimally-scoped instrument-verify agent adequately resist a
+      hostile finding-description payload steering it to a false
+      `verified:true`? (main-qa residue item 5, the node's last author item)
+    answer: "(Recorded 2026-08-04, author-directed.) Yes — item 5 is CLOSED, the
+      isolation is sufficient. Basis verified by direct inspection of
+      origin/main rather than by re-asserting the park: the isolation is
+      structural, not prompt-based. `.claude/workflows/review-fix.js` pipes the
+      instrument-verify agent's input through `jq -c '{instrument, verified,
+      invocations, succeeded, rejections}'` and drops stderr, so attacker-
+      reachable transcript text never reaches the agent; the agent's output
+      schema admits only the booleans and integers `instrument`, `verified`,
+      `invocations`, `succeeded`, `rejections`; and the human-facing 'why not
+      verified' phrase is rebuilt script-side from those integers alone. A
+      hostile finding description therefore has no channel into the verdict.
+      This ratifies the narrowing made by commit 5d17e079 (this node's own
+      review-fix pass, which fed the verifier counts/booleans only after a
+      Required+Upheld red-team finding). Item 5 no longer blocks this node."
+  - question: Has the post-merge transcript sweep (main-qa residue item 3)
+      accumulated enough history to call it swept, and does it show any lane
+      substituting itself under a failed instrument's name?
+    answer: "(Recorded 2026-08-04, machine-swept — no author decision needed.) Yes,
+      swept: zero violations. When this node was parked (2026-07-31) only ~1h40m
+      and a single in-flight run were available, which is why item 3 was
+      deferred. Re-run 2026-08-04 over ~/.claude/projects/*/*.jsonl modified
+      since the 2026-07-31T22:45:49Z merge, excluding this reading session's own
+      transcript: 20 distinct review-fix outcome envelopes were emitted. Three
+      of them (sessions da6504a3, f8f7ac3c, 5dda188c) recorded a non-empty
+      `instrument_failures` naming code-review with reason 'instrument reported
+      NOT invoked — Skill code-review cannot be used with Skill tool due to
+      disable-model-invocation'; ALL THREE carry `disposition: escalated`, i.e.
+      the guard fired and the lane refused to report under the instrument's
+      name. The other 17 recorded an empty `instrument_failures`. No envelope
+      was found crediting a failed instrument's output. Item 3 is satisfied."
 tooling_goals: []
 success_signal: null
 attention:
@@ -51,6 +83,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T22:45:49Z
     mergeCommitSha: 778a1c943392ad4fea31d7d2e92cdadab404262f
@@ -92,14 +125,17 @@ office_hours:
     ~/.claude/jobs/20e9cbe1/, since garbage-collected). Full expected end-to-end
     behavior confirmed on a real run, not a fixture.
 
-    3. Transcript sweep after merge — Verifiability: MACHINE (checked,
-    insufficient history yet). Only ~1h40m elapsed between merge
-    (2026-07-31T22:45:49Z) and this check (2026-08-01T00:26 UTC). Grepped
-    ~/.claude/projects/*/*.jsonl (excluding this reading session's own
-    transcript dir) for review-fix runs newer than the merge: found exactly one,
-    still in progress on PR #3008 as of this check, already showing the correct
-    discard pattern (code-review rejected, never merged) with zero violations so
-    far. Real data, but the window is too short to call this item swept.
+    3. Transcript sweep after merge — Verifiability: MACHINE (RESOLVED
+    2026-08-04, zero violations). Superseded: when this park was written only
+    ~1h40m and one in-flight run were available. Re-swept 2026-08-04 over
+    ~/.claude/projects/*/*.jsonl modified since the 2026-07-31T22:45:49Z merge,
+    excluding the reading session's own transcript: 20 distinct review-fix
+    outcome envelopes. Three (sessions da6504a3, f8f7ac3c, 5dda188c) carry a
+    non-empty `instrument_failures` naming code-review as NOT invoked, and all
+    three carry `disposition: escalated` — the guard fired and the lane refused
+    to report under the instrument's name. The other 17 carry an empty
+    `instrument_failures`. No envelope credits a failed instrument's output. See
+    this node's dated clarification for the full method.
 
     4. Token-economy sensor reading — Verifiability: MACHINE (checked,
     insufficient history yet). intentions/strategy-token-economy.md's `reading`
@@ -107,14 +143,16 @@ office_hours:
     reading, so no yield/fixes_applied data exists yet for this instrument.
     Genuinely too soon, not a defect in the check.
 
-    5. Prompt-injection isolation — Verifiability: AUTHOR (unchanged). This is,
-    by the node's own words, a human trust-boundary judgment call, not
-    machine-decidable. Note for the reviewer: a related concern was already
-    found and fixed during this PR's own review-fix pass — a Required+Upheld
-    red-team finding that the verifier agent transcribed attacker-reachable
-    transcript text was fixed by an Opus pass (commit 5d17e079) that now feeds
-    the verifier counts/booleans only, no free text. That narrows, but does not
-    close, the human judgment call.
+    5. Prompt-injection isolation — Verifiability: AUTHOR (CLOSED 2026-08-04 by
+    author ruling). The author ruled the isolation sufficient. Basis: it is
+    structural, not prompt-based — review-fix.js pipes the instrument-verify
+    agent's input through `jq -c '{instrument, verified, invocations, succeeded,
+    rejections}'` and drops stderr, the agent's output schema admits only those
+    booleans/integers, and the 'why not verified' phrase is rebuilt script-side
+    from the integers, so attacker-reachable text has no channel into the
+    verdict. This ratifies the narrowing made by commit 5d17e079 (the
+    Required+Upheld red-team fix that stopped the verifier transcribing
+    attacker-reachable transcript text). See this node's dated clarification.
 
 
     Separately discovered, out of scope for this node but worth attention: this
@@ -128,27 +166,21 @@ office_hours:
     is not this node's fix to make.
   since: 2026-07-31
   recommendation: >-
-    Items 1 and 2 are resolved with direct transcript evidence — see `reason`
-    above: the instrument gate and the induced-unavailability escalation path
-    were both exercised for real on this PR's own review-fix pass and confirmed
-    correct end-to-end. A human reviewer does not need to re-derive that. Three
-    items remain genuinely open:
+    Items 1, 2, 3 and 5 are all resolved — see `reason` above and this node's
+    two dated clarifications. Items 1 and 2 were confirmed end-to-end on a real
+    review-fix pass; item 3 was machine-swept 2026-08-04 across 20 post-merge
+    envelopes with zero violations; item 5 was closed 2026-08-04 by author
+    ruling on structurally-enforced verifier isolation. A human reviewer does
+    not need to re-derive any of those. EXACTLY ONE item remains open, and it is
+    a WAIT, not an author decision:
 
-
-    3. Transcript sweep — re-check after more post-merge review-fix history
-    accumulates (only ~1h40m has passed since merge); zero violations found
-    across the one post-merge instance available so far.
 
     4. Token-economy sensor reading — wait for strategy-token-economy's sensor
-    to produce a post-merge reading (currently `reading: null` repo-wide), then
-    confirm `fixes_applied` credits nothing to the discarded code-review
-    instrument.
-
-    5. Prompt-injection isolation — human reviewer judgment call: does the
-    minimally-scoped instrument-verify agent (now counts/booleans only, after
-    this PR's own review-fix pass tightened it) resist a hostile
-    finding-description payload steering it to a false `verified:true`? Not
-    machine-decidable.
+    to produce a post-merge reading (still `reading: null` repo-wide, re-checked
+    2026-08-04), then confirm `fixes_applied` credits nothing to the discarded
+    code-review instrument. No author input is needed; this park should NOT be
+    routed to office hours again — it is a deferred observation awaiting a
+    sensor run.
 
 
     Also flag separately for a human: graph-auto-merge does not gate merges on
@@ -157,7 +189,7 @@ office_hours:
     advisory-only until that gap is fixed elsewhere.
 
 
-    Once items 3-5 are satisfied, transition the node main-qa -> done via
+    Once item 4 is satisfied, transition the node main-qa -> done via
     `.claude/skills/dispatch-propagate/scripts/transition-node
     tactic-lane-instrument-substitution-guard`.
   session_type: other

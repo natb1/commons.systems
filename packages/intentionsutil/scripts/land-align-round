@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# land-align-round — land an /align-tactics decomposition round AND record the
+# session's terminal disposition in the SAME process.
+#
+# Usage:
+#   land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]
+#
+# Why this wrapper exists (tactic-align-tactics-mark-terminal-skipped):
+# /align-tactics used to land its round with a bare `graph-commit` call and
+# then, several tool calls and at least one turn later, was instructed by
+# SKILL.md prose to separately call `mark-node-terminal <node-id> align-round`.
+# Nothing guaranteed the session survived to make that second call. When it did
+# not, the round's content landed durably on main but the node carried no
+# declared disposition, so dispatch-tick's terminal-without-disposition sweep
+# parked it — and clearing that park alone restarted the churn, since the dead
+# session was still un-reaped. Confirmed three times in production.
+#
+# This is the same rationale park-node states at its own bundled
+# mark-node-terminal call, and the same one transition-node's `mark_terminal()`
+# helper embodies: a terminal writer must bundle the marker write into the SAME
+# shell process as the landing write, so no turn boundary, context exhaustion,
+# or API error can separate the two. This script centralizes that pattern for
+# /align-tactics in one reusable place rather than duplicating it inline.
+#
+# `--terminal <node-id>` names exactly ONE node — the session's own target (the
+# tactic-target id in tactic mode, the strategy id in strategy mode). It is
+# required and never inferred from the positional ids: a round routinely lands
+# CHILD tactics whose ids are not the session's target, and a marker written
+# for one of those would be a lie.
+#
+# `--base` and `-m` pass through to graph-commit verbatim. The positional ids
+# pass through too, but only after a charset check (see "AUTHENTICATING THE
+# VERDICT LINE" below) — they are not forwarded unexamined.
+#
+# Behavior keyed on graph-commit's own VERDICT LINE, corroborated by its exit
+# code:
+#   verdict: landed | landed-equivalent
+#     AND graph-commit exited 0                 -> mark-node-terminal <node> align-round; exit 0
+#   verdict: parked AND graph-commit exited
+#     non-zero                                  -> mark-node-terminal <node> park; exit graph-commit's rc
+#   anything else (not-landed, unknown,
+#   refused — busy-main exhaustion, a
+#   park whose own push failed, usage
+#   error, a verdict/rc disagreement, ...)      -> no marker; propagate graph-commit's exit
+#
+# Since tactic-graph-commit-landing-signal-unreliable Unit 2, graph-commit
+# derives its OWN exit code from a post-push read of origin/main and prints
+# exactly one `graph-commit: verdict: <status> ids=<csv> pushed=<sha|none>
+# main=<sha> context=<context>` line on every terminal path (see graph-commit's
+# own header block and `print_verdict`/`emit_verdict_and_exit`). The exit code
+# is now DERIVED FROM that verdict — `landed`/`landed-equivalent` are the only
+# statuses that exit 0, and every other status (including `parked`) exits
+# non-zero — so the verdict line is the primary signal and this wrapper gates
+# on it directly rather than re-deriving a park/no-park distinction from prose
+# or from the exit code alone.
+#
+# AUTHENTICATING THE VERDICT LINE.
+# graph-commit's stderr is a SHARED channel: the verdict line is interleaved
+# with free-form prose, and much of that prose quotes caller-supplied node ids
+# verbatim (die() messages, the parking announcement, cleanup()'s git output).
+# graph-commit's own id validation bans only `/`, `\`, `,` and the exact names
+# `.`/`..`, so a newline inside an id would let a caller inject a forged
+# `graph-commit: verdict: landed ...` line at column 0 on a path that landed
+# NOTHING — and this wrapper would then declare a terminal disposition for a
+# round that does not exist on main, letting dispatch-self-close reap the job
+# and its worktree (destroying the only copy of the writer's content) while the
+# tick's terminal-without-disposition sweep skips the node because a
+# disposition WAS declared. That is the same failure the `parked` discussion
+# below describes, reached by forgery instead of by mis-keying.
+#
+# Three layers close it, and all three must hold before a marker is written:
+#   1. Every positional id is validated against ^[A-Za-z0-9._-]+$ BEFORE it
+#      reaches graph-commit (see the validation loop below). No newline, no
+#      space, no `#`/`@` — so no caller-supplied text can start a line at all.
+#      This is strictly tighter than graph-commit's own check, deliberately:
+#      this wrapper parses graph-commit's line-oriented output, so it needs the
+#      line discipline graph-commit itself does not require.
+#   2. Only the LAST verdict-prefixed line of the captured stderr is
+#      considered, and it must match the FULL anchored contract shape
+#      (`... verdict: <status> ids=... pushed=... main=... context=...`), not
+#      merely carry a matching prefix somewhere in the file. graph-commit emits
+#      its real verdict AFTER any prose that quotes an id (die() prints the
+#      message, then the verdict), so the last such line is the genuine one.
+#   3. The exit code must corroborate the status: graph-commit derives its rc
+#      FROM the verdict, so `landed`/`landed-equivalent` with a non-zero rc, or
+#      `parked` with rc 0, is a contract violation and is treated as no verdict
+#      at all. One real path disagrees on purpose — a die() whose write
+#      nonetheless landed prints `verdict: landed` and still exits 1 — and it
+#      is deliberately routed to the no-marker branch: a die is an environment
+#      failure a human must see, so the sweep parking the node is the wanted
+#      outcome, not a gap to paper over with a disposition that would let the
+#      job be reaped unexamined.
+#
+# The durable fix is for graph-commit to write its verdict to a dedicated sink
+# the caller names (e.g. `--verdict-file <path>`, one machine-parsed line) so
+# no free-text channel is being authenticated at all. Until that exists, the
+# three layers above are what stands in for it; layer 2's parse should move to
+# that file, unchanged in shape, when it lands.
+#
+# MATCH THE VERDICT LINE, NOT ANY PROSE ANNOUNCEMENT. graph-commit prints
+# "... parking node(s) — this writer's content is NOT landed" BEFORE it tries
+# to push the parking write, and that push can fail — the graph landing lock
+# is held, main stays busy, the push is rejected — in which case the verdict
+# line reports `not-landed` or `unknown` with `context=park`, not `parked`.
+# Nothing reached origin/main in that case: the node is still unparked, at a
+# working phase, with `office_hours: null`. Keying the `park` marker on the
+# pre-push announcement (or on rc alone) would declare a terminal disposition
+# for a park that does not exist on main — dispatch-self-close would then reap
+# the job and its worktree (destroying the only copy of this writer's content,
+# which lives only in the local worktree), while the tick's
+# terminal-without-disposition sweep skips the node because a disposition WAS
+# declared. So the marker is keyed on the verdict line's `parked` status,
+# which graph-commit only emits after a post-push READ of origin/main
+# confirmed the parking commit is there; the unlanded-park case falls through
+# to the no-marker branch and is treated exactly like busy-main exhaustion —
+# the session stays held and the sweep catches it.
+#
+# No ownership guard here: mark-node-terminal already refuses to write unless
+# $CLAUDE_JOB_DIR/state.json's `.name` equals the node id, and no-ops entirely
+# when CLAUDE_JOB_DIR is unset (an interactive run). Both are reused as-is.
+#
+# The marker call is best-effort — its exit code never changes this script's
+# own exit — but it is not silent: mark-node-terminal exits 0 on both of its
+# benign skip paths (CLAUDE_JOB_DIR unset/not-a-dir, or the ownership gate's
+# "not my job"), so any non-zero exit from it is a genuine failure. That case
+# is surfaced as a single non-fatal warning on stderr, with the marker's own
+# stderr appended, so the exact gap this wrapper exists to prevent — a landed
+# or parked round with no declared disposition — is diagnosable at write time
+# instead of only after the fact via dispatch-terminal-gap-audit.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+USAGE="usage: land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]"
+
+TERMINAL_NODE=""
+BASE=""
+MSG=""
+HAVE_MSG=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --terminal)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --terminal requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      TERMINAL_NODE="$2"; shift 2 ;;
+    --base)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --base requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      BASE="$2"; shift 2 ;;
+    -m|--message)
+      [[ $# -ge 2 ]] || { echo "land-align-round: $1 requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      MSG="$2"; HAVE_MSG=1; shift 2 ;;
+    --)
+      shift; break ;;
+    -*)
+      echo "land-align-round: unrecognized flag: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      break ;;
+  esac
+done
+
+if [[ -z "$TERMINAL_NODE" ]]; then
+  echo "land-align-round: --terminal <node-id> is required (the session's own target node)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "land-align-round: expected at least one node id to land" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+# --- Id charset gate (layer 1 of the verdict-line defense) -------------------
+# Every id this wrapper hands to graph-commit — and the terminal node it will
+# name to mark-node-terminal — must be a single line of ordinary id characters.
+# See "AUTHENTICATING THE VERDICT LINE" in the header: this script decides a
+# terminal disposition by parsing graph-commit's LINE-oriented stderr, and
+# graph-commit echoes ids into that stream verbatim, so an id carrying a
+# newline could forge the very line being parsed. Refusing at the edge keeps
+# the parse total. Every id in intentions/ satisfies this; a rejection here is
+# a malformed or hostile id, not a legitimate node.
+ID_RE='^[A-Za-z0-9._-]+$'
+
+if [[ ! "$TERMINAL_NODE" =~ $ID_RE ]]; then
+  echo "land-align-round: invalid --terminal node id: '$TERMINAL_NODE' (must match $ID_RE)" >&2
+  exit 2
+fi
+
+for _id in "$@"; do
+  if [[ ! "$_id" =~ $ID_RE ]]; then
+    echo "land-align-round: invalid node id: '$_id' (must match $ID_RE — ids are echoed into graph-commit's line-oriented stderr, which this wrapper parses for the landing verdict)" >&2
+    exit 2
+  fi
+done
+
+GC_ARGS=()
+[[ -n "$BASE" ]] && GC_ARGS+=(--base "$BASE")
+[[ $HAVE_MSG -eq 1 ]] && GC_ARGS+=(-m "$MSG")
+GC_ARGS+=("$@")
+
+# graph-commit's stderr is both discriminated here and re-emitted to the caller
+# verbatim. It is captured to a tempfile and flushed after the call rather than
+# tee'd through a process substitution, so the read below can never race the
+# writer.
+ERR_FILE="$(mktemp)"
+MARK_ERR="$(mktemp)"
+cleanup() { rm -f "$ERR_FILE" "$MARK_ERR"; }
+trap cleanup EXIT
+
+# Best-effort by design: a marker write must NEVER demote a landed round to a
+# script failure. This is a deliberate, documented exception to
+# .claude/rules/code-style.md's prefer-clear-errors rule, not a pattern to
+# imitate elsewhere in this script — but "best-effort" only means the exit
+# code is never propagated, not that a failure is invisible. mark-node-terminal
+# exits 0 on both of its benign skip paths (interactive run, not-my-job), so a
+# non-zero exit here is always a genuine failure, and it is warned about on
+# stderr (with the marker's own stderr appended) rather than swallowed.
+mark_terminal_best_effort() {
+  local disposition="$1" mrc=0
+  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" "$disposition" >/dev/null 2>"$MARK_ERR" || mrc=$?
+  if [[ $mrc -ne 0 ]]; then
+    echo "land-align-round: warning: mark-node-terminal $TERMINAL_NODE $disposition failed (exit $mrc) — the outcome already happened (the round landed or was parked) but no terminal disposition was declared; the tick's terminal-without-disposition sweep will park this node. See dispatch-terminal-gap-audit." >&2
+    cat "$MARK_ERR" >&2
+  fi
+}
+
+rc=0
+"$SCRIPT_DIR/graph-commit" "${GC_ARGS[@]}" 2>"$ERR_FILE" || rc=$?
+cat "$ERR_FILE" >&2
+
+# Layer 2: the LAST verdict-prefixed line, and only that line, is the candidate
+# verdict. graph-commit emits its real verdict after any prose that quotes an
+# id (die() prints its message, then calls print_verdict), so when both a
+# forged line and the genuine one are present, the genuine one is last.
+# Empty when graph-commit printed no verdict at all (killed before any terminal
+# path, or a stub/older build) — every branch below then falls through to the
+# no-marker exit, which is the safe direction.
+VERDICT_LINE="$(grep -aE '^graph-commit: verdict: ' "$ERR_FILE" | tail -n 1 || true)"
+
+# Layers 2+3 together: the candidate line must match the FULL anchored contract
+# shape, and graph-commit's exit code must corroborate the status it claims
+# (rc 0 for landed/landed-equivalent — graph-commit derives rc from the verdict
+# and those are its only rc-0 statuses).
+if [[ $rc -eq 0 ]] && grep -qE '^graph-commit: verdict: (landed|landed-equivalent) ids=[^[:space:]]* pushed=[^[:space:]]+ main=[^[:space:]]+ context=[^[:space:]]+( .*)?$' <<<"$VERDICT_LINE"; then
+  mark_terminal_best_effort align-round
+  exit 0
+fi
+
+# `parked` is never an rc-0 status (only landed/landed-equivalent exit 0), so a
+# parked verdict over rc 0 is a contract violation, not a park to declare.
+if [[ $rc -ne 0 ]] && grep -qE '^graph-commit: verdict: parked ids=[^[:space:]]* pushed=[^[:space:]]+ main=[^[:space:]]+ context=[^[:space:]]+( .*)?$' <<<"$VERDICT_LINE"; then
+  # graph-commit's concurrent-edit fallback landed an office_hours park on the
+  # node AND pushed it to main — the verdict line above is printed only after
+  # a post-push READ of origin/main confirmed the parking commit is there, so
+  # this branch is reached only when the park is durably on main: a genuine
+  # terminal disposition, even though this writer's content did not land.
+  # Same best-effort contract as above. graph-commit's rc for a `parked`
+  # verdict is non-zero (only `landed`/`landed-equivalent` exit 0), so
+  # propagate it rather than hardcoding 1.
+  mark_terminal_best_effort park
+  exit "$rc"
+fi
+
+# Every other non-zero exit (busy-main exhaustion ending `... retry later`, a
+# concurrent-edit park whose own push failed so nothing reached main, a
+# graph-commit usage error, a pre-flight refusal, a die() over a write that did
+# land) landed nothing this wrapper may attest to. There is no disposition to
+# declare, so no marker is written and the session stays held — report and stop.
+#
+# The rc-0 case reaching here is narrower and louder: graph-commit exited 0,
+# which its own contract says only `landed`/`landed-equivalent` do, yet it
+# printed no verdict line matching that contract's shape. The landing signal is
+# exactly what cannot be trusted here, so this fails closed with a clear error
+# instead of exiting 0 on an unattested claim — a re-run of the same
+# graph-commit invocation is idempotent (it takes the nothing-to-push path when
+# the content is already on main), so the recovery is a retry.
+if [[ $rc -eq 0 ]]; then
+  echo "land-align-round: graph-commit exited 0 but printed no parsable verdict line — refusing to declare a terminal disposition on an unattested landing. Re-run the same graph-commit invocation (idempotent) or inspect its output above." >&2
+  exit 1
+fi
+
+exit "$rc"

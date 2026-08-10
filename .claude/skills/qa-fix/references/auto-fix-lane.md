@@ -164,11 +164,19 @@ Otherwise (opus-fixable items present), choose exactly one path:
 
    qa-fix keeps **no** merge base (Step 1 runs only a name-only
    `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
-   null). Derive `repo` from the local remote (read-only git, sandbox-safe):
+   null). Derive `repo` from the local remote (read-only git, sandbox-safe). On
+   the node lane (`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue`;
+   on the legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"` and omit
+   `--node-id`:
    ```bash
    REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   if [[ "$TARGET_KIND" == node ]]; then
+     id_arg=(--node-id "$N")
+   else
+     id_arg=(--issue "$N")
+   fi
    .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
-     --phase qa --repo "$REPO" --issue "$N" --pr "$PR_NUM" \
+     --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
      --findings-surfaced <result.findings_surfaced> \
      --findings-actionable <result.findings_actionable> \
      --fixes-applied <fixes_applied_count> \
