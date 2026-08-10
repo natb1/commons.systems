@@ -75,6 +75,14 @@
 #   rm ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer
 #   systemctl --user enable --now dispatch-fleet-watch.timer   # or wait for the next reseed
 #
+# Confirm a disable is being honored (works in steady state, not only on the
+# reseed cycle that rewrites the unit files):
+#   journalctl --user -t dispatch-schedule-reseed --since '-1h' | grep 'skipping enable --now'
+#   # → "...is marked manually disabled (<sentinel path>); unit files already
+#   #    current, skipping enable --now"   — and NO `WARNING:` for this unit.
+# Only ensure_healer_units and ensure_watcher_units consult this sentinel; the
+# other ensure_*_units installers in lib.sh do not.
+#
 # Safe to source multiple times. Does NOT use set -e (must return, not exit).
 #
 # CRITICAL DIVERGENCE from lib-pause-state.sh: that file sets `set -uo
