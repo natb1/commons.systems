@@ -58,23 +58,19 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: |-
-    standdown-winner-dead-work-unpushed: a session stood down for this node in favour of winner session (unattributed — observed duplicate, no winner declared), which is no longer registered with the Claude daemon (crash, OOM, API error, or classifier denial). The stand-down is unconditional on the winner living, so the standing-down session(s) 2ed76dcf-9c1f-496a-8ddd-6b1bcdcf5e5c are still waiting on a session that no longer exists, and the winner left work UNPUSHED in /home/n8/natb1/commons.systems/.claude/worktrees/tactic-decision-log-append-noncompact-corruption. Unpushed head (origin/main..HEAD): 7aa9f008 Merge remote-tracking branch 'origin/main' into tactic-decision-log-append-noncompact-corruption
-    abc82995 Merge remote-tracking branch 'origin/main' into tactic-decision-log-append-noncompact-corruption
-    77434da9 review fixes for tactic-decision-log-append-noncompact-corruption
+  reason: "residue item 15 (silent-drop tradeoff acceptance) is WAIT: the
+    acceptance criterion is absence of operator friction from
+    decision_log_append's silent-drop-on-invalid-input behavior in production,
+    an event that has not had time to occur or fail to occur yet -- PR #3061
+    merged 2026-08-10T12:55:13Z, so no production window has elapsed; earliest
+    useful re-check is after roughly 2 weeks of production dispatch-tick
+    activity (~2026-08-24), reviewing routing-decisions.jsonl and
+    dispatch-fleet-watch alarm history for any sign a malformed decision-log
+    payload silently vanished and caused operator confusion or a missed
+    audit-trail entry"
   since: 2026-08-10
-  recommendation: "Find the holding job with 'claude agents --all' and attach it
-    ('claude attach <job-id>') to see where it stopped. If the worktree at
-    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-decision-log-append\
-    -noncompact-corruption has unpushed commits, verify them and push them from
-    there FIRST. To release the holding session use 'claude stop <job-id>' —
-    NEVER 'claude rm', which deletes the session AND its worktree, destroying
-    any unpushed work still in the shared worktree. Once the work is safe and
-    the session is stopped, run 'clear-park
-    tactic-decision-log-append-noncompact-corruption' to return the node to the
-    lane. Accepted residual: while a live session still holds the node-id
-    session name, office-hours reports this node as 'all-held' rather than
-    launching a review session for it — that is expected, not a bug."
+  recommendation: no author decision needed at this time -- re-selection only,
+    once the production window above has elapsed
   session_type: other
 pace_exempt: false
 rounds: null
