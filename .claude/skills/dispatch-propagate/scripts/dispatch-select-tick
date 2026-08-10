@@ -65,6 +65,16 @@
 # newly-red main, is still surfaced even at/over the worker budget. The only hard
 # floor is genuine token exhaustion.
 #
+# The routing-decision log records BOTH bounds per run: `target_n` (the pace-curve
+# target) and `max_workers` (the absolute max_concurrent_workers ceiling). Two
+# fields, because one alone is ambiguous — a low target_n means nothing on its own
+# until you can see whether the ceiling was also throttled. `max_workers` carries
+# the resolved ceiling on every lane that consults it (the autonomous no-arg lane,
+# which resolves it once up front, and `--manual`), and `null` on the lanes that
+# deliberately do not: the explicit NODE_ARG single-node lane, which skips both the
+# pace curve and the ceiling by design, and the early exits (busy, usage-error,
+# sync-*) that return before either bound is read.
+#
 # Lock invariant: RELEASE the lock on every decision except busy (where nothing
 # was acquired). Every terminal path — graph/empty/sync-failed/
 # sync-repair-pending/sync-broken/concurrency-cap/main-broken/jit-reminder —
@@ -113,6 +123,11 @@ DLOG_SKIP_REASON=""
 # so nothing here may leak to fd 1 (jq output is captured into a var; jq stderr
 # is swallowed). Numeric budget fields may be empty on an early exit, so they are
 # passed as strings and coerced in-filter (empty → JSON null) so jq never fails.
+# `max_workers` carries the resolved `max_concurrent_workers` ceiling on every
+# lane that consults it (the autonomous no-arg lane and `--manual`), and null on
+# lanes that deliberately do not (the explicit NODE_ARG lane, and every early
+# exit before the ceiling is read). It is what distinguishes a low `target_n`
+# produced by the normal pace curve from one produced by a throttled ceiling.
 _dlog_select_emit() {
   local json
   json=$(jq -c -n \
@@ -123,6 +138,7 @@ _dlog_select_emit() {
     --arg disposition "$DLOG_DISPOSITION" \
     --arg skip_reason "$DLOG_SKIP_REASON" \
     --arg target_n    "${TARGET_N:-}" \
+    --arg max_workers "${MAX_WORKERS:-}" \
     --arg eff_live    "${LIVE_COUNT:-}" \
     --arg gap         "${GAP:-}" \
     '
@@ -135,6 +151,7 @@ _dlog_select_emit() {
       disposition:   $disposition,
       skip_reason:   $skip_reason,
       target_n:      ($target_n | num),
+      max_workers:   ($max_workers | num),
       effective_live: ($eff_live | num),
       gap:           ($gap | num)
     }' 2>/dev/null) || return 0
@@ -684,6 +701,15 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+  # Resolve the ABSOLUTE ceiling once, here at the top of the lane, so the
+  # routing-decision log's `max_workers` field is populated on every exit from
+  # this lane — including the internal-error exit just below. Deliberately
+  # NON-FATAL and unguarded: an unreadable ceiling is not an error here. The one
+  # place it is load-bearing (the at-cap pace-exempt sub-branch) does its own
+  # numeric test and fails closed there. `--max` short-circuits inside
+  # dispatch-target-workers before the rate-limit/telemetry load, so this costs
+  # one cheap config read and writes no state.
+  MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
   if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]]; then
     release_lock
     DLOG_DISPOSITION="internal-error"
@@ -726,9 +752,11 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
         echo "concurrency-cap"
         exit 0
       fi
-      # Not exhausted: resolve the ABSOLUTE ceiling before probing. Exhaustion
-      # stays the hard floor and is evaluated first (above); the ceiling is the
-      # second, independent bound. The pace-exempt lane fills to
+      # Not exhausted: apply the ABSOLUTE ceiling before probing. MAX_WORKERS was
+      # already resolved once at the top of this lane (right after TARGET_N), so
+      # it is simply consulted here. Exhaustion stays the hard floor and is
+      # evaluated first (above); the ceiling is the second, independent bound.
+      # The pace-exempt lane fills to
       #   PACE_GAP = max(0, MAX_WORKERS − LIVE_COUNT)
       # — genuine headroom under max_concurrent_workers, which is absolute for
       # autonomous scheduling (unlike the --manual branch, where a deliberate
@@ -741,7 +769,6 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
       # which fails open to TOP=1; that is a different caller. Do NOT exit 2
       # here — that would also suppress the main-broken probe and the reseed
       # below, both of which must stay reachable when this lane is closed.
-      MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
       PACE_LANE_CLOSED=""
       if [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
         PACE_GAP=$(( MAX_WORKERS - LIVE_COUNT ))
