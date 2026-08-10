@@ -310,8 +310,8 @@ export function attributeSpend(byPhase: Record<string, SpendBucket>): WorkflowSp
  * document, or `null` when the document is not one.
  *
  * Validates rather than asserts: the document comes off disk and may be
- * truncated, from an older schema, or another file entirely, so each bucket's
- * fields are re-derived as numbers instead of being cast into shape. A bucket
+ * truncated, from an older schema, or another file entirely, so every bucket
+ * field is re-derived numerically instead of being cast into shape. A bucket
  * that is not an object is skipped rather than defaulted to zeros — the
  * difference between "this skill spent nothing" and "this row was unreadable"
  * is exactly what the dispatch-dominance check turns on.
