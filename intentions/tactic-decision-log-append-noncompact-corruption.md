@@ -39,7 +39,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-decision-log-append-noncompact-corruption
   pr: 3061
@@ -51,7 +51,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T12:55:13Z
+    mergeCommitSha: efde7eebd7866eac9f83a153e00889866bdfe1aa
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
