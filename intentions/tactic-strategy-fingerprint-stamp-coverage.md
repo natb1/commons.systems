@@ -29,7 +29,6 @@ rationale: "Measured 2026-07-28 during an /align-strategy round that amended
   different strategy) is a related but distinct failure mode and is explicitly
   out of scope here."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -63,8 +62,7 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-strategy-fingerprint-stamp-coverage
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
