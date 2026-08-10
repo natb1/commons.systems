@@ -724,9 +724,18 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # counts against the sweep's own fetch budget, so verify-landed must
         # not fetch a second time.
         git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+        # The node id and the predicate are SEPARATE arguments (`--node` /
+        # `--jq`), never a concatenated `"${node}@..."` spec: an id containing
+        # `@` used to become jq source, and an id ending in `@true #` comments
+        # out the predicate and forges `landed` for any node. `$node` here is
+        # read off a stand-down marker filename, not written in this file, so
+        # the charset is also checked locally — a malformed id fails closed
+        # (marker kept, park not counted).
         local landed=0 vl_rc=0
-        if [[ -x "$verify_landed" ]]; then
-          "$verify_landed" --no-fetch -C "$repo_root" "${node}@.office_hours != null" \
+        if [[ ! "$node" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-standdown-recheck: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$; KEEPING the marker\n' "$node" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$node" --jq '.office_hours != null' \
             >/dev/null 2>&1 || vl_rc=$?
           (( vl_rc == 0 )) && landed=1
         fi

@@ -489,8 +489,10 @@ run_graph_commit() {
 # Delegates to the shared `verify-landed` primitive (three-valued:
 # landed/not-landed/unknown, `unknown` never collapsed into `landed` — see
 # that script's own header) rather than re-deriving the hash/compare sequence
-# inline. `<id>=<blobsha>` is the exact predicate this call site needs: "does
-# origin/main:intentions/<id>.md hash to what I just wrote locally".
+# inline. `--node <id> --blob <blobsha>` is the exact predicate this call site
+# needs: "does origin/main:intentions/<id>.md hash to what I just wrote
+# locally". The id goes in its OWN argument, never concatenated into a spec
+# token — see verify-landed's header for why a spliced id is a forged verdict.
 #
 # The fetch stays HERE, explicit, exactly as it was before this call site
 # adopted verify-landed (`--no-fetch` below suppresses verify-landed's own):
@@ -512,8 +514,11 @@ verify_landed() {
     log "could not hash $NODE_FILE for post-write verification"
     return 1
   fi
+  # $ID is already pinned to the closed alarm-id enum by the anchored $ID_RE
+  # guard at start-up, so it cannot carry a delimiter; verify-landed re-validates
+  # it in full and refuses anything else with a usage error, not a verdict.
   local vl_out vl_rc=0
-  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" "$ID=$local_blob" 2>&1 9>&-) || vl_rc=$?
+  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" --node "$ID" --blob "$local_blob" 2>&1 9>&-) || vl_rc=$?
   if (( vl_rc == 0 )); then
     return 0
   fi

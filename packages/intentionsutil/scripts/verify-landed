@@ -24,16 +24,32 @@
 # that cannot handle three answers should park, not guess.
 #
 # Usage:
-#   verify-landed [-C <repo-path>] [--no-fetch] [--json] <spec> [<spec>...]
+#   verify-landed [-C <repo-path>] [--no-fetch] [--json]
+#                 --node <id> (--blob <sha>|--jq <filter>) [--node <id> ...]
 #
-# Spec forms:
-#   <id>=<blobsha>    origin/main:intentions/<id>.md must be exactly <blobsha>
-#   <id>=absent       the node must be ABSENT from origin/main (a landed prune)
-#   <id>@<jq-filter>  the jq filter over the node's JSON as of origin/main must
-#                     evaluate true, e.g. 'tactic-foo@.office_hours != null'
+# Spec forms (each `--node <id>` is completed by exactly one of):
+#   --blob <blobsha>  origin/main:intentions/<id>.md must be exactly <blobsha>
+#   --blob absent     the node must be ABSENT from origin/main (a landed prune)
+#   --jq <filter>     the jq filter over the node's JSON as of origin/main must
+#                     evaluate true, e.g. --node tactic-foo --jq '.office_hours != null'
 #
-# When a spec contains both `=` and `@`, the delimiter that appears FIRST wins
-# (a jq filter may legitimately contain `=`, as in `.phase == "done"`).
+# THE ID AND THE FILTER ARE SEPARATE ARGUMENTS, ON PURPOSE. The earlier
+# single-token spec forms (`<id>=<sha>`, `<id>@<filter>`) split on a delimiter,
+# and node ids are not restricted to a delimiter-free charset upstream
+# (assertPathSafeId, src/store.ts, rejects only `/`, `\`, `.` and `..`). A
+# caller that built its spec by concatenation — every call site did — handed
+# an id containing `@` straight into the jq program: an id of
+# `tactic-x@true #` produced the filter `true #.office_hours != null`, whose
+# `#` comments out the intended predicate and reports `landed` for ANY node,
+# including one that does not exist. That forged verdict is the authorization
+# for destructive follow-ons (park-node suppressing its rollback and writing a
+# terminal marker; lib-frozen-session-park.sh deleting a session's only copy of
+# its escalation text), and jq's `$ENV`/`env` made the same hole an environment
+# exfiltration channel via the `observed=` log line. So: no delimiter, no
+# split, and the FULL id is validated against `^[A-Za-z0-9._-]+$` before it is
+# used at all — an id outside that charset is a usage error (exit 2), never a
+# verdict. Filters are additionally refused if they contain `#` or reference
+# `env`/`$ENV`; callers pass literal filters, so nothing legitimate needs them.
 #
 # Repo resolution: `-C <path>` when given, else the current directory, run
 # through `git rev-parse --show-toplevel` — identical to graph-commit's own
@@ -48,13 +64,13 @@
 # it cannot be built on dump-node.ts: that tool resolves its intentionsDir
 # from its OWN file location (dump-node.ts:37-40), so it can only ever read
 # the script's checkout's WORKING TREE — the wrong repo and the wrong
-# revision. The `@<jq-filter>` mode goes through readNodeAtRef
+# revision. The `--jq` mode goes through readNodeAtRef
 # (lib-store-at-ref.ts) instead, which takes the repo root as a parameter and
 # reads at a ref.
 #
-# Cost: the `=<blobsha>` and `=absent` modes are pure git plumbing — no node,
-# no tsx — so the hot path (the one every writer runs after every land) costs
-# a fetch and a rev-parse. Only `@<jq-filter>` pays for a tsx start-up.
+# Cost: the `--blob` modes are pure git plumbing — no node, no tsx — so the hot
+# path (the one every writer runs after every land) costs a fetch and a
+# rev-parse. Only `--jq` pays for a tsx start-up.
 #
 # FILE DESCRIPTORS. Callers holding a flock fd across their write (see
 # dispatch-fleet-alarm's `9>&-` discipline, :485-487) must close it across
@@ -67,8 +83,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_STORE_AT_REF="$SCRIPT_DIR/lib-store-at-ref.ts"
 
-USAGE="usage: verify-landed [-C <repo-path>] [--no-fetch] [--json] <spec> [<spec>...]
-  spec: <id>=<blobsha> | <id>=absent | <id>@<jq-filter>"
+USAGE="usage: verify-landed [-C <repo-path>] [--no-fetch] [--json] --node <id> (--blob <sha>|--jq <filter>) [--node <id> ...]
+  --node <id>    node id, matched in full against ^[A-Za-z0-9._-]+\$ — never split on a delimiter
+  --blob <sha>   origin/main:intentions/<id>.md must be exactly <sha>, or the literal 'absent'
+  --jq <filter>  the jq filter over the node's JSON as of origin/main must evaluate true"
 
 usage_error() {
   echo "$USAGE" >&2
@@ -76,10 +94,46 @@ usage_error() {
   exit 2
 }
 
+# Every spec is validated as it is parsed — a caller bug must be a cheap exit 2
+# BEFORE any network call, never a `not-landed` verdict, which would read as a
+# real answer about the graph.
+ID_CHARSET='^[A-Za-z0-9._-]+$'
+# jq's `#` opens a comment that swallows the rest of the program, and `env` /
+# `$ENV` render the whole process environment into the `observed=` log line.
+# Callers pass literal predicates over a node's own JSON, so neither is ever
+# legitimate here; refusing them keeps a filter that somehow arrives from an
+# untrusted source from truncating a predicate or exfiltrating the environment.
+JQ_ENV_RE='(^|[^A-Za-z0-9_$])(env|\$ENV)([^A-Za-z0-9_]|$)'
+
+IDS=()
+MODES=()
+EXPECTED=()
+PENDING_ID=""
+
+start_spec() { # <id>
+  [[ -z "$PENDING_ID" ]] || usage_error "--node '$PENDING_ID' was not followed by --blob or --jq"
+  [[ -n "$1" ]] || usage_error "--node requires a non-empty node id"
+  [[ "$1" =~ $ID_CHARSET ]] || usage_error "malformed node id '$1' — ids must match ^[A-Za-z0-9._-]+\$ in FULL (no '@', no '=', no whitespace)"
+  PENDING_ID="$1"
+}
+
+finish_spec() { # <mode> <expectation>
+  [[ -n "$PENDING_ID" ]] || usage_error "--$1 must follow a --node <id>"
+  [[ -n "$2" ]] || usage_error "--$1 requires a non-empty value"
+  case "$1" in
+    blob) [[ "$2" == "absent" || "$2" =~ ^[0-9a-f]{40}$ ]] ||
+            usage_error "--blob expects a 40-hex blob sha or the literal 'absent', got '$2'" ;;
+    jq)   [[ "$2" != *'#'* ]] ||
+            usage_error "--jq filter must not contain '#' — a jq comment truncates the rest of the predicate: '$2'"
+          [[ ! "$2" =~ $JQ_ENV_RE ]] ||
+            usage_error "--jq filter must not reference the process environment (env / \$ENV): '$2'" ;;
+  esac
+  IDS+=("$PENDING_ID"); MODES+=("$1"); EXPECTED+=("$2"); PENDING_ID=""
+}
+
 REPO_ARG=""
 DO_FETCH=1
 AS_JSON=0
-SPECS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -C|--repo) [[ $# -ge 2 ]] || usage_error "-C requires a repo path argument"
@@ -88,45 +142,22 @@ while [[ $# -gt 0 ]]; do
     --no-fetch) DO_FETCH=0; shift ;;
     --json) AS_JSON=1; shift ;;
     -h|--help) echo "$USAGE"; exit 0 ;;
-    --) shift; while [[ $# -gt 0 ]]; do SPECS+=("$1"); shift; done ;;
+    --node) [[ $# -ge 2 ]] || usage_error "--node requires a node id argument"
+            start_spec "$2"; shift 2 ;;
+    --node=*) start_spec "${1#*=}"; shift ;;
+    --blob) [[ $# -ge 2 ]] || usage_error "--blob requires a value argument"
+            finish_spec blob "$2"; shift 2 ;;
+    --blob=*) finish_spec blob "${1#*=}"; shift ;;
+    --jq) [[ $# -ge 2 ]] || usage_error "--jq requires a filter argument"
+          finish_spec jq "$2"; shift 2 ;;
+    --jq=*) finish_spec jq "${1#*=}"; shift ;;
     -*) usage_error "unknown option '$1'" ;;
-    *) SPECS+=("$1"); shift ;;
+    *) usage_error "unexpected argument '$1' — specs are '--node <id> --blob <sha>' or '--node <id> --jq <filter>'; the single-token '<id>=<sha>' / '<id>@<filter>' forms were removed (see the header: a concatenated id bled into the jq program)" ;;
   esac
 done
 
-[[ ${#SPECS[@]} -gt 0 ]] || usage_error "at least one spec is required"
-
-# --- Parse the specs up front -------------------------------------------------
-# A malformed spec is a caller bug, so it must be a cheap exit 2 BEFORE any
-# network call — never a `not-landed` verdict, which would read as a real
-# answer about the graph.
-IDS=()
-MODES=()
-EXPECTED=()
-for spec in "${SPECS[@]}"; do
-  eq_head="${spec%%=*}"
-  at_head="${spec%%@*}"
-  has_eq=0; has_at=0
-  [[ "$spec" == *=* ]] && has_eq=1
-  [[ "$spec" == *@* ]] && has_at=1
-
-  if [[ $has_eq -eq 1 && ( $has_at -eq 0 || ${#eq_head} -lt ${#at_head} ) ]]; then
-    id="$eq_head"; mode="blob"; want="${spec#*=}"
-  elif [[ $has_at -eq 1 ]]; then
-    id="$at_head"; mode="jq"; want="${spec#*@}"
-  else
-    usage_error "spec '$spec' has neither '=' nor '@' — see the spec forms above"
-  fi
-
-  [[ -n "$id" ]] || usage_error "spec '$spec' has an empty node id"
-  [[ "$id" =~ ^[A-Za-z0-9._-]+$ ]] || usage_error "spec '$spec' has a malformed node id '$id'"
-  [[ -n "$want" ]] || usage_error "spec '$spec' has an empty expectation"
-  if [[ "$mode" == "blob" && "$want" != "absent" && ! "$want" =~ ^[0-9a-f]{40}$ ]]; then
-    usage_error "spec '$spec': expected a 40-hex blob sha or the literal 'absent', got '$want'"
-  fi
-
-  IDS+=("$id"); MODES+=("$mode"); EXPECTED+=("$want")
-done
+[[ -z "$PENDING_ID" ]] || usage_error "--node '$PENDING_ID' was not followed by --blob or --jq"
+[[ ${#IDS[@]} -gt 0 ]] || usage_error "at least one '--node <id> --blob <sha>|--jq <filter>' spec is required"
 
 # --- Resolve the repo from the CALLER, never from this script's location -----
 RESOLVE_FROM="${REPO_ARG:-$(pwd)}"
@@ -237,6 +268,9 @@ for i in "${!IDS[@]}"; do
         echo "verify-landed: could not read $id at origin/main (readNodeAtRef failed) — the outcome is undetermined" >&2
         status="unknown"
       else
+        # `$want` is the filter the caller passed as its own `--jq` argument —
+        # it can never contain a node id, because the id arrived as a separate
+        # `--node` argument and was charset-validated in full (see the header).
         # `jq -e`: 0 the filter produced a truthy value, 1 false/null, anything
         # else (5) is a jq error — an error is `unknown`, not a false.
         # Here-string, never `echo "$node_json" | jq` (.claude/rules/shell-json.md).

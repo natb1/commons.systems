@@ -244,7 +244,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly, wrap
               # in REAL frontmatter fences plus the schema's required core
               # fields (id/kind/statement/owner/status) and an explicit
               # `office_hours: null` line. Unit 4's verify-landed jq-mode check
-              # (`<id>@.office_hours != null` / `== null`) parses these nodes
+              # (`--node <id> --jq '.office_hours != null'`) parses these nodes
               # for real via readNodeAtRef, not just greps them — unlike the
               # rest of this harness's synthetic content, these fixtures must
               # be valid YAML frontmatter or every jq-mode check comes back

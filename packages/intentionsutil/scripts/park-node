@@ -91,7 +91,8 @@
 # reached origin/main (Direction B), or success over one that didn't. After
 # the graph-commit invocation below — success or failure — this script asks
 # the sibling `verify-landed` primitive directly: `verify-landed -C
-# "$REPO_ROOT" "$NODE_ID@.office_hours != null"`. Its three-valued verdict
+# "$REPO_ROOT" --node "$NODE_ID" --jq '.office_hours != null'` (id and filter
+# as separate arguments — see that script's header). Its three-valued verdict
 # (landed/not-landed/unknown), not graph-commit's rc, decides park-node's own
 # exit and whether the pre-park local copy is restored. The "HEAD moved
 # locally" comparison inside restore_node() (above) stays as a diagnostic aid
@@ -184,6 +185,17 @@ REASON="${ARGS[1]:-}"
 RECOMMENDATION="${ARGS[2]:-}"
 if [[ ${#ARGS[@]} -lt 2 || ${#ARGS[@]} -gt 3 || -z "$NODE_ID" || -z "$REASON" ]]; then
   echo "$USAGE" >&2
+  exit 2
+fi
+
+# The node id is interpolated into a path, a graph-commit --base/--expect pair,
+# and (via verify-landed) a landing check, so it is validated in FULL here — the
+# same charset verify-landed enforces. src/store.ts's assertPathSafeId rejects
+# only `/`, `\`, `.` and `..`, which leaves `@`, `#` and whitespace legal
+# upstream; this is the gate that keeps such an id from reaching a downstream
+# parser at all.
+if [[ ! "$NODE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "park-node: malformed node id '$NODE_ID' — ids must match ^[A-Za-z0-9._-]+\$" >&2
   exit 2
 fi
 
@@ -415,7 +427,13 @@ GC_RC=0
 # Ask verify-landed directly, unconditionally — including when GC_RC is 0 —
 # because a reported success is exactly as untrustworthy as a reported
 # failure until origin/main itself confirms it.
-VL_OUT="$("$SCRIPT_DIR/verify-landed" -C "$REPO_ROOT" "$NODE_ID@.office_hours != null" 2>&1)"; VL_RC=$?
+# The id and the predicate are SEPARATE arguments (`--node` / `--jq`), never a
+# concatenated `"$NODE_ID@..."` token: node ids are not delimiter-free upstream
+# (assertPathSafeId permits `@` and `#`), and an id spliced into the spec string
+# became jq source — an id ending in `@true #` forged a `landed` verdict for any
+# node, which here would suppress the rollback and write the terminal marker.
+# NODE_ID is charset-validated above; verify-landed re-validates it in full.
+VL_OUT="$("$SCRIPT_DIR/verify-landed" -C "$REPO_ROOT" --node "$NODE_ID" --jq '.office_hours != null' 2>&1)"; VL_RC=$?
 echo "$VL_OUT" >&2
 
 case "$VL_RC" in

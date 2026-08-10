@@ -688,9 +688,19 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         # explicit fetch is the one that counts against the sweep's fetch
         # budget, so verify-landed must not fetch a second time.
         git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
+        # The node id and the predicate are SEPARATE arguments (`--node` /
+        # `--jq`). A concatenated `"${name}@..."` spec let an id containing `@`
+        # become jq source — an id ending in `@true #` comments out the
+        # predicate and forges `landed` for any node — and `$name` here comes
+        # from a session name, not from this file. The id is charset-checked
+        # first so a malformed one is NOT counted as a park (verify-landed would
+        # exit 2, which is already treated as not-landed, but the local check
+        # names the reason).
         local landed=0 vl_rc=0
-        if [[ -x "$verify_landed" ]]; then
-          "$verify_landed" --no-fetch -C "$repo_root" "${name}@.office_hours != null" \
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
             >/dev/null 2>&1 || vl_rc=$?
           (( vl_rc == 0 )) && landed=1
         fi
@@ -1410,9 +1420,16 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         # the fail-safe direction, since `unknown` is never `landed`.
         git -C "$repo_root" fetch origin main --quiet 2>/dev/null || true
 
+        # Separate `--node` / `--jq` arguments, and a charset check on the id
+        # first: see the denied-command sweep's fuller note at its own
+        # verify-landed call. Here the stake is higher — a forged `landed` is
+        # what authorizes the `rm -f` of this session's only escalation copy
+        # below — so a malformed id must fail closed, keeping the markers.
         local landed=0 vl_rc=0
-        if [[ -x "$verify_landed" ]]; then
-          "$verify_landed" --no-fetch -C "$repo_root" "${name}@.office_hours != null" \
+        if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          printf 'lib-frozen-session-park: refusing to confirm a park for malformed node id %q — ids must match ^[A-Za-z0-9._-]+$; KEEPING the escalation markers\n' "$name" >&2
+        elif [[ -x "$verify_landed" ]]; then
+          "$verify_landed" --no-fetch -C "$repo_root" --node "$name" --jq '.office_hours != null' \
             >/dev/null 2>&1 || vl_rc=$?
           (( vl_rc == 0 )) && landed=1
         fi

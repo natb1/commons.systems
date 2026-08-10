@@ -23,7 +23,11 @@
 #   6. jq predicate true                → landed, exit 0
 #   7. jq predicate false               → not-landed, exit 4
 #   8. jq predicate on an absent node   → not-landed, exit 4
-#   9. malformed spec                   → usage error, exit 2, before any fetch
+#   9. malformed spec (including the retired single-token `<id>=<sha>` /
+#                       `<id>@<filter>` positional forms)
+#                                       → usage error, exit 2, before any fetch
+#  9b. id/filter injection — an id carrying '@'/'#', or a filter carrying '#'
+#      or `env`/`$ENV` → usage error, exit 2, and NO verdict line at all
 #  10. --json emits one parseable object with the documented shape
 #  11. multi-spec: one unsatisfied spec decides the whole verdict
 #  12. the working tree is never written (no fetch-into-tree, no index touch)
@@ -107,24 +111,24 @@ run() {
 }
 
 # --- 1. blob-equal → landed ---------------------------------------------------
-run 0 "blob-equal is landed" -- -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB"
+run 0 "blob-equal is landed" -- -C "$CLONE" --no-fetch --node t-plain --blob "$PLAIN_BLOB"
 grep -q "verdict=landed" <<<"$OUT" || no "case 1: terminal line does not say verdict=landed"
 
 # --- 2. blob-differs → not-landed --------------------------------------------
-run 4 "blob-differs is not-landed" -- -C "$CLONE" --no-fetch "t-plain=$WRONG_BLOB"
+run 4 "blob-differs is not-landed" -- -C "$CLONE" --no-fetch --node t-plain --blob "$WRONG_BLOB"
 grep -q "verdict=not-landed" <<<"$OUT" || no "case 2: terminal line does not say verdict=not-landed"
 
 # --- 3. absent, expected absent → landed -------------------------------------
-run 0 "absent-and-expected-absent is landed" -- -C "$CLONE" --no-fetch "t-never-existed=absent"
+run 0 "absent-and-expected-absent is landed" -- -C "$CLONE" --no-fetch --node t-never-existed --blob absent
 
 # --- 4. present, expected absent → not-landed --------------------------------
-run 4 "present-but-expected-absent is not-landed" -- -C "$CLONE" --no-fetch "t-plain=absent"
+run 4 "present-but-expected-absent is not-landed" -- -C "$CLONE" --no-fetch --node t-plain --blob absent
 
 # --- 5. unreachable origin → unknown, never not-landed ------------------------
 BROKEN="$WORK/broken"
 git clone -q "$ORIGIN" "$BROKEN"
 git -C "$BROKEN" remote set-url origin "$WORK/no-such-origin.git"
-run 1 "unreachable origin is unknown" -- -C "$BROKEN" "t-plain=$PLAIN_BLOB"
+run 1 "unreachable origin is unknown" -- -C "$BROKEN" --node t-plain --blob "$PLAIN_BLOB"
 if grep -q "not-landed" <<<"$OUT"; then
   no "case 5: the word 'not-landed' appears in an UNKNOWN result — the collapse this primitive prevents"
 else
@@ -133,18 +137,38 @@ fi
 grep -q "verdict=unknown" <<<"$OUT" || no "case 5: terminal line does not say verdict=unknown"
 
 # --- 6/7/8. jq predicates -----------------------------------------------------
-run 0 "jq predicate true is landed" -- -C "$CLONE" --no-fetch 't-parked@.office_hours != null'
-run 4 "jq predicate false is not-landed" -- -C "$CLONE" --no-fetch 't-parked@.office_hours == null'
-run 4 "jq predicate on an absent node is not-landed" -- -C "$CLONE" --no-fetch 't-never-existed@.office_hours != null'
+run 0 "jq predicate true is landed" -- -C "$CLONE" --no-fetch --node t-parked --jq '.office_hours != null'
+run 4 "jq predicate false is not-landed" -- -C "$CLONE" --no-fetch --node t-parked --jq '.office_hours == null'
+run 4 "jq predicate on an absent node is not-landed" -- -C "$CLONE" --no-fetch --node t-never-existed --jq '.office_hours != null'
 
 # --- 9. malformed spec → usage error -----------------------------------------
-run 2 "spec with no delimiter is a usage error" -- -C "$CLONE" --no-fetch "t-plain"
-run 2 "spec with a non-sha, non-absent value is a usage error" -- -C "$CLONE" --no-fetch "t-plain=maybe"
+run 2 "a bare positional spec is a usage error" -- -C "$CLONE" --no-fetch "t-plain"
+run 2 "the retired '<id>=<sha>' positional form is a usage error" -- -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB"
+run 2 "the retired '<id>@<filter>' positional form is a usage error" -- -C "$CLONE" --no-fetch 't-parked@.office_hours != null'
+run 2 "--blob with a non-sha, non-absent value is a usage error" -- -C "$CLONE" --no-fetch --node t-plain --blob maybe
+run 2 "--node without --blob/--jq is a usage error" -- -C "$CLONE" --no-fetch --node t-plain
+run 2 "--blob without a preceding --node is a usage error" -- -C "$CLONE" --no-fetch --blob "$PLAIN_BLOB"
 run 2 "no specs at all is a usage error" -- -C "$CLONE" --no-fetch
-run 2 "a repo path outside any git repo is a usage error" -- -C "$WORK" --no-fetch "t-plain=$PLAIN_BLOB"
+run 2 "a repo path outside any git repo is a usage error" -- -C "$WORK" --no-fetch --node t-plain --blob "$PLAIN_BLOB"
+
+# --- 9b. id/filter injection is refused, never answered -----------------------
+# The defect this argument shape exists to end: with a single-token spec, an id
+# containing '@' split the spec early and the tail became jq source, and its '#'
+# commented out the intended predicate — 'tactic-x@true #.office_hours != null'
+# reported `landed` for a node that does not exist on origin/main at all. Every
+# shape of that attack must now be a usage error (exit 2, no verdict word).
+run 2 "an id containing '@' is a malformed id, not a spec split" -- \
+  -C "$CLONE" --no-fetch --node 't-plain@true #' --jq '.office_hours != null'
+grep -q "verdict=" <<<"$OUT" && no "case 9b: a refused id still printed a verdict line"
+run 2 "a filter containing '#' is refused (jq comment truncation)" -- \
+  -C "$CLONE" --no-fetch --node t-parked --jq 'true #.office_hours != null'
+run 2 "a filter referencing \$ENV is refused (exfiltration channel)" -- \
+  -C "$CLONE" --no-fetch --node t-parked --jq '$ENV.PATH != null'
+run 2 "a filter referencing env is refused (exfiltration channel)" -- \
+  -C "$CLONE" --no-fetch --node t-parked --jq 'env.PATH != null'
 
 # --- 10. --json shape ---------------------------------------------------------
-JSON_OUT="$("$VL_SCRIPT" -C "$CLONE" --no-fetch --json "t-plain=$PLAIN_BLOB" "t-parked=absent" 2>/dev/null)"
+JSON_OUT="$("$VL_SCRIPT" -C "$CLONE" --no-fetch --json --node t-plain --blob "$PLAIN_BLOB" --node t-parked --blob absent 2>/dev/null)"
 JSON_RC=$?
 [[ $JSON_RC -eq 4 ]] || no "case 10: expected exit 4 from the mixed --json run, got $JSON_RC"
 # The JSON object is the tail of stdout, after the per-spec and terminal lines.
@@ -164,14 +188,14 @@ fi
 
 # --- 11. multi-spec: one unsatisfied decides ---------------------------------
 run 4 "one unsatisfied spec decides a multi-spec verdict" -- \
-  -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB" "t-parked=$WRONG_BLOB"
+  -C "$CLONE" --no-fetch --node t-plain --blob "$PLAIN_BLOB" --node t-parked --blob "$WRONG_BLOB"
 run 0 "all-satisfied multi-spec is landed" -- \
-  -C "$CLONE" --no-fetch "t-plain=$PLAIN_BLOB" 't-parked@.office_hours != null'
+  -C "$CLONE" --no-fetch --node t-plain --blob "$PLAIN_BLOB" --node t-parked --jq '.office_hours != null'
 
 # --- 12. never writes ---------------------------------------------------------
 BEFORE_STATUS="$(git -C "$CLONE" status --porcelain)"
 BEFORE_HEAD="$(git -C "$CLONE" rev-parse HEAD)"
-"$VL_SCRIPT" -C "$CLONE" "t-plain=$PLAIN_BLOB" >/dev/null 2>&1
+"$VL_SCRIPT" -C "$CLONE" --node t-plain --blob "$PLAIN_BLOB" >/dev/null 2>&1
 AFTER_STATUS="$(git -C "$CLONE" status --porcelain)"
 AFTER_HEAD="$(git -C "$CLONE" rev-parse HEAD)"
 if [[ "$BEFORE_STATUS" == "$AFTER_STATUS" && "$BEFORE_HEAD" == "$AFTER_HEAD" ]]; then

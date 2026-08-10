@@ -101,10 +101,14 @@
 # contract below, an already-landed `--prune <id>` must be dropped from the
 # retry argv; nothing else about the argv changes.)
 #
-# That branch's DIVERGED-AND-NOTHING-STAGED wrong-repo refusal is scoped to an
-# unpushed-commit count of ZERO precisely so it cannot fire on this recovery —
-# it used to fire on every orphan (an orphan's whole point is that HEAD's blob
-# differs from origin/main's), which made the documented recovery unreachable.
+# That branch's DIVERGED-AND-NOTHING-STAGED wrong-repo refusal is scoped, per
+# id, to a divergence NO unpushed commit of this script's own explains, so it
+# cannot fire on this recovery — it used to fire on every orphan (an orphan's
+# whole point is that HEAD's blob differs from origin/main's), which made the
+# documented recovery unreachable. The exemption is deliberately not a bare
+# "the checkout has some unpushed commit": that is true of any stale worktree,
+# and would hand the refusal's whole job away (see
+# id_divergence_is_own_orphan()).
 #
 # `git reset --hard origin/main` is NOT a prerequisite for that retry, and the
 # older tribal advice to run it first is retired: it DISCARDS the orphan, which
@@ -147,7 +151,14 @@
 #                      already carries byte-identical content for every id and
 #                      every --prune id is absent there. A peer landed the same
 #                      content; the caller's intent is satisfied.
-#   parked             the park path only: the PARKING commit is on origin/main.
+#   parked             the park path only: the PARKING commit is on origin/main,
+#                      or — on the idempotent retry, where the node already
+#                      carried a byte-identical office_hours block so there was
+#                      nothing to commit or push — origin/main already carries
+#                      exactly this park's office_hours content for every parked
+#                      id. Like `landed-equivalent`, that second arm is decided
+#                      by CONTENT rather than ancestry; unlike it, it still
+#                      exits 1, because this writer's own content was not landed.
 #   not-landed         the read succeeded and none of the above holds.
 #   refused            the invocation died before any id was validated, so no
 #                      write was ever attempted. No fetch is performed.
@@ -366,6 +377,14 @@ LOCK_WAIT_SECONDS="${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-$((MAX_PUSH_ATTEMPTS * (CHE
 #               path discards the writer's local commit, so the snapshot is the
 #               only remaining copy of the writer's content).
 # CURRENT_MSG — the commit message commit_files() commits with.
+# PARK_CONTENT_DIR — empty until park_write() runs; then a dir holding each
+#               parked node's POST-park-write content (origin/main's content
+#               plus the office_hours block). It is what a park INTENDS to put
+#               on origin/main, and is therefore what print_verdict()'s
+#               content-equivalence fallback compares against on the park path.
+#               Deliberately NOT SNAP_DIR: that must keep holding the writer's
+#               unlanded pre-park edit, which the park recommendation points a
+#               human at for the manual merge.
 declare -a IDS=()
 declare -a PRUNE_IDS=()
 declare -a ALL_IDS=()
@@ -375,6 +394,7 @@ declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
 CURRENT_MSG=""
+PARK_CONTENT_DIR=""
 # SCRATCH_BRANCH — the throwaway `graph/**` branch name used to stamp SHAs.
 # SCRATCH_PUSHED — 1 once we have pushed it at least once, so cleanup() knows to
 #                  delete it on the remote on exit.
@@ -1207,6 +1227,56 @@ detect_pre_existing_orphan() {
   echo "graph-commit: orphan-detected: $count local commit(s) not on origin/main ($shas) — re-running this invocation rebases and lands them; do NOT git push them by hand" >&2
 }
 
+# --- Is THIS id's divergence explained by an orphan THIS SCRIPT made? --------
+# Answers the one question the nothing-staged branch's wrong-repo backstop turns
+# on, per id: HEAD's blob for $id differs from origin/main's and nothing is
+# staged — is that difference the residue of a killed graph-commit run (the
+# sanctioned orphan recovery, which must PROCEED), or content this script never
+# wrote (a mis-pointed -C/--repo or a stale worktree, which must DIE)?
+#
+# A bare `rev-list --count $MAIN_SHA..HEAD > 0` cannot tell those apart: it is
+# true of ANY unpushed commit in the checkout, including an old one for a
+# different node, a hand-made commit, or a stale worktree's leftovers. Trusting
+# it would let land() rebase and push that unrelated content onto main —
+# reverting edits other writers already landed — and then report `landed`,
+# because print_verdict compares main against the same stale content. So the
+# exemption is narrowed to a divergence the local commits actually EXPLAIN, and
+# only when they look like this script's own work:
+#   - at least one unpushed commit touches intentions/$id.md (path-scoped
+#     rev-list — an unpushed commit for some OTHER node explains nothing here);
+#   - every such commit is non-merge and intentions/-only (graph-commit stages
+#     nothing else, and rebases rather than merges);
+#   - every such commit's subject is one this script writes: exactly this
+#     invocation's message (the sanctioned recovery re-runs the same argv, so
+#     the orphan carries CURRENT_MSG) or the default `graph: …` shape.
+# Anything else keeps the die().
+#
+# Callers: main()'s nothing-staged branch only. Requires MAIN_SHA pinned and
+# CURRENT_MSG set.
+id_divergence_is_own_orphan() {
+  local id="$1" shas sha subject parents nonint
+  shas="$(git rev-list "$MAIN_SHA..HEAD" -- "intentions/$id.md" 2>/dev/null || true)"
+  [[ -n "$shas" ]] || return 1
+  while IFS= read -r sha; do
+    [[ -n "$sha" ]] || continue
+    # Merge commits: not something graph-commit produces (it rebases), and
+    # a name-only listing reports no paths for them, so the intentions/-only
+    # check below would pass vacuously. Reject explicitly. (`rev-list --parents
+    # -n 1` prints "<sha> <parent>…", so a word count of 2 is exactly one
+    # parent; a root commit counts 1 and is rejected too — origin/main is its
+    # ancestor here, so it cannot be one.)
+    parents="$(git rev-list --parents -n 1 "$sha" | wc -w)"
+    [[ "$parents" -eq 2 ]] || return 1
+    subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+    if [[ "$subject" != "$CURRENT_MSG" && "$subject" != graph:\ * ]]; then
+      return 1
+    fi
+    nonint="$(git diff-tree --no-commit-id --name-only -r "$sha" | grep -v '^intentions/' || true)"
+    [[ -z "$nonint" ]] || return 1
+  done <<<"$shas"
+  return 0
+}
+
 # --- Commit ----------------------------------------------------------------
 # Stage exactly our id files (edits AND prunes — `git add -- <path>` stages a
 # deletion for a tracked file that is missing from the working tree just as
@@ -1490,27 +1560,47 @@ print_verdict() { # <context>
   # 3. Content equivalence. Ancestry is false, but a PEER may have landed
   #    byte-identical content, in which case the caller's intent is satisfied
   #    and a retry would be a no-op. Compare, per id, the content this run
-  #    INTENDED to land (SNAP_DIR — refreshed in place by every layer-2/3
-  #    resolution, so it is the intended content, not a stale pre-merge copy)
-  #    against origin/main; a --prune id is satisfied by ABSENCE there.
-  #    An id whose intended content cannot be read is `unknown`, and unknown
-  #    wins outright over unsatisfied — it is the absence of an answer, not a
-  #    weak answer.
-  local id intended observed unsatisfied=0 indeterminate=0
+  #    INTENDED to land against origin/main; an id whose intended content
+  #    cannot be read is `unknown`, and unknown wins outright over unsatisfied
+  #    — it is the absence of an answer, not a weak answer.
+  #
+  #    WHICH content is "intended" depends on the path:
+  #      - ordinary landing: SNAP_DIR/<id>.md — refreshed in place by every
+  #        layer-2/3 resolution, so it is the intended content, not a stale
+  #        pre-merge copy — and a --prune id is satisfied by ABSENCE on main.
+  #      - park (PARK_CONTENT_DIR set by park_write): the intent is no longer
+  #        this writer's edit at all. A park lands origin/main's content PLUS
+  #        the office_hours block, and SNAP_DIR deliberately keeps holding the
+  #        writer's UNLANDED pre-park edit (the recommendation text points a
+  #        human at it), so SNAP_DIR is guaranteed to mismatch here. The same
+  #        flip applies to a PARKED --prune id: the deletion was not landed, so
+  #        absence on main is the wrong question — the office_hours record is
+  #        the intent. A bystander prune (never passed to park_write, so absent
+  #        from PARK_CONTENT_DIR) keeps the absence test, which is right: it WAS
+  #        re-applied and landed.
+  #    Load-bearing on the idempotent-retry path, where park_and_exit() found
+  #    the node already carrying a byte-identical office_hours block, committed
+  #    and pushed nothing, and left PUSHED_SHA empty — so ancestry cannot answer
+  #    and this comparison is the whole verdict.
+  local id intended observed unsatisfied=0 indeterminate=0 intended_file
   for id in "${ALL_IDS[@]}"; do
-    if is_prune_id "$id"; then
+    intended_file=""
+    if [[ -n "$PARK_CONTENT_DIR" && -f "$PARK_CONTENT_DIR/$id.md" ]]; then
+      intended_file="$PARK_CONTENT_DIR/$id.md"
+    elif is_prune_id "$id"; then
       if git cat-file -e "FETCH_HEAD:intentions/$id.md" 2>/dev/null; then
         unsatisfied=1
       fi
       continue
-    fi
-    if [[ -z "$SNAP_DIR" || ! -f "$SNAP_DIR/$id.md" ]]; then
+    elif [[ -n "$SNAP_DIR" && -f "$SNAP_DIR/$id.md" ]]; then
+      intended_file="$SNAP_DIR/$id.md"
+    else
       # The run died before snapshot() captured this id, so what it intended to
       # land is not recoverable here.
       indeterminate=1
       continue
     fi
-    if ! intended="$(git hash-object "$SNAP_DIR/$id.md" 2>/dev/null)"; then
+    if ! intended="$(git hash-object "$intended_file" 2>/dev/null)"; then
       indeterminate=1
       continue
     fi
@@ -1521,6 +1611,14 @@ print_verdict() { # <context>
   if [[ "$indeterminate" -eq 1 ]]; then
     verdict="unknown"
     reason="origin/main was read, but this run's intended content for at least one id could not be determined — the outcome is undetermined"
+  elif [[ "$unsatisfied" -eq 0 && "$context" == "park" ]]; then
+    # A park whose office_hours content is already on origin/main byte for byte
+    # IS parked — the record a park exists to put there is there. Reported as
+    # `parked` rather than `landed-equivalent` for the same reason ancestry does
+    # in step 1: this writer's own content was NOT landed, and `landed*` are the
+    # only statuses that exit 0.
+    verdict="parked"
+    reason="${PUSHED_SHA:-no push} did not reach origin/main, but origin/main already carries exactly this park's office_hours content for every parked id (the node was already parked byte-identically — nothing needed pushing)"
   elif [[ "$unsatisfied" -eq 0 ]]; then
     verdict="landed-equivalent"
     reason="${PUSHED_SHA:-no push} did not reach origin/main, but origin/main already carries exactly this invocation's intended content for every id (a peer landed identical content)"
@@ -2290,6 +2388,22 @@ TS
       [[ -n "$rid" ]] && RESURRECTED_IDS+=("$rid")
     done <"$resurrected_file"
   fi
+
+  # Record what this park INTENDS to put on origin/main — origin/main's content
+  # with the office_hours block just written — for print_verdict()'s
+  # content-equivalence fallback. SNAP_DIR is NOT that content and must not be
+  # overwritten with it: it holds this writer's unlanded pre-park edit, which
+  # the recommendation text and the "preserved at $SNAP_DIR" message point a
+  # human at for the manual merge. Resurrected ids are copied too, deliberately:
+  # their node no longer exists on origin/main, so the comparison correctly
+  # answers "not on main" for them.
+  PARK_CONTENT_DIR="$SNAP_DIR/.parked"
+  mkdir -p "$PARK_CONTENT_DIR" || die "could not create the parked-content dir"
+  local pid
+  for pid in "$@"; do
+    cp -- "$INTENTIONS_DIR/$pid.md" "$PARK_CONTENT_DIR/$pid.md" \
+      || die "could not record the parked content for $pid"
+  done
 }
 
 # --- Shared fail-closed park path (never returns) ---------------------------
@@ -2817,22 +2931,27 @@ main() {
     #     there is nothing left to stage: an ORPHAN). Naming only the first is
     #     what misdirected an earlier diagnosis.
     #
-    # The two are told apart by the unpushed-commit count, exactly the
-    # discriminator the die() below already prescribed to its reader:
-    #   - count > 0 → the ORPHAN case. THIS IS THE SANCTIONED RECOVERY PATH
+    # The two are told apart PER ID, by whether an unpushed local commit that
+    # THIS SCRIPT made actually explains that id's divergent blob
+    # (id_divergence_is_own_orphan(), which spells out the test):
+    #   - explained → the ORPHAN case. THIS IS THE SANCTIONED RECOVERY PATH
     #     (see the header block's recovery rule): re-running the same invocation
     #     rebases HEAD onto fresh origin/main and pushes it, which lands the
-    #     orphan. It must therefore PROCEED, not die. It used to die: the per-id
-    #     blob comparison fires on every orphan (an orphan's whole point is that
-    #     HEAD's blob differs from origin/main's), so the documented recovery was
-    #     unreachable and an operator following it got a wrong-repo accusation
-    #     instead. The remaining risk that the die covered — a false "landed" —
-    #     is covered elsewhere now: nothing is claimed landed except off a
-    #     post-push read of origin/main (print_verdict()).
-    #   - count == 0 → HEAD is at or behind origin/main, so no local commit can
-    #     explain the differing blob. That is the mis-pointed-repo case, and it
-    #     still dies. (--expect is the robust check for wrong-repo targeting;
-    #     this stays as the no-flag backstop.)
+    #     orphan. It must therefore PROCEED, not die. It used to die on every
+    #     orphan (an orphan's whole point is that HEAD's blob differs from
+    #     origin/main's), so the documented recovery was unreachable and an
+    #     operator following it got a wrong-repo accusation instead.
+    #   - NOT explained → nothing this script wrote accounts for the divergence,
+    #     so it still dies. That covers both the stale/mis-pointed checkout at
+    #     or behind origin/main (no local commit at all) AND — the reason the
+    #     test is per id rather than a bare unpushed-commit count — a checkout
+    #     that happens to carry SOME unrelated unpushed commit: an old one for a
+    #     different node, a hand-made commit, a stale worktree's leftovers. A
+    #     bare count > 0 exemption would let land() rebase and push that content
+    #     onto main, reverting edits other writers landed, and print_verdict()
+    #     would then compare main against the same stale content and say
+    #     `landed`. (--expect is the robust check for wrong-repo targeting; this
+    #     stays as the no-flag backstop.)
     local head_sha main_sha unpushed
     head_sha="$(git rev-parse HEAD)"
     main_sha="$(git rev-parse FETCH_HEAD)"
@@ -2841,16 +2960,19 @@ main() {
     # Compare per id against origin/main as pinned by main()'s single fetch
     # ($MAIN_SHA, taken above — do NOT fetch again). Both blobs absent/empty (id
     # absent both places) is benign (equal empty strings).
-    if [[ "$unpushed" -eq 0 ]]; then
-      local id local_blob main_blob
-      for id in "${ALL_IDS[@]}"; do
-        local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
-        main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
-        if [[ "$local_blob" != "$main_blob" ]]; then
-          die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit, and HEAD carries NO local commit that could explain it (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>}; 'git -C $REPO_ROOT rev-list --count $MAIN_SHA..HEAD' is 0, so HEAD is at or behind origin/main). That rules out the killed-prior-run cause — an unpushed local commit, which this script now detects and simply lands — and leaves a mis-pointed -C/--repo (or a cwd targeting the wrong checkout), so the edit the caller made lives in a DIFFERENT checkout. Refusing to emit a false 'landed' for a tree that was never going to change origin/main."
-        fi
-      done
-    fi
+    local id local_blob main_blob why
+    for id in "${ALL_IDS[@]}"; do
+      local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
+      main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
+      [[ "$local_blob" == "$main_blob" ]] && continue
+      id_divergence_is_own_orphan "$id" && continue
+      if [[ "$unpushed" -eq 0 ]]; then
+        why="'git -C $REPO_ROOT rev-list --count $MAIN_SHA..HEAD' is 0, so HEAD is at or behind origin/main and there is no local commit at all that could explain it"
+      else
+        why="HEAD carries $unpushed local commit(s) not on origin/main, but NONE of them is one this script made for this id — a commit that touches intentions/$id.md, is a non-merge intentions/-only commit, and carries this invocation's message ('$CURRENT_MSG') or a 'graph: …' subject. Unrelated unpushed commits (an old write for another node, a hand-made commit, a stale worktree's leftovers) do not explain this blob"
+      fi
+      die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit, and no unpushed local commit of this script's own explains it (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>}; $why). That rules out the killed-prior-run cause — an orphan this script made, which it detects and simply lands — and leaves a mis-pointed -C/--repo (or a cwd targeting the wrong checkout, e.g. a STALE worktree), so the edit the caller made lives in a DIFFERENT checkout. Landing this HEAD would rebase and push the stale content onto main, over whatever other writers already landed. Refusing to emit a false 'landed' for a tree that was never going to carry the caller's edit."
+    done
 
     # Nothing is staged AND every id already matches origin/main. If HEAD is
     # also exactly origin/main there is, by definition, nothing to push: the

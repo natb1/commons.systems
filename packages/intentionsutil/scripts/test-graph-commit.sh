@@ -247,6 +247,15 @@
 #      says plainly that nothing was parked ON MAIN, WITHOUT emitting
 #      land-align-round's landed-park needle
 #
+#  59. idempotent park retry: a node whose office_hours block is ALREADY on
+#      origin/main byte-identically (a peer parked it first) parks again with
+#      nothing to commit and nothing to push (park_and_exit()'s committed=0
+#      arm, PUSHED_SHA empty). The verdict must still be `parked` — decided by
+#      comparing origin/main against the PARK's content, not against SNAP_DIR's
+#      unlanded pre-park edit or a --prune id's absence — never `not-landed`,
+#      which would deny land-align-round its park marker for a park that IS on
+#      main. origin/main must not move.
+#
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
@@ -316,7 +325,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-bystander-prune t-bystander-conflict t-prune-base-stale \
           t-base-bystander-prune t-manifest-foreign t-manifest-prune \
           t-kill-lockwait t-kill-stamp t-kill-busy \
-          t-verdict-happy t-verdict-park; do
+          t-verdict-happy t-verdict-park t-park-retry; do
   seed_node "$id"
 done
 
@@ -707,6 +716,15 @@ Mailbox discipline."
         rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
       fi
       [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
+      # SET, not append. The real helper does `node.office_hours = {...}` and
+      # writeNode serializes the whole node, so re-parking a node that ALREADY
+      # carries an office_hours block REPLACES it — which is what makes the
+      # idempotent-retry park byte-identical (nothing to commit, nothing to
+      # push). A blind append here would fabricate a second block, leave the
+      # file dirty, and hide that path from the harness entirely. This shim
+      # always writes the block last, so "from the block's opening line to EOF"
+      # is exactly the previous block.
+      sed -i '/^office_hours: {/,$d' "$dir/$id.md"
       printf 'office_hours: {reason: "%s", since: %s, recommendation: "%s"}\n' "$reason" "$since" "$rec" >>"$dir/$id.md"
       echo "graph-commit: set office_hours on $id (since=$since)" >&2
     done
@@ -2337,7 +2355,7 @@ else
   fi
   drop_scratch_refs
 
-  vl_out="$(bash "$HARNESS_DIR/verify-landed" -C "$W54" "t-kill-stamp=$intended54" 2>&1)"; vl_rc=$?
+  vl_out="$(bash "$HARNESS_DIR/verify-landed" -C "$W54" --node t-kill-stamp --blob "$intended54" 2>&1)"; vl_rc=$?
   if [[ $vl_rc -eq 4 ]] && grep -q 'verdict=not-landed' <<<"$vl_out"; then
     ok "kill mid-stamp: verify-landed reports not-landed (exit 4) for the orphaned content"
   else
@@ -2509,6 +2527,54 @@ if [[ $rc -eq 1 ]] \
   ok "delete/modify divergence: deletion lands first, stale-base edit races it — the deletion STANDS on main, the re-materialization is local+untracked with office_hours and the authored body, and no landed-park claim is emitted"
 else
   no "delete/modify divergence (rc=$rc still_deleted=$still_deleted untracked=$untracked58)"; printf '%s\n' "$out"; printf '%s\n' "$local_content"
+fi
+
+# --- Case 59: idempotent park retry — already parked, byte-identical, nothing to push ---
+# park_and_exit()'s committed=0 arm: the node on origin/main ALREADY carries a
+# byte-identical office_hours block (a peer parked it first), so the park write
+# leaves the tree clean, nothing is committed, nothing is pushed, and
+# PUSHED_SHA stays empty. print_verdict() therefore cannot answer from
+# ancestry and falls through to the content comparison — which must compare
+# against the PARK's intended content (origin/main's content plus office_hours,
+# recorded by park_write), not against SNAP_DIR (this writer's unlanded
+# pre-park edit, which is guaranteed to differ) and not against a --prune id's
+# absence (the deletion was not landed; the office_hours record is the intent).
+# Both of those wrong questions answer `not-landed` on a park that IS on main,
+# which land-align-round then refuses to declare a park for.
+#
+# Shape: writer A lands an edit; stale writers B and C each --prune the same id.
+# B's prune conflicts with A's landed edit and parks (landing the office_hours
+# commit). C's prune then conflicts identically and re-parks onto B's already-
+# landed record — byte for byte, since the prune recommendation carries no
+# per-run path.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+W59="$WORK/w59"
+make_clone "$W59" writer-59
+edit_line "$A" t-park-retry 1 landed-edit
+run_gc "$A" t-park-retry >/dev/null 2>&1
+rm -f "$B/intentions/t-park-retry.md"
+out59b="$(run_gc "$B" --prune t-park-retry 2>&1)"; rc59b=$?
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out59b")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+sha_after_park="$(origin_sha)"
+rm -f "$W59/intentions/t-park-retry.md"
+out59="$(run_gc "$W59" --prune t-park-retry 2>&1)"; rc59=$?
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out59")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+sha_after_retry="$(origin_sha)"
+content59="$(origin_show t-park-retry 2>/dev/null)"
+if [[ $rc59b -eq 1 ]] \
+   && [[ $rc59 -eq 1 ]] \
+   && [[ "$sha_after_retry" == "$sha_after_park" ]] \
+   && grep -q 'graph-commit: verdict: parked ' <<<"$out59" \
+   && ! grep -q 'graph-commit: verdict: not-landed ' <<<"$out59" \
+   && [[ "$(verdict_lines "$out59")" == "1" ]] \
+   && grep -q 'landed-edit' <<<"$content59" \
+   && grep -q 'office_hours' <<<"$content59"; then
+  ok "idempotent park retry: an already-parked byte-identical node needs no push and still reports verdict: parked (not not-landed)"
+else
+  no "idempotent park retry (rc_b=$rc59b rc=$rc59 sha_moved=$([[ "$sha_after_retry" == "$sha_after_park" ]] && echo no || echo yes))"; printf '%s\n' "$out59"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
