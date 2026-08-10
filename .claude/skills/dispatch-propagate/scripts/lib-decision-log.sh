@@ -6,9 +6,14 @@
 # sites) emits a structured per-tick routing decision as one JSON line. This
 # helper owns the append: it is the SINGLE shared writer of the decision log.
 # Callers build a complete JSON object with `jq -n`/`jq -c` and hand the string
-# to `decision_log_append`; the helper ensures the directory, rotates the log
-# when it grows too large, and appends the line under a flock so concurrent
-# per-worker writers never interleave a rotate-then-append.
+# to `decision_log_append`. The helper itself guarantees single-line, valid-JSON
+# output on disk regardless of whether the caller passed compact (`jq -nc`) or
+# pretty-printed (`jq -n`) JSON: it canonicalizes the argument through `jq -c .`
+# before appending, so callers may use either form. Non-JSON/unparseable input
+# is silently dropped rather than corrupting the log (consistent with the
+# always-non-fatal contract below). The helper ensures the directory, rotates
+# the log when it grows too large, and appends the line under a flock so
+# concurrent per-worker writers never interleave a rotate-then-append.
 #
 # Usage: source this file, then call:
 #   decision_log_append <json-string>
@@ -80,27 +85,41 @@ if [[ -z "${_LIB_DECISION_LOG_LOADED:-}" ]]; then
     # `return 0` below guarantees the function never propagates a failure to a
     # caller running under `set -e`.
     {
-      mkdir -p "$(dirname "$DECISION_LOG_FILE")"
+      # Canonicalize the caller's argument to single-line JSON up front, once,
+      # reused by both the flock and no-flock branches below. This is NOT the
+      # "no read/parse path" boundary the header describes — that note scopes
+      # what this helper does with the LOG FILE (it never reads back prior
+      # entries); this parses the incoming ARGUMENT on each call, which is a
+      # different boundary. If the argument is not valid JSON, `jq -c .` fails
+      # and the `&&` below short-circuits the whole wrapped block non-zero, so
+      # the append is skipped — the outer `return 0` still guarantees the
+      # function itself never propagates a failure to the caller.
+      local canonical_json
+      canonical_json=$(printf '%s' "$json" | jq -c .) &&
 
-      local lockfile="${DECISION_LOG_FILE}.lock"
+      mkdir -p "$(dirname "$DECISION_LOG_FILE")" &&
 
-      if command -v flock >/dev/null 2>&1; then
-        # Serialize rotate+append across concurrent per-worker writers. A failed
-        # or timed-out flock (fd 9) exits the subshell 0 — the append is dropped
-        # rather than racing or blocking, consistent with the best-effort
-        # contract. The 2-second wait (-w 2) bounds the worst-case hang when
-        # another live process holds the lock, so this EXIT-trap handler can
-        # never stall dispatch-stop.sh / dispatch-select-tick indefinitely.
-        (
-          flock -w 2 9 || exit 0
+      {
+        local lockfile="${DECISION_LOG_FILE}.lock"
+
+        if command -v flock >/dev/null 2>&1; then
+          # Serialize rotate+append across concurrent per-worker writers. A failed
+          # or timed-out flock (fd 9) exits the subshell 0 — the append is dropped
+          # rather than racing or blocking, consistent with the best-effort
+          # contract. The 2-second wait (-w 2) bounds the worst-case hang when
+          # another live process holds the lock, so this EXIT-trap handler can
+          # never stall dispatch-stop.sh / dispatch-select-tick indefinitely.
+          (
+            flock -w 2 9 || exit 0
+            _decision_log_rotate
+            printf '%s\n' "$canonical_json" >> "$DECISION_LOG_FILE"
+          ) 9>"$lockfile"
+        else
+          # No flock available — degrade to a plain rotate+append (still non-fatal).
           _decision_log_rotate
-          printf '%s\n' "$json" >> "$DECISION_LOG_FILE"
-        ) 9>"$lockfile"
-      else
-        # No flock available — degrade to a plain rotate+append (still non-fatal).
-        _decision_log_rotate
-        printf '%s\n' "$json" >> "$DECISION_LOG_FILE"
-      fi
+          printf '%s\n' "$canonical_json" >> "$DECISION_LOG_FILE"
+        fi
+      }
     } 2>/dev/null || true
     return 0
   }
