@@ -36,6 +36,7 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-30T16:11:25Z
     mergeCommitSha: c2a7970c0b7b773f1e0b973422961aec52cdcc66
@@ -43,109 +44,30 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: "/qa-main: all 3 needs-main residue items on
-    tactic-graph-tick-node-lane-auto-merge (id 7, 8, 9) are
-    non-browser-verifiable — none carries a url_path, and each asks whether a
-    live dispatch-select-tick cycle merges/holds a *different, future* node-lane
-    PR in production (graph-auto-merge auto-merge, transition-node's
-    deferred-merge line, and the scope-stale hold-and-demote path). There is no
-    prod URL or UI surface to observe for any of the three; the qa-fix triage
-    that filed them already classified them as \"not verifiable at merge time\"
-    for the same reason. Source PR #2904 is confirmed MERGED (mergedAt
-    2026-07-30T16:11:25Z, mergeCommit c2a7970c), so the deploy-readiness signal
-    is favorable — this is a routing barrier (item 1 of the qa-main decision
-    tree: not browser-verifiable), not a deploy-lag or ambiguity case."
-  since: 2026-07-30
-  recommendation: >-
-    ## What to verify
-
-
-    All three residue items need direct observation of a live tick cycle, not a
-
-    browser check, so `/qa-main` cannot resolve them itself. Here is a concrete
-    lead
-
-    plus what to look for on each.
-
-
-    **Promising lead already found:** PR #2986 ("bootstrap: node-terminal
-
-    declaration + dump-node manifest CAS guard") merged at 2026-07-30T16:17:38Z
-    —
-
-    6 minutes after PR #2904 (this tactic) merged at 16:11:25Z. Its head branch
-
-    (`bootstrap-integrity-guards`) is non-numeric — a node-lane branch — and it
-
-    carries **zero labels**, i.e. it merged label-free. Right after, origin/main
-
-    commit `b552dfa2` ("narrow the qa-fix terminal-declaration node to Unit 2;
-
-    prune the shipped dump-node manifest tactic") shows the corresponding node
-    was
-
-    pruned, consistent with a clean review → auto-merge → `main-qa`/`done` →
-
-    prune pass. This is strong circumstantial evidence the new
-    `graph-auto-merge`
-
-    path already fired once in production, but it has not been confirmed against
-
-    the actual dispatch-tick session transcript.
-
-
-    ### id 7 — first node-lane tactic auto-merges via the tick in production
-
-
-    - Find the dispatch-tick session that ran around 2026-07-30T16:11–16:18Z
-      (`claude agents --json` history, or the dispatch session logs) and confirm it
-      printed `merge: merged #2986 (bootstrap-integrity-guards)` from the new
-      `graph-auto-merge` reconciler (wired in
-      `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick`, the block
-      right after the legacy issue-lane auto-merge and before
-      `reconcile-graph-merged`).
-    - If that line is present, id 7 is confirmed working end-to-end and can be
-      closed out; if PR #2986 merged some other way (e.g. a human `gh pr merge`),
-      keep watching the next node-lane PR that reaches clean review.
-
-    ### id 8 — `transition-node` defers the merge and prints the new line
-
-
-    - In the same tick/session window, look for `transition-node`'s output on
-      `bootstrap-integrity-guards` (or whichever node reached clean review) —
-      expect `review-complete <id> (merge deferred to tick)` and **no**
-      `dispatch-auto-merge` invocation from that script itself
-      (`.claude/skills/dispatch-propagate/scripts/transition-node`, arm block
-      removed at what was `:166-174`).
-
-    ### id 9 — a scope-edited node is held and demoted
-
-
-    - No evidence yet either way. Needs a node that reaches `phase:review` +
-      `reviewed` marker, then has its scope edited before the tick's freshness
-      re-check runs. Watch the next occurrence, or deliberately construct one: put
-      a node through review, then touch a file the tactic's scope fingerprint
-      covers before the next tick, and confirm the tick emits `held <id>
-      (scope-stale)` (no merge) and the next selection tick demotes it to
-      `implement`.
-
-    ## Suggested resolution
-
-
-    Since id 7/8 already have a strong real-world candidate (PR #2986), the
-    fastest
-
-    path is: pull the dispatch session transcript covering 16:11–16:18Z on
-
-    2026-07-30, grep for `graph-auto-merge`, `merge:`, and `review-complete`,
-    and
-
-    confirm the exact lines above. If confirmed, mark ids 7 and 8 done via a
-    normal
-
-    graph-commit needs-main-residue update; only id 9 needs a fresh live
-
-    observation.
+  reason: "needs-main item 9b (graph-auto-merge's fail-closed 'held <id>
+    (scope-stale)' / 'held <id> (missing-stamp)' hold at the review->merge
+    arming point) has not fired in production. Re-verified 2026-08-05:
+    journalctl --user SYSLOG_IDENTIFIER=dispatch-tick over its full retained
+    history (2026-06-03 through 2026-08-05T18:16 EDT) returns zero lines
+    matching 'held <id> (scope-stale)' or 'held <id> (missing-stamp)'. The
+    park-clearing commit's claim that the scope-drift demote path fired on all
+    three 2026-08-05 merges (#3047, #2990, #3049) is only partly accurate: the
+    scope-sweep DEMOTE path (item 9a, a distinct already-discharged mechanism)
+    fired for exactly one of the three --
+    tactic-align-tactics-mark-terminal-skipped, same tick as its #3047 merge --
+    and did not fire for the #2990 or #3049 nodes. Neither event is item 9b: 9b
+    is graph-auto-merge's own pre-merge arming hold, separate from the tick's
+    scope-sweep. This is a narrow race (a node going scope-stale in the window
+    between review completion and the tick's merge-arming pass) with no
+    predictable recheck interval; re-check after further tick cycles
+    accumulate."
+  since: 2026-08-05
+  recommendation: No author decision needed -- re-selection only. Items 7, 8, and
+    9a remain discharged exactly as recorded in the node body on 2026-07-31.
+    Only 9b is outstanding. When a 'held <id> (scope-stale)' or 'held <id>
+    (missing-stamp)' line appears for a real node in a dispatch-tick journal
+    line, record it under id 9b in the node's needs-main residue section and
+    re-select for /qa-main.
   session_type: other
 pace_exempt: false
 rounds: null
@@ -226,9 +148,11 @@ fingerprint — merges it label-free.
 - Tick wiring pattern: `dispatch-select-tick:424-440` (the existing issue-lane
   auto-merge block, gated on `[[ -z "$OPEN_MB" ]]`) is the exact shape to mirror
   for the new graph-lane block.
-- Existing tests: `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`
-  — the `dispatch-auto-merge` section (~L39222+) and the tick auto-merge-wiring
-  assertions (~L29286-29327) are the templates for the new reconciler's tests.
+- Existing tests: `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`
+  — the `dispatch-auto-merge` section and the tick auto-merge-wiring
+  assertions — are the templates for the new reconciler's tests, alongside
+  `.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh` (the new
+  script's own suite).
 
 ## Units of work
 
@@ -295,8 +219,8 @@ Behavior:
 label-gated reconciler stays exactly as-is for the draining gh queue).
 
 **Tests (in this unit).** Add a `graph-auto-merge` section to
-`test-dispatch-scripts.sh` modeled on the existing `dispatch-auto-merge` section
-(~L39222+): fake `lib.sh` helpers + a fake `gh` and fixture nodes to assert
+`test-graph-auto-merge.sh` modeled on the existing `dispatch-auto-merge` section
+of `test-dispatch-select-tick.sh`: fake `lib.sh` helpers + a fake `gh` and fixture nodes to assert
 (a) a `phase:review` + `reviewed`-marker + green-CI + MERGEABLE node merges and
 emits `merged #<pr> (<id>)`; (b) a `phase:review` node WITHOUT the `reviewed`
 marker is skipped; (c) `pending` CI and `failing` CI are skipped (no merge);
@@ -343,7 +267,7 @@ in `apply-node-transition.ts:174-178`. Renaming it (`armMerge`→`reviewComplete
 would be marginally cleaner greenfield but touches the pure layer and its tests
 for no behavioral gain; keep the name and only relocate the *action*.
 
-**Tests (in this unit).** Update any `test-dispatch-scripts.sh` assertion that
+**Tests (in this unit).** Update any `test-transition-node.sh` assertion that
 expects `transition-node` to emit `armed-merge` or to invoke `dispatch-auto-merge`
 on a clean review, to expect the new `review-complete ... (merge deferred to
 tick)` line and NO merge call.
@@ -368,7 +292,7 @@ unconditionally, and already honors a grace window at
 subsequent tick without racing a still-settling merge.
 
 **Tests (in this unit).** Add a tick-wiring assertion modeled on the existing
-issue-lane auto-merge-wiring test (`test-dispatch-scripts.sh:~29286-29327`):
+issue-lane auto-merge-wiring test in `test-dispatch-select-tick.sh`:
 `graph-auto-merge` IS invoked when main is known-good (`OPEN_MB` empty) and its
 `merged #N (id)` lines are prefixed `merge:`; and it is NOT invoked (no `merge:`
 line) when main is broken/unknown.
@@ -396,7 +320,7 @@ Auto-runnable — the dispatch script test suite covers the reconciler gating, t
 `transition-node` arm removal, and the tick wiring:
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+bash .claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh
 ```
 
 ```verify
@@ -442,7 +366,8 @@ complementary, not blocking; plan against current `origin/main`
 All script-verifiable acceptance criteria passed at QA time (the new
 `graph-auto-merge` script's gates, `transition-node`'s arm removal, the
 `dispatch-select-tick` wiring, the `review-fix/SKILL.md` doctrine update, the
-full `test-dispatch-scripts.sh` suite at 2976/2976, and `run-lint.sh`). The
+full pre-split monolithic test suite (since split into per-SUT files) at
+2976/2976, and `run-lint.sh`). The
 following three acceptance criteria are genuinely only verifiable by observing a
 live tick cycle acting on a real downstream node-lane PR after this merges — the
 QA disposition triage classified all three `needs-main` (planned deferral, not a

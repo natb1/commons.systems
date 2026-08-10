@@ -26,7 +26,9 @@ rationale: >-
   commitments, channel campaigns) is gated on an explicit tier-3 entry
   declaration recorded on strategy-progressive-validation. As of 2026-07-06 that
   declaration has not been made: the design is still in flux and the author has
-  not committed practitioner-support bandwidth.
+  not committed practitioner-support bandwidth. Narrowed 2026-08-04: passive
+  articulation surfaces on owned properties are readiness-posture work, ungated
+  — see the articulation-vs-commitment clarification.
 reading: null
 gap: null
 serves:
@@ -217,6 +219,47 @@ clarifications:
       this record: any store that will not overwrite a published object
       satisfies the invariant, so a later move off GitHub releases needs no
       amendment here."
+  - question: Does the tier-3 gate block the README practitioner funnel?
+    answer: "Narrowed 2026-08-04 interview: the tier-3 invitation gate distinguishes
+      articulation from commitment. Passive articulation surfaces on owned
+      properties — the README’s practitioner abstract and runbook, the landing
+      about page — are readiness-posture work, valid at tier 1 (the author must
+      be able to socialize the value proposition even if only to support tier-1
+      development) and ship ungated, including describing the mechanics of
+      consuming this repo as a Claude plugin. What remains gated on the tier-3
+      declaration: support commitments, marketplace/directory submissions,
+      channel campaigns, and any active solicitation of practitioners."
+  - question: What is the practitioner runbook, and how does it relate to the gated
+      entry-point tactic?
+    answer: "(Recorded 2026-08-04 interview.) The README’s runbook is the three-step
+      funnel: install this repo’s skills as a Claude plugin → run /mount
+      (dialectic onboarding + mechanical mount of this graph as a delegatee) →
+      run /align <directive> on the practitioner’s own graph. Under the
+      articulation narrowing the runbook ships ungated — it is description on an
+      owned surface. It partially delivers the articulation half of
+      tactic-workflow-entry-point; that tactic’s gated remainder narrows to
+      entry-point features implying support or active solicitation (standing
+      support surfaces, submissions, campaigns), which still wait on the tier-3
+      declaration with the support boundary written first."
+  - question: What is the /mount skill?
+    answer: "(Recorded 2026-08-04 interview.) A general mount skill, lanes selected
+      by context, folding in every recorded mount use case rather than being
+      onboarding-only: (a) onboarding lane, triggered by the absence of an
+      intentions/ graph in the invoking repo — periagoge dialectic (the
+      practitioner articulates their own model of goals/alignment before
+      Claude’s account appears; load-bearing concepts taught Socratically), then
+      the mechanical mount: scaffold the practitioner’s own graph (their virtue
+      roots, first nodes), record this repo’s graph as a mounted delegatee (a
+      delegation record with divergence/irreversibility axes, by-reference shape
+      per strategy-graph-mounts), enroll everything taken on trust as
+      born-parked review items in the practitioner’s own curriculum, and
+      converge on a directive handed to /align; (b) tradition lane — deferring
+      to a tradition during /align or curriculum review mounts the tradition’s
+      graph; (c) delegation lane — delegating to a vendor mounts the vendor’s
+      virtues as constraints. /mount fully supersedes /align’s no-prompt
+      onboarding funnel: no-prompt /align delegates to /mount. Full design at
+      tactic-mount-skill (serves this strategy and strategy-graph-mounts, the
+      artifact’s two owners)."
 tooling_goals: []
 success_signal:
   observable: practitioners encountering and forking the workflow — entry-point
@@ -241,8 +284,9 @@ attributes:
     - a practitioner audience for autonomy tooling exists and is reachable
       without engagement platforms
     - tier-3 (practitioner) entry is declared on strategy-progressive-validation
-      before any invitation or obligation ships — publication channels, external
-      submissions, support commitments; preparation and artifact work are not
-      gated
+      before any commitment ships — support commitments, marketplace/directory
+      submissions, channel campaigns, active solicitation; passive articulation
+      on owned surfaces (README abstract and runbook, landing about) plus
+      preparation and artifact work are not gated (narrowed 2026-08-04)
 ---
 # Make the dispatch workflow forkable in practice — a practitioner entry point, not just an open repo

@@ -1577,4 +1577,108 @@ if claude_agents_registry_reachable 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "probe: a missing pgrep reports unreachable (no corroboration)" "127" "$rc"
 ca_teardown
 
+# --- Test 71: worktree_occupancy_state — the four-state occupancy verdict ----
+# The granular classifier behind worktree_has_live_session. The TOKEN on stdout
+# is the contract; the function ALWAYS returns 0 (same shape as
+# dispatch_pause_state). `terminal` is the state the invalid-state lane exists
+# to see: nothing is running, yet the claim survives.
+echo "Test: worktree_occupancy_state distinguishes free / live / terminal / unknown"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+
+# free — the daemon answered and nothing claims this worktree.
+write_fake_claude '[]' 0
+out=$(worktree_occupancy_state "$CA_DIR"); rc=$?
+assert_eq "occupancy: empty registry yields free" "free" "$out"
+assert_eq "occupancy: free still returns 0 (token is the contract)" "0" "$rc"
+# The evidence globals are observable only on a DIRECT call — a `$( )` call runs
+# in a subshell whose assignments cannot escape. Assert them the way a real
+# caller must read them.
+worktree_occupancy_state "$CA_DIR" >/dev/null
+assert_eq "occupancy: free publishes the state global" "free" "$WORKTREE_OCCUPANCY_STATE"
+assert_eq "occupancy: free carries no session id" "" "$WORKTREE_OCCUPANCY_SESSION_ID"
+
+# live — a working session is a VALID claim, never an invalid state.
+write_fake_claude "[{\"sessionId\":\"sess-live\",\"status\":\"busy\",\"name\":\"$ca_basename\",\"state\":\"working\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR"); rc=$?
+assert_eq "occupancy: a working session yields live" "live" "$out"
+assert_eq "occupancy: live returns 0" "0" "$rc"
+
+# terminal — at least `done` and `error`, both from the shared enumeration.
+write_fake_claude "[{\"sessionId\":\"sess-done\",\"name\":\"$ca_basename\",\"state\":\"done\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null); rc=$?
+assert_eq "occupancy: a done session yields terminal" "terminal" "$out"
+assert_eq "occupancy: terminal returns 0" "0" "$rc"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "occupancy: terminal publishes the holder's session id" \
+  "sess-done" "$WORKTREE_OCCUPANCY_SESSION_ID"
+
+write_fake_claude "[{\"sessionId\":\"sess-err\",\"name\":\"$ca_basename\",\"state\":\"error\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "occupancy: an error session yields terminal" "terminal" "$out"
+
+# The operator diagnostic names whichever terminal state matched, not just `done`.
+diag=$(worktree_occupancy_state "$CA_DIR" 2>&1 >/dev/null)
+case "$diag" in
+  *"held by a error-but-not-removed session sess-err"*) diag_ok=yes ;;
+  *) diag_ok="no: $diag" ;;
+esac
+assert_eq "occupancy: the diagnostic names the matched terminal state" "yes" "$diag_ok"
+
+# unknown — a daemon failure and whitespace-only output. Never `terminal`:
+# a blocked read must not manufacture an invalid state.
+write_fake_claude '' 1
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null); rc=$?
+assert_eq "occupancy: a daemon-query failure yields unknown" "unknown" "$out"
+assert_eq "occupancy: unknown returns 0" "0" "$rc"
+
+write_fake_claude '   ' 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "occupancy: whitespace-only output yields unknown" "unknown" "$out"
+
+# exclude_sid suppresses a self-match, leaving the worktree free.
+write_fake_claude "[{\"sessionId\":\"sess-self\",\"status\":\"busy\",\"name\":\"$ca_basename\",\"state\":\"working\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR" "sess-self")
+assert_eq "occupancy: exclude_sid suppresses the caller's own claim" "free" "$out"
+out=$(worktree_occupancy_state "$CA_DIR" "sess-other")
+assert_eq "occupancy: exclude_sid does not suppress another session's claim" "live" "$out"
+
+# A missing path argument is unknown (fail safe), never free.
+out=$(worktree_occupancy_state "" 2>/dev/null)
+assert_eq "occupancy: an empty path yields unknown, never free" "unknown" "$out"
+ca_teardown
+
+# --- Test 72: worktree_has_live_session's boolean contract is unchanged ------
+# The wrapper is the regression surface for every existing caller
+# (graph-select-target, dispatch-sweep, lib-graph-worktree.sh,
+# lib-standdown-recheck.sh, .claude/hooks/worktree-remove.sh): ONLY a definite
+# `free` releases the worktree. A terminal holder must still read as occupied —
+# promoting it to a first-class verdict must not un-block it.
+echo "Test: worktree_has_live_session still folds terminal and unknown to occupied"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+
+write_fake_claude "[{\"sessionId\":\"sess-done\",\"name\":\"$ca_basename\",\"state\":\"done\"}]" 0
+if worktree_has_live_session "$CA_DIR" 2>/dev/null; then live=occupied; else live=free; fi
+assert_eq "wrapper: a terminal row still reports occupied" "occupied" "$live"
+
+write_fake_claude '[]' 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "wrapper: a free worktree still reports free" "free" "$live"
+
+write_fake_claude '' 1
+if worktree_has_live_session "$CA_DIR" 2>/dev/null; then live=occupied; else live=free; fi
+assert_eq "wrapper: an unknown read still folds to occupied" "occupied" "$live"
+
+# The done-holder stderr diagnostic must still reach existing callers through
+# the wrapper — the wrapper captures stdout, so stderr has to pass through.
+write_fake_claude "[{\"sessionId\":\"sess-done\",\"name\":\"$ca_basename\",\"state\":\"done\"}]" 0
+diag=$(worktree_has_live_session "$CA_DIR" 2>&1 >/dev/null || true)
+case "$diag" in
+  *"claude rm sess-done"*) diag_ok=yes ;;
+  *) diag_ok="no: $diag" ;;
+esac
+assert_eq "wrapper: the operator diagnostic still reaches stderr" "yes" "$diag_ok"
+ca_teardown
+
 report_results

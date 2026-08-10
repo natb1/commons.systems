@@ -35,7 +35,7 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-manual-path-reservation-sweep
   pr: 2964
@@ -44,11 +44,32 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-10T06:16:11Z
+    mergeCommitSha: c80ef57f3084648078e818b979049858da6d1f00
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-manual-path-reservation-sweep
-office_hours: null
+blocked_by: []
+office_hours:
+  reason: "needs-main item 16 (real-world confirmation) requires a multi-day
+    window of live paused+manual-only operation with no live-worker
+    phantom-count recurrence; PR #2964 merged only ~17 minutes ago
+    (2026-08-10T06:16:11Z), so the window has not accumulated yet — re-check
+    after several days of manual-tick history"
+  since: 2026-08-10
+  recommendation: "No author decision needed, re-selection only. Lane-M already
+    confirmed: (1) reservation_sweep 1>&2 || true now runs in
+    dispatch-select-tick's --manual fan-out block immediately before
+    RESV=$(reservation_count), with the comment updated to cite the
+    paused+manual reaper-dormancy reasoning (grep-verified in
+    dispatch-select-tick); (2) the new stale-dead-session-reservation-reclaim
+    test added to test-dispatch-select-tick.sh's sel_tick manual-fan-out group;
+    (3) full suite run sandbox-off: 226/226 passed, 0 failed. On re-selection,
+    check journalctl for manual-tick 'live=N' lines over the elapsed window and
+    confirm no recurrence of the 2026-07-23 'SPAWN_N=1 ... live=10 with no live
+    workers' phantom shape."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -113,7 +134,7 @@ branch (already sweeps).
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
 ```
 
 ### Unit 2 — test coverage
@@ -121,7 +142,7 @@ branch (already sweeps).
 **Recommended model:** sonnet — mechanical test addition following the existing
 `rl_setup` stale-marker pattern and the `sel_tick` manual-fan-out group.
 
-**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`,
 the `sel_tick` manual-fan-out test group. Add a test that plants a stale
 dead-session reservation marker (a `session=` absent from `sel_tick_setup`'s fake
 `claude_agents_list_all`, with `DISPATCH_RESERVATION_NOW` past the 30s boot
@@ -131,7 +152,18 @@ excludes the stale marker (the sweep ran), and (b) the marker file under
 
 **Reuse:** `reservation_write` / `reservation_exists` / `reservation_sweep`
 (`lib-reservation-ledger.sh`); `sel_tick_setup`'s `DISPATCH_RESERVATION_DIR` +
-fake-agents wiring; the `rl_setup` group's dead-session-sweep test as the
-reclaimable-marker reference.
+fake-agents wiring, defined in
+`.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`; the
+`rl_setup` group's dead-session-sweep test, now in
+`.claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh`, as
+the reclaimable-marker reference.
 
 **Dependencies:** Unit 1.
+
+## needs-main residue
+
+- **id:** 16
+  **title:** Real-world confirmation that phantom `live=N` no longer inflates on the manual path
+  **URL path:** current
+  **Expected outcome:** `live=N` on manual ticks matches observed live workers over a multi-day window of live paused+manual-only operation; no recurrence of the `SPAWN_N=1 ... live=10` phantom-worker shape diagnosed 2026-07-23.
+  **Finding:** Planned deferral — only observable over a multi-day window of live paused+manual-only operation, not assertable at merge time from the test harness (which can only plant a synthetic marker). Only repeated observation of the live router output confirms the incident class is fully closed.

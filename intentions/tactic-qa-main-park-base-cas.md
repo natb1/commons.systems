@@ -205,11 +205,11 @@ Four files.
 - Markers must **not** be consumed on any failure, including exit 3. The existing code only `rm -f`s on success (`:93`); keep that. Do **not** retry, and do **not** re-invoke `park-node` without `--base`.
 - Update the hook's header block (`:24–29`) to describe the base marker the same way it describes `office-hours-pr`.
 
-The resulting exit-3 outcome — deliberate, and to be stated in both the skill and the hook comment: `park-node` writes no `node-terminal` marker on a refusal (it writes one only after a landed park, `park-node:277`), so `dispatch-self-close --node` HOLDs the job alive instead of reaping it (the gate tested at `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:18124–18142`). The node is left at its newer, correct state; the held session is visible and resumable, and re-verification is the next `/qa-main` run — which is the re-diagnosis the doctrine requires. This is an operational stall requiring a human glance, not a graph corruption, and it is strictly better than the alternative of reverting a landed transition.
+The resulting exit-3 outcome — deliberate, and to be stated in both the skill and the hook comment: `park-node` writes no `node-terminal` marker on a refusal (it writes one only after a landed park, `park-node:277`), so `dispatch-self-close --node` HOLDs the job alive instead of reaping it (the gate tested at `.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh`). The node is left at its newer, correct state; the held session is visible and resumable, and re-verification is the next `/qa-main` run — which is the re-diagnosis the doctrine requires. This is an operational stall requiring a human glance, not a graph corruption, and it is strictly better than the alternative of reverting a landed transition.
 
 **(c) `.claude/skills/ref-diagnosis-time-cas/SKILL.md:18–20`.** Rewrite the "NOT needed … e.g. the Stop-hook backstop" carve-out. The distinguishing criterion is the *gap*, not the caller: a provisioning failure diagnosed and parked in the same breath needs no pin; a `/qa-main` cannot-verify park, whose verification pass runs for minutes between the front-door read and the Stop-hook park, does. Document the marker seam (`office-hours-base`) and the exit-3 disposition described above (hold, no re-park, re-verify on the next selection) so the reference stays the single home of this contract.
 
-**(d) `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`** — new cases in the `=== dispatch-stop ===` block (starts `:20074`, ends before `:20351`). The fixture already exists: `stopnc_setup` at `:20106` installs a fake `park-node` that appends `"$*"` to `park-calls.log` and honors a `park-exit` override file; `stopnc_state` writes `state.json`; `stopnc_run` runs the hook with `CLAUDE_JOB_DIR` set and captures stderr to `$ROOT/hook-stderr.log`. Follow the existing argv-assertion style (see the `park-node <id> <reason>` and `+ recommendation` cases at ~`:20232–20256`). Add:
+**(d) `.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh`** — new cases in the `=== dispatch-stop ===` block (starts `:20074`, ends before `:20351`). The fixture already exists: `stopnc_setup` at `:20106` installs a fake `park-node` that appends `"$*"` to `park-calls.log` and honors a `park-exit` override file; `stopnc_state` writes `state.json`; `stopnc_run` runs the hook with `CLAUDE_JOB_DIR` set and captures stderr to `$ROOT/hook-stderr.log`. Follow the existing argv-assertion style (see the `park-node <id> <reason>` and `+ recommendation` cases at ~`:20232–20256`). Add:
 1. base marker present → argv is `--base <sha> <id> <reason>` (and with a recommendation, `--base <sha> <id> <reason> <reco>`).
 2. base + pr markers both present → both flags precede the id.
 3. base marker absent → argv unchanged from today (no `--base`).
@@ -218,7 +218,7 @@ The resulting exit-3 outcome — deliberate, and to be stated in both the skill 
 
 **Out of scope**: any change to `packages/intentionsutil/scripts/park-node` itself (`--base` already works and is covered by `packages/intentionsutil/scripts/test-park-node.sh` cases 12–15); wiring `fix-checks`, `review-fix`, `qa-fix` or `dispatch-conflict` to write `office-hours-base` (they can adopt the seam later — note them as follow-up candidates in the skill/reference prose, do not edit them); anything in `graph-commit`.
 
-**Reuse**: `park-node`'s existing `--base` bare-40-hex form (`park-node:173–179`) — pass the sha alone, not `<id>=<sha>`, and not a manifest; the `_OH_PR` marker-read pattern at `dispatch-stop.sh:71–77`; the `stopnc_*` harness helpers in `test-dispatch-scripts.sh`.
+**Reuse**: `park-node`'s existing `--base` bare-40-hex form (`park-node:173–179`) — pass the sha alone, not `<id>=<sha>`, and not a manifest; the `_OH_PR` marker-read pattern at `dispatch-stop.sh:71–77`; the `stopnc_*` harness helpers in `test-dispatch-stop-hook.sh`.
 
 **Shell rules**: net-new lines in committed `.sh` files are linted by `.claude/skills/dispatch-propagate/scripts/lint-prose-rules.sh` (run from `run-lint.sh`) — never `echo "$JSON" | jq`; use `jq <<<"$VAR"`.
 
@@ -264,7 +264,7 @@ If the author judges `graph-commit` too broad to auto-approve, land the list **w
 
 ```verify
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/hooks/test-approve-workflow-commands.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && packages/intentionsutil/scripts/test-park-node.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/run-lint.sh

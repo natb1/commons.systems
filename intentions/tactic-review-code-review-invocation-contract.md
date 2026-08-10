@@ -39,7 +39,7 @@ attention:
     mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
     retire the interim scale; do not orphan this boost."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-review-code-review-invocation-contract
   pr: 3007
@@ -50,36 +50,14 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T03:00:25Z
     mergeCommitSha: 7c7728296e47420017e4e9949dffc26fba7d3e62
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Three needs-main residue items on
-    tactic-review-code-review-invocation-contract (PR #3007, merged
-    2026-08-03T03:00:25Z) require a real subsequent /review-fix pass that has
-    not happened yet: (1) a live nested claude -p '/code-review low --fix' run
-    actually completing and writing the working tree, (2) --comment actually
-    posting the review to a PR, and (3) whether low effort is the right
-    cost/quality point, which additionally needs 3-5 real passes plus a
-    dispatch-token-audit run per the node's own Verification section. Checked at
-    re-selection time (2026-08-03T03:32Z, 32 minutes post-merge): gh pr list
-    --repo natb1/commons.systems --state merged --limit 15 shows PR #3007 as the
-    most recently merged PR with nothing merged after it, so no /review-fix pass
-    has run on this repo since the mechanism landed. journalctl --since the
-    merge time shows no dispatch/review-fix activity. Earliest useful re-check:
-    after the next PR goes through the review phase post-merge (or after 3-5
-    such passes for item 3)."
-  since: 2026-08-03
-  recommendation: No author decision needed — re-selection only. When re-checked,
-    look for a subsequent review-fix run's transcript or the
-    dispatch-code-review out-dir (tmp/code-review-<N>) on a later PR to confirm
-    status=ok and a real PR comment from --comment; after 3-5 such passes, run
-    /dispatch-token-audit and compare against the Unit 1 baseline in
-    references/code-review-invocation.md to decide item 3.
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -812,3 +790,54 @@ classified all three `needs-main`:
    Planned deferral — the PR's own "Out of scope" section defers effort-level
    tuning to the `strategy-token-economy` follow-up; needs 3-5 real passes plus a
    `/dispatch-token-audit` run to inform.
+
+## Office-hours sitting 2026-08-09 — all three residue items closed
+
+**Disposition: closed. Item 3 answered against `low`; the replacement work is
+filed as its own node.** Author ruling at the 2026-08-09 sitting. `phase: done`,
+park cleared.
+
+| item | outcome |
+|---|---|
+| 1 — nested `code-review low --fix` pre-stage completes and writes the tree on a real PR diff | PASS, confirmed across three merged PRs |
+| 2 — `--comment` actually posts a PR comment | CONTRADICTED; carried by `tactic-review-code-review-invocation-contract-main-qa-regression` |
+| 3 — is `low` the right cost/quality point? | ANSWERED: no |
+
+### Item 2 is not closed here, it is owned elsewhere
+
+Zero inline comments and zero reviews were observed across all three merged PRs
+despite `--comment` on every run. That defect is already filed as
+`tactic-review-code-review-invocation-contract-main-qa-regression`, which at the
+sitting read `phase: implement`, `status: raw`, unparked — i.e. moving. Nothing
+about item 2 is discharged by closing this node.
+
+### Item 3 — `low` does not hold; `max` directed
+
+The author ruled that `low` is not the right cost/quality point for the review
+phase and directed `max`. The token-audit evidence the park called for was not
+gathered: the author decided on quality grounds without it, so the audit spend
+was not incurred.
+
+**`max` cannot be reached by changing the effort argument.** This is a measured
+constraint, surfaced at the sitting from this node's own reference doc
+(`.claude/skills/review-fix/references/code-review-invocation.md` section 1.2):
+a `max` review of a real diff ran 2363 s (39 m 23 s), produced no output, and
+was killed with `exit=143` and 0 bytes captured. It exceeds both the Bash tool's
+600 000 ms cap and the proposed `DISPATCH_CODE_REVIEW_TIMEOUT:-540`. Because
+`claude -p` buffers all output until completion, a timed-out run is a total loss
+of a very expensive run, not a degraded result. The doc's own conclusion is
+explicit: run it detached with a resume-poll, or drop the effort — and
+`Design this deliberately; do not just raise the timeout constant.`
+
+**Filed as `tactic-review-effort-max-detached-resume-poll`** (`status: raw`,
+`attention.boost: 20`), which couples the effort raise and the detached
+resume-poll harness into ONE deliverable so `max` can never land without the
+harness that makes it viable. That node, not this one, carries the remaining
+work.
+
+### Park recommendation already discharged
+
+The park told the operator to release a frozen slot with `git worktree remove …`
+plus `claude rm 361f3b83-0fa7-4ea0-828c-0d611f68eaf3`. Verified at the sitting:
+the session is absent from `claude agents --json --all` and the worktree does not
+exist. Do not re-run those commands.

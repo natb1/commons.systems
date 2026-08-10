@@ -27,7 +27,7 @@ attention:
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
   tier: 1
-phase: null
+phase: done
 execution:
   branch: tactic-noncodegen-session-model-defaults
   pr: 2776
@@ -38,49 +38,16 @@ execution:
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-10T17:48:04Z
+    mergeCommitSha: a2f52f10b4872d15f2449423cb07a1b564d704d1
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/align-tactics misrouted onto this node: it is not a draft. router.ts's
-    isDraft (packages/intentionsutil/src/router.ts:147-149) treats any
-    phase:null as a draft with no allowance for the pre-schema-migration
-    attributes.phase squatter form. Commit f621caba (2026-07-10) parked this
-    merged/reviewed tactic (PR #2776, execution.markers qa-done+reviewed, body
-    already carries a full finalized plan plus a '## main-qa residue' checklist)
-    into that squatter shape (phase: null, attributes: {phase: main-qa}) to
-    represent it awaiting main-qa verification. But schema.ts's Phase enum
-    gained a first-class 'main-qa' value the very next day
-    (tactic-main-qa-phase, landed 2026-07-11) and the qa-main node-lane handler
-    (its Unit 2) now expects real phase: main-qa nodes — this node predates that
-    migration and was never backfilled onto it, unlike the 14 siblings
-    tactic-schema-migration-backfill (234e52e7, 2026-07-07) already lifted. The
-    selector's frozenTacticSelectable gate does not distinguish this stale
-    squatter shape from a genuine draft, so it queued this node for
-    align-tactics finalize/decompose — which would be actively harmful here
-    (re-planning or resetting phase:implement on already-shipped, reviewed
-    work). Declining to run the Workflow on this target."
-  since: 2026-08-04
-  recommendation: "Migrate this node's frontmatter directly to current schema
-    (phase: main-qa, attributes: {}) via a standalone state-only graph-commit,
-    mirroring precedent commit 234e52e7 — no qa/review needed, it is a pure
-    frontmatter fix. That unblocks the qa-main node-lane handler
-    (tactic-main-qa-phase Unit 2, .claude/skills/qa-main/SKILL.md) to run the
-    '## main-qa residue' checklist already recorded in this node's body and land
-    it to done. Separately: grep intentions/tactic-*.md for other lingering
-    'attributes:\\n  phase:' squatters (router.ts's isDraft has no guard against
-    this shape and would misroute any of them into align-tactics the same way)
-    and either backfill them or harden isDraft/progressionIndex to exclude
-    legacy attributes.phase carriers. Also refresh two stale doc claims found in
-    this session: align-tactics SKILL.md's 'Out of scope' section says main-qa
-    is 'not in schema.ts's PHASES' (false as of tactic-main-qa-phase), and
-    references/autonomy.md's office_hours.recommendation 'transitional note'
-    says the field 'is not yet in schema.ts' (also false — it landed)."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # Sonnet-by-default initialization for non-codegen sessions — fix the /qa-main routing gap and pass --model on the aux background-job spawns
 

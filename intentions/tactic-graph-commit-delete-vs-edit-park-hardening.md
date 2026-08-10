@@ -30,19 +30,57 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-graph-commit-delete-vs-edit-park-hardening
   pr: 2936
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-10T09:50:52Z
+    mergeCommitSha: dfa9a3b3e6e2b459b58ba710c674a1ad524c6742
+    graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Two needs-main residue items require author judgment, not tooling: (12)
+    whether the OVERRIDE-vs-CONFIRM office_hours recommendation text on a
+    delete/modify divergence is actionable enough that an operator can pick
+    correctly without reconstructing the git race from history is a subjective
+    readability/UX-sufficiency call; (13) whether re-materializing a deleted
+    node's edit as a local, untracked, human-arbitrated file is the right
+    operator-facing default for graph-commit's delete/modify divergence handling
+    is a product-intent/policy decision about graph-writer semantics. Neither
+    has a mechanical pass/fail check."
+  since: 2026-08-10
+  recommendation: "No MACHINE items on this node's needs-main residue -- both
+    items were pre-marked Verifiability: AUTHOR and nothing else needed
+    checking. Verified by reading current code
+    (packages/intentionsutil/scripts/graph-commit:1839-1867,
+    test-graph-commit.sh:212-223, Case 53 at line 2089): the shipped behavior is
+    NOT 'resurrect the deleted node onto origin/main with a park attached' as
+    item 13's finding text states -- that description is stale. Current
+    behavior: the landed deletion always STANDS on origin/main; nothing is ever
+    auto-pushed back; the session's edit is re-materialized ONLY as a local
+    untracked worktree file carrying office_hours, and the human must explicitly
+    pick one of two actions to clear the park -- OVERRIDE (re-run graph-commit
+    on the re-materialized file to re-land it) or CONFIRM (rm the file, since
+    main already reflects the deletion). Decide: (12) read that OVERRIDE/CONFIRM
+    recommendation text (graph-commit:1858-1867) and confirm an operator can act
+    on it without digging through git history, editing the copy if not; (13)
+    confirm this local-only, human-arbitrated re-materialization (never
+    auto-landed on main) is the intended default policy, or direct a change --
+    note the question is narrower than originally posed since no autonomous
+    session ever overrides a landed deletion under the current implementation.
+    Source PR #2936 merged 2026-08-10T09:50:52Z; clearing this park requires
+    resolving both items."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -179,3 +217,22 @@ The bash suite drives the fake `npx`, so Case 25 is protected end-to-end by the 
 2. Re-run the suite (or isolate Case 25). Case 25 must now FAIL: with the guard gone the shim reports `resolved:true`, `check_base_freshness` cp's the merged content and continues, the edit LANDS (resurrecting the deleted node) with no park — so the exit code is 0, no `office_hours` / no `delete/modify divergence` substring appears, and a false auto-resolve occurs.
 3. Restore the Unit 1 fix and re-run — Case 25 green again.
 4. (Optional, covers the REAL guard directly.) Because the shim is a faithful mirror of `merge-node.ts:74-78`, additionally spot-check the real script: temporarily revert the #2911 guard in `merge-node.ts`, then manually run `npx tsx packages/intentionsutil/scripts/merge-node.ts --base <non-empty-node-file> --ours <node-file> --theirs "" --out /tmp/out` and confirm it now (wrongly) prints `{"resolved":true,...}` and writes `--out`; with the guard present it prints `{"resolved":false,...}` and writes nothing. Restore the guard. (`test/node-merge.test.ts` is the standing automated coverage of the real primitive.)
+
+
+## needs-main residue
+
+QA attempt 2 (PR #2936) deferred two `needs-human-judgment` items to office-hours (planned-deferral — subjective/policy calls, not correctness bugs; not gating this PR). Both are `AUTHOR`-verifiability (subjective product/UX judgment; no machine check can settle them):
+
+- id: 12
+  title: Operator resolving this park picks the right option without further investigation
+  url_path: current
+  expected_outcome: The two options (KEEP vs CONFIRM the deletion) are actionable as written and the operator does not need to reconstruct the race from git history to choose.
+  finding: attempt 1 already assessed readability (YAML folded-scalar round-trip) and option unambiguity ("clears this park" holds for both) as satisfied; what remains is a subjective sufficiency call on decision context.
+  Verifiability: AUTHOR
+
+- id: 13
+  title: Re-materializing a node another writer deliberately deleted is the right operator-facing default
+  url_path: current
+  expected_outcome: A recorded human decision that resurrect-with-park is the intended policy, or a directive to change it.
+  finding: policy choice about graph-writer semantics, not a correctness bug; the implemented behavior (resurrect the deleted node onto origin/main with a park attached, rather than dropping the edit or parking with no node) is documented in the exit-code header and covered by Case 53.
+  Verifiability: AUTHOR

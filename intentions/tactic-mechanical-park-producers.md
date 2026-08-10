@@ -101,7 +101,7 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: main-qa
+phase: done
 execution:
   branch: tactic-mechanical-park-producers
   pr: 2970
@@ -111,64 +111,14 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-26T05:07:00Z
     mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-main: needs-main residue item #15 on
-    tactic-mechanical-park-producers (\"Queue-noise reduction: fewer tracked
-    holds than today's exit-11 park rate\") is not browser-verifiable. Its
-    url_path is the literal string \"current\", not a real page — the expected
-    outcome is a week-over-time count of
-    tactic-hold-conflict-*/tactic-hold-fix-cap-* node creations on origin/main
-    compared to the ~5/week exit-11-park baseline named in the plan, a
-    graph/git-history query, not a page Claude-in-Chrome can observe. It also
-    cannot be judged yet on timing alone: source PR #2970 merged
-    2026-07-26T05:07:00Z, only 2 days before this check, short of the week-long
-    observation window the plan's own Verification section specifies."
-  since: 2026-07-28
-  recommendation: >-
-    Wait until at least 2026-08-02 (one week after the PR #2970 merge on
-    2026-07-26) before judging this item.
-
-
-    Then check the rate directly against origin/main:
-
-
-    ```bash
-
-    git -C <repo> log --since=2026-07-26 --diff-filter=A --name-only --oneline
-    -- 'intentions/tactic-hold-conflict-*.md'
-    'intentions/tactic-hold-fix-cap-*.md' origin/main
-
-    ```
-
-
-    Count the created hold nodes in that window. The plan's success signal
-    (Verification section, "Queue-noise outcome") is materially fewer than
-    ~5/week — ideally zero in a week where main is moving normally. Any
-    tactic-hold-conflict-* node that does appear is expected signal for a
-    genuine structural conflict (not noise); if the count is high, check whether
-    `CONFLICT_STRIKE_CAP=5` in
-    `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute` needs to
-    be tuned looser.
-
-
-    Also spot-check hygiene per the plan's other manual checks: confirm the
-    strike-counter sidecar (`.claude/worktrees/<id>.conflict-strikes`) is being
-    deleted on successful provisions rather than accumulating for reaped
-    worktrees, and confirm any hold tactic that landed carries the mandatory
-    "clearing office_hours alone does not unblock the source" sentence in its
-    body.
-
-
-    If the count and hygiene look right, this residue item is satisfied and the
-    node's main-qa phase can be advanced to done via the normal graph-transition
-    path.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -740,3 +690,39 @@ and is deferred to `/qa-main` observation on deployed main:
   which `tactic-hold-*` nodes are created on `origin/main` over the week
   following merge, and confirm holds that do land correspond to genuinely
   stuck conflicts/fix-cap exhaustions rather than routine noise.
+
+## Office-hours sitting 2026-08-09 — residue item 15 resolved, no code change
+
+**Disposition: the hold-creation rate is acceptable; the fix worked.** Author
+ruling at the 2026-08-09 sitting. `phase: done`, park cleared.
+
+The park (2026-08-05) could not be judged because its only counter-evidence was
+that the fleet had not been running. That confound is now gone and the
+measurement was re-taken against `origin/main` at the sitting:
+
+| | park (08-05) | sitting (08-09) |
+|---|---|---|
+| holds total | 12 (6 conflict, 6 fix-cap) | 16 (9 conflict, 7 fix-cap) |
+| resolved `phase: done` | 0 | 10 |
+| still open | 12 | 6 |
+| created since 08-05 | — | 4, all on 08-09 |
+
+The decisive fact is the resolution column, not the creation column. The park
+recorded 12 holds with **none** resolved, which is what made the producer look
+like pure queue noise. Ten have since drained. The mechanism produces holds that
+get resolved, which is the intended behaviour — a hold is a routing artifact,
+not a defect.
+
+Creation timeline: 08-06, 08-07 and 08-08 produced zero holds (the pace curve
+was closed and no work ran); 08-09 produced 4 in roughly six active hours. Two
+of those four are on #2974 and #3023 — the conflict backlog that was expected to
+drain once the curve reopened; it was picked up, and both hit provision-conflict
+immediately.
+
+**Residual confound, recorded honestly and NOT resolved by this disposition.**
+The free-retry tier (`CONFLICT_STRIKE_CAP=5`) means a self-resolved conflict
+leaves zero graph record. So every number above counts holds *created*, never
+conflicts *encountered* — the raw exit-11 incidence rate this fix was built to
+filter remains unobservable from git history. A future judgment on whether the
+cap is tuned correctly needs an instrument that records conflicts below the cap;
+none exists today, and the sitting did not file one.

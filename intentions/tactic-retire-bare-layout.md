@@ -137,14 +137,15 @@ Sites and their disposition:
   common dir sits at the repo root, unreachable via FSA). Confirm office-hours'
   intended FSA usage, then remove the branch + test or re-model. Self-contained
   to office-hours.
-- `test-dispatch-scripts.sh` "5. bare+worktree repo resolution" block
+- `test-dispatch-plan-io.sh` "5. bare+worktree repo resolution" block
   (`make_bare_worktree_fixture`, tests 5/5b–5e) tests `dispatch-write-plan` /
   `dispatch-read-plan` (legacy gh-issue scripts) against the `.bare` layout —
   a dead scenario for scripts already slated for deletion. **Co-lands with
   `tactic-legacy-router-removal`** (which deletes those scripts); do not
   duplicate here.
-- Remaining `.bare` fixtures in `test-dispatch-scripts.sh` (worktree-list
-  parsing, `resolve_project_root`), `test-phase-log-reentry.sh`,
+- Remaining `.bare` fixtures across the per-SUT test files (worktree-list
+  parsing, `resolve_project_root` — e.g. `test-dispatch-tick.sh`,
+  `test-lib-worktree-records.sh`), `test-phase-log-reentry.sh`,
   `test-write-phase-log.sh`, `test-worktree-remove.sh`: for **kept** plumbing,
   re-model to the standard `.git` common dir; for fixtures that only exist to
   test a legacy script, co-land with `tactic-legacy-router-removal`.

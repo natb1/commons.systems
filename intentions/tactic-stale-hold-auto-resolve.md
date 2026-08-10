@@ -75,17 +75,60 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-03
-    attempt: 2
-    pushed_sha: e99304c0b345c6582eee98fe7f505aad61188435
+  fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T19:00:41Z
     mergeCommitSha: 190777100263403e404da68ce458cfd813f8f7d3
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main residue item 8 (dirty-main resolve-hold retry) has still not
+    naturally occurred. Independently re-verified by this intervention at park
+    time: journalctl --user --since 2026-08-03T19:00:41Z (the source PR #3011
+    merge time) shows 337 'lib-stale-hold-recheck: sweep complete' lines, every
+    one status=ok with unknown=0 failed=0, and 0 'resolve-failed' occurrences
+    anywhere in the window — the assert_clean_outside_ids refusal-then-retry
+    path that item 8 checks has not fired. The check is sound (item 7's
+    identical journalctl method fully confirms the machinery emits correctly on
+    every pass, and item 7 is a confirmed PASS on this reading) and the
+    machinery works; only the triggering event — a transiently dirty main
+    coinciding with a resolve-hold attempt — has not happened yet. Earliest
+    useful re-check: after another day or more of tick volume, since dirty-main
+    episodes have recurred on this host before. Provenance: this park was landed
+    by the invalid-state intervention rather than by the terminal-disposition
+    sweep. The /qa-main node-lane pass (session 868b586c) reached this WAIT
+    verdict, wrote it to its job-dir office-hours markers via
+    dispatch-mark-node-park, and stopped without a mark-node-terminal
+    declaration, as that branch prescribes; the sweep's invalid-state pre-tier
+    then routed the candidate to this lane before reaching its own
+    marker-verbatim park. The lane defect is recorded as
+    tactic-invalid-state-rc-77ac4f8e; the verdict text above is the pass's own,
+    re-verified here rather than re-derived."
+  since: 2026-08-06
+  recommendation: "No author judgment is needed on the residue item itself — only
+    re-selection once the awaited event occurs. Re-check with: journalctl --user
+    --since 2026-08-03T19:00:41Z | grep -c 'resolve-failed' — a nonzero count
+    means the event finally occurred and item 8 can be scored on its actual
+    output (does the sweep summary line show failed>=1 with status=ok, does git
+    log -- intentions/ show no partial write, and does the following tick's log
+    show a retry of the same hold id). Reap THEN clear, in that order. (1) Reap
+    the terminal session that still holds this node: run git worktree remove
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-stale-hold-auto-res\
+    olve && claude rm 868b586c-f66f-47f1-ae55-8e3dae06f600 — this intervention
+    verified all three reap-safety conditions passing at park time: git -C
+    <worktree> status --porcelain --untracked-files=no printed nothing, git -C
+    <worktree> diff --quiet origin/main HEAD -- . ':!intentions' exited 0, and
+    gh pr list --head tactic-stale-hold-auto-resolve --state open returned empty
+    (the branch's own PR is merged). Re-confirm those three before removing,
+    since they were read at park time. (2) ONLY THEN run clear-park
+    tactic-stale-hold-auto-resolve to return the node to the main-qa lane.
+    Clearing first is a no-op: the terminal-disposition sweep re-detects the
+    un-reaped terminal session and the node freezes again on the next tick.
+    Session attach or resume is not a recovery path here — the pass completed
+    its reading and its verdict is recorded in full above."
+  session_type: other
 pace_exempt: true
 rounds: null
 attributes: {}

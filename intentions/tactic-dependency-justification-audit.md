@@ -26,10 +26,8 @@ execution:
   attempts: {}
   markers: []
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-28
-    attempt: 1
-    pushed_sha: null
+  fix: null
+  conflict: null
   completion: null
 validates:
   - strategy-owned-web-platform

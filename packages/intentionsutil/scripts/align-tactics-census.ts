@@ -18,16 +18,8 @@
 // propagate as thrown errors — no fallback, no silent default.
 
 import { listNodes, readNodeBody } from "../src/store.js";
-import type { IntentionNode } from "../src/schema.js";
-
-type Classification = "draft" | "born-parked" | "open" | "done";
-
-function classify(node: IntentionNode): Classification {
-  if (node.phase === "done") return "done";
-  if (node.phase !== null) return "open";
-  // phase is null/absent here
-  return node.office_hours === null ? "draft" : "born-parked";
-}
+import { classifyTactic } from "../src/census.js";
+import type { TacticClassification } from "../src/census.js";
 
 function headings(body: string): string[] {
   const matches = body.matchAll(/^##\s+(.+)$/gm);
@@ -55,7 +47,7 @@ function main(): void {
   const tactics = nodes.filter((n) => n.kind === "tactic" && n.serves.includes(strategyId));
 
   for (const tactic of tactics) {
-    const classification = classify(tactic);
+    const classification: TacticClassification = classifyTactic(tactic);
     const body = readNodeBody(intentionsDir, tactic.id);
     const lines: string[] = [];
     lines.push(`id: ${tactic.id}`);

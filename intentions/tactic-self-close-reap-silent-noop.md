@@ -44,7 +44,28 @@ gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Park questions — (1) what reaps a marker-declared terminal session
+      whose branch has unlanded content or an open PR, and (2) which tactic owns
+      dispatch-self-close's terminal reap line?
+    answer: "(Ruled 2026-08-04 /align interview, author-ratified.) Superseded by the
+      invalid-state lane recorded on strategy-graph-native-dispatch (2026-08-04
+      clarifications). (1) The recorded brownfield Step 2 (delete exec claude
+      rm) is RETIRED — dispatch-self-close KEEPS its reap as a best-effort fast
+      path, session_reap_sweep stays the backstop for the undeclared/align-round
+      class, and the invalid-state lane is the guaranteed net: the
+      selection-time occupancy check discriminates occupied-by-terminal (invalid
+      state — route to an intervention session that reviews the transcript,
+      files a find-or-create root-cause follow-up, and resolves or parks) from
+      occupied-by-live (valid skip), with the defensive sweeps as the second
+      detection point. A marker-declared session with unlanded content or an
+      open PR routes to that lane rather than being force-reaped or stranded, so
+      gates 7b/7c stay as they are. (2) tactic-worker-self-close-configurable
+      retains ownership of the call site; its default-off keep-all gate lands as
+      planned with no ordering conflict. This node's remaining scope: make the
+      fast path's decline DETECTABLE and loud (verify the post-state instead of
+      trusting exit 0), with the lane owning escalation. Re-run /align-tactics
+      on this node to re-plan against the lane. Park cleared on this ruling."
 tooling_goals: []
 success_signal: null
 attention:
@@ -61,53 +82,49 @@ execution: null
 validates: []
 blocked_by: []
 office_hours:
-  reason: "REQUIREMENT AMBIGUITY — Step 2 as recorded cannot be planned as
-    written; it would strand every common-case node worker. VERIFIED 2026-08-04
-    against HEAD: session_reap_sweep skips at gate 7b when the worktree tree
-    differs from origin/main outside intentions/ (lib-session-reap.sh:429-445)
-    and at gate 7c when any OPEN PR has the branch as head (:447-469) — i.e.
-    every implement/qa/review/fix worker. Every other dispatch-sweep worktree
-    arm SKIPs on worktree_has_live_session (dispatch-sweep:415,467,495), which
-    reads the REGISTERED view, so a stopped-but-unremoved session still counts
-    as live. dispatch-self-close:222 is therefore the ONLY reaper for the
-    declared-terminal common case; step 1's unlock criterion (sweep observed
-    reaping within one interval — SESSION_REAPED 22:02:39 and 22:32:16 UTC
-    2026-08-03) was met only for the align-round class, whose branches are never
-    pushed and have no PR. With tactic-stopped-session-blocks-node
-    (codified/done: a registered session blocks its node permanently, NO
-    TIMEOUT), deleting line 222 makes each such node permanently unselectable —
-    and the deadlock is circular, not merely delayed, because the PR can only
-    merge after qa/review, which cannot start while the implement session holds
-    the node. This contradicts the strategy's condition 'AUTO-CLOSE REMAINS THE
-    DOCTRINAL DEFAULT FOR EVERY DECLARED TERMINAL DISPOSITION'. AUTHOR DECISION
-    NEEDED — two questions: (1) What reaps a marker-declared terminal session
-    whose branch has unlanded content or an open PR once self-close no longer
-    reaps? Candidates: (a) retire Step 2 — self-close stays the reaper for the
-    DECLARED case and session_reap_sweep stays a backstop for the
-    undeclared/align-round class only (one reaper per class, not one reaper
-    overall); (b) narrow gates 7b/7c so a marker-declared session is reapable
-    despite unlanded content/open PR (the worktree-remove-first step then needs
-    a safety story for unlanded work); (c) a third design. (2) Which tactic owns
-    dispatch-self-close's terminal reap line?
-    tactic-worker-self-close-configurable (status codified, phase implement, IN
-    FLIGHT) plans a default-off keep-all config gate layered on exactly that
-    call site (its body cites dispatch-self-close:216, today's line 222). Step 2
-    deletes the site its sibling gates; the two cannot both land as written and
-    the ordering is unrecorded. Recommend: settle (1) then (2) in an
-    /align-strategy sitting or an office-hours disposition; amend this node's
-    'Brownfield migration' section (body ~173-190) and its 'Amendment to scope
-    note' to the ratified answer; then re-run /align-tactics
-    tactic-self-close-reap-silent-noop to finalize. STATE A FRESH SESSION NEEDS:
-    step 1 (session_reap_sweep, PR #3026 / commit 2b3ff597) is LANDED, wired at
-    dispatch-sweep:70,566, and verified reaping in production — a re-plan must
-    scope to the remaining question ONLY and must not re-propose the sweep arm;
-    the two invariants above line 222 (router continuation, node-terminal marker
-    check) stay out of scope; re-run journalctl --user -t dispatch-sweep --since
-    <ts> | grep -E
-    'SESSION_REAPED|REAP_DECLINED|SESSION_REAP_UNVERIFIED|SESSION_REAP_SKIP_OPE\
-    N_PR' (dangerouslyDisableSandbox) to reconfirm the gate behavior before
-    executing."
-  since: 2026-08-04
+  reason: "Side B material premise from a 2026-08-10 /align-tactics tactic-mode
+    finalize attempt: the plan depends on an unrecorded design call the node
+    itself declines to take. This node's body (§\"What this means for this
+    node's plan\", 2026-08-06 correction) records that
+    lib-session-reap.sh:288-291 derives the reaped worktree path from the node
+    id, that this premise is false for /align-tactics-provisioned checkouts, and
+    that the remedy is therefore aimed at the wrong directory — then states
+    verbatim: 'Either the invariant is enforced at provisioning time, or the
+    sweep stops deriving and starts resolving. That choice is a design call, not
+    an implementation detail.' Nothing in strategy-graph-native-dispatch or in
+    this node answers it, and the two limbs produce disjoint unit sets, files,
+    and owners: limb (a) edits the /align-tactics worktree-entry contract at
+    .claude/skills/align-tactics/SKILL.md:80-88 and
+    dispatch-graph-execute:205-215's deliberate no-pre-provision branch; limb
+    (b) edits lib-session-reap.sh:286-291 and its false header premise at
+    :263-267, plus test-lib-session-reap.sh:221-266 fixtures. The same ruling
+    settles a second open point: whether path resolution lands under this node
+    at all, since the author's 2026-08-04 ruling narrowed this node's remaining
+    scope to 'make the fast path's decline DETECTABLE and loud (verify the
+    post-state instead of trusting exit 0), with the lane owning escalation' —
+    the 2026-08-06 correction's expansion into the sweep was recorded by a
+    monitor pass, not ratified. Planning either limb now would author against an
+    unratified premise, and planning the narrow ratified scope alone would ship
+    a fix the node's own text says leaves the loop running ('a decline that is
+    correctly detected every 15 minutes and correctly reported is still a
+    decline'). See the dated clarification added this round for the full
+    proposed-clarification text and the measured evidence bounding the choice
+    (registry `cwd` already tracks the real checkout and is already
+    parsed/threaded through lib-session-reap.sh, just unused for path resolution
+    at :288-291; dispatch-node-reap:134 passes no cwd at all and independently
+    hits the same bug). Recommend: ratify one limb (RECOMMENDATION: limb (b) —
+    resolve from the registry cwd — is the lower-friction fix on measured
+    evidence, since it needs only a consumer change at
+    lib-session-reap.sh:288-291 and also fixes dispatch-node-reap:134 for free;
+    limb (a) is the stronger invariant but closes the EnterWorktree escape hatch
+    dispatch-graph-execute:205-215 deliberately leaves open), record the ruling
+    as this node's clarification answer, then re-run /align-tactics
+    tactic-self-close-reap-silent-noop to author the plan against it. Sequencing
+    note for whoever plans this next:
+    tactic-reap-safety-behind-branch-false-positive (phase qa) edits gate 7b
+    inside the same session_reap_node function and should be sequenced against
+    this node's eventual fix, though it does not own the wt_path derivation."
+  since: 2026-08-10
   recommendation: null
   session_type: other
 pace_exempt: false
@@ -296,3 +313,161 @@ on that proof would close the remaining class without weakening Invariant 2,
 since the evidence the invariant protects has by then been produced and verified.
 Whether the terminal-disposition contract should admit a supervisor-supplied
 disposition is exactly the kind of premise that belongs in an author ruling.
+
+## Step 2 retired (2026-08-04 author ruling)
+
+The brownfield Step 2 above — deleting `exec claude rm` from
+`dispatch-self-close` — is retired; see the 2026-08-04 clarification in this
+node's frontmatter. Self-close keeps its reap as a best-effort fast path (so
+`tactic-worker-self-close-configurable`'s gate on that call site lands as
+planned); the invalid-state lane recorded on `strategy-graph-native-dispatch`
+(2026-08-04) is the guaranteed net for declines, with the occupancy-check
+discriminator (occupied-by-terminal vs occupied-by-live) as the detection
+point and the sweeps as the second. This node's remaining scope narrows to
+making the fast path's decline detectable and loud — verify the post-state
+instead of trusting exit 0.
+
+## Correction 2026-08-06: the decline is a WRONG-PATH bug, not a no-worktree case
+
+The 2026-08-03 diagnosis above attributes the `claude rm` decline to the node
+branch never having been pushed to `origin` ("the unverifiable-worktree
+condition holds whenever the node's branch was never pushed"). Measured
+2026-08-06 during an N+7 monitor pass, that is **not** the operative cause of
+the observed permanent declines, and the recorded remedy — "remove the worktree
+first" — was being applied to the wrong directory.
+
+`lib-session-reap.sh:291` derives the worktree path from the node id:
+
+```sh
+local wt_path="$worktrees_root/$name"
+```
+
+with the standing comment that its path "is derived, never taken from the
+registry's `cwd`: provision-node-worktree puts a node's checkout at exactly
+`<project-root>/.claude/worktrees/<node-id>`". **That premise does not hold for
+`/align-tactics` sessions**, whose checkout is provisioned at
+`<worktrees>/align-tactics-<suffix>` while the session registers under the bare
+node id. The sweep therefore probes a path that either does not exist — logging
+`SESSION_REAP_NO_WORKTREE` and proceeding — or, worse, exists as an unrelated
+stale checkout it then gates on. Either way it never removes the directory the
+daemon is actually holding, so `claude rm` declines, and the sweep re-attempts
+and re-declines on every interval indefinitely.
+
+### Reproduced twice, same shape
+
+Session `3dc03651`, node `tactic-fleet-alarm-watch-unknown`:
+
+```
+SESSION_REAP_NO_WORKTREE: ... worktree=.../tactic-fleet-alarm-watch-unknown
+  (nothing to remove; proceeding to claude rm)
+REAP_DECLINED: ... claude_rm_rc=1
+```
+
+`claude rm` itself names the real path in its decline text:
+
+```
+kept 3dc03651 — worktree has files but no repository to verify them against
+  worktree kept at .../.claude/worktrees/align-tactics-fleet-alarm-watch-unknown
+```
+
+Removing **that** directory made `claude rm` succeed immediately (rc=0). The
+same sequence held for session `2551a780` /
+`tactic-fleet-alarm-unclaimed-hold`: the sweep gated on
+`<worktrees>/tactic-fleet-alarm-unclaimed-hold`, `claude rm` was holding
+`<worktrees>/align-tactics-fleet-alarm-unclaimed-hold`, and the reap completed
+the moment the latter was removed. Both align-prefixed worktrees were 0 commits
+ahead of `origin/main`, clean, and carried no open PR.
+
+### What this means for this node's plan
+
+The remaining scope — make the decline detectable and loud — stands and is
+unaffected. But loudness alone leaves the loop running: a decline that is
+correctly detected every 15 minutes and correctly reported is still a decline.
+The plan must additionally cover **path resolution**, because the removal step
+the remedy depends on is aimed at the wrong directory:
+
+- The daemon is the authority on which worktree a session holds. Its decline
+  text carries the path verbatim, and the registry row is queryable; the
+  node-id-derived path is an assumption that is false for every
+  `/align-tactics`-provisioned worktree.
+- The derivation comment at `lib-session-reap.sh:288-291` asserts an invariant
+  that `provision-node-worktree` does not actually guarantee across lanes.
+  Either the invariant is enforced at provisioning time, or the sweep stops
+  deriving and starts resolving. That choice is a design call, not an
+  implementation detail.
+- `SESSION_REAP_NO_WORKTREE` is currently benign-sounding and precedes a reap
+  attempt. When the daemon *does* hold a worktree, that log line is a false
+  negative and should not read as "nothing to remove".
+
+Recorded, not taken: this node stays `status: raw` under the 2026-08-05
+author decision deferring raw tactics to the fleet. The separate two-dot
+reap-safety defect found in the same pass is owned by
+`tactic-reap-safety-behind-branch-false-positive`, which is a different gate
+(7b) earlier in the same sweep.
+
+## Fresh confirmation 2026-08-10: still live, and now also defeats the invalid-state lane's own reap
+
+Researched 2026-08-09/10 in an `/align-tactics tactic-self-close-reap-silent-noop`
+finalize attempt, before the drift review parked this node (see `office_hours`).
+The 2026-08-06 diagnosis is unchanged and unfixed: `git log` shows no commit
+since 2026-08-05 touching `lib-session-reap.sh`'s worktree-path derivation
+(still `local wt_path="$worktrees_root/$name"` at line 291, header comment at
+288-290 still asserting the false premise). A fresh, independent occurrence
+landed the same day: `tactic-fleet-alarm-busy-stall`, session `e94d9b62`,
+2026-08-09T17:33:09Z — `dispatch-node-reap` (the invalid-state lane's own
+reap entry point, called by the `dispatch-invalid-state` intervention skill
+on the `terminal-session` kind) derived
+`.claude/worktrees/tactic-fleet-alarm-busy-stall` (absent,
+`SESSION_REAP_NO_WORKTREE`) while the daemon actually held
+`.claude/worktrees/align-tactics-fleet-alarm-busy-stall`; `claude rm` declined
+(`claude_rm_rc=1`), verdict `declined`. This occurrence, and two earlier ones
+from 2026-08-06, are logged on the auto-minted cause-slug dedup tracker
+`tactic-invalid-state-rc-0b9860b2` (`self-close-reap-declined`), which is
+**not** a fix-owning node — it exists purely to dedup occurrences by cause and
+defers the fix to this node, per the sole-tracker convention.
+
+This matters for scope: `dispatch-node-reap` is a thin CLI wrapper
+(`.claude/skills/dispatch-propagate/scripts/dispatch-node-reap`) that calls
+the exact same `session_reap_node` function `session_reap_sweep` calls, and
+declares no independent path resolution of its own — it invokes
+`session_reap_node "$NODE" "$SESSION" "$JOB_ID"` with no `cwd` argument at all
+(the function's 7th positional parameter). So the invalid-state lane's own
+reap — the ratified "guaranteed net" behind the fast-path decline — inherits
+this exact bug and cannot succeed on an align-tactics-provisioned session
+either. Whichever design limb below is ratified, the fix belongs in
+`session_reap_node` (or its shared resolution path), not only in the sweep's
+calling convention, so both callers benefit.
+
+### Where the fix data already lives, unused
+
+`session_reap_sweep`'s candidate loop already parses a `cwd` column out of
+`claude_agents_list_terminal_workers`'s TSV row (`sessionId`, `id`, `name`,
+`cwd` — `lib-claude-agents.sh`, function registered ~line 1479-1503) and
+passes it into `session_reap_node` as its 7th positional parameter (`idle`,
+`cwd` — threaded at `lib-session-reap.sh:511`, `:627`) — but `session_reap_node`
+currently treats that `cwd` as DIAGNOSTIC ONLY (used solely in the trailing
+`SESSION_REAPED` log line), never for path resolution. The daemon's own
+registry already reports the real checkout path on every terminal-worker row;
+the derivation at line 291 simply doesn't use it. Existing coverage:
+`.claude/skills/dispatch-propagate/scripts/test-lib-session-reap.sh` and
+`test-dispatch-node-reap.sh` exercise `session_reap_node`/`session_reap_sweep`
+end-to-end against a real scratch git repo, but neither fixture currently
+models a session whose registry `cwd` differs from `$worktrees_root/$name` —
+new fixture coverage for that mismatch is needed to prove any fix.
+
+### Why this node parks instead of planning against it
+
+The "design call, not an implementation detail" question two sections above —
+enforce the node-id worktree-path invariant at provisioning time, or stop
+deriving in `session_reap_node` and resolve from the registry `cwd` — is still
+unanswered by any author ruling, and the two limbs produce disjoint unit sets,
+files, and owners (limb (a): `.claude/skills/align-tactics/SKILL.md:80-88`'s
+worktree-entry contract and `dispatch-graph-execute`'s deliberate
+no-pre-provision branch for `kind == strategy` / `phase == align-tactics`
+sessions; limb (b): `lib-session-reap.sh:286-291` and its false header premise
+at `:263-267`, plus `test-lib-session-reap.sh:221-266`'s fixtures). Planning
+either limb without a ruling would author against an unratified premise, and
+planning only the 2026-08-04-ratified narrow scope (fast-path decline
+loudness) alone would ship a fix that leaves the loop running — a decline
+correctly detected and reported every sweep interval is still a decline. See
+`office_hours.reason` for the park detail and the author-facing recommendation.

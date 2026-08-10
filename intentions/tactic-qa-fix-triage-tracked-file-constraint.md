@@ -49,8 +49,9 @@ Draft context retained from the 2026-07-30 office-hours drain of
 
 ## The defect, confirmed live
 
-PR #2964's body asserted `test-dispatch-scripts.sh — 3046/3046 passed` while
-the tree ran 3183/3183. `/qa-fix` triage raised the mismatch and classified it
+PR #2964's body asserted `<pre-split dispatch-scripts test monolith> —
+3046/3046 passed` while the tree ran 3183/3183. `/qa-fix` triage raised the
+mismatch and classified it
 `script-verifiable`. The only remediation is editing PR #2964's GitHub
 description — there is no tracked file to change. The Opus fix-planner
 therefore could not land it, and the lane escalated with a permanent planner
@@ -88,8 +89,9 @@ an assertion count, a session simply chose one.
 
 Add the convention: for a suite living in a shared file that unrelated PRs
 extend, cite the suite and its exit status, never an assertion count. A count
-written against `test-dispatch-scripts.sh` is stale within days by
-construction, because every parallel dispatch-script feature adds cases to it.
+written against a shared per-SUT test file (e.g. `test-graph-auto-merge.sh`)
+is stale within days by construction, because every parallel dispatch-script
+feature adds cases to it.
 
 The plan schema is already right — the originating tactic ran the script bare
 in its own verify block, with no count. Only the PR-body prose convention needs

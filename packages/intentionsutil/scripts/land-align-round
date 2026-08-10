@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# land-align-round — land an /align-tactics decomposition round AND record the
+# session's terminal disposition in the SAME process.
+#
+# Usage:
+#   land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]
+#
+# Why this wrapper exists (tactic-align-tactics-mark-terminal-skipped):
+# /align-tactics used to land its round with a bare `graph-commit` call and
+# then, several tool calls and at least one turn later, was instructed by
+# SKILL.md prose to separately call `mark-node-terminal <node-id> align-round`.
+# Nothing guaranteed the session survived to make that second call. When it did
+# not, the round's content landed durably on main but the node carried no
+# declared disposition, so dispatch-tick's terminal-without-disposition sweep
+# parked it — and clearing that park alone restarted the churn, since the dead
+# session was still un-reaped. Confirmed three times in production.
+#
+# This is the same rationale park-node states at its own bundled
+# mark-node-terminal call, and the same one transition-node's `mark_terminal()`
+# helper embodies: a terminal writer must bundle the marker write into the SAME
+# shell process as the landing write, so no turn boundary, context exhaustion,
+# or API error can separate the two. This script centralizes that pattern for
+# /align-tactics in one reusable place rather than duplicating it inline.
+#
+# `--terminal <node-id>` names exactly ONE node — the session's own target (the
+# tactic-target id in tactic mode, the strategy id in strategy mode). It is
+# required and never inferred from the positional ids: a round routinely lands
+# CHILD tactics whose ids are not the session's target, and a marker written
+# for one of those would be a lie.
+#
+# `--base`, `-m`, and the positional ids pass through to graph-commit verbatim.
+#
+# Behavior keyed on graph-commit's exit:
+#   0                             -> mark-node-terminal <node> align-round; exit 0
+#   1 with the park-LANDED
+#   confirmation                  -> mark-node-terminal <node> park; exit 1
+#   any other non-zero (busy-main
+#   exhaustion, a park whose own
+#   push failed, usage error, ...) -> no marker; propagate graph-commit's exit
+#
+# The exit-1 discrimination mirrors references/write-path.md's "Discriminating
+# the exit-1 cases": graph-commit's concurrent-edit path can land an
+# office_hours park on the node and push it to main (a real terminal
+# disposition — `park`), while its busy-main exhaustion path — and a
+# concurrent-edit park whose own push failed — land nothing at all, so there
+# is no disposition to declare and the session must stay held.
+#
+# MATCH THE CONFIRMATION, NOT THE ANNOUNCEMENT. graph-commit prints
+# "... parking node(s) — this writer's content is NOT landed" BEFORE it tries
+# to push the parking write (graph-commit ~1800/1816), and that push can fail
+# — the graph landing lock is held, main stays busy, the push is rejected —
+# in which case graph-commit prints "could not land the parking write ... —
+# office_hours set locally but not pushed to main" and still exits 1. Nothing
+# reached origin/main in that case: the node is still unparked, at a working
+# phase, with `office_hours: null`. Keying the `park` marker on the
+# announcement would declare a terminal disposition for a park that does not
+# exist on main — dispatch-self-close would then reap the job and its
+# worktree (destroying the only copy of this writer's content, which lives
+# only in the local worktree), while the tick's terminal-without-disposition
+# sweep skips the node because a disposition WAS declared. So the marker is
+# keyed on graph-commit's post-push SUCCESS confirmation (graph-commit
+# ~1828/1830), whose shared literal is the needle grepped for below; the
+# unlanded-park case falls through to the no-marker branch and is treated
+# exactly like busy-main exhaustion — the session stays held and the sweep
+# catches it.
+#
+# No ownership guard here: mark-node-terminal already refuses to write unless
+# $CLAUDE_JOB_DIR/state.json's `.name` equals the node id, and no-ops entirely
+# when CLAUDE_JOB_DIR is unset (an interactive run). Both are reused as-is.
+#
+# The marker call is best-effort — its exit code never changes this script's
+# own exit — but it is not silent: mark-node-terminal exits 0 on both of its
+# benign skip paths (CLAUDE_JOB_DIR unset/not-a-dir, or the ownership gate's
+# "not my job"), so any non-zero exit from it is a genuine failure. That case
+# is surfaced as a single non-fatal warning on stderr, with the marker's own
+# stderr appended, so the exact gap this wrapper exists to prevent — a landed
+# or parked round with no declared disposition — is diagnosable at write time
+# instead of only after the fact via dispatch-terminal-gap-audit.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+USAGE="usage: land-align-round --terminal <node-id> [--base <manifest>] -m <message> <id> [<id> ...]"
+
+TERMINAL_NODE=""
+BASE=""
+MSG=""
+HAVE_MSG=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --terminal)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --terminal requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      TERMINAL_NODE="$2"; shift 2 ;;
+    --base)
+      [[ $# -ge 2 ]] || { echo "land-align-round: --base requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      BASE="$2"; shift 2 ;;
+    -m|--message)
+      [[ $# -ge 2 ]] || { echo "land-align-round: $1 requires a value" >&2; echo "$USAGE" >&2; exit 2; }
+      MSG="$2"; HAVE_MSG=1; shift 2 ;;
+    --)
+      shift; break ;;
+    -*)
+      echo "land-align-round: unrecognized flag: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *)
+      break ;;
+  esac
+done
+
+if [[ -z "$TERMINAL_NODE" ]]; then
+  echo "land-align-round: --terminal <node-id> is required (the session's own target node)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "land-align-round: expected at least one node id to land" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+
+GC_ARGS=()
+[[ -n "$BASE" ]] && GC_ARGS+=(--base "$BASE")
+[[ $HAVE_MSG -eq 1 ]] && GC_ARGS+=(-m "$MSG")
+GC_ARGS+=("$@")
+
+# graph-commit's stderr is both discriminated here and re-emitted to the caller
+# verbatim. It is captured to a tempfile and flushed after the call rather than
+# tee'd through a process substitution, so the read below can never race the
+# writer.
+ERR_FILE="$(mktemp)"
+MARK_ERR="$(mktemp)"
+cleanup() { rm -f "$ERR_FILE" "$MARK_ERR"; }
+trap cleanup EXIT
+
+# Best-effort by design: a marker write must NEVER demote a landed round to a
+# script failure. This is a deliberate, documented exception to
+# .claude/rules/code-style.md's prefer-clear-errors rule, not a pattern to
+# imitate elsewhere in this script — but "best-effort" only means the exit
+# code is never propagated, not that a failure is invisible. mark-node-terminal
+# exits 0 on both of its benign skip paths (interactive run, not-my-job), so a
+# non-zero exit here is always a genuine failure, and it is warned about on
+# stderr (with the marker's own stderr appended) rather than swallowed.
+mark_terminal_best_effort() {
+  local disposition="$1" mrc=0
+  "$SCRIPT_DIR/mark-node-terminal" "$TERMINAL_NODE" "$disposition" >/dev/null 2>"$MARK_ERR" || mrc=$?
+  if [[ $mrc -ne 0 ]]; then
+    echo "land-align-round: warning: mark-node-terminal $TERMINAL_NODE $disposition failed (exit $mrc) — the outcome already happened (the round landed or was parked) but no terminal disposition was declared; the tick's terminal-without-disposition sweep will park this node. See dispatch-terminal-gap-audit." >&2
+    cat "$MARK_ERR" >&2
+  fi
+}
+
+rc=0
+"$SCRIPT_DIR/graph-commit" "${GC_ARGS[@]}" 2>"$ERR_FILE" || rc=$?
+cat "$ERR_FILE" >&2
+
+if [[ $rc -eq 0 ]]; then
+  mark_terminal_best_effort align-round
+  exit 0
+fi
+
+if [[ $rc -eq 1 ]] && grep -qF -- "(office_hours set on the origin/main content)" "$ERR_FILE"; then
+  # graph-commit's concurrent-edit fallback landed an office_hours park on the
+  # node AND pushed it to main — the needle above is the substring shared by
+  # both of graph-commit's post-push success confirmations ("parked <ids>
+  # (office_hours set on the origin/main content) and pushed the parking write
+  # to main" / "... ; landed bystander prune deletion(s) ...; pushed to main")
+  # and appears in NEITHER the pre-push announcement nor the failed-push error
+  # ("office_hours set locally but not pushed to main"). So this branch is
+  # reached only when the park is durably on main: a genuine terminal
+  # disposition, even though this writer's content did not land. Same
+  # best-effort contract as above.
+  mark_terminal_best_effort park
+  exit 1
+fi
+
+# Every other non-zero exit (busy-main exhaustion ending `... retry later`, a
+# concurrent-edit park whose own push failed so nothing reached main, a
+# graph-commit usage error, a pre-flight refusal) landed nothing and parked
+# nothing on main. There is no disposition to declare, so no marker is written
+# and the session stays held — report and stop.
+exit "$rc"

@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-flake-preview-and-smoke-dpkg-lock
   pr: 3020
@@ -35,29 +35,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "All 4 needs-main residue items (recurrence-watch,
-    holder-allowlist-incomplete, cap-design-tradeoff-acceptance,
-    escalation-ladder-design-soundness) await subsequent
-    preview-and-smoke/acceptance CI runs on main after PR #3020's dpkg-lock
-    mitigations (merged 2026-08-03T21:31:12Z). As of this QA pass, zero
-    preview-and-smoke runs have occurred since the merge (gh run list --repo
-    natb1/commons.systems --workflow \"PR Checks\" shows the most recent run at
-    2026-08-03T21:14:33Z, before the merge). Earliest useful re-check: after the
-    next PR's preview-and-smoke run lands on a merge to main, grep its logs for
-    the fingerprint string 'E: Could not get lock /var/lib/dpkg/lock-frontend'
-    and for the mitigation step's holder-diagnostic lines ('<lock> holders at
-    step start:', '<lock> still held at the shared 120s deadline; holders:')."
-  since: 2026-08-03
-  recommendation: "No author decision needed — this is a pure re-selection wait,
-    not a judgment call. All 4 residue items are observational (do subsequent CI
-    runs show the fingerprint / an unmasked holder / a truncated 300s-cap step /
-    an escalation-ladder failure) and will resolve themselves once enough
-    post-merge preview-and-smoke/acceptance runs accumulate. Re-select this node
-    once at least one preview-and-smoke run has occurred on main since the PR
-    #3020 merge commit cadb2e5b848666f211c292dab06f73a1a8ed3fac, then re-run the
-    Lane-M checks named in each item's Verifiability line."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -189,3 +167,10 @@ recurred on PR #3002 / run https://github.com/natb1/commons.systems/actions/runs
   expected_outcome: Subsequent `preview-and-smoke`/`acceptance` runs show the ladder (unit mask+kill, grace window, pkill/fuser -k SIGKILL stage, the re-escalation round added in the latest commit) successfully clearing an external lock holder before the job's own apt-get/playwright-install attempt, with no need for `wait_for_dpkg_lock`'s post-failure backstop to intervene.
   finding: A QA pass (this attempt, post office-hours fix landing the bounded re-escalation round) re-verified all 6 prior opus-fixable findings plus the acceptance-job-unprotected/timeout-minutes-no-continue-on-error findings via 7 fresh script-verifiable checks against the current code — all 7 passed (mode/syntax, re-escalation not gated by the SKIP_SIGKILL latch, lock-file/budget-constant/lib.sh-default claims match code, both playwright-install call sites protected, continue-on-error+timeout-minutes present on both, every systemctl call externally timeout-wrapped, dpkg --configure -a rc=124 distinct-handled+retried-once with reconciled budget comments). What remains is not a code defect but whether the ladder's design is actually sufficient against a holder this repo cannot simulate locally — that is only observable from live GitHub-hosted runner behavior across subsequent CI runs, which is exactly what `recurrence-watch` and `holder-allowlist-incomplete` above already watch for. This item folds into those two rather than being a distinct new observation.
   Verifiability: WAIT — awaiting N subsequent `preview-and-smoke`/`acceptance` CI runs post-merge; same check as `recurrence-watch` (fingerprint absence) and `holder-allowlist-incomplete` (holder-diagnostic log lines) above — no separate check needed.
+
+- id: reescalation-tail-selftruncate
+  title: Confirm the re-escalation round's reserved-tail re-wait delivers its intended backstop despite being able to self-truncate
+  url_path: current
+  expected_outcome: A maintainer confirms whether a re-escalation round whose re-wait can degenerate to a few seconds (or effectively zero) on a slow first pass still delivers the intended backstop against a late-arriving lock holder, or decides the round needs a minimum guaranteed re-wait length instead of a hard absolute deadline.
+  finding: A fresh QA pass (this attempt, re-verifying the cumulative code state including the bounded re-escalation round, commit `50bcbab9`) found that `WAIT_SECONDS=120` splits into a 90s first pass and a 30s reserved tail ending at the absolute `final_wait_deadline = wait_now + WAIT_SECONDS`. On a first pass that consumes the full 90s across all three locks, the re-escalation round's own `fuser -k` calls (up to 3 locks x 5s `FUSER_TIMEOUT` = up to 15s) run before the re-wait loop starts, eating into the reserved 30s tail before any re-waiting happens — so the actual guaranteed re-wait after a slow `fuser -k` round can be well under 30s, or effectively zero. This is a design tradeoff (bounded total step budget vs. a guaranteed minimum re-wait length), not a correctness bug — the code is internally consistent and bounded either way — and is only decidable by observing behavior against a real external lock holder in live CI. The Step 3.5 disposition workflow classified this `needs-main` (not an actionable Opus fix): it folds into the existing `escalation-ladder-design-soundness` residue above rather than being resolvable at QA time.
+  Verifiability: WAIT — awaiting N subsequent `preview-and-smoke`/`acceptance` CI runs post-merge; same check as `escalation-ladder-design-soundness` above — no separate check needed.
