@@ -31,7 +31,6 @@ rationale: "Surfaced by the 2026-07-31 /align-strategy calendar-blocking round
   `attributes.wait_until` presence with a resolvable source, never on a bare
   `tactic-wait-` id prefix — which would collide with this node's own id."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -47,6 +46,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   conflict: null
