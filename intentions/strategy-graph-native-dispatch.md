@@ -39,8 +39,19 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   superseded migration-completion threshold could not read. success_signal was
   amended this round accordingly; see the threshold-shape and steelman
   clarifications below."
-reading: null
-gap: null
+reading: "lifecycle: tactic-graph-select-target-node-tests
+  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
+  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
+  → 29.7% → 27.5% (non-increasing)"
+gap: "reading \"lifecycle: tactic-graph-select-target-node-tests
+  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
+  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
+  → 29.7% → 27.5% (non-increasing)\" does not meet threshold \"the owned path
+  carries tactics through the full lifecycle continuously, and the machinery's
+  own open defect backlog — open (phase set, not done) plus born-parked tactics
+  serving this strategy — stays at or below 35% of all tactics serving this
+  strategy and is non-increasing across consecutive samples derived from
+  intentions/ git history at read time\""
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
