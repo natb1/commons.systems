@@ -40,10 +40,12 @@ attributes: {}
 Add a new section to `.claude/rules/test-integrity.md` (which currently covers
 only the weakening direction: "fix the code or escalate — never weaken the
 test"). The section is **scoped to proxy guards** — content greps and similar
-surface checks standing in for a mechanism enforced elsewhere (e.g.
-`test-dispatch-scripts.sh` content guards grepping skill prose for doctrine
-literals). It must NOT be a broad license to redesign ordinary failing tests,
-which stay wholly under the existing never-weaken doctrine.
+surface checks standing in for a mechanism enforced elsewhere (e.g. the
+dispatch-scripts test suite's content guards grepping skill prose for
+doctrine literals — those guards now live in the split per-SUT test files
+rather than one monolith). It must NOT be a broad license to redesign
+ordinary failing tests, which stay wholly under the existing never-weaken
+doctrine.
 
 Rule substance to encode:
 
@@ -61,8 +63,8 @@ Rule substance to encode:
 
 Worked live case for the rule's example text: PR #2927 thinned
 `review-fix/SKILL.md`, moving the `model: opus` literal into `references/`;
-the guard at `test-dispatch-scripts.sh` (review-fix Opus fix-authoring pin,
-#1172) failed; the first fix restored the literal to the thinned body
+a content guard in the dispatch-scripts test suite (review-fix Opus
+fix-authoring pin, #1172) failed; the first fix restored the literal to the thinned body
 (expedient); the correct fix re-pointed the guard at
 `.claude/workflows/review-fix.js`, the runtime file whose `agent()` calls
 actually enforce the pin, verified load-bearing via a mutate-and-watch test.

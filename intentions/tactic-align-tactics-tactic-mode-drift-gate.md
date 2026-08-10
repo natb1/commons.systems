@@ -395,7 +395,7 @@ opus
 `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`, so a PR touching
 only `align-tactics.js` triggers no vitest suite. The only test that runs on
 every PR is the hook-tests job, which invokes
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh` directly
+`.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh` directly
 (`.github/workflows/unit-tests.yml:199`). Coverage therefore lands as a
 sentinel-slice probe driven from that script — the pattern already established
 by `align-tactics-tempref-probe.mjs` and `qa-fix-partition-probe.mjs`.
@@ -438,11 +438,10 @@ Vectors to assert (`g = computePhaseGates(mode, drift)`):
    `computePhaseGates('strategy', {})` → both gates false in both calls.
 
 **Driver block** in
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`: insert
-immediately **after** the existing `=== align-tactics tempref (resolveTempRefs)
-===` block (which ends at the `assert_eq "align-tactics tempref: all probe
-vectors pass" ...` line, currently line 25040), using the same banner-comment +
-`echo` + `assert_eq` shape:
+`.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh`: insert
+using the same banner-comment + `echo` + `assert_eq` shape as its sibling
+`test-align-tactics-tempref.sh` (which drives the tempref probe from its own,
+now-separate file):
 
 ```bash
 # ============================================================================
@@ -465,10 +464,9 @@ assert_eq "align-tactics gates: computePhaseGates call site present" "1" "$(grep
 assert_eq "align-tactics gates: no phase gate reads raw !driftProceed" "0" "$(grep -c '!driftProceed' "$REPO_ROOT/.claude/workflows/align-tactics.js" || true)"
 ```
 
-`SCRIPT_DIR` and `REPO_ROOT` are already defined in that script
-(`test-dispatch-scripts.sh:8`, and `REPO_ROOT` is used by the adjacent qa-fix
-call-site assertion). Make the new `.mjs` file executable (`chmod +x`) to match
-its sibling probes.
+`SCRIPT_DIR` and `REPO_ROOT` are already available via the sourced
+`dispatch-test-fixture.sh` (see `test-align-tactics-gates.sh`'s own header).
+Make the new `.mjs` file executable (`chmod +x`) to match its sibling probes.
 
 Note for the shell edit: `.claude/rules/shell-json.md` is mechanically linted on
 net-new added lines in committed `.sh` files — do not pipe a captured variable
@@ -572,10 +570,10 @@ Unit 1 (the docs describe the landed behavior).
 - **`.claude/skills/dispatch-propagate/scripts/qa-fix-partition-probe.mjs`** —
   the second instance of the same pattern, confirming one probe file per pure
   function rather than one shared probe.
-- **`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:25025-25040`**
+- **`.claude/skills/dispatch-propagate/scripts/test-align-tactics-tempref.sh`**
   — the tempref probe driver block (banner comment, `echo`, `out_at=$(node …)`,
-  `assert_eq` on the `tail -n1` token) plus the adjacent qa-fix call-site
-  `grep -c` assertion. Unit 2's driver mirrors both.
+  `assert_eq` on the `tail -n1` token); `test-qa-fix-partition.sh` carries the
+  analogous qa-fix call-site `grep -c` assertion. Unit 2's driver mirrors both.
 - **`.claude/workflows/qa-fix.js:501-580`** — the fix-plan phase gated on the
   independent `plan_fix` flag. The cited precedent for gating a phase on a
   purpose-built flag rather than overloading one upstream boolean.
@@ -598,7 +596,7 @@ node .claude/skills/dispatch-propagate/scripts/align-tactics-gates-probe.mjs
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-align-tactics-gates.sh
 ```
 
 ```verify

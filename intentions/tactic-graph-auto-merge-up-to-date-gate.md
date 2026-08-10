@@ -133,25 +133,25 @@ head (creating a merge commit and re-triggering CI) rather than rebasing; and th
 the head moved since it was sensed. Note `gh_retry` (`lib.sh:125-151`) does not retry
 non-transient failures, so a 422 returns immediately.
 
-Tests go in `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, in two
+Tests go in `.claude/skills/dispatch-propagate/scripts/test-lib-gh-rest.sh`, in two
 places:
 
 1. **gh stub arm.** The shared `gh` stub is a first-wins `case` over `$args`. Add an arm
-   `"api -X PUT "*/pulls/*/update-branch*)` alongside the `gh_pr_merge_rest` arm at
-   `test-dispatch-scripts.sh:715-736` and, like it, **before** the generic
-   `api repos/*/pulls/*` arm. The arm appends `$args` to
+   `"api -X PUT "*/pulls/*/update-branch*)` alongside the `gh_pr_merge_rest` arm and, like it,
+   **before** the generic `api repos/*/pulls/*` arm. The arm appends `$args` to
    `"$STUB_DIR/gh-pr-update-branch-rest-calls.log"`, honors the existing
    `$STUB_DIR/gh-fail-rest` marker (print `stub forced gh api failure` to stderr, `exit 1`),
    and otherwise echoes `{}`.
 2. **Helper tests.** Add a `# --- gh_pr_update_branch_rest ---` block immediately after the
-   `gh_pr_merge_rest` block, which ends at `test-dispatch-scripts.sh:2687` (its last sub-test is the gh-failure case at :2679-2687; `:2668` is only the sixth sub-case teardown, so inserting there would splice the new block into the middle of the existing tests). Follow that
-   block's exact idiom (`setup` / `: > "$STUB_DIR/<log>"` /
+   `gh_pr_merge_rest` block (its last sub-test is the gh-failure case; the sixth sub-case
+   teardown precedes it, so inserting there would splice the new block into the middle of the
+   existing tests). Follow that block's exact idiom (`setup` / `: > "$STUB_DIR/<log>"` /
    `source "$TMPDIR_TEST/lib.sh"; <call>` / `grep -q` into `assert_eq` / `teardown`). Cases:
    - PUT to `pulls/42/update-branch` with no `expected_head_sha` field sent.
    - `--expected-head-sha abc123` sends `expected_head_sha=abc123`.
    - `--repo owner/other-repo` emits `repos/owner/other-repo/pulls/42/update-branch`.
    - Missing PR number → non-zero exit and stderr naming the helper (copy the
-     `gh_pr_view_rest` missing-number test at `test-dispatch-scripts.sh:2036-2039`).
+     `gh_pr_view_rest` missing-number test).
    - `gh-fail-rest` marker → non-zero exit and the `gh api failed for` stderr line.
 
 Out of scope for this unit: any change to `graph-auto-merge`, to `dispatch-auto-merge`, or
@@ -163,9 +163,8 @@ to any existing helper. The helper has no caller until Unit 2 — that is expect
   structural template for the whole helper.
 - `.claude/skills/dispatch-propagate/scripts/lib.sh:125-151` (`gh_retry`) — wrap the `gh api`
   call with it; do not call `gh` bare.
-- `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:715-736` — the stub-arm
-  template (including the `gh-fail-rest` failure-injection idiom).
-- `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:2613-2687` — the
+- `.claude/skills/dispatch-propagate/scripts/test-lib-gh-rest.sh` — the stub-arm
+  template (including the `gh-fail-rest` failure-injection idiom) and the
   helper-test template.
 
 ## Unit 2 - Gate `graph-auto-merge` on branch currency and sync when behind
@@ -299,12 +298,12 @@ up-to-date conjunct and the sync-and-defer behavior. No code change is needed in
 the new line surfaces as `merge: synced #<pr> (<id>)` automatically.
 
 **(f) Tests** — extend the existing `graph-auto-merge` fixture in
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:33124-33336`. That fixture
+`.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh`. That fixture
 builds a real temp repo with a real `origin/main` (so the `git archive` runs for real), stubs
 `node` and `gh` on `PATH`, injects CI verdicts through `DISPATCH_CI_VERDICT_CACHE`, and pins
 `GRAPH_AUTO_MERGE_MAIN_ROOT`.
 
-Extend the fake `gh` at `test-dispatch-scripts.sh:33201-33218`. Its `api` branch extracts the
+Extend the fake `gh` in `test-graph-auto-merge.sh`. Its `api` branch extracts the
 first `repos/*` argument into `path`, special-cases `*/merge`, and otherwise falls back to
 `N="${path##*/}"` + `stub/pr-$N.json`. Add three arms **before** that fallback (order matters
 — `*/commits/main` would otherwise fall through and look for `stub/pr-main.json`):
@@ -315,7 +314,7 @@ first `repos/*` argument into `path`, special-cases `*/merge`, and otherwise fal
 - `*/commits/main` → if `$STUB/main-sha-fail` exists, stderr + `exit 1`; else
   `cat "$STUB/main-sha.json"`.
 
-Add a helper next to `gam_fresh` (`test-dispatch-scripts.sh:33233-33236`):
+Add a helper next to `gam_fresh`:
 
 ```bash
 gam_uptodate() {  # live main tip + a compare status that reads "up to date"
@@ -324,13 +323,12 @@ gam_uptodate() {  # live main tip + a compare status that reads "up to date"
 }
 ```
 
-`gam_reset` (`:33221-33224`) wipes `stub/*`, so call `gam_uptodate` after `gam_reset` in
-**every** existing case — (a) `:33239`, (c) `:33267`, (d) `:33286`, (e) `:33300`, (f)
-`:33321`. Case (b) exits before Step 3 (empty candidate set), but call it there too for
-uniformity. Those cases must keep their current expected output unchanged.
+`gam_reset` wipes `stub/*`, so call `gam_uptodate` after `gam_reset` in
+**every** existing case — (a), (c), (d), (e), (f). Case (b) exits before Step 3 (empty
+candidate set), but call it there too for uniformity. Those cases must keep their current
+expected output unchanged.
 
-New cases to append before the `rm -rf "$GAM_ROOT" "$GAM_BARE"` cleanup at
-`test-dispatch-scripts.sh:33336`:
+New cases to append before the `rm -rf "$GAM_ROOT" "$GAM_BARE"` cleanup:
 
 - **(g) behind → sync, no merge.** Reviewed + green + MERGEABLE + fresh stamp, with
   `stub/compare.json` = `{"status":"diverged"}`. Assert stdout is exactly
@@ -377,17 +375,18 @@ failure cases do not sleep. Follow the existing assertion idiom exactly:
   idiom.
 - `.claude/skills/dispatch-propagate/scripts/graph-auto-merge:184-190` — the
   `rc=0 / out=$(... 2>&1) || rc=$? / stderr + HARD_ERROR=1 + continue` error template.
-- `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh:33124-33336` — the whole
+- `.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh` — the whole
   `graph-auto-merge` fixture; extend it rather than building a new harness.
 
 ## Verification
 
 ```verify
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh
+.claude/skills/dispatch-propagate/scripts/test-lib-gh-rest.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
 ```
 
-`test-dispatch-scripts.sh` is the harness CI runs for these scripts
+`test-graph-auto-merge.sh` and `test-lib-gh-rest.sh` are the harnesses CI runs for these scripts
 (`.github/workflows/unit-tests.yml:199`); it covers both units. It is large — expect several
 minutes. If it fails with read-only-filesystem or `mktemp` errors rather than assertion
 failures, re-run the Bash call with `dangerouslyDisableSandbox: true` (it creates temp git
