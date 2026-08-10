@@ -262,10 +262,14 @@ under your own in-flight work (incident 2026-07-28, node
 
 ## Step 7 — decision log
 
-One record via `decision_log_append` (`lib-decision-log.sh:76-102`), behind a
-`command -v decision_log_append` guard, built with `jq -n`: node id, dead
-`sid`/`jid`, classification, act taken, reap verdict, follow-up node id and its
-mint/update state, and the declared disposition.
+One record via `decision_log_append` (`lib-decision-log.sh:88-127`), behind a
+`command -v decision_log_append` guard, built with `jq -c -n`: node id, dead
+`sid`/`jid`, classification, act taken, reap verdict, follow-up node id and
+its mint/update state, and the declared disposition.
+
+`-c` is required: `jq -n` alone pretty-prints, and a multi-line object
+corrupts the JSONL log. Match the `jq -c -n ... '{...}'` pattern at
+`dispatch-invalid-state-route:525`.
 
 ## Step 8 — report
 

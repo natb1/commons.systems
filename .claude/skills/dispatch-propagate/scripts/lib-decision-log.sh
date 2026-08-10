@@ -6,9 +6,21 @@
 # sites) emits a structured per-tick routing decision as one JSON line. This
 # helper owns the append: it is the SINGLE shared writer of the decision log.
 # Callers build a complete JSON object with `jq -n`/`jq -c` and hand the string
-# to `decision_log_append`; the helper ensures the directory, rotates the log
-# when it grows too large, and appends the line under a flock so concurrent
-# per-worker writers never interleave a rotate-then-append.
+# to `decision_log_append`. The helper itself guarantees single-line, valid-JSON
+# output on disk regardless of whether the caller passed compact (`jq -nc`) or
+# pretty-printed (`jq -n`) JSON: it canonicalizes the argument through `jq -c .`
+# before appending, so callers may use either form. Non-JSON/unparseable input
+# is silently dropped, and so is empty/whitespace-only input (including a
+# no-argument call): NO stderr diagnostic, NO sentinel record, and — critically
+# — NO blank line on disk. The whole function body is wrapped in
+# `2>/dev/null || true` so it can run inside
+# EXIT-trap handlers under `set -euo pipefail` without ever killing the caller.
+# Operator consequence: a missing record for a call site means either the write
+# failed or the argument was empty or not valid JSON. Remedy: build payloads with
+# `jq -c -n`; test-lib-decision-log-compact.sh covers the canonicalization.
+# The helper ensures the directory, rotates the log when it grows too large,
+# and appends the line under a flock so concurrent per-worker writers never
+# interleave a rotate-then-append.
 #
 # Usage: source this file, then call:
 #   decision_log_append <json-string>
@@ -38,7 +50,9 @@
 #
 # The decision log is WRITE-ONLY through this helper. The only operations on the
 # log file are: mkdir (its dir), stat (size), mv (rotate), and append
-# (printf >>). There is no read/parse path here by design.
+# (printf >>). No prior log CONTENT is ever read back or parsed here by design —
+# the log file is append-only through this helper. (The incoming ARGUMENT is a
+# separate matter: it is parsed once per call by `jq -c .` to canonicalize it.)
 #
 # Path:
 #   DECISION_LOG_FILE — the resolved log path, exported as a var for callers.
@@ -80,27 +94,44 @@ if [[ -z "${_LIB_DECISION_LOG_LOADED:-}" ]]; then
     # `return 0` below guarantees the function never propagates a failure to a
     # caller running under `set -e`.
     {
-      mkdir -p "$(dirname "$DECISION_LOG_FILE")"
+      # Canonicalize the caller's argument to single-line JSON up front, once,
+      # reused by both the flock and no-flock branches below. On invalid JSON,
+      # `jq -c .` exits non-zero and the `&&` chain short-circuits, so the
+      # append is skipped; the outer `return 0` still holds.
+      local canonical_json
+      canonical_json=$(printf '%s' "$json" | jq -c .) &&
 
-      local lockfile="${DECISION_LOG_FILE}.lock"
+      # Empty/whitespace-only input is NOT rejected by jq: `jq -c .` on empty
+      # input exits 0 and emits nothing, so without this guard the `&&` chain
+      # would proceed and `printf '%s\n' ""` would append a bare blank line —
+      # exactly the log corruption this helper exists to prevent (a blank tail
+      # line blinds `tail -n 1` readers such as dispatch-fleet-watch). Require
+      # non-empty canonical output before touching the log.
+      [[ -n "$canonical_json" ]] &&
 
-      if command -v flock >/dev/null 2>&1; then
-        # Serialize rotate+append across concurrent per-worker writers. A failed
-        # or timed-out flock (fd 9) exits the subshell 0 — the append is dropped
-        # rather than racing or blocking, consistent with the best-effort
-        # contract. The 2-second wait (-w 2) bounds the worst-case hang when
-        # another live process holds the lock, so this EXIT-trap handler can
-        # never stall dispatch-stop.sh / dispatch-select-tick indefinitely.
-        (
-          flock -w 2 9 || exit 0
+      mkdir -p "$(dirname "$DECISION_LOG_FILE")" &&
+
+      {
+        local lockfile="${DECISION_LOG_FILE}.lock"
+
+        if command -v flock >/dev/null 2>&1; then
+          # Serialize rotate+append across concurrent per-worker writers. A failed
+          # or timed-out flock (fd 9) exits the subshell 0 — the append is dropped
+          # rather than racing or blocking, consistent with the best-effort
+          # contract. The 2-second wait (-w 2) bounds the worst-case hang when
+          # another live process holds the lock, so this EXIT-trap handler can
+          # never stall dispatch-stop.sh / dispatch-select-tick indefinitely.
+          (
+            flock -w 2 9 || exit 0
+            _decision_log_rotate
+            printf '%s\n' "$canonical_json" >> "$DECISION_LOG_FILE"
+          ) 9>"$lockfile"
+        else
+          # No flock available — degrade to a plain rotate+append (still non-fatal).
           _decision_log_rotate
-          printf '%s\n' "$json" >> "$DECISION_LOG_FILE"
-        ) 9>"$lockfile"
-      else
-        # No flock available — degrade to a plain rotate+append (still non-fatal).
-        _decision_log_rotate
-        printf '%s\n' "$json" >> "$DECISION_LOG_FILE"
-      fi
+          printf '%s\n' "$canonical_json" >> "$DECISION_LOG_FILE"
+        fi
+      }
     } 2>/dev/null || true
     return 0
   }
