@@ -10,11 +10,13 @@
 # output on disk regardless of whether the caller passed compact (`jq -nc`) or
 # pretty-printed (`jq -n`) JSON: it canonicalizes the argument through `jq -c .`
 # before appending, so callers may use either form. Non-JSON/unparseable input
-# is silently dropped: NO stderr diagnostic, NO sentinel record — the whole
-# function body is wrapped in `2>/dev/null || true` so it can run inside
+# is silently dropped, and so is empty/whitespace-only input (including a
+# no-argument call): NO stderr diagnostic, NO sentinel record, and — critically
+# — NO blank line on disk. The whole function body is wrapped in
+# `2>/dev/null || true` so it can run inside
 # EXIT-trap handlers under `set -euo pipefail` without ever killing the caller.
 # Operator consequence: a missing record for a call site means either the write
-# failed or the argument was not valid JSON. Remedy: build payloads with
+# failed or the argument was empty or not valid JSON. Remedy: build payloads with
 # `jq -c -n`; test-lib-decision-log-compact.sh covers the canonicalization.
 # The helper ensures the directory, rotates the log when it grows too large,
 # and appends the line under a flock so concurrent per-worker writers never
@@ -98,6 +100,14 @@ if [[ -z "${_LIB_DECISION_LOG_LOADED:-}" ]]; then
       # append is skipped; the outer `return 0` still holds.
       local canonical_json
       canonical_json=$(printf '%s' "$json" | jq -c .) &&
+
+      # Empty/whitespace-only input is NOT rejected by jq: `jq -c .` on empty
+      # input exits 0 and emits nothing, so without this guard the `&&` chain
+      # would proceed and `printf '%s\n' ""` would append a bare blank line —
+      # exactly the log corruption this helper exists to prevent (a blank tail
+      # line blinds `tail -n 1` readers such as dispatch-fleet-watch). Require
+      # non-empty canonical output before touching the log.
+      [[ -n "$canonical_json" ]] &&
 
       mkdir -p "$(dirname "$DECISION_LOG_FILE")" &&
 

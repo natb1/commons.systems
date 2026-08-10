@@ -76,6 +76,29 @@ else
   assert_eq "invalid: log file was never created" "yes" "yes"
 fi
 
+# --- Test 3a: empty / whitespace-only / no-argument input appends nothing ----
+#
+# `jq -c .` on empty input exits 0 and emits nothing, so an unguarded `&&`
+# chain would append a bare newline — a blank, non-JSON line that blinds
+# `tail -n 1` readers (dispatch-fleet-watch reports "decision log is empty").
+
+echo "Test: empty, whitespace-only, and no-argument calls append no line at all"
+for DLC_EMPTY_LABEL in empty whitespace no-arg; do
+  dlc_setup
+  case "$DLC_EMPTY_LABEL" in
+    empty)      if decision_log_append ""; then DLC_RC=0; else DLC_RC=$?; fi ;;
+    whitespace) if decision_log_append "   "; then DLC_RC=0; else DLC_RC=$?; fi ;;
+    no-arg)     if decision_log_append; then DLC_RC=0; else DLC_RC=$?; fi ;;
+  esac
+  assert_eq "$DLC_EMPTY_LABEL: decision_log_append still returns 0" "0" "$DLC_RC"
+  assert_eq "$DLC_EMPTY_LABEL: log file has no lines appended" "0" "$(dlc_line_count)"
+  # A bare newline is one physical line but zero bytes of JSON — assert on raw
+  # size too, so a blank-line append cannot hide behind a line-count of 0.
+  DLC_SIZE=0
+  [[ -f "$DECISION_LOG_FILE" ]] && DLC_SIZE=$(wc -c < "$DECISION_LOG_FILE" | tr -d ' ')
+  assert_eq "$DLC_EMPTY_LABEL: log file has zero bytes" "0" "$DLC_SIZE"
+done
+
 # --- Test 3b: a valid append after a rejected invalid append is unaffected ---
 
 echo "Test: a valid append following a rejected invalid append still lands cleanly"
