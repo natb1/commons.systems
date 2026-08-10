@@ -11,7 +11,6 @@ rationale: "Surfaced at the 2026-07-07 /align-strategy interview as the
   justified, count flat or falling) needs a repeatable audit rather than a hand
   sweep. Retained as a draft for /align-tactics."
 reading: null
-gap: null
 serves:
   - strategy-owned-web-platform
 recovers: []

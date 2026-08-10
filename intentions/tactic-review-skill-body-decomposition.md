@@ -31,7 +31,6 @@ rationale: "Surfaced by the 2026-07-31 review-fix token audit interview. The
   parent-session shape the attribution fix would otherwise be evaluated
   against."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []

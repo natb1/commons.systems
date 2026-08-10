@@ -16,7 +16,6 @@ rationale: "Surfaced by the 2026-07-31 review-fix token audit interview. Author
   / amplifier / N+1), and the trigger is a dedicated diff-content api_call_site
   gate rather than the shared app_or_rules boolean."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []

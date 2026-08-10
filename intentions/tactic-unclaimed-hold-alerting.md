@@ -46,7 +46,6 @@ rationale: "Found live 2026-08-01 on
   would demote it back to implement (scope-sweep.ts:60-80,
   check-node-selection.ts check 5) and discard in-flight work."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

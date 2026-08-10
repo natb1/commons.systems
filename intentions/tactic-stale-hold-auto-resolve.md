@@ -45,7 +45,6 @@ rationale: "Found 2026-07-31 by two independent verification passes that each
   numeric scheme with lexicographic (tier, rank) and max-lifting, and
   tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

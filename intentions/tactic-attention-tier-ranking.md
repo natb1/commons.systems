@@ -21,7 +21,6 @@ rationale: "Byproduct of the 2026-07-18 /align-strategy tier-model round on
   landing. A later /align-tactics round should treat this body as unreviewed by
   the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-drives-dispatch
 recovers: []

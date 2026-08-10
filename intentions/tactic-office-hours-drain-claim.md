@@ -24,7 +24,6 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review on
   worktree_has_live_session check to mean anything for this node kind; the plan
   below is written against that post-merge shape."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

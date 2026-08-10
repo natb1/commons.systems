@@ -47,7 +47,6 @@ rationale: "CONFIRMED 2026-08-04 by direct diff, with a line-level root cause.
   and pin it through `park-node --base`, routing an exit-3 stale-diagnosis
   refusal back to re-diagnosis. These sweeps predate or bypass that contract."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
