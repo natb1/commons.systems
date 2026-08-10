@@ -680,10 +680,18 @@ Unit 4's checks below are the ones that matter** — Units 1–3 are already on 
 branch and their checks are regression cover.
 
 ```verify
-# Unit 1 — pure-function unit tests (package test script is `vitest run`).
-cd packages/intentionsutil && npx vitest run node-ancestry
+# Unit 1 — pure-function unit tests. Rooted at the repo root and selected with
+# --project, per .claude/rules/sandbox.md: rooting at the package directory
+# scopes vite's server.fs.allow to it and denies root-hoisted imports. The
+# earlier form ran two `cd packages/intentionsutil && …` lines in ONE fence —
+# same shell, no `set -e` — so the second `cd` failed ("already there"), `&&`
+# short-circuited, the second suite never ran, and the block's exit status was
+# a failed `cd`. That was a plan-text defect, not a code defect: it failed
+# identically on every run. Ratified as a false positive at the 2026-08-09
+# office-hours sitting.
+npx vitest run --project packages/intentionsutil --root . node-ancestry
 # Full package suite (no regressions in siblings):
-cd packages/intentionsutil && npx vitest run
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
@@ -716,7 +724,7 @@ after. `npx tsx` needs `dangerouslyDisableSandbox: true` (tsx dies on an IPC
 pipe under the sandbox):
 
 ```verify
-npx tsx -e "
+cat > "$TMPDIR/whole-store-gate.mts" <<'GATE'
 import { readdirSync } from 'node:fs';
 const m = await import('./packages/intentionsutil/scripts/node-ancestry.ts');
 const dir = './intentions';
@@ -733,8 +741,16 @@ for (const id of ids) {
 console.log('nodes=' + ids.length + ' over-cap=' + over + ' no-virtue=' + novirtue + ' max-bytes=' + worst);
 if (over > 0 || novirtue > 0) { console.error('FAIL'); process.exit(1); }
 console.log('PASS');
-"
+GATE
+npx tsx "$TMPDIR/whole-store-gate.mts"
 ```
+
+**Why this is a file and not `npx tsx -e`.** The earlier form inlined the same
+script with `-e`, which fails here with `Top-level await is currently not
+supported with the 'cjs' output format` — a tsx/esbuild limitation, not a code
+defect, and one that would trip every future run. Writing a real `.mts` and
+running it was executed successfully at the 2026-08-09 office-hours sitting and
+is the form that works.
 
 Expected after Unit 4: `over-cap=0`, `no-virtue=0`, `max-bytes` at or just under
 24,000. (`no-virtue` counts only nodes that have ancestors at all — the five
@@ -744,6 +760,43 @@ zero ancestors.)
 **The whole-store assertion above is the gate.** It quantifies over every node,
 so it already subsumes any per-node spot-check. Treat a failure there as
 authoritative and do not weaken it into a sample.
+
+### What `max-bytes` does and does not tell you (measured 2026-08-09)
+
+Re-run at the office-hours sitting against a store that had grown from 496 to
+553 nodes:
+
+```
+nodes=553 over-cap=0 no-virtue=0 max-bytes=23951  → PASS
+```
+
+**Do not read the gap between `max-bytes` and 24,000 as headroom.**
+`renderAncestryProjection` SPENDS `MAX_PROJECTION_BYTES` as a budget and calls
+`shedBlockToFit` to make each block fit its fair-share allocation, so a
+projection can only exceed the cap when shedding bottoms out at
+`MIN_RATIONALE_BYTES` and still overruns. `max-bytes` landing just under the cap
+is the fitting algorithm working, not a near miss — at the sitting the top five
+nodes clustered inside a 14-byte band (23937–23951), which is the signature of a
+budget, not of organic size.
+
+So `over-cap=0` proves shedding still succeeds. It says nothing about **how
+much** is being shed, which is the quantity that actually degrades as the store
+grows. Measured the same day across all 553 nodes:
+
+| | value |
+|---|---|
+| nodes with ancestors | 521 |
+| nodes whose projection was truncated | **230 (44.1%)** |
+| clarification titles shed | **48,826** |
+| conditions shed | 3,305 |
+| rationales cut at a byte boundary | 10 |
+
+Within-block shedding is documented as normal operation, so this is not a
+failure of the gate as written. It is a gap in what the gate measures: the node's
+purpose is to carry decision context up the graph, and on 44% of nodes most of
+the clarification context is being dropped to fit. If a future pass wants a
+signal that tracks the thing this node exists to deliver, assert on
+`clarifications_omitted` / `conditions_omitted` trends, not on `max-bytes`.
 
 The spot-check below exists only to put a rendered worst case in front of a
 human. It **selects its own subject at runtime** — the node with the largest
@@ -758,7 +811,7 @@ them here as historical examples is fine; asserting on them is not. Needs
 `dangerouslyDisableSandbox: true` for `npx tsx`:
 
 ```verify
-npx tsx -e "
+cat > "$TMPDIR/worst-case-spot-check.mts" <<'SPOT'
 import { readdirSync } from 'node:fs';
 const m = await import('./packages/intentionsutil/scripts/node-ancestry.ts');
 const dir = './intentions';
@@ -778,8 +831,15 @@ console.log(out);
 if (!out.includes('(virtue)')) { console.error('FAIL: worst-case node ' + worstId + ' renders no virtue ancestor'); process.exit(1); }
 if (worstBytes > m.MAX_PROJECTION_BYTES) { console.error('FAIL: worst-case node ' + worstId + ' exceeds the cap'); process.exit(1); }
 console.log('PASS');
-"
+SPOT
+npx tsx "$TMPDIR/worst-case-spot-check.mts"
 ```
+
+Same `tsx -e` top-level-await limitation as the gate above — write the script to
+a file and run it. Expect `truncated=true` on the selected node: at the
+2026-08-09 measurement the worst case was
+`tactic-legacy-office-hours-entry-removal` at 23,951 bytes, and 44% of nodes with
+ancestors were shedding.
 
 **Manual / observational (Units 2–3, require git + direnv +
 `dangerouslyDisableSandbox`, so not auto-runnable here):**

@@ -113,7 +113,7 @@ branch (already sweeps).
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
 ```
 
 ### Unit 2 — test coverage
@@ -121,7 +121,7 @@ branch (already sweeps).
 **Recommended model:** sonnet — mechanical test addition following the existing
 `rl_setup` stale-marker pattern and the `sel_tick` manual-fan-out group.
 
-**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`,
 the `sel_tick` manual-fan-out test group. Add a test that plants a stale
 dead-session reservation marker (a `session=` absent from `sel_tick_setup`'s fake
 `claude_agents_list_all`, with `DISPATCH_RESERVATION_NOW` past the 30s boot
@@ -131,7 +131,10 @@ excludes the stale marker (the sweep ran), and (b) the marker file under
 
 **Reuse:** `reservation_write` / `reservation_exists` / `reservation_sweep`
 (`lib-reservation-ledger.sh`); `sel_tick_setup`'s `DISPATCH_RESERVATION_DIR` +
-fake-agents wiring; the `rl_setup` group's dead-session-sweep test as the
-reclaimable-marker reference.
+fake-agents wiring, defined in
+`.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`; the
+`rl_setup` group's dead-session-sweep test, now in
+`.claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh`, as
+the reclaimable-marker reference.
 
 **Dependencies:** Unit 1.
