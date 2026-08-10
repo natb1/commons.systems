@@ -15,15 +15,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-select-target-node-tests
   pr: 2985
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []
