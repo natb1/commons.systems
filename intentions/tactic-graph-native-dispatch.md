@@ -431,6 +431,15 @@ boosts on draft work until the backlog drains, whereas the adopted
 WIP-bound design preserves the existing `(tier, rank)` ordering in the
 normal (below-limit) case.
 
+The bound is a START throttle applied once at selection, never an
+eligibility gate — so three `router.ts` helpers that re-call the selector
+outside the start path, `strategyAlignSelectable`, `resolveFrozenDescendant`,
+and `frozenTacticSelectable`, deliberately call it UNBOUNDED. Those helpers
+back the worker-start re-validation gate
+(`packages/intentionsutil/scripts/check-node-selection.ts`): re-validating
+an already-claimed, already-launched worker under a bound that flipped on
+since its selection would wrongly exit-12 it.
+
 Claimed-set, reservation ledger, concurrency pacing
 (`dispatch-target-workers` curve), the selection lock, and the
 `dispatch-spawn-tick` heartbeat carry over unchanged — the heartbeat is the
