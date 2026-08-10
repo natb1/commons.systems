@@ -141,7 +141,7 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
    */
   const isLiveRearmTarget = (n: IntentionNode): boolean => {
     if (!isWaitNode(n)) return false;
-    const source = byId.get(n.attributes.wait_for as string);
+    const source = byId.get(n.attributes.wait_for as string); // type-safety-ok: isWaitNode already checked wait_for is a string
     return source !== undefined && source.phase !== "done";
   };
 

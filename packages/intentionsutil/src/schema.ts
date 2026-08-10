@@ -1168,7 +1168,7 @@ function checkWaitNodeShape(node: IntentionNode, problems: string[]): void {
       expected = waitIdFor(waitFor);
     } catch (err) {
       problems.push(
-        `${node.id}: attributes.wait_for "${waitFor}" does not derive a usable wait id — ${(err as Error).message}; pick a source id whose derived wait id fits the node-id slug shape`,
+        `${node.id}: attributes.wait_for "${waitFor}" does not derive a usable wait id — ${(err instanceof Error ? err.message : String(err))}; pick a source id whose derived wait id fits the node-id slug shape`,
       );
     }
     if (expected !== null && node.id !== expected) {

@@ -44,7 +44,7 @@ describe("waitIdFor", () => {
   });
 
   it("throws when the derived id does not fit the node-id slug shape", () => {
-    expect(() => waitIdFor("tactic-Bad_Id!")).toThrow();
+    expect(() => waitIdFor("tactic-Bad_Id!")).toThrow(); // type-safety-ok: "!" is inside a string literal test fixture, not a non-null assertion
   });
 });
 

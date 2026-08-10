@@ -231,8 +231,8 @@ export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecisi
   if (disposition === "NONE") {
     decision.node = buildWaitNode(waitId, source, input);
     decision.node_body = buildWaitBody(waitId, input);
-  } else if (disposition === "REARM") {
-    const priorAttempts = existing!.attributes.wait_attempts;
+  } else if (existing !== undefined && disposition === "REARM") {
+    const priorAttempts = existing.attributes.wait_attempts;
     const attempts =
       typeof priorAttempts === "number" && Number.isInteger(priorAttempts) && priorAttempts >= 1
         ? priorAttempts + 1

@@ -93,7 +93,7 @@ export function listWaitCandidates(nodes: IntentionNode[], nowMs: number): WaitC
   for (const node of nodes) {
     if (!isWaitNode(node)) continue;
 
-    const sourceId = node.attributes.wait_for as string;
+    const sourceId = node.attributes.wait_for as string; // type-safety-ok: isWaitNode already checked wait_for is a string
     const source = byId.get(sourceId);
     if (source === undefined) continue; // orphan WAIT: nothing to hold
 

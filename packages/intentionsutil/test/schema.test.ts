@@ -1938,9 +1938,9 @@ describe("validateGraph", () => {
   });
 
   it("Rule 21: reports a wait_for whose derived id fails the node-id slug shape", () => {
-    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "Tactic_Source!" }) });
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "Tactic_Source!" }) }); // type-safety-ok: "!" is inside a string literal test fixture, not a non-null assertion
     expect(() => validateGraph(nodes)).toThrow(
-      /tactic-wait-source: attributes\.wait_for "Tactic_Source!" does not derive a usable wait id — .*does not match the node-id slug shape/,
+      /tactic-wait-source: attributes\.wait_for "Tactic_Source!" does not derive a usable wait id — .*does not match the node-id slug shape/, // type-safety-ok: "!" is inside a regex literal test fixture, not a non-null assertion
     );
   });
 
