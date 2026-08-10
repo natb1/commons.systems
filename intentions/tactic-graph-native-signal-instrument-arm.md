@@ -67,8 +67,7 @@ execution:
   completion: null
 validates:
   - strategy-graph-native-dispatch
-blocked_by:
-  - tactic-hold-residue-graph-native-signal-instrument-arm
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
