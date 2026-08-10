@@ -9,7 +9,7 @@ statement: "Add shell-level test coverage for transition-node's scope-stale
   worktree. Surfaced by review-fix on PR #2882
   (tactic-graph-node-lane-write-hardening): the shell-only guard and MAIN_ROOT
   stamp-path resolution added there are exercised by no test
-  (test-dispatch-scripts.sh has zero references to transition-node), so a
+  (test-transition-node.sh has zero references to transition-node's scope-stale handling), so a
   regression -- the guard removed, a typo in the main-qa phase string, or
   MAIN_ROOT mis-resolving -- would silently re-demote an already-merged node to
   implement or reintroduce the stamp-missing bug with nothing to catch it."
@@ -45,7 +45,7 @@ attributes: {}
 **Location:** `.claude/skills/dispatch-propagate/scripts/transition-node:138`
 
 **Description:** The new shell-only logic has no test coverage.
-`test-dispatch-scripts.sh` contains zero references to `transition-node`, and
+`test-transition-node.sh` contains zero references to this scope-stale logic, and
 the pure layer (`apply-node-transition`/`transitions`) is never handed
 `scopeStale` by this wrapper — `transition-node` handles scope-stale entirely
 in bash and forwards only `--ci`/`--strategy-stale`/`--set-pr`. So the newly

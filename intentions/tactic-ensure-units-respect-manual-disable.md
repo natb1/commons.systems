@@ -42,7 +42,7 @@ success_signal:
     bug-B/bug-O healing behavior must be unaffected)
   is_proxy: false
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-ensure-units-respect-manual-disable
   pr: 3015
@@ -60,31 +60,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "needs-main residue id 12 (Live-host observation: a real 'disable --now'
-    survives at least two reseed cycles) is Verifiability: WAIT. The code landed
-    on origin/main (PR #3015, merged 2026-08-03T06:31:12Z; lib.sh:3166,3417 both
-    call unit_manually_disabled; lib-unit-disable-state.sh present) and this
-    host runs the live
-    dispatch-fleet-watch.timer/dispatch-heal.timer/dispatch-sweep-periodic.time\
-    r/dispatch-heartbeat.timer, but no operator has yet started the awaited
-    event: no sentinel exists at ~/.local/share/commons-dispatch/disabled/ (dir
-    absent), so the deliberate disable-and-wait experiment has not begun.
-    Earliest useful re-check: after an operator creates the sentinel, disables
-    dispatch-fleet-watch.timer, and lets >=2 reseed cycles (~30-60 min) elapse,
-    then confirms via 'systemctl --user is-active/is-enabled' and 'journalctl
-    --user -t dispatch-schedule-reseed' that the disable stuck and the skip line
-    appeared."
-  since: 2026-08-03
-  recommendation: "No author decision needed, only re-selection once the live-host
-    manual procedure (documented in the tactic body under 'Manual /
-    observe-on-the-operator-host checks', steps 1-6) has been run and its
-    wall-clock window has elapsed. Lane-M already confirmed: guard code present
-    in lib.sh (both ensure_healer_units and ensure_watcher_units call
-    unit_manually_disabled), lib-unit-disable-state.sh exists, source PR #3015
-    is merged, and this host's dispatch timers are live. No contradicted MACHINE
-    item and no AUTHOR item on this node."
-  session_type: other
+office_hours: null
 pace_exempt: true
 rounds: null
 attributes: {}
@@ -653,3 +629,56 @@ live `systemd --user` session and a real reseed cycle):
     rm ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer
     # wait one more reseed cycle, then confirm re-arm:
     systemctl --user is-active dispatch-fleet-watch.timer   # expect active
+
+## main-qa result — live-host manual procedure run 2026-08-09
+
+Residue item 12 (`Verifiability: WAIT`) is **resolved**. An operator ran the
+six-step procedure on the live dispatch host on 2026-08-09, 10:59:43 → 12:01:49
+EDT. The awaited event has occurred; the WAIT is discharged.
+
+| step | check | result |
+|---|---|---|
+| 1 | create the sentinel, then `systemctl --user disable --now dispatch-fleet-watch.timer` | done 10:59:43 |
+| 2 | survives >= 2 reseed cycles (>= 45 min) without silent re-enable | **PASS** — 50.6 min elapsed across three `dispatch-tick` invocations; `is-active` stayed `inactive` and `is-enabled` stayed `disabled` throughout |
+| 3 | the skip is visible, not silent | **FAIL on visibility** — no `skipping enable --now` line appeared in `journalctl --user -t dispatch-schedule-reseed`, and no `WARNING:` appeared either |
+| 4 | no collateral fleet alarm and no heal loop | **PASS** — `dispatch-heal-units` logged `result=clean` x18 over the window; no standing alarm raised by the disable |
+| 5 | the healer is unaffected while the watcher is disabled | **PASS** — `dispatch-heal.timer` stayed active and firing throughout |
+| 6 | re-arms cleanly once the sentinel is removed | **PASS** — re-armed 12:01:49 with a correct unit file (`WorkingDirectory=` naming the current main worktree) |
+
+Five of six pass. The guard itself works: the disable stuck for 50.6 minutes
+across three reseed-carrying tick invocations, where the pre-change behavior was
+re-arming within 15-30 minutes. The success_signal's threshold ("the timer stays
+disabled across at least one full reseed cycle when the new opt-out sentinel is
+present") is met with margin, and step 4/5 confirm the no-collateral-damage half.
+
+### Step 3's deviation is filed, not lost
+
+Step 3 failed on **observability only**, not on the guard. It is tracked as its
+own node, `tactic-unit-disable-skip-silent-in-steady-state`, so closing this node
+does not drop it. Mechanism, read from code at the time of the run:
+`ensure_watcher_units` reads the sentinel, then returns 0 at the steady-state hot
+path *before* reaching the logging branch, whenever the installed unit files
+already match byte-for-byte. That early return is exactly the hot-path extension
+this tactic's Unit 2b deliberately added (so a disabled timer costs zero
+`systemctl` invocations per cycle) — so on any steady-state host, where the unit
+files are already current, the informational line is unreachable by construction.
+It is reachable only when the unit files needed rewriting. The alternative
+explanation — that no caller reached the guard at all — was ruled out:
+`dispatch-schedule-reseed:422` and `dispatch-schedule-convergence-reseed:212` both
+invoke `ensure_watcher_units`, and without the guard the timer re-arms in 15-30
+minutes, which it demonstrably did not.
+
+Consequence: the only operator-visible evidence that a disable is being honored
+is the *absence* of re-arming, which is indistinguishable from a dead guard or
+from a caller that never ran. The follow-up node carries the preferred fix
+direction (log the skip once from the hot path before returning, preserving the
+zero-`systemctl` property) and notes it applies symmetrically to
+`ensure_healer_units`.
+
+### One observation the procedure's text did not anticipate
+
+Step 6's re-arm was driven by the **periodic heartbeat**, not by a reseed cycle.
+Same guard (`ensure_watcher_units`), different caller than the step text assumes.
+The re-arm is correct either way — the guard lives inside the installer precisely
+so every call site inherits it — but a future operator re-running this procedure
+should not expect the re-arm to be attributable to a reseed in the journal.

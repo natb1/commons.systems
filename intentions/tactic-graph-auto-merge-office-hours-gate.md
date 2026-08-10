@@ -80,7 +80,27 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: needs-main residue item 11 asks whether to invest in a one-time backward
+    audit of already-merged node-lane PRs against their nodes' office_hours park
+    history — a scoping/prioritization call on the user's product intent, not an
+    objective check any tool can settle; no MACHINE items exist on this node to
+    run first
+  since: 2026-08-09
+  recommendation: "Decide: is a backward audit of already-merged node-lane PRs vs
+    their office_hours park history worth running as separate follow-up work?
+    Context from the merged PR #3033 (merged 2026-08-06T02:00:42Z, confirmed via
+    gh pr view): this tactic hardens graph-auto-merge to hold (not merge) any
+    phase:review node carrying a live office_hours park, closing a gap that was
+    never observed firing in production (the original motivating case, PR #3006,
+    was investigated and confirmed benign — its park was set post-merge at the
+    downstream main-qa phase). Acceptance evidence is the two new/updated test
+    suites cited in the PR body (test-graph-auto-merge.sh and the intentionsutil
+    vitest reconcile-graph suite), not a before/after production comparison,
+    since there is no historical incident to reproduce. If a backward audit is
+    wanted, scope and file it as a new tactic; otherwise this residue item can
+    be dismissed as accepted-risk."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

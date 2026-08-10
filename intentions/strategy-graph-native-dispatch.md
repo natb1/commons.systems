@@ -4548,6 +4548,221 @@ clarifications:
       launch is claim-safe without selecting at all, and no bypass is needed.
       Honest limit stated when the question was put to the author: what else
       depends on --standalone was not enumerated in this round."
+  - question: The WAIT design names `dispatch-sweep` as the host for the wait_until
+      release predicate, but that script reaps worktrees and sessions and writes
+      no graph node state. Which sweep actually hosts the predicate, and do the
+      design's line citations still resolve?
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release, re-verifying the WAIT design's cited
+      evidence against origin/main HEAD.) The WAIT release predicate's HOST is
+      the per-tick sweep family invoked from `dispatch-tick`, not the script
+      literally named `dispatch-sweep`. The two recorded pointers disagree on
+      the name: the WAIT ratification (2026-07-31, first round) names \"the
+      EXISTING tick sweep framework — the one landed by
+      tactic-denied-command-parks-node as PR #2994\", while the calendar-release
+      entry of the same date names \"dispatch-sweep, which already reads
+      nodeMinAgeSeconds from its config\". Both facts are individually true and
+      they point at different scripts. `dispatch-sweep` does read
+      `nodeMinAgeSeconds` (dispatch-sweep:139-152, sweep.example.json), but its
+      job is reaping merged/closed worktrees and stranded worker SESSIONS, fired
+      by the worker Stop-hook via dispatch-spawn-sweep and by the
+      dispatch-sweep-periodic systemd timer (lib.sh:2840-3042); it performs no
+      graph node phase/attributes write at all. The PR #2994 lineage is the set
+      of predicates sourced into `dispatch-tick` and run before selection each
+      tick — `reservation_sweep`, `standdown_recheck_sweep`,
+      `stale_hold_recheck_sweep`, `frozen_session_sweep`,
+      `terminal_without_disposition_sweep` (dispatch-tick:319-409 and 576-629) —
+      each added with the same idempotent `declare -f` source-and-call idiom,
+      which is exactly the \"one more predicate, never a second sweep\" shape
+      this strategy's one-framework rule requires. `stale_hold_recheck_sweep`
+      (lib-stale-hold-recheck.sh) is the direct analog: re-check a parked
+      predicate, resolve through a dedicated CLI that owns fresh-origin/main +
+      --base CAS, always return 0, never a gate. The plan therefore hosts the
+      wait_until predicate there and amends this node's statement accordingly;
+      no second sweep is created, so the strategy's rule is honored under either
+      name. Also recorded so future rounds do not read them as errors: the line
+      citations carried in the WAIT clarifications and node body have drifted
+      with unrelated edits — `router.ts:168-175` (blockersComplete) is now
+      ~237-241, `router.ts:343-355` (draft-candidate loop) is now ~518-573, and
+      dispatch-select-tick's dispatch-jit-engine/dispatch-jit-calendar-import
+      calls at :844/:938 are now ~:980/:993. Every mechanism they cite was
+      re-verified as accurate in substance."
+  - question: "Who owns the WAIT producer wiring — the qa-phase mint, the /qa-main
+      re-arm, and flipping tactic-qa-main-verifiability-sort-criterion's interim
+      park branch — and are the existing `Verifiability: WAIT` residue marks
+      backfilled?"
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release.) The producer side of the WAIT mechanism is
+      this node's work, and the boundary with the already-landed sort tactic is
+      now explicit. tactic-qa-main-verifiability-sort-criterion is phase done /
+      status codified: it landed the per-item `Verifiability:
+      MACHINE|AUTHOR|WAIT` sub-line on `## needs-main residue` bullets and an
+      INTERIM /qa-main WAIT branch that takes the same terminal action a
+      deploy-lag cannot-verify takes (a park), stating in its own body that it
+      must not mint WAIT hold nodes and that \"once that node lands, this branch
+      emits a WAIT hold node instead of parking\". It never says who makes that
+      edit; since it is done, this node does. So this node's plan covers three
+      producer-side items beyond the sweep predicate and router exclusion: (a)
+      the qa-phase mint that creates `tactic-wait-<source-id>` with the initial
+      `attributes.wait_until` at needs-main-residue record time (default 24h)
+      and adds the source's `blocked_by` edge, per the calendar-release
+      clarification's placement; (b) /qa-main's re-arm write that revises
+      `wait_until` and increments `attributes.attempts`; and (c) flipping the
+      sibling's interim WAIT branch from park to hold-node emission, which is
+      the only thing that gives a WAIT mark a consumer. Recorded corpus fact
+      bearing on scope: about 20 nodes in intentions/ already carry live
+      `Verifiability: WAIT` residue items (e.g.
+      tactic-flake-preview-and-smoke-dpkg-lock, tactic-invalid-state-lane,
+      tactic-terminal-disposition-sweep-park-without-cas), written before any
+      hold mechanism existed and therefore carrying no WAIT node, no wait_until,
+      and no blocked_by edge. They are not backfilled by this node — the
+      mechanism applies to marks recorded after it lands, and the existing ones
+      continue to drain through the interim park path. Most of them also await
+      an EPISODE (N further CI runs, elapsed fleet runtime, a live tick
+      observing a condition) rather than a deadline, which is precisely the case
+      the calendar wait's recorded concession bounds: the clock schedules when
+      the observation is taken and never substitutes for it."
+  - question: Should the WAIT router exclusion and enumerator key on the
+      deterministic `tactic-wait-` id prefix, as the hold precedent (holdIdFor /
+      isCanonicalHoldId) suggests?
+    answer: "(Recorded 2026-08-06 /align-tactics tactic-mode round on
+      tactic-wait-calendar-release.) The WAIT exclusion and the WAIT enumerator
+      key on `attributes.wait_until` presence together with a resolvable source
+      node — never on a bare `tactic-wait-` id prefix. The hold precedent this
+      design otherwise mirrors (packages/intentionsutil/src/holds.ts,
+      `holdIdFor` / `isCanonicalHoldId`, whose doc comment makes id-derivation
+      binding a security property) would suggest an id-keyed set, but the WAIT
+      id scheme `tactic-wait-<source-id>` collides with this implementing node's
+      own id: `tactic-wait-calendar-release` parses as a WAIT on a source named
+      `calendar-release`, which does not exist. An id-prefix-keyed exclusion in
+      the router's draft-candidate loop would therefore silently drop this node
+      itself from /align-tactics candidacy, and an id-prefix-keyed enumerator
+      would emit it as a WAIT candidate with an unresolvable source. Keying on
+      the attribute plus source resolution avoids both and keeps the exclusion
+      honest for a re-armed node (which returns to phase-null and re-enters that
+      loop). Verified at HEAD this round: the draft-candidate loop
+      (router.ts:565-586) still skips only `subtreeParentIds`, so the exclusion
+      the WAIT design calls mandatory remains ABSENT; `officeHoursQueue`'s `if
+      (n.office_hours === null) continue` (officeHours.ts:82, duplicated at
+      :256) still keeps an office_hours-null WAIT out of the human queue by
+      construction; and `blockersComplete` (router.ts:237-241) still returns
+      false for any non-done blocker, so a phase-less WAIT genuinely holds its
+      source and a `phase: done` write alone releases it."
+  - question: Does the manual `dispatch <node-id>` lane (Lane 2) actually reach
+      dispatch-graph-execute without a preceding origin/main sync, as
+      tactic-graph-execute-fresh-main-read's original rationale premised?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.) No — verified against HEAD
+      7c3e2a99. `dispatch` and `dispatch <node-id>`
+      (nix/packages/dispatch.nix:9-35) exec dispatch-tick, which runs
+      dispatch-select-tick synchronously in-process (dispatch-tick:637-650)
+      before routing the `graph` decision to dispatch-graph-execute
+      (dispatch-tick:735-750); the only standalone dispatch-graph-execute
+      invocations are test harnesses. A failed sync also does not leak a launch:
+      on fetch/merge failure dispatch-select-tick emits
+      `sync-failed`/`sync-broken` and exits before selection
+      (dispatch-select-tick:379-429). The I17 exposure is real but sits
+      elsewhere: (a) dispatch-select-tick:297-298 guards the whole Step 1
+      fetch+merge on the invoking checkout being on `main`, so a `dispatch
+      <node-id>` issued from any worktree skips the sync entirely, and (b)
+      provision-node-worktree fetches origin/main (line 115) but hands the gate
+      the un-merged main-checkout working tree (lines 129-130) rather than a
+      snapshot of what it just fetched. The ratified 2026-08-09 design (explicit
+      ref/sha/fetchedAt snapshot parameter on check-node-selection.ts,
+      refuse-by-default on unprovable freshness, recorded --allow-stale
+      override) is unchanged by this correction and is, if anything, better
+      motivated by it. Planned as part of tactic-graph-execute-fresh-main-read."
+  - question: Where does tactic-graph-execute-fresh-main-read's freshness-read scope
+      sit relative to the two adjacent raw nodes tactic-explicit-ref-graph-reads
+      and tactic-graph-execute-claimless-manual-launch?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.)
+      tactic-graph-execute-fresh-main-read is planned as the narrow
+      check-node-selection.ts slice of the broader principle stated by
+      tactic-explicit-ref-graph-reads (raw, no phase, \"every graph read
+      resolves its tree from an explicit ref\") — strategy clarification R3
+      (2026-08-05) is the adopted general form, and the 2026-08-09 office-hours
+      ratification is the controlling, more specific direction for this one
+      primitive, so the node is an instance with a cross-reference, not absorbed
+      into or superseding the broader node. Separately,
+      tactic-graph-execute-claimless-manual-launch (raw, no phase) edits the
+      same file, dispatch-graph-execute, for a different concern (claim-safety
+      on direct launches, not snapshot freshness) — the two are independent in
+      substance; whichever lands second rebases onto the other, neither
+      supersedes it. The ratified shape's production precedent (wrapper acquires
+      provenance, pure function consumes it as an explicit parameter) does not
+      depend on the still-unexercised sibling
+      tactic-office-hours-select-fresh-main: the same split is already in
+      production at transition-node:161,182,186 feeding compute-freshness.ts's
+      explicit --snapshot argument."
+  - question: Does any recorded attributes.conditions entry on
+      strategy-graph-native-dispatch fail in a way that bears on the
+      check-node-selection.ts freshness work
+      (tactic-graph-execute-fresh-main-read), or leave any Side-A condition
+      falsified?
+    answer: "(Recorded 2026-08-09 /align-tactics drift sweep on
+      tactic-graph-execute-fresh-main-read.) No condition was found to have
+      failed in a way bearing on this work; the sweep is recorded for the author
+      as non-blocking implementation-status observations. Conditions on
+      thin/offline-testable composition, freshly-fetched-state reads for
+      align-family sessions, and mechanical invalid-state handling all verified
+      holding and support the ratified direction. Two adjacent
+      implementation-status gaps were noted, neither a falsified premise: the
+      node-assigned bounded-ancestry-projection condition is not yet true on
+      origin/main (packages/intentionsutil/scripts/node-ancestry.ts does not
+      exist there; its implementing tactic tactic-node-ancestry-context sits at
+      phase implement on unmerged PR #2946 — an in-flight commitment); and the
+      PR-title CI-guard condition has no in-repo implementation this sweep could
+      find (.github/workflows/pr-checks.yml carries no title check,
+      dispatch-open-pr passes --title through unvalidated) — recorded as an
+      unverified gap (the guard may be GitHub-side branch protection invisible
+      to a repo search), not a finding of absence."
+  - question: (Drift review, 2026-08-10 /align-tactics strategy round.) Is the armed
+      maintenance-burden band (35% ceiling, non-increasing) still holding, given
+      the tactic population has churned substantially since the 2026-08-05
+      arming sample?
+    answer: "(Measured 2026-08-10 /align-tactics drift review.) The armed
+      maintenance-burden band HOLDS. Direct re-run of `npx tsx
+      packages/intentionsutil/scripts/align-tactics-census.ts
+      strategy-graph-native-dispatch intentions` against origin/main (0c23faea):
+      232 tactics serve this strategy, classified 50 open / 15 born-parked / 72
+      done / 95 draft. Open plus born-parked = 65 of 232 = 28.0%, against the
+      recorded 2026-08-05 arming sample of 59/197 = 30.0% and the 2026-08-04
+      baseline of 62/178 = 34.8%. Both terms of the band are satisfied: at or
+      below 35%, and non-increasing across the three consecutive samples (34.8%
+      -> 30.0% -> 28.0%) while the denominator grew by 54 over six days. The
+      condition is holding, not failing, and did not block this round. Recorded
+      as dated provenance in the same form as the arming measurement — not as
+      stored series state, which the 2026-08-05 sample-history ratification
+      explicitly rejected in favor of derivation from intentions/ git history at
+      read time."
+  - question: (Drift review, 2026-08-10 /align-tactics strategy round.) Is the
+      2026-08-05-ratified instrument work
+      (tactic-graph-native-signal-instrument-arm) still live and does the
+      adjacent in-flight census-scripted-tick work (tactic-census-scripted-tick)
+      conflict with it?
+    answer: "(Verified 2026-08-10 /align-tactics drift review.) Two checks on the
+      instrument work ratified 2026-08-05
+      (tactic-graph-native-signal-instrument-arm), both clear. (a) The sensor
+      drift is STILL LIVE and the tactic is not a no-op: LIFECYCLE_SENSOR_NAME
+      at packages/intentionsutil/scripts/read-sensors.ts:443 (used at :646) is
+      still the short string \"the intention store and the router's selection
+      log\", while this node's recorded success_signal.sensor carries the
+      amended long string naming align-tactics-census.ts and the selection log —
+      so SensorRegistry.resolve's exact match still fails and reading stays
+      null. Note the file path recorded in the 2026-08-05 clarification and in
+      the tactic's rationale is scripts/read-sensors.ts, not
+      src/read-sensors.ts; no src/ copy exists. (b) The adjacent in-flight
+      census work does NOT conflict with the recorded sensor:
+      tactic-census-scripted-tick (open, qa) retires
+      `.claude/skills/dispatch-propagate/scripts/dispatch-graph-census` (the
+      threshold-gated latch-birth wrapper) and adds census-tick.ts — it does not
+      touch packages/intentionsutil/scripts/align-tactics-census.ts, which the
+      recorded sensor names as its defect-population enumerator and which
+      remains referenced by the /align-tactics skill and its
+      idempotency/tactic-target references. The sensor implementer may reuse
+      align-tactics-census.ts's classify() (draft/born-parked/open/done, lines
+      23-30) without a pending-retirement hazard."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4601,7 +4816,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
-  last_aligned: null
+  last_aligned: 2026-08-10
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via

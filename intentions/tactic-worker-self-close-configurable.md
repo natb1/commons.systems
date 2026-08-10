@@ -189,10 +189,9 @@ missing. Show the operator-meaningful form — the opt-out — as
 `force-opus.example.json` shows `{"enabled": false}`.)
 
 **Loader tests** in
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`: add five
-cases immediately after the `force-opus` loader tests (Tests 7p–7t,
-`test-dispatch-scripts.sh:11881-11950`), reusing the existing `config_setup` /
-`config_teardown` helpers (`test-dispatch-scripts.sh:10952-10969`, which copy
+`.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh`: add
+five cases immediately after the `force-opus` loader tests (Tests 7p–7t),
+reusing the existing `config_setup` / `config_teardown` helpers, which copy
 `dispatch-config-load` + `lib.sh` into a scratch `scripts/` dir and export
 `DISPATCH_CONFIG_DIR`). Mirror the force-opus cases one-for-one:
 
@@ -309,12 +308,10 @@ behavior change in this plan.
    escape hatch, its config file, its precedence chain, its fail-toward-keep
    direction, and the claim-hold caution.
 
-**`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`** — extend
-the existing `dispatch-self-close` block (`test-dispatch-scripts.sh:17805-18277`;
-the block ends with Test 16 at ~18261 and is followed by the `dispatch-jit-engine`
-section):
+**`.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh`** —
+extend the existing `dispatch-self-close` block:
 
-- Extend `selfclose_setup` (`:17813-17846`) to also `cp
+- Extend `selfclose_setup` to also `cp
   "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/"` and `cp
   "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/"` (`chmod +x` the loader only —
   `lib.sh` is sourced), `mkdir -p "$TMPDIR_TEST/config"`, and `export
@@ -322,13 +319,13 @@ section):
   run from a copied `scripts/` dir, so it resolves the loader through its own
   `SCRIPT_DIR`, and `DISPATCH_CONFIG_DIR` keeps the loader off the real repo
   config. Add `DISPATCH_CONFIG_DIR` and `DISPATCH_SELF_CLOSE_AUTO_CLOSE` to the
-  `unset` list in `selfclose_teardown` (`:17941-17952`).
+  `unset` list in `selfclose_teardown`.
 - Add a helper `selfclose_write_worker_sessions <true|false>` that writes
   `{"auto_close":<v>}` to `$DISPATCH_CONFIG_DIR/worker-sessions.json`, alongside
   the existing `selfclose_write_state` / `selfclose_write_terminal_marker`
   helpers.
 - New cases, each `selfclose_setup` … `selfclose_teardown`, asserting via the
-  existing `selfclose_assert_no_rm` (`:17874-17883`) or by reading
+  existing `selfclose_assert_no_rm` or by reading
   `$SPAWN_ROUTER_RM_LOG`:
   1. `--node tactic-x`, matching marker, `auto_close:false` → NO `claude rm`;
      stdout/stderr contain `keeping`.
@@ -355,13 +352,11 @@ section):
      existing HOLD path, no `claude rm` (the toggle never makes behavior more
      aggressive).
 
-  **Coordination note (not a dependency):** `tactic-dispatch-test-monolith-split`
-  (phase `qa`) plans to move this block into a new
-  `.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh`
-  (`intentions/tactic-dispatch-test-monolith-split.md:164,280`). If that file
-  already exists when this unit runs, add the new self-close cases there instead
-  of in the monolith; the loader cases from Unit 1 stay wherever the
-  `dispatch-config-load` tests live.
+  **Note:** `tactic-dispatch-test-monolith-split` has already landed the split
+  of the old monolith into per-SUT files; the self-close block now lives in
+  `.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh` (as
+  referenced above), and the loader cases from Unit 1 live in
+  `test-dispatch-config-load.sh`.
 
 **`.claude/skills/dispatch-propagate/reference.md`** — add a short prose
 paragraph in the self-close discussion (`reference.md:573-582`, which already
@@ -413,15 +408,13 @@ opus
   naming convention and `${VAR:-default}` idiom.
 - `dispatch-self-close:191-196` and `:206-211` — the existing park/hold message
   style (stdout + stderr, `exit 0`) the keep message must mirror.
-- `test-dispatch-scripts.sh:10952-10969` — `config_setup` / `config_teardown`
-  for loader tests.
-- `test-dispatch-scripts.sh:17813-17952` — `selfclose_setup`,
+- `test-dispatch-config-load.sh` — `config_setup` / `config_teardown`
+  for loader tests, and the force-opus loader test quintet to mirror.
+- `test-dispatch-self-close.sh` — `selfclose_setup`,
   `selfclose_write_state`, `selfclose_write_terminal_marker`,
   `selfclose_set_workers`, `selfclose_set_timer`, `selfclose_assert_no_rm`,
   `selfclose_teardown`; plus `write_fake_spawn_router_claude`'s fake `claude`
   that logs `rm` argv to `$SPAWN_ROUTER_RM_LOG`.
-- `test-dispatch-scripts.sh:11881-11950` — the force-opus loader test quintet to
-  mirror.
 - `.claude/skills/dispatch-propagate/scripts/*.example.json` (11 files) — the
   example-file convention.
 
@@ -432,7 +425,8 @@ whole suite must pass, not just the new cases (Unit 2 changes a shared setup
 helper).
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh
 ```
 
 ```verify
@@ -448,7 +442,7 @@ Manual / judgment checks:
 - **Default no-regress, read from the diff:** with no `dispatch.config/worker-sessions.json`
   present, the only behavioral delta in `dispatch-self-close` must be an
   additional loader call. Confirm the pre-existing self-close tests (Tests 1–16,
-  `test-dispatch-scripts.sh:17953-18277`) pass unmodified except for the
+  in `test-dispatch-self-close.sh`) pass unmodified except for the
   `selfclose_setup`/`selfclose_teardown` additions.
 - **Polarity spot-check:** run
   `printf '{"auto_close":false}' > /tmp/claude-ws/worker-sessions.json` and
