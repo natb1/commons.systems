@@ -19,17 +19,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-dependency-justification-audit
   pr: 2875
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-07-28
-    attempt: 2
-    pushed_sha: 9b151ee71fff48d94780a18757c10fa795960ed8
+  fix: null
+  conflict: null
   completion: null
 validates:
   - strategy-owned-web-platform
