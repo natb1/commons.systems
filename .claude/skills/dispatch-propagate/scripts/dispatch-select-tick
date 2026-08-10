@@ -53,8 +53,9 @@
 # effective_live = busy_workers + outstanding_reservations — a reservation counts
 # against the budget the instant it is written, with no wait for worker
 # registration — and the tick sweeps stranded reservations before counting.
-# A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
-# and computes a context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
+# A `--manual` run (the bare human-typed `/dispatch` shim) also reconciles the
+# ledger before counting, then QUERIES the live-count and computes a
+# context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
 # it overrides the pace-curve throttle and, per human-dispatch-is-sovereign, always
 # launches its one highest-ranking-available node even at the MAX_WORKERS ceiling
 # (a bounded, deliberate max_concurrent_workers + 1 overage) — only the `--exhausted`
@@ -849,12 +850,41 @@ elif [[ -n "$MANUAL" ]]; then
   # ordering signal). LIVE_COUNT mirrors the
   # autonomous block's effective-live count (busy workers + reservations), and —
   # like that block — it SWEEPS the ledger before counting. The sweep is
-  # load-bearing since the spawn handoff landed: a claim is no longer cleared at
-  # the spawn kick but re-stamped `origin=spawned` and held until the worker
-  # registers, so between registration and the next sweep the SAME node is both a
-  # busy worker and an outstanding reservation. Counting unswept would charge it
-  # twice and shrink manual fan-out for up to a full tick interval. Sweep rule (a)
-  # drops exactly those redundant markers.
+  # load-bearing for TWO INDEPENDENT reasons; do not remove it as a redundant
+  # optimization on the strength of only one of them:
+  #   (1) Spawn-handoff double-counting. Since the spawn handoff landed, a claim
+  #       is no longer cleared at the spawn kick but re-stamped `origin=spawned`
+  #       and held until the worker registers, so between registration and the
+  #       next sweep the SAME node is both a busy worker and an outstanding
+  #       reservation. Counting unswept would charge it twice and shrink manual
+  #       fan-out for up to a full tick interval. Sweep rule (a) drops exactly
+  #       those redundant markers.
+  #   (2) Cross-mode ledger freshness. Pause gates worker SPAWNING only, never
+  #       ledger bookkeeping: dispatch-tick's paused branch sources
+  #       lib-reservation-ledger.sh and reaps the ledger ahead of its
+  #       short-circuit `exit 0` (landed as tactic-heartbeat-sweep-before-pause),
+  #       so a paused heartbeat IS still a reaper and this manual sweep is NOT
+  #       the ledger's only reconciler — do not read it as one. What it is, is
+  #       the only reconciler that makes the ledger current AS OF THIS RUN: a
+  #       manual dispatch must not consume a ledger that is up to one heartbeat
+  #       interval stale (and arbitrarily stale when the heartbeat timer is
+  #       stopped, masked, or has not fired since a worker session died).
+  #       A stale count here is NOT merely "more conservative and therefore
+  #       safe": dead-session orphan markers inflate live=N with phantom
+  #       workers, and once they reach the ceiling HEADROOM hits 0 and manual
+  #       fan-out gets throttled or zeroed outright — the shape of the
+  #       2026-07-23 phantom-worker incident (`live=10` with no live worker
+  #       actually running) — which is a failure, not caution. Required by
+  #       strategy-graph-native-dispatch's 2026-07-23 cross-mode ledger-validity
+  #       clarification. (That clarification named a
+  #       `$XDG_DATA_HOME/commons-dispatch/paused` sentinel; its 2026-07-26
+  #       amendment supersedes the mechanism with a dispatch.config/*.json
+  #       boolean field — not yet built, tracked by
+  #       tactic-dispatch-pause-config-field, so dispatch-tick still resolves
+  #       DISPATCH_PAUSE_FLAG today — and leaves the spawning-not-bookkeeping
+  #       semantics unchanged.)
+  # Like the autonomous site, the call is best-effort (`|| true`): a failed sweep
+  # must not block a deliberate human dispatch.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null
