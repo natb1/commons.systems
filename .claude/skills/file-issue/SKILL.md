@@ -1,6 +1,6 @@
 ---
 name: file-issue
-description: RETIRED — do not invoke. Superseded by /align-strategy and /align-tactics; use those instead.
+description: RETIRED — do not invoke. Superseded by /align and /align-tactics; use those instead.
 ---
 
 # File Issue (RETIRED)
@@ -28,8 +28,8 @@ grep -rn '/file-issue' .claude/skills/
 ```
 
 (that grep also surfaces non-invocation mentions — dispatch script comments,
-`dispatch-token-audit` test fixtures, `align-init`/`align-strategy` narrative
-prose — which are descriptive, not call sites.)
+`dispatch-token-audit` test fixtures, `align` narrative prose — which are
+descriptive, not call sites.)
 
 - `.claude/skills/qa-fix/references/needs-main-followups.md` — Step 3.6
   needs-main follow-up filing; superseded by that file's "Node-target lane"
@@ -60,7 +60,7 @@ type/topic classification) with no approval gate.
 
 The intention-graph lane has superseded it:
 
-- **`/align-strategy`** — interview-driven recording of a `strategy-*`
+- **`/align`** — interview-driven recording of a `strategy-*`
   intention node. This is the graph-native successor to `/file-issue`'s
   requirements-definition role.
 - **`/align-tactics`** — breaks a recorded `strategy-*` intention node into
@@ -68,7 +68,7 @@ The intention-graph lane has superseded it:
   `/file-issue`'s epic-structuring (decomposition) role.
 
 For any future work that would previously have gone through `/file-issue`,
-use `/align-strategy` and `/align-tactics` instead.
+use `/align` and `/align-tactics` instead.
 
 The scripts under `.claude/skills/file-issue/scripts/` are left in place
 unchanged; this retirement touches only this SKILL.md.

@@ -29,7 +29,7 @@
 # retries, and deletes it on every exit path).
 #
 # Usage:
-#   graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
+#   graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... [--expect <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]
 #   graph-commit -m 'graph: seed dispatch state' tactic-graph-commit
 #   graph-commit -C /path/to/worktree -m 'graph: land edit' tactic-foo
 #
@@ -50,15 +50,40 @@
 #   blob no longer matches origin/main after a fetch, the write is refused
 #   before any local commit is made. Omit entirely to keep pre-CAS behavior.
 #
-# Exit status — four observable outcomes across rc 0 and rc 1:
-#   0  the edit landed on main. Two sub-cases, distinguished only by a log line
-#      (same exit code):
+# --expect <id>=<blobsha> (repeatable) or --expect <manifest-file> (one
+#   <id>=<sha> pair per line): optional wrong-repo assertion. The sha is the
+#   blob of the content the caller WROTE — `git hash-object -- intentions/<id>.md`
+#   run in the caller's OWN checkout after its edit. Before any tree mutation,
+#   graph-commit hashes the same path in the repo it resolved (-C/--repo, else
+#   cwd) and refuses to land on a mismatch.
+#
+#   --base and --expect assert different things and are not interchangeable:
+#   --base asserts the PRE-edit blob against origin/main (a freshness /
+#   compare-and-swap check about concurrent writers), while --expect asserts the
+#   POST-edit blob against the resolved checkout (a targeting check about WHICH
+#   repo this invocation is committing). Only --expect can catch a wrong-repo
+#   invocation whose blob happens to equal origin/main: the nothing-staged guard
+#   below only fires when the wrong repo's blob DIFFERS from origin/main, so a
+#   wrong repo that is merely in sync with origin/main slips through it and
+#   exits 0 (as the nothing-to-push sub-case below, or as a "landed" that landed
+#   nothing) while the caller's real edit sits dirty elsewhere.
+#   Omit entirely to keep pre-assertion behavior.
+#
+# Exit status — six observable outcomes across rc 0 and rc 1:
+#   0  nothing needed to land, or the edit landed on main. Three sub-cases,
+#      distinguished only by a log line (same exit code):
+#        nothing-to-push        — every target id already matches origin/main
+#          AND HEAD is already origin/main, so nothing this run holds could
+#          change main. The landing cycle (lock, scratch push, check poll, push
+#          to main) is skipped entirely and NO "landed" line is printed; the
+#          log line ends "nothing to push; skipping the landing cycle".
 #        landed                 — no concurrent-edit divergence; no special log.
 #        landed-after-resolution — a concurrent-edit divergence was auto-merged
 #          by layer 2 (rebase-conflict field merge) or layer 3 (stale --base
 #          re-read), then landed. The final log line carries the
 #          "(layer 2/3 auto-resolved a concurrent-edit divergence)" suffix.
-#   1  push could not land. Two distinct rc-1 sub-cases:
+#   1  push could not land, OR the invocation was refused before any write.
+#      Three distinct rc-1 sub-cases:
 #        busy-main — busy main after all attempts, the required checks never
 #          stamped green within the poll window, a required check CONCLUDED
 #          non-success (deterministic content failure — no retry), or check-run
@@ -74,8 +99,93 @@
 #          "mechanical-unresolved" and office_hours.recommendation holds a
 #          per-diverged-field breakdown; a park with no captured field detail
 #          keeps the plain "concurrent-edit conflict — manual merge needed"
-#          reason and no recommendation.
-#   2  usage error.
+#          reason and no recommendation. Carve-out: a --prune id that is NOT
+#          itself part of the conflicted set is a bystander — its deletion is
+#          independent of whatever id(s) failed to resolve, so it is
+#          re-applied and lands WITH the park commit rather than parking (see
+#          park_and_exit()). Only a prune id that IS part of the conflicted
+#          set keeps this "content is NOT landed" fate. The park commit
+#          subject (and, on a failed land, the unlanded-park error) names the
+#          parked set and the landed-deletion set separately, so a bystander
+#          prune is never described as parked.
+#        refused-by-die — a die() call (see `die()` below) prints
+#          `error: graph-commit: <msg>` to stderr and exits 1. This sub-case is
+#          the PRE-WRITE validation refusals specifically: the existence guards
+#          (the ordinary-edit "does not exist — write the node via
+#          write-node.ts" guard and both --prune guards), the --expect
+#          wrong-repo refusal, the malformed `<id>=<blobsha>` refusal for
+#          --base/--expect, the missing-flag-argument checks (-m/-C/--prune/
+#          --base/--expect with no value), the not-a-git-repo refusal, and the
+#          rebase-already-in-progress refusal. All of those run before main()
+#          touches the tree: nothing is committed, nothing is pushed, and NO
+#          park is written.
+#          die() is NOT exclusive to those guards, so `rc 1` plus an
+#          `error: graph-commit:` line does not by itself license a caller to
+#          assume nothing happened — the stderr text is the discriminator, not
+#          the exit code. The die() sites that fire AFTER the tree, the index,
+#          or the remote was already mutated:
+#            - inside try_land(): the concluded-non-success die and the
+#              check-run-polling die — a local commit exists and a `graph/**`
+#              scratch branch was already pushed. Both belong to the busy-main
+#              sub-case above, which already owns them; they are named here
+#              only so the enumeration is not read as exhaustive.
+#            - "unexpected land status" on that same path, likewise after the
+#              local commit.
+#            - check_base_freshness()'s unreadable-base-blob die and
+#              try_layer2_resolve()'s broken-staging-invariant die, both of
+#              which run after layer 2/3 may have rewritten node files on disk.
+#            - park_write()'s "failed to write the office_hours parking record"
+#              die, reached from park_and_exit() AFTER
+#              `git reset --hard FETCH_HEAD` discarded this writer's tree. That
+#              is the one die() that leaves NO park recorded while the writer's
+#              content is already gone from the worktree — SNAP_DIR is the only
+#              surviving copy.
+#        Caller contract: rc 1 does not mean "nothing landed". When the
+#          invocation mixed --prune ids with other ids, a bystander prune's
+#          deletion may have landed on main together with the park commit. A
+#          caller that retries after rc 1 must NOT replay the same argv
+#          blindly. Per --prune id, re-derive whether the deletion is still
+#          outstanding by asking origin/main directly:
+#            git fetch origin main
+#            git cat-file -e origin/main:intentions/<id>.md
+#          rc 0 = the file is still present on origin/main, the prune is still
+#          outstanding — keep `--prune <id>` in the retry argv. rc non-zero =
+#          the deletion already landed — DROP `--prune <id>` from the retry
+#          argv. (`git cat-file -e` is the quiet existence test, and is the
+#          same idiom the script's own prune guard uses.)
+#          If an already-landed `--prune <id>` IS re-passed, that guard refuses
+#          the retry with rc 1 (not rc 2 — it goes through die()) and this
+#          exact stderr line:
+#            error: graph-commit: intentions/<id>.md does not exist in HEAD — nothing to prune for '<id>'
+#          That rc 1 is an argument-validation refusal raised before any git
+#          write: no park is written, no `office_hours` line appears on any
+#          node, and no snapshot dir is preserved. It must NOT be misread as a
+#          second concurrent-edit conflict. The discriminator an agent can use
+#          is that message text plus the ABSENCE of any
+#          "graph-commit: parked ..." stderr line.
+#          Precondition on that guard: it tests `HEAD:intentions/<id>.md` —
+#          the LOCAL checkout's HEAD, NOT origin/main. So it only protects a
+#          retry that runs from a repo already synced past the park commit.
+#          The park path itself (park_and_exit()) leaves the writer's OWN
+#          worktree in exactly that state, since it resets to FETCH_HEAD,
+#          commits the deletion, and pushes. But a retry issued from a STALE
+#          checkout whose HEAD still contains the node's file passes this
+#          guard even though the deletion already landed on origin/main —
+#          which is exactly why the `git fetch origin main` step above is
+#          mandatory before any retry, not merely a suggestion.
+#          The stderr lines above distinguish the parked set from the landed
+#          bystander-prune set, and so does the park commit subject; those are
+#          the authoritative record of what happened. No in-repo caller
+#          currently passes --prune programmatically — pruning is agent-driven
+#          via the owed-prune census, not script-driven — so this contract is
+#          documented for the agent reading it before a retry, not enforced by
+#          a caller check.
+#   2  usage error — reserved for the paths that call `exit 2` directly: an
+#      unknown `-*` option, no node ids given at all, an id rejected by
+#      validate_id_chars (empty, containing a path separator, or exactly `.`
+#      or `..`), and `--expect <id>=...` naming a --prune id. rc 2 does NOT
+#      cover every argument problem: the die()-based validation refusals listed
+#      under rc 1 above exit 1.
 #
 # Conventions: mirrors the bounded-retry shape/logging of `gh_retry` in
 # .claude/skills/dispatch-propagate/scripts/lib.sh. Per .claude/rules/code-style.md
@@ -140,6 +250,9 @@ LOCK_WAIT_SECONDS="${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-$((MAX_PUSH_ATTEMPTS * (CHE
 # BASE        — optional --base compare-and-swap manifest: node id -> the blob
 #               SHA the caller read it at (git hash-object at read time).
 #               Empty unless --base was passed; empty means skip the check.
+# EXPECT_BLOB — optional --expect assertion manifest: node id -> the blob SHA of
+#               the content the caller WROTE (git hash-object after its edit).
+#               Empty unless --expect was passed.
 # EXPECTED    — associative set of the exact staged paths we permit.
 # SNAP_DIR    — tempdir holding the on-disk node content we are trying to land.
 # KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
@@ -150,6 +263,7 @@ declare -a IDS=()
 declare -a PRUNE_IDS=()
 declare -a ALL_IDS=()
 declare -A BASE=()
+declare -A EXPECT_BLOB=()
 declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
@@ -159,6 +273,26 @@ CURRENT_MSG=""
 #                  delete it on the remote on exit.
 SCRATCH_BRANCH=""
 SCRATCH_PUSHED=0
+# LAST_CHECK_DETAIL — a human-readable per-context snapshot of the most recent
+# successful check-run poll (e.g. "acceptance=success(3 rows), lint=pending(1
+# row), ..."). Written by await_checks(), read by try_land()'s retry and
+# terminal messages so a failed landing names the state it actually observed
+# instead of guessing at contention (Defect 3).
+# LAST_CHECK_SHA — the provenance of that snapshot: the commit it was observed
+# on. Written in the SAME statement group as LAST_CHECK_DETAIL and never reset,
+# so a later attempt that ends BEFORE any poll (lock wait exhausted, scratch
+# push failed, lock stolen) still carries an EARLIER attempt's snapshot for an
+# EARLIER commit. Every message therefore renders the pair through
+# check_state_phrase(), which compares this against the SHA it is describing so
+# a stale snapshot is never presented as a current observation of that SHA.
+LAST_CHECK_DETAIL=""
+LAST_CHECK_SHA=""
+# LAST_LAND_REASON — a short human phrase naming why the last try_land()
+# attempt ended, set at each of that loop's exit branches. The terminal exit-11
+# message names it as the cause, so the reader is told what actually happened
+# rather than being handed a "checks bad, or else lock contention" disjunction
+# the code already knows the answer to.
+LAST_LAND_REASON=""
 # Landing-lock globals (see "# --- Landing lock" below).
 # LOCK_HOLDER_ID    — this process's unique claim identity, computed once at
 #                     script load: short hostname + PID + two $RANDOM draws.
@@ -181,6 +315,19 @@ LOCK_WAIT_DEADLINE=0
 # intentions-only worktree), where the in-place path is used unchanged.
 ORIG_HEAD=""
 RESTORE_HEAD=0
+# MAIN_SHA — the SINGLE origin/main tip this invocation reconciles against.
+# main() fetches origin/main exactly once (right after the dirty-tree pre-flight,
+# before snapshot()) and pins the resulting sha here; every pre-land step —
+# check_base_freshness()'s --base CAS, ensure_intentions_only_base()'s far-ahead
+# rebuild and its three-way replay, and main()'s nothing-staged blob comparison —
+# reads THIS value rather than re-fetching and re-reading FETCH_HEAD. Pinning it
+# matters for correctness, not just cost: with independent fetches, the far-ahead
+# rebuild could reset onto a main tip NEWER than the one the freshness check
+# reconciled against, so an edge landed in between would be reconciled against by
+# nobody. The one deliberate exception is park_and_exit(), which re-fetches on
+# purpose — the park must land on the freshest main, not on a tip observed
+# before the conflict was diagnosed.
+MAIN_SHA=""
 # RESOLVED_VIA_MERGE — set to 1 the moment any layer-2 (structural field-level
 # merge, run_merge_node()) or later layer-3 auto-merge actually resolves a
 # concurrent-edit divergence. Read once at the final "landed" log line to append
@@ -203,7 +350,7 @@ die() {
 }
 
 usage() {
-  echo "usage: graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
+  echo "usage: graph-commit [-C <repo-path>] [-m <message>] [--prune <id>]... [--base <id>=<blobsha>|<manifest-file>]... [--expect <id>=<blobsha>|<manifest-file>]... <node-id> [<node-id> ...]" >&2
 }
 
 # --- Prune / base id helpers -------------------------------------------------
@@ -227,35 +374,89 @@ validate_id_chars() {
   esac
 }
 
-# Record one <id>=<blobsha> pair into BASE.
-add_base_pair() {
-  local pair="$1" id sha
+# Record one <id>=<blobsha> pair into the named associative array (BASE for
+# --base, EXPECT_BLOB for --expect). The target array is passed BY NAME and
+# bound with a bash nameref (requires bash 4.3; the script already requires
+# bash 4 for `declare -A`), so --base and --expect share one parser instead of
+# maintaining two copies that can drift.
+add_blob_pair() { # <array-name> <flag-name> <pair>
+  local -n _target="$1"
+  local flag="$2" pair="$3" id sha
   id="${pair%%=*}"
   sha="${pair#*=}"
   if [[ -z "$id" || "$id" == "$pair" || -z "$sha" ]]; then
-    die "invalid --base entry '$pair' (expected <id>=<blobsha>)"
+    die "invalid $flag entry '$pair' (expected <id>=<blobsha>)"
   fi
-  BASE["$id"]="$sha"
+  _target["$id"]="$sha"
 }
 
-# A --base argument is either a literal <id>=<blobsha> pair or, when it names
-# an existing file, a manifest of such pairs (one per line, blank lines
-# ignored) — so a caller holding a whole dump's worth of base shas can pass
-# one flag instead of one --base per node.
-parse_base_arg() {
-  local arg="$1"
+# A --base/--expect argument is either a literal <id>=<blobsha> pair or, when it
+# names an existing file, a manifest of such pairs (one per line, blank lines
+# ignored) — so a caller holding a whole dump's worth of blob shas can pass one
+# flag instead of one flag per node.
+parse_blob_arg() { # <array-name> <flag-name> <arg>
+  local arr="$1" flag="$2" arg="$3"
   if [[ -f "$arg" ]]; then
     local line
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ -z "$line" ]] && continue
-      add_base_pair "$line"
+      add_blob_pair "$arr" "$flag" "$line"
     done <"$arg"
   else
-    add_base_pair "$arg"
+    add_blob_pair "$arr" "$flag" "$arg"
   fi
 }
 
-# Reconcile each --base entry against origin/main after a fetch. If an entry's
+# --- Wrong-repo assertion (--expect) ----------------------------------------
+# Assert that the repo this invocation RESOLVED actually holds the content the
+# caller wrote. The caller computes `git hash-object -- intentions/<id>.md` in
+# its OWN checkout after its edit and passes it as --expect <id>=<sha>; here we
+# hash the same path in REPO_ROOT and compare.
+#
+# Why this exists on top of the nothing-staged guard in main(): that guard only
+# fires when the wrongly-targeted repo's blob DIFFERS from origin/main. When the
+# wrong repo happens to be in sync with origin/main — the common case for an
+# idle checkout — both blobs are equal, the guard passes, and graph-commit
+# reports a false "landed" while the caller's real edit sits dirty in a
+# different checkout. --expect closes that hole because it asserts the caller's
+# POST-edit content, independent of any pre-edit or origin/main state.
+#
+# Ordering is load-bearing: this must run before check_base_freshness (layer 3's
+# auto-merge overwrites $INTENTIONS_DIR/$id.md on disk) and before
+# ensure_intentions_only_base (which can `git reset --hard` the tree). Later
+# would hash content graph-commit itself rewrote, not the caller's.
+#
+# Opt-in: no --expect means no behavior change for existing callers.
+assert_expected_content() {
+  [[ "${#EXPECT_BLOB[@]}" -eq 0 ]] && return 0
+  local id
+  # Pass 1 — validation. A --prune is a deletion: there is no content to
+  # assert, so pinning one is a usage error (exit 2, like the other argument
+  # validators; die() would exit 1). Keys naming neither an ordinary id nor a
+  # prune id are ignored, matching --base manifest semantics where one batch
+  # manifest may cover more nodes than a given invocation commits.
+  for id in "${!EXPECT_BLOB[@]}"; do
+    if is_prune_id "$id"; then
+      echo "error: graph-commit: --expect $id=... names a --prune id — a deletion has no content to assert" >&2
+      exit 2
+    fi
+  done
+  # Pass 2 — assertion over the ordinary edit ids only. main() has already
+  # cd'd to REPO_ROOT, so the repo-relative path is correct.
+  local sha actual
+  for id in "${IDS[@]}"; do
+    sha="${EXPECT_BLOB[$id]:-}"
+    [[ -z "$sha" ]] && continue
+    actual="$(git hash-object -- "intentions/$id.md")" \
+      || die "could not hash intentions/$id.md in the resolved repo ($REPO_ROOT)"
+    if [[ "$actual" != "$sha" ]]; then
+      die "the resolved repo ($REPO_ROOT) does not hold the content the caller asserted for intentions/$id.md (--expect $sha, on disk $actual) — the edit was made in a DIFFERENT checkout: mis-pointed -C/--repo (or cwd targeting the wrong checkout). Refusing to land."
+    fi
+  done
+}
+
+# Reconcile each --base entry against origin/main as pinned by main()'s single
+# fetch ($MAIN_SHA — this function no longer fetches itself). If an entry's
 # blob no longer matches origin/main, a concurrent writer landed an edit to the
 # same node since this writer read it. Rather than refusing outright (the old
 # behavior — a hard die), attempt a structural three-way merge of the writer's
@@ -263,7 +464,7 @@ parse_base_arg() {
 # run_merge_node() primitive as the rebase-conflict path. There is no git
 # rebase-stage inversion here — these are plain file reads, so base/ours/theirs
 # map directly: base = the blob the writer read (BASE[$id]), ours = the writer's
-# current on-disk edit, theirs = origin/main's landed content (FETCH_HEAD:path).
+# current on-disk edit, theirs = origin/main's landed content ($MAIN_SHA:path).
 # A fully-merged node is rewritten on disk so the normal commit+land flow
 # proceeds against the fresh origin/main content. A divergence run_merge_node
 # cannot resolve is recorded (CONFLICT_FIELDS_JSON); after every entry is
@@ -277,24 +478,38 @@ parse_base_arg() {
 check_base_freshness() {
   [[ "${#BASE[@]}" -eq 0 ]] && return 0
   echo "graph-commit: checking --base freshness for ${#BASE[@]} node(s) against origin/main" >&2
-  git fetch origin main >&2
   local id sha origin_sha path STALE_BASE_UNRESOLVED=0
   for id in "${!BASE[@]}"; do
     sha="${BASE[$id]}"
     path="intentions/$id.md"
-    if git cat-file -e "FETCH_HEAD:$path" 2>/dev/null; then
-      origin_sha="$(git rev-parse "FETCH_HEAD:$path")"
+    if git cat-file -e "$MAIN_SHA:$path" 2>/dev/null; then
+      origin_sha="$(git rev-parse "$MAIN_SHA:$path")"
     else
       origin_sha="<absent>"
     fi
     [[ "$origin_sha" == "$sha" ]] && continue
+
+    # A prune id has no on-disk content to three-way merge, and
+    # $INTENTIONS_DIR/$id.md is absent by contract (main() refuses otherwise
+    # when a --prune id also names an ordinary edit). Handing merge-node.ts a
+    # nonexistent --ours throws ENOENT, which run_merge_node() would report as
+    # the generic "could not attempt structural merge" crash sentinel — the
+    # wrong diagnosis, and a doomed npx tsx spawn. Mirror try_layer2_resolve()'s
+    # prune early-out instead: record an accurate, prune-specific sentinel and
+    # park rather than resolve, so a stale --base on a prune id fails closed
+    # instead of resurrecting the pruned file.
+    if is_prune_id "$id"; then
+      append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune base moved — the node changed on origin/main since this writer read it"}]')"
+      STALE_BASE_UNRESOLVED=1
+      continue
+    fi
 
     # origin/main's copy of this node diverged from the blob the writer read.
     # Attempt a structural three-way merge instead of refusing. base/ours/theirs
     # map directly to plain file reads (no rebase-stage inversion):
     #   base   = the blob the writer originally read (BASE[$id])
     #   ours   = the writer's current intended content (on disk, pre-snapshot)
-    #   theirs = origin/main's freshly-landed content (FETCH_HEAD:$path), or the
+    #   theirs = origin/main's freshly-landed content ($MAIN_SHA:$path), or the
     #            empty string when the node is now absent on origin/main.
     local base_f theirs_f out_f
     base_f="$SNAP_DIR/.base-merge-$id.base"
@@ -306,13 +521,26 @@ check_base_freshness() {
       theirs_f=""
     else
       theirs_f="$SNAP_DIR/.base-merge-$id.theirs"
-      git show "FETCH_HEAD:$path" >"$theirs_f"
+      git show "$MAIN_SHA:$path" >"$theirs_f"
     fi
     if run_merge_node "$id" "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f" "$out_f"; then
       # Fully resolved: overwrite the on-disk node with the merged content so the
       # write proceeds against exactly origin_sha. RESOLVED_VIA_MERGE is already
       # set to 1 by run_merge_node().
+      #
+      # The SNAP_DIR copy is refreshed in the SAME step, deliberately: SNAP_DIR
+      # holds the content THIS RUN INTENDS TO LAND, not a frozen pre-merge copy
+      # of what the writer happened to have on disk at snapshot() time. A later
+      # ensure_intentions_only_base() re-materializes each node from SNAP_DIR
+      # after resetting the tree to fresh origin/main; if the snapshot still held
+      # the pre-merge content, that re-materialization would silently discard the
+      # reconciliation performed right here. Keeping the two in sync also means
+      # park_and_exit()'s "this writer's unlanded content is preserved at
+      # $SNAP_DIR" message points at the RECONCILED content — the best available
+      # starting point for the manual merge — rather than at a stale pre-merge
+      # copy.
       cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+      cp -- "$out_f" "$SNAP_DIR/$id.md"
       continue
     fi
     # run_merge_node() already appended the unresolved fields to
@@ -334,6 +562,27 @@ check_base_freshness() {
 # failure never masks the real exit status.
 cleanup() {
   local rc=$?
+  # Abort a rebase this run stranded. main() refuses to start at all when a
+  # rebase is ALREADY in progress (see the pre-flight check there, which
+  # deliberately runs BEFORE this trap is installed), so any rebase still in
+  # progress here was necessarily started by THIS run's `git pull --rebase` —
+  # that is the load-bearing premise for aborting unconditionally, with no
+  # separate "did we start it" flag.
+  #
+  # This MUST precede the RESTORE_HEAD `git reset --hard` below: a reset --hard
+  # inside a live rebase moves the tree but leaves the rebase state dir behind,
+  # which is exactly the mid-operation residue this is meant to clear.
+  #
+  # Deliberately incomplete: a SIGKILL fires no trap at all, so this cannot be
+  # the only defense. provision-node-worktree's precondition guard (which
+  # detects and repairs an abandoned rebase before handing a worktree to a
+  # session) is the primary one; this is the secondary, cheap backstop.
+  # Best-effort (|| true), on the same footing as the lock release and the
+  # scratch-branch delete below — its failure must never mask the real exit
+  # status, which this function still returns as $rc.
+  if rebase_in_progress; then
+    git rebase --abort >&2 || true
+  fi
   # Restore the original (far-ahead) HEAD if ensure_intentions_only_base() moved
   # the worktree onto origin/main to land an intentions/-only SHA. The intended
   # edit is already on main by this point (or failed to land); either way the
@@ -392,14 +641,27 @@ assert_staged_safe() {
 # origin/main), so this snapshot becomes the only surviving copy of the
 # writer's content — cleanup() keeps SNAP_DIR on that path (KEEP_SNAP=1) and
 # the park message points at it for the manual merge.
+#
+# SNAP_DIR is NOT a frozen pre-merge copy: it holds the content THIS RUN INTENDS
+# TO LAND, and it is refreshed in place whenever a layer-3 merge resolves — by
+# check_base_freshness() (stale --base reconciliation) and by
+# ensure_intentions_only_base() (the rebuild path's implicit compare-and-swap).
+# Two consequences follow. First, ensure_intentions_only_base() re-materializes
+# nodes from SNAP_DIR after resetting the tree to fresh origin/main, so a stale
+# snapshot there would silently revert a reconciliation. Second, park_and_exit()'s
+# "this writer's unlanded content is preserved at $SNAP_DIR" message points at
+# the reconciled content, not at a superseded pre-merge copy.
 snapshot() {
   local id
   for id in "${IDS[@]}"; do
     cp -- "$INTENTIONS_DIR/$id.md" "$SNAP_DIR/$id.md"
   done
   # PRUNE_IDS are deliberately skipped: a prune id has no on-disk file to
-  # copy, and there is no writer-authored content to preserve for it — the
-  # deletion is fully recorded by the commit that lands (or fails to land).
+  # copy, and there is no writer-authored content to preserve for it. The
+  # deletion is re-applied after each re-sync to fresh origin/main instead —
+  # ensure_intentions_only_base() re-deletes every PRUNE_IDS file, and
+  # park_and_exit() re-deletes every PRUNE_IDS file NOT itself implicated in
+  # the conflict (see conflicted_ids()) — so a bystander prune still lands.
 }
 
 # --- Layer-2 conflict accumulation ------------------------------------------
@@ -480,12 +742,35 @@ run_merge_node() {
 #
 # This makes graph-commit far-ahead-safe at the source: when HEAD is ahead of
 # origin/main with non-intentions changes, rebuild the intended edit on top of
-# fresh origin/main — reset the tree to origin/main, re-materialize the
-# snapshotted node content (edits) and deletions (prunes) — so the normal
+# fresh origin/main — reset the tree to $MAIN_SHA, then REPLAY the snapshotted
+# node content (edits) and deletions (prunes) onto it — so the normal
 # commit+land flow runs on an intentions/-only base. cleanup() restores the
 # original HEAD on exit. A worktree already at/behind origin/main, or ahead
 # with only intentions/ commits, needs no rebuild and is left untouched (the
 # in-place path is unchanged for the main-checkout and clean-worktree callers).
+#
+# The replay is a THREE-WAY MERGE, not a blind copy. Its base is the merge-base
+# of HEAD and $MAIN_SHA — the fork point the writer's edit was actually derived
+# from — computed BEFORE the reset moves HEAD. Per id:
+#   - the fork blob equals origin/main's blob → origin/main has not touched this
+#     node since the fork, so the snapshot is still a valid replay and is copied
+#     in verbatim (no merge invoked: the common far-ahead case stays merge-free);
+#   - they differ → another writer landed an edit to this node after the fork,
+#     so the snapshot is three-way merged against it (run_merge_node, base = the
+#     fork blob, ours = the snapshot, theirs = origin/main's blob). A resolved
+#     merge is written to BOTH the working tree and SNAP_DIR, keeping SNAP_DIR
+#     authoritative as the content this invocation intends to land. One class of
+#     edit is withheld from that merge and parked instead: a frontmatter LIST
+#     entry this invocation REMOVED that origin/main still carries — the merge's
+#     list rule is a base-free union that cannot express a deletion and would
+#     silently restore it (see the guard above frontmatter_list_entries).
+# A prune is guarded the same way: main carrying a post-fork edit to a node this
+# invocation means to delete is a prune-vs-concurrent-edit conflict, not a
+# deletion to force through. Any divergence the merge cannot resolve parks the
+# node(s) via park_and_exit() rather than silently overwriting the other
+# writer's landed edit — the fail-closed discipline layers 1-3 already follow.
+# The blind `cp` this replaced was a silent-revert hole: any landing between
+# snapshot() and the fetch was overwritten with no conflict, park, or diagnostic.
 #
 # NOTE (deployment): `git reset --hard` is a tree-updating op; when this script
 # is driven through the sandboxed Bash tool it needs dangerouslyDisableSandbox
@@ -493,25 +778,200 @@ run_merge_node() {
 # .claude/rules/sandbox.md. That is a caller concern (every graph-commit caller
 # already sets it), not resolved here. Must run AFTER snapshot() so SNAP_DIR
 # holds the writer's content before the reset overwrites the working tree.
+# blob_sha_or_empty <commit-ish> <id> — print the blob sha of intentions/<id>.md
+# at <commit-ish>, or the EMPTY STRING when the file does not exist there. Same
+# existence idiom check_base_freshness() uses (cat-file -e to test, rev-parse to
+# read), with "absent" encoded as "" so callers can compare two sides directly
+# and pass the result straight through to merge-node.ts's empty-arg convention
+# (mirrors stage_file_or_empty()).
+blob_sha_or_empty() {
+  local rev="$1" id="$2"
+  if git cat-file -e "$rev:intentions/$id.md" 2>/dev/null; then
+    git rev-parse "$rev:intentions/$id.md"
+  else
+    printf '%s'
+  fi
+}
+
+# --- List-entry removal guard (interim) ------------------------------------
+# The field-level merge primitive (mergeIntentionNodes, via run_merge_node)
+# merges every frontmatter LIST field — serves, recovers, clarifications,
+# tooling_goals, validates, blocked_by, and attributes.conditions — with a
+# BASE-FREE union (packages/intentionsutil/src/node-merge.ts:102-112, 161-166).
+# A union cannot express a deletion: "this entry is in theirs and absent from
+# ours because ours DELETED it" is indistinguishable from "it is in theirs
+# because theirs just added it", and the union keeps it either way. No
+# FieldConflict is ever produced for a list field, so the merge reports a clean
+# resolve and graph-commit exits 0 claiming the write landed — with the removal
+# silently reverted.
+#
+# That defect predates this script's far-ahead replay and is owned by
+# `tactic-node-merge-list-removal-loss`, which makes the primitive base-aware so
+# a removal is HONORED (not parked). But the replay below newly routes any node
+# whose origin/main blob moved since the fork point through that primitive,
+# where the pre-existing code path was a blind `cp` that honored the deletion.
+# Without a guard, a far-ahead writer clearing a satisfied `blocked_by` edge or
+# repointing `serves` loses the removal whenever ANY concurrent writer touches
+# the same node (an `attention` bump is enough) — silently, repeatably, and with
+# no per-field diagnostic naming what was dropped.
+#
+# So the replay refuses instead: when the snapshot drops a frontmatter list
+# entry that origin/main still carries, park (fail closed, the discipline layers
+# 1-3 already follow) rather than hand the removal to a merge that would revert
+# it. This is INTERIM. When `tactic-node-merge-list-removal-loss` lands and the
+# primitive honors removals, delete this guard and its call site — parking a
+# satisfied-blocked_by cleanup is exactly the mechanical park that node's design
+# decision rejects.
+#
+# frontmatter_list_entries <file> — print one "<top-level field><TAB><raw line>"
+# per YAML list-item line inside the file's FRONTMATTER (never the body, whose
+# markdown bullets are not node fields), sorted and deduped for `comm`. Keying
+# each entry by its owning top-level field keeps an entry MOVED between two list
+# fields (e.g. serves → validates) visible as a removal from the field it left.
+# A file with no `---` fence on line 1 yields nothing: it is not a node file, so
+# there is no list field to reason about.
+frontmatter_list_entries() {
+  awk '
+    NR == 1 { if ($0 != "---") exit; in_fm = 1; next }
+    in_fm && $0 == "---" { exit }
+    in_fm && /^[A-Za-z_][A-Za-z0-9_]*:/ { field = $0; sub(/:.*/, "", field); next }
+    in_fm && /^[[:space:]]+-[[:space:]]/ { print field "\t" $0 }
+  ' "$1" | LC_ALL=C sort -u
+}
+
+# list_entries_dropped_by_ours <base-file> <ours-file> <theirs-file> — print the
+# "<field><TAB><line>" entries present at BOTH the fork point and on origin/main
+# but absent from this invocation's snapshot: exactly the set the base-free union
+# would restore. Empty output (and a caller that ignores the exit status) means
+# no removal is at risk. Deliberately conservative in the safe direction — an
+# entry EDITED in place by this writer reads as a removal plus an addition, and
+# the union would resurrect the pre-edit variant alongside the new one, so
+# parking on it is right too.
+#
+# LC_ALL=C on both the sort (above) and the comm: `comm` verifies its inputs are
+# ordered under the SAME collation it compares with, so a locale-collated sort
+# feeding a comm can trip "file N is not in sorted order" — which exits non-zero
+# and, under `set -e`, would kill graph-commit mid-rebuild. Byte order on both
+# sides is deterministic and locale-independent.
+list_entries_dropped_by_ours() {
+  local base_f="$1" ours_f="$2" theirs_f="$3"
+  LC_ALL=C comm -12 \
+    <(LC_ALL=C comm -23 <(frontmatter_list_entries "$base_f") <(frontmatter_list_entries "$ours_f")) \
+    <(frontmatter_list_entries "$theirs_f")
+}
+
+# replay_snapshot_onto_base <id> <fork-sha> — re-materialize one snapshotted node
+# onto the freshly-reset $MAIN_SHA tree, reconciling with anything origin/main
+# landed for that node since <fork-sha> (the merge-base of the writer's HEAD and
+# $MAIN_SHA). Returns 0 when the working-tree copy now holds this invocation's
+# intended content, 1 when the divergence was unresolvable (run_merge_node has
+# already recorded the unresolved fields in CONFLICT_FIELDS_JSON, and
+# RESOLVED_VIA_MERGE is set by it on the resolving path). All tempfiles live
+# under SNAP_DIR so cleanup() removes them.
+replay_snapshot_onto_base() {
+  local id="$1" fork_sha="$2"
+  local fork_blob main_blob
+  fork_blob="$(blob_sha_or_empty "$fork_sha" "$id")"
+  main_blob="$(blob_sha_or_empty "$MAIN_SHA" "$id")"
+
+  # Fast path: origin/main has not touched this node since the fork point
+  # (including "absent at both"), so the snapshot is still a valid replay.
+  if [[ "$fork_blob" == "$main_blob" ]]; then
+    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+    return 0
+  fi
+
+  # Divergent: another writer landed an edit (or a deletion) to this node after
+  # the fork point. Three-way merge rather than overwrite. An absent side is
+  # passed as the empty string, merge-node.ts's "this side did not exist".
+  local base_f="" theirs_f="" out_f="$SNAP_DIR/.replay-$id.out"
+  if [[ -n "$fork_blob" ]]; then
+    base_f="$SNAP_DIR/.replay-$id.base"
+    git cat-file -p "$fork_blob" >"$base_f"
+  fi
+  if [[ -n "$main_blob" ]]; then
+    theirs_f="$SNAP_DIR/.replay-$id.theirs"
+    git cat-file -p "$main_blob" >"$theirs_f"
+  fi
+  # Interim list-entry removal guard (see the block above frontmatter_list_entries):
+  # the merge below unions list fields base-free and would silently restore any
+  # entry this invocation removed. Only meaningful with BOTH a fork blob (there is
+  # a base to have removed something FROM) and an origin/main blob (there is a
+  # landed side still carrying it); an absent theirs is the delete/modify case
+  # merge-node.ts already refuses.
+  if [[ -n "$base_f" && -n "$theirs_f" ]]; then
+    local dropped summary
+    dropped="$(list_entries_dropped_by_ours "$base_f" "$SNAP_DIR/$id.md" "$theirs_f")"
+    if [[ -n "$dropped" ]]; then
+      # Render at most 8 dropped entries as `<field>[<entry>]`, joined with "; ",
+      # so a wholesale list rewrite cannot blow up the parked recommendation.
+      summary="$(awk -F'\t' '
+        NR <= 8 { e = $2; sub(/^[[:space:]]*-[[:space:]]*/, "", e); printf "%s%s[%s]", (NR > 1 ? "; " : ""), $1, e }
+        END { if (NR > 8) printf "; +%d more", NR - 8 }
+      ' <<<"$dropped")"
+      append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
+        '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), and the field-level merge unions list fields base-free, so auto-merging would silently restore them")}]')"
+      return 1
+    fi
+  fi
+  if run_merge_node "$id" "$base_f" "$SNAP_DIR/$id.md" "$theirs_f" "$out_f"; then
+    cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
+    # Keep SNAP_DIR authoritative — it holds exactly what this invocation
+    # intends to land, and is what park_write() would point a human at.
+    cp -- "$out_f" "$SNAP_DIR/$id.md"
+    return 0
+  fi
+  return 1
+}
+
 ensure_intentions_only_base() {
-  git fetch origin main >&2
-  local base_sha nonint
-  base_sha="$(git rev-parse FETCH_HEAD)"
+  local nonint
   # Same diff spec the fast-path guard uses: three-dot (changes on HEAD's side
   # of the merge-base), name-only, then drop everything under intentions/.
-  nonint="$(git diff --name-only "$base_sha"...HEAD | grep -v '^intentions/' || true)"
+  nonint="$(git diff --name-only "$MAIN_SHA"...HEAD | grep -v '^intentions/' || true)"
   [[ -z "$nonint" ]] && return 0
   echo "graph-commit: worktree HEAD is ahead of origin/main with non-intentions changes — rebuilding the edit on an intentions/-only base (HEAD restored on exit)" >&2
+  # Set the HEAD-restore state BEFORE the reset below, so a park taken from
+  # inside this function — an unresolvable replay, or a --prune racing a
+  # concurrent edit — still returns the worktree to its PR tip via cleanup().
   ORIG_HEAD="$(git rev-parse HEAD)"
   RESTORE_HEAD=1
-  git reset --hard "$base_sha" >&2
-  local id
+  # The fork point MUST be computed before the reset — `git reset --hard` moves
+  # HEAD to $MAIN_SHA, after which merge-base HEAD $MAIN_SHA is just $MAIN_SHA
+  # and every replay would look like a no-op fast path. Clear error, no fallback
+  # (code-style.md): without a real fork point the replay has no base to
+  # three-way against, and guessing one is exactly the silent-revert hole this
+  # replaced.
+  local fork_sha
+  fork_sha="$(git merge-base HEAD "$MAIN_SHA")" \
+    || die "could not compute the merge-base of HEAD and origin/main ($MAIN_SHA) — the far-ahead rebuild has no fork point to replay this invocation's snapshot against"
+  git reset --hard "$MAIN_SHA" >&2
+  local id unresolved=0
   for id in "${IDS[@]}"; do
-    cp -- "$SNAP_DIR/$id.md" "$INTENTIONS_DIR/$id.md"
+    replay_snapshot_onto_base "$id" "$fork_sha" || unresolved=1
   done
+  local prune_fork prune_main
   for id in "${PRUNE_IDS[@]}"; do
+    prune_fork="$(blob_sha_or_empty "$fork_sha" "$id")"
+    prune_main="$(blob_sha_or_empty "$MAIN_SHA" "$id")"
+    # A deletion has nothing to three-way merge, so guard it instead: when
+    # origin/main still holds this node AND its content moved since the fork
+    # point, another writer landed an edit this prune never saw. Forcing the
+    # `rm -f` through would destroy that edit exactly as the old blind copy did.
+    # Same sentinel shape layer 2 records for a prune-vs-edit rebase conflict.
+    if [[ -n "$prune_main" && "$prune_main" != "$prune_fork" ]]; then
+      append_conflicts "$(jq -cn --arg id "$id" '[{id: $id, note: "prune vs. concurrent edit"}]')"
+      unresolved=1
+      continue
+    fi
+    # Unchanged since the fork, or already deleted on main too — safe to delete.
     rm -f -- "$INTENTIONS_DIR/$id.md"
   done
+  # Fail closed. ORIG_HEAD/RESTORE_HEAD are already set above, so cleanup() still
+  # returns the worktree to its PR tip on this park path.
+  if [[ "$unresolved" -eq 1 ]]; then
+    park_and_exit   # never returns
+  fi
 }
 
 # --- Is there anything new to commit? --------------------------------------
@@ -566,10 +1026,17 @@ rebase_in_progress() {
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
 # report a successful conclusion, keyed on the check-run NAME (mirrors the four
-# jobs in .github/workflows/graph-fast-path.yml). Only the fast path fires on a
-# `graph/**` push (unit-tests.yml ignores graph/**, pr-checks.yml is PR-only),
-# so there is no same-named run to race. Uses `gh api ... --jq` so gh runs jq on
-# its in-memory JSON — never an `echo "$VAR" | jq` round-trip (shell-json.md).
+# jobs in .github/workflows/graph-fast-path.yml). Gating is per DISTINCT
+# required context, not per check-run row: a SHA re-stamped by several pushes
+# accumulates one row per workflow run per name, so a row count of the green
+# rows can exceed four and an `== 4` row gate can never fire, leaving an
+# already-green SHA permanently unlandable. Instead each required name is
+# resolved to the conclusion of its NEWEST GitHub-Actions-authored run (highest
+# server-assigned `id`; rows from any other App are ignored outright), and the
+# gate fires when all four distinct names resolve to success. Uses
+# `gh api ... --jq` so gh runs jq
+# on its in-memory JSON — never an `echo "$VAR" | jq` round-trip
+# (shell-json.md).
 # Returns:
 #   0  all four contexts green.
 #   1  the timeout elapsed with the checks still pending (transient — the
@@ -582,36 +1049,88 @@ rebase_in_progress() {
 # would hide the real cause (clear error over fallback, code-style.md).
 await_checks() {
   local sha="$1"
-  local deadline counts nsucc nfail gh_stderr gh_fails=0
+  local deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0
   # gh's stderr is captured per poll inside SNAP_DIR, which already exists for
   # the lifetime of the run and is removed by cleanup() on non-park exits.
   local errfile="$SNAP_DIR/.gh-poll-stderr"
   deadline=$(( $(date +%s) + CHECK_TIMEOUT_SECONDS ))
-  nsucc=0
   while :; do
-    # For the four required names on this SHA, count how many concluded
-    # success and how many concluded non-success, keyed off .conclusion alone
-    # (null = pending, non-null = concluded) rather than requiring
-    # status=="completed" too — GitHub sometimes leaves a check-run's status
-    # stuck at in_progress even after its conclusion is already populated (a
-    # known check-runs desync). Mirrors dispatch_classify_rollup's
-    # `(.conclusion // "")` idiom (lib.sh) fixed for the same desync. Extra
-    # check runs (e.g. CodeQL `Analyze (*)`, `guard`) are ignored by the name
-    # filter.
+    # Emit exactly one line per required name, in a fixed order, shaped
+    # `<name> <latest-conclusion> <row-count>`; a name with no rows at all
+    # emits `absent 0`.
+    #
+    # Producer filter FIRST, ordering second — this gate is the one code path
+    # that pushes straight to a protected branch, so both must be
+    # forgery-resistant:
+    #
+    #   - Only rows authored by GitHub Actions (`.app.slug == "github-actions"`,
+    #     the App that runs .github/workflows/graph-fast-path.yml) are
+    #     considered. Any principal holding `checks: write` — a workflow's
+    #     GITHUB_TOKEN, an installed App, a leaked PAT — can POST a check run
+    #     with an arbitrary `name` and `conclusion: "success"` onto the
+    #     `graph/**` scratch SHA. Rows from any other App are dropped before a
+    #     winner is picked, so a foreign row can neither satisfy a required
+    #     context nor supersede the genuine one.
+    #   - The winner is `max_by(.id)` and NOTHING else. `id` is server-assigned
+    #     and monotonic per repository; `started_at` is caller-supplied on
+    #     `POST /repos/{owner}/{repo}/check-runs` and rewritable by `PATCH`, so
+    #     ordering on it would let a row claiming `started_at:
+    #     "9999-01-01T00:00:00Z"` sort above a genuine failure. Ordering on `id`
+    #     alone still resolves the real case this gate exists for: a SHA
+    #     re-stamped by several pushes, where the newer run's row has the higher
+    #     id and supersedes the stale failed one.
+    #
+    # The gate stays fail-closed: the selected row for each required name must
+    # itself conclude success, and any non-success selected row is a hard
+    # refusal (return 2, no retry).
+    #
+    # Keying off .conclusion alone (null = pending, non-null = concluded)
+    # rather than requiring status=="completed" too is deliberate — GitHub
+    # sometimes leaves a check-run's status stuck at in_progress even after its
+    # conclusion is already populated (a known check-runs desync, #2457).
+    # Mirrors dispatch_classify_rollup's `(.conclusion // "")` idiom (lib.sh)
+    # fixed for the same desync. Extra check runs (e.g. CodeQL `Analyze (*)`,
+    # the fast path's `guard` job) stay excluded by the name filter.
     if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
-      --jq '[.check_runs[]
-             | select(.name=="acceptance" or .name=="preview-and-smoke"
-                      or .name=="lint" or .name=="unit-tests")]
-            | "\([.[]|select((.conclusion // "") == "success")]|length) \([.[]|select(((.conclusion // "") != "") and (.conclusion != "success"))]|length)"' \
+      --jq '["acceptance","preview-and-smoke","lint","unit-tests"] as $req
+            | (.check_runs // []) as $all
+            | $req[] as $name
+            | [$all[]
+               | select(.name == $name)
+               | select((.app.slug // "") == "github-actions")] as $rows
+            | if ($rows | length) == 0 then "\($name) absent 0"
+              else ($rows | max_by(.id // 0)) as $latest
+                | "\($name) \($latest.conclusion // "pending") \($rows | length)"
+              end' \
       2>"$errfile")"; then
       gh_fails=0
-      [[ -n "$counts" ]] || counts="0 0"
-      read -r nsucc nfail <<<"$counts"
-      if [[ "$nsucc" -eq 4 ]]; then
+      ngreen=0; nbad=0; detail=""
+      while read -r cname cconc crows; do
+        [[ -n "$cname" ]] || continue
+        # `absent` means GitHub never created a check-run row for this name at
+        # all — a different thing from a row that exists but has not concluded
+        # (`pending`), and the parenthetical says so rather than printing a
+        # bare "(0 row(s))" the reader has to decode.
+        if [[ "$cconc" == "absent" ]]; then
+          detail+="${detail:+, }$cname=absent(no check-run rows created)"
+        else
+          detail+="${detail:+, }$cname=$cconc(${crows} row(s))"
+        fi
+        case "$cconc" in
+          success)         ngreen=$((ngreen + 1)) ;;
+          pending|absent)  ;;
+          *)               nbad=$((nbad + 1)) ;;
+        esac
+      done <<<"$counts"
+      # Snapshot and its provenance always move together: a detail string
+      # without the SHA it was read on cannot be attributed by a later message.
+      LAST_CHECK_DETAIL="$detail"
+      LAST_CHECK_SHA="$sha"
+      if [[ "$ngreen" -eq 4 ]]; then
         return 0
       fi
-      if [[ "${nfail:-0}" -gt 0 ]]; then
-        echo "graph-commit: a required check concluded non-success for $sha ($nsucc/4 green, $nfail failed)" >&2
+      if [[ "$nbad" -gt 0 ]]; then
+        echo "graph-commit: a required check concluded non-success for $sha — $detail" >&2
         return 2
       fi
     else
@@ -623,11 +1142,35 @@ await_checks() {
       fi
     fi
     if [[ "$(date +%s)" -ge "$deadline" ]]; then
-      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha (last seen ${nsucc:-0}/4 green)" >&2
+      echo "graph-commit: required checks not green within ${CHECK_TIMEOUT_SECONDS}s for $sha — $(check_state_phrase "$sha")" >&2
       return 1
     fi
     sleep "$CHECK_POLL_SECONDS"
   done
+}
+
+# check_state_phrase <sha> — render, on stdout, what this run actually knows
+# about the required checks ON <sha>, for interpolation into a failure message.
+# Three distinct things a reader must be able to tell apart:
+#   - we never observed any check state at all (no poll completed in this run);
+#   - we never observed <sha>'s state, and the snapshot we do hold belongs to a
+#     DIFFERENT commit (an earlier attempt's) — named as such, never passed off
+#     as <sha>'s current state;
+#   - we observed <sha>'s state, and here it is.
+# The degenerate cases are worded as non-observations rather than dropped into
+# the slot where a check state goes, so "we could not see the checks" never
+# reads as "the checks are not green".
+check_state_phrase() {
+  local sha="$1"
+  if [[ -z "$LAST_CHECK_SHA" ]]; then
+    echo "no check-run poll completed in this run, so the required-check state was never observed (this is a non-observation, not a check state)"
+    return 0
+  fi
+  if [[ "$LAST_CHECK_SHA" != "$sha" ]]; then
+    echo "no check-run poll completed for ${sha:0:8}, so ITS required-check state was never observed; the most recent observation was of a DIFFERENT commit ${LAST_CHECK_SHA:0:8}, which reported: $LAST_CHECK_DETAIL"
+    return 0
+  fi
+  echo "required-check state observed on ${sha:0:8}: $LAST_CHECK_DETAIL"
 }
 
 # --- Prune-id membership ----------------------------------------------------
@@ -911,13 +1454,17 @@ lock_release() {
 # remaining attempts are not burned (clear error over a fallback, per
 # code-style.md).
 try_land() {
-  local attempt sha ck
+  # sha is initialized (not merely declared) because the terminal message below
+  # reads it on the path where the loop ended before any attempt reached the
+  # `git rev-parse HEAD` that assigns it.
+  local attempt ck sha=""
   LOCK_WAIT_DEADLINE=$(( $(date +%s) + LOCK_WAIT_SECONDS ))
   for (( attempt=1; attempt<=MAX_PUSH_ATTEMPTS; attempt++ )); do
     # Serialize concurrent invocations on the landing lock so a losing writer
     # waits/backs off instead of burning a full CI-stamp cycle only to lose
     # the final push to main anyway.
     if ! lock_claim_or_renew; then
+      LAST_LAND_REASON="the landing lock was not acquired within the ${LOCK_WAIT_SECONDS}s wait window (another writer held it)"
       break
     fi
 
@@ -949,6 +1496,7 @@ try_land() {
     # expectation would go stale and spuriously reject the second push. It is a
     # PID-scoped branch this process owns and deletes, so a blind force is safe.
     if ! git push --force origin "HEAD:refs/heads/$SCRATCH_BRANCH" >&2; then
+      LAST_LAND_REASON="the scratch push to the graph scratch branch $SCRATCH_BRANCH failed"
       echo "graph-commit: scratch push to $SCRATCH_BRANCH failed on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
       continue
     fi
@@ -964,12 +1512,14 @@ try_land() {
       die "a required check concluded non-success for $sha — the commit content fails CI; not retrying (fix the content and re-run)"
     fi
     if [[ "$ck" -ne 0 ]]; then
-      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
+      LAST_LAND_REASON="the required checks did not report green within the ${CHECK_TIMEOUT_SECONDS}s poll window"
+      echo "graph-commit: checks did not go green for $sha on attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying — $(check_state_phrase "$sha")" >&2
       continue
     fi
 
     # The SHA now carries the four passing contexts — fast-forward it onto main.
     if [[ "$(git ls-remote origin "$LOCK_REF" | cut -f1)" != "$LOCK_SHA" ]]; then
+      LAST_LAND_REASON="the landing lock was stolen after expiry before the main push"
       echo "graph-commit: landing lock no longer held (stolen after expiry) before the main push on attempt $attempt/$MAX_PUSH_ATTEMPTS; re-claiming and retrying" >&2
       LOCK_HELD=0
       continue
@@ -978,12 +1528,18 @@ try_land() {
       lock_release
       return 0
     fi
+    LAST_LAND_REASON="the push to main was rejected because main advanced"
     echo "graph-commit: push of $sha to main rejected (main advanced), attempt $attempt/$MAX_PUSH_ATTEMPTS; rebasing and retrying" >&2
   done
   lock_release
   local ran=$attempt
   (( ran > MAX_PUSH_ATTEMPTS )) && ran=$MAX_PUSH_ATTEMPTS
-  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — main busy (landing-lock contention or required checks never stamped green); retry later" >&2
+  # Cause, then evidence. LAST_LAND_REASON is what ended the LAST attempt —
+  # known exactly, never guessed at — and check_state_phrase() attributes the
+  # check snapshot to the commit it was actually read on (or says plainly that
+  # no such observation exists), so an earlier attempt's snapshot can never be
+  # mistaken for a current reading of this failure.
+  echo "error: graph-commit: could not land on main after $ran/$MAX_PUSH_ATTEMPTS attempts — cause: ${LAST_LAND_REASON:-<no attempt reached an exit branch>}; $(check_state_phrase "$sha"); retry later" >&2
   return 11
 }
 
@@ -1039,6 +1595,25 @@ map(
 ) | join("\n\n")
 JQ
   jq -rf "$jqprog" "$CONFLICT_FIELDS_JSON"
+}
+
+# --- Conflicted-id set -------------------------------------------------------
+# CONFLICT_FIELDS_JSON's every entry (both the {id,field,ours,theirs} shape and
+# the {id,note} sentinel shape) carries an `id` key — it is the authoritative
+# registry of which ids this invocation could not resolve. Emits the distinct
+# ids, one per line, on stdout; returns 1 (no output) when the accumulator was
+# never created or is empty, which park_and_exit() treats as "could not
+# determine the conflicted set" and falls back to parking every id.
+# `-s` alone is not emptiness: the accumulator is created holding the two-byte
+# literal `[]` (init_conflict_fields()), and an append of a zero-length array
+# leaves it that way — so the id list itself, not the file size, decides. This
+# matches park_write()'s reader, which gates on `jq 'length'` for the same file.
+conflicted_ids() {
+  [[ -n "$CONFLICT_FIELDS_JSON" && -s "$CONFLICT_FIELDS_JSON" ]] || return 1
+  local ids
+  ids="$(jq -r '.[].id' "$CONFLICT_FIELDS_JSON" | sort -u)"
+  [[ -n "$ids" ]] || return 1
+  printf '%s\n' "$ids"
 }
 
 # --- Parking fallback ------------------------------------------------------
@@ -1139,7 +1714,7 @@ for (let i = 0; i < nodes.length; i++) {
 }
 TS
   if ! GRAPH_COMMIT_RECOMMENDATION_FILE="$rec_file" \
-       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "${ALL_IDS[@]}" >&2; then
+       npx tsx "$tmpts" "$STORE_MODULE" "$INTENTIONS_DIR" "$since" "$reason" "$SNAP_DIR" "$prune_csv" "$@" >&2; then
     rm -f "$tmpts"
     die "failed to write the office_hours parking record"
   fi
@@ -1148,19 +1723,40 @@ TS
 
 # --- Shared fail-closed park path (never returns) ---------------------------
 # The concurrent-edit conflict fail-closed sequence, extracted from main()'s
-# rc-12 tail so a second call site (Unit 3, before any commit exists) can invoke
-# the identical park without duplicating fetch/reset/park_write/re-commit/land
-# logic. Self-contained: relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP)
-# and the committed helpers, never on state that exists only after
-# try_land()/land() ran — it does its own fetch/reset. Always calls exit 1.
+# rc-12 tail so other call sites can invoke the identical park without
+# duplicating fetch/reset/park_write/re-commit/land logic. Self-contained:
+# relies only on globals (ALL_IDS, SNAP_DIR, KEEP_SNAP) and the committed
+# helpers, never on state that exists only after try_land()/land() ran — it does
+# its own fetch/reset. Always calls exit 1.
+#
+# Three call sites:
+#   1. main()'s rc-12 tail — a rebase conflict layer 2 could not resolve.
+#   2. check_base_freshness() — a stale --base (layer 3) whose divergence
+#      run_merge_node() could not resolve.
+#   3. ensure_intentions_only_base() — the far-ahead rebuild's three-way replay
+#      found a node (or a --prune id) that advanced on origin/main since this
+#      checkout's fork point and could not reconcile it. This one parks with no
+#      local commit yet in existence; ORIG_HEAD/RESTORE_HEAD are set before the
+#      rebuild's own `git reset --hard "$MAIN_SHA"`, so cleanup() still returns
+#      the worktree to its PR tip.
+#
+# Bystander prunes: a --prune id that is NOT itself part of the conflicted set
+# (per conflicted_ids()) is independent of whatever id(s) failed to resolve, so
+# its deletion is re-applied after the reset and lands with the park commit —
+# it does not park. A prune id that IS in the conflicted set keeps parking
+# exactly as before (Cases 17/23): re-deleting a conflicted prune would blind-
+# overwrite the other writer's just-landed edit, which is exactly the
+# fail-closed contract above forbids. When the conflicted set cannot be
+# determined (conflicted_ids() fails/empty — e.g. try_layer2_resolve() returned
+# 1 with nothing appended), or when it names no id this invocation is actually
+# committing (so the partition would park nothing at all), fall back to the
+# conservative default: every id parks, no prune is re-applied.
 park_and_exit() {
-  local park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
   # Fail closed: discard this writer's local conflicting commit, park the node as
   # it exists on fresh origin/main (the other writer's already-landed content
   # wins), and preserve this writer's unlanded content in SNAP_DIR for the
   # manual merge.
   KEEP_SNAP=1
-  echo "graph-commit: concurrent-edit conflict on ${ALL_IDS[*]}; parking node(s) — this writer's content is NOT landed" >&2
   echo "graph-commit: this writer's unlanded content is preserved at $SNAP_DIR for the manual merge" >&2
   # Sync to fresh origin/main. Both callers reach here with the writer's content
   # already captured in SNAP_DIR by snapshot() (run before check_base_freshness),
@@ -1178,7 +1774,71 @@ park_and_exit() {
   # caller concern, not resolved here.
   git fetch origin main >&2
   git reset --hard FETCH_HEAD >&2
-  park_write
+
+  # Partition: bystander prunes (re-applied and landed) vs. park_ids (parked).
+  local conflicted park_ids=() bystander_prunes=() id
+  if conflicted="$(conflicted_ids)"; then
+    declare -A _conflicted_set=()
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && _conflicted_set["$id"]=1
+    done <<<"$conflicted"
+    for id in "${PRUNE_IDS[@]}"; do
+      if [[ -z "${_conflicted_set[$id]:-}" ]]; then
+        bystander_prunes+=("$id")
+      fi
+    done
+    for id in "${ALL_IDS[@]}"; do
+      local is_bystander=0 b
+      for b in "${bystander_prunes[@]}"; do
+        [[ "$b" == "$id" ]] && { is_bystander=1; break; }
+      done
+      [[ "$is_bystander" -eq 0 ]] && park_ids+=("$id")
+    done
+  else
+    # Could not determine the conflicted set — conservative fallback: every id
+    # parks, no prune is re-applied.
+    park_ids=("${ALL_IDS[@]}")
+  fi
+
+  # Degenerate partition: every id in this invocation was classified a bystander
+  # prune, so nothing would park. Reachable when the unresolved conflict is on a
+  # --base id OUTSIDE this invocation's node set — check_base_freshness()
+  # iterates every BASE key, and a batch manifest may cover more nodes than the
+  # invocation commits (see assert_expected_content()'s note on that manifest
+  # semantics) — while every id actually being committed is a bystander prune.
+  # Parking nothing while the stderr and the exit status announce a park is the
+  # silent-loss shape this whole path exists to prevent, so route it to the same
+  # conservative default as an undeterminable conflicted set: every id parks, no
+  # prune is re-applied. The prune is then re-derivable by the caller from
+  # origin/main (see the rc-1 caller contract in the header).
+  if [[ "${#park_ids[@]}" -eq 0 ]]; then
+    echo "graph-commit: the unresolved conflict names no id in this invocation's node set — parking every id and re-applying no prune (conservative fallback)" >&2
+    park_ids=("${ALL_IDS[@]}")
+    bystander_prunes=()
+  fi
+
+  local park_msg
+  if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+    park_msg="graph: park ${park_ids[*]} (concurrent-edit conflict); prune ${bystander_prunes[*]}"
+    # ANNOUNCEMENT ONLY — not a landing claim. This prints BEFORE the parking
+    # write is pushed, and that push can still fail (see the post-`land` branch
+    # below). Nothing downstream may treat this line as evidence that a park
+    # reached main; land-align-round deliberately keys its `park` terminal
+    # marker on the post-push CONFIRMATION instead (the load-bearing substring
+    # is marked there).
+    echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
+    echo "graph-commit: re-applying and landing bystander prune(s) not implicated in the conflict: ${bystander_prunes[*]}" >&2
+    for id in "${bystander_prunes[@]}"; do
+      rm -f -- "$INTENTIONS_DIR/$id.md"
+    done
+  else
+    park_msg="graph: park ${ALL_IDS[*]} (concurrent-edit conflict)"
+    # ANNOUNCEMENT ONLY — see the note on the identical emission above: this
+    # precedes the parking push and is not evidence that a park reached main.
+    echo "graph-commit: concurrent-edit conflict on ${park_ids[*]}; parking node(s) — this writer's content is NOT landed" >&2
+  fi
+
+  park_write "${park_ids[@]}"
   CURRENT_MSG="$park_msg"
   if id_files_dirty; then
     commit_files
@@ -1186,9 +1846,29 @@ park_and_exit() {
   local prc=0
   land || prc=$?
   if [[ "$prc" -eq 0 ]]; then
-    echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+    # LOAD-BEARING SUBSTRING: both confirmations below share the literal
+    # "(office_hours set on the origin/main content)", and land-align-round
+    # (the /align-tactics landing wrapper) greps its captured stderr for
+    # exactly that to decide whether this rc-1 exit is a genuine terminal
+    # disposition (park) versus an exit with nothing landed and nothing parked
+    # ON MAIN — busy-main exhaustion, a usage error, or the failed-parking-push
+    # branch below. These lines print only AFTER `land` succeeded, which is
+    # what makes them safe to key on; the pre-push announcement is not. A
+    # wording change here silently breaks that downstream branch. The ratchet
+    # case in test-land-align-round.sh (packages/intentionsutil/scripts/)
+    # extracts land-align-round's needle from its real source and asserts it
+    # appears on exactly these two echo lines — keep them coupled.
+    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "graph-commit: parked ${park_ids[*]} (office_hours set on the origin/main content); landed bystander prune deletion(s) for ${bystander_prunes[*]}; pushed to main" >&2
+    else
+      echo "graph-commit: parked ${ALL_IDS[*]} (office_hours set on the origin/main content) and pushed the parking write to main" >&2
+    fi
   else
-    echo "error: graph-commit: could not land the parking write for ${ALL_IDS[*]} — office_hours set locally but not pushed to main" >&2
+    if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main; the bystander prune deletion for ${bystander_prunes[*]} also did not land — it is committed locally but unpushed, same as the park" >&2
+    else
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main" >&2
+    fi
   fi
   exit 1
 }
@@ -1319,7 +1999,9 @@ main() {
       --prune) [[ $# -ge 2 ]] || { usage; die "--prune requires a node id argument"; }
                PRUNE_IDS+=("$2"); shift 2 ;;
       --base) [[ $# -ge 2 ]] || { usage; die "--base requires an <id>=<blobsha> argument or a manifest file path"; }
-              parse_base_arg "$2"; shift 2 ;;
+              parse_blob_arg BASE --base "$2"; shift 2 ;;
+      --expect) [[ $# -ge 2 ]] || { usage; die "--expect requires an <id>=<blobsha> argument or a manifest file path"; }
+                parse_blob_arg EXPECT_BLOB --expect "$2"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       --) shift; while [[ $# -gt 0 ]]; do IDS+=("$1"); shift; done ;;
       -*) usage; echo "error: graph-commit: unknown option '$1'" >&2; exit 2 ;;
@@ -1339,6 +2021,22 @@ main() {
   fi
   INTENTIONS_DIR="$REPO_ROOT/intentions"
   cd "$REPO_ROOT"
+
+  # Refuse to run on a mid-operation worktree. A clear error at a system edge,
+  # not a fallback: a rebase in progress means someone (or something) else owns
+  # this checkout's HEAD right now, and graph-commit's own rebase/reset flow
+  # would compound the damage.
+  #
+  # Placement is load-bearing — this must run BEFORE `trap cleanup EXIT` is
+  # installed further down. cleanup() aborts any rebase in progress on exit; if
+  # this refusal ran after the trap were armed, the very die() below would abort
+  # the caller's own rebase — including an `edit`-stopped one, which leaves a
+  # CLEAN tree and would otherwise slip past assert_clean_outside_ids entirely.
+  # Refusing before the trap exists is what makes cleanup()'s unconditional
+  # abort provably safe: any rebase seen there was started by this run.
+  if rebase_in_progress; then
+    die "a rebase is already in progress in $REPO_ROOT — graph-commit will not run on a mid-operation worktree; finish or 'git rebase --abort' it first"
+  fi
 
   if [[ "${#IDS[@]}" -eq 0 && "${#PRUNE_IDS[@]}" -eq 0 ]]; then
     usage
@@ -1412,6 +2110,24 @@ main() {
   # surfaced (and named) rather than silently discarded.
   assert_clean_outside_ids
 
+  # Wrong-repo assertion (opt-in via --expect). MUST run here: before
+  # check_base_freshness (whose layer-3 auto-merge rewrites node files on disk)
+  # and before ensure_intentions_only_base (which can `git reset --hard` the
+  # tree). Running it any later would hash content graph-commit itself wrote.
+  # It reads only the caller's on-disk content, so it is independent of
+  # $MAIN_SHA and runs ahead of the fetch below.
+  assert_expected_content
+
+  # Fetch origin/main ONCE and pin its tip. Every pre-land step below reconciles
+  # against this exact sha (see the MAIN_SHA global): the --base freshness check,
+  # the far-ahead rebuild and its three-way replay, and the nothing-staged blob
+  # comparison. Independent fetches would let those steps disagree about which
+  # main they are reconciling against, leaving a concurrent landing in between
+  # checked by none of them. park_and_exit() deliberately re-fetches — the park
+  # must land on the freshest main, not on this pre-diagnosis observation.
+  git fetch origin main >&2
+  MAIN_SHA="$(git rev-parse FETCH_HEAD)"
+
   # Capture the writer's intended on-disk content BEFORE check_base_freshness.
   # Layer 3's stale-base park (park_and_exit, reached from inside
   # check_base_freshness on an unresolvable same-field divergence) runs
@@ -1462,18 +2178,45 @@ main() {
     #     checkout was targeted (a bad -C, or cwd pointing at another repo).
     #     Emitting the "landed" success here would repeat the incident bug — a
     #     false success for a tree that was never going to change origin/main.
-    # Compare per id against origin/main using the FETCH_HEAD already populated
-    # by ensure_intentions_only_base()'s fetch above (do NOT fetch again). Both
-    # blobs absent/empty (id absent both places) is benign (equal empty strings).
+    # Compare per id against origin/main as pinned by main()'s single fetch
+    # ($MAIN_SHA, taken above — do NOT fetch again). Both blobs absent/empty (id
+    # absent both places) is benign (equal empty strings).
     local id local_blob main_blob
     for id in "${ALL_IDS[@]}"; do
       local_blob="$(git rev-parse "HEAD:intentions/$id.md" 2>/dev/null || true)"
-      main_blob="$(git rev-parse "FETCH_HEAD:intentions/$id.md" 2>/dev/null || true)"
+      main_blob="$(git rev-parse "$MAIN_SHA:intentions/$id.md" 2>/dev/null || true)"
       if [[ "$local_blob" != "$main_blob" ]]; then
         die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit. Under graph-commit's caller-derived repo resolution this can only mean a mis-pointed -C/--repo (or cwd targeting the wrong checkout) — refusing to emit a false 'landed' for a tree that was never going to change origin/main (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>})"
       fi
     done
-    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (nothing to commit, or a prior attempt already committed but did not push)" >&2
+
+    # Nothing is staged AND every id already matches origin/main. If HEAD is
+    # also exactly origin/main there is, by definition, nothing to push: the
+    # whole land() cycle (landing lock, graph/** scratch push, await_checks,
+    # push to main) is pure cost on a SHA that already carries its checks.
+    # Exit success here rather than buying a stamp cycle that cannot change
+    # main (tactic-graph-commit-noop-landing-false-failure, Defect 1).
+    local head_sha main_sha
+    head_sha="$(git rev-parse HEAD)"
+    main_sha="$(git rev-parse FETCH_HEAD)"
+    if [[ "$head_sha" == "$main_sha" ]]; then
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} and HEAD is already origin/main (${head_sha:0:8}) — nothing to push; skipping the landing cycle" >&2
+      exit 0
+    fi
+
+    # HEAD differs from origin/main, so the landing cycle still runs — but WHY
+    # it differs decides what an operator should go looking for, and the two
+    # cases are not the same thing. Read the relation rather than asserting one
+    # of them: an unpushed-commit count of 0 means HEAD is BEHIND origin/main
+    # (a stale checkout), where telling the reader "a prior attempt committed
+    # but did not push" would point at a commit that does not exist.
+    local unpushed
+    unpushed="$(git rev-list --count "$main_sha..$head_sha")"
+    if [[ "$unpushed" -gt 0 ]]; then
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push)" >&2
+    else
+      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (HEAD ${head_sha:0:8} is behind origin/main ${main_sha:0:8}; no unpushed local commit, so the landing cycle will fast-forward)" >&2
+    fi
   fi
 
   local rc=0

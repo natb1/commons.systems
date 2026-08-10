@@ -47,7 +47,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes, readNode, readNodeBody, writeNode } from "../src/store.js";
+import { listNodesStrict, readNode, readNodeBody, writeNode } from "../src/store.js";
 import { PHASES } from "../src/schema.js";
 import { servingStrategyIds } from "../src/router.js";
 import {
@@ -138,7 +138,12 @@ function isOpen(phase: string | null): boolean {
 
 export function reconcileGraph(args: Args): Plan {
   const prStates: Record<string, PrState> = JSON.parse(readFileSync(args.prStatesFile, "utf8"));
-  const nodes = listNodes(args.dir);
+  // STRICT enumeration: reconciliation writes phase transitions back to disk,
+  // and every id it does NOT see is treated as "not a graph node" (skipped).
+  // Under the tolerant `listNodes` a corrupt node file would silently drop out
+  // of `byId`, so its merged PR would never be reconciled and the node would
+  // sit at a stale phase forever. A corrupt file must refuse loudly instead.
+  const nodes = listNodesStrict(args.dir);
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   const plan: Plan = { edit: [], deferred: [], reconciled: [] };
@@ -147,6 +152,17 @@ export function reconcileGraph(args: Args): Plan {
   // Pass 1: classify each terminal-PR tactic into main-qa-transition vs done.
   // doneSet maps each done-transitioning id to its pr-states entry so Pass 3 can
   // record the right completion evidence; mainQaTargets carries the entry too.
+  //
+  // Deliberately NO office_hours filter here. graph-auto-merge gates on a live
+  // office_hours park because it DECIDES — it takes the irreversible autonomous
+  // action of squash-merging, and a park revokes that authority. This pass only
+  // RECORDS REALITY: the PR is already terminal on GitHub, and refusing to
+  // reconcile a parked node would strand it at a stale phase with graph state
+  // contradicting GitHub — exactly what this reconciler exists to prevent. The
+  // park survives the write untouched: office_hours is a frontmatter field the
+  // phase write never touches, and officeHoursQueue (src/officeHours.ts:48-75)
+  // keys only on office_hours !== null with no phase filter, so the node stays
+  // in the office-hours queue after reconciliation.
   const doneSet = new Map<string, PrState>();
   const mainQaTargets: { id: string; entry: PrState }[] = [];
   for (const [id, entry] of Object.entries(prStates)) {

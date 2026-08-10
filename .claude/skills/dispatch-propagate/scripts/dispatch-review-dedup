@@ -28,11 +28,20 @@
 #
 # Merge arithmetic per group (and singletons — no-op except normalizing sources):
 #   confidence rank: high=3, medium=2, low=1.
-#   representative = finding with highest Confidence; tie-break = earliest in
-#                    input findings order. All passthrough fields come from it.
+#   lane-a flag: 1 if Source is one of the built-in review-lane sources
+#                (code-review, security-review), else 0.
+#   representative = finding ordered by (lane-a flag asc [non-Lane-A first],
+#                    Confidence desc, input index asc); tie-break within that
+#                    order is earliest input index. All passthrough fields
+#                    come from it. When a same-root group spans both lanes,
+#                    this guarantees the representative — and its id/Source/
+#                    bucket/Location — always comes from the non-Lane-A
+#                    (Lane B) member: a Lane-A win would make it structurally
+#                    possible for a Lane-A-derived entry to acquire bucket
+#                    `Required`, narrowing verify eligibility.
 #   output.Confidence = MAX Confidence across the group.
-#   output.OWASP      = first non-empty OWASP, ordered by (Confidence desc,
-#                       input order); else "".
+#   output.OWASP      = first non-empty OWASP, ordered by (lane-a flag asc,
+#                       Confidence desc, input order); else "".
 #   output.STRIDE     = same rule as OWASP.
 #   output.sources    = sorted-unique union of every group finding's Source
 #                       plus any pre-existing sources entries.
@@ -50,6 +59,12 @@ jq '
   # --- helpers ----------------------------------------------------------------
 
   def confrank: (. // "_") | {"high":3,"medium":2,"low":1}[.] // 0;
+
+  # 1 for a Lane-A built-in source (code-review/security-review), else 0. Used
+  # to sort Lane-A members LAST so a Lane-B member always wins representative/
+  # OWASP/STRIDE selection when a group spans both lanes. Sliced copy of the
+  # LANE_A membership test mirrored in review-fix.js:355 — keep in sync by hand.
+  def laneaflag: . as $source | if (["code-review","security-review"] | index($source)) != null then 1 else 0 end;
 
   # Build id → input-index map (0-based) for ordering.
   (.findings | to_entries | map({key: .value.id, value: .key}) | from_entries) as $idx |
@@ -88,23 +103,26 @@ jq '
     # Earliest-input-index member (for output ordering).
     ($members | min_by(.idx) | .idx) as $min_idx |
 
-    # Representative: highest Confidence; tie-break by earliest input index.
-    ($members | sort_by([(.finding.Confidence | confrank | -.), .idx]) | .[0].finding) as $rep |
+    # Representative: (lane-a flag asc, Confidence desc, earliest input index).
+    # A Lane-A (code-review/security-review) member always sorts after every
+    # non-Lane-A member, so the representative is Lane-B whenever the group
+    # spans both lanes.
+    ($members | sort_by([(.finding.Source | laneaflag), (.finding.Confidence | confrank | -.), .idx]) | .[0].finding) as $rep |
 
     # Max confidence across all group members.
     ($members | map(.finding.Confidence | confrank) | max) as $max_conf_rank |
     ({"3":"high","2":"medium","1":"low"}[$max_conf_rank | tostring]) as $max_conf |
 
-    # OWASP: first non-empty, ordered by (Confidence desc, input index).
+    # OWASP: first non-empty, ordered by (lane-a flag asc, Confidence desc, input index).
     ($members
-      | sort_by([(.finding.Confidence | confrank | -.), .idx])
+      | sort_by([(.finding.Source | laneaflag), (.finding.Confidence | confrank | -.), .idx])
       | map(.finding.OWASP)
       | map(select(. != null and . != ""))
       | .[0] // "") as $owasp |
 
     # STRIDE: same rule.
     ($members
-      | sort_by([(.finding.Confidence | confrank | -.), .idx])
+      | sort_by([(.finding.Source | laneaflag), (.finding.Confidence | confrank | -.), .idx])
       | map(.finding.STRIDE)
       | map(select(. != null and . != ""))
       | .[0] // "") as $stride |

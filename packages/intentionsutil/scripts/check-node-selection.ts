@@ -41,7 +41,7 @@
 
 import { pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
-import { listNodes, readNode, readNodeBody } from "../src/store.js";
+import { listNodesStrict, readNode, readNodeBody } from "../src/store.js";
 import {
   frozenTacticSelectable,
   servingStrategyIds,
@@ -51,7 +51,7 @@ import {
 } from "../src/router.js";
 import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
 import { isPlainObject } from "../src/schema.js";
-import type { FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
+import type { ConflictState, FixState, IntentionNode, StrategyStampValue } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
 // --- Exit codes ------------------------------------------------------------
@@ -173,11 +173,43 @@ function readFixState(node: IntentionNode): FixState | null {
 }
 
 /**
+ * The node's active merge-conflict interrupt (`execution.conflict`), first-class
+ * or squatter, else null (tactic-graph-router-conflict-routing). Structural
+ * sibling of `readFixState` minus the `pushed_sha` field (a conflict carries no
+ * pending-CI-sha guard). Like the fix interrupt this is graph-native-only, so in
+ * practice only the first-class read fires; the squatter fallback is kept for
+ * uniformity with `readFixState` / `readMarkers` / `readStrategyFingerprint`.
+ */
+function readConflictState(node: IntentionNode): ConflictState | null {
+  const firstClass = node.execution?.conflict ?? null;
+  if (firstClass !== null) return firstClass;
+  const squatExec = node.attributes.execution;
+  if (squatExec !== null && typeof squatExec === "object" && "conflict" in squatExec) {
+    const conflict = (squatExec as { conflict?: unknown }).conflict;
+    if (
+      isPlainObject(conflict) &&
+      typeof conflict.since === "string" &&
+      typeof conflict.attempt === "number"
+    ) {
+      return { since: conflict.since, attempt: conflict.attempt };
+    }
+  }
+  return null;
+}
+
+/**
  * Run the five re-validation checks against a store the caller guarantees is at
  * fresh origin/main. Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
- * fails schema validation), which is a config-class error the caller maps to
- * exit 2, distinct from the staleness verdicts.
+ * cannot be read or fails schema validation), which is a config-class error the
+ * caller maps to exit 2, distinct from the staleness verdicts.
+ *
+ * Store enumeration is deliberately STRICT (`listNodesStrict`, not the tolerant
+ * `listNodes`): this is a fail-closed integrity gate, so one unreadable node
+ * file must abort it loudly rather than silently shrink the graph the
+ * align-eligibility and fingerprint-staleness checks reason over — a corrupt
+ * strategy file under tolerant enumeration would turn the gate into a pass for
+ * every tactic serving it.
  */
 export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   const { nodeId, selectedPhase, dir, stamp } = opts;
@@ -227,6 +259,22 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
         `selected fix but ${nodeId} carries no execution.fix interrupt (resolved since selection)`,
       );
     }
+  } else if (selectedPhase === "conflict") {
+    // `conflict` is likewise a directive the selector emits but never stores:
+    // the merge-conflict interrupt lives on `execution.conflict` while `phase`
+    // stays at its real ladder position (typically `review` with the reviewed
+    // marker, awaiting merge). Same interrupt-presence gate as `fix` — a null
+    // `execution.conflict` means the conflict resolved between selection and
+    // execute-time, a stale selection. (`pending-merge`, the other new signal
+    // string, is never a dispatched selectedPhase: the shell sensor gate turns
+    // it into `conflict` or a skip before any worker starts.)
+    if (readConflictState(node) === null) {
+      return fail(
+        EXIT_STALE_SELECTION,
+        "phase",
+        `selected conflict but ${nodeId} carries no execution.conflict interrupt (resolved since selection)`,
+      );
+    }
   } else if (selectedPhase === "align-tactics") {
     if (node.kind === "strategy") {
       // A strategy is align-selected at its native null phase; any non-null
@@ -270,7 +318,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   //     defers wholesale to the pure selector (single source of truth).
   if (selectedPhase === "align-tactics") {
     if (node.kind === "strategy") {
-      if (!strategyAlignSelectable(node, listNodes(dir))) {
+      if (!strategyAlignSelectable(node, listNodesStrict(dir))) {
         return fail(
           EXIT_STALE_SELECTION,
           "phase",
@@ -278,7 +326,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
             `(signal validated, rounds cap, on-path child, or soft-frozen out)`,
         );
       }
-    } else if (!frozenTacticSelectable(node, listNodes(dir))) {
+    } else if (!frozenTacticSelectable(node, listNodesStrict(dir))) {
       return fail(
         EXIT_STALE_SELECTION,
         "phase",
@@ -300,10 +348,16 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
   //    re-evaluation worker at exit 12.
   const stampedFp = selectedPhase === "align-tactics" ? null : readStrategyFingerprint(node);
   if (stampedFp !== null) {
-    const byId = new Map(listNodes(dir).map((n) => [n.id, n]));
+    const byId = new Map(listNodesStrict(dir).map((n) => [n.id, n]));
     for (const sid of servingStrategyIds(node, byId)) {
       const strategy = byId.get(sid);
-      if (strategy === undefined) continue; // a dangling serves edge is validateGraph's failure, not this gate's
+      // Strict enumeration above guarantees an absent id means the node is
+      // genuinely not in the store — a dangling serves edge, which is
+      // validateGraph's failure, not this gate's. (Under the tolerant
+      // `listNodes` a corrupt strategy file would also land here, silently
+      // turning this required staleness gate into a pass for the whole
+      // subtree serving it.)
+      if (strategy === undefined) continue;
       if (isFingerprintStale(stampedFp, sid, strategyFingerprint(strategy))) {
         return fail(
           EXIT_STALE_SELECTION,

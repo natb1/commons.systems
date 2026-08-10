@@ -50,9 +50,11 @@
 #   does NOT immediately emit `concurrency-cap`. It first probes
 #   `graph-select-target --pace-exempt-only` (the authored `pace_exempt` flag is
 #   the graph home of the legacy `priority` label); a hit holds the lock and
-#   spawns exactly ONE gate-exempt worker (`GAP=1`). If that lane is empty, it
-#   checks `repo-health --main-broken-sha` — a main that breaks while at the
-#   worker cap still surfaces and spawns the diagnose job even at cap. Either
+#   spawns up to `max_concurrent_workers - LIVE_COUNT` gate-exempt workers (0
+#   closes the lane) — the ceiling is absolute for autonomous scheduling. If
+#   that lane is empty, it checks `repo-health --main-broken-sha` — a main
+#   that breaks while at the worker cap still surfaces and spawns the
+#   diagnose job even at cap. Either
 #   bypass still counts toward `LIVE_COUNT` and suppresses non-pace-exempt fan-out
 #   on later ticks: it bypasses the GATE, not the COUNT. If both are empty, the
 #   tick falls back to the normal `concurrency-cap` disposition and reseed. (The
@@ -66,6 +68,38 @@
 #   by the `/dispatch-conflict` phase routed through the worker.
 #
 # Behavior:
+#   0. Frozen-session sweep (denied-command park, tactic-denied-command-parks-node):
+#      calls lib-frozen-session-park.sh's `frozen_session_sweep` — no args, always
+#      returns 0 — to park the graph node of any worker session frozen at a
+#      permission/classifier denial (`claude agents` reports `state: blocked` with
+#      a stale transcript). Runs on BOTH cadences: (a) the paused-branch early exit
+#      (Step "Pause sentinel" below), alongside that branch's own
+#      `reservation_sweep`, since that is the only autonomous path that never
+#      reaches dispatch-select-tick's sweep; and (b) the normal path, immediately
+#      after the per-tick `claude agents` snapshot capture and before Step 1's
+#      `dispatch-select-tick` invocation. On the normal path it runs before
+#      selection for two reasons: it reuses this tick's single daemon snapshot
+#      instead of an extra round-trip, and any node the sweep parks lands
+#      `office_hours` on `main` before Step 1 selects, so this tick's own
+#      selection already excludes it. A load failure of
+#      lib-frozen-session-park.sh is logged loudly and never aborts the tick — the
+#      sweep is observability/containment, not a gate.
+#   0.5 Terminal-without-disposition sweep (tactic-phase-terminal-requires-disposition):
+#      calls lib-frozen-session-park.sh's `terminal_without_disposition_sweep` — no
+#      args, always returns 0 — to surface any worker session whose graph node
+#      reached a terminal Claude-agent state (`state: done`/`error`) without a
+#      recorded disposition. Runs on the same two cadences as the frozen-session
+#      sweep above, immediately after it, for the same reason: the paused-branch
+#      `exit 0` is the only autonomous path that never reaches
+#      dispatch-select-tick's own sweeps. On the normal path its placement before
+#      Step 1 buys ONE thing only — any node it parks is already excluded from
+#      this tick's own selection. It does NOT share the tick's daemon snapshot:
+#      `claude_agents_list_terminal_workers` queries `claude agents --json --all`
+#      DIRECTLY, because the snapshot is captured without `--all` and so lacks the
+#      terminal rows the sweep exists to find, so the sweep costs one extra daemon
+#      round-trip (its stand-down interlock's ACTIVE-view read IS
+#      snapshot-backed). A load failure of lib-frozen-session-park.sh is logged
+#      loudly and never aborts the tick.
 #   1. Run dispatch-select-tick, echoing all of its stdout through (the
 #      jit:/calendar: passthrough lines AND the decision line) so journald and a
 #      live relay both see the narrative. The decision is its LAST stdout line.
@@ -96,6 +130,20 @@
 #                            reservations are the claim. On the autonomous path a
 #                            successful execute arms a convergence reseed.
 #        anything else     → diagnostic to stderr; exit 2.
+#   3. Run the stand-down winner-liveness re-check sweep
+#      (standdown_recheck_sweep, lib-standdown-recheck.sh) on TWO cadences: on
+#      the paused branch (so a stranded stand-down marker still surfaces even
+#      while dispatch is paused — that `exit 0` is the only autonomous path
+#      that never reaches dispatch-select-tick's own sweeps), and on the
+#      normal path, after the per-tick daemon snapshot is captured and before
+#      Step 1 target selection (so it reuses the snapshot and any node it
+#      parks is already excluded from this tick's own selection). Never gates
+#      the tick — a load failure logs loudly and the tick continues.
+#   4. Run the terminal-without-disposition sweep
+#      (terminal_without_disposition_sweep, lib-frozen-session-park.sh, see
+#      Behavior item 0.5 above) on the same two cadences as the frozen-session
+#      sweep it is paired with. Never gates the tick — a load failure logs
+#      loudly and the tick continues.
 #
 # The legacy gh-issue lane (explicit/pr/issue decisions →
 # dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
@@ -108,7 +156,7 @@
 # also needs an elevated Bash `timeout` (see SKILL.md Step 0).
 #
 # Manual inspection of the autonomous tick's journal (once systemd drives it):
-#   journalctl --user -u dispatch-tick
+#   journalctl --user -t dispatch-tick
 #
 # Exit codes: 0 on a routed disposition; 2 on an internal/usage error surfaced on
 # stderr.
@@ -293,6 +341,76 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   else
     echo "dispatch-tick: lib-reservation-ledger.sh failed to load; reservation ledger NOT swept this tick" >&2
   fi
+
+  # A stranded stand-down marker (winner session died mid-work, loser waiting
+  # forever) must still surface even while dispatch is paused, for the same
+  # reason the reservation sweep runs on this branch: this `exit 0` path is the
+  # ONLY autonomous tick path that never reaches dispatch-select-tick's own
+  # sweeps, so nothing else would ever re-check a stand-down marker while
+  # paused. Same conditional-source + verify + loud-failure idiom as
+  # reservation_sweep above, applied to lib-standdown-recheck.sh.
+  if ! declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+  fi
+  if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+    standdown_recheck_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
+  fi
+
+  # A tracked hold that outlived the condition it tracks (tactic-stale-hold-auto-resolve)
+  # must still get re-checked even while dispatch is paused — the same reason the
+  # stand-down sweep above is here: this `exit 0` path is the ONLY autonomous tick
+  # path that never reaches dispatch-select-tick's own sweeps, so nothing else
+  # would ever re-check a stale hold while dispatch is paused. Same
+  # conditional-source + verify + loud-failure idiom as the sweeps above, applied
+  # to lib-stale-hold-recheck.sh.
+  if ! declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-stale-hold-recheck.sh"
+  fi
+  if declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+    stale_hold_recheck_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick" >&2
+  fi
+
+  # A node frozen at a permission/classifier denial (tactic-denied-command-parks-node)
+  # must still surface to office_hours even while dispatch is paused — this is the
+  # same "only autonomous path that never reaches select-tick's own sweeps" reason
+  # the reservation sweep above is here. Same conditional-source idiom, same
+  # loud-failure-instead-of-swallow posture (.claude/rules/code-style.md).
+  if ! declare -f frozen_session_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-frozen-session-park.sh"
+  fi
+  if declare -f frozen_session_sweep >/dev/null 2>&1; then
+    frozen_session_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-frozen-session-park.sh failed to load; frozen-session sweep NOT run this tick" >&2
+  fi
+
+  # A worker session whose graph node reached a terminal Claude-agent state
+  # without a recorded disposition (tactic-phase-terminal-requires-disposition)
+  # must still surface even while dispatch is paused — the same "only autonomous
+  # path that never reaches select-tick's own sweeps" reason the frozen-session
+  # sweep above is here. Same conditional-source idiom, same loud-failure-instead
+  # -of-swallow posture (.claude/rules/code-style.md).
+  if ! declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-claude-agents.sh"
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-frozen-session-park.sh"
+  fi
+  if declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+    terminal_without_disposition_sweep 1>&2
+  else
+    echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
+  fi
+
   echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
   exit 0
 fi
@@ -399,8 +517,18 @@ fi
 # (.claude/rules/sandbox.md), so this is the one place the Unix-socket-backed
 # `claude agents` call is made. The snapshot lives under the mktemp -d workspace
 # the EXIT/INT/TERM trap removes.
+#
+# The tick captures TWO independent snapshots, one per daemon view (ACTIVE below,
+# REGISTERED next) — not one query filtered client-side into both. Reconstructing
+# ACTIVE from REGISTERED (or vice versa) means guessing at the daemon's
+# terminal-state set client-side, which lib-claude-agents.sh's own header
+# ("ACTIVE vs REGISTERED", design rule 1) forbids: ask the daemon for the view you
+# want. So this is two daemon queries per tick, not one — still a fixed constant
+# instead of hundreds of live per-call round-trips.
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-frozen-session-park.sh"
 _SNAPSHOT_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot.json"
 if claude_agents_snapshot_capture "$_SNAPSHOT_FILE"; then
   export DISPATCH_AGENTS_SNAPSHOT="$_SNAPSHOT_FILE"
@@ -410,7 +538,97 @@ else
   # its live per-call path and the UNKNOWN fail-safe is preserved bit-for-bit. Do
   # NOT abort the tick — degrade to the pre-#1452 behavior. (#1452)
   rm -f "$_SNAPSHOT_FILE"
+  # `unset`, not merely "don't set": the variable may be present in the INHERITED
+  # environment (a nested tick, a leftover manual export). Left set, it would
+  # point every read at a foreign/stale file instead of degrading to live.
+  unset DISPATCH_AGENTS_SNAPSHOT
   echo "dispatch-tick: claude agents snapshot capture failed; selection will use live per-call reads (#1452)" >&2
+fi
+
+# Second, independent capture: the REGISTERED (--all) view. This is what
+# worktree_has_live_session now reads (tactic-stopped-session-blocks-node Unit 1)
+# so a stopped-but-not-removed session still blocks its node/worktree. Without
+# this capture, every occupancy probe in the tick would fall through to a live
+# `claude agents --json --all` daemon round-trip — hundreds per tick instead of
+# one. Independent of the ACTIVE capture above: either may fail without affecting
+# the other.
+_SNAPSHOT_ALL_FILE="$DISPATCH_TICK_WORKSPACE/agents-snapshot-all.json"
+if claude_agents_snapshot_capture_registered "$_SNAPSHOT_ALL_FILE"; then
+  export DISPATCH_AGENTS_SNAPSHOT_ALL="$_SNAPSHOT_ALL_FILE"
+else
+  rm -f "$_SNAPSHOT_ALL_FILE"
+  # Same as the ACTIVE branch above: unset an inherited value, or a stale
+  # registered snapshot would decide occupancy — a missing row makes a genuinely
+  # held node re-selectable, the exact failure this tactic removes.
+  unset DISPATCH_AGENTS_SNAPSHOT_ALL
+  echo "dispatch-tick: registered (--all) agents snapshot capture failed; occupancy checks will use live per-call reads" >&2
+fi
+
+# --- Stand-down winner-liveness re-check sweep --------------------------------
+# Placement matters: this runs AFTER the daemon snapshot above (so the sweep's
+# machine-wide session-registry reads reuse this tick's single
+# DISPATCH_AGENTS_SNAPSHOT instead of an extra round-trip `claude agents --json`
+# call) and BEFORE Step 1 target selection below, so that any node the sweep
+# parks to `office_hours` lands on `main` before selection runs — this tick's
+# own selection already excludes whatever the sweep just parked. Same
+# conditional-source + verify + loud-failure idiom as the paused-branch call
+# above.
+if ! declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-standdown-recheck.sh"
+fi
+if declare -f standdown_recheck_sweep >/dev/null 2>&1; then
+  standdown_recheck_sweep 1>&2
+else
+  echo "dispatch-tick: lib-standdown-recheck.sh failed to load; stand-down re-check NOT run this tick" >&2
+fi
+
+# --- Stale-hold re-check sweep (tactic-stale-hold-auto-resolve) ---------------
+# Placement matters, same reasons as the stand-down sweep just above: it runs
+# AFTER the daemon snapshot (so the sweep's session-registry reads reuse this
+# tick's snapshot instead of an extra round-trip) and BEFORE Step 1 target
+# selection, so a hold resolved here has already landed its source's
+# `blocked_by` removal on `main` before selection runs — this tick's own
+# selection can pick up the just-unblocked source. Same conditional-source +
+# verify + loud-failure idiom as the sweep above.
+if ! declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/lib-stale-hold-recheck.sh"
+fi
+if declare -f stale_hold_recheck_sweep >/dev/null 2>&1; then
+  stale_hold_recheck_sweep 1>&2
+else
+  echo "dispatch-tick: lib-stale-hold-recheck.sh failed to load; stale-hold re-check NOT run this tick" >&2
+fi
+
+# --- Frozen-session sweep (denied-command park, tactic-denied-command-parks-node) ---
+# Runs here — after the snapshot capture above, before Step 1's selection below —
+# so the sweep reuses this tick's single daemon snapshot (no extra round-trip)
+# and any node the sweep parks this tick is excluded from THIS tick's own
+# selection: park-node has already landed office_hours on main by the time
+# dispatch-select-tick runs. Same guard posture as the paused branch above: a
+# load failure is logged loudly and never aborts or skips the rest of the tick —
+# the sweep is observability/containment, never a gate.
+if declare -f frozen_session_sweep >/dev/null 2>&1; then
+  frozen_session_sweep 1>&2
+else
+  echo "dispatch-tick: lib-frozen-session-park.sh failed to load; frozen-session sweep NOT run this tick" >&2
+fi
+
+# --- Terminal-without-disposition sweep (tactic-phase-terminal-requires-disposition) ---
+# Runs here — immediately after the frozen-session sweep above, before Step 1's
+# selection below — for ONE reason: any node it parks this tick is excluded from
+# THIS tick's own selection, because park-node has already landed office_hours on
+# main by the time dispatch-select-tick runs. It does NOT ride this tick's daemon
+# snapshot: its candidate query is a DIRECT `claude agents --json --all` (the
+# snapshot is captured without `--all`, so it cannot carry the terminal rows the
+# sweep looks for), which costs one extra round-trip. Same guard posture as the
+# paused branch above: a load failure is logged loudly and never aborts or skips
+# the rest of the tick — the sweep is observability/containment, never a gate.
+if declare -f terminal_without_disposition_sweep >/dev/null 2>&1; then
+  terminal_without_disposition_sweep 1>&2
+else
+  echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
 fi
 
 # --- Step 1: select the target ------------------------------------------------

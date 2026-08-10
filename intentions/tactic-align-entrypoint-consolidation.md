@@ -26,12 +26,42 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-align-entrypoint-consolidation
+  pr: 2983
+  attempts: {}
+  markers:
+    - planned
+    - qa-done
+    - reviewed
+  strategy_fingerprint: null
+  fix: null
+  completion:
+    mergedAt: 2026-08-04T10:24:00Z
+    mergeCommitSha: c845d50f88458ea14d6f481f8ae9da43e8ce94fb
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-align-tactics-mechanical-floor
-office_hours: null
+office_hours:
+  reason: worker session froze at a permission/classifier denial — claude agents
+    reports state=blocked and the transcript has had no activity for 1713s; the
+    session cannot make progress and cannot park itself (a blocked session never
+    reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
+    this node
+  since: 2026-08-04
+  recommendation: Find the holding job with 'claude agents --all' and attach it
+    ('claude attach <job-id>'), then answer the pending prompt. If the denied
+    command was gratuitous, cancel it and let the worker continue; if it is
+    genuinely needed, run it yourself or add a standing permission rule — do NOT
+    rewrite the command to route around the classifier. If the session is
+    unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the
+    worktree, then run clear-park <node-id> to return the node to the lane.
+    Until that session is gone, office-hours reports this node as 'all-held'
+    rather than launching a review session for it, because the frozen session
+    still holds the node-id session name.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -434,3 +464,13 @@ Manual/prose verification:
   `done` (or its PR #2896 abandoned) before starting Unit 2 — the `blocked_by`
   edge in this node's frontmatter should already gate router selection, but a
   human-invoked implementation session should re-check by hand too.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #2983). Drained after `review → main-qa` fires post-merge.
+
+- **id:** 17
+- **title:** Residual `align-strategy` / `align-init` prose inside `intentions/*.md` node bodies
+- **url_path:** current
+- **expected_outcome:** All `align-strategy`/`align-init` hits inside `intentions/` are narrative prose in node bodies scheduled for individual later updates, not executable directives.
+- **finding:** Not walked at QA time — the tactic's own scope statement explicitly defers updating `intentions/tactic-*.md` node bodies that name `align-strategy`/`align-init` in their own prose to later per-node work; completeness there is not assertable against this PR (planned deferral).

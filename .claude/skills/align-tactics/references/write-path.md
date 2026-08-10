@@ -5,7 +5,7 @@ Apply the Workflow result" (and the tactic-target flow, which reuses this same
 writer for its single-node result). The Workflow
 (`.claude/workflows/align-tactics.js`) authors no files — it returns a
 structured result and this session lands every graph write. The write path
-mirrors `/align-strategy` Step 5 exactly: `write-node.ts` is the single
+mirrors `/align` Step 5 exactly: `write-node.ts` is the single
 validation gate (never hand-author YAML frontmatter), and `graph-commit` is
 the only landing path.
 
@@ -46,6 +46,11 @@ mechanically rather than by rebase luck (the 2026-07-06 near-miss). Nodes
 this round **creates** (new tactics, new gates) have no origin/main blob and
 take no `--base` entry.
 
+The two recipes below are alternatives — pick one. Either way, a single
+`dump-node.ts` call must name **every** id the `graph-commit` will land: a
+manifest only guards the ids it holds, and the rest land with no
+compare-and-swap at all.
+
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])
@@ -57,8 +62,50 @@ For a single-node tactic-target session (finalize/re-plan of one
 ```bash
 BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
   --out-dir "$TMPDIR/dump" <tactic-id>)
-packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
+packages/intentionsutil/scripts/land-align-round --terminal <tactic-id> \
+  --base "$BASE" -m 'graph: finalize <tactic-id>' <tactic-id>
 ```
+
+`land-align-round` is the wrapper around `graph-commit` used for the round's
+**final** landing call — it passes `--base`, `-m`, and the positional ids
+through verbatim and, in the **same process**, records this session's terminal
+disposition via `mark-node-terminal` (`align-round` on a clean land, `park`
+when `graph-commit`'s concurrent-edit fallback parked the node). `--terminal`
+names exactly one node — this session's own target, here the `tactic-<slug>`
+being finalized — and is never inferred from the positional ids, which
+routinely include child tactics this session does not own. See Step 4 below.
+
+**Capture the manifest at the read, before any write, and never re-dump over
+an edited worktree.** The manifest's claim is "this is the content that was
+read" — so it must be taken at the session's **read** step (the
+strategy-target flow's "Gather the input", or the tactic-target flow's node
+read), before `write-node.ts` or the body `Edit` touches anything, not later
+in Step 2. Do **not** re-run `dump-node.ts` in a worktree that already holds
+an edit, including during a `graph-commit` timeout/`git reset --mixed`
+recovery — a dump taken after the writer's own edit records that in-flight
+content as the base, defeating the compare-and-swap entirely.
+
+**A lost manifest is an unverifiable state — park, do not recompute.** Never
+manufacture a base from the *current* remote tip (`git rev-parse
+origin/main:intentions/<id>.md`): that records content the session never read,
+so `assert-node-fresh` compares the recorded blob against an identical
+`FETCH_HEAD` blob and always exits 0, and `graph-commit`'s
+`check_base_freshness()` sees `base == theirs` and resolves the three-way
+merge wholesale to `ours` — silently discarding anything a concurrent writer
+landed between the read and the recompute. It is the same silent revert as the
+2026-07-31 incident with the operands swapped. When the manifest is gone, park
+the node — `office_hours: {reason, since}` per the Parks section below — with
+a reason naming the lost manifest and recommending a fresh `/align-tactics
+<node-id>` round. The only admissible reconstruction is one that names the
+blob the session actually read — the provision-time sha (`git rev-parse
+<provision-time-sha>:intentions/<id>.md`) or the sha recorded in the worker's
+provisioning record — never the current tip.
+
+This is not theoretical: on 2026-07-31 a re-dump after the edit made
+`base == ours`, so
+`check_base_freshness()`'s three-way merge resolved cleanly to `theirs` and
+silently reverted a 310-line finalized plan body to a 2-line draft stub,
+reporting nothing.
 
 ## Artifact-owner placement (strategy clarification 27)
 
@@ -96,7 +143,48 @@ author) instead of assigning ownership by proximity.
    npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic.json"
    ```
 
-2. **Plan body via `Edit`.** `write-node.ts` lands only frontmatter;
+2. **Freshness assertion before the body write.** The body write is a
+   *wholesale replacement* — `body_markdown` is not merged into the existing
+   body — so it must be preceded by a freshness assertion against the same ref
+   the write will land on. Run, from the worktree:
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/assert-node-fresh \
+     --base "$BASE" <id> [<id> ...]
+   ```
+
+   naming **every** id this round will write a body for. Exit 0 means no
+   named node moved on `origin/main` since the base was captured — proceed.
+   A non-zero exit means the node moved (or the fetch failed, or a
+   pre-existing id is missing from `$BASE`): **do not write the body.** The
+   guard compares the recorded base blob against `origin/main`, never the
+   on-disk file, so the frontmatter `write-node.ts` just landed does not
+   trip it.
+
+   On a refusal naming a moved node, take **one** bounded retry. Step 1 above
+   already rewrote the node's frontmatter on disk, and `dump-node.ts` hashes
+   the **on-disk** file — so the retry must first restore the worktree copy to
+   the remote content, or the new manifest would record this writer's own
+   in-flight frontmatter as the base. In order:
+
+   ```bash
+   git fetch origin main
+   git checkout origin/main -- intentions/<id>.md
+   ```
+
+   Then re-read that node from `origin/main`
+   (`git show origin/main:intentions/<id>.md`), rebuild `args` from the fresh
+   body, re-invoke the Workflow once, capture a **new** base manifest into a
+   **fresh `--out-dir`** (never a second dump into the old one, and never a
+   dump over an edited file), re-run `write-node.ts`, and re-run
+   `assert-node-fresh`. If the second check also refuses, or the refusal is a
+   fetch failure or a missing `--base` entry, **park** the node —
+   `office_hours: {reason, since}` per the Parks section below — with a
+   reason naming the intervening commit and recommending a fresh
+   `/align-tactics <node-id>` round. Never overwrite, and never end the pass
+   without one of these two dispositions.
+
+3. **Plan body via `Edit`.** `write-node.ts` lands only frontmatter;
    `writeNode` preserves an existing tactic body verbatim across
    frontmatter-only rewrites. For each tactic with a non-null
    `body_markdown` (the Workflow merged the authored plan onto the tactic
@@ -107,7 +195,7 @@ author) instead of assigning ownership by proximity.
    implement-phase body — only its statement and the reason it needs a
    human.
 
-3. **Land via `graph-commit`.** One `graph-commit` per tactic, or a small
+4. **Land via `graph-commit`.** One `graph-commit` per tactic, or a small
    batch (e.g. a parent plus its immediate children, the drift-clarified
    strategy alongside the round's tactics, or a split-parent tactic
    alongside its new born-parked sibling) in one call:
@@ -116,6 +204,34 @@ author) instead of assigning ownership by proximity.
    packages/intentionsutil/scripts/graph-commit --base "$BASE" \
      <tactic-id> [<tactic-id> ...] [<strategy-id>]
    ```
+
+   **The round's FINAL landing call — and only that one — goes through
+   `land-align-round` instead:**
+
+   ```bash
+   packages/intentionsutil/scripts/land-align-round \
+     --terminal <target-node-id> --base "$BASE" -m '<message>' \
+     <tactic-id> [<tactic-id> ...] [<strategy-id>]
+   ```
+
+   `land-align-round` invokes `graph-commit` with `--base`, `-m`, and the
+   positional ids passed through verbatim, then writes this session's terminal
+   disposition marker in the **same process** as the land — the guarantee
+   `park-node` and `transition-node` already carry, and the one this session
+   used to lack when the marker was a separate call a turn or more later (a
+   session that died in between left the round landed on `main` with no
+   declared disposition, and the tick's terminal-without-disposition sweep
+   parked the node; confirmed 3x in production). `--terminal` names exactly
+   one node — this session's own target (the tactic-target id in tactic mode,
+   the strategy id in strategy mode) — and is never inferred from the
+   positional ids, which routinely include child tactics this session does not
+   own. `mark-node-terminal`'s own ownership gate makes the call safe
+   unconditionally; it is a no-op in an interactive run.
+
+   A **multi-call** round keeps bare `graph-commit` for every earlier call. A
+   marker written after call 1 of 3 would declare a partially landed round
+   terminal, making it reapable mid-round — converting a failure the sweep
+   currently catches into a silent one.
 
    A split's parent edit and its new sibling must never land as two
    separate `graph-commit` calls — the 2026-07-18 near-miss (`c037cec7`
@@ -132,23 +248,43 @@ author) instead of assigning ownership by proximity.
    the `graph/**` fast path, and fast-forwards onto `main` with a bounded
    rebase-retry loop.
 
-### Discriminating the two exit-1 cases
+### Discriminating the exit-1 cases
 
-`graph-commit` has **two** distinct exit-1 cases, discriminated by the
-presence of a parking message:
+`graph-commit` has **three** distinct exit-1 cases. The parking
+*announcement* (`... parking node(s) — this writer's content is NOT landed`)
+does not separate them: it prints **before** the parking write is pushed, so
+it appears on two of the three. Only the post-push confirmation does:
 
-- **Parking message present** (`... parking node(s) — this writer's content
-  is NOT landed`) — a concurrent writer landed an overlapping edit to the
-  same node: the node landed with `office_hours` set instead of the
-  intended content, and this session's unlanded content is preserved on
-  disk.
-- **No parking message** — instead the busy-main exhaustion error ending
+- **Park landed** — the announcement, then `parked <ids> (office_hours set
+  on the origin/main content) ... pushed to main`. A concurrent writer landed
+  an overlapping edit to the same node: the node is on `main` with
+  `office_hours` set instead of the intended content, and this session's
+  unlanded content is preserved on disk.
+- **Park attempted, not landed** — the announcement, then `could not land
+  the parking write ... office_hours set locally but not pushed to main`.
+  Nothing reached `main`: the node is still unparked, at a working phase,
+  with `office_hours: null`. The local worktree holds the only copy of both
+  this writer's content and the park.
+- **No announcement at all** — instead the busy-main exhaustion error ending
   `... retry later` — nothing landed and no `office_hours` was set: `main`
   stayed busy (or the required checks never stamped green) across all
   `MAX_PUSH_ATTEMPTS`, with no semantic conflict.
 
 Either way, report it and stop — do not retry automatically within this
 session.
+
+On the round's final call, **`land-align-round` performs this discrimination
+itself** and writes the matching marker: `park` **only** on the park-landed
+case (the node really did reach a terminal disposition — an `office_hours`
+park on `main` — even though this writer's content did not land), and **no
+marker at all** on the other two (nothing landed and nothing parked on
+`main`, so there is no disposition to declare and the session stays held for
+the tick's terminal-without-disposition sweep). It keys that decision on the
+post-push confirmation, never on the announcement — a marker written for an
+unlanded park would let the job and its worktree be reaped while the only
+copy of the round's content lives there. Either exit code is propagated
+unchanged. So this session no longer decides *which* marker to write — it
+still reads the stderr, reports which case occurred, and stops.
 
 ## Parks — writing `office_hours`
 

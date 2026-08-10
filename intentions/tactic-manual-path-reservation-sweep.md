@@ -27,23 +27,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 90
+  boost: 10
   override: null
-  rationale: "Author-directed 2026-07-23 /align-strategy round: the
-    reservation-ledger cross-mode-validity fix ranks at the top of normal
-    (non-main-health) work — below the strategy-main-health emergency ceiling
-    (boost 100), which the 2026-07-13 write-path guard keeps dominant. Own-boost
-    90 composes below 100, tripping no guard, while topping the ~11-max normal
-    field."
-phase: qa
+  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
+    band to 10. These are ordinary improvements, not integrity defects; at 85-90
+    they outranked strategy-main-health (101 resolved) and flooded the selector
+    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme."
+  tier: 1
+phase: implement
 execution:
   branch: tactic-manual-path-reservation-sweep
   pr: 2964
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []
@@ -112,7 +112,7 @@ branch (already sweeps).
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
 ```
 
 ### Unit 2 — test coverage
@@ -120,7 +120,7 @@ branch (already sweeps).
 **Recommended model:** sonnet — mechanical test addition following the existing
 `rl_setup` stale-marker pattern and the `sel_tick` manual-fan-out group.
 
-**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+**Scope:** `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`,
 the `sel_tick` manual-fan-out test group. Add a test that plants a stale
 dead-session reservation marker (a `session=` absent from `sel_tick_setup`'s fake
 `claude_agents_list_all`, with `DISPATCH_RESERVATION_NOW` past the 30s boot
@@ -130,8 +130,11 @@ excludes the stale marker (the sweep ran), and (b) the marker file under
 
 **Reuse:** `reservation_write` / `reservation_exists` / `reservation_sweep`
 (`lib-reservation-ledger.sh`); `sel_tick_setup`'s `DISPATCH_RESERVATION_DIR` +
-fake-agents wiring; the `rl_setup` group's dead-session-sweep test as the
-reclaimable-marker reference.
+fake-agents wiring, defined in
+`.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`; the
+`rl_setup` group's dead-session-sweep test, now in
+`.claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh`, as
+the reclaimable-marker reference.
 
 **Dependencies:** Unit 1.
 

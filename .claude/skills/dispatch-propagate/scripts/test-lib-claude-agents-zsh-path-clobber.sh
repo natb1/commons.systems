@@ -32,13 +32,21 @@ CA_FAKE=""
 ca_setup() {
   CA_DIR=$(mktemp -d)
   CA_FAKE="$CA_DIR/fake-claude"
+  # The empty-read corroboration probe: lib-claude-agents only trusts an
+  # exactly-`[]` registry payload when a `claude daemon` process corroborates
+  # it. Test 1 below serves exactly that payload, so the seam is stubbed to
+  # "daemon visible" (exit 0) — otherwise the case would pass or fail on whether
+  # the host running the suite happens to have a daemon.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$CA_DIR/fake-pgrep"
+  chmod +x "$CA_DIR/fake-pgrep"
+  export CLAUDE_AGENTS_PGREP_CMD="$CA_DIR/fake-pgrep"
 }
 
 ca_teardown() {
   rm -rf "$CA_DIR"
   CA_DIR=""
   CA_FAKE=""
-  unset CLAUDE_AGENTS_CMD
+  unset CLAUDE_AGENTS_CMD CLAUDE_AGENTS_PGREP_CMD
 }
 
 # write_fake_claude <stdout-payload> <exit-code> — install a fake `claude` that

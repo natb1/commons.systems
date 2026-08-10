@@ -3,13 +3,13 @@ id: tactic-provision-worktree-script-tests
 kind: tactic
 statement: Add script-level test coverage for provision-node-worktree's
   worker-start gate integration (selected-phase arg, exit 12/13 pass-through,
-  scope-fingerprint stamp write) in test-dispatch-scripts.sh
+  scope-fingerprint stamp write) in test-provision-node-worktree.sh
 owner: ai
 status: raw
 parent: null
 rationale: "Surfaced during Unit 2 of tactic-worker-start-revalidation
   (2026-07-07): the plan called for extending 'the provision section of
-  test-dispatch-scripts.sh', but no provision-node-worktree test harness exists
+  test-provision-node-worktree.sh', but no provision-node-worktree test harness exists
   there (plan anchor drift). The gate LOGIC is well covered (15 unit tests on
   check-node-selection.ts), but the bash plumbing Unit 2 added — the new second
   arg, the exit-12/13 pass-through, and the '<fingerprint> <sha>' stamp write —
@@ -47,7 +47,7 @@ attributes: {}
 exit-13 (scope-stale) pass-through, and a `<scope-fingerprint>
 <origin-main-sha>` stamp write on pass. Its plan called for extending the
 "provision section" of
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`, but that
+`.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh`, but that
 file has no `provision-node-worktree` tests to extend — the anchor had drifted.
 
 The gate LOGIC is covered by 15 unit tests on `check-node-selection.ts`. The
@@ -57,7 +57,7 @@ and the stamp-file write.
 ## Recommended scope
 
 A focused harness (mirroring the mock-`gh`/fixture pattern already in
-`test-dispatch-scripts.sh`):
+`test-provision-node-worktree.sh`):
 
 - **arg forwarding** — `provision-node-worktree <id> <phase>` invokes
   `check-node-selection.ts` with both args; a one-arg call exits 2 (usage).

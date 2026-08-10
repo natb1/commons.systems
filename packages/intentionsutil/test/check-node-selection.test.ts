@@ -157,6 +157,52 @@ describe("evaluateSelection", () => {
     expect(r.stderr[0]).toMatch(/selected fix but tactic-fx carries no execution\.fix interrupt/);
   });
 
+  it("passes a conflict selection while execution.conflict is set (ladder phase preserved)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-cf",
+        kind: "tactic",
+        phase: "review", // real ladder phase preserved; the interrupt is orthogonal
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: ["reviewed"],
+          strategy_fingerprint: null,
+          conflict: { since: "2026-08-03", attempt: 1 },
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("exit 12 on a conflict selection once execution.conflict was cleared (resolved since selection)", () => {
+    const dir = tempDir();
+    seed(
+      dir,
+      anode({
+        id: "tactic-cf",
+        kind: "tactic",
+        phase: "review",
+        execution: {
+          branch: "b",
+          pr: 1,
+          attempts: {},
+          markers: ["reviewed"],
+          strategy_fingerprint: null,
+          conflict: null,
+        },
+      }),
+    );
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/selected conflict but tactic-cf carries no execution\.conflict interrupt/);
+  });
+
   it("exit 12 when parked first-class (office_hours set after selection)", () => {
     const dir = tempDir();
     seed(
@@ -205,6 +251,31 @@ describe("evaluateSelection", () => {
     const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-x substance changed/);
+  });
+
+  it("throws (fails closed) when a serving strategy's file is corrupt rather than passing the gate", () => {
+    // Regression: the gate enumerates the store STRICTLY. Under the tolerant
+    // `listNodes` a corrupt strategy file is skipped with a warning, the
+    // `byId.get(sid) === undefined → continue` shortcut fires, and this
+    // soft-frozen tactic gets a silent exit-0 pass — a required staleness gate
+    // turned into a no-op for every tactic serving that strategy.
+    const dir = tempDir();
+    seed(dir, anode({ id: "strategy-x", kind: "strategy", statement: "Own the substrate." }));
+    seed(
+      dir,
+      anode({
+        id: "tactic-x",
+        kind: "tactic",
+        phase: "qa",
+        serves: ["strategy-x"],
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
+      }),
+    );
+    // Simulate the partially-written / truncated node file.
+    writeFileSync(join(dir, "strategy-x.md"), "");
+    expect(() => evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null })).toThrow(
+      /strategy-x\.md/,
+    );
   });
 
   it("passes when the stamped strategy fingerprint matches the current substance", () => {

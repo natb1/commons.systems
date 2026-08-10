@@ -1,10 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { tacticScopeFingerprint } from "../src/router.js";
-import { restampScope } from "../scripts/restamp-scope-fingerprint.js";
+import { readNode, parseNodeRaw } from "../src/store.js";
+import { hasNeedsMainResidue, parseScopeStamp } from "../src/transitions.js";
+import {
+  restampScope,
+  restampScopeFromRev,
+  writeScopeStamp,
+} from "../scripts/restamp-scope-fingerprint.js";
 import { writeNodeFromJson } from "../scripts/write-node.js";
 
 function tempDir(): string {
@@ -100,5 +106,172 @@ describe("restampScope", () => {
     expect(() =>
       restampScope(intentionsDir, nonGitRepoRoot, mainRoot, "tactic-git-failure-fixture"),
     ).toThrow();
+  });
+});
+
+// --- restampScopeFromRev -----------------------------------------------
+
+function nodeRaw(id: string, statement: string, body: string): string {
+  return (
+    `---\n` +
+    `id: ${id}\n` +
+    `kind: tactic\n` +
+    `statement: ${statement}\n` +
+    `owner: human\n` +
+    `status: codified\n` +
+    `parent: null\n` +
+    `---\n` +
+    body
+  );
+}
+
+// A scratch git repo with an identity configured, on branch `main`, so
+// `git rev-parse main` and `git show main:<path>` resolve without touching
+// the real checkout.
+function initScratchRepo(): string {
+  const scratchRepo = tempDir();
+  execFileSync("git", ["init", "-b", "main"], { cwd: scratchRepo });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: scratchRepo });
+  execFileSync("git", ["config", "user.name", "Test User"], { cwd: scratchRepo });
+  return scratchRepo;
+}
+
+// Write `intentions/<id>.md` into a scratch repo and commit it. Returns the
+// absolute node path so a caller can overwrite it uncommitted afterwards.
+function commitNodeFixture(scratchRepo: string, id: string, statement: string, body: string): string {
+  const intentionsAbsDir = join(scratchRepo, "intentions");
+  execFileSync("mkdir", ["-p", intentionsAbsDir]);
+  const nodePath = join(intentionsAbsDir, `${id}.md`);
+  writeFileSync(nodePath, nodeRaw(id, statement, body));
+  execFileSync("git", ["add", "-A"], { cwd: scratchRepo });
+  execFileSync("git", ["commit", "-m", "add fixture node"], { cwd: scratchRepo });
+  return nodePath;
+}
+
+describe("restampScopeFromRev", () => {
+  it("stamps the COMMITTED content, not the uncommitted working-tree content", () => {
+    const id = "tactic-restamp-from-rev-fixture";
+    const statement = "Stamp what actually landed, not the reverted worktree.";
+    const bodyA = "# " + statement + "\n\nOriginal committed body.\n";
+    const bodyB = "# " + statement + "\n\nUncommitted working-tree body, must NOT be stamped.\n";
+
+    const scratchRepo = initScratchRepo();
+    const nodePath = commitNodeFixture(scratchRepo, id, statement, bodyA);
+
+    // Overwrite on disk, uncommitted — this is the reverted-worktree state
+    // `restampScopeFromRev` must NOT read from.
+    writeFileSync(nodePath, nodeRaw(id, statement, bodyB));
+
+    const mainRoot = tempDir();
+    const result = restampScopeFromRev(scratchRepo, mainRoot, id, "main");
+
+    const expectedSha = execFileSync("git", ["rev-parse", "main"], { cwd: scratchRepo, encoding: "utf8" }).trim();
+    const expectedFingerprint = tacticScopeFingerprint(statement, bodyA);
+    const wrongFingerprint = tacticScopeFingerprint(statement, bodyB);
+
+    expect(result.sha).toBe(expectedSha);
+    expect(result.fingerprint).toBe(expectedFingerprint);
+    expect(result.fingerprint).not.toBe(wrongFingerprint);
+  });
+
+  it("matches the needs-main-residue production scenario: A and B fingerprints differ", () => {
+    const id = "tactic-restamp-residue-fixture";
+    const statement = "Carry a needs-main residue append across a transition.";
+    const bodyA = "# " + statement + "\n\nPre-transition body.\n";
+    const bodyB =
+      "# " + statement + "\n\nPre-transition body.\n\n## needs-main residue\n\nVerify in production after merge.\n";
+
+    expect(hasNeedsMainResidue(bodyB)).toBe(true);
+    expect(hasNeedsMainResidue(bodyA)).toBe(false);
+
+    const scratchRepo = initScratchRepo();
+    commitNodeFixture(scratchRepo, id, statement, bodyB);
+
+    const mainRoot = tempDir();
+    const result = restampScopeFromRev(scratchRepo, mainRoot, id, "main");
+
+    const fingerprintA = tacticScopeFingerprint(statement, bodyA);
+    const fingerprintB = tacticScopeFingerprint(statement, bodyB);
+    expect(fingerprintA).not.toBe(fingerprintB);
+    expect(result.fingerprint).toBe(fingerprintB);
+  });
+
+  it("round-trips through parseScopeStamp", () => {
+    const id = "tactic-restamp-roundtrip-fixture";
+    const statement = "Round-trip the written stamp through the shared parser.";
+    const body = "# " + statement + "\n";
+
+    const scratchRepo = initScratchRepo();
+    commitNodeFixture(scratchRepo, id, statement, body);
+
+    const mainRoot = tempDir();
+    const result = restampScopeFromRev(scratchRepo, mainRoot, id, "main");
+
+    const stampPath = join(mainRoot, ".claude", "worktrees", `${id}.scope-fingerprint`);
+    const content = readFileSync(stampPath, "utf8");
+    const parsed = parseScopeStamp(content);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.fingerprint).toBe(result.fingerprint);
+    expect(parsed?.sha).toBe(result.sha);
+  });
+
+  it("fails loud on a rev/path that does not exist", () => {
+    const scratchRepo = initScratchRepo();
+    // At least one commit so "main" resolves; the node file itself is never added.
+    writeFileSync(join(scratchRepo, "README.md"), "placeholder\n");
+    execFileSync("git", ["add", "-A"], { cwd: scratchRepo });
+    execFileSync("git", ["commit", "-m", "init"], { cwd: scratchRepo });
+
+    const mainRoot = tempDir();
+    expect(() => restampScopeFromRev(scratchRepo, mainRoot, "tactic-not-on-main", "main")).toThrow();
+  });
+
+  // Validation parity with the disk path: `restampScope` reaches
+  // `assertPathSafeId` for free through `readNode`, but the git-rev path never
+  // touches `readNode`, so the guard lives at the shared `writeScopeStamp`
+  // seam. Without it, `join(mainRoot, ".claude", "worktrees", `${id}.md`)`
+  // would escape the worktrees directory.
+  it("rejects a path-unsafe id instead of writing outside the worktrees dir", () => {
+    const scratchRepo = initScratchRepo();
+    writeFileSync(join(scratchRepo, "README.md"), "placeholder\n");
+    execFileSync("git", ["add", "-A"], { cwd: scratchRepo });
+    execFileSync("git", ["commit", "-m", "init"], { cwd: scratchRepo });
+
+    const mainRoot = tempDir();
+    expect(() => restampScopeFromRev(scratchRepo, mainRoot, "../escape", "main")).toThrow(
+      /path separators/,
+    );
+    expect(() => writeScopeStamp(mainRoot, "../escape", "statement", "body\n", "deadbeef")).toThrow(
+      /path separators/,
+    );
+    expect(() => writeScopeStamp(mainRoot, "..", "statement", "body\n", "deadbeef")).toThrow(
+      /reserved path name/,
+    );
+  });
+});
+
+describe("parseNodeRaw / readNode agreement", () => {
+  it("parseNodeRaw(raw, id) and readNode(dir, id) produce the same result for the same content", () => {
+    const intentionsDir = tempDir();
+    const statement = "Guard the parseNodeRaw/readNode extraction.";
+
+    writeNodeFromJson(
+      intentionsDir,
+      JSON.stringify({
+        id: "tactic-parse-node-raw-guard",
+        kind: "tactic",
+        statement,
+        owner: "human",
+        status: "codified",
+        parent: null,
+      }),
+    );
+
+    const raw = readFileSync(join(intentionsDir, "tactic-parse-node-raw-guard.md"), "utf8");
+
+    expect(parseNodeRaw(raw, "tactic-parse-node-raw-guard")).toEqual(
+      readNode(intentionsDir, "tactic-parse-node-raw-guard"),
+    );
   });
 });

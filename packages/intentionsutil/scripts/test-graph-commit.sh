@@ -12,7 +12,8 @@
 #
 # Covers:
 #   1. happy path lands (exit 0), scratch branch deleted on origin
-#   2. idempotent re-run on a clean tree: exit 0, no new commit on main
+#   2. idempotent re-run on a clean tree: exit 0, no new commit on main, and
+#      the no-op short-circuit makes zero gh polls and leaves no scratch branch
 #   3. non-overlapping concurrent edits auto-merge; both writers' edits survive
 #   4. overlapping concurrent edits: exit 1, the other writer's landed content
 #      survives on main, this writer's content is NOT landed, the office_hours
@@ -23,7 +24,10 @@
 #   6. gh hard failure (shim exits 1): die surfacing gh's stderr after exactly
 #      3 consecutive polls
 #   7. pending timeout (shim reports "0 0"): still transient — burns all
-#      attempts and exits with the busy-main error
+#      attempts and exits with the busy-main error, whose terminal line names
+#      the cause and attributes the observed check state to the SHA it was read
+#      on (guarding against a prior attempt's snapshot being shown as this
+#      failure's state)
 #   8. desynced check-run status (one required check's status is stuck
 #      in_progress even though its conclusion already reports success — a
 #      known GitHub check-runs desync, #2457): the fixed --jq filter keys off
@@ -96,7 +100,8 @@
 #  28. fail-loud guard, benign equal-blob: a clone synced exactly to
 #      origin/main's tip (nothing staged, and the local blob for the id
 #      equals origin/main's blob) proceeds benignly — exit 0, the same
-#      "no new changes to stage" message, no die.
+#      "no new changes to stage" message, no die, and zero gh polls (the
+#      no-op short-circuit).
 #  29. lock contention is cheap: a waiting writer makes zero gh polls while
 #      blocked on the landing lock, then exactly one poll cycle once it
 #      acquires the lock and lands (not a re-poll-from-scratch retry burn)
@@ -107,6 +112,102 @@
 #  32. lock-ref hygiene: refs/graph/landing-lock is absent after a normal
 #      landing and never appears under refs/heads/graph/** (disjoint from
 #      the scratch-branch namespace graph-fast-path.yml triggers on)
+#  33. --expect happy path: an --expect entry matching the blob the caller
+#      actually wrote is transparent — exit 0, the edit lands
+#  34. --expect catches the equal-blob wrong-repo case that case 28's benign
+#      path cannot: a clone synced bit-for-bit to origin/main (nothing staged,
+#      local blob == origin/main blob, so the nothing-staged guard passes)
+#      invoked with an --expect sha for content that is NOT there — dies
+#      naming "mis-pointed -C/--repo", never reaches "landed", main untouched
+#  35. --expect on a --prune id is a usage error (exit 2, origin untouched) —
+#      a deletion has no content to assert
+#  36. a rebase ALREADY in progress in the target checkout: refused up front
+#      (non-zero exit naming "already in progress"), main untouched, zero gh
+#      calls — graph-commit never runs on a mid-operation worktree, so a
+#      caller's own stopped rebase is never aborted by case 37's cleanup
+#  37. a rebase THIS run stranded (a die() fires while the pull --rebase
+#      conflict is still live) is aborted by cleanup(): no rebase state dir
+#      survives, HEAD is reattached to the branch, and the checkout's local
+#      commits are intact
+#  38. duplicate green rows land: a SHA re-stamped by several pushes carries
+#      TWO completed/success rows per required name (plus an unrelated CodeQL
+#      row). The gate counts DISTINCT required contexts resolved to their
+#      newest run, not rows, so this lands (exit 0) instead of spinning to
+#      the busy-main timeout a row-count `== 4` gate could never satisfy
+#  39. duplicated rows do not paper over a missing context: four rows but only
+#      three distinct required names green (two lint successes, no acceptance
+#      row at all) — exit 1, nothing lands on main, and the reported state
+#      names "acceptance=absent" (the regression guard against relaxing the
+#      gate to `-ge 4`)
+#  40. a stale failed row superseded by a newer success lands: acceptance has
+#      a lower-id conclusion=failure row and a higher-id conclusion=success
+#      row, so max_by(.id) resolves it green — exit 0, no "concluded
+#      non-success" misdiagnosis. The stale row carries the LATER started_at,
+#      so ordering on that caller-settable field would fail this case
+#  41. no-op short-circuit exits 0 even when checks are unusable: a clone
+#      synced exactly to origin/main's tip, invoked on an existing id with
+#      nothing edited, while gh is in hard-fail mode (every call exits 1) —
+#      still exits 0 with zero gh polls and no "polling failed", proving the
+#      no-op path never reaches the poller
+#      (tactic-graph-commit-noop-landing-false-failure, Defect 1)
+#  42. lock-wait exhaustion is diagnosed as lock contention, not as a check
+#      state: a foreign lock with a far-future expiry blocks the writer, which
+#      exits after zero gh polls — the terminal message names the landing lock
+#      as the cause and states that the required-check state was never
+#      observed, instead of presenting any check-state snapshot
+#      (tactic-graph-commit-noop-landing-false-failure, Defect 3 residue)
+#  43. a forged green row cannot mask a genuine failure: `lint` has a real
+#      GitHub-Actions failure row plus a success row written by another App
+#      (a `checks: write` principal) with a far-future started_at and a higher
+#      id. The producer filter drops the foreign row, so `lint` resolves to the
+#      failure — hard refusal (1 poll, "not retrying"), nothing lands on main
+#  44. bystander prune lands despite a park on another id in the same
+#      invocation: a --prune id NOT implicated in a concurrent-edit conflict
+#      is re-applied and landed with the park commit rather than resurrected
+#      and silently dropped; the conflicted id still parks exactly as before;
+#      the landed park commit's subject names the parked id and the pruned
+#      id in separate clauses, never describing the pruned id as parked
+#  45. stale --base on a --prune id parks with a prune-specific reason instead
+#      of resurrecting the file: check_base_freshness() refuses to hand a
+#      nonexistent --ours to merge-node.ts, so a prune whose base moved on
+#      origin/main fails closed (exit 1) rather than silently landing rc 0
+#      through the empty-diff "no new changes to stage" branch
+#  46. bystander prune lands through the LAYER-3 park entry (the --base path an
+#      owed-prune census actually takes): a stale --base same-field divergence
+#      on one id parks it from inside check_base_freshness() — before any
+#      commit exists and with the writer's edits still uncommitted — while an
+#      unrelated --prune in the same invocation is re-applied after the reset
+#      and lands with the park commit
+#  47. a --base MANIFEST entry outside this invocation's node set that fails to
+#      merge does not degenerate into a park of nothing: every committed id is
+#      a bystander prune, so the partition would leave park_ids empty — the
+#      conservative fallback parks every id instead and re-applies no prune,
+#      rather than announcing a park while writing office_hours on no node
+#  48. far-ahead + stale --base: the layer-3 merge survives the rebuild — a
+#      writer whose worktree is BOTH far-ahead (a non-intentions code commit
+#      on HEAD) AND carrying a stale --base that a concurrent writer has
+#      since landed a disjoint-field edit against; the layer-3 merge's result
+#      must not be reverted by the far-ahead rebuild's snapshot-restore, so
+#      both writers' fields land, the code commit is excluded, and HEAD is
+#      restored to the far-ahead tip
+#  49. far-ahead, NO --base, disjoint field: a concurrent writer lands an edit
+#      to a DIFFERENT field of the same node between this writer's snapshot and
+#      the far-ahead rebuild — the rebuild's three-way replay merges instead of
+#      blindly copying, so both edits land (pre-fix the concurrent edit was
+#      silently reverted with no conflict, park, or diagnostic)
+#  50. far-ahead, NO --base, SAME field: the rebuild's replay cannot resolve the
+#      divergence, so it parks (exit 1, "mechanical-unresolved", both values
+#      named) instead of overwriting — and the far-ahead worktree's HEAD is
+#      still restored to its PR tip on this new park path
+#  51. far-ahead --prune racing a concurrent edit to the same node: the prune is
+#      guarded rather than forced through — exit 1, park, and the node SURVIVES
+#      on main carrying the concurrent edit
+#  52. far-ahead, NO --base, LIST-ENTRY REMOVAL racing a concurrent edit: this
+#      writer clears one `blocked_by` entry while another writer lands an
+#      unrelated field edit to the same node. The replay's merge unions list
+#      fields base-free and would silently restore the removed entry, so the
+#      guard refuses instead — exit 1, park naming the dropped entry, the entry
+#      still present on main, and HEAD restored to the PR tip
 #
 # No network and no real gh/node needed; requires only bash + git + jq.
 
@@ -164,7 +265,13 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-prune-edit t-prune t-prune-guard t-prune-solo t-base t-base-manifest \
           t-farahead t-farahead-prune t-prune-conflict t-dirty-preflight \
           t-cwd-target t-fail-loud-diff t-fail-loud-benign \
-          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene; do
+          t-lock-contend t-lock-steal t-lock-wait t-lock-hygiene \
+          t-farahead-prune-race \
+          t-expect-happy t-expect-wrong-repo t-expect-prune \
+          t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
+          t-dup-rows t-partial-dup t-stale-fail t-forged-green \
+          t-bystander-prune t-bystander-conflict t-prune-base-stale \
+          t-base-bystander-prune t-manifest-foreign t-manifest-prune; do
   seed_node "$id"
 done
 
@@ -195,6 +302,11 @@ seed_field_node t-field-merge "fieldA: base" "fieldB: base"
 seed_field_node t-field-conflict "sentinel: base"
 seed_field_node t-field-base-ok "fieldA: base" "fieldB: base"
 seed_field_node t-field-base-bad "sentinel: base"
+seed_field_node t-farahead-base "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race "fieldA: base" "fieldB: base"
+seed_field_node t-farahead-race-conflict "sentinel: base"
+seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
+seed_field_node t-base-bystander-conflict "sentinel: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -219,30 +331,36 @@ FIXTURE_DIR="$WORK/fixtures"
 # Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
 # four required names, run through graph-commit's REAL --jq filter below (not
 # a hardcoded count) so the filter itself is exercised end-to-end.
+#
+# Every genuine row carries `"app": {"slug": "github-actions"}` because that is
+# what the real payload carries for a row written by the GitHub Actions App —
+# and the filter now considers ONLY those rows, so a fixture row without it is
+# invisible to the gate (see the forged-green fixture, which relies on exactly
+# that).
 cat >"$FIXTURE_DIR/green.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "success"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
 cat >"$FIXTURE_DIR/pending.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "in_progress", "conclusion": null},
-  {"name": "preview-and-smoke", "status": "in_progress", "conclusion": null},
-  {"name": "lint", "status": "in_progress", "conclusion": null},
-  {"name": "unit-tests", "status": "in_progress", "conclusion": null}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null}
 ]}
 JSON
 
 cat >"$FIXTURE_DIR/concluded-fail.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "completed", "conclusion": "failure"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "failure"}
 ]}
 JSON
 
@@ -251,10 +369,74 @@ JSON
 # the fixed --jq filter tolerates by keying off .conclusion alone) — #2457.
 cat >"$FIXTURE_DIR/desynced-success.json" <<'JSON'
 {"check_runs": [
-  {"name": "acceptance", "status": "completed", "conclusion": "success"},
-  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success"},
-  {"name": "lint", "status": "completed", "conclusion": "success"},
-  {"name": "unit-tests", "status": "in_progress", "conclusion": "success"}
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": "success"}
+]}
+JSON
+
+# Duplicate rows: the incident shape. A SHA re-stamped by two pushes carries
+# TWO completed/success rows per required name (distinct id and started_at),
+# so a row-count gate sees 8 green rows and `== 4` can never fire. The
+# unrelated failing CodeQL row proves the name filter still excludes non-
+# required runs.
+cat >"$FIXTURE_DIR/duplicate-rows.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 101, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "acceptance",        "id": 201, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 102, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 202, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 103, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 203, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 104, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 204, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "Analyze (javascript)", "id": 999, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:30:00Z", "status": "completed", "conclusion": "failure"}
+]}
+JSON
+
+# Partial duplicate: four rows total but only THREE distinct required names
+# green — lint is duplicated and acceptance has no row at all. The regression
+# guard against naively relaxing the gate to a `-ge 4` row count.
+cat >"$FIXTURE_DIR/partial-duplicate.json" <<'JSON'
+{"check_runs": [
+  {"name": "lint",              "id": 301, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 302, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 303, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 304, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T10:00:00Z", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+# Stale fail then green: acceptance's OLDER row concluded failure and its
+# NEWER row (higher server-assigned id) concluded success, so max_by(.id) must
+# resolve the name to success rather than treating the stale failure as a hard
+# stop. The stale row deliberately carries the LATER started_at, so a filter
+# that still ordered on the caller-settable timestamp would resolve this name
+# to failure and fail this case.
+cat >"$FIXTURE_DIR/stale-fail-then-green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 401, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T12:00:00Z", "status": "completed", "conclusion": "failure"},
+  {"name": "acceptance",        "id": 402, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 403, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 404, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 405, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"}
+]}
+JSON
+
+# Forged green: a genuine GitHub-Actions `lint` FAILURE row, plus a row a
+# `checks: write` principal (any other App, or a PAT) could POST onto the
+# scratch SHA — same name, conclusion success, a far-future caller-supplied
+# started_at, and (as any forger would) a high id. Neither the timestamp nor
+# the id may let it supersede the genuine row: the producer filter drops it
+# before a winner is picked, so `lint` resolves to the real failure and the
+# gate refuses hard (exit 2) instead of fast-forwarding a red SHA onto main.
+cat >"$FIXTURE_DIR/forged-green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance",        "id": 501, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "preview-and-smoke", "id": 502, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "unit-tests",        "id": 503, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "success"},
+  {"name": "lint",              "id": 504, "app": {"slug": "github-actions"}, "started_at": "2026-07-27T11:00:00Z", "status": "completed", "conclusion": "failure"},
+  {"name": "lint",              "id": 999999, "app": {"slug": "attacker-app"}, "started_at": "9999-01-01T00:00:00Z", "status": "completed", "conclusion": "success"}
 ]}
 JSON
 
@@ -303,7 +485,10 @@ cat >"$WORK/bin/npx" <<'SH'
 #     for each key appearing in ours and/or theirs, if both sides agree (or
 #     only one side touched it), that value wins; if both sides changed it
 #     away from base to DIFFERENT values (or there is no base to compare
-#     against and the two sides disagree), it is an unresolved conflict.
+#     against and the two sides disagree), it is an unresolved conflict. A
+#     missing --ours file exits 1 with no JSON, mirroring the real CLI's crash
+#     contract (merge-node.ts:14-16) instead of silently resolving from theirs
+#     alone.
 #   anything else (park_write's throwaway tsx module) — emulates `npx tsx
 #     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
 #     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
@@ -330,6 +515,17 @@ case "$(basename "$2")" in
         *) shift ;;
       esac
     done
+
+    # Mirror the real CLI's crash contract (merge-node.ts:14-16: "A tool crash
+    # ... exits non-zero with an error on stderr and NO JSON on stdout") for a
+    # missing --ours file. Without this guard the shim below silently treats a
+    # nonexistent --ours as an empty OURS_V map and resolves from theirs alone
+    # — diverging from the real merge-node.ts, which throws ENOENT reading a
+    # missing --ours path.
+    if [[ -n "$ours" && ! -f "$ours" ]]; then
+      echo "merge-node shim: --ours file does not exist: $ours" >&2
+      exit 1
+    fi
 
     # theirs genuinely absent (the id no longer exists on the landed side):
     # ours is the only content, so ours wins outright (mirrors merge-node.ts's
@@ -481,12 +677,18 @@ else
 fi
 
 # --- Case 2: idempotent re-run on a clean tree ----------------------------------
+set_mode green
 before="$(origin_sha)"
 out="$(run_gc "$A" t-happy 2>&1)"; rc=$?
 if [[ $rc -eq 0 && "$(origin_sha)" == "$before" ]] && grep -q 'no new changes to stage' <<<"$out"; then
   ok "idempotent re-run: exit 0, no new commit on main"
 else
   no "idempotent re-run (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ "$(gh_calls)" -eq 0 && -z "$(scratch_refs)" ]]; then
+  ok "idempotent re-run: no-op short-circuit makes zero gh polls, no scratch branch"
+else
+  no "idempotent re-run: expected zero gh polls and no scratch branch (gh_calls=$(gh_calls), scratch_refs=$(scratch_refs))"
 fi
 
 # --- Case 3: non-overlapping concurrent edits auto-merge ------------------------
@@ -580,6 +782,16 @@ if [[ $rc -eq 1 ]] \
   ok "pending timeout stays transient: burns attempts, exits busy-main"
 else
   no "pending timeout retry path (rc=$rc)"; printf '%s\n' "$out"
+fi
+# The terminal line must attribute the check state to the commit it was read
+# on, and must name what ended the run. Without the SHA, a snapshot carried
+# over from an earlier attempt (an attempt can end before any poll runs) would
+# be printed as if it described this failure.
+if grep -Eq 'required-check state observed on [0-9a-f]{7,}: .*acceptance=' <<<"$out" \
+   && grep -q 'cause: the required checks did not report green' <<<"$out"; then
+  ok "pending timeout: terminal line attributes the observed state to a SHA and names the cause"
+else
+  no "pending timeout terminal attribution"; printf '%s\n' "$out"
 fi
 sync_clone "$A"
 
@@ -1067,6 +1279,7 @@ fi
 # local blob for the id already EQUALS origin/main's blob (the already-landed
 # / already-at-HEAD case). This must proceed benignly — same "no new changes
 # to stage" message as case 2, no die.
+set_mode green
 W15="$WORK/w15"; make_clone "$W15" writer-15
 sync_clone "$W15"   # now bit-for-bit at origin/main's tip
 before_sha="$(origin_sha)"
@@ -1079,6 +1292,11 @@ if [[ $rc -eq 0 ]] \
   ok "fail-loud guard: benign equal-blob (already at origin/main's tip) proceeds without error"
 else
   no "fail-loud guard benign-equal-blob (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "fail-loud guard benign-equal-blob: no-op short-circuit makes zero gh polls"
+else
+  no "fail-loud guard benign-equal-blob: expected zero gh polls (gh_calls=$(gh_calls))"
 fi
 
 # --- Case 29: contention is now cheap, not exhausting -----------------------
@@ -1197,6 +1415,608 @@ if ! git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**' |
   ok "lock hygiene: refs/heads/graph/** never lists the landing-lock ref (disjoint namespaces)"
 else
   no "lock hygiene: landing-lock ref leaked into refs/heads/graph/**"
+fi
+
+# --- Case 33: --expect is transparent on the happy path -----------------------
+# The caller hashes the content it just wrote in its OWN checkout and pins it.
+# The resolved repo is that same checkout, so the assertion holds and the edit
+# lands exactly as it would without --expect.
+set_mode green
+W33="$WORK/w33"; make_clone "$W33" writer-33
+sync_clone "$W33"
+edit_line "$W33" t-expect-happy 1 expect-happy-lands
+expect_sha="$(git -C "$W33" hash-object -- intentions/t-expect-happy.md)"
+out="$(run_gc "$W33" -m 'test: expect happy' --expect "t-expect-happy=$expect_sha" t-expect-happy 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-expect-happy | grep -q 'line1: expect-happy-lands'; then
+  ok "--expect happy path: matching blob assertion is transparent, edit lands"
+else
+  no "--expect happy path (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 34: --expect catches the equal-blob wrong-repo case -------------------
+# The exact hole case 28 leaves open. This clone is bit-for-bit at origin/main
+# and has nothing staged, so the nothing-staged guard sees local_blob ==
+# main_blob and proceeds benignly ("no new changes to stage" + "landed") — a
+# false success when the caller's real edit lives in a DIFFERENT checkout.
+# With --expect naming the content the caller actually wrote, graph-commit must
+# refuse instead.
+set_mode green
+W34="$WORK/w34"; make_clone "$W34" writer-34
+sync_clone "$W34"   # bit-for-bit at origin/main, nothing staged
+elsewhere_sha="$(printf 'content that lives in some OTHER checkout\n' | git -C "$W34" hash-object --stdin)"
+before_sha="$(origin_sha)"
+out="$(run_gc "$W34" -m 'test: expect wrong repo' --expect "t-expect-wrong-repo=$elsewhere_sha" t-expect-wrong-repo 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+# The assertion greps an --expect-SPECIFIC substring. 'mis-pointed -C/--repo'
+# appears in BOTH the --expect die and the pre-existing nothing-staged guard
+# (which case 27 greps with exactly that string), so it cannot tell the two
+# apart — and this case exists precisely to prove --expect fired where the
+# nothing-staged guard structurally could not.
+if [[ $rc -ne 0 ]] \
+   && grep -q 'does not hold the content the caller asserted' <<<"$out" \
+   && ! grep -q 'landed t-expect-wrong-repo on main' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect: equal-blob wrong-repo invocation dies loudly, never emits a false landed"
+else
+  no "--expect wrong-repo (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 35: --expect on a --prune id is a usage error ------------------------
+# A deletion has no content to assert, so pinning one is a caller mistake.
+set_mode green
+W35="$WORK/w35"; make_clone "$W35" writer-35
+sync_clone "$W35"
+prune_sha="$(git -C "$W35" hash-object -- intentions/t-expect-prune.md)"
+rm -f "$W35/intentions/t-expect-prune.md"   # --prune requires the file gone on disk
+before_sha="$(origin_sha)"
+out="$(run_gc "$W35" -m 'test: expect prune' --prune t-expect-prune --expect "t-expect-prune=$prune_sha" 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -eq 2 ]] \
+   && grep -q 'no content to assert' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "--expect on a --prune id is a usage error (exit 2), origin untouched"
+else
+  no "--expect on a prune id (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 36: a pre-existing rebase is refused up front -------------------------
+# graph-commit must not run on a mid-operation worktree. The refusal runs before
+# the EXIT trap is installed, precisely so this caller-owned rebase survives the
+# refusal untouched (case 37's cleanup abort would otherwise destroy it).
+set_mode green
+W36="$WORK/w36"; make_clone "$W36" writer-36
+sync_clone "$W36"
+OTHER36="$WORK/other36"; make_clone "$OTHER36" other36
+sync_clone "$OTHER36"
+edit_line "$OTHER36" t-preexist-conflict 1 landed-remote
+git -C "$OTHER36" commit -qam 'concurrent edit lands on origin (case 36 fixture)'
+git -C "$OTHER36" push -q origin main
+# W36 is now stale: give it a conflicting local commit and start the rebase that
+# stops on it, leaving a live rebase state dir and a detached HEAD.
+edit_line "$W36" t-preexist-conflict 1 local-side
+git -C "$W36" commit -qam 'local conflicting commit (case 36 fixture)'
+git -C "$W36" fetch -q origin main
+git -C "$W36" rebase FETCH_HEAD >/dev/null 2>&1
+rebase_started=0
+[[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]] && rebase_started=1
+# An unrelated node edit, so the invocation would otherwise be a normal landing.
+edit_line "$W36" t-preexist-rebase 1 should-never-land
+set_mode green   # resets the gh call log
+before_sha="$(origin_sha)"
+out="$(run_gc "$W36" -m 'test: pre-existing rebase' t-preexist-rebase 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ "$rebase_started" -eq 1 && $rc -ne 0 ]] \
+   && grep -q 'a rebase is already in progress' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]] \
+   && [[ "$(gh_calls)" -eq 0 ]]; then
+  ok "pre-existing rebase: refused up front, main untouched, zero gh calls"
+else
+  no "pre-existing rebase refusal (rebase_started=$rebase_started rc=$rc gh_calls=$(gh_calls))"; printf '%s\n' "$out"
+fi
+# The caller's rebase must still be there — the refusal aborts nothing.
+if [[ -d "$W36/.git/rebase-merge" || -d "$W36/.git/rebase-apply" ]]; then
+  ok "pre-existing rebase: the caller's own rebase is left in progress, not aborted"
+else
+  no "pre-existing rebase: the caller's rebase was destroyed by the refusal"
+fi
+git -C "$W36" rebase --abort >/dev/null 2>&1
+
+# --- Case 37: a rebase this run stranded is aborted by cleanup() ----------------
+# End-to-end (not the sourced-function fallback): the run is driven down a real
+# die() that fires while `git pull --rebase origin main`'s conflict is still
+# live. The lever is try_layer2_resolve()'s broken-staging-invariant die — an
+# EXTRA local commit touching a DIFFERENT node id conflicts on the rebase, and
+# that conflicted path is outside this invocation's node set, so layer 2 dies
+# instead of reaching its own explicit `git rebase --abort`. Only cleanup() can
+# clear the rebase on this path. (The extra commit is intentions/-only, so
+# ensure_intentions_only_base() leaves the worktree alone and the commit
+# survives to be replayed.)
+set_mode green
+W37="$WORK/w37"; make_clone "$W37" writer-37
+sync_clone "$W37"
+OTHER37="$WORK/other37"; make_clone "$OTHER37" other37
+sync_clone "$OTHER37"
+edit_line "$OTHER37" t-strand-other 1 landed-remote
+git -C "$OTHER37" commit -qam 'concurrent edit lands on origin (case 37 fixture)'
+git -C "$OTHER37" push -q origin main
+edit_line "$W37" t-strand-other 1 local-strand
+git -C "$W37" commit -qam 'local conflicting commit on an out-of-set node (case 37 fixture)'
+edit_line "$W37" t-strand-main 1 strand-edit   # the node actually passed to graph-commit
+before_sha="$(origin_sha)"
+out="$(run_gc "$W37" -m 'test: stranded rebase' t-strand-main 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'unexpected conflicted path' <<<"$out" \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "stranded rebase: the run dies mid-rebase on the broken-staging-invariant path"
+else
+  no "stranded rebase setup (rc=$rc)"; printf '%s\n' "$out"
+fi
+if [[ ! -d "$W37/.git/rebase-merge" && ! -d "$W37/.git/rebase-apply" ]] \
+   && [[ "$(git -C "$W37" symbolic-ref -q HEAD)" == "refs/heads/main" ]] \
+   && git -C "$W37" show HEAD:intentions/t-strand-other.md | grep -q 'line1: local-strand'; then
+  ok "stranded rebase: cleanup() aborted it — no state dir, HEAD reattached, local commits intact"
+else
+  no "stranded rebase not aborted by cleanup (HEAD=$(git -C "$W37" symbolic-ref -q HEAD))"; printf '%s\n' "$out"
+fi
+
+# --- Case 38: duplicate green rows still land --------------------------------
+set_mode duplicate-rows
+W38="$WORK/w38"
+make_clone "$W38" writer-38
+edit_line "$W38" t-dup-rows 1 dup-rows-land
+out="$(run_gc "$W38" -m 'test: duplicate rows' t-dup-rows 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-dup-rows | grep -q 'line1: dup-rows-land' \
+   && ! grep -q 'retry later' <<<"$out"; then
+  ok "duplicate green rows per required name still land (distinct-context gate)"
+else
+  no "duplicate green rows (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 39: duplicated rows do not paper over a missing context ------------
+set_mode partial-duplicate
+W39="$WORK/w39"
+make_clone "$W39" writer-39
+edit_line "$W39" t-partial-dup 1 must-not-land
+before="$(origin_sha)"
+out="$(export GC_POLL=0 GC_TIMEOUT=1 GC_ATTEMPTS=1; run_gc "$W39" -m 'test: partial dup' t-partial-dup 2>&1)"; rc=$?
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" ]] \
+   && grep -q 'acceptance=absent' <<<"$out"; then
+  ok "duplicated rows do not satisfy the gate when a required context is absent"
+else
+  no "partial-duplicate gate (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$W39"   # drop the never-landed local commit
+
+# --- Case 40: a stale failed row superseded by a newer success lands ---------
+set_mode stale-fail-then-green
+W40="$WORK/w40"
+make_clone "$W40" writer-40
+edit_line "$W40" t-stale-fail 1 newest-run-wins
+out="$(run_gc "$W40" -m 'test: stale fail then green' t-stale-fail 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-stale-fail | grep -q 'line1: newest-run-wins' \
+   && ! grep -q 'concluded non-success' <<<"$out"; then
+  ok "stale failed row superseded by a newer success lands (newest run per name)"
+else
+  no "stale-fail-then-green (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+# --- Case 41: no-op short-circuit exits 0 even when checks are unusable ------
+# A clone synced exactly to origin/main's tip, invoked on an existing id with
+# nothing edited, while gh is in hard-fail mode (every call exits 1). If the
+# no-op guard did not short-circuit before the poller, this would die with
+# "polling failed" instead of landing (a genuine no-op) cleanly.
+set_mode hard-fail
+W41="$WORK/w41"
+make_clone "$W41" writer-41
+sync_clone "$W41"   # now bit-for-bit at origin/main's tip
+before_sha="$(origin_sha)"
+out="$(run_gc "$W41" t-happy 2>&1)"; rc=$?
+after_sha="$(origin_sha)"
+calls="$(gh_calls)"
+if [[ $rc -eq 0 ]] \
+   && ! grep -q 'polling failed' <<<"$out" \
+   && [[ "$calls" -eq 0 ]] \
+   && [[ "$after_sha" == "$before_sha" ]]; then
+  ok "no-op short-circuit exits 0 with zero gh polls even when checks are unusable (hard-fail mode)"
+else
+  no "no-op short-circuit under hard-fail (rc=$rc gh_calls=$calls)"; printf '%s\n' "$out"
+fi
+
+# --- Case 42: lock-wait exhaustion names the lock, not a check observation ---
+# A foreign lock with a far-future expiry is never stolen, so the writer exits
+# the attempt loop having made ZERO check-run polls. The terminal message must
+# then name the landing lock as the cause and state plainly that no check state
+# was ever observed — never print a check-state snapshot (which, before
+# LAST_CHECK_SHA, could only have come from an unrelated earlier attempt).
+# Reuses the t-lock-wait node on a different line; this run must not land.
+set_mode green
+blocking_expiry=$(( $(date +%s) + 3600 ))
+plant_lock "$blocking_expiry" blocking-holder-test
+W42="$WORK/w42"
+make_clone "$W42" writer-42
+edit_line "$W42" t-lock-wait 5 must-not-land
+before="$(origin_sha)"
+out="$(export GC_LOCK_POLL=1 GC_LOCK_WAIT=1 GC_ATTEMPTS=1; run_gc "$W42" -m 'test: lock wait exhausted' t-lock-wait 2>&1)"; rc=$?
+calls="$(gh_calls)"
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 0 ]] \
+   && grep -q 'could not land on main after 1/1 attempts' <<<"$out" \
+   && grep -q 'cause: the landing lock was not acquired' <<<"$out" \
+   && grep -q 'required-check state was never observed' <<<"$out" \
+   && ! grep -q 'required-check state observed on' <<<"$out"; then
+  ok "lock-wait exhaustion: names the landing lock as the cause, reports no check observation (0 polls)"
+else
+  no "lock-wait exhaustion diagnostic (rc=$rc gh_calls=$calls origin_moved=$([[ "$(origin_sha)" == "$before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+fi
+git -C "$ORIGIN" update-ref -d refs/graph/landing-lock
+
+# --- Case 43: a forged green row cannot mask a genuine failure ---------------
+# A row named `lint` written by a principal OTHER than the GitHub Actions App
+# (any holder of `checks: write`), with conclusion success, a far-future
+# caller-supplied started_at, and a high id. The producer filter drops it, so
+# `lint` still resolves to the genuine failure row: hard refusal, no retry,
+# nothing lands on main.
+set_mode forged-green
+W43="$WORK/w43"
+make_clone "$W43" writer-43
+edit_line "$W43" t-forged-green 1 must-not-land
+before="$(origin_sha)"
+out="$(run_gc "$W43" -m 'test: forged green row' t-forged-green 2>&1)"; rc=$?
+calls="$(gh_calls)"
+if [[ $rc -eq 1 && "$(origin_sha)" == "$before" && "$calls" -eq 1 ]] \
+   && grep -q 'concluded non-success' <<<"$out" \
+   && grep -q 'lint=failure' <<<"$out" \
+   && grep -q 'not retrying' <<<"$out"; then
+  ok "forged non-Actions green row cannot supersede a genuine failure (hard refusal, nothing lands)"
+else
+  no "forged-green gate (rc=$rc gh_calls=$calls origin_moved=$([[ "$(origin_sha)" == "$before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+fi
+sync_clone "$W43"   # drop the never-landed local commit
+# --- Case 44: bystander prune lands despite a park on another id ---------------
+# t-bystander-conflict races a concurrent edit (same shape as Case 4) while
+# t-bystander-prune, an unrelated node, is pruned in the SAME invocation. The
+# conflicted id still parks; the bystander prune is not implicated in the
+# conflict, so it must be re-applied after the park's re-sync and land WITH
+# the park commit — not resurrected on disk and silently dropped. The landed
+# park commit's subject must name the parked id and the pruned id in separate
+# clauses (park.../prune...), never listing the pruned id as parked.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-bystander-conflict 1 A-wins
+run_gc "$A" t-bystander-conflict >/dev/null 2>&1
+edit_line "$B" t-bystander-conflict 1 B-loses
+rm -f "$B/intentions/t-bystander-prune.md"
+out="$(run_gc "$B" -m 'test: bystander prune' t-bystander-conflict --prune t-bystander-prune 2>&1)"; rc=$?
+content="$(origin_show t-bystander-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; prune*}"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: A-wins' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-bystander-prune.md 2>/dev/null \
+   && grep -q 't-bystander-conflict' <<<"$park_clause" \
+   && ! grep -q 't-bystander-prune' <<<"$park_clause"; then
+  ok "bystander prune: conflicted id parks, unrelated --prune lands anyway, commit subject names sets separately"
+else
+  no "bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
+fi
+# --- Case 45: stale --base on a --prune id parks, no resurrection --------------
+# A concurrent writer advances t-prune-base-stale on origin/main after W45
+# read its base blob. W45 then prunes it locally with that stale --base. Before
+# Unit 2, check_base_freshness() handed the (nonexistent, by --prune contract)
+# --ours path to the merge-node shim, which — lacking a guard for a missing
+# --ours — silently resolved from theirs alone, resurrecting the file and
+# landing rc 0 through the empty-diff branch. Since Unit 2, a --prune id is
+# excluded from the merge attempt entirely and parks with a prune-specific
+# reason.
+set_mode green
+W45="$WORK/w45"
+make_clone "$W45" writer-45
+stale="$(git -C "$W45" hash-object intentions/t-prune-base-stale.md)"
+OTHER45="$WORK/other45"
+make_clone "$OTHER45" other45
+echo "line13: concurrent edit" >>"$OTHER45/intentions/t-prune-base-stale.md"
+git -C "$OTHER45" commit -qam 'concurrent edit'
+git -C "$OTHER45" push -q origin main
+rm -f "$W45/intentions/t-prune-base-stale.md"
+out="$(run_gc "$W45" -m 'test: prune stale base' --base "t-prune-base-stale=$stale" --prune t-prune-base-stale 2>&1)"; rc=$?
+content="$(origin_show t-prune-base-stale 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && [[ -n "$content" ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'prune base moved' <<<"$content" \
+   && ! grep -q 'could not attempt structural merge' <<<"$content" \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out"; then
+  ok "prune stale base: refuses to land, parks with a prune-specific reason, no resurrection"
+else
+  no "prune stale base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 46: bystander prune lands through the LAYER-3 park entry -------------
+# Case 44 enters park_and_exit() from the layer-2 rc-12 tail: a local commit
+# already exists and the conflicting rebase was aborted. This case enters it
+# from inside check_base_freshness() instead — before any commit exists, with
+# the writer's edits still uncommitted in the tree — which is the entry a
+# --base-passing caller (the owed-prune census this fix exists for) actually
+# takes. Same partition contract must hold: the stale-base id parks, the
+# unrelated --prune is re-applied after the reset and lands with the park
+# commit, and the subject names the two sets in separate clauses.
+set_mode green
+W46="$WORK/w46"
+make_clone "$W46" writer-46
+base46_sha="$(git -C "$W46" hash-object intentions/t-base-bystander-conflict.md)"
+edit_field "$W46" t-base-bystander-conflict sentinel writer46-value
+rm -f "$W46/intentions/t-base-bystander-prune.md"
+
+OTHER46="$WORK/other46"
+make_clone "$OTHER46" other46
+edit_field "$OTHER46" t-base-bystander-conflict sentinel concurrent46-value
+git -C "$OTHER46" commit -qam 'concurrent same-field edit'
+git -C "$OTHER46" push -q origin main
+
+out="$(run_gc "$W46" -m 'test: layer-3 bystander prune' \
+        --base "t-base-bystander-conflict=$base46_sha" \
+        t-base-bystander-conflict --prune t-base-bystander-prune 2>&1)"; rc=$?
+content="$(origin_show t-base-bystander-conflict 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; prune*}"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'sentinel: concurrent46-value' <<<"$content" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-base-bystander-prune.md 2>/dev/null \
+   && grep -q 't-base-bystander-conflict' <<<"$park_clause" \
+   && ! grep -q 't-base-bystander-prune' <<<"$park_clause" \
+   && grep -q 't-base-bystander-prune' <<<"$subject"; then
+  ok "layer 3 bystander prune: stale --base parks its own node while the unrelated --prune lands with the park commit"
+else
+  no "layer 3 bystander prune (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
+fi
+
+# --- Case 47: a foreign --base manifest entry must not park nothing ------------
+# check_base_freshness() walks EVERY --base key, and a batch manifest (the
+# owed-prune census's whole-graph dump) may name nodes this invocation does not
+# commit. Here t-manifest-foreign was pruned on origin/main by another writer
+# after the dump, so the manifest blob is stale AND the id is absent from this
+# fresh checkout — merge-node.ts crashes on the nonexistent --ours, which lands
+# t-manifest-foreign (and only it) in the conflicted set. Every id this
+# invocation actually commits is then a bystander prune, so the naive partition
+# leaves park_ids empty: park_write() would be called with zero ids, the subject
+# would carry an empty park clause, and the run would exit 1 announcing a park
+# that exists nowhere. The conservative fallback must fire instead — park every
+# id, re-apply no prune.
+set_mode green
+OTHER47="$WORK/other47"
+make_clone "$OTHER47" other47
+stale47="$(git -C "$OTHER47" hash-object intentions/t-manifest-foreign.md)"
+git -C "$OTHER47" rm -q intentions/t-manifest-foreign.md
+git -C "$OTHER47" commit -qm 'concurrent prune of the foreign manifest node'
+git -C "$OTHER47" push -q origin main
+
+W47="$WORK/w47"
+make_clone "$W47" writer-47            # fresh: t-manifest-foreign is NOT on disk
+MANIFEST47="$WORK/base47.manifest"
+printf 't-manifest-foreign=%s\n' "$stale47" >"$MANIFEST47"
+rm -f "$W47/intentions/t-manifest-prune.md"
+
+out="$(run_gc "$W47" -m 'test: foreign manifest entry' --base "$MANIFEST47" \
+        --prune t-manifest-prune 2>&1)"; rc=$?
+content="$(origin_show t-manifest-prune 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+if [[ $rc -eq 1 ]] \
+   && grep -q "names no id in this invocation's node set" <<<"$out" \
+   && [[ -n "$content" ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 't-manifest-prune' <<<"$subject" \
+   && ! grep -q '; prune' <<<"$subject"; then
+  ok "foreign manifest entry: park_ids never degenerates to empty — every id parks, no prune is re-applied"
+else
+  no "foreign manifest entry (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"; printf 'subject: %s\n' "$subject"
+fi
+
+# --- Case 48: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
+# Unit 1 regression guard. Wfab is BOTH far-ahead (a non-intentions code
+# commit on HEAD, like case 16) AND carrying a stale --base whose field-level
+# delta is disjoint from a concurrent writer's landed edit (like case 21).
+# Before Unit 1's fix, ensure_intentions_only_base()'s far-ahead rebuild would
+# copy the PRE-merge SNAP_DIR content back over the layer-3 merge result,
+# silently reverting the concurrent writer's landed fieldB edit even though
+# the log line still claimed "layer 2/3 auto-resolved". The fix keeps
+# SNAP_DIR authoritative once the merge resolves, so the rebuild replays the
+# merged content instead.
+set_mode green
+Wfab="$WORK/wfab"
+make_clone "$Wfab" writer-fab
+fab_sha="$(git -C "$Wfab" hash-object intentions/t-farahead-base.md)"
+
+mkdir -p "$Wfab/src"
+echo "console.log('pr feature code, far-ahead + stale base')" >"$Wfab/src/farahead-base-feature.js"
+git -C "$Wfab" add src/farahead-base-feature.js
+git -C "$Wfab" commit -qm 'pr: non-intentions code change (far-ahead + stale base)'
+fab_tip="$(git -C "$Wfab" rev-parse HEAD)"
+
+edit_field "$Wfab" t-farahead-base fieldA farahead-edit
+
+OTHERFAB="$WORK/otherfab"
+make_clone "$OTHERFAB" otherfab
+edit_field "$OTHERFAB" t-farahead-base fieldB concurrent-edit
+git -C "$OTHERFAB" commit -qam 'concurrent field edit (far-ahead + stale base)'
+git -C "$OTHERFAB" push -q origin main
+
+out="$(run_gc "$Wfab" -m 'test: far-ahead stale base' --base "t-farahead-base=$fab_sha" t-farahead-base 2>&1)"; rc=$?
+content="$(origin_show t-farahead-base 2>/dev/null)"
+main_tree3="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored3="$(git -C "$Wfab" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: farahead-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-base-feature.js' <<<"$main_tree3" \
+   && [[ "$restored3" == "$fab_tip" ]]; then
+  ok "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild, both fields land"
+else
+  no "far-ahead + stale --base (rc=$rc restored3=$restored3 fab_tip=$fab_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 49-51: the far-ahead rebuild's three-way replay (Unit 2).
+#
+# Cases 16/18/48 all exercise the far-ahead rebuild where either nothing landed
+# concurrently or a --base CAS caught the divergence first. These three cover
+# the hole that opened when NEITHER applies: a writer with NO --base whose
+# worktree is far-ahead, racing a concurrent landing to the same node. Pre-Unit-2
+# the rebuild blindly `cp`'d the snapshot back over the freshly-reset tree, so
+# the concurrent edit was reverted with no conflict, no park, and no diagnostic.
+#
+# NOT covered here: a concurrent PRUNE racing this writer's edit (the node exists
+# at the fork point but is absent on origin/main). The real merge-node.ts treats
+# an empty --theirs with a non-null base as a delete/modify conflict (see
+# merge-node.ts's own comment), but this harness's npx shim resolves an empty
+# --theirs in favor of ours — a test here would assert shim behavior, not
+# product behavior. It is covered by the real merge primitive's own unit tests.
+
+# --- Case 49: far-ahead, no --base, disjoint field — both edits land ---------
+set_mode green
+W49="$WORK/w49"
+make_clone "$W49" writer-49
+mkdir -p "$W49/src"
+echo "console.log('pr feature code, far-ahead race')" >"$W49/src/farahead-race-feature.js"
+git -C "$W49" add src/farahead-race-feature.js
+git -C "$W49" commit -qm 'pr: non-intentions code change (far-ahead race)'
+race_tip="$(git -C "$W49" rev-parse HEAD)"
+edit_field "$W49" t-farahead-race fieldA writer-edit
+
+OTHERRACE="$WORK/otherrace"
+make_clone "$OTHERRACE" otherrace
+edit_field "$OTHERRACE" t-farahead-race fieldB concurrent-edit
+git -C "$OTHERRACE" commit -qam 'concurrent field edit (far-ahead race)'
+git -C "$OTHERRACE" push -q origin main
+
+out="$(run_gc "$W49" -m 'test: far-ahead race, disjoint field' t-farahead-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race 2>/dev/null)"
+main_tree49="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
+restored49="$(git -C "$W49" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'fieldA: writer-edit' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-race-feature.js' <<<"$main_tree49" \
+   && [[ "$restored49" == "$race_tip" ]]; then
+  ok "far-ahead race, no --base: the rebuild's three-way replay merges, both writers' fields land"
+else
+  no "far-ahead race disjoint field (rc=$rc restored49=$restored49 race_tip=$race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 50: far-ahead, no --base, SAME field — parks, HEAD restored --------
+set_mode green
+W50="$WORK/w50"
+make_clone "$W50" writer-50
+mkdir -p "$W50/src"
+echo "console.log('pr feature code, far-ahead race conflict')" >"$W50/src/farahead-race-conflict-feature.js"
+git -C "$W50" add src/farahead-race-conflict-feature.js
+git -C "$W50" commit -qm 'pr: non-intentions code change (far-ahead race conflict)'
+race_conflict_tip="$(git -C "$W50" rev-parse HEAD)"
+edit_field "$W50" t-farahead-race-conflict sentinel writer-value
+
+OTHERRACE2="$WORK/otherrace2"
+make_clone "$OTHERRACE2" otherrace2
+edit_field "$OTHERRACE2" t-farahead-race-conflict sentinel concurrent-value
+git -C "$OTHERRACE2" commit -qam 'concurrent same-field edit (far-ahead race conflict)'
+git -C "$OTHERRACE2" push -q origin main
+
+out="$(run_gc "$W50" -m 'test: far-ahead race, same field' t-farahead-race-conflict 2>&1)"; rc=$?
+content="$(origin_show t-farahead-race-conflict 2>/dev/null)"
+restored50="$(git -C "$W50" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer-value' <<<"$content" \
+   && grep -q 'concurrent-value' <<<"$content" \
+   && [[ "$restored50" == "$race_conflict_tip" ]]; then
+  ok "far-ahead race, same field: parks mechanical-unresolved instead of overwriting, HEAD restored to the PR tip"
+else
+  no "far-ahead race same-field park (rc=$rc restored50=$restored50 race_conflict_tip=$race_conflict_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 51: far-ahead --prune racing a concurrent edit — park, node survives ---
+set_mode green
+W51="$WORK/w51"
+make_clone "$W51" writer-51
+mkdir -p "$W51/src"
+echo "console.log('pr feature code, far-ahead prune race')" >"$W51/src/farahead-prune-race-feature.js"
+git -C "$W51" add src/farahead-prune-race-feature.js
+git -C "$W51" commit -qm 'pr: non-intentions code change (far-ahead prune race)'
+prune_race_tip="$(git -C "$W51" rev-parse HEAD)"
+rm -f "$W51/intentions/t-farahead-prune-race.md"
+
+OTHERRACE3="$WORK/otherrace3"
+make_clone "$OTHERRACE3" otherrace3
+edit_line "$OTHERRACE3" t-farahead-prune-race 1 concurrent-edit-survives
+git -C "$OTHERRACE3" commit -qam 'concurrent edit racing a far-ahead prune'
+git -C "$OTHERRACE3" push -q origin main
+
+out="$(run_gc "$W51" -m 'test: far-ahead prune race' --prune t-farahead-prune-race 2>&1)"; rc=$?
+content="$(origin_show t-farahead-prune-race 2>/dev/null || true)"
+restored51="$(git -C "$W51" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'line1: concurrent-edit-survives' <<<"$content" \
+   && grep -q 'prune vs. concurrent edit' <<<"$content" \
+   && [[ "$restored51" == "$prune_race_tip" ]]; then
+  ok "far-ahead prune race: the prune is guarded, the node survives on main with the concurrent edit, HEAD restored"
+else
+  no "far-ahead prune race (rc=$rc restored51=$restored51 prune_race_tip=$prune_race_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 52: far-ahead list-entry removal racing a concurrent edit ----------
+# The interim list-removal guard in replay_snapshot_onto_base. This writer clears
+# one satisfied `blocked_by` entry (the routine drain operation) from a far-ahead
+# PR worktree; another writer lands an unrelated field edit to the same node
+# first, so the replay takes its MERGE branch. The merge unions list fields
+# base-free — it would restore the cleared entry and report a clean auto-resolve
+# — so the guard parks instead. Asserted on the landed node rather than on the
+# npx shim's behavior: the guard runs before merge-node.ts is ever invoked.
+set_mode green
+W52="$WORK/w52"
+make_clone "$W52" writer-52
+mkdir -p "$W52/src"
+echo "console.log('pr feature code, far-ahead list removal')" >"$W52/src/farahead-list-removal-feature.js"
+git -C "$W52" add src/farahead-list-removal-feature.js
+git -C "$W52" commit -qm 'pr: non-intentions code change (far-ahead list removal)'
+list_removal_tip="$(git -C "$W52" rev-parse HEAD)"
+sed -i '/^  - t-satisfied-blocker$/d' "$W52/intentions/t-farahead-list-removal.md"
+
+OTHERRACE4="$WORK/otherrace4"
+make_clone "$OTHERRACE4" otherrace4
+edit_field "$OTHERRACE4" t-farahead-list-removal fieldB concurrent-edit
+git -C "$OTHERRACE4" commit -qam 'concurrent field edit racing a list-entry removal'
+git -C "$OTHERRACE4" push -q origin main
+
+out="$(run_gc "$W52" -m 'test: far-ahead list-entry removal' t-farahead-list-removal 2>&1)"; rc=$?
+content="$(origin_show t-farahead-list-removal 2>/dev/null)"
+restored52="$(git -C "$W52" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'list-entry removal vs. concurrent edit' <<<"$content" \
+   && grep -q 'blocked_by\[t-satisfied-blocker\]' <<<"$content" \
+   && grep -q '  - t-satisfied-blocker' <<<"$content" \
+   && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && [[ "$restored52" == "$list_removal_tip" ]]; then
+  ok "far-ahead list-entry removal: the guard parks instead of letting the base-free union silently restore the removed entry, HEAD restored"
+else
+  no "far-ahead list-entry removal guard (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

@@ -42,10 +42,11 @@ It inherits along two axes, each with a part it deliberately does **not** take:
   plan-comment, no worktree-branch target parsing, no owning-PR probe. The
   target is the `<strategy-node-id>` argument; sequencing is `blocked_by`
   frontmatter edges, not a PR-precondition scan.
-- **From `/align-strategy` (`.claude/skills/align-strategy/SKILL.md`)** — take
-  the write path (`write-node.ts` → body `Edit` → `graph-commit`), the
+- **From `/align` (`.claude/skills/align/SKILL.md`)** — take
+  the write path (`write-node.ts` → `assert-node-fresh` → body `Edit` →
+  `graph-commit`), the
   citation of `validateGraph` rules by number, and the register. Invert the
-  interaction model: `/align-strategy` is interview-driven; **`/align-tactics`
+  interaction model: `/align` is interview-driven; **`/align-tactics`
   is autonomous and never calls `AskUserQuestion`**. This inversion is the
   single biggest trap — "match the sibling" pulls the wrong way.
 
@@ -75,32 +76,7 @@ checkout: a concurrent session's dirty tracked file blocks this run's
 
 1. **Resolve the target node id** — the `strategy-<slug>` or `tactic-<slug>`
    argument (this skill never selects its own target).
-2. **Check the claim.** If `<project-root>/.claude/worktrees/<node-id>`
-   already exists with a live session — `worktree_has_live_session <path>
-   "$CLAUDE_CODE_SESSION_ID"`
-   (`.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:15`,
-   run with `dangerouslyDisableSandbox: true`) — the claim is held by
-   another session: stop and report the held claim, then end the run. Pass
-   this session's own id as the second (exclusion) argument so a
-   graph-launched orchestrator — the strategy-lane spawn in
-   `dispatch-graph-execute` uses `dispatch-spawn-job --name "$id"`, whose
-   name equals this worktree's basename — does not match its own
-   just-spawned session as a pre-existing claim; a genuinely different live
-   session in the same worktree still counts as a held claim and stops the
-   run. A held claim is **not** an `office_hours` park (it is not one of the
-   three autonomy-contract conditions below) and **not** a defect.
-
-   Before ending the run on a held claim, record the terminal disposition —
-   this session did nothing and lost nothing, so reaping its job is correct:
-
-   ```bash
-   packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
-   ```
-
-   Without it the Stop hook holds the job alive (see the note at the end of
-   Step 2). The call is safe unconditionally: `mark-node-terminal` writes
-   nothing unless this job's own name is `<target-node-id>`.
-3. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
+2. **Enter the worktree — on a verified-fresh checkout.** Otherwise create
    or re-enter it, and do all authoring and the step-5 `graph-commit` from
    there. The worktree **is** the claim: the same live-session ⇔ worktree
    liveness rule the router uses, so no separate lock is needed. **Prefer
@@ -117,6 +93,72 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    way, **STOP** and freshen (`git fetch origin main && git merge
    origin/main`) before proceeding. Never treat a failed fetch as license to
    proceed on unverified state.
+
+   **Then, unconditionally, on both entry paths — run the shared mechanical
+   selection-validity gate**, in the worktree, after `assert-worktree-fresh`
+   and **before any graph read** (before any `readNode` call or drift grep
+   below). This includes the `provision-node-worktree` path too, even though
+   `provision-node-worktree` already ran `check-node-selection.ts` itself
+   moments earlier: the re-run here is a redundant, idempotent ~0.7s check,
+   and paying it uniformly is the point — a session that provisioned once via
+   `provision-node-worktree` but re-enters later (e.g. a resumed session)
+   would otherwise slip through on re-entry with no fresh gate check at all.
+
+   ```bash
+   .claude/skills/dispatch-propagate/scripts/assert-node-selection "<target-node-id>" align-tactics
+   ```
+
+   `align-tactics` is the correct `<selected-phase>` literal for **both**
+   target kinds this skill handles. For a `strategy-<slug>` target,
+   `check-node-selection.ts` requires the node still be `kind: strategy` at
+   its native null phase and defers wholesale to a helper predicate,
+   `strategyAlignSelectable`. For a `tactic-<slug>` target — draft/raw
+   finalize or soft-frozen re-plan alike — the gate skips the phase-literal
+   comparison and defers wholesale to `frozenTacticSelectable`, which is
+   membership in the selector's own candidate list
+   (`packages/intentionsutil/src/router.ts`). The selector emits an
+   uncapped, fully-sorted candidate list, so a low-ranked draft is still
+   admitted — ranking never causes a false exit 12.
+
+   Route on the exit code:
+
+   - `0` — proceed; stdout is the node's scope fingerprint (discard it here,
+     Step 0 does not consume it).
+   - `12` — the selection is no longer valid: the node advanced past draft
+     and is not soft-frozen, was parked to `office_hours`, was resolved or
+     pruned, or has incomplete blockers. **STOP.** Make **no** graph write,
+     open no PR, and record the terminal disposition so the Stop hook can
+     reap the job — this session did nothing and lost nothing, so reaping it
+     is correct:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     `no-claim` is already a validated disposition value in
+     `mark-node-terminal`'s vocabulary
+     (`packages/intentionsutil/scripts/mark-node-terminal:74`) — this is not
+     a new value. The call is safe unconditionally: `mark-node-terminal`
+     writes nothing unless this job's own name is `<target-node-id>`.
+   - `13` — not reachable at this phase: the gate's scope-chained-phase
+     check only applies to the `fix`/`qa`/`review` phases, not
+     `align-tactics`. Treat it as a mechanical error: report and stop.
+   - any other non-zero — mechanical error (unresolvable project root,
+     failed fetch, malformed store): report and stop. A stale selection
+     (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical
+     error is neither of those either — it is a broken environment to report
+     plainly, per this repo's code-style convention of clear errors over
+     defensive fallbacks.
+
+   **Deliberately not gated by `assert-node-selection`** — each of these has
+   a shape this gate cannot express, so a future session should not "finish
+   the rollout" by wiring it in:
+
+   - `/office-hours` — operates on an **office_hours-parked** node by
+     definition; the gate's park check would reject every legitimate run.
+   - `/align-strategy` — may target a strategy that doesn't exist yet (a
+     new-strategy interview), and strategies carry no phase to gate on.
+   - `/align-init` — has no node target at all.
+   - `/grounding-research` — walks many nodes; there is no single selected
+     target to gate.
 
 ## Tactic target — per-node finalize or re-plan
 
@@ -169,7 +211,7 @@ run resumes by planning only what's missing. The census reports each child's
 its `office_hours.reason`; read the classification off its output
 rather than re-deriving it from a raw `phase`/`office_hours` read. See
 `references/idempotency.md` for the census output contract and how to tell an
-`/align-strategy`-retained draft from a born-parked child (both are
+`/align`-retained draft from a born-parked child (both are
 `phase`-absent, but only the latter carries `office_hours`).
 
 ## Step 1 — Build `args` and invoke the Workflow
@@ -188,11 +230,14 @@ this session no longer re-types a `model:` at each subagent callsite.
 small `tsx` one-liner, or just read the file — only the frontmatter is
 authoritative): `statement`, `rationale`, `success_signal`, `reading`, `gap`,
 `clarifications`, `attributes.conditions`, and `rounds`. Read its draft child
-tactics (their bodies carry retained tactical context from `/align-strategy`)
+tactics (their bodies carry retained tactical context from `/align`)
 and its existing non-draft children — the Idempotency section's census script
 finds both, and its `classification` field tells a draft (`phase` absent **and**
 `office_hours` unset) from a born-parked child (`phase` absent **with** `office_hours` set,
 which is decided human-owned work, **not** a draft — leave it out of the input).
+Dump the base manifest for every pre-existing node this round will edit
+**here**, at this read, before any write — see `references/write-path.md`'s
+"Capture a base manifest" section for the recipe.
 
 **Build `args`.**
 
@@ -216,7 +261,11 @@ args = {
 The eligibility sanity check (`office_hours` null, signal unvalidated, the
 fresh-reading gate, no non-draft child already on the signal path,
 `rounds.count < 2`) is the Workflow's drift phase — do **not** re-decide it here;
-just supply the inputs it judges from.
+just supply the inputs it judges from. This check is **strategy-mode only**. A
+per-node `/align-tactics <tactic-id>` run does not evaluate it — a sibling
+tactic (in-flight or completed-but-unpruned) sitting on the strategy's signal
+path never blocks a per-node finalize; that run's drift review judges Side A /
+Side B against the one target node and parks the tactic, never the strategy.
 
 **Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
 `args`. This skill is a sanctioned caller of that Workflow — no `ultracode`
@@ -250,7 +299,8 @@ on this thread. In brief, so a fresh reader still knows *what* happens:
   human-decided) and Side B (the round's plans depend on an *unrecorded* premise
   → a **material** premise parks the strategy for author ratification, an
   **immaterial** one lands as a dated `clarifications` entry without
-  interrupting). Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
+  interrupting). (In `mode: "tactic"`, both sides park **the target tactic**
+  instead of the strategy.) Absorbs `/plan-issue`'s relevance/drift, convention-drift, and
   merged-work-overlap review, with the graph as the corpus. Every clarification
   answer carries a dated provenance clause (`validateGraph` rule 17 enforces the
   date-presence half).
@@ -290,33 +340,52 @@ The Workflow authored no files; this session lands every graph write. The
 shape of the work, in order: **mint** real node ids for the Workflow's
 `temp_ref`s and rewrite edges, **dump** a base manifest for every
 pre-existing node this round touches (`dump-node.ts`), write each node's
-**frontmatter** (`write-node.ts`), `Edit` in each planned tactic's **body**
-(the Workflow's `body_markdown`), **land** the whole round in one or a few
-`graph-commit --base` calls, then **validate**
-(`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
-`office_hours: {reason, since}` on the target node. `graph-commit` has two
-distinct exit-1 cases — a parking message (a concurrent writer landed first;
-this session's content is unlanded but preserved on disk) versus a
-busy-main-exhaustion error (nothing landed, no park) — either way, report and
+**frontmatter** (`write-node.ts`), **assert** freshness against
+`origin/main` for every id about to receive a body write
+(`assert-node-fresh`), `Edit` in each planned tactic's **body** (the
+Workflow's `body_markdown`), **land** the whole round in one or a few
+`graph-commit --base` calls — the round's **final** call through
+`land-align-round --terminal <target-node-id>`, which bundles the
+terminal-disposition marker into the same process as the land — then
+**validate** (`validate-graph.ts`). Parks (`result.parks`) are written the same way, as
+`office_hours: {reason, since}` on the target node. `graph-commit` has three
+distinct exit-1 cases — a park that landed on `main` (a concurrent writer
+landed first; this session's content is unlanded but preserved on disk), a
+park whose own push failed (nothing on `main` at all — the parking
+*announcement* prints before the push, so it does not distinguish these two),
+and busy-main exhaustion (nothing landed, no park) — in every case, report and
 stop rather than retry automatically. See `references/write-path.md` for the
-full write-node.ts/dump-node.ts/graph-commit mechanics, exit-1 discrimination,
-park-writing, and the fingerprint/round-accounting details (per-strategy
-`execution.strategy_fingerprint` map via `strategy-fingerprint.ts`, and the
-strategy's `rounds.count`/`last_completed`/`last_aligned` bookkeeping).
+full write-node.ts/dump-node.ts/assert-node-fresh/graph-commit mechanics,
+exit-1 discrimination, park-writing, and the fingerprint/round-accounting
+details (per-strategy `execution.strategy_fingerprint` map via
+`strategy-fingerprint.ts`, and the strategy's
+`rounds.count`/`last_completed`/`last_aligned` bookkeeping).
 
-Once the round has landed and `validate-graph.ts` is clean, record the
-terminal disposition:
-
-```bash
-packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" align-round
-```
+The round's **final** landing call goes through
+`packages/intentionsutil/scripts/land-align-round --terminal <target-node-id>
+...` rather than a bare `graph-commit`. That wrapper writes this session's
+terminal disposition marker (`align-round`, or `park` when `graph-commit`'s
+concurrent-edit fallback parked the node **and pushed that park to main**) in
+the **same process** as the land. When the park itself failed to push, no
+marker is written and the session stays held — same as busy-main exhaustion.
+There is no separate marker step to run.
 
 The Stop hook (`.claude/hooks/dispatch-stop.sh`) reaps this node worker's job
 only on positive evidence that the pass ended — `Stop` fires on every turn
 yield, not only on terminal exit, so an unmarked session is held alive instead
-of reaped. Call it unconditionally: `mark-node-terminal` writes nothing unless
-this job's own name is `<target-node-id>`, so a round that lands *child*
-tactics cannot authorize a reap on their behalf.
+of reaped. Bundling the marker into the landing process is what makes that
+evidence unmissable: as a separate call a turn or more later, it was skipped
+whenever the session died in between, leaving the round landed on `main` with
+no declared disposition for the tick's terminal-without-disposition sweep to
+read (confirmed 3x in production). The wrapper's marker call is safe
+unconditionally — `mark-node-terminal` writes nothing unless this job's own
+name is `<target-node-id>`, so a round that lands *child* tactics cannot
+authorize a reap on their behalf.
+
+Consequently `validate-graph.ts` runs AFTER the marker, not before it. A
+`validate-graph.ts` failure on an already-landed round is **reported and filed
+as a follow-up**, not held as a live session: the graph is already invalid on
+`main`, and holding this session open does not fix it.
 
 ## Re-evaluation mode
 
@@ -342,11 +411,10 @@ forms relate.
 - The router's consumption of `phase` (selection, transitions, the soft-freeze
   gate) — `tactic-graph-router-selector` / `tactic-graph-router-transitions`,
   not this skill.
-- `/align-strategy` (recording the strategy under interview) and `/align-init`
-  (fork onboarding) — sibling skills.
+- `/align` (recording the strategy under interview) — sibling skill.
 - Retiring `/plan-issue` / `/file-issue` — done by
   `tactic-legacy-router-removal` Unit 2. Both SKILL.md bodies are now
-  retirement stubs pointing here and at `/align-strategy`; neither works for
+  retirement stubs pointing here and at `/align`; neither works for
   gh-issue work any more (GitHub Issues are disabled repo-wide). Deleting the
   stub directories outright is not this skill's work either.
 - `phase: main-qa` — it is in the spec enum (strategy clarification 22) but

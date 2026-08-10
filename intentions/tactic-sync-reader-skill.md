@@ -33,6 +33,7 @@ attention:
     rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
     tactics only, not the reading-chunk tactics under
     strategy-philosophical-grounding, which remain unboosted."
+  tier: 1
 phase: implement
 execution:
   branch: tactic-sync-reader-skill

@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# reconcile-graph-review-stall — the review-stall recovery sweep
+# (tactic-graph-review-exclusion-stall-recovery Unit 2). Sibling of
+# reconcile-graph-merged: it absorbs out-of-band PR events for open
+# graph-native tactics that are STUCK in phase:review with the `reviewed`
+# marker (armed auto-merge), rather than terminal ones.
+#
+# A phase:review + reviewed tactic is excluded from selector candidates
+# entirely (router.ts's REVIEWED_MARKER exclusion), so the normal
+# graph-select-target CI-red gate — which only runs on candidates the
+# selector already emits — never gets a chance to run on it. If the armed
+# merge cannot complete (CI turns red, or the PR goes CONFLICTING), the node
+# would otherwise be stranded forever. This sweep independently polls each
+# such node's PR and routes a detected regression to the lane that can
+# actually clear it (transitions.ts's `reviewStallRoute`):
+#
+#   fix      — CI concluded red. Enter the CI-fix interrupt directly (the same
+#              execution.fix write graph-select-target's _gate_maybe_interrupt
+#              would have made), which the router.ts fix-aware carve-out
+#              (tactic-graph-review-exclusion-stall-recovery) then re-surfaces
+#              as a `fix` candidate on the next selection tick.
+#
+# CONFLICTING detection is NO LONGER this sweep's job
+# (tactic-graph-router-conflict-routing): the selector now surfaces every
+# reviewed awaiting-merge node as a `pending-merge` candidate and enters the
+# orthogonal `execution.conflict` interrupt from its own sensor gate, every tick,
+# through the normal selection path. The `conflict` route below is therefore a
+# deliberate no-op — acting on it too would double-handle the same PR (a
+# `hold-node` here racing an `execution.conflict` interrupt there).
+#
+# A still-OPEN PR with no regression, or one whose mergeability is still
+# UNKNOWN (GitHub computes it asynchronously and self-heals), is a no-op —
+# not a signal this sweep should act on. A merged/closed PR is
+# reconcile-graph-merged's job, not this sweep's. A node already carrying an
+# open blocker (typically the conflict hold a previous sweep landed) is
+# likewise skipped, so a persisting conflict is held ONCE, not once per tick.
+#
+# Doctrine: run from a main-based checkout (the sweep writes state-only
+# commits on main). Sandbox: the CALLER wraps every invocation with
+# dangerouslyDisableSandbox — gh needs network + TLS, and node --import
+# tsx/esm needs the npm cache (see .claude/rules/sandbox.md).
+#
+# Stdout protocol, one line per tactic acted on; NOTHING for a skip:
+#   recovered <id> -> fix (ci=<verdict> merge=<state>)
+#
+# Exit codes: 0 always (including a no-op sweep and any per-node error —
+# best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
+# failure that prevents the sweep from running at all (e.g. the enumeration
+# one-liner itself erroring).
+#
+# Rollback: every `--set-fix` write is staged on disk before it is landed, so
+# each node is snapshotted from origin/main first and any failure restores it
+# (RESTORE_ON_FAILURE / restore_snapshot, as in reconcile-graph-merged). The
+# sweep never exits leaving intentions/ dirty — a leaked write would trip
+# graph-commit's assert_clean_outside_ids for EVERY graph writer in this
+# checkout, not just this one.
+#
+# Lock budget: the caller (dispatch-select-tick) holds the dispatch lock across
+# this sweep, and dispatch-acquire-lock reclaims a holder whose heartbeat is
+# older than MAX_HOLD_SECONDS (default 300s). A graph-commit can block far
+# longer than that (it waits on the global landing lock for up to
+# LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST ONE
+# graph-commit per tick: every `fix`-routed node's `--set-fix` write is
+# batched into ONE commit (exactly as reconcile-graph-merged batches its plan).
+# Per-tick actions are
+# additionally capped (GRAPH_REVIEW_STALL_CAP), and the lock heartbeat is
+# refreshed between candidates so the per-PR polling loop cannot age the lock
+# out on its own.
+#
+# Env:
+#   GRAPH_REVIEW_STALL_CAP  Max nodes acted on per sweep.
+#                           Positive integer. Default: 3. Excess candidates are
+#                           left for the next tick (the sweep is idempotent —
+#                           they still match).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
+
+# Positive-integer validation before the value reaches any `(( ))` context —
+# bash arithmetic evaluates array-index command substitution, so a hostile env
+# override must be rejected as a literal-integer check first (mirrors
+# dispatch-tick-recover:~130-150). CAP=0 would make the sweep a permanent no-op.
+CAP="${GRAPH_REVIEW_STALL_CAP:-3}"
+if ! [[ "$CAP" =~ ^[0-9]+$ ]] || [[ "$CAP" -lt 1 ]]; then
+  echo "reconcile-graph-review-stall: GRAPH_REVIEW_STALL_CAP must be a positive integer, got '$CAP'" >&2
+  exit 1
+fi
+
+# refresh_lock — bump the dispatch lock's heartbeat (strict-owner; a noop when
+# we do not hold it) so a multi-candidate polling loop cannot age the caller's
+# lock past MAX_HOLD_SECONDS and get it reclaimed mid-sweep.
+refresh_lock() {
+  [[ -x "$SCRIPT_DIR/dispatch-acquire-lock" ]] || return 0
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
+# --- Rollback path for the staged --set-fix writes ---------------------------
+# apply-fix-state mutates intentions/<id>.md on disk BEFORE anything is landed.
+# A write left behind by a failed land is not just this sweep's problem:
+# graph-commit's assert_clean_outside_ids refuses to start whenever a tracked
+# file outside the call's own node set is dirty, so one leaked write blocks
+# every other graph writer in this checkout until a human runs `git checkout
+# --`. So each node is snapshotted from origin/main before it is written and
+# every failure path restores it, exactly as reconcile-graph-merged does
+# (RESTORE_ON_FAILURE / restore_snapshot).
+declare -A SNAPSHOT=()
+RESTORE_ON_FAILURE=0
+restore_snapshot() {
+  local sid blob
+  for sid in "${!SNAPSHOT[@]}"; do
+    blob="${SNAPSHOT[$sid]}"
+    git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$sid.md"
+  done
+}
+# EXIT trap: roll the staged writes back when a failure armed the flag, so this
+# sweep never exits leaving intentions/ dirty.
+trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
+
+# --- Enumerate stranded review+reviewed tactics ------------------------------
+# One node pass: print `<id>\t<pr>` for every tactic at phase:review carrying
+# the `reviewed` marker, with no interrupt already active (defensive — should
+# always hold given the selector exclusion, but skip rather than double-enter
+# if it doesn't) and a non-null execution.pr.
+#
+# A parked node (office_hours set) is NEVER swept: a human owns its state while
+# it is parked, and the fix interrupt this sweep writes could not be undone
+# autonomously — selectGraphTargets skips every tactic with `office_hours !==
+# null` (router.ts:294), so the node would never surface as a `fix` candidate
+# and `--clear-fix` would never run. The exclusion mirrors that selector gate.
+#
+# A node with an OPEN blocker is likewise skipped (`blockersComplete`, the same
+# rule the selector applies): that is how a conflict hold this sweep already
+# landed stops it from re-holding the same conflict on every subsequent tick —
+# the hold stays open until /dispatch-conflict resolves it.
+#
+# Enumeration is STRICT (`listNodesStrict`): `blockersComplete` reads a
+# `blocked_by` id ABSENT from `byId` as COMPLETE, so under the tolerant reader a
+# corrupt blocker file would silently satisfy the open-blocker gate above and
+# let this sweep re-hold a node whose conflict hold is still open.
+CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const { REVIEWED_MARKER } = await import("./packages/intentionsutil/src/transitions.js");
+  const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
+  const nodes = listNodesStrict("./intentions");
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    if (n.kind !== "tactic") continue;
+    if (n.phase !== "review") continue;
+    if (n.office_hours != null) continue;
+    if (!n.execution || !n.execution.markers.includes(REVIEWED_MARKER)) continue;
+    if (n.execution.fix != null) continue;
+    if (!blockersComplete(n, byId)) continue;
+    const pr = n.execution.pr;
+    if (pr === null || pr === undefined) continue;
+    process.stdout.write(n.id + "\t" + pr + "\n");
+  }
+') )" || { echo "reconcile-graph-review-stall: node enumeration failed" >&2; exit 1; }
+
+[[ -z "$CANDIDATES" ]] && exit 0
+
+# --- Per candidate: poll the PR, decide, and stage its fix-state write -------
+# Writes only; nothing is landed inside the loop (see the lock budget above).
+RECOVERED_IDS=()
+RECOVERED_MSGS=()
+ACTED=0
+while IFS=$'\t' read -r id pr; do
+  [[ -n "$id" && -n "$pr" ]] || continue
+  # At cap — leave the rest for the next tick rather than stretching this
+  # tick's lock hold (they still match the enumeration next sweep).
+  [[ "$ACTED" -ge "$CAP" ]] && break
+  # Each iteration issues network polls; keep the caller's lock heartbeat fresh.
+  refresh_lock
+
+  PR_JSON=$(gh_pr_view_rest "$pr" 2>/dev/null) || {
+    echo "reconcile-graph-review-stall: gh_pr_view_rest #$pr for $id failed" >&2
+    continue
+  }
+  [[ -n "$PR_JSON" ]] || {
+    echo "reconcile-graph-review-stall: gh_pr_view_rest #$pr for $id returned empty" >&2
+    continue
+  }
+
+  STATE=$(jq -r '.state' <<<"$PR_JSON")
+  if [[ "$STATE" != "OPEN" ]]; then
+    continue   # merged/closed — reconcile-graph-merged's job
+  fi
+
+  MERGEABLE=$(jq -r '.mergeable' <<<"$PR_JSON")
+  # Validate at the shell/TypeScript edge rather than letting an unexpected
+  # value fall through: reviewStallRoute takes a closed union, so anything
+  # outside it (a changed gh_pr_view_rest projection, a jq-stringified null)
+  # would silently route to `null` and the sweep would stop recovering with no
+  # signal at all. Report it loudly and skip this node instead.
+  case "$MERGEABLE" in
+    MERGEABLE|CONFLICTING|UNKNOWN) ;;
+    *)
+      echo "reconcile-graph-review-stall: unexpected .mergeable '$MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
+      continue ;;
+  esac
+  HEAD_SHA=$(jq -r '.headRefOid' <<<"$PR_JSON")
+
+  RAW_VERDICT=$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null) || RAW_VERDICT=""
+  case "$RAW_VERDICT" in
+    passing|failing) VERDICT="$RAW_VERDICT" ;;
+    *) VERDICT="unknown" ;;   # pending or a call failure — not a regression
+  esac
+
+  ROUTE=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { reviewStallRoute } = await import("./packages/intentionsutil/src/transitions.js");
+    const ci = process.argv[1];
+    const mergeable = process.argv[2];
+    process.stdout.write(String(reviewStallRoute(ci, mergeable)));
+  ' "$VERDICT" "$MERGEABLE") ) || {
+    echo "reconcile-graph-review-stall: reviewStallRoute eval failed for $id" >&2
+    continue
+  }
+
+  case "$ROUTE" in
+    fix)
+      # Snapshot the node's origin/main blob BEFORE staging the write, so any
+      # later failure (this write, or the batched land below) restores a clean
+      # tree. A candidate with no origin/main blob has no rollback path — skip
+      # it rather than stage a write nothing can revert.
+      blob=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$id.md" 2>/dev/null) || {
+        echo "reconcile-graph-review-stall: cannot snapshot $id from origin/main (no rollback path)" >&2
+        continue
+      }
+      SNAPSHOT[$id]="$blob"
+      RESTORE_ON_FAILURE=1
+      if ! node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --set-fix --dir "$REPO_ROOT/intentions" >/dev/null; then
+        echo "reconcile-graph-review-stall: apply-fix-state --set-fix failed for $id (write rolled back)" >&2
+        git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$id.md"
+        unset "SNAPSHOT[$id]"
+        continue
+      fi
+      RECOVERED_IDS+=("$id")
+      RECOVERED_MSGS+=("recovered $id -> fix (ci=$VERDICT merge=$MERGEABLE)")
+      ACTED=$(( ACTED + 1 ))
+      ;;
+    conflict)
+      # Retired no-op (tactic-graph-router-conflict-routing): the selector's
+      # `pending-merge`/`conflict` candidate path handles CONFLICTING on every
+      # tick through `execution.conflict`, so this sweep must NOT also land a
+      # competing `provision-conflict` hold on the same PR. Nothing staged,
+      # ACTED not incremented.
+      continue
+      ;;
+    *)
+      continue   # null — no regression; nothing to route
+      ;;
+  esac
+done <<<"$CANDIDATES"
+
+[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
+
+# --- Land every staged fix-state write as ONE graph-commit -------------------
+# `-C "$REPO_ROOT"` is mandatory: graph-commit resolves the repo to commit from
+# its caller's cwd, never from its own on-disk location, while the --set-fix
+# writes above targeted "$REPO_ROOT/intentions". Without -C, a caller invoked
+# from a different main-branch checkout would have graph-commit inspect that
+# other tree, find nothing dirty, commit nothing, exit 0 — and this sweep would
+# print `recovered` for state left stranded uncommitted. (Same reason
+# reconcile-graph-merged passes -C.)
+if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
+  refresh_lock
+  GC_ARGS=(-C "$REPO_ROOT" -m "graph: enter fix-interrupt on stalled reviews (${#RECOVERED_IDS[@]} node(s))")
+  for id in "${RECOVERED_IDS[@]}"; do GC_ARGS+=("$id"); done
+
+  if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
+    echo "reconcile-graph-review-stall: graph-commit failed for ${RECOVERED_IDS[*]} (write rolled back, nothing landed)" >&2
+    # The EXIT trap restores every staged write, so intentions/ is left clean
+    # for the next graph writer. The next tick re-detects these nodes — the
+    # enumeration still matches.
+    exit 0
+  fi
+  # Landed — disarm the rollback so the clean exit keeps the committed state.
+  RESTORE_ON_FAILURE=0
+  refresh_lock
+
+  for msg in "${RECOVERED_MSGS[@]}"; do echo "$msg"; done
+fi
+
+exit 0

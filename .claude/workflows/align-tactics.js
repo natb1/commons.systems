@@ -22,7 +22,12 @@
  *     each claude-eligible one (runs every phase).
  *   - "tactic": finalize/re-plan a single existing tactic node — SKIPS the
  *     `decompose` phase entirely (there is nothing to decompose; only the one
- *     node's plan body needs authoring).
+ *     node's plan body needs authoring). It also runs the drift phase with the
+ *     round-eligibility sanity check disabled (that check — office_hours null,
+ *     signal unvalidated, fresh-reading gate, no non-draft sibling already on
+ *     the signal path, rounds.count < 2 — is a strategy-round question; a
+ *     tactic-mode run opens no round) and every park it emits targets the
+ *     target tactic node, never the strategy.
  *
  * args IN:
  *   { mode: "strategy" | "tactic",
@@ -33,7 +38,14 @@
  *       rounds:{count,last_completed,last_aligned} },
  *     target_node: {              // tactic mode ONLY: the single tactic being (re)planned
  *       id, statement, rationale, body, phase },
- *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align-strategy drafts
+ *       // ALL FIVE fields ride into the plan prompt (synthesizeTargetPlanTactic
+ *       // + tacticModeFraming below). `body` must be the node's FULL current
+ *       // body text below the frontmatter fence: the plan agent reconciles
+ *       // against it and its returned body_markdown REPLACES it wholesale
+ *       // (references/write-path.md), so a truncated body silently loses
+ *       // content. `phase` is the finalize-vs-re-plan discriminator
+ *       // (null/absent/"draft" => finalize; any in-flight phase => re-plan).
+ *     draft_tactics:[ { id, statement, body } ],  // strategy mode: retained /align drafts
  *     existing_children:[ { id, phase, on_signal_path } ], // non-draft children already on the signal path
  *     reuse_hunts:[ { focus, scope } ],           // up to 3 reuse-hunt foci (default 1)
  *     existing_ids:[ ... ] }      // pre-existing real node ids (for the caller's resolveTempRefs pass)
@@ -50,6 +62,9 @@
  *   - gates: born-parked author-approval gates emitted by decompose.
  *   - parks: every park collected across drift / decompose / plan, each
  *     { target, reason, category }.
+ *   - drift.eligibility.decomposable: meaningful in strategy mode only (the
+ *     round-eligibility sanity check's verdict); pinned true in tactic mode,
+ *     where the check does not run.
  *   - deviation: LIVE — true when any park exists or drift said do not proceed.
  *   - disposition: enum {completed, completed_with_fixes, escalated} per
  *     .claude/docs/outcome-envelope.md.
@@ -429,6 +444,38 @@ function resolveTempRefs(tactics, existingIds) {
 }
 // <<< resolveTempRefs <<<
 
+// computePhaseGates — the decompose and plan phase gates, split out of the
+// single `drift.proceed` boolean they used to share.
+//
+// The drift phase answers TWO independent questions and this function is the
+// only place they are combined:
+//   - eligibility.decomposable — "may this STRATEGY open another decomposition
+//     round?" (office_hours null, signal unvalidated, fresh-reading gate, no
+//     non-draft child already on the signal path, rounds.count < 2). This is a
+//     strategy-round question; in tactic mode the drift prompt does not even
+//     ask it (it pins the field to true) and nothing here reads it.
+//   - proceed — "is this run free of drift blockers?" (Side A failed condition
+//     / Side B material unrecorded premise). Meaningful in BOTH modes.
+//
+// Reading `proceed` alone for the plan gate was the defect: a per-node tactic
+// finalize was escalated whenever the serving strategy's signal path happened
+// to be claimed by an unrelated in-flight sibling.
+//
+// Fails CLOSED on a missing/garbled drift object: both gates false.
+//
+// >>> computePhaseGates: sliced + eval'd by test-dispatch-scripts.sh (align-tactics) >>>
+function computePhaseGates(mode, drift) {
+  const isTactic = mode === 'tactic';
+  const d = drift || {};
+  const proceed = d.proceed === true;
+  const decomposable = !!(d.eligibility && d.eligibility.decomposable === true);
+  return {
+    decomposeProceed: !isTactic && proceed && decomposable,
+    planProceed: isTactic ? proceed : proceed && decomposable,
+  };
+}
+// <<< computePhaseGates <<<
+
 // --- shared prompt fragments -------------------------------------------------
 
 // UNTRUSTED-DATA GUARD — copied from qa-fix.js. The strategy statement /
@@ -448,6 +495,114 @@ const untrusted = (text) => ['<untrusted>', String(text == null ? '' : text), '<
 
 // Compact JSON for embedding a data structure inside a prompt.
 const asJson = (obj) => JSON.stringify(obj, null, 2);
+
+// --- tactic-mode target-node context -----------------------------------------
+
+// synthesizeTargetPlanTactic — build the one-entry `planTactics` record for
+// mode: "tactic" from args.target_node.
+//
+// The defect this fixes: this record used to carry only id/statement, and it is
+// the object buildPlanPrompt serializes verbatim (`untrusted(asJson(tactic))`),
+// so the plan agent never saw the node's own rationale, its accumulated body
+// evidence, or its phase. All three now ride through. PURE (no fs/git) so the
+// probe can eval it in isolation.
+//
+// >>> synthesizeTargetPlanTactic: sliced + eval'd by test-align-tactics-target-context.sh >>>
+function synthesizeTargetPlanTactic(targetNode) {
+  const t = targetNode || {};
+  return {
+    temp_ref: t.id || 'target',
+    slug_hint: t.id || 'target',
+    statement: t.statement || '',
+    // The node's own accumulated evidence — the primary input to a finalize or
+    // a re-plan, not decoration.
+    rationale: t.rationale || '',
+    body: t.body || '',
+    // null (not undefined) so the discriminator is explicit in the serialized
+    // JSON the agent reads.
+    phase: t.phase == null ? null : t.phase,
+    claude_eligible: true,
+    draft_source_id: t.id || null,
+    existing_id: t.id || null,
+  };
+}
+// <<< synthesizeTargetPlanTactic <<<
+
+// tacticModeFraming — the finalize-vs-re-plan prose block for buildPlanPrompt.
+//
+// Returns [] in strategy mode (a decomposed tactic is new work with no prior
+// body to reconcile). In tactic mode it branches on the target node's phase.
+// The doctrine text is spliced from
+// .claude/skills/align-tactics/references/tactic-target.md:40-56 (draft/raw ->
+// finalize) and :58-73 + :160-172 (soft-frozen -> re-plan, clarification 32's
+// whole-node reconciliation bar) — author-approved wording, not re-derived.
+//
+// Phase values are the schema enum (packages/intentionsutil/src/schema.ts:36-43):
+// draft | align-tactics | implement | qa | review | main-qa | done. A null,
+// empty, or "draft" phase means never-decomposed; anything else is in-flight.
+// ("fix" is NOT a phase — the CI-fix interrupt lives in execution.fix.)
+//
+// >>> tacticModeFraming: sliced + eval'd by test-align-tactics-target-context.sh >>>
+function tacticModeFraming(mode, tactic) {
+  if (mode !== 'tactic') return [];
+  const t = tactic || {};
+  const phase = t.phase == null ? '' : String(t.phase);
+  const isFinalize = phase === '' || phase === 'draft';
+  const head = isFinalize
+    ? [
+        'TACTIC-MODE DISPOSITION — FINALIZE. This node has never been decomposed',
+        '(its phase is absent/draft), so this run authors its FIRST full',
+        'clean-session plan body.',
+      ]
+    : [
+        `TACTIC-MODE DISPOSITION — RE-PLAN. This node is soft-frozen at phase`,
+        `"${phase}": work is already in flight against the body below. This run`,
+        'RECONCILES that node, it does not author a plan from zero.',
+      ];
+  const shared = [
+    '',
+    'The `rationale` and `body` fields on the tactic below are the node\'s OWN',
+    'accumulated evidence — the recorded diagnosis, root cause, path:line',
+    'anchors, caveats, and instructions its author put there. Read them as the',
+    'PRIMARY input. The gather-phase reuse evidence and the strategy substance',
+    'are context around them, never a replacement for them.',
+    '',
+    'YOUR RETURNED body_markdown REPLACES THE NODE BODY WHOLESALE. Anything in',
+    '`body` that is still true and still needed — root-cause analysis, path:line',
+    'anchors, explicit caveats, instructions addressed to sibling or child nodes',
+    '— must be carried forward into what you author, or it is permanently lost.',
+    'Anything in it that your plan contradicts must be rewritten, not left',
+    'standing beside it.',
+  ];
+  const tail = isFinalize
+    ? [
+        '',
+        'WHOLE-NODE RECONCILE (clarification 32): rewrite any stale draft',
+        'narrative so nothing in the body contradicts the finalized plan. Do NOT',
+        'sweep the serving strategy\'s other draft tactics and do NOT propose a',
+        'rounds bump — neither is this run\'s job.',
+      ]
+    : [
+        '',
+        'WHOLE-NODE RECONCILIATION BAR (clarification 32): reconcile the node\'s',
+        'WHOLE body — the ## Context prose, EVERY unit, ## Reuse, and',
+        '## Verification — against the full current strategy substance shown',
+        'above, in this one pass. A one-bullet delta that leaves a sibling unit',
+        'or a verification step contradicting the amendment is an INCOMPLETE',
+        'amendment. Preserve verbatim every unit the current strategy substance',
+        'does not invalidate (units already implemented against this body are',
+        'cited by landed work); revise only what it actually invalidates, and',
+        'say explicitly in ## Context what changed and why. Do NOT relabel or',
+        'renumber the phase — the caller preserves the in-flight phase on',
+        'landing.',
+      ];
+  return head.concat(shared, tail, [
+    '',
+    'Whichever disposition applies, the body_markdown you return must satisfy',
+    'the PLAN BODY SCHEMA above in full.',
+  ]);
+}
+// <<< tacticModeFraming <<<
 
 // --- prompt builders ---------------------------------------------------------
 
@@ -538,38 +693,89 @@ function buildClausePrompt(strategy) {
 }
 
 // drift: the two-sided drift-review doctrine (SKILL.md Step 1), inline.
-function buildDriftPrompt(strategy, gather) {
+function buildDriftPrompt(strategy, gather, mode, targetNode) {
+  const isTactic = mode === 'tactic';
+  // Side A / Side B park the node this run may actually write.
+  const parkNoun = isTactic ? 'the target tactic' : 'the strategy';
+  const opening = isTactic
+    ? [
+        'You are the two-sided drift-review agent for an /align-tactics per-node',
+        'tactic finalize/re-plan. Exactly ONE pre-existing tactic node is being',
+        '(re)planned against its serving strategy. You decide ONLY whether a drift',
+        'blocker prevents authoring that one node\'s plan. You do NOT decide whether',
+        'the serving strategy may open a new decomposition round. Reason over the',
+        'data below and the gather-phase evidence; author no graph writes.',
+      ].join('\n')
+    : [
+        'You are the two-sided drift-review agent for an /align-tactics round. You',
+        'decide whether the strategy is decomposable this round and whether any',
+        'premise the round would rely on drifts from the recorded strategy. Reason',
+        'over the data below and the gather-phase evidence; author no graph writes.',
+      ].join('\n');
+  const eligibilityBlock = isTactic
+    ? [
+        'TACTIC MODE — NO ROUND-ELIGIBILITY CHECK. This run finalizes or re-plans',
+        'ONE pre-existing tactic node. It opens no decomposition round, consumes no',
+        'draft tactics, and bumps no `rounds` counter. The strategy-round',
+        'eligibility criteria therefore DO NOT APPLY and you must NOT evaluate',
+        'them: whether a non-draft sibling tactic already sits on the strategy\'s',
+        'signal path, `rounds.count`, the fresh-reading gate, the strategy\'s',
+        '`gap`/`reading` state, and the strategy\'s own `office_hours`. A sibling',
+        'tactic — in-flight or completed-but-unpruned — claiming the signal path is',
+        'EXPECTED and is NOT a reason to block this node. Whether this node is',
+        'selectable at all was already decided upstream by the router\'s',
+        '`frozenTacticSelectable` gate before this run started; do not re-litigate',
+        'it. Set `eligibility.decomposable = true` with rationale `"n/a — tactic',
+        'mode: round decomposability is not evaluated for a per-node finalize"`.',
+        '',
+        'Set `proceed=false` ONLY when Side A or Side B below blocks authoring THIS',
+        'node\'s plan. Target EVERY park you emit at the target tactic id given',
+        'below — never at the serving strategy. A per-node session never writes the',
+        'strategy, so a strategy-targeted park from this run is unwritable; if the',
+        'strategy\'s own record is what is incomplete, name that fact inside a park',
+        'on the target tactic.',
+      ].join('\n')
+    : [
+        'ELIGIBILITY SANITY CHECK. The strategy is decomposable this round only when:',
+        'office_hours is null, the signal is unvalidated (gap non-null OR reading',
+        'null), the fresh-reading gate holds (rounds.last_aligned is null, or a',
+        'reading exists dated strictly newer than rounds.last_aligned — a null reading',
+        'never satisfies "newer than"), it has no non-draft child tactic already on',
+        'its signal path, and rounds.count < 2. If rounds.count is at the cap with no',
+        'fresh reading, do NOT burn a third round: set eligibility.decomposable=false,',
+        'proceed=false, and park (category "unverifiable-blocker", reason = the round',
+        'history: no fresh reading exists to resolve whether another round is warranted).',
+      ].join('\n');
+  const nothingBlocks = isTactic
+    ? [
+        'When nothing blocks this node\'s plan, set proceed=true,',
+        'side_a_failed_conditions=[], parks=[], and eligibility.decomposable=true',
+        '(per the tactic-mode block above).',
+      ].join('\n')
+    : [
+        'When nothing blocks the round, set proceed=true, side_a_failed_conditions=[],',
+        'parks=[], and eligibility.decomposable=true.',
+      ].join('\n');
   return [
-    'You are the two-sided drift-review agent for an /align-tactics round. You',
-    'decide whether the strategy is decomposable this round and whether any',
-    'premise the round would rely on drifts from the recorded strategy. Reason',
-    'over the data below and the gather-phase evidence; author no graph writes.',
+    opening,
     '',
     UNTRUSTED_GUARD,
     '',
-    'ELIGIBILITY SANITY CHECK. The strategy is decomposable this round only when:',
-    'office_hours is null, the signal is unvalidated (gap non-null OR reading',
-    'null), the fresh-reading gate holds (rounds.last_aligned is null, or a',
-    'reading exists dated strictly newer than rounds.last_aligned — a null reading',
-    'never satisfies "newer than"), it has no non-draft child tactic already on',
-    'its signal path, and rounds.count < 2. If rounds.count is at the cap with no',
-    'fresh reading, do NOT burn a third round: set eligibility.decomposable=false,',
-    'proceed=false, and park (category "unverifiable-blocker", reason = the round',
-    'history: no fresh reading exists to resolve whether another round is warranted).',
+    eligibilityBlock,
     '',
     'DRIFT REVIEW IS TWO-SIDED:',
     '- Side A — a recorded condition failed. If any attributes.conditions entry no',
     '  longer plausibly holds against current repo/author state, do NOT plan',
     '  against a dead premise. Conditions are human-decided; a failed one is an',
     '  author decision, not something you re-resolve. List it in',
-    '  side_a_failed_conditions, set proceed=false, and park the strategy',
+    `  side_a_failed_conditions, set proceed=false, and park ${parkNoun}`,
     '  (category "major-scope-deviation", reason naming the failed condition).',
     '- Side B — the round\'s plans depend on an UNRECORDED condition. Sweep for',
     '  premises the decomposition newly relies on that the strategy does not',
     '  record. The discriminator: does a plan actually depend on it (plan_depends)?',
     '  - Material (plan_depends=true, material=true): a condition or design',
     '    assumption the author must ratify. Emit it as unrecorded_premises with a',
-    '    proposed_clarification, AND park the strategy (category',
+    `    proposed_clarification, AND park ${parkNoun} (category`,
     '    "requirement-ambiguity", reason naming the proposed clarification for',
     '    author ratification), proceed=false.',
     '  - Immaterial (plan_depends=false, material=false): an observation that',
@@ -581,8 +787,7 @@ function buildDriftPrompt(strategy, gather) {
     '/align-tactics round.) ...") — validate-graph rule 17 enforces the',
     'date-presence half mechanically.',
     '',
-    'When nothing blocks the round, set proceed=true, side_a_failed_conditions=[],',
-    'parks=[], and eligibility.decomposable=true.',
+    nothingBlocks,
     '',
     'Strategy record:',
     untrusted(
@@ -598,6 +803,20 @@ function buildDriftPrompt(strategy, gather) {
         rounds: strategy.rounds || null,
       })
     ),
+    isTactic
+      ? [
+          '',
+          'Target tactic node (the ONE node being finalized/re-planned; park THIS id):',
+          untrusted(
+            asJson({
+              id: (targetNode && targetNode.id) || '',
+              statement: (targetNode && targetNode.statement) || '',
+              rationale: (targetNode && targetNode.rationale) || '',
+              phase: (targetNode && targetNode.phase) || null,
+            })
+          ),
+        ].join('\n')
+      : '',
     '',
     'Gather-phase evidence (corpus + clause coverage + reuse):',
     untrusted(asJson(gather)),
@@ -702,7 +921,7 @@ function buildDecomposePrompt(strategy, drafts, gather, drift) {
 }
 
 // plan: the per-tactic plan-body schema + quality bar (SKILL.md Step 3), inline.
-function buildPlanPrompt(strategy, tactic, gather) {
+function buildPlanPrompt(strategy, tactic, gather, mode) {
   return [
     'You are the plan-authoring agent for a single claude-eligible tactic. Produce',
     'a FULL clean-session plan and return it as body_markdown. The quality bar:',
@@ -749,12 +968,28 @@ function buildPlanPrompt(strategy, tactic, gather) {
     '',
     `Serving strategy id: ${strategy.id || '?'}`,
     'Strategy intent:',
-    untrusted(
-      [
-        `statement: ${strategy.statement || ''}`,
-        `success_signal: ${strategy.success_signal || ''}`,
-      ].join('\n')
-    ),
+    mode === 'tactic'
+      ? untrusted(
+          asJson({
+            id: strategy.id,
+            statement: strategy.statement,
+            rationale: strategy.rationale,
+            success_signal: strategy.success_signal,
+            reading: strategy.reading,
+            gap: strategy.gap,
+            conditions: strategy.conditions || [],
+            clarifications: strategy.clarifications || [],
+            rounds: strategy.rounds || null,
+          })
+        )
+      : untrusted(
+          [
+            `statement: ${strategy.statement || ''}`,
+            `success_signal: ${strategy.success_signal || ''}`,
+          ].join('\n')
+        ),
+    '',
+    ...tacticModeFraming(mode, tactic),
     '',
     'Tactic to plan:',
     untrusted(asJson(tactic)),
@@ -792,8 +1027,17 @@ let subagentsLaunched = 0;
 // A short summary of the decomposition target, reused by the reuse-hunt prompts.
 const targetSummary =
   mode === 'tactic'
-    ? `Finalize/re-plan the single tactic "${(_a.target_node && _a.target_node.id) || '?'}": ${(_a.target_node && _a.target_node.statement) || ''}`
+    ? `Finalize/re-plan the single tactic "${(_a.target_node && _a.target_node.id) || '?'}" (phase: ${(_a.target_node && _a.target_node.phase) || 'draft/raw — finalize'}): ${(_a.target_node && _a.target_node.statement) || ''}`
     : `Decompose strategy "${strategy.id || '?'}" into its minimum signal-validating tactic subtree this round.`;
+
+// The node a park from this run must name. A per-node tactic-target session
+// never writes the serving strategy (references/tactic-target.md, "Autonomy
+// contract binds unchanged"), so a strategy-targeted park emitted from tactic
+// mode would be unwritable by the SKILL caller.
+const parkTarget =
+  mode === 'tactic'
+    ? (_a.target_node && _a.target_node.id) || ''
+    : strategy.id || '';
 
 // --- 1. GATHER (parallel: reuse hunts + corpus scan + clause coverage) --------
 phase('gather');
@@ -875,7 +1119,7 @@ log(`gather: ${reuseFindings.length} reuse candidate(s); ${(corpus.candidate_pre
 // --- 2. DRIFT (one Opus agent, barrier) --------------------------------------
 phase('drift');
 subagentsLaunched += 1;
-const driftRes = await agent(buildDriftPrompt(strategy, gather), {
+const driftRes = await agent(buildDriftPrompt(strategy, gather, mode, _a.target_node || {}), {
   model: 'opus',
   agentType: 'general-purpose',
   schema: DRIFT_SCHEMA,
@@ -894,22 +1138,29 @@ const drift =
     clarifications_to_add: [],
     parks: [
       {
-        target: strategy.id || '',
-        reason: 'drift-review agent returned null — cannot confirm the round is decomposable without a drift verdict.',
+        target: parkTarget,
+        reason:
+          mode === 'tactic'
+            ? 'drift-review agent returned null — cannot confirm this tactic is free of drift blockers without a drift verdict.'
+            : 'drift-review agent returned null — cannot confirm the round is decomposable without a drift verdict.',
         category: 'unverifiable-blocker',
       },
     ],
     proceed: false,
   };
 const driftProceed = drift.proceed === true;
-log(`drift: proceed=${driftProceed}; side_a_failed=${(drift.side_a_failed_conditions || []).length}; parks=${(drift.parks || []).length}`);
+const gates = computePhaseGates(mode, drift);
+log(`drift: proceed=${driftProceed}; decomposeProceed=${gates.decomposeProceed}; planProceed=${gates.planProceed}; side_a_failed=${(drift.side_a_failed_conditions || []).length}; parks=${(drift.parks || []).length}`);
 
 // --- 3. DECOMPOSE (strategy mode only; skipped in tactic mode) ----------------
-// Conditional phase skip, exactly like qa-fix.js's fix-plan gate: tactic mode
-// has nothing to decompose (one pre-existing node), and a drift park means the
-// strategy must go back to the author before any decomposition.
+// Conditional phase skip, exactly like qa-fix.js's fix-plan gate — but reading
+// the purpose-built `decomposeProceed` flag from computePhaseGates rather than
+// the raw drift.proceed boolean. decomposeProceed already folds in both facts:
+// tactic mode has nothing to decompose (one pre-existing node), and a drift
+// park or an ineligible round means the strategy must go back to the author
+// before any decomposition.
 let decompose = { tactics: [], approval_gates: [], prunes: [], greenfield_drops: [], parks: [] };
-if (mode !== 'tactic' && driftProceed) {
+if (gates.decomposeProceed) {
   phase('decompose');
   subagentsLaunched += 1;
   const decomposeRes = await agent(buildDecomposePrompt(strategy, drafts, gather, drift), {
@@ -940,31 +1191,23 @@ if (mode !== 'tactic' && driftProceed) {
   }
   log(`decompose: ${decompose.tactics.length} tactic(s), ${decompose.approval_gates.length} gate(s), ${decompose.parks.length} park(s)`);
 } else {
-  log(`decompose: skipped (mode=${mode}, driftProceed=${driftProceed})`);
+  log(`decompose: skipped (mode=${mode}, decomposeProceed=${gates.decomposeProceed})`);
 }
 
 // --- 4. PLAN (parallel: one Opus planner per claude-eligible tactic) ----------
 phase('plan');
 
 // The tactics to plan:
-//   - tactic mode: the single pre-existing target node (always plan it, unless
-//     drift parked it), synthesized as a one-entry list keyed on its real id.
+//   - tactic mode: the single pre-existing target node — always plan it unless
+//     THIS node's own drift review recorded a blocker (Side A / Side B). The
+//     serving strategy's round eligibility is irrelevant here and no longer
+//     gates this phase. Synthesized as a one-entry list keyed on its real id.
 //   - strategy mode: the claude-eligible subset of the decomposed tactics.
 let planTactics = [];
-if (!driftProceed) {
+if (!gates.planProceed) {
   planTactics = []; // parked — nothing to plan this run
 } else if (mode === 'tactic') {
-  const t = _a.target_node || {};
-  planTactics = [
-    {
-      temp_ref: t.id || 'target',
-      slug_hint: t.id || 'target',
-      statement: t.statement || '',
-      claude_eligible: true,
-      draft_source_id: t.id || null,
-      existing_id: t.id || null,
-    },
-  ];
+  planTactics = [synthesizeTargetPlanTactic(_a.target_node)];
 } else {
   planTactics = (decompose.tactics || []).filter((t) => t.claude_eligible === true);
 }
@@ -975,7 +1218,7 @@ if (planTactics.length) {
   subagentsLaunched += planTactics.length;
   const planResults = await parallel(
     planTactics.map((t) => () =>
-      agent(buildPlanPrompt(strategy, t, gather), {
+      agent(buildPlanPrompt(strategy, t, gather, mode), {
         model: 'opus',
         agentType: 'general-purpose',
         schema: PLAN_SCHEMA,
@@ -1050,6 +1293,17 @@ const parks = []
   .concat(decompose.parks || [])
   .concat(planParks);
 
+// A closed plan gate with no park recorded would emit disposition
+// "escalated" with no target the SKILL caller can act on. Synthesize one,
+// reusing the drift agent-death fallback's shape.
+if (!gates.planProceed && parks.length === 0) {
+  parks.push({
+    target: parkTarget,
+    reason: `drift review did not clear this run to author plans (mode=${mode}, proceed=${drift.proceed === true}, decomposable=${!!(drift.eligibility && drift.eligibility.decomposable)}) but recorded no park.`,
+    category: 'unverifiable-blocker',
+  });
+}
+
 // --- outcome-envelope counts (per .claude/docs/outcome-envelope.md) ----------
 // Counts are mapped onto the envelope's field set: "surfaced" = every unit the
 // run produced (decomposed tactics + born-parked approval gates), "actionable" =
@@ -1065,7 +1319,7 @@ const followups_filed = 0;
 
 // deviation: LIVE — the run could not fully proceed autonomously. True when the
 // drift review said do not proceed, or any phase parked.
-const deviation = !driftProceed || parks.length > 0;
+const deviation = !gates.planProceed || parks.length > 0;
 
 // disposition: escalated on deviation; else completed_with_fixes when plans were
 // authored; else completed. Matches the path→value table in outcome-envelope.md.

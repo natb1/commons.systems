@@ -22,15 +22,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-node-ancestry-context
   pr: 2946
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -42,6 +43,83 @@ attributes: {}
 
 *Finalized 2026-07-22 by /align-tactics (per-node finalize of a draft/raw
 tactic). Full clean-session plan below — this body is the sole work contract.*
+
+## Re-plan 2026-07-28 — READ THIS FIRST (demoted from `review` to `implement`)
+
+**Units 1–3 are already implemented and pushed.** They live on the remote
+branch `tactic-node-ancestry-context` (PR #2946, open draft, ~14 commits ahead
+of `origin/main`; `packages/intentionsutil/scripts/node-ancestry.ts` is ~13.7 KB
+there, with `test/node-ancestry.test.ts`, the `provision-node-worktree` wiring,
+the `.gitignore` line, and the eight skill edits all present). This node was
+demoted from `review` back to `implement` because measurement of the landed
+implementation against the live 404-node store found the bound design wrong —
+not because the units were unbuilt.
+
+**So the implement worker's job is to MODIFY existing files, not create them.**
+Before doing anything: `git log --oneline origin/main..HEAD` and read the
+existing `packages/intentionsutil/scripts/node-ancestry.ts` in the worktree. If
+that file is absent from your worktree, stop and escalate — you are on the wrong
+tree (the work is on the remote branch, not on `origin/main`). Units 1–3 need no
+re-implementation; **only Unit 4 below is new work**, and it edits Unit 1's file.
+
+### What the measurement found (why the re-plan)
+
+Measured with the branch's own implementation against all 404 nodes in
+`intentions/` at `origin/main` on 2026-07-28:
+
+- The *path* bound is fine and will never bind: ancestor count is min 0, **p50 4,
+  p90 6, max 8**. `MAX_ANCESTORS = 64` is unreachable in a real graph.
+- The *content* bound is wrong. `rationale` and `conditions` have **no per-field
+  cap at all** (only `clarifications` is capped, at 20 titles). Field share of
+  rendered ancestor bytes: **rationale 54.3%, conditions 23.5%**, clarification
+  titles 14.7%, success_signal 5.1%, statement 1.7%, attention 0.6%.
+- **99 of 404 nodes (24.5%) already exceed `MAX_PROJECTION_BYTES` and truncate.**
+  Projection bytes: p50 12,038 · p90 23,651 · max 23,736 — the whole top decile
+  is pinned at the ceiling.
+- **Truncation deletes exactly what this tactic exists to deliver.** The cap
+  drops *trailing* blocks, which are the farthest ancestors — the virtue roots.
+  Three nodes already receive a projection containing **no virtue ancestor**:
+  `tactic-align-audit-legacy-review`,
+  `tactic-office-hours-graph-type-passthrough`,
+  `tactic-office-hours-session-type`.
+- **`enforceByteCap` has no floor, so it collapses to zero rather than
+  degrading.** Its loop is `while (projection.ancestors.length > 0) { pop; if
+  (!overBudget()) break; }`. If the *nearest* ancestor's own block exceeds the
+  cap, that block is popped too and the output is a ~211-byte header-plus-note
+  with **no ancestry at all**. Verified by simulation: growing
+  `strategy-graph-native-dispatch`'s projected fields by +4.5 KB drops both
+  virtues (4 ancestors → 2); by +9 KB the projection collapses to 0 ancestors.
+- **One ancestor dominates and is growing fast.**
+  `strategy-graph-native-dispatch` contributes **15,438 B — 64% of the entire
+  24,000-byte budget** — and appears in **98 projections (~24% of the graph)**.
+  Its projected-field size went 6,426 B (07-08) → 9,146 B (07-14) → 10,745 B
+  (07-21) → 15,090 B (07-28): **+8.7 KB in 20 days**, against a +9 KB collapse
+  threshold.
+
+Per-session context cost was never the problem (24 KB ≈ 6.7k tokens, read once
+per session, ~2.3× the node body at p50). The defect is the opposite: the budget
+is allocated so badly that one fat ancestor starves every other, and the failure
+mode is silent-ish deletion of the roots rather than graceful thinning.
+
+### Design decision for Unit 4 (fair-share, measured — do not re-derive)
+
+Three candidate designs were simulated against all 404 nodes. Numbers below are
+measured, not estimated; they are the reason Unit 4 is specified the way it is.
+
+| design | p50 | p90 | max | nodes over 24 KB | ancestors dropped |
+|---|---|---|---|---|---|
+| current (no field caps) | 11,816 | 31,727 | 36,883 | **99/404** | yes — roots first |
+| flat field caps (rat 1200 / 10 conds / 300 B each) | 9,993 | 19,446 | 23,613 | 0/404 | none, but only 387 B headroom |
+| fixed per-ancestor budget 4,000 B | 11,554 | 17,193 | 21,623 | 0/404 | none (tuned, not structural) |
+| **fair-share allocator (chosen)** | **11,122** | **24,000** | **24,000** | **0/404** | **none, by construction** |
+
+The fair-share allocator was chosen because its guarantee is *structural*
+rather than tuned to today's graph: the total can never exceed the cap and no
+ancestor is ever dropped, whatever the field sizes grow to. Measured cost:
+only **101 of 1,765 blocks (5.7%)** get truncated at all, median shed 42% of
+that block. Flat field caps also reach 0/404 today but re-bind as the graph
+grows; the fixed per-ancestor budget is 8 × 4,000 = 32 KB in the worst case, so
+it is not a real bound either.
 
 ## Context
 
@@ -330,9 +408,23 @@ ancestry projection (parent chain + served strategies up to virtue roots) for
 this node."* + the shared discipline clause):
 
 - `.claude/skills/implement/SKILL.md` — node-lane plan source is documented
-  near its "Plan source" bullet (`:82-83`); the plan-read step is
-  `### 1. Read the plan` (`:218-228`). Insert the ancestry note immediately
-  after the plan-read step (`:228`).
+  near its "Plan source" bullet (`:109`); the plan-read step is
+  `### 1. Read the plan` (`:247-264`, followed by `### 2. Build each unit` at
+  `:265`). Insert the ancestry note immediately after the plan-read step.
+
+  **Also make Step 1 self-contained for node targets (added by the 2026-07-28
+  re-plan).** Step 1's body currently states only the issue-lane instruction —
+  "Read the persisted plan from the issue's `<!-- dispatch:plan -->` comment"
+  followed by `dispatch-read-plan <N>` — while the node-lane override that
+  redirects it to `$NODE_BODY` lives 138 lines earlier at `:109`, in the seams
+  list. A worker reading Step 1 in isolation would call `dispatch-read-plan`
+  with a node id, which fails on its non-numeric-arg guard (documented exit 2).
+  That failure is loud rather than silently wrong, so this is a nuisance and
+  not a correctness hazard — but the fix is one sentence and this unit already
+  edits the file. Add, as the first line of Step 1's body, a node-lane sentence
+  pointing at the already-bound `$NODE_BODY` and naming the `:109` seam as
+  governing, so the step no longer has to be read together with a distant
+  section to be executed correctly.
 - `.claude/skills/fix-checks/SKILL.md` — Step-0 node read via `readNode`
   around `:45-62`. Insert immediately after that node-read block.
 - `.claude/skills/qa-fix/SKILL.md` — `$NODE_MD` is read at Step 0
@@ -400,6 +492,145 @@ Independent of Unit 2 (both Unit 2 and Unit 3 depend only on Unit 1), though
 landing Unit 2 first makes the phase-worker "if present" path real; order
 1 → 2 → 3 is the clean sequence.
 
+### Unit 4 — Fair-share byte budget: no ancestor starves another, none is dropped
+
+**This is the only unit with new work.** Units 1–3 above are already built and
+pushed on branch `tactic-node-ancestry-context` (PR #2946) — see the "Re-plan
+2026-07-28" section at the top of this body. Unit 4 edits Unit 1's file.
+
+**Scope**
+
+Modify `packages/intentionsutil/scripts/node-ancestry.ts`. Extend
+`packages/intentionsutil/test/node-ancestry.test.ts`. **No other file changes** —
+`provision-node-worktree`, the root `.gitignore`, and all eight skill edits from
+Units 2–3 stay exactly as they are. The CLI surface, the `--dir`/`--out` flags,
+the Markdown-only output contract, and the exported names
+`buildAncestryProjection` / `renderAncestryProjection` are all unchanged, so no
+caller needs touching.
+
+**Delete the tail-drop entirely.** Remove `enforceByteCap` and `byteDropNote`.
+Their contract — pop whole ancestor blocks from the end until the render fits —
+is the defect: the end of the list is the virtue roots, and the loop
+(`while (projection.ancestors.length > 0)`) has no floor, so it can empty the
+projection. Nothing replaces it at the "drop a block" level.
+
+**Add the fair-share allocator.** New exported pure function:
+
+```ts
+/** Water-filling: give every block its natural size if the total fits; else
+ *  give each block an equal share, hand back the unused remainder of blocks
+ *  smaller than their share, and re-divide it among the blocks that are still
+ *  over. Guarantees: sum(result) <= budget, and every result[i] > 0. */
+export function allocateBudgets(naturalSizes: number[], budget: number): number[];
+```
+
+Algorithm — implement exactly this:
+1. If `naturalSizes.length === 0` return `[]`. If `sum(naturalSizes) <= budget`,
+   return `naturalSizes` unchanged (the common case — p50 of the real store).
+2. Otherwise: `remaining = budget`, `active` = all indices. Loop:
+   `share = Math.floor(remaining / active.length)`; every active `i` with
+   `naturalSizes[i] <= share` is finalized at `naturalSizes[i]`, its bytes
+   subtracted from `remaining`, and removed from `active`. If no index was
+   finalized this pass, assign `share` to every remaining active index and stop.
+   Repeat while `active` is non-empty.
+
+**Add per-block shedding to fit an allocation.** A block is reduced to fit its
+allocated bytes by dropping the least decision-relevant content first, in this
+fixed order, re-measuring after each step:
+
+1. clarification titles from the tail (each drop increments the existing
+   `clarifications_omitted`);
+2. conditions from the tail (each drop increments a new `conditions_omitted`);
+3. `rationale` truncated at a byte boundary down to a floor of
+   `MIN_RATIONALE_BYTES = 200` (sets a new `rationale_truncated: boolean`).
+
+**Never shed** the `## <id>  (<kind>)` heading, `- statement:`, or
+`- success_signal:`. Those are the ancestor's identity and its intent test —
+statement is only 1.7% of rendered bytes across the whole store, so protecting
+them is nearly free. A block therefore has a non-zero floor; with the real
+store's maximum of 8 ancestors that floor is a few hundred bytes each and cannot
+approach the cap.
+
+**Add the pathological-depth backstop** (the only place a whole ancestor is ever
+dropped, and it cannot fire on the current graph — measured maximum walked
+ancestors is 8): new `MAX_RENDERED_ANCESTORS = 24`. When
+`ancestors.length > MAX_RENDERED_ANCESTORS`, keep **every** ancestor with
+`kind === "virtue"` (the roots are the stated purpose of this tactic, and are
+the cheapest blocks — mean 1.1 KB), then fill the remaining slots with the
+nearest non-virtue ancestors in BFS order, dropping from the middle. Set
+`truncated = true` and push a `notes` entry naming how many were dropped.
+
+**New `AncestorEntry` fields** (additive; keep every existing field):
+`conditions_omitted: number` and `rationale_truncated: boolean`.
+
+**Render changes** (`renderBlock`): after the listed conditions emit
+`  - …and N more` when `conditions_omitted > 0`, matching the existing
+clarifications idiom; append ` … (truncated — read intentions/<id>.md for the
+full text)` to a rationale when `rationale_truncated`. Extend the existing
+one-line header to name the bounds in effect, so a reader knows the file is a
+bounded projection rather than the whole ancestry.
+
+**Warning policy — make the stderr WARNING mean something again.** Today 24.5%
+of provisions would emit one, which is noise, not signal. Within-block shedding
+is normal operation: it is recorded in the rendered Markdown by the "…and N
+more" / "(truncated)" markers and sets `truncated`, but must **not** write a
+stderr WARNING. Only two conditions write a stderr WARNING: the `MAX_ANCESTORS`
+cycle cap, and the `MAX_RENDERED_ANCESTORS` whole-ancestor drop. Both are
+should-never-happen on a healthy graph.
+
+**Constants after this unit:** `MAX_PROJECTION_BYTES = 24_000` (unchanged),
+`MAX_CLARIFICATION_TITLES = 20` (unchanged), `MAX_ANCESTORS = 64` (unchanged —
+walk/cycle guard only), plus new `MAX_RENDERED_ANCESTORS = 24` and
+`MIN_RATIONALE_BYTES = 200`.
+
+**Tests** — extend `test/node-ancestry.test.ts`, same conventions as Unit 1 (a
+local `anode()` fixture, `tempDir()`/`seed()` round-tripping real
+`writeNode`/`readNode`, importing the pure functions directly, never shelling
+out):
+
+1. **Collapse regression (the core bug).** One nearest ancestor whose own
+   natural block exceeds `MAX_PROJECTION_BYTES` on its own, plus three small
+   ancestors including a virtue root. Assert all four are still present, the
+   render is `<= MAX_PROJECTION_BYTES`, and the virtue block's `statement` is
+   intact. Before this unit this case rendered zero ancestors.
+2. **Virtue root always survives.** tactic → huge strategy → virtue: assert a
+   `(virtue)` block is in the render.
+3. **`allocateBudgets` unit tests.** Under-budget input returned unchanged;
+   over-budget input sums to `<= budget`; every element `> 0`; a mix of one
+   huge and several tiny blocks leaves the tiny ones at natural size.
+4. **Shed order.** Clarifications shed before conditions, conditions before
+   rationale; heading, `statement`, and `success_signal` survive at the tightest
+   allocation.
+5. **Marker rendering.** `conditions_omitted > 0` renders `…and N more`;
+   `rationale_truncated` renders the truncation suffix.
+6. **`MAX_RENDERED_ANCESTORS` backstop** keeps all virtue ancestors, drops
+   middles, sets `truncated`, and pushes a note.
+7. **Warning policy.** Within-block shedding produces no stderr WARNING path;
+   the cycle cap and the whole-ancestor drop do.
+
+**Replace, do not delete, the old byte-cap test.** Unit 1's test 6 ("an
+oversized chain trips `MAX_PROJECTION_BYTES`, drops trailing blocks, and sets
+`truncated`") asserts the behavior this unit removes. Rewrite it to assert the
+new contract — total still `<= MAX_PROJECTION_BYTES`, `truncated` still set, but
+**no ancestor dropped**. This is correcting a test that encodes the wrong
+contract, not weakening coverage: the replacement is strictly stronger (it adds
+the no-drop assertion). Coverage of the byte ceiling must not decrease.
+
+**Out of scope for this unit:** any change to the walk semantics (BFS closure
+over `parent` + `serves`, nearest-first, `visited` cycle guard) — the path bound
+is measured correct; any change to `provision-node-worktree`, `.gitignore`, or
+the eight skill instructions from Units 2–3; any JSON output format; any change
+to `servingStrategyIds`; re-tuning `MAX_PROJECTION_BYTES` (24 KB ≈ 6.7k tokens
+read once per session is the right budget — the allocation of it was the bug).
+
+**Recommended model: opus** — the allocator carries the load-bearing judgment
+(water-filling correctness, the shed-order contract, the interaction between
+three bounds and a protected per-block minimum), and it is replacing a subtly
+wrong design rather than filling in a blank.
+
+**Dependencies:** Units 1–3, which are already implemented on the branch. No
+other tactic gates this.
+
 ## Reuse
 
 - `readNode(dir, id): IntentionNode` — `packages/intentionsutil/src/store.ts:101`
@@ -441,14 +672,24 @@ landing Unit 2 first makes the phase-worker "if present" path real; order
 
 ## Verification
 
-Unit 1 is the only auto-runnable surface; Units 2–3 are a bash script and doc
-edits verified by smoke-invocation and observation.
+Units 1 and 4 are the auto-runnable surfaces; Units 2–3 are a bash script and
+doc edits verified by smoke-invocation and observation. **For a re-plan run,
+Unit 4's checks below are the ones that matter** — Units 1–3 are already on the
+branch and their checks are regression cover.
 
 ```verify
-# Unit 1 — pure-function unit tests (package test script is `vitest run`).
-cd packages/intentionsutil && npx vitest run node-ancestry
+# Unit 1 — pure-function unit tests. Rooted at the repo root and selected with
+# --project, per .claude/rules/sandbox.md: rooting at the package directory
+# scopes vite's server.fs.allow to it and denies root-hoisted imports. The
+# earlier form ran two `cd packages/intentionsutil && …` lines in ONE fence —
+# same shell, no `set -e` — so the second `cd` failed ("already there"), `&&`
+# short-circuited, the second suite never ran, and the block's exit status was
+# a failed `cd`. That was a plan-text defect, not a code defect: it failed
+# identically on every run. Ratified as a false positive at the 2026-08-09
+# office-hours sitting.
+npx vitest run --project packages/intentionsutil --root . node-ancestry
 # Full package suite (no regressions in siblings):
-cd packages/intentionsutil && npx vitest run
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
@@ -463,6 +704,140 @@ npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-node-ancestry-co
 fall back to the repo's standard `npx tsx <script>` invocation and the
 sibling `*.test.ts` suite via the workspace's vitest config —
 `packages/intentionsutil/package.json` declares `"test": "vitest run"`.)
+
+**Unit 4 — the checks that would have caught the defect.** The vitest project
+name is the workspace directory (`vitest.config.ts:18` sets
+`test: { name: dir }`), so select it with `--project packages/intentionsutil`
+and root at the worktree root — do not root at the package directory:
+
+```verify
+npx vitest run --project packages/intentionsutil --root . node-ancestry
+npx vitest run --project packages/intentionsutil --root .
+```
+
+Whole-store assertion — every one of the ~404 real nodes must keep all its
+walked ancestors and stay under the cap. This is the check that fails on the
+pre-Unit-4 code (99 nodes over cap, 3 with no virtue at all) and must pass
+after. `npx tsx` needs `dangerouslyDisableSandbox: true` (tsx dies on an IPC
+pipe under the sandbox):
+
+```verify
+cat > "$TMPDIR/whole-store-gate.mts" <<'GATE'
+import { readdirSync } from 'node:fs';
+const m = await import('./packages/intentionsutil/scripts/node-ancestry.ts');
+const dir = './intentions';
+const ids = readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md').map(f => f.slice(0, -3));
+let over = 0, novirtue = 0, worst = 0;
+for (const id of ids) {
+  const p = m.buildAncestryProjection(dir, id);
+  const bytes = Buffer.byteLength(m.renderAncestryProjection(p));
+  if (bytes > m.MAX_PROJECTION_BYTES) over++;
+  worst = Math.max(worst, bytes);
+  const wantsVirtue = p.ancestors.length > 0;
+  if (wantsVirtue && !p.ancestors.some(a => a.kind === 'virtue')) novirtue++;
+}
+console.log('nodes=' + ids.length + ' over-cap=' + over + ' no-virtue=' + novirtue + ' max-bytes=' + worst);
+if (over > 0 || novirtue > 0) { console.error('FAIL'); process.exit(1); }
+console.log('PASS');
+GATE
+npx tsx "$TMPDIR/whole-store-gate.mts"
+```
+
+**Why this is a file and not `npx tsx -e`.** The earlier form inlined the same
+script with `-e`, which fails here with `Top-level await is currently not
+supported with the 'cjs' output format` — a tsx/esbuild limitation, not a code
+defect, and one that would trip every future run. Writing a real `.mts` and
+running it was executed successfully at the 2026-08-09 office-hours sitting and
+is the form that works.
+
+Expected after Unit 4: `over-cap=0`, `no-virtue=0`, `max-bytes` at or just under
+24,000. (`no-virtue` counts only nodes that have ancestors at all — the five
+virtue roots themselves and the `kind-*`/`tradition-*` nodes legitimately walk to
+zero ancestors.)
+
+**The whole-store assertion above is the gate.** It quantifies over every node,
+so it already subsumes any per-node spot-check. Treat a failure there as
+authoritative and do not weaken it into a sample.
+
+### What `max-bytes` does and does not tell you (measured 2026-08-09)
+
+Re-run at the office-hours sitting against a store that had grown from 496 to
+553 nodes:
+
+```
+nodes=553 over-cap=0 no-virtue=0 max-bytes=23951  → PASS
+```
+
+**Do not read the gap between `max-bytes` and 24,000 as headroom.**
+`renderAncestryProjection` SPENDS `MAX_PROJECTION_BYTES` as a budget and calls
+`shedBlockToFit` to make each block fit its fair-share allocation, so a
+projection can only exceed the cap when shedding bottoms out at
+`MIN_RATIONALE_BYTES` and still overruns. `max-bytes` landing just under the cap
+is the fitting algorithm working, not a near miss — at the sitting the top five
+nodes clustered inside a 14-byte band (23937–23951), which is the signature of a
+budget, not of organic size.
+
+So `over-cap=0` proves shedding still succeeds. It says nothing about **how
+much** is being shed, which is the quantity that actually degrades as the store
+grows. Measured the same day across all 553 nodes:
+
+| | value |
+|---|---|
+| nodes with ancestors | 521 |
+| nodes whose projection was truncated | **230 (44.1%)** |
+| clarification titles shed | **48,826** |
+| conditions shed | 3,305 |
+| rationales cut at a byte boundary | 10 |
+
+Within-block shedding is documented as normal operation, so this is not a
+failure of the gate as written. It is a gap in what the gate measures: the node's
+purpose is to carry decision context up the graph, and on 44% of nodes most of
+the clarification context is being dropped to fit. If a future pass wants a
+signal that tracks the thing this node exists to deliver, assert on
+`clarifications_omitted` / `conditions_omitted` trends, not on `max-bytes`.
+
+The spot-check below exists only to put a rendered worst case in front of a
+human. It **selects its own subject at runtime** — the node with the largest
+rendered projection in the current store — rather than naming ids. An earlier
+draft of this plan hardcoded `tactic-office-hours-session-type`,
+`tactic-align-audit-legacy-review`, and `tactic-office-hours-graph-type-passthrough`
+because those were the three nodes that lost their virtue root on 2026-07-28.
+That is a property of that day's graph, not of the code: as the graph moves,
+those ids can stop being over-cap, and the `grep -q '(virtue)'` would then pass
+without exercising the shed path at all — green for the wrong reason. Naming
+them here as historical examples is fine; asserting on them is not. Needs
+`dangerouslyDisableSandbox: true` for `npx tsx`:
+
+```verify
+cat > "$TMPDIR/worst-case-spot-check.mts" <<'SPOT'
+import { readdirSync } from 'node:fs';
+const m = await import('./packages/intentionsutil/scripts/node-ancestry.ts');
+const dir = './intentions';
+const ids = readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md').map(f => f.slice(0, -3));
+let worstId = null, worstBytes = -1;
+for (const id of ids) {
+  const p = m.buildAncestryProjection(dir, id);
+  if (p.ancestors.length === 0) continue;
+  const bytes = Buffer.byteLength(m.renderAncestryProjection(p));
+  if (bytes > worstBytes) { worstBytes = bytes; worstId = id; }
+}
+if (worstId === null) { console.error('FAIL: no node in the store has any ancestor'); process.exit(1); }
+const p = m.buildAncestryProjection(dir, worstId);
+const out = m.renderAncestryProjection(p);
+console.log('worst-case node=' + worstId + ' bytes=' + worstBytes + ' ancestors=' + p.ancestors.length + ' truncated=' + p.truncated);
+console.log(out);
+if (!out.includes('(virtue)')) { console.error('FAIL: worst-case node ' + worstId + ' renders no virtue ancestor'); process.exit(1); }
+if (worstBytes > m.MAX_PROJECTION_BYTES) { console.error('FAIL: worst-case node ' + worstId + ' exceeds the cap'); process.exit(1); }
+console.log('PASS');
+SPOT
+npx tsx "$TMPDIR/worst-case-spot-check.mts"
+```
+
+Same `tsx -e` top-level-await limitation as the gate above — write the script to
+a file and run it. Expect `truncated=true` on the selected node: at the
+2026-08-09 measurement the worst case was
+`tactic-legacy-office-hours-entry-removal` at 23,951 bytes, and 44% of nodes with
+ancestors were shedding.
 
 **Manual / observational (Units 2–3, require git + direnv +
 `dangerouslyDisableSandbox`, so not auto-runnable here):**
@@ -484,3 +859,11 @@ Out of scope: weakening the plan-completeness bar; the fingerprint
 freeze/demote machinery (unchanged — it guards substance changes, this
 guards under-determined judgment calls); tradition-record injection
 (alignment-tests territory, tactic-align-strategy-alignment-tests).
+
+## needs-main residue
+
+- id: 9
+  title: Live provisioning end-to-end: the file lands untracked in a real worker worktree
+  url_path: .claude/skills/dispatch-propagate/scripts/provision-node-worktree
+  expected_outcome: Every freshly-provisioned worktree carries a correct, untracked ancestry projection, and a projection failure never blocks provisioning.
+  finding: requires a live dispatch-provisioned worker session; the PR's own test plan defers this item to qa/main-qa (checkbox left unchecked in the PR body's own test plan). Verify against deployed main by running `provision-node-worktree <a-real-tactic-id> <its-phase>` from the main checkout and confirming `<worktree>/.claude/ancestry-context.md` exists, is untracked (`git status --porcelain` empty), and that a forced projection failure warns to stderr without blocking provisioning.
