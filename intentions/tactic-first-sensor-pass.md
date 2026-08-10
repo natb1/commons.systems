@@ -25,21 +25,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-first-sensor-pass
   pr: 3062
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint:
     strategy-graph-drives-dispatch:
       hash: 99227b632204950956b9eb8f36c3837b121261ccba95dd830e863947c12a3802
       sha: c64859d398cbebfdabfa69c97e527b27f3ed71be
-  fix:
-    since: 2026-08-10
-    attempt: 2
-    pushed_sha: 85481f9504655fc22f113fea44dcf0a7e975462e
+  fix: null
   conflict: null
   completion: null
 validates:
