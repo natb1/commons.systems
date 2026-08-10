@@ -42,9 +42,10 @@ attributes:
   irreversibility:
     recovery_path: substitute — plain-text and open formats in owned storage; not yet designed
     recovery_cost: unassessed
-    gated: partially — proprietary formats degrade on export
+    gated:
+      level: partial
+      note: proprietary formats degrade on export
     last_exercised: null
-  classification: platform
   non_delegable_floor: unassessed
   review_trigger: recovery progress under strategy-recover-knowledge; the full
     two-axis assessment is due as its first step

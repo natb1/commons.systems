@@ -13,7 +13,10 @@ rationale: "Put in scope by the 2026-07-02 clarifications on both mobility
   strategy-complete-ledger's own completeness threshold: a live attachment
   carrying no record. Raw per kind-delegation — no recovery strategy has been
   selected for this domain yet — but the axes below are the author's own,
-  supplied at the 2026-07-28 sitting, not a sweep's first pass."
+  supplied at the 2026-07-28 sitting, not a sweep's first pass. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `moderate` — the recorded assessment was mostly time and skill,
+  not capital."
 reading: null
 gap: null
 serves: []
@@ -46,10 +49,12 @@ attributes:
     recovery_path: substitute — source unprocessed ingredients and cook from
       scratch; realistic and available now. Growing or producing food is not a
       realistic substitution path for this household.
-    recovery_cost: moderate — mostly time and skill, not capital
-    gated: false
+    recovery_cost: moderate
+    gated:
+      level: none
+      note: no gating stated — unprocessed ingredients are sourceable now, and cooking
+        from scratch is not knowledge the delegatee holds
     last_exercised: null
-  classification: captured
   non_delegable_floor: "two capabilities, neither of which may atrophy: cooking
     from base ingredients — producing meals from unprocessed inputs without
     relying on processed shortcuts; and evaluating nutrition independently —

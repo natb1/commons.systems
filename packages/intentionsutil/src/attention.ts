@@ -60,63 +60,166 @@ const CAPTURE_TERM_WEIGHT = 1;
 
 // --- Helpers -------------------------------------------------------------------
 
-function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** A strategy's signal is unvalidated iff it has a gap, or no reading yet. */
 export function isSignalUnvalidated(strategy: IntentionNode): boolean {
   return strategy.gap !== null || strategy.reading === null;
 }
 
-// --- Capture-resolution scoring ------------------------------------------------
-// Reads the two capture axes (kind-delegation: divergence, irreversibility) off
-// a delegation node's freeform `attributes` (kind-specific, not schema-typed) —
-// defensive parsing here is boundary validation, not a fallback: a
-// missing/malformed axis simply contributes 0 rather than throwing, since
-// `attributes` shape is data (the kind node), not a code contract.
+// --- Delegation capture axes (kind-delegation) ---------------------------------
+// The two capture axes (kind-delegation: divergence, irreversibility) live on a
+// delegation node's freeform `attributes` (kind-specific, not schema-typed).
+// Every axis field below is an ENUM, read EXACTLY — no prefix matching, no
+// token scanning over free text. The prose nuance behind an assessment lives in
+// the sibling `note`/description fields and the node body, never in the enum
+// member itself, so a reader never has to parse an authored sentence.
 //
-// Both axes are authored as free text, not an enum the schema gates — the live
-// store already carries compound/qualified values (`low-moderate`,
-// `moderate — would-be`) alongside the plain `low`/`moderate`/`high` the
-// kind-delegation field spec documents, so an exact-match switch silently
-// zeroes real, already-recovered delegations (e.g. delegation-hosted-publishing
-// feeds strategy-recover-publishing's capture term today). Token matching
-// against the free text is the boundary-validation move here: real authored
-// intent still parses, and only genuinely unrecognized text falls to 0.
+// Defensive parsing here is boundary validation, not a fallback: a
+// missing/out-of-enum axis simply contributes 0 rather than throwing, since
+// `attributes` shape is data (the kind node), not a code contract. The
+// enum is enforced graph-side (`validateGraph`), not by `validateNode` — the
+// attributes map is deliberately freeform per kind.
 
-const DIVERGENCE_LEVEL_SCORES: Record<string, number> = { low: 1, moderate: 2, high: 3 };
+/** `divergence.level` — kind-delegation's divergence axis. */
+export const DIVERGENCE_LEVELS = ["low", "moderate", "high"] as const;
+export type DivergenceLevel = (typeof DIVERGENCE_LEVELS)[number];
 
-function divergenceScore(delegation: IntentionNode): number {
-  const divergence = delegation.attributes.divergence;
-  if (!isPlainObjectLike(divergence)) return 0;
-  const level = divergence.level;
-  if (typeof level !== "string") return 0;
-  const tokens = level.toLowerCase().match(/\blow\b|\bmoderate\b|\bhigh\b/g);
-  if (tokens === null) return 0;
-  // A compound value ("low-moderate") names two severities at once; score the
-  // more severe one — understating capture risk is the wrong direction to
-  // round on a term whose purpose is flagging it.
-  return Math.max(...tokens.map((t) => DIVERGENCE_LEVEL_SCORES[t]));
+/**
+ * `irreversibility.recovery_cost` — what recovering the capability costs.
+ * `unassessed` is a deliberate member meaning "not yet measured", distinct from
+ * every cost band: it triggers neither arm of the classification derivation.
+ */
+export const RECOVERY_COSTS = [
+  "none",
+  "low",
+  "moderate",
+  "high",
+  "prohibitive",
+  "unassessed",
+] as const;
+export type RecoveryCost = (typeof RECOVERY_COSTS)[number];
+
+/**
+ * `irreversibility.gated.level` — how far the recovery knowledge is held by the
+ * delegatee. Three bands, not a boolean: 41% of the corpus reads a middle band
+ * ("partially"), and `true` never occurs at all, so a boolean would corrupt the
+ * derivation. The assessment prose lives in the sibling `gated.note` field.
+ */
+export const GATED_LEVELS = ["none", "partial", "large"] as const;
+export type GatedLevel = (typeof GATED_LEVELS)[number];
+
+/** A delegation's classification — derived from the axes, never stored. */
+export type DelegationClassification = "tool" | "platform" | "captured";
+
+function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function irreversibilityScore(delegation: IntentionNode): number {
-  const irreversibility = delegation.attributes.irreversibility;
-  if (!isPlainObjectLike(irreversibility)) return 0;
+/** Exact membership read: a non-member (or non-string) is `null`, never coerced. */
+function readEnum<T extends string>(value: unknown, members: readonly T[]): T | null {
+  if (typeof value !== "string") return null;
+  for (const member of members) {
+    if (member === value) return member;
+  }
+  return null;
+}
+
+/**
+ * The `attributes` map of a delegation, whether given the node or the map. Both
+ * are accepted so callers holding only the parsed attributes (a validator, a
+ * renderer) need not synthesize a node; a node is detected by its own
+ * object-shaped `attributes` key.
+ */
+function delegationAttributes(
+  delegation: IntentionNode | Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isPlainObjectLike(delegation)) return {};
+  const own = delegation.attributes;
+  return isPlainObjectLike(own) ? own : delegation;
+}
+
+/** `attributes.divergence.level`, or null if absent/out-of-enum. */
+export function readDivergenceLevel(
+  delegation: IntentionNode | Record<string, unknown>,
+): DivergenceLevel | null {
+  const divergence = delegationAttributes(delegation).divergence;
+  if (!isPlainObjectLike(divergence)) return null;
+  return readEnum(divergence.level, DIVERGENCE_LEVELS);
+}
+
+/** `attributes.irreversibility.recovery_cost`, or null if absent/out-of-enum. */
+export function readRecoveryCost(
+  delegation: IntentionNode | Record<string, unknown>,
+): RecoveryCost | null {
+  const irreversibility = delegationAttributes(delegation).irreversibility;
+  if (!isPlainObjectLike(irreversibility)) return null;
+  return readEnum(irreversibility.recovery_cost, RECOVERY_COSTS);
+}
+
+/** `attributes.irreversibility.gated.level`, or null if absent/out-of-enum. */
+export function readGatedLevel(
+  delegation: IntentionNode | Record<string, unknown>,
+): GatedLevel | null {
+  const irreversibility = delegationAttributes(delegation).irreversibility;
+  if (!isPlainObjectLike(irreversibility)) return null;
   const gated = irreversibility.gated;
-  // A missing/malformed axis contributes 0 rather than partial (mirrors
-  // `divergenceScore`): an unfilled `irreversibility` object must not score
-  // HIGHER than one explicitly authored as fully open.
-  if (typeof gated !== "string") return 0;
-  const gatedText = gated.trim().toLowerCase();
-  if (gatedText === "") return 0;
-  if (gatedText.startsWith("true")) return 3;
-  if (gatedText.startsWith("false")) return 1;
-  // The store's real middle ground ("partially — ...", "largely — ...") is
-  // real, described gating — a present, non-empty string that names neither
-  // pole — distinct from both the fully-open and fully-closed poles, never
-  // collapsed into either.
-  return 2;
+  if (!isPlainObjectLike(gated)) return null;
+  return readEnum(gated.level, GATED_LEVELS);
+}
+
+// --- Classification derivation ---------------------------------------------
+
+/**
+ * Derive a delegation's classification from its two axes. This implements the
+ * rule stated in `intentions/kind-delegation.md` (rationale, 2026-07-09) —
+ * that node is the rule's one home; this function is only its mechanization,
+ * so any change to the rule is made there first and mirrored here:
+ *
+ *   captured = high divergence OR gated/prohibitive recovery;
+ *   platform = moderate divergence OR high recovery cost;
+ *   tool     = otherwise.
+ *
+ * "gated" in that rule resolves to `irreversibility.gated.level === "large"` —
+ * the top band of the three-band axis. `unassessed` recovery cost triggers
+ * neither arm: it asserts nothing about cost, so it cannot lift the record.
+ *
+ * Applies uniformly to `origin: declined` records: a declined delegation
+ * derives over its would-be axes exactly as an entered one does — the record
+ * documents the attachment that WOULD exist, and classifying it is the point.
+ *
+ * Classification is derived on read and never stored, so it can never again
+ * contradict the axes it claims to derive from.
+ */
+export function deriveClassification(
+  delegation: IntentionNode | Record<string, unknown>,
+): DelegationClassification {
+  const divergence = readDivergenceLevel(delegation);
+  const cost = readRecoveryCost(delegation);
+  const gated = readGatedLevel(delegation);
+
+  if (divergence === "high" || gated === "large" || cost === "prohibitive") return "captured";
+  if (divergence === "moderate" || cost === "high") return "platform";
+  return "tool";
+}
+
+// --- Capture-resolution scoring ------------------------------------------------
+
+const DIVERGENCE_LEVEL_SCORES: Record<DivergenceLevel, number> = { low: 1, moderate: 2, high: 3 };
+
+function divergenceScore(delegation: IntentionNode): number {
+  const level = readDivergenceLevel(delegation);
+  return level === null ? 0 : DIVERGENCE_LEVEL_SCORES[level];
+}
+
+// A missing/out-of-enum `gated` contributes 0 rather than the `none` band's 1
+// (mirrors `divergenceScore`): an unfilled `irreversibility` object must not
+// score HIGHER than one explicitly authored as fully open. That 0-vs-1 gap is
+// the whole point of keeping `none` an authored enum member rather than the
+// absence of a value.
+const GATED_LEVEL_SCORES: Record<GatedLevel, number> = { none: 1, partial: 2, large: 3 };
+
+function irreversibilityScore(delegation: IntentionNode): number {
+  const level = readGatedLevel(delegation);
+  return level === null ? 0 : GATED_LEVEL_SCORES[level];
 }
 
 /** One delegation's capture severity, normalized to the 1/3..1 range (max axis sum 6). */

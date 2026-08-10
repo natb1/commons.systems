@@ -44,6 +44,15 @@ rationale: >-
   flips status delegated → codified; last_exercised updates per chunk. When no
   record remains delegated, this delegation is unwound and the record retires to
   history.
+
+
+  Axis resolution (tactic-delegation-classification-derivation, 2026-08-04):
+  recovery_cost resolved to `low` — bounded reading-hours, since the sources are
+  fixed, public, free, and cited passage-by-passage on the records. The
+  classification the record used to store — platform, demanding buy-in while
+  unverified — now derives from the axes; the decay toward tool it noted is what
+  happens as each tradition record flips to codified and the divergence axis
+  relaxes.
 reading: null
 gap: null
 serves: []
@@ -142,10 +151,11 @@ attributes:
     recovery_path: relearn — read the cited texts against each tradition record,
       chunked in tactic-tradition-reading-program; each verified record flips
       status delegated → codified
-    recovery_cost: bounded reading-hours — the sources are fixed, public, free, and
-      cited passage-by-passage on the records
-    gated: false — nothing about the way back is held by either delegatee; the texts
-      outlive both
+    recovery_cost: low
+    gated:
+      level: none
+      note: nothing about the way back is held by either delegatee; the texts outlive
+        both
     last_exercised: "2026-07-17 — chunk 5 (NE VI + III.4): reading and per-chapter
       comprehension dialectic completed with the three-movement structure; the
       sitting's amend/ratify outcomes were deferred en bloc (2026-07-18 glare
@@ -154,8 +164,6 @@ attributes:
       record itself (eleven textual corrections including the end-setter gate)
       plus one reading-wins catch (the R15b misstatement, recorded in
       contradictions)"
-  classification: platform — demands buy-in while unverified; decays toward tool
-    as records flip to codified
   non_delegable_floor: the capacity to notice a recorded articulation
     contradicting a disposition actually held — exercised 2026-07-05, which is
     why this record exists

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IntentionNode } from "../src/schema.js";
-import { analyzeGrounding } from "../src/grounding.js";
+import { analyzeGrounding, divergenceRank, gatedRank } from "../src/grounding.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -77,6 +77,43 @@ const rankedIds = (nodes: IntentionNode[]): string[] =>
   analyzeGrounding(nodes).ranked.map((r) => r.id);
 
 const indexOf = (ids: string[], id: string): number => ids.indexOf(id);
+
+// Both capture axes are enums read EXACTLY — no prefix matching over free text.
+describe("capture-axis ranks are exact enum reads", () => {
+  const delegation = (attributes: Record<string, unknown>): IntentionNode =>
+    anode({ id: "delegation-under-test", kind: "delegation", attributes });
+
+  it("ranks each divergence enum member exactly (high > moderate > low)", () => {
+    expect(divergenceRank(delegation({ divergence: { level: "high" } }))).toBe(4);
+    expect(divergenceRank(delegation({ divergence: { level: "moderate" } }))).toBe(3);
+    expect(divergenceRank(delegation({ divergence: { level: "low" } }))).toBe(1);
+  });
+
+  it("ranks an out-of-enum or malformed divergence level 0", () => {
+    // Transitional: the pre-enum corpus still authors these until Unit 2
+    // normalizes it. Out of enum reads 0, matching the contract in attention.ts.
+    expect(divergenceRank(delegation({ divergence: { level: "low-moderate" } }))).toBe(0);
+    expect(divergenceRank(delegation({ divergence: { level: "moderate — would-be" } }))).toBe(0);
+    expect(divergenceRank(delegation({ divergence: { level: "High" } }))).toBe(0);
+    expect(divergenceRank(delegation({ divergence: "high" }))).toBe(0);
+    expect(divergenceRank(delegation({}))).toBe(0);
+  });
+
+  it("ranks each gated enum member exactly (large > partial > none)", () => {
+    expect(gatedRank(delegation({ irreversibility: { gated: { level: "large" } } }))).toBe(3);
+    expect(gatedRank(delegation({ irreversibility: { gated: { level: "partial" } } }))).toBe(2);
+    expect(gatedRank(delegation({ irreversibility: { gated: { level: "none", note: "portable" } } }))).toBe(1);
+  });
+
+  it("ranks an absent or malformed gated axis 0 — strictly below an authored 'none'", () => {
+    expect(gatedRank(delegation({}))).toBe(0);
+    expect(gatedRank(delegation({ irreversibility: {} }))).toBe(0);
+    expect(gatedRank(delegation({ irreversibility: { gated: {} } }))).toBe(0);
+    expect(gatedRank(delegation({ irreversibility: { gated: { level: "partially — vendor-held" } } }))).toBe(0);
+    expect(gatedRank(delegation({ irreversibility: { gated: true } }))).toBe(0); // legacy boolean is gone
+    expect(gatedRank(delegation({ irreversibility: { gated: "false" } }))).toBe(0); // legacy free text is gone
+  });
+});
 
 describe("analyzeGrounding", () => {
   it("(a) excludes tactic and tradition kinds from the report", () => {

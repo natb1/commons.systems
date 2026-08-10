@@ -254,3 +254,20 @@ the derivation, the normalization commit message names the record and which
 way it resolved). `attention.ts`'s capture term produces the same ranking
 class for the known-severe records (spot-check delegation-attention-services
 per kind-delegation's body).
+
+## needs-main residue
+
+- **Stale `--project intentionsutil` verify filter in this node's own
+  Verification block.** The persisted `` ```verify ``` `` block above still
+  reads `npx vitest run --project intentionsutil --root .`; this repo's vitest
+  workspace names projects by directory (`packages/intentionsutil`), so the
+  filter matches nothing and the check silently no-ops rather than running the
+  suite. The QA pass ran the corrected form by hand
+  (`npx vitest run --project packages/intentionsutil --root .`, 842/842
+  passing) and confirmed the mismatch, but fixing the persisted block itself
+  is out of scope for a pre-merge QA pass (editing this node's own plan text
+  is main-side follow-up, not something to change mid-QA).
+  - Expected outcome: the Verification block's first line reads
+    `npx vitest run --project packages/intentionsutil --root .`.
+  - Verifiability: MACHINE
+  - Check: `grep -n "project intentionsutil" intentions/tactic-delegation-classification-derivation.md` on `origin/main` returns no match (the stale form is gone), and the corrected `--project packages/intentionsutil` form is present.

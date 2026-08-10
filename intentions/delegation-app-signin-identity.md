@@ -18,7 +18,11 @@ rationale: "Every deployed app signs in exactly one way: GitHub OAuth through
   in direction, with auth mostly redundant under local-first; the sign-in
   surface shrinks as user data migrates to local-first files readable without
   any account, and the demo app becomes the remaining consumer. Recorded
-  2026-07-07 by the /align-strategy comprehensive code review."
+  2026-07-07 by the /align-strategy comprehensive code review. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `low` — the recorded assessment was days, with the provider
+  hardcoded in one shared package (packages/authutil/src/firebase-auth.ts) and
+  no data migration."
 reading: null
 gap: null
 serves:
@@ -55,11 +59,12 @@ attributes:
     recovery_path: authorization is email-based and provider-agnostic
       (memberEmails); swapping or adding a provider is an authutil code change
       plus user re-auth — no data migration
-    recovery_cost: low; days — the provider is hardcoded in one shared package
-      (packages/authutil/src/firebase-auth.ts)
-    gated: false
+    recovery_cost: low
+    gated:
+      level: none
+      note: no gating stated — authorization is email-based and provider-agnostic, so
+        nothing needed for a provider swap is held by the delegatee
     last_exercised: null
-  classification: platform
   non_delegable_floor: authorization stays email-based and provider-agnostic;
     local-first user data stays readable without any sign-in
   review_trigger: the local-first migration removing an app's auth surface; GitHub

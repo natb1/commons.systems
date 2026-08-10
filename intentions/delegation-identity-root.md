@@ -15,7 +15,10 @@ rationale: "Cloudflare holds the registrations and DNS for the owned domains;
   attachment itself is low-divergence — a fee-aligned vendor on portable terms
   (registrar transfer, standard zone export) — so the risk concentrates on the
   irreversibility axis: lockout or loss of the root is not one more capture, it
-  is loss of the mobility substrate itself."
+  is loss of the mobility substrate itself. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): recovery_cost
+  resolved to `moderate` — the recorded assessment was days: transfer locks and
+  DNS propagation, with no data re-formatting."
 reading: null
 gap: null
 serves: []
@@ -44,10 +47,11 @@ attributes:
     contradictions: []
   irreversibility:
     recovery_path: substitute — registrar transfer plus standard zone export
-    recovery_cost: days — transfer locks and DNS propagation, no data re-formatting
-    gated: partially — a transfer runs through the account being recovered from
+    recovery_cost: moderate
+    gated:
+      level: partial
+      note: a transfer runs through the account being recovered from
     last_exercised: null
-  classification: tool
   non_delegable_floor: custody of the domains and the root credentials — losing
     the root gates every other recovery path in this graph
   review_trigger: Cloudflare terms or pricing changes; any lockout incident on an

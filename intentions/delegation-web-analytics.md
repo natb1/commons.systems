@@ -47,10 +47,12 @@ attributes:
   irreversibility:
     recovery_path: substitute — server-log or owned privacy-respecting analytics;
       the sites publish unchanged without the sensor
-    recovery_cost: low; historical series lost, capability retained
-    gated: false
+    recovery_cost: low
+    gated:
+      level: none
+      note: no gating stated — the sites are owned and keep publishing with the sensor
+        absent; only the historical series is lost
     last_exercised: null
-  classification: tool
   non_delegable_floor: the owned sites remain fully functional and publishable
     with the analytics absent
   review_trigger: analytics signals begin driving publishing or marketing

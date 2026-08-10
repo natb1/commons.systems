@@ -15,7 +15,9 @@ rationale: "The motivating specimen of the philosophy — the canonical example
   is the same recovery pattern applied at its most resonant point. The
   consumer-side recovery is owned by strategy-recover-attention — print carries
   the author's daily reading; audio is early and has not yet displaced platform
-  listening."
+  listening. Axis resolution (tactic-delegation-classification-derivation,
+  2026-08-04): recovery_cost resolved to `moderate` — the recorded assessment
+  was moderate and falling, with the social graph the sticky remainder."
 reading: null
 gap: null
 serves: []
@@ -47,10 +49,11 @@ attributes:
   irreversibility:
     recovery_path: substitute — direct sources, RSS, self-hosted filtering, tools
       whose vendor virtue is service rather than engagement
-    recovery_cost: moderate and falling; the social graph is the sticky remainder
-    gated: partially — ranking logic and accumulated data are proprietary
+    recovery_cost: moderate
+    gated:
+      level: partial
+      note: ranking logic and accumulated data are proprietary
     last_exercised: null
-  classification: captured
   non_delegable_floor: noticing where my attention actually goes versus where I intend it
   review_trigger: standing — this record motivates the graph
   last_assessed: 2026-07-02

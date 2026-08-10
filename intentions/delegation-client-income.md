@@ -44,9 +44,11 @@ attributes:
     recovery_path: substitute — client pipeline and diversification; runway bounds
       the gap a lost client opens
     recovery_cost: unassessed
-    gated: false
+    gated:
+      level: none
+      note: no gating stated — the client relationship holds no artifact a rebuilt
+        pipeline needs
     last_exercised: null
-  classification: platform
   non_delegable_floor: the ability to find and close new client work
   review_trigger: recovery progress under strategy-diversify-income; client
     concentration rising as the pipeline refills

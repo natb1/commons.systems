@@ -15,7 +15,15 @@ rationale: "The pivotal delegation of the present conditions: tactical software
   local inference) the base case the whole recovery recursion bottoms out in.
   Paying the vendor imports a minor capture of its own — the spend promotes the
   vendor's growth, which is not a virtue held here; the owned budgeting pipeline
-  (strategy-recover-finance) is what keeps that import visible."
+  (strategy-recover-finance) is what keeps that import visible. Axis resolution
+  (tactic-delegation-classification-derivation, 2026-08-04): divergence was
+  recorded as `low-moderate` before the axes were enum-ized; resolved to `low` —
+  the contradictions list is empty and the imported items are vendor terms,
+  defaults, and named framing risks, none of which contradict a virtue held
+  here. recovery_cost resolved to `moderate` — the substitute (open-weight
+  models plus local inference) runs today and nothing already built breaks, so
+  the cost is the frontier-vs-open-weight capability gap at recovery time:
+  iteration slows, and the cost grows if the gap widens."
 reading: null
 gap: null
 serves:
@@ -39,7 +47,7 @@ attributes:
     across the repo
   origin: chosen
   divergence:
-    level: low-moderate
+    level: low
     imported:
       - usage policy
       - pricing and access terms
@@ -58,11 +66,11 @@ attributes:
       are local-first and keep running without any agent (iteration slows,
       nothing already built breaks; built artifacts decay only at substrate
       drift rate)
-    recovery_cost: the frontier-vs-open-weight capability gap at recovery time;
-      grows if the gap widens
-    gated: false — artifacts, workflow, and evaluation context are all in-repo
+    recovery_cost: moderate
+    gated:
+      level: none
+      note: artifacts, workflow, and evaluation context are all in-repo
     last_exercised: null
-  classification: tool
   non_delegable_floor: the ability to evaluate what the agent produces; if that
     atrophies the open source is nominal and recovery is severed
   review_trigger: runway-rule breach; open-weight capability gap widening; terms

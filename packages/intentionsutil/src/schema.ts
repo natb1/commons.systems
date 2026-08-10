@@ -1,3 +1,11 @@
+import {
+  DIVERGENCE_LEVELS,
+  GATED_LEVELS,
+  RECOVERY_COSTS,
+  readDivergenceLevel,
+  readGatedLevel,
+  readRecoveryCost,
+} from "./attention.js";
 import { IntentionSchemaError } from "./errors.js";
 import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
 
@@ -1124,6 +1132,67 @@ function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): v
 }
 
 /**
+ * Rule 21: delegation axis enums are valid, and `classification` is never
+ * stored. `node.attributes` is freeform, kind-specific data (not
+ * schema-typed) — that is why this check lives here in `validateGraph`
+ * rather than in `validateNode`. The enum member lists (`DIVERGENCE_LEVELS`,
+ * `RECOVERY_COSTS`, `GATED_LEVELS`) and the readers used below live in
+ * `attention.ts`, which is their one home; this function only enforces them
+ * at the schema boundary rather than re-deriving the lists.
+ *
+ * TODO(tactic-schema-drift-guard): once tactic-schema-drift-guard lands (its
+ * phase is still `implement`, not `done`, as of this writing), cross-check
+ * these enum declarations against `intentions/kind-delegation.md`'s stated
+ * field spec so schema.ts's guard and the kind node's prose spec can never
+ * silently drift apart. No live coordination with that tactic exists yet —
+ * this is a pointer for whoever lands it, not a dependency.
+ */
+function checkDelegationAxisEnums(node: IntentionNode, problems: string[]): void {
+  if (node.kind !== "delegation") return;
+
+  if (readDivergenceLevel(node) === null) {
+    const divergence = node.attributes.divergence;
+    const raw = isPlainObject(divergence) ? divergence.level : undefined;
+    problems.push(
+      `${node.id}: divergence.level ${JSON.stringify(raw)} is not a valid enum member ` +
+        `(expected one of ${DIVERGENCE_LEVELS.join("|")})`,
+    );
+  }
+
+  const irreversibility = node.attributes.irreversibility;
+
+  if (readRecoveryCost(node) === null) {
+    const raw = isPlainObject(irreversibility) ? irreversibility.recovery_cost : undefined;
+    problems.push(
+      `${node.id}: irreversibility.recovery_cost ${JSON.stringify(raw)} is not a valid enum ` +
+        `member (expected one of ${RECOVERY_COSTS.join("|")})`,
+    );
+  }
+
+  const gated = isPlainObject(irreversibility) ? irreversibility.gated : undefined;
+  if (typeof gated === "boolean" || typeof gated === "string") {
+    problems.push(
+      `${node.id}: irreversibility.gated is a legacy scalar (${typeof gated}) — it must be an ` +
+        `object with a "level" field (expected one of ${GATED_LEVELS.join("|")}), not a bare ` +
+        `boolean or free-text string`,
+    );
+  } else if (readGatedLevel(node) === null) {
+    const raw = isPlainObject(gated) ? gated.level : undefined;
+    problems.push(
+      `${node.id}: irreversibility.gated.level ${JSON.stringify(raw)} is not a valid enum ` +
+        `member (expected one of ${GATED_LEVELS.join("|")})`,
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(node.attributes, "classification")) {
+    problems.push(
+      `${node.id}: classification must not be stored — it derives on read via ` +
+        `deriveClassification (tactic-delegation-classification-derivation)`,
+    );
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1237,6 +1306,13 @@ function checkBlockedByCycles(
  *      check deliberately uses the own tier, not the effective one: an
  *      effective-tier check would cascade, invalidating every boosted
  *      descendant the moment any ancestor gained a mark.
+ *  21. On every `kind: "delegation"` node: `divergence.level`,
+ *      `irreversibility.recovery_cost`, and `irreversibility.gated.level` are
+ *      each a valid enum member (`attention.ts`'s `DIVERGENCE_LEVELS` /
+ *      `RECOVERY_COSTS` / `GATED_LEVELS`) — `gated` in particular must be an
+ *      object with a `level` field, never a legacy boolean or free-text
+ *      string. `attributes.classification` must never be stored — it derives
+ *      on read via `deriveClassification` (tactic-delegation-classification-derivation).
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1287,6 +1363,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierMarkShape(node, problems);
     // Rule 20: attention.tier tags the node's own tier namespace.
     checkAttentionTierNamespace(node, problems);
+    // Rule 21: delegation axis enums are valid and classification is not stored.
+    checkDelegationAxisEnums(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

@@ -14,7 +14,10 @@ rationale: "The development machine runs Windows with the actual working
   re-hosting the same Linux environment on bare metal. This record is also the
   substrate half of strategy-open-weight-readiness: its condition that
   local-inference hardware stays affordable is read against the hardware
-  recorded here."
+  recorded here. Axis resolution (tactic-delegation-classification-derivation,
+  2026-08-04): recovery_cost resolved to `moderate` — the recorded assessment
+  was days to reprovision the dev environment and peripherals on owned
+  hardware."
 reading: null
 gap: null
 serves: []
@@ -44,10 +47,12 @@ attributes:
   irreversibility:
     recovery_path: substitute — re-host the existing WSL2 Linux userland on
       bare-metal Linux; the working environment already lives there
-    recovery_cost: days — reprovision the dev environment and peripherals on owned hardware
-    gated: false
+    recovery_cost: moderate
+    gated:
+      level: none
+      note: no gating stated — the working environment is a WSL2 Linux userland that
+        re-hosts on bare metal unchanged
     last_exercised: null
-  classification: platform
   non_delegable_floor: the ability to provision the working environment from
     scratch on a fresh machine
   review_trigger: Windows changes hostile to WSL2; hardware refresh;
