@@ -502,3 +502,30 @@ Prose-rule lint over the net-new lines in the committed `.sh` files:
 strictly-behind theme in `graph-commit`: a HEAD behind `origin/main` misread as a
 state to act on. Same root shape (a symmetric comparison mistaken for a
 directional one), different subsystem; neither node subsumes the other.
+
+## needs-main residue
+
+- **id 8 — Design call: is `rev-list --count == 0` the right safety predicate?**
+  - Expected outcome: an author-level ruling that the `rev-list --count 0`
+    short-circuit (arm 1 of gate 7b) is an acceptable safety predicate for the
+    dispatch fleet, or a recorded follow-up to tighten it.
+  - Finding: planned-deferral — a safety-vs-throughput tradeoff on an
+    irreversible operation (`claude rm` / worktree removal); belongs to the
+    author, not an autonomous QA walk. QA's own re-verification (a mutation
+    test that temporarily neutralized arm 1's short-circuit) confirmed the
+    landed implementation matches the design already argued for at length in
+    this node's own finalized rationale above (FINALIZED 2026-08-06 via
+    `/align-tactics`): the two-dot content diff alone is symmetric and
+    false-positives on strictly-behind branches; `ahead == 0` is "trivially
+    safe: there is nothing that could have failed to land"; the fail-closed
+    reasoning is spelled out (an unreadable `origin/main` ref fails both arms
+    together, so an unknown ahead-count can never reach a reap); alternatives
+    considered and deliberately rejected include a new `skip-rev-list-error`
+    token and a `merge-tree`/reflog/stash probe. With the mutation reverted,
+    the full suite (129/129, 26/26, 135/135) and the repo-wide unit-test and
+    prose-lint runs all pass. The residual question is not implementation
+    correctness — QA confirms that — it is whether the risk-tolerance judgment
+    itself, already made at plan time, should stand or be revisited.
+  - Verifiability: AUTHOR — a subjective risk-tolerance judgment on an
+    irreversible operation; no machine check can decide whether the accepted
+    safety margin is sufficient.
