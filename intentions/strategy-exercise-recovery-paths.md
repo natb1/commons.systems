@@ -36,8 +36,11 @@ rationale: >-
   refinement are the standard triggers, with ad-hoc prioritization via the
   capture-visibility surface) — so aggregate drift has an owner. The divergence
   half is why this strategy also serves virtue-alignment-of-attachments.
-reading: null
-gap: null
+reading: "exercised: 4/22 records; 18 null last_exercised; review_trigger firing
+  not recorded"
+gap: "reading \"exercised: 4/22 records; 18 null last_exercised; review_trigger
+  firing not recorded\" does not meet threshold \"no record's last_exercised is
+  null, and no fired review_trigger is left unactioned\""
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -74,6 +77,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - drills stay affordable — walking a path costs days, not the price of the

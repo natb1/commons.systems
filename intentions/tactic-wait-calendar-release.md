@@ -52,7 +52,28 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
+    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
+  since: 2026-08-10
+  recommendation: >-
+    A concurrent writer landed an overlapping edit to this node while this
+    session's edit was in flight; this writer's content was NOT landed. This
+    session's unlanded content is preserved at
+    /tmp/tmp.JNZ6SD0qok/tactic-wait-calendar-release.md (this machine only — may
+    not survive past this session). Recommended: the losing writer re-reads the
+    current origin/main content, manually merges in its intended edit, and
+    re-runs graph-commit on the merged result — that same commit clears this
+    office_hours park. A third session encountering this park while the loser is
+    still working should wait rather than attempt its own merge (the mailbox
+    discipline).
+
+
+    Unresolved conflict on tactic-wait-calendar-release: list-entry removal vs.
+    concurrent edit — this write removes frontmatter list entries that
+    origin/main still carries (execution[planned]), and the field-level merge
+    unions list fields base-free, so auto-merging would silently restore them
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -871,3 +892,13 @@ Manual / judgment checks, in this order:
   sweep reads to decide that closure — not a new release rule, not a new edge
   type. The declined `blocked_until` field would have contradicted it. No edit to
   that strategy is owed by this work.
+
+## needs-main residue
+
+- **id:** 10
+  **title:** Production tick observation: exactly one sweep summary line per tick with an empty WAIT store
+  **url_path:** current
+  **expected_outcome:** For at least two consecutive `dispatch-tick` runs with no WAIT node in the store, exactly one `lib-wait-recheck: sweep complete (candidates=0 … status=ok)` line appears per tick in the tick journal — never zero (predicate silently failed to load) and never two (double-wiring at both call sites firing in a single tick).
+  **finding:** All 9 other QA plan items (independent re-runs of the 7 auto-verify commands plus live fixture checks of the router exclusion, the full arm→release→re-arm→cap lifecycle against a real bare remote, office-hours gating across all three WAIT states, and the census owed-prune exclusion) PASSed in this `/qa-fix` pass. This item is the node body's own Verification-section item 5 ("Observe in production, after merge") — by construction it requires observing at least two consecutive *live* `dispatch-tick` runs against the real production journal, which cannot be produced pre-merge on a feature-branch QA session. The mechanism's fail-safe posture (always returns 0, correctly-distinguished `status=` values across `repo-unresolvable`/`ok`/`enumeration-failed`) and the `dispatch-tick` wiring (both call sites `declare -f`-guarded, un-`|| true`'d, correctly ordered after `stale_hold_recheck_sweep` and before Step-1 selection) were independently re-verified live this pass.
+  **Verifiability:** WAIT — awaited event: this PR merging to `main` and at least two subsequent live `dispatch-tick` runs completing.
+  **Check:** grep the tick journal for `lib-wait-recheck: sweep complete` across ≥2 consecutive ticks; confirm exactly one such line per tick and `status=ok` (never `enumeration-failed`, never absent).

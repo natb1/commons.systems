@@ -33,8 +33,9 @@
 #      known GitHub check-runs desync, #2457): the fixed --jq filter keys off
 #      .conclusion alone, so this still counts as the fourth success and
 #      lands immediately instead of spinning to the busy-main timeout
-#   9. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, and the
-#      exact ids `.` / `..` are rejected with exit 2
+#   9. id validation: `v1..v2-migration` lands end-to-end; `/`, `\`, a comma
+#      (in either an ordinary or a --prune id), and the exact ids `.` / `..`
+#      are rejected with exit 2
 #  10. --prune: an ordinary edit id and a prune id land in ONE commit
 #  11. --prune guard: a prune id whose file is still present on disk is
 #      rejected (no commit lands)
@@ -233,6 +234,19 @@
 #  57. verdict-line uniqueness: a happy-path run, a busy-but-actually-landed
 #      run and a park run each emit EXACTLY ONE `graph-commit: verdict: ` line
 #
+#  58. delete/modify divergence: another writer's deletion lands on main FIRST
+#      (genuine rm+commit+push, not --prune), then a stale --base edit races
+#      it: exit 1, no false "layer 2/3 auto-resolved" claim, and the LANDED
+#      DELETION STANDS — the node is NOT resurrected on origin/main (a losing
+#      writer must never push a deleted node's content back to main with no PR
+#      and no review). The re-materialization is local and UNTRACKED: the
+#      worktree file carries office_hours and the "delete/modify divergence"
+#      recommendation, the writer's field edit survives in its frontmatter, and
+#      the authored markdown body is preserved rather than replaced by the
+#      generated "# <statement>" placeholder. stderr reports the divergence and
+#      says plainly that nothing was parked ON MAIN, WITHOUT emitting
+#      land-align-round's landed-park needle
+#
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
@@ -338,6 +352,7 @@ seed_field_node t-farahead-race "fieldA: base" "fieldB: base"
 seed_field_node t-farahead-race-conflict "sentinel: base"
 seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
 seed_field_node t-base-bystander-conflict "sentinel: base"
+seed_field_node t-field-delete-edit "fieldA: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -558,10 +573,18 @@ case "$(basename "$2")" in
       exit 1
     fi
 
-    # theirs genuinely absent (the id no longer exists on the landed side):
-    # ours is the only content, so ours wins outright (mirrors merge-node.ts's
-    # real documented behavior for an empty --theirs).
+    # theirs genuinely absent (the id no longer exists on the landed side).
+    # Branches on --base, mirroring merge-node.ts:74-78: if base is also
+    # empty/absent, this is a genuine add/add and ours is the only content,
+    # so ours wins outright. If base is non-empty, theirs going empty means
+    # the landed side deleted a node ours still edits — an unresolved
+    # delete/modify conflict, not a silent ours-wins.
     if [[ -z "$theirs" ]]; then
+      if [[ -n "$base" && -f "$base" && -s "$base" ]]; then
+        id="$(basename "$ours" .md)"
+        printf '{"resolved":false,"conflicts":[{"field":"<node>","ours":"%s","theirs":null}]}\n' "$id"
+        exit 0
+      fi
       [[ -n "$out" && -n "$ours" ]] && cp -- "$ours" "$out"
       printf '{"resolved":true,"conflicts":[]}\n'
       exit 0
@@ -635,9 +658,36 @@ case "$(basename "$2")" in
   *)
     shift 3   # tsx, helper script path, store module path
     dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
+    # Delete/modify divergence: a non-prune id whose target file is absent but
+    # whose snapshot exists was deleted by another writer's already-landed
+    # change while this session's edit was in flight; re-materialize it from the
+    # snapshot (mirrors the real helper) and record it as a divergence. Hard-
+    # error only when NEITHER the target nor the snapshot exists.
+    deleted_csv=""
     for id in "$@"; do
-      [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
+      if [[ -f "$dir/$id.md" ]]; then
+        continue
+      fi
+      if [[ ",$prune_csv," != *",$id,"* && -f "$snap_dir/$id.md" ]]; then
+        cp "$snap_dir/$id.md" "$dir/$id.md"
+        deleted_csv="$deleted_csv,$id"
+        continue
+      fi
+      echo "npx shim: unreadable node $id" >&2; exit 1
     done
+    deleted_csv="$deleted_csv,"
+    # Report the re-materialized ids back out of band, NUL-delimited (mirrors
+    # the real helper's GRAPH_COMMIT_RESURRECTED_FILE contract). park_and_exit()
+    # reads this into RESURRECTED_IDS and refuses to stage those paths, so the
+    # other writer's landed deletion is not reverted by the park commit.
+    if [[ -n "${GRAPH_COMMIT_RESURRECTED_FILE:-}" ]]; then
+      : >"$GRAPH_COMMIT_RESURRECTED_FILE"
+      for id in "$@"; do
+        if [[ ",$deleted_csv," == *",$id,"* ]]; then
+          printf '%s\0' "$id" >>"$GRAPH_COMMIT_RESURRECTED_FILE"
+        fi
+      done
+    fi
     # The out-of-band field breakdown (mechanical-unresolved detail), appended
     # after each node's base recovery text — mirrors the real helper.
     field_breakdown=""
@@ -647,6 +697,12 @@ case "$(basename "$2")" in
     for id in "$@"; do
       if [[ ",$prune_csv," == *",$id,"* ]]; then
         rec="prune, no content snapshot, mailbox discipline"
+      elif [[ ",$deleted_csv," == *",$id,"* ]]; then
+        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; the landed deletion WINS and this record is LOCAL ONLY. Re-materialized from ${snap_dir}/${id}.md with authored body preserved, untracked.
+Recommended: a human picks ONE of two intents.
+(1) OVERRIDE the deletion: review the file, drop office_hours, re-run graph-commit ${id}.
+(2) CONFIRM the other writer's deletion: rm ${dir}/${id}.md.
+Mailbox discipline."
       else
         rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
       fi
@@ -950,7 +1006,13 @@ if [[ $rc -eq 0 ]] && origin_show v1..v2-migration | grep -q 'line1: dotdot-ok';
 else
   no "dotdot-substring id (rc=$rc)"; printf '%s\n' "$out"
 fi
-for bad in 'a/b' 'a\b' '.' '..'; do
+# A comma is banned for a DELIMITER reason, not a path one: park_write() carries
+# PRUNE_IDS to its tsx helper as a comma-joined argv value, and a comma inside an
+# id would split the set into fragments — misclassifying a prune as an edit on
+# the park path, where the helper then looks for a snapshot that deliberately
+# does not exist and kills the whole park. Rejected at the edge, in BOTH id
+# positions (ordinary and --prune).
+for bad in 'a/b' 'a\b' '.' '..' 'a,b'; do
   run_gc "$A" "$bad" >/dev/null 2>&1; rc=$?
   if [[ $rc -eq 2 ]]; then
     ok "id '$bad' rejected with exit 2"
@@ -958,6 +1020,12 @@ for bad in 'a/b' 'a\b' '.' '..'; do
     no "id '$bad' expected exit 2, got $rc"
   fi
 done
+run_gc "$A" --prune 'a,b' >/dev/null 2>&1; rc=$?
+if [[ $rc -eq 2 ]]; then
+  ok "--prune id 'a,b' rejected with exit 2 (the comma-delimited prune channel stays splittable)"
+else
+  no "--prune id 'a,b' expected exit 2, got $rc"
+fi
 
 # ---------------------------------------------------------------------------
 # Cases 10-11: --prune
@@ -2387,6 +2455,60 @@ if [[ $rc57p -eq 1 ]] \
   ok "verdict uniqueness: a park run emits exactly one verdict line (status parked)"
 else
   no "verdict uniqueness park (rc=$rc57p lines=$(verdict_lines "$out57p"))"; printf '%s\n' "$out57p"
+fi
+
+# --- Case 58: delete/modify divergence — deletion lands first, edit races it via stale --base ---
+# The reverse of case 23's direction: there, an edit landed first and a
+# --prune raced it via a rebase CONFLICT. Here, a genuine deletion (rm + commit
+# + push, not --prune) lands on origin/main FIRST, and a second writer's field
+# edit — holding a --base blob sha captured before the deletion — races it via
+# the stale-base path (layer 3), not a rebase conflict. merge-node.ts's
+# --theirs-empty branch (Unit 1) reports this unresolved rather than silently
+# treating it as an add/add ours-wins, and park_and_exit()'s re-materialization
+# fix (Unit 2) keeps the park from crashing on the now-absent target file —
+# WITHOUT reverting the landed deletion: the re-materialized file is local and
+# unstaged, so origin/main keeps the node deleted and a human decides.
+set_mode green
+W23="$WORK/w23"
+make_clone "$W23" writer-23
+base_de_sha="$(git -C "$W23" hash-object intentions/t-field-delete-edit.md)"
+edit_field "$W23" t-field-delete-edit fieldA writer23-edit
+# do NOT commit/push W23's edit yet — it stays local, matching the stale-base
+# setup cases 21-22 use, so the --base sha above is now stale once the
+# deletion below lands.
+
+W24="$WORK/w24"
+make_clone "$W24" writer-24
+rm -f "$W24/intentions/t-field-delete-edit.md"
+git -C "$W24" commit -qam 'test: delete t-field-delete-edit'
+git -C "$W24" push -q origin main
+
+out="$(run_gc "$W23" -m 'test: delete vs edit' --base "t-field-delete-edit=$base_de_sha" t-field-delete-edit 2>&1)"; rc=$?
+# The landed deletion must SURVIVE on origin/main: origin_show fails when the
+# path is absent, which is exactly the expectation here.
+still_deleted=0; origin_show t-field-delete-edit >/dev/null 2>&1 || still_deleted=1
+# The re-materialization is local only, and UNTRACKED (`??`) — never staged,
+# never committed, never pushed.
+local_content="$(cat "$W23/intentions/t-field-delete-edit.md" 2>/dev/null || true)"
+untracked58=0
+[[ "$(git -C "$W23" status --porcelain -- intentions/t-field-delete-edit.md)" == '?? '* ]] && untracked58=1
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && [[ $still_deleted -eq 1 ]] \
+   && [[ $untracked58 -eq 1 ]] \
+   && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
+   && grep -q 'delete/modify divergence on t-field-delete-edit' <<<"$out" \
+   && grep -q 'nothing was parked ON MAIN' <<<"$out" \
+   && ! grep -qF -- '(office_hours set on the origin/main content)' <<<"$out" \
+   && grep -q 'office_hours' <<<"$local_content" \
+   && grep -q 'delete/modify divergence' <<<"$local_content" \
+   && grep -q 'fieldA: writer23-edit' <<<"$local_content" \
+   && grep -q 'Placeholder body for t-field-delete-edit\.' <<<"$local_content" \
+   && ! grep -q '^# base statement for t-field-delete-edit' <<<"$local_content"; then
+  ok "delete/modify divergence: deletion lands first, stale-base edit races it — the deletion STANDS on main, the re-materialization is local+untracked with office_hours and the authored body, and no landed-park claim is emitted"
+else
+  no "delete/modify divergence (rc=$rc still_deleted=$still_deleted untracked=$untracked58)"; printf '%s\n' "$out"; printf '%s\n' "$local_content"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

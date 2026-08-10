@@ -12,7 +12,6 @@ rationale: "Retained from the 2026-07-09 /align-strategy review round: 31 of 47
   stored prose — three conventions for one derived value. Derived state is never
   stored."
 reading: null
-gap: null
 serves:
   - strategy-graph-self-description
 recovers: []
@@ -20,13 +19,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: qa
 execution:
   branch: tactic-gap-derive-on-read
-  pr: null
+  pr: 3063
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null

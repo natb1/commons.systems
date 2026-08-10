@@ -43,13 +43,12 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: implement
 execution:
   branch: tactic-graph-commit-landing-signal-unreliable
   pr: 3050
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   conflict: null
@@ -675,3 +674,36 @@ Manual / judgment checks:
   window explicitly in the header — the verdict (Unit 2) is the load-bearing
   half of this tactic; the window shrink is the secondary half. Do not weaken
   or skip a test to make the move fit (`.claude/rules/test-integrity.md`).
+
+## needs-main residue
+
+- **id:** 10
+- **Title:** Observe real dispatch traffic post-merge
+- **URL path:** current
+- **Expected outcome:** Over real dispatch traffic post-merge, every terminal
+  `graph-commit`/`clear-park`/`park-node` run emits exactly one well-formed
+  verdict line matching `origin/main` reality in both directions, and any
+  `orphan=` recovery instructions actually recover the commit when followed.
+- **Finding:** Explicitly called out in this node's own Verification section
+  as a production-only check not assertable at merge time — the original
+  defect was only observed under real concurrent dispatch load (three
+  occurrences in one session on 2026-08-05). All 8 script-verifiable QA items
+  (verify-landed's own suite, graph-commit's verdict emitter and its full
+  suite including the new SIGKILL kill-path regressions, the Direction B
+  regression, clear-park/park-node's unconditional verify-landed adoption,
+  the five other adopting call sites and their suites, the CI wiring, and
+  `readNodeAtRef` coverage) passed at or above the PR's self-reported counts.
+  A second judgment item (verdict-taxonomy coherence across every consumer)
+  was independently audited in code and confirmed already-satisfied — no
+  unhandled status, `unknown` is fail-safe everywhere a destructive action
+  follows. Only this production-observation item remains, and it cannot be
+  settled before merge by construction.
+- **Verifiability:** WAIT — awaiting several real post-merge
+  `graph-commit`/`clear-park`/`park-node` invocations under live dispatch
+  traffic to accumulate before the check can run.
+- **Check:** grep dispatch worker session transcripts (not journald — stdout
+  from these scripts does not reach journald) for `graph-commit: verdict:`
+  lines after merge; confirm exactly one per run; confirm no run exits 0
+  without a `landed`/`landed-equivalent` verdict; confirm any `orphan=` line
+  is followed, on the caller's retry, by a clean landing without a manual
+  `git reset --hard`.

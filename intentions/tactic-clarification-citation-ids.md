@@ -19,18 +19,38 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: review
 execution:
   branch: tactic-clarification-citation-ids
   pr: 3041
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: |-
+    standdown-winner-dead-work-unpushed: a session stood down for this node in favour of winner session (unattributed — observed duplicate, no winner declared), which is no longer registered with the Claude daemon (crash, OOM, API error, or classifier denial). The stand-down is unconditional on the winner living, so the standing-down session(s) 01fd636e-e3dc-416b-96da-b8799ca38c12 are still waiting on a session that no longer exists, and the winner left work UNPUSHED in /home/n8/natb1/commons.systems/.claude/worktrees/tactic-clarification-citation-ids. Unpushed head (origin/main..HEAD): 837b1bf6 Merge remote-tracking branch 'origin/main' into tactic-clarification-citation-ids
+    4b145b91 Merge remote-tracking branch 'origin/main' into tactic-clarification-citation-ids
+    d37dfa90 Merge remote-tracking branch 'origin/main' into tactic-clarification-citation-ids
+  since: 2026-08-10
+  recommendation: "Find the holding job with 'claude agents --all' and attach it
+    ('claude attach <job-id>') to see where it stopped. If the worktree at
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-clarification-citat\
+    ion-ids has unpushed commits, verify them and push them from there FIRST. To
+    release the holding session use 'claude stop <job-id>' — NEVER 'claude rm',
+    which deletes the session AND its worktree, destroying any unpushed work
+    still in the shared worktree. Once the work is safe and the session is
+    stopped, run 'clear-park tactic-clarification-citation-ids' to return the
+    node to the lane. Accepted residual: while a live session still holds the
+    node-id session name, office-hours reports this node as 'all-held' rather
+    than launching a review session for it — that is expected, not a bug."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
