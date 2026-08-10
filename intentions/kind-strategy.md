@@ -30,7 +30,9 @@ rationale: >-
 
 
   `success_signal` on a strategy names the observable that would show the
-  strategy working; `reading` and `gap` are sensor-populated against it.
+  strategy working; `reading` is sensor-populated against it, and `gap` is
+  derived on read from `reading` vs `success_signal.threshold` via
+  `deriveGap` (`packages/intentionsutil/src/sensors.ts`) — never stored.
 
 
   `recovers` is the strategy→delegation edge: the ids of the delegation records

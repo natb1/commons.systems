@@ -1,11 +1,13 @@
 // Read the local-first default sensors over every node in the store and write
-// each node's fresh `reading` + derived `gap` back to the local `intentions/`
-// store.
+// each node's fresh `reading` back to the local `intentions/` store. `gap` is
+// derived on read (`deriveGap`, sensors.ts) from `reading` vs
+// `success_signal.threshold` — it is never stored, so this driver does not
+// compute or persist it.
 //
 // This is the batch driver for the feedback arm's READ step: for every node in
 // the store that names a `success_signal.sensor`, it resolves that sensor in
-// a registry, reads the current measurement, derives the mechanical gap, and
-// persists `{ ...node, reading, gap }` — preserving every other field. It reads
+// a registry, reads the current measurement, and persists `{ ...node, reading
+// }` — preserving every other field. It reads
 // only the local store and runs only local own-execution commands (no gh API,
 // no analytics, no network) — with one deliberate exception: the main-health
 // sensor below shells to `gh` to read the trunk's OWN check-run conclusions.
@@ -50,7 +52,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes, writeNode } from "../src/store.js";
 import { strategyBacklogBand } from "../src/census.js";
 import { listNodesAtRef } from "./lib-store-at-ref.js";
-import { SensorRegistry, deriveGap, type Sensor } from "../src/sensors.js";
+import { SensorRegistry, type Sensor } from "../src/sensors.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 
@@ -1261,8 +1263,10 @@ export interface ReadSummary {
 
 /**
  * Walk EVERY node in the store and, for each that names a registered sensor,
- * read the sensor, derive the gap against the FRESH reading, and write the node
- * back preserving all other fields. Nodes with no signal are skipped silently;
+ * read the sensor and write the node back with the fresh `reading`, preserving
+ * all other fields. `gap` is derived on read (`deriveGap`) from `reading` vs
+ * `success_signal.threshold` — it is never computed or persisted here. Nodes
+ * with no signal are skipped silently;
  * nodes naming an unregistered sensor are collected for reporting (never crash,
  * never silently skipped). Exported for later unit testing.
  *
@@ -1308,8 +1312,7 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
     }
 
     const reading = sensor.read(node);
-    const gap = deriveGap({ ...node, reading });
-    updates.push({ ...node, reading, gap });
+    updates.push({ ...node, reading });
   }
 
   // WRITE pass: persist every updated node now that all readings are computed.

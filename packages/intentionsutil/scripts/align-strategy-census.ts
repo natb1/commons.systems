@@ -22,6 +22,7 @@
 import { listNodes } from "../src/store.js";
 import { isPlainObject } from "../src/schema.js";
 import type { IntentionNode } from "../src/schema.js";
+import { deriveGap } from "../src/sensors.js";
 
 const RECORDED_DATE_RE = /Recorded\s+(\d{4}-\d{2}-\d{2})/g;
 
@@ -51,7 +52,7 @@ function printStrategy(node: IntentionNode): void {
     lines.push(`attributes.conditions: (none)`);
   }
   lines.push(`reading: ${node.reading ?? "null"}`);
-  lines.push(`gap: ${node.gap ?? "null"}`);
+  lines.push(`gap: ${deriveGap(node) ?? "null"}`);
   const dates = recordedDates(node);
   lines.push(
     `clarification dates: ${dates.length} recorded${dates.length > 0 ? ` (${dates.join(", ")})` : ""}`
