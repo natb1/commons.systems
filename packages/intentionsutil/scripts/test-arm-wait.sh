@@ -39,6 +39,8 @@
 #      byte-identically and the born-fresh wait file is deleted, leaving no
 #      dirty intentions/*.md at all.
 #   7. Usage error (missing --until) exits 2 without touching anything.
+#   8. An --until beyond WAIT_MAX_HORIZON_DAYS (src/waits.ts) is refused: exit 2,
+#      no wait node, no edge, no graph-commit.
 #
 # Needs bash, git, jq, and a real `node` (the decision and the writers are the
 # real TypeScript, not shims). No network.
@@ -61,7 +63,15 @@ PASS=0; FAIL=0
 ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 
-UNTIL="2099-03-04T05:06:07Z"
+# A RELATIVE instant, not a fixed far-future one: wait-node-decide.ts refuses an
+# `--until` more than WAIT_MAX_HORIZON_DAYS (src/waits.ts) past now, because a
+# wait armed beyond that horizon never comes due and so never reaches the
+# attempt cap. Seven days is comfortably inside it and stays inside it forever,
+# unlike a hard-coded date.
+UNTIL="$(date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)" \
+  || { echo "error: date -u -d '+7 days' failed (GNU date required)" >&2; exit 1; }
+# Beyond the horizon — used by case 8 to assert the refusal.
+UNTIL_BEYOND_HORIZON="2099-03-04T05:06:07Z"
 # The load-bearing closing sentence every born-fresh WAIT body must end with
 # (src/waits.ts's WAIT_RELEASE_SENTENCE — a prefix of it is enough to assert).
 RELEASE_SENTENCE_HEAD='the tick sweep releases this node to `phase: done` when `attributes.wait_until`'
@@ -366,6 +376,29 @@ if [[ $rc -eq 2 ]] && grep -q 'usage: arm-wait' <<<"$out" && [[ -z "$status_afte
   ok "usage error (missing --until): exit 2, nothing written"
 else
   no "usage error (rc=$rc)"; printf '%s\n' "$out"; printf 'status: %s\n' "$status_after"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 8: an --until beyond the wait horizon refuses — exit 2, nothing written.
+# This is the denial-of-work bound: without it, one `arm-wait <victim> --until
+# 9999-12-31T23:59:59Z` lands a blocked_by edge that never comes due, so the
+# attempt cap never fires and the sweep only ever reports it as `observing`.
+# ---------------------------------------------------------------------------
+G="$WORK/g"; make_clone "$G" writer-g
+GCLOG_G="$WORK/gclog-g"
+out="$(run_aw "$G" "$GCLOG_G" 0 tactic-src-a \
+        --until "$UNTIL_BEYOND_HORIZON" \
+        --reason-file "$WORK/reason.txt" \
+        --recommendation-file "$WORK/recommendation.txt" 2>&1)"; rc=$?
+status_after="$(git -C "$G" status --porcelain -- intentions/)"
+if [[ $rc -eq 2 ]] \
+   && grep -q 'days after --now' <<<"$out" \
+   && [[ -z "$status_after" ]] \
+   && [[ ! -e "$G/intentions/tactic-wait-src-a.md" ]] \
+   && [[ ! -s "$GCLOG_G" ]]; then
+  ok "over-horizon --until: exit 2 with a clear refusal, no wait node, no edge, no graph-commit"
+else
+  no "over-horizon --until refusal (rc=$rc)"; printf '%s\n' "$out"; printf 'status: %s\n' "$status_after"
 fi
 
 echo

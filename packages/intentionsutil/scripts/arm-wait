@@ -40,8 +40,15 @@
 #            --reason-file <f> --recommendation-file <f> [--body-file <f>]
 #
 # --until <iso> is an ISO 8601 UTC instant (YYYY-MM-DDTHH:MM:SSZ) strictly in
-#   the future; it becomes the wait node's `attributes.wait_until`, the instant
-#   the tick sweep releases the wait at.
+#   the future AND no more than WAIT_MAX_HORIZON_DAYS (../src/waits.ts) out; it
+#   becomes the wait node's `attributes.wait_until`, the instant the tick sweep
+#   releases the wait at. The upper bound is not tidiness: a wait armed past the
+#   horizon never comes due, so `wait_attempts` never increments, the attempt
+#   cap never fires, and the source stays blocked_by it indefinitely with
+#   nothing but an `observing` stderr line to show for it. Extending a
+#   still-armed wait is bounded the same way, measured from the node's
+#   `attributes.wait_armed_since` — an EXTEND is deliberately not a new attempt,
+#   so armed AGE is the only thing that can bound an extend-forever loop.
 # --reason-file / --recommendation-file are FILES (not inline strings): both are
 #   multi-line diagnostic text, passed through to wait-node-decide.ts verbatim.
 # --body-file <f>: optional extra diagnosis prose folded into the wait body.
@@ -64,8 +71,10 @@
 # advanced, or an unreachable/absent-node origin/main); 2 usage error — which,
 # mirroring hold-node's mapping of its decision tool's exit codes, also covers
 # wait-node-decide.ts's own refusals (a bad `--until`, an `--until` not after
-# now, or a wait node that already carries a cap-park `office_hours` and must
-# be `clear-park`ed before it can re-arm). Nothing is written on any of those.
+# now, an `--until` beyond the wait horizon, an EXTEND that would keep the wait
+# armed past that horizon, or a wait node that already carries a cap-park
+# `office_hours` and must be `clear-park`ed before it can re-arm). Nothing is
+# written on any of those.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

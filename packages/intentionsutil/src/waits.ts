@@ -17,6 +17,39 @@ import type { IntentionNode } from "./schema.js";
  */
 export const WAIT_ATTEMPT_CAP = 4;
 
+/**
+ * The maximum wait HORIZON, in days: no WAIT may be armed for an instant more
+ * than this far in the future, and no WAIT may stay continuously armed for
+ * longer than this without escalating.
+ *
+ * Why a horizon exists at all. `WAIT_ATTEMPT_CAP` bounds only the
+ * release/re-arm CYCLE — it counts arm→due→release→re-arm rounds. It does not
+ * bound a wait that is never due: an `--until` far enough in the future (the
+ * degenerate case, `9999-12-31T23:59:59Z`) is armed once, classified `waiting`
+ * on every sweep forever, never reaches `capped`, and never escalates — while
+ * its `blocked_by` edge keeps the SOURCE permanently unselectable. The same
+ * hole opens one day at a time when a caller EXTENDS a still-armed wait before
+ * each deadline arrives: an extension is deliberately not a new attempt, so the
+ * attempt counter never moves. Either way the result is an indefinite,
+ * unmonitored denial of work on an arbitrary node, arm-able with one command.
+ *
+ * The horizon closes both: `decideWait` refuses an `--until` beyond it (and
+ * refuses an EXTEND that pushes `wait_until` beyond `wait_armed_since` + the
+ * horizon), validate-graph rule 21 refuses a hand-landed node that exceeds it,
+ * and `listWaitCandidates` classifies an over-horizon or too-long-armed WAIT
+ * `capped` — which the tick sweep escalates to office-hours — so a hold that
+ * outlives the horizon becomes VISIBLE rather than silent.
+ *
+ * 30 days is deliberately generous: the design's own default wait is 24h, so a
+ * legitimate calendar-release predicate lands far inside it. A genuinely longer
+ * wait is not forbidden, it is merely not SILENT — it re-arms, or it escalates
+ * to the author who can extend it deliberately.
+ */
+export const WAIT_MAX_HORIZON_DAYS = 30;
+
+/** `WAIT_MAX_HORIZON_DAYS` in milliseconds, the unit every comparison uses. */
+export const WAIT_MAX_HORIZON_MS = WAIT_MAX_HORIZON_DAYS * 24 * 60 * 60 * 1000;
+
 /** The id prefix every WAIT node carries. */
 export const WAIT_ID_PREFIX = "tactic-wait-";
 
@@ -62,9 +95,10 @@ export function waitIdFor(sourceId: string): string {
 export const WAIT_UNTIL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 /**
- * Parse `attributes.wait_until` into epoch milliseconds, or `null` when
- * `value` is not a string, does not match `WAIT_UNTIL_RE`, or fails to parse
- * (`Date.parse` yields `NaN`).
+ * Parse a WAIT instant — `attributes.wait_until` or `attributes.
+ * wait_armed_since`, which share one shape — into epoch milliseconds, or
+ * `null` when `value` is not a string, does not match `WAIT_UNTIL_RE`, or
+ * fails to parse (`Date.parse` yields `NaN`).
  */
 export function parseWaitUntil(value: unknown): number | null {
   if (typeof value !== "string" || !WAIT_UNTIL_RE.test(value)) {

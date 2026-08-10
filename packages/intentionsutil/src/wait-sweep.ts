@@ -15,7 +15,7 @@
 // handed.
 
 import type { IntentionNode } from "./schema.js";
-import { WAIT_ATTEMPT_CAP, isWaitNode, parseWaitUntil } from "./waits.js";
+import { WAIT_ATTEMPT_CAP, WAIT_MAX_HORIZON_MS, isWaitNode, parseWaitUntil } from "./waits.js";
 
 /**
  * What the sweep must do with a WAIT node:
@@ -23,9 +23,17 @@ import { WAIT_ATTEMPT_CAP, isWaitNode, parseWaitUntil } from "./waits.js";
  *  - `due`       — `wait_until` has passed and the attempt cap has not been
  *                  reached: the sweep should release (re-arm in place).
  *  - `waiting`   — `wait_until` has not yet passed: leave it alone.
- *  - `capped`    — `wait_until` has passed but `wait_attempts` has already
- *                  reached `WAIT_ATTEMPT_CAP`: escalate to the author instead
- *                  of releasing again.
+ *  - `capped`    — escalate to the author instead of releasing. Two ways in:
+ *                  `wait_until` has passed and `wait_attempts` has already
+ *                  reached `WAIT_ATTEMPT_CAP` (the release/re-arm loop ran out
+ *                  of rounds), OR the wait has outlived `WAIT_MAX_HORIZON_MS`
+ *                  — either armed for an instant that far in the future, or
+ *                  continuously armed that long per `wait_armed_since`. The
+ *                  second way is what makes a wait that is NEVER due
+ *                  escalatable at all: the attempt counter cannot reach the cap
+ *                  without a release, so without this a never-due wait would be
+ *                  classified `waiting` forever while its `blocked_by` edge held
+ *                  the source.
  *  - `malformed` — the node's shape does not fit the WAIT vocabulary (a
  *                  non-done, non-null `phase`; an unparseable `wait_until`;
  *                  or a corrupted `wait_attempts`). Reported for visibility
@@ -78,9 +86,18 @@ export interface WaitCandidate {
  *  8. `node.office_hours !== null` → emit nothing. The cap-park already fired
  *     for this node; the author owns it now, and the sweep must not re-park
  *     or release it out from under them.
- *  9. `nowMs >= waitUntil` AND `attempts >= WAIT_ATTEMPT_CAP` → `capped`.
- * 10. `nowMs >= waitUntil` → `due`.
- * 11. Otherwise → `waiting`.
+ *  9. The HORIZON check, before the due/cap ladder: `waitUntil` more than
+ *     `WAIT_MAX_HORIZON_MS` beyond `nowMs`, or a parseable
+ *     `attributes.wait_armed_since` more than `WAIT_MAX_HORIZON_MS` before
+ *     `nowMs` → `capped`. A never-due wait can never reach the attempt cap, and
+ *     an endlessly-EXTENDED wait never increments it, so without this rung both
+ *     stay `waiting` forever — a silent, unbounded block on the source. An
+ *     absent `wait_armed_since` (a wait minted before the field existed) simply
+ *     skips the age half; it is not `malformed`, since the horizon on
+ *     `waitUntil` still bounds it.
+ * 10. `nowMs >= waitUntil` AND `attempts >= WAIT_ATTEMPT_CAP` → `capped`.
+ * 11. `nowMs >= waitUntil` → `due`.
+ * 12. Otherwise → `waiting`.
  *
  * @param nodes The loaded graph nodes (as from `listNodes`).
  * @param nowMs The current instant, in epoch milliseconds.
@@ -129,8 +146,22 @@ export function listWaitCandidates(nodes: IntentionNode[], nowMs: number): WaitC
     if (cls === undefined) {
       if (node.office_hours !== null) continue; // cap-park already fired; author owns it
 
+      // The horizon, checked BEFORE the due/cap ladder — it is the only rung
+      // that can fire on a wait which never comes due, and a never-due wait is
+      // exactly the one the attempt cap cannot see.
+      const armedSince = parseWaitUntil(node.attributes.wait_armed_since);
+      const overHorizon =
+        waitUntil - nowMs > WAIT_MAX_HORIZON_MS ||
+        (armedSince !== null && nowMs - armedSince > WAIT_MAX_HORIZON_MS);
+
       const due = nowMs >= waitUntil;
-      cls = due && attempts >= WAIT_ATTEMPT_CAP ? "capped" : due ? "due" : "waiting";
+      cls = overHorizon
+        ? "capped"
+        : due && attempts >= WAIT_ATTEMPT_CAP
+          ? "capped"
+          : due
+            ? "due"
+            : "waiting";
     }
 
     candidates.push({ waitId: node.id, sourceId, attempts, waitUntil, cls });

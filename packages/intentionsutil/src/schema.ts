@@ -1,6 +1,11 @@
 import { IntentionSchemaError } from "./errors.js";
 import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
-import { parseWaitUntil, waitIdFor } from "./waits.js";
+import {
+  WAIT_MAX_HORIZON_DAYS,
+  WAIT_MAX_HORIZON_MS,
+  parseWaitUntil,
+  waitIdFor,
+} from "./waits.js";
 
 // --- Enums -----------------------------------------------------------------
 
@@ -1138,6 +1143,20 @@ function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): v
  *  - `wait_until` is present and parses via `parseWaitUntil` (an ISO 8601 UTC
  *    instant, `YYYY-MM-DDTHH:MM:SSZ`). It is the release predicate; an
  *    unparseable one would leave the node armed forever.
+ *  - `wait_until` is not more than `WAIT_MAX_HORIZON_DAYS` beyond now, and —
+ *    when `attributes.wait_armed_since` is present — not more than that beyond
+ *    `wait_armed_since` either. This is the bound the attempt cap CANNOT
+ *    supply: `wait_attempts` counts release/re-arm rounds, so a wait armed for
+ *    a distant instant never comes due, never reaches the cap, and never
+ *    escalates, while its `blocked_by` edge holds the source indefinitely.
+ *    `arm-wait` refuses to write such a node; this rung is what stops a
+ *    hand-landed one. Only the UPPER side is bounded, so the check is
+ *    monotonically safe as clock time advances: a node that validates today
+ *    still validates tomorrow.
+ *  - `wait_armed_since`, when present, parses via `parseWaitUntil`. It records
+ *    when the current arming cycle began and is what bounds an EXTEND loop —
+ *    extension is deliberately not a new attempt, so armed AGE, not the attempt
+ *    counter, is the thing that can escalate a wait extended forever.
  *  - `wait_attempts`, when present, is an integer >= 1. It is the re-arm
  *    counter feeding the finite attempt cap; absence is legal (a
  *    freshly-armed wait has made no attempt yet), a malformed value is not —
@@ -1175,10 +1194,38 @@ function checkWaitNodeShape(node: IntentionNode, problems: string[]): void {
     }
   }
 
-  if (parseWaitUntil(node.attributes.wait_until) === null) {
+  const untilMs = parseWaitUntil(node.attributes.wait_until);
+  if (untilMs === null) {
     problems.push(
       `${node.id}: attributes.wait_until must be an ISO 8601 UTC instant of the form YYYY-MM-DDTHH:MM:SSZ, got ${JSON.stringify(node.attributes.wait_until)} — set the calendar instant the tick sweep releases this wait at`,
     );
+  }
+
+  // The armed-age stamp, and the two horizon bounds it participates in.
+  const armedSinceRaw = node.attributes.wait_armed_since;
+  let armedSinceMs: number | null = null;
+  if (armedSinceRaw !== undefined) {
+    armedSinceMs = parseWaitUntil(armedSinceRaw);
+    if (armedSinceMs === null) {
+      problems.push(
+        `${node.id}: attributes.wait_armed_since must be an ISO 8601 UTC instant of the form YYYY-MM-DDTHH:MM:SSZ when present, got ${JSON.stringify(armedSinceRaw)} — it records when this arming cycle began, and it is what bounds an extend-forever loop the attempt counter cannot see`,
+      );
+    }
+  }
+  if (untilMs !== null) {
+    // `Date.now()` rather than a passed-in clock: only the UPPER side is
+    // bounded, so validity is monotonic — a node that passes now cannot start
+    // failing merely because time advanced.
+    if (untilMs - Date.now() > WAIT_MAX_HORIZON_MS) {
+      problems.push(
+        `${node.id}: attributes.wait_until ${JSON.stringify(node.attributes.wait_until)} is more than ${WAIT_MAX_HORIZON_DAYS} days in the future — a wait armed past that horizon never comes due, so it never reaches WAIT_ATTEMPT_CAP and never escalates, while its blocked_by edge holds ${JSON.stringify(waitFor)} indefinitely; arm a nearer instant and let the wait re-arm`,
+      );
+    }
+    if (armedSinceMs !== null && untilMs - armedSinceMs > WAIT_MAX_HORIZON_MS) {
+      problems.push(
+        `${node.id}: attributes.wait_until ${JSON.stringify(node.attributes.wait_until)} is more than ${WAIT_MAX_HORIZON_DAYS} days after attributes.wait_armed_since ${JSON.stringify(armedSinceRaw)} — an extension is not a new attempt, so a wait extended this far past its arming instant suppresses its source without ever reaching the attempt cap; let it come due and re-arm instead`,
+      );
+    }
   }
 
   const attempts = node.attributes.wait_attempts;

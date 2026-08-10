@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { listWaitCandidates } from "../src/wait-sweep.js";
-import { WAIT_ATTEMPT_CAP } from "../src/waits.js";
+import { WAIT_ATTEMPT_CAP, WAIT_MAX_HORIZON_MS } from "../src/waits.js";
 import type { IntentionNode, OfficeHours } from "../src/schema.js";
 
 /** Minimal full IntentionNode fixture (mirrors hold-sweep.test.ts's `anode`). */
@@ -172,6 +172,70 @@ describe("listWaitCandidates", () => {
     expect(result).toEqual([
       { waitId: w.id, sourceId: "tactic-a", attempts: 1, waitUntil: Date.parse(FUTURE), cls: "waiting" },
     ]);
+  });
+
+  // --- the horizon rungs ---------------------------------------------------
+  // A wait armed for a distant instant is NEVER due, so `wait_attempts` never
+  // increments and `capped` is unreachable through the attempt cap. Without
+  // the horizon it would be classified `waiting` on every sweep forever while
+  // its blocked_by edge held the source — an invisible, indefinite block.
+  const BEYOND_HORIZON = new Date(NOW + WAIT_MAX_HORIZON_MS + 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const AT_HORIZON = new Date(NOW + WAIT_MAX_HORIZON_MS).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  it("classifies a wait armed beyond the horizon as capped, not waiting", () => {
+    const w = wait("tactic-a", {
+      attributes: { wait_for: "tactic-a", wait_until: BEYOND_HORIZON, wait_attempts: 1 },
+    });
+    const result = listWaitCandidates([w, source("tactic-a", [w.id])], NOW);
+    expect(result.map((c) => c.cls)).toEqual(["capped"]);
+  });
+
+  it("classifies a wait armed exactly at the horizon as waiting", () => {
+    const w = wait("tactic-a", {
+      attributes: { wait_for: "tactic-a", wait_until: AT_HORIZON, wait_attempts: 1 },
+    });
+    const result = listWaitCandidates([w, source("tactic-a", [w.id])], NOW);
+    expect(result.map((c) => c.cls)).toEqual(["waiting"]);
+  });
+
+  it("classifies a wait continuously armed past the horizon as capped, whatever its attempts", () => {
+    // The EXTEND blind spot: an extension is not a new attempt, so a wait
+    // re-extended before every deadline sits at wait_attempts: 1 forever.
+    // Cumulative armed AGE is what escalates it.
+    const armedSince = new Date(NOW - WAIT_MAX_HORIZON_MS - 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const w = wait("tactic-a", {
+      attributes: {
+        wait_for: "tactic-a",
+        wait_until: FUTURE,
+        wait_armed_since: armedSince,
+        wait_attempts: 1,
+      },
+    });
+    const result = listWaitCandidates([w, source("tactic-a", [w.id])], NOW);
+    expect(result.map((c) => c.cls)).toEqual(["capped"]);
+  });
+
+  it("leaves a recently-armed wait alone", () => {
+    const armedSince = new Date(NOW - 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const w = wait("tactic-a", {
+      attributes: {
+        wait_for: "tactic-a",
+        wait_until: FUTURE,
+        wait_armed_since: armedSince,
+        wait_attempts: 1,
+      },
+    });
+    const result = listWaitCandidates([w, source("tactic-a", [w.id])], NOW);
+    expect(result.map((c) => c.cls)).toEqual(["waiting"]);
+  });
+
+  it("treats an absent wait_armed_since as unremarkable, not malformed", () => {
+    // Waits minted before the field existed still classify on wait_until alone.
+    const w = wait("tactic-a", {
+      attributes: { wait_for: "tactic-a", wait_until: FUTURE, wait_attempts: 1 },
+    });
+    const result = listWaitCandidates([w, source("tactic-a", [w.id])], NOW);
+    expect(result.map((c) => c.cls)).toEqual(["waiting"]);
   });
 
   it("sorts multiple candidates by wait id ascending", () => {

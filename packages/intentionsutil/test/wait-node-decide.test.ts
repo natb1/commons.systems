@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { validateNode, type IntentionNode } from "../src/schema.js";
-import { WAIT_RELEASE_SENTENCE, WAIT_UNTIL_RE, waitIdFor } from "../src/waits.js";
+import {
+  WAIT_MAX_HORIZON_MS,
+  WAIT_RELEASE_SENTENCE,
+  WAIT_UNTIL_RE,
+  waitIdFor,
+} from "../src/waits.js";
 import { decideWait, type WaitInput } from "../scripts/wait-node-decide.js";
 
 // tactic-wait-calendar-release Unit 5 — the network-free WAIT node decision.
@@ -39,6 +44,7 @@ function wait(extra: Record<string, unknown> = {}): IntentionNode {
     attributes: {
       wait_for: SOURCE,
       wait_until: "2026-07-20T00:00:00Z",
+      wait_armed_since: "2026-07-19T00:00:00Z",
       wait_attempts: 1,
       wait_reason: "old reason",
       wait_recommendation: "old recommendation",
@@ -88,6 +94,7 @@ describe("decideWait dispositions", () => {
     expect(d.node?.attributes).toEqual({
       wait_for: SOURCE,
       wait_until: UNTIL,
+      wait_armed_since: NOW,
       wait_attempts: 1,
       wait_reason: input().reason,
       wait_recommendation: input().recommendation,
@@ -102,6 +109,8 @@ describe("decideWait dispositions", () => {
       phase: null,
       attributes: {
         wait_until: UNTIL,
+        // A re-arm starts a new arming cycle, so the armed-age clock restarts.
+        wait_armed_since: NOW,
         wait_attempts: 3,
         wait_reason: input().reason,
         wait_recommendation: input().recommendation,
@@ -128,11 +137,39 @@ describe("decideWait dispositions", () => {
     const armed = wait({ phase: null, attributes: { ...wait().attributes, wait_attempts: 2 } });
     const d = decideWait([source(), armed], input());
     expect(d.disposition).toBe("EXTEND");
-    // Only attributes.wait_until changes — wait_attempts is NOT incremented.
+    // Only attributes.wait_until changes — wait_attempts is NOT incremented,
+    // and wait_armed_since is NOT refreshed (that is what makes cumulative
+    // armed age, rather than the never-moving attempt counter, boundable).
     expect(d.node).toEqual({ attributes: { wait_until: UNTIL } });
     expect(d.node_body_append).toContain(`## Extend ${NOW}`);
     expect(d.node_body_append).toContain(UNTIL);
     expect(d.node_body).toBeUndefined();
+  });
+
+  it("EXTEND backfills wait_armed_since on a wait minted before the field existed", () => {
+    const legacy = wait({
+      phase: null,
+      attributes: {
+        wait_for: SOURCE,
+        wait_until: "2026-07-20T00:00:00Z",
+        wait_attempts: 2,
+        wait_reason: "old reason",
+        wait_recommendation: "old recommendation",
+      },
+    });
+    const d = decideWait([source(), legacy], input());
+    expect(d.disposition).toBe("EXTEND");
+    // Backfilled at `now` — starting the clock beats leaving it unbounded.
+    expect(d.node).toEqual({ attributes: { wait_until: UNTIL, wait_armed_since: NOW } });
+  });
+
+  it("EXTEND leaves a garbled wait_armed_since replaced rather than trusted", () => {
+    const garbled = wait({
+      phase: null,
+      attributes: { ...wait().attributes, wait_armed_since: "not-an-instant" },
+    });
+    const d = decideWait([source(), garbled], input());
+    expect(d.node).toEqual({ attributes: { wait_until: UNTIL, wait_armed_since: NOW } });
   });
 });
 
@@ -154,6 +191,41 @@ describe("decideWait throw cases", () => {
     expect(() =>
       decideWait([source()], input({ until: "2026-07-24T00:00:00Z" })),
     ).toThrow(/must be strictly after/);
+  });
+
+  // The horizon exists because WAIT_ATTEMPT_CAP counts release/re-arm ROUNDS:
+  // a wait that never comes due never increments it, so an unbounded --until
+  // (or an unbounded extension loop) would suppress its source forever without
+  // ever escalating to the author.
+  it("throws when --until is beyond the wait horizon", () => {
+    const beyond = new Date(Date.parse(NOW) + WAIT_MAX_HORIZON_MS + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .replace(/\.\d{3}Z$/, "Z");
+    expect(() => decideWait([source()], input({ until: beyond }))).toThrow(
+      /more than 30 days after --now/,
+    );
+    expect(() => decideWait([source()], input({ until: "9999-12-31T23:59:59Z" }))).toThrow(
+      /more than 30 days after --now/,
+    );
+  });
+
+  it("accepts an --until exactly at the horizon", () => {
+    const atHorizon = new Date(Date.parse(NOW) + WAIT_MAX_HORIZON_MS)
+      .toISOString()
+      .replace(/\.\d{3}Z$/, "Z");
+    expect(decideWait([source()], input({ until: atHorizon })).disposition).toBe("NONE");
+  });
+
+  it("throws when an EXTEND would push the wait past the horizon from wait_armed_since", () => {
+    const armed = wait({
+      phase: null,
+      attributes: { ...wait().attributes, wait_armed_since: "2026-07-01T00:00:00Z" },
+    });
+    // 2026-08-20 is inside the horizon measured from NOW (2026-07-25) but 50
+    // days past the arming instant — the extend-forever loop this closes.
+    expect(() =>
+      decideWait([source(), armed], input({ until: "2026-08-20T00:00:00Z" })),
+    ).toThrow(/continuously armed for more than 30 days/);
   });
 
   it("throws when the existing wait node carries a non-null office_hours", () => {

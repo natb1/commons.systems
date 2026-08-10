@@ -18,6 +18,14 @@
 // The wait id is DETERMINISTIC: `waitIdFor(source)` (see `../src/waits.ts`),
 // which makes find-or-create idempotent by mere existence.
 //
+// Bounded horizon: `--until` is refused when it is more than
+// `WAIT_MAX_HORIZON_DAYS` (../src/waits.ts) beyond `--now`, and an EXTEND is
+// refused when it would keep the wait continuously armed past that horizon
+// (measured from `attributes.wait_armed_since`, which this tool stamps on NONE
+// and REARM and never rewrites on EXTEND). Both refusals close the same hole:
+// the attempt cap counts release/re-arm cycles, so it can never fire on a wait
+// that is never due — the source would stay blocked, unobserved, forever.
+//
 // Usage:
 //   node --import tsx/esm wait-node-decide.ts --source <id> --until <iso>
 //     --reason-file <f> --recommendation-file <f> [--body-file <f>]
@@ -32,7 +40,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodesStrict } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
-import { WAIT_RELEASE_SENTENCE, waitIdFor, parseWaitUntil } from "../src/waits.js";
+import {
+  WAIT_MAX_HORIZON_DAYS,
+  WAIT_MAX_HORIZON_MS,
+  WAIT_RELEASE_SENTENCE,
+  waitIdFor,
+  parseWaitUntil,
+} from "../src/waits.js";
 
 export type Disposition = "NONE" | "REARM" | "EXTEND";
 
@@ -119,6 +133,15 @@ function buildWaitNode(
     attributes: {
       wait_for: input.sourceId,
       wait_until: input.until,
+      // The instant this arming CYCLE began. `wait_attempts` counts
+      // release/re-arm rounds and deliberately does not move on an EXTEND, so
+      // it cannot bound a wait that is extended forever without ever coming
+      // due. `wait_armed_since` is what does: it survives every extension
+      // untouched, so the sweep can escalate on cumulative armed AGE rather
+      // than only on repeated release/re-arm cycles. Reset on a REARM (a
+      // released wait that re-arms is a genuinely new cycle), never on an
+      // EXTEND.
+      wait_armed_since: input.now,
       wait_attempts: 1,
       wait_reason: input.reason,
       wait_recommendation: input.recommendation,
@@ -166,14 +189,20 @@ function buildWaitBody(waitId: string, input: WaitInput): string {
  *  - EXTEND — a wait node exists with `phase === null` and `office_hours ===
  *             null` (still armed). Emit only `attributes.wait_until`
  *             changed — `wait_attempts` is NOT incremented, since extending
- *             a live wait is not a new attempt. Emit a dated `## Extend`
- *             stanza to append.
+ *             a live wait is not a new attempt — plus a backfilled
+ *             `wait_armed_since` when the existing node carries none. Emit a
+ *             dated `## Extend` stanza to append.
  *
  * Throws when: the source is absent from the store; `until` fails
  * `parseWaitUntil` validation; `until`'s parsed instant is not strictly
- * after `now`'s parsed instant; or the existing node at the derived wait id
- * carries a non-null `office_hours` (the cap-park already fired — re-arming
- * would erase the escalation; the caller must `clear-park` first).
+ * after `now`'s parsed instant; `until` is more than `WAIT_MAX_HORIZON_DAYS`
+ * beyond `now` (an over-horizon wait never comes due, so it never reaches the
+ * attempt cap and never escalates); an EXTEND would push `until` more than
+ * `WAIT_MAX_HORIZON_DAYS` past the existing node's `wait_armed_since` (the
+ * unbounded-extension loop the attempt cap cannot see); or the existing node
+ * at the derived wait id carries a non-null `office_hours` (the cap-park
+ * already fired — re-arming would erase the escalation; the caller must
+ * `clear-park` first).
  */
 export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecision {
   const waitId = waitIdFor(input.sourceId);
@@ -203,6 +232,20 @@ export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecisi
     throw new Error(
       `wait-node-decide: --until "${input.until}" must be strictly after --now ` +
         `"${input.now}"`,
+    );
+  }
+  // The upper bound. Without it, an `--until` far enough out is armed once and
+  // classified `waiting` on every sweep forever: never due, so never `capped`,
+  // so never escalated — an indefinite, unmonitored block on the source. See
+  // WAIT_MAX_HORIZON_DAYS in ../src/waits.ts.
+  if (untilMs - nowMs > WAIT_MAX_HORIZON_MS) {
+    throw new Error(
+      `wait-node-decide: --until "${input.until}" is more than ` +
+        `${WAIT_MAX_HORIZON_DAYS} days after --now "${input.now}" — a wait ` +
+        `armed beyond that horizon would never come due, so it would never ` +
+        `reach the attempt cap and never escalate; arm a nearer instant and ` +
+        `let the wait re-arm, or park the source deliberately if it genuinely ` +
+        `needs a human on a longer clock`,
     );
   }
 
@@ -241,6 +284,12 @@ export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecisi
       phase: null,
       attributes: {
         wait_until: input.until,
+        // A REARM starts a genuinely new arming cycle — the previous one ended
+        // when the sweep released the wait and the source became selectable
+        // again — so the armed-age clock restarts here. The bound that governs
+        // repeated re-arms is `wait_attempts`/WAIT_ATTEMPT_CAP, incremented
+        // just above.
+        wait_armed_since: input.now,
         wait_attempts: attempts,
         wait_reason: input.reason,
         wait_recommendation: input.recommendation,
@@ -248,10 +297,27 @@ export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecisi
     };
     decision.node_body_append = rearmStanza(input, attempts);
   } else {
+    // EXTEND. `wait_armed_since` is deliberately NOT refreshed: the whole point
+    // of the field is that it survives extension, so cumulative suppression is
+    // bounded even though `wait_attempts` never moves on this path. A wait that
+    // predates the field (or carries a garbled one) gets it backfilled at
+    // `now`, which starts the clock rather than leaving it unbounded.
+    const armedSinceMs = parseWaitUntil(existing?.attributes.wait_armed_since);
+    if (armedSinceMs !== null && untilMs - armedSinceMs > WAIT_MAX_HORIZON_MS) {
+      throw new Error(
+        `wait-node-decide: extending "${waitId}" to "${input.until}" would keep ` +
+          `it continuously armed for more than ${WAIT_MAX_HORIZON_DAYS} days ` +
+          `(armed since "${existing?.attributes.wait_armed_since}") — extension ` +
+          `is not a new attempt, so an unbounded extension loop would suppress ` +
+          `"${input.sourceId}" forever without ever reaching the attempt cap; ` +
+          `let the wait come due and re-arm, or escalate it deliberately`,
+      );
+    }
     decision.node = {
-      attributes: {
-        wait_until: input.until,
-      },
+      attributes:
+        armedSinceMs === null
+          ? { wait_until: input.until, wait_armed_since: input.now }
+          : { wait_until: input.until },
     };
     decision.node_body_append = extendStanza(input);
   }

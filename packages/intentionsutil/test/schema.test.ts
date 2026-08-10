@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
+import { WAIT_MAX_HORIZON_MS } from "../src/waits.js";
 
 describe("validateNode", () => {
   it("accepts a valid full node", () => {
@@ -2001,6 +2002,65 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: a WAIT node's phase must be null \(armed\) or "done" \(released\), got "implement"/,
     );
+  });
+
+  // The horizon bound. arm-wait refuses to WRITE an over-horizon wait; these
+  // are what stop a hand-landed one — the node that would be armed once, never
+  // come due, never reach WAIT_ATTEMPT_CAP, and hold its source forever.
+  /** An instant `ms` beyond the real current time, in WAIT_UNTIL_RE shape. */
+  function fromNow(ms: number): string {
+    return new Date(Date.now() + ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  it("Rule 21: rejects a wait_until beyond the wait horizon", () => {
+    const nodes = waitNodes({
+      attributes: waitAttrs({ wait_until: fromNow(WAIT_MAX_HORIZON_MS + 60 * 60 * 1000) }),
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until .* is more than 30 days in the future/,
+    );
+  });
+
+  it("Rule 21: rejects the degenerate far-future wait_until", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "9999-12-31T23:59:59Z" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until .* is more than 30 days in the future/,
+    );
+  });
+
+  it("Rule 21: accepts a wait_until inside the horizon", () => {
+    const nodes = waitNodes({
+      attributes: waitAttrs({ wait_until: fromNow(24 * 60 * 60 * 1000) }),
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: rejects a wait_until more than the horizon past wait_armed_since", () => {
+    // Inside the horizon measured from now, but far past the arming instant:
+    // the extend-forever loop, which never increments wait_attempts.
+    const nodes = waitNodes({
+      attributes: waitAttrs({
+        wait_until: fromNow(24 * 60 * 60 * 1000),
+        wait_armed_since: new Date(Date.now() - WAIT_MAX_HORIZON_MS - 24 * 60 * 60 * 1000)
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "Z"),
+      }),
+    });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_until .* is more than 30 days after attributes\.wait_armed_since/,
+    );
+  });
+
+  it("Rule 21: rejects a malformed attributes.wait_armed_since when present", () => {
+    const nodes = waitNodes({ attributes: waitAttrs({ wait_armed_since: "2026-08-07" }) });
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-wait-source: attributes\.wait_armed_since must be an ISO 8601 UTC instant/,
+    );
+  });
+
+  it("Rule 21: accepts a WAIT node with no wait_armed_since at all", () => {
+    // Waits minted before the field existed stay landable.
+    expect(() => validateGraph(waitNodes())).not.toThrow();
   });
 });
 

@@ -47,7 +47,18 @@
 #       -> exactly TWO writes total across BOTH writers (one shared counter,
 #       not one per class), the rest deferred
 #   12. unresolvable repo root -> status=repo-unresolvable, return 0
-#   13. EVERY case: return value 0 and EXACTLY ONE `sweep complete` line
+#   15. ROTATION: three due waits, DISPATCH_WAIT_RECHECK_MAX=1, the
+#       alphabetically FIRST one failing every time -> pass 2 resumes after it
+#       and releases the next wait instead of re-spending the only slot on the
+#       failing head (head-of-line starvation regression)
+#   16. BACKOFF: a failed write arms the per-node skip window -> the next pass
+#       reports backoff-skipped for it, spends no slot on it, and still
+#       releases its sibling
+#   17. ESCALATION: DISPATCH_WAIT_RECHECK_FAIL_ESCALATE=2 with a writer that
+#       always fails -> the second consecutive failure parks the WAIT's own id
+#       to office hours, the park strings carrying the node's own
+#       wait_reason / wait_recommendation
+#   ALL: EVERY case: return value 0 and EXACTLY ONE `sweep complete` line
 #       (asserted by run_sweep, which every case goes through)
 #
 # No network needed; requires bash + git + jq + a real node with tsx resolvable
@@ -129,6 +140,10 @@ export DISPATCH_WAIT_RECHECK_PARK="$PARK_STUB"
 export DISPATCH_RESERVATION_DIR="$WORK/reservations"
 export DISPATCH_DECISION_LOG_DIR="$WORK/decision-log"
 export DISPATCH_AGENTS_SNAPSHOT_ALL="$WORK/agents-all.json"
+# The round-robin cursor + per-node backoff state. Pinned into the scratch dir
+# (and deleted by reset_env) so no case inherits another's failure streak and
+# the developer's real ~/.local/share state is never touched.
+export DISPATCH_WAIT_RECHECK_STATE="$WORK/wait-recheck-state.json"
 mkdir -p "$DISPATCH_RESERVATION_DIR" "$DISPATCH_DECISION_LOG_DIR"
 printf '[]\n' >"$DISPATCH_AGENTS_SNAPSHOT_ALL"
 
@@ -136,7 +151,14 @@ printf '[]\n' >"$DISPATCH_AGENTS_SNAPSHOT_ALL"
 source "$HARNESS_DIR/lib-wait-recheck.sh"
 
 PAST="2020-01-01T00:00:00Z"
-FUTURE="2099-01-01T00:00:00Z"
+# RELATIVE, not a fixed far-future instant: the enumerator classifies a wait
+# armed more than WAIT_MAX_HORIZON_DAYS (packages/intentionsutil/src/waits.ts)
+# out as `capped` rather than `waiting`, since a never-due wait can never reach
+# the attempt cap. Two days is a genuine not-yet-due wait forever.
+FUTURE="$(date -u -d '+2 days' +%Y-%m-%dT%H:%M:%SZ)" \
+  || { echo "error: date -u -d '+2 days' failed (GNU date required)" >&2; exit 1; }
+# Beyond the horizon — case 13 asserts this escalates instead of observing.
+FUTURE_BEYOND_HORIZON="2099-01-01T00:00:00Z"
 REASON="the batch QA window has not closed yet"
 RECOMMENDATION="re-check the deployed run log after the window, then re-plan or release"
 
@@ -187,11 +209,16 @@ NODE
 
 # write_wait <repo> <source-id> <wait_until> <attempts> [reason] [recommendation]
 # — an ARMED wait (phase null, office_hours null) under its canonical id.
+# WAIT_ARMED_SINCE, when set non-empty in the caller's environment, adds an
+# `attributes.wait_armed_since` line (the armed-age stamp the horizon rung
+# reads); unset, the node carries none, which is the pre-field shape.
 write_wait() {
   local repo="$1" src="$2" until_at="$3" attempts="$4"
   local reason="${5:-$REASON}" rec="${6:-$RECOMMENDATION}"
-  local wid
+  local wid armed_line=""
   wid="$(wait_id_for "$src")"
+  [[ -n "${WAIT_ARMED_SINCE:-}" ]] && armed_line="
+  wait_armed_since: $WAIT_ARMED_SINCE"
   cat >"$repo/intentions/$wid.md" <<NODE
 ---
 id: $wid
@@ -204,7 +231,7 @@ phase: null
 office_hours: null
 attributes:
   wait_for: $src
-  wait_until: $until_at
+  wait_until: $until_at$armed_line
   wait_attempts: $attempts
   wait_reason: $reason
   wait_recommendation: $rec
@@ -285,6 +312,9 @@ reset_env() {
   rm -f "${DISPATCH_RESERVATION_DIR:?}"/* 2>/dev/null
   unset DISPATCH_WAIT_RECHECK_ENUM
   unset DISPATCH_WAIT_RECHECK_MAX
+  unset DISPATCH_WAIT_RECHECK_BACKOFF_MAX
+  unset DISPATCH_WAIT_RECHECK_FAIL_ESCALATE
+  rm -f "${DISPATCH_WAIT_RECHECK_STATE:?}"
   export RELEASE_FAIL_IDS=""
   export PARK_FAIL_IDS=""
   export DISPATCH_WAIT_RECHECK_RELEASE="$RELEASE_STUB"
@@ -302,7 +332,7 @@ write_wait "$R1" tactic-src-a "$PAST" 1
 DISPATCH_WAIT_RECHECK_REPO_ROOT="$R1" run_sweep "case1"
 
 assert_contains "case1: summary reports one release" \
-  "candidates=1 released=1 capped=0 observing=0 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=1 released=1 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_contains "case1: names the released wait and its source" \
   "released tactic-wait-src-a (unblocked tactic-src-a)" "$ERR"
 assert_eq "case1: release-wait invoked exactly once" "1" "$(release_log_lines)"
@@ -324,9 +354,9 @@ DISPATCH_WAIT_RECHECK_REPO_ROOT="$R2" run_sweep "case2"
 # millisecond-precision — the sweep echoes that column verbatim rather than
 # reformatting it.
 assert_contains "case2: reports the instant it is waiting on" \
-  "observing (until=2099-01-01T00:00:00.000Z) for tactic-wait-src-a" "$ERR"
+  "observing (until=${FUTURE%Z}.000Z) for tactic-wait-src-a" "$ERR"
 assert_contains "case2: summary counts it as observing" \
-  "candidates=1 released=0 capped=0 observing=1 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=1 released=0 capped=0 observing=1 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case2: release-wait never invoked" "0" "$(release_log_lines)"
 assert_eq "case2: park-node never invoked" "0" "$(park_log_lines)"
 
@@ -343,7 +373,7 @@ write_wait "$R3" tactic-src-a "$PAST" 4
 DISPATCH_WAIT_RECHECK_REPO_ROOT="$R3" run_sweep "case3"
 
 assert_contains "case3: summary reports one cap-park" \
-  "candidates=1 released=0 capped=1 observing=0 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=1 released=0 capped=1 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_contains "case3: names the parked wait" "capped-parked tactic-wait-src-a" "$ERR"
 assert_eq "case3: park-node invoked exactly once" "1" "$(park_log_lines)"
 assert_eq "case3: parked the WAIT's own id, never the source's" \
@@ -381,7 +411,7 @@ assert_contains "case4: the live-session claim is reported" \
 assert_contains "case4: the reservation claim is reported" \
   "observing-claimed (tactic-src-b has a live session or reservation)" "$ERR"
 assert_contains "case4: summary counts both as observing" \
-  "candidates=2 released=0 capped=0 observing=2 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=2 released=0 capped=0 observing=2 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case4: release-wait never invoked" "0" "$(release_log_lines)"
 assert_eq "case4: park-node never invoked" "0" "$(park_log_lines)"
 
@@ -402,7 +432,7 @@ DISPATCH_WAIT_RECHECK_REPO_ROOT="$R5" run_sweep "case5"
 assert_contains "case5: reports the claim on the wait node" \
   "observing-claimed (tactic-wait-src-a has a live session or reservation)" "$ERR"
 assert_contains "case5: summary counts it as observing" \
-  "candidates=1 released=0 capped=0 observing=1 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=1 released=0 capped=0 observing=1 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case5: release-wait never invoked" "0" "$(release_log_lines)"
 assert_eq "case5: park-node never invoked" "0" "$(park_log_lines)"
 
@@ -421,7 +451,7 @@ DISPATCH_WAIT_RECHECK_REPO_ROOT="$R6" run_sweep "case6"
 assert_contains "case6: the malformed wait is named in a loud line" \
   "skip-malformed (tactic-wait-src-a carries an unparseable wait_until" "$ERR"
 assert_contains "case6: summary counts it as malformed" \
-  "candidates=1 released=0 capped=0 observing=0 malformed=1 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=1 released=0 capped=0 observing=0 malformed=1 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case6: release-wait never invoked" "0" "$(release_log_lines)"
 assert_eq "case6: park-node never invoked" "0" "$(park_log_lines)"
 
@@ -439,7 +469,7 @@ write_parked_wait "$R7" tactic-src-a "$PAST" 4
 DISPATCH_WAIT_RECHECK_REPO_ROOT="$R7" run_sweep "case7"
 
 assert_contains "case7: no candidate is produced at all" \
-  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case7: the parked wait is never named in the sweep output" "0" \
   "$(grep -cF 'tactic-wait-src-a' "$WORK/stderr.log")"
 assert_eq "case7: release-wait never invoked" "0" "$(release_log_lines)"
@@ -458,7 +488,7 @@ DISPATCH_WAIT_RECHECK_ENUM="$ENUM_FAIL_STUB" \
 SUMMARY_ENUM_FAILED="$SUMMARY"
 
 assert_contains "case8: status is enumeration-failed" \
-  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 status=enumeration-failed" \
+  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=enumeration-failed" \
   "$SUMMARY"
 assert_contains "case8: prints a loud diagnostic naming the exit code" \
   "wait enumeration FAILED (rc=2" "$ERR"
@@ -475,7 +505,7 @@ R9="$(new_repo case9)"
 DISPATCH_WAIT_RECHECK_REPO_ROOT="$R9" run_sweep "case9"
 
 assert_contains "case9: status is ok with no candidates" \
-  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 status=ok" "$SUMMARY"
+  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case9: release-wait never invoked" "0" "$(release_log_lines)"
 TOTAL=$((TOTAL + 1))
 if [[ "$SUMMARY" != "$SUMMARY_ENUM_FAILED" ]]; then
@@ -502,7 +532,7 @@ assert_contains "case10: the failure is reported with its exit code" \
 assert_contains "case10: the sibling candidate still released" \
   "released tactic-wait-src-b (unblocked tactic-src-b)" "$ERR"
 assert_contains "case10: summary counts one failure and one release" \
-  "candidates=2 released=1 capped=0 observing=0 malformed=0 failed=1 deferred=0 status=ok" "$SUMMARY"
+  "candidates=2 released=1 capped=0 observing=0 malformed=0 failed=1 deferred=0 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_eq "case10: release-wait invoked once per candidate" "2" "$(release_log_lines)"
 
 # ============================================================================
@@ -519,7 +549,7 @@ write_source "$R11" tactic-src-d "[tactic-wait-src-d]"; write_wait "$R11" tactic
 DISPATCH_WAIT_RECHECK_MAX=2 DISPATCH_WAIT_RECHECK_REPO_ROOT="$R11" run_sweep "case11"
 
 assert_contains "case11: one release plus one park exhausts the shared cap of 2" \
-  "candidates=4 released=1 capped=1 observing=0 malformed=0 failed=0 deferred=2 status=ok" "$SUMMARY"
+  "candidates=4 released=1 capped=1 observing=0 malformed=0 failed=0 deferred=2 backoff=0 escalated=0 status=ok" "$SUMMARY"
 assert_contains "case11: the deferral names the cap" "deferred (cap=2) for" "$ERR"
 assert_eq "case11: release-wait invoked once" "1" "$(release_log_lines)"
 assert_eq "case11: park-node invoked once" "1" "$(park_log_lines)"
@@ -536,11 +566,148 @@ unset DISPATCH_GRAPH_MAIN_WORKTREE
 run_sweep_in "$NOT_A_REPO" "case12"
 
 assert_contains "case12: status is repo-unresolvable" \
-  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 status=repo-unresolvable" \
+  "candidates=0 released=0 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=0 escalated=0 status=repo-unresolvable" \
   "$SUMMARY"
 assert_contains "case12: prints a diagnostic naming the unresolvable root" \
   "repo root unresolvable" "$ERR"
 assert_eq "case12: release-wait never invoked" "0" "$(release_log_lines)"
 assert_eq "case12: park-node never invoked" "0" "$(park_log_lines)"
+
+# ============================================================================
+# Case 13: a wait that outlives the horizon escalates instead of observing
+# ============================================================================
+# The denial-of-work hole the attempt cap cannot see. `wait_attempts` counts
+# release/re-arm ROUNDS, so a wait armed for a distant instant — or one
+# re-EXTENDED before every deadline, which is deliberately not a new attempt —
+# never comes due, never reaches WAIT_ATTEMPT_CAP, and would otherwise be
+# reported as `observing` forever while its blocked_by edge held the source.
+# WAIT_MAX_HORIZON_DAYS (packages/intentionsutil/src/waits.ts) is what turns
+# both into a `capped` park the author can see.
+echo "Case 13: a wait armed beyond the horizon is parked, not observed"
+reset_env
+R13="$(new_repo case13)"
+write_source "$R13" tactic-src-a "[tactic-wait-src-a]"
+write_wait "$R13" tactic-src-a "$FUTURE_BEYOND_HORIZON" 1
+DISPATCH_WAIT_RECHECK_REPO_ROOT="$R13" run_sweep "case13"
+
+assert_contains "case13: the over-horizon wait is escalated, not left observing" \
+  "capped-parked tactic-wait-src-a" "$ERR"
+assert_eq "case13: park-node invoked exactly once" "1" "$(park_log_lines)"
+assert_eq "case13: parked the WAIT's own id, never the source's" \
+  "tactic-wait-src-a" "$(awk 'NR==1' "$PARK_ARGV_LOG")"
+assert_eq "case13: release-wait never invoked for a not-yet-due wait" "0" "$(release_log_lines)"
+
+echo "Case 14: a wait continuously armed past the horizon is parked"
+reset_env
+R14="$(new_repo case14)"
+write_source "$R14" tactic-src-a "[tactic-wait-src-a]"
+# Inside the horizon by wait_until, but armed far longer than it: the
+# extend-forever loop, whose wait_attempts never moves off 1.
+WAIT_ARMED_SINCE="$(date -u -d '-60 days' +%Y-%m-%dT%H:%M:%SZ)" \
+  write_wait "$R14" tactic-src-a "$FUTURE" 1
+DISPATCH_WAIT_RECHECK_REPO_ROOT="$R14" run_sweep "case14"
+
+assert_contains "case14: cumulative armed age escalates even at wait_attempts 1" \
+  "capped-parked tactic-wait-src-a" "$ERR"
+assert_eq "case14: park-node invoked exactly once" "1" "$(park_log_lines)"
+assert_eq "case14: release-wait never invoked" "0" "$(release_log_lines)"
+
+# ============================================================================
+# Case 15 (rotation): a persistently failing candidate at the HEAD of the id
+# ordering must not monopolize the shared per-pass cap. `listWaitCandidates`
+# sorts by wait id ascending, so without the round-robin cursor `src-a` — which
+# fails every time — would spend the only slot on every tick forever and `src-b`
+# / `src-c` would be `deferred` for good, quietly, under `status=ok`.
+# ============================================================================
+echo "Case 15: a persistently failing head-of-list wait cannot starve the rest"
+reset_env
+R15="$(new_repo case15)"
+write_source "$R15" tactic-src-a "[tactic-wait-src-a]"; write_wait "$R15" tactic-src-a "$PAST" 1
+write_source "$R15" tactic-src-b "[tactic-wait-src-b]"; write_wait "$R15" tactic-src-b "$PAST" 1
+write_source "$R15" tactic-src-c "[tactic-wait-src-c]"; write_wait "$R15" tactic-src-c "$PAST" 1
+export RELEASE_FAIL_IDS="tactic-wait-src-a"
+export DISPATCH_WAIT_RECHECK_MAX=1
+export DISPATCH_WAIT_RECHECK_REPO_ROOT="$R15"
+
+run_sweep "case15-rotation pass1"
+assert_contains "case15-rotation: pass 1 spends its only slot on the failing head" \
+  "candidates=3 released=0 capped=0 observing=0 malformed=0 failed=1 deferred=2 backoff=0 escalated=0 status=ok" \
+  "$SUMMARY"
+assert_eq "case15-rotation: pass 1 attempted only the head" \
+  "tactic-wait-src-a" "$(cat "$RELEASE_LOG")"
+
+run_sweep "case15-rotation pass2"
+assert_contains "case15-rotation: pass 2 resumes AFTER the failing head" \
+  "released tactic-wait-src-b (unblocked tactic-src-b)" "$ERR"
+assert_eq "case15-rotation: pass 2 never re-attempted the failing head" "0" \
+  "$(grep -cF 'tactic-wait-src-a' "$RELEASE_LOG")"
+
+unset DISPATCH_WAIT_RECHECK_MAX
+unset DISPATCH_WAIT_RECHECK_REPO_ROOT
+
+# ============================================================================
+# Case 16 (backoff): a failed write arms a per-node skip window, so the failing
+# wait spends NO slot on the next pass at all.
+# ============================================================================
+echo "Case 16: a failed write backs the wait off for the following pass"
+reset_env
+R16="$(new_repo case16)"
+write_source "$R16" tactic-src-a "[tactic-wait-src-a]"; write_wait "$R16" tactic-src-a "$PAST" 1
+write_source "$R16" tactic-src-b "[tactic-wait-src-b]"; write_wait "$R16" tactic-src-b "$PAST" 1
+export RELEASE_FAIL_IDS="tactic-wait-src-a"
+export DISPATCH_WAIT_RECHECK_REPO_ROOT="$R16"
+
+run_sweep "case16-backoff pass1"
+assert_contains "case16-backoff: pass 1 records the failure" \
+  "candidates=2 released=1 capped=0 observing=0 malformed=0 failed=1 deferred=0 backoff=0 escalated=0 status=ok" \
+  "$SUMMARY"
+
+run_sweep "case16-backoff pass2"
+assert_contains "case16-backoff: pass 2 skips the failing wait instead of retrying it" \
+  "backoff-skipped (tactic-wait-src-a has failed 1 consecutive write attempts" "$ERR"
+assert_contains "case16-backoff: pass 2 counts the skip and still releases the sibling" \
+  "candidates=2 released=1 capped=0 observing=0 malformed=0 failed=0 deferred=0 backoff=1 escalated=0 status=ok" \
+  "$SUMMARY"
+assert_eq "case16-backoff: pass 2 invoked release-wait for the sibling only" \
+  "tactic-wait-src-b" "$(cat "$RELEASE_LOG")"
+
+unset DISPATCH_WAIT_RECHECK_REPO_ROOT
+
+# ============================================================================
+# Case 17 (escalation): a wait whose writer refuses forever is retired to office
+# hours rather than retried until the heat death of the fleet — parked on its
+# OWN id, carrying its own wait_reason verbatim inside the failure narrative.
+# ============================================================================
+echo "Case 17: a wait at the consecutive-failure threshold escalates to office hours"
+reset_env
+R17="$(new_repo case17)"
+write_source "$R17" tactic-src-a "[tactic-wait-src-a]"; write_wait "$R17" tactic-src-a "$PAST" 1
+export RELEASE_FAIL_IDS="tactic-wait-src-a"
+export DISPATCH_WAIT_RECHECK_FAIL_ESCALATE=2
+# 0 disables the skip window, so the second failure lands on the very next pass.
+export DISPATCH_WAIT_RECHECK_BACKOFF_MAX=0
+export DISPATCH_WAIT_RECHECK_REPO_ROOT="$R17"
+
+run_sweep "case17-escalation pass1"
+assert_eq "case17-escalation: the first failure escalates nothing" "0" "$(park_log_lines)"
+
+run_sweep "case17-escalation pass2"
+assert_contains "case17-escalation: the threshold failure is escalated" \
+  "escalated tactic-wait-src-a to office hours (2 consecutive failed release-wait attempts" "$ERR"
+assert_contains "case17-escalation: the summary counts the escalation" \
+  "candidates=1 released=0 capped=0 observing=0 malformed=0 failed=1 deferred=0 backoff=0 escalated=1 status=ok" \
+  "$SUMMARY"
+assert_eq "case17-escalation: park-node invoked exactly once" "1" "$(park_log_lines)"
+assert_eq "case17-escalation: parked the WAIT's own id, never the source's" \
+  "tactic-wait-src-a" "$(awk 'NR==1' "$PARK_ARGV_LOG")"
+assert_contains "case17-escalation: the park reason carries the node's own wait_reason" \
+  "$REASON" "$(awk 'NR==2' "$PARK_ARGV_LOG")"
+assert_contains "case17-escalation: the park recommendation carries the node's own recommendation" \
+  "$RECOMMENDATION" "$(awk 'NR==3' "$PARK_ARGV_LOG")"
+
+unset DISPATCH_WAIT_RECHECK_FAIL_ESCALATE
+unset DISPATCH_WAIT_RECHECK_BACKOFF_MAX
+unset DISPATCH_WAIT_RECHECK_REPO_ROOT
+reset_env
 
 report_results
