@@ -612,6 +612,8 @@ assert_eq "unreadable ceiling: probe not consulted" "0" \
 DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
 assert_eq "unreadable ceiling: decision log .skip_reason" "at-cap-ceiling-unreadable" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+assert_eq "unreadable ceiling: decision log .max_workers is null" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- at-cap: crashed dispatch-target-workers --max closes the lane (item 9) ----
@@ -643,6 +645,8 @@ assert_eq "crashed max: probe not consulted" "0" \
 DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
 assert_eq "crashed max: decision log .skip_reason" "at-cap-ceiling-unreadable" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.skip_reason')"
+assert_eq "crashed max: decision log .max_workers is null" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- exhausted at cap: neither probe runs (hard floor) -------------------------
@@ -1147,6 +1151,9 @@ case "$err" in
 esac
 assert_eq "non-numeric TARGET_N → error + exit 2" "ok" "$status"
 assert_eq "non-numeric TARGET_N: lock released" "" "$(cat "$DISPATCH_LOCK_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "non-numeric TARGET_N: decision log .max_workers resolved before the guard" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- TARGET_N validation: empty stdout → release + exit 2 (#1315) ------------
@@ -1240,6 +1247,29 @@ out=$(run_sel_tick) || true
 assert_eq "under-cap: decision line" "graph 1 t1:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "under-cap: gap drives the graph fan-out width (4 − 1 = 3)" "--top 3" \
   "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "under-cap: decision log .target_n" "4" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.target_n')"
+assert_eq "under-cap: decision log .max_workers" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
+sel_tick_teardown
+
+# --- throttled ceiling shape is visible in the decision log (2026-08-01) -----
+# Before Unit 1, a throttled ceiling (MAX_WORKERS < the usual default) was
+# invisible on the decision line — only target_n appeared, so an operator
+# reading the log could not tell a deliberately-throttled ceiling apart from a
+# normal low pace-curve target. This locks in that the ceiling now appears
+# alongside target_n under cap.
+echo "Test: select-tick throttled ceiling (2026-08-01 shape) is visible in the decision log"
+sel_tick_setup
+export SEL_LIVE_COUNT=0 SEL_TARGET_N=1 SEL_MAX_WORKERS=1
+export SEL_GRAPH_TARGET="node t1 tactic implement"
+out=$(run_sel_tick) || true
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "throttled-ceiling: decision log .target_n" "1" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.target_n')"
+assert_eq "throttled-ceiling: decision log .max_workers" "1" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- daemon UNKNOWN → fails CLOSED to concurrency-cap, reseed armed ----------
@@ -1420,6 +1450,9 @@ sel_tick_setup
 export SEL_LIVE_COUNT=6 SEL_TARGET_N=10 SEL_GRAPH_TARGET="node t1 tactic implement"
 out=$(run_sel_tick --manual)
 assert_eq "manual-gap-clamped: graph selector called --top 2 (headroom clamps gap)" "--top 2" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "manual-gap-clamped: decision log .max_workers" "8" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # Case 4: at-max-live. LIVE=8 → HEADROOM=0 → per human-dispatch-is-sovereign the
@@ -1717,6 +1750,9 @@ assert_eq "node-explicit at-cap: decision line" "graph 1 foo-bar:tactic:implemen
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "node-explicit at-cap: graph selector called --node <id> (not --top)" \
   "--node foo-bar" "$(cat "$TMPDIR_TEST/logs/graph-select.log")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "node-explicit at-cap: decision log .max_workers is null (no ceiling consulted)" "null" \
+  "$(tail -n1 "$DLOG_FILE" | jq -r '.max_workers')"
 sel_tick_teardown
 
 # --- explicit node-id, stale reservation reclaimed by sweep → still selects ---
