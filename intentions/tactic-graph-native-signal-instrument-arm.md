@@ -54,7 +54,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-native-signal-instrument-arm
   pr: 3060
@@ -66,7 +66,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T08:44:56Z
+    mergeCommitSha: 19d401fb266fdb75c98ad962b211cb4d18a3d2da
+    graphCommitSha: null
 validates:
   - strategy-graph-native-dispatch
 blocked_by: []
