@@ -48,39 +48,7 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Two needs-main residue items require author judgment, not tooling: (12)
-    whether the OVERRIDE-vs-CONFIRM office_hours recommendation text on a
-    delete/modify divergence is actionable enough that an operator can pick
-    correctly without reconstructing the git race from history is a subjective
-    readability/UX-sufficiency call; (13) whether re-materializing a deleted
-    node's edit as a local, untracked, human-arbitrated file is the right
-    operator-facing default for graph-commit's delete/modify divergence handling
-    is a product-intent/policy decision about graph-writer semantics. Neither
-    has a mechanical pass/fail check."
-  since: 2026-08-10
-  recommendation: "No MACHINE items on this node's needs-main residue -- both
-    items were pre-marked Verifiability: AUTHOR and nothing else needed
-    checking. Verified by reading current code
-    (packages/intentionsutil/scripts/graph-commit:1839-1867,
-    test-graph-commit.sh:212-223, Case 53 at line 2089): the shipped behavior is
-    NOT 'resurrect the deleted node onto origin/main with a park attached' as
-    item 13's finding text states -- that description is stale. Current
-    behavior: the landed deletion always STANDS on origin/main; nothing is ever
-    auto-pushed back; the session's edit is re-materialized ONLY as a local
-    untracked worktree file carrying office_hours, and the human must explicitly
-    pick one of two actions to clear the park -- OVERRIDE (re-run graph-commit
-    on the re-materialized file to re-land it) or CONFIRM (rm the file, since
-    main already reflects the deletion). Decide: (12) read that OVERRIDE/CONFIRM
-    recommendation text (graph-commit:1858-1867) and confirm an operator can act
-    on it without digging through git history, editing the copy if not; (13)
-    confirm this local-only, human-arbitrated re-materialization (never
-    auto-landed on main) is the intended default policy, or direct a change --
-    note the question is narrower than originally posed since no autonomous
-    session ever overrides a landed deletion under the current implementation.
-    Source PR #2936 merged 2026-08-10T09:50:52Z; clearing this park requires
-    resolving both items."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
