@@ -34,7 +34,7 @@
 #   hold-node <source-node-id>
 #             --kind <provision-conflict|fix-attempt-cap|worktree-residue>
 #             --reason-file <f> --recommendation-file <f>
-#             [--body-file <f>] [--reset-fix-attempt]
+#             [--body-file <f>] [--reset-fix-attempt] [--reset-fix-cycle]
 #
 # --reason-file / --recommendation-file are FILES (not inline strings): both are
 #   multi-line diagnostic text, passed through to hold-node-decide.ts verbatim.
@@ -42,6 +42,12 @@
 # --reset-fix-attempt: additionally reset the SOURCE's `execution.fix.attempt`
 #   counter (see the call site below for why it must happen here, not in the
 #   caller).
+# --reset-fix-cycle: additionally reset the SOURCE's LIFETIME
+#   `execution.attempts[FIX_CYCLE_ATTEMPT_KEY]` cross-cycle counter (distinct
+#   from --reset-fix-attempt's in-episode counter — see apply-fix-state.ts's
+#   `--reset-cycle`). Called by `reconcile-graph-review-stall` when it lands a
+#   cross-cycle-cap hold, so resolving the hold gives the node a fresh
+#   lifetime budget rather than leaving it permanently capped.
 #
 # Stdout: exactly one line — `held <hold-id> (<disposition>)`, where
 # <disposition> is NONE (born fresh) | EXISTING (re-entry on an open hold) |
@@ -61,7 +67,7 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 APPLY_FIX_TS="$SCRIPT_DIR/apply-fix-state.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap|worktree-residue> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt]"
+USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap|worktree-residue> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt] [--reset-fix-cycle]"
 
 SOURCE_ID=""
 KIND=""
@@ -69,6 +75,7 @@ REASON_FILE=""
 RECOMMENDATION_FILE=""
 BODY_FILE=""
 RESET_FIX_ATTEMPT=0
+RESET_FIX_CYCLE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --kind) KIND="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
@@ -76,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     --recommendation-file) RECOMMENDATION_FILE="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
     --body-file) BODY_FILE="${2:-}"; shift 2 || { echo "$USAGE" >&2; exit 2; } ;;
     --reset-fix-attempt) RESET_FIX_ATTEMPT=1; shift ;;
+    --reset-fix-cycle) RESET_FIX_CYCLE=1; shift ;;
     -*) echo "hold-node: unknown option \"$1\"" >&2; echo "$USAGE" >&2; exit 2 ;;
     *)
       if [[ -n "$SOURCE_ID" ]]; then
@@ -229,6 +237,13 @@ SOURCE_CHANGED=0
 if [[ "$RESET_FIX_ATTEMPT" == 1 ]]; then
   if ! (cd "$REPO_ROOT" && node --import tsx/esm "$APPLY_FIX_TS" "$SOURCE_ID" --reset-attempt) >/dev/null; then
     echo "hold-node: apply-fix-state --reset-attempt failed for $SOURCE_ID" >&2
+    exit 1
+  fi
+  SOURCE_CHANGED=1
+fi
+if [[ "$RESET_FIX_CYCLE" == 1 ]]; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$APPLY_FIX_TS" "$SOURCE_ID" --reset-cycle) >/dev/null; then
+    echo "hold-node: apply-fix-state --reset-cycle failed for $SOURCE_ID" >&2
     exit 1
   fi
   SOURCE_CHANGED=1

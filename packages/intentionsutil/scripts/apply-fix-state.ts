@@ -57,29 +57,64 @@
 //                      the point it lands the tracked hold. Errors if no
 //                      interrupt is set.
 //
+//   --check-cycle-cap  Pure read of the CROSS-CYCLE cap (`FIX_CYCLE_CAP`,
+//                      `src/transitions.ts`), distinct from `--check-cap`:
+//                      that mode bounds retries WITHIN one open interrupt
+//                      episode, this one bounds LIFETIME fresh entries
+//                      (`execution.attempts[FIX_CYCLE_ATTEMPT_KEY]`, never
+//                      reset by `--clear-fix`). Makes NO write, and — unlike
+//                      every other read/write mode above — does NOT require
+//                      an active interrupt: it is meant to be checked BEFORE
+//                      `--set-fix`, to decide whether a fresh entry should be
+//                      allowed at all. Called by `reconcile-graph-review-stall`
+//                      before re-entering the interrupt on a stalled review.
+//
+//   --reset-cycle      Write-only: resets `execution.attempts[FIX_CYCLE_ATTEMPT_KEY]`
+//                      to 0, giving a human-resolved cross-cycle hold a fresh
+//                      lifetime budget. Called by `hold-node --reset-fix-cycle`
+//                      at the point it lands a cross-cycle-cap hold. Does not
+//                      require an active interrupt (mirrors `--check-cycle-cap`).
+//
 // Usage:
 //   node --import tsx/esm apply-fix-state.ts <node-id> \
-//     (--set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --check-cap | --reset-attempt) \
+//     (--set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --check-cap | \
+//      --reset-attempt | --check-cycle-cap | --reset-cycle) \
 //     [--dir <intentions-dir>]
 //
 // Stdout: one JSON object, shape per mode —
-//   set-fix:        { "mode": "set",         "id", "attempt": <n>, "since": <date>, "wrote": true }
-//   clear-fix:      { "mode": "clear",       "id", "phase": <resolved>, "reset": bool, "wrote": true }
-//   record-push:    { "mode": "record",      "id", "pushed_sha": <sha>, "wrote": true }
-//   spend-attempt:  { "mode": "spend",       "id", "attempt": <n>, "wrote": true }
-//   check-cap:      { "mode": "check-cap",   "id", "capped": bool, "consumed": <n>, "attempt": <n> }
-//   reset-attempt:  { "mode": "reset-attempt", "id", "wrote": true, "attempt": 1 }
+//   set-fix:         { "mode": "set",         "id", "attempt": <n>, "since": <date>, "wrote": true }
+//   clear-fix:       { "mode": "clear",       "id", "phase": <resolved>, "reset": bool, "wrote": true }
+//   record-push:     { "mode": "record",      "id", "pushed_sha": <sha>, "wrote": true }
+//   spend-attempt:   { "mode": "spend",       "id", "attempt": <n>, "wrote": true }
+//   check-cap:       { "mode": "check-cap",   "id", "capped": bool, "consumed": <n>, "attempt": <n> }
+//   reset-attempt:   { "mode": "reset-attempt", "id", "wrote": true, "attempt": 1 }
+//   check-cycle-cap: { "mode": "check-cycle-cap", "id", "wrote": false, "cycles": <n>, "cycleCapped": bool }
+//   reset-cycle:     { "mode": "reset-cycle", "id", "wrote": true, "cycles": 0 }
 
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readNode, writeNode } from "../src/store.js";
 import type { Execution, FixState } from "../src/schema.js";
-import { FIX_ATTEMPT_CAP, REVIEWED_MARKER } from "../src/transitions.js";
+import {
+  FIX_ATTEMPT_CAP,
+  FIX_CYCLE_ATTEMPT_KEY,
+  FIX_CYCLE_CAP,
+  incrementAttempt,
+  REVIEWED_MARKER,
+} from "../src/transitions.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(dirname(dirname(scriptDir)));
 
-type Mode = "set" | "clear" | "record" | "spend" | "check-cap" | "reset-attempt";
+type Mode =
+  | "set"
+  | "clear"
+  | "record"
+  | "spend"
+  | "check-cap"
+  | "reset-attempt"
+  | "check-cycle-cap"
+  | "reset-cycle";
 
 interface Args {
   id: string;
@@ -101,7 +136,7 @@ export function parseArgs(argv: string[]): Args {
   const setMode = (m: Mode): void => {
     if (mode !== null) {
       throw new Error(
-        "apply-fix-state: --set-fix, --clear-fix, --record-push, --spend-attempt, --check-cap, and --reset-attempt are mutually exclusive",
+        "apply-fix-state: --set-fix, --clear-fix, --record-push, --spend-attempt, --check-cap, --reset-attempt, --check-cycle-cap, and --reset-cycle are mutually exclusive",
       );
     }
     mode = m;
@@ -133,6 +168,12 @@ export function parseArgs(argv: string[]): Args {
       case "--reset-attempt":
         setMode("reset-attempt");
         break;
+      case "--check-cycle-cap":
+        setMode("check-cycle-cap");
+        break;
+      case "--reset-cycle":
+        setMode("reset-cycle");
+        break;
       case "--dir": {
         const v = argv[++i];
         if (v === undefined || v === "") throw new Error("apply-fix-state: --dir requires a directory argument");
@@ -148,7 +189,7 @@ export function parseArgs(argv: string[]): Args {
   if (id === "") throw new Error("apply-fix-state: <node-id> is required");
   if (mode === null) {
     throw new Error(
-      "apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --check-cap | --reset-attempt is required",
+      "apply-fix-state: one of --set-fix | --clear-fix | --record-push <sha> | --spend-attempt | --check-cap | --reset-attempt | --check-cycle-cap | --reset-cycle is required",
     );
   }
   return { id, mode, pushedSha, dir };
@@ -177,6 +218,10 @@ export interface FixStateResult {
   capped?: boolean;
   /** check-cap: the count of attempts consumed so far (`attempt - 1`). */
   consumed?: number;
+  /** check-cycle-cap/reset-cycle: the lifetime fix-cycle count (`execution.attempts[FIX_CYCLE_ATTEMPT_KEY]`). */
+  cycles?: number;
+  /** check-cycle-cap: whether `cycles` is at or above `FIX_CYCLE_CAP`. */
+  cycleCapped?: boolean;
 }
 
 /** The node shape `applyFixState` mutates: a tactic with an `execution` block. */
@@ -199,7 +244,11 @@ function requireFix(currentFix: FixState | null, id: string, whatFor: string): F
 /**
  * `--set-fix`: enter the interrupt. Fresh when none is set; a defensive double-
  * call bumps `attempt` and preserves `since`/`pushed_sha` so an in-flight count
- * is not clobbered.
+ * is not clobbered. A genuinely fresh entry (`currentFix === null`) also bumps
+ * the LIFETIME `FIX_CYCLE_ATTEMPT_KEY` counter on `execution.attempts` — unlike
+ * `fix.attempt`, this survives `--clear-fix`, so it accumulates across
+ * enter/clear/re-stall cycles rather than resetting to 1 every time. The
+ * defensive double-call branch is not a new cycle, so it does not bump it.
  */
 function applySet(
   args: Args,
@@ -211,7 +260,9 @@ function applySet(
     currentFix === null
       ? { since: todayUtc(), attempt: 1, pushed_sha: null }
       : { ...currentFix, attempt: currentFix.attempt + 1 };
-  node.execution = { ...execution, fix };
+  const nextExecution: Execution =
+    currentFix === null ? incrementAttempt(execution, FIX_CYCLE_ATTEMPT_KEY) : execution;
+  node.execution = { ...nextExecution, fix };
   writeNode(args.dir, node);
   return { mode: "set", id: args.id, wrote: true, attempt: fix.attempt, since: fix.since };
 }
@@ -301,6 +352,47 @@ function applyCheckCap(
 }
 
 /**
+ * `--check-cycle-cap`: pure read of the CROSS-CYCLE cap. Makes NO write, and
+ * — unlike every other check/spend/clear/record/reset mode — does NOT require
+ * an active interrupt: `execution.fix` is null at the point this is meant to
+ * be called (BEFORE `--set-fix`, to decide whether a fresh entry should be
+ * allowed at all). Reports the lifetime fix-cycle count
+ * (`execution.attempts[FIX_CYCLE_ATTEMPT_KEY]`, defaulting to 0 when absent)
+ * and whether it has already reached `FIX_CYCLE_CAP`.
+ */
+function applyCheckCycleCap(
+  args: Args,
+  _node: TacticNode,
+  execution: Execution,
+  _currentFix: FixState | null,
+): FixStateResult {
+  const cycles = execution.attempts[FIX_CYCLE_ATTEMPT_KEY] ?? 0;
+  return {
+    mode: "check-cycle-cap",
+    id: args.id,
+    wrote: false,
+    cycles,
+    cycleCapped: cycles >= FIX_CYCLE_CAP,
+  };
+}
+
+/**
+ * `--reset-cycle`: write-only reset of `execution.attempts[FIX_CYCLE_ATTEMPT_KEY]`
+ * to 0, giving a human-resolved cross-cycle-cap hold a fresh lifetime budget.
+ * Does not require an active interrupt (mirrors `--check-cycle-cap`).
+ */
+function applyResetCycle(
+  args: Args,
+  node: TacticNode,
+  execution: Execution,
+  _currentFix: FixState | null,
+): FixStateResult {
+  node.execution = { ...execution, attempts: { ...execution.attempts, [FIX_CYCLE_ATTEMPT_KEY]: 0 } };
+  writeNode(args.dir, node);
+  return { mode: "reset-cycle", id: args.id, wrote: true, cycles: 0 };
+}
+
+/**
  * `--reset-attempt`: write-only reset of `execution.fix.attempt` to 1,
  * preserving `since`/`pushed_sha` and the ladder `phase`, giving a
  * human-cleared (or newly-held) node a fresh budget. Called by
@@ -344,6 +436,8 @@ const MODE_HANDLERS: Record<
   spend: applySpend,
   "check-cap": applyCheckCap,
   "reset-attempt": applyResetAttempt,
+  "check-cycle-cap": applyCheckCycleCap,
+  "reset-cycle": applyResetCycle,
   record: applyRecord,
 };
 

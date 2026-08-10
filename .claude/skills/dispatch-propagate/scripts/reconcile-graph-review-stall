@@ -42,6 +42,10 @@
 #
 # Stdout protocol, one line per tactic acted on; NOTHING for a skip:
 #   recovered <id> -> fix (ci=<verdict> merge=<state>)
+#   held <id> -> fix-cycle-cap (cycles=<n>)   — the lifetime cross-cycle cap
+#     (FIX_CYCLE_CAP, src/transitions.ts) is exhausted; a tracked hold was
+#     landed instead of a fresh execution.fix entry (see
+#     _hold_node_review_stall_cycle_cap below).
 #
 # Exit codes: 0 always (including a no-op sweep and any per-node error —
 # best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
@@ -59,10 +63,14 @@
 # this sweep, and dispatch-acquire-lock reclaims a holder whose heartbeat is
 # older than MAX_HOLD_SECONDS (default 300s). A graph-commit can block far
 # longer than that (it waits on the global landing lock for up to
-# LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST ONE
-# graph-commit per tick: every `fix`-routed node's `--set-fix` write is
-# batched into ONE commit (exactly as reconcile-graph-merged batches its plan).
-# Per-tick actions are
+# LOCK_WAIT_SECONDS, default 1050s), so every `fix`-routed node's `--set-fix`
+# write is batched into ONE commit (exactly as reconcile-graph-merged batches
+# its plan) rather than one graph-commit per node. A cross-cycle-cap hold
+# (`_hold_node_review_stall_cycle_cap`, below) is the one exception: hold-node
+# lands its OWN graph-commit synchronously, so a tick with both capped and
+# fresh-entry candidates can still make more than one graph-commit — the
+# heartbeat is refreshed immediately around each hold-node call for exactly
+# this reason. Per-tick actions are
 # additionally capped (GRAPH_REVIEW_STALL_CAP), and the lock heartbeat is
 # refreshed between candidates so the per-PR polling loop cannot age the lock
 # out on its own.
@@ -96,6 +104,55 @@ fi
 refresh_lock() {
   [[ -x "$SCRIPT_DIR/dispatch-acquire-lock" ]] || return 0
   "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
+# FIX_CYCLE_CAP mirrors packages/intentionsutil/src/transitions.ts's constant
+# of the same name (currently 3) — used only for the hold reason's diagnostic
+# prose below, never for the capped decision itself (that stays
+# apply-fix-state.ts's `--check-cycle-cap`, the single source of truth for the
+# comparison). Keep this literal in sync if the source constant changes.
+FIX_CYCLE_CAP=3
+
+# _hold_node_review_stall_cycle_cap <id> <pr> <cycles> — land a tracked hold
+# (reusing the `fix-attempt-cap` hold kind — graph-select-target's
+# `_hold_node_fix_cap` already covers the in-episode exhaustion case, and this
+# is the same remediation for the cross-cycle case: resolve the hold tactic to
+# get a fresh budget) once a node's LIFETIME fix-cycle count reaches
+# FIX_CYCLE_CAP, instead of entering another fresh `execution.fix` episode.
+# `--reset-fix-cycle` (not `--reset-fix-attempt`: there is no active interrupt
+# at this call site — enumeration already guarantees `execution.fix` is null)
+# gives the node a fresh cross-cycle budget once the hold is resolved. hold-node
+# lands its own graph-commit (fresh-origin/main refresh, hold node write, source
+# blocked_by edge), independent of this sweep's batched --set-fix land below.
+# Prints hold-node's stdout line on success; rc mirrors hold-node's own exit code.
+_hold_node_review_stall_cycle_cap() {
+  local id="$1" pr="$2" cycles="$3"
+  local tmpdir reason_file rec_file rc
+  tmpdir=$(mktemp -d) || return 1
+  reason_file="$tmpdir/reason.txt"
+  rec_file="$tmpdir/recommendation.txt"
+  {
+    printf 'reconcile-graph-review-stall: %s has entered and resolved the CI-fix ' "$id"
+    printf 'interrupt %s time(s) on PR #%s without landing a stable review — the ' \
+      "$cycles" "$pr"
+    printf 'cross-cycle cap of %s is exhausted. Each prior episode cleared with a fresh ' \
+      "$FIX_CYCLE_CAP"
+    printf 'attempt:1 budget (the in-episode FIX_ATTEMPT_CAP alone cannot stop this thrash).\n'
+  } > "$reason_file"
+  {
+    printf 'Review PR #%s to diagnose why review keeps stalling on repeated CI regressions ' "$pr"
+    printf "(the node's worktree tmp/fix-checks-summary.md across episodes, and PR comments, "
+    printf 'carry the per-episode diagnosis). Resolve THIS HOLD TACTIC (phase: done, then '
+    printf 'prune) to unblock %s with a fresh cross-cycle budget, or abandon/redesign the ' "$id"
+    printf 'tactic if the current approach cannot work.\n'
+  } > "$rec_file"
+
+  ( cd "$REPO_ROOT" && packages/intentionsutil/scripts/hold-node "$id" --kind fix-attempt-cap \
+      --reason-file "$reason_file" --recommendation-file "$rec_file" --reset-fix-cycle ) \
+    >/dev/null 2>&1
+  rc=$?
+  rm -rf "$tmpdir"
+  return $rc
 }
 
 # --- Rollback path for the staged --set-fix writes ---------------------------
@@ -221,6 +278,36 @@ while IFS=$'\t' read -r id pr; do
 
   case "$ROUTE" in
     fix)
+      # Cross-cycle cap (tactic-graph-review-exclusion-stall-recovery-main-qa-
+      # regression, needs-main residue item 9): `--set-fix` below would start a
+      # FRESH `execution.fix` episode (this candidate's enumeration already
+      # guarantees no interrupt is active), and `--clear-fix` never resets
+      # `execution.attempts[FIX_CYCLE_ATTEMPT_KEY]` — so a node that repeatedly
+      # enters this branch, resolves, and re-stalls would otherwise get a fresh
+      # `attempt: 1` budget every cycle and thrash indefinitely. Check the
+      # lifetime cap BEFORE entering; a capped node is routed to a tracked hold
+      # instead of a fresh entry.
+      cycle_out=$(node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --check-cycle-cap --dir "$REPO_ROOT/intentions" 2>/dev/null) || {
+        echo "reconcile-graph-review-stall: apply-fix-state --check-cycle-cap failed for $id" >&2
+        continue
+      }
+      if [[ "$(jq -r '.cycleCapped' <<<"$cycle_out" 2>/dev/null)" == "true" ]]; then
+        cycles=$(jq -r '.cycles' <<<"$cycle_out" 2>/dev/null)
+        # hold-node lands its OWN graph-commit (fresh-origin/main refresh +
+        # write + land), separate from this sweep's batched --set-fix land —
+        # a potentially lock-blocking call, so refresh the heartbeat around it
+        # exactly as the batched land does below.
+        refresh_lock
+        if _hold_node_review_stall_cycle_cap "$id" "$pr" "$cycles"; then
+          echo "held $id -> fix-cycle-cap (cycles=$cycles)"
+          ACTED=$(( ACTED + 1 ))
+        else
+          echo "reconcile-graph-review-stall: hold-node --kind fix-attempt-cap (cycle cap) failed for $id" >&2
+        fi
+        refresh_lock
+        continue
+      fi
+
       # Snapshot the node's origin/main blob BEFORE staging the write, so any
       # later failure (this write, or the batched land below) restores a clean
       # tree. A candidate with no origin/main blob has no rollback path — skip
