@@ -3,41 +3,17 @@
 # Both the WSL package (wezterm.nix, built from source at `rev`) and the Windows
 # GUI binary (wezterm-windows.nix, the matching nightly zip) are pinned to the
 # SAME upstream build here, so the mux client (Windows GUI) and server (WSL
-# wezterm-mux-server) always speak the same PDU protocol version. Drift between
-# the two is what makes the GUI window close on connect with a version error.
-#
-# Why a pin at all: upstream distributes exactly ONE Windows nightly zip (the
-# latest), overwriting it in place, while nixpkgs pins a *snapshot* nightly by
-# commit. Left to their own devices the two sides only match by luck. Pinning
-# both to one commit here makes the match deterministic and reproducible.
+# wezterm-mux-server) always speak the same PDU protocol version.
 #
 # `version` is authoritative and is read from the distributed Windows binary
 # itself (the zip's internal `WezTerm-windows-<version>` directory name), NOT
-# the upstream `nightly` git ref — that ref is frequently stale and points at a
-# different commit than the published assets.
+# the upstream `nightly` git ref — that ref is frequently stale.
 #
-# Regenerate on every deliberate upgrade with:  nix/home/sync-wezterm.sh
-# (that script resolves the current nightly commit + all three hashes and
-# rewrites this file atomically). Do not hand-edit the hashes.
+# Regenerate with:  nix/home/sync-wezterm.sh  (do not hand-edit the hashes).
 {
-  # <date>-<time>-<shorthash> from the Windows zip's directory name.
-  version = "20260716-195552-76b606ec";
-
-  # Full commit the above build corresponds to.
-  rev = "76b606ec597a3c0263fa60321548637451c0a547";
-
-  # NAR hash of the wezterm source tree (fetchSubmodules = true) at `rev`.
-  srcHash = "sha256-FLU1R78C1xLPsJ1udBk9bW0BbVry4lGiC0kvPfMI66c=";
-
-  # Vendored cargo dependencies hash for the source at `rev`.
-  cargoHash = "sha256-jY7lTOfbT74tAZ7he1xudCN7BUxZBzY+8+e1d2g2v4I=";
-
-  # SHA-256 of WezTerm-windows-nightly.zip as published for this build.
-  #
-  # NOTE: upstream re-uploads this asset for an UNCHANGED build — the zip bytes
-  # (and therefore this hash) can change while `version`/`rev` stay put. When CI
-  # reports a mismatch, first confirm the live zip still unpacks to
-  # WezTerm-windows-${version}; if it does, only this hash needs refreshing and
-  # the other four fields must be left alone.
-  windowsZipHash = "sha256-bTvVHVpB8Mh6g2lF2RB9Egs2IApanVb5Z1R2M9UCZZ8=";
+  version = "20260805-104032-4b1c3c15";
+  rev = "4b1c3c151eb530e569f867e1461693c56fe89695";
+  srcHash = "sha256-cZ5RDeHP9cBa1Qu6E96lRjKW4aC/wMJBZNpUZ2kAWuU=";
+  cargoHash = "sha256-4jm0uMj0/6fcLHSvd7y12h1QjQ/VavkmNc5L/ebQez0=";
+  windowsZipHash = "sha256-s/Jfeer9ELfFkYnzXMMPMbOQ42nQ3lxe7khksDHaGks=";
 }
