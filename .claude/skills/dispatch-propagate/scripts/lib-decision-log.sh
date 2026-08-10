@@ -43,7 +43,9 @@
 #
 # The decision log is WRITE-ONLY through this helper. The only operations on the
 # log file are: mkdir (its dir), stat (size), mv (rotate), and append
-# (printf >>). There is no read/parse path here by design.
+# (printf >>). No prior log CONTENT is ever read back or parsed here by design —
+# the log file is append-only through this helper. (The incoming ARGUMENT is a
+# separate matter: it is parsed once per call by `jq -c .` to canonicalize it.)
 #
 # Path:
 #   DECISION_LOG_FILE — the resolved log path, exported as a var for callers.
@@ -86,14 +88,9 @@ if [[ -z "${_LIB_DECISION_LOG_LOADED:-}" ]]; then
     # caller running under `set -e`.
     {
       # Canonicalize the caller's argument to single-line JSON up front, once,
-      # reused by both the flock and no-flock branches below. This is NOT the
-      # "no read/parse path" boundary the header describes — that note scopes
-      # what this helper does with the LOG FILE (it never reads back prior
-      # entries); this parses the incoming ARGUMENT on each call, which is a
-      # different boundary. If the argument is not valid JSON, `jq -c .` fails
-      # and the `&&` below short-circuits the whole wrapped block non-zero, so
-      # the append is skipped — the outer `return 0` still guarantees the
-      # function itself never propagates a failure to the caller.
+      # reused by both the flock and no-flock branches below. On invalid JSON,
+      # `jq -c .` exits non-zero and the `&&` chain short-circuits, so the
+      # append is skipped; the outer `return 0` still holds.
       local canonical_json
       canonical_json=$(printf '%s' "$json" | jq -c .) &&
 
