@@ -41,64 +41,74 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "(/align-tactics tactic-target round, 2026-07-31.) Drift review surfaced
-    one MATERIAL design premise this tactic's plan cannot be authored without,
-    and which the strategy does not record: WHERE THE DURABLE CLAIM ANCHOR
-    LIVES. Three options are live and the round's own gather evidence recommends
-    two of them in opposite directions. (a) A first-class graph field on the
-    node, following the Execution.fix / office_hours precedent
-    (packages/intentionsutil/src/schema.ts:399-444, validated at :554-564 and
-    :600-612). Cost: the spawn path carries NO graph write today — its only
-    claim-time write is reservation_mark_spawned
-    (.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:159) into
-    the file ledger — so this adds a graph-commit round trip (scratch branch + 4
-    CI checks, packages/intentionsutil/scripts/graph-commit:11-27) to every
-    node-worker spawn, a new per-selection write volume and landing-lock
-    contention that condition 2 prices as 'negligible at fleet concurrency'. (b)
-    An extension of the file reservation ledger
-    (.claude/skills/dispatch-propagate/scripts/lib-reservation-ledger.sh), which
-    already is a durable, atomically-written, project-root-relative record with
-    a sweep that reconciles against the daemon registry. Cost: sweep rule (a)
-    ('live-worker-redundant', :593-596) deliberately CLEARS the marker the
-    instant a live named session registers — handing authority back to the
-    registry at exactly the moment a freeze anchor must persist — so the option
-    requires reversing that ledger's documented pace-budget/dedup design intent,
-    the same class of unilateral reversal a 2026-07-31 clarification already
-    ruled out of a single tactic's scope for the busy-worker filter. (c) No new
-    record at all: a reconciler deriving 'a pass started and never declared'
-    from state that already lands durably (the provisioned node-id
-    worktree/branch, the PR). This is the crash-only reading the author DIVERGED
-    from on 2026-07-29 for the declaration marker, on the ground that
-    turn-yield-versus-terminal is knowledge only the session holds — but that
-    ground does not transfer to the claim side, where 'a pass started' IS
-    reconstructable from durable state, so the divergence does not settle it.
-    Cutting across all three: condition 10 records 'Breaker state never lives
-    outside the graph', and whether that binds the fuse's per-claim evidence
-    anchor or only the tripped-breaker incident record is unrecorded either way.
-    Four immaterial observations from this same drift review landed as dated
-    clarifications on strategy-graph-native-dispatch alongside this park (no
-    author action needed on those). Recommend: ratify, in a one-question
-    /align-strategy sitting citing this park, where the durable claim anchor
-    lives (graph field on the node vs. reservation-ledger extension vs. no new
-    record) and whether condition 10's 'Breaker state never lives outside the
-    graph' binds the fuse's per-claim evidence anchor or only the
-    tripped-breaker incident record; then clear this office_hours park and
-    re-run /align-tactics tactic-claim-containment-durable-anchor to finalize —
-    the round already produced a complete reuse set (worktree_has_live_session
-    at lib-claude-agents.sh:770-876 as the predicate to supersede; the
-    FixState/office_hours schema precedent; lib-reservation-ledger.sh's
-    write/sweep/origin-token machinery; check-node-selection.ts:141-178 for the
-    read-side helper shape; dispatch-reclaim-audit as the existing template for
-    quantifying how often registry loss actually strands a claim) and no
-    ordering blocker (tactic-router-failure-fuses records this node must be
-    planned first in its chain, before itself and before
-    tactic-terminal-declaration-verified-against-node)."
-  since: 2026-07-31
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Anchor a claimed node's freeze in durable state rather than the daemon-backed session registry, so a registry loss cannot silently free an undeclared pass without firing the fuse
+
+## Office-hours sitting 2026-08-10 — park cleared, anchor ratified
+
+This node has been born-parked since 2026-07-31 on WHERE THE DURABLE CLAIM
+ANCHOR LIVES. The 2026-08-09 park on
+`tactic-session-reap-authorization-durability` re-raised the identical
+question from the other side, so both were answered in one sitting.
+
+### Ratified answer
+
+**Option (a), the graph anchor — but written batched, not per spawn.** The
+claim is a first-class record in durable graph state, following the
+`Execution.fix` / `office_hours` optional-field precedent this node's park
+already cited. The selection loop issues ONE `graph-commit` per tick carrying
+every claim for that tick, **before** the workers spawn; `graph-commit` already
+accepts multiple node ids (`graph-commit:531`).
+
+This directly answers the cost objection recorded in this node's own park. The
+park priced option (a) as "a graph-commit round trip to every node-worker
+spawn", which is correct for a per-spawn write and was the reason the question
+went to the author. Batching removes it: cost becomes independent of fan-out
+width. Measured 2026-08-10 — ~92 graph landings/day baseline (1293 / 14d,
+peaking at 27/hour) against ~22 worker passes/day (312 transitions / 14d), so
+a per-spawn write adds only ~24% to landing volume, but puts a CI-stamped,
+globally-lock-serialized landing (`refs/graph/landing-lock`,
+`graph-commit:355`) on the spawn critical path — an N-wide fan-out serializes
+into N landings. One batched landing per tick does not.
+
+Issuing the batch before the spawns inverts the risk window to
+claimed-but-not-yet-spawned, which `reservation_sweep` already reconciles and
+which fails safe.
+
+### Option (b) is ruled out on doctrine, not on cost
+
+The reservation-ledger extension is rejected. Condition 10 of
+`strategy-graph-native-dispatch` governs the anchor directly: the containment
+holds only where "the freeze must anchor on durable graph state rather than on
+a process-level session registry". Ratified 2026-08-10 — that binds the
+per-claim evidence anchor, not merely the tripped-breaker incident record,
+which is the cross-cutting question this node's park raised.
+
+A ledger anchor may still be defensible one day, but it would be an
+**amendment** to condition 10, not a reading of it, and must be put to the
+author as such. This also avoids the independent problem the park identified:
+ledger sweep rule (a) `live-worker-redundant`
+(`lib-reservation-ledger.sh:662`) clears the marker the instant a live named
+session registers — the exact moment a freeze anchor must persist.
+
+### Option (c) is ruled out by the same condition
+
+A reconciler deriving "a pass started and never declared" from the provisioned
+worktree/branch and the PR anchors on state that is durable but is not graph
+state, so condition 10 excludes it on the same ground.
+
+## Ordering and scope
+
+`tactic-router-failure-fuses` records that this node must be planned first in
+its chain. That ordering leg is now satisfiable — this park is cleared. Its
+other leg (`tactic-terminal-declaration-verified-against-node`) remains parked
+on a genuinely different question, so the fuses node stays parked.
+
+This node and `tactic-session-reap-authorization-durability` now share one
+design. That node was rescoped in the same sitting onto the surviving
+claim/release deliverable, so the two must be planned together or merged by
+the next `/align-tactics` round rather than each planning the same write.

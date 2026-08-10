@@ -4774,6 +4774,35 @@ clarifications:
       idempotency/tactic-target references. The sensor implementer may reuse
       align-tactics-census.ts's classify() (draft/born-parked/open/done, lines
       23-30) without a pending-retirement hazard."
+  - question: Does condition 10's 'Breaker state never lives outside the graph'
+      bind the per-claim evidence anchor for a node's freeze, or only the
+      tripped-breaker incident record? And where is the claim written?
+    answer: "Ratified in the 2026-08-10 office-hours sitting, clearing the parks on
+      tactic-claim-containment-durable-anchor (born-parked 2026-07-31) and
+      tactic-session-reap-authorization-durability (parked 2026-08-09) with one
+      answer. (i) IT BINDS THE PER-CLAIM ANCHOR. Condition 10's own closing text
+      is the governing sentence: the containment holds only where 'the freeze
+      must anchor on durable graph state rather than on a process-level session
+      registry'. That is about the freeze anchor, not merely the tripped-breaker
+      incident record. Consequence: a reservation-ledger anchor (option b of the
+      2026-07-31 park) and a reconciler derived from worktree/branch/PR (option
+      c) are both excluded — durable, but not graph state. Either may still be
+      adopted later, but only as an AMENDMENT to this condition, never as a
+      reading of it. (ii) THE CLAIM IS WRITTEN BATCHED, ONE graph-commit PER
+      SELECTION TICK, ISSUED BEFORE THE SPAWNS — not per spawn in
+      provision-node-worktree, which is the shape the 2026-08-09 sitting ratified
+      without pricing. Measured 2026-08-10: provision-node-worktree performs no
+      graph write today (only reservation_mark_spawned at
+      dispatch-graph-execute:159); baseline ~92 landings/day (1293/14d, peak
+      27/hour) against ~22 worker passes/day (312 transitions/14d), so a
+      per-spawn write adds only ~24% to landing VOLUME but places a CI-stamped
+      landing serialized behind the global refs/graph/landing-lock
+      (graph-commit:355) on the spawn critical path, where an N-wide fan-out
+      serializes into N landings. Batching makes the cost independent of fan-out
+      width, which is what the contention condition's 'negligible at fleet
+      concurrency' requires. Issuing the batch BEFORE spawning inverts the risk
+      window to claimed-but-not-yet-spawned, which reservation_sweep already
+      reconciles and which fails safe."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
