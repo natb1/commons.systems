@@ -61,7 +61,15 @@ attention:
     outrank their own remedy."
   tier: 1
 phase: implement
-execution: null
+execution:
+  branch: tactic-node-verify-fence-dead-test-path-sweep
+  pr: null
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
