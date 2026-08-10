@@ -26,7 +26,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  rsi_cost: 1
 ---
 
 ## Draft context (2026-08-10 /align interview; re-scoped same-day review round)
