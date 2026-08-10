@@ -8,6 +8,7 @@ import {
   SUMMARY_STALE_DAYS,
   attributeSpend,
   daysBetween,
+  externalLedgersOf,
   queueSummaryOf,
   renderRsiPlan,
   rsiTaskCost,
@@ -444,5 +445,96 @@ describe("renderRsiPlan", () => {
     ]);
     const md = renderRsiPlan(input({ nodes })).markdown;
     expect(md.indexOf("strategy-tier-three")).toBeLessThan(md.indexOf("strategy-boosted"));
+  });
+});
+
+describe("externalLedgersOf", () => {
+  it("reads well-formed entries in order, trimming", () => {
+    const n = node({
+      id: "s",
+      kind: "strategy",
+      attributes: {
+        external_ledgers: [
+          { path: "  /a/one.md  ", note: "  carries the traps  " },
+          { path: "/b/two.md", note: "carries the recipes" },
+        ],
+      },
+    });
+    expect(externalLedgersOf(n)).toEqual([
+      { path: "/a/one.md", note: "carries the traps" },
+      { path: "/b/two.md", note: "carries the recipes" },
+    ]);
+  });
+
+  it("returns [] for absent, non-array, or empty values", () => {
+    expect(externalLedgersOf(undefined)).toEqual([]);
+    expect(externalLedgersOf(node({ id: "s" }))).toEqual([]);
+    expect(
+      externalLedgersOf(node({ id: "s", attributes: { external_ledgers: "one.md" } })),
+    ).toEqual([]);
+    expect(externalLedgersOf(node({ id: "s", attributes: { external_ledgers: [] } }))).toEqual(
+      [],
+    );
+  });
+
+  it("skips malformed entries without dropping well-formed siblings", () => {
+    const n = node({
+      id: "s",
+      kind: "strategy",
+      attributes: {
+        external_ledgers: [
+          "bare string",
+          { path: "/keep.md", note: "kept" },
+          { path: "", note: "no path" },
+          { path: "/no-note.md", note: "   " },
+          { path: 42, note: "wrong type" },
+        ],
+      },
+    });
+    expect(externalLedgersOf(n)).toEqual([{ path: "/keep.md", note: "kept" }]);
+  });
+});
+
+describe("renderRsiPlan §7 external ledgers", () => {
+  function withLedgers(ledgers: unknown): IntentionNode[] {
+    return baseNodes([
+      node({
+        id: RSI_STRATEGY_ID,
+        kind: "strategy",
+        attributes: { external_ledgers: ledgers },
+      }),
+    ]);
+  }
+
+  it("renders each ledger's path and note", () => {
+    const md = renderRsiPlan(
+      input({
+        nodes: withLedgers([
+          { path: "~/.claude/plans/prototype.md", note: "invariants I13-I30, not yet absorbed" },
+        ]),
+      }),
+    ).markdown;
+    expect(md).toContain("## 7. External operational ledgers");
+    expect(md).toContain("`~/.claude/plans/prototype.md`");
+    expect(md).toContain("invariants I13-I30, not yet absorbed");
+  });
+
+  it("omits the section entirely when no ledger is recorded", () => {
+    expect(renderRsiPlan(input()).markdown).not.toContain("External operational ledgers");
+    expect(renderRsiPlan(input({ nodes: withLedgers([]) })).markdown).not.toContain(
+      "External operational ledgers",
+    );
+  });
+
+  it("raises no flag for an absent ledger list — an empty ledger is the goal state", () => {
+    expect(renderRsiPlan(input()).flags.some((f) => f.subject === RSI_STRATEGY_ID
+      && f.detail.includes("ledger"))).toBe(false);
+  });
+
+  it("renders §7 last, after the task plan", () => {
+    const md = renderRsiPlan(
+      input({ nodes: withLedgers([{ path: "/p.md", note: "n" }]) }),
+    ).markdown;
+    expect(md.indexOf("## 7.")).toBeGreaterThan(md.indexOf("## 6."));
   });
 });
