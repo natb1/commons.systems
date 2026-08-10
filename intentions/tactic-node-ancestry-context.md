@@ -33,8 +33,7 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-node-ancestry-context
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
