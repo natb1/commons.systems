@@ -137,9 +137,27 @@ if [ "$RUN_DS_DRIFT" = true ]; then
   fi
 fi
 
+# Run verify-fence path lint — UNCONDITIONALLY, on every PR.
+#
+# Deliberately not gated on RUN_PROSE or any other changed-files flag. The
+# failure this catches is a DELETION that orphans a path named inside a live
+# intention node's ```verify fence, and every changed-files gate here stats the
+# path on disk (RUN_PROSE comes from lib.sh's is_shell_script, which returns
+# false for a file this diff deleted). Gating it would leave exactly the case it
+# exists to catch uncovered.
+echo "=== verify-fence path lint ==="
+if "$SCRIPTS/lint-verify-fence-paths.sh"; then
+  echo "PASS: verify-fence paths"
+else
+  echo "FAIL: verify-fence paths" >&2
+  FAILURES+=(verify-fence-paths)
+fi
+
+# The changed-files-scoped checks may all have been skipped; say so. This is no
+# longer an early exit — the unconditional check above always runs, so its
+# result must still reach the FAILURES tally below.
 if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_PROSE" = false ] && [ "$RUN_DS_DRIFT" = false ]; then
-  echo "No lint targets matched changed files. Nothing to check."
-  exit 0
+  echo "No changed-file lint targets matched. Only the unconditional checks ran."
 fi
 
 if [ ${#FAILURES[@]} -gt 0 ]; then
