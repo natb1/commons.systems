@@ -46,7 +46,7 @@ attention:
     with other tier-2 improvement work, without contending with active
     reliability fixes (top-of-band ~55-61)."
   tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-review-skill-body-decomposition
   pr: 3025
@@ -58,7 +58,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T00:00:19Z
+    mergeCommitSha: 7d64646be6cc323ee0ab320b77d3ed7dd492caf2
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
