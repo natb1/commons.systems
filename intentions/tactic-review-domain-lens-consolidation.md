@@ -15,7 +15,6 @@ rationale: "Surfaced by the 2026-07-31 review-fix token audit interview.
   tactic-review-api-cost-lens-merge's classification conflict), so this is a
   pure agent-consolidation change with no author ruling blocker."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []

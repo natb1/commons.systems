@@ -262,6 +262,8 @@ jobs:
         run: packages/intentionsutil/scripts/test-release-wait.sh
       - name: Run graph-commit tests
         run: packages/intentionsutil/scripts/test-graph-commit.sh
+      - name: Run verify-landed tests
+        run: packages/intentionsutil/scripts/test-verify-landed.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests

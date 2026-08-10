@@ -17,7 +17,6 @@ rationale: "Surfaced in the 2026-07-11 /align-strategy interview recording the
   8/9). Unify on one tick-owned, label-free merge keyed off the node's reviewed
   marker."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

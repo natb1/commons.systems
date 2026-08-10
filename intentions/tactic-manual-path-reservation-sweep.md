@@ -19,7 +19,6 @@ rationale: Immediate parity fix (migration step i) for the 2026-07-23 cross-mode
   did not consider. Boosted top-of-normal + finalized this round per author
   direction.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

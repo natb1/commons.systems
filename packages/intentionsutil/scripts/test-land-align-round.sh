@@ -18,9 +18,9 @@
 #      produces NO warning text (the benign interactive/not-my-job skips must
 #      stay silent).
 #   2. graph-commit exit 1 WITH the concurrent-edit parking message AND its
-#      post-push "parked ... (office_hours set on the origin/main content)"
-#      confirmation -> exactly one mark-node-terminal call with `park`, wrapper
-#      exits 1, and graph-commit's stderr is re-emitted to the caller.
+#      post-push `graph-commit: verdict: parked ...` line -> exactly one
+#      mark-node-terminal call with `park`, wrapper exits 1, and graph-commit's
+#      stderr is re-emitted to the caller.
 #   3. graph-commit exit 1 with the busy-main `... retry later` exhaustion
 #      message -> ZERO marker calls (nothing landed, nothing parked, so there
 #      is no disposition to declare), exit 1 propagated.
@@ -65,22 +65,39 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 # drift in its messages surfaces here as a failure rather than as a silently
 # unwritten — or, worse, a silently FALSE — park marker in production.
 #
+# Since tactic-graph-commit-landing-signal-unreliable Unit 5, land-align-round
+# keys off graph-commit's own `graph-commit: verdict: <status> ids=... ...`
+# line (print_verdict()/_emit_verdict_line() in graph-commit), not off prose or
+# rc alone. Every fixture below therefore carries a verdict line matching what
+# the real graph-commit would emit for that scenario, in addition to the
+# human-readable prose that a real run would also print alongside it.
+#
 # The parking path prints TWO things, in order: an ANNOUNCEMENT before the
-# parking write is pushed, then either a post-push success CONFIRMATION or a
-# failed-push error. Both variants exit 1. land-align-round must key its `park`
-# marker on the confirmation, never on the announcement, so the two are kept as
-# separate fixtures here and both are exercised.
+# parking write is pushed, then either a post-push success CONFIRMATION (with a
+# `verdict: parked` line) or a failed-push error (with a `verdict: not-landed`
+# or `verdict: unknown` line). Both variants exit 1. land-align-round must key
+# its `park` marker on the verdict line, never on the announcement, so the two
+# are kept as separate fixtures here and both are exercised.
 PARK_ANNOUNCE="graph-commit: concurrent-edit conflict on t-node; parking node(s) — this writer's content is NOT landed"
-PARK_LANDED="graph-commit: parked t-node (office_hours set on the origin/main content) and pushed the parking write to main"
+PARK_LANDED="graph-commit: parked t-node and pushed the parking write to main"
+PARK_LANDED_VERDICT="graph-commit: verdict: parked ids=t-node pushed=abcd000 main=1234abc context=park — the parking commit abcd000 is on origin/main"
 PARK_UNLANDED="error: graph-commit: could not land the parking write for t-node — office_hours set locally but not pushed to main"
-# A genuine, durable park: announcement followed by the post-push confirmation.
+PARK_UNLANDED_VERDICT="graph-commit: verdict: not-landed ids=t-node pushed=none main=1234abc context=park — origin/main does not carry this invocation's intended content"
+LANDED_VERDICT="graph-commit: verdict: landed ids=t-node pushed=abc1234 main=def5678 context=push-reported-success — abc1234 is an ancestor of origin/main"
+# A genuine, durable park: announcement, post-push confirmation, then the
+# verdict line that actually drives land-align-round's branch.
 PARK_MSG="$PARK_ANNOUNCE
-$PARK_LANDED"
+$PARK_LANDED
+$PARK_LANDED_VERDICT"
 # The announcement fired, but the parking write never reached main: origin/main
-# still shows the node unparked, at a working phase, with office_hours null.
+# still shows the node unparked, at a working phase, with office_hours null —
+# so the verdict line reports `not-landed`, not `parked`.
 PARK_FAILED_PUSH_MSG="$PARK_ANNOUNCE
-$PARK_UNLANDED"
-BUSY_MSG="error: graph-commit: could not land on main after 5/5 attempts — cause: main busy; retry later"
+$PARK_UNLANDED
+$PARK_UNLANDED_VERDICT"
+BUSY_VERDICT="graph-commit: verdict: not-landed ids=t-node pushed=none main=1234abc context=busy-exhausted — origin/main does not carry this invocation's intended content"
+BUSY_MSG="error: graph-commit: could not land on main after 5/5 attempts — cause: main busy; retry later
+$BUSY_VERDICT"
 
 # --- Scratch script dir with argv-logging stubs ------------------------------
 SD="$WORK/scripts"
@@ -137,7 +154,7 @@ gc_calls() { local n; n=$(grep -c '^--- call$' "$GC_LOG" 2>/dev/null) || n=0; ec
 # ---------------------------------------------------------------------------
 # Case 1: clean land -> exactly one `align-round` marker, exit 0.
 # ---------------------------------------------------------------------------
-out="$(run_lar 0 "" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+out="$(run_lar 0 "$LANDED_VERDICT" 0 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
    && [[ "$(cat "$MNT_LOG")" == "t-node align-round" ]] \
    && ! grep -qF -- "warning: mark-node-terminal" <<<"$out"; then
@@ -207,7 +224,7 @@ fi
 # Case 5: a failing marker write does NOT demote a landed round, but IS warned
 # about, with the marker's own stderr re-emitted.
 # ---------------------------------------------------------------------------
-out="$(run_lar 0 "" 7 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
+out="$(run_lar 0 "$LANDED_VERDICT" 7 --terminal t-node -m 'graph: round' t-node 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]] && [[ "$(mnt_calls)" -eq 1 ]] \
    && grep -qF -- "warning: mark-node-terminal t-node align-round failed (exit 7)" <<<"$out" \
    && grep -qF -- "MOCK-MARK-NODE-TERMINAL-STDERR" <<<"$out"; then
@@ -230,7 +247,7 @@ fi
 # ---------------------------------------------------------------------------
 # Case 7: --base, -m and the positional ids pass through unchanged (batch form).
 # ---------------------------------------------------------------------------
-out="$(run_lar 0 "" 0 --terminal t-parent --base /tmp/base-manifest.txt \
+out="$(run_lar 0 "$LANDED_VERDICT" 0 --terminal t-parent --base /tmp/base-manifest.txt \
         -m 'graph: land round with children' t-parent t-child-a t-child-b 2>&1)"; rc=$?
 expected=$'--- call\n--base\n/tmp/base-manifest.txt\n-m\ngraph: land round with children\nt-parent\nt-child-a\nt-child-b'
 actual="$(cat "$GC_LOG")"
@@ -259,53 +276,91 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Case 9: real-source ratchet. Extract the needle land-align-round ACTUALLY
-# greps for (from the REAL land-align-round on disk, not the stub) and assert
-# it is a literal substring of the REAL graph-commit's EMITTED text, AND that
-# the harness's own PARK_MSG fixture also contains it. Without this case, a
-# wording change to graph-commit's post-push park confirmation passes CI green
-# while land-align-round silently falls through to its no-marker branch on a
-# genuine concurrent-edit park in production — the exact defect this test suite
-# exists to catch, just relocated one hop upstream.
-#
-# The ratchet also asserts the needle is ABSENT from PARK_FAILED_PUSH_MSG. That
-# is the direction that matters most: a needle satisfied by the pre-push
-# ANNOUNCEMENT alone would make land-align-round declare a `park` disposition
-# for a park that never reached main. Both halves must hold.
-#
-# The graph-commit side is matched against EXECUTABLE text only. Each of the
-# two `echo` call sites is preceded by a LOAD-BEARING-SUBSTRING comment block
-# that repeats the needle verbatim, so a whole-file `grep -qF` would match the
-# comments and stay green even if both `echo` lines were reworded away — the
-# ratchet would be disarmed exactly where it is claimed to be strongest. So:
-# strip comment lines, keep only lines whose first token is `echo`/`printf`,
-# and pin the occurrence count so BOTH call sites must be maintained.
+# Case 9: real-source ratchet. Extract the TWO regexes land-align-round
+# ACTUALLY greps its captured stderr for (from the REAL land-align-round on
+# disk, not the stub) — one for the landed branch, one for the parked branch —
+# and assert: (a) both are anchored on the literal prefix the REAL
+# graph-commit's `_emit_verdict_line()` actually emits before `$status`; (b)
+# the real graph-commit source actually invokes `_emit_verdict_line` with the
+# literal status words `landed`, `landed-equivalent`, and `parked` somewhere;
+# and (c) each regex matches exactly the fixtures it should and none of the
+# fixtures it should not. Without this case, a wording change to graph-commit's
+# verdict-line prefix or status vocabulary passes CI green while
+# land-align-round silently falls through to its no-marker branch on a genuine
+# landed/parked round in production — the exact defect this test suite exists
+# to catch, just relocated one hop upstream (from prose to the verdict-line
+# contract).
 # ---------------------------------------------------------------------------
 GC_REAL="$HARNESS_DIR/graph-commit"
 [[ -f "$GC_REAL" ]] || { echo "error: graph-commit not found at $GC_REAL" >&2; exit 1; }
 
-# Extract the quoted argument of land-align-round's `grep -qF -- "..."` call
-# rather than hardcoding a 4th copy of the literal — a copy could drift from
-# the real needle without this case ever noticing.
-needle="$(grep -oP 'grep -qF -- "\K[^"]*(?=")' "$LAR_SCRIPT")"
+# Extract, in file order, the two `grep -qE '...'` patterns land-align-round
+# actually branches on — landed first, then parked — rather than hardcoding a
+# second copy that could drift from the real needles without this case ever
+# noticing.
+mapfile -t needles < <(grep -oP "grep -qE '\K[^']+(?=')" "$LAR_SCRIPT")
+landed_needle="${needles[0]:-}"
+parked_needle="${needles[1]:-}"
 
-if [[ -z "$needle" ]]; then
-  no "real-source ratchet: extracted an EMPTY needle from land-align-round's 'grep -qF --' argument — the extraction regex is broken or the grep call was removed/reworded; refusing to vacuously pass"
+# The literal prefix the real graph-commit's _emit_verdict_line() emits before
+# the `$status` variable — extracted from its own echo format string, not
+# hardcoded, so a prefix rewording there is caught too.
+gc_prefix="$(grep -oP 'echo "\Kgraph-commit: verdict: (?=\$status)' "$GC_REAL" | head -1)"
+
+if [[ -z "$landed_needle" || -z "$parked_needle" ]]; then
+  no "real-source ratchet: could not extract both 'grep -qE' patterns from land-align-round — extraction regex is broken or a grep call was removed/reworded; refusing to vacuously pass"
+elif [[ -z "$gc_prefix" ]]; then
+  no "real-source ratchet: could not extract graph-commit's verdict-line prefix from _emit_verdict_line()'s echo — refusing to vacuously pass"
 else
-  # Both post-push park CONFIRMATION branches in graph-commit emit the needle:
-  # the bystander-prune branch and the plain branch. Both must keep it.
-  GC_EMIT_EXPECTED=2
-  gc_emit_count="$(grep -v '^[[:space:]]*#' "$GC_REAL" \
-    | grep -E '^[[:space:]]*(echo|printf)[[:space:]]' \
-    | grep -cF -- "$needle")"
-  found_in_gc=0
-  [[ "$gc_emit_count" -eq "$GC_EMIT_EXPECTED" ]] && found_in_gc=1
-  found_in_park=0; grep -qF -- "$needle" <<<"$PARK_MSG" && found_in_park=1
-  found_in_failed=0; grep -qF -- "$needle" <<<"$PARK_FAILED_PUSH_MSG" && found_in_failed=1
-  if [[ $found_in_gc -eq 1 ]] && [[ $found_in_park -eq 1 ]] && [[ $found_in_failed -eq 0 ]]; then
-    ok "real-source ratchet: the needle land-align-round greps for appears on exactly $GC_EMIT_EXPECTED of the REAL graph-commit's echo/printf lines (comments excluded) and in the landed-park fixture, and is ABSENT from the failed-push fixture"
+  prefix_ok=0
+  [[ "${landed_needle#^}" == "${gc_prefix}"* && "${parked_needle#^}" == "${gc_prefix}"* ]] && prefix_ok=1
+
+  # The status words land-align-round's regexes name must actually be literals
+  # graph-commit produces as a verdict status: `landed` and `parked` are
+  # passed straight to _emit_verdict_line as literal first arguments;
+  # `landed-equivalent` is instead assigned to the local `verdict` var (the
+  # content-equivalence branch) and passed through indirectly, so it is
+  # checked as a bare status-word literal rather than requiring it immediately
+  # after `_emit_verdict_line`.
+  words_ok=0
+  if grep -qE '_emit_verdict_line[[:space:]]+landed[[:space:]]' "$GC_REAL" \
+     && grep -qF 'verdict="landed-equivalent"' "$GC_REAL" \
+     && grep -qE '_emit_verdict_line[[:space:]]+parked[[:space:]]' "$GC_REAL"; then
+    words_ok=1
+  fi
+
+  # Each regex must match exactly the fixtures that represent its own verdict,
+  # and NEITHER the pre-push announcement alone nor an unsatisfied verdict for
+  # the same context.
+  landed_match_ok=0
+  [[ "$LANDED_VERDICT" =~ $landed_needle ]] \
+    && ! [[ "$PARK_LANDED_VERDICT" =~ $landed_needle ]] \
+    && ! [[ "$PARK_UNLANDED_VERDICT" =~ $landed_needle ]] \
+    && ! [[ "$BUSY_VERDICT" =~ $landed_needle ]] \
+    && landed_match_ok=1
+
+  parked_match_ok=0
+  [[ "$PARK_LANDED_VERDICT" =~ $parked_needle ]] \
+    && ! [[ "$PARK_UNLANDED_VERDICT" =~ $parked_needle ]] \
+    && ! [[ "$BUSY_VERDICT" =~ $parked_needle ]] \
+    && ! [[ "$LANDED_VERDICT" =~ $parked_needle ]] \
+    && parked_match_ok=1
+
+  # And the two full multi-line fixtures land-align-round actually receives as
+  # stderr must resolve the way the branches above require: PARK_MSG contains
+  # the parked verdict line (park marker fires), PARK_FAILED_PUSH_MSG does not
+  # (no marker fires).
+  fixtures_ok=0
+  grep -qE -- "$parked_needle" <<<"$PARK_MSG" \
+    && ! grep -qE -- "$parked_needle" <<<"$PARK_FAILED_PUSH_MSG" \
+    && ! grep -qE -- "$parked_needle" <<<"$BUSY_MSG" \
+    && fixtures_ok=1
+
+  if [[ $prefix_ok -eq 1 && $words_ok -eq 1 && $landed_match_ok -eq 1 \
+        && $parked_match_ok -eq 1 && $fixtures_ok -eq 1 ]]; then
+    ok "real-source ratchet: land-align-round's landed/parked verdict-line regexes are anchored on graph-commit's real verdict-line prefix, graph-commit really emits the landed/landed-equivalent/parked status words, and each regex matches only the fixtures it should"
   else
-    no "real-source ratchet: needle '$needle' (extracted from land-align-round) graph-commit echo/printf occurrences=$gc_emit_count (expected $GC_EMIT_EXPECTED, comments excluded) found_in_PARK_MSG=$found_in_park (want 1) found_in_PARK_FAILED_PUSH_MSG=$found_in_failed (want 0) — the real-source coupling has drifted"
+    no "real-source ratchet: landed_needle='$landed_needle' parked_needle='$parked_needle' gc_prefix='$gc_prefix' prefix_ok=$prefix_ok words_ok=$words_ok landed_match_ok=$landed_match_ok parked_match_ok=$parked_match_ok fixtures_ok=$fixtures_ok — the real-source coupling has drifted"
   fi
 fi
 

@@ -51,7 +51,6 @@ rationale: "Found and empirically confirmed 2026-07-25 while running
   mode), CI vector, and doc-sync units are authored in the body below, ready for
   /implement.)"
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

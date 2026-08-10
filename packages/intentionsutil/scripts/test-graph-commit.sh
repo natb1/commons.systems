@@ -209,7 +209,32 @@
 #      fields base-free and would silently restore the removed entry, so the
 #      guard refuses instead — exit 1, park naming the dropped entry, the entry
 #      still present on main, and HEAD restored to the PR tip
-#  53. delete/modify divergence: another writer's deletion lands on main FIRST
+#
+# Cases 53-57 are the SIGKILL cases (tactic-graph-commit-landing-signal-
+# unreliable). A SIGKILL fires no trap, so cleanup() never runs and no
+# trap-based defense applies — these exercise the exact paths the orphan-window
+# containment and the terminal verdict line were written for, by actually
+# killing the writer's whole process group rather than simulating it:
+#  53. killed while WAITING on a live landing lock leaves NO orphan: the local
+#      commit is made inside try_land() after the lock is held, so a kill during
+#      the wait makes zero local commits, leaves the writer's edit uncommitted
+#      on disk (still recoverable by a re-run), and leaves origin/main untouched
+#  54. killed MID-STAMP (inside await_checks, past commit+lock+scratch push)
+#      leaves the residual orphan the header block documents: a local commit
+#      exists, `verify-landed` reports `not-landed` (exit 4) against the
+#      content the run intended, and a PLAIN RE-RUN of the identical invocation
+#      lands it — the tribal `git reset --hard` is NOT required and is retired
+#  55. the `not-landed` verdict on that orphan names the commit AND the
+#      recovery: an `orphan=<sha>` line carrying "re-run" and the prohibition
+#      on hand-pushing it to main
+#  56. Direction B: a writer whose main push is rejected until its attempts are
+#      exhausted, while a peer lands byte-identical content, exits 0 with
+#      `verdict: landed-equivalent` — not exit 1 with a rejection as its last
+#      word
+#  57. verdict-line uniqueness: a happy-path run, a busy-but-actually-landed
+#      run and a park run each emit EXACTLY ONE `graph-commit: verdict: ` line
+#
+#  58. delete/modify divergence: another writer's deletion lands on main FIRST
 #      (genuine rm+commit+push, not --prune), then a stale --base edit races
 #      it: exit 1, no false "layer 2/3 auto-resolved" claim, and the LANDED
 #      DELETION STANDS — the node is NOT resurrected on origin/main (a losing
@@ -222,7 +247,16 @@
 #      says plainly that nothing was parked ON MAIN, WITHOUT emitting
 #      land-align-round's landed-park needle
 #
-# No network and no real gh/node needed; requires only bash + git + jq.
+#  59. idempotent park retry: a node whose office_hours block is ALREADY on
+#      origin/main byte-identically (a peer parked it first) parks again with
+#      nothing to commit and nothing to push (park_and_exit()'s committed=0
+#      arm, PUSHED_SHA empty). The verdict must still be `parked` — decided by
+#      comparing origin/main against the PARK's content, not against SNAP_DIR's
+#      unlanded pre-park edit or a --prune id's absence — never `not-landed`,
+#      which would deny land-align-round its park marker for a park that IS on
+#      main. origin/main must not move.
+#
+# No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
 
@@ -230,6 +264,11 @@ HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GC_SCRIPT="$HARNESS_DIR/graph-commit"
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
+# Required by the SIGKILL cases (53-57): the writer must run in its OWN process
+# group so the test can kill the whole tree without killing this harness.
+# A hard requirement rather than a skip — a silently skipped kill case is a
+# vacuous pass, which is precisely the failure mode these cases exist to end.
+command -v setsid >/dev/null || { echo "error: setsid not found (required by the SIGKILL cases)" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 declare -a SNAP_DIRS_TO_CLEAN=()
@@ -284,7 +323,9 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-preexist-conflict t-preexist-rebase t-strand-other t-strand-main \
           t-dup-rows t-partial-dup t-stale-fail t-forged-green \
           t-bystander-prune t-bystander-conflict t-prune-base-stale \
-          t-base-bystander-prune t-manifest-foreign t-manifest-prune; do
+          t-base-bystander-prune t-manifest-foreign t-manifest-prune \
+          t-kill-lockwait t-kill-stamp t-kill-busy \
+          t-verdict-happy t-verdict-park t-park-retry; do
   seed_node "$id"
 done
 
@@ -675,6 +716,15 @@ Mailbox discipline."
         rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
       fi
       [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
+      # SET, not append. The real helper does `node.office_hours = {...}` and
+      # writeNode serializes the whole node, so re-parking a node that ALREADY
+      # carries an office_hours block REPLACES it — which is what makes the
+      # idempotent-retry park byte-identical (nothing to commit, nothing to
+      # push). A blind append here would fabricate a second block, leave the
+      # file dirty, and hide that path from the harness entirely. This shim
+      # always writes the block last, so "from the block's opening line to EOF"
+      # is exactly the previous block.
+      sed -i '/^office_hours: {/,$d' "$dir/$id.md"
       printf 'office_hours: {reason: "%s", since: %s, recommendation: "%s"}\n' "$reason" "$since" "$rec" >>"$dir/$id.md"
       echo "graph-commit: set office_hours on $id (since=$since)" >&2
     done
@@ -714,6 +764,102 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
+}
+
+# --- SIGKILL harness (cases 53-57) -------------------------------------------
+# A SIGKILL fires no trap, so the writer's cleanup() never runs: the scratch
+# branch survives on origin, the landing lock stays claimed until its TTL, and
+# any local commit already made is left behind as an orphan. That is exactly
+# the state these cases must produce, and it cannot be produced by returning a
+# non-zero exit code from a shim — only by actually killing the process tree.
+#
+# WAITING FOR THE WRITER TO REACH THE RIGHT POINT. Never `pgrep -f
+# graph-commit` here: a pgrep whose pattern is the writer's command line also
+# matches the poll loop's OWN command line, so the loop never exits and the
+# kill never fires. Every wait below polls a filesystem-observable condition
+# instead (the writer's own FETCH_HEAD, the gh call log), in the same
+# bounded-poll shape case 29 already uses.
+
+# wait_until <max-tenths-of-a-second> <command...> — poll <command> until it
+# succeeds. Returns 1 if it never does, so callers report a real failure rather
+# than proceeding against an unmet precondition.
+wait_until() {
+  local tries="$1"; shift
+  local i
+  for (( i=0; i<tries; i++ )); do
+    "$@" && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+fetch_head_is() { # <clone> <sha> — the writer's last `git fetch` landed on <sha>
+  [[ "$(git -C "$1" rev-parse FETCH_HEAD 2>/dev/null || true)" == "$2" ]]
+}
+gh_calls_at_least() { [[ "$(gh_calls)" -ge "$1" ]]; }
+group_gone() { ! kill -0 -- "-$1" 2>/dev/null; }
+
+# start_gc_killable <pgidfile> <outfile> <clone> [graph-commit args...]
+# Launch graph-commit under `setsid` so it leads its own process group, which
+# is what makes `kill -9 -- -<pgid>` reach the whole tree (git, the gh shim,
+# its sleeps) without touching this harness — a plain background job would
+# share the harness's process group.
+# The group leader writes its own pid — post-setsid that pid IS the pgid — to
+# <pgidfile> and then `exec`s graph-commit, so the recorded pid stays valid for
+# the writer's whole life. Honors the same GC_* knobs as run_gc().
+GC_BG_PID=""
+start_gc_killable() {
+  local pgidfile="$1" outfile="$2" clone="$3"; shift 3
+  rm -f "$pgidfile"
+  setsid env \
+    PATH="$WORK/bin:$PATH" \
+    GC_GH_MODE_FILE="$MODE_FILE" \
+    GC_GH_CALL_LOG="$CALL_LOG" \
+    GC_FIXTURE_DIR="$FIXTURE_DIR" \
+    GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}" \
+    GC_PGID_FILE="$pgidfile" \
+    GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}" \
+    GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}" \
+    GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}" \
+    GRAPH_COMMIT_LOCK_TTL_SECONDS="${GC_LOCK_TTL:-}" \
+    GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}" \
+    GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}" \
+    bash -c 'cd "$1" || exit 99
+             shift
+             printf "%s" "$$" >"$GC_PGID_FILE"
+             exec bash packages/intentionsutil/scripts/graph-commit "$@"' \
+    _ "$clone" "$@" >"$outfile" 2>&1 &
+  GC_BG_PID=$!
+}
+
+# kill_gc_group <pgidfile> — SIGKILL the whole writer group and wait for it to
+# be gone before any assertion reads the repo (the kill is asynchronous; a
+# surviving child could still be mid-write). The `wait` reaps our own child so
+# a zombie leader cannot keep group_gone() false forever; when `setsid` forked,
+# that child has already exited and the real leader was reparented to init,
+# which reaps it.
+kill_gc_group() {
+  local pgid
+  pgid="$(cat "$1" 2>/dev/null || true)"
+  [[ -n "$pgid" ]] || return 1
+  kill -9 -- "-$pgid" 2>/dev/null || true
+  [[ -n "$GC_BG_PID" ]] && wait "$GC_BG_PID" 2>/dev/null
+  wait_until 100 group_gone "$pgid"
+}
+
+# local_commits_ahead <clone> <base-sha> — commits on the clone's HEAD that are
+# not on <base-sha>. Deliberately takes the ORIGIN's tip as an argument rather
+# than reading the clone's own remote-tracking ref, which the writer's fetches
+# move around.
+local_commits_ahead() { git -C "$1" rev-list --count "$2..HEAD" 2>/dev/null || echo unknown; }
+
+verdict_lines() { grep -c 'graph-commit: verdict: ' <<<"$1" | tr -d ' '; }
+
+drop_scratch_refs() { # delete every graph/** scratch branch a killed writer left
+  local ref
+  while IFS= read -r ref; do
+    [[ -n "$ref" ]] && git -C "$ORIGIN" update-ref -d "$ref"
+  done < <(git -C "$ORIGIN" for-each-ref --format='%(refname)' 'refs/heads/graph/**')
 }
 
 # --- Case 1: happy path --------------------------------------------------------
@@ -2086,7 +2232,250 @@ else
   no "far-ahead list-entry removal guard (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
-# --- Case 53: delete/modify divergence — deletion lands first, edit races it via stale --base ---
+# ---------------------------------------------------------------------------
+# Cases 53-57: SIGKILL. See the header block. These kill the writer's process
+# group for real (no trap runs, no cleanup), so each one cleans up after the
+# corpse explicitly — the killed writer cannot.
+# ---------------------------------------------------------------------------
+
+# --- Case 53: killed while WAITING on a live lock leaves no orphan ------------
+# The orphan-window containment property (graph-commit's ORPHAN-WINDOW
+# CONTAINMENT comment in try_land): the local commit is made INSIDE try_land,
+# after the landing lock is held. A writer killed while blocked in
+# lock_claim_or_renew has therefore committed nothing — the window where the
+# observed incidents died is gone. Before that change, main() committed before
+# land(), so this same kill left an orphan every time.
+#
+# The wait condition is the writer's own FETCH_HEAD: main()'s single
+# `git fetch origin main` leaves it at main's tip, and the FIRST pass of
+# lock_claim_or_renew re-points it at the lock commit (the lock object is not
+# in a fresh clone's object database, so read_lock_payload misses and the loop
+# fetches refs/graph/landing-lock). FETCH_HEAD == the planted lock sha is
+# therefore a precise, stable signal that the writer is inside the lock wait.
+#
+# ORDER MATTERS: the clone is made BEFORE the lock is planted. `git clone` from
+# a local path copies (hardlinks) the whole object directory, so a lock commit
+# that already exists in $ORIGIN would arrive in the clone's own object
+# database — read_lock_payload would then succeed on its first try, the loop
+# would never fetch, and FETCH_HEAD would never move off main's tip.
+set_mode green
+W53="$WORK/w53"
+make_clone "$W53" writer-53
+lockwait_expiry=$(( $(date +%s) + 3600 ))
+plant_lock "$lockwait_expiry" kill-lockwait-holder
+lockwait_lock_sha="$(git -C "$ORIGIN" for-each-ref --format='%(objectname)' refs/graph/landing-lock)"
+edit_line "$W53" t-kill-lockwait 1 killed-before-any-commit
+before53="$(origin_sha)"
+pgid53="$WORK/pgid-53"; out53="$WORK/out-53.log"
+# Prefix assignments on a FUNCTION call persist in bash, so they are unset
+# again immediately — start_gc_killable must launch in this shell (not a
+# subshell) for kill_gc_group's `wait` to be able to reap its own child.
+GC_LOCK_POLL=1 GC_LOCK_WAIT=600 \
+  start_gc_killable "$pgid53" "$out53" "$W53" -m 'test: killed in lock wait' t-kill-lockwait
+unset GC_LOCK_POLL GC_LOCK_WAIT
+if ! wait_until 300 fetch_head_is "$W53" "$lockwait_lock_sha"; then
+  no "kill in lock wait: writer never reached the lock wait (FETCH_HEAD never became the lock sha)"
+  printf 'planted=%s observed FETCH_HEAD=%s\n' "$lockwait_lock_sha" "$(git -C "$W53" rev-parse FETCH_HEAD 2>&1)"
+  printf '%s\n' "$(cat "$out53" 2>/dev/null)"
+  kill_gc_group "$pgid53"
+else
+  kill_gc_group "$pgid53"
+  ahead53="$(local_commits_ahead "$W53" "$before53")"
+  dirty53="$(git -C "$W53" status --porcelain -- intentions/t-kill-lockwait.md)"
+  if [[ "$ahead53" == "0" && "$(origin_sha)" == "$before53" ]]; then
+    ok "kill in lock wait: no local commit was made and origin/main is untouched (no orphan)"
+  else
+    no "kill in lock wait: ahead=$ahead53 origin_moved=$([[ "$(origin_sha)" == "$before53" ]] && echo no || echo yes)"
+    printf '%s\n' "$(cat "$out53" 2>/dev/null)"
+  fi
+  # Non-vacuity, and the recovery story: the writer's edit is still on disk
+  # uncommitted, so re-running the same invocation still has something to land.
+  if [[ -n "$dirty53" ]] && grep -q 'line1: killed-before-any-commit' "$W53/intentions/t-kill-lockwait.md"; then
+    ok "kill in lock wait: the writer's edit survives uncommitted on disk (a re-run still lands it)"
+  else
+    no "kill in lock wait: expected the edit to remain uncommitted (status='$dirty53')"
+  fi
+  if [[ -z "$(scratch_refs)" ]]; then
+    ok "kill in lock wait: no scratch branch was ever pushed (the kill landed before the stamp)"
+  else
+    no "kill in lock wait: unexpected scratch branch: $(scratch_refs)"
+    drop_scratch_refs
+  fi
+fi
+git -C "$ORIGIN" update-ref -d refs/graph/landing-lock
+
+# --- Cases 54 & 55: killed MID-STAMP — a detectable, recoverable orphan -------
+# The residual window graph-commit's header block says CANNOT be closed (git
+# has no atomic commit-and-push): commit → stamp → push. `blocked-green` parks
+# the writer inside await_checks() — past the lock, past its local commit, past
+# the scratch push — and the gh call log is the observable that it got there.
+# Killing it then produces the real orphan, and the three properties that make
+# an orphan survivable are asserted in order:
+#   54a the local commit exists (the window is real, not hypothetical)
+#   54b `verify-landed` reports not-landed (exit 4) against the intended blob
+#   55  a graph-commit run over that orphan prints the `orphan=` recovery line
+#   54c a PLAIN RE-RUN of the identical invocation lands it — no `git reset
+#       --hard`, which the header block explicitly retires (it DISCARDS the
+#       orphan)
+# GC_LOCK_TTL=2 on the killed run: a SIGKILL never releases the landing lock,
+# so the two runs below can only proceed by stealing the dead holder's claim
+# after its TTL — which is the real recovery path, not a harness shortcut.
+set_mode blocked-green
+SENTINEL54="$WORK/kill-sentinel-54"; rm -f "$SENTINEL54"
+W54="$WORK/w54"
+make_clone "$W54" writer-54
+edit_line "$W54" t-kill-stamp 1 kill-mid-stamp
+intended54="$(git -C "$W54" hash-object -- intentions/t-kill-stamp.md)"
+before54="$(origin_sha)"
+pgid54="$WORK/pgid-54"; out54="$WORK/out-54.log"
+GC_LOCK_POLL=1 GC_LOCK_TTL=2 GC_SENTINEL="$SENTINEL54" \
+  start_gc_killable "$pgid54" "$out54" "$W54" -m 'test: killed mid-stamp' t-kill-stamp
+unset GC_LOCK_POLL GC_LOCK_TTL GC_SENTINEL
+if ! wait_until 300 gh_calls_at_least 1; then
+  no "kill mid-stamp: writer never reached await_checks (no gh call observed)"
+  rm -f "$SENTINEL54"; kill_gc_group "$pgid54"; drop_scratch_refs
+else
+  kill_gc_group "$pgid54"
+  ahead54="$(local_commits_ahead "$W54" "$before54")"
+  scratch54="$(scratch_refs)"
+  if [[ "$ahead54" == "1" && "$(origin_sha)" == "$before54" ]]; then
+    ok "kill mid-stamp: a local commit exists and is NOT on origin/main (the residual orphan window is real)"
+  else
+    no "kill mid-stamp: expected exactly 1 unpushed local commit (ahead=$ahead54)"
+    printf '%s\n' "$(cat "$out54" 2>/dev/null)"
+  fi
+  # Non-vacuity: the killed writer had already pushed its scratch branch, which
+  # is what places the kill INSIDE the commit→stamp→push window rather than
+  # before it. No trap ran, so the branch is still there — drop it here, since
+  # the corpse cannot.
+  if [[ -n "$scratch54" ]]; then
+    ok "kill mid-stamp: the kill landed after the scratch push (no cleanup ran — the branch survives)"
+  else
+    no "kill mid-stamp: expected a leftover scratch branch from the killed writer"
+  fi
+  drop_scratch_refs
+
+  vl_out="$(bash "$HARNESS_DIR/verify-landed" -C "$W54" --node t-kill-stamp --blob "$intended54" 2>&1)"; vl_rc=$?
+  if [[ $vl_rc -eq 4 ]] && grep -q 'verdict=not-landed' <<<"$vl_out"; then
+    ok "kill mid-stamp: verify-landed reports not-landed (exit 4) for the orphaned content"
+  else
+    no "kill mid-stamp: verify-landed (rc=$vl_rc)"; printf '%s\n' "$vl_out"
+  fi
+
+  # --- Case 55: the not-landed verdict names the orphan and the recovery -----
+  # A run that cannot land (checks never green, one attempt) over that same
+  # orphan. Its terminal verdict is `not-landed`, which is one of the two
+  # statuses print_orphan_recovery_line() speaks on. Substrings are taken from
+  # the line graph-commit actually emits, not paraphrased.
+  set_mode pending
+  out55="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=1 GC_LOCK_POLL=1
+           run_gc "$W54" -m 'test: killed mid-stamp' t-kill-stamp 2>&1)"; rc55=$?
+  orphan_line="$(grep 'graph-commit: orphan=' <<<"$out55")"
+  if [[ $rc55 -eq 1 ]] \
+     && grep -q 'graph-commit: verdict: not-landed ' <<<"$out55" \
+     && [[ -n "$orphan_line" ]] \
+     && grep -q 're-run this same graph-commit invocation' <<<"$orphan_line" \
+     && grep -q 'NEVER git push this commit to main by hand' <<<"$orphan_line"; then
+    ok "not-landed verdict names the orphan commit, the re-run recovery, and the no-hand-push prohibition"
+  else
+    no "orphan recovery line (rc=$rc55)"; printf '%s\n' "$out55"
+  fi
+
+  # --- Case 54c: the sanctioned recovery is a plain re-run -------------------
+  set_mode green
+  out54b="$(export GC_LOCK_POLL=1; run_gc "$W54" -m 'test: killed mid-stamp' t-kill-stamp 2>&1)"; rc54b=$?
+  if [[ $rc54b -eq 0 ]] \
+     && origin_show t-kill-stamp | grep -q 'line1: kill-mid-stamp' \
+     && grep -q 'graph-commit: verdict: landed ' <<<"$out54b"; then
+    ok "kill mid-stamp: an identical plain re-run lands the orphan (no 'git reset --hard' needed)"
+  else
+    no "kill mid-stamp recovery re-run (rc=$rc54b)"; printf '%s\n' "$out54b"
+  fi
+fi
+rm -f "$SENTINEL54"
+
+# --- Case 56: exhausted attempts over an already-landed write exit 0 ----------
+# Direction B of the defect. The writer stamps a SHA, a PEER lands byte-
+# identical content while it waits in await_checks, and its own push to main is
+# then rejected as non-fast-forward. With one attempt configured that exhausts
+# the loop, so this run's own view of itself is "I never landed anything" — and
+# it used to exit 1 with the rejection as its last log line, telling a caller a
+# write failed that is in fact ON origin/main. The verdict is derived from a
+# post-push READ instead, so it reports landed-equivalent and exits 0.
+set_mode blocked-green
+SENTINEL56="$WORK/kill-sentinel-56"; rm -f "$SENTINEL56"
+W56="$WORK/w56"; P56="$WORK/p56"
+make_clone "$W56" writer-56
+make_clone "$P56" peer-56
+# Byte-identical edits from the same base: the peer's landed blob must equal
+# the writer's intended blob, or the verdict would (correctly) be not-landed.
+edit_line "$W56" t-kill-busy 1 both-writers-agree
+edit_line "$P56" t-kill-busy 1 both-writers-agree
+out56="$WORK/out-56.log"
+( GC_ATTEMPTS=1 GC_LOCK_POLL=1 GC_SENTINEL="$SENTINEL56" \
+    run_gc "$W56" -m 'test: busy but landed by a peer' t-kill-busy >"$out56" 2>&1
+  echo $? >"$WORK/rc-56" ) &
+pid56=$!
+if ! wait_until 300 gh_calls_at_least 1; then
+  no "busy-but-landed: writer never reached await_checks (no gh call observed)"
+  : >"$SENTINEL56"; wait "$pid56" 2>/dev/null
+else
+  # The peer lands while the writer is parked in await_checks, so the writer's
+  # own push to main below is guaranteed to be rejected.
+  git -C "$P56" commit -qam 'peer lands the identical content'
+  git -C "$P56" push -q origin main
+  : >"$SENTINEL56"
+  wait "$pid56"; rc56="$(cat "$WORK/rc-56")"
+  out56_text="$(cat "$out56")"
+  if [[ "$rc56" -eq 0 ]] \
+     && grep -q 'graph-commit: verdict: landed-equivalent ' <<<"$out56_text" \
+     && grep -q 'push of .* to main rejected' <<<"$out56_text" \
+     && origin_show t-kill-busy | grep -q 'line1: both-writers-agree'; then
+    ok "busy-exhausted over content a peer already landed: exit 0 with verdict landed-equivalent"
+  else
+    no "busy-but-landed (rc=$rc56)"; printf '%s\n' "$out56_text"
+  fi
+fi
+rm -f "$SENTINEL56"
+
+# --- Case 57: exactly one verdict line per run --------------------------------
+# The verdict line is the parsed caller contract, and several paths can reach
+# it (die(), park_and_exit(), emit_verdict_and_exit()). Two lines would mean a
+# caller grepping for it reads whichever came first. print_verdict()'s
+# once-only guard makes that structurally impossible; this is its regression
+# test, over the three terminal shapes that reach it by different routes.
+set_mode green
+W57="$WORK/w57"
+make_clone "$W57" writer-57
+edit_line "$W57" t-verdict-happy 1 one-line-only
+out57="$(run_gc "$W57" -m 'test: verdict uniqueness happy' t-verdict-happy 2>&1)"; rc57=$?
+if [[ $rc57 -eq 0 && "$(verdict_lines "$out57")" == "1" ]]; then
+  ok "verdict uniqueness: the happy path emits exactly one verdict line"
+else
+  no "verdict uniqueness happy (rc=$rc57 lines=$(verdict_lines "$out57"))"; printf '%s\n' "$out57"
+fi
+if [[ "$(verdict_lines "${out56_text:-}")" == "1" ]]; then
+  ok "verdict uniqueness: the busy-but-landed run emits exactly one verdict line"
+else
+  no "verdict uniqueness busy-but-landed (lines=$(verdict_lines "${out56_text:-}"))"
+fi
+# A park: the same overlapping-edit shape as case 4, on its own node.
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-verdict-park 1 A-wins
+run_gc "$A" t-verdict-park >/dev/null 2>&1
+edit_line "$B" t-verdict-park 1 B-loses
+out57p="$(run_gc "$B" -m 'test: verdict uniqueness park' t-verdict-park 2>&1)"; rc57p=$?
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out57p")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc57p -eq 1 ]] \
+   && grep -q 'graph-commit: verdict: parked ' <<<"$out57p" \
+   && [[ "$(verdict_lines "$out57p")" == "1" ]]; then
+  ok "verdict uniqueness: a park run emits exactly one verdict line (status parked)"
+else
+  no "verdict uniqueness park (rc=$rc57p lines=$(verdict_lines "$out57p"))"; printf '%s\n' "$out57p"
+fi
+
+# --- Case 58: delete/modify divergence — deletion lands first, edit races it via stale --base ---
 # The reverse of case 23's direction: there, an edit landed first and a
 # --prune raced it via a rebase CONFLICT. Here, a genuine deletion (rm + commit
 # + push, not --prune) lands on origin/main FIRST, and a second writer's field
@@ -2119,13 +2508,13 @@ still_deleted=0; origin_show t-field-delete-edit >/dev/null 2>&1 || still_delete
 # The re-materialization is local only, and UNTRACKED (`??`) — never staged,
 # never committed, never pushed.
 local_content="$(cat "$W23/intentions/t-field-delete-edit.md" 2>/dev/null || true)"
-untracked53=0
-[[ "$(git -C "$W23" status --porcelain -- intentions/t-field-delete-edit.md)" == '?? '* ]] && untracked53=1
+untracked58=0
+[[ "$(git -C "$W23" status --porcelain -- intentions/t-field-delete-edit.md)" == '?? '* ]] && untracked58=1
 snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
 [[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
 if [[ $rc -eq 1 ]] \
    && [[ $still_deleted -eq 1 ]] \
-   && [[ $untracked53 -eq 1 ]] \
+   && [[ $untracked58 -eq 1 ]] \
    && ! grep -q 'layer 2/3 auto-resolved' <<<"$out" \
    && grep -q 'delete/modify divergence on t-field-delete-edit' <<<"$out" \
    && grep -q 'nothing was parked ON MAIN' <<<"$out" \
@@ -2137,7 +2526,55 @@ if [[ $rc -eq 1 ]] \
    && ! grep -q '^# base statement for t-field-delete-edit' <<<"$local_content"; then
   ok "delete/modify divergence: deletion lands first, stale-base edit races it — the deletion STANDS on main, the re-materialization is local+untracked with office_hours and the authored body, and no landed-park claim is emitted"
 else
-  no "delete/modify divergence (rc=$rc still_deleted=$still_deleted untracked=$untracked53)"; printf '%s\n' "$out"; printf '%s\n' "$local_content"
+  no "delete/modify divergence (rc=$rc still_deleted=$still_deleted untracked=$untracked58)"; printf '%s\n' "$out"; printf '%s\n' "$local_content"
+fi
+
+# --- Case 59: idempotent park retry — already parked, byte-identical, nothing to push ---
+# park_and_exit()'s committed=0 arm: the node on origin/main ALREADY carries a
+# byte-identical office_hours block (a peer parked it first), so the park write
+# leaves the tree clean, nothing is committed, nothing is pushed, and
+# PUSHED_SHA stays empty. print_verdict() therefore cannot answer from
+# ancestry and falls through to the content comparison — which must compare
+# against the PARK's intended content (origin/main's content plus office_hours,
+# recorded by park_write), not against SNAP_DIR (this writer's unlanded
+# pre-park edit, which is guaranteed to differ) and not against a --prune id's
+# absence (the deletion was not landed; the office_hours record is the intent).
+# Both of those wrong questions answer `not-landed` on a park that IS on main,
+# which land-align-round then refuses to declare a park for.
+#
+# Shape: writer A lands an edit; stale writers B and C each --prune the same id.
+# B's prune conflicts with A's landed edit and parks (landing the office_hours
+# commit). C's prune then conflicts identically and re-parks onto B's already-
+# landed record — byte for byte, since the prune recommendation carries no
+# per-run path.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+W59="$WORK/w59"
+make_clone "$W59" writer-59
+edit_line "$A" t-park-retry 1 landed-edit
+run_gc "$A" t-park-retry >/dev/null 2>&1
+rm -f "$B/intentions/t-park-retry.md"
+out59b="$(run_gc "$B" --prune t-park-retry 2>&1)"; rc59b=$?
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out59b")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+sha_after_park="$(origin_sha)"
+rm -f "$W59/intentions/t-park-retry.md"
+out59="$(run_gc "$W59" --prune t-park-retry 2>&1)"; rc59=$?
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out59")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+sha_after_retry="$(origin_sha)"
+content59="$(origin_show t-park-retry 2>/dev/null)"
+if [[ $rc59b -eq 1 ]] \
+   && [[ $rc59 -eq 1 ]] \
+   && [[ "$sha_after_retry" == "$sha_after_park" ]] \
+   && grep -q 'graph-commit: verdict: parked ' <<<"$out59" \
+   && ! grep -q 'graph-commit: verdict: not-landed ' <<<"$out59" \
+   && [[ "$(verdict_lines "$out59")" == "1" ]] \
+   && grep -q 'landed-edit' <<<"$content59" \
+   && grep -q 'office_hours' <<<"$content59"; then
+  ok "idempotent park retry: an already-parked byte-identical node needs no push and still reports verdict: parked (not not-landed)"
+else
+  no "idempotent park retry (rc_b=$rc59b rc=$rc59 sha_moved=$([[ "$sha_after_retry" == "$sha_after_park" ]] && echo no || echo yes))"; printf '%s\n' "$out59"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

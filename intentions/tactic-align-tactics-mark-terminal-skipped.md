@@ -39,7 +39,6 @@ rationale: >-
   the plan's Verification section and record the landed-then-skipped baseline in
   this node's needs-main residue.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

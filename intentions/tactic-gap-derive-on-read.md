@@ -19,7 +19,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-gap-derive-on-read
   pr: 3063
@@ -31,7 +31,10 @@ execution:
   strategy_fingerprint: 15b5ef1dc7ce30e0a267440a124bd558c5506c86bd79f91fa2dc39b909df79b9
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T15:11:34Z
+    mergeCommitSha: 455ae5d15c7a19e104d5e51c5d004ba732cad710
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

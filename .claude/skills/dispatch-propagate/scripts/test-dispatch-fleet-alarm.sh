@@ -52,6 +52,16 @@ set -uo pipefail
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUT="$HARNESS_DIR/dispatch-fleet-alarm"
 [[ -f "$SUT" ]] || { echo "error: dispatch-fleet-alarm not found at $SUT" >&2; exit 1; }
+# The SUT's verify_landed() delegates to the real verify-landed primitive
+# (packages/intentionsutil/scripts/verify-landed), which is NOT copied into
+# the miniature fixture repo below — its `<id>=<blobsha>` mode is pure git
+# plumbing (no tsx), so it is safe to run directly against the fixture's `-C`
+# path without any stubbing. Resolved from HARNESS_DIR (this test file's real
+# on-disk location), the same 4-up convention the SUT itself uses for its own
+# REPO_ROOT, since the fixture's copy of the SUT resolves that math inside a
+# repo that has no packages/ tree at all.
+REAL_VERIFY_LANDED="$HARNESS_DIR/../../../../packages/intentionsutil/scripts/verify-landed"
+[[ -x "$REAL_VERIFY_LANDED" ]] || { echo "error: verify-landed not found at $REAL_VERIFY_LANDED" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
@@ -233,6 +243,7 @@ run_alarm() {
     DISPATCH_FLEET_ALARM_WRITE_NODE_CMD="$BIN/stub-write-node" \
     DISPATCH_FLEET_ALARM_DUMP_NODE_CMD="$BIN/stub-dump-node" \
     DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD="$BIN/stub-graph-commit" \
+    DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD="$REAL_VERIFY_LANDED" \
     DISPATCH_FLEET_ALARM_INTENTIONS_DIR="$FR/intentions" \
     DISPATCH_FLEET_ALARM_RETRY_DELAY=0 \
     DISPATCH_FLEET_ALARM_RETRIES=1 \

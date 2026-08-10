@@ -35,7 +35,6 @@ rationale: "Measured three times in a single session on 2026-08-05 (bootstrap
   ref's own lifecycle). None addresses the exit-code-and-log-both-lie failure
   mode under a killed wrapper."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -51,6 +50,7 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   conflict: null

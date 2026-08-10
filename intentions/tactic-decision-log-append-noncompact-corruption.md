@@ -31,7 +31,6 @@ rationale: Root-caused during the /align-tactics
   is filed as its own new tactic rather than as any write to the alarm node
   itself, which the align-tactics session made no graph write to.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
