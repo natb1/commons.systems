@@ -165,7 +165,76 @@ office_hours:
     dispatch-terminal-gap-audit as the existing report-only diagnostic to extend
     for migration step 4's observe pass."
   since: 2026-08-09
-  recommendation: null
+  recommendation: >-
+    (Office-hours review, 2026-08-10, read-only.) THE COST PREMISE HOLDS AND THE
+    RATIFICATION QUESTION STANDS: provision-node-worktree still performs no graph
+    write (no graph-commit / write-node / apply-node-transition / reservation_
+    call anywhere in the script; its only claim-time write is still
+    reservation_mark_spawned at dispatch-graph-execute:159), so the ratified write
+    site would add one graph-commit per node-worker spawn, CI-stamped and
+    serialized behind the global landing lock. That question still needs the
+    author.
+
+    BUT THIS NODE'S OWN RATIONALE PREMISE IS FALSIFIED — re-measure before
+    planning. The rationale's mechanism is gate 3 (job-dir ownership) being
+    unsatisfiable, stranding terminal sessions in an absorbing state. Measured on
+    the live host 2026-08-10 against tmp/dispatch-sweep.log (38231 lines,
+    2026-07-22 to 2026-08-10): of 1184 SESSION_REAP_SKIP_* records, 1060 are
+    NO_TERMINAL_MARKER, 123 UNLANDED_CONTENT, 1 GRACE, and ZERO are NO_JOB_DIR or
+    FOREIGN_JOB_DIR. Those two ARE logged when they fire (lib-session-reap.sh:548
+    and :557) and they sit BEFORE the marker gate, so zero occurrences means gate
+    3 was reached and PASSED 1060 times — not that candidates never arrive. Host
+    census the same day: 35 job dirs, 13 with .name set, 1 empty, 20 with no
+    state.json at all; job dirs are now keyed by the session-id prefix, which ties
+    dir identity to session lifetime and removes the independent-lifetime
+    mechanism the rationale's 2026-08-05 census measured. The absorbing state no
+    longer reproduces.
+
+    THE LIVE STRANDING MECHANISM IS GATE 4, NOT GATE 3: ZERO node-terminal markers
+    exist anywhere on the host (~/.claude/jobs/*/node-terminal matches nothing),
+    so gate 4 is unsatisfiable for every candidate and all 1060 skips land there.
+    That is tactic-qa-fix-node-terminal-declaration's territory (phase qa, already
+    moving), not this node's. Rescope accordingly: what may survive here is the
+    durable claim/release design shared with
+    tactic-claim-containment-durable-anchor, with the reap-authorization framing
+    retired.
+
+    ON THE ANCHOR QUESTION — CORRECTION TO ANY LEDGER-ANCHORED RECOMMENDATION.
+    Condition 10 of strategy-graph-native-dispatch says verbatim that the
+    containment holds only where the freeze anchors on durable GRAPH state rather
+    than on a process-level session registry. A reservation-ledger anchor (option
+    b of tactic-claim-containment-durable-anchor's park) may still be the right
+    call, but it is an AMENDMENT to that condition, not a reading of it, and must
+    be put to the author as such. Between the two graph-anchored options,
+    batching a tick's claims into ONE graph-commit dominates the per-spawn write
+    at every cap; issue the batch BEFORE spawning, which inverts the risk window
+    to claimed-but-not-spawned — a state reservation_sweep already reconciles and
+    which fails safe. The park's stated cost for batching (a spawn briefly
+    unclaimed) applies only to claim-after-spawn.
+
+    DO NOT SPLIT MIGRATION STEP 1 AS RECORDED. The park proposes splitting out
+    making lib-session-reap.sh read a recorded worktree path instead of deriving
+    worktrees_root/name (lib-session-reap.sh:286-291), calling it small and
+    independent. Measured 2026-08-10: provision-node-worktree:113 places EVERY
+    node worktree at exactly PROJECT_ROOT/.claude/worktrees/<node-id> — the same
+    path the reap derives — so the derivation is correct by construction for
+    provisioned worktrees. The real divergence is sessions registered under a node
+    id that run at the REPO ROOT, which strategy-node and office-hours-graph
+    sessions do BY DESIGN. Live instance the same day: session
+    tactic-hold-conflict-strategy-fingerprint-stamp-coverage, idle, cwd at the
+    repo root, derived worktree absent. Recording the ACTUAL cwd as the reap's
+    worktree path — the recorded fix — would point the reap's git worktree remove
+    (lib-session-reap.sh:373) at the MAIN checkout for exactly those sessions. Any
+    step-1 tactic must first distinguish has-a-node-worktree from
+    runs-at-the-repo-root, so it is not the small independent fix the park
+    assumes.
+
+    SIBLING PARKS UNCHANGED: tactic-claim-containment-durable-anchor (parked
+    2026-07-31) is the identical anchor question and should be cleared by the same
+    sitting; tactic-terminal-declaration-verified-against-node and
+    tactic-router-failure-fuses stay parked. Do NOT settle their
+    subsumption/pruning on the current framing — with gate 3 not firing, re-derive
+    it from the fresh measurement above.
   session_type: requirement-discovery
 pace_exempt: false
 rounds: null
