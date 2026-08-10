@@ -25,16 +25,10 @@ rationale: "Recorded 2026-07-07 from the /align-strategy comprehensive code
   app is forced into it. The accepted trade: owned correctness burden — the
   router XSS and prerender-injection defects were real — in exchange for freedom
   from framework lock-in and a fork that inherits no rented substrate."
-reading: no dependency-justification audit exists; knip enforces
-  one-reason-per-suppression but runtime dependencies carry no recorded
-  justification, and upstream-liveness exposure (Critters archived, epubjs
-  stale) is tracked only in review notes (code audit, 2026-07-07)
-gap: reading "no dependency-justification audit exists; knip enforces
-  one-reason-per-suppression but runtime dependencies carry no recorded
-  justification, and upstream-liveness exposure (Critters archived, epubjs
-  stale) is tracked only in review notes (code audit, 2026-07-07)" does not meet
-  threshold "zero unjustified runtime dependencies and no unreviewed dependency
-  growth between office-hours reviews"
+reading: "dependency-audit: 27 runtime deps, 0 unjustified, 1 dead-upstream"
+gap: 'reading "dependency-audit: 27 runtime deps, 0 unjustified, 1
+  dead-upstream" does not meet threshold "zero unjustified runtime dependencies
+  and no unreviewed dependency growth between office-hours reviews"'
 serves:
   - virtue-progressive-detachment
 recovers: []
