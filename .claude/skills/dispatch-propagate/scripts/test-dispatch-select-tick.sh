@@ -1525,16 +1525,22 @@ assert_eq "manual-sweep: stale reservation marker was reclaimed (deleted)" "0" \
   "$([ -e "$DISPATCH_RESERVATION_DIR/900-test" ] && echo 1 || echo 0)"
 sel_tick_teardown
 
-# --- --manual sweeps an orphan-SATURATED ledger at/over the ceiling (2026-07-23 incident) ---
+# --- --manual sweeps an orphan-SATURATED ledger at/over the ceiling ---------
 # The adjacent manual-sweep test above plants a SINGLE stale marker well below
 # the worker ceiling — it proves the sweep runs, but a weak assertion there
 # would still pass even if the sweep were deleted: SPAWN_N has a floor of 1
 # that re-asserts itself past the ceiling regardless of RESV, so "non-zero
 # fan-out" alone proves nothing. This case is distinct: it plants SEVEN
 # dead-session markers — enough to saturate the ledger AT the MAX_WORKERS
-# ceiling (7 >= MAX_WORKERS − BUSY = 8 − 1) — reproducing the shape of the
+# ceiling (7 >= MAX_WORKERS − BUSY = 8 − 1) — reproducing the SHAPE of the
 # 2026-07-23 phantom-worker incident (`router: manual fan-out: SPAWN_N=1 ...
-# live=10` with no live workers actually running). Only with the sweep
+# live=10` with no live worker actually running). The shape, not its cause:
+# the manual sweep is not the ledger's only reaper (dispatch-tick's paused
+# branch reaps too, ahead of its short-circuit), so what this test pins is the
+# manual path's own cross-mode freshness guarantee — a deliberate human
+# dispatch must count against a ledger reconciled AS OF THIS RUN, not one up
+# to a heartbeat interval (or an unfired/stopped heartbeat) stale. Only with
+# the sweep
 # reclaiming all 7 markers does LIVE_COUNT stay at 1 (BUSY only, RESV=0),
 # HEADROOM=7, GAP=6−1=5, SPAWN_N=5 → graph --top 5. If reservation_sweep were
 # removed (the regression this test must catch), the 7 dead markers would

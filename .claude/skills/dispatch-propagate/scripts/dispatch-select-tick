@@ -859,19 +859,30 @@ elif [[ -n "$MANUAL" ]]; then
   #       reservation. Counting unswept would charge it twice and shrink manual
   #       fan-out for up to a full tick interval. Sweep rule (a) drops exactly
   #       those redundant markers.
-  #   (2) Paused + manual-only dormancy. While the pause sentinel is set, the
-  #       autonomous heartbeat exits before Step 1b and never calls
-  #       reservation_sweep (see the autonomous gate's own sweep above), so in
-  #       that standing paused+manual-only operating mode the manual tick is the
-  #       ONLY live consumer of the reservation ledger. Skip this sweep and
-  #       dead-session orphan markers pile up without bound, inflating live=N
-  #       with phantom workers — this is what caused the 2026-07-23
-  #       phantom-worker incident. A stale count here is NOT merely "more
-  #       conservative and therefore safe": once orphans reach the ceiling,
-  #       HEADROOM hits 0 and manual fan-out gets throttled or zeroed outright,
-  #       which is a failure, not caution. Required by
+  #   (2) Cross-mode ledger freshness. Pause gates worker SPAWNING only, never
+  #       ledger bookkeeping: dispatch-tick's paused branch sources
+  #       lib-reservation-ledger.sh and reaps the ledger ahead of its
+  #       short-circuit `exit 0` (landed as tactic-heartbeat-sweep-before-pause),
+  #       so a paused heartbeat IS still a reaper and this manual sweep is NOT
+  #       the ledger's only reconciler — do not read it as one. What it is, is
+  #       the only reconciler that makes the ledger current AS OF THIS RUN: a
+  #       manual dispatch must not consume a ledger that is up to one heartbeat
+  #       interval stale (and arbitrarily stale when the heartbeat timer is
+  #       stopped, masked, or has not fired since a worker session died).
+  #       A stale count here is NOT merely "more conservative and therefore
+  #       safe": dead-session orphan markers inflate live=N with phantom
+  #       workers, and once they reach the ceiling HEADROOM hits 0 and manual
+  #       fan-out gets throttled or zeroed outright — the shape of the
+  #       2026-07-23 phantom-worker incident (`live=10` with no live worker
+  #       actually running) — which is a failure, not caution. Required by
   #       strategy-graph-native-dispatch's 2026-07-23 cross-mode ledger-validity
-  #       clarification.
+  #       clarification. (That clarification named a
+  #       `$XDG_DATA_HOME/commons-dispatch/paused` sentinel; its 2026-07-26
+  #       amendment supersedes the mechanism with a dispatch.config/*.json
+  #       boolean field — not yet built, tracked by
+  #       tactic-dispatch-pause-config-field, so dispatch-tick still resolves
+  #       DISPATCH_PAUSE_FLAG today — and leaves the spawning-not-bookkeeping
+  #       semantics unchanged.)
   # Like the autonomous site, the call is best-effort (`|| true`): a failed sweep
   # must not block a deliberate human dispatch.
   # shellcheck source=/dev/null
