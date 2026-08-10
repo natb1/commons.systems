@@ -10,7 +10,6 @@ status: codified
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -18,56 +17,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/implement: tactic-flake-acceptance-action-download's plan declares no
-    code scope (no ## Unit N sections, Scope forbids touching pr-checks.yml,
-    Verification is manual-only) - nothing for /implement-unit to build and no
-    diff to put in a PR. Escalating for a human decision on whether to
-    transition this node straight to done without a PR, or reclassify. Sibling
-    node tactic-flake-firestore-query-bounds-sensor-action-download has the
-    identical pattern from the same PR #3052 / CI run."
-  since: 2026-08-09
-  recommendation: >-
-    **Recommendation: agree with the park — but the routing, not the node, is
-    what needs deciding.**
-
-
-    1. **Nothing to implement.** The plan has no `## Unit N` sections, its Scope
-    explicitly forbids touching `pr-checks.yml`, and its Verification is
-    manual-only. A `Service Unavailable` from GitHub's action-resolution service
-    before `actions/checkout` runs is not fixable in this repo. Forcing a no-op
-    PR just to satisfy the implement→review marker would put a fake diff in
-    history. Don't do that.
-
-
-    2. **Unblock by transitioning phase, not by opening a PR.** These nodes are
-    incident records: their whole value is the fingerprint plus the recurrence
-    link. The transition should take the node straight from `implement` to
-    `done` with a short body note recording the disposition (re-run passed / no
-    code remedy). Use the repo's node-transition tooling
-    (`.claude/skills/dispatch-propagate/scripts/transition-node`) rather than
-    hand-editing the frontmatter — hand edits in a stale worktree are a known
-    way to lose the body. Before transitioning, confirm the `acceptance` job
-    actually passed on a re-run of PR #3052; if it failed again with the same
-    fingerprint, that changes the answer (recurring → real signal, escalate
-    upstream).
-
-
-    3. **Same sitting, both nodes.**
-    `tactic-flake-firestore-query-bounds-sensor-action-download` is stuck
-    identically — same PR, same run, same empty scope. Dispatch the same
-    disposition to both.
-
-
-    **Worth deciding once:** whether flake-tracking nodes with no code scope
-    should ever be routed to `implement` at all, or be born at
-    `done`/observational in align-tactics. Otherwise this recurs on every
-    CI-infra flake.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -140,3 +94,21 @@ Retrying in 29.034 seconds
 ```
 
 recurred on PR #3052 / run https://github.com/natb1/commons.systems/actions/runs/31114386402/job/92660066629
+
+## Disposition 2026-08-10 — re-run passed, closed with no code remedy
+
+Author ruling 2026-08-10: re-run the failed check and, if green, transition
+`implement` → `done` without a PR (a no-op PR would put a fake diff in
+history).
+
+Re-run executed: `gh run rerun 31114386402 --failed`. The `acceptance` job
+passed in 39s (job 93512162554), on the same commit `cda146fb` that had
+failed — confirming the failure was transient GitHub-side action resolution,
+not anything in the PR's diff. The sibling check in the same run,
+`firestore-query-bounds-sensor`, passed in 33s alongside it.
+
+No code changed and none was needed; the node's durable value is the recorded
+fingerprint (`acceptance — acceptance`), which lets the flake classifier match
+a recurrence and re-surface it. A recurrence of this exact fingerprint is real
+signal — escalate to the GitHub status page / Support rather than re-opening a
+code-scope search.
