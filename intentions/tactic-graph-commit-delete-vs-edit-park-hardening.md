@@ -30,7 +30,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-commit-delete-vs-edit-park-hardening
   pr: 2936
@@ -42,7 +42,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T09:50:52Z
+    mergeCommitSha: dfa9a3b3e6e2b459b58ba710c674a1ad524c6742
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
