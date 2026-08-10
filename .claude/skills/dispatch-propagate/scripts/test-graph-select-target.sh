@@ -148,6 +148,159 @@ assert_eq "graph-select-target: an unknown read is NOT reported as terminal-sess
 rm -rf "$GSC_ROOT" "$GSC_BARE"
 
 # ============================================================================
+# Test: graph-select-target --node — explicit-target dispatch
+# (tactic-graph-select-target-node-tests)
+# ============================================================================
+# --node lets a caller ask for one specific node id rather than the ranked-set
+# selection graph-select-target otherwise performs. The candidate-loop jq
+# filters the snapshot to `select(.id == $target)`; NODE_PRESENT then drives
+# the disposition: absent from candidates -> not-found (stderr explains why,
+# exit 0, stdout "empty"); present but gated (reserved / live-session) ->
+# gated (stderr names the gate, exit 0, stdout "empty"); present and clear ->
+# selected (stdout "node <id> <kind> <phase>", exit 0). --node is also
+# mutually exclusive with --top and --pace-exempt-only (exit 2). This fixture
+# reuses the Unit-3 real-git-repo + fake-npx + fake-`claude` shape verbatim
+# (graph-select-target derives REPO_ROOT from its own on-disk SCRIPT_DIR
+# location, so the script + every sourced lib*.sh must be physically copied,
+# not symlinked, and select-targets.ts is stubbed with a fake `npx` on PATH),
+# including that fixture's empty-read corroboration stub — see the
+# pgrep-daemon-visible note below.
+GSN_ROOT=$(mktemp -d)
+GSN_BARE=$(mktemp -d)
+GSN_SCRIPTS="$GSN_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GSN_SCRIPTS" "$GSN_ROOT/bin"
+cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSN_SCRIPTS/"
+# Fake npx: one selectable implement-phase candidate (same shape as the
+# Unit-3 fixture above).
+cat > "$GSN_ROOT/bin/npx" <<'GSNNPX'
+#!/usr/bin/env bash
+echo '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"implement","pr":null,"pace_exempt":false}],"events":[]}'
+exit 0
+GSNNPX
+chmod +x "$GSN_ROOT/bin/npx"
+# A git repo whose origin/main carries an intentions/ tree, main checked out at
+# the fixture root so NATIVE_ROOT resolves there.
+git init -q -b main "$GSN_ROOT"
+git -C "$GSN_ROOT" config user.email t@t
+git -C "$GSN_ROOT" config user.name t
+mkdir -p "$GSN_ROOT/intentions"
+echo '# placeholder' > "$GSN_ROOT/intentions/placeholder.md"
+git -C "$GSN_ROOT" add -A
+git -C "$GSN_ROOT" commit -q -m seed
+git init -q --bare -b main "$GSN_BARE"
+git -C "$GSN_ROOT" remote add origin "$GSN_BARE"
+git -C "$GSN_ROOT" push -q origin main
+git -C "$GSN_ROOT" fetch -q origin
+# Fake `claude agents --json`: payload driven by a rewritable file.
+cat > "$GSN_ROOT/bin/claude" <<'GSNCLAUDE'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/.." && pwd)"
+cat "$_root/claude-payload.json"
+exit 0
+GSNCLAUDE
+chmod +x "$GSN_ROOT/bin/claude"
+# Empty-read corroboration stub, same as the Unit-3 fixture above: the real
+# (physically copied) lib-claude-agents.sh only trusts an exactly-`[]` registry
+# payload as a genuine "no live sessions" when a `claude daemon` process
+# corroborates it, and folds an UNCORROBORATED `[]` into UNKNOWN, which
+# worktree_has_live_session then fails safe to "occupied". Every `[]`-payload
+# case below therefore needs this probe defaulted to "daemon visible" (exit 0)
+# — otherwise it falls through to the REAL host `pgrep` and Case 1 reports the
+# live-session gate instead of selecting, on any host (CI included) not itself
+# running a claude daemon.
+cat > "$GSN_ROOT/bin/pgrep-daemon-visible" <<'GSNPGREP'
+#!/usr/bin/env bash
+exit 0
+GSNPGREP
+chmod +x "$GSN_ROOT/bin/pgrep-daemon-visible"
+mkdir -p "$GSN_ROOT/.claude/worktrees/tactic-fixture"
+GSN_GST="$GSN_SCRIPTS/graph-select-target"
+
+# Per-case baseline: no live sessions, no reservations. graph-select-target
+# checks the reserved gate BEFORE the live-session gate, so without an explicit
+# reset the live-session case would only observe its own gate because the
+# reserved case happened to clean up after itself — cases would silently change
+# meaning if reordered or run in isolation.
+gsn_reset() {
+  printf '%s' '[]' > "$GSN_ROOT/claude-payload.json"
+  rm -rf "$GSN_ROOT/reservations"
+  mkdir -p "$GSN_ROOT/reservations"
+}
+
+echo "Test: graph-select-target --node explicit dispatch (tactic-graph-select-target-node-tests)"
+
+# --- Case 1: present candidate, no gate -> selected -------------------------
+gsn_reset
+gsn1_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>/dev/null) && gsn1_rc=0 || gsn1_rc=$?
+assert_eq "graph-select-target --node: present candidate, no gate selects" "node tactic-fixture tactic implement" "$gsn1_out"
+assert_eq "graph-select-target --node: present candidate, no gate exits 0" "0" "$gsn1_rc"
+
+# --- Case 2: node absent from candidates -> not-found -----------------------
+gsn_reset
+gsn2_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-absent 2>"$GSN_ROOT/stderr.txt") && gsn2_rc=0 || gsn2_rc=$?
+gsn2_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: absent candidate emits empty" "empty" "$gsn2_out"
+assert_eq "graph-select-target --node: absent candidate exits 0" "0" "$gsn2_rc"
+assert_contains_local "graph-select-target --node: absent candidate explains not-selectable" \
+  "graph-select-target: node tactic-absent is not selectable (not found, done, parked, blocked, or already reviewed — inspect intentions/tactic-absent.md directly for the reason)" \
+  "$gsn2_err"
+
+# --- Case 3: present candidate, reserved -> gated ---------------------------
+gsn_reset
+touch "$GSN_ROOT/reservations/tactic-fixture"
+gsn3_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>"$GSN_ROOT/stderr.txt") && gsn3_rc=0 || gsn3_rc=$?
+gsn3_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: reserved candidate emits empty" "empty" "$gsn3_out"
+assert_eq "graph-select-target --node: reserved candidate exits 0" "0" "$gsn3_rc"
+assert_eq "graph-select-target --node: reserved candidate reports reserved" "graph-select-target: reserved" "$gsn3_err"
+
+# --- Case 4: present candidate, live session -> gated -----------------------
+gsn_reset
+printf '%s' '[{"sessionId":"s1","pid":1,"status":"busy","name":"tactic-fixture","cwd":""}]' \
+  > "$GSN_ROOT/claude-payload.json"
+gsn4_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture 2>"$GSN_ROOT/stderr.txt") && gsn4_rc=0 || gsn4_rc=$?
+gsn4_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: live-session candidate emits empty" "empty" "$gsn4_out"
+assert_eq "graph-select-target --node: live-session candidate exits 0" "0" "$gsn4_rc"
+assert_eq "graph-select-target --node: live-session candidate reports live-session" "graph-select-target: live-session" "$gsn4_err"
+
+# --- Case 5: --node + --top -> usage error ----------------------------------
+gsn_reset
+gsn5_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --top 2 2>"$GSN_ROOT/stderr.txt") && gsn5_rc=0 || gsn5_rc=$?
+gsn5_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: --node + --top exits 2" "2" "$gsn5_rc"
+assert_contains_local "graph-select-target --node: --node + --top reports mutual exclusion" \
+  "--node is mutually exclusive with --top and --pace-exempt-only" "$gsn5_err"
+
+# --- Case 6: --node + --pace-exempt-only -> usage error ---------------------
+gsn_reset
+gsn6_out=$(PATH="$GSN_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSN_ROOT/bin/claude" CLAUDE_AGENTS_PGREP_CMD="$GSN_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSN_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSN_ROOT/seldir" "$GSN_GST" --node tactic-fixture --pace-exempt-only 2>"$GSN_ROOT/stderr.txt") && gsn6_rc=0 || gsn6_rc=$?
+gsn6_err=$(cat "$GSN_ROOT/stderr.txt")
+assert_eq "graph-select-target --node: --node + --pace-exempt-only exits 2" "2" "$gsn6_rc"
+assert_contains_local "graph-select-target --node: --node + --pace-exempt-only reports mutual exclusion" \
+  "--node is mutually exclusive with --top and --pace-exempt-only" "$gsn6_err"
+
+rm -rf "$GSN_ROOT" "$GSN_BARE"
+
+# ============================================================================
 # Test: graph-select-target --standalone — lock + headroom + claim wrapping
 # (tactic-graph-router-live-worker-visibility Unit 2)
 # ============================================================================
