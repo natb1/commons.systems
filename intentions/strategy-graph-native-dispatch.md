@@ -4717,6 +4717,52 @@ clarifications:
       dispatch-open-pr passes --title through unvalidated) — recorded as an
       unverified gap (the guard may be GitHub-side branch protection invisible
       to a repo search), not a finding of absence."
+  - question: (Drift review, 2026-08-10 /align-tactics strategy round.) Is the armed
+      maintenance-burden band (35% ceiling, non-increasing) still holding, given
+      the tactic population has churned substantially since the 2026-08-05
+      arming sample?
+    answer: "(Measured 2026-08-10 /align-tactics drift review.) The armed
+      maintenance-burden band HOLDS. Direct re-run of `npx tsx
+      packages/intentionsutil/scripts/align-tactics-census.ts
+      strategy-graph-native-dispatch intentions` against origin/main (0c23faea):
+      232 tactics serve this strategy, classified 50 open / 15 born-parked / 72
+      done / 95 draft. Open plus born-parked = 65 of 232 = 28.0%, against the
+      recorded 2026-08-05 arming sample of 59/197 = 30.0% and the 2026-08-04
+      baseline of 62/178 = 34.8%. Both terms of the band are satisfied: at or
+      below 35%, and non-increasing across the three consecutive samples (34.8%
+      -> 30.0% -> 28.0%) while the denominator grew by 54 over six days. The
+      condition is holding, not failing, and did not block this round. Recorded
+      as dated provenance in the same form as the arming measurement — not as
+      stored series state, which the 2026-08-05 sample-history ratification
+      explicitly rejected in favor of derivation from intentions/ git history at
+      read time."
+  - question: (Drift review, 2026-08-10 /align-tactics strategy round.) Is the
+      2026-08-05-ratified instrument work
+      (tactic-graph-native-signal-instrument-arm) still live and does the
+      adjacent in-flight census-scripted-tick work (tactic-census-scripted-tick)
+      conflict with it?
+    answer: "(Verified 2026-08-10 /align-tactics drift review.) Two checks on the
+      instrument work ratified 2026-08-05
+      (tactic-graph-native-signal-instrument-arm), both clear. (a) The sensor
+      drift is STILL LIVE and the tactic is not a no-op: LIFECYCLE_SENSOR_NAME
+      at packages/intentionsutil/scripts/read-sensors.ts:443 (used at :646) is
+      still the short string \"the intention store and the router's selection
+      log\", while this node's recorded success_signal.sensor carries the
+      amended long string naming align-tactics-census.ts and the selection log —
+      so SensorRegistry.resolve's exact match still fails and reading stays
+      null. Note the file path recorded in the 2026-08-05 clarification and in
+      the tactic's rationale is scripts/read-sensors.ts, not
+      src/read-sensors.ts; no src/ copy exists. (b) The adjacent in-flight
+      census work does NOT conflict with the recorded sensor:
+      tactic-census-scripted-tick (open, qa) retires
+      `.claude/skills/dispatch-propagate/scripts/dispatch-graph-census` (the
+      threshold-gated latch-birth wrapper) and adds census-tick.ts — it does not
+      touch packages/intentionsutil/scripts/align-tactics-census.ts, which the
+      recorded sensor names as its defect-population enumerator and which
+      remains referenced by the /align-tactics skill and its
+      idempotency/tactic-target references. The sensor implementer may reuse
+      align-tactics-census.ts's classify() (draft/born-parked/open/done, lines
+      23-30) without a pending-retirement hazard."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -4770,7 +4816,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
-  last_aligned: null
+  last_aligned: 2026-08-10
 attributes:
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
