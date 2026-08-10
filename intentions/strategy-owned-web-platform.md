@@ -26,9 +26,6 @@ rationale: "Recorded 2026-07-07 from the /align-strategy comprehensive code
   router XSS and prerender-injection defects were real — in exchange for freedom
   from framework lock-in and a fork that inherits no rented substrate."
 reading: "dependency-audit: 27 runtime deps, 0 unjustified, 1 dead-upstream"
-gap: 'reading "dependency-audit: 27 runtime deps, 0 unjustified, 1
-  dead-upstream" does not meet threshold "zero unjustified runtime dependencies
-  and no unreviewed dependency growth between office-hours reviews"'
 serves:
   - virtue-progressive-detachment
 recovers: []
@@ -121,6 +118,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the owned implementations' defect stream stays small enough for the

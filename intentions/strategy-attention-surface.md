@@ -212,6 +212,21 @@ rounds:
   last_completed: null
   last_aligned: null
 attributes:
+  queue_summary:
+    date: "2026-08-10"
+    summary: >-
+      156 parked nodes, of which 6 are rank-lifted from work they block and 150
+      are not; 16 live nodes are held by a blocked_by edge onto a park. The
+      critical path is the lifted set — clearing those 6 releases named work —
+      but rank alone does not order this queue: the highest-ranked park
+      (tactic-drain-disposition-diagnosis-cas, 90.3, parked since 2026-07-28)
+      outranks every lifted one and blocks nothing. Two provision-conflict holds
+      (tactic-hold-conflict-autonomous-ci-pending-liveness-bound and
+      tactic-hold-conflict-scope-fingerprint-plan-substance) have no autonomous
+      re-attempt path — nothing re-runs conflict Lane 3 against an existing hold
+      — so they persist until a session is launched by hand. A third,
+      tactic-hold-conflict-strategy-fingerprint-stamp-coverage, resolved this way
+      on 2026-08-10 and its source is now in qa.
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

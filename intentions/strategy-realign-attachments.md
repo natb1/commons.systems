@@ -23,10 +23,7 @@ rationale: >-
   This is the graph's first strategy whose primary axis is divergence rather
   than irreversibility.
 reading: "high-divergence: 5 records; 4 covered by recovers; uncovered:
-  delegation-communications"
-gap: 'reading "high-divergence: 5 records; 4 covered by recovers; uncovered:
-  delegation-communications" does not meet threshold "every high-divergence
-  record is covered by a recovers edge or a recorded re-alignment"'
+  delegation-communications (sensor read 2026-08-10)"
 serves:
   - virtue-alignment-of-attachments
 recovers: []

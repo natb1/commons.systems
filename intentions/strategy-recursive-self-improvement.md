@@ -34,7 +34,9 @@ rationale: "The graph-native dispatch bootstrap has been in flight for several
   tradition-agentic-engineering — feeds the fit-function evaluation with
   external hypotheses; sensor-only, author-gated incorporation, recorded in the
   clarifications and conditions of that date.)"
-reading: null
+reading: "pause: paused; backlog: 58/236 = 24.6% (band ≤35%); parked: 156 (21
+  blocking); worktrees: 54; tokens 7d: dispatch 91% / office-hours 0% / rsi 0% /
+  other 9%"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -240,6 +242,32 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
+  queue_summary:
+    date: "2026-08-10"
+    summary: >-
+      R2 shipped — /rsi, /rsi-plan, render-rsi-plan.ts and the claim primitive
+      landed in #3065 — so this file is rendered from graph state rather than
+      transcribed from a session's measurements. This iteration corrected two
+      defects that only the first real render could expose: the renderer dropped
+      the bug-ledger pointer, now carried as graph data in
+      attributes.external_ledgers and rendered as section 7; and the rsi sensor
+      had silently de-registered when 47219a1a reworded this node's
+      success_signal.sensor prose, which the registry matches
+      character-for-character. R3 (tactic-rsi-implement-skill, cost 1) is the
+      next task and the only queued one that spends budget. rsi tasks are never
+      dispatch-delegated — the rsi session executes them itself, serialized on
+      this strategy's worktree claim.
+  external_ledgers:
+    - path: "~/.claude/plans/task-notification-task-id-bwopwgmr1-tas-lucky-parasol.md"
+      note: >-
+        Prototype-session operating record. Still the sole carrier for the
+        numbered operational invariants I13-I30, the graph-write and --base CAS
+        recipes, the reap traps, and the sandbox rules — this graph carries the
+        strategy, not the operations. Most STANDING invariants are independently
+        held in the session memory store (I13, I16, I18, I21, I24, I25); the
+        residue is not (I15, I22's exact form, I27, I28, I29, I30). Retire this
+        entry once that residue lands as graph nodes or memories, and do not
+        delete the file while the entry stands.
   conditions:
     - at most one /rsi session is active at a time — invocation claims a
       singleton resource (the strategy-recursive-self-improvement worktree,

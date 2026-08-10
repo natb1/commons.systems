@@ -39,19 +39,10 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   superseded migration-completion threshold could not read. success_signal was
   amended this round accordingly; see the threshold-shape and steelman
   clarifications below."
-reading: "lifecycle: tactic-graph-select-target-node-tests
-  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
-  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
-  → 29.7% → 27.5% (non-increasing)"
-gap: "reading \"lifecycle: tactic-graph-select-target-node-tests
-  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
-  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
-  → 29.7% → 27.5% (non-increasing)\" does not meet threshold \"the owned path
-  carries tactics through the full lifecycle continuously, and the machinery's
-  own open defect backlog — open (phase set, not done) plus born-parked tactics
-  serving this strategy — stays at or below 35% of all tactics serving this
-  strategy and is non-increasing across consecutive samples derived from
-  intentions/ git history at read time\""
+reading: "lifecycle: tactic-gap-derive-on-read implement→qa→review→done
+  (2026-08-10); router selections: 2374 records, 281 nodes; backlog: 58/236 =
+  24.6% (band ≤35%); backlog series 28d: 47.6% → 38.2% → 31.4% → 24.6%
+  (non-increasing)"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -4774,8 +4765,8 @@ clarifications:
       idempotency/tactic-target references. The sensor implementer may reuse
       align-tactics-census.ts's classify() (draft/born-parked/open/done, lines
       23-30) without a pending-retirement hazard."
-  - question: Does condition 10's 'Breaker state never lives outside the graph'
-      bind the per-claim evidence anchor for a node's freeze, or only the
+  - question: Does condition 10's 'Breaker state never lives outside the graph' bind
+      the per-claim evidence anchor for a node's freeze, or only the
       tripped-breaker incident record? And where is the claim written?
     answer: "Ratified in the 2026-08-10 office-hours sitting, clearing the parks on
       tactic-claim-containment-durable-anchor (born-parked 2026-07-31) and
@@ -4790,9 +4781,9 @@ clarifications:
       adopted later, but only as an AMENDMENT to this condition, never as a
       reading of it. (ii) THE CLAIM IS WRITTEN BATCHED, ONE graph-commit PER
       SELECTION TICK, ISSUED BEFORE THE SPAWNS — not per spawn in
-      provision-node-worktree, which is the shape the 2026-08-09 sitting ratified
-      without pricing. Measured 2026-08-10: provision-node-worktree performs no
-      graph write today (only reservation_mark_spawned at
+      provision-node-worktree, which is the shape the 2026-08-09 sitting
+      ratified without pricing. Measured 2026-08-10: provision-node-worktree
+      performs no graph write today (only reservation_mark_spawned at
       dispatch-graph-execute:159); baseline ~92 landings/day (1293/14d, peak
       27/hour) against ~22 worker passes/day (312 transitions/14d), so a
       per-spawn write adds only ~24% to landing VOLUME but places a CI-stamped
@@ -4858,6 +4849,19 @@ rounds:
   last_completed: null
   last_aligned: 2026-08-10
 attributes:
+  queue_summary:
+    date: "2026-08-10"
+    summary: >-
+      Paused under rsi pause authority; the tick's merge lane still runs, so
+      review-phase nodes keep landing while nothing new is selected. Backlog is
+      58/236 = 24.6%, inside the recorded 35% band and non-increasing across the
+      28d series (47.6% then 38.2% then 31.4% then 24.6%). The queue's mass is in
+      verification rather than construction — 31 of the 58 open nodes sit in qa
+      or main-qa against 12 in implement — so resuming adds implement-phase
+      arrivals to a queue whose bottleneck is downstream of them, and the band
+      alone is not the resume test. Resume is gated on R4's five recorded
+      criteria, re-measured at the time of the decision and never lifted early
+      without recording why.
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
       gh once the /align entry point (today /align-strategy, until
