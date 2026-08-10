@@ -30,15 +30,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-graph-commit-delete-vs-edit-park-hardening
   pr: 2936
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by: []
