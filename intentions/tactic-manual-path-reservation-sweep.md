@@ -35,12 +35,13 @@ attention:
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
   tier: 1
-phase: implement
+phase: qa
 execution:
   branch: tactic-manual-path-reservation-sweep
   pr: 2964
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   conflict: null
