@@ -260,13 +260,28 @@ strategy node so its `reading` stays current. Do this once per successful
    This writes `$TMPDIR/strategy-recover-finance.json` (the shape `write-node.ts`
    consumes) and `$TMPDIR/base-manifest.txt`.
 
-2. In that JSON, set `reading` to
-   `"<YYYY-MM> statements merged and categorized; snapshot <filename>"`, where
-   `<YYYY-MM>` is the merged statement month and `<filename>` is the basename of
-   the just-published snapshot (`budget-<ts>.enc.json`, echoed by
-   `budget-apply`). Set `gap` to `null` when the merged month is the most recent
-   complete month; otherwise name the shortfall (e.g. the months still unmerged).
-   Change nothing else.
+2. In that JSON, set `reading` — and change nothing else. `reading` is the only
+   field that decides whether the signal is met: the gap is derived on read by
+   `deriveGap` (`packages/intentionsutil/src/sensors.ts`), which compares the
+   trimmed, case-insensitive `reading` against the node's
+   `success_signal.threshold` and reports a gap unless the two are equal. There
+   is no `gap` field to write — the schema does not carry one, and
+   `write-node.ts` drops the key, so a shortfall recorded anywhere but
+   `reading` is silently discarded.
+
+   - When the merged month **is** the most recent complete month, set `reading`
+     to the node's `success_signal.threshold` **verbatim** (currently
+     `statements merged and categorized monthly with no SaaS budgeting service
+     holding the data`). Copy the threshold string out of the dumped JSON
+     rather than retyping it — any deviation, including an appended month or
+     snapshot filename, derives as a shortfall.
+   - Otherwise, set `reading` to a string naming the shortfall, e.g.
+     `merged through <YYYY-MM>; <YYYY-MM> statements still unmerged`. Any
+     string that does not match the threshold derives a gap, so make it say
+     what is missing — that string is what an office-hours reader sees.
+
+   The published snapshot filename is reported to the user in the session
+   summary (Step 4), not stamped into `reading`.
 
 3. Write it back through the validation gate, then land it:
 
@@ -277,12 +292,11 @@ strategy node so its `reading` stays current. Do this once per successful
      --base "$TMPDIR/base-manifest.txt" strategy-recover-finance
    ```
 
-`reading` and `gap` are sensor-writable state fields, excluded from the strategy
-substance fingerprint, so this stamp never triggers a soft freeze on the
-strategy. The snapshot filename carries a timestamp only — no transaction data —
-so it is safe for the public graph. The privacy invariant above otherwise
-applies unchanged: never put transaction contents, descriptions, amounts, or
-account identifiers into the stamped `reading`.
+`reading` is a sensor-writable state field, excluded from the strategy substance
+fingerprint, so this stamp never triggers a soft freeze on the strategy. The
+privacy invariant above applies unchanged: never put transaction contents,
+descriptions, amounts, or account identifiers into the stamped `reading` —
+a shortfall string names months, not transactions.
 
 ## Wrong-password handling
 

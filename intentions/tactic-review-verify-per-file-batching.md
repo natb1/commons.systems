@@ -12,7 +12,6 @@ rationale: Surfaced by the 2026-07-31 review-fix token audit interview. Verify
   rejected folding the call into classify because that would destroy the gate's
   independence. See clarification 19 on strategy-token-economy.
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []

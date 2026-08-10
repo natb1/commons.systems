@@ -25,7 +25,6 @@ rationale: "Surfaced 2026-08-01 while investigating a stopped-node QA subagent's
   main-qa phase. The gap is a live but not-yet-observed code path, not an
   incident; see the body's resolved-timeline table for the full commit trail.)"
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

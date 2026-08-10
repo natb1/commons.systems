@@ -11,8 +11,23 @@ npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [i
 ```
 
 `intentionsDir` defaults to `intentions`, matching `validate-graph.ts`. It
-finds every `kind: tactic` node whose `serves` includes `<strategy-id>` and
-emits one blank-line-separated record per match:
+first emits one serving-strategy block:
+
+```
+=== Serving strategy ===
+id: strategy-<slug>
+reading: <reading> | null
+gap: <derived gap> | null
+```
+
+That `gap` is **derived**, never stored: the node carries no `gap`
+frontmatter key, and the script computes it fresh via `deriveGap`
+(`packages/intentionsutil/src/sensors.ts`), the same doctrine `attention`
+follows. This block is the caller's source for the strategy's gap — read it
+here rather than off the node.
+
+It then finds every `kind: tactic` node whose `serves` includes
+`<strategy-id>` and emits one blank-line-separated record per match:
 
 ```
 id: tactic-<slug>

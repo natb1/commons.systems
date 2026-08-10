@@ -39,41 +39,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-wait-calendar-release
   pr: 3051
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   conflict: null
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "graph-commit: mechanical-unresolved — 1 field(s) diverged across
-    concurrent writes and could not be auto-merged (layers 1-3 exhausted)"
-  since: 2026-08-10
-  recommendation: >-
-    A concurrent writer landed an overlapping edit to this node while this
-    session's edit was in flight; this writer's content was NOT landed. This
-    session's unlanded content is preserved at
-    /tmp/tmp.JNZ6SD0qok/tactic-wait-calendar-release.md (this machine only — may
-    not survive past this session). Recommended: the losing writer re-reads the
-    current origin/main content, manually merges in its intended edit, and
-    re-runs graph-commit on the merged result — that same commit clears this
-    office_hours park. A third session encountering this park while the loser is
-    still working should wait rather than attempt its own merge (the mailbox
-    discipline).
-
-
-    Unresolved conflict on tactic-wait-calendar-release: list-entry removal vs.
-    concurrent edit — this write removes frontmatter list entries that
-    origin/main still carries (execution[planned]), and the field-level merge
-    unions list fields base-free, so auto-merging would silently restore them
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

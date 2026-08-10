@@ -15,7 +15,6 @@ rationale: "Surfaced by the 2026-07-31 /align-strategy fleet-scheduling
   half can compound across ticks, not just overshoot by one. Both are defects
   against the record, not design choices."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

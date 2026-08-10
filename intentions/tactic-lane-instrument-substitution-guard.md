@@ -15,7 +15,6 @@ rationale: Surfaced by the 2026-07-31 /code-review investigation. Across 18
   clarification on strategy-graph-native-dispatch and clarification 25 on
   strategy-token-economy.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
   - strategy-token-economy

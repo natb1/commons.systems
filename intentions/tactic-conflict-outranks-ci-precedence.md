@@ -21,7 +21,6 @@ rationale: "Byproduct of the 2026-07-29 /align-strategy dispatch-containment
   siblings, each of which removes a special case that would otherwise be carried
   into the unified form."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

@@ -22,7 +22,6 @@ rationale: "review-fix follow-up from PR #2911
   merge-node.ts guard landed in PR #2911 -- this tactic only builds
   test/downstream coverage around it."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

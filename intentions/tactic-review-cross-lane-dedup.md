@@ -30,7 +30,6 @@ rationale: "laneAResidue never enters the allFindings/dedup pool
   plan). See the node body for the full plan, the invariant proof, and
   verification."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
   - strategy-graph-native-dispatch

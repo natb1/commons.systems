@@ -10,7 +10,6 @@ rationale: "Finalized 2026-07-03 by /align-tactics round 1: foundational leaf â€
   every other tactic in the round reads the graph through this layer. Consumes
   the retained draft of the same id."
 reading: null
-gap: null
 serves:
   - strategy-attention-surface
 recovers: []

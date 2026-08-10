@@ -150,8 +150,9 @@ export interface IntentionCandidate {
  * reads "met" yet the intention is plainly not met — is not mechanically
  * detectable here. A proxy not yet read (reading null) is also NOT flagged —
  * there is nothing to contradict yet, even though `deriveGap` returns a "no
- * reading yet" string. The gap is computed via `deriveGap`, not read from the
- * stored `node.gap`, so the predicate is self-contained and total.
+ * reading yet" string. The gap is computed via `deriveGap` — there is no
+ * stored `node.gap` field to read — so the predicate is self-contained and
+ * total.
  */
 export function findFalsifiedProxies(nodes: IntentionNode[]): IntentionNode[] {
   return nodes.filter(

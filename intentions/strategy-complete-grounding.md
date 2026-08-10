@@ -30,12 +30,12 @@ rationale: "Recorded 2026-07-07 /align-strategy interview, from the same-day
   loop at office-hours."
 reading: "gap analysis 2026-07-10: 75 unmarked durable-layer nodes of 85; top
   exposure: delegation-attention-services, delegation-communications,
-  delegation-social-publishing"
-gap: 75 of 85 durable-layer nodes are unmarked (10 virtues/strategies carry a
-  traditions mark, zero carry a grounding mark); exposure ranks all 21
-  delegations first — the divergence-high delegation-attention-services /
-  -communications / -social-publishing at the top — then the non-delegation
-  nodes by recovers-proximity to the nearest delegation.
+  delegation-social-publishing; 10 virtues/strategies carry a traditions mark
+  and zero carry a grounding mark; exposure ranks all 21 delegations first (the
+  divergence-high delegation-attention-services / -communications /
+  -social-publishing at the top), then the non-delegation nodes by
+  recovers-proximity to the nearest delegation"
+gap: null
 serves:
   - virtue-philosophical-mobility
   - virtue-progressive-detachment
@@ -146,6 +146,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - "the office-hours cadence holds — candidate chunks resolve there, so a

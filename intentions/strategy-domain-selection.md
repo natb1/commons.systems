@@ -51,13 +51,17 @@ rationale: >-
   strategy is minted for it directly rather than waiting on this selection —
   exercised 2026-07-02: strategy-diversify-income, minted directly on
   delegation-client-income.
+
+
+  Selection-coverage assessment (2026-07 round): the round scored every raw
+  record — selected or explicitly deferred — so no raw record currently sits
+  unscored, meeting the threshold for that cycle. The threshold's "across a
+  review cycle" recurrence clause remains unproven after a single round.
 reading: "2026-07 round: all raw records scored — delegation-communications and
   delegation-web-analytics selected; delegation-banking, -cloud-backup,
   -health-records, -media-libraries, -mobile-platform, -connectivity explicitly
   deferred"
-gap: 2026-07 round scored every raw record (selected or deferred) — no raw
-  record currently sits unscored, meeting the threshold for this cycle; the
-  "across a review cycle" recurrence clause is unproven after a single round
+gap: null
 serves:
   - virtue-progressive-detachment
 recovers: []
