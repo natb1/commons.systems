@@ -60,7 +60,7 @@ attention:
     own progress, so leaving it at baseline would let the casualties it prevents
     outrank their own remedy."
   tier: 1
-phase: review
+phase: done
 execution:
   branch: tactic-node-verify-fence-dead-test-path-sweep
   pr: 3055
@@ -75,7 +75,10 @@ execution:
     attempt: 2
     pushed_sha: 1f2f0842a34baf57992895df6a86dbbe66a76974
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T05:15:35Z
+    mergeCommitSha: 9054327f536f539c613e3a8aaf0de7ea9f934382
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
