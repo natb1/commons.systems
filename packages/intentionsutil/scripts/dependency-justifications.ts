@@ -16,13 +16,17 @@
 //     allowed for finer notes, but only `"archived"`/`"stale"` are counted as
 //     dead-upstream by the audit.
 //
-// SCOPE OF THIS SEED: only a couple of illustrative entries plus the one real
-// dead-upstream case the audit must be able to surface (`epubjs`). Completeness
-// — a justification for every third-party runtime dependency — is deliberately
-// out of scope for this unit and is the next unit's job. Do NOT add entries for
-// dependencies that are not runtime `dependencies` of some workspace member: e.g.
-// `critters` is a root devDependency used by criticalcssutil's build step, not a
-// runtime dependency of any app, so it does not belong here.
+// SCOPE. One honest entry per name the audit currently audits: every
+// third-party runtime declaration across the workspace members —
+// `dependencies`, `optionalDependencies`, `peerDependencies`, bundled deps —
+// plus every package named in the root `package.json` `overrides` map (an
+// override substitutes code no manifest walk enumerates, so it needs a
+// justification too). Do NOT add entries for names the audit does not audit:
+// e.g. `critters` is a root devDependency used by criticalcssutil's build step,
+// not a runtime declaration of any member and not overridden, so it does not
+// belong here. Keeping this file in step with the audit is what holds the
+// reading at "0 unjustified"; a new declaration with no entry here reports
+// UNJUSTIFIED, by design.
 
 export interface DependencyJustification {
   /** Why this third-party runtime dependency is carried. */
@@ -34,9 +38,19 @@ export interface DependencyJustification {
    * not-dead-upstream.
    */
   upstream: "live" | "archived" | "stale" | string;
+  /**
+   * Declared specifiers this justification explicitly covers, needed ONLY for
+   * specifiers that pick code by something other than a registry range for this
+   * package's own name — an `npm:` alias, or a git/github/http/file/link
+   * target. The audit reports such a declaration as UNJUSTIFIED unless the
+   * exact specifier string is listed here, because the name alone certifies
+   * nothing about what an alias or git target actually installs. Ordinary
+   * version ranges (`"^19.0.0"`) never need to be listed.
+   */
+  specifiers?: string[];
 }
 
-export const dependencyJustifications: Record<string, DependencyJustification> = {
+const entries: Record<string, DependencyJustification> = {
   react: {
     justification: "Core UI runtime for the React-based apps (print, office-hours, and others).",
     upstream: "live",
@@ -141,4 +155,49 @@ export const dependencyJustifications: Record<string, DependencyJustification> =
       "parse/stringify YAML — office-hours graph-source parsing and intentionsutil's intention-node store.",
     upstream: "live",
   },
+
+  // --- peerDependencies: supplied by the consuming app, not by the package ---
+  "@playwright/test": {
+    justification:
+      "packages/authutil peer-declares it (>=1.50) for its `./e2e/sign-in` export, the shared Playwright sign-in helper consuming apps' e2e suites import; the consuming app supplies the runner (root and audio pin 1.61.1).",
+    upstream: "live",
+  },
+  "web-vitals": {
+    justification:
+      "packages/analyticsutil peer-declares it (>=4); src/index.ts imports onLCP/onCLS/onINP/onFCP/onTTFB to report Core Web Vitals through gtag. The consuming app supplies the implementation.",
+    upstream: "live",
+  },
+
+  // --- root `overrides`: security pins substituted into transitive deps ------
+  "@xmldom/xmldom": {
+    justification:
+      "Root override pinning the transitive XML DOM implementation to ^0.8.13 to remediate advisory 1117894 (commit 8b50ba68); no workspace member declares it directly.",
+    upstream: "live",
+  },
+  "fast-xml-builder": {
+    justification:
+      "Root override pinning the transitive XML builder to ^1.2.0, past advisory 1118965 (commit 4c2419cc); no workspace member declares it directly.",
+    upstream: "live",
+  },
+  esbuild: {
+    justification:
+      "Root override pinning the transitive bundler to ^0.28.1 to remediate GHSA-gv7w-rqvm-qjhr (commit 6a87b0cb); no workspace member declares it directly.",
+    upstream: "live",
+  },
+  protobufjs: {
+    justification:
+      "Root override pinning the transitive protobuf runtime (pulled in by the Google Cloud/Firebase SDKs) to ^7.6.4 for its security fix (commit 7d2bb66b); no workspace member declares it directly.",
+    upstream: "live",
+  },
 };
+
+// Exported prototype-free: `Object.create(null)` means no inherited
+// `Object.prototype` member (`constructor`, `toString`, `valueOf`, …) can ever
+// satisfy a lookup. npm names are unrestricted lowercase strings, so a
+// dependency literally named `constructor` is legal — read off a plain object
+// literal it would resolve to `Object.prototype.constructor` and be silently
+// counted as justified while reporting no `upstream`. `dependency-audit.ts`
+// ALSO guards its lookup with `Object.hasOwn`; this is the belt to that
+// suspenders, and it protects any other consumer that indexes the map directly.
+export const dependencyJustifications: Record<string, DependencyJustification> =
+  Object.assign(Object.create(null) as Record<string, DependencyJustification>, entries);

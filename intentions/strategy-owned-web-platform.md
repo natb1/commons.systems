@@ -25,8 +25,8 @@ rationale: "Recorded 2026-07-07 from the /align-strategy comprehensive code
   app is forced into it. The accepted trade: owned correctness burden — the
   router XSS and prerender-injection defects were real — in exchange for freedom
   from framework lock-in and a fork that inherits no rented substrate."
-reading: "dependency-audit: 21 runtime deps, 0 unjustified, 1 dead-upstream"
-gap: 'reading "dependency-audit: 21 runtime deps, 0 unjustified, 1
+reading: "dependency-audit: 27 runtime deps, 0 unjustified, 1 dead-upstream"
+gap: 'reading "dependency-audit: 27 runtime deps, 0 unjustified, 1
   dead-upstream" does not meet threshold "zero unjustified runtime dependencies
   and no unreviewed dependency growth between office-hours reviews"'
 serves:

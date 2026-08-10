@@ -807,6 +807,14 @@ const lifecycleSensor: Sensor = {
 // call in try/catch so a thrown error degrades to an honest status string
 // rather than propagating and aborting the whole batch (the total-sensor
 // contract documented at the top of this file).
+//
+// The caught error is NEVER interpolated into the returned reading. `main()`
+// persists every reading into the node's `reading` field (and quotes it again
+// in the derived `gap`), and those nodes are committed and pushed to a PUBLIC
+// repository — so an environment-specific error string would publish local
+// filesystem detail. The failure collapses to the same kind of fixed status
+// token every other sensor in this file uses ("unknown"), and the detail goes
+// to stderr, which the driver does not persist.
 
 /** The verbatim `success_signal.sensor` name strategy-owned-web-platform declares. */
 const DEPENDENCY_AUDIT_SENSOR_NAME =
@@ -818,7 +826,9 @@ const dependencyAuditSensor: Sensor = {
     try {
       return computeDependencyAudit(repoRoot).summaryLine;
     } catch (err) {
-      return `dependency audit: read error — ${String(err)}`;
+      // stderr only — not persisted into the node, so it may carry detail.
+      console.error(`dependency audit sensor: read error — ${String(err)}`);
+      return "dependency audit: unknown";
     }
   },
 };
