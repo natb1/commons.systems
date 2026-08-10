@@ -42,7 +42,7 @@ export interface DependencyJustification {
    * Declared specifiers this justification explicitly covers, needed ONLY for
    * specifiers that pick code by something other than a registry range for this
    * package's own name — an `npm:` alias, or a git/github/http/file/link
-   * target. The audit reports such a declaration as UNJUSTIFIED unless the
+   * target. The audit reports such a declaration UNJUSTIFIED unless the
    * exact specifier string is listed here, because the name alone certifies
    * nothing about what an alias or git target actually installs. Ordinary
    * version ranges (`"^19.0.0"`) never need to be listed.
@@ -200,4 +200,4 @@ const entries: Record<string, DependencyJustification> = {
 // ALSO guards its lookup with `Object.hasOwn`; this is the belt to that
 // suspenders, and it protects any other consumer that indexes the map directly.
 export const dependencyJustifications: Record<string, DependencyJustification> =
-  Object.assign(Object.create(null) as Record<string, DependencyJustification>, entries);
+  Object.assign(Object.create(null) as Record<string, DependencyJustification>, entries); // type-safety-ok: typing a null-prototype object literal
