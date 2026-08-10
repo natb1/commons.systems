@@ -179,3 +179,22 @@ The bash suite drives the fake `npx`, so Case 25 is protected end-to-end by the 
 2. Re-run the suite (or isolate Case 25). Case 25 must now FAIL: with the guard gone the shim reports `resolved:true`, `check_base_freshness` cp's the merged content and continues, the edit LANDS (resurrecting the deleted node) with no park — so the exit code is 0, no `office_hours` / no `delete/modify divergence` substring appears, and a false auto-resolve occurs.
 3. Restore the Unit 1 fix and re-run — Case 25 green again.
 4. (Optional, covers the REAL guard directly.) Because the shim is a faithful mirror of `merge-node.ts:74-78`, additionally spot-check the real script: temporarily revert the #2911 guard in `merge-node.ts`, then manually run `npx tsx packages/intentionsutil/scripts/merge-node.ts --base <non-empty-node-file> --ours <node-file> --theirs "" --out /tmp/out` and confirm it now (wrongly) prints `{"resolved":true,...}` and writes `--out`; with the guard present it prints `{"resolved":false,...}` and writes nothing. Restore the guard. (`test/node-merge.test.ts` is the standing automated coverage of the real primitive.)
+
+
+## needs-main residue
+
+QA attempt 2 (PR #2936) deferred two `needs-human-judgment` items to office-hours (planned-deferral — subjective/policy calls, not correctness bugs; not gating this PR). Both are `AUTHOR`-verifiability (subjective product/UX judgment; no machine check can settle them):
+
+- id: 12
+  title: Operator resolving this park picks the right option without further investigation
+  url_path: current
+  expected_outcome: The two options (KEEP vs CONFIRM the deletion) are actionable as written and the operator does not need to reconstruct the race from git history to choose.
+  finding: attempt 1 already assessed readability (YAML folded-scalar round-trip) and option unambiguity ("clears this park" holds for both) as satisfied; what remains is a subjective sufficiency call on decision context.
+  Verifiability: AUTHOR
+
+- id: 13
+  title: Re-materializing a node another writer deliberately deleted is the right operator-facing default
+  url_path: current
+  expected_outcome: A recorded human decision that resurrect-with-park is the intended policy, or a directive to change it.
+  finding: policy choice about graph-writer semantics, not a correctness bug; the implemented behavior (resurrect the deleted node onto origin/main with a park attached, rather than dropping the edit or parking with no node) is documented in the exit-code header and covered by Case 53.
+  Verifiability: AUTHOR
