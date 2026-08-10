@@ -77,7 +77,31 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Both needs-main residue items (id 8, id 9) await a natural post-merge
+    invocation of align-tactics.js's Workflow that has not yet occurred. Checked
+    journalctl --user since 2026-08-05 (the PR #2982 merge date) for the
+    workflow's own gate-decision log line (planProceed=/decomposeProceed=) and
+    for any 'disposition completed_with_fixes'/'disposition escalated' emitted
+    by align-tactics.js -- zero matches for either, across ~24h of dispatch-tick
+    activity. Re-check after the next tactic-mode or strategy-mode
+    /align-tactics run actually executes; no fixed ETA, since selection depends
+    on the dispatch router or an interactive session choosing that work next."
+  since: 2026-08-10
+  recommendation: "No author decision needed -- re-selection only. Lane M already
+    confirmed on origin/main: (1) align-tactics.js contains computePhaseGates
+    with the tactic/strategy gate split exactly as this node's plan specified
+    (decomposeProceed/planProceed derived from mode+drift), and zero remaining
+    raw '!driftProceed' gate reads in the file; (2) no align-tactics Workflow
+    run of either mode has completed since the merge (journalctl --user --since
+    2026-08-05, grepped for the gate log line and for a disposition string --
+    zero hits). Re-run this qa-main pass once a natural /align-tactics
+    invocation occurs: for item 8, check for planProceed=true / disposition
+    completed_with_fixes on a tactic-mode run against a signal-path-claimed
+    strategy (strategy-graph-native-dispatch remains in that state); for item 9,
+    confirm the first post-merge strategy-mode round behaves as before (no
+    unexpected escalation from the deliberate park-synthesis-belt tightening)."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
