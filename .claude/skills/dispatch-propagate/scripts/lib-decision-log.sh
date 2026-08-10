@@ -10,10 +10,15 @@
 # output on disk regardless of whether the caller passed compact (`jq -nc`) or
 # pretty-printed (`jq -n`) JSON: it canonicalizes the argument through `jq -c .`
 # before appending, so callers may use either form. Non-JSON/unparseable input
-# is silently dropped rather than corrupting the log (consistent with the
-# always-non-fatal contract below). The helper ensures the directory, rotates
-# the log when it grows too large, and appends the line under a flock so
-# concurrent per-worker writers never interleave a rotate-then-append.
+# is silently dropped: NO stderr diagnostic, NO sentinel record — the whole
+# function body is wrapped in `2>/dev/null || true` so it can run inside
+# EXIT-trap handlers under `set -euo pipefail` without ever killing the caller.
+# Operator consequence: a missing record for a call site means either the write
+# failed or the argument was not valid JSON. Remedy: build payloads with
+# `jq -c -n`; test-lib-decision-log-compact.sh covers the canonicalization.
+# The helper ensures the directory, rotates the log when it grows too large,
+# and appends the line under a flock so concurrent per-worker writers never
+# interleave a rotate-then-append.
 #
 # Usage: source this file, then call:
 #   decision_log_append <json-string>
