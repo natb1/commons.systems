@@ -46,8 +46,7 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-manual-path-reservation-sweep
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
