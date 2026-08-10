@@ -74,3 +74,5 @@ export {
   confirmPushDowns,
 } from "./sensors.js";
 export type { Sensor, Reading, IntentionCandidate } from "./sensors.js";
+export { classifyTactic, strategyBacklogBand } from "./census.js";
+export type { TacticClassification, BacklogBand } from "./census.js";

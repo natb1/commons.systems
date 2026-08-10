@@ -16,7 +16,6 @@ rationale: Byproduct of the 2026-07-25 concurrency/serialization review,
   graph-select-target already sets the precedent by snapshotting origin/main
   itself via git archive.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

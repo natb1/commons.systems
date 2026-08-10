@@ -69,10 +69,25 @@ attention:
     (tactic-graph-execute-fresh-main-read, tactic-probe-unknown-never-clear),
     which carry the identical boost."
   tier: 1
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-reap-safety-behind-branch-false-positive
+  pr: 3052
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-09
+    attempt: 2
+    pushed_sha: null
+  conflict: null
+  completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-flake-analyze-go
+  - tactic-flake-acceptance-action-download
+  - tactic-flake-firestore-query-bounds-sensor-action-download
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -50,7 +50,6 @@ rationale: "Observed live 2026-07-31 during the dispatch-pipeline bootstrap, on
   promotion lifts no unblocked node and cannot compound until that dependency
   clears."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []

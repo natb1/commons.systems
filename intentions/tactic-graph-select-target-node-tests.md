@@ -15,16 +15,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-select-target-node-tests
   pr: 2985
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-10T09:55:41Z
+    mergeCommitSha: 40a8852f92ca96e384fccab4c9dbbca069092a31
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -41,7 +47,7 @@ code-review finder, residue-disposed `deferred`. The `--node` selection logic
 in `graph-select-target` (the jq `select(.id == $target)` filter, the
 `NODE_PRESENT` flag driving the not-found vs. gated-vs-absent disposition
 split, and the per-gate stderr reason echoes) has no direct unit test. The
-four select-tick tests in `test-dispatch-scripts.sh` that pass `--node` use
+four select-tick tests in `test-dispatch-select-tick.sh` that pass `--node` use
 the fake `graph-select-target` from `sel_tick_setup`, which ignores `--node`
 and just echoes `SEL_GRAPH_TARGET` — they only verify that select-tick passes
 `--node` through and bypasses the pace gate, not that the real `--node`
@@ -74,7 +80,7 @@ in the interim.
 ## Unit 1 — direct `--node` test cases in the `GSC_ROOT` fixture family
 
 **Scope.** Test-file-only change to
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`. No
+`.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh`. No
 production-code change; no user-facing surface. Add a new fixture block
 (model it on the existing `GSC_ROOT` "Unit 3" fixture immediately above,
 currently spanning roughly lines 30886–30944, ending
@@ -166,7 +172,7 @@ do not begin implementation until that tactic reaches `phase: done` and the
 ## Reuse
 
 - The existing `GSC_ROOT` fixture immediately above in
-  `test-dispatch-scripts.sh` (physical-copy-of-script-plus-libs pattern, fake
+  `test-graph-select-target.sh` (physical-copy-of-script-plus-libs pattern, fake
   `npx` stub, fake `claude` binary driven by a rewritable payload file,
   `DISPATCH_RESERVATION_DIR`/`DISPATCH_SELECTION_LOG_DIR` env overrides) — copy
   its structure rather than inventing a new fixture shape.
@@ -174,13 +180,14 @@ do not begin implementation until that tactic reaches `phase: done` and the
   (`$DISPATCH_RESERVATION_DIR/<worktree-basename>`) for the reserved-gate case
   — a plain `touch`, no need to call `reservation_write` (which cares about
   concurrency semantics this test does not need).
-- `assert_eq` (already defined earlier in `test-dispatch-scripts.sh`, used
+- `assert_eq` (already defined earlier in `test-graph-select-target.sh`, used
   throughout the file) for every assertion; no new assertion helper needed.
 
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
+.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh
 ```
 
 Manual check: after adding the cases, temporarily revert the `--node`

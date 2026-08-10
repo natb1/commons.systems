@@ -7,25 +7,49 @@ Skip a path when its bucket is empty.
 ## Node-target lane (`TARGET_KIND=node`) — supersedes 5a/5b entirely
 
 A node target files **no gh issue**: new work never enters the graph through gh
-(strategy condition 1). The prepared `result.deferred_filings` and
-`result.security_followup_input` structures are instead written as **draft
-tactic nodes** — `status: raw`, no `phase`, `serves` the same strategy this
-tactic serves — batched per component, one `write-node.ts` build plus one
-`graph-commit`. Each draft's body records the finding provenance:
+(strategy condition 1). The prepared `deferred_filings` and
+`security_followup_input` structures — read from the JSON at `result.result_path`
+by the **Step-5 subagent**, never by the main thread — are instead written as
+**draft tactic nodes** — `status: raw`, no `phase`, `serves` the same strategy
+this tactic serves — batched per component, one `write-node.ts` build plus one
+`graph-commit`. Steps 1 and 2 below are the subagent's work; step 3
+(`graph-commit`) runs in the main thread after the subagent returns.
+Each draft's body records the finding provenance:
 `file:line`, failure scenario, adversarial verdict, and the source PR
 (`execution.pr`). `body` is not a `write-node.ts` input field — the script
 discards unknown keys, and a new node's body is always regenerated from
 `statement` as a `# <statement>` placeholder
 (`packages/intentionsutil/src/store.ts:47`). So write each draft's provenance as
-a separate step, folded into the one-build-plus-one-commit sequence above:
+a separate step, folded into the one-build-plus-one-commit sequence above.
 
-1. Run `write-node.ts` with only the frontmatter fields above (including
-   `status: raw`).
-2. Then edit each `intentions/<draft-id>.md` directly, replacing the generated
-   `# <statement>` placeholder that appears after the closing `---` fence with
-   the provenance content (`file:line`, failure scenario, adversarial verdict,
-   and `execution.pr`).
-3. Then run `graph-commit`.
+**Redaction applies to the provenance written in steps 1–2.** These bodies are
+`graph-commit`ed and pushed to `origin/main` in this **public** repository —
+permanently, in git history — and the structures they are built from carry each
+finder's verbatim `Description` and `Recommended fix`, including the roster's
+dedicated `secrets` lens, whose text can quote the credential material it found
+in the diff. The untrusted-data framing the Step-5 prompt carries is a
+prompt-injection guard only, not a redaction guard. The canonical rule is
+`.claude/skills/review-fix/SKILL.md`, "Redaction rule for the office-hours park
+reason" (its one home; do not restate the bullets): reference each finding by
+`file:line` and failure category only, never copy a `Description` or
+`Recommended fix` verbatim into a node body, and never emit any string that
+looks like a token, credential, or key — even one that appears already masked.
+Fidelity is preserved by `result.result_path` staying on disk in the worktree
+for the human reviewer, not by pasting finding text into a pushed record.
+
+1. *(subagent)* Run `write-node.ts` with only the frontmatter fields above
+   (including `status: raw`).
+2. *(subagent)* Then edit each `intentions/<draft-id>.md` directly, replacing the
+   generated `# <statement>` placeholder that appears after the closing `---`
+   fence with the provenance content (`file:line`, failure scenario, adversarial
+   verdict, and `execution.pr`). Create new draft files only — never modify or
+   delete an existing node. The subagent then returns
+   `{ node_ids: [...], count: <N> }` — `count` is the number of NEW draft nodes
+   it created — and runs no `graph-commit` itself.
+3. *(main thread, after the subagent returns)* Then run `graph-commit`, once.
+   It stays here rather than in the subagent because `graph-commit` is
+   worktree-sensitive: overlapping or mis-rooted invocations corrupt graph state,
+   and a subagent's working directory is not reliably the main thread's.
 
 These hand-authored bodies are durable across any later frontmatter-only rewrite
 of these nodes: `writeNode` calls `readExistingTacticBody`
@@ -45,6 +69,11 @@ runs 5a/5b below unchanged.
 ## Follow-ups-filed counting rule
 
 `result.followups_deferred` is the count of Step-5a filing subagents the Workflow queued (not yet filed); it drives the Step-5a fan-out and is NOT the value emitted to `--followups-filed`. Track instead how many Step-5a and Step-5b follow-ups were ACTUALLY filed this run — count only NEW `<disposition>` records (EXISTING records returned by `/file-issue` were not filed this phase). Use the already-captured `<N>` records from the "Capture each `<N>`" lines in 5a and 5b for this count; introduce no new tracking mechanism. Pass that count, not `result.followups_deferred`, as the `--followups-filed` total.
+
+On the node lane the source of that count is the Step-5 subagent's returned
+`count` — the number of NEW draft nodes it created. The rule is unchanged (only
+NEW records, never `result.followups_deferred`); only where the number comes from
+moved, since the main thread no longer holds the filing structures itself.
 
 ## Source-PR marker and static label
 

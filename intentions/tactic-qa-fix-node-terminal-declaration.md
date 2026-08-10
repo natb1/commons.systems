@@ -45,10 +45,15 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-08-09
+    attempt: 1
+    pushed_sha: null
+  conflict: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-fix-cap-qa-fix-node-terminal-declaration
 office_hours: null
 pace_exempt: false
 rounds: null

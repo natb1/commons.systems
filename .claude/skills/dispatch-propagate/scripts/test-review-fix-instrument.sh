@@ -94,8 +94,11 @@ assert_eq "instrument gate: instrumentFailed.has('code-review') removed" "0" \
 assert_eq "instrument gate: securityReviewResult guarded by instrumentFailed" "1" \
   "$(grep -c "instrumentFailed.has('security-review')" "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
-# instrument_failures is surfaced in the returned object.
-assert_eq "instrument gate: instrument_failures in returned object" "1" \
+# instrument_failures is surfaced in BOTH result sinks: the inline return (the
+# bounded summary the SKILL body reads directly) and the `fullResult` object the
+# dump agent writes to result.json for the Step-5/Step-6 subagents. Two sites — a
+# failure that reaches only one of them would be invisible to half the consumers.
+assert_eq "instrument gate: instrument_failures in returned object" "2" \
   "$(grep -c 'instrument_failures: instrumentFailures' "$REPO_ROOT/.claude/workflows/review-fix.js" || true)"
 
 # instrumentFailures.length is folded into deviation (and gates coverage_incomplete

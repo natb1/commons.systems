@@ -53,8 +53,9 @@
 # effective_live = busy_workers + outstanding_reservations — a reservation counts
 # against the budget the instant it is written, with no wait for worker
 # registration — and the tick sweeps stranded reservations before counting.
-# A `--manual` run (the bare human-typed `/dispatch` shim) QUERIES the live-count
-# and computes a context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
+# A `--manual` run (the bare human-typed `/dispatch` shim) also reconciles the
+# ledger before counting, then QUERIES the live-count and computes a
+# context-dependent SPAWN_N = max(1, min(max(N_PRIO, GAP, 1), HEADROOM));
 # it overrides the pace-curve throttle and, per human-dispatch-is-sovereign, always
 # launches its one highest-ranking-available node even at the MAX_WORKERS ceiling
 # (a bounded, deliberate max_concurrent_workers + 1 overage) — only the `--exhausted`
@@ -64,6 +65,16 @@
 # bypass at cap (see the gate narrative below): a graph pace_exempt node, or a
 # newly-red main, is still surfaced even at/over the worker budget. The only hard
 # floor is genuine token exhaustion.
+#
+# The routing-decision log records BOTH bounds per run: `target_n` (the pace-curve
+# target) and `max_workers` (the absolute max_concurrent_workers ceiling). Two
+# fields, because one alone is ambiguous — a low target_n means nothing on its own
+# until you can see whether the ceiling was also throttled. `max_workers` carries
+# the resolved ceiling on every lane that consults it (the autonomous no-arg lane,
+# which resolves it once up front, and `--manual`), and `null` on the lanes that
+# deliberately do not: the explicit NODE_ARG single-node lane, which skips both the
+# pace curve and the ceiling by design, and the early exits (busy, usage-error,
+# sync-*) that return before either bound is read.
 #
 # Lock invariant: RELEASE the lock on every decision except busy (where nothing
 # was acquired). Every terminal path — graph/empty/sync-failed/
@@ -113,6 +124,11 @@ DLOG_SKIP_REASON=""
 # so nothing here may leak to fd 1 (jq output is captured into a var; jq stderr
 # is swallowed). Numeric budget fields may be empty on an early exit, so they are
 # passed as strings and coerced in-filter (empty → JSON null) so jq never fails.
+# `max_workers` carries the resolved `max_concurrent_workers` ceiling on every
+# lane that consults it (the autonomous no-arg lane and `--manual`), and null on
+# lanes that deliberately do not (the explicit NODE_ARG lane, and every early
+# exit before the ceiling is read). It is what distinguishes a low `target_n`
+# produced by the normal pace curve from one produced by a throttled ceiling.
 _dlog_select_emit() {
   local json
   json=$(jq -c -n \
@@ -123,6 +139,7 @@ _dlog_select_emit() {
     --arg disposition "$DLOG_DISPOSITION" \
     --arg skip_reason "$DLOG_SKIP_REASON" \
     --arg target_n    "${TARGET_N:-}" \
+    --arg max_workers "${MAX_WORKERS:-}" \
     --arg eff_live    "${LIVE_COUNT:-}" \
     --arg gap         "${GAP:-}" \
     '
@@ -135,6 +152,7 @@ _dlog_select_emit() {
       disposition:   $disposition,
       skip_reason:   $skip_reason,
       target_n:      ($target_n | num),
+      max_workers:   ($max_workers | num),
       effective_live: ($eff_live | num),
       gap:           ($gap | num)
     }' 2>/dev/null) || return 0
@@ -684,6 +702,15 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-reservation-ledger.sh"
   TARGET_N=$("$SCRIPT_DIR/dispatch-target-workers")
+  # Resolve the ABSOLUTE ceiling once, here at the top of the lane, so the
+  # routing-decision log's `max_workers` field is populated on every exit from
+  # this lane — including the internal-error exit just below. Deliberately
+  # NON-FATAL and unguarded: an unreadable ceiling is not an error here. The one
+  # place it is load-bearing (the at-cap pace-exempt sub-branch) does its own
+  # numeric test and fails closed there. `--max` short-circuits inside
+  # dispatch-target-workers before the rate-limit/telemetry load, so this costs
+  # one cheap config read and writes no state.
+  MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
   if [[ ! "$TARGET_N" =~ ^[0-9]+$ ]]; then
     release_lock
     DLOG_DISPOSITION="internal-error"
@@ -726,9 +753,11 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
         echo "concurrency-cap"
         exit 0
       fi
-      # Not exhausted: resolve the ABSOLUTE ceiling before probing. Exhaustion
-      # stays the hard floor and is evaluated first (above); the ceiling is the
-      # second, independent bound. The pace-exempt lane fills to
+      # Not exhausted: apply the ABSOLUTE ceiling before probing. MAX_WORKERS was
+      # already resolved once at the top of this lane (right after TARGET_N), so
+      # it is simply consulted here. Exhaustion stays the hard floor and is
+      # evaluated first (above); the ceiling is the second, independent bound.
+      # The pace-exempt lane fills to
       #   PACE_GAP = max(0, MAX_WORKERS − LIVE_COUNT)
       # — genuine headroom under max_concurrent_workers, which is absolute for
       # autonomous scheduling (unlike the --manual branch, where a deliberate
@@ -741,7 +770,6 @@ if [[ -z "$MANUAL" && -z "$NODE_ARG" ]]; then
       # which fails open to TOP=1; that is a different caller. Do NOT exit 2
       # here — that would also suppress the main-broken probe and the reseed
       # below, both of which must stay reachable when this lane is closed.
-      MAX_WORKERS=$("$SCRIPT_DIR/dispatch-target-workers" --max 2>/dev/null) || MAX_WORKERS=""
       PACE_LANE_CLOSED=""
       if [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]]; then
         PACE_GAP=$(( MAX_WORKERS - LIVE_COUNT ))
@@ -849,12 +877,41 @@ elif [[ -n "$MANUAL" ]]; then
   # ordering signal). LIVE_COUNT mirrors the
   # autonomous block's effective-live count (busy workers + reservations), and —
   # like that block — it SWEEPS the ledger before counting. The sweep is
-  # load-bearing since the spawn handoff landed: a claim is no longer cleared at
-  # the spawn kick but re-stamped `origin=spawned` and held until the worker
-  # registers, so between registration and the next sweep the SAME node is both a
-  # busy worker and an outstanding reservation. Counting unswept would charge it
-  # twice and shrink manual fan-out for up to a full tick interval. Sweep rule (a)
-  # drops exactly those redundant markers.
+  # load-bearing for TWO INDEPENDENT reasons; do not remove it as a redundant
+  # optimization on the strength of only one of them:
+  #   (1) Spawn-handoff double-counting. Since the spawn handoff landed, a claim
+  #       is no longer cleared at the spawn kick but re-stamped `origin=spawned`
+  #       and held until the worker registers, so between registration and the
+  #       next sweep the SAME node is both a busy worker and an outstanding
+  #       reservation. Counting unswept would charge it twice and shrink manual
+  #       fan-out for up to a full tick interval. Sweep rule (a) drops exactly
+  #       those redundant markers.
+  #   (2) Cross-mode ledger freshness. Pause gates worker SPAWNING only, never
+  #       ledger bookkeeping: dispatch-tick's paused branch sources
+  #       lib-reservation-ledger.sh and reaps the ledger ahead of its
+  #       short-circuit `exit 0` (landed as tactic-heartbeat-sweep-before-pause),
+  #       so a paused heartbeat IS still a reaper and this manual sweep is NOT
+  #       the ledger's only reconciler — do not read it as one. What it is, is
+  #       the only reconciler that makes the ledger current AS OF THIS RUN: a
+  #       manual dispatch must not consume a ledger that is up to one heartbeat
+  #       interval stale (and arbitrarily stale when the heartbeat timer is
+  #       stopped, masked, or has not fired since a worker session died).
+  #       A stale count here is NOT merely "more conservative and therefore
+  #       safe": dead-session orphan markers inflate live=N with phantom
+  #       workers, and once they reach the ceiling HEADROOM hits 0 and manual
+  #       fan-out gets throttled or zeroed outright — the shape of the
+  #       2026-07-23 phantom-worker incident (`live=10` with no live worker
+  #       actually running) — which is a failure, not caution. Required by
+  #       strategy-graph-native-dispatch's 2026-07-23 cross-mode ledger-validity
+  #       clarification. (That clarification named a
+  #       `$XDG_DATA_HOME/commons-dispatch/paused` sentinel; its 2026-07-26
+  #       amendment supersedes the mechanism with a dispatch.config/*.json
+  #       boolean field — not yet built, tracked by
+  #       tactic-dispatch-pause-config-field, so dispatch-tick still resolves
+  #       DISPATCH_PAUSE_FLAG today — and leaves the spawning-not-bookkeeping
+  #       semantics unchanged.)
+  # Like the autonomous site, the call is best-effort (`|| true`): a failed sweep
+  # must not block a deliberate human dispatch.
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib-claude-agents.sh"
   # shellcheck source=/dev/null

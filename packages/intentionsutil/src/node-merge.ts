@@ -56,7 +56,6 @@ const SCALAR_FIELDS: readonly (keyof IntentionNode)[] = [
   "parent",
   "rationale",
   "reading",
-  "gap",
   "success_signal",
   "attention",
   "phase",

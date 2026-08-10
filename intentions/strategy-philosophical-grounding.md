@@ -37,6 +37,14 @@ rationale: >-
   kind-tradition and five records; the apex question held open on both roots;
   the respect floor made explicitly Kantian with Aristotelian practice; the
   consent edge split by irreversibility; virtue-temperance rooted.
+
+
+  Recurrence assessment: four rounds recorded — 2026-07-04 dialectic, 2026-07-07
+  chunk 1, 2026-07-13 chunk 2, 2026-07-17 chunk 5 (the last deferred en bloc,
+  ratification pending at the dialog session). Recurrence is holding, but
+  sustained recurrence across review cycles remains the unproven clause. The
+  capture-doctrine path is read end to end (Cave, hexis, phronesis); its
+  phronesis third stays unratified until the dialog session passes.
 reading: "chunk 5 completed 2026-07-17 (/reading-review live sitting, NE VI +
   III.4): comprehension dialectic run per-chapter with the three-movement
   structure; the end-setter correction issued at the finale (virtue makes the
@@ -51,12 +59,7 @@ reading: "chunk 5 completed 2026-07-17 (/reading-review live sitting, NE VI +
   exercise, born-parked), whose body quarantines the ledger and gates
   ratification; retroactive cave and hexis items route to
   tactic-dialog-review-plato-cave and tactic-dialog-review-aristotle-hexis"
-gap: four rounds recorded (2026-07-04 dialectic, 2026-07-07 chunk 1, 2026-07-13
-  chunk 2, 2026-07-17 chunk 5 — the last deferred en bloc, ratification pending
-  at the dialog session) — recurrence holding; sustained recurrence across
-  review cycles remains the unproven clause; the capture-doctrine path is read
-  end to end (Cave, hexis, phronesis) but its phronesis third is unratified
-  until the dialog session passes
+gap: null
 serves:
   - virtue-philosophical-mobility
   - virtue-respect-for-persons
@@ -349,6 +352,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the canonical texts remain the strongest zero-stake challenge source

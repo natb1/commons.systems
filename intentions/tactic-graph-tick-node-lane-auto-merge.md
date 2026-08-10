@@ -17,7 +17,6 @@ rationale: "Surfaced in the 2026-07-11 /align-strategy interview recording the
   8/9). Unify on one tick-owned, label-free merge keyed off the node's reviewed
   marker."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -148,9 +147,11 @@ fingerprint — merges it label-free.
 - Tick wiring pattern: `dispatch-select-tick:424-440` (the existing issue-lane
   auto-merge block, gated on `[[ -z "$OPEN_MB" ]]`) is the exact shape to mirror
   for the new graph-lane block.
-- Existing tests: `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`
-  — the `dispatch-auto-merge` section (~L39222+) and the tick auto-merge-wiring
-  assertions (~L29286-29327) are the templates for the new reconciler's tests.
+- Existing tests: `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh`
+  — the `dispatch-auto-merge` section and the tick auto-merge-wiring
+  assertions — are the templates for the new reconciler's tests, alongside
+  `.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh` (the new
+  script's own suite).
 
 ## Units of work
 
@@ -217,8 +218,8 @@ Behavior:
 label-gated reconciler stays exactly as-is for the draining gh queue).
 
 **Tests (in this unit).** Add a `graph-auto-merge` section to
-`test-dispatch-scripts.sh` modeled on the existing `dispatch-auto-merge` section
-(~L39222+): fake `lib.sh` helpers + a fake `gh` and fixture nodes to assert
+`test-graph-auto-merge.sh` modeled on the existing `dispatch-auto-merge` section
+of `test-dispatch-select-tick.sh`: fake `lib.sh` helpers + a fake `gh` and fixture nodes to assert
 (a) a `phase:review` + `reviewed`-marker + green-CI + MERGEABLE node merges and
 emits `merged #<pr> (<id>)`; (b) a `phase:review` node WITHOUT the `reviewed`
 marker is skipped; (c) `pending` CI and `failing` CI are skipped (no merge);
@@ -265,7 +266,7 @@ in `apply-node-transition.ts:174-178`. Renaming it (`armMerge`→`reviewComplete
 would be marginally cleaner greenfield but touches the pure layer and its tests
 for no behavioral gain; keep the name and only relocate the *action*.
 
-**Tests (in this unit).** Update any `test-dispatch-scripts.sh` assertion that
+**Tests (in this unit).** Update any `test-transition-node.sh` assertion that
 expects `transition-node` to emit `armed-merge` or to invoke `dispatch-auto-merge`
 on a clean review, to expect the new `review-complete ... (merge deferred to
 tick)` line and NO merge call.
@@ -290,7 +291,7 @@ unconditionally, and already honors a grace window at
 subsequent tick without racing a still-settling merge.
 
 **Tests (in this unit).** Add a tick-wiring assertion modeled on the existing
-issue-lane auto-merge-wiring test (`test-dispatch-scripts.sh:~29286-29327`):
+issue-lane auto-merge-wiring test in `test-dispatch-select-tick.sh`:
 `graph-auto-merge` IS invoked when main is known-good (`OPEN_MB` empty) and its
 `merged #N (id)` lines are prefixed `merge:`; and it is NOT invoked (no `merge:`
 line) when main is broken/unknown.
@@ -318,7 +319,7 @@ Auto-runnable — the dispatch script test suite covers the reconciler gating, t
 `transition-node` arm removal, and the tick wiring:
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
+bash .claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh
 ```
 
 ```verify
@@ -364,7 +365,8 @@ complementary, not blocking; plan against current `origin/main`
 All script-verifiable acceptance criteria passed at QA time (the new
 `graph-auto-merge` script's gates, `transition-node`'s arm removal, the
 `dispatch-select-tick` wiring, the `review-fix/SKILL.md` doctrine update, the
-full `test-dispatch-scripts.sh` suite at 2976/2976, and `run-lint.sh`). The
+full pre-split monolithic test suite (since split into per-SUT files) at
+2976/2976, and `run-lint.sh`). The
 following three acceptance criteria are genuinely only verifiable by observing a
 live tick cycle acting on a real downstream node-lane PR after this merges — the
 QA disposition triage classified all three `needs-main` (planned deferral, not a

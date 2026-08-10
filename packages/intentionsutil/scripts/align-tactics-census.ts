@@ -10,6 +10,13 @@
 // human/agent call, not something this script attempts) operates on each
 // child's actual recorded units instead of a keyword match.
 //
+// It also emits a leading serving-strategy block carrying the strategy's
+// `reading` and its DERIVED `gap`. `gap` is not stored on the node — it is
+// computed fresh on every read via `deriveGap`
+// (packages/intentionsutil/src/sensors.ts), the same doctrine `attention`
+// already follows — so callers can no longer read `gap` off frontmatter and
+// must get it from here (or call `deriveGap` themselves).
+//
 // Usage:
 //   npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
 //
@@ -18,16 +25,9 @@
 // propagate as thrown errors — no fallback, no silent default.
 
 import { listNodes, readNodeBody } from "../src/store.js";
-import type { IntentionNode } from "../src/schema.js";
-
-type Classification = "draft" | "born-parked" | "open" | "done";
-
-function classify(node: IntentionNode): Classification {
-  if (node.phase === "done") return "done";
-  if (node.phase !== null) return "open";
-  // phase is null/absent here
-  return node.office_hours === null ? "draft" : "born-parked";
-}
+import { classifyTactic } from "../src/census.js";
+import type { TacticClassification } from "../src/census.js";
+import { deriveGap } from "../src/sensors.js";
 
 function headings(body: string): string[] {
   const matches = body.matchAll(/^##\s+(.+)$/gm);
@@ -52,10 +52,17 @@ function main(): void {
     throw new Error(`Node "${strategyId}" is kind:${strategy.kind}, not kind:strategy`);
   }
 
+  const strategyLines: string[] = [];
+  strategyLines.push("=== Serving strategy ===");
+  strategyLines.push(`id: ${strategy.id}`);
+  strategyLines.push(`reading: ${strategy.reading ?? "null"}`);
+  strategyLines.push(`gap: ${deriveGap(strategy) ?? "null"}`);
+  process.stdout.write(strategyLines.join("\n") + "\n\n");
+
   const tactics = nodes.filter((n) => n.kind === "tactic" && n.serves.includes(strategyId));
 
   for (const tactic of tactics) {
-    const classification = classify(tactic);
+    const classification: TacticClassification = classifyTactic(tactic);
     const body = readNodeBody(intentionsDir, tactic.id);
     const lines: string[] = [];
     lines.push(`id: ${tactic.id}`);

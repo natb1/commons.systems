@@ -853,6 +853,7 @@ fi
 # extension short-circuits before touching systemctl at all.
 : > "$ehl_log"
 ehl_5b_rc=0
+ehl_5b_err="$ehl_tmp/5b-stderr"
 (
   export DISPATCH_HEALER_UNIT_DIR="$ehl_unit_dir"
   export DISPATCH_HEALER_SYSTEMCTL_CMD="$ehl_tmp/bin/systemctl"
@@ -861,9 +862,33 @@ ehl_5b_rc=0
   export DISPATCH_UNIT_DISABLE_DIR="$ehl_disable_dir"
   source "$SCRIPT_DIR/lib.sh"
   ensure_healer_units "$ehl_tmp/main-worktree"
-) >/dev/null 2>&1 || ehl_5b_rc=$?
+) >/dev/null 2>"$ehl_5b_err" || ehl_5b_rc=$?
 assert_eq "5b: ensure_healer_units returns 0 (steady state, marker present)" "0" "$ehl_5b_rc"
 assert_eq "5b: stub log empty (no daemon-reload/enable/is-active call)" "" "$(cat "$ehl_log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'skipping enable --now' "$ehl_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr mentions skipping enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing 'skipping enable --now'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'unit files already current' "$ehl_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr mentions unit files already current (hot path, not cold-path fall-through)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing 'unit files already current'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -qF "$ehl_disable_dir/dispatch-heal.timer" "$ehl_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr names the sentinel file"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing the sentinel file path"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'WARNING' "$ehl_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr has no WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr unexpectedly contains WARNING"
+fi
 
 # --- 5c. marker absent → unchanged cold-path behavior (regression guard) -----
 rm -f "$ehl_svc" "$ehl_tmr"
@@ -1237,6 +1262,7 @@ fi
 # extension short-circuits before touching systemctl at all.
 : > "$ewa_log"
 ewa_5b_rc=0
+ewa_5b_err="$ewa_tmp/5b-stderr"
 (
   export DISPATCH_WATCHER_UNIT_DIR="$ewa_unit_dir"
   export DISPATCH_WATCHER_SYSTEMCTL_CMD="$ewa_tmp/bin/systemctl"
@@ -1245,9 +1271,33 @@ ewa_5b_rc=0
   export DISPATCH_UNIT_DISABLE_DIR="$ewa_disable_dir"
   source "$SCRIPT_DIR/lib.sh"
   ensure_watcher_units "$ewa_tmp/main-worktree"
-) >/dev/null 2>&1 || ewa_5b_rc=$?
+) >/dev/null 2>"$ewa_5b_err" || ewa_5b_rc=$?
 assert_eq "5b: ensure_watcher_units returns 0 (steady state, marker present)" "0" "$ewa_5b_rc"
 assert_eq "5b: stub log empty (no daemon-reload/enable/is-active call)" "" "$(cat "$ewa_log")"
+TOTAL=$((TOTAL + 1))
+if grep -q 'skipping enable --now' "$ewa_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr mentions skipping enable --now"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing 'skipping enable --now'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q 'unit files already current' "$ewa_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr mentions unit files already current (hot path, not cold-path fall-through)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing 'unit files already current'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -qF "$ewa_disable_dir/dispatch-fleet-watch.timer" "$ewa_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr names the sentinel file"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr missing the sentinel file path"
+fi
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'WARNING' "$ewa_5b_err"; then
+  PASS=$((PASS + 1)); echo "  PASS: 5b stderr has no WARNING"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 5b stderr unexpectedly contains WARNING"
+fi
 
 # --- 5c. marker absent → unchanged cold-path behavior (regression guard) -----
 rm -f "$ewa_svc" "$ewa_tmr"

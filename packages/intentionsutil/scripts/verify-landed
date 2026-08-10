@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+# verify-landed — the one place that answers "did this actually land on
+# origin/main?" (tactic-graph-commit-landing-signal-unreliable).
+#
+# WHY IT EXISTS. A writer's own exit code and log text are not evidence.
+# graph-commit can exit 0 after a push that never made it, and can exit
+# non-zero after a park write that DID land; every caller that reads those
+# signals as a verdict inherits the defect. This primitive replaces all of
+# them with the only authority there is: the content of origin/main. Callers
+# ask a question about origin/main and get one of three answers — landed,
+# not-landed, or unknown — and the three are never collapsed into two.
+#
+#   exit 0  landed      every spec is satisfied at origin/main
+#   exit 4  not-landed  the read SUCCEEDED and at least one spec is
+#                       definitively unsatisfied
+#   exit 1  unknown     could not determine (fetch failed, git error, tsx or
+#                       jq failure) — nothing is claimed either way
+#   exit 2  usage error
+#
+# The 0/4/1 split is the whole point. Collapsing `unknown` into `landed`
+# reports success for a write that may not exist; collapsing it into
+# `not-landed` triggers retries and rollbacks against a graph that may already
+# be correct. Both are the defect this script was written to end. A caller
+# that cannot handle three answers should park, not guess.
+#
+# Usage:
+#   verify-landed [-C <repo-path>] [--no-fetch] [--json]
+#                 --node <id> (--blob <sha>|--jq <filter>) [--node <id> ...]
+#
+# Spec forms (each `--node <id>` is completed by exactly one of):
+#   --blob <blobsha>  origin/main:intentions/<id>.md must be exactly <blobsha>
+#   --blob absent     the node must be ABSENT from origin/main (a landed prune)
+#   --jq <filter>     the jq filter over the node's JSON as of origin/main must
+#                     evaluate true, e.g. --node tactic-foo --jq '.office_hours != null'
+#
+# THE ID AND THE FILTER ARE SEPARATE ARGUMENTS, ON PURPOSE. The earlier
+# single-token spec forms (`<id>=<sha>`, `<id>@<filter>`) split on a delimiter,
+# and node ids are not restricted to a delimiter-free charset upstream
+# (assertPathSafeId, src/store.ts, rejects only `/`, `\`, `.` and `..`). A
+# caller that built its spec by concatenation — every call site did — handed
+# an id containing `@` straight into the jq program: an id of
+# `tactic-x@true #` produced the filter `true #.office_hours != null`, whose
+# `#` comments out the intended predicate and reports `landed` for ANY node,
+# including one that does not exist. That forged verdict is the authorization
+# for destructive follow-ons (park-node suppressing its rollback and writing a
+# terminal marker; lib-frozen-session-park.sh deleting a session's only copy of
+# its escalation text), and jq's `$ENV`/`env` made the same hole an environment
+# exfiltration channel via the `observed=` log line. So: no delimiter, no
+# split, and the FULL id is validated against `^[A-Za-z0-9._-]+$` before it is
+# used at all — an id outside that charset is a usage error (exit 2), never a
+# verdict. Filters are additionally refused if they contain `#` or reference
+# `env`/`$ENV`; callers pass literal filters, so nothing legitimate needs them.
+#
+# Repo resolution: `-C <path>` when given, else the current directory, run
+# through `git rev-parse --show-toplevel` — identical to graph-commit's own
+# main() resolution, and for the same reason. Resolving from THIS SCRIPT's
+# on-disk location would answer about whichever checkout the script was
+# invoked from by absolute path (routinely the main checkout) rather than the
+# caller's, which is the staleness-silent-revert defect all over again.
+#
+# It never writes. No fetch-into-worktree, no `git show > file`, no index
+# touch, no node file rewritten — only `git fetch` (which updates a
+# remote-tracking ref, not the tree) and read-only plumbing. This is also why
+# it cannot be built on dump-node.ts: that tool resolves its intentionsDir
+# from its OWN file location (dump-node.ts:37-40), so it can only ever read
+# the script's checkout's WORKING TREE — the wrong repo and the wrong
+# revision. The `--jq` mode goes through readNodeAtRef
+# (lib-store-at-ref.ts) instead, which takes the repo root as a parameter and
+# reads at a ref.
+#
+# Cost: the `--blob` modes are pure git plumbing — no node, no tsx — so the hot
+# path (the one every writer runs after every land) costs a fetch and a
+# rev-parse. Only `--jq` pays for a tsx start-up.
+#
+# FILE DESCRIPTORS. Callers holding a flock fd across their write (see
+# dispatch-fleet-alarm's `9>&-` discipline, :485-487) must close it across
+# this call: `verify-landed ... 9>&-`. `git fetch` forks a credential helper
+# that can outlive this process and would pin an inherited fd, holding the
+# caller's mutex open long after the caller released it. verify-landed itself
+# holds no locks and needs no inherited descriptors.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_STORE_AT_REF="$SCRIPT_DIR/lib-store-at-ref.ts"
+
+USAGE="usage: verify-landed [-C <repo-path>] [--no-fetch] [--json] --node <id> (--blob <sha>|--jq <filter>) [--node <id> ...]
+  --node <id>    node id, matched in full against ^[A-Za-z0-9._-]+\$ — never split on a delimiter
+  --blob <sha>   origin/main:intentions/<id>.md must be exactly <sha>, or the literal 'absent'
+  --jq <filter>  the jq filter over the node's JSON as of origin/main must evaluate true"
+
+usage_error() {
+  echo "$USAGE" >&2
+  [[ $# -gt 0 ]] && echo "error: verify-landed: $1" >&2
+  exit 2
+}
+
+# Every spec is validated as it is parsed — a caller bug must be a cheap exit 2
+# BEFORE any network call, never a `not-landed` verdict, which would read as a
+# real answer about the graph.
+ID_CHARSET='^[A-Za-z0-9._-]+$'
+# jq's `#` opens a comment that swallows the rest of the program, and `env` /
+# `$ENV` render the whole process environment into the `observed=` log line.
+# Callers pass literal predicates over a node's own JSON, so neither is ever
+# legitimate here; refusing them keeps a filter that somehow arrives from an
+# untrusted source from truncating a predicate or exfiltrating the environment.
+JQ_ENV_RE='(^|[^A-Za-z0-9_$])(env|\$ENV)([^A-Za-z0-9_]|$)'
+
+IDS=()
+MODES=()
+EXPECTED=()
+PENDING_ID=""
+
+start_spec() { # <id>
+  [[ -z "$PENDING_ID" ]] || usage_error "--node '$PENDING_ID' was not followed by --blob or --jq"
+  [[ -n "$1" ]] || usage_error "--node requires a non-empty node id"
+  [[ "$1" =~ $ID_CHARSET ]] || usage_error "malformed node id '$1' — ids must match ^[A-Za-z0-9._-]+\$ in FULL (no '@', no '=', no whitespace)"
+  PENDING_ID="$1"
+}
+
+finish_spec() { # <mode> <expectation>
+  [[ -n "$PENDING_ID" ]] || usage_error "--$1 must follow a --node <id>"
+  [[ -n "$2" ]] || usage_error "--$1 requires a non-empty value"
+  case "$1" in
+    blob) [[ "$2" == "absent" || "$2" =~ ^[0-9a-f]{40}$ ]] ||
+            usage_error "--blob expects a 40-hex blob sha or the literal 'absent', got '$2'" ;;
+    jq)   [[ "$2" != *'#'* ]] ||
+            usage_error "--jq filter must not contain '#' — a jq comment truncates the rest of the predicate: '$2'"
+          [[ ! "$2" =~ $JQ_ENV_RE ]] ||
+            usage_error "--jq filter must not reference the process environment (env / \$ENV): '$2'" ;;
+  esac
+  IDS+=("$PENDING_ID"); MODES+=("$1"); EXPECTED+=("$2"); PENDING_ID=""
+}
+
+REPO_ARG=""
+DO_FETCH=1
+AS_JSON=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C|--repo) [[ $# -ge 2 ]] || usage_error "-C requires a repo path argument"
+               REPO_ARG="$2"; shift 2 ;;
+    -C=*|--repo=*) REPO_ARG="${1#*=}"; shift ;;
+    --no-fetch) DO_FETCH=0; shift ;;
+    --json) AS_JSON=1; shift ;;
+    -h|--help) echo "$USAGE"; exit 0 ;;
+    --node) [[ $# -ge 2 ]] || usage_error "--node requires a node id argument"
+            start_spec "$2"; shift 2 ;;
+    --node=*) start_spec "${1#*=}"; shift ;;
+    --blob) [[ $# -ge 2 ]] || usage_error "--blob requires a value argument"
+            finish_spec blob "$2"; shift 2 ;;
+    --blob=*) finish_spec blob "${1#*=}"; shift ;;
+    --jq) [[ $# -ge 2 ]] || usage_error "--jq requires a filter argument"
+          finish_spec jq "$2"; shift 2 ;;
+    --jq=*) finish_spec jq "${1#*=}"; shift ;;
+    -*) usage_error "unknown option '$1'" ;;
+    *) usage_error "unexpected argument '$1' — specs are '--node <id> --blob <sha>' or '--node <id> --jq <filter>'; the single-token '<id>=<sha>' / '<id>@<filter>' forms were removed (see the header: a concatenated id bled into the jq program)" ;;
+  esac
+done
+
+[[ -z "$PENDING_ID" ]] || usage_error "--node '$PENDING_ID' was not followed by --blob or --jq"
+[[ ${#IDS[@]} -gt 0 ]] || usage_error "at least one '--node <id> --blob <sha>|--jq <filter>' spec is required"
+
+# --- Resolve the repo from the CALLER, never from this script's location -----
+RESOLVE_FROM="${REPO_ARG:-$(pwd)}"
+if ! REPO_ROOT="$(git -C "$RESOLVE_FROM" rev-parse --show-toplevel 2>/dev/null)"; then
+  usage_error "'$RESOLVE_FROM' is not inside a git repository — verify-landed reads the CALLER's checkout (resolved from -C, else the current directory), never this script's own location"
+fi
+
+ID_CSV="$(IFS=,; echo "${IDS[*]}")"
+
+# report <verdict> <main-sha> — emit the single terminal line (plus the --json
+# object) and exit with the verdict's code. The terminal line's `verdict=` word
+# is the machine-readable answer; nothing else on stdout is.
+STATUSES=()
+OBSERVED=()
+report() {
+  local verdict="$1" main_sha="$2" code
+  case "$verdict" in
+    landed) code=0 ;;
+    not-landed) code=4 ;;
+    *) code=1 ;;
+  esac
+  echo "verify-landed: verdict=$verdict ids=$ID_CSV main=${main_sha:-unknown}"
+  if [[ $AS_JSON -eq 1 ]]; then
+    local args=(--arg verdict "$verdict" --arg main "${main_sha:-}")
+    local filter='{verdict: $verdict, main: (if $main == "" then null else $main end), specs: []}'
+    local i
+    for i in "${!IDS[@]}"; do
+      args+=(--arg "id$i" "${IDS[$i]}" --arg "mode$i" "${MODES[$i]}"
+             --arg "status$i" "${STATUSES[$i]:-unknown}"
+             --arg "observed$i" "${OBSERVED[$i]:-}" --arg "expected$i" "${EXPECTED[$i]}")
+      filter+=" | .specs += [{id: \$id$i, mode: \$mode$i, status: \$status$i,"
+      filter+=" observed: (if \$observed$i == \"\" then null else \$observed$i end),"
+      filter+=" expected: \$expected$i}]"
+    done
+    jq -n "${args[@]}" "$filter"
+  fi
+  exit "$code"
+}
+
+# --- Refresh origin/main ------------------------------------------------------
+# A fetch failure yields `unknown`, NEVER `not-landed`: an unreachable remote
+# says nothing about what is on it. `9>&-` inside this script would be a lie —
+# the discipline belongs to the CALLER (see the header), which owns the lock.
+if [[ $DO_FETCH -eq 1 ]]; then
+  if ! git -C "$REPO_ROOT" fetch --quiet origin main >&2; then
+    echo "verify-landed: could not fetch origin/main in $REPO_ROOT — the outcome is undetermined" >&2
+    report unknown ""
+  fi
+fi
+
+if ! MAIN_SHA="$(git -C "$REPO_ROOT" rev-parse origin/main 2>/dev/null)"; then
+  echo "verify-landed: could not resolve origin/main in $REPO_ROOT — the outcome is undetermined" >&2
+  report unknown ""
+fi
+
+# --- Evaluate each spec -------------------------------------------------------
+# Reduce over the specs: any `unknown` wins outright (it is the absence of an
+# answer, not a weak answer); otherwise any `unsatisfied` decides.
+ANY_UNKNOWN=0
+ANY_UNSATISFIED=0
+
+# node_json_at_main <id> — print the node's JSON as of origin/main via
+# readNodeAtRef, or the literal `null` when the node is absent there. Runs
+# from SCRIPT_DIR (not REPO_ROOT) so `npx tsx` and the tsx loader resolve
+# against THIS checkout's node_modules; the repo under inspection is passed as
+# an argument, exactly as readNodeAtRef's contract requires.
+# The tsx entry itself is a heredoc temp module (park-node:345-362 uses the
+# same shape) rather than a committed sibling script: it is four lines of glue
+# with no independent callers, and the library it delegates to — and its
+# tests — are the real surface.
+TMPTS=""
+cleanup_tmpts() { [[ -n "$TMPTS" ]] && rm -f "$TMPTS"; }
+trap cleanup_tmpts EXIT
+
+node_json_at_main() {
+  local id="$1"
+  if [[ -z "$TMPTS" ]]; then
+    TMPTS="$(mktemp --suffix=.mts)" || return 1
+    cat >"$TMPTS" <<'TS'
+// argv: <libPath> <repoRoot> <ref> <id>
+const [libPath, repoRoot, ref, id] = process.argv.slice(2);
+const { readNodeAtRef } = await import(libPath);
+process.stdout.write(JSON.stringify(readNodeAtRef(repoRoot, ref, id) ?? null));
+TS
+  fi
+  # `node --import tsx/esm` (resolve-hold's form), not `npx tsx`: the tsx CLI
+  # opens an IPC unix socket at start-up, which a sandboxed caller cannot do
+  # (EPERM) — turning every jq-mode verification into a spurious `unknown`.
+  # The loader form needs no socket.
+  (cd "$SCRIPT_DIR" && node --import tsx/esm "$TMPTS" "$LIB_STORE_AT_REF" "$REPO_ROOT" "origin/main" "$id")
+}
+
+for i in "${!IDS[@]}"; do
+  id="${IDS[$i]}"; mode="${MODES[$i]}"; want="${EXPECTED[$i]}"
+  status="unknown"; observed=""
+
+  case "$mode" in
+    blob)
+      if blob="$(git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$id.md" 2>/dev/null)"; then
+        observed="$blob"
+      else
+        observed="absent"
+      fi
+      if [[ "$observed" == "$want" ]]; then status="satisfied"; else status="unsatisfied"; fi
+      ;;
+    jq)
+      if ! node_json="$(node_json_at_main "$id")"; then
+        echo "verify-landed: could not read $id at origin/main (readNodeAtRef failed) — the outcome is undetermined" >&2
+        status="unknown"
+      else
+        # `$want` is the filter the caller passed as its own `--jq` argument —
+        # it can never contain a node id, because the id arrived as a separate
+        # `--node` argument and was charset-validated in full (see the header).
+        # `jq -e`: 0 the filter produced a truthy value, 1 false/null, anything
+        # else (5) is a jq error — an error is `unknown`, not a false.
+        # Here-string, never `echo "$node_json" | jq` (.claude/rules/shell-json.md).
+        jq_out="$(jq -e "$want" <<<"$node_json" 2>/dev/null)"; jq_rc=$?
+        observed="$jq_out"
+        case "$jq_rc" in
+          0) status="satisfied" ;;
+          1) status="unsatisfied"; observed="${jq_out:-false}" ;;
+          *) echo "verify-landed: jq filter '$want' failed on $id — the outcome is undetermined" >&2
+             status="unknown"; observed="" ;;
+        esac
+      fi
+      ;;
+  esac
+
+  STATUSES+=("$status")
+  OBSERVED+=("$observed")
+  echo "verify-landed: $id mode=$mode status=$status expected=$want observed=${observed:-unknown}"
+  [[ "$status" == "unknown" ]] && ANY_UNKNOWN=1
+  [[ "$status" == "unsatisfied" ]] && ANY_UNSATISFIED=1
+done
+
+if [[ $ANY_UNKNOWN -eq 1 ]]; then
+  report unknown "$MAIN_SHA"
+elif [[ $ANY_UNSATISFIED -eq 1 ]]; then
+  report not-landed "$MAIN_SHA"
+fi
+report landed "$MAIN_SHA"

@@ -15,7 +15,6 @@ rationale: "Surfaced by the 2026-07-31 /align-strategy fleet-scheduling
   half can compound across ticks, not just overshoot by one. Both are defects
   against the record, not design choices."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -65,7 +64,12 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: provision-node-worktree failed for this tactic (exit 2)
+  since: 2026-08-09
+  recommendation: Inspect the provisioning failure (git fetch/worktree add,
+    direnv) in the tick journal, fix the environment, and re-run the phase.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

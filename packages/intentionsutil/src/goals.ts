@@ -2,6 +2,7 @@ import type { ResolvedAttention, TermContribution } from "./attention.js";
 import { resolveAttention } from "./attention.js";
 import { ownTier } from "./schema.js";
 import type { IntentionNode, Owner } from "./schema.js";
+import { deriveGap } from "./sensors.js";
 
 /**
  * How a goal is realized once it becomes actionable. A procedure node is
@@ -98,8 +99,8 @@ export function projectGoals(nodes: IntentionNode[]): Goal[] {
     const bVal = attention.get(b.id)?.value ?? 0;
     if (aVal !== bVal) return bVal - aVal;
 
-    const aGap = a.gap !== null ? 0 : 1;
-    const bGap = b.gap !== null ? 0 : 1;
+    const aGap = deriveGap(a) !== null ? 0 : 1;
+    const bGap = deriveGap(b) !== null ? 0 : 1;
     if (aGap !== bGap) return aGap - bGap;
 
     const aSig = a.success_signal !== null ? 0 : 1;
@@ -190,7 +191,8 @@ export function renderFrontier(goals: Goal[]): string {
           : ` [rank ${rank}]`;
       line += formatTermBreakdown(attention.terms);
     }
-    if (node.gap !== null) line += ` — gap: ${node.gap}`;
+    const gap = deriveGap(node);
+    if (gap !== null) line += ` — gap: ${gap}`;
     return line;
   });
   return `${lines.join("\n")}\n`;

@@ -69,7 +69,6 @@ rationale: "Discovered 2026-07-16 during a /qa-fix pass on
   planned as one unit, but if both are in flight simultaneously they will
   conflict textually in that file region."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []

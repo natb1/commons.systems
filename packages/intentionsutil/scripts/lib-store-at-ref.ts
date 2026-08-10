@@ -12,10 +12,10 @@
 // graph state read at `origin/main` through this helper instead.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listNodesStrict } from "../src/store.js";
+import { listNodesStrict, readNode } from "../src/store.js";
 import type { IntentionNode } from "../src/schema.js";
 
 /**
@@ -72,6 +72,83 @@ export function listNodesAtRef(repoRoot: string, ref: string): IntentionNode[] {
   try {
     execFileSync("tar", ["-x", "-C", dir], { input: tar });
     return listNodesStrict(join(dir, "intentions"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * ONE node as of `ref` — `readNode(<worktree>/intentions, id)`'s git-ref-aware
+ * counterpart — or `null` when the node does not exist at `ref`.
+ *
+ * `repoRoot` is a parameter for the same reason as `listNodesAtRef`'s: the
+ * answer must describe the checkout the CALLER means, never the one this file
+ * happens to live in.
+ *
+ * Deliberately NOT built on `listNodesAtRef`: that helper is STRICT over the
+ * whole 500+ node store, so a single unrelated malformed node would fail the
+ * verification of a perfectly healthy one. A single-node question must be
+ * answerable from a single node file.
+ *
+ * Failure posture (see .claude/rules/code-style.md):
+ * - Absent at `ref` → `null`. That is a real answer, not an error: a pruned or
+ *   not-yet-landed node is exactly what a post-land verification asks about.
+ * - Anything else (unknown ref, git failure, unparseable/invalid frontmatter)
+ *   → throws with a message naming the id, the ref and the repo. Never
+ *   collapse an error into `null`, which callers read as "definitely absent".
+ */
+export function readNodeAtRef(repoRoot: string, ref: string, id: string): IntentionNode | null {
+  const path = `${ref}:intentions/${id}.md`;
+
+  // Existence probe first, so "absent at ref" is distinguished from "git blew
+  // up" — `git show` reports both as a non-zero exit.
+  try {
+    execFileSync("git", ["-C", repoRoot, "cat-file", "-e", path], { stdio: "ignore" });
+  } catch {
+    // Absent path, or a ref that does not resolve at all. Only the former is a
+    // legitimate `null`; check the ref separately so a mistyped/unfetched ref
+    // is not silently reported as a pruned node.
+    try {
+      execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+        stdio: "ignore",
+      });
+    } catch {
+      throw new Error(
+        `readNodeAtRef: ref "${ref}" does not resolve in the repository at ${repoRoot}. ` +
+          `If it is a remote-tracking ref, the local copy may be missing or stale — run ` +
+          `\`git fetch origin main\` and retry.`,
+      );
+    }
+    return null;
+  }
+
+  let content: string;
+  try {
+    content = execFileSync("git", ["-C", repoRoot, "show", path], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  } catch (err) {
+    throw new Error(
+      `readNodeAtRef: could not read "${path}" in the repository at ${repoRoot}: ${String(err)}`,
+    );
+  }
+
+  // Parse through the canonical reader (`readNode`) rather than scraping the
+  // frontmatter here: one parser, one validation, one set of defaults.
+  const dir = mkdtempSync(join(tmpdir(), "intention-at-ref-"));
+  try {
+    const intentionsDir = join(dir, "intentions");
+    mkdirSync(intentionsDir);
+    writeFileSync(join(intentionsDir, `${id}.md`), content, "utf8");
+    try {
+      return readNode(intentionsDir, id);
+    } catch (err) {
+      throw new Error(
+        `readNodeAtRef: "${path}" in the repository at ${repoRoot} is not a valid intention ` +
+          `node: ${String(err)}`,
+      );
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

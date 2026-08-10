@@ -63,7 +63,8 @@ execution:
   conflict: null
   completion: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-hold-conflict-strategy-fingerprint-stamp-coverage
 office_hours: null
 pace_exempt: false
 rounds: null

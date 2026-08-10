@@ -23,11 +23,11 @@ blocked_by: []
 office_hours:
   reason: "phase session ended without declaring a disposition — `claude agents
     --all` reports the session for this node in a terminal state and it has had
-    no transcript activity for `19548`s, while `origin/main` still shows the
-    node at a working phase with `office_hours: null`; the node is therefore
-    both re-selectable and held, so the dispatch-tick
-    terminal-without-disposition sweep parked it"
-  since: 2026-08-06
+    no transcript activity for `698`s, while `origin/main` still shows the node
+    at a working phase with `office_hours: null`; the node is therefore both
+    re-selectable and held, so the dispatch-tick terminal-without-disposition
+    sweep parked it"
+  since: 2026-08-09
   recommendation: "Reap THEN clear — this order is mandatory, not a choice between
     two options. (1) Read the session's transcript or attach the held job
     (`claude agents --all`, `claude attach <job-id>`) to see what it concluded;

@@ -31,7 +31,6 @@ rationale: "Surfaced by the 2026-07-31 /align-strategy calendar-blocking round
   `attributes.wait_until` presence with a resolvable source, never on a bare
   `tactic-wait-` id prefix — which would collide with this node's own id."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -39,13 +38,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: review
 execution:
   branch: tactic-wait-calendar-release
   pr: 3051
   attempts: {}
   markers:
     - planned
+    - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   conflict: null
@@ -871,3 +872,13 @@ Manual / judgment checks, in this order:
   sweep reads to decide that closure — not a new release rule, not a new edge
   type. The declined `blocked_until` field would have contradicted it. No edit to
   that strategy is owed by this work.
+
+## needs-main residue
+
+- **id:** 10
+  **title:** Production tick observation: exactly one sweep summary line per tick with an empty WAIT store
+  **url_path:** current
+  **expected_outcome:** For at least two consecutive `dispatch-tick` runs with no WAIT node in the store, exactly one `lib-wait-recheck: sweep complete (candidates=0 … status=ok)` line appears per tick in the tick journal — never zero (predicate silently failed to load) and never two (double-wiring at both call sites firing in a single tick).
+  **finding:** All 9 other QA plan items (independent re-runs of the 7 auto-verify commands plus live fixture checks of the router exclusion, the full arm→release→re-arm→cap lifecycle against a real bare remote, office-hours gating across all three WAIT states, and the census owed-prune exclusion) PASSed in this `/qa-fix` pass. This item is the node body's own Verification-section item 5 ("Observe in production, after merge") — by construction it requires observing at least two consecutive *live* `dispatch-tick` runs against the real production journal, which cannot be produced pre-merge on a feature-branch QA session. The mechanism's fail-safe posture (always returns 0, correctly-distinguished `status=` values across `repo-unresolvable`/`ok`/`enumeration-failed`) and the `dispatch-tick` wiring (both call sites `declare -f`-guarded, un-`|| true`'d, correctly ordered after `stale_hold_recheck_sweep` and before Step-1 selection) were independently re-verified live this pass.
+  **Verifiability:** WAIT — awaited event: this PR merging to `main` and at least two subsequent live `dispatch-tick` runs completing.
+  **Check:** grep the tick journal for `lib-wait-recheck: sweep complete` across ≥2 consecutive ticks; confirm exactly one such line per tick and `status=ok` (never `enumeration-failed`, never absent).

@@ -24,7 +24,6 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review on
   worktree_has_live_session check to mean anything for this node kind; the plan
   below is written against that post-merge shape."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -168,7 +167,7 @@ fired was a non-fast-forward push rejection — late by construction.
    common case.
 5. **A new `reservation_owner` helper** is added to
    `lib-reservation-ledger.sh` to avoid duplicating the sweep's inline `sed`
-   parse, with a test added to `test-dispatch-scripts.sh` in the existing
+   parse, with a test added to `test-lib-reservation-ledger.sh` in the existing
    style.
 
 `validates: []` stands — this is infrastructure hardening, not a
@@ -199,7 +198,7 @@ check is daemon-derived (via `claude agents --json`) too.
   "$bn") || marker_sid=""`) so exactly one parser exists. Leave the
   `timestamp=` parse untouched.
 - Tests in
-  `.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh`,
+  `.claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh`,
   appended to the existing `lib-reservation-ledger.sh` test section (reuse
   `rl_setup`/`rl_teardown` and the `assert_eq` helper; Test 1
   (`reservation_write` + `reservation_count`) is the style template): owner of
@@ -317,7 +316,7 @@ control-flow blocks that PR is concurrently rewriting.
   (`lib-claude-agents.sh:512`) as used by `align-tactics/SKILL.md` Step 0.
 - Bash-only directive-verb precedent — `office-hours-graph`'s existing
   `cleared` verb (and `tactic-office-hours-concurrency-dedup`'s `held`).
-- Test harness — `test-dispatch-scripts.sh`'s existing
+- Test harness — `test-lib-reservation-ledger.sh`'s existing
   `lib-reservation-ledger.sh` test section (`rl_setup`/`rl_teardown`,
   `assert_eq`, Test 1 as the style template).
 
@@ -329,7 +328,8 @@ bash -n packages/intentionsutil/scripts/office-hours-graph
 ```
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh 2>&1 | tail -20
+bash .claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh 2>&1 | tail -20
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh 2>&1 | tail -20
 ```
 
 Expect `0 failed`, with the new `reservation_owner` assertions passing and
