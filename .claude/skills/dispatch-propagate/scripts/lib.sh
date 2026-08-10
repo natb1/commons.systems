@@ -2829,6 +2829,31 @@ unit_manually_disabled() {
   esac
 }
 
+# Emit the ONE informational line that makes an honored manual disable visible
+# in the journal. NOT a WARNING and NOT an error — this is the requested state,
+# and the caller's `|| true` must not be the only thing separating "we did what
+# you asked" from "something went wrong". Callers that merely return silently
+# leave the operator no in-the-moment evidence at all, which is
+# indistinguishable from a dead guard or a caller that never ran.
+#
+# One implementation for all four call sites (both installers' steady-state and
+# unit-files-updated paths), for the same reason unit_manually_disabled above is
+# shared: the message cannot drift between structurally identical twins.
+#
+# The trailing `skipping enable --now` wording is load-bearing — the recorded
+# operator procedure greps for exactly that substring — so $detail varies but
+# the suffix does not.
+#
+# Args: $1 = caller name, $2 = timer unit name, $3 = state detail phrase
+# Always returns 0.
+unit_disable_skip_notice() {
+  local caller="$1"
+  local unit="$2"
+  local detail="$3"
+  echo "$caller: $unit is marked manually disabled ($(dispatch_unit_disable_sentinel_path "$unit")); $detail, skipping enable --now" >&2
+  return 0
+}
+
 # Disable a stale sweep timer/service whose installed unit points at a
 # different main-worktree path than the current one, mirroring
 # cleanup_stale_heartbeat_units below. Thin wrapper over
@@ -3205,6 +3230,14 @@ EOF
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
      && { [ "$manually_disabled" -eq 1 ] || "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-heal.timer; }; then
+    # Report a honored disable even on the zero-`systemctl` path. The
+    # short-circuit above means `manually_disabled` is the only leg that can be
+    # true without an is-active probe having run, so re-testing it here costs
+    # nothing and does NOT re-read the sentinel — the single-read invariant
+    # documented at :3193-3195 is preserved.
+    if [ "$manually_disabled" -eq 1 ]; then
+      unit_disable_skip_notice ensure_healer_units dispatch-heal.timer "unit files already current"
+    fi
     return 0
   fi
 
@@ -3278,7 +3311,7 @@ EOF
   # the requested state, and the caller's `|| true` must not be the only thing
   # separating "we did what you asked" from "something went wrong".
   if [ "$manually_disabled" -eq 1 ]; then
-    echo "ensure_healer_units: dispatch-heal.timer is marked manually disabled ($(dispatch_unit_disable_sentinel_path dispatch-heal.timer)); unit files updated, skipping enable --now" >&2
+    unit_disable_skip_notice ensure_healer_units dispatch-heal.timer "unit files updated"
     return 0
   fi
 
@@ -3456,6 +3489,14 @@ EOF
   if [ -f "$SERVICE_PATH" ] && [ "$(cat "$SERVICE_PATH")" = "$desired_service" ] \
      && [ -f "$TIMER_PATH" ] && [ "$(cat "$TIMER_PATH")" = "$desired_timer" ] \
      && { [ "$manually_disabled" -eq 1 ] || "$SYSTEMCTL_CMD" --user is-active --quiet dispatch-fleet-watch.timer; }; then
+    # Report a honored disable even on the zero-`systemctl` path. The
+    # short-circuit above means `manually_disabled` is the only leg that can be
+    # true without an is-active probe having run, so re-testing it here costs
+    # nothing and does NOT re-read the sentinel — the single-read invariant
+    # documented at :3193-3195 is preserved.
+    if [ "$manually_disabled" -eq 1 ]; then
+      unit_disable_skip_notice ensure_watcher_units dispatch-fleet-watch.timer "unit files already current"
+    fi
     return 0
   fi
 
@@ -3529,7 +3570,7 @@ EOF
   # the requested state, and the caller's `|| true` must not be the only thing
   # separating "we did what you asked" from "something went wrong".
   if [ "$manually_disabled" -eq 1 ]; then
-    echo "ensure_watcher_units: dispatch-fleet-watch.timer is marked manually disabled ($(dispatch_unit_disable_sentinel_path dispatch-fleet-watch.timer)); unit files updated, skipping enable --now" >&2
+    unit_disable_skip_notice ensure_watcher_units dispatch-fleet-watch.timer "unit files updated"
     return 0
   fi
 
