@@ -43,12 +43,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: review
 execution:
   branch: tactic-graph-commit-landing-signal-unreliable
   pr: 3050
   attempts: {}
-  markers: []
+  markers:
+    - planned
+    - qa-done
   strategy_fingerprint: null
   fix: null
   conflict: null
