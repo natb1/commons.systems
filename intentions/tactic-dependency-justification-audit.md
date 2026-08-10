@@ -29,7 +29,10 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-08-10
+    attempt: 1
+    pushed_sha: null
   conflict: null
   completion: null
 validates:
