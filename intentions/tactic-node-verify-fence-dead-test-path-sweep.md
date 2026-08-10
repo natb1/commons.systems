@@ -70,7 +70,10 @@ execution:
     - qa-done
     - reviewed
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-08-10
+    attempt: 2
+    pushed_sha: 1f2f0842a34baf57992895df6a86dbbe66a76974
   conflict: null
   completion: null
 validates: []
