@@ -1136,7 +1136,7 @@ describe("strategyFingerprint", () => {
     expect(
       strategyFingerprint({
         ...base,
-        clarifications: [{ question: "q", answer: "a" }],
+        clarifications: [{ question: "q", answer: "a", id: null }],
       }),
     ).not.toBe(fp);
     expect(
@@ -1151,6 +1151,42 @@ describe("strategyFingerprint", () => {
     const base = strategy({ id: "strategy-s", serves: ["virtue-a", "virtue-b"] });
     const reordered = strategy({ id: "strategy-s", serves: ["virtue-b", "virtue-a"] });
     expect(strategyFingerprint(base)).toBe(strategyFingerprint(reordered));
+  });
+
+  it("a null clarification id hashes identically to no id key at all (schema-widening stability)", () => {
+    // Simulates the pre-`id`-field shape: clarification objects that never
+    // carried an `id` key. `id: string | null` was added to the Clarification
+    // interface after this shape existed everywhere in the store, and
+    // `validateNode` now always fills `id: null` when absent — so a real node
+    // read via readNode/validateNode always has the key present. The
+    // fingerprint must not change just because the key started appearing.
+    const withoutIdKey = strategy({
+      id: "strategy-s",
+      clarifications: [
+        { question: "q1", answer: "a1 (2026-07-01)" },
+        { question: "q2", answer: "a2 (2026-07-01)" },
+      ] as unknown as IntentionNode["clarifications"], // type-safety-ok: simulates pre-widening on-disk shape with no `id` key at all
+    });
+    const withNullId = strategy({
+      id: "strategy-s",
+      clarifications: [
+        { question: "q1", answer: "a1 (2026-07-01)", id: null },
+        { question: "q2", answer: "a2 (2026-07-01)", id: null },
+      ],
+    });
+    expect(strategyFingerprint(withNullId)).toBe(strategyFingerprint(withoutIdKey));
+  });
+
+  it("assigning a non-null clarification id changes the fingerprint", () => {
+    const withNullId = strategy({
+      id: "strategy-s",
+      clarifications: [{ question: "q1", answer: "a1 (2026-07-01)", id: null }],
+    });
+    const withRealId = strategy({
+      id: "strategy-s",
+      clarifications: [{ question: "q1", answer: "a1 (2026-07-01)", id: "q1-slug" }],
+    });
+    expect(strategyFingerprint(withRealId)).not.toBe(strategyFingerprint(withNullId));
   });
 });
 

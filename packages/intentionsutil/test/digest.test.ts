@@ -131,8 +131,8 @@ describe("renderPerNode (Section 1)", () => {
         id: "tactic-c",
         kind: "tactic",
         clarifications: [
-          { question: "q1", answer: "decided on 2026-01-05 initially" },
-          { question: "q2", answer: "revised 2026-07-09 per round" },
+          { question: "q1", answer: "decided on 2026-01-05 initially", id: null },
+          { question: "q2", answer: "revised 2026-07-09 per round", id: null },
         ],
         attributes: { conditions: ["one", "two", "three"] },
       }),

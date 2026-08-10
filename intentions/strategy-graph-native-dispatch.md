@@ -291,7 +291,8 @@ clarifications:
     answer: A selected node’s scope or state changes after selection — before its
       worker starts, or while it runs. What closes the window? — See body
       §Fingerprint & Freeze. Recorded 2026-07-06 interview.
-  - question: Does long-horizon graph work keep a workflow or session alive?
+  - id: disposable-session
+    question: Does long-horizon graph work keep a workflow or session alive?
     answer: Does long-horizon graph work keep a workflow or session alive? — See
       body §Execution Substrate for the full mechanism. Recorded 2026-07-06
       interview.
@@ -507,7 +508,8 @@ clarifications:
       Does the cost of the fix versus the cost of deferring it also bear on the
       disposition? — See body §Review & QA Disposition for the full mechanism.
       Recorded 2026-07-13 interview.
-  - question: After a node worker terminates, is its session removed from the agents
+  - id: reaping
+    question: After a node worker terminates, is its session removed from the agents
       list — and does an escalation-parked session stay for the author to
       engage?
     answer: After a node worker terminates, is its session removed from the agents
@@ -614,8 +616,9 @@ clarifications:
       off-path demotion covers the recorded requirement’s own rank; the freeze
       tax of the recording edit itself — every stamped child paying a
       re-evaluation session even for an orthogonal edit — is addressed
-      separately by the materiality-scoped-freeze clarification.)"
-  - question: A strategy edit soft-freezes every stamped open child regardless of
+      separately by `strategy-graph-native-dispatch#materiality-scoped-freeze`.)"
+  - id: materiality-scoped-freeze
+    question: A strategy edit soft-freezes every stamped open child regardless of
       relevance or rank (a low-rank edit such as the 2026-07-18 skill-rename
       round stales every stamped in-flight child) — should the freeze decision
       incorporate a rank comparison, and how does a stale child recover WHAT
@@ -715,16 +718,17 @@ clarifications:
       owns which ladder layer? — See body §Serialization & Commit for the full
       mechanism. Recorded 2026-07-19 /align-strategy round.
   - question: Should auto-close of a completed worker session be configurable, given
-      the 2026-07-16 reaping clarification reaps on every terminal exit and
-      diverged from the session-as-observability rival?
+      `strategy-graph-native-dispatch#reaping` (2026-07-16) reaps on every
+      terminal exit and diverged from the session-as-observability rival?
     answer: "Yes — auto-close is made configurable via a default-off operator escape
       hatch, and this does NOT weaken the reaping doctrine. Auto-close (reap on
       every terminal exit) remains the DEFAULT and the doctrinal expression of
       disposable sessions; the toggle, off by default, lets an operator KEEP a
       completed or escalation-parked worker session for local
       inspection/debugging. The doctrine holds because its actual concern —
-      established by the disposable-session clarification and the 2026-07-16
-      reaping clarification's divergence from the session-as-observability rival
+      established by `strategy-graph-native-dispatch#disposable-session` and by
+      the divergence of `strategy-graph-native-dispatch#reaping` (2026-07-16)
+      from the session-as-observability rival
       — is that session persistence must never become router SUBSTRATE or the
       observability CHANNEL, not the bare existence of a lingering session; the
       author affirmed this reading of the divergence's intent this round. A
@@ -833,13 +837,14 @@ clarifications:
       if its re-entry routing re-runs check-node-selection — the draft tactic's
       first unit verifies that overlap before implementing. Recorded 2026-07-19
       /align-strategy interview."
-  - question: The 2026-07-16 reaping clarification reaps a node-worker session on
-      EVERY terminal exit, and its edge case (c) reaps a mid-phase-dead
-      (crashed) worker's orphaned job via the tick/sweep pass. But a session
-      that terminated WITHOUT a clean phase-transition and WITHOUT an
-      escalation-park has no durable record anywhere — it was not parked to the
-      office-hours queue, so nothing carries its failure context except the live
-      session itself. Should auto-close really fire on those exits?
+  - question: Clarification `strategy-graph-native-dispatch#reaping`
+      (2026-07-16) reaps a node-worker session on EVERY terminal exit, and its
+      edge case (c) reaps a mid-phase-dead (crashed) worker's orphaned job via
+      the tick/sweep pass. But a session that terminated WITHOUT a clean
+      phase-transition and WITHOUT an escalation-park has no durable record
+      anywhere — it was not parked to the office-hours queue, so nothing carries
+      its failure context except the live session itself. Should auto-close
+      really fire on those exits?
     answer: "No — auto-close (reap) is narrowed to fire ONLY on a clean
       phase-transition or an escalation-park; every OTHER terminal exit — a hard
       crash, an error exit, or a clean-but-no-transition/no-progress exit —
@@ -852,15 +857,15 @@ clarifications:
       parked to office-hours (so it never reaches the PARKED panel, the
       office-hours-debuggable channel) and it did not advance the phase, so the
       live session is the only artifact of the failure. Reaping it would
-      silently erase the one thing a debugger has. This DIVERGES from the
-      2026-07-16 clarification's edge case (c) (which reaped the crashed job via
-      the sweep) and narrows 'reaped on every terminal exit' (its main body, and
-      edge case (b)'s
+      silently erase the one thing a debugger has. This DIVERGES from
+      `strategy-graph-native-dispatch#reaping`'s edge case (c) (which reaped the
+      crashed job via the sweep) and narrows 'reaped on every terminal exit'
+      (its main body, and edge case (b)'s
       reap-then-fuse-re-selects-after-a-silent-no-transition-exit) to 'reaped
       iff the exit transitioned or parked the node'. It does NOT re-open the
-      session-as-observability coupling the 2026-07-16 clarification rejected: a
-      kept failed session is a DEBUGGING ARTIFACT a human inspects, not a
-      recovery substrate (session attach/resume is still not a supported
+      session-as-observability coupling `strategy-graph-native-dispatch#reaping`
+      rejected: a kept failed session is a DEBUGGING ARTIFACT a human inspects,
+      not a recovery substrate (session attach/resume is still not a supported
       recovery path — the router never resumes from a kept session; the human
       reaps it and the node re-selects fresh or is fixed forward) and not the
       escalation channel (real escalations still park to office-hours).
@@ -881,10 +886,11 @@ clarifications:
       minimal count' over 'no new surface', this round]. Retained as draft
       tactic-frozen-session-debug-count. (d) COMPOSITION with the 2026-07-19
       keep-all toggle — the DEFAULT itself narrows to 'reap iff
-      transitioned-or-parked' (this amends all three recorded sites: the
-      2026-07-16 reaping clarification, the 2026-07-19 configurable-auto-close
-      clarification, and the reap condition); the keep-all toggle
-      (tactic-worker-self-close-configurable) layers ON TOP — when ON it
+      transitioned-or-parked' (this amends all three recorded sites:
+      `strategy-graph-native-dispatch#reaping`, the 2026-07-19
+      configurable-auto-close clarification, and the reap condition); the
+      keep-all toggle (tactic-worker-self-close-configurable) layers ON TOP —
+      when ON it
       additionally keeps the transitioned/parked sessions the narrowed default
       would otherwise reap; both the transition-or-park check and the toggle
       live in the shared self-close primitive [author chose 'narrow default;
@@ -1289,9 +1295,10 @@ clarifications:
       ceiling (boost 100), which the 2026-07-13 guard keeps dominant — the
       ledger fix is important but is not a red-main emergency. (Amended
       2026-07-26: the \"$XDG_DATA_HOME/commons-dispatch/paused\" sentinel named
-      here is superseded by a dispatch.config/*.json boolean field — see the
-      pause-field clarification of that date. The mechanism this clarification
-      protects is unchanged: pause gates worker SPAWNING only and never ledger
+      here is superseded by a dispatch.config/*.json boolean field — see
+      `strategy-graph-native-dispatch#pause-field`. The mechanism this
+      clarification protects is unchanged: pause gates worker SPAWNING only and
+      never ledger
       BOOKKEEPING, and the pre-short-circuit ledger sweep still runs on a paused
       tick.)"
   - question: Does the greenfield design enforce serialization of work on the
@@ -1633,11 +1640,13 @@ clarifications:
       accepted deliberately: this round LOWERS the repo's literal XDG usage
       rather than raising it, because the one dispatch parameter that was
       XDG-compliant (the pause flag at $XDG_DATA_HOME/commons-dispatch/paused)
-      moves into the non-XDG dispatch.config/ — see the pause-field
-      clarification of the same date. Unrelated XDG uses elsewhere (topic-usage
+      moves into the non-XDG dispatch.config/ — see
+      `strategy-graph-native-dispatch#pause-field` (same date). Unrelated XDG
+      uses elsewhere (topic-usage
       state under $XDG_STATE_HOME, systemd user units under $XDG_CONFIG_HOME,
       the budget skill's own config) are untouched and out of scope."
-  - question: Should "dispatch scheduling paused" (default false) stay a filesystem
+  - id: pause-field
+    question: Should "dispatch scheduling paused" (default false) stay a filesystem
       sentinel at $XDG_DATA_HOME/commons-dispatch/paused, or become a
       dispatch.config/*.json field like the other operator-facing dispatch
       parameters?
@@ -2739,7 +2748,8 @@ clarifications:
       tactic-terminal-declaration-verified-against-node. Distinct from
       tactic-qa-fix-node-terminal-declaration, which covers the opposite (safe)
       direction of a missing declaration and its mechanical guard."
-  - question: The 2026-07-26 pause-field clarification's rationale lists the worker
+  - question: The rationale of `strategy-graph-native-dispatch#pause-field`
+      (2026-07-26) lists the worker
       auto-close toggle among operator parameters that "already resolve through
       dispatch-config-load". Is that true of the toggle today, and does it
       change where the toggle belongs?
@@ -3645,8 +3655,9 @@ clarifications:
       event carries no already-readable signal the release predicate is CALENDAR
       TIME (attributes.wait_until), and the attempt counter's survival across a
       re-wait — which this entry left open — is settled by re-arming one node in
-      place rather than re-minting. See the calendar-release clarification of
-      this date for both, including the router.ts:343-355 exclusion this entry
+      place rather than re-minting. See
+      `strategy-graph-native-dispatch#calendar-release` (this date) for both,
+      including the router.ts:343-355 exclusion this entry
       already requires, which now must cover a RE-ARMED node too (a re-arm
       returns the node to phase-less, so it re-enters the draft-candidate loop
       this exclusion guards).
@@ -3801,7 +3812,8 @@ clarifications:
       marked set that grows without bound is that condition failing — which
       parks this strategy for an author decision — rather than a silently
       absorbed cost.
-  - question: The ratified WAIT releases "when the observation lands" — but for
+  - id: calendar-release
+    question: The ratified WAIT releases "when the observation lands" — but for
       deploy lag, detecting the observation IS running the test. What releases a
       WAIT whose event has no readable signal, and what survives a re-wait?
     answer: >
@@ -4936,7 +4948,7 @@ attributes:
       count) must hold in it without relying on the autonomous heartbeat's
       reaper (Amended 2026-07-26: the pause SENTINEL named in this condition is
       replaced by a dispatch.config/*.json boolean field as the sole mechanism —
-      see the pause-field clarification of that date. Every clause of this
+      see `strategy-graph-native-dispatch#pause-field`. Every clause of this
       condition carries over to the field unchanged, and pause evaluation
       additionally fails CLOSED: any config resolve/read/parse failure is
       treated as paused, never as not-paused.)"

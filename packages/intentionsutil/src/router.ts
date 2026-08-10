@@ -106,12 +106,20 @@ export interface GraphSelection {
  *
  * `serves` is order-normalized (sorted) so an edge reorder is not substance;
  * clarifications keep author order (their sequence is meaningful dialectic
- * history).
+ * history). Each clarification's `id` is included in the hashed shape only
+ * when non-null: `id: null` is the overwhelming common case (no citation slug
+ * assigned yet) and predates the `id` field entirely, so it must hash exactly
+ * as `{question, answer}` did before `id` existed — otherwise this
+ * schema-widening alone would falsely invalidate every already-stamped
+ * fingerprint graph-wide. Assigning a real (non-null) id IS a substantive
+ * edit — a citable slug being added/changed/removed — so it stays hashed.
  */
 export function strategyFingerprint(strategy: IntentionNode): string {
   const substance = {
     statement: strategy.statement,
-    clarifications: strategy.clarifications,
+    clarifications: strategy.clarifications.map((c) =>
+      c.id === null ? { question: c.question, answer: c.answer } : c,
+    ),
     conditions: strategy.attributes.conditions ?? null,
     serves: [...strategy.serves].sort(),
     success_signal: strategy.success_signal,

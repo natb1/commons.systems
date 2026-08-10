@@ -228,8 +228,8 @@ describe("computeReviewCoverage — last_reviewed (rule 4)", () => {
           id: "s",
           kind: "strategy",
           clarifications: [
-            { question: "q1", answer: "Recorded 2026-05-01." },
-            { question: "q2", answer: "Amended 2026-06-15." },
+            { question: "q1", answer: "Recorded 2026-05-01.", id: null },
+            { question: "q2", answer: "Amended 2026-06-15.", id: null },
           ],
         }),
       ],
@@ -262,7 +262,7 @@ describe("computeReviewCoverage — last_reviewed (rule 4)", () => {
         node({
           id: "d",
           kind: "delegation",
-          clarifications: [{ question: "q", answer: "Reviewed 2026-08-01." }],
+          clarifications: [{ question: "q", answer: "Reviewed 2026-08-01.", id: null }],
           attributes: { review_trigger: "x", last_assessed: "2026-07-02" },
         }),
       ],
