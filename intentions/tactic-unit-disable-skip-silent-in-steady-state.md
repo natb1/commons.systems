@@ -77,13 +77,12 @@ attention:
     the observation is not lost when tactic-ensure-units-respect-manual-disable
     closes.
   tier: 1
-phase: qa
+phase: implement
 execution:
   branch: tactic-unit-disable-skip-silent-in-steady-state
   pr: 3059
   attempts: {}
-  markers:
-    - planned
+  markers: []
   strategy_fingerprint: null
   fix: null
   conflict: null
@@ -472,3 +471,46 @@ silence, which is the defect this node fixes.
   plan deliberately requires no edit to it.
 - `tactic-self-close-reap-silent-noop` — names the silent-PASS class this
   belongs to.
+
+## needs-main residue
+
+Filed by `/qa-fix` (PR #3059). All 7 script-verifiable QA items passed
+(the shared `unit_disable_skip_notice` helper exists adjacent to
+`unit_manually_disabled`; the message carries the load-bearing substring and
+no `WARNING`; it fires from both installers' steady-state hot paths before
+their existing `return 0`; the cold-path wording is byte-identical to
+`origin/main`; `test-lib-systemd-units.sh` is 146/146 with the strengthened
+5b assertions and the zero-`systemctl` ratchet intact; the full
+`run-unit-tests.sh --pr-scripts` suite passed with zero failures when
+re-verified outside the sandbox — the sandboxed run's failures were a known
+`tsx` IPC-socket `EPERM` sandbox artifact unrelated to this diff, confirmed by
+re-running the affected suites individually unsandboxed; `lib-unit-disable-state.sh`'s
+header documents the `journalctl` confirmation with the exact emitted
+substring, and all three touched scripts parse cleanly). One item is a planned
+deferral that cannot be settled until this PR is on `origin/main`:
+
+- id: 8
+- title: Live-host confirmation: the notice actually appears in the
+  operator's journal after a real disable
+- url_path: current
+- expected outcome: The operator sees exactly one informational notice per
+  steady-state pass naming the sentinel path, and the disabled unit stays
+  disabled — the previously-silent path is now observable from the journal
+  alone.
+- finding: Requires a live `systemd --user` session on the real dispatch
+  host; this is the node's own documented post-merge live-host check
+  (below), which cannot run in CI or a worktree.
+- Verifiability: MACHINE
+- Check: On the dispatch host, after this change is on `origin/main`: set
+  the sentinel
+  (`mkdir -p ~/.local/share/commons-dispatch/disabled && touch
+  ~/.local/share/commons-dispatch/disabled/dispatch-fleet-watch.timer &&
+  systemctl --user disable --now dispatch-fleet-watch.timer`), wait for one
+  reseed cycle or heartbeat tick (≤30 min), then
+  `journalctl --user -t dispatch-schedule-reseed --since '-1h' | grep
+  'skipping enable --now'` must show the line containing `unit files already
+  current` and the sentinel path, with no `WARNING:` for this unit; also
+  check `-t dispatch-tick` for the heartbeat-driven invocation. Confirm
+  `systemctl --user is-active dispatch-fleet-watch.timer` stays `inactive`
+  and `is-enabled` stays `disabled`. Clean up by removing the sentinel and
+  confirming the timer re-arms.

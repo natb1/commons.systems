@@ -116,7 +116,7 @@ attention:
     5.33 undecomposed baseline. Simulated over the live store before writing: 0
     tier changes, 0 value drift onto non-target nodes."
   tier: 1
-phase: review
+phase: done
 execution:
   branch: tactic-worker-cap-config-durability
   pr: 3058
@@ -124,10 +124,14 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T06:52:04Z
+    mergeCommitSha: 3fb01db157c13a06ca5b75c4b6f23ac450ae68f1
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null

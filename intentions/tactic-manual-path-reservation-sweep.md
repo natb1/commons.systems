@@ -51,7 +51,25 @@ execution:
     graphCommitSha: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "needs-main item 16 (real-world confirmation) requires a multi-day
+    window of live paused+manual-only operation with no live-worker
+    phantom-count recurrence; PR #2964 merged only ~17 minutes ago
+    (2026-08-10T06:16:11Z), so the window has not accumulated yet — re-check
+    after several days of manual-tick history"
+  since: 2026-08-10
+  recommendation: "No author decision needed, re-selection only. Lane-M already
+    confirmed: (1) reservation_sweep 1>&2 || true now runs in
+    dispatch-select-tick's --manual fan-out block immediately before
+    RESV=$(reservation_count), with the comment updated to cite the
+    paused+manual reaper-dormancy reasoning (grep-verified in
+    dispatch-select-tick); (2) the new stale-dead-session-reservation-reclaim
+    test added to test-dispatch-select-tick.sh's sel_tick manual-fan-out group;
+    (3) full suite run sandbox-off: 226/226 passed, 0 failed. On re-selection,
+    check journalctl for manual-tick 'live=N' lines over the elapsed window and
+    confirm no recurrence of the 2026-07-23 'SPAWN_N=1 ... live=10 with no live
+    workers' phantom shape."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
