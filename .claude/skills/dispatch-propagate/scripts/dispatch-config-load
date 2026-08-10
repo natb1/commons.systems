@@ -7,7 +7,7 @@
 # the normalized result to stdout.
 #
 # Usage:
-#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census>
+#   dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census|wip>
 #
 # Config files live in <project-root>/dispatch.config/. The project root is
 # resolved via resolve_project_root (lib.sh).
@@ -315,6 +315,31 @@
 #     "threshold": 10
 #   }
 #
+# ---- Schema: wip.json --------------------------------------------------------
+#
+# Top-level object with one optional tunable: the work-in-progress ceiling for
+# the graph selector (selectGraphTargets in packages/intentionsutil/src/router.ts).
+# This config type follows the GENERIC absent→inert convention (see "Stdout
+# protocol" above): when the file is absent, no-config is emitted and
+# graph-select-target runs the selector UNBOUNDED — this is a deliberate
+# divergence from census's absent→baked-active-default: the correct WIP number
+# is an operator judgment against live fleet state, and a binding default would
+# silently freeze all align-tactics work on landing.
+#
+# THE CEILING IS CONFIG; THE IN-FLIGHT COUNT ITSELF IS COMPUTED LIVE FROM THE
+# GRAPH AND IS NEVER STORED.
+#
+#   limit                   number (optional, must be a non-negative integer) —
+#                           the in-flight-tactic count at or above which the
+#                           selector restricts the candidate set to in-flight
+#                           nodes. Absent → the bound is OFF (unbounded, today's
+#                           behavior).
+#
+# Example (see wip.example.json):
+#   {
+#     "limit": 24
+#   }
+#
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -323,9 +348,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 CONFIG_TYPE="${1:-}"
 case "$CONFIG_TYPE" in
-  projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census) ;;
+  projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census|wip) ;;
   *)
-    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census>" >&2
+    echo "error: usage: dispatch-config-load <projects|jit|statements|target-workers|epic|auto-merge|force-opus|strict-preflight|sweep|selection-lock|census|wip>" >&2
     exit 2
     ;;
 esac
@@ -759,6 +784,35 @@ case "$CONFIG_TYPE" in
           # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
           # the graph-census-debt.ts integer threshold check and be rejected there.
           "threshold must be a whole number (integer), got \($cfg.threshold)"
+        else
+          empty
+        end)
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  wip)
+    # top-level value must be an object; the single tunable is optional.
+    # graph-select-target substitutes UNBOUNDED (no cap) when the field is
+    # absent, so absence is silent — only the type of a present field is
+    # checked. limit is an in-flight-tactic count, so a non-negative integer.
+    ERRORS=$(jq -r '
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      else
+        . as $cfg |
+        (if ($cfg | has("limit")) | not then
+          empty
+        elif ($cfg.limit | type) != "number" then
+          "limit must be a number if present, got \($cfg.limit | type)"
+        elif $cfg.limit < 0 then
+          "limit must be >= 0 if present, got \($cfg.limit)"
+        elif ($cfg.limit | tostring | test("^[0-9]+$") | not) then
+          # Mirror the env-override contract (^[0-9]+$): reject any value whose
+          # rendered form is not a plain integer. This catches fractions (0.5)
+          # and scientific notation (1e6 -> jq renders "1E+6"); both would reach
+          # the graph selector integer in-flight-count comparison and be
+          # rejected there.
+          "limit must be a whole number (integer), got \($cfg.limit)"
         else
           empty
         end)
