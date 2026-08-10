@@ -28,10 +28,8 @@ execution:
   markers:
     - planned
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-04
-    attempt: 2
-    pushed_sha: da18fb8ad7f98e9e517912725995c44dd27387f2
+  fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by:
