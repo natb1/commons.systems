@@ -60,12 +60,13 @@ attention:
     own progress, so leaving it at baseline would let the casualties it prevents
     outrank their own remedy."
   tier: 1
-phase: implement
+phase: qa
 execution:
   branch: tactic-node-verify-fence-dead-test-path-sweep
-  pr: null
+  pr: 3055
   attempts: {}
-  markers: []
+  markers:
+    - planned
   strategy_fingerprint: null
   fix: null
   conflict: null
