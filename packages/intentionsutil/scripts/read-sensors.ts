@@ -945,35 +945,95 @@ export function renderDelegationRecordsReport(dir: string): string {
  * `review_trigger firing not recorded` clause is fixed prose: there is no
  * firing/actioned surface on the records to mechanically detect a "fired
  * review_trigger left unactioned", so the reading says so rather than guessing.
+ *
+ * Ends with the read date in the same `(sensor read <YYYY-MM-DD>)` form
+ * `readDelegationRecordsReading` uses, and for the same reason: the router's
+ * fresh-reading gate (`readingDate`, `src/router.ts`) scrapes the newest ISO
+ * date out of the reading prose and, once `rounds.last_aligned` is stamped,
+ * drops any strategy whose reading carries no parseable date with a
+ * `stale-reading` event — permanently and silently starving an undated strategy
+ * out of align selection no matter how often the sensor re-runs.
  */
-function readExerciseRecoveryPathsReading(dir: string): string {
+function readExerciseRecoveryPathsReading(dir: string, today: Date): string {
   const records = readDelegationRecords(dir);
   const n = records.length;
   const k = records.filter((r) => r.lastExercised !== null).length;
   const m = n - k;
-  return `exercised: ${k}/${n} records; ${m} null last_exercised; review_trigger firing not recorded`;
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `exercised: ${k}/${n} records; ${m} null last_exercised; ` +
+    `review_trigger firing not recorded (sensor read ${readDate})`
+  );
 }
 
 /**
- * True when a `kind: delegation` node's `attributes.divergence.level` (trimmed,
- * lowercased) starts with `"high"`. Defensively parsed — missing or malformed
- * `divergence`/`level` is treated as not high-divergence rather than throwing,
- * mirroring this file's existing defensive-attributes precedent (`src/attention.ts:89-107`).
+ * The divergence levels `kind-delegation` declares for
+ * `attributes.divergence.level` (`intentions/kind-delegation.md`:
+ * `"divergence: {level: low|moderate|high, ...}"`).
  */
-function isHighDivergence(node: IntentionNode): boolean {
+const DIVERGENCE_LEVELS = ["low", "moderate", "high"] as const;
+
+/**
+ * The declared divergence levels a `kind: delegation` node's
+ * `attributes.divergence.level` names — or a HALT naming the record.
+ *
+ * The live corpus authors this field as compound free prose AROUND the declared
+ * vocabulary (`low-moderate`, `moderate — would-be`), so the value is tokenized
+ * on non-letter runs and each token matched against `DIVERGENCE_LEVELS` rather
+ * than compared whole. A value naming NO declared level (`critical`, an empty
+ * string, a restructured `divergence` object, a missing `divergence`) is a
+ * schema-invalid delegation record — not a not-high-divergence one — and throws
+ * `IntentionSchemaError` naming the record, exactly as `readDelegationRecords`
+ * above does for the other delegation attributes.
+ *
+ * Deliberately fail-loud rather than defensively parsed: reading an
+ * unrecognized level as "not high" would drop the record from both numerator
+ * and denominator of `strategy-realign-attachments`' reading, turning a
+ * one-word edit in an unprivileged data file into a silent all-clear on the
+ * exact condition that strategy exists to detect — a fail-open measurement on
+ * its own control (`.claude/rules/code-style.md`).
+ */
+function divergenceLevels(node: IntentionNode): Set<string> {
   const attrs = node.attributes;
-  if (!isPlainObject(attrs)) {
-    return false;
-  }
-  const divergence = attrs.divergence;
+  const divergence = isPlainObject(attrs) ? attrs.divergence : undefined;
   if (!isPlainObject(divergence)) {
-    return false;
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence must be an object naming a ` +
+        `level in {${DIVERGENCE_LEVELS.join(", ")}}.`,
+    );
   }
   const level = divergence.level;
   if (typeof level !== "string") {
-    return false;
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence.level must be a string, ` +
+        `got ${typeof level}.`,
+    );
   }
-  return level.trim().toLowerCase().startsWith("high");
+  const recognized = new Set(
+    level
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((token): token is (typeof DIVERGENCE_LEVELS)[number] =>
+        (DIVERGENCE_LEVELS as readonly string[]).includes(token),
+      ),
+  );
+  if (recognized.size === 0) {
+    throw new IntentionSchemaError(
+      `Delegation record "${node.id}" attributes.divergence.level "${level}" names none of ` +
+        `the declared levels {${DIVERGENCE_LEVELS.join(", ")}}.`,
+    );
+  }
+  return recognized;
+}
+
+/**
+ * True when a `kind: delegation` node's divergence level names `high` at all —
+ * a compound value like `moderate-high` counts as high. Over-inclusion is the
+ * safe direction for a monitoring control: a record that might be high belongs
+ * in the uncovered list, never silently outside it.
+ */
+function isHighDivergence(node: IntentionNode): boolean {
+  return divergenceLevels(node).has("high");
 }
 
 /**
@@ -983,8 +1043,13 @@ function isHighDivergence(node: IntentionNode): boolean {
  * the ledger yet (per the strategy's own 2026-07-11-era clarification 7), so
  * only the `recovers`-edge half is mechanically checked — the reading does not
  * invent a convention that doesn't exist.
+ *
+ * Ends with `(sensor read <YYYY-MM-DD>)` for the same fresh-reading-gate reason
+ * documented on `readExerciseRecoveryPathsReading` above: a reading with no
+ * parseable date is dropped by the router's gate once `rounds.last_aligned` is
+ * stamped, silently starving the strategy out of align selection.
  */
-function readRealignAttachmentsReading(nodes: IntentionNode[]): string {
+function readRealignAttachmentsReading(nodes: IntentionNode[], today: Date): string {
   const recoveredIds = new Set<string>();
   for (const node of nodes) {
     for (const id of node.recovers) {
@@ -999,7 +1064,11 @@ function readRealignAttachmentsReading(nodes: IntentionNode[]): string {
   const c = covered.length;
   const uncovered = highDivergenceIds.filter((id) => !recoveredIds.has(id)).sort();
   const uncoveredList = uncovered.length > 0 ? uncovered.join(", ") : "none";
-  return `high-divergence: ${h} records; ${c} covered by recovers; uncovered: ${uncoveredList}`;
+  const readDate = today.toISOString().slice(0, 10);
+  return (
+    `high-divergence: ${h} records; ${c} covered by recovers; ` +
+    `uncovered: ${uncoveredList} (sensor read ${readDate})`
+  );
 }
 
 /**
@@ -1009,21 +1078,33 @@ function readRealignAttachmentsReading(nodes: IntentionNode[]): string {
  * count, and any other id gets a total fallback string (never throws) rather
  * than the old id-blind generic aggregate — the two strategies' thresholds
  * measure different things and neither matched the old shared reading.
- * `loadNodes` is injected (same pattern as `makeIntentionStoreSensor`) so unit
- * tests can supply fixture arrays without touching the live store; the
- * exercise-recovery-paths branch still reads `readDelegationRecords(intentionsDir)`
- * directly since its narrower `DelegationRecordReading` shape is sufficient
- * there (it doesn't need `divergence`, which isn't in that shape).
+ * Both store reads are injected so unit tests never touch the live store:
+ * `loadNodes` (same pattern as `makeIntentionStoreSensor`) feeds the
+ * realign-attachments branch, and `recordsDir` — defaulting to the real
+ * `intentionsDir` for production callers — feeds the exercise-recovery-paths
+ * branch, which reads `readDelegationRecords` directly since its narrower
+ * `DelegationRecordReading` shape is sufficient there (it doesn't need
+ * `divergence`, which isn't in that shape).
+ *
+ * `now` is the third injection point: both readings stamp the read date the
+ * router's fresh-reading gate parses, and it is read at `read()` time (not
+ * build time) so a long-lived registry never stamps a stale date. Tests pin it
+ * to a fixed clock so the asserted date clause cannot flake across UTC
+ * midnight.
  */
-export function makeDelegationRecordsSensor(loadNodes: () => IntentionNode[]): Sensor {
+export function makeDelegationRecordsSensor(
+  loadNodes: () => IntentionNode[],
+  recordsDir: string = intentionsDir,
+  now: () => Date = () => new Date(),
+): Sensor {
   return {
     name: DELEGATION_RECORDS_SENSOR_NAME,
     read(node): string {
       if (node.id === "strategy-exercise-recovery-paths") {
-        return readExerciseRecoveryPathsReading(intentionsDir);
+        return readExerciseRecoveryPathsReading(recordsDir, now());
       }
       if (node.id === "strategy-realign-attachments") {
-        return readRealignAttachmentsReading(loadNodes());
+        return readRealignAttachmentsReading(loadNodes(), now());
       }
       return `no per-node rule for ${node.id}`;
     },
