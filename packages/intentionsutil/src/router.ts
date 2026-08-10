@@ -770,7 +770,7 @@ export function selectGraphTargets(
     // Node-keyed, not rung-keyed: a `reevaluation` candidate sits at the
     // align-tactics rung but its NODE is in flight, so it stays.
     const isInFlightCandidate = (c: GraphCandidate): boolean =>
-      c.kind === "tactic" && !isDraft(byId.get(c.id)!);
+      c.kind === "tactic" && !isDraft(byId.get(c.id)!); // type-safety-ok: every tactic candidate's id is drawn from `tactics = nodes.filter(...)`, and byId is keyed over the full `nodes` array, so the lookup always hits
     const restricted = candidates.filter(
       (c) => isInFlightCandidate(c) || c.precedence.tier >= 2,
     );
