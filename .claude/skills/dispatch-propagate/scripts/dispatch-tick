@@ -646,10 +646,22 @@ fi
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.
+#
+# --allow-stale is forwarded to select-tick on BOTH operator lanes, not only
+# down the graph-execute path below: select-tick runs FIRST, and on the primary
+# checkout its own origin/main fetch + ff-only merge probe is what fails when
+# the network is down. Left unforwarded, that probe emits `sync-failed` — a
+# terminal disposition routed at Step 2 — so dispatch-graph-execute (where the
+# flag is otherwise consumed) is never reached at all, making the override
+# unreachable in exactly the offline scenario it exists for.
+#
+# The bare autonomous `else` branch never carries it: the guard above already
+# rejects --allow-stale without --manual or a node id, so that combination
+# cannot reach here.
 if [[ -n "$MANUAL" ]]; then
-  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual ${ALLOW_STALE:+--allow-stale})
 elif [[ -n "$NODE_ARG" ]]; then
-  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG")
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG" ${ALLOW_STALE:+--allow-stale})
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
 fi

@@ -2,7 +2,7 @@
 # dispatch-select-tick — the /dispatch-propagate router's selection orchestrator
 # (the deterministic Steps 0-3 of the old SKILL.md, bundled into one script).
 #
-# Usage: dispatch-select-tick [--manual | <node-id>]
+# Usage: dispatch-select-tick [--manual | <node-id>] [--allow-stale]
 #
 # Runs the lock acquisition, origin/main sync (only on `main`), the run-scoped
 # concurrency gate, the JIT engine, the Calendar JIT importer, the statements
@@ -27,6 +27,11 @@
 #   sync-failed      git fetch / merge --ff-only failed on `main` and the repair
 #                    attempt-cap is not yet hit; lock released, reseed armed.
 #                    dispatch-tick reads this to spawn the deduped repair job.
+#                    SUPPRESSED by --allow-stale: an operator-attested dispatch
+#                    arms the reseed, warns loudly on stderr, and proceeds to
+#                    selection against the unverified local checkout instead
+#                    (skip_reason=allow-stale-sync-bypass). The counter and the
+#                    sync-broken latch are left untouched on that path.
 #   sync-repair-pending   a live sync-repair job is mutating the main worktree;
 #                    deferred. lock released; reseed armed.
 #   sync-broken      local main cannot ff-merge origin/main and the repair
@@ -125,6 +130,7 @@ _dlog_select_emit() {
     --arg target_n    "${TARGET_N:-}" \
     --arg eff_live    "${LIVE_COUNT:-}" \
     --arg gap         "${GAP:-}" \
+    --arg allow_stale "${ALLOW_STALE:-}" \
     '
     def num: if . == "" then null else (tonumber? // null) end;
     {
@@ -136,7 +142,8 @@ _dlog_select_emit() {
       skip_reason:   $skip_reason,
       target_n:      ($target_n | num),
       effective_live: ($eff_live | num),
-      gap:           ($gap | num)
+      gap:           ($gap | num),
+      allow_stale:   ($allow_stale != "")
     }' 2>/dev/null) || return 0
   command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
 }
@@ -148,9 +155,19 @@ trap '_dlog_select_emit' EXIT
 
 MANUAL=""
 NODE_ARG=""
+# --allow-stale (I17, tactic-graph-execute-fresh-main-read): an operator's
+# explicit attestation that this dispatch may proceed against a main checkout
+# whose freshness against origin/main could NOT be proven. It bypasses exactly
+# ONE thing — the `sync-failed` disposition of the Step 1 sync block below (a
+# fetch or ff-only merge that outright failed, e.g. the network is down). It
+# never touches the `sync-repair-pending` defer (a concurrency hazard, not a
+# freshness one), never touches the `sync-broken` latch, and never bumps or
+# resets the repair attempt counter.
+ALLOW_STALE=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
+    --allow-stale) ALLOW_STALE=1 ;;
     --*) DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="unknown-flag"; echo "dispatch-select-tick: unknown flag '$a'" >&2; exit 2 ;;
     *)
       # Explicit issue/PR targeting (`dispatch <N>`) was the legacy issue lane's
@@ -174,6 +191,19 @@ done
 if [[ -n "${NODE_ARG:-}" && -n "$MANUAL" ]]; then
   DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="node-arg-with-manual"
   echo "dispatch-select-tick: a node-id argument cannot be combined with --manual" >&2
+  exit 2
+fi
+
+# --allow-stale is an operator override attached to a deliberate dispatch act (a
+# manual fan-out or an explicit single-node target). The fully autonomous
+# no-flags-no-node tick has no operator present to attest an unverified
+# snapshot, so the combination is a usage error rather than a silent widening of
+# what the autonomous chain will run on. dispatch-tick guards the same
+# combination at its own entry point; mirror it here so the guard holds for any
+# direct caller of this script too.
+if [[ -n "${ALLOW_STALE:-}" && -z "$MANUAL" && -z "${NODE_ARG:-}" ]]; then
+  DLOG_DISPOSITION="usage-error"; DLOG_SKIP_REASON="allow-stale-without-target"
+  echo "dispatch-select-tick: --allow-stale requires --manual or an explicit <node-id> (the autonomous tick has no operator to attest an unverified snapshot)" >&2
   exit 2
 fi
 
@@ -383,6 +413,37 @@ if [[ "$BRANCH" == "main" ]]; then
       gh_issue_close_rest "$n" \
         --comment "local main ff-merges clean again; closing the sync-broken latch" 1>&2 || true
     done
+  elif [[ -n "${ALLOW_STALE:-}" ]]; then
+    # FAILURE, but an operator attested it (I17,
+    # tactic-graph-execute-fresh-main-read). Without this arm the whole
+    # --allow-stale override is UNREACHABLE in its own motivating scenario: with
+    # the network down, this block emits `sync-failed` and dispatch-tick routes
+    # that as a terminal disposition, so dispatch-graph-execute — where the flag
+    # is consumed — is never reached at all.
+    #
+    # Deliberately narrow. This arm:
+    #   - does NOT emit `sync-failed` and does NOT exit; it falls through to
+    #     selection exactly like the merge_ok==1 success path above, and (like
+    #     that path) does NOT release the lock — the steps below still need it.
+    #   - still arms the #725 reseed, so the environment keeps trying to
+    #     self-heal on a later autonomous tick even though this deliberate
+    #     dispatch is proceeding anyway.
+    #   - does NOT reset or bump the repair attempt counter and does NOT touch
+    #     the sync-broken latch: the tree was never proven clean, so nothing has
+    #     actually recovered and nothing new has been attempted. The counter and
+    #     latch are left exactly as this tick found them.
+    # It is also placed BEFORE the latched / attempt-cap / under-the-cap ladder
+    # below so it bypasses `sync-failed` only; the sync-repair-pending defer
+    # above is untouched by design (a live repair session mutating the tree is a
+    # concurrency hazard, not a freshness one).
+    "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
+    # LOUD, unswallowed: a stale dispatch must be attributable after the fact —
+    # silence is the actual I17 failure, not staleness itself.
+    echo "dispatch-select-tick: --allow-stale: proceeding with selection against a LOCAL, UNVERIFIED main checkout (origin/main sync failed${NODE_ARG:+, target node '$NODE_ARG'}) — this dispatch's snapshot freshness cannot be attested" >&2
+    # A skip_reason ANNOTATION on top of whatever disposition this tick reaches
+    # by continuing on to selection — deliberately not a DLOG_DISPOSITION of its
+    # own, since the routing disposition is still to be decided below.
+    DLOG_SKIP_REASON="allow-stale-sync-bypass"
   else
     # FAILURE — local main is dirty or diverged. The latch is checked only AFTER
     # a failed merge (Decision B); the probe itself is never suppressed. The
