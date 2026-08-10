@@ -118,11 +118,23 @@ if [[ -z "$REPO_ROOT" ]]; then
     exit 2
   fi
 fi
-[[ -n "$INTENTIONS_DIR" ]] || INTENTIONS_DIR="$REPO_ROOT/intentions"
+INTENTIONS_DIR_EXPLICIT=false
+if [[ -n "$INTENTIONS_DIR" ]]; then
+  INTENTIONS_DIR_EXPLICIT=true
+else
+  INTENTIONS_DIR="$REPO_ROOT/intentions"
+fi
 
 if [[ ! -d "$INTENTIONS_DIR" ]]; then
-  echo "lint-verify-fence-paths.sh: not a directory: $INTENTIONS_DIR" >&2
-  exit 2
+  if [[ "$INTENTIONS_DIR_EXPLICIT" == true ]]; then
+    echo "lint-verify-fence-paths.sh: not a directory: $INTENTIONS_DIR" >&2
+    exit 2
+  fi
+  # Default-resolved path, not explicitly named: a repo with no intentions/
+  # directory has no nodes to check, which is a legitimate empty-repo state
+  # (e.g. run-lint.sh's own test fixtures build ephemeral repos with no
+  # intentions/ at all) — nothing to check is a pass, not an error.
+  exit 0
 fi
 
 # --- Grandfather baseline ---------------------------------------------------
