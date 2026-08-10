@@ -12,9 +12,23 @@
 //
 // Usage:
 //   npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
-//     <node-id> <selected-phase> --dir <intentions-dir> [--stamp <path>]
+//     <node-id> <selected-phase> --dir <intentions-dir> [--stamp <path>] \
+//     [--snapshot-ref <ref>] [--snapshot-sha <sha>] \
+//     [--snapshot-fetched-at <iso8601>] [--allow-stale]
+//
+// The snapshot's provenance (ref / sha / fetch instant) is an INPUT to this
+// gate — the caller acquires it and passes it in; this file NEVER fetches,
+// resolves a ref, or shells out to git for it. That is what keeps the predicate
+// pure and pays one fetch per tick instead of one per node. Consequently
+// `node:child_process` must NEVER be imported into this file.
 //
 // Checks, in order (each failing with one line on stderr):
+//   0. freshness   — the caller's snapshot provenance proves the store was
+//                    materialized from a recently-fetched ref
+//                    (`classifySnapshot`). WARN-ONLY today: an unprovable
+//                    snapshot emits one `unknown-freshness:` line and falls
+//                    through to the checks below. Enforcement (exit 15) lands
+//                    in a later unit of tactic-graph-execute-fresh-main-read.
 //   1. exists      — intentions/<node-id>.md present (a pruned node is a
 //                    completed/removed selection).            exit 12
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
@@ -57,19 +71,97 @@ import { IntentionSchemaError } from "../src/errors.js";
 // --- Exit codes ------------------------------------------------------------
 export const EXIT_STALE_SELECTION = 12; // node/phase/park/fingerprint no longer matches the selection
 export const EXIT_SCOPE_STALE = 13; // the tactic's scope changed after the previous phase ran
+export const EXIT_UNKNOWN_FRESHNESS = 15; // the snapshot's provenance could not be proven
 
 const SCOPE_CHAINED_PHASES = new Set(["fix", "qa", "review"]);
+
+// --- Snapshot provenance ---------------------------------------------------
+// The caller's attestation of where the store directory came from and when it
+// was last proven current. Mirrors `StrategyStampValue`'s "a value plus the sha
+// it was computed against" shape (src/schema.ts), extended with the fetch
+// instant so staleness is measurable rather than assumed.
+
+export interface SnapshotProvenance {
+  /** The git ref the snapshot dir was materialized from, e.g. "origin/main". */
+  ref: string;
+  /** The 40-hex commit that ref resolved to at materialization time. */
+  sha: string;
+  /** ISO-8601 instant the caller's `git fetch` of that ref SUCCEEDED. */
+  fetchedAt: string;
+}
+
+/** How old a fetch attestation may be before the snapshot is unprovable. */
+export const MAX_SNAPSHOT_AGE_MS = 10 * 60 * 1000;
+/** How far into the future a fetch attestation may sit before it is rejected. */
+export const MAX_SNAPSHOT_CLOCK_SKEW_MS = 60 * 1000;
+
+export type FreshnessVerdict = { kind: "proven" } | { kind: "unknown"; detail: string };
+
+const SHA_RE = /^[0-9a-f]{40}$/;
+
+/**
+ * Classify a caller-supplied snapshot attestation. Pure: `now` is a parameter,
+ * never `new Date()` inside, so the age boundaries are testable deterministically
+ * and the function performs no I/O of any kind.
+ *
+ * Deliberately does NOT constrain the VALUE of `ref` (e.g. to "origin/main"):
+ * this predicate records provenance, it does not dictate policy on which ref is
+ * canonical. That policy belongs to the caller that chose the ref.
+ */
+export function classifySnapshot(s: SnapshotProvenance | null, now: Date): FreshnessVerdict {
+  if (s === null) {
+    return { kind: "unknown", detail: "no snapshot provenance was supplied by the caller" };
+  }
+  if (s.ref === "") {
+    return { kind: "unknown", detail: "snapshot provenance carries an empty ref" };
+  }
+  if (!SHA_RE.test(s.sha)) {
+    return { kind: "unknown", detail: `snapshot sha '${s.sha}' is not a 40-hex commit id` };
+  }
+  const fetchedAtMs = Date.parse(s.fetchedAt);
+  if (Number.isNaN(fetchedAtMs)) {
+    return { kind: "unknown", detail: `snapshot fetchedAt '${s.fetchedAt}' is not a parseable date` };
+  }
+  const ageMs = now.getTime() - fetchedAtMs;
+  if (ageMs > MAX_SNAPSHOT_AGE_MS) {
+    return {
+      kind: "unknown",
+      detail:
+        `snapshot of ${s.ref} was fetched ${Math.round(ageMs / 1000)}s ago, ` +
+        `over the ${Math.round(MAX_SNAPSHOT_AGE_MS / 1000)}s limit`,
+    };
+  }
+  if (-ageMs > MAX_SNAPSHOT_CLOCK_SKEW_MS) {
+    return {
+      kind: "unknown",
+      detail:
+        `snapshot of ${s.ref} is future-dated by ${Math.round(-ageMs / 1000)}s, ` +
+        `over the ${Math.round(MAX_SNAPSHOT_CLOCK_SKEW_MS / 1000)}s clock-skew allowance`,
+    };
+  }
+  return { kind: "proven" };
+}
 
 export interface SelectionOpts {
   nodeId: string;
   selectedPhase: string;
   dir: string;
   stamp: string | null;
+  /**
+   * The caller's attestation for `dir`, or null when it cannot supply one.
+   * REQUIRED (not optional) by design: encoding the obligation in the type is
+   * what stops a future caller from silently skipping the freshness question.
+   */
+  snapshot: SnapshotProvenance | null;
+  /** Operator override recorded on the warning line; load-bearing in a LATER unit. */
+  allowStale?: boolean;
+  /** Injectable clock for the freshness classifier; `main` passes `new Date()`. */
+  now?: Date;
 }
 
 export interface SelectionResult {
-  /** 0 = pass, 12 = stale-selection, 13 = scope-stale. */
-  exitCode: 0 | 12 | 13;
+  /** 0 = pass, 12 = stale-selection, 13 = scope-stale, 15 = unknown-freshness. */
+  exitCode: 0 | 12 | 13 | 15;
   /** The node's scope fingerprint on a pass, else null. */
   stdout: string | null;
   /** Failure line and/or warnings, in emission order. */
@@ -198,8 +290,10 @@ function readConflictState(node: IntentionNode): ConflictState | null {
 }
 
 /**
- * Run the five re-validation checks against a store the caller guarantees is at
- * fresh origin/main. Pure: reads files, returns a result — no process exit, no
+ * Run check 0 (snapshot freshness) and the five re-validation checks against a
+ * store the caller guarantees is at fresh origin/main — an obligation the caller
+ * now attests to explicitly via `opts.snapshot` rather than by convention.
+ * Pure: reads files, returns a result — no process exit, no
  * direct stdio. Throws only on a genuinely malformed store (a node file that
  * cannot be read or fails schema validation), which is a config-class error the
  * caller maps to exit 2, distinct from the staleness verdicts.
@@ -212,11 +306,26 @@ function readConflictState(node: IntentionNode): ConflictState | null {
  * every tactic serving it.
  */
 export function evaluateSelection(opts: SelectionOpts): SelectionResult {
-  const { nodeId, selectedPhase, dir, stamp } = opts;
+  const { nodeId, selectedPhase, dir, stamp, snapshot, allowStale = false, now = new Date() } = opts;
+  const warnings: string[] = [];
   const fail = (exitCode: 12 | 13, check: string, detail: string): SelectionResult => {
     const prefix = exitCode === EXIT_SCOPE_STALE ? "scope-stale" : "stale-selection";
-    return { exitCode, stdout: null, stderr: [`${prefix}: ${check}: ${detail}`] };
+    return { exitCode, stdout: null, stderr: [...warnings, `${prefix}: ${check}: ${detail}`] };
   };
+
+  // 0. freshness — no other verdict may be computed from an unproven store, so
+  //    this runs FIRST. Today the unknown branch is WARN-ONLY: it records the
+  //    unprovable read and falls through, changing no exit code. Refuse-by-
+  //    default (exit 15, with --allow-stale as the recorded operator override)
+  //    lands in a later unit of tactic-graph-execute-fresh-main-read.
+  const freshness = classifySnapshot(snapshot, now);
+  if (freshness.kind === "unknown") {
+    warnings.push(
+      allowStale
+        ? `unknown-freshness: ${freshness.detail} (--allow-stale: the operator accepted an unverified snapshot)`
+        : `unknown-freshness: ${freshness.detail} (WARNING — not yet enforced; enforcement lands in this tactic's Unit 5)`,
+    );
+  }
 
   // 1. exists — a missing file is a pruned/removed selection.
   let node: IntentionNode;
@@ -370,7 +479,7 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
 
   // Passed the staleness checks: compute the scope fingerprint (statement + body).
   const scopeFp = tacticScopeFingerprint(node.statement, readNodeBody(dir, nodeId));
-  const stderr: string[] = [];
+  const stderr: string[] = [...warnings];
 
   // 5. scope chain — chain-of-custody. Only for the phases that inherit a prior
   //    phase's scope (fix/qa/review); implement always re-establishes custody
@@ -410,6 +519,10 @@ function parseArgs(argv: string[]): SelectionOpts {
   const positional: string[] = [];
   let dir: string | null = null;
   let stamp: string | null = null;
+  let snapshotRef: string | null = null;
+  let snapshotSha: string | null = null;
+  let snapshotFetchedAt: string | null = null;
+  let allowStale = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--dir") {
@@ -420,6 +533,21 @@ function parseArgs(argv: string[]): SelectionOpts {
       const v = argv[++i];
       if (v === undefined || v === "") throw new Error("check-node-selection: --stamp requires a path argument");
       stamp = v;
+    } else if (arg === "--snapshot-ref") {
+      const v = argv[++i];
+      if (v === undefined || v === "") throw new Error("check-node-selection: --snapshot-ref requires a ref argument");
+      snapshotRef = v;
+    } else if (arg === "--snapshot-sha") {
+      const v = argv[++i];
+      if (v === undefined || v === "") throw new Error("check-node-selection: --snapshot-sha requires a sha argument");
+      snapshotSha = v;
+    } else if (arg === "--snapshot-fetched-at") {
+      const v = argv[++i];
+      if (v === undefined || v === "")
+        throw new Error("check-node-selection: --snapshot-fetched-at requires an ISO-8601 argument");
+      snapshotFetchedAt = v;
+    } else if (arg === "--allow-stale") {
+      allowStale = true;
     } else if (arg.startsWith("--")) {
       throw new Error(`check-node-selection: unknown argument '${arg}'`);
     } else {
@@ -428,15 +556,24 @@ function parseArgs(argv: string[]): SelectionOpts {
   }
   if (positional.length !== 2 || dir === null) {
     throw new Error(
-      "usage: check-node-selection.ts <node-id> <selected-phase> --dir <intentions-dir> [--stamp <path>]",
+      "usage: check-node-selection.ts <node-id> <selected-phase> --dir <intentions-dir> [--stamp <path>] " +
+        "[--snapshot-ref <ref>] [--snapshot-sha <sha>] [--snapshot-fetched-at <iso8601>] [--allow-stale]",
     );
   }
-  return { nodeId: positional[0], selectedPhase: positional[1], dir, stamp };
+  // PARTIAL provenance (one or two of the three flags) is `null`, NOT a usage
+  // error: a caller that half-plumbs the flags must be refused through the
+  // freshness path — where the refusal is attributable and overridable — rather
+  // than crashed into the config-class exit 2.
+  const snapshot: SnapshotProvenance | null =
+    snapshotRef !== null && snapshotSha !== null && snapshotFetchedAt !== null
+      ? { ref: snapshotRef, sha: snapshotSha, fetchedAt: snapshotFetchedAt }
+      : null;
+  return { nodeId: positional[0], selectedPhase: positional[1], dir, stamp, snapshot, allowStale };
 }
 
 // --- Main ------------------------------------------------------------------
 function main(argv: string[]): void {
-  const result = evaluateSelection(parseArgs(argv));
+  const result = evaluateSelection({ ...parseArgs(argv), now: new Date() });
   for (const line of result.stderr) process.stderr.write(`${line}\n`);
   if (result.stdout !== null) process.stdout.write(`${result.stdout}\n`);
   process.exit(result.exitCode);
