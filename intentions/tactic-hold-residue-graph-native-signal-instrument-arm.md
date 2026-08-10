@@ -17,42 +17,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: |-
-    provision-node-worktree refused to provision this tactic's worktree: it carries mechanical residue from a dead session (exit 14), not a content conflict. `origin/main` merges clean once the residue is cleared — with one exception the status output below distinguishes: on the `failed-merge-abort` condition a merge git could NOT abort is still in progress (MERGE_HEAD present, `UU` paths), and that merge has to be finished or aborted before anything else.
-
-    `git -C /home/n8/natb1/commons.systems/.claude/worktrees/tactic-graph-native-signal-instrument-arm status --porcelain --untracked-files=no`:
-     M packages/intentionsutil/scripts/align-tactics-census.ts
-     M packages/intentionsutil/src/index.ts
-
-    `git -C /home/n8/natb1/commons.systems/.claude/worktrees/tactic-graph-native-signal-instrument-arm diff --stat`:
-     packages/intentionsutil/scripts/align-tactics-census.ts | 14 +++-----------
-     packages/intentionsutil/src/index.ts                    |  2 ++
-     2 files changed, 5 insertions(+), 11 deletions(-)
-  since: 2026-08-10
-  recommendation: "Inspect the diff recorded above in
-    `.claude/worktrees/tactic-graph-native-signal-instrument-arm` and decide
-    what the uncommitted content IS. If it is unlanded work, land it —
-    `graph-commit` for an intentions/ node write, or commit and push the branch
-    for code — and never discard it sight-unseen; the uncommitted edit may be
-    its only copy. If it is safely discardable (build output, a half-applied
-    edit already landed elsewhere), clear it with `git restore` — but NOT while
-    a merge is live: if the status above shows `UU` paths or the worktree has a
-    MERGE_HEAD, abort or complete THAT merge first, since `git restore` inside
-    one discards the wrong side. A detached HEAD with commits on it needs a
-    branch before anything is reset, and a worktree sitting on a branch other
-    than `tactic-graph-native-signal-instrument-arm` (the `wrong-branch`
-    condition) needs that branch's own state settled before it is switched back.
-    Once the worktree is clean, the next tick provisions it normally. Then
-    resolve THIS HOLD TACTIC to `phase: done` and prune it — clearing
-    `office_hours` alone does not unblock the source. `resolve-hold
-    tactic-graph-native-signal-instrument-arm --kind worktree-residue` does the
-    resolve and the source's `blocked_by` clear in one landed write."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

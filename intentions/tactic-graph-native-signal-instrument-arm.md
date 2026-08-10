@@ -54,12 +54,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: qa
+execution:
+  branch: tactic-graph-native-signal-instrument-arm
+  pr: 3060
+  attempts: {}
+  markers:
+    - planned
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates:
   - strategy-graph-native-dispatch
-blocked_by:
-  - tactic-hold-residue-graph-native-signal-instrument-arm
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
