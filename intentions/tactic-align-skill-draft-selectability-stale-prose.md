@@ -1,0 +1,129 @@
+---
+id: tactic-align-skill-draft-selectability-stale-prose
+kind: tactic
+statement: correct /align SKILL.md Step 4's claim that the router never selects
+  a draft tactic — the router does select drafts, emitting them at the
+  align-tactics rung
+owner: ai
+status: raw
+parent: null
+rationale: Surfaced as a graph-internal inconsistency during the 2026-08-11
+  /align round on graph-ops tooling. The skill prose asserts a router behavior
+  the router does not have. The router is correct; the prose is the stale
+  artifact. Left unfixed, a future align session authoring a draft tactic
+  believes it is writing inert retained context when it is in fact writing a
+  selectable candidate.
+reading: null
+serves:
+  - strategy-graph-native-dispatch
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# correct /align SKILL.md Step 4's claim that the router never selects a draft tactic — the router does select drafts, emitting them at the align-tactics rung
+
+## The inconsistency
+
+`.claude/skills/align/SKILL.md` Step 4 ("Retain draft tactics"), at
+`origin/main` line 497–500, tells the author what omitting `phase` means:
+
+> No `phase` field (equivalently `phase: draft`) marks it as retained
+> context, not selectable work — the router never selects a draft tactic and
+> it does not count as a child for the strategy's `/align-tactics`
+> eligibility.
+
+That sentence makes **two** claims. They do not share a verdict.
+
+**Claim 1 — "the router never selects a draft tactic" — FALSE.**
+`packages/intentionsutil/src/router.ts:558-586` runs a dedicated
+frozen-tactic candidate loop whose first branch is exactly the draft case:
+
+```
+if (isDraft(t)) {
+  if (subtreeParentIds.has(t.id)) continue; // permanent container
+  candidates.push({ id: t.id, kind: "tactic", phase: "align-tactics", ... });
+}
+```
+
+`isDraft` (`router.ts:147-149`) is `tactic.phase === null || tactic.phase
+=== "draft"` — precisely the state Step 4's recipe produces. The router's
+own doc comment (`router.ts:442-447`) states the behavior plainly: draft/raw
+tactics "are also first-class selectable candidates that route to
+`/align-tactics`", gated on `office_hours === null` and complete blockers,
+with the candidate `phase` set to the directive rung `align-tactics` while
+the progression ordinal reads the node's real phase (draft, index 0) so a
+draft sorts last among rank ties.
+
+**Claim 2 — "it does not count as a child for the strategy's
+`/align-tactics` eligibility" — TRUE.** `router.ts:448-449`: "A strategy
+with only draft children still emits its own fresh-round align-tactics
+candidate; the two compete by rank." A draft child does not suppress its
+strategy's own candidate. This half of the sentence is accurate and must
+survive the fix.
+
+## Why the router is right
+
+This is not a bug report against `router.ts`. Routing a draft to
+`/align-tactics` is the intended consumption path, and the skill's own
+following sentence already says so — a draft body "survives untouched until
+`/align-tactics` consumes it." Selection at the `align-tactics` rung *is*
+that consumption. The behavior was introduced deliberately by
+`tactic-graph-frozen-tactic-dispatch` (PR #2883, since completed and
+pruned; the router comments retain it as a provenance citation), which made
+drafts and soft-frozen tactics first-class candidates so an undecomposed
+draft surfaces for its own align session rather than lingering invisibly.
+
+The defect is that Step 4's prose predates that change and still describes
+the older world where a draft was inert. Two exclusions the prose also omits
+are load-bearing and belong in the corrected text: a draft named as another
+tactic's `parent` is a permanent subtree container and is skipped
+(`router.ts:573`), and a draft with non-null `office_hours` (the born-parked
+review-item state Step 2's deferral mechanics create) is skipped
+(`router.ts:570`).
+
+## Consequence if left
+
+An align session following Step 4 believes a draft tactic is inert retained
+context. It is instead a selectable candidate that the router will surface
+for an `/align-tactics` session once dispatch resumes. The author's mental
+model of what a `/align` round puts into flight is wrong by exactly the
+number of drafts the round retains — the 2026-08-11 round retained four.
+The mis-modelling is one-directional and non-destructive (work gets
+scheduled that the author thought was parked, not the reverse), which is why
+this is prose-correction scope and not an incident.
+
+## Scope
+
+Correct claim 1 in `.claude/skills/align/SKILL.md` Step 4 while keeping
+claim 2. State the actual behavior: no `phase` marks the node as
+undecomposed work whose next step is an `/align-tactics` session, not
+executable phase work — the router selects it at the `align-tactics`
+directive rung, subject to the `office_hours`-null, blockers-complete, and
+not-a-subtree-parent gates. Sweep for the same stale claim elsewhere in the
+align skill family before editing (`.claude/skills/align/`,
+`.claude/skills/align-tactics/`, including `references/`).
+
+Out of scope: any change to `router.ts` or its tests; the router's behavior
+is the correct reference. Also out of scope: the born-parked review-item
+mechanics in Step 2, which already set `office_hours` and are correctly
+described.
+
+## Verification
+
+Read the corrected Step 4 text against `router.ts:558-586` and confirm each
+gate named in the prose exists in the code and no gate in the code is
+omitted from the prose. `packages/intentionsutil/test/router.test.ts:125`
+already asserts the draft-selectability behavior, so no new test is owed
+against the router; the deliverable is prose accuracy.
+
+Recorded 2026-08-11.
