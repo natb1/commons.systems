@@ -53,8 +53,8 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 8ca07d4c8e5540539be1aa0092cdc45a16b28e49920d59358a48c559ff70fd80
-      sha: ba85a73587be52bb0d9f7f0a7960c97a65776b8f
+      hash: 2b209f9b2c73b657664b8bb044bda0c9b6c09f7d0f7acba7ee7529f7422970d3
+      sha: 611262d2b469945367d8731f4e8adc829f69eb4d
   fix:
     since: 2026-08-03
     attempt: 1

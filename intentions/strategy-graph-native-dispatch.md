@@ -4870,6 +4870,119 @@ clarifications:
       this session never classified. Leaving it untouched is the fail-closed
       choice. The re-measurement (47 open children, 1 stamped) updates the
       2026-08-03 finalize-time figure of 46 open and 0 keyed."
+  - question: What gate reviews an /align round's drafted graph updates before they
+      commit?
+    answer: "(Recorded 2026-08-11 interview; amended same day from the bootstrap
+      review's two rounds.) Every /align round whose graph-commit creates or
+      modifies any strategy-* node field other than the router-owned ones
+      (phase, execution, office_hours, reading, and attention stamps), or
+      creates any new node file, runs a mandatory adversarial draft design
+      review after drafting and before that commit — the predicate is the
+      commit's own diff, mechanically checkable, never the session's
+      self-judgment; it covers new-strategy rounds,
+      statement/rationale/signal-only amendments, and draft-tactic-only rounds,
+      while excluding the mechanical phase-transition writers, which touch only
+      router-owned fields. The reviewer is an independent subagent (launched
+      with an explicit model: opus parameter — the launch argument, not skill
+      frontmatter, which is only confirmed honored for context: fork skills)
+      executing /align-review with no drafting-session context. Its handoff pack
+      is assembled by an owned script (assemble-review-pack) from on-disk
+      artifacts, never composed as session narrative: the author's requirement
+      text written verbatim at step 1, the dump-node base JSON and exact
+      write-node input JSON for every edited node, each draft tactic's JSON and
+      body, the design-proposals rule, origin/main renders of every touched node
+      and of every file the round's carrier tactics will amend, and the round's
+      freeze classification and delegation-sweep outcome — each written to the
+      round's pack dir by the /align step that produces it, with the script
+      failing closed when any is missing. Interview resolutions enter the pack
+      as the drafted clarification entries themselves. The reviewer proposes
+      alternate designs against both the author's original proposal and the
+      draft, reconsiders assumptions in the existing graph — evaluating whether
+      the draft is ideal greenfield design — and returns a verdict, a
+      requirement-clause coverage table, and findings ranked MATERIAL/MINOR. The
+      coverage table is the authoritative discharge of the record-completeness
+      contract (condition 7): the reviewer reads only the pack, so it is a
+      fresh-session proxy — the exact reader that contract is written for — and
+      the skill's own coverage walk reconciles against the reviewer's table,
+      escalating any clause the reviewer could not place; the reviewer
+      additionally flags every fact it needed that is not in the material
+      landing on origin/main (the write-node inputs and draft-tactic bodies) —
+      that list is the round's condition-7 defect list. Disposition: MATERIAL
+      findings — anything that changes WHAT the record says, including
+      design-shape problems, contradictions with author-confirmed resolutions,
+      and any challenge to recorded doctrine — go to the author through the
+      interview's question mechanics (recommendation + boldness +
+      accept-as-deferral; a deferred material finding enrolls a Mode-A
+      born-parked review item per the deferral mechanics); MINOR findings are
+      structurally incapable of carrying judgment — they change only HOW the
+      record says something (typo, missing or wrong date, schema/format defect;
+      a wrong-citation fix only when the intended referent is unambiguous and
+      exists) — and fold into the draft, reported in the round summary. If
+      disposition changes the draft's design shape (a new or removed unit, a
+      changed carrier, changed condition semantics), the amended draft is
+      re-reviewed — never for MINOR folds or wording — capped at two review
+      rounds per bundle, after which the round surfaces the residue to the
+      author and proceeds on the author's call. Enforcement floor: graph-commit
+      refuses a gated commit (dedicated exit code) unless it carries --review
+      <report-file> whose report names the node ids it reviewed and a digest of
+      the exact write-node input JSON it was given — graph-commit recomputes the
+      digest from the staged node files and refuses on mismatch, so a stale
+      pre-disposition receipt fails mechanically — or an explicit --ack <reason>
+      flag recorded as a commit trailer (the condition-14 escape-hatch idiom; a
+      message-substring would have no author surface since graph-commit authors
+      its own messages). Judgment stays in the review; the receipt check is
+      mechanical, per the scripted-path condition of 2026-08-11. A multi-topic
+      round reviews per strategy commit bundle. /align-review is also
+      author-invocable standalone against any staged draft. Per-round cost — one
+      opus subagent per gated bundle, at most two — is accepted and read by the
+      token audit's by-node attribution. Arming: the gate as a whole reads
+      not-yet-armed until tactic-align-review-skill lands the skill text, the
+      pack script, and the receipt flag; the interim discharge is a general
+      subagent carrying this clarification's pack spec inline — the proven
+      bootstrap path (two live runs 2026-08-11) — and the interim expires when
+      that tactic's PR merges, after which an inline-pack discharge is drift,
+      not a sanctioned path. Scope is /align only (the author's directive names
+      /align executions); extending the gate to /align-tactics' drafted plans is
+      a recorded candidate — one --review flag, not a redesign. The gate changes
+      no delegation record: the reviewer is itself Claude and material findings
+      route to the author, so judgment stays author-held —
+      delegation-anthropic-claude is unchanged and no recovers edge applies.
+      Skill build tracked at tactic-align-review-skill."
+  - question: Steelman — the interview is already the audit; does a second reviewer
+      diffuse that responsibility?
+    answer: "(Diverged 2026-08-11, reasons recorded.) The rival holds the interview
+      solely responsible for design quality and reads a post-draft reviewer as
+      institutionalizing rushed interviews while adding per-round cost; its
+      softer form — the review as advisory, run at the session's discretion —
+      was offered and rejected in this round's interview. Diverged: the live
+      2026-08-11 precedent (the rsi-plan priorities round in this same session)
+      ran exactly this review ad hoc at author direction and caught three
+      material design-shape problems the completed interview had missed — an
+      actuator set that could defeat the author's forcing mechanism, a
+      mitigation with no recorded carrier, and a brownfield attribute split — at
+      the bounded cost of one subagent. The gate strengthens rather than
+      replaces the audit: findings route back through the interview's own
+      question mechanics, so responsibility stays with the round; and the
+      advisory alternative failed precisely because the precedent ran only by
+      author direction — an optional gate is the one that does not run. The same
+      argument closed the enforcement seam: an unenforced mandatory gate
+      inherits the advisory flaw, so the graph-commit receipt floor (see the
+      gate clarification) is part of the divergence's resolution, not an
+      optional extra."
+  - question: Is the interview still the audit once the draft review gate exists?
+    answer: "(Recorded 2026-08-11, from the bootstrap review's findings.) Yes,
+      amended: the interview is the audit; the draft review is the audit's
+      second reader, not a substitute for it. A rushed interview is still a
+      permanent gap — the reviewer sees only what the pack carries, so it can
+      catch a mis-shaped design but not an unasked question — and the reviewer's
+      material findings return to the interview's own question mechanics rather
+      than replacing them. This entry is the doctrine's graph home: the align
+      skill text previously asserted 'the interview is the audit... there is no
+      downstream review step' citing a clarification on this node that does not
+      exist (the phrase lived only in skill prose and a transient tactic node);
+      the carrier tactic rewrites that skill paragraph to match this record and
+      fixes the citation, and the tactic-graph-native-dispatch spec sentence is
+      reconciled in this same commit."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5194,6 +5307,22 @@ attributes:
       alongside per-call bytes. This is a FLOOR, not a ceiling — ad-hoc shell
       stays available for genuinely novel graph questions, so the recovery path
       virtue-progressive-detachment protects stays open (Recorded 2026-08-11)"
+    - "every graph-commit that creates or modifies any strategy-* node field
+      other than the router-owned ones (phase, execution, office_hours, reading,
+      attention stamps), or creates any new node file, passes the adversarial
+      draft review gate: review before commit, MATERIAL findings dispositioned
+      by the author through the question mechanics, MINOR restricted to
+      format-only fixes (anything changing what the record says is MATERIAL by
+      construction), re-review on design-shape change capped at two rounds per
+      bundle, and the commit carries a content-bound review receipt —
+      graph-commit refuses the write without --review (a report naming the
+      reviewed node ids and matching the digest of the staged write-node inputs)
+      or an explicit --ack flag; the gate as a whole reads not-yet-armed until
+      tactic-align-review-skill lands the skill, pack script, and receipt flag —
+      the interim discharge is the inline-pack bootstrap subagent, expiring when
+      that tactic merges; a skipped, silently-failed, or
+      silently-folded-material review is a defect of the round (Recorded
+      2026-08-11)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
