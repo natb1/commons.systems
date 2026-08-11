@@ -206,12 +206,45 @@ FAKE
 echo "\$*" >> "$TMPDIR_TEST/logs/converge.log"
 exit \${TICK_CONVERGE_RC:-0}
 FAKE
+  # Fake dispatch-graph-main-red-sync (tactic-pause-disables-merge-lane): prints
+  # TICK_MAIN_RED (default empty = main known-good) and exits TICK_MAIN_RED_RC
+  # (default 0). Used by BOTH the normal path and the paused-branch node-lane
+  # merge chain to compute OPEN_MAIN_RED, so it must be a fake even though tests
+  # here only exercise the paused-branch call site. Logs to its own file (NOT
+  # order.log) — the existing paused-flag test asserts order.log does not exist
+  # at all (proxy for "refresh-rate-limits never ran"), and this fake legitimately
+  # runs on that same paused branch, so it must not perturb that shared file.
+  cat > "$TMPDIR_TEST/dispatch-graph-main-red-sync" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/main-red-sync.log"
+printf '%s' "\${TICK_MAIN_RED:-}"
+exit \${TICK_MAIN_RED_RC:-0}
+FAKE
+  # Fake graph-auto-merge (tactic-pause-disables-merge-lane): records that it
+  # ran (argv, to its own log file — see the order.log note above) and exits 0.
+  cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+exit 0
+FAKE
+  # Fake reconcile-graph-merged (tactic-pause-disables-merge-lane): records that
+  # it ran (own log file — see the order.log note above) and exits 0. The
+  # paused-branch call site is unconditional (not gated on OPEN_MAIN_RED),
+  # matching dispatch-select-tick's own reconcile-graph-merged call.
+  cat > "$TMPDIR_TEST/reconcile-graph-merged" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/reconcile-graph-merged.log"
+exit 0
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
            "$TMPDIR_TEST/dispatch-graph-execute" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-refresh-rate-limits" \
            "$TMPDIR_TEST/dispatch-tick-recover" \
-           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed"
+           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed" \
+           "$TMPDIR_TEST/dispatch-graph-main-red-sync" \
+           "$TMPDIR_TEST/graph-auto-merge" \
+           "$TMPDIR_TEST/reconcile-graph-merged"
 }
 
 tick_teardown() {
@@ -225,7 +258,8 @@ tick_teardown() {
     DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PARK_NODE \
     DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
-    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM
+    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM \
+    TICK_MAIN_RED TICK_MAIN_RED_RC
   export DISPATCH_DECISION_LOG_DIR="$DISPATCH_TEST_DECISION_LOG_DIR"
 }
 
@@ -345,6 +379,68 @@ assert_eq "paused-frozen: select-tick NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
 assert_eq "paused-frozen: park-node invoked exactly once" "1" \
   "$(grep -cF "tactic-frozen-paused" "$TMPDIR_TEST/logs/park-node.log" 2>/dev/null || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane: paused branch still drains the node-lane
+# merge chain (graph-auto-merge + reconcile-graph-merged), main known-good ------
+# The pause sentinel gates worker SPAWNING only, never ledger bookkeeping/
+# draining (see the header comment above the sentinel in dispatch-tick), and this
+# exit 0 path is the ONLY autonomous tick path that never reaches
+# dispatch-select-tick's own merge/reconcile calls. Main known-good (the fake
+# dispatch-graph-main-red-sync prints nothing and exits 0, so OPEN_MAIN_RED is
+# empty) → graph-auto-merge runs. reconcile-graph-merged always runs regardless.
+# Still no spawn and no dispatch-select-tick, matching the base paused test.
+echo "Test: dispatch-tick paused, main known-good → drains graph-auto-merge + reconcile-graph-merged, no spawn/select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-ok: exit 0" "0" "$rc"
+assert_eq "paused-merge-ok: stdout still announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: no spawn-job call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: graph-auto-merge WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane: paused branch suppresses the merge when
+# OPEN_MAIN_RED is non-empty (main known-broken) -------------------------------
+# The fake dispatch-graph-main-red-sync prints an open tactic-main-red-* id and
+# exits 0, so OPEN_MAIN_RED is non-empty → graph-auto-merge must NOT run.
+# reconcile-graph-merged still runs unconditionally (it only absorbs
+# already-merged work, safe during a main-broken episode).
+echo "Test: dispatch-tick paused, main known-broken (OPEN_MAIN_RED set) → graph-auto-merge suppressed, reconcile-graph-merged still runs"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_MAIN_RED="tactic-main-red-abc1234"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-red: exit 0" "0" "$rc"
+assert_eq "paused-merge-red: graph-auto-merge NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-red: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane: paused branch fails OPEN_MAIN_RED closed
+# on a dispatch-graph-main-red-sync invocation failure ---------------------------
+# Mirrors dispatch-select-tick:467's fail-closed behavior: a non-zero exit from
+# dispatch-graph-main-red-sync folds OPEN_MAIN_RED to UNKNOWN (non-empty), which
+# must suppress graph-auto-merge exactly like a genuinely broken main does. A
+# transient read failure must never masquerade as "main healthy".
+echo "Test: dispatch-tick paused, dispatch-graph-main-red-sync fails → OPEN_MAIN_RED=UNKNOWN, graph-auto-merge suppressed"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_MAIN_RED_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-unknown: exit 0" "0" "$rc"
+assert_eq "paused-merge-unknown: graph-auto-merge NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-unknown: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
