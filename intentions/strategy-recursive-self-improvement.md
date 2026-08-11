@@ -283,6 +283,62 @@ clarifications:
       iteration designs against it — batching independent node writes into one
       graph-commit call is the cheap lever already available, and this session
       used it — but the design work is not done and should not be improvised.
+  - question: Does the greenfield design carry an evaluation phase after an
+      implementation task, and does it instruct the session to identify
+      avoidable issues and track them?
+    answer: >-
+      (Confirmed 2026-08-11 by the author, on the reading offered that day; no
+      amendment made.) Yes — condition 14, recorded earlier the same day, is
+      that step, and the author ratified its existing text as already covering
+      avoidable-issue identification and tracking rather than widening it.
+
+
+      How the coverage reads. Condition 14 requires the review to run after the
+      node reaches its terminus, inside the same task at no extra budget cost,
+      and to evaluate the observed execution over named waste categories: phase
+      wall-clock against the await window, failed or wasted launch cycles,
+      repeated operator interventions, round trips that produced no code change,
+      and CI/fix-lane spend. Those categories are what an avoidable failure
+      actually looks like in this harness's telemetry — a mis-signalled CI
+      failure surfaces as a launch cycle that produced no code change. The
+      condition then requires every finding to land in the graph in that same
+      session, as a tactic or as a dated clarification on an existing node, and
+      names a session that leaves findings in session prose only as a defect.
+      Identification is the waste-category walk; tracking is the
+      must-land-in-the-graph rule. The word 'avoidable' does not appear in the
+      condition; the author's ratification is that the enumerated categories
+      plus the tracking rule carry the requirement without it.
+
+
+      The worked example that prompted this confirmation. The 2026-08-11
+      iteration's hook-tests failure reported eleven product-test failures that
+      were in fact one swallowed `git clone` in fixture setup — a test harness
+      with `set -uo pipefail` and no `-e` continuing past a failed clone. A
+      whole /fix-checks session was dispatched after it and its commit contained
+      no code change at all. Under condition 14 that is a no-code-change round
+      trip, and it was tracked as
+      tactic-flake-hook-tests-graph-commit-fixture-clone rather than counted as
+      spend. The same review recorded
+      tactic-orphaned-check-run-pins-pending-ci-guard and
+      tactic-select-tick-main-sync-gated-on-caller-cwd by the same route.
+
+
+      Scope, deliberately not widened. The binding requirement stays on
+      rsi-implement tasks, not on every dispatch implementation-phase worker.
+      The author's 'after any implementation task' is read as any rsi-implement
+      task. An rsi task has an attending author and an explicit budget; a
+      dispatch phase worker has neither, so a per-node review obligation there
+      would add real per-node cost and produce findings with no one present to
+      judge them. Whether a dispatch-wide evaluation phase is worth its cost is
+      an open question for its own interview, not settled here.
+
+
+      The mechanism that makes the condition bind a fresh session is
+      tactic-rsi-implement-acceleration-review: /rsi's SKILL.md Step 4b ends at
+      'stop when idle' and Step 5 lists four report items, neither mentioning a
+      review, so a clean session executing the skill alone would not perform it.
+      That tactic adds the closing loop step and the fifth report item. Until it
+      lands, the condition is specification without a carrier in the skill text.
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
