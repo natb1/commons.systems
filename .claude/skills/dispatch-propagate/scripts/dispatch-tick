@@ -411,6 +411,12 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
   fi
 
+  # Print the paused banner BEFORE the node-lane merge/reconcile drain below so
+  # an operator scanning `journalctl --user -u dispatch-tick` reads the pause
+  # state first and interprets the following `merge:`/`reconcile-graph:` lines
+  # as the paused-branch drain, not as scheduling activity.
+  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick; draining node-lane merge/reconcile only"
+
   # A reviewed, green node-lane PR must still merge even while dispatch is
   # paused — the pause sentinel gates worker SPAWNING only (see the header
   # comment above), never ledger bookkeeping/draining, and this exit 0 path is
@@ -439,7 +445,6 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     done <<< "$RECONCILE_GRAPH_OUT"
   fi
 
-  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
   exit 0
 fi
 

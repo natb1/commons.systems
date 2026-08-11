@@ -221,10 +221,13 @@ printf '%s' "\${TICK_MAIN_RED:-}"
 exit \${TICK_MAIN_RED_RC:-0}
 FAKE
   # Fake graph-auto-merge (tactic-pause-disables-merge-lane): records that it
-  # ran (argv, to its own log file — see the order.log note above) and exits 0.
+  # ran (argv, to its own log file — see the order.log note above), emits
+  # TICK_GRAPH_MERGE_OUT (default empty) on stdout so ordering tests can assert
+  # a `merge:` line appears, and exits 0.
   cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+printf '%s' "\${TICK_GRAPH_MERGE_OUT:-}"
 exit 0
 FAKE
   # Fake reconcile-graph-merged (tactic-pause-disables-merge-lane): records that
@@ -259,7 +262,7 @@ tick_teardown() {
     DISPATCH_FROZEN_SESSION_PARK_NODE \
     DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
     DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM \
-    TICK_MAIN_RED TICK_MAIN_RED_RC
+    TICK_MAIN_RED TICK_MAIN_RED_RC TICK_GRAPH_MERGE_OUT
   export DISPATCH_DECISION_LOG_DIR="$DISPATCH_TEST_DECISION_LOG_DIR"
 }
 
@@ -441,6 +444,27 @@ assert_eq "paused-merge-unknown: graph-auto-merge NOT invoked" "0" \
   "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
 assert_eq "paused-merge-unknown: reconcile-graph-merged WAS invoked" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane (finding 9): the paused banner prints
+# BEFORE the node-lane merge/reconcile drain lines ------------------------------
+# An operator scanning `journalctl --user -u dispatch-tick` must read the pause
+# state first and interpret the following `merge:`/`reconcile-graph:` lines as
+# the paused-branch drain, not as scheduling. Force a non-empty graph-auto-merge
+# stdout line via TICK_GRAPH_MERGE_OUT, then assert the banner's line number in
+# stdout precedes the `merge:` line's.
+echo "Test: dispatch-tick paused → banner line precedes merge/reconcile-graph drain lines"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_GRAPH_MERGE_OUT="merged tactic-example (PR #999)"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-order: exit 0" "0" "$rc"
+assert_eq "paused-merge-order: stdout still announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+banner_line=$(grep -n 'paused (sentinel present' <<< "$out" | head -1 | cut -d: -f1)
+merge_line=$(grep -n '^merge: ' <<< "$out" | head -1 | cut -d: -f1)
+assert_eq "paused-merge-order: banner line precedes merge line" "1" \
+  "$([ -n "$banner_line" ] && [ -n "$merge_line" ] && [ "$banner_line" -lt "$merge_line" ] && echo 1 || echo 0)"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
