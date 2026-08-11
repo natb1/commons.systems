@@ -29,7 +29,21 @@ clarifications:
       the attachment. Mitigations recorded on that strategy: per-node priority
       logs with dated rationales, fitness-function post-hoc audit, author
       override at the strategy level, and strategies plus owner: human tactics
-      untouchable."
+      untouchable. BOUNDED 2026-08-11, second round the same day: the ordering
+      authority is band-scoped. A delegated attention write may never invert
+      cross-strategy order within a tier — a tactic's own boost orders it only
+      inside the band of its distributing strategy — so the strongest mitigation
+      of this widening is structural rather than behavioral: the failure becomes
+      inexpressible, not merely forbidden. The model's remaining cross-strategy
+      instruments are classification acts, which are falsifiable and reviewable
+      against the work itself: a bug_fix/security mark (lifting tier) and a
+      serves edge determined to be genuine (lifting band). See
+      strategy-recursive-self-improvement, its amended tier/rank-composition
+      clarification, its classification-escape clarification, and conditions 15
+      and 17; rank algebra at kind-kind; implementation at
+      tactic-attention-namespaced-rank. No recovers edge is owed: this round
+      narrows the blast radius of the delegated authority without unwinding the
+      delegation."
 tooling_goals: []
 success_signal: null
 attention: null

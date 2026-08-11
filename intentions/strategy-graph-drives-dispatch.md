@@ -222,6 +222,41 @@ clarifications:
       strategy-main-health's boost-100 -> tier-3 migration (the must-land-first
       change in that tactic) is the canonical precedent for a tier change that
       drops a large boost rather than carrying it forward.
+  - question: Does the never-bands doctrine survive namespaced tactic rank?
+    answer: "(Recorded 2026-08-11, third round, after adversarial review found this
+      node contradicted by a same-week /align round that never amended it.) It
+      survives as amended, for the second time, and the amendment is deliberate.
+      Two clarifications on this node are otherwise left false by that round.
+      Clarification 1 records that the shipped design 'supersedes the same-day
+      banded design (bands, provenance discount, subordinate_to, emit-time
+      projection)' — a banded design was considered and REJECTED here.
+      Clarification 8 records that 'tiers ARE bands, deliberately, layered above
+      the term-composed rank; the terms-and-weights doctrine continues to govern
+      ordering within a tier'. The 2026-08-11 rank-namespacing round introduces
+      a SECOND band — distributing-strategy rank, sitting between tier and the
+      term-composed value — so ordering within a tier is now governed by band
+      first and terms second. That sentence needs reading as: terms-and-weights
+      govern ordering within a BAND. Why the 2026-07-02 rejection does not carry
+      over, stated so this is a re-decision and not an oversight: what was
+      rejected then was PROVENANCE-DISCOUNTED bands with emit-time projection,
+      under the standing assumption of a single trusted authority setting every
+      number — the objection was that discounting a claim by who emitted it made
+      rank unreadable and ties dishonest. The new band rests on a different
+      argument entirely: it is a DELEGATION boundary. Ordering authority over
+      owner: ai tactic attention is delegated to /rsi-evaluate, and a flat scale
+      is safe only while one authority sets every number. It does not discount
+      any claim by provenance, it does not project at emit time, and it is
+      derived on read like everything else. It is the same move hierarchical
+      weight distribution makes when a subtree's shares are delegated.
+      Consequence to carry: tactic-attention-tier-ranking, phase main-qa, states
+      that 'the selector sorts by (tier, rank), blocking lifts the lexicographic
+      (tier, rank) pair' — the exact surface this changes, since Precedence must
+      become a 3-tuple for the band to reach the sort at all. It needs
+      re-scoping when the resolver change lands; it is named here rather than
+      edited, because it is in flight and a body edit would trip scope custody.
+      Full algebra at kind-kind; ownership half at
+      strategy-recursive-self-improvement; implementation at
+      tactic-attention-namespaced-rank."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with

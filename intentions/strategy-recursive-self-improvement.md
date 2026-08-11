@@ -402,21 +402,28 @@ clarifications:
       authored source once down parent/serves), so a child strategy may be
       boosted, in conjunction with its parent's boost, to outrank cousin and
       uncle strategies — still tier-scoped, since tier dominates
-      lexicographically. Tier remains the only cross-strategy escape, and the
-      model's only instrument on it stays adding a recognized bug_fix/security
-      mark, which may lift a tactic over lower-tier tactics of other strategies
-      (the accepted and intended effect recorded above). The bound is uniform,
-      with no owner carve-out: it is a property of the rank algebra, not of who
+      lexicographically. Tier is ONE cross-strategy escape — corrected
+      2026-08-11, third round: it is not the only one, see the
+      classification-escape clarification below — and the model's only
+      instrument on TIER stays adding a recognized bug_fix/security mark, which
+      may lift a tactic over lower-tier tactics of other strategies (the
+      accepted and intended effect recorded above). The bound is uniform, with
+      no owner carve-out: it is a property of the rank algebra, not of who
       authored the value, so an author-set boost on an owner: human tactic is
       namespaced identically — the author's cross-strategy channels are strategy
       rank and tier, never a direct tactic boost. A tactic with several
       distributing strategies sits in the band of the highest-ranked one (max
       across distributors, never the sum), mirroring the max-lift rule the
       resolver already applies to effective tier, so adding a serves edge can
-      neither demote a tactic nor become a way to jump bands. Enforcement is
-      structural, not behavioral: the resolver is to order lexicographically by
-      (tier, distributing-strategy rank, within-strategy value) so an inversion
-      is impossible to express rather than merely forbidden — greenfield target
+      never demote a tactic. (Corrected 2026-08-11, third round: the clause
+      previously here also claimed a serves edge could never become a way to
+      jump bands. That was false — under max across distributors, adding a
+      serves edge to a higher-ranked strategy IS a band promotion. See the
+      classification-escape clarification below, which records that promotion as
+      sanctioned rather than as a leak.) Enforcement is structural, not
+      behavioral: the resolver is to order lexicographically by (tier,
+      distributing-strategy rank, within-strategy value) so an inversion is
+      impossible to express rather than merely forbidden — greenfield target
       recorded at tactic-attention-namespaced-rank, which also carries the
       brownfield migration (behavioral doctrine plus lint first, resolver change
       after) and absorbs the tier-isolation verification previously noted here."
@@ -528,6 +535,38 @@ clarifications:
       its authority-based alternative is rejected on a further ground: making
       owner a priority instrument overloads a field that records who does the
       work, not how urgent it is."
+  - question: What may the model do that changes cross-strategy order, and why is
+      that the right escape?
+    answer: "(Author-directed 2026-08-11, third round, correcting this node's own
+      second-round claim that tier was the sole escape.) There are three, and
+      the first two share a shape worth stating as the governing principle: the
+      model never moves a node by choosing a NUMBER; it moves a node by making a
+      CLAIM ABOUT WHAT THE WORK IS. (1) TIER — adding a recognized
+      bug_fix/security mark, which lifts the tactic over lower-tier tactics of
+      every other strategy. (2) BAND — adding a serves edge on the determination
+      that the tactic genuinely serves a higher-ranked strategy. Since a tactic
+      sits in the band of its highest-ranked distributor, that determination
+      promotes it across strategies. This is sanctioned on the same footing as
+      the tier mark, and by the author's own framing: it is the identical act of
+      classification, differing only in which axis it names. It is also already
+      governed — strategy-graph-drives-dispatch records that authoring a serves
+      edge 'is a ranking act — a second serves edge adds a real claim to the
+      node's rank, so edge authoring deserves the same review care as weights'.
+      (3) The blocked_by PRECEDENCE LIFT — structural, not a judgment call:
+      router.ts's effectivePrecedence lifts a blocker to the lexicographic max
+      over its own pair and the precedence of everything it blocks, and
+      selectGraphTargets sorts on that lifted pair, not on the reported one. A
+      low-band tactic blocking a high-band tactic therefore already sorts at the
+      high band. WHY classification is the right escape and a number is not: a
+      classification act is FALSIFIABLE. A wrong bug_fix mark or a wrong serves
+      edge is visible on the node and reviewable against the work itself; a
+      boost of 8 rather than 4 is not reviewable against anything. Namespacing
+      attention while leaving classification open therefore does not weaken the
+      bound — it moves the model's influence onto the only surface where the
+      author can actually audit it. Left open deliberately: the marks-asymmetry
+      rule (a mark may be added, never removed or downgraded, by a model
+      priority write) has an obvious analogue for serves removal, which would be
+      a demotion act — whether it extends there is not decided here."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -740,9 +779,14 @@ attributes:
       several strategies sits in the band of the highest-ranked one (max, never
       the sum); strategy attention is the complementary case, additive down
       parent/serves so a child strategy's boost augments its parent's and may
-      outrank cousin and uncle strategies, bounded only by tier; the sole
-      cross-strategy escape is tier, and the model's only tier instrument stays
-      adding a recognized bug_fix/security mark (Recorded 2026-08-11)"
+      outrank cousin and uncle strategies, bounded only by tier; cross-strategy
+      order may be changed only by a CLASSIFICATION act, never by an attention
+      value: the model may add a recognized bug_fix/security mark (lifting tier)
+      or add a serves edge on the determination that the work genuinely serves a
+      higher-ranked strategy (lifting band), and the blocked_by precedence lift
+      moves a blocker to the urgency of what it holds up; no attention number,
+      from any author, crosses a band (Recorded 2026-08-11, amended same day
+      third round)"
   pause:
     state: paused
     since: 2026-08-10
