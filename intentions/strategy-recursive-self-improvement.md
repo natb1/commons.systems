@@ -216,6 +216,30 @@ clarifications:
       complete-grounding's next edit round — the same pattern as
       tactic-rsi-direct-push-condition-reconcile, avoiding an open-child freeze
       classification on a sibling strategy mid-bootstrap."
+  - question: Does the dispatch pause stop the queue from draining, and can its own
+      resume criteria be met while it is in force?
+    answer: "(Recorded 2026-08-11 rsi iteration, from reading the code at
+      origin/main.) Partly, and no. The pause sentinel is documented as gating
+      worker SPAWNING only, and the paused branch does run the healing sweeps
+      (reservation, stand-down re-check, stale-hold re-check, frozen-session,
+      terminal-disposition) before its exit 0. But the node-lane merge lane is
+      not among them: graph-auto-merge is invoked at dispatch-select-tick:505,
+      and every dispatch-select-tick invocation (dispatch-tick:638-642) sits
+      past the pause short-circuit's exit 0 at dispatch-tick:415. Merging a
+      reviewed green PR is the terminal drain step, so pausing does cost
+      healing, contrary to the intent recorded for it. The consequence is
+      concrete: resume criterion 1 requires PR #3052 to be merged, and #3052 is
+      a node-lane PR in phase review that has been 23/23 green and unmerged
+      since the pause began. A pause whose first resume criterion requires an
+      action the pause itself disables cannot lift autonomously. The escapes are
+      an operator-run dispatch-tick --manual (dispatch-tick:314 tests -z
+      \"$MANUAL\") or an author hand-merge, and both are operator actions no
+      part of the record named as a dependency of resuming. Repair is tracked as
+      tactic-pause-disables-merge-lane. Two record corrections follow: /rsi's
+      own SKILL.md asserts \"the tick's merge lane runs even while dispatch is
+      paused — let it\", which is false as written, and the pause rationale's
+      claim that the paused branch is \"precisely the set needed to drain a
+      queue, so pausing costs no healing\" overstates what that branch covers."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -348,5 +372,80 @@ attributes:
       born-parked items (candidate chunks, review items) accumulating across
       cycles without an office-hours sitting is a review trigger recorded in the
       rsi-plan, never silent debt"
+  pause:
+    state: paused
+    since: 2026-08-10
+    mechanism: sentinel
+    sentinel_path: $XDG_DATA_HOME/commons-dispatch/paused
+    authority: author directive 2026-08-10; held under
+      strategy-recursive-self-improvement's pause/resume authority condition
+    reason: "The queue could retire nothing: the reap gate refused every candidate,
+      so held sessions and worktrees only accumulated while autonomous spawning
+      kept adding load."
+    last_measured: 2026-08-11
+    decision: stay paused
+    status_values: Each criterion is holds | fails | partial | unknown. partial
+      means one clause of the criterion was measured and another was not;
+      unknown means it was not measured this pass. Resume requires every
+      criterion to read holds, re-measured at the time of the decision.
+    self_blocking: Criterion 1 cannot be satisfied autonomously while this pause is
+      in force. The node-lane merge lane (graph-auto-merge,
+      dispatch-select-tick:505) runs only inside dispatch-select-tick, and every
+      dispatch-select-tick invocation (dispatch-tick:638-642) sits past the
+      pause short-circuit's exit 0 (dispatch-tick:415). So no reviewed node-lane
+      PR merges autonomously while the sentinel exists, and criterion 1 requires
+      exactly such a merge. The escapes are an operator-run `dispatch-tick
+      --manual` (dispatch-tick:314 tests -z "$MANUAL") or an author hand-merge.
+      Tracked for repair by tactic-pause-disables-merge-lane.
+    resume_criteria:
+      - id: reap-gate-landed
+        criterion: "PR #3052 is merged, and the sweep demonstrably reaps a 0-ahead clean
+          worktree with no operator action (#3052's own done-when)."
+        check: gh pr view 3052 --json state --jq .state reads MERGED, and a reservation
+          sweep reaps a 0-ahead clean worktree unattended.
+        status: fails
+        measured: "2026-08-11: #3052 OPEN, 23/23 checks SUCCESS, mergeable CLEAN,
+          unmerged. Green and unmergeable-by-the-harness for the reason recorded
+          in self_blocking above."
+      - id: held-sessions-bounded
+        criterion: Held-for-debug sessions number 3 or fewer, and no held session is
+          reap-eligible-but-stuck (each has an OPEN PR).
+        check: "claude agents --json --all: count rows with state done; cross-check each
+          against an OPEN PR."
+        status: holds
+        measured: "2026-08-11: 2 sessions total, 1 held (state done) and 1 working.
+          Count 1 is within the bound of 3, down from 7 at the pause. The one
+          held row is an interactive align session (worktree align-rsi-research)
+          rather than a dispatch worker, so it carries no PR and is not
+          reap-eligible-but-stuck in the sense this criterion bounds; it is
+          reapable by claude rm."
+      - id: worktrees-draining
+        criterion: No worktree whose PR is MERGED and which is provably
+          0-ahead-and-clean remains on disk, and the worktree count trends down
+          rather than up.
+        check: git worktree list count, compared against the prior reading; per-worktree
+          merged-and-clean sweep for the residual clause.
+        status: partial
+        measured: "2026-08-11: 43 git worktree list rows (42 worktrees plus the main
+          checkout), down from 54 at the 2026-08-10 reading and 46 at the pause.
+          The trend clause holds and is the clearest evidence the pause is
+          draining as intended. The residual clause (no MERGED-PR 0-ahead-clean
+          worktree left on disk) was not re-swept this pass."
+      - id: no-invalid-state-24h
+        criterion: bug-J is clean and no duplicate-session invalid state has been
+          observed for a full 24 hours.
+        check: invalid-state routing output over a 24h window.
+        status: unknown
+        measured: "2026-08-11: not measured this pass."
+      - id: fleet-watch-clean
+        criterion: dispatch-fleet-watch reports no finding other than the known-latched
+          unclaimed-hold.
+        check: dispatch-fleet-watch --json, read from a tick rather than ad hoc.
+        status: unknown
+        measured: "2026-08-11: not re-run this pass. Running it is not a free probe — it
+          records findings as graph nodes via dispatch-fleet-alarm, so it
+          belongs to a tick, not to an rsi read. Last alarm refreshes on disk:
+          unclaimed-hold 2026-08-10, busy-stall 2026-08-09, watch-unknown
+          2026-08-09, heal-fired 2026-08-08."
 ---
 # A serialized recursive self-improvement loop — /rsi — evaluates the harness each iteration, maintains rsi-plan.md as the author-facing status/plan surface, and shortcuts critical-path work that blocks model execution of author intention
