@@ -29,8 +29,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-rsi-plan-priority-render
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -85,14 +84,26 @@ Tactic rows sit under their group.
 
 **Tier is the outer key deliberately.** `selectGraphTargets`
 (`packages/intentionsutil/src/router.ts`) sorts on the **lifted** `(tier,
-rank)` pair, so tier dominates strategy rank globally. Grouping by strategy
-alone would render a tier-2 bug fix under a low-ranked strategy far down the
-page even though it executes first, and would break the ETA column: ETA is
-derived from a row's 1-based position in the true `(tier, rank)` order, so in
-a strategy-only grouping the dates would not count monotonically down the
-page. With tier outermost, reading order equals execution order and the ETA
-column stays monotonic — which is the property that makes the table worth
-reading at all.
+rank)` pair, so tier dominates strategy rank globally: a tier-2 bug fix
+executes before every tier-1 row regardless of its strategy's rank. Without a
+tier band it would render far down the page under a low-ranked strategy even
+though it runs first.
+
+> **Withdrawn 2026-08-11 after adversarial review.** An earlier version of
+> this paragraph also justified tier-outermost by claiming it keeps the ETA
+> column counting monotonically down the page. **That is false.** Grouping by
+> strategy *at all* reorders rows away from selection order — measured on the
+> live graph, one strategy's rows span up to 160 selection positions — so no
+> choice of outer key restores monotonicity. Monotonic ETA is not a property
+> this table has, and nothing may be justified by it. Grouping is kept
+> because the author specified it; the reviewer's alternative (one global
+> selection-ordered list with lineage as a per-row breadcrumb column) was
+> considered and declined for that reason.
+
+**Row set.** Every non-`done` tactic, drafts included. The two tactics that
+implement this very table are themselves drafts, and a phase-set-only rule
+would omit them from the plan that tracks them. Parked rows are included and
+marked, never dropped.
 
 Accepted cost, named: tier 2 and 3 bands are usually small, so the table
 opens with several near-empty sections before reaching the bulk of the work.
@@ -108,11 +119,14 @@ phase, **delegated**, **parked**, and estimated delivery date.
 - **parked** — set when `office_hours` is non-null: not selectable by the
   router until the author clears the park.
 
-These are **two independent columns, not one lane column.** Measured on the
-graph at the time of drafting: 146 tactics are parked and **58 of those are
+These are **two independent columns, not one lane column.** Measured over all
+non-`done` tactics (388 at 2026-08-11): **143 are parked, and 54 of those are
 `owner: ai`** — so the two facts are orthogonal for a large minority of rows,
 and a single combined column would have to pick one and hide the other for
-every one of those 58.
+every one of those 54. (Corrected 2026-08-11: the drafting round recorded
+146/58 against a row set it never stated. State the row set with any recount —
+the figure moves by several depending on whether drafts and non-`raw` statuses
+are counted.)
 
 The parked cell carries the blocking answer **inline** — `parked (blocks
 dispatch)` versus `parked (blocks other priorities)` versus bare `parked` —
@@ -129,20 +143,49 @@ Do not invent a new comparator — read the order from the same path
 `selectGraphTargets` uses so the table cannot drift from the queue it claims
 to show.
 
-### Dependency
+### ETA derivation — absorbed here, one basis for every date on the page
 
-`blocked_by: [tactic-rsi-plan-priority-render]`. That tactic defines the ETA
-derivation (velocity = the dispatch queue's 28-day closure rate in
-closures/day; a tactic row's ETA is today + position ÷ velocity; a strategy
-row's is today + open-child count ÷ velocity; zero velocity renders honestly
-as unavailable) and the `(tier, rank)` ordering this table groups. Landing
-this table first would mean reimplementing both.
+This node previously carried `blocked_by:
+[tactic-rsi-plan-priority-render]` on the ground that the blocker "defines
+the ETA derivation." **That edge is dropped and the derivation moved here**
+(2026-08-11, after adversarial review). The ordering was unexecutable: the
+blocker had to land first, but its ETA clauses were written against sections
+1 and 2 — which this node deletes — so a worker taking it first would have
+built an ETA column onto sections about to be removed. The derivation is four
+lines of specification that this table has to implement regardless, and this
+table is its only consumer.
 
-Note that the same tactic's **section 1 and section 2 format specs are
-superseded by this node** — see the supersession note in its own body. Its
-surviving scope is the ETA derivation, the section 6 task-plan changes, the
-flag kinds, the per-iteration reprioritization delta, and the
-reprioritization-outcome audit.
+**Velocity** = the dispatch queue's 28-day closure rate in closures/day, from
+the existing created/closed series. Zero velocity (paused queue) renders
+honestly as `unavailable` rather than as a date.
+
+**Tactic row ETA** = today + (the row's 1-based position in the router's
+selection order ÷ velocity).
+
+**Parked rows have no position.** `selectGraphTargets` skips them at its
+`office_hours` guard, so they are never ranked at all. Their ETA cell reads
+`unavailable — parked`, and they are **excluded from the position counter**
+that feeds every other row's ETA — otherwise 143 unselectable rows inflate
+every real date on the page.
+
+**Group header ETA** = the position-derived ETA of the **last unparked row in
+that group** — when the group finishes — computed on the same basis as the
+rows. A header can therefore never date earlier than the rows beneath it.
+
+> The earlier basis, "strategy row ETA = open-child count ÷ velocity", is
+> **withdrawn**. It ignored that other strategies' work interleaves, so it
+> produced headers dating months before their own rows: at drafting,
+> `strategy-rsi-delegated-prioritization` had zero open children and would
+> have rendered "today" above rows sitting at positions 19–21, while
+> `strategy-attention-surface` would have dated ~11 rows out above rows
+> reaching position 171.
+
+The residue of `tactic-rsi-plan-priority-render` after this move is the
+section 6 task-plan typing and the FLAG kinds; the per-iteration
+reprioritization delta and the outcome audit moved to
+`tactic-rsi-reprioritization-outcome-audit` under
+`strategy-rsi-delegated-prioritization`. No supersession is left standing
+anywhere — the annotated dead bullets are gone rather than annotated.
 
 ### Interaction with tactic-attention-namespaced-rank
 
@@ -157,11 +200,16 @@ lands second should verify the two agree rather than assuming it.
 
 ### Verification
 
-- Render against the live graph and confirm the ETA column increases
-  monotonically top-to-bottom across the whole table, tier bands included.
-  A non-monotonic ETA means the row order and the derivation disagree.
+- Confirm every group header's ETA is **at or after** the ETA of every row
+  beneath it. This replaces the withdrawn page-wide monotonicity check: the
+  page is grouped by strategy, so ETA is deliberately not monotonic down it,
+  and a header dating before its own rows is the failure that check should
+  have been catching.
+- Confirm parked rows render `unavailable — parked` and that removing them
+  from the graph does not shift any unparked row's ETA — the check that they
+  were excluded from the position counter rather than merely blanked.
 - Confirm a node that is both `owner: ai` and parked shows **both** columns
-  set — the 58-row case that rules out a single lane column.
+  set — the 54-row case that rules out a single lane column.
 - Confirm a tier-2 or tier-3 node renders in its own band above every tier-1
   group regardless of its strategy's rank.
 - Confirm the lineage header walks all the way to the root, not just one

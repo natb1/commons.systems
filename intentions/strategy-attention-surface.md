@@ -191,6 +191,33 @@ clarifications:
       signal that should trigger the author to look, or a statement of what the
       harness is doing and in what order. The first is this node; the second is
       strategy-rsi-plan-surface."
+  - question: What was the freeze blast radius when this node's substance last
+      changed, on 2026-08-11?
+    answer: "(Recorded 2026-08-11 after adversarial review, filling a gap in the
+      round that added the strategy-rsi-plan-surface boundary clarification.)
+      That round changed this node's clarifications, which changes its
+      strategyFingerprint (router.ts hashes statement, clarifications,
+      conditions, serves, success_signal, tooling_goals). The round recorded its
+      freeze classification only for strategy-recursive-self-improvement and
+      asserted the second strategy in a commit message — which the
+      record-completeness contract says is not the carrier, since the graph
+      record is the sole carrier to a fresh session. Recorded here now, measured
+      with strategyFingerprint plus isStrategyStale rather than a grep. Result:
+      of 18 children, exactly ONE carries a non-null
+      execution.strategy_fingerprint —
+      tactic-attention-surface-analytics-collector — and it is STALE (stamped
+      900e0568 against the current 41299978). It froze nothing, because it is a
+      draft at phase null and the router does not gate a node with no phase. But
+      it is born stale: the moment it is promoted to a phase it trips the
+      chain-of-custody gate for a substance change it never executed against.
+      This is a defect in the predicate the original round used, not only in its
+      record — 'zero stamped OPEN children' passes while a stamped DRAFT sits
+      stale underneath it. The widened predicate is 'any child carrying a
+      non-null stamp', and it belongs in
+      tactic-strategy-fingerprint-stamp-coverage; a round-level align_round
+      provenance field, so a classification is recorded per edited strategy
+      rather than once on the round's headline node, is proposed at
+      tactic-align-review-skill."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type

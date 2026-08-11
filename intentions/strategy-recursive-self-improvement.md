@@ -635,7 +635,8 @@ clarifications:
       priority write) has an obvious analogue for serves removal, which would be
       a demotion act — whether it extends there is not decided here."
   - question: Which tactics moved to the new child strategies, and which stayed here?
-    answer: "(Recorded 2026-08-11, fourth round — the subdivision round.) Moved to
+    answer: >-
+      (Recorded 2026-08-11, fourth round — the subdivision round.) Moved to
       strategy-rsi-plan-surface (band 8): tactic-rsi-plan-priority-render,
       tactic-rsi-plan-render-pause-block, and the newly drafted
       tactic-rsi-plan-merged-priority-table. Moved to
@@ -662,7 +663,75 @@ clarifications:
       children of this strategy (tactic-rsi-implement-acceleration-review,
       tactic-rsi-plan-render-pause-block) carry no stamped
       execution.strategy_fingerprint entry, so nothing froze and nothing needed
-      re-stamping."
+      re-stamping.
+
+
+      CORRECTED 2026-08-11 after adversarial review, in five places. (1) BAND
+      FIGURES. Every 'band N' figure above is an AUTHORED sum, but kind-kind
+      defines a node's band as the RESOLVED rank of its distributing strategy.
+      Resolved: this parent 7, strategy-rsi-plan-surface 9,
+      strategy-rsi-delegated-prioritization 8.5. Under the recorded definition
+      the surface child's tactics sit in band 9 while carrying an authored 8 — a
+      residual of MINUS 1 — because the signal and capture terms are computed
+      per node and are not distributed downward. A negative residual is not
+      cosmetic: under a (tier, band, residual) key it sorts every tactic of an
+      unvalidated strategy below the neutral baseline inside its own band.
+      Whether ownBand derives from a strategy's authored term or its resolved
+      value is now an open decision recorded on
+      tactic-attention-namespaced-rank, with a surface-child tactic as its
+      regression case. Read the figures above as authored values throughout. (2)
+      THE ORDERING WAS NOT LIVE WHEN THIS WAS WRITTEN. Measured at the recording
+      commit, the six repointed tactics sat at selection positions 16-21 of 245,
+      behind fifteen tactics of strategy-graph-native-dispatch, which resolves
+      lower — the exact inversion the namespacing bound forbids, unenforced
+      because resolveAttention sums a tactic's own boost with its distributed
+      value. That was not disclosed. It is now largely discharged: the boost
+      magnitudes of all 42 open tactics carrying an authored boost were
+      compressed onto a 0.01-per-level ladder, taking boost-attributable
+      inversions from 2139 to 0, with originals preserved at
+      attributes.pre_namespacing_boost. That compression is itself a stopgap;
+      tactic-attention-namespaced-rank makes the bound structural. (3) THE
+      STAY-VS-MOVE LEDGER IS FALSIFIED IN ONE ROW.
+      tactic-dispatch-skill-standards-extraction is listed above as staying here
+      at band 6, but it resolves to 11.33 and outranks every tactic of both
+      children — it serves two strategies and resolveAttention SUMS their
+      contributions where the recorded doctrine is 'highest-ranked distributing
+      strategy, max across distributors, never the sum'. It carries no boost, so
+      no boost edit can reach it; fixing the multi-distributor combinator to max
+      is now in tactic-attention-namespaced-rank's scope, with this node and
+      tactic-office-hours-graph-type-passthrough as its regression cases. (4)
+      THE FREEZE CLASSIFICATION COVERED ONLY THIS STRATEGY. The same round
+      edited strategy-attention-surface's clarifications, which changes its
+      fingerprint too; its classification is now recorded on that node, where it
+      found one stale stamp on a draft child that the 'open children' predicate
+      could not see. (5) ONE MOVE WAS MADE MID-FLIGHT.
+      tactic-rsi-plan-render-pause-block was repointed while at phase implement,
+      moving its resolved value 6 to 8 under a live worker. Benign — it carries
+      no strategy fingerprint stamp, and the scope fingerprint covers statement
+      and body only, so nothing froze — but recorded so a future round does not
+      read the silence as 'only drafts were repointed'.
+  - question: How were the two render tactics restructured after the review, and why?
+    answer: "(Recorded 2026-08-11 after adversarial review.) The round that created
+      the children left tactic-rsi-plan-priority-render partially superseded,
+      with tactic-rsi-plan-merged-priority-table blocked_by it. That ordering
+      could not be executed as written: the blocker had to land first, but its
+      surviving scope was defined entirely against the sections its own
+      supersession banner forbade building — a worker taking it first would have
+      added an ETA column to sections about to be deleted. The dependency was
+      justified by 'that tactic defines the ETA derivation', which is four lines
+      of prose the merged table has to implement anyway. Restructured into three
+      nodes with no supersession left standing:
+      tactic-rsi-plan-merged-priority-table absorbs the ETA derivation, which it
+      is the only consumer of, and the blocked_by edge is dropped;
+      tactic-rsi-plan-priority-render is reduced to its genuinely independent
+      residue, the section-6 task-plan typing and the FLAG kinds, with its
+      statement restated to match; and the per-iteration reprioritization delta
+      plus the post-hoc outcome audit split out as
+      tactic-rsi-reprioritization-outcome-audit under
+      strategy-rsi-delegated-prioritization, whose signal they move. The general
+      lesson, worth keeping: partial supersession that leaves dead prose in
+      place because a dependency points at it is a sign the decomposition is
+      wrong, not a sign the prose needs annotating."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each

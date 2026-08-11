@@ -43,7 +43,26 @@ clarifications:
       and 17; rank algebra at kind-kind; implementation at
       tactic-attention-namespaced-rank. No recovers edge is owed: this round
       narrows the blast radius of the delegated authority without unwinding the
-      delegation."
+      delegation. (REVERSED 2026-08-11, later the same day.) The judgment that
+      no recovers edge is owed is withdrawn.
+      strategy-rsi-delegated-prioritization — recorded hours after this
+      clarification — now carries recovers: [delegation-anthropic-claude].
+      Ground for the reversal: /align's delegation sweep records that a strategy
+      which unwinds OR REDUCES RELIANCE ON a delegation should carry the edge
+      even when the unwinding is only partial, and that is what this strategy
+      does. It does not take ordering authority back from the model; it bounds
+      that authority — every reordering logged, namespaced inside author-set
+      strategy bands, and answerable to a fitness function the author can read.
+      Narrowing a delegation's blast radius IS partial recovery, and the earlier
+      wording drew the line at full unwinding, which is stricter than the
+      recorded rule. Recorded here, on the node that owns what was handed over,
+      rather than only on the strategy: leaving the two records contradicting
+      each other is the failure mode tactic-align-review-skill names, and it is
+      what an adversarial review caught. Mechanical consequence, so it is not
+      discovered by surprise later: the edge gives that strategy and every
+      tactic serving it this delegation's capture term of 0.5 — captureScore =
+      (divergence low-moderate = 2 + irreversibility gated = 1) / 6 — which is
+      recorded in that strategy's attention rationale."
 tooling_goals: []
 success_signal: null
 attention: null

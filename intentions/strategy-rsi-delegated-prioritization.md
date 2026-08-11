@@ -20,9 +20,7 @@ rationale: "Recorded 2026-08-11 by the /align round that subdivided
   tactics serving it resolve one band above tactics left directly on the parent,
   and one below the rsi-plan surface child."
 reading: null
-serves:
-  - virtue-alignment-of-attachments
-  - virtue-progressive-detachment
+serves: []
 recovers:
   - delegation-anthropic-claude
 clarifications:
@@ -115,15 +113,44 @@ clarifications:
       same one the parent's anti-thrash clarification names — every reordering
       carries its rationale in priority_log, and rsi-plan.md renders what moved
       each iteration, so the author can audit judgment the sensors cannot score.
+  - question: Why does this child declare no serves of its own?
+    answer: "(Recorded 2026-08-11 after adversarial review.) It was created serving
+      virtue-alignment-of-attachments and virtue-progressive-detachment — the
+      parent's set exactly. kind-strategy's 'Does a sub-strategy re-declare its
+      parent's serves?' clarification answers no: sub-strategies inherit, the
+      parent edge already carries the parent's claims down, and a child authors
+      serves only for a virtue claim BEYOND its parent's. An exact duplicate
+      adds no rank information while doubling the review surface, and a serves
+      edge is a ranking act deserving weight-level care. Removed; inheritance
+      through parent is deliberate. Confirmed rank-inert before removal: virtues
+      carry no attention, and this node resolves identically with and without
+      the edges."
+  - question: Where does the reprioritization-outcome audit live, and why did it move?
+    answer: "(Recorded 2026-08-11 after adversarial review, correcting a misfile
+      made in the round that created this node.) This strategy's signal names an
+      outcome sensor — did nodes the model front-loaded close faster than the
+      queue's baseline? — and that sensor was originally filed inside
+      tactic-rsi-plan-priority-render, which serves the sibling
+      strategy-rsi-plan-surface. That inverts the very stay-vs-move principle
+      the same round recorded on the parent: the audit's completion moves THIS
+      strategy's signal and does not move the surface child's at all, so it
+      belonged here. Worse, it made this strategy's signal unreadable until a
+      tactic outside its own subtree landed. It is now split out as
+      tactic-rsi-reprioritization-outcome-audit, serving this strategy, carrying
+      both the per-iteration reprioritization delta and the post-hoc outcome
+      audit. The rendering of that section into rsi-plan.md remains the surface
+      child's concern; deriving the measurement is this strategy's."
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,
     against the dispatch queue's baseline closure interval; and (b) the count of
     cross-strategy rank inversions plus the count of model attention writes
     carrying no priority_log entry
-  sensor: the reprioritization-outcome section of render-rsi-plan.ts, joining
-    attributes.priority_log entry dates with node closure dates, plus
-    validate-graph's ownership-boundary and marks-asymmetry lint
+  sensor: tactic-rsi-reprioritization-outcome-audit's outcome section (joining
+    attributes.priority_log entry dates with node closure dates), plus
+    validate-graph's ownership-boundary and marks-asymmetry lint from
+    tactic-priority-provenance-schema — both tactics serve THIS strategy, so the
+    signal is readable from inside its own subtree
   threshold: "front-loaded tactics close at or below the baseline interval across
     consecutive iterations, AND both counts in (b) stay at zero. Either half
     passing alone is a failure, not a partial win: integrity without outcome
@@ -133,15 +160,31 @@ success_signal:
 attention:
   boost: 1
   override: null
-  rationale: "Author-directed 2026-08-11: +1 over the parent's authored 6 resolves
-    this child's tactics to band 7 — second within the
-    strategy-recursive-self-improvement subtree, behind the rsi-plan surface
-    child at 8 and ahead of tactics left directly on the parent at 6. Chosen
-    relative to the parent, not on an absolute scale: the value means 'one band
-    above the parent'. The ordering between the two children is the author's:
-    the surface that makes harness state readable ranks ahead of the machinery
-    that reorders within it, because the author cannot audit the reordering
-    without first being able to read the plan."
+  rationale: "Author-directed 2026-08-11: +1 over the parent's AUTHORED 6 gives
+    this child an authored 7, and the authored term is what distributes to its
+    tactics — second within the strategy-recursive-self-improvement subtree,
+    behind the rsi-plan surface child's authored 8 and ahead of tactics left
+    directly on the parent at 6. Chosen relative to the parent, not on an
+    absolute scale: the value means 'one band above the parent'. The ordering
+    between the two children is the author's: the surface that makes harness
+    state readable ranks ahead of the machinery that reorders within it, because
+    the author cannot audit the reordering without first being able to read the
+    plan. CORRECTED 2026-08-11 after adversarial review, two ways. (1) This
+    node's RESOLVED rank is 8.5, not 7: the signal term adds 1 and the capture
+    term adds 0.5. Resolved figures are derived and must not be restated as if
+    authored; the durable claim is the authored 7 and its relation to the
+    parent. (2) The 0.5 is not incidental — it is the price of the recovers edge
+    added to delegation-anthropic-claude in the same round. captureScore for
+    that delegation is (divergence 'low-moderate' = 2 + irreversibility gated =
+    1) / 6 = 0.5, and attention.ts gives it to this strategy and to every tactic
+    serving it. So the author's directed one-band separation from the surface
+    child is delivered as 0.5 at the strategy level (9 vs 8.5) and 0.5 at the
+    tactic level (8 vs 7.5), not 1. The ORDER the author directed is preserved,
+    which is what was asked; the magnitude is not. This is left as-is rather
+    than compensated by raising the boost, because inflating an authored value
+    to cancel a derived term would make the authored number mean two things at
+    once — but it is recorded here so a future rerank starts from the real
+    figure."
   tier: 1
 phase: null
 execution: null
