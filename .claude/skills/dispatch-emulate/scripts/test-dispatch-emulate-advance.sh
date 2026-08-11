@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Unit tests for rsi-advance — the launch half of the rsi-implement loop.
+# Unit tests for dispatch-emulate-advance — the launch half of the
+# dispatch-emulation loop.
 #
 # What is worth testing here is the DISPOSITION MAPPING and the REFUSALS, not
-# the dispatch machinery: rsi-advance's whole design is that it delegates
+# the dispatch machinery: dispatch-emulate-advance's whole design is that it delegates
 # selection and execution verbatim, so the tests stub both siblings and assert
 # that every line they can emit maps to the documented exit code. A mapping
 # regression is silent in production — an unmapped `parked` that fell through to
@@ -27,16 +28,16 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # --- Fixture ---------------------------------------------------------------
-# A real checkout layout, because rsi-advance resolves its siblings from its own
-# on-disk location (four levels up) — a resolution that is itself a regression
-# risk.
+# A real checkout layout, because dispatch-emulate-advance resolves its
+# siblings from its own on-disk location (four levels up) — a resolution that
+# is itself a regression risk.
 PROJECT="$TMP/project"
-RSI_SCRIPTS="$PROJECT/.claude/skills/rsi/scripts"
+EMULATE_SCRIPTS="$PROJECT/.claude/skills/dispatch-emulate/scripts"
 DISPATCH="$PROJECT/.claude/skills/dispatch-propagate/scripts"
-mkdir -p "$RSI_SCRIPTS" "$DISPATCH"
+mkdir -p "$EMULATE_SCRIPTS" "$DISPATCH"
 
-cp "$SCRIPT_DIR/rsi-advance" "$RSI_SCRIPTS/rsi-advance"
-chmod +x "$RSI_SCRIPTS/rsi-advance"
+cp "$SCRIPT_DIR/dispatch-emulate-advance" "$EMULATE_SCRIPTS/dispatch-emulate-advance"
+chmod +x "$EMULATE_SCRIPTS/dispatch-emulate-advance"
 for lib in lib-claude-agents.sh lib-reservation-ledger.sh lib-graph-worktree.sh lib.sh; do
   src="$SCRIPT_DIR/../../dispatch-propagate/scripts/$lib"
   [[ -f "$src" ]] && cp "$src" "$DISPATCH/$lib"
@@ -48,13 +49,13 @@ git -C "$PROJECT" config user.name Test
 git -C "$PROJECT" add -A >/dev/null 2>&1
 git -C "$PROJECT" commit -qm init >/dev/null 2>&1
 
-ADVANCE="$RSI_SCRIPTS/rsi-advance"
+ADVANCE="$EMULATE_SCRIPTS/dispatch-emulate-advance"
 
 export DISPATCH_GRAPH_MAIN_WORKTREE="$PROJECT"
 export DISPATCH_RESERVATION_DIR="$TMP/reservations"
 mkdir -p "$DISPATCH_RESERVATION_DIR"
 
-# `git fetch origin main` must succeed — rsi-advance refuses to act on an
+# `git fetch origin main` must succeed — dispatch-emulate-advance refuses to act on an
 # unverified graph otherwise. Give the fixture a real local "remote".
 REMOTE="$TMP/remote.git"
 git init -q --bare "$REMOTE"
@@ -194,9 +195,50 @@ run_case "an empty selection is idle, not an error (exit 10)" \
 run_case "a selector line for another node is not consumed (exit 10)" \
   "node tactic-other-node tactic qa" "launched x /qa-fix" 10 "idle tactic-fixture-node not-selectable"
 
+# --- Strategy refusal -------------------------------------------------------
+# A strategy id must be refused mechanically, not launched: an /align-tactics
+# pass on a strategy decomposes it into CHILD tactic ids rather than
+# advancing the strategy itself up the ladder, so there is no single node for
+# this loop to follow. Cannot use run_case — it hardcodes tactic-fixture-node
+# as the argument; this case needs a strategy id instead.
+printf 'node strategy-fixture-node strategy align-tactics\n' >"$SELECT_OUT"
+printf 'launched strategy-fixture-node /align-tactics\n' >"$EXEC_OUT"
+rm -f "$DISPATCH_RESERVATION_DIR"/* 2>/dev/null
+rm -f "$TMP/exec.args"
+OUT=$("$ADVANCE" strategy-fixture-node 2>/dev/null); RC=$?
+if [[ "$RC" == 2 && "$OUT" == "refused strategy-fixture-node strategy" ]]; then
+  ok "a strategy id is refused before any claim or execute (exit 2)"
+else
+  fail "strategy refusal should exit 2 with 'refused ...', got exit $RC / '$OUT'"
+fi
+if [[ ! -s "$TMP/exec.args" ]]; then
+  ok "dispatch-graph-execute was never invoked for a refused strategy"
+else
+  fail "dispatch-graph-execute should not run for a refused strategy; args: $(cat "$TMP/exec.args")"
+fi
+if [[ ! -f "$DISPATCH_RESERVATION_DIR/strategy-fixture-node" ]]; then
+  ok "no reservation marker is written for a refused strategy"
+else
+  fail "a reservation marker should not exist for a refused strategy"
+fi
+
+# --- Complement: a tactic at the align-tactics rung still launches --------
+# The refusal gates on KIND only, never PHASE — a draft/raw/frozen tactic
+# starting its own /align-tactics finalize pass is the legitimate "start at
+# align-tactics" case, so it must not be caught by the strategy refusal.
+printf 'node tactic-fixture-node tactic align-tactics\n' >"$SELECT_OUT"
+printf 'launched tactic-fixture-node /align-tactics\n' >"$EXEC_OUT"
+rm -f "$DISPATCH_RESERVATION_DIR"/* 2>/dev/null
+OUT=$("$ADVANCE" tactic-fixture-node 2>/dev/null); RC=$?
+if [[ "$RC" == 0 && "$OUT" == "launched tactic-fixture-node tactic align-tactics /align-tactics" ]]; then
+  ok "a tactic at the align-tactics rung still launches (exit 0)"
+else
+  fail "tactic at the align-tactics rung should launch (exit 0), got exit $RC / '$OUT'"
+fi
+
 # --- Claim refusals --------------------------------------------------------
 # A live session registered under the node's worktree name blocks the launch.
-# This is the dispatch/rsi mutual exclusion; nothing may proceed past it.
+# This is the dispatch/dispatch-emulate mutual exclusion; nothing may proceed past it.
 cat >"$AGENTS_JSON" <<'JSON'
 [{"pid":999,"id":"aaaa","cwd":"/x","sessionId":"aaaa-1","name":"tactic-fixture-node","status":"busy","state":"working"}]
 JSON

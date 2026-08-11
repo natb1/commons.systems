@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# rsi-await — wait for one node's phase session to finish, then ask origin/main
-# what actually happened.
+# dispatch-emulate-await — wait for one node's phase session to finish, then
+# ask origin/main what actually happened.
 #
-# The other half of the rsi-implement loop (`intentions/tactic-rsi-implement-skill.md`);
-# `rsi-advance` launches, this waits and verifies. It makes no graph writes, no
-# merges, and no decisions — it reports one of five outcomes and lets the /rsi
-# main thread judge.
+# The other half of the dispatch-emulation loop (built by
+# `intentions/tactic-rsi-implement-skill.md`); `dispatch-emulate-advance`
+# launches, this waits and verifies. It makes no graph writes, no merges, and
+# no decisions — it reports one of five outcomes and lets the calling thread
+# (`/dispatch-emulate`, invoked directly or by `/rsi`) judge.
 #
 # NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
 # owns every merge (strategy condition, and the node's own plan). A wait loop is
@@ -54,11 +55,12 @@
 # treated as "still running" and keeps polling — never as "finished", which
 # would send the loop on to the next phase while a worker is live.
 #
-# Usage: rsi-await <node-id> <from-phase>
+# Usage: dispatch-emulate-await <node-id> <from-phase>
 #                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
 #
-#   <from-phase>       the phase rsi-advance printed. The transition check asks
-#                      whether the node has moved off it.
+#   <from-phase>       the phase dispatch-emulate-advance printed. The
+#                      transition check asks whether the node has moved off
+#                      it.
 #   --timeout-s <n>    give up waiting after n seconds (default 540). The
 #                      default sits under the Bash tool's 600s ceiling on
 #                      purpose, so a call from a Claude session returns a real
@@ -81,7 +83,8 @@
 # Exit codes:
 #   0   advanced or pruned — the loop may take another step.
 #   11  throw: the node is parked, or a session is held un-reaped. Both need the
-#       attended /rsi thread; neither is retried here.
+#       calling thread (`/dispatch-emulate`, invoked directly or by `/rsi`);
+#       neither is retried here.
 #   12  stalled: the session ended with no graph change. Needs judgment — it is
 #       the shape a silently-failed phase takes, and retrying blindly would
 #       spend budget on a repeat.
@@ -114,7 +117,7 @@ NODE_ID=""
 FROM_PHASE=""
 
 usage() {
-  echo "usage: rsi-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
+  echo "usage: dispatch-emulate-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
   exit 2
 }
 
@@ -123,11 +126,11 @@ while [[ $# -gt 0 ]]; do
     --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
     --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
     --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
-    --*)            echo "rsi-await: unknown flag $1" >&2; usage ;;
+    --*)            echo "dispatch-emulate-await: unknown flag $1" >&2; usage ;;
     *)
       if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
       elif [[ -z "$FROM_PHASE" ]]; then FROM_PHASE="$1"
-      else echo "rsi-await: unexpected argument $1" >&2; usage
+      else echo "dispatch-emulate-await: unexpected argument $1" >&2; usage
       fi
       shift ;;
   esac
@@ -135,19 +138,19 @@ done
 
 [[ -n "$NODE_ID" && -n "$FROM_PHASE" ]] || usage
 [[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
-  echo "rsi-await: invalid node id '$NODE_ID'" >&2; exit 2; }
+  echo "dispatch-emulate-await: invalid node id '$NODE_ID'" >&2; exit 2; }
 [[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
-  echo "rsi-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+  echo "dispatch-emulate-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
 
 PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
-  echo "rsi-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  echo "dispatch-emulate-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
 fi
 
 VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
 [[ -x "$VERIFY_LANDED" ]] || {
-  echo "rsi-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
+  echo "dispatch-emulate-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
 
 # --- Session state ---------------------------------------------------------
 # Echoes one of: working | done-held | absent | unknown.
@@ -221,26 +224,26 @@ report_graph_verdict() { # <session-note>
   case "$verdict" in
     pruned)
       echo "pruned $NODE_ID"
-      echo "rsi-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
+      echo "dispatch-emulate-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
       exit 0 ;;
     parked)
       echo "throw $NODE_ID parked"
-      echo "rsi-await: $NODE_ID carries office_hours at origin/main ($note). The attended /rsi thread conducts the engagement; this script never clears a park." >&2
+      echo "dispatch-emulate-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-emulate, invoked directly or by /rsi) conducts the engagement; this script never clears a park." >&2
       exit 11 ;;
     blocked)
       echo "throw $NODE_ID blocked-by"
-      echo "rsi-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
+      echo "dispatch-emulate-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
       exit 11 ;;
     advanced)
       echo "advanced $NODE_ID $FROM_PHASE -> origin/main"
       exit 0 ;;
     unchanged)
       echo "stalled $NODE_ID $FROM_PHASE"
-      echo "rsi-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
+      echo "dispatch-emulate-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
       exit 12 ;;
     *)
       echo "throw $NODE_ID unknown-graph-read"
-      echo "rsi-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
+      echo "dispatch-emulate-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
       exit 14 ;;
   esac
 }
@@ -268,8 +271,8 @@ if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
   # is the same "trust an unanswerable probe" failure rsi-claim refuses to make.
   # Report `running` instead — the caller re-runs, and nothing is claimed.
   echo "running $NODE_ID $FROM_PHASE"
-  echo "rsi-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
-  echo "rsi-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
+  echo "dispatch-emulate-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
+  echo "dispatch-emulate-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
   exit 20
 fi
 
@@ -293,11 +296,11 @@ while (( SECONDS < DEADLINE )); do
       # session is a throw either way: it occupies a worker slot and keeps the
       # node unselectable until a human releases it.
       echo "throw $NODE_ID held-session"
-      echo "rsi-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
-      echo "rsi-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
+      echo "dispatch-emulate-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
+      echo "dispatch-emulate-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
       "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" \
         --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1 && \
-        echo "rsi-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
+        echo "dispatch-emulate-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
       exit 11
       ;;
   esac
@@ -305,5 +308,5 @@ while (( SECONDS < DEADLINE )); do
 done
 
 echo "running $NODE_ID $FROM_PHASE"
-echo "rsi-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call rsi-await again with the same arguments." >&2
+echo "dispatch-emulate-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call dispatch-emulate-await again with the same arguments." >&2
 exit 20

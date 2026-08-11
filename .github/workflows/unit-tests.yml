@@ -262,10 +262,10 @@ jobs:
         run: packages/intentionsutil/scripts/test-verify-landed.sh
       - name: Run rsi-claim tests
         run: .claude/skills/rsi/scripts/test-rsi-claim.sh
-      - name: Run rsi-advance tests
-        run: .claude/skills/rsi/scripts/test-rsi-advance.sh
-      - name: Run rsi-await tests
-        run: .claude/skills/rsi/scripts/test-rsi-await.sh
+      - name: Run dispatch-emulate-advance tests
+        run: .claude/skills/dispatch-emulate/scripts/test-dispatch-emulate-advance.sh
+      - name: Run dispatch-emulate-await tests
+        run: .claude/skills/dispatch-emulate/scripts/test-dispatch-emulate-await.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests

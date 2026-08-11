@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Unit tests for rsi-await — the wait-and-verify half of the rsi-implement loop.
+# Unit tests for dispatch-emulate-await — the wait-and-verify half of the
+# dispatch-emulation loop.
 #
 # Two things are worth testing and both are invisible in production until they
 # are wrong:
@@ -34,22 +35,22 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- Fixture ---------------------------------------------------------------
 PROJECT="$TMP/project"
-RSI_SCRIPTS="$PROJECT/.claude/skills/rsi/scripts"
+EMULATE_SCRIPTS="$PROJECT/.claude/skills/dispatch-emulate/scripts"
 DISPATCH="$PROJECT/.claude/skills/dispatch-propagate/scripts"
 IUTIL="$PROJECT/packages/intentionsutil/scripts"
-mkdir -p "$RSI_SCRIPTS" "$DISPATCH" "$IUTIL"
+mkdir -p "$EMULATE_SCRIPTS" "$DISPATCH" "$IUTIL"
 
-cp "$SCRIPT_DIR/rsi-await" "$RSI_SCRIPTS/rsi-await"
-chmod +x "$RSI_SCRIPTS/rsi-await"
+cp "$SCRIPT_DIR/dispatch-emulate-await" "$EMULATE_SCRIPTS/dispatch-emulate-await"
+chmod +x "$EMULATE_SCRIPTS/dispatch-emulate-await"
 for lib in lib-claude-agents.sh lib-reservation-ledger.sh lib-graph-worktree.sh lib.sh; do
   src="$SCRIPT_DIR/../../dispatch-propagate/scripts/$lib"
   [[ -f "$src" ]] && cp "$src" "$DISPATCH/$lib"
 done
 
-AWAIT="$RSI_SCRIPTS/rsi-await"
+AWAIT="$EMULATE_SCRIPTS/dispatch-emulate-await"
 export DISPATCH_GRAPH_MAIN_WORKTREE="$PROJECT"
 
-# See test-rsi-advance.sh: the empty-read corroboration needs a visible daemon,
+# See test-dispatch-emulate-advance.sh: the empty-read corroboration needs a visible daemon,
 # and CI has none. Stub the probe so the suite does not depend on whether a real
 # Claude daemon happens to be running on the host.
 PGREP_STUB="$TMP/pgrep-stub"
@@ -70,7 +71,7 @@ chmod +x "$CLAUDE_STUB"
 export CLAUDE_AGENTS_CMD="$CLAUDE_STUB"
 
 # verify-landed. Its three answers (0 landed / 4 not-landed / 1 unknown) are
-# what rsi-await maps, so the stub is keyed on the spec it is asked about: each
+# what dispatch-emulate-await maps, so the stub is keyed on the spec it is asked about: each
 # case writes the exit code it wants for `absent`, `office_hours`, `blocked_by`,
 # and `phase`.
 RC_ABSENT="$TMP/rc.absent"; RC_PARKED="$TMP/rc.parked"
