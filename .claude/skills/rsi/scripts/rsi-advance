@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# rsi-advance — kick ONE phase step of ONE node, through the dispatch lane.
+#
+# Half of the rsi-implement loop (`intentions/tactic-rsi-implement-skill.md`).
+# `rsi-advance` launches a phase; `rsi-await` waits for it and verifies the
+# transition off `origin/main`. The /rsi skill alternates them until the node
+# is done or throws.
+#
+# WHAT THIS IS NOT. It is not a scheduler, not a selector, and not a second
+# orchestration surface — `strategy-recursive-self-improvement`'s standing
+# constraint is that rsi reuses the dispatch skills VERBATIM and maintains no
+# orchestration rule dispatch does not already have. So this script decides
+# nothing about eligibility. It delegates:
+#
+#   graph-select-target --node <id>   the phase directive, read at origin/main,
+#                                     with EVERY environmental gate applied —
+#                                     claim safety, the per-phase CI/PR sensor
+#                                     gates, the fix and conflict interrupts.
+#                                     `--node` is documented as a selection-ORDER
+#                                     override, not a gate bypass, which is
+#                                     exactly the property rsi needs.
+#   dispatch-graph-execute <spec>     provisioning, the phase-skill mapping, the
+#                                     spawn, the reservation handoff, and every
+#                                     park/hold disposition.
+#
+# Everything below those two calls is argument marshalling and exit-code
+# mapping. If a rule about WHEN a node may run ever appears in this file, it is
+# in the wrong file.
+#
+# NO --standalone, DELIBERATELY. `graph-select-target --standalone` would fold
+# in the lock, the ledger claim, and the headroom cap — but it also applies the
+# pace curve, and its header says so plainly: a --standalone caller is treated
+# as unattended and degrades to `empty` at the ceiling. /rsi is attended
+# (strategy condition 9) and pace-exempt (condition 7 — "the budget and the
+# serialization are the throttle, not the pace curve"). More concretely: rsi's
+# execute lane exists FOR the bootstrap-deadlock case, where dispatch is paused
+# and the fix is what would unpause it. Under a pause the worker target is 0,
+# so --standalone would print `empty` on every call and the lane would be dead
+# in precisely the situation it was built for. The ledger claim --standalone
+# would have written is made explicitly below instead.
+#
+# CLAIM DISCIPLINE. A node must never be worked by dispatch and rsi at once.
+# Three things enforce that, none of them new:
+#   1. The pre-launch refusal below — `worktree_has_live_session`, fail-safe
+#      (unknown counts as occupied), plus an existing reservation marker.
+#   2. The reservation marker this script writes before executing, with
+#      `origin=explicit` — the origin dispatch-select-tick's own explicit
+#      named-node lane uses, so reservation_sweep's TTL rule already reclaims
+#      it if this script dies before the worker registers. NOT a new origin:
+#      a new one would need a new branch in the sweep, and this claim has the
+#      same lifecycle as that lane's.
+#   3. dispatch-graph-execute's spawn handoff, which re-stamps the marker
+#      `origin=spawned` and lets the sweep release it once the worker's own
+#      live session registers. From that moment the worktree IS the claim and
+#      graph-select-target skips the node for the router.
+#
+# Usage: rsi-advance <node-id>
+#
+# Stdout, one line:
+#   launched <id> <kind> <phase> <skill>   a session is running; call rsi-await
+#                                          with <phase> as the from-phase.
+#   idle <id> <reason>                     nothing to launch right now.
+#   throw <id> <reason>                    the node needs the attended thread.
+#   claimed <id> <holder>                  another session holds it.
+#
+# Exit codes:
+#   0   launched — a phase session is running.
+#   10  idle: not selectable, ci-waiting, stale-selection, or scope-stale. Not
+#       an error; the loop stops or retries later. The graph-select-target
+#       event lines on stderr say which.
+#   11  throw: parked, held, or a failed launch. The /rsi main thread conducts
+#       the office-hours engagement — this script never pushes through one.
+#   13  claimed: a live session or an unreclaimed marker holds the node.
+#       NEVER proceed past this; it is the dispatch/rsi mutual exclusion.
+#   2   usage or environment error.
+#
+# Requires `dangerouslyDisableSandbox: true`: the selector's sensor gates call
+# `gh`, the liveness read reaches the Claude daemon over a Unix socket, and
+# dispatch-graph-execute runs git/direnv and spawns `claude --bg`
+# (.claude/rules/sandbox.md).
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# .claude/skills/rsi/scripts → the checkout root is four levels up. Used only to
+# locate sibling scripts and libraries; the PROJECT root is resolved from git
+# below, because this checkout may itself be a worktree.
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: rsi-advance <node-id>" >&2
+  exit 2
+fi
+
+NODE_ID="$1"
+
+# Validate before the id reaches a spawn prompt or a worktree path — the same
+# slug regex dispatch-graph-execute and provision-node-worktree apply.
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "rsi-advance: invalid node id '$NODE_ID'" >&2
+  exit 2
+fi
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "rsi-advance: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+# Freshness. Every read below answers about origin/main, so fetch first — a
+# stale remote-tracking ref would let this launch a phase the graph has already
+# advanced past.
+if ! git -C "$PROJECT_ROOT" fetch origin main --quiet 1>&2; then
+  echo "rsi-advance: git fetch origin main failed; refusing to act on unverified graph state" >&2
+  exit 2
+fi
+
+# --- Claim safety ----------------------------------------------------------
+# Checked HERE as well as inside the selector, for the message: the selector
+# folds a claimed node into a bare `empty`, and "another session is working
+# this node" is the one disposition the rsi loop must never mistake for
+# "nothing to do".
+NODE_WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
+if worktree_has_live_session "$NODE_WT"; then
+  echo "claimed $NODE_ID live-session"
+  echo "rsi-advance: REFUSED — a live session is registered on $NODE_WT (or the liveness probe could not answer, which counts as occupied)." >&2
+  echo "rsi-advance: a node is never worked by dispatch and rsi at once. Wait for that session, or release a terminal holder with 'claude rm <session-id>'." >&2
+  exit 13
+fi
+
+if reservation_exists "$NODE_ID"; then
+  RES_OWNER=$(reservation_owner "$NODE_ID" 2>/dev/null || echo "unknown")
+  echo "claimed $NODE_ID reservation:$RES_OWNER"
+  echo "rsi-advance: REFUSED — an unreleased reservation-ledger marker claims $NODE_ID (owner $RES_OWNER)." >&2
+  echo "rsi-advance: if that claim is stale, reservation_sweep reclaims it on the next dispatch heartbeat; do not clear it by hand while a worker may still be booting." >&2
+  exit 13
+fi
+
+# --- Selection: the directive, with every gate applied ---------------------
+# stderr flows through — its event lines are the record of WHY a node was not
+# selectable, and the rsi main thread reads them.
+SELECTION=$("$DISPATCH_SCRIPTS/graph-select-target" --node "$NODE_ID")
+select_rc=$?
+if (( select_rc != 0 )); then
+  echo "throw $NODE_ID selector-failed"
+  echo "rsi-advance: graph-select-target exited $select_rc for $NODE_ID" >&2
+  exit 11
+fi
+
+# Protocol: `node <id> <kind> <phase>` or `empty`.
+SPEC_LINE=$(grep -E "^node ${NODE_ID} " <<<"$SELECTION" | head -n1)
+if [[ -z "$SPEC_LINE" ]]; then
+  echo "idle $NODE_ID not-selectable"
+  echo "rsi-advance: graph-select-target selected nothing for $NODE_ID — the event lines above name the gate that held it (phase null with no align route, a CI verdict still pending, a park, a blocked_by edge, a stale strategy fingerprint)." >&2
+  exit 10
+fi
+
+read -r _ _ KIND PHASE <<<"$SPEC_LINE"
+if [[ -z "$KIND" || -z "$PHASE" ]]; then
+  echo "throw $NODE_ID malformed-selection"
+  echo "rsi-advance: could not parse the selector line '$SPEC_LINE'" >&2
+  exit 11
+fi
+
+# --- Claim, then execute ---------------------------------------------------
+# Written BEFORE the spawn so the boot window is covered: between this line and
+# the worker's own session registering, the marker is what keeps a concurrent
+# dispatch tick from selecting the same node. dispatch-graph-execute re-stamps
+# it `origin=spawned` on a successful kick (its hand_off_reservation), after
+# which reservation_sweep owns its release.
+#
+# The `issue-N` slot carries the node id: graph nodes have no issue number, and
+# the slot is rejected empty, so the graph lane puts the id there —
+# `reservation_write "$id" "$id" ...`, exactly as graph-select-target's own
+# --standalone claim does. The session-id slot falls back to a literal `rsi`
+# rather than an empty string for the same reason: empty is rejected, and a
+# claim that silently failed to write is the boot-window hole this line exists
+# to close.
+if ! reservation_write "$NODE_ID" "$NODE_ID" "${CLAUDE_CODE_SESSION_ID:-rsi}" explicit; then
+  echo "throw $NODE_ID reservation-write-failed"
+  echo "rsi-advance: could not write the reservation marker for $NODE_ID; refusing to spawn a worker whose claim is unrecorded (a concurrent dispatch tick could select the same node)." >&2
+  exit 11
+fi
+
+EXEC_OUT=$("$DISPATCH_SCRIPTS/dispatch-graph-execute" "$NODE_ID:$KIND:$PHASE")
+exec_rc=$?
+
+DISPOSITION=$(awk '{print $1; exit}' <<<"$EXEC_OUT")
+case "$DISPOSITION" in
+  launched)
+    SKILL=$(awk '{print $3; exit}' <<<"$EXEC_OUT")
+    echo "launched $NODE_ID $KIND $PHASE $SKILL"
+    exit 0
+    ;;
+  conflict-lane)
+    # A session WAS launched — /dispatch-conflict, in the primary checkout,
+    # named for this node. It is awaited exactly like a phase session, and it
+    # declares its own terminal disposition on both of its exit paths. The
+    # from-phase reported is the node's ladder phase: Lane 3 resolves the
+    # conflict and the node re-enters at that phase, so a plain phase-changed
+    # check would read as `stalled`. rsi-await's absent/park checks still fire,
+    # and the attended thread reads the lane's own report.
+    echo "launched $NODE_ID $KIND $PHASE /dispatch-conflict"
+    exit 0
+    ;;
+  waiting)
+    reservation_clear "$NODE_ID" || true
+    echo "idle $NODE_ID ci-waiting"
+    exit 10
+    ;;
+  skipped)
+    # dispatch-graph-execute already cleared the marker on this path.
+    echo "idle $NODE_ID stale-selection"
+    exit 10
+    ;;
+  scope-stale)
+    # Likewise cleared; the node was demoted to implement and is re-runnable.
+    echo "idle $NODE_ID scope-stale-demoted"
+    exit 10
+    ;;
+  parked|held)
+    # A mechanical producer parked the node or born a tracked hold. Both need
+    # the attended thread — never pushed through here.
+    echo "throw $NODE_ID $DISPOSITION"
+    echo "$EXEC_OUT" >&2
+    exit 11
+    ;;
+  failed|*)
+    reservation_clear "$NODE_ID" || true
+    echo "throw $NODE_ID execute-failed"
+    echo "rsi-advance: dispatch-graph-execute exited $exec_rc with '$EXEC_OUT'" >&2
+    exit 11
+    ;;
+esac

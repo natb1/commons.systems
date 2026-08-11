@@ -1,0 +1,309 @@
+#!/usr/bin/env bash
+# rsi-await — wait for one node's phase session to finish, then ask origin/main
+# what actually happened.
+#
+# The other half of the rsi-implement loop (`intentions/tactic-rsi-implement-skill.md`);
+# `rsi-advance` launches, this waits and verifies. It makes no graph writes, no
+# merges, and no decisions — it reports one of five outcomes and lets the /rsi
+# main thread judge.
+#
+# NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
+# owns every merge (strategy condition, and the node's own plan). A wait loop is
+# the one place it would be tempting to "just merge it and move on"; this script
+# has no gh call and no git write at all.
+#
+# THE VERDICT COMES FROM origin/main, NOT FROM THE SESSION. A phase worker's
+# exit status is not evidence that its transition landed — that is the whole
+# premise of `verify-landed` (tactic-graph-commit-landing-signal-unreliable), and
+# this script reuses it rather than re-deriving a second landing signal. The
+# session poll answers only "has the worker stopped?"; the graph answers "did
+# anything change?", and the two disagreeing is a real and reportable state
+# (`stalled`).
+#
+# HOW A FINISHED SESSION LOOKS. Graph node workers declare a terminal
+# disposition with `mark-node-terminal`, and dispatch-stop.sh's discriminator
+# hands that to `dispatch-self-close`, which reaps the job — so the registry row
+# DISAPPEARS. A worker that never declares one is HELD alive by that same hook:
+# its row survives with `state: done`. The two are therefore distinguishable and
+# mean different things:
+#   row gone            — declared terminal and reaped. The normal path.
+#   row present, done   — stopped WITHOUT declaring terminal. The session is
+#                         holding a worker slot and keeping the node
+#                         unselectable until a human runs `claude rm`. Reported
+#                         as `held-session`, because it needs that human act.
+#   row present, other  — still working. Keep polling.
+#
+# BOOT GRACE. `dispatch-graph-execute` returns as soon as the spawn kick
+# succeeds, before the worker's session registers with the daemon. Polling
+# immediately would see no row and misread the boot window as a completed
+# session, so the wait has two stages: first wait for the row to APPEAR (up to
+# --boot-grace-s), then wait for it to leave. A row that never appears is not
+# assumed dead — the graph is consulted first, because a very short phase can
+# genuinely start, transition, and reap inside the grace window.
+#
+# The grace is a CEILING, not a delay: the ordinary case breaks out of stage 1
+# on the first poll that sees the worker, and the full window is only ever spent
+# when no session appears at all. It defaults to 90s — three times the
+# reservation ledger's own 30s boot grace
+# (DISPATCH_RESERVATION_BOOT_GRACE_S, lib-reservation-ledger.sh), because that
+# sweep is reclaiming a slot and should be impatient, while this wait is about
+# to declare a phase dead and should not be.
+#
+# UNKNOWN IS NOT DONE. `claude_sessions_with_name_all` returns non-zero when the
+# daemon cannot be queried (missing binary, sandboxed socket read). That is
+# treated as "still running" and keeps polling — never as "finished", which
+# would send the loop on to the next phase while a worker is live.
+#
+# Usage: rsi-await <node-id> <from-phase>
+#                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
+#
+#   <from-phase>       the phase rsi-advance printed. The transition check asks
+#                      whether the node has moved off it.
+#   --timeout-s <n>    give up waiting after n seconds (default 540). The
+#                      default sits under the Bash tool's 600s ceiling on
+#                      purpose, so a call from a Claude session returns a real
+#                      answer rather than being killed mid-poll. A phase that
+#                      outlives it is NOT an error — exit 20 says "still
+#                      running, call again".
+#   --poll-s <n>       seconds between daemon reads (default 15).
+#   --boot-grace-s <n> how long to wait for the worker to REGISTER before
+#                      concluding none exists (default 90 — see BOOT GRACE).
+#
+# Stdout, one line:
+#   advanced <id> <from> -> <to-known-via>   the node moved off <from>.
+#   pruned <id>                              the node is gone from origin/main —
+#                                            completed and pruned.
+#   throw <id> <reason>                      parked, or a held session.
+#   stalled <id> <from>                      the worker stopped and NOTHING
+#                                            changed at origin/main.
+#   running <id> <from>                      still working at the timeout.
+#
+# Exit codes:
+#   0   advanced or pruned — the loop may take another step.
+#   11  throw: the node is parked, or a session is held un-reaped. Both need the
+#       attended /rsi thread; neither is retried here.
+#   12  stalled: the session ended with no graph change. Needs judgment — it is
+#       the shape a silently-failed phase takes, and retrying blindly would
+#       spend budget on a repeat.
+#   14  unknown: origin/main could not be read (verify-landed's third answer).
+#       Nothing is claimed either way; re-run once the read works.
+#   20  still running at the timeout. Call again — this is the expected result
+#       for any phase longer than --timeout-s, not a failure.
+#   2   usage or environment error.
+#
+# Requires `dangerouslyDisableSandbox: true` — the liveness read reaches the
+# Claude daemon over a Unix socket the sandbox blocks silently, and
+# `verify-landed` fetches (.claude/rules/sandbox.md).
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+
+TIMEOUT_S=540
+POLL_S=15
+BOOT_GRACE_S=90
+NODE_ID=""
+FROM_PHASE=""
+
+usage() {
+  echo "usage: rsi-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
+    --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
+    --*)            echo "rsi-await: unknown flag $1" >&2; usage ;;
+    *)
+      if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
+      elif [[ -z "$FROM_PHASE" ]]; then FROM_PHASE="$1"
+      else echo "rsi-await: unexpected argument $1" >&2; usage
+      fi
+      shift ;;
+  esac
+done
+
+[[ -n "$NODE_ID" && -n "$FROM_PHASE" ]] || usage
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "rsi-await: invalid node id '$NODE_ID'" >&2; exit 2; }
+[[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
+  echo "rsi-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "rsi-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
+[[ -x "$VERIFY_LANDED" ]] || {
+  echo "rsi-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
+
+# --- Session state ---------------------------------------------------------
+# Echoes one of: working | done-held | absent | unknown.
+session_state() {
+  local rows
+  if ! rows="$(claude_sessions_with_name_all "$NODE_ID")"; then
+    printf 'unknown\n'; return 0
+  fi
+  if [[ -z "${rows//[[:space:]]/}" ]]; then
+    printf 'absent\n'; return 0
+  fi
+  # Column 2 is the granular state. ANY row not yet `done` means work is live.
+  if awk -F'\t' '$2 != "done" { found = 1 } END { exit found ? 0 : 1 }' <<<"$rows"; then
+    printf 'working\n'
+  else
+    printf 'done-held\n'
+  fi
+}
+
+# --- Graph verdict ---------------------------------------------------------
+# Every question is asked of origin/main through verify-landed, whose three
+# answers (landed / not-landed / unknown) are never collapsed into two.
+#
+# Order matters. `absent` is checked FIRST because an absent node satisfies
+# `.phase != "<from>"` — a pruned node and an advanced node would otherwise be
+# indistinguishable, and they call for different reports.
+graph_verdict() {
+  local rc
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'pruned\n'; return 0 ;;
+    4) ;;                        # present — the expected case, fall through
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  # Park before phase: a parked node may ALSO have advanced, and the park is the
+  # disposition that needs the attended thread.
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq '.office_hours != null' >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'parked\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq ".blocked_by | length > 0" >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'blocked\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'advanced\n' ;;
+    4) printf 'unchanged\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+report_graph_verdict() { # <session-note>
+  local note="$1" verdict
+  verdict=$(graph_verdict)
+  case "$verdict" in
+    pruned)
+      echo "pruned $NODE_ID"
+      echo "rsi-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
+      exit 0 ;;
+    parked)
+      echo "throw $NODE_ID parked"
+      echo "rsi-await: $NODE_ID carries office_hours at origin/main ($note). The attended /rsi thread conducts the engagement; this script never clears a park." >&2
+      exit 11 ;;
+    blocked)
+      echo "throw $NODE_ID blocked-by"
+      echo "rsi-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
+      exit 11 ;;
+    advanced)
+      echo "advanced $NODE_ID $FROM_PHASE -> origin/main"
+      exit 0 ;;
+    unchanged)
+      echo "stalled $NODE_ID $FROM_PHASE"
+      echo "rsi-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
+      exit 12 ;;
+    *)
+      echo "throw $NODE_ID unknown-graph-read"
+      echo "rsi-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
+      exit 14 ;;
+  esac
+}
+
+# --- Stage 1: wait for the worker to register ------------------------------
+DEADLINE=$(( SECONDS + TIMEOUT_S ))
+BOOT_DEADLINE=$(( SECONDS + BOOT_GRACE_S ))
+SAW_SESSION=0
+GOT_ANSWER=0
+
+while (( SECONDS < BOOT_DEADLINE && SECONDS < DEADLINE )); do
+  case "$(session_state)" in
+    working|done-held) SAW_SESSION=1; GOT_ANSWER=1; break ;;
+    absent)            GOT_ANSWER=1 ;;
+    # `unknown` deliberately does NOT set GOT_ANSWER — see below.
+  esac
+  sleep "$POLL_S"
+done
+
+if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
+  # Every read in the grace window was UNANSWERABLE — not one of them said
+  # "no session". Falling through to the graph here would let an unreadable
+  # registry produce a real verdict: a node whose phase had not landed YET would
+  # be reported `stalled` while its worker was alive and simply invisible. That
+  # is the same "trust an unanswerable probe" failure rsi-claim refuses to make.
+  # Report `running` instead — the caller re-runs, and nothing is claimed.
+  echo "running $NODE_ID $FROM_PHASE"
+  echo "rsi-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
+  echo "rsi-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
+  exit 20
+fi
+
+if (( SAW_SESSION == 0 )); then
+  # The registry answered, and it said there is no session. That is NOT proof
+  # the worker died: a short phase can start, transition, and reap before the
+  # first poll. Ask the graph — if it moved, the phase simply ran fast.
+  report_graph_verdict "no session registered within ${BOOT_GRACE_S}s"
+fi
+
+# --- Stage 2: wait for it to finish ----------------------------------------
+while (( SECONDS < DEADLINE )); do
+  case "$(session_state)" in
+    absent)
+      report_graph_verdict "session reaped after declaring terminal"
+      ;;
+    done-held)
+      # Stopped without declaring a terminal disposition, so the Stop hook is
+      # holding the job. The graph may still have advanced (the transition can
+      # land before the marker is written), so report that first — but a held
+      # session is a throw either way: it occupies a worker slot and keeps the
+      # node unselectable until a human releases it.
+      echo "throw $NODE_ID held-session"
+      echo "rsi-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
+      echo "rsi-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
+      "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" \
+        --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1 && \
+        echo "rsi-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
+      exit 11
+      ;;
+  esac
+  sleep "$POLL_S"
+done
+
+echo "running $NODE_ID $FROM_PHASE"
+echo "rsi-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call rsi-await again with the same arguments." >&2
+exit 20

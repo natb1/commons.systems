@@ -260,6 +260,12 @@ jobs:
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run verify-landed tests
         run: packages/intentionsutil/scripts/test-verify-landed.sh
+      - name: Run rsi-claim tests
+        run: .claude/skills/rsi/scripts/test-rsi-claim.sh
+      - name: Run rsi-advance tests
+        run: .claude/skills/rsi/scripts/test-rsi-advance.sh
+      - name: Run rsi-await tests
+        run: .claude/skills/rsi/scripts/test-rsi-await.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
