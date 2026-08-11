@@ -64,11 +64,37 @@ rationale: "Found 2026-08-05 by the iteration-N+4 invariant audit, which asks of
   detect the checkout is behind origin/main -- the unknown-never-clear posture
   of tactic-probe-unknown-never-clear, applied to staleness."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Has the stale-store read actually been observed launching a real
+      session, and what makes it fire more often than the record implies?
+    answer: "(Recorded 2026-08-11 rsi iteration.) Yes — reproduced live, and the
+      pause makes it routine rather than rare. rsi-advance launched
+      tactic-pause-disables-merge-lane seconds after that node landed on
+      origin/main, and dispatch-graph-execute refused it with `stale-selection:
+      exists: ... is no longer in the store (pruned or removed)`, mapped to exit
+      10 `idle`. The node was on origin/main throughout; the main checkout was 4
+      commits behind (65d8952d against origin/main 790aaab2), so the gate read a
+      tree that predated the node. Fast-forwarding the main checkout by hand and
+      re-running launched it immediately. Two things this adds to the record
+      above. First, the failure is not only 'launch a worker onto a node parked
+      on origin/main' (a false positive); it is equally a false NEGATIVE — a
+      node that exists and is eligible reports as pruned, and the caller cannot
+      distinguish that from a genuine prune, so the correct-looking response is
+      to stop. Second, the freshness precondition is maintained only by
+      dispatch-select-tick, and dispatch-select-tick does not run while the
+      pause sentinel is present (dispatch-tick exits at :415, before every
+      dispatch-select-tick invocation at :638-642). So during a pause nothing
+      fast-forwards the main checkout, its store drifts further from origin/main
+      the longer the pause lasts, and every non-tick launch path — the
+      sanctioned manual `dispatch <node-id>` lane and rsi-advance alike — reads
+      a store that is stale by construction. The pause is exactly when
+      hand-dispatch is the prescribed mode, so the gate is least reliable
+      precisely when it is most used. Same root as
+      tactic-pause-disables-merge-lane: work that only dispatch-select-tick
+      performs stops silently while paused."
 tooling_goals: []
 success_signal: null
 attention:
