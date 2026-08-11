@@ -183,6 +183,13 @@ model still orders freely *inside* each band.
 
 ### Brownfield migration
 
+The greenfield/brownfield split above is **required structure**, not house
+style: `.claude/rules/design-proposals.md` binds every design change to lead
+with the design it would choose building from scratch, on its own terms and
+independent of migration cost, and to carry the migration path as a separate
+proposal. Do not tidy the two sections together — the separation is the rule
+being followed.
+
 1. Record the doctrine (**done** in the same round as this draft) and land a
    lint that flags a delegated `attention` write whose composed value
    inverts cross-strategy order within a tier. This is the same lint family

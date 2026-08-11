@@ -129,3 +129,40 @@ restate its rationale.
 8. Candidate, explicitly out of scope (author kept scope /align-only
    2026-08-11): extending the gate to /align-tactics' drafted plans via the
    same --review flag.
+9. **Round provenance has no home in the graph — a structural gap this
+   tactic must close** (added 2026-08-11, third round, from the review of
+   the namespaced-rank round: six of its ten completeness defects were all
+   this one gap). `/align`'s Step 5 orders the session to "record the
+   classification in this round's own record/summary — the scope-inert
+   verdict and the tactic ids re-stamped — as the audit trail the doctrine
+   requires", but names **no field** to record it in, and none exists.
+   `rounds` is not it: schema.ts declares it `/align-tactics` round
+   accounting (`{count, last_completed, last_aligned}`, strategies only,
+   `validateGraph` rule 12). `/align` writes only `attributes.conditions`,
+   `delegated`, `divergence`, and `irreversibility`. So every round's
+   freeze classification, delegation-sweep disposition, and gate-compliance
+   status survive only in session narrative and die with the session — and
+   the record-completeness contract (strategy clarification 31 / condition
+   7) says the graph is the **sole** carrier. The observed cost is
+   concrete: because the namespaced-rank round's freeze classification was
+   never recorded, nothing showed that its blast-radius scan covered only
+   children of `strategy-recursive-self-improvement`, and a contradiction
+   left standing on `strategy-graph-drives-dispatch` went unnoticed until
+   an adversarial reviewer found it.
+   Scope: add an `attributes.align_round` record on the aligned strategy —
+   date, requirement digest, freeze classification with its evidence set,
+   delegation-sweep disposition, and the review receipt from item 3 — and
+   make Step 5 write it. It is deliberately the same field the `--review`
+   receipt lands in, so a round that skipped review is visible as a missing
+   receipt rather than as an absence of any record at all. Note the
+   fingerprint interaction: like `priority_log` and `queue_summary`, this
+   field must be **exempt** from `strategyFingerprint`, or writing a
+   round's own provenance would freeze that strategy's open children.
+   Two provenance items are NOT in scope, having been judged
+   cheap-and-ad-hoc rather than structural: quoting the author's
+   requirement verbatim and naming a declined alternative both land as
+   ordinary clarification prose (done for that round at d7f306a7 and its
+   follow-up). And curriculum-enrollment status is deliberately **not**
+   recorded: Step 5 makes Mode B enrollment implicit and forbids a
+   per-node review schedule or side list, so an audit trail for it would
+   contradict the doctrine it audits.

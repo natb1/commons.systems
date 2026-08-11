@@ -496,7 +496,17 @@ clarifications:
       being subdivided. Recommending a direct tactic boost to the author is a
       misreading of this node; it is recorded because it happened in the
       2026-08-11 session that produced this clarification, and a fresh session
-      reading only the ownership clarification could repeat it."
+      reading only the ownership clarification could repeat it. The author's
+      requirement is preserved verbatim here, because later rounds disputing
+      this bound's exact shape should read the words and not a paraphrase: 'if I
+      modify the tactic boost directly that risks being overridden by the model
+      which owns delegated tactic ranking (within strategies owned by the
+      author). So, instead I communicate priorities by breaking down a parent
+      strategy into child strategies with each child augmenting the boost of the
+      parent.' And on the algebra, confirming round 1: 'tactic boost is always
+      scoped to a tier/parent strategy rank at that tier. strategy boost is
+      additive with parent strategy boost, not scoped to parent strategy, but
+      still scoped by tier.'"
   - question: What justifies a child strategy — does subdividing a parent purely to
       rank its tactics count?
     answer: "(Recorded 2026-08-11.) Yes. Subdividing a strategy in order to
@@ -513,7 +523,22 @@ clarifications:
       tactics is therefore consistent with doctrine, not a workaround for it.
       The accepted cost, named deliberately: ranking-only nodes enter the
       strategy layer, bounded by the own-success_signal requirement and by the
-      ordinary /align interview each such child must pass."
+      ordinary /align interview each such child must pass. PROVENANCE (recorded
+      2026-08-11, third round): this was the REFUSED branch, not a novel
+      requirement. The session recommended exempting a ranking-namespace child
+      from carrying its own success_signal, on the ground that its purpose is
+      ordering rather than a distinct outcome; the author declined the exemption
+      and required the signal. A later round proposing that exemption should
+      read it as already-decided and argue against the refusal, not present it
+      as new. The concrete work this clarification authorizes is also owed and
+      not yet done: subdividing strategy-recursive-self-improvement into two
+      children — one for rsi-plan.md, one for the
+      delegated-tactic-prioritization skill — boosted so the first ranks above
+      the second within the rsi subtree. The doctrine round was deliberately
+      sequenced ahead of it; the rerank that preceded both landed at c4974600
+      (boost 4 to 6), the doctrine at f1265dfa, its review dispositions at
+      d7f306a7. Each child owes its own interview, because each owes its own
+      success_signal."
   - question: "Steelman — should rank stay a flat global scale, with authority
       (owner: human) rather than structure as the author's channel?"
     answer: "(Diverged 2026-08-11, reasons recorded.) The rival is flat global
