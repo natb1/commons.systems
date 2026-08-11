@@ -4850,18 +4850,21 @@ rounds:
   last_aligned: 2026-08-10
 attributes:
   queue_summary:
-    date: "2026-08-10"
-    summary: >-
-      Paused under rsi pause authority; the tick's merge lane still runs, so
-      review-phase nodes keep landing while nothing new is selected. Backlog is
-      58/236 = 24.6%, inside the recorded 35% band and non-increasing across the
-      28d series (47.6% then 38.2% then 31.4% then 24.6%). The queue's mass is in
-      verification rather than construction — 31 of the 58 open nodes sit in qa
-      or main-qa against 12 in implement — so resuming adds implement-phase
-      arrivals to a queue whose bottleneck is downstream of them, and the band
-      alone is not the resume test. Resume is gated on R4's five recorded
-      criteria, re-measured at the time of the decision and never lifted early
-      without recording why.
+    date: 2026-08-11
+    summary: "Paused (`dispatch_pause_state` reads `paused`) and static: origin/main
+      advanced by exactly one commit since yesterday's render (0f2e1412 to
+      65d8952d, the rsi iteration itself), and the phase table is byte-identical
+      to it — 12 implement, 13 qa, 18 main-qa, 3 review. Backlog is 58/236 =
+      24.6%, inside the recorded 35% band and non-increasing across the 28d
+      series (47.6% then 38.2% then 31.4% then 24.6%) — but at this sample the
+      band is measuring a queue that is not moving rather than one that is
+      draining. The mass stays in verification: 31 of the 46 phase-set nodes sit
+      in qa or main-qa against 12 in implement, so the binding constraint on
+      resume is downstream of selection, not at it. Review holds three —
+      tactic-graph-commit-landing-signal-unreliable,
+      tactic-reap-safety-behind-branch-false-positive,
+      tactic-wait-calendar-release. Resume remains gated on the recorded
+      criteria, re-measured at the time of the decision."
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
       gh once the /align entry point (today /align-strategy, until

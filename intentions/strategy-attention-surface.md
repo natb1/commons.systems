@@ -37,7 +37,6 @@ rationale: "The office-hours surface was the materialization of several
   gh-router work already migrating office-hours off hosted Firestore drains in
   parallel; this strategy consumes its output rather than duplicating it."
 reading: null
-gap: null
 serves:
   - virtue-alignment-of-attachments
 recovers:
@@ -140,10 +139,10 @@ clarifications:
       drafted in tactic-office-hours-session-type."
   - question: Do the two deferrable session-type classes cover every whole class of
       sitting the author wants to defer, or is a third needed?
-    answer: "(Recorded 2026-07-25, author direction at the close of an
-      office-hours drain sweep. Amends the 2026-07-23 entry above by WIDENING its
-      closed enum; the ranking and selection doctrine is unchanged.) A third class
-      is needed: strategy-review. The enum becomes {requirement-discovery,
+    answer: "(Recorded 2026-07-25, author direction at the close of an office-hours
+      drain sweep. Amends the 2026-07-23 entry above by WIDENING its closed
+      enum; the ranking and selection doctrine is unchanged.) A third class is
+      needed: strategy-review. The enum becomes {requirement-discovery,
       curriculum-review, strategy-review, other}, still closed, still defaulting
       to other when absent. Its defining shape is that THE INPUT IS METRICS, NOT
       A QUESTION — the author reads numbers (budget figures, pace/velocity,
@@ -164,8 +163,8 @@ clarifications:
       tactic-office-hours-session-type (PR #2961) introduces the field and is
       itself parked at its qa-fix attempt cap, so the widening is filed
       separately at tactic-office-hours-session-type-strategy-review, blocked_by
-      it, which also backfills the parks labelled for this class in prose.
-      Until then the class is recorded in park prose only, deliberately:
+      it, which also backfills the parks labelled for this class in prose. Until
+      then the class is recorded in park prose only, deliberately:
       validateOfficeHours reconstructs a park from exactly {reason, since,
       recommendation}, so a session_type key written today is silently dropped
       rather than rejected, which would make a structured label a false record."
@@ -201,6 +200,7 @@ attention:
     strategy-graph-native-dispatch (boost 5): boost 3 ranks this strategy and
     its tactics above all derived-only ranks (cap 2) and below the dispatch
     migration."
+  tier: 1
 phase: null
 execution: null
 validates: []
@@ -213,20 +213,22 @@ rounds:
   last_aligned: null
 attributes:
   queue_summary:
-    date: "2026-08-10"
-    summary: >-
-      156 parked nodes, of which 6 are rank-lifted from work they block and 150
-      are not; 16 live nodes are held by a blocked_by edge onto a park. The
-      critical path is the lifted set — clearing those 6 releases named work —
-      but rank alone does not order this queue: the highest-ranked park
-      (tactic-drain-disposition-diagnosis-cas, 90.3, parked since 2026-07-28)
-      outranks every lifted one and blocks nothing. Two provision-conflict holds
-      (tactic-hold-conflict-autonomous-ci-pending-liveness-bound and
-      tactic-hold-conflict-scope-fingerprint-plan-substance) have no autonomous
-      re-attempt path — nothing re-runs conflict Lane 3 against an existing hold
-      — so they persist until a session is launched by hand. A third,
-      tactic-hold-conflict-strategy-fingerprint-stamp-coverage, resolved this way
-      on 2026-08-10 and its source is now in qa.
+    date: 2026-08-11
+    summary: "Unchanged from 2026-08-10: 156 parked, 6 rank-lifted from work they
+      block, 16 live nodes held by a blocked_by edge onto a park — nothing
+      cleared and nothing added, with dispatch paused and no office-hours
+      session run in between. Two holds are unclaimed past 2.6 days with no
+      autonomous re-attempt path (`list-unclaimed-hold-alerts`):
+      tactic-hold-conflict-autonomous-ci-pending-liveness-bound
+      (provision-conflict) and
+      tactic-hold-fix-cap-qa-fix-node-terminal-declaration (fix-attempt-cap),
+      both at rank 25.3 and parked 2026-08-09; a third,
+      tactic-hold-conflict-scope-fingerprint-plan-substance, sits unlifted at
+      5.3. Rank alone does not order this queue: the highest-ranked park,
+      tactic-drain-disposition-diagnosis-cas at 90.3 since 2026-07-28, blocks
+      nothing, while the lifted set that does release named work all ranks below
+      it. Measured office-hours spend over the 7d window is 4.2% of price proxy
+      against dispatch's 69.6%."
   conditions:
     - the local clone the surface reads stays fresh enough that attention and
       rank read from it track origin/main

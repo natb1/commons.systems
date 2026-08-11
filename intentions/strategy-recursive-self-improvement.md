@@ -243,24 +243,25 @@ pace_exempt: false
 rounds: null
 attributes:
   queue_summary:
-    date: "2026-08-10"
-    summary: >-
-      R2 shipped — /rsi, /rsi-plan, render-rsi-plan.ts and the claim primitive
-      landed in #3065 — so this file is rendered from graph state rather than
-      transcribed from a session's measurements. This iteration corrected two
-      defects that only the first real render could expose: the renderer dropped
-      the bug-ledger pointer, now carried as graph data in
-      attributes.external_ledgers and rendered as section 7; and the rsi sensor
-      had silently de-registered when 47219a1a reworded this node's
-      success_signal.sensor prose, which the registry matches
-      character-for-character. R3 (tactic-rsi-implement-skill, cost 1) is the
-      next task and the only queued one that spends budget. rsi tasks are never
-      dispatch-delegated — the rsi session executes them itself, serialized on
-      this strategy's worktree claim.
+    date: 2026-08-11
+    summary: "R2 landed as #3066 (65d8952d) and both of its task nodes are now phase
+      done — tactic-rsi-plan-skill and tactic-rsi-skill — so the only remaining
+      budgeted item is R3. R3, tactic-rsi-implement-skill (rsi_cost 1), is in
+      flight but not landed: the branch tactic-rsi-implement-skill is pushed at
+      05073b83, one commit ahead of origin/main, adding
+      .claude/skills/rsi/scripts/rsi-advance and rsi-await with their shell
+      tests and a unit-tests workflow entry (6 files, +1100/-12); the node's own
+      phase is still null. The remaining drafts are tactic-rsi-research-skill
+      and tactic-dispatch-skill-standards-extraction, both cost 0;
+      tactic-review-tradition-agentic-engineering is born-parked for an
+      office-hours sitting and is not claude-executable. rsi's own measured 7d
+      spend renders as 0.0% because no turn in the window carried an `rsi` or
+      `rsi-plan` attribution skill — the aggregate's largest single bucket is
+      `<none>` at 4747.37 price proxy over 12008 turns, so the workflow split
+      understates rsi rather than showing it spent nothing."
   external_ledgers:
-    - path: "~/.claude/plans/task-notification-task-id-bwopwgmr1-tas-lucky-parasol.md"
-      note: >-
-        Prototype-session operating record. Still the sole carrier for the
+    - path: ~/.claude/plans/task-notification-task-id-bwopwgmr1-tas-lucky-parasol.md
+      note: Prototype-session operating record. Still the sole carrier for the
         numbered operational invariants I13-I30, the graph-write and --base CAS
         recipes, the reap traps, and the sandbox rules — this graph carries the
         strategy, not the operations. Most STANDING invariants are independently
