@@ -268,20 +268,20 @@ success_signal:
     content
   is_proxy: true
 attention:
-  boost: 7
+  boost: 3.5
   override: null
-  rationale: "Author-directed 2026-07-09: elevate the curriculum-frontier /
-    graph-review-coverage machinery to the established curriculum tier (authored
-    7 — the level of tactic-reading-review-skill and tactic-sync-reader-skill).
-    Boosting the strategy carries the tier to its whole subtree by inheritance:
-    the three tactics serving it (tactic-review-curriculum-coverage-sensor,
+  rationale: "Author-directed 2026-08-11: re-rank the curriculum-frontier /
+    graph-review-coverage machinery to sit after the rsi strategy (boost 4)
+    and before strategy-attention-surface (boost 3) — supersedes the 2026-07-09
+    rationale that elevated this strategy to authored 7. Boosting the strategy
+    carries the tier to its whole subtree by inheritance: the three tactics
+    serving it (tactic-review-curriculum-coverage-sensor,
     tactic-align-curriculum-maintenance,
-    tactic-review-sitting-skill-generalization) inherit authored 7 with no
-    per-node boost. The strategy itself resolves to 8 (authored 7 + the
-    structural signal term) — expected for a human-owned root and left unfought.
-    Scope is the frontier-maintenance machinery, not the curriculum's per-class
-    review mechanisms/entries (reading chunks, deferral items, delegation review
-    windows, the conditions sweep) which stay unboosted."
+    tactic-review-sitting-skill-generalization) inherit authored 3.5 with no
+    per-node boost. Scope is unchanged: the frontier-maintenance machinery,
+    not the curriculum's per-class review mechanisms/entries (reading chunks,
+    deferral items, delegation review windows, the conditions sweep) which
+    stay unboosted."
 phase: null
 execution: null
 validates: []

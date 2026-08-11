@@ -460,7 +460,16 @@ success_signal:
     consecutive rsi iterations complete with zero critical-path blockers
     requiring shortcut implementation
   is_proxy: true
-attention: null
+attention:
+  boost: 4
+  override: null
+  rationale: "Author-directed 2026-08-11: rank the rsi strategy just below
+    strategy-graph-native-dispatch (authored boost 5, tier 1) — the router
+    migration stays the top priority, but the recursive-self-improvement loop
+    that maintains rsi-plan.md and shortcuts critical-path harness work should
+    outrank every other tier-1 strategy, including strategy-graph-review-curriculum
+    (boost 3.5) and strategy-attention-surface (boost 3)."
+  tier: 1
 phase: null
 execution: null
 validates: []
