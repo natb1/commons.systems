@@ -1,6 +1,6 @@
 # rsi-plan
 
-> **Generated file — do not hand-edit.** Rendered by `packages/intentionsutil/scripts/render-rsi-plan.ts` on 2026-08-10 from the intention store at `origin/main` (`0f2e1412`).
+> **Generated file — do not hand-edit.** Rendered by `packages/intentionsutil/scripts/render-rsi-plan.ts` on 2026-08-11 from the intention store at `origin/main` (`4d103b41`).
 >
 > Single writer: the `/rsi` skill, serialized on the `strategy-recursive-self-improvement` worktree claim, direct-pushed to main (`strategy-recursive-self-improvement` condition 5). The graph is the sole tracker — every section here is derived, and a hand-edited section is a defect. To change what this file says, change the graph and re-render.
 
@@ -25,9 +25,9 @@ move an item, author an `attention` boost or a tier on its node.
 
 ## 2. Dispatch queue — delegated priorities
 
-**dispatch queue summary** (drafted 2026-08-10, source of truth `strategy-graph-native-dispatch`):
+**dispatch queue summary** (drafted 2026-08-11, source of truth `strategy-graph-native-dispatch`):
 
-Paused under rsi pause authority; the tick's merge lane still runs, so review-phase nodes keep landing while nothing new is selected. Backlog is 58/236 = 24.6%, inside the recorded 35% band and non-increasing across the 28d series (47.6% then 38.2% then 31.4% then 24.6%). The queue's mass is in verification rather than construction — 31 of the 58 open nodes sit in qa or main-qa against 12 in implement — so resuming adds implement-phase arrivals to a queue whose bottleneck is downstream of them, and the band alone is not the resume test. Resume is gated on R4's five recorded criteria, re-measured at the time of the decision and never lifted early without recording why.
+Paused (`dispatch_pause_state` reads `paused`) and static: origin/main advanced by exactly one commit since yesterday's render (0f2e1412 to 65d8952d, the rsi iteration itself), and the phase table is byte-identical to it — 12 implement, 13 qa, 18 main-qa, 3 review. Backlog is 58/236 = 24.6%, inside the recorded 35% band and non-increasing across the 28d series (47.6% then 38.2% then 31.4% then 24.6%) — but at this sample the band is measuring a queue that is not moving rather than one that is draining. The mass stays in verification: 31 of the 46 phase-set nodes sit in qa or main-qa against 12 in implement, so the binding constraint on resume is downstream of selection, not at it. Review holds three — tactic-graph-commit-landing-signal-unreliable, tactic-reap-safety-behind-branch-false-positive, tactic-wait-calendar-release. Resume remains gated on the recorded criteria, re-measured at the time of the decision.
 
 Backlog band: **24.6%** (58/236 tactics serving `strategy-graph-native-dispatch`; recorded threshold 35% and non-increasing).
 
@@ -40,9 +40,9 @@ Backlog band: **24.6%** (58/236 tactics serving `strategy-graph-native-dispatch`
 
 ## 3. Office-hours queue — parked nodes on the critical path
 
-**office-hours queue summary** (drafted 2026-08-10, source of truth `strategy-attention-surface`):
+**office-hours queue summary** (drafted 2026-08-11, source of truth `strategy-attention-surface`):
 
-156 parked nodes, of which 6 are rank-lifted from work they block and 150 are not; 16 live nodes are held by a blocked_by edge onto a park. The critical path is the lifted set — clearing those 6 releases named work — but rank alone does not order this queue: the highest-ranked park (tactic-drain-disposition-diagnosis-cas, 90.3, parked since 2026-07-28) outranks every lifted one and blocks nothing. Two provision-conflict holds (tactic-hold-conflict-autonomous-ci-pending-liveness-bound and tactic-hold-conflict-scope-fingerprint-plan-substance) have no autonomous re-attempt path — nothing re-runs conflict Lane 3 against an existing hold — so they persist until a session is launched by hand. A third, tactic-hold-conflict-strategy-fingerprint-stamp-coverage, resolved this way on 2026-08-10 and its source is now in qa.
+Unchanged from 2026-08-10: 156 parked, 6 rank-lifted from work they block, 16 live nodes held by a blocked_by edge onto a park — nothing cleared and nothing added, with dispatch paused and no office-hours session run in between. Two holds are unclaimed past 2.6 days with no autonomous re-attempt path (`list-unclaimed-hold-alerts`): tactic-hold-conflict-autonomous-ci-pending-liveness-bound (provision-conflict) and tactic-hold-fix-cap-qa-fix-node-terminal-declaration (fix-attempt-cap), both at rank 25.3 and parked 2026-08-09; a third, tactic-hold-conflict-scope-fingerprint-plan-substance, sits unlifted at 5.3. Rank alone does not order this queue: the highest-ranked park, tactic-drain-disposition-diagnosis-cas at 90.3 since 2026-07-28, blocks nothing, while the lifted set that does release named work all ranks below it. Measured office-hours spend over the 7d window is 4.2% of price proxy against dispatch's 69.6%.
 
 Canonical source: `office-hours-select.ts --list`, read at the same ref as the
 rest of this render. Parked blockers are already rank-lifted from what they
@@ -99,11 +99,17 @@ deviation from that is itself a review trigger, not a datum to note and pass.
 | `strategy-token-economy` | utilization: 27% weekly; tactics 28d: 310 created / 226 closed (net +84) | utilization near 100% of the weekly allowance while open claude-eligible tactics are non-increasing (closure at or above arrival); full utilization with a growing backlog fails th… | shortfall |
 | `tactic-main-red-ac908454` | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | green: every check on the current origin/main HEAD concludes success (or neutral/skipped) | **met** |
 
-**Per-workflow token attribution** — *unavailable.* No usage aggregate was
-read for this render. `/rsi-plan` produces one with
-`.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh --days 7
---json-out tmp/usage-audit.json` before rendering. An absent aggregate is
-reported, never rendered as zero spend.
+**Per-workflow token attribution** (window 7d, from
+`aggregate-usage.sh`'s per-skill `by_phase` buckets folded by `WORKFLOW_SKILLS`,
+`src/rsi.ts`). `price_proxy_usd` holds price constant to compare token volume;
+`cost_usd` is the truthful per-model bill.
+
+| workflow | share | price proxy (USD) | cost (USD) | turns |
+|---|---|---|---|---|
+| dispatch | 69.6% | 13638.02 | 3073.92 | 45247 |
+| office-hours | 4.2% | 814.94 | 336.40 | 1968 |
+| rsi | 0.0% | 0.00 | 0.00 | 0 |
+| other | 26.2% | 5139.78 | 1551.11 | 14018 |
 
 ## 5. Recommended additional telemetry
 
@@ -133,9 +139,9 @@ listed here.
 
 ## 6. RSI task plan
 
-**rsi queue summary** (drafted 2026-08-10, source of truth `strategy-recursive-self-improvement`):
+**rsi queue summary** (drafted 2026-08-11, source of truth `strategy-recursive-self-improvement`):
 
-R2 shipped — /rsi, /rsi-plan, render-rsi-plan.ts and the claim primitive landed in #3065 — so this file is rendered from graph state rather than transcribed from a session's measurements. This iteration corrected two defects that only the first real render could expose: the renderer dropped the bug-ledger pointer, now carried as graph data in attributes.external_ledgers and rendered as section 7; and the rsi sensor had silently de-registered when 47219a1a reworded this node's success_signal.sensor prose, which the registry matches character-for-character. R3 (tactic-rsi-implement-skill, cost 1) is the next task and the only queued one that spends budget. rsi tasks are never dispatch-delegated — the rsi session executes them itself, serialized on this strategy's worktree claim.
+R2 landed as #3065/#3066 and both of its task nodes are now phase done — tactic-rsi-plan-skill and tactic-rsi-skill. R3, tactic-rsi-implement-skill (rsi_cost 1, the only budgeted item left), landed its code mid-iteration as #3067 (6dbdf63c): .claude/skills/rsi/scripts/rsi-advance and rsi-await with their shell tests and a unit-tests workflow entry, 6 files, +1100/-12. The node itself is not closed out — status raw, phase null, no execution record — so the graph does not yet carry the completion its merged code implies. The remaining drafts are tactic-rsi-research-skill and tactic-dispatch-skill-standards-extraction, both cost 0; tactic-review-tradition-agentic-engineering is born-parked for an office-hours sitting and is not claude-executable. rsi's own measured 7d spend renders as 0.0% because no turn in the window carried an `rsi` or `rsi-plan` attribution skill — the aggregate's largest single bucket is `<none>` at 4747.37 price proxy over 12008 turns, so the workflow split understates rsi rather than showing it spent nothing.
 
 Every task is a graph node serving `strategy-recursive-self-improvement` — the graph is the
 sole tracker, so a task that is not a node does not exist. Budget: a session's
