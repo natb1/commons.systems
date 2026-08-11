@@ -17,12 +17,19 @@ rationale: "The pivotal delegation of the present conditions: tactical software
   vendor's growth, which is not a virtue held here; the owned budgeting pipeline
   (strategy-recover-finance) is what keeps that import visible."
 reading: null
-gap: null
 serves:
   - strategy-owned-orchestration
   - strategy-recover-author-autonomy
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does the delegation include prioritization of the delegated work?
+    answer: "(Recorded 2026-08-11 /align round on
+      strategy-recursive-self-improvement.) Extended to include it: the model
+      orders its own delegated work queue — a self-curation-shaped widening of
+      the attachment. Mitigations recorded on that strategy: per-node priority
+      logs with dated rationales, fitness-function post-hoc audit, author
+      override at the strategy level, and strategies plus owner: human tactics
+      untouchable."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -35,8 +42,10 @@ pace_exempt: false
 rounds: null
 attributes:
   delegatee: Anthropic (Claude) — vendor institution supplying a construction tool
-  delegated: software construction — tactical execution of build and change work
-    across the repo
+  delegated: "software construction — tactical execution of build and change work
+    across the repo, and tactical prioritization of dispatch-delegated work —
+    ordering owner: ai tactics toward the recorded fitness function (extended
+    2026-08-11, strategy-recursive-self-improvement round)"
   origin: chosen
   divergence:
     level: low-moderate

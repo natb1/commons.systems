@@ -1,0 +1,69 @@
+---
+id: tactic-priority-provenance-schema
+kind: tactic
+statement: Document and validate the delegated-priority machinery —
+  attributes.priority_log and attributes.rsi_task on kind-tactic,
+  ownership-boundary and marks-asymmetry lint in validate-graph
+owner: ai
+status: raw
+parent: null
+rationale: "Surfaced in the 2026-08-11 /align interview: the priority-delegation
+  boundary is node-ownership-based (no attention schema change), but the two new
+  attributes need kind-tactic documentation and the boundary deserves a
+  mechanical lint."
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+  - strategy-graph-drives-dispatch
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# Document and validate the delegated-priority machinery — attributes.priority_log and attributes.rsi_task on kind-tactic, ownership-boundary and marks-asymmetry lint in validate-graph
+## Draft context (2026-08-11 /align interview)
+
+- kind-tactic documents attributes.priority_log ({date, old→new, rationale}
+  entries, append-only, capped ~10) and attributes.rsi_task ({type,
+  reasoning, cost?}) as model-writable, fingerprint-exempt fields (the
+  queue_summary precedent). Document that the anti-thrash rule binds within
+  the log's retained window (an entry scrolled off the cap no longer
+  constrains). Document rsi_task.cost semantics: implementation type ⇒
+  derived cost 1, declared cost ignored/flagged; other types default 0.
+  The legacy standalone attributes.rsi_cost is retired (carriers repointed
+  by tactic-rsi-plan-priority-render); a standalone rsi_cost is a lint
+  violation thereafter.
+- Verify (and if needed make) both fields exempt from the substance
+  fingerprints: strategyFingerprint for strategies and the tactic scope
+  fingerprint, so an iteration's reprioritization/re-derivation never
+  freezes open children or trips scope custody.
+- validate-graph lint candidates: a priority_log on a strategy/virtue node
+  or on an owner: human tactic is a boundary violation (model priority
+  writes are only legal on owner: ai tactics); a log entry without date or
+  rationale; rsi_task.type=implementation on a node whose declared
+  rsi_task.cost contradicts the derived cost 1; a standalone legacy
+  rsi_cost field (retired — repoint to rsi_task.cost).
+- VERIFY within-tier ordering semantics against the recorded doctrine
+  (strategy-recursive-self-improvement, 2026-08-11 tier/rank-composition
+  clarification): tier takes precedence globally; within a tier, tactics of
+  higher-ranked strategies order before tactics of lower-ranked strategies.
+  attention.ts's tier-isolation filter (~lines 531–534) appears to drop a
+  lower-tier distributing strategy's contribution from a higher-tier
+  node's value, which would break the within-tier ordering. If confirmed,
+  that is a defect against the recorded semantics: draft a bug_fix tactic
+  (it is itself the queue-integrity class the fitness function
+  front-loads).
+- The marks asymmetry (bug_fix/security may be added, never
+  removed/downgraded, by model priority writes) is behavioral doctrine on
+  strategy-recursive-self-improvement; lint what is mechanically checkable
+  (e.g. a diff-time check is out of scope for validate-graph — note where
+  it could live, e.g. graph-commit review or CI diff lint).
