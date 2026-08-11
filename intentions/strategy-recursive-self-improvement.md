@@ -392,6 +392,21 @@ attributes:
       failure shape of a lane that drafts from external findings and then judges
       its own output. Build detail and the lane's spec corrections are recorded
       on tactic-rsi-research-skill."
+    - "every rsi-implement task ends with a recorded acceleration review, inside
+      the same task and at no extra budget cost: once the node reaches its
+      terminus for the session, the observed execution is evaluated for
+      optimizations to rsi shortcut implementation and to implementation in
+      general — phase wall-clock against the await window, failed or wasted
+      launch cycles, repeated operator interventions, round trips that produced
+      no code change, and CI/fix-lane spend — and every finding lands in the
+      graph in that same session as a tactic, or as a dated clarification on an
+      existing node when one already covers it. The review is performed after
+      the implementation reaches its terminus, never interleaved with it, so it
+      evaluates observed results rather than predictions. A session that reports
+      an rsi-implement outcome with no recorded review, or that leaves its
+      findings in session prose only, is a defect — the graph is the sole
+      tracker, so an unrecorded acceleration finding is indistinguishable from
+      one never made."
   pause:
     state: paused
     since: 2026-08-10
