@@ -372,6 +372,26 @@ attributes:
       born-parked items (candidate chunks, review items) accumulating across
       cycles without an office-hours sitting is a review trigger recorded in the
       rsi-plan, never silent debt"
+    - "tactics the research lane drafts without author intervention always
+      require qa-main validation before they count as validating this strategy:
+      each lane-drafted tactic cites the reference finding that motivated it and
+      states that reference's claimed effect in terms the graph's existing
+      sensors already observe (per-workflow token attribution, tactic closure
+      velocity, this strategy's own success_signal thresholds); qa-main verifies
+      the landed change actually produces that stated effect, and a change that
+      lands cleanly without producing it is recorded as a refuted hypothesis
+      rather than a validating success; a finding whose claimed effect cannot be
+      stated observably is not draftable as a tactic at all and goes to a
+      born-parked candidate chunk for an author sitting instead. This is the
+      operational form of the 2026-08-10 endogenous-primacy clarification — the
+      external finding enters as a hypothesis and this harness's own telemetry
+      is what accepts or refutes it — and it supplies the outside-the-loop
+      acceptance signal that self-authored verification cannot: the 2026-08-11
+      dry run found that across 35 self-improvement runs every run self-reported
+      a passing score while 43% actually scored below random baseline, the exact
+      failure shape of a lane that drafts from external findings and then judges
+      its own output. Build detail and the lane's spec corrections are recorded
+      on tactic-rsi-research-skill."
   pause:
     state: paused
     since: 2026-08-10
