@@ -3,7 +3,7 @@
 > ## ⚠ HAND-AUTHORED TARGET-STATE RENDER — 2026-08-11
 >
 > **This revision was not produced by `render-rsi-plan.ts`.** It was written by
-> hand, on 2026-08-11, from the intention store at `origin/main` (`869ba4e4`),
+> hand, on 2026-08-11, from the intention store at `origin/main` (`42bb99b9`),
 > to show the shape this document is *supposed* to have once the renderer
 > catches up with the format contract that landed in `869ba4e4`.
 >
@@ -14,7 +14,7 @@
 > it with the *old* shape. That is expected; do not treat the regression as a
 > defect in this revision.
 >
-> Every number below is derived from the live graph at `869ba4e4` — nothing is
+> Every number below is derived from the live graph at `42bb99b9` — nothing is
 > invented. What is hand-done is the *layout*, not the data.
 >
 > Normal contract, suspended for this one revision: `rsi-plan.md` is a derived
@@ -69,6 +69,22 @@ settle, and which the graph does not currently decide:
   count widens to match the row set, or the disagreement is recorded as
   intended.
 
+**Ranking provenance for this render.** The row order below reflects
+`42bb99b9`, which compressed the authored `attention.boost` magnitude on 42
+open tactics onto a `0.01`-per-level ladder so a tactic boost can no longer lift
+a node out of its parent strategy's band. That is a **stopgap**: the bound it
+enforces is doctrine-only today, because `resolveAttention`'s authored term is
+still a flat additive sum. Making it structural — ordering by
+`(tier, band, residual)` — is tracked at `tactic-attention-namespaced-rank`
+(row 9 below). Two rows still cross their band on inherited value alone, with no
+boost to compress, and no boost edit can reach them:
+`tactic-dispatch-skill-standards-extraction` (row 12, value 11.33 in band 7) and
+`tactic-office-hours-graph-type-passthrough` (row 21, value 8.5 in band 6.33).
+Both serve several strategies, and `resolveAttention` sums the authored
+contributions of every distributor where the recorded doctrine says take the
+maximum. They are visible in the table as rows that sort above their own group's
+lead — the clearest reason to land `tactic-attention-namespaced-rank`.
+
 ## 1–3. Priorities — merged table
 
 *(Was: §1 top author priorities, §2 dispatch queue, §3 office-hours parked
@@ -82,6 +98,11 @@ Paused (`dispatch_pause_state` reads `paused`) and static: origin/main advanced 
 **office-hours queue summary** (drafted 2026-08-11, source of truth `strategy-attention-surface`):
 
 Unchanged from 2026-08-10: 156 parked, 6 rank-lifted from work they block, 16 live nodes held by a blocked_by edge onto a park — nothing cleared and nothing added, with dispatch paused and no office-hours session run in between. Two holds are unclaimed past 2.6 days with no autonomous re-attempt path (`list-unclaimed-hold-alerts`): tactic-hold-conflict-autonomous-ci-pending-liveness-bound (provision-conflict) and tactic-hold-fix-cap-qa-fix-node-terminal-declaration (fix-attempt-cap), both at rank 25.3 and parked 2026-08-09; a third, tactic-hold-conflict-scope-fingerprint-plan-substance, sits unlifted at 5.3. Rank alone does not order this queue: the highest-ranked park, tactic-drain-disposition-diagnosis-cas at 90.3 since 2026-07-28, blocks nothing, while the lifted set that does release named work all ranks below it. Measured office-hours spend over the 7d window is 4.2% of price proxy against dispatch's 69.6%.
+
+*(Both summaries are carried verbatim from `attributes.queue_summary` on their
+owning strategies, as the render contract requires. They were drafted before
+`42bb99b9` and quote the pre-compression rank magnitudes — 90.3, 25.3, 5.3 —
+which no longer exist. The next `/rsi-plan` pass redrafts them.)*
 
 **Backlog band:** 24.9% (61/245 tactics serving `strategy-graph-native-dispatch`;
 recorded threshold 35% and non-increasing).
@@ -136,26 +157,26 @@ page, which is the property that makes the table worth reading.
 | 20. `tactic-rsi-research-skill`<br/>Build the /rsi-research skill and its weekly harness-cron schedule — the scheduled /deep-research sensor lane… | `— (draft)` | delegated |  | 2026-08-13 |
 | **Tier 1 · strategy-explicit-intent › strategy-graph-drives-dispatch › strategy-graph-native-dispatch** | | | | **2026-08-17** |
 | _resolved rank 6.33 · open children (all tiers): 49 · rows in this band: 163_ | | | | |
-| 21. `tactic-lane-instrument-substitution-guard`<br/>Fail a dispatch lane that cannot invoke its named instrument, instead of letting the agent substitute itself … | `main-qa` | delegated | parked — since 2026-07-31 | 2026-08-14 |
-| 22. `tactic-demote-node-stale-local-read`<br/>Make graph-script repo-root resolution uniform and explicit — today demote-node-to-implement and dump-node.ts… | `— (draft)` | delegated |  | 2026-08-14 |
-| 23. `tactic-graph-auto-merge-up-to-date-gate`<br/>graph-auto-merge merges only a PR whose branch is current with origin/main and whose passing checks ran on th… | `implement` | delegated |  | 2026-08-14 |
-| 24. `tactic-graph-tick-node-lane-auto-merge`<br/>Tick reconciler owns a single label-free, CI-validated auto-merge of a reviewed node-lane PR, keyed off the n… | `main-qa` | delegated | parked (blocks dispatch) — since 2026-08-05 | 2026-08-14 |
-| 25. `tactic-hold-conflict-scope-fingerprint-plan-substance`<br/>hold: provision-conflict on `tactic-scope-fingerprint-plan-substance` — a tracked hold blocking the source un… | `— (born-parked)` | delegated | parked (blocks dispatch) — since 2026-08-09 | 2026-08-14 |
-| 26. `tactic-node-merge-list-removal-loss`<br/>graph-commit's layer-2 field-level merge cannot express a REMOVAL: the base-free list union silently restores… | `implement` | delegated | parked — since 2026-07-31 | 2026-08-14 |
-| 27. `tactic-phase-evidence-fingerprint-bound`<br/>Bind phase-completion evidence (phase-log entry, qa-done marker, QA PR comment) to the scope fingerprint it w… | `qa` | delegated |  | 2026-08-14 |
-| 28. `tactic-phase-terminal-requires-disposition`<br/>A phase skill that terminates on a needs-human judgment item must land an office_hours park before exiting — … | `main-qa` | delegated | parked — since 2026-08-05 | 2026-08-14 |
-| 29. `tactic-qa-main-park-base-cas`<br/>/qa-main's cannot-verify Stop-hook park calls park-node with no --base CAS, so an in-flight qa-main session c… | `qa` | delegated | parked — since 2026-07-31 | 2026-08-15 |
-| 30. `tactic-reap-session-worktree-classification`<br/>Classify a reap candidate as having-a-node-worktree versus running-at-the-repo-root before the sweep resolves… | `— (draft)` | delegated |  | 2026-08-15 |
-| 31. `tactic-scope-fingerprint-plan-substance`<br/>Scope tacticScopeFingerprint to PLAN SUBSTANCE only, excluding machinery-appended body sections, so no machin… | `qa` | delegated |  | 2026-08-15 |
-| 32. `tactic-autonomous-ci-pending-liveness-bound`<br/>Bound pending CI on the autonomous dispatch path — a node whose checks never start or whose run is cancelled … | `qa` | delegated |  | 2026-08-15 |
-| 33. `tactic-blocked-session-invisible-to-census`<br/>The reap/health census classifies sessions on `state: done` alone, so a session in any other non-`working` st… | `qa` | delegated |  | 2026-08-15 |
-| 34. `tactic-claim-containment-durable-anchor`<br/>Anchor a claimed node's freeze in durable state rather than the daemon-backed session registry, so a registry… | `— (draft)` | delegated |  | 2026-08-15 |
-| 35. `tactic-conflict-lane-exit11-retry-bound`<br/>Bound the exit-11 conflict-lane kicks: a Lane 3 dispatch-conflict session that stops without declaring a term… | `qa` | delegated | parked — since 2026-08-03 | 2026-08-15 |
-| 36. `tactic-conflict-outranks-ci-precedence`<br/>Make the normal selection path check mergeable BEFORE writing execution.fix, so a CONFLICTING-and-red node ro… | `main-qa` | delegated | parked — since 2026-08-03 | 2026-08-15 |
-| 37. `tactic-dispatch-config-untracked-pace-curve`<br/>dispatch.config/target-workers.json — the pace curve every scheduling decision reads, and today the sole gate… | `— (born-parked)` | delegated | parked — since 2026-08-05 | 2026-08-16 |
-| 38. `tactic-graph-execute-fresh-main-read`<br/>The node-selection gate must perform its own origin/main freshness read so every caller inherits it -- today … | `qa` | delegated |  | 2026-08-16 |
-| 39. `tactic-hold-conflict-autonomous-ci-pending-liveness-bound`<br/>hold: provision-conflict on `tactic-autonomous-ci-pending-liveness-bound` — a tracked hold blocking the sourc… | `— (born-parked)` | delegated | parked (blocks dispatch) — since 2026-08-09 | 2026-08-16 |
-| 40. `tactic-hold-fix-cap-qa-fix-node-terminal-declaration`<br/>hold: fix-attempt-cap on `tactic-qa-fix-node-terminal-declaration` — a tracked hold blocking the source until… | `— (born-parked)` | delegated | parked (blocks dispatch) — since 2026-08-09 | 2026-08-16 |
+| 21. `tactic-office-hours-graph-type-passthrough`<br/>Plumb --type <session-type> through the office-hours-graph entry point so the session-type filter is reachabl… | `— (born-parked)` | delegated | parked — since 2026-08-04 | 2026-08-14 |
+| 22. `tactic-lane-instrument-substitution-guard`<br/>Fail a dispatch lane that cannot invoke its named instrument, instead of letting the agent substitute itself … | `main-qa` | delegated | parked — since 2026-07-31 | 2026-08-14 |
+| 23. `tactic-demote-node-stale-local-read`<br/>Make graph-script repo-root resolution uniform and explicit — today demote-node-to-implement and dump-node.ts… | `— (draft)` | delegated |  | 2026-08-14 |
+| 24. `tactic-graph-auto-merge-up-to-date-gate`<br/>graph-auto-merge merges only a PR whose branch is current with origin/main and whose passing checks ran on th… | `implement` | delegated |  | 2026-08-14 |
+| 25. `tactic-graph-tick-node-lane-auto-merge`<br/>Tick reconciler owns a single label-free, CI-validated auto-merge of a reviewed node-lane PR, keyed off the n… | `main-qa` | delegated | parked (blocks dispatch) — since 2026-08-05 | 2026-08-14 |
+| 26. `tactic-hold-conflict-scope-fingerprint-plan-substance`<br/>hold: provision-conflict on `tactic-scope-fingerprint-plan-substance` — a tracked hold blocking the source un… | `— (born-parked)` | delegated | parked (blocks dispatch) — since 2026-08-09 | 2026-08-14 |
+| 27. `tactic-node-merge-list-removal-loss`<br/>graph-commit's layer-2 field-level merge cannot express a REMOVAL: the base-free list union silently restores… | `implement` | delegated | parked — since 2026-07-31 | 2026-08-14 |
+| 28. `tactic-phase-evidence-fingerprint-bound`<br/>Bind phase-completion evidence (phase-log entry, qa-done marker, QA PR comment) to the scope fingerprint it w… | `qa` | delegated |  | 2026-08-14 |
+| 29. `tactic-phase-terminal-requires-disposition`<br/>A phase skill that terminates on a needs-human judgment item must land an office_hours park before exiting — … | `main-qa` | delegated | parked — since 2026-08-05 | 2026-08-15 |
+| 30. `tactic-qa-main-park-base-cas`<br/>/qa-main's cannot-verify Stop-hook park calls park-node with no --base CAS, so an in-flight qa-main session c… | `qa` | delegated | parked — since 2026-07-31 | 2026-08-15 |
+| 31. `tactic-reap-session-worktree-classification`<br/>Classify a reap candidate as having-a-node-worktree versus running-at-the-repo-root before the sweep resolves… | `— (draft)` | delegated |  | 2026-08-15 |
+| 32. `tactic-scope-fingerprint-plan-substance`<br/>Scope tacticScopeFingerprint to PLAN SUBSTANCE only, excluding machinery-appended body sections, so no machin… | `qa` | delegated |  | 2026-08-15 |
+| 33. `tactic-autonomous-ci-pending-liveness-bound`<br/>Bound pending CI on the autonomous dispatch path — a node whose checks never start or whose run is cancelled … | `qa` | delegated |  | 2026-08-15 |
+| 34. `tactic-blocked-session-invisible-to-census`<br/>The reap/health census classifies sessions on `state: done` alone, so a session in any other non-`working` st… | `qa` | delegated |  | 2026-08-15 |
+| 35. `tactic-claim-containment-durable-anchor`<br/>Anchor a claimed node's freeze in durable state rather than the daemon-backed session registry, so a registry… | `— (draft)` | delegated |  | 2026-08-15 |
+| 36. `tactic-conflict-lane-exit11-retry-bound`<br/>Bound the exit-11 conflict-lane kicks: a Lane 3 dispatch-conflict session that stops without declaring a term… | `qa` | delegated | parked — since 2026-08-03 | 2026-08-15 |
+| 37. `tactic-conflict-outranks-ci-precedence`<br/>Make the normal selection path check mergeable BEFORE writing execution.fix, so a CONFLICTING-and-red node ro… | `main-qa` | delegated | parked — since 2026-08-03 | 2026-08-16 |
+| 38. `tactic-dispatch-config-untracked-pace-curve`<br/>dispatch.config/target-workers.json — the pace curve every scheduling decision reads, and today the sole gate… | `— (born-parked)` | delegated | parked — since 2026-08-05 | 2026-08-16 |
+| 39. `tactic-graph-execute-fresh-main-read`<br/>The node-selection gate must perform its own origin/main freshness read so every caller inherits it -- today … | `qa` | delegated |  | 2026-08-16 |
+| 40. `tactic-hold-conflict-autonomous-ci-pending-liveness-bound`<br/>hold: provision-conflict on `tactic-autonomous-ci-pending-liveness-bound` — a tracked hold blocking the sourc… | `— (born-parked)` | delegated | parked (blocks dispatch) — since 2026-08-09 | 2026-08-16 |
 
 > **This table is truncated.** It shows rows **1–40 of 388** unfinished tactics,
 > and **8 of 48** strategy group headers. The cut falls *inside* the tier-1
@@ -281,7 +302,7 @@ deadlock to unblock, and so on.
 | `tactic-rsi-research-skill` | — *not recorded* | 0 | — | — *not recorded* | Build the /rsi-research skill and its weekly harness-cron schedule — the scheduled /deep-research sensor lane… |
 | `tactic-rsi-skill` | — *not recorded* | 0 | `done` | — *not recorded* | Build the /rsi skill — the serialized recursive-self-improvement iteration loop |
 
-**Flags this section raises at 869ba4e4.** No node in the graph carries an
+**Flags this section raises at `42bb99b9`.** No node in the graph carries an
 `attributes.rsi_task` object yet, so `type` and `reasoning` are empty on every
 row and every derived cost falls to the type-less default of 0 — including
 `tactic-rsi-implement-skill`, which still carries the retired standalone
