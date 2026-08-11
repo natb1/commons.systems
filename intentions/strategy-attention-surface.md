@@ -168,6 +168,29 @@ clarifications:
       validateOfficeHours reconstructs a park from exactly {reason, since,
       recommendation}, so a session_type key written today is silently dropped
       rather than rejected, which would make a structured label a false record."
+  - question: Where does this surface end and strategy-rsi-plan-surface begin? Both
+      name a surface, and both end up in the same office-hours application.
+    answer: "(Recorded 2026-08-11, by the /align round that created
+      strategy-rsi-plan-surface; the same boundary is recorded on that node, and
+      a session planning GUI work should read both.) Split by CONTENT, not by
+      application. This strategy keeps the office-hours ritual, parked-node
+      selection and its session-type ranking, and the SIGNALS queue —
+      tactic-attention-surface-status-page's \"one attention-ranked queue of
+      typed signals with per-signal context panel\", i.e. the things that
+      trigger review. strategy-rsi-plan-surface owns the harness status and
+      PRIORITY view — what the harness is doing, what comes next, and when —
+      starting as rsi-plan.md and later migrating into a view inside this same
+      application. The two therefore do not compete for the GUI; they occupy
+      different content within it. The boundary was drawn because this node's
+      statement (\"status signals and goals exploration\") and the rsi-plan.md
+      contents contract (which records that the document \"eventually integrates
+      into the office-hours GUI project\") both reached for the same
+      destination, and a fresh session reading only one of them would plan the
+      status view under the wrong owner. Practical test when a future round is
+      unsure which node owns a proposed view: ask whether the content is a
+      signal that should trigger the author to look, or a statement of what the
+      harness is doing and in what order. The first is this node; the second is
+      strategy-rsi-plan-surface."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type

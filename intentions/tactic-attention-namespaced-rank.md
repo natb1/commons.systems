@@ -19,7 +19,7 @@ rationale: "Surfaced in the 2026-08-11 /align round that recorded the
 reading: null
 serves:
   - strategy-graph-drives-dispatch
-  - strategy-recursive-self-improvement
+  - strategy-rsi-delegated-prioritization
 recovers: []
 clarifications: []
 tooling_goals: []

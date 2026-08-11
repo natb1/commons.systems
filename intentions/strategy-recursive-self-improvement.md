@@ -361,7 +361,34 @@ clarifications:
       (tier, rank) order ÷ velocity) days; a strategy row’s ETA (section 1) is
       today + (its open-tactic count ÷ velocity) days — the drain time of its
       open children. Zero velocity (a paused queue) renders honestly as
-      unavailable. Render work tracked at tactic-rsi-plan-priority-render."
+      unavailable. Render work tracked at tactic-rsi-plan-priority-render.
+      (Amended 2026-08-11, fourth round — ownership moved and sections 1-3
+      superseded.) The rsi-plan.md format contract is no longer owned here:
+      strategy-rsi-plan-surface, a ranking-namespace child created this day,
+      owns the author-facing status and priority view, and its clarification
+      \"What is the shape of the merged priority table this strategy's tactics
+      must render?\" is now authoritative for the table's format. Two changes
+      that clarification makes to what is recorded above: (1) the three separate
+      sections named here — top author priorities, dispatch-delegated status,
+      and critical office-hours parked nodes — MERGE into a single table, with
+      the strategy rows of section 1 becoming group header rows carrying the
+      full strategy lineage, the parked nodes of section 3 becoming ordinary
+      rows with a parked column, and two independent columns marking each row
+      delegated (owner: ai) and parked (office_hours set); (2) the requirement
+      recorded above that section 2 list nodes \"one node per line, never
+      grouped by phase\" is preserved in substance but restated — rows are never
+      grouped by phase, and are now grouped by parent strategy inside tier
+      bands, with tier as the OUTER key so that reading order still equals the
+      router's (tier, rank) selection order and the estimated-delivery-date
+      column still counts monotonically down the page. Sections 4, 5, and 6 are
+      unchanged and stay separate; the task plan in particular does not fold
+      into the merged table, because its type column admits values like \"pause
+      queue\" that are not graph tactics at all. The ETA derivation recorded
+      above is unchanged and still governs. Implementation split:
+      tactic-rsi-plan-merged-priority-table carries the merged table;
+      tactic-rsi-plan-priority-render keeps the ETA derivation, the section 6
+      changes, the flag kinds, the per-iteration delta, and the
+      reprioritization-outcome audit."
   - question: Who may alter priorities (tier/rank), and on what?
     answer: "(Recorded 2026-08-11 interview.) Ownership-based boundary, no attention
       schema change: the author owns prioritization of strategies (all
@@ -538,7 +565,22 @@ clarifications:
       sequenced ahead of it; the rerank that preceded both landed at c4974600
       (boost 4 to 6), the doctrine at f1265dfa, its review dispositions at
       d7f306a7. Each child owes its own interview, because each owes its own
-      success_signal."
+      success_signal. DONE 2026-08-11, fourth round: the owed work named above
+      has landed. The two children are strategy-rsi-plan-surface (boost 2,
+      resolving its tactics to band 8) and strategy-rsi-delegated-prioritization
+      (boost 1, band 7), both with parent: strategy-recursive-self-improvement,
+      ranking first and second within this subtree ahead of tactics left
+      directly here at band 6. Each passed its own /align interview and carries
+      its own success_signal, as this clarification requires — render fidelity
+      for the surface child, a paired outcome-and-integrity signal for the
+      prioritization child. Both are proxies, and both say so. The interviews
+      also produced two divergences worth reading before reopening either node:
+      the surface child diverged from the rival framing that a rendered view is
+      scaffolding rather than a goal, and the prioritization child diverged from
+      the rival framing that a delegation boundary needs an edge rather than a
+      node — while adopting that rival's edge, so it carries recovers:
+      [delegation-anthropic-claude], reversing the disposition the doctrine
+      round recorded."
   - question: "Steelman — should rank stay a flat global scale, with authority
       (owner: human) rather than structure as the author's channel?"
     answer: "(Diverged 2026-08-11, reasons recorded.) The rival is flat global
@@ -592,6 +634,35 @@ clarifications:
       rule (a mark may be added, never removed or downgraded, by a model
       priority write) has an obvious analogue for serves removal, which would be
       a demotion act — whether it extends there is not decided here."
+  - question: Which tactics moved to the new child strategies, and which stayed here?
+    answer: "(Recorded 2026-08-11, fourth round — the subdivision round.) Moved to
+      strategy-rsi-plan-surface (band 8): tactic-rsi-plan-priority-render,
+      tactic-rsi-plan-render-pause-block, and the newly drafted
+      tactic-rsi-plan-merged-priority-table. Moved to
+      strategy-rsi-delegated-prioritization (band 7): tactic-rsi-evaluate-skill,
+      tactic-priority-provenance-schema, and tactic-attention-namespaced-rank —
+      the last keeping its existing serves edge to
+      strategy-graph-drives-dispatch as well, since it is genuinely
+      cross-cutting and under band = max across distributors a multi-serves edge
+      resolves to the higher band. Stayed here at band 6: tactic-rsi-skill,
+      tactic-rsi-implement-skill, tactic-rsi-plan-skill,
+      tactic-rsi-research-skill, tactic-rsi-implement-acceleration-review,
+      tactic-rsi-external-acceptance-gate, tactic-rsi-lane-token-attribution,
+      tactic-rsi-measure-fanout-and-model-routing,
+      tactic-dispatch-cache-preserving-context,
+      tactic-dispatch-observation-masking, and
+      tactic-dispatch-skill-standards-extraction. The principle for a future
+      round deciding where a new rsi tactic belongs: a tactic moves to a child
+      only if the child's success_signal would actually be moved by its
+      completion. The rsi skill family proper, the research lane, the
+      acceleration review, and the token-economy measurements are not validated
+      by render fidelity or by bounded delegated ordering, so they stay here.
+      Freeze classification for this round was a no-op — measured with
+      strategyFingerprint plus isStrategyStale rather than a grep, both open
+      children of this strategy (tactic-rsi-implement-acceleration-review,
+      tactic-rsi-plan-render-pause-block) carry no stamped
+      execution.strategy_fingerprint entry, so nothing froze and nothing needed
+      re-stamping."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each

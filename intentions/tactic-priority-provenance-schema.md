@@ -13,8 +13,7 @@ rationale: "Surfaced in the 2026-08-11 /align interview: the priority-delegation
   mechanical lint."
 reading: null
 serves:
-  - strategy-recursive-self-improvement
-  - strategy-graph-drives-dispatch
+  - strategy-rsi-delegated-prioritization
 recovers: []
 clarifications: []
 tooling_goals: []

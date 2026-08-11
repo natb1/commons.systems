@@ -12,7 +12,7 @@ rationale: Surfaced in the 2026-08-11 /align interview on rsi-plan tactical
   what-must-rsi-plan.md-contain clarification records.
 reading: null
 serves:
-  - strategy-recursive-self-improvement
+  - strategy-rsi-plan-surface
 recovers: []
 clarifications: []
 tooling_goals: []
@@ -30,14 +30,32 @@ attributes: {}
 # Rework rsi-plan.md rendering — priority-ordered node listing with parent/phase/ETA columns, velocity-derived delivery dates, typed task-plan rows with reasoning
 ## Draft context (2026-08-11 /align interview)
 
+> **PARTIALLY SUPERSEDED 2026-08-11, later the same day.** The two bullets
+> immediately below — the section 1 and section 2 format specs — are
+> superseded by `tactic-rsi-plan-merged-priority-table`, which merges
+> sections 1, 2, and 3 into a single tier-banded table grouped by strategy
+> lineage. Do **not** implement them as written: section 1's strategy rows
+> become that table's group header rows, and section 2's node listing becomes
+> its ordinary rows. They are kept here rather than deleted because the
+> merged table's dependency on this node is exactly the ETA derivation and
+> the `(tier, rank)` ordering these bullets introduced.
+>
+> This node's surviving scope: the ETA derivation, the section 6 task-plan
+> changes, the flag kinds, the per-iteration reprioritization delta, and the
+> reprioritization-outcome audit. Authoritative format contract for the table
+> itself is the "What is the shape of the merged priority table" clarification
+> on `strategy-rsi-plan-surface`.
+
 render-rsi-plan.ts changes, from the amended rsi-plan.md contents
 clarification on strategy-recursive-self-improvement:
 
 - Section 1 (top author priorities): add an estimated-delivery-date column.
+  *(superseded — becomes the merged table's group header rows)*
 - Section 2 (dispatch status): replace the phase-grouped nodes table with a
   top-ranking node listing ordered by (tier, rank) — one node per line,
   never grouped by phase — columns: parent strategy, phase, estimated
-  delivery date.
+  delivery date. *(superseded — becomes the merged table's ordinary rows;
+  the never-grouped-by-phase requirement survives unchanged)*
 - Estimated delivery dates are DERIVED at render time. Velocity = the
   dispatch queue's 28d closure rate in closures/day (from the existing
   created/closed series). Tactic row (section 2): ETA = today +

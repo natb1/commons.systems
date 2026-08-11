@@ -17,7 +17,7 @@ rationale: "strategy-recursive-self-improvement's pause/resume condition
   half-discharged: the criteria exist but not where the author reads the plan."
 reading: null
 serves:
-  - strategy-recursive-self-improvement
+  - strategy-rsi-plan-surface
 recovers: []
 clarifications: []
 tooling_goals: []

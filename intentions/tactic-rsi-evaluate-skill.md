@@ -12,7 +12,7 @@ rationale: "Surfaced in the 2026-08-11 /align interview on rsi-plan tactical
   delegated judgment, /rsi keeps authority and execution."
 reading: null
 serves:
-  - strategy-recursive-self-improvement
+  - strategy-rsi-delegated-prioritization
 recovers: []
 clarifications: []
 tooling_goals: []
