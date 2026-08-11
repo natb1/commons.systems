@@ -244,15 +244,16 @@ rounds: null
 attributes:
   queue_summary:
     date: 2026-08-11
-    summary: "R2 landed as #3066 (65d8952d) and both of its task nodes are now phase
-      done — tactic-rsi-plan-skill and tactic-rsi-skill — so the only remaining
-      budgeted item is R3. R3, tactic-rsi-implement-skill (rsi_cost 1), is in
-      flight but not landed: the branch tactic-rsi-implement-skill is pushed at
-      05073b83, one commit ahead of origin/main, adding
+    summary: "R2 landed as #3065/#3066 and both of its task nodes are now phase done
+      — tactic-rsi-plan-skill and tactic-rsi-skill. R3,
+      tactic-rsi-implement-skill (rsi_cost 1, the only budgeted item left),
+      landed its code mid-iteration as #3067 (6dbdf63c):
       .claude/skills/rsi/scripts/rsi-advance and rsi-await with their shell
-      tests and a unit-tests workflow entry (6 files, +1100/-12); the node's own
-      phase is still null. The remaining drafts are tactic-rsi-research-skill
-      and tactic-dispatch-skill-standards-extraction, both cost 0;
+      tests and a unit-tests workflow entry, 6 files, +1100/-12. The node itself
+      is not closed out — status raw, phase null, no execution record — so the
+      graph does not yet carry the completion its merged code implies. The
+      remaining drafts are tactic-rsi-research-skill and
+      tactic-dispatch-skill-standards-extraction, both cost 0;
       tactic-review-tradition-agentic-engineering is born-parked for an
       office-hours sitting and is not claude-executable. rsi's own measured 7d
       spend renders as 0.0% because no turn in the window carried an `rsi` or
