@@ -4794,6 +4794,82 @@ clarifications:
       concurrency' requires. Issuing the batch BEFORE spawning inverts the risk
       window to claimed-but-not-yet-spawned, which reservation_sweep already
       reconciles and which fails safe."
+  - question: Graph retrieval, editing, and concurrency control consume more session
+      effort than the content they carry. Does the mechanical-floor doctrine
+      cover session-facing graph operations, or only router and workflow
+      mechanics?
+    answer: "(Recorded 2026-08-11 interview.) It covers them, and this round widens
+      the doctrine to the session-facing graph-operation surface via a new
+      condition following the shape of the invalid-state mechanical-floor
+      condition. MEASUREMENT, over the 2026-08-10/11 transcript corpus read
+      across every commons.systems project directory including the per-worktree
+      ones (797 session transcripts, 164MB, 13,342 tool calls of which 8,728
+      Bash, 9.4MB of model-authored tool input): stripping heredoc bodies out of
+      Bash commands leaves 1,857KB of shell mechanics against 262KB of authored
+      content — a 7.1x ratio of effort spent reaching and writing the graph over
+      effort spent writing what goes in it. Ad-hoc node access (386 jq, 398
+      sed/awk/grep over a node .md, 105 inline python/node one-offs = 889 calls)
+      outnumbers the sanctioned node primitives (write-node.ts 65, dump-node.ts
+      63 = 128 calls) about 7:1. 1,612 of 8,728 Bash calls restate a worktree
+      path; 1,049 perform post-write git status/diff eyeball verification; 705
+      calls invoke graph-commit across 1,113 occurrences, the excess being retry
+      loops; 270 calls hand-roll `git show origin/main:intentions/<id>.md`. That
+      last one has a STRUCTURAL cause, not a discipline cause: storeAtRef
+      (packages/intentionsutil/scripts/lib-store-at-ref.ts) exists as a library
+      helper with five script consumers but no CLI, while dump-node.ts resolves
+      its store from import.meta.url and therefore reads the worktree copy — so
+      the doctrine that repeatedly mandates reading at origin/main has no
+      scripted path at all, and every doctrine-compliant read is necessarily
+      hand-written shell. Sessions were observed writing full-graph scans as
+      bash loops over `git ls-tree` plus per-node `git show` plus `sed`.
+      ROUND-TRIP COST is first-class alongside per-call bytes (author addendum,
+      same interview): 8,728 Bash calls produced 140 intentions/ commits in the
+      window, roughly 62 Bash round-trips per landed graph commit. ADOPTED: the
+      mechanical-floor framing — scripts carry what is mechanical, model spend
+      carries what needs judgment — extended from
+      selection/transition/provisioning and invalid-state to retrieval and
+      query, editing, and concurrency control. DIVERGED from the strongest rival
+      framing, that this overhead is appropriate generality and the hand-rolled
+      escape hatch is precisely the point: the measured calls are uniform rather
+      than diverse — all 270 origin/main reads are the same operation and the
+      1,612 path restatements carry no information whatsoever — so this is the
+      absence of a primitive for an already-uniform operation, not generality.
+      The divergence is bounded by writing the condition as a floor rather than
+      a ceiling."
+  - question: Does moving mechanical graph labor into owned scripts warrant a
+      recovers edge from this strategy to delegation-anthropic-claude?
+    answer: (Recorded 2026-08-11 interview.) No — raised and declined on this
+      round's basis, with the question retained rather than dropped. The
+      mechanical-floor doctrine already lives in this strategy as the
+      workflow-thin-composition condition and the invalid-state condition,
+      neither of which carries such an edge; if the edge is warranted it was
+      warranted for the whole doctrine, so newly adding it because this round
+      widens the same doctrine would be inconsistent.
+      delegation-anthropic-claude is additionally the pivotal delegation whose
+      recovery substrate is open-weight and local inference, which makes an edge
+      claim on it doctrinally heavy and wrong to let ride along on an efficiency
+      amendment. recovers stays [delegation-github] this round. The question is
+      retained as the draft tactic tactic-graph-ops-model-recovery-edge so a
+      later round can decide it on its own terms.
+  - question: What was this round's own freeze blast radius, and what does it say
+      about the strategy soft-freeze?
+    answer: "(Measured 2026-08-11 interview.) Effectively zero, corroborating
+      tactic-strategy-fingerprint-stamp-coverage. Computed with the
+      authoritative predicate (listNodes plus the per-child
+      execution.strategy_fingerprint read and strategyFingerprint from
+      packages/intentionsutil/src/router.ts), never a grep: 237 tactics serve
+      this strategy, 47 of them open (phase set, neither done nor draft), and
+      exactly ONE — tactic-strategy-fingerprint-stamp-coverage — carries a
+      non-null strategy_fingerprint entry for this strategy. A text grep over
+      the field would have counted 45 and inflated the estimate, which is the
+      failure mode the measurement rule exists to prevent. That single stamp was
+      ALREADY stale against the current strategyFingerprint before this round's
+      edit, i.e. frozen by some earlier delta. It was therefore classified
+      orthogonal to this round's delta but deliberately NOT re-stamped:
+      re-stamping would have silently discharged a prior round's freeze that
+      this session never classified. Leaving it untouched is the fail-closed
+      choice. The re-measurement (47 open children, 1 stamped) updates the
+      2026-08-03 finalize-time figure of 46 open and 0 keyed."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5109,6 +5185,15 @@ attributes:
       model session — and each invalid-state kind carries its own intervention
       skill rather than one skill body branching across kinds (Recorded
       2026-08-05)
+    - "graph operations available to sessions — retrieval and query, node
+      editing, and concurrency control — run through owned, offline-testable
+      primitives rather than hand-rolled shell, and every operation the doctrine
+      mandates has a scripted path: a read the doctrine requires at origin/main
+      with no CLI able to perform it is a tooling defect, not a
+      session-discipline problem. Round-trip count is a first-class cost
+      alongside per-call bytes. This is a FLOOR, not a ceiling — ad-hoc shell
+      stays available for genuinely novel graph questions, so the recovery path
+      virtue-progressive-detachment protects stays open (Recorded 2026-08-11)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
