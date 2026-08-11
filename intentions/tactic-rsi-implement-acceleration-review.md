@@ -2,8 +2,8 @@
 id: tactic-rsi-implement-acceleration-review
 kind: tactic
 statement: Give the rsi skill a mechanism for the acceleration review every
-  rsi-implement task now owes — a closing step in the execute loop and a fifth
-  required report item
+  rsi-implement task now owes — a closing step in the execute loop, a fifth
+  required report item, and an await window sized to the phase
 owner: ai
 status: raw
 parent: null
@@ -36,7 +36,7 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Give the rsi skill a mechanism for the acceleration review every rsi-implement task now owes — a closing step in the execute loop and a fifth required report item
+# Give the rsi skill a mechanism for the acceleration review every rsi-implement task now owes — a closing step in the execute loop, a fifth required report item, and an await window sized to the phase
 
 ## Context
 
@@ -125,6 +125,58 @@ specification, not a thing this unit edits.
   Step 5 `:194-199`. Match them; do not introduce a new heading level or a
   parallel checklist format.
 
+## Unit 2 — Tell Step 4b to size the await window to the phase
+
+**Recommended model: sonnet.** A short, well-evidenced prose addition to a step
+Unit 1 is already editing.
+
+**Dependencies:** Unit 1, only because both edit the same region of the same
+file — land them together to avoid a second PR touching Step 4b.
+
+### Context for this unit
+
+The first finding of the 2026-08-11 acceleration review. `rsi-await`'s default
+timeout is 540s (`.claude/skills/rsi/scripts/rsi-await:110`, documented at
+`:62`), and **every** phase of that iteration ran longer than it:
+
+| phase | duration | await calls needed |
+|---|---|---|
+| implement | 14m10s | 2 |
+| qa | 15m59s | 2 |
+| fix | ~50m (11:21:15 → 12:11:55) | 6 |
+
+Exit 20 is the documented "call again with the same arguments" path, so none of
+this was an error — but each extra call is a round trip that buys nothing, and
+two of them were lost outright when the session compacted and the backgrounded
+`rsi-await` died with it. Step 4b currently describes the 540s behavior as
+simply how the loop works (`:136-137`, "Exit 20 means still working — call it
+again with the same arguments, as many times as it takes") and never mentions
+that the window is adjustable.
+
+The flag already exists: `rsi-await --timeout-s <n>` (`:123`). Nothing needs to
+be built.
+
+### Scope
+
+File: `.claude/skills/rsi/SKILL.md`, Step 4b — the command block at `:121-124`
+and loop item 2 at `:136-137`.
+
+State that the caller should pass `--timeout-s` sized to the phase rather than
+accepting the 540s default, cite the measured durations above as the reason, and
+suggest ~1800s as the starting point for implement/qa/fix phases. Keep exit 20
+documented exactly as it is: it stays the correct, expected result, and a
+too-small window is a round-trip cost, never a failure.
+
+Add the operational reason as well, because it is the part a fresh session
+cannot rediscover: prefer a foreground call with a long tool timeout over a
+backgrounded one, since a backgrounded `rsi-await` does not survive session
+teardown or compaction, and its exit status is then stale rather than absent —
+the failure mode that actually bit this iteration.
+
+**Out of scope:** changing the 540s default in `rsi-await` itself. The default
+serves other callers, the flag is sufficient, and per `:150-159` the scripts
+must not accumulate loop policy.
+
 ## Verification
 
 There is no test suite over skill prose, so verification is reading and
@@ -141,6 +193,8 @@ Mechanical checks on the skill file, each a grep the reviewer can run:
 
 - `.claude/skills/rsi/SKILL.md` contains a Step 4b loop item naming the
   acceleration review and placing it after the loop's exit.
+- Step 4b mentions `--timeout-s` and no longer presents 540s as the only
+  behavior (Unit 2).
 - Step 5's required-report list has five items, the fifth being the review's
   findings and the nodes they landed as.
 - No occurrence of "nine conditions" or "twelve clarifications" remains.

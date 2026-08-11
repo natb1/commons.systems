@@ -240,6 +240,49 @@ clarifications:
       paused — let it\", which is false as written, and the pause rationale's
       claim that the paused branch is \"precisely the set needed to drain a
       queue, so pausing costs no healing\" overstates what that branch covers."
+  - question: What actually consumes the wall-clock of an rsi-implement task, and
+      where should the next iteration look for acceleration?
+    answer: >-
+      (Recorded 2026-08-11 rsi iteration, from the first acceleration review run
+      under condition 14.) Recording state cost far more than producing it, and
+      CI signal quality cost more than either.
+
+
+      Measured on tactic-pause-disables-merge-lane. The fix phase entered its
+      interrupt at 11:21:15 (78dc28b5) and the fix worker pushed at 11:26:44
+      (74548a2b) — about five and a half minutes. That push contained no code
+      change at all: it is a bare merge of origin/main, because the CI failure
+      it was dispatched to fix was an infrastructure flake. The resulting fix
+      state did not land on main until 12:11:55 (82b2f8fe). So roughly 50
+      minutes elapsed to record a five-minute no-op, and the recording dominated
+      the work by about eight to one. Every graph state write pays the same
+      shape of cost: a scratch branch, a full required-check run, and the
+      landing lock, serialized against every other writer.
+
+
+      The node also consumed four pushes at roughly 23 checks each, and was
+      still unmerged 2h18m after its implement commit (841ac70a, 10:34:05).
+
+
+      Four findings were recorded as their own nodes rather than here:
+      tactic-flake-hook-tests-graph-commit-fixture-clone (a swallowed fixture
+      clone failure presented as 11 product failures, which is what sent a whole
+      fix session after a flake),
+      tactic-orphaned-check-run-pins-pending-ci-guard (orphaned check rows that
+      pin a node and block all graph writes — the reason this node never reached
+      done in-session), tactic-select-tick-main-sync-gated-on-caller-cwd (the
+      shared main checkout going stale and one stray dirty file there wedging
+      three writers at once), and tactic-rsi-implement-acceleration-review (the
+      skill mechanism for this review, plus sizing the rsi-await window to
+      observed phase durations).
+
+
+      What is deliberately NOT concluded here: that per-write graph latency
+      should be reduced by weakening the required-check gate. That gate is what
+      makes the store trustworthy. The measurement is recorded so a future
+      iteration designs against it — batching independent node writes into one
+      graph-commit call is the cheap lever already available, and this session
+      used it — but the design work is not done and should not be improvised.
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
