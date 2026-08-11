@@ -52,6 +52,13 @@ attributes: {}
   rationale; rsi_task.type=implementation on a node whose declared
   rsi_task.cost contradicts the derived cost 1; a standalone legacy
   rsi_cost field (retired — repoint to rsi_task.cost).
+- SUPERSEDED 2026-08-11 (second /align round): the within-tier ordering
+  verification below moved to tactic-attention-namespaced-rank, which owns
+  the resolver change that makes namespaced rank structural. What stays
+  here is the lint half — the boundary and marks-asymmetry checks above,
+  plus a new check flagging a delegated attention write whose composed
+  value inverts cross-strategy order within a tier. Land the two together
+  or state why not. Retained for context:
 - VERIFY within-tier ordering semantics against the recorded doctrine
   (strategy-recursive-self-improvement, 2026-08-11 tier/rank-composition
   clarification): tier takes precedence globally; within a tier, tactics of

@@ -45,7 +45,6 @@ rationale: >-
   tactics that validate a strategy's signal; both are tactic-layer edges
   resolved by validateGraph like the rest.
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -59,6 +58,30 @@ clarifications:
       statement' doctrine, which was already false for tactics — their bodies
       carry the clean-session plans dispatch executes. Recorded 2026-07-09
       interview (strategy-graph-self-description)."
+  - question: How does an authored boost compose across the parent/serves chain — as
+      a flat global sum, or namespaced by the distributor?
+    answer: "(Recorded 2026-08-11.) Namespaced, and asymmetrically by kind — the
+      accumulated (source-node, amount) set described above is what the order
+      reads FROM, not itself the order. A tactic's own authored boost orders it
+      only within the band of the strategy distributing to it, at its tier: it
+      can never carry the tactic past a tactic of a higher-ranked strategy in
+      the same tier, and a tactic with several distributors sits in the band of
+      the highest-ranked one (max across distributors, never the sum) — the same
+      max rule the effective-tier fixpoint already applies. A strategy's
+      authored boost is the complementary case: additive and unscoped, summing
+      with its parent's down parent/serves, so a child strategy may be boosted
+      in conjunction with its parent to outrank cousin and uncle strategies.
+      Tier dominates both lexicographically and is the only cross-strategy
+      escape. The derived-state doctrine is unchanged: rank stays computed on
+      read and is never stored — this clarifies the ORDER the accumulated claims
+      express, not where they live. As implemented, resolveAttention sums a
+      tactic's own boost with its strategy-distributed value
+      (packages/intentionsutil/src/attention.ts), so the namespacing is not yet
+      mechanically enforced; the greenfield target is lexicographic ordering by
+      (tier, distributing-strategy rank, within-strategy value), with a
+      behavioral-doctrine-plus-lint migration first. Tracked at
+      tactic-attention-namespaced-rank; the ownership half of the doctrine (who
+      may write which attention) lives on strategy-recursive-self-improvement."
 tooling_goals: []
 success_signal: null
 attention: null

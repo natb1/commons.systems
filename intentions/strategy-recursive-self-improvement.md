@@ -390,7 +390,36 @@ clarifications:
       excludes a lower-tier distributing strategy’s rank from a higher-tier
       tactic’s within-tier ordering, that is a defect against these recorded
       semantics, not doctrine — verification tracked at
-      tactic-priority-provenance-schema."
+      tactic-priority-provenance-schema. (Amended 2026-08-11, second round — the
+      accepted-risk clause above is superseded.) A model attention write on an
+      owner: ai tactic may NOT displace the strategy-distributed value in a way
+      that inverts cross-strategy order. The rank algebra is namespaced, and the
+      bound is asymmetric by kind. Tactic boost is SCOPED: a tactic's own boost
+      orders it only within the band of its distributing strategy, at its tier —
+      it can never carry the tactic past a tactic of a higher-ranked strategy in
+      the same tier. Strategy boost is ADDITIVE and UNSCOPED: a child strategy's
+      boost sums with its parent's (resolveAttention counts each distinct
+      authored source once down parent/serves), so a child strategy may be
+      boosted, in conjunction with its parent's boost, to outrank cousin and
+      uncle strategies — still tier-scoped, since tier dominates
+      lexicographically. Tier remains the only cross-strategy escape, and the
+      model's only instrument on it stays adding a recognized bug_fix/security
+      mark, which may lift a tactic over lower-tier tactics of other strategies
+      (the accepted and intended effect recorded above). The bound is uniform,
+      with no owner carve-out: it is a property of the rank algebra, not of who
+      authored the value, so an author-set boost on an owner: human tactic is
+      namespaced identically — the author's cross-strategy channels are strategy
+      rank and tier, never a direct tactic boost. A tactic with several
+      distributing strategies sits in the band of the highest-ranked one (max
+      across distributors, never the sum), mirroring the max-lift rule the
+      resolver already applies to effective tier, so adding a serves edge can
+      neither demote a tactic nor become a way to jump bands. Enforcement is
+      structural, not behavioral: the resolver is to order lexicographically by
+      (tier, distributing-strategy rank, within-strategy value) so an inversion
+      is impossible to express rather than merely forbidden — greenfield target
+      recorded at tactic-attention-namespaced-rank, which also carries the
+      brownfield migration (behavioral doctrine plus lint first, resolver change
+      after) and absorbs the tier-isolation verification previously noted here."
   - question: Steelman — should the model only recommend reorderings for author
       ratification (the sensor/actuator split), never write them?
     answer: "(Diverged 2026-08-11, reasons recorded.) The rival is grounded in this
@@ -443,6 +472,62 @@ clarifications:
       the cap no longer constrains. rsi-plan.md renders what changed each
       iteration. Schema documentation and lint tracked at
       tactic-priority-provenance-schema.
+  - question: May the author express tactic priority by boosting a tactic directly?
+    answer: "(Recorded 2026-08-11, correcting a misreading made in session.) No. A
+      direct author-set boost on a dispatch-delegated (owner: ai) tactic sits
+      inside the surface delegated to /rsi-evaluate, which may create, rewrite,
+      or remove that node's attention without author input — so the author's
+      intent is one delegated write away from being erased. Under the
+      namespacing bound recorded in the tier/rank-composition clarification it
+      could not express cross-strategy order in any case. The author's channel
+      for communicating priority among a strategy's tactics is to break the
+      parent strategy down into child strategies, each child's boost augmenting
+      the parent's, so rank distributes down to the tactics serving it. This is
+      the same forcing mechanism the ownership clarification already names —
+      grouping delegated tactics under a strategy and boosting the strategy —
+      stated here for the case where the grouping strategy already exists and is
+      being subdivided. Recommending a direct tactic boost to the author is a
+      misreading of this node; it is recorded because it happened in the
+      2026-08-11 session that produced this clarification, and a fresh session
+      reading only the ownership clarification could repeat it."
+  - question: What justifies a child strategy — does subdividing a parent purely to
+      rank its tactics count?
+    answer: "(Recorded 2026-08-11.) Yes. Subdividing a strategy in order to
+      namespace and order its own tactics is a named justification for a child
+      strategy, standing alongside the distinct-success-signal /
+      distinct-machinery / distinct-authority test this node's first
+      clarification applies to a candidate strategy: a ranking-namespace child
+      need not also show distinct machinery or distinct authority, because
+      ranking is its function. It gets no exemption from carrying its own
+      success_signal — if a subdivision cannot name what would validate it, it
+      is not yet a strategy, and the ranking use case must never become a
+      loophole admitting ungrounded nodes to the strategy layer. Subdividing
+      strategy-recursive-self-improvement into child strategies to order its own
+      tactics is therefore consistent with doctrine, not a workaround for it.
+      The accepted cost, named deliberately: ranking-only nodes enter the
+      strategy layer, bounded by the own-success_signal requirement and by the
+      ordinary /align interview each such child must pass."
+  - question: "Steelman — should rank stay a flat global scale, with authority
+      (owner: human) rather than structure as the author's channel?"
+    answer: "(Diverged 2026-08-11, reasons recorded.) The rival is flat global
+      priority — one comparable scale for the whole graph, as UNIX nice values
+      are deliberately flat — holding that namespacing hides genuine
+      cross-strategy urgency and inflates the strategy layer with ranking-only
+      nodes, and that the author should instead secure a priority by flipping
+      the tactic to owner: human so the model cannot overwrite it. Diverged
+      because a flat scale is safe only while a single trusted authority sets
+      every number: once ranking is delegated, every delegated write competes
+      globally and the author's ordering is one boost away from being
+      overwritten — the exact failure this round was called to fix. Namespacing
+      is what makes the delegation safe, the same reason hierarchical weight
+      distribution (cgroups v2) namespaces a delegated subtree's shares instead
+      of letting them compete flat with its siblings'. That parallel is
+      Claude-internal knowledge, not a tradition recorded in this graph; the
+      author accepted it as argued rather than as sourced. The rival's cost
+      objection is granted and bounded in the child-strategy clarification, and
+      its authority-based alternative is rejected on a further ground: making
+      owner a priority instrument overloads a field that records who does the
+      work, not how urgent it is."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -464,11 +549,11 @@ attention:
   boost: 6
   override: null
   rationale: "Author-directed 2026-08-11: rerank the rsi strategy to the top of
-    tier 1, above strategy-graph-native-dispatch (authored boost 5) —
-    supersedes the same-day rationale that placed rsi just below the router
-    migration. The recursive-self-improvement loop that maintains rsi-plan.md
-    and shortcuts critical-path harness work now outranks every other tier-1
-    strategy, including strategy-graph-native-dispatch (boost 5),
+    tier 1, above strategy-graph-native-dispatch (authored boost 5) — supersedes
+    the same-day rationale that placed rsi just below the router migration. The
+    recursive-self-improvement loop that maintains rsi-plan.md and shortcuts
+    critical-path harness work now outranks every other tier-1 strategy,
+    including strategy-graph-native-dispatch (boost 5),
     strategy-graph-review-curriculum (boost 3.5), and strategy-attention-surface
     (boost 3)."
   tier: 1
@@ -639,12 +724,25 @@ attributes:
       bug_fix/security mark; tier takes precedence over strategy rank
       (within-tier, higher-ranked strategies’ tactics first); the author’s
       forcing mechanism is the strategy level, never a race on the delegated
-      entries (Recorded 2026-08-11)"
+      entries (Recorded 2026-08-11). Amended 2026-08-11: a delegated attention
+      write is additionally namespaced — it orders the tactic only within its
+      distributing strategy's band and may never invert cross-strategy order
+      within a tier, superseding the accepted-risk carve-out that previously
+      permitted an override to displace the strategy-distributed value"
     - "every model reprioritization is logged: the attention write appends
       {date, old→new, rationale} to the node’s attributes.priority_log
       (append-only, capped ~10, fingerprint-exempt), and a prior reordering is
       never reversed without citing new evidence — prioritization thrash is a
       defect the log exists to make visible (Recorded 2026-08-11)"
+    - "tactic rank is namespaced by its distributing strategy: no tactic's own
+      attention — whoever authored it — may order it ahead of a tactic of a
+      higher-ranked strategy at the same tier, and a tactic distributed to by
+      several strategies sits in the band of the highest-ranked one (max, never
+      the sum); strategy attention is the complementary case, additive down
+      parent/serves so a child strategy's boost augments its parent's and may
+      outrank cousin and uncle strategies, bounded only by tier; the sole
+      cross-strategy escape is tier, and the model's only tier instrument stays
+      adding a recognized bug_fix/security mark (Recorded 2026-08-11)"
   pause:
     state: paused
     since: 2026-08-10
