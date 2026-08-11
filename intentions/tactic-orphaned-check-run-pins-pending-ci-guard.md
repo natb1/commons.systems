@@ -285,15 +285,26 @@ never resolves no matter how long the wait.
 `gh_retry` and the existing `errfile`/`gh_fails` error plumbing in the same
 polling block.
 
-### A related but separate observation, deliberately not fixed here
+### Do not widen the green-wait budget — the budget was never the problem
 
-During this same incident `preview-and-smoke` legitimately ran for **14+
-minutes** on the scratch branch, against a per-attempt window of 180s and a
-five-attempt ceiling — a total green-wait of about 15 minutes. Even without any
-orphan, a graph write races a required check it can only just outlast. Whether
-that budget should be raised is a real question, but it is a tuning decision
-with its own tradeoffs and belongs to its own node. Recording it here so the
-observation is not lost; do **not** change those constants under this tactic.
+While the incident was in progress it looked as though `preview-and-smoke` was
+simply slow: the row sat unresolved for 14+ minutes against a per-attempt window
+of 180s and a five-attempt ceiling (~15 minutes total), which reads like a check
+that a graph write can only just outlast.
+
+That reading was wrong, and the immediately following `graph-commit` invocation
+disproved it. On the next scratch branch
+(`...-1660135`) every required check, `preview-and-smoke` included, concluded
+green well inside the first attempt's window, and the write landed as
+`2f9fdb94`. The 14 minutes were not a slow check; they were **this defect** —
+the orphaned row never moving.
+
+So the retry budget is adequate and must not be touched under this tactic.
+Raising those constants would be the natural wrong fix: it costs every future
+graph write more wall-clock, and it still never lands, because an orphaned row
+does not resolve at any timeout. The mistaken reading is recorded here because
+it is the reading an implementer is most likely to arrive at from the logs
+alone.
 
 ## Verification
 
