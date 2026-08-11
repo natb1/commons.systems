@@ -29,7 +29,36 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Requires author ratification of the band-derivation definition before
+    the plan can be authored: does `band` derive from the distributing
+    strategy's authored term or from its full resolved rank? kind-kind's
+    rank-algebra clarification records ownBand as \"a strategy's own resolved
+    rank\" (intentions/kind-kind.md, the 'three components of the rank key'
+    clarification), while this node's own body defines residual as \"its own
+    authored boost plus the signal term plus the capture term\" — true only if
+    band is the authored term — and then asserts \"the design above says
+    authored\" in direct contradiction of its own greenfield bullet. This is not
+    a drafting nit: resolveAttention distributes ancestors' authored claims only
+    (packages/intentionsutil/src/attention.ts:420-437), while signal and capture
+    are per-node and undistributed, so under band = resolved rank the residual
+    goes negative by up to the strategy's own signal+capture weight and the
+    distributing strategy's terms leak back into within-band order — the exact
+    artifact the residual exists to remove; under band = authored term, the
+    ~1828 inversions this node measures against strategy resolved rank stay
+    live, which decides whether the serving strategy's success-signal half (b)
+    (inversion count stays at zero) is reachable. The resolution is author-owned
+    twice over: the definition lives on the doctrine node kind-kind, which a
+    tactic may not rewrite, and it fixes what the author-owned fitness criterion
+    counts. Recommend: run an /align pass on kind-kind (or a targeted interview
+    on strategy-rsi-delegated-prioritization) to settle whether band = strategy
+    authored term or strategy resolved rank, and to state which of the two
+    quantities the success_signal's cross-strategy-inversion count is measured
+    against; then re-run /align-tactics tactic-attention-namespaced-rank to
+    author the plan."
+  since: 2026-08-11
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
