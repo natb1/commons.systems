@@ -7,28 +7,27 @@ statement: Classify a reap candidate as having-a-node-worktree versus
 owner: ai
 status: raw
 parent: null
-rationale: "Split out of tactic-session-reap-authorization-durability's migration
-  step 1 at the 2026-08-10 office-hours sitting, but deliberately NOT on the
-  scope that node recorded. That park proposed making lib-session-reap.sh read a
-  recorded worktree path instead of deriving \"$worktrees_root/$name\", calling
-  it small and independent; measurement on 2026-08-10 falsified both halves.
-  provision-node-worktree:113 places EVERY provisioned node worktree at exactly
-  PROJECT_ROOT/.claude/worktrees/<node-id> — the same path lib-session-reap.sh
-  derives at :286-291 — so the derivation is correct by construction for
-  provisioned worktrees and the recorded fix addresses nothing there. The actual
-  divergence is a different population: sessions registered under a node id that
-  run at the REPO ROOT, which strategy-node and office-hours-graph sessions do
-  BY DESIGN. For those the derived worktree is simply absent, and the recorded
-  fix — record the session's actual cwd and reap that — would point the sweep's
-  `git worktree remove` (lib-session-reap.sh:374) at the MAIN CHECKOUT. So the
-  naive fix converts a benign decline into a destructive one. Harm from the
-  current behaviour is real and ongoing: tactic-fleet-alarm-busy-stall declined
-  every ~15 minutes, 2268 journal mentions in the trailing 3 days as of
-  2026-08-10. Live instance recorded the same day: session
-  tactic-hold-conflict-strategy-fingerprint-stamp-coverage, idle, cwd at the
-  repo root, derived worktree absent."
+rationale: "Split out of tactic-session-reap-authorization-durability's
+  migration step 1 at the 2026-08-10 office-hours sitting, but deliberately NOT
+  on the scope that node recorded. That park proposed making lib-session-reap.sh
+  read a recorded worktree path instead of deriving \"$worktrees_root/$name\",
+  calling it small and independent; measurement on 2026-08-10 falsified both
+  halves. provision-node-worktree:113 places EVERY provisioned node worktree at
+  exactly PROJECT_ROOT/.claude/worktrees/<node-id> — the same path
+  lib-session-reap.sh derives at :286-291 — so the derivation is correct by
+  construction for provisioned worktrees and the recorded fix addresses nothing
+  there. The actual divergence is a different population: sessions registered
+  under a node id that run at the REPO ROOT, which strategy-node and
+  office-hours-graph sessions do BY DESIGN. For those the derived worktree is
+  simply absent, and the recorded fix — record the session's actual cwd and reap
+  that — would point the sweep's `git worktree remove` (lib-session-reap.sh:374)
+  at the MAIN CHECKOUT. So the naive fix converts a benign decline into a
+  destructive one. Harm from the current behaviour is real and ongoing:
+  tactic-fleet-alarm-busy-stall declined every ~15 minutes, 2268 journal
+  mentions in the trailing 3 days as of 2026-08-10. Live instance recorded the
+  same day: session tactic-hold-conflict-strategy-fingerprint-stamp-coverage,
+  idle, cwd at the repo root, derived worktree absent."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -36,14 +35,27 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
+  boost: 0.05
   override: null
-  rationale: "Filed at the 2026-08-10 office-hours sitting above the 20-band its
-    parent and siblings sit in, because unlike them it is not blocked on any
-    author question and it is causing measured, ongoing waste today (a node
-    declining every ~15 minutes). The author's instruction at that sitting was
-    to split it out precisely so it would not wait behind the claim-anchor
-    ratification."
+  rationale: >-
+    Filed at the 2026-08-10 office-hours sitting above the 20-band its parent
+    and siblings sit in, because unlike them it is not blocked on any author
+    question and it is causing measured, ongoing waste today (a node declining
+    every ~15 minutes). The author's instruction at that sitting was to split it
+    out precisely so it would not wait behind the claim-anchor ratification.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
+  tier: 1
 phase: null
 execution: null
 validates: []
@@ -51,7 +63,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 50
 ---
 
 # Classify reap candidates by worktree class before resolving a worktree path

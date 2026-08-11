@@ -23,7 +23,6 @@ rationale: "Surfaced in the 2026-07-19 /align-strategy interview recording the
   reported citation and substance gaps were applied before landing. A later
   /align-tactics round should treat this body as unreviewed by the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -31,15 +30,29 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
+  boost: 0.05
   override: null
-  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
-    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
-    work. This band holds the silent graph-write-corruption defects plus the two
-    paths the bootstrap arms or depends on. Interim scaffolding only -
+  rationale: >-
+    Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale (50 / 20
+    / 10) that puts write-path integrity work above ordinary feature work. This
+    band holds the silent graph-write-corruption defects plus the two paths the
+    bootstrap arms or depends on. Interim scaffolding only -
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
-    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
+  tier: 1
 phase: implement
 execution: null
 validates: []
@@ -48,7 +61,8 @@ blocked_by:
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 50
 ---
 # graph-auto-merge merges only a PR whose branch is current with origin/main and whose passing checks ran on that current base; when BEHIND the tick scripts gh api update-branch and defers the merge to a later green tick
 

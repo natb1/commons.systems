@@ -240,3 +240,61 @@ keeps the band of its tier-1 strategy. Without that, the band would vanish
 at exactly the moment a tactic is lifted, and the whole namespacing bound
 would be inert at tiers 2 and 3. No separate `bug_fix` is owed — the
 resolution is part of the band derivation, as intended.
+
+### Interim state — boost magnitudes were compressed by hand (2026-08-11)
+
+The bound this tactic makes structural was, until this change, defeated in
+live state: the resolver's flat additive sum let bootstrap-era hand-set
+boosts lift `owner: ai` tactics clean out of their strategy's band. Measured
+on the graph the day the two RSI child strategies landed, **2139 ordered
+tactic pairs were inverted** by an authored tactic boost — a tactic of a
+lower-ranked strategy outranking a tactic of a higher-ranked one.
+
+As a stopgap until this tactic lands, the magnitudes of **all 42 open
+tactics carrying an authored boost** were compressed onto a `0.01`-per-level
+ladder, ascending, assigned per band. That is far below the minimum adjacent
+gap between distinct strategy authored levels (`0.5`, measured the same day),
+so a compressed boost can no longer cross a band while the ordering *within*
+each band is preserved exactly. Boost-attributable inversions went 2139 → 0.
+
+**This discharges verification item 4's enumeration gap.** That item asks the
+implementer to enumerate the bootstrap-era boost set as the first step,
+noting it "is not listed anywhere." It is now listed, durably and per-node:
+every compressed node carries its original magnitude at
+**`attributes.pre_namespacing_boost`**, and its `attention.rationale` carries
+a dated `NAMESPACING STOPGAP` paragraph naming the old and new values. Query
+that field to recover the set rather than reconstructing it from git history.
+
+**What this tactic owes the stopgap:** once `(tier, band, residual)` ordering
+is structural, the compression is no longer needed to hold the bound, and the
+`0.0x` residuals are too coarse to express meaningful within-band priority.
+Restore each node's residual from `attributes.pre_namespacing_boost`, rescaled
+into whatever range the residual component takes, then delete the field and
+the stopgap paragraph. Leaving the compressed values in place would silently
+flatten the within-band priority the author and `/rsi-evaluate` express.
+
+**What the stopgap could NOT fix — and why it is this tactic's problem.**
+Two crossings survive, and neither node carries a boost at all:
+
+| node | value | its band | why |
+|---|---|---|---|
+| `tactic-dispatch-skill-standards-extraction` | 11.33 | 7 | authored term **sums** across distributors |
+| `tactic-office-hours-graph-type-passthrough` | 8.5 | 6.33 | same |
+
+Both serve more than one strategy, and `resolveAttention`'s authored term
+adds every distributing strategy's contribution rather than taking the
+maximum. The recorded doctrine is explicit that this is wrong — the author's
+resolution was *"highest-ranked distributing strategy (max across
+distributors, never the sum)"* — so the resolver currently contradicts it.
+No boost edit can reach this: the value is pure inherited sum. **Fixing the
+multi-distributor combinator to `max` belongs to this tactic's scope**, and
+those two nodes are its ready-made regression cases.
+
+A further class is out of reach of boosts and is *not* claimed as fixed here:
+the `signal` and `capture` terms are computed per-node and do not flow down
+through distribution, so a strategy's resolved rank can exceed the authored
+value its tactics inherit by up to 2. That is why ~1828 pair inversions
+remain against strategy *resolved* rank. Decide deliberately whether `band`
+derives from the strategy's authored term or its full resolved value — the
+design above says authored, and that choice should be stated in the
+implementation rather than left to fall out of the code.

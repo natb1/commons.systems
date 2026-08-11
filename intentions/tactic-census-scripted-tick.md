@@ -17,7 +17,6 @@ rationale: "Carrier for the census greenfield recorded 2026-07-23 on
   mechanical-verification predicate reads a completion field neither has landed
   on Execution yet."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -25,11 +24,24 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 3
+  boost: 0.01
   override: null
-  rationale: "Author-directed 2026-07-23 /align-strategy round: the top-3 systemic
-    gaps (PR custody, scripted census, playwright retry) rank ahead of the
-    low-urgency tracked gaps once finalized."
+  rationale: >-
+    Author-directed 2026-07-23 /align-strategy round: the top-3 systemic gaps
+    (PR custody, scripted census, playwright retry) rank ahead of the
+    low-urgency tracked gaps once finalized.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 3 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: qa
 execution:
@@ -40,6 +52,7 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion: null
 validates: []
 blocked_by:
@@ -133,7 +146,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 3
 ---
 # Implement census as a scripted dispatch-tick step: verify-merged-only prune with scripted edge repair and one batched graph-commit; surface verification failures as an integrity-defect count; retire dispatch-graph-census latch birth
 

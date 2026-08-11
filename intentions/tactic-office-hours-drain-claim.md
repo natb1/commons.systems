@@ -31,13 +31,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 10
+  boost: 0.02
   override: null
-  rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
-    band to 10. These are ordinary improvements, not integrity defects; at 85-90
-    they outranked strategy-main-health (101 resolved) and flooded the selector
-    hot band. Interim scaffolding only; tactic-attention-tier-ranking and
-    tactic-attention-boost-scripts retire this numeric scheme."
+  rationale: >-
+    Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90 band to
+    10. These are ordinary improvements, not integrity defects; at 85-90 they
+    outranked strategy-main-health (101 resolved) and flooded the selector hot
+    band. Interim scaffolding only; tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire this numeric scheme.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 10 to 0.02 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: main-qa
 execution:
@@ -82,7 +95,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 10
 ---
 # Every office-hours drain joins the node-id reservation ledger regardless of launch path — subagent fan-out and interactive drains included — so a drain cannot race the fleet or a second drain
 

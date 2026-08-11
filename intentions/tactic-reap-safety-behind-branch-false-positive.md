@@ -60,13 +60,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
+  boost: 0.04
   override: null
-  rationale: "Bootstrap band 2 (50/20/10 interim scale): a reap-path correctness
-    defect that permanently strands a worker slot and freezes its node — the
-    same band as the other dispatch-containment fixes
+  rationale: >-
+    Bootstrap band 2 (50/20/10 interim scale): a reap-path correctness defect
+    that permanently strands a worker slot and freezes its node — the same band
+    as the other dispatch-containment fixes
     (tactic-graph-execute-fresh-main-read, tactic-probe-unknown-never-clear),
-    which carry the identical boost."
+    which carry the identical boost.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: review
 execution:
@@ -91,7 +104,8 @@ blocked_by:
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 
 # A strictly-behind branch is not unlanded work
