@@ -83,7 +83,17 @@ clarifications:
       ordering by (tier, distributing-strategy rank, within-strategy value),
       with a behavioral-doctrine-plus-lint migration first. Tracked at
       tactic-attention-namespaced-rank; the ownership half of the doctrine (who
-      may write which attention) lives on strategy-recursive-self-improvement."
+      may write which attention) lives on strategy-recursive-self-improvement.
+      Amended 2026-08-12: the composition question is settled, and the ASYMMETRY
+      BY KIND is retired. There is one relation and one rule for every kind: a
+      node's score is its own per-tier boost plus the sum of the boosts of every
+      distinct node in its lineage, each counted once. Strategies are banded on
+      the same terms as tactics (a strategy's band is the maximum score among
+      its own parents), so 'strategies live on a single flat additive scale' no
+      longer holds. The namespacing BOUND this entry records is preserved — a
+      tactic still cannot outrank a tactic of a higher-ranked strategy — but it
+      is now delivered by the band component of a uniform key rather than by a
+      kind-specific rule."
   - question: What exactly are the three components of the rank key, and how is each
       derived?
     answer: "(Recorded 2026-08-11, third round, after adversarial review found the
@@ -153,7 +163,29 @@ clarifications:
       Author-directed: the author accepted this resolution on trust in the same
       round rather than deriving it, so it is enrolled for re-validation as a
       born-parked office-hours review sitting
-      (tactic-review-band-derivation-ratification)."
+      (tactic-review-band-derivation-ratification). Amended 2026-08-12 (/align
+      round on strategy-graph-drives-dispatch; the unified ranking model). The
+      key is no longer a triple and RESIDUAL IS RETIRED as a distinct component.
+      The key is the lexicographic QUADRUPLE (resolved tier, band, score,
+      depth), descending. TIER and BAND are unchanged in derivation. SCORE
+      replaces residual, and the residual correction recorded above becomes MOOT
+      rather than merely superseded — under the unified model every term flows
+      down the parent relation (the signal term is retired outright, and capture
+      becomes lineage via `recovers`), so a node's lineage necessarily contains
+      its band-defining parent and everything above it. Therefore band <= score
+      always, the residual can never go negative, and since every node sharing a
+      band has that same band value inside its score, subtracting it is
+      subtracting a constant: ordering by score within a band is IDENTICAL to
+      ordering by residual. The residual existed to stop the band leaking into
+      within-band order; making every term flow down removes the leak at its
+      source, so the subtraction is no longer needed. DEPTH — the count of
+      distinct lineage nodes — is the new final component, and it is what
+      guarantees a child always outranks its parent. Consequence for the
+      terms-and-weights doctrine: with the signal term retired and capture
+      converted to lineage, the term registry is emptied and attention has
+      exactly ONE input, the authored per-tier boost. A new attention condition
+      must therefore become a tier, a lineage edge, or an authored boost — 'add
+      it as a term with a weight' is no longer an available move."
   - question: Is the band derived, or authored and checked?
     answer: "(Author-directed 2026-08-11, third round.) Both, and the second is the
       point. The band is derived as above, but the VALUE chosen inside a band
@@ -178,7 +210,17 @@ clarifications:
       interaction to settle when this lands: validateGraph rule 18 (the
       strategy-main-health boost-dominance guard) has a tactic-facing half that
       becomes dead under namespaced rank — the implementing tactic must record
-      whether it retires."
+      whether it retires. Amended 2026-08-12: split, and only half is resolved.
+      The per-TIER half is adopted and is now structural — a node carries an
+      authored boost per tier, and in tier T's ranking every node contributes
+      its tier-T boost, which is what makes a node's rank well-defined in a tier
+      it does not itself belong to (see strategy-graph-drives-dispatch,
+      2026-08-12). The per-BAND scope stamp this entry proposes remains OPEN and
+      is not resolved by that round: a boost authored while its node sat in one
+      band still means something different after the band-defining parent is
+      reranked, and nothing yet stamps or catches that. Recorded explicitly so
+      the per-tier adoption is not misread as having closed the per-band
+      question."
   - question: Which order-changing mechanisms sit outside the rank key, and how do
       they compose with it?
     answer: "(Recorded 2026-08-11, third round.) Two, and the second-round record
@@ -200,7 +242,14 @@ clarifications:
       inherits the band of what it blocks, which is the correct reading — the
       blocked work's urgency is exactly what the lift models — and it preserves
       the never-additive, always-max property the 2026-07-13 supersession was
-      built on."
+      built on. Amended 2026-08-12: reduced to ONE mechanism. The blocked_by
+      PRECEDENCE LIFT described here is deleted, because blocked_by moves inside
+      the parent relation — a blocker is a child of what it blocks and therefore
+      inherits its tier, its band and its lineage directly, by the ordinary rank
+      key. The mechanical concern this entry raises (Precedence must widen to a
+      3-tuple or the band never reaches the sort) is resolved by deletion rather
+      than by widening: there is no separate Precedence tuple left to keep in
+      sync. CLASSIFICATION acts remain outside the key exactly as recorded."
 tooling_goals: []
 success_signal: null
 attention: null

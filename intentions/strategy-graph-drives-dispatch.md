@@ -44,12 +44,19 @@ clarifications:
       provenance discount, subordinate_to, emit-time projection) after the
       2026-07-02 scenario interview.
   - question: How are ordering constraints ("do A before B") expressed?
-    answer: Never through attention. Blocking is a separate tactic-layer mechanism —
-      a tactic subtree blocks another, and no tactic in the blocked subtree
+    answer: "Never through attention. Blocking is a separate tactic-layer mechanism
+      — a tactic subtree blocks another, and no tactic in the blocked subtree
       begins until every tactic in the blocking subtree completes; the gate
       releases itself as tactics close. Strategies are never blocked, and
       strategy refinement, documentation, and emission are never gated — the
-      router is the single enforcement point. Recorded 2026-07-02.
+      router is the single enforcement point. Recorded 2026-07-02. Amended
+      2026-08-12 (author-dictated): superseded. Ordering constraints ARE now
+      expressed through the ranking algorithm — a blocked node is its blocker's
+      parent, so a blocker always outranks what it blocks by construction rather
+      than by a separate serialization mechanism. Blocking remains the sole
+      GATING mechanism (a blocked node stays ineligible regardless of rank);
+      what is retired is the separation of ordering from rank, not the gate. See
+      the 2026-08-12 single-ranking-algorithm entry below."
   - question: What does authoring a `serves` edge imply for rank?
     answer: It is a ranking act — a second serves edge adds a real claim to the
       node's rank, so edge authoring deserves the same review care as weights.
@@ -69,7 +76,15 @@ clarifications:
       backward. The critical path to a hot node is still drained first, but by
       serialization precedence, not boost inheritance. Existing authored boosts
       keep their value and meaning. Recorded 2026-07-07 interview; superseded in
-      part 2026-07-13 interview (author-dictated orthogonality)."
+      part 2026-07-13 interview (author-dictated orthogonality). Amended
+      2026-08-12 (author-dictated): the backward flow along blocked_by is
+      RESTORED, in a different form. blocked_by is a parent edge in one unified
+      relation, and authority flows as LINEAGE with each lineage node counted
+      exactly once regardless of how many paths reach it. That per-node
+      deduplication is what makes it safe where the 2026-07-07 additive per-path
+      form was not. 'Downward only' is therefore no longer the rule; the rule is
+      that authority flows along the parent relation, of which blocked_by is now
+      part."
   - question: Does backward rank flow along blocked_by change the blocking mechanism?
     answer: "Superseded framing, 2026-07-13: there is no backward rank flow.
       Blocking is orthogonal to boosting — blockers are serialized by a distinct
@@ -90,7 +105,15 @@ clarifications:
       draft tactic-attention-blocking-orthogonal. Recorded 2026-07-13 interview
       (author-dictated). Amended 2026-07-18: under the tier model the precedence
       lift generalizes to the lexicographic (tier, rank) pair — see the
-      2026-07-18 tier clarifications."
+      2026-07-18 tier clarifications. Amended 2026-08-12 (author-dictated; the
+      orthogonality ruling was explicitly declared not binding at the opening of
+      that interview): there IS backward rank flow again, and blocking is no
+      longer orthogonal to boosting. One ranking algorithm; a blocked node is
+      its blocker's parent; the separate max-based precedence mechanism is
+      deleted rather than generalized. The 2026-07-07 compounding hazard
+      recorded above does not return, because lineage is deduplicated per node —
+      see the 2026-08-12 entry on what the unification costs and why it is safe
+      now."
   - question: How does the intention-store instrument distinguish sensor-run
       readings from hand-written ones?
     answer: "Mechanically it cannot: reading provenance is not recorded in
@@ -146,7 +169,14 @@ clarifications:
       with tier-3 urgency while its own marks and authored rank are untouched.
       This extends the 2026-07-13 blocking-orthogonal-to-boosting doctrine
       unchanged in spirit: blocking still gates and serializes, never boosts.
-      Recorded 2026-07-18 interview."
+      Recorded 2026-07-18 interview. Amended 2026-08-12: the blocking-precedence
+      lift described here is DELETED. Tier still inherits max-based, but along
+      the widened parent relation that now includes blocked_by, so a blocker
+      inherits the tier of what it blocks directly rather than through a
+      parallel precedence pair. Consequence recorded with that change: resolved
+      tier stays correct for ORDERING but is no longer usable for COUNTING
+      production issues — a consumer that classifies must read ownTier, not the
+      resolved tier."
   - question: Which nodes carry the first bug_fix/security marks?
     answer: "The 2026-07-18 round applied attributes.bug_fix: true to the ten clear
       defect-fix tactics open at the time
@@ -207,7 +237,18 @@ clarifications:
       clarifications). The exact storage shape (a map keyed by tier vs a
       tier-tagged value) and the validate-graph shape check are tactical,
       retained in tactic-attention-tier-ranking. Gated on that tactic landing —
-      tiers are not yet built."
+      tiers are not yet built. Amended 2026-08-12: the open design consideration
+      retained here — 'how a per-tier boost composes with the recorded downward
+      flow of authored boosts along parent/serves' — is now ANSWERED, and this
+      entry's per-tier namespace is adopted rather than revised. In tier T's
+      ranking every node contributes its tier-T boost, throughout the whole
+      lineage sum. That makes 'a rank for each tier' well-defined for every
+      node, including nodes that do not themselves belong to tier T, which is
+      precisely what lets a tier-lifted tactic band against its parent's rank IN
+      THE TACTIC'S OWN resolved tier rather than against the parent's resolved
+      tier. One requirement this adds to the storage shape left tactical here:
+      an unauthored tier must stay distinguishable from an authored lowest
+      value, or 'not yet ranked in this tier' reads as 'ranked last'."
   - question: Is changing a node's tier the same operation as boosting it to top rank?
     answer: (Recorded 2026-07-21 interview.) No — a tier change is a DISTINCT
       scripted operation, run only on an explicit author request for a tier
@@ -256,7 +297,160 @@ clarifications:
       edited, because it is in flight and a body edit would trip scope custody.
       Full algebra at kind-kind; ownership half at
       strategy-recursive-self-improvement; implementation at
-      tactic-attention-namespaced-rank."
+      tactic-attention-namespaced-rank. Amended 2026-08-12: the consequence this
+      entry carries forward is now settled in the other direction. Precedence
+      does NOT become a 3-tuple: effectivePrecedence is deleted outright,
+      because blocked_by moves inside the parent relation and a blocker
+      therefore inherits the band of what it blocks as ordinary lineage. The
+      band still reaches the sort — the selector sorts on the rank key directly.
+      tactic-attention-tier-ranking still needs re-scoping when the resolver
+      change lands, for the same reason stated here."
+  - question: What is the single ranking algorithm, after the 2026-08-12 unification?
+    answer: (Recorded 2026-08-12 /align interview, author-dictated. Supersedes in
+      part clarifications 1, 4, 5, 9, 12 and 14 above, each of which carries its
+      own dated amendment.) One algorithm, one relation, no orthogonal
+      mechanisms. PARENT RELATION — a node's parents are the node named by its
+      `parent` field, every node it `serves`, every delegation it `recovers`,
+      and every node that lists it in `blocked_by` (that is, every node it
+      blocks). The same relation drives every axis. TIER — own tier defaults to
+      1, bug_fix/security marks resolve to 2, production issues to 3; resolved
+      tier = max(own tier, parents' resolved tier), unchanged from the
+      2026-07-18 model except for the widened relation. PER-TIER BOOSTS — each
+      node carries an authored boost per tier, and in tier T's ranking every
+      node contributes its tier-T boost. ATTENTION SCORE — score(n) = boost(n)
+      plus the sum of the boosts of every DISTINCT node in n's lineage; each
+      lineage node counts exactly once no matter how many paths reach it, and
+      there is no decay and no per-path multiplicity. BAND — the maximum, over
+      n's parents, of the parent's score, taken in n's resolved tier. RANK KEY —
+      the lexicographic quadruple (resolved tier, band, score, depth),
+      descending, where depth is the count of distinct lineage nodes. TERMINAL
+      NODES — a node at phase `done` contributes nothing to any axis, so rank
+      decays as work lands instead of waiting on a prune. There is no override,
+      no branch cap, no separate blocking-precedence lift, and no signal term.
+  - question: Why does 'a child always outranks its parent' come from depth rather
+      than from a minimum boost of 1?
+    answer: "(Recorded 2026-08-12, author-directed after the interview measured both
+      variants against the live 597-node graph.) The model as brought to
+      interview gave every node a minimum boost of 1, so a child's inherited sum
+      plus its own floor always exceeded its parent's. That does guarantee the
+      invariant, but it also makes the score a proxy for lineage SIZE rather
+      than for attention: measured across the graph, the min-boost-1 score
+      correlates r=0.965 with distinct-ancestor count and only r=0.146 with the
+      node's own authored boost, and all 18 top-ranked selectable tactics
+      resolved with an authored boost of 0 — a deep subtree under a cold
+      strategy outranking shallow work under a hot one. So an unauthored boost
+      contributes 0, and the invariant is carried instead by DEPTH as the final
+      lexicographic term. Verified exhaustively on the same graph: zero
+      violations of child-outranks-parent across all 846 parent edges, and the
+      resulting top of queue returns to the rsi-plan and attention-surface work
+      that actually carries authored claims (15 of the top 15 have a real
+      authored claim in lineage, against 0 of 18 under min-boost-1). The
+      simulation scripts were interview instruments, not deliverables, and were
+      not retained; the figures recorded here are the record of what was
+      measured."
+  - question: Does a failing or unvalidated success_signal change any node's
+      attention score?
+    answer: "(Recorded 2026-08-12, author correction during interview — the
+      interviewer had carried the signal in as a rank term and was corrected.)
+      No. Signals are orthogonal to rank. An unvalidated strategy is a FAILING
+      SIGNAL, and what surfaces is the signal itself, on
+      strategy-attention-surface's status queue; the importance of a failing
+      signal is read from the attention score of the node that owns it. The
+      score does not move because the signal is failing. This retires the
+      structural `signal` term in resolveAttention — SIGNAL_TERM_WEIGHT, the
+      flat +1 for a node on the path to an unvalidated validates-terminal
+      (packages/intentionsutil/src/attention.ts) — so attention has no signal
+      input at all. Note for the implementing session, because the two uses are
+      easy to conflate: computeSignalPath is ALSO consumed by the graph router's
+      strategy-eligibility gate, which is a separate concern and is NOT retired
+      by this entry. Only its contribution to rank is."
+  - question: What replaces `override` once it is removed?
+    answer: "(Recorded 2026-08-12, author-dictated.) Nothing, deliberately.
+      `attention.override` pinned a node's value absolutely and discarded
+      incoming authority, acting as a branch cap. It is removed as an
+      unnecessary complication: if a node requires less attention than its
+      lineage confers, the graph is wrong and the LINEAGE is corrected, not the
+      number — a child cannot receive less attention than its parent. The cost
+      of removal is empirically near zero: measured this round, exactly ONE node
+      of 597 carries a non-null override
+      (tactic-transition-node-stamp-landed-body, itself at phase done), so no
+      live subtree depends on the cap. The consequence accepted alongside it is
+      that re-weighting the owning strategy becomes the SOLE remedy when a hot
+      subtree monopolizes the queue — which clarification 3 above already
+      accepts by design. `serves` remains a ranking act (clarification 2); this
+      round confirms rather than changes that, since a serves edge is simply a
+      parent edge and ranks by tier and attention exactly like every other
+      parent edge."
+  - question: How do delegations and `recovers` participate in rank, given
+      delegations are not in the goal layer?
+    answer: "(Recorded 2026-08-12, author-directed, with one sub-decision left
+      explicitly open.) `recovers` becomes a true parent edge: a delegation is a
+      parent of every strategy that recovers it, and the delegation's score
+      flows down as ordinary lineage. This requires delegations to become
+      score-bearing, which they are not today — kind-delegation carries no
+      `goal_layer: true`, so a delegation has no `attention` field at all and
+      there is nothing for a recovering strategy to inherit. The delegation's
+      score is DERIVED, not authored: computed from its divergence and
+      irreversibility axes exactly as the current capture term computes them,
+      which preserves the self-updating property — raising a delegation's
+      divergence level re-ranks every recovering strategy with no authoring act.
+      In short, the capture TERM becomes capture LINEAGE. OPEN, and owed before
+      implementation: whether the derived score keeps a cap. Today the capture
+      term is capped at min(1, sum) so that a strategy recovering several severe
+      delegations cannot swamp authored intent; read as lineage, the natural
+      form of this model is no cap, with severity instead calibrated onto the
+      same integer scale as authored boosts. 19 recovers edges across 22
+      delegations are in scope. Carried into
+      tactic-attention-delegation-scoring."
+  - question: What does making `blocked_by` a ranking edge cost, and why is it safe
+      in 2026-08-12 when it was not in 2026-07-13?
+    answer: "(Recorded 2026-08-12, author-dictated re-decision.) The 2026-07-13
+      ruling was adopted because ADDITIVE backward flow let unrelated blocked_by
+      compounding silently overtake intentionally top-ranked nodes. Per-node
+      deduplication removes that mechanism outright: a lineage node contributes
+      once no matter how many paths reach it, so nothing compounds. Measured
+      this round on the live graph — the per-path form reaches a maximum score
+      of 273 with path multiplicity up to 89, while the dedup form maxes at 122
+      and produces no overtaking. The hazard that justified orthogonality is
+      therefore retired rather than merely tolerated, and the gain is the
+      deletion of an entire second mechanism (router.ts's recursive max-based
+      effectivePrecedence lift). Three costs were surfaced; all are latent
+      rather than live, each measured at zero occurrences today. (a) MIXED
+      CYCLES become representable in the unified relation and nothing catches
+      them: validateGraph rule 15 forbids only blocked_by cycles, and the
+      realistic authoring mistake is `B.parent = A` together with `B.blocked_by
+      = [A]` ('B is a sub-tactic of A, and B waits on A's other work') — two
+      individually sensible edges that together cycle. Under dedup-union the
+      fixpoint still CONVERGES rather than diverging, so child-outranks-parent
+      collapses silently inside the cycle instead of erroring; 0 cycles today;
+      carried into tactic-attention-unified-relation-cycle-rule. (b) TIER STOPS
+      BEING A CLASSIFICATION: it stays correct for ordering, but once a tier-3
+      incident has blockers, those blockers report tier 3, so any consumer
+      COUNTING production issues over-counts and must read ownTier instead; 0
+      nodes are lifted by a blocked_by edge today. (c) A `done` blocked node
+      kept conferring lineage on its blocker until the edge was pruned, which is
+      why terminal nodes are ruled non-distributing in the ranking-algorithm
+      entry above."
+  - question: What was the freeze blast radius when this node's substance changed on
+      2026-08-12?
+    answer: "(Recorded 2026-08-12, discharging the materiality-scoped-freeze
+      contract for this round.) This round changes this node's clarifications
+      and therefore its strategyFingerprint. Measured with readNode plus
+      isFingerprintStale and strategyFingerprint, never a grep. Ten children
+      serve this strategy. Exactly ONE is open (non-draft, non-done) —
+      tactic-attention-tier-ranking at phase main-qa — and it carries NO
+      strategy_fingerprint entry for this strategy, so per-strategy null
+      semantics apply and no freeze fires for it. Three children carry a stamp
+      keyed to this strategy: tactic-first-sensor-pass (phase done, irrelevant)
+      and tactic-owner-review-reading-pass-a and -pass-b (both phase-null
+      drafts, reading-curriculum work orthogonal to rank algebra) — left stale,
+      and born stale in the sense tactic-strategy-fingerprint-stamp-coverage
+      tracks. Materially affected but not freezable:
+      tactic-attention-tier-ranking's shipped behaviour (the selector sorts by
+      the (tier, rank) pair; blocking lifts that pair) is superseded in part by
+      this round's rank key and by the deletion of the precedence lift, but it
+      is already merged at PR 2997 and sits past main-qa, so the supersession is
+      follow-up work carried by tactic-attention-namespaced-rank, not a freeze."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with
@@ -286,5 +480,12 @@ attributes:
   conditions:
     - the dispatch chain remains the execution path for tactical work
       (strategy-autonomous-execution holds)
+    - The unified parent relation stays acyclic. Under per-node deduplication
+      the fixpoint converges rather than diverging on a cycle, so a cycle
+      degrades ordering silently instead of erroring; validateGraph must reject
+      cycles over the whole relation, not only over blocked_by.
+    - Consumers that COUNT nodes by tier (reporting, queue summaries, incident
+      counts) read ownTier, not resolved tier. Resolved tier is an ordering axis
+      only, since it now propagates along blocked_by.
 ---
 # Close the loop — intent enters execution from the graph, and execution reports back as readings

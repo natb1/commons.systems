@@ -1,9 +1,10 @@
 ---
 id: tactic-attention-namespaced-rank
 kind: tactic
-statement: Make namespaced rank structural — order by (tier, band, residual)
-  with an authored attention.scope stamp, so a tactic's attention can never
-  invert cross-strategy order
+statement: Implement the unified rank key — one parent relation
+  (parent/serves/recovers/reverse-blocked_by), per-tier boosts, deduplicated
+  lineage score, and the (tier, band, score, depth) quadruple — retiring
+  override, the signal term and the blocked_by precedence lift
 owner: ai
 status: raw
 parent: null
@@ -89,6 +90,33 @@ clarifications:
       key; the 75 is a real measurement but the 0 is structural, not empirical,
       since band dominates residual lexicographically, so it must not be cited
       as evidence the key was validated against data."
+  - question: Does the (tier, band, residual) design with an attention.scope stamp
+      survive the 2026-08-12 unification?
+    answer: "(Recorded 2026-08-12 /align round on strategy-graph-drives-dispatch,
+      author-dictated.) Partly. BAND survives unchanged, including the
+      derivation from the distributing node's resolved rank settled in this
+      node's first clarification. RESIDUAL is retired, and the correction
+      recorded in that first clarification becomes moot rather than wrong:
+      because every term now flows down the parent relation, band <= score
+      always and the band cancels within a band, so ordering by score is
+      identical to ordering by residual. The multi-distributor sum-to-max
+      value-honesty defect this node also owns is likewise dissolved — the score
+      is a deduplicated lineage sum, so a node no longer reports a value its
+      highest-ranked distributor cannot account for, and the ~1828 inversion
+      figure and its re-measurement are moot. The attention.scope stamp is NOT
+      adopted in the per-band form proposed here; the per-TIER half is adopted
+      instead, as per-tier authored boosts, and the per-band stamp stays open on
+      kind-kind. Scope this node now carries: the widened parent relation,
+      per-tier boosts, the deduplicated lineage score with unauthored boosts
+      contributing 0, the (tier, band, score, depth) key, depth as the
+      child-outranks-parent guarantee, terminal (done) nodes contributing
+      nothing, deletion of attention.override, deletion of the signal term from
+      resolveAttention (leaving computeSignalPath in place for the router's
+      strategy-eligibility gate), and deletion of router.ts's
+      effectivePrecedence lift. Sibling work is split out: delegation scoring to
+      tactic-attention-delegation-scoring, the cycle rule to
+      tactic-attention-unified-relation-cycle-rule, and the boost migration to
+      tactic-attention-per-tier-boost-migration."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -101,8 +129,103 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Make namespaced rank structural — order by (tier, band, residual) with an authored attention.scope stamp, so a tactic's attention can never invert cross-strategy order
-## Draft context (2026-08-11 /align round, revised same day after adversarial review)
+# Implement the unified rank key — one parent relation (parent/serves/recovers/reverse-blocked_by), per-tier boosts, deduplicated lineage score, and the (tier, band, score, depth) quadruple — retiring override, the signal term and the blocked_by precedence lift
+
+## Superseding design (2026-08-12 /align round, author-dictated)
+
+**Everything below this section is the superseded 2026-08-11 design, kept as
+the record of what was decided and why.** Read it for the band derivation and
+the fixpoint argument, which survive; do not implement its `residual`
+component or its `attention.scope` stamp.
+
+The doctrine home for this design is `strategy-graph-drives-dispatch`'s
+2026-08-12 clarifications (the single-ranking-algorithm entry and the five
+that follow it); the algebra is on `kind-kind`.
+
+### The model
+
+One relation, one algorithm, no orthogonal mechanisms.
+
+- **Parent relation** — a node's parents are the node named by its `parent`
+  field, every node it `serves`, every delegation it `recovers`, and every
+  node that lists it in `blocked_by` (every node it blocks). The same
+  relation drives every axis.
+- **Tier** — own tier defaults 1, `bug_fix`/`security` resolve 2, production
+  issues 3; `resolved = max(own, parents' resolved)`. Unchanged except for
+  the widened relation.
+- **Per-tier boosts** — each node carries an authored boost per tier, and in
+  tier `T`'s ranking every node contributes its tier-`T` boost. This is what
+  makes a node's rank well-defined in a tier it does not itself belong to,
+  and so lets a tier-lifted tactic band against its parent's rank in the
+  tactic's own resolved tier.
+- **Score** — `score(n) = boost(n) + Σ boost(a)` over every **distinct** node
+  `a` in `n`'s lineage. Each lineage node counts exactly once regardless of
+  how many paths reach it. No decay. An unauthored boost contributes **0** —
+  there is no minimum boost of 1.
+- **Band** — `max` over `n`'s parents of the parent's score, taken in `n`'s
+  resolved tier.
+- **Rank key** — the lexicographic quadruple `(tier, band, score, depth)`,
+  descending, where `depth` is the count of distinct lineage nodes.
+- **Terminal nodes** — a node at phase `done` contributes nothing to any
+  axis, so rank decays as work lands rather than waiting on a prune.
+
+### Why `depth` rather than a minimum boost of 1
+
+The model as brought to interview gave every node a minimum boost of 1 so a
+child's inherited sum always exceeded its parent's. Measured on the live
+597-node graph, that makes score a proxy for lineage **size**: `r=0.965`
+against distinct-ancestor count, `r=0.146` against the node's own authored
+boost, with all 18 top-ranked selectable tactics resolving at authored boost
+0. Carrying the invariant on `depth` instead preserves it exactly — verified
+at **0 violations across all 846 parent edges** — while returning the top of
+queue to nodes with real authored claims (15 of 15).
+
+### Why `residual` is retired
+
+Because every term now flows down the parent relation (the signal term is
+deleted; capture becomes lineage via `recovers`), a node's lineage
+necessarily contains its band-defining parent and everything above it.
+Therefore `band <= score` always, and every node sharing a band carries that
+same band value inside its score — so subtracting it subtracts a constant and
+ordering by `score` within a band is **identical** to ordering by `residual`.
+The residual existed to stop the band leaking into within-band order; making
+every term flow down removes the leak at its source. The multi-distributor
+sum-to-max value-honesty defect dissolves for the same reason.
+
+### Scope carried by this node
+
+1. Widen the distributor relation in `resolveAttention`
+   (`packages/intentionsutil/src/attention.ts`) to `parent` ∪ `serves` ∪
+   `recovers` ∪ reverse-`blocked_by`.
+2. Per-tier authored boosts throughout the lineage sum.
+3. Deduplicated lineage score; unauthored boosts contribute 0.
+4. The `(tier, band, score, depth)` key, and the selector sorting on it.
+5. Terminal (`done`) nodes contribute nothing to any axis.
+6. Delete `attention.override` from the schema and the resolver.
+7. Delete the signal term (`SIGNAL_TERM_WEIGHT`) from `resolveAttention`.
+   **Leave `computeSignalPath` in place** — it is also consumed by the graph
+   router's strategy-eligibility gate, which this round does not touch.
+8. Delete `router.ts`'s `effectivePrecedence` lift and its `Precedence`
+   tuple; blockers are parents now, so the lift is redundant.
+
+### Split out, not in this node
+
+- `tactic-attention-delegation-scoring` — making delegations score-bearing
+  so `recovers` can carry lineage (blocks item 1 above from being complete).
+- `tactic-attention-unified-relation-cycle-rule` — `validateGraph` must
+  reject cycles over the whole relation.
+- `tactic-attention-per-tier-boost-migration` — the authored-value
+  migration, including reverting the 0.01 namespacing ladder.
+
+### Consumer note
+
+Resolved tier is now an **ordering** axis only. It propagates along
+`blocked_by`, so a consumer that **counts** production issues must read
+`ownTier` instead.
+
+---
+
+## Draft context (2026-08-11 /align round, revised same day after adversarial review) — SUPERSEDED
 
 The doctrine this implements is recorded in three places, split by artifact
 owner:
