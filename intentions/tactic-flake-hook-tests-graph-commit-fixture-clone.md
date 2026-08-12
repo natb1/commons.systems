@@ -25,7 +25,44 @@ reading: null
 serves:
   - strategy-token-economy
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is the fixture clone failure actually transient, and does the
+      loud-failure fix cover everything wrong here?
+    answer: "(Measured 2026-08-12 during the /align round that recorded
+      /dispatch-emulate; observed on PR #3070, a one-paragraph SKILL.md prose
+      change that cannot touch graph-commit fixtures.) NO on both counts, and
+      this node's framing needs widening. TRANSIENCE. The statement above calls
+      the clone failure transient. It is not, at least not now: hook-tests
+      failed on the PR, was re-run with `gh run rerun --failed`, and failed
+      AGAIN with the identical signature — a different temp directory each time,
+      the same `fatal: failed to copy file to '<tmp>/b/.git/objects/<xx>/<sha>':
+      No such file or directory` followed by every dependent case dying on
+      `fatal: cannot change to '<tmp>/b'`. Both runs reported `passed: 73
+      failed: 11`, the exact cascade this node exists to stop presenting. So it
+      reproduces deterministically in the CI runner. THE DISCRIMINATOR that
+      makes this diagnosable rather than a guess: the SAME suite, run locally at
+      the same commit (origin/main ccfa8028 plus the one prose commit), reports
+      `passed: 84 failed: 0`. Local green, CI red, twice, on a change that
+      touches only markdown. That rules out a code regression and localizes the
+      fault to the CI environment's local-clone behavior, not to graph-commit
+      and not to the test's assertions. TWO DEFECTS, NOT ONE. This node covers
+      the reporting defect — a swallowed fixture failure cascading into 11
+      misleading product failures — and that fix stands and is still worth
+      landing exactly as scoped: with `set -uo pipefail` and no `-e`, the
+      harness walks past a failed fixture clone. But underneath it there is a
+      SECOND defect this node does not cover: whatever makes `git clone` of
+      fixture `b` fail in the runner in the first place. 'failed to copy file
+      ... No such file or directory' on a local clone is a source-side symptom —
+      the object the clone is copying is not where the clone expects it — so the
+      candidates are the local-clone hardlink/copy path against a source repo
+      being mutated concurrently, or runner filesystem behavior the local path
+      does not exercise. Diagnosing that is separate work; it is named here so a
+      session that lands the loud-failure fix does not read a now-clear one-line
+      error as the whole problem solved. OPERATIONAL CONSEQUENCE while both
+      stand: hook-tests is a required check, so this currently blocks any PR
+      that runs it — #3070 included — independent of the PR's content. Per the
+      test-integrity rule the suite was not weakened, skipped, or worked around
+      in this session."
 tooling_goals: []
 success_signal: null
 attention: null
