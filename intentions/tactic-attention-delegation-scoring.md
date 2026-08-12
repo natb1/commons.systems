@@ -60,7 +60,11 @@ clarifications:
       Preserving that relative weight across the migration requires ONE named
       constant, DELEGATION_SEVERITY_WEIGHT = 10, giving a range of 10..60 that
       spans both authored modes. Net: three mechanisms (divisor, cap, term
-      weight) become one constant. NO `goal_layer` FLIP IS NEEDED — this is
+      weight) become one constant. (SUPERSEDED 2026-08-12: that constant is
+      deleted — severity maps onto the author level vocabulary instead, see the
+      severity-to-level clarification below. The scale ARGUMENT here still
+      stands and is why the mapping lands where it does; only the mechanism
+      changed.) NO `goal_layer` FLIP IS NEEDED — this is
       what makes the change small. resolveAttention's authored fixpoint already
       sweeps EVERY node and lets an ineligible node relay its distributors'
       outgoing set, filtering to eligible only when building the output map, so
@@ -75,28 +79,35 @@ clarifications:
       an AUTHORED magnitude is chosen against a tier's scale, and nothing is
       authored here."
   - question: How does the derived delegation score interact with the closed level
-      vocabulary settled after this node's cap decision?
-    answer: "(Raised 2026-08-12, AFTER the cap decision above; OPEN — the one
-      undecided item on this node.) The author later closed kind-kind's per-band
-      question by making the authored boost vocabulary a closed set of absolute
-      levels (background 5 / low 10 / normal 20 / high 50 / urgent 85; see
-      tactic-attention-per-tier-boost-migration). DELEGATION_SEVERITY_WEIGHT =
-      10 yields 10, 20, 30, 40, 50, 60 — and 30, 40 and 60 are values no author
-      can express. This is NOT a validation conflict: the derived boost is
-      computed inside resolveAttention and never written to a node's attention,
-      so the write-path vocabulary check that replaces retired rule 20 does not
-      see it, and an off-vocabulary SCORE is not anomalous because scores are
-      sums of boosts. An implementer must not apply the vocabulary check to
-      resolved values. What is open is whether a delegation should speak the
-      author's vocabulary: (1) keep the weight, preserving six distinct monotone
-      contributions; or (2) map severity onto the levels and delete
-      DELEGATION_SEVERITY_WEIGHT entirely — one fewer constant and
-      commensurability by construction, at the cost of collapsing six
-      severities onto five levels (the live graph carries severities 1..5 across
-      22 delegations, so little is lost). Recommendation is (2), on the same
-      reasoning that decided the cap and the vocabulary; the mapping itself is
-      the judgment call. Not folded in unilaterally because the cap decision is
-      already recorded as settled."
+      vocabulary, and what is the severity-to-level mapping?
+    answer: "(Raised and DECIDED 2026-08-12, after the cap decision above; nothing
+      on this node is open now.) A delegation speaks the AUTHOR'S VOCABULARY.
+      DELEGATION_SEVERITY_WEIGHT is deleted — severity maps directly onto the
+      absolute levels (background 5 / low 10 / normal 20 / high 50 / urgent 85;
+      tactic-attention-per-tier-boost-migration owns them). The weight yielded
+      10, 20, 30, 40, 50, 60, of which 30, 40 and 60 are values no author can
+      express; mapping instead gives commensurability by construction and
+      removes the last constant this node introduced. THE MAPPING, severity =
+      divergenceScore + irreversibilityScore (each 0..3, so 0..6): 0 -> 0, 1 ->
+      5, 2 -> 5, 3 -> 10, 4 -> 20, 5 -> 50, 6 -> 85. SEVERITY 0 MUST CONFER
+      NOTHING, not `background`: 0 means the axes are absent or unparseable —
+      not assessed — and that must stay distinguishable from assessed-as-minimal,
+      the same principle already recorded for an unauthored tier versus an
+      authored lowest value. Measured impact on the live graph (22 delegations,
+      severities 1..5 only, so 0 and 6 are unexercised today): per-delegation
+      levels come out 5,5,10,20,50 over populations 3,6,5,5,3, and the four
+      top-ranked recovering strategies (own-audience, recover-attention,
+      recover-discovery, recover-publishing) hold at 50 — identical to the
+      weight. ONE ORDER CHANGE: strategy-author-approved-copy, the only node
+      recovering two delegations (both severity 3), falls from 60 to 20 and from
+      first to mid-pack among recovering strategies, because the level scale is
+      deliberately NON-LINEAR — it names priority, not quantity — so two
+      moderate delegations no longer outrank one severe one. That is the
+      intended reading, recorded rather than glossed. Unchanged from the earlier
+      entry: this was never a validation conflict, and an implementer must NOT
+      apply the write-path vocabulary check to resolved values — the derived
+      boost is never written to a node's attention, and scores are sums of
+      boosts so they sit off-vocabulary routinely."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -126,12 +137,14 @@ open decision the resolver work does not need to wait on.
 ## Scope
 
 1. Seed each delegation's derived boost in `resolveAttention`'s authored
-   fixpoint as `divergenceScore(d) + irreversibilityScore(d)`, scaled by
-   `DELEGATION_SEVERITY_WEIGHT` (see below). **Reuse** those two helpers in
-   `packages/intentionsutil/src/attention.ts` rather than writing a second
-   implementation — their free-text token matching is deliberate (the live
-   store carries compound values such as `low-moderate`) and must be
-   preserved.
+   fixpoint by mapping `divergenceScore(d) + irreversibilityScore(d)` through
+   the severity-to-level table below (severity 0 confers nothing). **Reuse**
+   those two helpers in `packages/intentionsutil/src/attention.ts` rather than
+   writing a second implementation — their free-text token matching is
+   deliberate (the live store carries compound values such as `low-moderate`)
+   and must be preserved. The level values come from the shared vocabulary
+   constant owned by `tactic-attention-per-tier-boost-migration`; do not
+   redeclare them here.
 2. Add `recovers` to the parent relation (this is item 1 of
    `tactic-attention-namespaced-rank`'s scope; it is inert until step 1
    lands).
@@ -179,7 +192,7 @@ reverse holds: raw `attention.boost` has median 3 with 46% of values below
 1.0, so the `[0,1]` capture term is currently competitive with half the
 authored graph.
 
-Preserving that relative weight across the migration takes **one named
+Preserving that relative weight across the migration took **one named
 constant**:
 
 ```
@@ -189,44 +202,62 @@ DELEGATION_SEVERITY_WEIGHT = 10   // severity 1..6 -> 10..60
 which spans both authored modes. Net simplification: three mechanisms
 (divisor, cap, term weight) collapse to one constant.
 
-## OPEN — interaction with the level vocabulary (raised 2026-08-12, after)
+> **SUPERSEDED 2026-08-12** — the constant above is deleted. Severity maps
+> directly onto the author level vocabulary instead; see "Severity maps onto
+> the level vocabulary" below for the table and the measured impact. The
+> scale ARGUMENT in this section still stands and is why the mapping lands
+> where it does; only the mechanism changed.
 
-The cap decision above was settled BEFORE the author closed the per-band
-question by making the authored boost vocabulary a closed set of absolute
-levels — background 5 / low 10 / normal 20 / high 50 / urgent 85
-(`tactic-attention-per-tier-boost-migration`;
-`strategy-graph-drives-dispatch` carries the doctrine). The two have an
-interaction that is **not yet decided**.
+## Severity maps onto the level vocabulary (decided 2026-08-12)
 
-`DELEGATION_SEVERITY_WEIGHT = 10` yields contributions of 10, 20, 30, 40, 50,
-60. Three of those (30, 40, 60) are values no author can express.
+**Supersedes `DELEGATION_SEVERITY_WEIGHT` above — that constant is deleted.**
 
-**This is not a validation conflict.** The derived boost is computed inside
+The cap decision was settled before the author closed the per-band question by
+making the authored boost vocabulary a closed set of absolute levels
+(`tactic-attention-per-tier-boost-migration` owns them;
+`strategy-graph-drives-dispatch` carries the doctrine). The weight yielded
+contributions of 10, 20, 30, 40, 50, 60 — and 30, 40 and 60 are values no
+author can express. A delegation now speaks the author's vocabulary instead:
+commensurability by construction, and one fewer constant.
+
+Severity is `divergenceScore + irreversibilityScore`, each `0..3`:
+
+| severity | level | live delegations |
+|---|---|---|
+| 0 | **0 — no claim** | 0 |
+| 1 | background 5 | 3 |
+| 2 | background 5 | 6 |
+| 3 | low 10 | 5 |
+| 4 | normal 20 | 5 |
+| 5 | high 50 | 3 |
+| 6 | urgent 85 | 0 |
+
+**Severity 0 must confer nothing, not `background`.** Zero means the axes are
+absent or unparseable — *not assessed* — which has to stay distinguishable
+from *assessed as minimal*. This is the same principle already recorded for an
+unauthored tier versus an authored lowest value.
+
+### Measured impact
+
+The four top-ranked recovering strategies — `strategy-own-audience`,
+`strategy-recover-attention`, `strategy-recover-discovery`,
+`strategy-recover-publishing` — hold at **50**, identical to the weight.
+
+**One order change.** `strategy-author-approved-copy` is the only node
+recovering two delegations (both severity 3). It falls from 60 to 20, and from
+first to mid-pack among recovering strategies, because the level scale is
+deliberately **non-linear** — it names priority, not quantity — so two
+moderate delegations no longer outrank one severe one. That is the intended
+reading, recorded rather than glossed.
+
+### Unchanged from the interaction note
+
+This was never a validation conflict. The derived boost is computed inside
 `resolveAttention` and never written to a node's `attention`, so the
-write-path vocabulary check that replaces retired rule 20 does not see it.
-Nor is an off-vocabulary *score* anomalous — scores are sums of boosts and sit
-off-vocabulary constantly. An implementer must not apply the vocabulary check
-to resolved values.
-
-**What is open** is whether a delegation should speak the same vocabulary as
-an author. Two options:
-
-1. **Keep the weight** (as recorded above). Preserves full resolution: six
-   distinct severities map to six distinct contributions, monotone and
-   injective.
-2. **Map severity onto the levels** and delete `DELEGATION_SEVERITY_WEIGHT`
-   entirely — one fewer constant, and a delegation then makes a claim in
-   exactly the language an author uses. Costs resolution: six severities
-   collapse onto five levels (in practice the live graph carries severities
-   1..5 across 22 delegations, so little is lost).
-
-**Recommendation: option 2**, on the same reasoning that decided the cap and
-the vocabulary — prefer one fewer mechanism, and prefer commensurability by
-construction. The mapping itself would be the judgment call.
-
-Not folded into the decision above unilaterally because that decision is
-already recorded as settled; this is flagged for the author rather than
-silently revised.
+write-path vocabulary check that replaces retired rule 20 does not see it —
+and an off-vocabulary *score* is not anomalous, since scores are sums of
+boosts and sit off-vocabulary routinely (two `low` delegations sum to 20).
+**An implementer must not apply the vocabulary check to resolved values.**
 
 ## Why no `goal_layer` flip
 
