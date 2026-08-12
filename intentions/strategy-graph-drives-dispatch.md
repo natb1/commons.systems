@@ -451,6 +451,33 @@ clarifications:
       this round's rank key and by the deletion of the precedence lift, but it
       is already merged at PR 2997 and sits past main-qa, so the supersession is
       follow-up work carried by tactic-attention-namespaced-rank, not a freeze."
+  - question: What do per-tier boosts cost, given almost none are authored — how do
+      tier 2 and tier 3 order in practice?
+    answer: "(Recorded 2026-08-12, same /align round as the entries above, closing a
+      measured finding the round's first commit left out of the record.) They
+      degenerate to lineage connectivity until someone authors them. In tier T's
+      ranking every node contributes its tier-T boost, so if no tier-2 boost has
+      been authored anywhere, every contribution is the unauthored value and the
+      score reduces to a count over the lineage — tier-2 ordering becomes 'how
+      deep and how connected is this node', not 'how urgent is this bug'.
+      Measured on the live graph: the whole tier-2 population is 5 nodes (4
+      bug_fix marks, 1 security), tier 3 is 5 more, and with no tier-2 boosts
+      authored their order is exactly their distinct-ancestor counts (9, 8, 8,
+      4, 3). That is the wrong ordering for precisely the tier that most needs
+      triage order, and nobody will preemptively author tier-2 boosts on
+      strategies that have never had a bug under them. This is a cost of the
+      per-tier model, accepted rather than solved: it is the same shape as the
+      recorded rule that changing a node's tier does not carry its boost
+      (clarification 12), and the remedy is the same — author a value in the
+      target tier when work actually arrives there. What it does mean concretely
+      is that the tier-lifted band rule, which is the reason per-tier boosts
+      were adopted at all, delivers a meaningful band only once the parent has
+      an authored boost in the lifted tier; until then a tier-lifted tactic
+      bands against a lineage count. Recorded so a later session reading the
+      per-tier adoption does not assume tier-2 ordering is already trustworthy.
+      Carried into tactic-attention-per-tier-boost-migration, which owns the
+      storage shape and the requirement that an unauthored tier stay
+      distinguishable from an authored lowest value."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with
