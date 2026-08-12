@@ -689,6 +689,22 @@ count_open_blockers() {
 #             unrecognized non-terminal state.
 # This is the classification logic that dispatch-phase applies inline; it is
 # factored here so the readiness predicate can reuse it verbatim.
+#
+# Input shapes — and why only one of them is live (tactic-orphaned-check-run-
+# pins-pending-ci-guard, Unit 2). The classifier accepts two entry shapes: the
+# GraphQL `statusCheckRollup` CheckRun/StatusContext union, and the REST
+# check-runs projection `dispatch_ci_verdict_rest` adapts to it. As of the
+# REST-default migration (#1601) `dispatch_ci_verdict_rest` is the ONLY live
+# producer — every dispatch caller (dispatch-ci-ready, dispatch-reconcile-ready,
+# dispatch-auto-merge, graph-auto-merge, graph-select-target,
+# dispatch-context-pack, reconcile-graph-review-stall) reaches the classifier
+# through it, and no script feeds a raw `gh pr view --json statusCheckRollup`
+# array here any more. So the orphaned-check-run rule (a check run whose parent
+# check suite has already concluded is STALE, never pending) is applied ONCE, at
+# the REST adaptation point below, and there is deliberately no second
+# implementation for the GraphQL shape. If a GraphQL feeder is ever
+# reintroduced, apply the same rule at its adaptation point — the GraphQL
+# CheckRun node exposes `checkSuite` inline, so it needs no extra API call.
 dispatch_classify_rollup() {
   local rollup="$1"
   local rollup_len
@@ -784,11 +800,35 @@ dispatch_classify_rollup() {
 # UPPERCASE; each adapted entry is `ascii_upcase`d so the classifier applies
 # unchanged. Every adapted object carries a `conclusion` key so the classifier's
 # `has("conclusion")` check-run branch fires (never the status-context branch).
+# Orphaned check runs (tactic-orphaned-check-run-pins-pending-ci-guard). GitHub
+# sometimes leaves a check run permanently un-concluded — `status: queued` with
+# a null conclusion — while that row's PARENT check suite has already finished.
+# A suite cannot conclude and still be running one of its own jobs, so such a
+# row will never report and is not retriable (`gh run rerun` answers "This
+# workflow run cannot be retried"). Adapted naively it reads `pending` forever,
+# which pins graph-select-target's `pending-ci-guard` on a node with every other
+# check green and gives the router no automated exit. So: a NON-COMPLETED row
+# with NO conclusion whose parent suite reports `status: completed` is adapted as
+# `{status: COMPLETED, conclusion: STALE}` — a conclusion dispatch_classify_rollup
+# already counts as failing, which routes the node into the fix lane's normal
+# budgeted re-push (a new head sha, fresh checks, orphan gone).
+#   - Only rows with a NULL conclusion qualify. A row carrying a conclusion
+#     behind a stale `in_progress` status is the DIFFERENT, complementary #2457
+#     desync, and it is already classified correctly off its conclusion;
+#     re-labelling it STALE would flip genuinely-green PRs to failing.
+#   - Extra API cost is paid only on a sha that is genuinely mid-flight: when
+#     every row is `completed`, or no pending row carries a `check_suite.id`,
+#     zero extra calls are made. Otherwise one call per DISTINCT parent suite.
 # Memoisation: when DISPATCH_CI_VERDICT_CACHE names a non-empty directory, the
 # verdict is cached per-SHA at $DISPATCH_CI_VERDICT_CACHE/<sha> — a cache hit
 # returns the stored verdict and makes no REST call; a miss fetches, writes the
 # verdict, then prints it. The caller owns the directory's lifecycle (this
 # helper does not mkdir it). When the var is unset/empty, every call fetches.
+# ONLY TERMINAL verdicts (`passing`, `failing`) are cached. A `pending` verdict
+# is deliberately never stored: pending is a statement about a moment, and a sha
+# classified pending while its suite was still running must be recomputed once
+# the suite concludes — otherwise the orphan rule above would be permanently
+# shadowed by the very cache entry the orphan produced.
 dispatch_ci_verdict_rest() {
   local sha="$1"
 
@@ -804,22 +844,72 @@ dispatch_ci_verdict_rest() {
 
   # One paginated REST call. `gh api --paginate` emits one JSON object per page,
   # so slurp (`jq -s`) and concatenate every page's `.check_runs` into a single
-  # array; `add` over an empty slurp is null, so coerce to `[]`. Then adapt each
-  # entry to the statusCheckRollup CheckRun shape and uppercase it.
-  local adapted
-  adapted=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
-    | jq -s 'map(.check_runs) | add // []
-             | map({status: (.status | ascii_upcase),
-                    conclusion: ((.conclusion // "") | ascii_upcase)})') || {
+  # array; `add` over an empty slurp is null, so coerce to `[]`.
+  local rows
+  rows=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq -s 'map(.check_runs) | add // []') || {
     echo "error: dispatch_ci_verdict_rest: check-runs fetch failed for $sha" >&2
+    return 1
+  }
+
+  # Orphan detection, step 1 — the distinct parent suites of the rows that could
+  # be orphans (not completed, no conclusion). Empty on the fast path, which is
+  # what keeps the all-green case at exactly one REST call.
+  local suite_ids
+  suite_ids=$(jq -r '
+    [ .[]
+      | select((.status // "") != "completed")
+      | select((.conclusion // "") == "")
+      | .check_suite.id // empty
+      | tostring ]
+    | unique | .[]' <<<"$rows") || {
+    echo "error: dispatch_ci_verdict_rest: check-run projection failed for $sha" >&2
+    return 1
+  }
+
+  # Step 2 — read each candidate suite once; collect the ids that have concluded.
+  local stale_suites="" suite_id suite_json suite_status
+  if [[ -n "$suite_ids" ]]; then
+    while IFS= read -r suite_id; do
+      [[ -n "$suite_id" ]] || continue
+      suite_json=$(gh_retry gh api "repos/{owner}/{repo}/check-suites/$suite_id") || {
+        echo "error: dispatch_ci_verdict_rest: check-suite fetch failed for suite $suite_id (sha $sha)" >&2
+        return 1
+      }
+      suite_status=$(jq -r '.status // ""' <<<"$suite_json")
+      if [[ "$suite_status" == "completed" ]]; then
+        stale_suites+="$suite_id"$'\n'
+      fi
+    done <<<"$suite_ids"
+  fi
+  local stale_json
+  stale_json=$(printf '%s' "$stale_suites" | jq -R -s 'split("\n") | map(select(length > 0))')
+
+  # Step 3 — adapt to the statusCheckRollup CheckRun shape. REST reports
+  # lowercase enums, so uppercase every entry; orphaned rows are replaced
+  # wholesale by the already-uppercase COMPLETED/STALE pair.
+  local adapted
+  adapted=$(jq --argjson stale "$stale_json" '
+    map(
+      if ((.status // "") != "completed")
+         and ((.conclusion // "") == "")
+         and ((.check_suite.id // "" | tostring) as $sid
+              | $sid != "" and ($stale | index($sid)) != null)
+      then {status: "COMPLETED", conclusion: "STALE"}
+      else {status: (.status | ascii_upcase),
+            conclusion: ((.conclusion // "") | ascii_upcase)}
+      end
+    )' <<<"$rows") || {
+    echo "error: dispatch_ci_verdict_rest: check-run adaptation failed for $sha" >&2
     return 1
   }
 
   local verdict
   verdict=$(dispatch_classify_rollup "$adapted")
 
-  # Memoisation miss: persist the verdict for subsequent ticks before printing.
-  if [[ -n "$cache_file" ]]; then
+  # Memoisation miss: persist TERMINAL verdicts only (see the header note) before
+  # printing.
+  if [[ -n "$cache_file" && "$verdict" != "pending" ]]; then
     printf '%s\n' "$verdict" > "$cache_file"
   fi
 

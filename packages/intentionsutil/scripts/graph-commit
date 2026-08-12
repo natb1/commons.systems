@@ -1312,6 +1312,31 @@ rebase_in_progress() {
   [[ -d "$rm" || -d "$ra" ]]
 }
 
+# check_suite_concluded <suite-id> — has the row's PARENT check suite already
+# finished? Returns 0 when the suite reports `status: completed`, 1 otherwise.
+#
+# A check suite cannot conclude while one of its own jobs is still running, so a
+# required check row carrying NO conclusion under a completed suite is orphaned:
+# GitHub will never move it, and `gh run rerun` refuses it ("This workflow run
+# cannot be retried"). Waiting is futile — and waiting is exactly what burned
+# every green-wait attempt on 2026-08-11, exiting busy-exhausted and leaving an
+# orphan local commit while the graph store's only write path stayed shut
+# (tactic-orphaned-check-run-pins-pending-ci-guard).
+#
+# Deliberately three-valued in effect: an UNREADABLE suite is a non-observation,
+# not evidence of an orphan, so a failed/empty lookup returns 1 and the caller
+# keeps polling. That is the safe direction — a non-observation can only cost
+# the caller the existing pending timeout (rc 1), never a green verdict.
+#
+# Uses `gh api ... --jq` so gh runs jq on its in-memory JSON (shell-json.md).
+check_suite_concluded() { # <suite-id>
+  local suite_id="$1" status
+  [[ -n "$suite_id" && "$suite_id" != "-" && "$suite_id" != "null" ]] || return 1
+  status="$(gh api "repos/{owner}/{repo}/check-suites/$suite_id" \
+    --jq '.status // ""' 2>/dev/null)" || return 1
+  [[ "$status" == "completed" ]]
+}
+
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
 # report a successful conclusion, keyed on the check-run NAME (mirrors the four
@@ -1331,14 +1356,16 @@ rebase_in_progress() {
 #   1  the timeout elapsed with the checks still pending (transient — the
 #      caller rebases and retries this whole cycle).
 #   2  a required check CONCLUDED non-success (deterministic — the commit
-#      content itself fails CI; the caller must not retry).
+#      content itself fails CI; the caller must not retry), OR a required check
+#      is ORPHANED — no conclusion, and its parent check suite has already
+#      finished, so no verdict will ever arrive (see check_suite_concluded).
 # Dies after 3 CONSECUTIVE gh poll failures, surfacing gh's captured stderr —
 # an auth/rate-limit/network error is a broken environment, not a pending
 # check, so collapsing it into "still polling" until the generic timeout
 # would hide the real cause (clear error over fallback, code-style.md).
 await_checks() {
   local sha="$1"
-  local deadline counts ngreen nbad cname cconc crows detail gh_stderr gh_fails=0
+  local deadline counts ngreen nbad cname cconc crows csuite detail gh_stderr gh_fails=0
   # gh's stderr is captured per poll inside SNAP_DIR, which already exists for
   # the lifetime of the run and is removed by cleanup() on non-park exits.
   local errfile="$SNAP_DIR/.gh-poll-stderr"
@@ -1380,6 +1407,14 @@ await_checks() {
     # Mirrors dispatch_classify_rollup's `(.conclusion // "")` idiom (lib.sh)
     # fixed for the same desync. Extra check runs (e.g. CodeQL `Analyze (*)`,
     # the fast path's `guard` job) stay excluded by the name filter.
+    #
+    # The complementary desync — no conclusion at all, on a row whose PARENT
+    # check suite has already concluded — is the ORPHAN case, and `.conclusion`
+    # cannot see it. So the filter also emits the winning row's
+    # `.check_suite.id` (or `-`) as a fourth field, which the loop below resolves
+    # via check_suite_concluded(). The two conditions coexist and must not be
+    # collapsed: #2457 is a populated conclusion behind a stale status, this is
+    # no conclusion at all.
     if counts="$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
       --jq '["acceptance","preview-and-smoke","lint","unit-tests"] as $req
             | (.check_runs // []) as $all
@@ -1387,15 +1422,24 @@ await_checks() {
             | [$all[]
                | select(.name == $name)
                | select((.app.slug // "") == "github-actions")] as $rows
-            | if ($rows | length) == 0 then "\($name) absent 0"
+            | if ($rows | length) == 0 then "\($name) absent 0 -"
               else ($rows | max_by(.id // 0)) as $latest
-                | "\($name) \($latest.conclusion // "pending") \($rows | length)"
+                | "\($name) \($latest.conclusion // "pending") \($rows | length) \($latest.check_suite.id // "-")"
               end' \
       2>"$errfile")"; then
       gh_fails=0
       ngreen=0; nbad=0; detail=""
-      while read -r cname cconc crows; do
+      while read -r cname cconc crows csuite; do
         [[ -n "$cname" ]] || continue
+        # An unconcluded row under an already-concluded suite is never going to
+        # report. Promote it from `pending` to a hard refusal BEFORE the detail
+        # string is built, so the operator's message names the orphan for what
+        # it is rather than as a slow check.
+        if [[ "$cconc" == "pending" ]] && check_suite_concluded "$csuite"; then
+          detail+="${detail:+, }$cname=orphaned(no conclusion, but parent check suite $csuite already concluded — GitHub will never report this row; ${crows} row(s))"
+          nbad=$((nbad + 1))
+          continue
+        fi
         # `absent` means GitHub never created a check-run row for this name at
         # all — a different thing from a row that exists but has not concluded
         # (`pending`), and the parenthetical says so rather than printing a

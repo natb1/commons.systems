@@ -1178,13 +1178,23 @@ case "$args" in
     else echo '[]'; fi
     ;;
   api\ repos/*/check-suites/*)
-    # main_broken_sha: branch-attribution lookup for a check-run's parent
-    # check-suite. Fixtures are keyed by suite id: main-check-suite-<id>.json.
-    # Default: unattributable (null head_branch), so an un-fixtured suite is
-    # conservatively dropped rather than misread as main's own.
-    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/]+)$#\1#')
-    if [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
-    else echo '{"head_branch":null}'; fi
+    # Two consumers share this endpoint:
+    #   - main_broken_sha: branch-attribution lookup for a check-run's parent
+    #     check-suite (reads .head_branch).
+    #   - dispatch_ci_verdict_rest's orphaned-check-run rule: does the pending
+    #     row's parent suite report `status: completed`? (reads .status)
+    # Fixtures are keyed by suite id: check-suite-<id>.json, falling back to the
+    # older main-check-suite-<id>.json name. Default: unattributable
+    # (null head_branch) AND still running (in_progress) — so an un-fixtured
+    # suite is conservatively dropped by the branch attribution rather than
+    # misread as main's own, and never mistaken for a concluded suite by the
+    # orphan rule.
+    # Every call is logged so a test can assert the FAST PATH makes zero of them.
+    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/ ]+).*#\1#')
+    echo "$suite_id" >> "$STUB_DIR/gh-check-suites-calls.log"
+    if [[ -f "$STUB_DIR/check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/check-suite-${suite_id}.json"
+    elif [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
+    else echo '{"head_branch":null,"status":"in_progress"}'; fi
     ;;
   issue\ list\ --repo\ *)
     # JIT scan: gh issue list --repo <repo> --label <label> --state <open|closed> --json ...

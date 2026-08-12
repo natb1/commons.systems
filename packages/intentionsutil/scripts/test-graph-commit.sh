@@ -333,7 +333,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-bystander-prune t-bystander-conflict t-prune-base-stale \
           t-base-bystander-prune t-manifest-foreign t-manifest-prune \
           t-kill-lockwait t-kill-stamp t-kill-busy \
-          t-verdict-happy t-verdict-park t-park-retry; do
+          t-verdict-happy t-verdict-park t-park-retry \
+          t-orphan t-live-pending; do
   seed_node "$id"
 done
 
@@ -397,6 +398,10 @@ make_clone "$B" writer-b
 mkdir -p "$WORK/bin" "$WORK/fixtures"
 MODE_FILE="$WORK/gh-mode"
 CALL_LOG="$WORK/gh-calls"
+# Parent-check-suite lookups are counted separately from check-run polls: a
+# suite lookup is not a poll, and every existing poll-count assertion would
+# otherwise shift the moment check_suite_concluded() fires.
+SUITE_CALL_LOG="$WORK/gh-suite-calls"
 FIXTURE_DIR="$WORK/fixtures"
 
 # Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
@@ -511,6 +516,34 @@ cat >"$FIXTURE_DIR/forged-green.json" <<'JSON'
 ]}
 JSON
 
+# Orphaned required row (tactic-orphaned-check-run-pins-pending-ci-guard): three
+# required names concluded green while `preview-and-smoke` sits at in_progress
+# with a null conclusion — the shape that burned the whole green-wait budget on
+# 2026-08-11. The row carries its parent check_suite id, which is what lets
+# check_suite_concluded() tell an orphan from a slow check. The `orphan-pending`
+# and `live-pending` fixtures are byte-identical: only the SUITE fixture below
+# differs, so the pair isolates exactly the suite-status signal.
+for _m in orphan-pending live-pending; do
+cat >"$FIXTURE_DIR/$_m.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null, "check_suite": {"id": 85480333626}},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}}
+]}
+JSON
+done
+# The orphan signal: the parent suite has already reported completed, so the
+# unconcluded row can never report.
+cat >"$FIXTURE_DIR/orphan-pending-suite-85480333626.json" <<'JSON'
+{"status": "completed", "conclusion": "success"}
+JSON
+# Default for any un-fixtured suite lookup, and the `live-pending` negative: the
+# suite is still running, so an unconcluded row is a genuinely slow check.
+cat >"$FIXTURE_DIR/suite-running.json" <<'JSON'
+{"status": "in_progress", "conclusion": null}
+JSON
+
 cat >"$WORK/bin/gh" <<'SH'
 #!/usr/bin/env bash
 # gh shim: behavior selected by $GC_GH_MODE_FILE; every invocation appends one
@@ -519,8 +552,28 @@ cat >"$WORK/bin/gh" <<'SH'
 # For modes that reach the check-runs endpoint, this runs graph-commit's REAL
 # --jq program (extracted from "$@") against a mode-specific fixture file, so
 # the filter itself is exercised rather than a hardcoded count string.
-echo "gh-invocation" >>"$GC_GH_CALL_LOG"
+args="$*"
 mode="$(cat "$GC_GH_MODE_FILE")"
+# check_suite_concluded()'s parent-suite lookup is a DIFFERENT endpoint from the
+# check-run poll, so it is logged to its own file — poll-count assertions must
+# keep counting polls, not suite lookups. Fixture per mode+suite:
+# <mode>-suite-<id>.json; when absent the suite is reported as still running,
+# which is the inert default. Every legacy fixture's rows carry no `check_suite`
+# at all, so graph-commit emits `-` for them and this branch is never reached.
+if [[ "$args" == *check-suites/* ]]; then
+  echo "gh-suite-invocation" >>"${GC_GH_SUITE_CALL_LOG:-/dev/null}"
+  suite_id="$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/ ]+).*#\1#')"
+  suite_fixture="$GC_FIXTURE_DIR/$mode-suite-$suite_id.json"
+  [[ -f "$suite_fixture" ]] || suite_fixture="$GC_FIXTURE_DIR/suite-running.json"
+  suite_jq=""
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--jq" ]]; then suite_jq="$2"; break; fi
+    shift
+  done
+  jq -r "$suite_jq" "$suite_fixture"
+  exit 0
+fi
+echo "gh-invocation" >>"$GC_GH_CALL_LOG"
 if [[ "$mode" == "hard-fail" ]]; then
   echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
   exit 1
@@ -750,8 +803,9 @@ SH
 chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
 
 # --- Helpers ------------------------------------------------------------------
-set_mode() { printf '%s' "$1" >"$MODE_FILE"; : >"$CALL_LOG"; }
+set_mode() { printf '%s' "$1" >"$MODE_FILE"; : >"$CALL_LOG"; : >"$SUITE_CALL_LOG"; }
 gh_calls() { wc -l <"$CALL_LOG" | tr -d ' '; }
+gh_suite_calls() { wc -l <"$SUITE_CALL_LOG" | tr -d ' '; }
 origin_show() { git -C "$ORIGIN" show "main:intentions/$1.md"; }
 origin_sha() { git -C "$ORIGIN" rev-parse main; }
 sync_clone() { git -C "$1" fetch -q origin main && git -C "$1" reset -q --hard FETCH_HEAD; }
@@ -771,6 +825,7 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     cd "$clone" || exit 99
     export PATH="$WORK/bin:$PATH"
     export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+    export GC_GH_SUITE_CALL_LOG="$SUITE_CALL_LOG"
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
@@ -831,6 +886,7 @@ start_gc_killable() {
     PATH="$WORK/bin:$PATH" \
     GC_GH_MODE_FILE="$MODE_FILE" \
     GC_GH_CALL_LOG="$CALL_LOG" \
+    GC_GH_SUITE_CALL_LOG="$SUITE_CALL_LOG" \
     GC_FIXTURE_DIR="$FIXTURE_DIR" \
     GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}" \
     GC_PGID_FILE="$pgidfile" \
@@ -1027,6 +1083,61 @@ if [[ $rc -eq 0 ]] && origin_show t-desync | grep -q 'line1: desync-lands'; then
   ok "desynced check-run (status stuck in_progress, conclusion success) still lands"
 else
   no "desynced check-run handling (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 8b: ORPHANED required row — hard refusal at the first poll ------------
+# The complement of case 8's #2457 desync: `preview-and-smoke` has NO conclusion
+# at all, and its parent check suite has already reported completed. A suite
+# cannot conclude while one of its own jobs is still running, so the row will
+# never report and `gh run rerun` refuses it. Pre-fix, graph-commit read it as
+# pending and burned the whole green-wait budget (five 180s attempts) before
+# exiting busy-exhausted with an orphan local commit — with the graph store's
+# only write path shut for the duration. It must instead refuse AT ONCE: exit
+# non-zero after ONE poll, no retries, nothing landed, and a diagnostic naming
+# the check and its suite so the operator sees a GitHub orphan rather than a
+# real red check.
+set_mode orphan-pending
+sync_clone "$A"
+edit_line "$A" t-orphan 1 never-lands
+out="$(export GC_POLL=1 GC_TIMEOUT=5 GC_ATTEMPTS=5; run_gc "$A" t-orphan 2>&1)"; rc=$?
+calls="$(gh_calls)"; scalls="$(gh_suite_calls)"
+if [[ $rc -eq 1 && "$calls" -eq 1 && "$scalls" -eq 1 ]] \
+   && grep -q 'not retrying' <<<"$out" \
+   && ! grep -q 'attempt 2/' <<<"$out" \
+   && ! origin_show t-orphan | grep -q 'never-lands'; then
+  ok "orphaned required row refuses at once (1 poll, 1 suite lookup, no retries, nothing landed)"
+else
+  no "orphaned required row refusal (rc=$rc gh_calls=$calls suite_calls=$scalls)"; printf '%s\n' "$out"
+fi
+# The diagnostic must be specific enough to distinguish a GitHub orphan from a
+# genuinely failing check — the required check's name AND its suite id.
+if grep -q 'preview-and-smoke=orphaned' <<<"$out" \
+   && grep -q '85480333626 already concluded' <<<"$out"; then
+  ok "orphaned required row: diagnostic names the check and its concluded suite"
+else
+  no "orphaned required row diagnostic"; printf '%s\n' "$out"
+fi
+sync_clone "$A"   # drop the never-landed local commit
+
+# --- Case 8c: the negative — same row, suite still running, keeps waiting -------
+# Byte-identical check-runs payload; only the SUITE fixture differs (absent, so
+# the shim reports in_progress). A check whose suite is still running is just
+# slow, and relaxing THAT into a refusal would turn every genuinely in-flight
+# graph write into a hard failure. It must keep the pre-existing wait-and-retry
+# behavior and time out as transient.
+set_mode live-pending
+sync_clone "$A"
+edit_line "$A" t-live-pending 1 stuck
+out="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=2; run_gc "$A" t-live-pending 2>&1)"; rc=$?
+scalls="$(gh_suite_calls)"
+if [[ $rc -eq 1 && "$scalls" -ge 1 ]] \
+   && grep -q 'attempt 2/2' <<<"$out" \
+   && grep -q 'could not land on main after 2/2 attempts' <<<"$out" \
+   && ! grep -q 'orphaned' <<<"$out"; then
+  ok "unconcluded row under a STILL-RUNNING suite keeps waiting (transient, not a refusal)"
+else
+  no "live pending row handling (rc=$rc suite_calls=$scalls)"; printf '%s\n' "$out"
 fi
 sync_clone "$A"
 

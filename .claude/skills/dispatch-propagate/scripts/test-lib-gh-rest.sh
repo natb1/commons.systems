@@ -89,6 +89,127 @@ unset DISPATCH_CI_VERDICT_CACHE
 teardown
 
 # ============================================================================
+# Orphaned check runs classify as STALE, not pending
+# (tactic-orphaned-check-run-pins-pending-ci-guard)
+# ============================================================================
+# GitHub sometimes strands a check run at `queued`/`in_progress` with a null
+# conclusion while that row's PARENT check suite has already concluded. The row
+# will never move and cannot be re-run, so classifying it `pending` pins
+# graph-select-target's pending-ci-guard forever. dispatch_ci_verdict_rest
+# resolves the parent suite for such rows and adapts a concluded-suite orphan as
+# {status: COMPLETED, conclusion: STALE} — which dispatch_classify_rollup
+# already counts as failing, routing the node into the fix lane's budgeted
+# re-push instead of holding it.
+#
+# The suite fixtures are served by the shared stub's `check-suites/<id>` branch
+# (dispatch-test-fixture.sh), which also appends one line per call to
+# gh-check-suites-calls.log — that log is what the fast-path/dedup cases count.
+echo "=== dispatch_ci_verdict_rest (orphaned check runs) ==="
+
+# As verdict_rest_case, plus the parent check-suite fixtures the orphan rule
+# reads. Trailing args are `<suite-id>=<suite-status>` pairs.
+verdict_rest_suite_case() {
+  local label="$1" sha="$2" check_runs_json="$3" expected="$4"
+  shift 4
+  local pair sid sstatus
+  for pair in "$@"; do
+    sid="${pair%%=*}"; sstatus="${pair#*=}"
+    printf '{"status":"%s","conclusion":null}' "$sstatus" > "$STUB_DIR/check-suite-${sid}.json"
+  done
+  printf '%s' "{\"check_runs\": $check_runs_json}" > "$STUB_DIR/check-runs-${sha}.json"
+  local actual
+  actual=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "$sha")
+  assert_eq "$label" "$expected" "$actual"
+}
+
+# Count the check-suites lookups made so far (the log is truncated per test).
+suite_call_count() {
+  local f="$STUB_DIR/gh-check-suites-calls.log"
+  [[ -f "$f" ]] || { echo 0; return 0; }
+  wc -l < "$f" | tr -d ' '
+}
+
+echo "Test: orphaned check run (parent suite concluded) → failing, not pending"
+setup
+: > "$STUB_DIR/gh-check-suites-calls.log"
+# The incident shape: PR #3068 head 74548a2b, one `queued` CodeQL row whose
+# suite 85475141868 had already reported completed/failure.
+verdict_rest_suite_case "orphan: queued row + concluded suite → failing" \
+  "sha-orphan" \
+  '[{"status":"queued","conclusion":null,"check_suite":{"id":85475141868}}]' \
+  "failing" "85475141868=completed"
+# The important negative: a genuinely in-flight run whose suite is still
+# running must STILL be pending. Breaking this would flip every live check in
+# the fleet to failing — the strictly worse failure direction.
+verdict_rest_suite_case "live: queued row + running suite → pending (regression guard)" \
+  "sha-live" \
+  '[{"status":"queued","conclusion":null,"check_suite":{"id":85475141869}}]' \
+  "pending" "85475141869=in_progress"
+# The rollup that actually pinned #3056: 22 green rows plus one orphan.
+verdict_rest_suite_case "orphan: green rows + one orphan → failing (not pending)" \
+  "sha-orphan-mixed" \
+  '[{"status":"completed","conclusion":"success"},{"status":"completed","conclusion":"success"},{"status":"in_progress","conclusion":null,"check_suite":{"id":85480333626}}]' \
+  "failing" "85480333626=completed"
+# #2457 is the COMPLEMENT of this defect and must keep its existing verdict: a
+# populated conclusion behind a stale status is concluded, not orphaned, even
+# when its suite has finished. Re-labelling it STALE would fail green PRs.
+verdict_rest_suite_case "desync (#2457): in_progress + success conclusion + concluded suite → passing" \
+  "sha-desync-suite" \
+  '[{"status":"in_progress","conclusion":"success","completed_at":"2026-06-19T04:17:24Z","check_suite":{"id":85480333627}}]' \
+  "passing" "85480333627=completed"
+# A pending row with no parent suite id is not resolvable, so it stays pending —
+# and costs no lookup.
+: > "$STUB_DIR/gh-check-suites-calls.log"
+verdict_rest_case "no check_suite on a pending row → pending" \
+  "sha-nosuite" '[{"status":"in_progress","conclusion":null}]' "pending"
+assert_eq "no check_suite: zero check-suites lookups" "0" "$(suite_call_count)"
+teardown
+
+echo "Test: all-completed fast path makes zero check-suites calls"
+setup
+: > "$STUB_DIR/gh-check-suites-calls.log"
+verdict_rest_case "fast path: all completed → passing" \
+  "sha-fast" \
+  '[{"status":"completed","conclusion":"success","check_suite":{"id":900001}},{"status":"completed","conclusion":"success","check_suite":{"id":900002}}]' \
+  "passing"
+assert_eq "fast path: zero check-suites lookups" "0" "$(suite_call_count)"
+teardown
+
+echo "Test: orphan lookups are deduplicated per parent suite"
+setup
+: > "$STUB_DIR/gh-check-suites-calls.log"
+# Three pending rows, two of them sharing one suite: exactly two lookups.
+verdict_rest_suite_case "dedup: three pending rows across two suites → failing" \
+  "sha-dedup" \
+  '[{"status":"queued","conclusion":null,"check_suite":{"id":910001}},{"status":"in_progress","conclusion":null,"check_suite":{"id":910001}},{"status":"queued","conclusion":null,"check_suite":{"id":910002}}]' \
+  "failing" "910001=completed" "910002=in_progress"
+assert_eq "dedup: one lookup per distinct suite" "2" "$(suite_call_count)"
+teardown
+
+echo "Test: a pending verdict is never cached, so the orphan stays detectable"
+setup
+export DISPATCH_CI_VERDICT_CACHE="$TMPDIR_TEST/ci-verdict-cache"
+mkdir -p "$DISPATCH_CI_VERDICT_CACHE"
+printf '%s' '{"check_runs":[{"status":"queued","conclusion":null,"check_suite":{"id":920001}}]}' \
+  > "$STUB_DIR/check-runs-sha-orphan-cache.json"
+printf '%s' '{"status":"in_progress","conclusion":null}' > "$STUB_DIR/check-suite-920001.json"
+first=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-orphan-cache")
+assert_eq "pending cache: first call (suite still running) → pending" "pending" "$first"
+if [[ -f "$DISPATCH_CI_VERDICT_CACHE/sha-orphan-cache" ]]; then
+  cached_pending="cached"
+else
+  cached_pending="not-cached"
+fi
+assert_eq "pending cache: pending verdict is NOT persisted" "not-cached" "$cached_pending"
+# The suite concludes; the orphan is now detectable and must be re-computed
+# rather than served as a stale `pending` from cache.
+printf '%s' '{"status":"completed","conclusion":"failure"}' > "$STUB_DIR/check-suite-920001.json"
+second=$(source "$TMPDIR_TEST/lib.sh"; dispatch_ci_verdict_rest "sha-orphan-cache")
+assert_eq "pending cache: recomputed once the suite concludes → failing" "failing" "$second"
+unset DISPATCH_CI_VERDICT_CACHE
+teardown
+
+# ============================================================================
 # gh_issue_list_rest edge-case tests (#1652)
 # ============================================================================
 # These three tests drive the REAL gh_issue_list_rest helper (sourced from the
