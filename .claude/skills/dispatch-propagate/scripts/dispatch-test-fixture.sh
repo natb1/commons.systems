@@ -15,7 +15,15 @@ set -euo pipefail
 # PR/rollup builders and constants).
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# SCRIPT_DIR — the dispatch-propagate scripts directory, i.e. THIS FILE's own
+# directory, resolved from BASH_SOURCE rather than from `$0`. For every suite
+# that lives alongside this fixture the two are identical; they differ for a
+# suite in another skill's scripts dir (the .claude/skills/dispatch-ladder/
+# suites), where `$0` would resolve SCRIPT_DIR to that directory and every
+# `$SCRIPT_DIR/<dispatch-script>` reference below — including this file's own
+# `source "$SCRIPT_DIR/lib-test-decision-log-guard.sh"` — would miss. A suite
+# outside this directory keeps its OWN dir in a variable of its own.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # HOOK_SCRIPT_DIR — the project hooks directory the hook-copying sections
 # (dispatch-office-hours-strip, dispatch-stop) copy from. SCRIPT_DIR here is

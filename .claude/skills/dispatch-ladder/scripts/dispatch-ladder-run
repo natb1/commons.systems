@@ -1,0 +1,453 @@
+#!/usr/bin/env bash
+# dispatch-ladder-run — walk ONE node the whole way up the dispatch ladder,
+# with no AI turn in the loop.
+#
+# `/dispatch-emulate` carried this loop in skill prose, so a model turn was
+# spent on every phase step, and — because the Bash tool's 600s ceiling is far
+# under the measured phase durations (implement 14m10s, qa 15m59s, fix ~50m) —
+# the model had to re-call `await` by hand on every exit 20. Two of those
+# re-calls were lost outright when a session compacted. This script is that
+# loop, owned by the shell, launched detached by `dispatch-ladder-spawn` as a
+# transient systemd unit.
+#
+# IT SEQUENCES; IT NEVER GATES. Every admission decision belongs to a script
+# that already owns it:
+#
+#   dispatch-ladder-advance     selection (with every gate applied), claim
+#                               safety, provisioning, the phase-skill mapping,
+#                               the spawn.
+#   dispatch-ladder-await       the wait, and the origin/main verdict.
+#   graph-auto-merge --node     the merge, with the config kill-switch, the
+#                               main-health admission gate, the park gate, the
+#                               PR/CI sensing and the fail-closed scope
+#                               fingerprint re-check all inside it.
+#   reconcile-graph-merged --node   the absorb, with its own grace window.
+#   verify-landed               the one landing signal, read at origin/main.
+#
+# This file branches on those five scripts' exit codes and their one-line
+# stdout protocols. It makes no graph write, no `gh` call, and no merge
+# decision of its own. If a rule about WHEN something may happen ever appears
+# here, it is in the wrong file.
+#
+# DETACHED EXECUTION, ATTENDED JUDGMENT. What is detached is the WAITING, not
+# the judgment. Every halt below is unconditional: no retry, no auto-park, no
+# resume. A halted ladder stays halted until a person reads it and acts. The
+# one place this script loops on a non-terminal answer is where the answer
+# means "not yet, by design" — CI still running, a requeued selection, the
+# reconciler's grace window — and those loops are bounded by --max-run-s.
+#
+# WHY EXIT 10 IS SPLIT BY REASON. Halting on any `idle` would halt after every
+# implement phase: a freshly opened draft PR with pending CI makes
+# dispatch-ladder-advance print `idle <id> ci-waiting`, which is the loop
+# working, not the loop stuck.
+#
+# Usage: dispatch-ladder-run <node-id>
+#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]
+#
+#   --timeout-s <n>   the await window handed to each dispatch-ladder-await
+#                     call (default 1800). This is NOT the 540s default inside
+#                     dispatch-ladder-await — that default exists to sit under
+#                     the Bash tool's 600s ceiling for a Claude-session caller,
+#                     and it stays as-is for those callers. This script is not
+#                     a Claude session and has no such ceiling, so it opens a
+#                     wider window: 1800s is the measured evidence's starting
+#                     point for implement/qa/fix.
+#   --max-run-s <n>   whole-run wall clock (default 21600 = 6h). Exceeded is
+#                     exit 21, never a silent stop.
+#   --poll-s <n>      how long to sleep before re-polling an idle-but-expected
+#                     state — pending CI, a requeue, the reconciler's grace
+#                     window (default 60).
+#
+# THE LOOP
+#
+#   advance
+#     0  launched   -> await, repeatedly, until it answers something terminal
+#     10 idle       -> by reason: re-poll, requeue, or try the merge-and-absorb
+#     11/13/2       -> halt
+#
+#   merge_and_absorb (folded in from tactic-dispatch-emulate-owns-merge)
+#     graph-auto-merge --node <id>
+#       `held <id> (...)`  -> halt 11. office-hours, a missing stamp and a
+#                             stale scope are all a person's call; a driver
+#                             that retried them would be making the call.
+#       `merged #N (<id>)` -> absorb, POLLING (see below)
+#       no output          -> absorb once, non-polling
+#     reconcile-graph-merged --node <id>
+#       `reconciled <id> -> <target>`  -> absorbed; take another ladder step
+#       `deferred <id> (...)`          -> re-poll
+#       no output                      -> re-poll IF we merged this run,
+#                                         otherwise nothing to absorb
+#
+#   THE GRACE WINDOW IS THE NO-OUTPUT CASE, not the `deferred` case.
+#   reconcile-graph-merged refuses to absorb a merge younger than
+#   GRAPH_RECONCILE_GRACE (600s) by `continue`-ing its candidate loop — a
+#   SILENT skip, printing nothing (reconcile-graph-merged:177). Its `deferred`
+#   lines come from reconcile-graph.ts's plan and today carry exactly one
+#   reason (`main-qa phase not yet in schema`). So both are re-polled, and the
+#   no-output re-poll is conditioned on having merged this run: without a merge
+#   of our own, no output means there is genuinely nothing to absorb.
+#
+#   This script POLLS THROUGH the grace window rather than overriding
+#   GRAPH_RECONCILE_GRACE. Overriding it would be the driver setting policy,
+#   which it may not do.
+#
+# EXIT CODES — deliberately the primitives' codes, so a journald reader sees
+# one vocabulary across the whole ladder:
+#
+#   0   complete      the node reached phase `done` at origin/main, or was
+#                     pruned.
+#   2   usage/refused a bad flag here, or a `refused`/usage answer from a
+#                     script this one drives.
+#   10  idle halt     nothing to launch and nothing left to try.
+#   11  throw         needs the attended thread.
+#   12  stalled       a phase ended with no graph change, or the requeue budget
+#                     ran out.
+#   13  claimed       another session holds the node.
+#   14  unknown       origin/main could not be read. Nothing is claimed.
+#   21  timeout       --max-run-s exceeded.
+#   1   internal      this script's own error (an unmapped exit code from a
+#                     driven script, an unwritable state dir).
+#
+# STATE, at <main-root>/.claude/worktrees/<id>.ladder/ — a sibling of the
+# existing `<id>.scope-fingerprint` convention, and untracked (the repo's
+# top-level `worktrees/` ignore rule covers `.claude/worktrees/`):
+#
+#   state.json    one object, rewritten atomically (mktemp in the same dir +
+#                 mv), for `dispatch-ladder-status` to read.
+#   events.jsonl  append-only. This is the evidence the closing acceleration
+#                 review needs and cannot rediscover later: phase wall-clock
+#                 against the await window, launches that produced no code
+#                 change, and re-poll counts. Nothing else records it.
+#
+# Everything written to those files is also written to stdout/stderr, which
+# journald captures for the transient unit.
+#
+# Sandbox: the whole run needs `dangerouslyDisableSandbox` semantics — it
+# drives gh, the Claude daemon socket, git and tsx. Launched via
+# dispatch-ladder-spawn it runs outside Claude's Bash sandbox entirely.
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# .claude/skills/dispatch-ladder/scripts → four levels up is the checkout root.
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+
+TIMEOUT_S=1800
+MAX_RUN_S=21600
+POLL_S=60
+NODE_ID=""
+
+usage() {
+  echo "usage: dispatch-ladder-run <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]" >&2
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-s) [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
+    --max-run-s) [[ $# -ge 2 ]] || usage; MAX_RUN_S="$2"; shift 2 ;;
+    --poll-s)    [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --*)         echo "dispatch-ladder-run: unknown flag $1" >&2; usage ;;
+    *)
+      if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
+      else echo "dispatch-ladder-run: unexpected argument $1" >&2; usage
+      fi
+      shift ;;
+  esac
+done
+
+# Input validation at the boundary — a bad flag must be a cheap exit 2 here,
+# never a confusing failure six phases into a detached run.
+[[ -n "$NODE_ID" ]] || usage
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "dispatch-ladder-run: invalid node id '$NODE_ID'" >&2; exit 2; }
+[[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$MAX_RUN_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-run: --timeout-s and --max-run-s must be non-negative integers" >&2; exit 2; }
+[[ "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-run: --poll-s must be a positive integer (0 would spin)" >&2; exit 2; }
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-ladder-run: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+ADVANCE="$SCRIPT_DIR/dispatch-ladder-advance"
+AWAIT="$SCRIPT_DIR/dispatch-ladder-await"
+AUTO_MERGE="$DISPATCH_SCRIPTS/graph-auto-merge"
+RECONCILE="$DISPATCH_SCRIPTS/reconcile-graph-merged"
+VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
+for exe in "$ADVANCE" "$AWAIT" "$AUTO_MERGE" "$RECONCILE" "$VERIFY_LANDED"; do
+  [[ -x "$exe" ]] || { echo "dispatch-ladder-run: required script not found or not executable: $exe" >&2; exit 2; }
+done
+
+# --- State -----------------------------------------------------------------
+STATE_DIR="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.ladder"
+mkdir -p "$STATE_DIR" || {
+  echo "dispatch-ladder-run: cannot create the state directory $STATE_DIR" >&2; exit 1; }
+STATE_FILE="$STATE_DIR/state.json"
+EVENTS_FILE="$STATE_DIR/events.jsonl"
+
+UNIT_NAME="dispatch-ladder-$NODE_ID"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+START_EPOCH="$(date -u +%s)"
+DEADLINE_EPOCH=$(( START_EPOCH + MAX_RUN_S ))
+
+STATUS=running
+STEP=advance
+PHASE=""
+DISPOSITION=""
+DETAIL=""
+EXIT_CODE=""
+
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+now_epoch() { date -u +%s; }
+
+# Rewritten whole, atomically: a reader (dispatch-ladder-status) must never see
+# a half-written object, and `mktemp` in the SAME directory keeps the `mv` a
+# same-filesystem rename.
+write_state() {
+  local tmp
+  tmp=$(mktemp "$STATE_DIR/.state.json.XXXXXX") || {
+    echo "dispatch-ladder-run: mktemp failed in $STATE_DIR" >&2; exit 1; }
+  if ! jq -n \
+      --arg node "$NODE_ID" --arg unit "$UNIT_NAME" --argjson pid "$$" \
+      --arg started_at "$STARTED_AT" --arg updated_at "$(now_iso)" \
+      --arg status "$STATUS" --arg step "$STEP" --arg phase "$PHASE" \
+      --arg disposition "$DISPOSITION" --arg detail "$DETAIL" \
+      --arg exit_code "$EXIT_CODE" \
+      '{node: $node, unit: $unit, pid: $pid,
+        started_at: $started_at, updated_at: $updated_at,
+        status: $status, step: $step,
+        phase: (if $phase == "" then null else $phase end),
+        disposition: (if $disposition == "" then null else $disposition end),
+        detail: (if $detail == "" then null else $detail end),
+        exit_code: (if $exit_code == "" then null else ($exit_code | tonumber) end)}' \
+      >"$tmp"; then
+    rm -f "$tmp"
+    echo "dispatch-ladder-run: could not render state.json" >&2
+    exit 1
+  fi
+  mv -f "$tmp" "$STATE_FILE" || {
+    rm -f "$tmp"; echo "dispatch-ladder-run: could not install $STATE_FILE" >&2; exit 1; }
+}
+
+# log_event <event> <phase> <disposition> <detail>
+# Append-only, one JSON object per line, and the same fact on stdout for
+# journald.
+log_event() {
+  jq -nc --arg ts "$(now_iso)" --arg event "$1" --arg phase "$2" \
+     --arg disposition "$3" --arg detail "$4" \
+     '{ts: $ts, event: $event,
+       phase: (if $phase == "" then null else $phase end),
+       disposition: (if $disposition == "" then null else $disposition end),
+       detail: (if $detail == "" then null else $detail end)}' >>"$EVENTS_FILE" \
+    || echo "dispatch-ladder-run: WARNING — could not append to $EVENTS_FILE" >&2
+  printf '%s %s %s | %s\n' "$1" "${2:--}" "${3:--}" "${4:--}"
+}
+
+# halt <exit-code> <disposition> <detail> — the ONLY terminal path. Never
+# called from inside a command substitution or subshell (`exit` there would
+# only leave the subshell and the loop would carry on past a halt).
+halt() {
+  EXIT_CODE="$1"; DISPOSITION="$2"; DETAIL="$3"
+  if [[ "$1" == "0" ]]; then STATUS=complete; else STATUS=halted; fi
+  write_state
+  log_event halt "$PHASE" "$DISPOSITION" "$DETAIL"
+  printf 'dispatch-ladder-run: %s %s (exit %s) — %s\n' "$STATUS" "$NODE_ID" "$1" "$3" >&2
+  exit "$1"
+}
+
+check_deadline() {
+  (( $(now_epoch) < DEADLINE_EPOCH )) && return 0
+  halt 21 timeout "--max-run-s ${MAX_RUN_S}s exceeded; the ladder is unfinished and nothing was rolled back"
+}
+
+# --- The landing signal ----------------------------------------------------
+# `done` is read at origin/main through verify-landed and nowhere else — a
+# session's exit status is not evidence that its transition landed, which is
+# the whole premise of verify-landed. Its three answers (0 landed / 4
+# not-landed / 1 unknown) are never collapsed into two.
+phase_is_done() {
+  local rc
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --jq '.phase == "done"' >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    4) return 1 ;;
+    *) halt 14 unknown-graph-read "verify-landed could not read $NODE_ID at origin/main (rc=$rc); nothing is claimed either way" ;;
+  esac
+}
+
+# --- Absorb ----------------------------------------------------------------
+# absorb <merged-this-run:0|1> — returns 0 when the graph changed, 1 when there
+# was nothing to absorb. Halts on anything needing a person.
+absorb() {
+  local merged="$1" out rc
+  STEP=absorb; write_state
+  while :; do
+    check_deadline
+    out=$("$RECONCILE" --node "$NODE_ID"); rc=$?
+    case "$rc" in
+      0) ;;
+      2) halt 2 usage "reconcile-graph-merged rejected its arguments (rc=2)" ;;
+      *) halt 11 throw "reconcile-graph-merged hard-errored (rc=$rc) — a gh sense failure or a failed graph-commit; read its stderr in the journal" ;;
+    esac
+    if grep -q "^reconciled $NODE_ID " <<<"$out"; then
+      log_event absorb "$PHASE" reconciled "$(grep "^reconciled $NODE_ID " <<<"$out" | head -n1)"
+      return 0
+    fi
+    if grep -q "^deferred $NODE_ID " <<<"$out"; then
+      log_event absorb "$PHASE" deferred "$(grep "^deferred $NODE_ID " <<<"$out" | head -n1); re-polling in ${POLL_S}s"
+      sleep "$POLL_S"
+      continue
+    fi
+    if (( merged == 1 )); then
+      # No output AND we merged this run: the merge is still inside
+      # GRAPH_RECONCILE_GRACE, which reconcile-graph-merged skips silently.
+      # Poll through the window; never override the env var.
+      log_event absorb "$PHASE" grace-wait "our merge has not aged past GRAPH_RECONCILE_GRACE yet; re-polling in ${POLL_S}s"
+      sleep "$POLL_S"
+      continue
+    fi
+    log_event absorb "$PHASE" noop "nothing to absorb for $NODE_ID"
+    return 1
+  done
+}
+
+# --- Merge, then absorb ----------------------------------------------------
+merge_and_absorb() {
+  local out rc merged=0
+  STEP=merge; write_state
+  out=$("$AUTO_MERGE" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) halt 2 usage "graph-auto-merge rejected its arguments (rc=2)" ;;
+    *) halt 11 throw "graph-auto-merge hard-errored (rc=$rc) — a gh sense/merge error or a freshness computation crash; read its stderr in the journal" ;;
+  esac
+  if grep -q "^held $NODE_ID " <<<"$out"; then
+    halt 11 throw "$(grep "^held $NODE_ID " <<<"$out" | head -n1) — office-hours, a missing scope stamp and a stale scope are a person's call, never retried here"
+  fi
+  if grep -q "^merged #" <<<"$out"; then
+    merged=1
+    log_event merge "$PHASE" merged "$(grep "^merged #" <<<"$out" | head -n1)"
+  else
+    # Silence covers several honest cases — the node is not a merge candidate,
+    # the PR is already merged, the config kill-switch is off, or main health
+    # is not known-good. All of them mean "no merge happened here", and the
+    # absorb below is what tells them apart.
+    log_event merge "$PHASE" no-merge "graph-auto-merge merged nothing for $NODE_ID"
+  fi
+  absorb "$merged"
+}
+
+# --- The ladder ------------------------------------------------------------
+merge_tried=0
+requeue_budget=5
+
+log_event start "" running "unit=$UNIT_NAME timeout_s=$TIMEOUT_S max_run_s=$MAX_RUN_S poll_s=$POLL_S"
+write_state
+
+while :; do
+  check_deadline
+
+  STEP=advance; write_state
+  # Captured WITHOUT a `| head` pipeline: inside `$( … )` the pipeline runs in a
+  # subshell, so PIPESTATUS is invisible out here and the assignment's status
+  # would be `head`'s, silently discarding every exit code this loop branches
+  # on. Take the first line afterwards instead.
+  ADV_OUT=$("$ADVANCE" "$NODE_ID"); adv_rc=$?
+  ADV_OUT=$(head -n1 <<<"$ADV_OUT")
+
+  case "$adv_rc" in
+    0)
+      # `launched <id> <kind> <phase> <skill>`
+      read -r _ _ KIND PHASE SKILL <<<"$ADV_OUT"
+      if [[ -z "${PHASE:-}" ]]; then
+        halt 1 internal "dispatch-ladder-advance exited 0 with an unparseable line '$ADV_OUT'"
+      fi
+      merge_tried=0
+      requeue_budget=5
+      LAUNCH_EPOCH=$(now_epoch)
+      REPOLLS=0
+      log_event launched "$PHASE" launched "kind=${KIND:-?} skill=${SKILL:-?}"
+
+      STEP=await; write_state
+      while :; do
+        check_deadline
+        AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S"); aw_rc=$?
+        AW_OUT=$(head -n1 <<<"$AW_OUT")
+        AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
+        case "$aw_rc" in
+          0)
+            log_event awaited "$PHASE" "$AW_DISP" \
+              "elapsed_s=$(( $(now_epoch) - LAUNCH_EPOCH )) await_repolls=$REPOLLS window_s=$TIMEOUT_S"
+            if [[ "$AW_DISP" == "pruned" ]]; then
+              halt 0 pruned "$NODE_ID is absent from origin/main — it completed and was pruned"
+            fi
+            break
+            ;;
+          20)
+            REPOLLS=$(( REPOLLS + 1 ))
+            log_event await-repoll "$PHASE" running \
+              "await_repolls=$REPOLLS window_s=$TIMEOUT_S elapsed_s=$(( $(now_epoch) - LAUNCH_EPOCH ))"
+            continue
+            ;;
+          11) halt 11 throw "$AW_OUT" ;;
+          12) halt 12 stalled "$AW_OUT — the worker stopped with no graph change; read its transcript before re-running" ;;
+          14) halt 14 unknown-graph-read "$AW_OUT" ;;
+          2)  halt 2 usage "dispatch-ladder-await rejected its arguments (rc=2)" ;;
+          *)  halt 1 internal "dispatch-ladder-await exited an unmapped $aw_rc with '$AW_OUT'" ;;
+        esac
+      done
+      continue
+      ;;
+
+    10)
+      # `idle <id> <reason>`
+      REASON=$(awk '{print $3; exit}' <<<"$ADV_OUT")
+      case "$REASON" in
+        ci-waiting)
+          # The normal state right after implement opens a draft PR. Halting
+          # here would halt after every implement phase.
+          log_event idle "$PHASE" ci-waiting "re-polling in ${POLL_S}s"
+          sleep "$POLL_S"
+          continue
+          ;;
+        stale-selection|scope-stale-demoted)
+          # dispatch-graph-execute already cleared the claim and the node is
+          # re-runnable. Bounded, because an unbounded requeue is a spin.
+          if (( requeue_budget == 0 )); then
+            halt 12 stalled "the requeue budget ran out on repeated '$REASON' — the node keeps being re-selected without progressing"
+          fi
+          requeue_budget=$(( requeue_budget - 1 ))
+          log_event idle "$PHASE" "$REASON" "requeue_budget=$requeue_budget"
+          continue
+          ;;
+        *)
+          # not-selectable, and any reason a future dispatch-ladder-advance
+          # adds. Three questions, in order.
+          if phase_is_done; then
+            halt 0 complete "$NODE_ID is at phase 'done' on origin/main"
+          fi
+          if (( merge_tried == 1 )); then
+            halt 10 idle "nothing to launch for $NODE_ID and the merge-and-absorb step has already run once this stretch (reason: ${REASON:-unknown}) — read dispatch-ladder-advance's event lines in the journal for the gate that held it"
+          fi
+          merge_and_absorb
+          merge_tried=1
+          continue
+          ;;
+      esac
+      ;;
+
+    11) halt 11 throw "$ADV_OUT" ;;
+    13) halt 13 claimed "$ADV_OUT — a node is never worked by dispatch and dispatch-ladder at once" ;;
+    2)  halt 2 refused "$ADV_OUT" ;;
+    *)  halt 1 internal "dispatch-ladder-advance exited an unmapped $adv_rc with '$ADV_OUT'" ;;
+  esac
+done

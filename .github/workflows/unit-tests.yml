@@ -266,6 +266,12 @@ jobs:
         run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
       - name: Run dispatch-ladder-await tests
         run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh
+      - name: Run dispatch-ladder-run tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
+      - name: Run dispatch-ladder-spawn tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-spawn.sh
+      - name: Run dispatch-ladder-status tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests
