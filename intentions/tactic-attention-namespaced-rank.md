@@ -57,6 +57,38 @@ clarifications:
       node also owns, since that figure predates it. Author-directed and
       accepted on trust; enrolled for re-validation as
       tactic-review-band-derivation-ratification."
+  - question: Are tactic-dispatch-skill-standards-extraction and
+      tactic-office-hours-graph-type-passthrough still regression cases for the
+      multi-distributor sum defect, once band and residual are settled?
+    answer: "(Re-measured 2026-08-12, same office-hours round, on origin/main at
+      fb1dc4cc against the live summing resolver.) Yes, but for a different
+      assertion than the body originally recorded. Neither node carries an
+      authored boost of its own, so its entire authored term is inherited; under
+      the corrected residual -- value minus the INHERITED authored contribution,
+      i.e. own boost plus own signal plus own capture -- the summed quantity
+      drops out of the rank key entirely. Measured:
+      dispatch-skill-standards-extraction own boost 0, value 11.33, band 7.00,
+      residual 0.33; office-hours-graph-type-passthrough own boost 0, value
+      8.50, band 6.33, residual 0.50. The band is already a max across
+      distributors and the residual is computed from the node's own terms alone,
+      so the corrected residual neutralizes the sum on the ordering path without
+      touching the combinator. These are therefore NOT ordering regression cases
+      any more. What remains owed is a value-honesty defect: resolveAttention
+      still reports 11.33 for a node whose highest-ranked distributor resolves
+      to 7.00, still contradicting the recorded max-across-distributors
+      doctrine, and bare value is what the migration step 3 consumers read
+      directly -- hold-alerts.ts most sharply, since it builds its own Rank list
+      of tier and value and applies a top-K cutoff, so an inflated value selects
+      the wrong nodes regardless of how the selector sorts. The sum-to-max fix
+      stays in this tactic's scope and these two nodes stay its regression
+      cases, but the assertion under test changes from a tactic does not invert
+      cross-strategy order to value equals the maximum distributing strategy
+      contribution, never their sum. Write the regression that way. Method
+      caveat for whoever re-measures: the same probe counted 75 cross-band
+      inversions among open tactics under the old flat key and 0 under the new
+      key; the 75 is a real measurement but the 0 is structural, not empirical,
+      since band dominates residual lexicographically, so it must not be cited
+      as evidence the key was validated against data."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -330,6 +362,52 @@ distributors, never the sum)"* — so the resolver currently contradicts it.
 No boost edit can reach this: the value is pure inherited sum. **Fixing the
 multi-distributor combinator to `max` belongs to this tactic's scope**, and
 those two nodes are its ready-made regression cases.
+
+**Re-measured 2026-08-12 — these are no longer ORDERING regression cases.**
+Measured on `origin/main` at `fb1dc4cc`, after the band/residual derivation
+was settled (see "Band and residual — settled" above), against the live
+summing resolver:
+
+| node | own boost | value (summed) | band (max) | residual (corrected) |
+|---|---|---|---|---|
+| `tactic-dispatch-skill-standards-extraction` | 0 | 11.33 | 7.00 | 0.33 |
+| `tactic-office-hours-graph-type-passthrough` | 0 | 8.50 | 6.33 | 0.50 |
+
+Neither node carries an authored boost of its own, so its whole `authored`
+term is inherited. Under the corrected residual — `value` minus the
+**inherited** authored contribution, i.e. own boost + own `signal` + own
+`capture` — the summed quantity **drops out of the rank key entirely**: the
+band is already a `max` across distributors (7.00, 6.33) and the residual is
+computed from the node's own terms alone (0.33, 0.50, both pure `capture`).
+The corrected residual therefore neutralizes the sum on the ordering path
+**without** touching the combinator.
+
+So the crossings these two illustrate are no longer reachable through
+ordering, and it would be wrong to plan them as ordering regression cases.
+**What remains owed is a `value`-honesty defect, not an ordering one.**
+`resolveAttention` still reports 11.33 for a node whose highest-ranked
+distributor resolves to 7.00, which still contradicts the recorded
+max-across-distributors doctrine, and bare `value` is what the consumers
+listed in migration step 3 read directly — `hold-alerts.ts` most sharply,
+since it builds its own `Rank[]` of `{tier, value}` and applies a **top-K
+cutoff**, so an inflated 11.33 selects the wrong nodes no matter how the
+selector sorts. `renderFrontier`, `officeHours.ts`, and `render-rsi-plan.ts`
+read it too.
+
+**Net effect on this tactic's scope:** the `sum`→`max` fix stays in scope and
+these two nodes stay as its regression cases, but the assertion under test
+changes — from *"a tactic does not invert cross-strategy order"* to *"`value`
+equals the maximum distributing strategy's contribution, never their sum."*
+Write the regression that way.
+
+Method note for whoever re-measures: the same probe counted 75 cross-band
+inversions among open tactics under the old flat `(tier, value)` key and 0
+under `(tier, band, residual)`. The 75 is a real measurement; the **0 is
+structural, not empirical** — band dominates residual lexicographically, so a
+lower-band tactic can never outrank a higher-band one by construction. Do not
+cite that 0 as evidence the key was validated against data. It is the same
+unfalsifiability `tactic-review-band-derivation-ratification` exists to put
+back to the author.
 
 A further class is out of reach of boosts and is *not* claimed as fixed here:
 the `signal` and `capture` terms are computed per-node and do not flow down
