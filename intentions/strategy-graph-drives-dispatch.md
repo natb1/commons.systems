@@ -432,7 +432,7 @@ clarifications:
       why terminal nodes are ruled non-distributing in the ranking-algorithm
       entry above."
   - question: What was the freeze blast radius when this node's substance changed on
-      2026-08-12?
+      2026-08-12 (both rounds that day)?
     answer: "(Recorded 2026-08-12, discharging the materiality-scoped-freeze
       contract for this round.) This round changes this node's clarifications
       and therefore its strategyFingerprint. Measured with readNode plus
@@ -450,7 +450,29 @@ clarifications:
       the (tier, rank) pair; blocking lifts that pair) is superseded in part by
       this round's rank key and by the deletion of the precedence lift, but it
       is already merged at PR 2997 and sits past main-qa, so the supersession is
-      follow-up work carried by tactic-attention-namespaced-rank, not a freeze."
+      follow-up work carried by tactic-attention-namespaced-rank, not a freeze.
+      (Amended 2026-08-12, SECOND round that day -- the office-hours /align
+      round that recorded the shape/value seam and cleared
+      tactic-attention-namespaced-rank's park. Recorded as an amendment rather
+      than a new entry because both rounds changed this node's substance on the
+      same date, and two separately-dated-identical entries would be
+      unreadable.) That round amended two clarifications and added one, so it
+      moved this node's strategyFingerprint again: 29446049f0208a9b ->
+      37db70dcaea46c61. Re-measured with readNode plus strategyFingerprint and
+      isFingerprintStale, never a grep. The radius is UNCHANGED and still empty:
+      14 children now serve or are parented to this strategy, exactly ONE is
+      open (non-draft, non-done) -- still tactic-attention-tier-ranking at phase
+      main-qa -- and it still carries NO strategy_fingerprint entry for this
+      strategy, so per-strategy null semantics apply and no freeze fires. The
+      same three children carry a stamp keyed here (tactic-first-sensor-pass at
+      phase done, tactic-owner-review-reading-pass-a and -pass-b as phase-null
+      drafts); none is open, so none is re-stamped and none is left materially
+      frozen. No child needed a blocked_by carrier either. Nothing was
+      re-stamped this round. Separately, no worktree-local .scope-fingerprint
+      re-stamp was owed: the round edited the BODIES of
+      tactic-attention-namespaced-rank and
+      tactic-attention-per-tier-boost-migration, but both are phase-null drafts
+      rather than in-flight tactics, so no scope-custody gate exists to trip."
   - question: What do per-tier boosts cost, given almost none are authored — how do
       tier 2 and tier 3 order in practice?
     answer: "(Recorded 2026-08-12, same /align round as the entries above, closing a
