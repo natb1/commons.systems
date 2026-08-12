@@ -39,13 +39,41 @@ attention: null
 phase: implement
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-dispatch-ladder-skill
 office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Give /dispatch-emulate a closing implementation-evaluation step — the acceleration review every rsi-implement task owes, inherited by /rsi through its Step 4b delegation — plus a report item, and an await window sized to the phase
+
+## SUPERSEDED 2026-08-12 — folded into tactic-dispatch-ladder-skill
+
+**Do not implement this node.** Later the same day — after the RE-TARGET below
+was written — a second /align interview replaced `/dispatch-emulate` outright
+with `/dispatch-ladder`, a detached shell driver whose sequencing lives in code
+rather than skill prose. Every line anchor in the RE-TARGET's scope now points
+at a skill that the replacement **deletes**, which is the second time this node
+has been invalidated by a move of its target; the author ruled that it be folded
+rather than re-targeted a third time, the record having already named repeated
+re-targeting of one node as a defect pattern.
+
+All three scope items are carried forward into `tactic-dispatch-ladder-skill` —
+the closing acceleration review as its item 6, the report item with it, and the
+await-window sizing as its item 7 — together with the measured-durations table
+below, which is copied there verbatim as irreplaceable evidence. This node is
+`blocked_by` that one so it is not worked in the interim.
+
+`strategy-recursive-self-improvement` condition 14 is **unchanged and still
+binding**; only its carrier moved, and the replacement node carries a `serves`
+edge to that strategy precisely so the requirement keeps its distributor.
+
+One substantive re-ruling to be aware of when reading the sections below: the
+review's **trigger** changes. Condition 14's after-terminus ordering is
+untouched, but a detached run reaches terminus with no session attached, so the
+review is performed by the invoking session after it polls the run to terminus —
+not as the driver's own final step, which a shell script cannot do.
 
 ## Context
 

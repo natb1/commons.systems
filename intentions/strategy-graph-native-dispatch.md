@@ -5036,7 +5036,19 @@ clarifications:
       inherits through the delegation rather than carrying separately; see
       strategy-recursive-self-improvement's condition 14 and
       tactic-rsi-implement-acceleration-review, re-targeted to this skill in the
-      same round."
+      same round. (Amended 2026-08-12, same-day /align round — superseded in
+      name and substrate. /dispatch-emulate is retired and replaced by
+      /dispatch-ladder: a detached shell driver that carries the whole ladder to
+      phase done, not a hand-driven per-phase loop. Everything recorded above
+      survives unchanged — the procedure, the case it exists for, the divergence
+      bound, the selector's ownership of every eligibility question, the
+      mechanical strategy-id refusal, and the align-tactics rung as a legitimate
+      start. What changes: the sequencing moves from skill prose into owned
+      code, the run detaches from the calling session, and THE LOOP'S FINAL STEP
+      named above is re-ruled — the closing implementation evaluation is now
+      performed by the invoking session after it polls the detached run to
+      terminus, because a shell driver cannot perform a judgment review. See the
+      entry recorded the same day on what replaces /dispatch-emulate.)"
   - question: Who merges an emulated run's PR — the tick's merge lane, or the
       emulation loop itself?
     answer: "(Author-directed 2026-08-12, after the /align interview surfaced a
@@ -5093,7 +5105,137 @@ clarifications:
       the exact condition under which someone would read it. OPERATIONAL NOTE
       worth keeping: #3068 is itself stalled behind the bug it fixes, sitting at
       qa while the pause blocks worker spawning and blocks the merge that would
-      land it — the same self-blocking loop this graph recorded for PR #3052."
+      land it — the same self-blocking loop this graph recorded for PR #3052.
+      (Amended 2026-08-12, same-day /align round — the ruling stands, its third
+      sequence item moves. Items (1) tactic-pause-disables-merge-lane and (2)
+      tactic-graph-auto-merge-main-health-gate are unchanged and still gate the
+      work. Item (3), tactic-dispatch-emulate-owns-merge, is superseded by
+      tactic-dispatch-ladder-skill, which carries the node-scoped
+      merge-and-absorb step into /dispatch-ladder's shell driver. The
+      replacement also strengthens the ruling's own point: the ladder now runs
+      THROUGH merge-and-absorb to phase done rather than leaving through idle,
+      so the structural inconsistency named here — a loop that delegates every
+      phase then outsources its terminal step to the scheduler it exists to
+      route around — actually goes away rather than being narrowed. The accepted
+      consequences named here are unchanged and are not re-litigated.)"
+  - question: What replaces /dispatch-emulate — what is /dispatch-ladder, how much
+      of the loop may the AI carry, and what bounds a detached driver?
+    answer: "(Recorded 2026-08-12 /align interview, same day as the entries it
+      amends.) THE REPLACEMENT. /dispatch-emulate is retired and replaced by
+      /dispatch-ladder <node-id>. THE NAME: the author's prompt proposed
+      /dispatch-workflow and the author then chose /dispatch-ladder instead,
+      because 'workflow' already carries two other senses here — the harness
+      Workflow tool, and 'the dispatch workflow' of strategy-distribute-workflow
+      — and the substrate ruling below excludes the first sense, so the name
+      would point a fresh clean session at the one implementation ruled out.
+      'Ladder' is this record's own word for the phase sequence. 'Emulate'
+      retires because the loop no longer emulates a tick: it runs the ladder
+      and, once the merge step lands, completes the node itself. THE SPAN — what
+      distinguishes it from the two existing entry points. The scheduled tick
+      and the manual `dispatch [<node-id>]` lane each execute ONE phase or
+      intervention per invocation; /dispatch-ladder progresses one node all the
+      way, /align-tactics through /qa-main and on through the node-scoped
+      merge-and-absorb. TERMINUS, ruled: run to terminal state — phase done, a
+      halt disposition, or a throw — not 'stop after main-qa' as the author's
+      prompt literally read, because stopping at main-qa leaves the loop
+      outsourcing its last step to the scheduler it exists to route around, the
+      exact structural inconsistency the same-day owns-merge ruling exists to
+      close. THE NEW REQUIREMENT: sequencing and conditional logic move out of
+      skill prose into owned code; the AI carries as little as possible.
+      SUBSTRATE, ruled — a plain shell driver, NOT a Workflow-tool script. The
+      deciding fact, put to the author because it inverts the obvious reading of
+      'workflow script': a Workflow-tool script has NO filesystem or shell
+      access, its only primitive is agent(), an AI subagent — so driving the
+      phase primitives through it would ADD an AI layer to a loop that is
+      already pure exit-code branching, achieving the opposite of the
+      requirement. Compounding it, this graph already records that a Workflow
+      launched by scriptPath dies unrecoverably when backgrounded. The precedent
+      for a fully mechanical driver is dispatch-tick itself, a bash script that
+      selects, launches and disposes with no AI at all. VERIFIED THIS ROUND,
+      discharging a claim flagged as unproven when the recommendation was made:
+      the loop's entire branch surface is exit codes and nothing in it needs
+      judgment — advance gives 0 launched / 2 usage-or-strategy-refused / 10
+      idle / 11 throw / 13 claimed, await gives 0 advanced-or-pruned / 11 throw
+      / 12 stalled / 14 unknown-graph-read / 20 still-running. RUNTIME, ruled —
+      detached. The measured phase durations on the superseded
+      acceleration-review node (implement 14m10s, qa 15m59s, fix ~50m) put a
+      full ladder at hours, while the Bash tool's ceiling is 600s. That ceiling
+      is WHY today's skill has the model re-call await on exit 20 repeatedly,
+      and that re-calling IS the AI sequencing being removed — a foreground
+      driver would preserve the very defect. So the driver launches as a
+      transient systemd-run --user unit, the pattern dispatch-spawn-tick already
+      uses for the tick, logging to journald, with the calling session returning
+      immediately. Rejected: a bounded-window foreground driver (thins the AI's
+      role, does not remove it) and a background Bash tool call (dies with the
+      session, which is the failure this loop hits most, since bootstrap
+      deadlocks are long). THE STEELMAN, put to the author from this graph's own
+      record, and the ruling. Rival framing: a detached, hours-long,
+      self-sequencing node driver IS the second orchestration surface
+      strategy-recursive-self-improvement condition 3 forbids, and detaching
+      falsifies the second of the two claims the 2026-08-12 divergence rested on
+      — that the skill is attended because its callers are. RULED: detached
+      execution, attended judgment. The driver detaches the WAITING only. It
+      never resolves a throw — exits 11, 12 and 14 halt the run unconditionally,
+      with no retry, no auto-park, no resume without a person. Attendedness is
+      preserved where it means something (judgment), not where it is only
+      polling. The divergence's FIRST claim is untouched: graph-select-target
+      --node still owns every eligibility question, dispatch-graph-execute still
+      owns provisioning, the phase-to-skill mapping, the spawn, the reservation
+      handoff and every park/hold disposition, and the verdict still comes from
+      verify-landed against origin/main. THE INVARIANT, re-scoped. 'The two
+      scripts decide nothing' becomes: the driver may SEQUENCE, never gate.
+      Sequencing is not authority here — the driver only re-asks the selector
+      what to do next, and every answer remains the selector's. THE CLOSING
+      REVIEW — a problem detachment creates that the attended loop did not have.
+      rsi condition 14 requires the acceleration review to run after terminus,
+      never interleaved; a detached run reaches terminus with no session
+      attached, and a shell script cannot perform a judgment review. RULED: the
+      invoking session, or a later author-started one, polls a status script to
+      terminus and then runs the review. Rejected: a terminus marker a later
+      session owes (risks the review being owed and never paid — precisely the
+      defect condition 14 names) and a driver-spawned review session (makes the
+      driver spawn AI work, the autonomy declined above). RETIREMENT, ruled —
+      full rename. dispatch-emulate-advance and dispatch-emulate-await become
+      dispatch-ladder-advance and dispatch-ladder-await with their tests;
+      .claude/skills/dispatch-emulate/ is deleted; /rsi Step 4b repoints by
+      name. Rejected: keeping the script names (leaves the retired word embedded
+      in the primitives and their tests) and folding the primitives into the
+      driver (loses two independently-testable units and the ability to step one
+      phase by hand). THE FOLDED NODES. tactic-dispatch-emulate-owns-merge (raw)
+      and tactic-rsi-implement-acceleration-review (phase implement, in flight,
+      already re-targeted once the same day) are both superseded by
+      tactic-dispatch-ladder-skill, which carries their scope forward: the
+      node-scoped merge-and-absorb step, the closing acceleration review, the
+      await-window sizing, and the irreplaceable measured-durations table. The
+      new node stays blocked_by tactic-graph-auto-merge-main-health-gate — the
+      node-scoped merge can only be delegated once graph-auto-merge owns the
+      main-health gate and takes a node filter. Rejected: letting the in-flight
+      node land first (pays for the same implement work twice) and a third
+      re-target of the same node (the record already names repeated re-targeting
+      as a defect pattern). SERVES, and why it is two edges.
+      tactic-dispatch-ladder-skill serves BOTH strategy-graph-native-dispatch —
+      the artifact-owner rule of clarification 27, the changed artifact being
+      this strategy's dispatch skill surface — and
+      strategy-recursive-self-improvement, whose condition 14 is the requirement
+      carried. The superseded node kept rsi alone, reasoning that a second edge
+      'would be a ranking act with no ordering effect (band is max across
+      distributors, and rsi resolves higher)'. That has inverted: rsi is the
+      higher distributor, so dropping it would LOWER the rank, and keeping both
+      PRESERVES the rank rather than granting one. DELEGATION ADVICE, Step 3
+      finding. This round's substrate choice moves a real loop off proprietary,
+      session-bound harness machinery (the Workflow executor) onto owned shell —
+      concrete evidence for the recovers edge to delegation-anthropic-claude
+      that tactic-graph-ops-model-recovery-edge owns. The edge is deliberately
+      NOT added here, honoring that node's own recorded instruction that an edge
+      claim on delegation-anthropic-claude is doctrinally heavy and must not be
+      settled as a side effect of an efficiency amendment; the evidence is cited
+      so the deciding round finds it. FREEZE BLAST RADIUS of this round,
+      measured with readNode + isFingerprintStale rather than a grep: one
+      stamped open child, tactic-strategy-fingerprint-stamp-coverage (phase qa),
+      classified ORTHOGONAL — its plan is the router's stamp-write plumbing,
+      untouched by ladder-driver doctrine — and re-stamped in this same commit.
+      Every other open child serving this strategy is unstamped and freezes
+      nothing."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5434,6 +5576,27 @@ attributes:
       that tactic merges; a skipped, silently-failed, or
       silently-folded-material review is a defect of the round (Recorded
       2026-08-11)"
+    - /dispatch-ladder's driver decides nothing — it may SEQUENCE the phase
+      ladder, never gate it. Every rule about when a node may run stays in
+      graph-select-target, and any such rule appearing in the driver or in its
+      advance/await primitives is in the wrong file. This is the re-scoped form
+      of the 'two scripts decide nothing' invariant, extended to the driver that
+      calls them, and it is the thing to check every future edit against.
+    - node mutual exclusion on the /dispatch-ladder path stays the claim
+      primitive — advance's exit 13, worktree-as-claim and the reservation
+      marker. A systemd unit name may dedup identical launches as a convenience,
+      but it is never the authority on whether a node is held, so detaching the
+      run introduces no second detection mechanism beside the claim.
+    - "/dispatch-ladder throws always halt, never resolve — advance/await exits
+      11, 12 and 14 stop the run unconditionally, with no retry, no auto-park
+      and no resume without a person. This is what preserves attendedness once
+      the run is detached from the calling session: the waiting detaches, the
+      judgment does not."
+    - AI sequencing on the /dispatch-ladder path stays at zero — no model turn
+      may be required to advance the ladder between phases. A change that
+      reintroduces one (a re-invoke, a poll the model must perform, a branch the
+      model must judge) is a regression against this requirement, not an
+      implementation detail.
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

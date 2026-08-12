@@ -21,12 +21,28 @@ execution: null
 validates: []
 blocked_by:
   - tactic-graph-auto-merge-main-health-gate
+  - tactic-dispatch-ladder-skill
 office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Give /dispatch-emulate a node-scoped merge-and-absorb step so an emulated run completes its own node instead of depending on the tick it exists to route around
+
+## SUPERSEDED 2026-08-12 — folded into tactic-dispatch-ladder-skill
+
+Later the same day, a second /align interview replaced `/dispatch-emulate`
+outright with `/dispatch-ladder`, a detached shell driver. The merge-and-absorb
+step scoped below is **carried forward unchanged** as item 4 of
+`tactic-dispatch-ladder-skill`, which now runs the ladder through
+merge-and-absorb to phase `done` rather than leaving through `idle` — so the
+structural inconsistency this node named is closed by the replacement rather
+than patched here. This node is `blocked_by` that one so it is not worked
+against a skill the replacement deletes; the scope below is retained as the
+reasoning behind item 4, not as separate work.
+
+The retained context that follows is still accurate about the defect and the
+ruling. Only its **carrier** moved.
 
 ## Draft context (2026-08-12 /align interview)
 
