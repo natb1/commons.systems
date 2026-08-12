@@ -74,6 +74,29 @@ clarifications:
       The derived boost is tier-invariant: per-tier namespacing exists because
       an AUTHORED magnitude is chosen against a tier's scale, and nothing is
       authored here."
+  - question: How does the derived delegation score interact with the closed level
+      vocabulary settled after this node's cap decision?
+    answer: "(Raised 2026-08-12, AFTER the cap decision above; OPEN — the one
+      undecided item on this node.) The author later closed kind-kind's per-band
+      question by making the authored boost vocabulary a closed set of absolute
+      levels (background 5 / low 10 / normal 20 / high 50 / urgent 85; see
+      tactic-attention-per-tier-boost-migration). DELEGATION_SEVERITY_WEIGHT =
+      10 yields 10, 20, 30, 40, 50, 60 — and 30, 40 and 60 are values no author
+      can express. This is NOT a validation conflict: the derived boost is
+      computed inside resolveAttention and never written to a node's attention,
+      so the write-path vocabulary check that replaces retired rule 20 does not
+      see it, and an off-vocabulary SCORE is not anomalous because scores are
+      sums of boosts. An implementer must not apply the vocabulary check to
+      resolved values. What is open is whether a delegation should speak the
+      author's vocabulary: (1) keep the weight, preserving six distinct monotone
+      contributions; or (2) map severity onto the levels and delete
+      DELEGATION_SEVERITY_WEIGHT entirely — one fewer constant and
+      commensurability by construction, at the cost of collapsing six
+      severities onto five levels (the live graph carries severities 1..5 across
+      22 delegations, so little is lost). Recommendation is (2), on the same
+      reasoning that decided the cap and the vocabulary; the mapping itself is
+      the judgment call. Not folded in unilaterally because the cap decision is
+      already recorded as settled."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -165,6 +188,45 @@ DELEGATION_SEVERITY_WEIGHT = 10   // severity 1..6 -> 10..60
 
 which spans both authored modes. Net simplification: three mechanisms
 (divisor, cap, term weight) collapse to one constant.
+
+## OPEN — interaction with the level vocabulary (raised 2026-08-12, after)
+
+The cap decision above was settled BEFORE the author closed the per-band
+question by making the authored boost vocabulary a closed set of absolute
+levels — background 5 / low 10 / normal 20 / high 50 / urgent 85
+(`tactic-attention-per-tier-boost-migration`;
+`strategy-graph-drives-dispatch` carries the doctrine). The two have an
+interaction that is **not yet decided**.
+
+`DELEGATION_SEVERITY_WEIGHT = 10` yields contributions of 10, 20, 30, 40, 50,
+60. Three of those (30, 40, 60) are values no author can express.
+
+**This is not a validation conflict.** The derived boost is computed inside
+`resolveAttention` and never written to a node's `attention`, so the
+write-path vocabulary check that replaces retired rule 20 does not see it.
+Nor is an off-vocabulary *score* anomalous — scores are sums of boosts and sit
+off-vocabulary constantly. An implementer must not apply the vocabulary check
+to resolved values.
+
+**What is open** is whether a delegation should speak the same vocabulary as
+an author. Two options:
+
+1. **Keep the weight** (as recorded above). Preserves full resolution: six
+   distinct severities map to six distinct contributions, monotone and
+   injective.
+2. **Map severity onto the levels** and delete `DELEGATION_SEVERITY_WEIGHT`
+   entirely — one fewer constant, and a delegation then makes a claim in
+   exactly the language an author uses. Costs resolution: six severities
+   collapse onto five levels (in practice the live graph carries severities
+   1..5 across 22 delegations, so little is lost).
+
+**Recommendation: option 2**, on the same reasoning that decided the cap and
+the vocabulary — prefer one fewer mechanism, and prefer commensurability by
+construction. The mapping itself would be the judgment call.
+
+Not folded into the decision above unilaterally because that decision is
+already recorded as settled; this is flagged for the author rather than
+silently revised.
 
 ## Why no `goal_layer` flip
 
