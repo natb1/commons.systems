@@ -428,6 +428,16 @@ implementation of a node's own tier; rules 18 and 19 are untouched; no
   exists). Extract the `reverseBlockers` construction currently inlined at
   `attention.ts:176-183` into one exported helper and use it from both
   `computeSignalPath` and `parentIds`.
+  **Precompute it once per run, not per sweep.** Build a
+  `Map<string, string[]>` of every node's `parentIds` before the fixpoints
+  start and read from it inside the loops. Today `distributorIds` allocates a
+  fresh `Set` and a sorted array *per node per sweep*, and this design adds
+  sweeps (the lineage set-union fixpoint below, the tier fixpoint, and per-tier
+  scores over three tiers), so the per-sweep rebuild costs strictly more here
+  than it did under the old resolver. This absorbs the surviving half of the
+  pruned cost-lens follow-up (see Findings, item 1). The map is built from
+  immutable node data, so hoisting it changes no result — assert that by
+  keeping the existing determinism test green.
 - **Lineage sets.** Compute `lineage(n) = ∪ over p ∈ parentIds(n) of
   ({p} \ done) ∪ lineage(p)` as a monotone set-union fixpoint, following the
   existing sweep shape (`attention.ts:417-438`): seed empty, sweep
@@ -715,15 +725,27 @@ recorded here rather than on `strategy-graph-drives-dispatch` because a
 per-node `/align-tactics <tactic-id>` session never edits the serving
 strategy's frontmatter.
 
-1. **This node ORPHANS a live sibling rather than satisfying it.**
-   `tactic-select-targets-redundant-attention-resolve` is an advisory,
-   non-Required cost/perf follow-up proposing that `selectGraphTargets` hoist a
-   redundant `effectivePrecedence` resolve. Unit 3 **deletes**
-   `effectivePrecedence` outright, so that follow-up's premise disappears when
-   this node lands — it is not satisfied, it becomes moot. Flagged, **not
-   actioned**: this plan neither absorbs nor closes it. Disposition (prune as
-   moot, or re-file against whatever replaces the lift) is the author's, in the
-   align/office-hours lane.
+1. **This node ORPHANED a live sibling — since PRUNED (author-decided
+   2026-08-12).** The raw tactic tactic-select-targets-redundant-attention-resolve
+   (filed 2026-08-01 from the PR #2997 cost-lens review, advisory/non-Required,
+   never adversarially verified) proposed that `selectGraphTargets` stop
+   recomputing `resolveAttention` twice per tick by passing its already-built
+   map into `effectivePrecedence`. Unit 3 **deletes** `effectivePrecedence`
+   outright, so that headline premise disappears when this node lands rather
+   than being satisfied by it. The author pruned the node as moot in the same
+   round that finalized this plan; it is gone from the graph, and this
+   paragraph is its only remaining record.
+
+   **Its second half was NOT moot and is absorbed into Unit 2** — see the
+   `parentIds` bullet there. The pruned node's closing suggestion was to hoist
+   the per-node distributor-set construction out of the fixpoint sweeps by
+   precomputing it once. Unit 2 renames `distributorIds` to `parentIds` and
+   widens it, but keeps its per-call shape, and this design runs **more**
+   sweeps over it than the old one did (a lineage set-union fixpoint and a tier
+   fixpoint, with per-tier scores across three tiers). So the redundant-work
+   observation gets *stronger* on that half, not moot. It is a near-free
+   addition to code Unit 2 already rewrites wholesale, which is why it rides
+   there instead of surviving as its own node.
 
 2. **One rank consumer is missing from Unit 4's list.**
    `packages/intentionsutil/scripts/render-rsi-plan.ts:142-217` parses
