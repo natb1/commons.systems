@@ -77,7 +77,7 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Migrate attention.boost to a per-tier map and retire the interim 0.01 namespacing ladder and the last override
+# Migrate attention.boost to a per-tier map of absolute levels, retire the interim 0.01 namespacing ladder, the last override, and validateGraph rule 20
 
 Draft — retained interview context per the retain-not-refine contract.
 
