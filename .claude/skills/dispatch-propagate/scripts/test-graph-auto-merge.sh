@@ -82,7 +82,7 @@ GAMRED
 chmod +x "$GAM_SCRIPTS/dispatch-graph-main-red-sync"
 
 # Fake node: enumeration ( -e inline ) applies the
-# id/phase/pr/conflict/reviewed-marker filter over stub/nodes.json;
+# id/phase/pr/conflict/blocked_by/reviewed-marker filter over stub/nodes.json;
 # compute-freshness.ts <id> serves stub/freshness-<id>.json.
 cat > "$GAM_ROOT/bin/node" <<'GAMNODE'
 #!/usr/bin/env bash
@@ -100,12 +100,24 @@ fi
 # passes its --node selection filter as the LAST argv element after the inline
 # -e program (empty string = no filter); mirror that here so the bash→node
 # plumbing of --node is genuinely exercised rather than assumed.
+#
+# The `blocked_by` conjunct mirrors `blockersComplete`
+# (packages/intentionsutil/src/router.ts): a blocker is complete when ABSENT
+# from the store (prune-on-done makes absence completion) or present at
+# `phase: done`; a present, not-done blocker blocks. Expressed here as a join of
+# each node's blocked_by ids against the same fixture array — without it the
+# gate would be invisible to this fixture, since the real predicate never runs.
 only="${!#}"
-jq -r --arg only "$only" '.[]
+jq -r --arg only "$only" '
+  (map({key: .id, value: .}) | from_entries) as $byId
+  | .[]
   | select($only == "" or .id == $only)
   | select(.kind=="tactic" and .phase=="review"
            and (.execution.pr != null)
            and (.execution.conflict == null)
+           and ([ (.blocked_by // [])[]
+                  | $byId[.]
+                  | select(. != null and .phase != "done") ] | length == 0)
            and ((.execution.markers // []) | index("reviewed")))
   | "\(.id)\t\(.execution.pr)\t\(if .office_hours == null then "clean" else "parked" end)"' "$STUB/nodes.json"
 exit 0
@@ -405,6 +417,55 @@ assert_eq "graph-auto-merge (k5): exit 0 (a suppressed sweep is not an error)" "
 if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_k5_m=present; else gam_k5_m=absent; fi
 assert_eq "graph-auto-merge (k5): unrunnable main-red sync issues no merge" "absent" "$gam_k5_m"
 mv "$GAM_ROOT/main-red-sync.bak" "$GAM_SCRIPTS/dispatch-graph-main-red-sync"
+
+# ============================================================================
+# tactic-graph-auto-merge-blocked-by-gate: blocked_by must gate the merge
+# ============================================================================
+# The candidate is otherwise fully mergeable (reviewed marker, green CI,
+# MERGEABLE, fresh stamp, unparked) in all three cases — the ONLY variable is
+# its blocker's presence/phase, so a pass here can only be the blocker gate.
+gam_m_setup() {  # $1 = the nodes.json array literal
+  gam_reset
+  printf '%s\n' "$1" > "$GAM_ROOT/stub/nodes.json"
+  printf '%s\n' '{"number":115,"title":"Tactic M","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-m","sha":"sha115"},"labels":[]}' \
+    > "$GAM_ROOT/stub/pr-115.json"
+  echo passing > "$GAM_ROOT/cache/sha115"
+  echo fp > "$GAM_ROOT/.claude/worktrees/tactic-m.scope-fingerprint"
+  gam_fresh tactic-m
+}
+
+# ---- (m1) a present, not-done blocker → NOT merged (silent skip) -----------
+# A blocker skip is a plain skip, not a `held <id> (...)` line: the node is not
+# a candidate at all, so the stdout protocol emits nothing for it.
+gam_m_setup '[{"id":"tactic-m","kind":"tactic","phase":"review","blocked_by":["tactic-m-blocker"],"execution":{"pr":115,"markers":["reviewed"]}},{"id":"tactic-m-blocker","kind":"tactic","phase":"implement","execution":{"pr":null,"markers":[]}}]'
+gam_m1_out=$(run_gam 2>/dev/null); gam_m1_rc=$?
+assert_eq "graph-auto-merge (m1): a node with an incomplete blocker is not merged" "" "$gam_m1_out"
+assert_eq "graph-auto-merge (m1): exit 0" "0" "$gam_m1_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_m1_m=present; else gam_m1_m=absent; fi
+assert_eq "graph-auto-merge (m1): incomplete blocker issues no merge" "absent" "$gam_m1_m"
+# The same gate applies under --node: the ladder's single-node caller cannot
+# merge past an open blocker either.
+gam_m1n_out=$(run_gam --node tactic-m 2>/dev/null)
+assert_eq "graph-auto-merge (m1): --node does NOT bypass the blocker gate" "" "$gam_m1n_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_m1n_m=present; else gam_m1n_m=absent; fi
+assert_eq "graph-auto-merge (m1): --node with an incomplete blocker issues no merge" "absent" "$gam_m1n_m"
+
+# ---- (m2) a blocker at phase:done → merged ---------------------------------
+gam_m_setup '[{"id":"tactic-m","kind":"tactic","phase":"review","blocked_by":["tactic-m-blocker"],"execution":{"pr":115,"markers":["reviewed"]}},{"id":"tactic-m-blocker","kind":"tactic","phase":"done","execution":{"pr":null,"markers":[]}}]'
+gam_m2_out=$(run_gam 2>/dev/null); gam_m2_rc=$?
+assert_eq "graph-auto-merge (m2): a done blocker does not block the merge" \
+  "merged #115 (tactic-m)" "$gam_m2_out"
+assert_eq "graph-auto-merge (m2): exit 0" "0" "$gam_m2_rc"
+
+# ---- (m3) a blocker ABSENT from the store → merged (absence = completion) --
+# prune-on-done removes a completed node, so an unresolvable blocker id is read
+# as complete — the documented `blockersComplete` rule, which is only safe
+# because the enumeration is STRICT.
+gam_m_setup '[{"id":"tactic-m","kind":"tactic","phase":"review","blocked_by":["tactic-m-pruned"],"execution":{"pr":115,"markers":["reviewed"]}}]'
+gam_m3_out=$(run_gam 2>/dev/null); gam_m3_rc=$?
+assert_eq "graph-auto-merge (m3): a blocker absent from the store is complete" \
+  "merged #115 (tactic-m)" "$gam_m3_out"
+assert_eq "graph-auto-merge (m3): exit 0" "0" "$gam_m3_rc"
 
 # ---- (l) usage errors exit 2 ----------------------------------------------
 gam_reset

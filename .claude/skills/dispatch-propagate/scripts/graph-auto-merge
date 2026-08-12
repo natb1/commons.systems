@@ -70,6 +70,11 @@
 #     resolved conflict can flip the PR back to MERGEABLE before the selector
 #     pass self-heals the interrupt and routes the re-review; merging then
 #     lands code the completed review never saw.
+#   - blocked_by satisfied (applied in the Step 2 enumeration, via the shared
+#     `blockersComplete` predicate). A node whose blocker is still open must not
+#     land ahead of it — the blocker exists precisely because this PR's code
+#     depends on, or must not precede, the blocker's. Silent skip, not a `held`
+#     line: the node is simply not a candidate yet.
 #   - CI passing. `pending` retries next tick; `failing` belongs to the fix
 #     interrupt (do NOT merge, do NOT route the fix here — the next
 #     transition-node / selection tick routes it).
@@ -188,9 +193,20 @@ fi
 # set. It reads the FIRST-CLASS `execution.conflict` field only — never the
 # `attributes` squatter path some other readers tolerate.
 #
+# A node with an UNSATISFIED `blocked_by` blocker is EXCLUDED here too, via the
+# shared `blockersComplete` predicate (packages/intentionsutil/src/router.ts) —
+# the same completeness rule the selector and the review-stall sweep apply: a
+# blocker is complete when ABSENT from the store (prune-on-done makes absence
+# completion) or present at `phase: done`. Nothing else in this script reads
+# `blocked_by`, so without this an autonomously-merged node could land ahead of
+# the very work it declares itself blocked by. It is an added conjunct on the
+# enumeration's existing strict read, not a second traversal.
+#
 # Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
 # a corrupt node file must abort the pass loudly rather than silently vanish
-# from the candidate set (or, via a dropped blocker, silently qualify one).
+# from the candidate set (or, via a dropped blocker, silently qualify one) —
+# the latter is exactly `blockersComplete`'s documented precondition, since it
+# reads an absent blocker id as COMPLETE.
 #
 # `--node <id>` is applied HERE, as the first thing the loop tests: a selection
 # filter layered on top of the enumeration, ahead of every gate, so the gates
@@ -199,14 +215,18 @@ fi
 # variable can never silently narrow an unflagged sweep.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
+  const nodes = listNodesStrict("./intentions");
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const only = process.argv[1] || "";
-  for (const n of listNodesStrict("./intentions")) {
+  for (const n of nodes) {
     if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase !== "review") continue;
     const pr = n.execution && n.execution.pr;
     if (pr === null || pr === undefined) continue;
     if (n.execution.conflict !== null && n.execution.conflict !== undefined) continue;
+    if (!blockersComplete(n, byId)) continue;
     const markers = (n.execution && n.execution.markers) || [];
     if (!markers.includes("reviewed")) continue;
     process.stdout.write(n.id + "\t" + pr + "\t" + (n.office_hours == null ? "clean" : "parked") + "\n");
