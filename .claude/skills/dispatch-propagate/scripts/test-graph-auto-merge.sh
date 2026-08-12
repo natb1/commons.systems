@@ -637,13 +637,23 @@ assert_eq "graph-auto-merge (n6): an unreadable main tip issues no sync" "absent
 # Same single-variable discipline as the (n) cases: the candidate is otherwise
 # fully mergeable and the compare status is pinned, so the ONLY variable is the
 # PR's merge-commit count (and the cap it is compared against).
-gam_o_commits() {  # $1 = PR number, $2 = how many MERGE commits to serve
+gam_o_commits() {  # $1 = PR number, $2 = API-form merges, $3 = worker merges (0)
+  # Two distinct merge-commit forms, because only ONE of them is this gate's:
+  #   - API form   `Merge branch 'main' into <ref>` — GitHub's update-branch
+  #     API, i.e. this gate's own sync. COUNTS toward the cap.
+  #   - worker form `Merge remote-tracking branch 'origin/main' into <ref>` —
+  #     commit-merge-push's local `git merge origin/main`, run at the end of
+  #     every implement unit and fix pass. Must NOT count.
   # Always append one ORDINARY (single-parent) commit: the counter must count
   # multi-parent commits, not commits, so a fixture of all-merges could not tell
   # a correct filter from `length`.
-  jq -cn --argjson n "$2" \
-    '[range($n) | {sha:"merge\(.)", parents:[{sha:"p1"},{sha:"p2"}]}]
-     + [{sha:"plain", parents:[{sha:"p1"}]}]' \
+  jq -cn --argjson api "$2" --argjson worker "${3:-0}" \
+    '[range($api) | {sha:"apimerge\(.)", parents:[{sha:"p1"},{sha:"p2"}],
+        commit:{message:"Merge branch '\''main'\'' into tactic-n"}}]
+     + [range($worker) | {sha:"wmerge\(.)", parents:[{sha:"p1"},{sha:"p2"}],
+        commit:{message:"Merge remote-tracking branch '\''origin/main'\'' into tactic-n"}}]
+     + [{sha:"plain", parents:[{sha:"p1"}],
+        commit:{message:"Implement the unit\n\nA body paragraph."}}]' \
     > "$GAM_ROOT/stub/pr-commits-$1.json"
 }
 
@@ -719,6 +729,46 @@ gam_o5_out=$(run_gam 2>/dev/null) || gam_o5_rc=$?
 assert_eq "graph-auto-merge (o5): an up-to-date head merges regardless of past syncs" \
   "merged #116 (tactic-n)" "$gam_o5_out"
 assert_eq "graph-auto-merge (o5): exit 0" "0" "$gam_o5_rc"
+
+# ---- (o6) worker merges do NOT count toward the cap ------------------------
+# The regression this filter exists for. commit-merge-push runs
+# `git merge origin/main` at the end of every implement unit and every fix
+# pass, so an ordinary multi-unit PR carries several worker merge commits that
+# this gate never made. Counting them held healthy PRs at the cap before the
+# gate had synced them even once — and `held <id> (sync-cap: …)` is a hard
+# exit-11 halt in dispatch-ladder-run. Modelled on real PR #3068, which carried
+# 3 worker merges (plus 1 API merge) and was already over the default cap of 3.
+gam_n_setup diverged
+gam_o_commits 116 0 4   # 4 worker merges, ZERO of this gate's own syncs
+gam_o6_rc=0
+gam_o6_out=$(run_gam 2>/dev/null) || gam_o6_rc=$?
+assert_eq "graph-auto-merge (o6): worker origin/main merges do not count toward the sync cap" \
+  "synced #116 (tactic-n)" "$gam_o6_out"
+assert_eq "graph-auto-merge (o6): exit 0" "0" "$gam_o6_rc"
+case "$gam_o6_out" in *sync-cap*) gam_o6_h=held ;; *) gam_o6_h=not-held ;; esac
+assert_eq "graph-auto-merge (o6): a PR carrying only worker merges is never held" "not-held" "$gam_o6_h"
+if grep -q 'pulls/116/update-branch' "$GAM_ROOT/stub/update-branch-calls.log" 2>/dev/null; then gam_o6_u=yes; else gam_o6_u=no; fi
+assert_eq "graph-auto-merge (o6): update-branch PUT still issued" "yes" "$gam_o6_u"
+
+# ---- (o7) mixed history: only the API-form merges are counted --------------
+# 3 worker merges + 2 API merges is 5 merge commits but only 2 syncs, so it is
+# still below the default cap of 3 and syncs.
+gam_n_setup diverged
+gam_o_commits 116 2 3
+gam_o7_rc=0
+gam_o7_out=$(run_gam 2>/dev/null) || gam_o7_rc=$?
+assert_eq "graph-auto-merge (o7): 3 worker + 2 API merges counts as 2 syncs, below the cap" \
+  "synced #116 (tactic-n)" "$gam_o7_out"
+assert_eq "graph-auto-merge (o7): exit 0" "0" "$gam_o7_rc"
+# One more API sync on the same mixed history crosses the cap — and the reported
+# count is 3 (the API merges), not 6 (every merge commit).
+gam_n_setup diverged
+gam_o_commits 116 3 3
+gam_o7b_rc=0
+gam_o7b_out=$(run_gam 2>/dev/null) || gam_o7b_rc=$?
+assert_eq "graph-auto-merge (o7): the cap counts API merges only, and still holds at 3" \
+  "held tactic-n (sync-cap: 3 syncs)" "$gam_o7b_out"
+assert_eq "graph-auto-merge (o7): mixed-history hold exit 0" "0" "$gam_o7b_rc"
 
 rm -rf "$GAM_ROOT" "$GAM_BARE"
 

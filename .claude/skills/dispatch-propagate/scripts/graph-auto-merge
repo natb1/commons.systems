@@ -97,9 +97,13 @@
 #     synced twice) but NOT per PR: under contention the sync re-triggers CI,
 #     main moves again during that 10-20 minute run, and the next tick syncs
 #     again. A PR can lose that race indefinitely, paying a full CI run per
-#     cycle. So before syncing, count the PR's own merge commits — that count IS
-#     the number of times main has been merged into this head, i.e. the sync's
-#     own footprint — and at `GRAPH_AUTO_MERGE_SYNC_MAX` (default 3) HOLD
+#     cycle. So before syncing, count the PR's merge commits whose subject is
+#     GitHub's update-branch form, `Merge branch 'main' into <head-ref>` — that
+#     count IS the number of times THIS gate has merged main into the head, i.e.
+#     its own footprint. The worker's local `git merge origin/main`
+#     (commit-merge-push) writes the remote-tracking form and is NOT counted,
+#     which would otherwise hold healthy multi-unit PRs that this gate had never
+#     synced. At `GRAPH_AUTO_MERGE_SYNC_MAX` (default 3) HOLD
 #     instead: `held <id> (sync-cap: <n> syncs)`. A hold, not a silent skip,
 #     because a thrashing PR needs a person (rebase it, land it manually, split
 #     it), which is exactly what the `held` verdict means here.
@@ -428,20 +432,40 @@ while IFS=$'\t' read -r id pr parked; do
       # contention can lose that race indefinitely, paying a full CI run per
       # cycle. Cap it, and hand a thrashing PR to a person.
       #
-      # The counter is the PR's own merge commits — commits with more than one
-      # parent. That count IS how many times main has been merged into this
-      # head: the sync's own footprint, read straight from GitHub, with nothing
-      # to persist, sweep, or race, and correct across processes and hosts.
+      # The counter is THIS GATE's own syncs, not every merge commit on the PR.
+      # A multi-parent commit alone does not identify one: commit-merge-push
+      # runs `git merge origin/main` at the end of every implement unit and
+      # every fix pass, so an ordinary multi-unit PR carries several worker
+      # merges that this gate never made. Counting those held healthy PRs at
+      # the cap before the gate had synced them even once.
+      #
+      # The two forms are distinguishable by commit subject, because they are
+      # made by different mechanisms:
+      #   - GitHub's update-branch API — what gh_pr_update_branch_rest calls
+      #     below — writes `Merge branch 'main' into <head-ref>`.
+      #   - a local `git merge origin/main` writes git's remote-tracking form,
+      #     `Merge remote-tracking branch 'origin/main' into <head-ref>`.
+      # So count multi-parent commits whose subject (first line of the message)
+      # starts with `Merge branch 'main'`. That count IS how many times THIS
+      # gate has merged main into this head: its own footprint, read straight
+      # from GitHub, with nothing to persist, sweep, or race, and correct
+      # across processes and hosts. The multi-parent predicate is kept as well
+      # — a non-merge commit could in principle carry that subject.
       #
       # Two honest caveats:
-      #   - a merge commit the PR AUTHOR made by hand also counts. That is
-      #     correct: it is still a sync of main into the head.
+      #   - a person who runs `git merge main` (the local branch, not
+      #     `origin/main`) by hand produces the same subject and is counted. No
+      #     script in this repo does that — every scripted merge names
+      #     `origin/main` — so it takes a rare human action, and it over-counts,
+      #     failing CLOSED: an unnecessary hold, which is that person's call
+      #     anyway.
       #   - `per_page=100` bounds the listing (gh_api_array does not paginate),
       #     so a PR with more than 100 commits UNDER-counts and fails OPEN,
       #     permitting another sync. Better than failing closed on a large PR.
       rc=0
       SYNC_COUNT=$(gh_api_array "repos/{owner}/{repo}/pulls/$pr/commits?per_page=100" \
-        '[.[] | select(.parents | length > 1)] | length') || rc=$?
+        '[.[] | select((.parents | length > 1)
+           and ((.commit.message | split("\n")[0]) | startswith("Merge branch '\''main'\''")))] | length') || rc=$?
       if [[ "$rc" -ne 0 ]]; then
         echo "graph-auto-merge: could not list commits on #$pr for $id (cannot run the sync cap)" >&2
         HARD_ERROR=1
