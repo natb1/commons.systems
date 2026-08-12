@@ -83,6 +83,16 @@ re-scaled onto the new scale.
   tier" reads as "ranked last". `kind-kind`'s per-band `attention.scope`
   stamp is a **separate**, still-open question — adopting per-tier boosts
   does not close it.
+- **`validateGraph` rule 20** (added 2026-08-12, post-round check).
+  `checkAttentionTierNamespace` (`packages/intentionsutil/src/schema.ts:1111`)
+  reads a single scalar `node.attention.tier` and requires it to equal
+  `ownTier(node)` — the rule that forces an author to re-pick a boost when a
+  node's tier changes, since a tier-1-scale value is meaningless on the
+  tier-2 scale. Replacing that scalar with a per-tier structure removes the
+  field the rule reads, so rule 20 must be reshaped or retired **as part of
+  this migration**, not left to fail on the new shape. Rule 18 is NOT
+  affected — it is a tier-authorship guard reading raw `attributes.tier`, not
+  a boost guard; see `tactic-attention-namespaced-rank`.
 
 ## Interaction to confirm
 

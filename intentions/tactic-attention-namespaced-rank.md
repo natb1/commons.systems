@@ -208,6 +208,28 @@ sum-to-max value-honesty defect dissolves for the same reason.
 8. Delete `router.ts`'s `effectivePrecedence` lift and its `Precedence`
    tuple; blockers are parents now, so the lift is redundant.
 
+### `validateGraph` rules 18 and 20 (added 2026-08-12, post-round check)
+
+The superseded body below asks (item 2 of its scope list) whether rule 18's
+"tactic-facing half — the `strategy-main-health` boost-dominance guard"
+retires under namespaced rank. **That premise is stale and the question is
+resolved: rule 18 survives unchanged.** It is no longer a boost-dominance
+guard. As implemented (`packages/intentionsutil/src/schema.ts:1021`) it is a
+tier-AUTHORSHIP guard: (a) no node other than `strategy-main-health` may
+author an explicit `attributes.tier: 3`, read from the RAW `attributes.tier`
+field rather than `ownTier` or any resolved value, precisely so that
+INHERITING tier 3 stays legal; (b) `strategy-main-health` must itself carry
+tier 3. This round changes neither tier authorship nor tier inheritance, so
+nothing in rule 18 is touched.
+
+**Rule 20 does need work, and it is not in the scope list above.**
+`checkAttentionTierNamespace` (`schema.ts:1111`) reads a single scalar
+`node.attention.tier` and requires it to equal `ownTier(node)`. Per-tier
+authored boosts replace that scalar with a per-tier structure, so the rule
+must be reshaped or retired along with the field. Its home is
+`tactic-attention-per-tier-boost-migration`, which owns the authored-value
+migration; recorded there as well so neither node has to infer it.
+
 ### Split out, not in this node
 
 - `tactic-attention-delegation-scoring` — making delegations score-bearing
