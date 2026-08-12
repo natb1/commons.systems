@@ -285,6 +285,12 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 ORIGIN="$WORK/origin.git"
 git init -q --bare "$ORIGIN"
 git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+# Silence the only asynchronous writer the scratch origin can have: an
+# in-process auto-gc that relocates loose objects into a pack right after the
+# seed push, racing make_clone's --no-local clone (see there). No assertion
+# in this suite depends on gc behavior in the fixtures.
+git -C "$ORIGIN" config gc.auto 0
+git -C "$ORIGIN" config receive.autogc false
 # plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
 # which needs an author identity. CI runners have no global git identity, so
 # without this commit-tree fails, plant_lock yields an empty sha, and the lock
@@ -298,6 +304,8 @@ mkdir -p "$SEED"
 git -C "$SEED" init -q -b main
 git -C "$SEED" config user.email harness@test
 git -C "$SEED" config user.name harness
+git -C "$SEED" config gc.auto 0
+git -C "$SEED" config receive.autogc false
 git -C "$SEED" remote add origin "$ORIGIN"
 mkdir -p "$SEED/intentions" \
          "$SEED/packages/intentionsutil/scripts" \
@@ -369,7 +377,15 @@ git -C "$SEED" push -q origin main
 
 # --- Independent writer clones -------------------------------------------
 make_clone() { # <dst> <identity>
-  git clone -q "$ORIGIN" "$1"
+  # --no-local routes the clone through upload-pack (one streamed pack)
+  # instead of the default local-path file-copy/hardlink of $ORIGIN/objects,
+  # which races a source-side loose->pack relocation triggered by auto-gc
+  # right after the seed push. --no-hardlinks is NOT equivalent: it keeps the
+  # same per-file copy loop and is exposed to the same race.
+  if ! git clone -q --no-local "$ORIGIN" "$1"; then
+    echo "error: fixture setup failed: git clone --no-local $ORIGIN $1" >&2
+    exit 1
+  fi
   git -C "$1" config user.email "$2@test"
   git -C "$1" config user.name "$2"
 }
