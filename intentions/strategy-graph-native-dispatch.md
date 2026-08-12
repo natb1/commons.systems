@@ -5236,6 +5236,56 @@ clarifications:
       untouched by ladder-driver doctrine — and re-stamped in this same commit.
       Every other open child serving this strategy is unstamped and freezes
       nothing."
+  - question: Is a recording round answerable for the internal consistency of its
+      own output, given that /align has no plan schema and refining tactical
+      content is /align-tactics’ job?
+    answer: "(Recorded 2026-08-12 /align interview, arising from a /dispatch-ladder
+      closing acceleration review.) YES — with the boundary drawn at
+      CONSISTENCY, never at plannability. DIVERGENCE, recorded with its reason:
+      the rival framing holds that an /align-tactics park is the mechanism
+      working, because the delegation economics deliberately move planning off
+      the author’s present, expensive interview time onto a cheap autonomous
+      session, so spending an autonomous session to discover unplannability is
+      the correct trade rather than waste. That framing is adopted for
+      plannability and diverged from for self-consistency: catching a
+      contradiction between two things the SAME round wrote consumes no author
+      judgment at all, so the economics argument does not reach it. Step 4’s
+      retain-not-refine rule is preserved verbatim — no plan schema and no
+      quality bar enter /align — and the duty asserted here is already implied
+      by Step 2’s standing obligation to always surface graph-internal
+      inconsistencies. EVIDENCE: commit 8249f664 (2026-08-12 14:22), an /align
+      round on strategy-graph-drives-dispatch, created
+      tactic-attention-namespaced-rank — whose body defers per-tier boost
+      storage to tactic-attention-per-tier-boost-migration — and in the SAME
+      commit gave that sibling blocked_by: [tactic-attention-namespaced-rank],
+      ordering the dependency after its own dependent. A /dispatch-ladder run
+      then spent roughly 13 minutes of Opus inside /align-tactics rediscovering
+      that inversion and parked the node (2184103c) for author ratification. The
+      defect was free to catch in the authoring round and cost a full autonomous
+      session to catch downstream. The same census pass found at least three
+      earlier parks naming an upstream recording round’s record gap as their
+      cause, one stating outright that it was a record-completeness gap of the
+      2026-07-02 /align-strategy round. SCOPE LIMIT: this does NOT make /align
+      answerable for whether a recorded tactic is plannable. That remains
+      /align-tactics’ sole judgment, and a park on genuine requirement ambiguity
+      — including the 2184103c park itself, which turned on an unratified
+      storage-shape ownership question — remains correct behavior. CAPTURE NOTE:
+      the walk makes Claude the checker of Claude’s own output, the same
+      self-audit shape strategy-graph-integrity records for its recurring
+      /align-audit; the loop is controlled, not unwound — no recovers edge is
+      added on that account. Mechanisms retained this round as draft tactics:
+      tactic-align-round-self-consistency-walk (the Step 6 walk),
+      tactic-validate-graph-ordering-inversion-lint (the mechanical backstop),
+      and tactic-align-tactics-premise-preflight (early refusal, so an
+      unplannable node parks cheaply). A fourth,
+      tactic-park-cause-sensor-instrument, was filed by this same round after it
+      measured that appending the park-cause sensor to success_signal.sensor
+      recorded the observable but registered nothing — the census sensor counter
+      read 19/53 with 45 unregistered both before and after the append, because
+      read-sensors matches the entire success_signal.sensor string against
+      registered Sensor names and this strategy’s prose was already
+      unregistered. Filing it rather than deferring it is this condition applied
+      to the round that recorded it."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5265,12 +5315,17 @@ success_signal:
     tactics serving this strategy"
   sensor: the intention store and the router's selection log —
     align-tactics-census.ts enumerates the open machinery-defect population
-    serving this strategy; the selection log carries lifecycle completions
+    serving this strategy; the selection log carries lifecycle completions; and
+    a park-cause reading over office_hours.reason across parked nodes counts
+    /align-tactics parks attributable to an upstream recording round’s own
+    record gap (the reading that surfaced three such parks on 2026-08-12)
   threshold: the owned path carries tactics through the full lifecycle
     continuously, and the machinery's own open defect backlog — open (phase set,
     not done) plus born-parked tactics serving this strategy — stays at or below
     35% of all tactics serving this strategy and is non-increasing across
-    consecutive samples derived from intentions/ git history at read time
+    consecutive samples derived from intentions/ git history at read time, and
+    parks attributable to an upstream recording round’s own record gap trend to
+    zero
   is_proxy: true
 attention:
   boost: 5
@@ -5597,6 +5652,13 @@ attributes:
       reintroduces one (a re-invoke, a poll the model must perform, a branch the
       model must judge) is a regression against this requirement, not an
       implementation detail.
+    - "a recording round is answerable for the internal consistency of its own
+      output — no edge a round authors may contradict a scope the same round
+      authors, checked before the round lands; this binds consistency ONLY and
+      never plannability, which stays /align-tactics’ sole judgment, so a park
+      on genuine requirement ambiguity remains correct (Recorded 2026-08-12: the
+      inverted blocked_by authored in 8249f664 cost a ~13-minute autonomous
+      /align-tactics session and an author park at 2184103c)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
