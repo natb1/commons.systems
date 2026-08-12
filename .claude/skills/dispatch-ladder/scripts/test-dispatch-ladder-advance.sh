@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Unit tests for dispatch-emulate-advance — the launch half of the
-# dispatch-emulation loop.
+# Unit tests for dispatch-ladder-advance — the launch half of the
+# dispatch-ladder loop.
 #
 # What is worth testing here is the DISPOSITION MAPPING and the REFUSALS, not
-# the dispatch machinery: dispatch-emulate-advance's whole design is that it delegates
+# the dispatch machinery: dispatch-ladder-advance's whole design is that it delegates
 # selection and execution verbatim, so the tests stub both siblings and assert
 # that every line they can emit maps to the documented exit code. A mapping
 # regression is silent in production — an unmapped `parked` that fell through to
@@ -28,16 +28,16 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # --- Fixture ---------------------------------------------------------------
-# A real checkout layout, because dispatch-emulate-advance resolves its
+# A real checkout layout, because dispatch-ladder-advance resolves its
 # siblings from its own on-disk location (four levels up) — a resolution that
 # is itself a regression risk.
 PROJECT="$TMP/project"
-EMULATE_SCRIPTS="$PROJECT/.claude/skills/dispatch-emulate/scripts"
+LADDER_SCRIPTS="$PROJECT/.claude/skills/dispatch-ladder/scripts"
 DISPATCH="$PROJECT/.claude/skills/dispatch-propagate/scripts"
-mkdir -p "$EMULATE_SCRIPTS" "$DISPATCH"
+mkdir -p "$LADDER_SCRIPTS" "$DISPATCH"
 
-cp "$SCRIPT_DIR/dispatch-emulate-advance" "$EMULATE_SCRIPTS/dispatch-emulate-advance"
-chmod +x "$EMULATE_SCRIPTS/dispatch-emulate-advance"
+cp "$SCRIPT_DIR/dispatch-ladder-advance" "$LADDER_SCRIPTS/dispatch-ladder-advance"
+chmod +x "$LADDER_SCRIPTS/dispatch-ladder-advance"
 for lib in lib-claude-agents.sh lib-reservation-ledger.sh lib-graph-worktree.sh lib.sh; do
   src="$SCRIPT_DIR/../../dispatch-propagate/scripts/$lib"
   [[ -f "$src" ]] && cp "$src" "$DISPATCH/$lib"
@@ -49,13 +49,13 @@ git -C "$PROJECT" config user.name Test
 git -C "$PROJECT" add -A >/dev/null 2>&1
 git -C "$PROJECT" commit -qm init >/dev/null 2>&1
 
-ADVANCE="$EMULATE_SCRIPTS/dispatch-emulate-advance"
+ADVANCE="$LADDER_SCRIPTS/dispatch-ladder-advance"
 
 export DISPATCH_GRAPH_MAIN_WORKTREE="$PROJECT"
 export DISPATCH_RESERVATION_DIR="$TMP/reservations"
 mkdir -p "$DISPATCH_RESERVATION_DIR"
 
-# `git fetch origin main` must succeed — dispatch-emulate-advance refuses to act on an
+# `git fetch origin main` must succeed — dispatch-ladder-advance refuses to act on an
 # unverified graph otherwise. Give the fixture a real local "remote".
 REMOTE="$TMP/remote.git"
 git init -q --bare "$REMOTE"
@@ -238,7 +238,7 @@ fi
 
 # --- Claim refusals --------------------------------------------------------
 # A live session registered under the node's worktree name blocks the launch.
-# This is the dispatch/dispatch-emulate mutual exclusion; nothing may proceed past it.
+# This is the dispatch/dispatch-ladder mutual exclusion; nothing may proceed past it.
 cat >"$AGENTS_JSON" <<'JSON'
 [{"pid":999,"id":"aaaa","cwd":"/x","sessionId":"aaaa-1","name":"tactic-fixture-node","status":"busy","state":"working"}]
 JSON

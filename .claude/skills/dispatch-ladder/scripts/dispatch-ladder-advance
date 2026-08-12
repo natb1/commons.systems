@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# dispatch-emulate-advance — kick ONE phase step of ONE node, through the
+# dispatch-ladder-advance — kick ONE phase step of ONE node, through the
 # dispatch lane.
 #
-# Half of the dispatch-emulation loop; built by
+# Half of the dispatch-ladder loop; built by
 # `intentions/tactic-rsi-implement-skill.md`.
-# `dispatch-emulate-advance` launches a phase; `dispatch-emulate-await` waits
+# `dispatch-ladder-advance` launches a phase; `dispatch-ladder-await` waits
 # for it and verifies the transition off `origin/main`. The
-# `/dispatch-emulate` loop alternates them until the node is done or throws.
+# `/dispatch-ladder` loop alternates them until the node is done or throws.
 #
 # WHAT THIS IS NOT. It is not a scheduler, not a selector, and not a second
 # orchestration surface — `strategy-recursive-self-improvement`'s standing
@@ -36,7 +36,7 @@
 # attended/pace-exempt status of its own — that property belongs to its
 # caller. `/rsi` is attended (strategy-recursive-self-improvement condition 9)
 # and pace-exempt (condition 7 — "the budget and the serialization are the
-# throttle, not the pace curve"), and `/dispatch-emulate` inherits both from
+# throttle, not the pace curve"), and `/dispatch-ladder` inherits both from
 # whichever attended thread invokes it. More concretely: the execute lane
 # exists FOR the bootstrap-deadlock case, where dispatch is paused and the fix
 # is what would unpause it. Under a pause the worker target is 0, so
@@ -45,7 +45,7 @@
 # would have written is made explicitly below instead.
 #
 # CLAIM DISCIPLINE. A node must never be worked by dispatch and
-# dispatch-emulate at once.
+# dispatch-ladder at once.
 # Three things enforce that, none of them new:
 #   1. The pre-launch refusal below — `worktree_has_live_session`, fail-safe
 #      (unknown counts as occupied), plus an existing reservation marker.
@@ -60,11 +60,11 @@
 #      live session registers. From that moment the worktree IS the claim and
 #      graph-select-target skips the node for the router.
 #
-# Usage: dispatch-emulate-advance <node-id>
+# Usage: dispatch-ladder-advance <node-id>
 #
 # Stdout, one line:
 #   launched <id> <kind> <phase> <skill>   a session is running; call
-#                                          dispatch-emulate-await with <phase>
+#                                          dispatch-ladder-await with <phase>
 #                                          as the from-phase.
 #   idle <id> <reason>                     nothing to launch right now.
 #   throw <id> <reason>                    the node needs the attended thread.
@@ -79,10 +79,10 @@
 #       an error; the loop stops or retries later. The graph-select-target
 #       event lines on stderr say which.
 #   11  throw: parked, held, or a failed launch. The calling thread
-#       (`/dispatch-emulate`, invoked directly or by `/rsi`) conducts the
+#       (`/dispatch-ladder`, invoked directly or by `/rsi`) conducts the
 #       office-hours engagement — this script never pushes through one.
 #   13  claimed: a live session or an unreclaimed marker holds the node.
-#       NEVER proceed past this; it is the dispatch/dispatch-emulate mutual
+#       NEVER proceed past this; it is the dispatch/dispatch-ladder mutual
 #       exclusion.
 #   2   usage or environment error, OR the node is a strategy (`refused <id>
 #       strategy`) — /align-tactics decomposes a strategy into child tactic
@@ -98,7 +98,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# .claude/skills/dispatch-emulate/scripts → the checkout root is four levels
+# .claude/skills/dispatch-ladder/scripts → the checkout root is four levels
 # up. Used only to
 # locate sibling scripts and libraries; the PROJECT root is resolved from git
 # below, because this checkout may itself be a worktree.
@@ -113,7 +113,7 @@ source "$DISPATCH_SCRIPTS/lib-reservation-ledger.sh"
 source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: dispatch-emulate-advance <node-id>" >&2
+  echo "usage: dispatch-ladder-advance <node-id>" >&2
   exit 2
 fi
 
@@ -122,13 +122,13 @@ NODE_ID="$1"
 # Validate before the id reaches a spawn prompt or a worktree path — the same
 # slug regex dispatch-graph-execute and provision-node-worktree apply.
 if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
-  echo "dispatch-emulate-advance: invalid node id '$NODE_ID'" >&2
+  echo "dispatch-ladder-advance: invalid node id '$NODE_ID'" >&2
   exit 2
 fi
 
 PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
-  echo "dispatch-emulate-advance: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  echo "dispatch-ladder-advance: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
 fi
 
@@ -136,28 +136,28 @@ fi
 # stale remote-tracking ref would let this launch a phase the graph has already
 # advanced past.
 if ! git -C "$PROJECT_ROOT" fetch origin main --quiet 1>&2; then
-  echo "dispatch-emulate-advance: git fetch origin main failed; refusing to act on unverified graph state" >&2
+  echo "dispatch-ladder-advance: git fetch origin main failed; refusing to act on unverified graph state" >&2
   exit 2
 fi
 
 # --- Claim safety ----------------------------------------------------------
 # Checked HERE as well as inside the selector, for the message: the selector
 # folds a claimed node into a bare `empty`, and "another session is working
-# this node" is the one disposition the dispatch-emulate loop must never mistake for
+# this node" is the one disposition the dispatch-ladder loop must never mistake for
 # "nothing to do".
 NODE_WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
 if worktree_has_live_session "$NODE_WT"; then
   echo "claimed $NODE_ID live-session"
-  echo "dispatch-emulate-advance: REFUSED — a live session is registered on $NODE_WT (or the liveness probe could not answer, which counts as occupied)." >&2
-  echo "dispatch-emulate-advance: a node is never worked by dispatch and dispatch-emulate at once. Wait for that session, or release a terminal holder with 'claude rm <session-id>'." >&2
+  echo "dispatch-ladder-advance: REFUSED — a live session is registered on $NODE_WT (or the liveness probe could not answer, which counts as occupied)." >&2
+  echo "dispatch-ladder-advance: a node is never worked by dispatch and dispatch-ladder at once. Wait for that session, or release a terminal holder with 'claude rm <session-id>'." >&2
   exit 13
 fi
 
 if reservation_exists "$NODE_ID"; then
   RES_OWNER=$(reservation_owner "$NODE_ID" 2>/dev/null || echo "unknown")
   echo "claimed $NODE_ID reservation:$RES_OWNER"
-  echo "dispatch-emulate-advance: REFUSED — an unreleased reservation-ledger marker claims $NODE_ID (owner $RES_OWNER)." >&2
-  echo "dispatch-emulate-advance: if that claim is stale, reservation_sweep reclaims it on the next dispatch heartbeat; do not clear it by hand while a worker may still be booting." >&2
+  echo "dispatch-ladder-advance: REFUSED — an unreleased reservation-ledger marker claims $NODE_ID (owner $RES_OWNER)." >&2
+  echo "dispatch-ladder-advance: if that claim is stale, reservation_sweep reclaims it on the next dispatch heartbeat; do not clear it by hand while a worker may still be booting." >&2
   exit 13
 fi
 
@@ -168,7 +168,7 @@ SELECTION=$("$DISPATCH_SCRIPTS/graph-select-target" --node "$NODE_ID")
 select_rc=$?
 if (( select_rc != 0 )); then
   echo "throw $NODE_ID selector-failed"
-  echo "dispatch-emulate-advance: graph-select-target exited $select_rc for $NODE_ID" >&2
+  echo "dispatch-ladder-advance: graph-select-target exited $select_rc for $NODE_ID" >&2
   exit 11
 fi
 
@@ -176,14 +176,14 @@ fi
 SPEC_LINE=$(grep -E "^node ${NODE_ID} " <<<"$SELECTION" | head -n1)
 if [[ -z "$SPEC_LINE" ]]; then
   echo "idle $NODE_ID not-selectable"
-  echo "dispatch-emulate-advance: graph-select-target selected nothing for $NODE_ID — the event lines above name the gate that held it (phase null with no align route, a CI verdict still pending, a park, a blocked_by edge, a stale strategy fingerprint)." >&2
+  echo "dispatch-ladder-advance: graph-select-target selected nothing for $NODE_ID — the event lines above name the gate that held it (phase null with no align route, a CI verdict still pending, a park, a blocked_by edge, a stale strategy fingerprint)." >&2
   exit 10
 fi
 
 read -r _ _ KIND PHASE <<<"$SPEC_LINE"
 if [[ -z "$KIND" || -z "$PHASE" ]]; then
   echo "throw $NODE_ID malformed-selection"
-  echo "dispatch-emulate-advance: could not parse the selector line '$SPEC_LINE'" >&2
+  echo "dispatch-ladder-advance: could not parse the selector line '$SPEC_LINE'" >&2
   exit 11
 fi
 
@@ -196,8 +196,8 @@ fi
 # its own finalize pass) still launches normally.
 if [[ "$KIND" == "strategy" ]]; then
   echo "refused $NODE_ID strategy"
-  echo "dispatch-emulate-advance: REFUSED — $NODE_ID is a strategy; an /align-tactics pass on a strategy decomposes it into child tactic ids rather than advancing the strategy itself up the ladder, so there is no single node for this loop to follow." >&2
-  echo "dispatch-emulate-advance: run /align-tactics $NODE_ID directly, then /dispatch-emulate <child-tactic-id> on the tactic it produces." >&2
+  echo "dispatch-ladder-advance: REFUSED — $NODE_ID is a strategy; an /align-tactics pass on a strategy decomposes it into child tactic ids rather than advancing the strategy itself up the ladder, so there is no single node for this loop to follow." >&2
+  echo "dispatch-ladder-advance: run /align-tactics $NODE_ID directly, then /dispatch-ladder <child-tactic-id> on the tactic it produces." >&2
   exit 2
 fi
 
@@ -217,7 +217,7 @@ fi
 # to close.
 if ! reservation_write "$NODE_ID" "$NODE_ID" "${CLAUDE_CODE_SESSION_ID:-rsi}" explicit; then
   echo "throw $NODE_ID reservation-write-failed"
-  echo "dispatch-emulate-advance: could not write the reservation marker for $NODE_ID; refusing to spawn a worker whose claim is unrecorded (a concurrent dispatch tick could select the same node)." >&2
+  echo "dispatch-ladder-advance: could not write the reservation marker for $NODE_ID; refusing to spawn a worker whose claim is unrecorded (a concurrent dispatch tick could select the same node)." >&2
   exit 11
 fi
 
@@ -237,7 +237,7 @@ case "$DISPOSITION" in
     # declares its own terminal disposition on both of its exit paths. The
     # from-phase reported is the node's ladder phase: Lane 3 resolves the
     # conflict and the node re-enters at that phase, so a plain phase-changed
-    # check would read as `stalled`. dispatch-emulate-await's absent/park checks still fire,
+    # check would read as `stalled`. dispatch-ladder-await's absent/park checks still fire,
     # and the attended thread reads the lane's own report.
     echo "launched $NODE_ID $KIND $PHASE /dispatch-conflict"
     exit 0
@@ -267,7 +267,7 @@ case "$DISPOSITION" in
   failed|*)
     reservation_clear "$NODE_ID" || true
     echo "throw $NODE_ID execute-failed"
-    echo "dispatch-emulate-advance: dispatch-graph-execute exited $exec_rc with '$EXEC_OUT'" >&2
+    echo "dispatch-ladder-advance: dispatch-graph-execute exited $exec_rc with '$EXEC_OUT'" >&2
     exit 11
     ;;
 esac
