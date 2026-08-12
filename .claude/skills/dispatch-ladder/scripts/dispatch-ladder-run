@@ -128,6 +128,12 @@
 #                             and a stale scope are all a person's call; a
 #                             driver that retried them would be making the call.
 #       `merged #N (<id>)` -> merged
+#       `synced #N (<id>)` -> quiet. The up-to-date gate found the PR behind
+#                             origin/main and merged main INTO it instead, which
+#                             re-triggers CI on the fresh base. No merge this
+#                             pass; the outer wait re-polls until CI is green on
+#                             the now-current base (or the --ci-wait-s budget
+#                             runs out and the run halts `idle`).
 #     reconcile-graph-merged --node <id>
 #       `reconciled <id> -> <target>`  -> changed; take another ladder step
 #       `deferred <id> (...)`          -> quiet (the outer wait re-polls)
@@ -583,6 +589,13 @@ reconcile_pass() {
     merged=1
     MERGED_ANY=1
     log_event merge "$PHASE" merged "$(grep "^merged #" <<<"$out" | head -n1)"
+  elif grep -q "^synced #" <<<"$out"; then
+    # The up-to-date gate: the PR was behind origin/main, so graph-auto-merge
+    # merged main into the head instead of merging the PR, and CI restarted on
+    # the fresh base. Not a merge and not a graph change — but it is NOT the
+    # silence the `else` arm below describes either, and a run that halts `idle`
+    # after this needs the sync in its journal to be readable at all.
+    log_event merge "$PHASE" synced "$(grep "^synced #" <<<"$out" | head -n1)"
   else
     # Silence covers several honest cases — the node is not a merge candidate,
     # the PR is already merged, CI is still pending, the config kill-switch is

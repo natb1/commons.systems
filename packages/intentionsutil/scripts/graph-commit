@@ -1329,11 +1329,31 @@ rebase_in_progress() {
 # the caller the existing pending timeout (rc 1), never a green verdict.
 #
 # Uses `gh api ... --jq` so gh runs jq on its in-memory JSON (shell-json.md).
+#
+# Memoised PER POLL, never across polls. The four required contexts routinely
+# share ONE check suite (the fixtures in test-graph-commit.sh are the real
+# shape: all four rows carry check_suite 85480333626), so an un-memoised lookup
+# costs one extra REST call per pending row per poll — with a 7s poll over a
+# 180s timeout across 5 attempts that is ~4x the green-wait's whole API budget.
+# The cache is reset at the top of every poll iteration in await_checks: a
+# suite's status is a statement about a moment, and a `not concluded` answer
+# cached across polls would hide the very transition this predicate watches for.
+# A FAILED lookup is not cached at all — it is a non-observation, not an answer.
+declare -A SUITE_CONCLUDED_CACHE=()
 check_suite_concluded() { # <suite-id>
   local suite_id="$1" status
   [[ -n "$suite_id" && "$suite_id" != "-" && "$suite_id" != "null" ]] || return 1
+  if [[ -n "${SUITE_CONCLUDED_CACHE[$suite_id]:-}" ]]; then
+    [[ "${SUITE_CONCLUDED_CACHE[$suite_id]}" == "completed" ]]
+    return
+  fi
+  # stdin is closed explicitly: this runs inside await_checks' `while read`
+  # loop, which is fed by a here-string, and a subprocess that read stdin would
+  # swallow the remaining rows (the same hazard lib-frozen-session-park.sh
+  # drains its candidate list into an array to avoid).
   status="$(gh api "repos/{owner}/{repo}/check-suites/$suite_id" \
-    --jq '.status // ""' 2>/dev/null)" || return 1
+    --jq '.status // ""' 2>/dev/null </dev/null)" || return 1
+  SUITE_CONCLUDED_CACHE["$suite_id"]="$status"
   [[ "$status" == "completed" ]]
 }
 
@@ -1429,6 +1449,9 @@ await_checks() {
       2>"$errfile")"; then
       gh_fails=0
       ngreen=0; nbad=0; detail=""
+      # Per-poll suite-status memo (see check_suite_concluded): rows sharing a
+      # suite cost one lookup, and nothing is carried into the next poll.
+      SUITE_CONCLUDED_CACHE=()
       while read -r cname cconc crows csuite; do
         [[ -n "$cname" ]] || continue
         # An unconcluded row under an already-concluded suite is never going to
