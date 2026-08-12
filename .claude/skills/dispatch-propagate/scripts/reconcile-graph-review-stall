@@ -40,6 +40,17 @@
 # dangerouslyDisableSandbox — gh needs network + TLS, and node --import
 # tsx/esm needs the npm cache (see .claude/rules/sandbox.md).
 #
+# Usage: reconcile-graph-review-stall [--node <id>]
+#
+#   --node <id>  Consider ONLY the named node id. A SELECTION FILTER, never a
+#                gate bypass — every route decision below still applies
+#                verbatim, exactly as documented for `graph-select-target
+#                --node`. Absent the flag, behavior is byte-identical to the
+#                unflagged sweep. It exists so a single-node caller (the
+#                /dispatch-ladder driver) can absorb its own review-stall
+#                recovery without sweeping — and without racing the tick's
+#                sweep across unrelated nodes.
+#
 # Stdout protocol, one line per tactic acted on; NOTHING for a skip:
 #   recovered <id> -> fix (ci=<verdict> merge=<state>)
 #
@@ -76,6 +87,21 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+
+# ---- Argument parsing -------------------------------------------------------
+NODE_FILTER=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "reconcile-graph-review-stall: --node requires a non-empty id" >&2; exit 2; }
+      NODE_FILTER="$2"; shift 2 ;;
+    *)
+      echo "reconcile-graph-review-stall: unknown argument '$1'" >&2
+      echo "usage: reconcile-graph-review-stall [--node <id>]" >&2
+      exit 2 ;;
+  esac
+done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
@@ -141,13 +167,21 @@ trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EX
 # `blocked_by` id ABSENT from `byId` as COMPLETE, so under the tolerant reader a
 # corrupt blocker file would silently satisfy the open-blocker gate above and
 # let this sweep re-hold a node whose conflict hold is still open.
+#
+# `--node <id>` is applied HERE, as the first thing the loop tests: a selection
+# filter layered on top of the enumeration, ahead of every gate, so the gates
+# below apply unchanged to whatever survives it. The id arrives via process.argv
+# (an empty string means "no filter"), not via the environment, so an ambient
+# variable can never silently narrow an unflagged sweep.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
   const { REVIEWED_MARKER } = await import("./packages/intentionsutil/src/transitions.js");
   const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
   const nodes = listNodesStrict("./intentions");
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  const only = process.argv[1] || "";
   for (const n of nodes) {
+    if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase !== "review") continue;
     if (n.office_hours != null) continue;
@@ -158,7 +192,7 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     if (pr === null || pr === undefined) continue;
     process.stdout.write(n.id + "\t" + pr + "\n");
   }
-') )" || { echo "reconcile-graph-review-stall: node enumeration failed" >&2; exit 1; }
+' "$NODE_FILTER") )" || { echo "reconcile-graph-review-stall: node enumeration failed" >&2; exit 1; }
 
 [[ -z "$CANDIDATES" ]] && exit 0
 
