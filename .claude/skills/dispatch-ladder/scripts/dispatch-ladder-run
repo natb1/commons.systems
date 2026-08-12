@@ -17,17 +17,34 @@
 #                               safety, provisioning, the phase-skill mapping,
 #                               the spawn.
 #   dispatch-ladder-await       the wait, and the origin/main verdict.
+#   dispatch-acquire-lock       the mutual exclusion against a concurrent
+#                               dispatch tick, for the whole reconcile pass.
 #   graph-auto-merge --node     the merge, with the config kill-switch, the
 #                               main-health admission gate, the park gate, the
 #                               PR/CI sensing and the fail-closed scope
 #                               fingerprint re-check all inside it.
 #   reconcile-graph-merged --node   the absorb, with its own grace window.
+#   reconcile-graph-review-stall --node   the red-CI route for a node the
+#                               router classifies `pending-merge` (phase
+#                               `review` + the `reviewed` marker). Such a node
+#                               is excluded from selector candidates, so the
+#                               ordinary fix interrupt never runs on it; this
+#                               sweep enters `execution.fix` and the router
+#                               re-surfaces the node as a `fix` candidate.
 #   verify-landed               the one landing signal, read at origin/main.
 #
-# This file branches on those five scripts' exit codes and their one-line
+# This file branches on those seven scripts' exit codes and their one-line
 # stdout protocols. It makes no graph write, no `gh` call, and no merge
 # decision of its own. If a rule about WHEN something may happen ever appears
 # here, it is in the wrong file.
+#
+# THE CI BRANCH IS OBSERVED, NEVER COMPUTED. For every interruptible phase
+# (`implement`, `qa`, `review` before the marker) red CI already routes to
+# `fix` inside the SAME selection pass, so the next `advance` simply answers
+# `launched <id> tactic fix /fix-checks` and this file needs no logic at all.
+# The one phase where that does not happen is `pending-merge`, which the sweep
+# above owns. So the driver's whole CI handling is: run the three reconcilers
+# and read what they printed.
 #
 # DETACHED EXECUTION, ATTENDED JUDGMENT. What is detached is the WAITING, not
 # the judgment. Every halt below is unconditional: no retry, no auto-park, no
@@ -42,7 +59,7 @@
 # working, not the loop stuck.
 #
 # Usage: dispatch-ladder-run <node-id>
-#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]
+#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
 #
 #   --timeout-s <n>   the await window handed to each dispatch-ladder-await
 #                     call (default 1800). This is NOT the 540s default inside
@@ -57,26 +74,58 @@
 #   --poll-s <n>      how long to sleep before re-polling an idle-but-expected
 #                     state — pending CI, a requeue, the reconciler's grace
 #                     window (default 60).
+#   --ci-wait-s <n>   how long the driver is willing to keep re-polling a
+#                     reconcile pass that changed nothing (default 3600 = 1h).
+#                     ONE budget covers both waits that produce silence: the
+#                     reconciler's GRAPH_RECONCILE_GRACE window and a PR whose
+#                     CI is still running. They are logged as DISTINCT
+#                     dispositions (`grace-wait` / `ci-wait`) in events.jsonl
+#                     so the closing acceleration review can tell them apart.
+#                     This never overrides GRAPH_RECONCILE_GRACE — that is the
+#                     reconciler's policy and the driver may not set policy.
+#                     It bounds how long THIS PROCESS polls, which is the
+#                     driver's own concern. It is also the anti-spin guard for
+#                     the reconcile pass: a node that never becomes selectable
+#                     and never merges exhausts the budget and halts 10.
 #
 # THE LOOP
 #
 #   advance
 #     0  launched   -> await, repeatedly, until it answers something terminal
-#     10 idle       -> by reason: re-poll, requeue, or try the merge-and-absorb
+#     10 idle       -> by reason: re-poll, requeue, or run one reconcile pass
 #     11/13/2       -> halt
 #
-#   merge_and_absorb (folded in from tactic-dispatch-emulate-owns-merge)
+#   reconcile_pass — ONE non-blocking pass, answering routed|merged|changed|quiet
+#     dispatch-acquire-lock --wait
+#       not `acquired`     -> quiet. A busy lock means a dispatch tick is
+#                             mid-selection; that is transient and the outer
+#                             wait retries. Nothing else happens this pass.
+#     git fetch origin main; git merge --ff-only origin/main (the main checkout)
+#       either fails       -> release the lock, halt 11. Both reconcilers below
+#                             enumerate their candidate set from the LOCAL
+#                             tree, so an unsynced checkout would merge straight
+#                             past a park that landed after this run started.
 #     graph-auto-merge --node <id>
-#       `held <id> (...)`  -> halt 11. office-hours, a missing stamp and a
-#                             stale scope are all a person's call; a driver
-#                             that retried them would be making the call.
-#       `merged #N (<id>)` -> absorb, POLLING (see below)
-#       no output          -> absorb once, non-polling
+#       `held <id> (...)`  -> release, halt 11. office-hours, a missing stamp
+#                             and a stale scope are all a person's call; a
+#                             driver that retried them would be making the call.
+#       `merged #N (<id>)` -> merged
 #     reconcile-graph-merged --node <id>
-#       `reconciled <id> -> <target>`  -> absorbed; take another ladder step
-#       `deferred <id> (...)`          -> re-poll
-#       no output                      -> re-poll IF we merged this run,
-#                                         otherwise nothing to absorb
+#       `reconciled <id> -> <target>`  -> changed; take another ladder step
+#       `deferred <id> (...)`          -> quiet (the outer wait re-polls)
+#     reconcile-graph-review-stall --node <id>
+#       `recovered <id> -> fix (...)`  -> routed. THE INTERVENTION: the node
+#                             entered `execution.fix`, so the very next advance
+#                             answers `launched <id> tactic fix /fix-checks`.
+#     dispatch-acquire-lock --release
+#
+#   NO SLEEP IS EVER TAKEN INSIDE THE PASS, and therefore never while the
+#   selection lock is held — dispatch-acquire-lock's INVARIANT #2
+#   (dispatch-acquire-lock:96-103): heartbeats fire on a step's COMPLETION,
+#   never inside a poll loop. All the waiting lives in the outer loop, with the
+#   lock released. The heartbeats between the three scripts are there because
+#   any one of them can outlive MAX_HOLD_SECONDS (300s) on a graph-commit that
+#   waits on the landing lock.
 #
 #   THE GRACE WINDOW IS THE NO-OUTPUT CASE, not the `deferred` case.
 #   reconcile-graph-merged refuses to absorb a merge younger than
@@ -84,12 +133,22 @@
 #   SILENT skip, printing nothing (reconcile-graph-merged:177). Its `deferred`
 #   lines come from reconcile-graph.ts's plan and today carry exactly one
 #   reason (`main-qa phase not yet in schema`). So both are re-polled, and the
-#   no-output re-poll is conditioned on having merged this run: without a merge
-#   of our own, no output means there is genuinely nothing to absorb.
+#   silence is read as the grace window only once a merge has happened this
+#   run: without a merge of our own, no output means there is genuinely nothing
+#   to absorb and the wait is on CI instead.
 #
 #   This script POLLS THROUGH the grace window rather than overriding
 #   GRAPH_RECONCILE_GRACE. Overriding it would be the driver setting policy,
 #   which it may not do.
+#
+# THE CI VERDICT CACHE MUST STAY UNSET, load-bearing.
+# dispatch_ci_verdict_rest memoizes per-SHA into $DISPATCH_CI_VERDICT_CACHE with
+# NO TTL and NO invalidation (lib.sh:796-824). A driver that exported a cache
+# dir and then re-polled would read its first `pending` forever and never see CI
+# resolve — the poll loop would run to its budget on a PR that went green
+# minutes in. So this script exports no cache dir and explicitly `unset`s the
+# variable before each reconciler call. See
+# intentions/tactic-review-stall-ci-verdict-cache-miss.md:40.
 #
 # EXIT CODES — deliberately the primitives' codes, so a journald reader sees
 # one vocabulary across the whole ladder:
@@ -98,8 +157,11 @@
 #                     pruned.
 #   2   usage/refused a bad flag here, or a `refused`/usage answer from a
 #                     script this one drives.
-#   10  idle halt     nothing to launch and nothing left to try.
-#   11  throw         needs the attended thread.
+#   10  idle halt     nothing to launch, and the --ci-wait-s budget for the
+#                     reconcile pass ran out without a merge, an absorb or a
+#                     fix route.
+#   11  throw         needs the attended thread — including a main checkout
+#                     that would not sync, which is never merged past.
 #   12  stalled       a phase ended with no graph change, or the requeue budget
 #                     ran out.
 #   13  claimed       another session holds the node.
@@ -131,19 +193,29 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # .claude/skills/dispatch-ladder/scripts → four levels up is the checkout root.
+#
+# TWO ROOTS, DELIBERATELY SPLIT. This CHECKOUT may itself be a feature worktree
+# (the driver is often started from the branch that is building it), so
+# CHECKOUT_ROOT is used for exactly ONE thing: sourcing lib-graph-worktree.sh,
+# which PROVIDES resolve_main_worktree and therefore necessarily precedes the
+# PROJECT_ROOT it resolves. Everything else — every dispatch-propagate script
+# this file executes, and every other library — resolves from PROJECT_ROOT
+# below. Those scripts compute their own REPO_ROOT from their on-disk location,
+# so a CHECKOUT_ROOT copy run out of a feature worktree would merge and write
+# graph nodes against that worktree's intentions/ on a non-main branch.
 CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
-DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
 
 # shellcheck source=/dev/null
-source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+source "$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
 
 TIMEOUT_S=1800
 MAX_RUN_S=21600
 POLL_S=60
+CI_WAIT_S=3600
 NODE_ID=""
 
 usage() {
-  echo "usage: dispatch-ladder-run <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]" >&2
+  echo "usage: dispatch-ladder-run <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]" >&2
   exit 2
 }
 
@@ -152,6 +224,7 @@ while [[ $# -gt 0 ]]; do
     --timeout-s) [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
     --max-run-s) [[ $# -ge 2 ]] || usage; MAX_RUN_S="$2"; shift 2 ;;
     --poll-s)    [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --ci-wait-s) [[ $# -ge 2 ]] || usage; CI_WAIT_S="$2"; shift 2 ;;
     --*)         echo "dispatch-ladder-run: unknown flag $1" >&2; usage ;;
     *)
       if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
@@ -170,6 +243,8 @@ done
   echo "dispatch-ladder-run: --timeout-s and --max-run-s must be non-negative integers" >&2; exit 2; }
 [[ "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
   echo "dispatch-ladder-run: --poll-s must be a positive integer (0 would spin)" >&2; exit 2; }
+[[ "$CI_WAIT_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-run: --ci-wait-s must be a non-negative integer" >&2; exit 2; }
 
 PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
@@ -177,12 +252,37 @@ if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
   exit 2
 fi
 
+# Everything below resolves from PROJECT_ROOT — see the two-roots note above.
+PROJECT_SCRIPTS="$PROJECT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# lib.sh          — dispatch_lock_file / headless_sentinel_path, for the
+#                   headless-liveness sentinel below.
+# lib-reservation-ledger.sh — reservation_sweep, run before every advance.
+# Both are sourced (not executed), so the CHECKOUT_ROOT hazard above does not
+# apply to them directly; they are taken from PROJECT_SCRIPTS anyway so the
+# driver runs ONE version of the ledger and lock helpers — the main checkout's
+# — rather than a feature branch's in-progress edit of them.
+for lib in lib.sh lib-reservation-ledger.sh; do
+  [[ -r "$PROJECT_SCRIPTS/$lib" ]] || {
+    echo "dispatch-ladder-run: required library not readable: $PROJECT_SCRIPTS/$lib" >&2; exit 2; }
+  # shellcheck source=/dev/null
+  source "$PROJECT_SCRIPTS/$lib"
+done
+for fn in dispatch_lock_file headless_sentinel_path reservation_sweep; do
+  declare -f "$fn" >/dev/null 2>&1 || {
+    echo "dispatch-ladder-run: $PROJECT_SCRIPTS libraries loaded but '$fn' is undefined; refusing to run without it" >&2
+    exit 2; }
+done
+
 ADVANCE="$SCRIPT_DIR/dispatch-ladder-advance"
 AWAIT="$SCRIPT_DIR/dispatch-ladder-await"
-AUTO_MERGE="$DISPATCH_SCRIPTS/graph-auto-merge"
-RECONCILE="$DISPATCH_SCRIPTS/reconcile-graph-merged"
+ACQUIRE_LOCK="$PROJECT_SCRIPTS/dispatch-acquire-lock"
+AUTO_MERGE="$PROJECT_SCRIPTS/graph-auto-merge"
+RECONCILE="$PROJECT_SCRIPTS/reconcile-graph-merged"
+REVIEW_STALL="$PROJECT_SCRIPTS/reconcile-graph-review-stall"
 VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
-for exe in "$ADVANCE" "$AWAIT" "$AUTO_MERGE" "$RECONCILE" "$VERIFY_LANDED"; do
+for exe in "$ADVANCE" "$AWAIT" "$ACQUIRE_LOCK" "$AUTO_MERGE" "$RECONCILE" \
+           "$REVIEW_STALL" "$VERIFY_LANDED"; do
   [[ -x "$exe" ]] || { echo "dispatch-ladder-run: required script not found or not executable: $exe" >&2; exit 2; }
 done
 
@@ -268,6 +368,69 @@ check_deadline() {
   halt 21 timeout "--max-run-s ${MAX_RUN_S}s exceeded; the ladder is unfinished and nothing was rolled back"
 }
 
+# --- A headless session identity, and the sentinel that makes it real -------
+# dispatch-acquire-lock keys the selection lock on CLAUDE_CODE_SESSION_ID and
+# exits 2 when it is unset (dispatch-acquire-lock:330-332), and `--release` is a
+# strict self-release keyed on the same value. A systemd-launched driver
+# inherits no session id, so it must synthesize one — exactly the problem the
+# systemd-launched dispatch-tick already solved (#1068), and this block mirrors
+# dispatch-tick:308-380 rather than inventing a second answer.
+#
+# An INVENTED id alone would be worthless: try_acquire treats a holder whose sid
+# is absent from `claude agents --json` as definitively dead and reclaims it
+# immediately (dispatch-acquire-lock:399-403), so a plain `ladder-<id>` holder
+# would give this driver NO exclusion against a concurrent tick. What makes a
+# synthetic id real is the `headless:<token>` FORM plus a PID sentinel:
+# resolve_holder_state special-cases a `headless:*` holder, never queries the
+# daemon for it, and resolves it live iff the sentinel exists AND its recorded
+# PID answers `kill -0`. A SIGKILL leaves a stale sentinel whose PID is gone, so
+# the lock self-heals.
+#
+# Token derivation mirrors the tick's: the systemd unit's INVOCATION_ID
+# (identical across all subprocesses of the unit, unique per run), validated to
+# hex-plus-hyphen so a hand-set value cannot inject a newline into the recorded
+# holder or a separator into the sentinel path; else a random hex token; else
+# this PID. Evaluated ONCE and frozen into the exported value so every child
+# agrees. dispatch-ladder-spawn deliberately passes NO session id through: the
+# driver synthesizes its own, exactly as the tick does.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+
+# One cleanup function, one trap — `trap` OVERWRITES per signal, so a second
+# `trap … EXIT` anywhere below would silently drop this one. It releases the
+# selection lock if a pass is holding it (a SIGTERM from `systemctl stop` lands
+# mid-pass otherwise and leaves the lock held until it goes stale) and removes
+# the liveness sentinel. Installed BEFORE the sentinel write below so a partial
+# sentinel is cleared if that write fails and we abort.
+SENTINEL=""
+LOCK_HELD=0
+_ladder_cleanup() {
+  if (( LOCK_HELD )); then
+    "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
+    LOCK_HELD=0
+  fi
+  [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
+}
+trap '_ladder_cleanup' EXIT INT TERM
+
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # Fail CLOSED, exactly as dispatch-tick:376-378 does. Continuing here would
+    # hold the lock with no liveness signal, so a concurrent tick would read
+    # this live holder as dead and reclaim it mid-merge — the duplicate-worker
+    # defect #1068 closed.
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-ladder-run: ERROR: failed to write the headless liveness sentinel '$SENTINEL'; a concurrent dispatch tick would reclaim this driver's selection lock mid-merge — refusing to start (#1068)" >&2
+      exit 2
+    fi
+  fi
+  # An unresolvable lock-file path is NOT swallowed into a degraded mode: it
+  # means dispatch-acquire-lock will itself exit 2 on the first reconcile pass,
+  # and that halts the run with its own message. Nothing to do here.
+fi
+
 # --- The landing signal ----------------------------------------------------
 # `done` is read at origin/main through verify-landed and nowhere else — a
 # session's exit status is not evidence that its transition landed, which is
@@ -284,79 +447,205 @@ phase_is_done() {
   esac
 }
 
-# --- Absorb ----------------------------------------------------------------
-# absorb <merged-this-run:0|1> — returns 0 when the graph changed, 1 when there
-# was nothing to absorb. Halts on anything needing a person.
-absorb() {
-  local merged="$1" out rc
-  STEP=absorb; write_state
-  while :; do
-    check_deadline
-    out=$("$RECONCILE" --node "$NODE_ID"); rc=$?
-    case "$rc" in
-      0) ;;
-      2) halt 2 usage "reconcile-graph-merged rejected its arguments (rc=2)" ;;
-      *) halt 11 throw "reconcile-graph-merged hard-errored (rc=$rc) — a gh sense failure or a failed graph-commit; read its stderr in the journal" ;;
-    esac
-    if grep -q "^reconciled $NODE_ID " <<<"$out"; then
-      log_event absorb "$PHASE" reconciled "$(grep "^reconciled $NODE_ID " <<<"$out" | head -n1)"
-      return 0
-    fi
-    if grep -q "^deferred $NODE_ID " <<<"$out"; then
-      log_event absorb "$PHASE" deferred "$(grep "^deferred $NODE_ID " <<<"$out" | head -n1); re-polling in ${POLL_S}s"
-      sleep "$POLL_S"
-      continue
-    fi
-    if (( merged == 1 )); then
-      # No output AND we merged this run: the merge is still inside
-      # GRAPH_RECONCILE_GRACE, which reconcile-graph-merged skips silently.
-      # Poll through the window; never override the env var.
-      log_event absorb "$PHASE" grace-wait "our merge has not aged past GRAPH_RECONCILE_GRACE yet; re-polling in ${POLL_S}s"
-      sleep "$POLL_S"
-      continue
-    fi
-    log_event absorb "$PHASE" noop "nothing to absorb for $NODE_ID"
-    return 1
-  done
+# --- The reconcile pass ----------------------------------------------------
+# ONE pass over the three reconcilers, under the selection lock, with NO sleep
+# anywhere inside it. Sets two globals and returns 0:
+#
+#   RECONCILE_RESULT  routed | merged | changed | quiet
+#   QUIET_REASON      on `quiet` only: grace-wait | ci-wait — which of the two
+#                     honest silences we are waiting out. Kept distinct in
+#                     events.jsonl because the acceleration review cannot tell
+#                     them apart afterwards.
+#
+# It halts, never returns, on anything that needs a person.
+#
+# MERGED_ANY (run-scoped, set once) is what makes a later silent reconcile
+# readable as the grace window rather than as "nothing to absorb".
+MERGED_ANY=0
+
+# refresh_lock — bump the selection lock's heartbeat (its mtime) so a
+# legitimately-long step does not age the lock past MAX_HOLD_SECONDS (default
+# 300s) and let a concurrent tick reclaim it mid-pass. Any one of the three
+# scripts below can exceed that on a graph-commit that waits on the landing
+# lock. Called ONLY between steps, on a step's completion — never inside a
+# loop, which is INVARIANT #2 (dispatch-acquire-lock:96-103). Modelled on
+# dispatch-tick's refresh_lock (dispatch-tick:397). Best-effort: a noop (we no
+# longer hold the lock) or any error is swallowed.
+refresh_lock() {
+  "$ACQUIRE_LOCK" --heartbeat >/dev/null 2>&1 || true
 }
 
-# --- Merge, then absorb ----------------------------------------------------
-merge_and_absorb() {
-  local out rc merged=0
+release_lock() {
+  "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
+  LOCK_HELD=0
+}
+
+reconcile_pass() {
+  local out rc merged=0 changed=0 routed=0
+  RECONCILE_RESULT=quiet
+  QUIET_REASON=ci-wait
+
+  # ---- The selection lock ---------------------------------------------------
+  # dispatch-select-tick holds this same lock across these same three scripts,
+  # and none of them locks internally. Without it this driver and a dispatch
+  # tick can merge and absorb the same node at once.
+  STEP=lock; write_state
+  out=$("$ACQUIRE_LOCK" --wait); rc=$?
+  case "$rc" in
+    0) ;;
+    2) halt 2 usage "dispatch-acquire-lock exited 2 — it could not resolve the lock file or our session id; the environment is misconfigured, not busy" ;;
+    *) halt 11 throw "dispatch-acquire-lock hard-errored (rc=$rc); read its stderr in the journal" ;;
+  esac
+  if [[ "$(head -n1 <<<"$out")" != "acquired" ]]; then
+    # `busy` — a dispatch tick is mid-selection. Transient by construction, so
+    # this is a soft retry: the outer wait re-polls and the ci-wait budget
+    # bounds it. NOTHING else happens this pass.
+    log_event lock "$PHASE" busy "another holder has the selection lock; retrying next poll"
+    return 0
+  fi
+  LOCK_HELD=1
+
+  # ---- Sync the main checkout ----------------------------------------------
+  # graph-auto-merge and reconcile-graph-merged enumerate their candidate set
+  # from the LOCAL working tree and read each node's `office_hours` from it, so
+  # an unsynced checkout would merge straight past a park or an
+  # execution.conflict interrupt that landed after this run started. The only
+  # thing that routinely advances that checkout is dispatch-select-tick's own
+  # Step 1 — which never runs for a node the tick cannot reach, i.e. precisely
+  # the case this driver exists for. Fetch and merge are SEPARATE steps so a
+  # fetch failure is distinguishable from a divergence (#1546,
+  # dispatch-select-tick:377-382, dispatch-tick:569-572). `--ff-only` doubles as
+  # the dirty/diverged-tree guard: the reconcilers write node files into this
+  # tree and push through graph-commit, so a wedged tree must not be drained
+  # into. A shared sync_main_checkout helper across the three call sites is a
+  # deliberately deferred follow-up.
+  STEP=sync; write_state
+  if ! git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
+    release_lock
+    halt 11 throw "main-sync-failed: 'git fetch origin main' failed in $PROJECT_ROOT — merging against a stale checkout could merge past a park landed since this run started"
+  fi
+  if ! git -C "$PROJECT_ROOT" merge --ff-only origin/main 1>&2; then
+    release_lock
+    halt 11 throw "main-sync-failed: 'git merge --ff-only origin/main' failed in $PROJECT_ROOT (the tree is dirty or diverged) — this checkout needs a person before anything may be merged or written into it"
+  fi
+  refresh_lock
+
+  # ---- The merge ------------------------------------------------------------
+  # dispatch_ci_verdict_rest memoizes per-SHA with no TTL and no invalidation
+  # (lib.sh:796-824), so a cache dir inherited from anywhere would pin this
+  # poll loop to the first `pending` it ever read and it would never see CI go
+  # green. The driver exports none and unsets it before every reconciler call.
+  unset DISPATCH_CI_VERDICT_CACHE
   STEP=merge; write_state
   out=$("$AUTO_MERGE" --node "$NODE_ID"); rc=$?
   case "$rc" in
     0) ;;
-    2) halt 2 usage "graph-auto-merge rejected its arguments (rc=2)" ;;
-    *) halt 11 throw "graph-auto-merge hard-errored (rc=$rc) — a gh sense/merge error or a freshness computation crash; read its stderr in the journal" ;;
+    2) release_lock; halt 2 usage "graph-auto-merge rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "graph-auto-merge hard-errored (rc=$rc) — a gh sense/merge error or a freshness computation crash; read its stderr in the journal" ;;
   esac
   if grep -q "^held $NODE_ID " <<<"$out"; then
+    release_lock
     halt 11 throw "$(grep "^held $NODE_ID " <<<"$out" | head -n1) — office-hours, a missing scope stamp and a stale scope are a person's call, never retried here"
   fi
   if grep -q "^merged #" <<<"$out"; then
     merged=1
+    MERGED_ANY=1
     log_event merge "$PHASE" merged "$(grep "^merged #" <<<"$out" | head -n1)"
   else
     # Silence covers several honest cases — the node is not a merge candidate,
-    # the PR is already merged, the config kill-switch is off, or main health
-    # is not known-good. All of them mean "no merge happened here", and the
-    # absorb below is what tells them apart.
+    # the PR is already merged, CI is still pending, the config kill-switch is
+    # off, or main health is not known-good. All of them mean "no merge
+    # happened here"; the two reconcilers below are what tell them apart.
     log_event merge "$PHASE" no-merge "graph-auto-merge merged nothing for $NODE_ID"
   fi
-  absorb "$merged"
+  refresh_lock
+
+  # ---- The absorb -----------------------------------------------------------
+  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  STEP=absorb; write_state
+  out=$("$RECONCILE" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) release_lock; halt 2 usage "reconcile-graph-merged rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "reconcile-graph-merged hard-errored (rc=$rc) — a gh sense failure or a failed graph-commit; read its stderr in the journal" ;;
+  esac
+  if grep -q "^reconciled $NODE_ID " <<<"$out"; then
+    changed=1
+    log_event absorb "$PHASE" reconciled "$(grep "^reconciled $NODE_ID " <<<"$out" | head -n1)"
+  elif grep -q "^deferred $NODE_ID " <<<"$out"; then
+    # The reconciler's own plan asked us to come back. Not a change, and not a
+    # CI wait either — the outer wait re-polls it as a grace-window silence.
+    QUIET_REASON=grace-wait
+    log_event absorb "$PHASE" deferred "$(grep "^deferred $NODE_ID " <<<"$out" | head -n1)"
+  elif (( MERGED_ANY == 1 )); then
+    # No output AND a merge happened this run: the merge has not aged past
+    # GRAPH_RECONCILE_GRACE, which reconcile-graph-merged skips SILENTLY. Poll
+    # through the window; never override the env var.
+    QUIET_REASON=grace-wait
+    log_event absorb "$PHASE" grace-wait "our merge has not aged past GRAPH_RECONCILE_GRACE yet"
+  else
+    log_event absorb "$PHASE" noop "nothing to absorb for $NODE_ID"
+  fi
+  refresh_lock
+
+  # ---- The review-stall route ----------------------------------------------
+  # The one CI branch the ordinary selection pass cannot take: a node the router
+  # classifies `pending-merge` (phase `review` + the `reviewed` marker) is
+  # excluded from selector candidates, so _gate_maybe_interrupt never sees its
+  # red CI. This sweep enters execution.fix for it, after which the router's
+  # fix-aware carve-out re-surfaces the node and the next advance launches
+  # /fix-checks. The driver reads the answer; it computes nothing.
+  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  STEP=review-stall; write_state
+  out=$("$REVIEW_STALL" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) release_lock; halt 2 usage "reconcile-graph-review-stall rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "reconcile-graph-review-stall hard-errored (rc=$rc) — its enumeration or a failed graph-commit; read its stderr in the journal" ;;
+  esac
+  if grep -q "^recovered $NODE_ID " <<<"$out"; then
+    routed=1
+    log_event review-stall "$PHASE" recovered "$(grep "^recovered $NODE_ID " <<<"$out" | head -n1)"
+  fi
+
+  release_lock
+
+  # Priority: an intervention outranks an absorb outranks a merge. Each of the
+  # three is real progress, so each resets the ci-wait budget in the caller.
+  if   (( routed  == 1 )); then RECONCILE_RESULT=routed
+  elif (( changed == 1 )); then RECONCILE_RESULT=changed
+  elif (( merged  == 1 )); then RECONCILE_RESULT=merged
+  fi
+  return 0
 }
 
 # --- The ladder ------------------------------------------------------------
-merge_tried=0
+ci_waited=0
 requeue_budget=5
 
-log_event start "" running "unit=$UNIT_NAME timeout_s=$TIMEOUT_S max_run_s=$MAX_RUN_S poll_s=$POLL_S"
+log_event start "" running "unit=$UNIT_NAME timeout_s=$TIMEOUT_S max_run_s=$MAX_RUN_S poll_s=$POLL_S ci_wait_s=$CI_WAIT_S"
 write_state
 
 while :; do
   check_deadline
 
   STEP=advance; write_state
+
+  # Sweep the reservation ledger before every advance. dispatch-ladder-advance
+  # writes an `origin=explicit` marker for this node before each spawn
+  # (dispatch-ladder-advance:218) and REFUSES with exit 13 when one already
+  # exists (:155-161). Nothing in this process releases it — its release is
+  # reservation_sweep, run today only by a dispatch heartbeat. On a host where
+  # that heartbeat is stopped, which is exactly the bootstrap-deadlock case this
+  # skill exists to serve, the driver's own previous step would deadlock its
+  # next one. So run the sweep the tick runs, unchanged: it reclaims a marker
+  # whose reserving session is dead (this driver's synthetic headless id never
+  # appears in `claude agents`, so the marker ages out under its origin TTL) or
+  # whose worktree already has a live worker. NO release policy of the driver's
+  # own — a driver that cleared markers by hand would be re-implementing the
+  # claim discipline it depends on.
+  reservation_sweep 1>&2
+
   # Captured WITHOUT a `| head` pipeline: inside `$( … )` the pipeline runs in a
   # subshell, so PIPESTATUS is invisible out here and the assignment's status
   # would be `head`'s, silently discarding every exit code this loop branches
@@ -371,7 +660,7 @@ while :; do
       if [[ -z "${PHASE:-}" ]]; then
         halt 1 internal "dispatch-ladder-advance exited 0 with an unparseable line '$ADV_OUT'"
       fi
-      merge_tried=0
+      ci_waited=0
       requeue_budget=5
       LAUNCH_EPOCH=$(now_epoch)
       REPOLLS=0
@@ -431,16 +720,34 @@ while :; do
           ;;
         *)
           # not-selectable, and any reason a future dispatch-ladder-advance
-          # adds. Three questions, in order.
+          # adds. Two questions, in order.
           if phase_is_done; then
             halt 0 complete "$NODE_ID is at phase 'done' on origin/main"
           fi
-          if (( merge_tried == 1 )); then
-            halt 10 idle "nothing to launch for $NODE_ID and the merge-and-absorb step has already run once this stretch (reason: ${REASON:-unknown}) — read dispatch-ladder-advance's event lines in the journal for the gate that held it"
-          fi
-          merge_and_absorb
-          merge_tried=1
-          continue
+          reconcile_pass
+          case "$RECONCILE_RESULT" in
+            routed|merged|changed)
+              # Real progress. `routed` is the INTERVENTION: the node is now in
+              # execution.fix, so the next advance answers
+              # `launched <id> tactic fix /fix-checks`.
+              ci_waited=0
+              log_event reconcile "$PHASE" "$RECONCILE_RESULT" "the reconcile pass changed state; the ci-wait budget is reset"
+              continue
+              ;;
+            *)
+              # quiet. The two honest silences — the reconciler's grace window
+              # and a PR whose CI is still running — share ONE budget, and are
+              # logged apart so the acceleration review can tell them apart.
+              log_event idle "$PHASE" "$QUIET_REASON" \
+                "ci_waited=${ci_waited}s of ${CI_WAIT_S}s; re-polling in ${POLL_S}s"
+              sleep "$POLL_S"
+              ci_waited=$(( ci_waited + POLL_S ))
+              if (( ci_waited > CI_WAIT_S )); then
+                halt 10 idle "nothing to launch for $NODE_ID: ${ci_waited}s of reconcile polling, past the --ci-wait-s ${CI_WAIT_S}s budget, produced no merge, no absorb and no fix route (last silence: $QUIET_REASON; advance reason: ${REASON:-unknown}) — the PR's CI is most likely still pending, or a gate is holding it; read the PR's checks and dispatch-ladder-advance's event lines in the journal"
+              fi
+              continue
+              ;;
+          esac
           ;;
       esac
       ;;

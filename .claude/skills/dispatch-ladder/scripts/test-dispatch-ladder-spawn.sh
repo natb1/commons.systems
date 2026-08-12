@@ -114,17 +114,38 @@ ls_teardown
 echo "Test: driver flags are passed through to dispatch-ladder-run"
 ls_setup
 rc=0
-out=$("$SPAWN" "$NODE" --timeout-s 900 --max-run-s 7200 --poll-s 30 2>/dev/null) || rc=$?
+out=$("$SPAWN" "$NODE" --timeout-s 900 --max-run-s 7200 --poll-s 30 --ci-wait-s 1800 2>/dev/null) || rc=$?
 assert_eq "flags: exits 0" "0" "$rc"
 assert_eq "flags: stdout is 'spawned'" "spawned" "$out"
 log=$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$log" == *"dispatch-ladder-run $NODE --timeout-s 900 --max-run-s 7200 --poll-s 30"* ]]; then
+if [[ "$log" == *"dispatch-ladder-run $NODE --timeout-s 900 --max-run-s 7200 --poll-s 30 --ci-wait-s 1800"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: flags: the driver argv carries the node id and every flag, in order"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: flags: the driver argv carries the node id and every flag, in order"
   echo "    log: $log"
 fi
+# The driver synthesizes its own `headless:<token>` lock holder and the PID
+# sentinel that makes it resolvable as live, exactly as the systemd-launched
+# dispatch-tick does. A forwarded session id would key the selection lock on a
+# session that ends long before the ladder does — so there must be no --setenv
+# for one.
+TOTAL=$((TOTAL + 1))
+if [[ "$log" != *"--setenv=CLAUDE_CODE_SESSION_ID"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: flags: no session id is forwarded to the unit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: flags: no session id is forwarded to the unit"
+  echo "    log: $log"
+fi
+ls_teardown
+
+echo "Test: a malformed --ci-wait-s is rejected here, not by a unit that dies later"
+ls_setup
+rc=0; "$SPAWN" "$NODE" --ci-wait-s x >/dev/null 2>&1 || rc=$?
+assert_eq "reject: a non-integer --ci-wait-s exits 2" "2" "$rc"
+rc=0; "$SPAWN" "$NODE" --ci-wait-s >/dev/null 2>&1 || rc=$?
+assert_eq "reject: a value-less --ci-wait-s exits 2" "2" "$rc"
+assert_eq "reject: nothing was launched" "" "$(cat "$TMPDIR_TEST/systemd-log" 2>/dev/null || true)"
 ls_teardown
 
 # --- Test 3: the fixed unit name is the dedup --------------------------------

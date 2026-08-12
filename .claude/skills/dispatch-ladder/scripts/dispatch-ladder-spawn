@@ -11,11 +11,19 @@
 # Modeled closely on dispatch-spawn-tick, deliberately, with ONE divergence —
 # see NO OnFailure below.
 #
-# Usage: dispatch-ladder-spawn <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]
+# Usage: dispatch-ladder-spawn <node-id>
+#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
 #   Every flag after the node id is passed through to dispatch-ladder-run
 #   verbatim. They are validated HERE as well, because a malformed argv would
 #   otherwise be discovered only by a unit that fails seconds after launch, in
 #   a journal nobody is watching.
+#
+# NO SESSION ID IS PASSED THROUGH — deliberately, and there is no --setenv for
+# one. dispatch-ladder-run synthesizes its own `headless:<token>` holder id and
+# writes the PID sentinel that makes it resolvable as live, exactly as the
+# systemd-launched dispatch-tick does (#1068). Forwarding a launching session's
+# id would key the driver's selection lock on a session that ends long before
+# the ladder does.
 #
 # Fixed-unit-name dedup + --collect:
 #   The unit name is FIXED — `dispatch-ladder-<node-id>` — and the name IS the
@@ -82,7 +90,7 @@
 set -uo pipefail
 
 usage() {
-  echo "usage: dispatch-ladder-spawn <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>]" >&2
+  echo "usage: dispatch-ladder-spawn <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]" >&2
   exit 2
 }
 
@@ -99,7 +107,7 @@ NODE_ID="$1"; shift
 DRIVER_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --timeout-s|--max-run-s|--poll-s)
+    --timeout-s|--max-run-s|--poll-s|--ci-wait-s)
       [[ $# -ge 2 ]] || { echo "dispatch-ladder-spawn: $1 requires a value" >&2; usage; }
       [[ "$2" =~ ^[0-9]+$ ]] || {
         echo "dispatch-ladder-spawn: $1 must be an integer, got '$2'" >&2; usage; }
