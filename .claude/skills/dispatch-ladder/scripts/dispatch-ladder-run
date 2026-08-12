@@ -56,6 +56,27 @@
 # itself. Neither is a gate: the driver adds no reclaim rule and no park rule of
 # its own, it only makes the tick's own sweeps run on its own cadence.
 #
+# FLEET-WIDE SCOPE, DELIBERATE. terminal_without_disposition_sweep takes no
+# node filter — it walks every escalated session in the fleet, not just
+# NODE_ID's. That is not an oversight this driver should scope away: the sweep
+# exists for the bootstrap-deadlock case where NO heartbeat is running at all,
+# so narrowing it to this driver's own node would silently drop every OTHER
+# node's escalation for as long as the heartbeat stays down — defeating the
+# reason this call exists. A reader watching this driver walk "one node" WILL
+# see it take park actions on unrelated nodes; that is the sweep doing its job,
+# not a bug to file.
+#
+# BUDGET-BOUNDED, NOT POLICY-CHANGED. The tick's defaults size the sweep for a
+# 15-minute tick: park_max=2 x park_timeout=120s + lock_wait=60s is up to 300s,
+# tolerable buried inside a tick period. This driver instead reports progress
+# on --poll-s cadence against a --max-run-s wall clock, so that same 300s can
+# overshoot --max-run-s by minutes on a single pass. The driver exports smaller
+# per-pass caps through the library's existing tunables at the call site below
+# — a bound on how long ONE pass may spend, not a change to what gets parked or
+# when: the sweep runs every pass, so a lower per-pass cap catches up over
+# subsequent passes rather than dropping work. Each cap stays overridable from
+# the environment.
+#
 # THE CI BRANCH IS OBSERVED, NEVER COMPUTED. For every interruptible phase
 # (`implement`, `qa`, `review` before the marker) red CI already routes to
 # `fix` inside the SAME selection pass, so the next `advance` simply answers
@@ -708,7 +729,28 @@ while :; do
   # sweep the tick runs, unchanged — it consumes the escalation reason and
   # parks the node to office_hours, turning a silent wedge into a halt a person
   # can read. NO park policy of the driver's own: sequencing, not gating.
-  terminal_without_disposition_sweep 1>&2
+  #
+  # Driver-appropriate budget caps, via the seams the library already exposes
+  # (lib-frozen-session-park.sh:150-167) rather than a copy of its logic. Each
+  # uses `${VAR:-default}` so an inherited environment override still wins —
+  # this only supplies a driver-sized default where none is set. See
+  # BUDGET-BOUNDED, NOT POLICY-CHANGED above for why these are smaller than the
+  # tick's own (park_max=2, park_timeout=120s, lock_wait=60s).
+  DISPATCH_TERMINAL_DISPOSITION_PARK_MAX="${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-1}" \
+  DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S="${DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S:-30}" \
+  DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S="${DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S:-15}" \
+    terminal_without_disposition_sweep 1>&2
+
+  # Re-check the deadline HERE, after both sweeps and before the advance they
+  # guard. check_deadline already ran once at the top of this pass, but the two
+  # sweeps above are real work with their own budget (bounded, just above) —
+  # without this second check, a pass whose sweeps ran right up to the
+  # deadline would still START an advance, and the overshoot would compound
+  # every pass instead of costing at most one sweep's worth. This keeps the
+  # promise made to --max-run-s: the driver never BEGINS new work once its
+  # deadline has passed, even though the sweeps themselves are not
+  # interruptible mid-call.
+  check_deadline
 
   # Captured WITHOUT a `| head` pipeline: inside `$( … )` the pipeline runs in a
   # subshell, so PIPESTATUS is invisible out here and the assignment's status

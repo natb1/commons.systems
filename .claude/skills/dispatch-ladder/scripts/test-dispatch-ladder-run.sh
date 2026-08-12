@@ -73,11 +73,26 @@ STUB
 # the stub records the advance counter AS IT STANDS at sweep time; the Nth sweep
 # must see N-1 completed advances. The real sweep's behavior (which sessions it
 # parks, and on what evidence) is covered by test-lib-frozen-session-park.sh.
+# The stub also records the three budget tunables it sees (Unit 11: the driver
+# exports driver-sized defaults for them around this call, via
+# `${VAR:-default}` so an inherited override still wins) and, when
+# $SEQ_DIR/sweep-sleep-s holds a positive number, sleeps that long — the only
+# way to make this instant stub stand in for a sweep that consumes real
+# wall-clock budget, which is what the deadline-recheck-after-sweeps cases
+# below need.
 cat >"$DISPATCH/lib-frozen-session-park.sh" <<STUB
 terminal_without_disposition_sweep() {
   local n
   n=\$(cat "$SEQ_DIR/advance.count" 2>/dev/null) || n=missing
   printf '%s\n' "\$n" >>"$SEQ_DIR/terminal-sweep.log"
+  printf 'PARK_MAX=%s PARK_TIMEOUT_S=%s LOCK_WAIT_S=%s\n' \
+    "\${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-<unset>}" \
+    "\${DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S:-<unset>}" \
+    "\${DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S:-<unset>}" \
+    >>"$SEQ_DIR/terminal-sweep-env.log"
+  if [[ -s "$SEQ_DIR/sweep-sleep-s" ]]; then
+    sleep "\$(cat "$SEQ_DIR/sweep-sleep-s")"
+  fi
   return 0
 }
 STUB
@@ -194,6 +209,12 @@ terminal_sweep_order() {
   out=$(paste -sd, "$SEQ_DIR/terminal-sweep.log" 2>/dev/null) || out=""
   echo "$out"
 }
+# terminal_sweep_env — the PARK_MAX/PARK_TIMEOUT_S/LOCK_WAIT_S line the sweep
+# stub saw on its LAST call (tail -n1), the tunables the driver exported
+# around that call.
+terminal_sweep_env() {
+  tail -n1 "$SEQ_DIR/terminal-sweep-env.log" 2>/dev/null || echo ""
+}
 
 # Reset every fake to a benign default, then let each case override what it
 # cares about. `landed 4` = "present at origin/main, not done"; `git 0` = the
@@ -210,6 +231,8 @@ reset_seqs() {
   : >"$SEQ_DIR/lock.sid"
   : >"$SEQ_DIR/sweep.log"
   : >"$SEQ_DIR/terminal-sweep.log"
+  : >"$SEQ_DIR/terminal-sweep-env.log"
+  rm -f "$SEQ_DIR/sweep-sleep-s"
   rm -rf "$STATE_DIR"
 }
 
@@ -695,6 +718,66 @@ assert_eq "terminal-sweep: three passes ran" "3" "$(calls advance)"
 assert_eq "terminal-sweep: one sweep per pass" "3" "$(terminal_sweeps)"
 assert_eq "terminal-sweep: each ran BEFORE its advance" "0,1,2" "$(terminal_sweep_order)"
 assert_eq "terminal-sweep: the ledger sweep kept pace with it" "3" "$(sweeps)"
+
+# --- Unit 11: the deadline is re-checked after the sweeps ------------------
+echo "Test: the deadline is re-checked after both sweeps, before the advance"
+# check_deadline runs once at the top of the loop, and the sweeps run after
+# that — so a sweep that eats the remaining budget must be caught by a SECOND
+# check_deadline call, or the pass would still START an advance past
+# --max-run-s. --max-run-s 1 lets the top-of-loop check pass (0s elapsed), then
+# the terminal sweep stub sleeps 2s — past the 1s deadline — before the driver
+# ever reaches dispatch-ladder-advance.
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+printf '2\n' >"$SEQ_DIR/sweep-sleep-s"
+RC=0
+OUT=$("$RUN" "$NODE" --poll-s 1 --max-run-s 1 2>/dev/null) || RC=$?
+assert_eq "deadline-after-sweep: exit 21 (timeout), not idle or complete" "21" "$RC"
+assert_eq "deadline-after-sweep: BOTH sweeps ran once this pass" "1" "$(sweeps)"
+assert_eq "deadline-after-sweep: including the one that ate the budget" "1" "$(terminal_sweeps)"
+assert_eq "deadline-after-sweep: no advance was started past the deadline" \
+  "0" "$(calls advance)"
+assert_eq "deadline-after-sweep: state.json disposition is timeout" \
+  "timeout" "$(jq -r .disposition "$STATE_DIR/state.json")"
+rm -f "$SEQ_DIR/sweep-sleep-s"
+
+echo "Test: a sweep that does NOT exhaust the budget still lets the advance start"
+# The companion case: an ordinary run with no sweep sleep and a generous
+# --max-run-s must NOT halt — proving the halt above is really about the
+# deadline being exhausted, not some side effect of the second check_deadline
+# call existing at all.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|'
+run_ladder
+assert_eq "deadline-after-sweep unaffected: exit 0 (complete), not timeout" "0" "$RC"
+assert_eq "deadline-after-sweep unaffected: the advance did run" "2" "$(calls advance)"
+
+# --- Unit 11: the sweep's budget tunables --------------------------------
+echo "Test: the driver exports driver-sized budget tunables around the sweep call"
+# lib-frozen-session-park.sh's own tick defaults are park_max=2, timeout=120,
+# lock_wait=60 (up to 300s per sweep) — too large for a driver that reports
+# progress on --poll-s cadence against --max-run-s. The driver exports smaller
+# defaults via ${VAR:-default}, so with nothing set in the environment the
+# sweep must see the driver's OWN smaller values, not the library's.
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+run_ladder
+assert_eq "tunables: driver default PARK_MAX" \
+  "PARK_MAX=1 PARK_TIMEOUT_S=30 LOCK_WAIT_S=15" "$(terminal_sweep_env)"
+
+echo "Test: an inherited environment override still wins over the driver default"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+export DISPATCH_TERMINAL_DISPOSITION_PARK_MAX=7
+export DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S=45
+export DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S=9
+run_ladder
+unset DISPATCH_TERMINAL_DISPOSITION_PARK_MAX DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S \
+      DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S
+assert_eq "tunables: an inherited override is not clobbered by the driver default" \
+  "PARK_MAX=7 PARK_TIMEOUT_S=45 LOCK_WAIT_S=9" "$(terminal_sweep_env)"
 
 echo "Test: a lib-frozen-session-park.sh that loads without the sweep aborts at startup"
 # dispatch-tick logs a loud line and ticks on when this library fails to load —

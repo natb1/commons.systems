@@ -145,6 +145,29 @@ Unlike `dispatch-tick`, which logs a loud line and ticks on, a library that
 fails to load here is fatal: the driver **refuses to start** (exit 2, naming the
 library) rather than running a ladder with a sweep silently missing.
 
+**`terminal_without_disposition_sweep` is fleet-wide, not node-scoped, and that
+is deliberate.** It takes no node filter — a driver walking one node will still
+watch it take park actions on unrelated nodes elsewhere in the fleet. That is
+not a leak to fix: the sweep exists for the bootstrap-deadlock case where no
+heartbeat is running at all, so scoping it to this driver's own node would
+silently drop every other node's escalation for as long as the heartbeat stays
+down, defeating the reason the driver calls it. Do not be surprised watching a
+"walk one node" driver park several.
+
+**The sweep's budget is capped smaller here than on the tick.** The tick sizes
+`terminal_without_disposition_sweep` for a 15-minute period
+(`DISPATCH_TERMINAL_DISPOSITION_PARK_MAX` x `_PARK_TIMEOUT_S` +
+`_LOCK_WAIT_S`, defaults 2 x 120s + 60s = up to 300s). This driver reports
+progress on `--poll-s` cadence against a `--max-run-s` wall clock, where 300s
+on one pass is a real overshoot, so it exports smaller defaults for those same
+three tunables at the call site — a budget bound, not a change to park policy:
+the sweep still runs every pass, so a lower per-pass cap catches up over
+subsequent passes instead of dropping work. Each stays overridable from the
+environment. The driver also re-checks its own deadline immediately after both
+sweeps and before the advance they guard, so a pass whose sweeps ran up to the
+deadline halts there rather than starting an advance past it — overshoot is
+bounded to one sweep's worth, not compounded every pass.
+
 ## How to run
 
 Every command below needs `dangerouslyDisableSandbox: true`: `gh` TLS, the
