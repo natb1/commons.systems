@@ -4983,6 +4983,117 @@ clarifications:
       the carrier tactic rewrites that skill paragraph to match this record and
       fixes the citation, and the tactic-graph-native-dispatch spec sentence is
       reconciled in this same commit."
+  - question: What is /dispatch-emulate, why does the dispatch surface own a
+      hand-driven emulation entry point, and what bounds it?
+    answer: "(Recorded 2026-08-12 /align interview, post-hoc: the skill landed
+      first, at 55d07b51 / PR #3069, and this entry records the requirement it
+      was built to.) THE PROCEDURE. Drive ONE tactic node through the real
+      dispatch phase ladder, one phase at a time, as spawned sessions running
+      the real dispatch phase skills — align-tactics, implement, the fix and
+      conflict interrupts, review, qa, main-qa. Nothing in it re-implements a
+      phase. IT EXISTS FOR the case the tick structurally cannot reach: dispatch
+      is paused and the fix is what would unpause it, or any other bootstrap
+      deadlock the tick has no route into, or an author who wants one node
+      driven under supervision. Before the extraction the procedure was written
+      down only inside /rsi Step 4b, so reaching it meant running a full /rsi
+      iteration with its claim, its plan render, its judgment step and its
+      budget. WHY THE REQUIREMENT IS RECORDED HERE rather than on
+      strategy-recursive-self-improvement, which built it: this strategy owns
+      the dispatch skill surface, and it already carries the emulation doctrine
+      this skill must obey — the clarifications on what a bootstrap-emulating
+      session owes the qa phase and the review phase (2026-07-04, entries
+      19-20). rsi keeps only what is rsi's: the budget, the attendedness, the
+      judgment step, and pause authority; /rsi Step 4b is now a delegation to
+      this skill, and rsi's own rsi-implement-contract clarification is amended
+      to match in the same round. THE BOUND — recorded as a divergence, not an
+      omission. The steelman put to the author: a user-invocable emulation skill
+      IS the second orchestration surface strategy-recursive-self-improvement's
+      condition 3 forbids, and giving it its own front door removes the three
+      guards that bounded the 2026-08-10 divergence — attended, serialized,
+      budget-bounded. DIVERGED 2026-08-12, reason recorded: the extraction moves
+      no scheduling authority at all. graph-select-target --node owns every
+      eligibility question — claim safety, the per-phase CI and PR sensor gates,
+      the fix and conflict interrupts — and --node is a selection-ORDER
+      override, never a gate bypass; dispatch-graph-execute owns provisioning,
+      the phase-to-skill mapping, the spawn, the reservation handoff, and every
+      park and hold disposition; the verdict comes from verify-landed against
+      origin/main, never from a session's exit status. So there is one
+      orchestration surface, now merely named. THE INVARIANT that keeps the
+      divergence honest, and the thing to check any future edit against: THE TWO
+      SCRIPTS DECIDE NOTHING. If a rule about when a node may run ever appears
+      in dispatch-emulate-advance or dispatch-emulate-await, it is in the wrong
+      place and belongs to the selector. Second half of the bound: the skill has
+      NO attendedness and NO pace-exemption of its own — it is attended because
+      its callers are, and it inherits nothing else. A STRATEGY ID IS REFUSED
+      MECHANICALLY, not by prose: dispatch-emulate-advance gates on the
+      selector's own kind, prints 'refused <id> strategy' and exits 2, before
+      any reservation is written, because an /align-tactics pass on a strategy
+      decomposes it into CHILD tactic ids rather than advancing the strategy up
+      the ladder — so there is no single node for the loop to follow. A tactic
+      whose selector rung is align-tactics is a legitimate starting point, since
+      /align-tactics finalizes that same node in place. THE LOOP'S FINAL STEP is
+      the implementation evaluation (author ruling, 2026-08-12), which /rsi
+      inherits through the delegation rather than carrying separately; see
+      strategy-recursive-self-improvement's condition 14 and
+      tactic-rsi-implement-acceleration-review, re-targeted to this skill in the
+      same round."
+  - question: Who merges an emulated run's PR — the tick's merge lane, or the
+      emulation loop itself?
+    answer: "(Author-directed 2026-08-12, after the /align interview surfaced a
+      false instruction shipped in the skill.) THE DEFECT. /dispatch-emulate's
+      SKILL.md ships the rule 'Never hand-merge. The tick's merge lane runs even
+      while dispatch is paused. Let it.' The second sentence is false as
+      written, and this graph already knew it: graph-auto-merge is invoked only
+      at dispatch-select-tick:505, and every dispatch-select-tick invocation
+      sits past the pause short-circuit's exit 0 at dispatch-tick:415, so no
+      node-lane PR merges while the pause sentinel exists. The sentence was
+      inherited verbatim from /rsi's Step 4b during the extraction; note that
+      the extraction REMOVED it from /rsi, so it has one home, not two. THE
+      AUTHOR'S CHALLENGE, and the ruling: the loop delegates every other phase
+      to the same scripts dispatch uses, then outsources the terminal step to
+      the scheduler it exists to route around — a structural inconsistency, and
+      it fails precisely when the loop is most needed. So the answer is not to
+      patch the sentence but to make it unnecessary. GREENFIELD DESIGN, adopted:
+      graph-auto-merge owns ALL of its admission gates — including the
+      main-known-good check that today lives in dispatch-select-tick around the
+      call site rather than inside the script — and takes an optional node-id
+      filter, so a caller can merge one node rather than sweeping the queue;
+      reconcile-graph-merged takes the same filter, because a merge the loop
+      performs must also be absorbed or the node sits merged-but-stuck at phase
+      review. Both the dispatch tick and /dispatch-emulate then call one
+      fully-gated script, and the pause gates worker spawning only, exactly as
+      this graph's pause doctrine already says it should. The emulation loop
+      still decides nothing: it delegates the merge the same way it already
+      delegates selection and launch. WHY THIS DOES NOT BREAK THE ONE-GATE
+      INVARIANT of the 2026-08-05 admission-gate ruling (entry 197) — it extends
+      it. Main health is a FOURTH predicate on the same single admission
+      decision as mergeability, office_hours and blocked_by, and that ruling's
+      named defect is uncoordinated tactics racing the same gate surface. So the
+      main-health predicate is sequenced BEHIND the two gate tactics still open
+      (tactic-graph-auto-merge-up-to-date-gate at implement,
+      tactic-graph-auto-merge-office-hours-gate at main-qa) rather than opening
+      a third racer. ACCEPTED CONSEQUENCES, named: two callers of one gated
+      script can race when dispatch is unpaused — benign, because the second
+      sense reads a non-OPEN PR and skips; and the pause stops meaning 'no
+      merges', which is acceptable because the record already names an
+      operator-run dispatch-tick --manual and an author hand-merge as legitimate
+      escapes, so this formalizes an existing escape rather than inventing one.
+      The skill's stated invariant that neither script makes a merge, a graph
+      write, or a gh call is re-scoped accordingly: neither script makes a
+      DECISION. SEQUENCE: (1) tactic-pause-disables-merge-lane (PR #3068, in
+      flight at phase qa) makes the paused tick run the node-lane merge chain —
+      verified this round to gate correctly on OPEN_MAIN_RED via
+      dispatch-graph-main-red-sync and to run reconcile-graph-merged
+      unconditionally; (2) tactic-graph-auto-merge-main-health-gate moves that
+      gate into the script and adds the node filter, deleting BOTH call-site
+      copies (#3068 adds a second one); (3) tactic-dispatch-emulate-owns-merge
+      adds the node-scoped merge-and-absorb step to the loop and rewrites the
+      false rule. An interim wording correction lands ahead of all three,
+      because the false instruction is live on main while the queue is paused —
+      the exact condition under which someone would read it. OPERATIONAL NOTE
+      worth keeping: #3068 is itself stalled behind the bug it fixes, sitting at
+      qa while the pause blocks worker spawning and blocks the merge that would
+      land it — the same self-blocking loop this graph recorded for PR #3052."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:

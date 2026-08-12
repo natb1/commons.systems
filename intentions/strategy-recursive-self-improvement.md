@@ -77,7 +77,24 @@ clarifications:
       / dispatch-spawn-job, await each session's terminal disposition, let the
       tick's merge lane merge, and handle parks and throws attended. Unit-level
       model selection stays inside the phase skills' own heuristics; the earlier
-      'sonnet subagent' form is superseded."
+      'sonnet subagent' form is superseded. (Amended 2026-08-12 /align round.)
+      The loop is no longer \"a thin loop in /rsi\". It was extracted to its own
+      user-invocable skill, /dispatch-emulate (landed 55d07b51, PR #3069), which
+      is now its only home: the advance/await cycle, the exit-code contract, the
+      phase ladder, and the three non-negotiable rules all live there. Its two
+      scripts moved and were renamed — rsi-advance and rsi-await became
+      dispatch-emulate-advance and dispatch-emulate-await. rsi-claim did NOT
+      move: it serializes rsi SESSIONS, not nodes, and node-level mutual
+      exclusion is the advance script's exit 13. /rsi Step 4b is now a
+      delegation invoked in the main thread, never in an Agent-tool subagent,
+      and it restates none of the loop's mechanics. The skill also refuses a
+      strategy id mechanically (exit 2), so an rsi task on a strategy runs
+      /align-tactics first and then emulates a child tactic. Everything the
+      contract says about WHAT the loop does is unchanged — the extraction moved
+      no scheduling authority. The requirement for the skill is recorded on
+      strategy-graph-native-dispatch (2026-08-12), which owns the dispatch skill
+      surface and already carried the emulation doctrine the skill obeys; read
+      the bound and the second-orchestration-surface divergence there."
   - question: How are inefficiencies surfaced by rsi's own orchestration handled?
     answer: (Recorded 2026-08-10.) Tracked in the graph as tactics and reflected in
       the rsi-plan, so they optimize implementation for both the harness and the
@@ -185,10 +202,11 @@ clarifications:
       classification on a sibling strategy mid-bootstrap."
   - question: Does the dispatch pause stop the queue from draining, and can its own
       resume criteria be met while it is in force?
-    answer: "(Recorded 2026-08-11 rsi iteration, from reading the code at
-      origin/main.) Partly, and no. The pause sentinel is documented as gating
-      worker SPAWNING only, and the paused branch does run the healing sweeps
-      (reservation, stand-down re-check, stale-hold re-check, frozen-session,
+    answer: >-
+      (Recorded 2026-08-11 rsi iteration, from reading the code at origin/main.)
+      Partly, and no. The pause sentinel is documented as gating worker SPAWNING
+      only, and the paused branch does run the healing sweeps (reservation,
+      stand-down re-check, stale-hold re-check, frozen-session,
       terminal-disposition) before its exit 0. But the node-lane merge lane is
       not among them: graph-auto-merge is invoked at dispatch-select-tick:505,
       and every dispatch-select-tick invocation (dispatch-tick:638-642) sits
@@ -200,13 +218,36 @@ clarifications:
       since the pause began. A pause whose first resume criterion requires an
       action the pause itself disables cannot lift autonomously. The escapes are
       an operator-run dispatch-tick --manual (dispatch-tick:314 tests -z
-      \"$MANUAL\") or an author hand-merge, and both are operator actions no
-      part of the record named as a dependency of resuming. Repair is tracked as
+      "$MANUAL") or an author hand-merge, and both are operator actions no part
+      of the record named as a dependency of resuming. Repair is tracked as
       tactic-pause-disables-merge-lane. Two record corrections follow: /rsi's
-      own SKILL.md asserts \"the tick's merge lane runs even while dispatch is
-      paused — let it\", which is false as written, and the pause rationale's
-      claim that the paused branch is \"precisely the set needed to drain a
-      queue, so pausing costs no healing\" overstates what that branch covers."
+      own SKILL.md asserts "the tick's merge lane runs even while dispatch is
+      paused — let it", which is false as written, and the pause rationale's
+      claim that the paused branch is "precisely the set needed to drain a
+      queue, so pausing costs no healing" overstates what that branch covers.
+
+
+      (Amended 2026-08-12 /align round, two corrections and a decision.) FIRST,
+      the false-sentence locator above is now stale: the assertion "the tick's
+      merge lane runs even while dispatch is paused — let it" no longer lives in
+      /rsi's SKILL.md. The 2026-08-12 extraction moved it verbatim into
+      .claude/skills/dispatch-emulate/SKILL.md, which reduced it to one home
+      rather than duplicating it; /rsi carries no merge instruction at all now.
+      SECOND, the finding recorded above is confirmed still true at fb1dc4cc,
+      and its repair is in flight: tactic-pause-disables-merge-lane is at phase
+      qa on PR #3068, whose diff computes OPEN_MAIN_RED via
+      dispatch-graph-main-red-sync, gates graph-auto-merge on it exactly as
+      dispatch-select-tick does, and runs reconcile-graph-merged
+      unconditionally, with tests for both. That PR is itself stalled behind the
+      bug it fixes — it sits at qa while the pause blocks worker spawning and
+      blocks the merge that would land it, the identical self-blocking loop
+      recorded here for PR #3052. THIRD, the author ruled on the underlying
+      design rather than on the wording: the emulation loop should own its own
+      merge by delegating to graph-auto-merge, rather than depending on a
+      scheduler it exists to route around. That decision, its accepted
+      consequences, and its three-step sequence are recorded on
+      strategy-graph-native-dispatch (2026-08-12, "Who merges an emulated run's
+      PR"), which owns the merge scripts.
   - question: What actually consumes the wall-clock of an rsi-implement task, and
       where should the next iteration look for acceleration?
     answer: >-
@@ -809,14 +850,25 @@ attributes:
       already-claimed node), so no node is ever worked concurrently by the
       dispatch workflow and the rsi skill — rsi meets the same serialized
       implementation standards as the dispatch workflow
-    - rsi shortcut implementation reuses the dispatch phase skills verbatim,
+    - "rsi shortcut implementation reuses the dispatch phase skills verbatim,
       driven through the same execution substrate — spawned sessions via
       dispatch-graph-execute / dispatch-spawn-job, with the tick's merge lane
       doing every merge (rsi never hand-merges) — so the quality bar is
       identical because the skills are identical; rsi maintains no second
       orchestration surface and no divergent copy of a standard, and a standards
       extraction into common skills happens only when a concrete consumer
-      requires it (none does today)
+      requires it (none does today) (Amended 2026-08-12: the parenthetical
+      \"none does today\" is now dated — a concrete consumer exists. The
+      emulation loop was extracted from /rsi into the user-invocable
+      /dispatch-emulate skill (55d07b51, PR #3069) so the procedure has one home
+      and is reachable without a full rsi iteration. The bound this condition
+      states is unchanged and was re-tested this round against its steelman: the
+      extraction moved NO scheduling authority — graph-select-target owns every
+      eligibility gate, dispatch-graph-execute owns provisioning, spawn and
+      every disposition, and the two loop scripts decide nothing — so rsi still
+      maintains no second orchestration surface. The divergence and its
+      invariant are recorded on strategy-graph-native-dispatch, which owns the
+      extracted skill.)"
     - rsi holds pause/resume authority over the dispatch queue for integrity
       errors affecting the stability or correctness of the dispatch workflow;
       pauses go through the doctrinal mechanism (the dispatch.config boolean
@@ -906,7 +958,16 @@ attributes:
       an rsi-implement outcome with no recorded review, or that leaves its
       findings in session prose only, is a defect — the graph is the sole
       tracker, so an unrecorded acceleration finding is indistinguishable from
-      one never made."
+      one never made. (Amended 2026-08-12 by author ruling: the review's CARRIER
+      is now the final step of /dispatch-emulate, and /rsi inherits it through
+      the Step 4b delegation rather than carrying a separate closing step of its
+      own. The condition itself is unchanged — it still binds rsi-implement
+      tasks, still runs after the node reaches its terminus, still costs no
+      extra budget, and still requires every finding to land in the graph in the
+      same session. Only the home of the mechanism moves, so that the loop and
+      its closing evaluation stay in one place.
+      tactic-rsi-implement-acceleration-review is re-targeted accordingly in
+      this same round.)"
     - "each rsi session runs under a task budget — default 1; a task’s cost
       derives from its attributes.rsi_task: an implementation-type task always
       costs 1 (a declared rsi_task.cost is ignored and flagged), other types
@@ -968,15 +1029,20 @@ attributes:
       means one clause of the criterion was measured and another was not;
       unknown means it was not measured this pass. Resume requires every
       criterion to read holds, re-measured at the time of the decision.
-    self_blocking: Criterion 1 cannot be satisfied autonomously while this pause is
+    self_blocking: "Criterion 1 cannot be satisfied autonomously while this pause is
       in force. The node-lane merge lane (graph-auto-merge,
       dispatch-select-tick:505) runs only inside dispatch-select-tick, and every
       dispatch-select-tick invocation (dispatch-tick:638-642) sits past the
       pause short-circuit's exit 0 (dispatch-tick:415). So no reviewed node-lane
       PR merges autonomously while the sentinel exists, and criterion 1 requires
       exactly such a merge. The escapes are an operator-run `dispatch-tick
-      --manual` (dispatch-tick:314 tests -z "$MANUAL") or an author hand-merge.
-      Tracked for repair by tactic-pause-disables-merge-lane.
+      --manual` (dispatch-tick:314 tests -z \"$MANUAL\") or an author
+      hand-merge. Tracked for repair by tactic-pause-disables-merge-lane.
+      (Re-measured 2026-08-12: still true. The repair named above is in flight
+      as PR #3068 at phase qa and is itself caught in this loop — the pause
+      blocks the worker that would advance it and blocks the merge that would
+      land it, so an operator dispatch-tick --manual is the only escape for the
+      repair as well as for the criterion.)"
     resume_criteria:
       - id: reap-gate-landed
         criterion: "PR #3052 is merged, and the sweep demonstrably reaps a 0-ahead clean
