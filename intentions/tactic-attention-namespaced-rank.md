@@ -7,17 +7,20 @@ statement: Implement the unified rank key -- one parent relation
   band, score, depth) quadruple -- retiring override, the signal term and the
   blocked_by precedence lift
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced in the 2026-08-11 /align round that recorded the
-  namespacing bound on strategy-recursive-self-improvement and kind-kind, and
-  reshaped by that round's adversarial review the same day: the author chose
-  structural enforcement in the resolver over a behavioral bound on
-  /rsi-evaluate, and resolveAttention today sums a tactic's own boost with its
-  strategy-distributed value, so the recorded doctrine is not yet mechanically
-  enforced. The review found the first draft of the key underspecified in all
-  three components and inert on the selection path; this node carries the
-  corrected design."
+  namespacing bound on strategy-recursive-self-improvement and kind-kind,
+  reshaped by that round's adversarial review the same day, and superseded on
+  2026-08-12 by the author-dictated unification that replaced the (tier, band,
+  residual) triple with the (tier, band, score, depth) quadruple over a single
+  parent relation. The author chose structural enforcement in the resolver over
+  a behavioral bound on /rsi-evaluate: resolveAttention today sums a tactic's
+  own boost with its strategy-distributed value across a narrow parent/serves
+  relation, so the recorded doctrine is not yet mechanically enforced. Finalized
+  2026-08-12 by a per-node /align-tactics session into a five-unit clean-session
+  plan; the doctrine home is strategy-graph-drives-dispatch's 2026-08-12
+  clarifications and the algebra is on kind-kind."
 reading: null
 serves:
   - strategy-graph-drives-dispatch
@@ -164,7 +167,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
@@ -173,546 +176,584 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
+
 # Implement the unified rank key — one parent relation (parent/serves/recovers/reverse-blocked_by), the per-tier boost storage shape (retiring validateGraph rule 20), deduplicated lineage score, and the (tier, band, score, depth) quadruple — retiring override, the signal term and the blocked_by precedence lift
 
-## Superseding design (2026-08-12 /align round, author-dictated)
+## Context
 
-**Everything below this section is the superseded 2026-08-11 design, kept as
-the record of what was decided and why.** Read it for the band derivation and
-the fixpoint argument, which survive; do not implement its `residual`
-component or its `attention.scope` stamp.
+`resolveAttention` (`packages/intentionsutil/src/attention.ts`) today runs the
+**v3 term-registry model**: three weighted terms (`authored` + `signal` +
+`capture`) summed into one scalar `value`, an `override` branch cap that
+discards incoming authority, a tier-isolation filter that drops lower-tier
+sources, and a distributor relation restricted to `parent` ∪ `serves`. Blocking
+urgency is carried by a **second, orthogonal mechanism** — `router.ts`'s
+recursive max-based `effectivePrecedence` lift — and by a **third** copy of the
+same idea in `officeHours.ts`'s `surfacingKey`. Because the authored term is a
+flat sum, a tactic's own boost competes directly with its strategy's
+distributed value, so a delegated number can reorder the author's strategies
+(2139 such inversions were measured 2026-08-11; they are currently held at 0
+only by a hand-applied `0.01`-per-level compression stopgap).
 
-The doctrine home for this design is `strategy-graph-drives-dispatch`'s
-2026-08-12 clarifications (the single-ranking-algorithm entry and the five
-that follow it); the algebra is on `kind-kind`.
+The 2026-08-12 `/align` round replaced that whole arrangement with **one
+relation and one algorithm**, recorded as doctrine on
+`strategy-graph-drives-dispatch` (the single-ranking-algorithm clarification and
+the five that follow it) and as algebra on `kind-kind`. This node implements it.
+The intended outcome: rank is derived from one parent relation, a delegated
+boost can never cross a band, the stopgap compression becomes unnecessary, and
+two of the three duplicated blocking-lift mechanisms are deleted rather than
+maintained.
 
-### The model
+### The model to implement (doctrine, restated so a clean session needs nothing else)
 
-One relation, one algorithm, no orthogonal mechanisms.
-
-- **Parent relation** — a node's parents are the node named by its `parent`
-  field, every node it `serves`, every delegation it `recovers`, and every
-  node that lists it in `blocked_by` (every node it blocks). The same
-  relation drives every axis.
-- **Tier** — own tier defaults 1, `bug_fix`/`security` resolve 2, production
-  issues 3; `resolved = max(own, parents' resolved)`. Unchanged except for
-  the widened relation.
-- **Per-tier boosts** — each node carries an authored boost per tier, and in
-  tier `T`'s ranking every node contributes its tier-`T` boost. This is what
-  makes a node's rank well-defined in a tier it does not itself belong to,
-  and so lets a tier-lifted tactic band against its parent's rank in the
-  tactic's own resolved tier.
-- **Score** — `score(n) = boost(n) + Σ boost(a)` over every **distinct** node
-  `a` in `n`'s lineage. Each lineage node counts exactly once regardless of
-  how many paths reach it. No decay. An unauthored boost contributes **0** —
-  there is no minimum boost of 1.
-- **Band** — `max` over `n`'s parents of the parent's score, taken in `n`'s
-  resolved tier.
-- **Rank key** — the lexicographic quadruple `(tier, band, score, depth)`,
+- **Parent relation.** A node's parents are: the node named by its `parent`
+  field, every node it `serves`, every delegation it `recovers`, and every node
+  that lists it in `blocked_by` (i.e. every node it blocks). One relation drives
+  every axis.
+- **Tier.** Own tier defaults 1; `bug_fix`/`security` marks resolve 2;
+  `attributes.tier: 3` resolves 3. `resolved = max(own, parents' resolved)`.
+  Unchanged except for the widened relation.
+- **Per-tier boosts.** Each node carries an authored boost **per tier**. In tier
+  `T`'s ranking every node contributes its tier-`T` boost. This is what makes a
+  node's rank well-defined in a tier it does not itself belong to, and so lets a
+  tier-lifted tactic band against its parent's rank in the tactic's own resolved
+  tier.
+- **Score.** `score_T(n) = boost_T(n) + Σ boost_T(a)` over every **distinct**
+  node `a` in `n`'s lineage (transitive closure of the parent relation). Each
+  lineage node counts exactly once no matter how many paths reach it. No decay,
+  no per-path multiplicity. An unauthored boost contributes **0** — there is no
+  minimum boost of 1.
+- **Band.** `max` over `n`'s parents `p` of `score_T(p)`, taken in `n`'s
+  **resolved** tier `T`. No parents ⇒ band 0.
+- **Rank key.** The lexicographic quadruple `(tier, band, score, depth)`,
   descending, where `depth` is the count of distinct lineage nodes.
-- **Terminal nodes** — a node at phase `done` contributes nothing to any
-  axis, so rank decays as work lands rather than waiting on a prune.
+- **Terminal nodes.** A node at `phase: done` contributes nothing to any axis,
+  so rank decays as work lands instead of waiting on a prune.
+- **Deleted outright:** `attention.override`, the signal term
+  (`SIGNAL_TERM_WEIGHT`), `router.ts`'s `effectivePrecedence` lift,
+  `officeHours.ts`'s `surfacingKey` lift, the tier-isolation source filter,
+  `validateGraph` rule 20.
 
-### Why `depth` rather than a minimum boost of 1
+### Three model questions the doctrine leaves to implementation — decided here
 
-The model as brought to interview gave every node a minimum boost of 1 so a
-child's inherited sum always exceeded its parent's. Measured on the live
-597-node graph, that makes score a proxy for lineage **size**: `r=0.965`
-against distinct-ancestor count, `r=0.146` against the node's own authored
-boost, with all 18 top-ranked selectable tactics resolving at authored boost
-0. Carrying the invariant on `depth` instead preserves it exactly — verified
-at **0 violations across all 846 parent edges** — while returning the top of
-queue to nodes with real authored claims (15 of 15).
+1. **What "a `done` node contributes nothing" means mechanically.** It is
+   implemented as ONE uniform rule: a `done` node's own boost is 0, its own tier
+   mark is ignored, and it is **not** a member of any lineage set (so it adds no
+   `depth`). It stays **transparent**: traversal still passes *through* it, so a
+   live child under a `done` parent keeps inheriting everything above that
+   parent. The hard-cut reading (severing the edge) is rejected: landing a
+   parent tactic would then demote its live children to band 0, which inverts
+   the doctrine's intent. Band from a `done` parent falls out of the same rule —
+   `score_T(done p)` is just `p`'s ancestor sum, exactly the pass-through value.
+2. **The tier-isolation filter (`attention.ts:518-539`) is deleted, not
+   ported.** Its job — keeping a tier-1-scale value out of a tier-2 ranking — is
+   done structurally by the per-tier boost map: in tier `T`'s ranking only
+   tier-`T` boosts are read, so a tier-1 boost is invisible in tier 2 by
+   construction. Keeping the filter as well would additionally drop the
+   *tier-2 boost a tier-1 strategy authored*, which is the exact write per-tier
+   boosts exist to enable.
+3. **The capture term is re-attributed, not deleted.** Doctrine converts capture
+   from a term into lineage via `recovers`, but making delegations score-bearing
+   is the sibling `tactic-attention-delegation-scoring` (which is blocked on
+   this node). Interim: `captureScoreFor` is computed **only** for the node that
+   owns the `recovers` edges (strategies) and is added to that node's own
+   contribution, so it flows down as ordinary lineage; the tactic-side
+   `serves`-walking capture computation is deleted, because lineage now delivers
+   it. This keeps `score` a single lineage sum (so `band <= score` holds and the
+   residual-retirement argument stays valid), keeps a live signal alive, and
+   moves in the sibling's direction rather than against it. The cap
+   (`min(1, sum)`) and the tier-agnosticism of the capture addend are left
+   exactly as they are today — both are the sibling's open questions.
 
-### Why `residual` is retired
+### Design record carried forward from the superseded 2026-08-11 draft
 
-Because every term now flows down the parent relation (the signal term is
-deleted; capture becomes lineage via `recovers`), a node's lineage
-necessarily contains its band-defining parent and everything above it.
-Therefore `band <= score` always, and every node sharing a band carries that
-same band value inside its score — so subtracting it subtracts a constant and
-ordering by `score` within a band is **identical** to ordering by `residual`.
-The residual existed to stop the band leaking into within-band order; making
-every term flow down removes the leak at its source. The multi-distributor
-sum-to-max value-honesty defect dissolves for the same reason.
+The pre-unification draft body (residual component, `attention.scope` stamp,
+`sum`→`max` combinator fix) is **retired** and is not restated here; it survives
+in this file's git history before this round. What survives from it:
 
-### Scope carried by this node
+- **Band derives from the distributing node's RESOLVED rank**, not its authored
+  term — ratified 2026-08-12. Reasons, still live: it is what makes
+  cross-strategy inversion structurally zero; it preserves the assertion that
+  strategies live on a single flat additive scale unchanged; and it required no
+  change to `kind-kind`'s band definition. **This derivation was accepted by the
+  author on trust rather than derived, and is enrolled for re-validation as the
+  born-parked office-hours sitting `tactic-review-band-derivation-ratification`.
+  Implementation obligation it creates: state the derivation explicitly in code
+  (a named `band` computation with the doctrine cited), never let it fall out of
+  a fold.**
+- **Why the band is a fixpoint over the relation rather than a direct max over a
+  node's own distributors:** an epic child whose only parent is another tactic
+  has no distributing strategy and would fall to band 0; a tier-lifted tactic
+  would lose its band exactly where it matters most. Under the widened relation
+  + lineage form this is automatic, since band reads the parent's *score*, which
+  is itself a lineage sum.
+- **Why `depth` and not a minimum boost of 1.** A minimum boost of 1 made score
+  a proxy for lineage size (measured on the live 597-node graph: `r=0.965`
+  against distinct-ancestor count, `r=0.146` against the node's own authored
+  boost; all 18 top-ranked selectable tactics at authored boost 0). Carrying the
+  child-outranks-parent invariant on `depth` preserves it exactly — verified at
+  **0 violations across all 846 parent edges** — while returning the top of
+  queue to nodes with real authored claims (15 of 15).
+- **Why `residual` is retired.** Every term now flows down the parent relation,
+  so a node's lineage necessarily contains its band-defining parent and
+  everything above it: `band <= score` always, the band is a constant inside
+  every co-banded node's score, and ordering by `score` within a band is
+  identical to ordering by `residual`. The multi-distributor `sum`→`max`
+  value-honesty defect dissolves for the same reason.
+- **The 2026-08-11 stopgap record.** All 42 open tactics carrying an authored
+  boost were compressed onto a `0.01`-per-level ladder. Every compressed node
+  carries its original magnitude at `attributes.pre_namespacing_boost` with a
+  dated `NAMESPACING STOPGAP` paragraph in its `attention.rationale` (91 nodes
+  carry the field today). **Query that field; do not reconstruct from git
+  history.** Reverting the ladder is NOT this node's work — it belongs to
+  `tactic-attention-per-tier-boost-migration` (the shape/value seam).
 
-1. Widen the distributor relation in `resolveAttention`
-   (`packages/intentionsutil/src/attention.ts`) to `parent` ∪ `serves` ∪
-   `recovers` ∪ reverse-`blocked_by`.
-2. Per-tier authored boosts throughout the lineage sum — **including the
-   storage shape**. `Attention` (`packages/intentionsutil/src/schema.ts`)
-   changes from one scalar `boost` plus one scalar `tier` namespace tag to a
-   per-tier map. An unauthored tier must stay distinguishable from an authored
-   lowest value (a sparse map does this), so "not yet ranked in this tier"
-   never reads as "ranked last". **No node files change**: `parseAttention`
-   already defaults an absent `tier` to 1 (`schema.ts:378-380`), so the legacy
-   `boost: X` / `tier: T` form reinterprets into the one-entry map `{T: X}` at
-   parse time. Measured 2026-08-12 on `origin/main` at `bad3e074`: all 92
-   attention-carrying nodes are tier-1 tagged (91 boosts, 1 override), and none
-   of the 6 nodes with `ownTier > 1` carries `attention` at all — so there is
-   no tier-2/3 authored value to migrate. Read sites are few: `attention.tier`
-   in exactly two places (`schema.ts:1114`, which *is* rule 20, and
-   `goals.ts:182`); `boost`/`override` in five (`attention.ts:388-392`,
-   `425-426`, `541`).
-3. Deduplicated lineage score; unauthored boosts contribute 0.
-4. The `(tier, band, score, depth)` key, and the selector sorting on it.
-5. Terminal (`done`) nodes contribute nothing to any axis.
-6. Delete `attention.override` from the schema and the resolver.
-7. Delete the signal term (`SIGNAL_TERM_WEIGHT`) from `resolveAttention`.
-   **Leave `computeSignalPath` in place** — it is also consumed by the graph
-   router's strategy-eligibility gate, which this round does not touch.
-8. Delete `router.ts`'s `effectivePrecedence` lift and its `Precedence`
-   tuple; blockers are parents now, so the lift is redundant.
-9. Retire `validateGraph` rule 20 (`checkAttentionTierNamespace`). It is
-   inseparable from item 2 — see the rule-20 section below.
+### Measurement caveats carried forward
 
-### `validateGraph` rules 18 and 20 (added 2026-08-12, post-round check)
+- The `~1828 inversions against strategy resolved rank` figure and the
+  `sum`→`max` value-honesty defect are **moot** under this design. Do **not**
+  plan `tactic-dispatch-skill-standards-extraction` /
+  `tactic-office-hours-graph-type-passthrough` as `sum`→`max` regression cases;
+  use them instead as the multi-parent regression fixture for the dedup lineage
+  score (each is reached by two strategies; each ancestor must count once).
+- A probe once counted 75 cross-band inversions among open tactics under the old
+  flat key and 0 under the new key. The 75 is a real measurement; **the 0 is
+  structural, not empirical** — band dominates score lexicographically, so a
+  lower-band node can never outrank a higher-band one by construction. Do not
+  cite that 0 as evidence the key was validated against data; that
+  unfalsifiability is what `tactic-review-band-derivation-ratification` exists
+  to put back to the author.
 
-The superseded body below asks (item 2 of its scope list) whether rule 18's
-"tactic-facing half — the `strategy-main-health` boost-dominance guard"
-retires under namespaced rank. **That premise is stale and the question is
-resolved: rule 18 survives unchanged.** It is no longer a boost-dominance
-guard. As implemented (`packages/intentionsutil/src/schema.ts:1021`) it is a
-tier-AUTHORSHIP guard: (a) no node other than `strategy-main-health` may
-author an explicit `attributes.tier: 3`, read from the RAW `attributes.tier`
-field rather than `ownTier` or any resolved value, precisely so that
-INHERITING tier 3 stays legal; (b) `strategy-main-health` must itself carry
-tier 3. This round changes neither tier authorship nor tier inheritance, so
-nothing in rule 18 is touched.
+### Explicitly out of scope (sibling-owned; do not absorb)
 
-**Rule 20 retires, and it retires HERE** — scope item 9 above. (Retirement
-decided 2026-08-12; ownership moved to this node by the office-hours /align
-round of 2026-08-12 that cleared this node's park. An earlier revision of this
-paragraph placed its home on `tactic-attention-per-tier-boost-migration`; that
-was wrong, and the correction is the whole reason this node was parked.)
-
-`checkAttentionTierNamespace` (`schema.ts:1111-1121`) reads a single scalar
-`node.attention.tier` and requires it to equal `ownTier(node)`. Two independent
-grounds retire it, and they differ in what they imply about *sequencing*:
-
-1. **Shape entailment — the load-bearing one.** Requiring
-   `attention.tier === ownTier(node)` means no node may author a boost in a
-   tier it does not itself belong to. Per-tier boosts exist precisely so a
-   **tier-1 strategy can author a tier-2 boost**, giving its tier-lifted
-   tactics a band to sort against instead of 0
-   (`strategy-graph-drives-dispatch`'s per-tier-cost clarification states this
-   requirement in its own terms). Rule 20 mechanically rejects that write. So
-   rule 20 cannot outlive the storage shape, and item 2 cannot ship without
-   it — a resolver written against the scalar in the meantime would be
-   **structurally unexercisable dead scaffolding**, not a working interim.
-2. **Calibration.** The rule's stated justification — a boost is "only
-   meaningful within one tier's scale" — is false once the authored vocabulary
-   is a closed set of absolute levels.
-
-Ground 1 ties the retirement to the **shape** (this node); ground 2 ties it to
-the **vocabulary** (`tactic-attention-per-tier-boost-migration`). Ground 1
-governs. The write-path check that a boost is *in* the vocabulary is a
-**new** check for a different purpose, not a replacement for a live obligation:
-under a per-tier map a tier-1 boost simply stays a tier-1 boost when the node's
-tier changes, so rule 20's obligation dissolves rather than transferring. That
-check stays with the vocabulary, on the sibling.
-
-### Split out, not in this node
-
-- `tactic-attention-delegation-scoring` — making delegations score-bearing
-  so `recovers` can carry lineage (blocks item 1 above from being complete).
-- `tactic-attention-unified-relation-cycle-rule` — `validateGraph` must
-  reject cycles over the whole relation.
-- `tactic-attention-per-tier-boost-migration` — the authored **values** only,
-  not the shape they live in (the **shape/value seam**, recorded on
-  `strategy-graph-drives-dispatch`): the closed level vocabulary and its single
-  exported constant, the write-path off-vocabulary check, reverting the 0.01
-  namespacing ladder from `attributes.pre_namespacing_boost`,
-  `strategy-graph-review-curriculum`'s `3.5`, and the last `override` value
-  (`tactic-transition-node-stamp-landed-body`). Its recorded
-  `blocked_by: [tactic-attention-namespaced-rank]` is unchanged and is now
-  genuinely load-bearing — it writes values *into* the map this node lands.
-  Note this is the same seam scope item 6 already uses for `override`: this
-  node deletes the **field**, the sibling drops the remaining **value**.
-
-### Consumer note
-
-Resolved tier is now an **ordering** axis only. It propagates along
-`blocked_by`, so a consumer that **counts** production issues must read
-`ownTier` instead.
+- `tactic-attention-delegation-scoring` — making delegations score-bearing so
+  `recovers` carries real lineage. Until it lands, a `recovers` edge is a parent
+  edge whose parent contributes boost 0.
+- `tactic-attention-unified-relation-cycle-rule` — `validateGraph` rejecting
+  cycles over the **whole** relation (rule 15 covers only `blocked_by` today).
+  0 cycles exist in the live graph; the resolver here must therefore **converge
+  silently** on a mixed cycle rather than throw.
+- `tactic-attention-per-tier-boost-migration` — the authored **values**: the
+  closed level vocabulary and its exported constant, the write-path
+  off-vocabulary check, the `0.01` ladder revert,
+  `strategy-graph-review-curriculum`'s `3.5`, and the last `override` **value**
+  (`tactic-transition-node-stamp-landed-body`, `override: 60`, at phase `done`).
+  This node deletes the **field**; the sibling drops the remaining **value**.
+- `validateGraph` **rule 18 survives unchanged** and must not be touched. It is
+  a tier-**authorship** guard (`schema.ts:1020-1076`), reading raw
+  `attributes.tier` and `attention.rationale` only — not boosts. Neither tier
+  authorship nor tier inheritance changes this round.
+- Doctrine node edits (`intentions/kind-kind.md`,
+  `intentions/strategy-graph-drives-dispatch.md`). `kind-kind`'s rule catalog
+  stops at rule 18, so retiring rule 20 needs no graph edit, and its
+  clarifications already anticipate the per-tier map. Graph writes belong to the
+  align/office-hours lane, not to this PR.
 
 ---
 
-## Draft context (2026-08-11 /align round, revised same day after adversarial review) — SUPERSEDED
+## Unit 1 — Per-tier boost storage shape; delete `override`; retire rule 20
 
-The doctrine this implements is recorded in three places, split by artifact
-owner:
+**Scope.** `packages/intentionsutil/src/schema.ts` and
+`packages/intentionsutil/test/schema.test.ts` only.
 
-- **Ownership** — who may write which attention, the namespacing bound on
-  delegated writes, and what the model may still legitimately do — on
-  `strategy-recursive-self-improvement`: its amended tier/rank-composition
-  clarification, its **classification-escape** clarification, conditions 15
-  and 17, and the two clarifications a reader of this tactic most needs —
-  *"May the author express tactic priority by boosting a tactic directly?"*
-  (no: that field is inside the delegated surface; the author's channel is
-  child strategies) and *"What justifies a child strategy — does
-  subdividing a parent purely to rank its tactics count?"* (yes, and it
-  still owes its own `success_signal`).
-- **Rank algebra** — how a boost composes down `parent`/`serves`, the three
-  key components, the `attention.scope` stamp, and what sits outside the key
-  — on `kind-kind`.
-- **The never-bands re-decision** — why this band is a second deliberate
-  amendment of a doctrine that once rejected bands — on
-  `strategy-graph-drives-dispatch`.
+- Replace `interface Attention` (`schema.ts:142-147`, doc comment from
+  `schema.ts:~120`) with the sparse per-tier map:
+  `{ boosts: Record<string, number>; rationale: string }`. Delete `boost`,
+  `override`, and the `tier` namespace tag. Keys are the decimal tier strings
+  `"1" | "2" | "3"` (validate against `TIERS`, `schema.ts:29`); values are finite
+  and `> 0`. **Sparse is load-bearing**: an unauthored tier must stay
+  distinguishable from an authored lowest value, so "not yet ranked in this
+  tier" never reads as "ranked last". Use a plain object, never a `Map` — nodes
+  are serialized with `yaml.stringify` (`src/store.ts:11,61`) and re-serialized
+  into the office-hours seed as JSON.
+- Rewrite `validateAttention` (`schema.ts:329-388`) to accept, and canonicalize
+  to `boosts`:
+  1. the canonical form `boosts: {1: 3, 2: 20}` (YAML integer keys arrive as
+     JS string keys — accept and normalize both);
+  2. **legacy** `boost: X` with optional `tier: T` (absent ⇒ 1) ⇒ `{ "T": X }`;
+  3. **legacy** `override: X` with optional `tier: T` ⇒ `{ "T": X }` when
+     `X > 0`, and `{}` when `X === 0` (the branch-cap semantics are gone).
+  Reject: a non-null `attention` that yields an empty `boosts` map *and* carried
+  no legacy `override: 0`; non-finite or `<= 0` values; keys outside `TIERS`; a
+  missing or empty `rationale`. Comment the two legacy branches as compatibility
+  sugar owned by `tactic-attention-per-tier-boost-migration` for deletion once
+  node files are rewritten. **They are required, not optional**: the live store
+  has 91 nodes on the legacy `boost:`/`override: null` form and one on
+  `override: 60`, and rewriting node files here is the sibling's scope.
+- Delete rule 20: `checkAttentionTierNamespace` (`schema.ts:1103-1121`), its
+  call site (`schema.ts:1285-1286`), and its catalog entry
+  (`schema.ts:1229-1240`). Add a one-line note in the catalog that rule 20 was
+  retired with the per-tier map so **the next rule takes number 21** — rule
+  numbers are cross-referenced from node bodies and must never be reused.
+- Update `test/schema.test.ts`: the fixture at lines 27-37, the
+  attention-validation block at lines 880-990 (boost/override/tier cases), and
+  any rule-20 case. Per `.claude/rules/test-integrity.md`, replace coverage
+  rather than delete it: keep an equivalent assertion for every invariant that
+  still exists (rationale required and non-empty; `> 0` values; tier-key
+  vocabulary) and add new cases for the sparse map, the two legacy
+  reinterpretations, and the empty-map rejection.
+- Add a **store round-trip test**: write a node carrying
+  `boosts: {"1": 3, "2": 20}` through `writeNode`, read it back with `readNode`,
+  and assert deep equality — this is what proves the YAML numeric-key handling
+  is stable in both directions.
 
-### The defect
+Out of scope: `ownTier` (`schema.ts:392-414`) is unchanged and stays the single
+implementation of a node's own tier; rules 18 and 19 are untouched; no
+`intentions/*.md` file changes.
 
-`resolveAttention` (`packages/intentionsutil/src/attention.ts`) accumulates
-per node a set of `(source-node, amount)` claims flowing down
-`parent`/`serves`, and a node's `value` is the **sum** of that set. A
-tactic's own authored boost is one more claim in the same flat sum as its
-strategy's distributed value. So a tactic boosted 50 under a boost-3
-strategy outranks a tactic under a boost-6 strategy — the cross-strategy
-inversion the recorded doctrine now forbids. Nothing mechanically prevents
-it; only the model's or author's restraint does.
+**Recommended model:** opus
 
-### Greenfield target
+## Unit 2 — Rewrite `resolveAttention` onto the unified relation and the quadruple
 
-**Two scales, not one.** Strategies live on a single flat additive scale —
-unchanged from today. Tactics are namespaced *inside* it: a tactic's own
-numbers order it only against tactics sitting at the same strategy rank.
+**Scope.** `packages/intentionsutil/src/attention.ts` and
+`packages/intentionsutil/test/attention.test.ts`.
 
-Rank orders **lexicographically** by `(tier, band, residual)`, descending.
+- **`ResolvedAttention` (`attention.ts:14-46`)** becomes the rank key plus its
+  explainability: `{ tier, band, score, depth, bandSource: string | null,
+  sources: string[] }`. Delete `value` and `terms`; delete
+  `interface TermContribution` and drop it from the re-exports in
+  `src/index.ts:13` and `src/graph.ts:34`. Deleting `value` is deliberate — the
+  resulting compile errors ARE the consumer audit Units 3 and 4 discharge.
+  `bandSource` is the parent id whose score defined the band (null when band 0),
+  and replaces the explainability that the retired lift mechanisms carried.
+- **Export the shared key and comparator** from this module:
+  `export interface RankKey { tier; band; score; depth }` and
+  `export function compareRankKeyDesc(a, b): number` (lexicographic descending,
+  tier outermost). Every consumer imports these instead of hand-rolling a
+  comparator — that duplication is why three copies exist today.
+- **Rename `distributorIds` (`attention.ts:339-348`) to `parentIds`** and widen
+  it to `{parent} ∪ {serves} ∪ {recovers} ∪ reverseBlocked(c)`, keeping the
+  existing shape: ids restricted to those that resolve, sorted for determinism,
+  and the `isEligible(c)` gate retained on `serves`/`recovers`/reverse-blocked
+  (a delegation's `serves` is deliberately unenforced, which is why that gate
+  exists). Extract the `reverseBlockers` construction currently inlined at
+  `attention.ts:176-183` into one exported helper and use it from both
+  `computeSignalPath` and `parentIds`.
+- **Lineage sets.** Compute `lineage(n) = ∪ over p ∈ parentIds(n) of
+  ({p} \ done) ∪ lineage(p)` as a monotone set-union fixpoint, following the
+  existing sweep shape (`attention.ts:417-438`): seed empty, sweep
+  `sortedNodeIds` in id order, repeat until a full sweep changes nothing;
+  because sets only grow, a size comparison detects change. Sets, not paths —
+  this is what makes the score dedup-per-node and what makes a mixed cycle
+  **converge instead of diverging**. Reuse `mustGet` (`attention.ts:409-415`).
+- **Per-tier score.** `effectiveBoost(a, T) = a.phase === "done" ? 0 :
+  (a.attention?.boosts[T] ?? 0)`, plus — for a node owning `recovers` edges —
+  the interim capture addend (see Context decision 3). `score_T(n) =
+  effectiveBoost(n, T) + Σ over a ∈ lineage(n) of effectiveBoost(a, T)`. Compute
+  for all three tiers, then report the node's score in its own resolved tier.
+- **Band.** `band(n) = max over p ∈ parentIds(n) of score_T(p)` where `T` is
+  `n`'s **resolved** tier (not `p`'s), 0 when it has no parents; `bandSource` is
+  the argmax (id ascending on ties). Write this as its own named function with a
+  comment citing the doctrine and naming
+  `tactic-review-band-derivation-ratification` as the ratification owed — the
+  "state the derivation explicitly in code" obligation.
+- **Depth.** `depth(n) = |lineage(n)|`.
+- **Tier fixpoint (`attention.ts:440-470`)** keeps its shape but runs over the
+  widened relation and honors the done rule: a `done` node contributes its own
+  tier mark as 1, while still relaying an inherited tier. Keep it resolved for
+  EVERY node (an ineligible node can relay), with `ResolvedAttention` entries
+  only for eligible ones.
+- **Deletions.** `SIGNAL_TERM_WEIGHT` (`attention.ts:56-57`) and the signal term
+  at `attention.ts:472-477`, `556` — **but `computeSignalPath`
+  (`attention.ts:154-243`) STAYS**, exported and unchanged: `router.ts:2,472`
+  consumes it for the strategy-eligibility gate, which this round does not
+  touch. Delete the `override` seeds and short-circuit
+  (`attention.ts:265-280, 384-396, 541-554`), the tier-isolation filter and its
+  comment block (`attention.ts:518-539`), and the whole term-registry
+  composition. `captureScore`/`divergenceScore`/`irreversibilityScore`
+  (`attention.ts:98-135`) stay; `captureScoreFor` (`attention.ts:481-506`) loses
+  its `serves`-walking tactic branch (lineage delivers it now).
+- **Keep the pure-parent cycle guard (`attention.ts:350-372`) as-is** — `parent`
+  is a single pointer, so the guard is cheap and its rationale is unchanged —
+  but rewrite the doc comments at `attention.ts:247-321` and `350-359`, which
+  currently assert that mixed `parent`/`blocked_by` cycles "can no longer
+  arise". They can again. State instead: a mixed cycle converges silently under
+  the dedup fixpoint (child-outranks-parent collapses inside the cycle rather
+  than erroring), and rejecting it on the write path is
+  `tactic-attention-unified-relation-cycle-rule`'s scope.
+- **Tests** (`test/attention.test.ts`): update the fixture builders
+  (`boost()`/`override()`, lines 43-58) to the new `Attention` shape — `boost()`
+  becomes a per-tier map builder, `override()` is deleted. Per
+  `.claude/rules/test-integrity.md` the override block (lines 195-284) and the
+  signal-term block (lines 320-370) are **replaced, not deleted**: rewrite them
+  as coverage of what subsumes them (lineage flow with no cap; correction of a
+  wrong graph via the LINEAGE rather than via a number). Keep and re-derive the
+  tier-axis block (lines 570-719), rewriting the three isolation-filter cases
+  (659, 678, 698) as per-tier-boost cases. Add cases for: a diamond (one
+  ancestor reached by two paths counts once); `recovers` and reverse-`blocked_by`
+  as parent edges; a `done` node contributing nothing while staying transparent
+  for its live child; band taken in the child's resolved tier; child-outranks-
+  parent on `depth` at equal band/score; a mixed cycle converging without a
+  throw; determinism under input reordering (the existing block at line 298).
 
-- **`tier`** — unchanged: the existing max-lifted effective tier.
-- **`band`** — the resolved rank of the strategy the node sits under,
-  derived by the **same downward monotone fixpoint the effective tier
-  already uses** (`attention.ts`, the `effectiveTier` loop):
-  `band(n) = max(ownBand(n), max over distributors d of band(d))`, where
-  `ownBand` is a strategy's own resolved rank and `0` for every other kind.
-  Deriving it as a fixpoint rather than as a direct max over the node's own
-  distributor set is what makes it **total** — see "Why the fixpoint" below.
-- **`residual`** — the node's `value` **minus the authored contribution
-  inherited from its distributors**, which equals its own authored boost plus
-  the `signal` term plus the `capture` term. (Corrected 2026-08-12 — see
-  "Band and residual — settled" below. The earlier wording, "the node's
-  `value` minus its band", is **wrong** and does not equal the gloss that
-  followed it: the band carries the distributing strategy's own `signal` and
-  `capture` weight, which the node never inherited, so subtracting the band
-  drives the residual negative.)
+**Dependencies:** Unit 1.
+**Recommended model:** opus
 
-**Why the residual and not "the node's own boost".** `resolveAttention`
-computes `value = authored + signal + capture`, and `authored` is itself a
-sum over *all* same-tier contributing sources — not the node's own claim.
-So the third component has to be defined, not assumed. Own-boost-only would
-drop the `signal` term (on-path to an unvalidated `success_signal`) and the
-`capture` term (`recovers` severity) out of ordering entirely, silently
-demoting two of the three registered terms. The bare `value` would
-double-count the distributing strategy's rank — once as the band, once
-inside `value` — so order within a band would still track strategy rank
-rather than the node's own claim. The residual keeps every registered term
-live, keeps `resolveAttention`'s composition untouched (the inherited
-authored contribution is a subtraction, not a rewrite), and preserves the
-shape the 2026-07-18 tier amendment already established: terms-and-weights
-govern ordering **within** a band.
+## Unit 3 — Retire the selector's precedence lift; sort on the quadruple
 
-**Why the fixpoint.** A direct max over the node's own distributor set is
-undefined for three real shapes. An **epic child** whose only distributor is
-another tactic has no distributing strategy at all, and would fall to band 0
-— below every banded tactic in its tier; under the fixpoint it inherits its
-subtree root's band for free. A node with **no distributor** (`parent: null`,
-`serves: []`) gets an honest 0. And a **tier-lifted** tactic sits at tier 2
-while its strategies stay at tier 1, so the tier-isolation filter has already
-dropped their claims; computing the band **outside** that filter keeps the
-bound live at tiers 2 and 3 — where every bug fix and every red-main item
-lives — instead of going inert exactly where it matters most.
+**Scope.** `packages/intentionsutil/src/router.ts` and
+`packages/intentionsutil/test/router.test.ts`.
 
-**The authored namespace stamp.** Deriving the band is not enough: a boost
-authored under a band-3 strategy means something different after that
-strategy is reranked to band 9, and nothing today stamps or catches it. The
-schema already solves this one axis over — `Attention.tier` is documented as
-"the per-tier boost **NAMESPACE** tag — the tier whose scale the value was
-chosen in", with `validateGraph` rule 20 forcing re-selection when a node's
-tier changes. Generalize it: extend `Attention` to
-`{boost | override, rationale, scope: {tier, strategy}}`, where
-`scope.strategy` names the distributing strategy in whose band the value was
-chosen, plus the rule-20 analogue requiring it to match the node's resolved
-band distributor. The namespace becomes **authored and checkable** rather
-than derived and implicit; the migration lint collapses from a global
-re-derivation diff to a field comparison `validateGraph` can do on the write
-path; and reranking a strategy mechanically surfaces every boost whose
-meaning it just invalidated.
+- Delete `interface Precedence` (`router.ts:245-249`), `PrecedenceResult`
+  (`258-261`), `maxPrecedence` (`264-267`), and `effectivePrecedence`
+  (`269-381`) in full, including its `reverseBlockers` walk, memo/stack cycle
+  machinery, and `ownPair`. Blockers are parents now; the lift is redundant.
+- Remove `"precedence-cycle"` from the `SelectionEvent` union (`router.ts:76`)
+  and its doc comment (`77-84`); the cycle case is
+  `tactic-attention-unified-relation-cycle-rule`'s, and the resolver no longer
+  degrades ordering on one.
+- `GraphCandidate` (`router.ts:28-49`): replace `rank`, `tier`, and
+  `precedence: {tier, rank}` with the single `key: RankKey` imported from
+  `attention.ts`, sourced directly from `resolveAttention` (there is no lift, so
+  the "own pair vs lifted pair" distinction that justified carrying both
+  disappears). Update the four candidate constructions (`router.ts:552, 580,
+  593, 612`) and the fallback for a node absent from the resolved map (use
+  `ownTier(n)` and zeros, mirroring today's `precedenceOf`, `router.ts:478-479`).
+- Sort comparator (`router.ts:673-682`): `compareRankKeyDesc(a.key, b.key)`,
+  then progression ordinal descending, then id ascending — the two trailing
+  tiebreaks are unchanged. Update the `GraphSelection`/`selectGraphTargets` doc
+  comments (`router.ts:86-92`, `440-465`), which currently describe the lifted
+  pair.
+- Confirm by grep that no shell script or non-TS consumer reads `precedence`,
+  `.rank`, or `.tier` off the selection JSON (`scripts/select-targets.ts:59`
+  emits the whole object; the audit at plan time found none in
+  `.claude/skills/**` — re-verify before relying on it).
+- Update `test/router.test.ts` and `test/check-node-selection.test.ts` for the
+  field rename. Every existing ordering assertion must be re-derived under the
+  new key rather than adjusted until green: a blocker that used to sort by a
+  lifted pair now sorts by an inherited band, and an assertion that still passes
+  by coincidence is worse than a failing one.
 
-**Precedence must become a 3-tuple, or this is inert.** `selectGraphTargets`
-sorts on the **lifted** `precedence`, not on the pair a node reports, and
-`Precedence` is `{tier, rank}` today. Extend it to `(tier, band, residual)`
-with `maxPrecedence` comparing lexicographically over all three
-(`router.ts`). A blocker then inherits the **band** of what it blocks, which
-is the correct reading — the blocked work's urgency is exactly what the lift
-models — and it preserves the never-additive, always-max property the
-2026-07-13 supersession was built on.
+**Dependencies:** Unit 2.
+**Recommended model:** opus
 
-**What stays open on purpose.** Strategy attention is the complementary,
-unscoped case and is unchanged: a child strategy's boost sums with its
-parent's, so a child may be boosted in conjunction with its parent to
-outrank cousin and uncle strategies. The asymmetry is deliberate — that
-additive strategy channel is precisely how the author expresses tactic
-priority, since a direct tactic boost is inside the surface delegated to
-`/rsi-evaluate`. And the model keeps two **classification** escapes, which
-are sanctioned rather than leaks: a `bug_fix`/`security` mark lifts tier, and
-a `serves` edge determined to be genuine lifts band. Under `band = max`
-across distributors, adding a `serves` edge to a higher-ranked strategy *is*
-a band promotion — an earlier draft of this node wrongly denied it. The
-principle: the model never moves a node by choosing a **number**, only by
-making a **claim about what the work is**, because a claim is falsifiable
-against the work and a number is not.
+## Unit 4 — Migrate the remaining rank consumers onto the one shared key
 
-The bound is **uniform, with no `owner` carve-out**: it is a property of the
-rank algebra, not of who authored the value. The resolver must not read
-`owner` — keeping policy out of what is currently a pure algebra was an
-explicit interview resolution.
+**Scope.** `packages/intentionsutil/src/goals.ts`, `src/hold-alerts.ts`,
+`src/officeHours.ts`, `src/rsi.ts`, `scripts/office-hours-select.ts`,
+`scripts/list-unclaimed-hold-alerts.ts`, `src/index.ts`, `src/graph.ts`, and the
+matching tests (`test/goals.test.ts`, `test/hold-alerts.test.ts`,
+`test/office-hours.test.ts`, `test/rsi.test.ts`).
 
-Derived-on-read is unchanged for `band` and `residual`: both are computed on
-read. The only stored addition is `attention.scope`, which is an **authored**
-namespace declaration, not a cached derivation.
+- **`hold-alerts.ts`** — delete the local `interface Rank`, `compareRankDesc`,
+  and `atOrAbove` (`46-62`); import `RankKey`/`compareRankKeyDesc` and express
+  the top-K cutoff as `compareRankKeyDesc(rank, cutoff) <= 0`. In
+  `listUnclaimedHoldAlerts` (`104-168`) the pool, the cutoff, and the
+  source-rank read all move to the quadruple. `UnclaimedHoldAlert.sourceValue`
+  (`33-34`) becomes `sourceBand`/`sourceScore`; the CLI row
+  (`scripts/list-unclaimed-hold-alerts.ts:106-107`) is tab-separated — **append**
+  the new column rather than reordering the existing ones, and update any
+  reader.
+- **`officeHours.ts`** — delete `interface AttentionKey`, `attentionKeyOf`,
+  the local `reverseBlockers`, `liftsKey`, and `surfacingKey` (`105-181`). This
+  is the **third** copy of the retired blocking lift and it goes for the same
+  reason as `effectivePrecedence`: a park's blocked source is now its parent, so
+  its band already carries that source's score, and the lift would be
+  structurally inert (`liftedFrom` would always be null). `QueueMember`
+  (`15-43`) carries the quadruple; `liftedFrom` is replaced by `bandSource` from
+  `ResolvedAttention`; `ownTier`/`ownRank` keep reporting the node's own,
+  un-penalized values. Apply `SESSION_TYPE_PENALTY` (`officeHours.ts:13`) to
+  **both** `band` and `score` so the soft demotion still bites across bands, and
+  never to `tier` — the tier comparison stays hard. `compareQueueMembers`
+  (`183-188`) delegates to `compareRankKeyDesc` then id ascending.
+- **`scripts/office-hours-select.ts`** — `formatQueueRow` (`182-184`) is a
+  **pinned 4-column tab-separated contract** parsed by
+  `.claude/skills/dispatch-propagate/scripts/office-hours-graph` and
+  `dispatch-terminal-gap-audit`, and ratcheted by a unit test. Keep exactly four
+  columns in the same order; the first column becomes the penalized **score**.
+  Rewrite `formatLiftNote` (`190-196`) as a band note —
+  `NOTE — <id> ranks at tier <t> band <b> via <bandSource> (own score <s>)` —
+  emitted when `bandSource !== null`, and update its test.
+- **`goals.ts`** — `projectGoals` (`90-117`) sorts on `compareRankKeyDesc`
+  before its existing gap/signal/id tiebreaks. `renderFrontier` (`176-199`):
+  the tier marker is unchanged; the rank marker becomes
+  ` [band <band> rank <score> via <sources[0]>]` (drop ` via …` when `sources`
+  is empty, render nothing when band and score are both 0). Delete
+  `formatTermBreakdown` (`139-150`) and the `TermContribution` import; keep
+  `formatRank` (`123-129`). Byte-stability of the render is asserted in
+  `test/goals.test.ts` — update the expectations there deliberately.
+- **`rsi.ts`** — `renderPriorities` (`450-470`) reads `attention?.value`; move it
+  to `band`/`score` and widen the rendered table's `rank` column accordingly.
+  Note the local variable named `band` at `rsi.ts:471` is the unrelated
+  *backlog* band — do not conflate the two; rename one if it reads ambiguously.
+- **Exports** — `src/index.ts:10-13` and `src/graph.ts:27-34`: drop
+  `TermContribution`, add `RankKey` and `compareRankKeyDesc`.
+  `office-hours/src/graph-source.ts:454,490` only stores the
+  `Map<string, ResolvedAttention>` in its view object and never reads a field,
+  so it needs no change beyond typechecking clean.
 
-### Worked example
+**Dependencies:** Unit 2 (Unit 3 first if taken in order, since both import the
+shared key).
+**Recommended model:** opus
 
-Strategy boosts at `origin/main` when this was drafted:
-`recursive-self-improvement` 6, `graph-native-dispatch` 5,
-`graph-review-curriculum` 3.5, `attention-surface` 3.
+## Unit 5 — Re-derive the queue and diff the order against the pre-change ranking
 
-Today (flat sum): tactic A serves rsi (6) with boost 4 → value 10; tactic B
-serves graph-native-dispatch (5) with boost 8 → value 13. **B wins** — a
-delegated number reordered the author's strategies.
+**Scope.** No shipped source changes. A throwaway `tsx` probe (write it under
+`$TMPDIR`, not the repo) that loads the live store at `intentions/` twice —
+once at the merge-base of this branch, once at working-tree HEAD, using
+`packages/intentionsutil/scripts/lib-store-at-ref.ts` for the "before" side —
+and reports, into the PR body:
 
-Under the key: A = `(1, 6, 4)`, B = `(1, 5, 8)`. **A wins.** The 8 cannot
-buy past 6-vs-5.
+1. The top ~30 selectable candidates before and after, side by side
+   (`selectGraphTargets`), with each node's `(tier, band, score, depth)`.
+2. Every node whose ordinal moved by more than a few places, with the parent
+   edge that explains the move.
+3. A check that **no node's rank is now defined by a `done` node** and that no
+   live child was demoted by its parent being `done`.
+4. A count of nodes whose band is 0 (no parents) and of tier-2/3 nodes whose
+   band is 0 — the accepted degeneracy of the per-tier model until values are
+   authored, which is the sibling migration's input, not a defect here.
+5. The two multi-parent nodes `tactic-dispatch-skill-standards-extraction` and
+   `tactic-office-hours-graph-type-passthrough`: confirm each ancestor is
+   counted once (not summed per path).
 
-With child strategies (the use case this exists to serve): rsi 6, a child
-boosted +2 resolves to 8, a second child boosted +1 resolves to 7. Both
-outrank the uncle at 5 (Scale 1 is additive), and their tactics sort at
-bands 8 and 7 ahead of tactics left directly on rsi at band 6 — while the
-model still orders freely *inside* each band.
+Then **judge** the resulting order rather than assuming it. The bootstrap-era
+hand-set boosts (`attributes.pre_namespacing_boost`, 91 nodes) are reinterpreted
+as within-band ordering by this change; confirm the top of the queue is the
+intended work. If it is not, the remedy is a note to the author in the PR body —
+**not** a value edit, which is
+`tactic-attention-per-tier-boost-migration`'s scope.
 
-### Brownfield migration
+**Dependencies:** Units 1-4.
+**Recommended model:** opus
 
-The greenfield/brownfield split above is **required structure**, not house
-style: `.claude/rules/design-proposals.md` binds every design change to lead
-with the design it would choose building from scratch, on its own terms and
-independent of migration cost, and to carry the migration path as a separate
-proposal. Do not tidy the two sections together — the separation is the rule
-being followed.
+---
 
-1. Record the doctrine (**done** in the same round as this draft) and land a
-   lint that flags a delegated `attention` write whose composed value
-   inverts cross-strategy order within a tier. This is the same lint family
-   as the ownership-boundary and marks-asymmetry checks drafted at
-   `tactic-priority-provenance-schema`; land them together or state why not.
-2. Extend `Attention` with `scope: {tier, strategy}` and land the rule-20
-   analogue. Record whether `validateGraph` rule 18's tactic-facing half
-   (the `strategy-main-health` boost-dominance guard) retires under
-   namespaced rank — it appears to become dead.
-3. Extend `ResolvedAttention` with the band component, and extend
-   `Precedence` to the 3-tuple with `maxPrecedence` comparing over all
-   three, then switch the selector's sort (`selectGraphTargets`,
-   `packages/intentionsutil/src/router.ts`, currently
-   `(tier desc, rank desc, progression-ordinal desc, id asc)` **over the
-   lifted pair**). Every other consumer must be audited — one that keeps
-   comparing bare `value` silently keeps the old flat semantics:
-   - `effectivePrecedence` / `maxPrecedence` (`router.ts`) — the decisive
-     one; without it the band never reaches the sort at all
-   - `hold-alerts.ts` — builds its own `Rank[]` of `{tier, value}`, sorts
-     with its own `compareRankDesc`, and takes a top-K cutoff
-   - `renderFrontier`
-   - the office-hours parked-queue ordering (`officeHours.ts`, which applies
-     its own session-type soft penalty)
-   - `render-rsi-plan.ts`
-4. Re-derive the queue and diff the order against the pre-change ranking.
-   Bootstrap-era hand-set boosts on `owner: ai` tactics (the 2026-07-30
-   re-scale band) are reinterpreted as within-strategy ordering by this
-   change; confirm the resulting order is the intended one rather than
-   assuming it. **Enumerate that boost set as the first step of this task**
-   — it is the input to the confirmation and is not listed anywhere.
-5. Re-scope `tactic-attention-tier-ranking` (phase `main-qa`), whose
-   statement covers the exact sort this changes: "the selector sorts by
-   `(tier, rank)`, blocking lifts the lexicographic `(tier, rank)` pair".
-   It was named rather than edited in the recording round because a body
-   edit on an in-flight node trips scope custody.
+## Reuse
 
-### Absorbed verification item — RESOLVED
+- `resolveAttention` (`packages/intentionsutil/src/attention.ts:322`) — modify in
+  place; keep its purity contract (same nodes in, deep-equal map out; nothing
+  written back to frontmatter), its sorted-sweep determinism, and its
+  `mustGet` helper (`attention.ts:409-415`).
+- The monotone-fixpoint sweep shape at `attention.ts:417-438` (authored) and
+  `attention.ts:456-470` (tier) — the lineage fixpoint follows it rather than a
+  fresh BFS.
+- The reverse-`blocked_by` construction at `attention.ts:176-183` — extract once,
+  use from `computeSignalPath`, `parentIds`, and delete the copies in
+  `router.ts:309-318` and `officeHours.ts:128-139`.
+- `computeSignalPath` (`attention.ts:154-243`) — **kept**, still exported for
+  `router.ts:472`'s strategy-eligibility gate. Its provisional-false DFS
+  memoization discipline (`185-233`) is the existing template for a
+  cycle-tolerant walk over a mixed relation.
+- `ownTier` (`schema.ts:392-414`) — the single canonical own-tier computation;
+  call it, never re-derive tier logic.
+- `captureScore` / `divergenceScore` / `irreversibilityScore`
+  (`attention.ts:98-135`) — kept as-is; only the attribution point moves.
+- `TIERS` / `AUTHORABLE_TIERS` / `DEFAULT_TIER` (`schema.ts:29-35`) — the tier
+  vocabulary for the boost-map keys.
+- `writeNode` / `readNode` (`src/store.ts`) — the round-trip gate for the new
+  storage shape; `validateNode` remains the single validation entry point.
+- `lib-store-at-ref.ts` (`packages/intentionsutil/scripts/lib-store-at-ref.ts`)
+  — loads the store at a git ref for Unit 5's before/after diff.
+- Test fixture builders `anode()` / `svnode()` / `kinds()`
+  (`test/attention.test.ts:6-84`) — reuse, do not hand-roll new literals.
+- `.claude/rules/test-integrity.md` — every retired mechanism's tests are
+  **replaced with coverage of what subsumes them**, never skipped or deleted to
+  green.
 
-This tactic absorbed the tier-isolation check previously noted on
-`tactic-priority-provenance-schema`: `attention.ts`'s tier-isolation filter
-(lines 531–534) drops a strictly-lower-tier source's claim from a
-higher-tier node's `value`. The open question was whether a lower-tier
-strategy can define a band for a tier-lifted tactic.
+## Verification
 
-**Answer: yes, and the design above depends on it.** Deriving `band` by the
-monotone fixpoint *outside* the tier-isolation filter means a tier-2 tactic
-keeps the band of its tier-1 strategy. Without that, the band would vanish
-at exactly the moment a tactic is lifted, and the whole namespacing bound
-would be inert at tiers 2 and 3. No separate `bug_fix` is owed — the
-resolution is part of the band derivation, as intended.
+```verify
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+```
 
-### Interim state — boost magnitudes were compressed by hand (2026-08-11)
+```verify
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app office-hours
+```
 
-The bound this tactic makes structural was, until this change, defeated in
-live state: the resolver's flat additive sum let bootstrap-era hand-set
-boosts lift `owner: ai` tactics clean out of their strategy's band. Measured
-on the graph the day the two RSI child strategies landed, **2139 ordered
-tactic pairs were inverted** by an authored tactic boost — a tactic of a
-lower-ranked strategy outranking a tactic of a higher-ranked one.
+```verify
+npx vitest run --project packages/intentionsutil --root .
+```
 
-As a stopgap until this tactic lands, the magnitudes of **all 42 open
-tactics carrying an authored boost** were compressed onto a `0.01`-per-level
-ladder, ascending, assigned per band. That is far below the minimum adjacent
-gap between distinct strategy authored levels (`0.5`, measured the same day),
-so a compressed boost can no longer cross a band while the ordering *within*
-each band is preserved exactly. Boost-attributable inversions went 2139 → 0.
+```verify
+npx vitest run --project office-hours --root .
+```
 
-**This discharges verification item 4's enumeration gap.** That item asks the
-implementer to enumerate the bootstrap-era boost set as the first step,
-noting it "is not listed anywhere." It is now listed, durably and per-node:
-every compressed node carries its original magnitude at
-**`attributes.pre_namespacing_boost`**, and its `attention.rationale` carries
-a dated `NAMESPACING STOPGAP` paragraph naming the old and new values. Query
-that field to recover the set rather than reconstructing it from git history.
+The live store is the real parser fixture: this must pass unchanged, proving the
+legacy `boost:`/`override:` forms in all 91 attention-carrying node files still
+parse under the new shape and that rule 20's removal broke no other rule.
 
-**What this tactic owes the stopgap:** once `(tier, band, residual)` ordering
-is structural, the compression is no longer needed to hold the bound, and the
-`0.0x` residuals are too coarse to express meaningful within-band priority.
-Restore each node's residual from `attributes.pre_namespacing_boost`, rescaled
-into whatever range the residual component takes, then delete the field and
-the stopgap paragraph. Leaving the compressed values in place would silently
-flatten the within-band priority the author and `/rsi-evaluate` express.
+```verify
+npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+```
 
-**What the stopgap could NOT fix — and why it is this tactic's problem.**
-Two crossings survive, and neither node carries a boost at all:
+```verify
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
 
-| node | value | its band | why |
-|---|---|---|---|
-| `tactic-dispatch-skill-standards-extraction` | 11.33 | 7 | authored term **sums** across distributors |
-| `tactic-office-hours-graph-type-passthrough` | 8.5 | 6.33 | same |
+Manual and judgment checks:
 
-Both serve more than one strategy, and `resolveAttention`'s authored term
-adds every distributing strategy's contribution rather than taking the
-maximum. The recorded doctrine is explicit that this is wrong — the author's
-resolution was *"highest-ranked distributing strategy (max across
-distributors, never the sum)"* — so the resolver currently contradicts it.
-No boost edit can reach this: the value is pure inherited sum. **Fixing the
-multi-distributor combinator to `max` belongs to this tactic's scope**, and
-those two nodes are its ready-made regression cases.
+- **Selector smoke over the live store.** Run
+  `npx tsx packages/intentionsutil/scripts/select-targets.ts` and confirm it
+  emits a non-empty candidate list whose head is defensible work, with each
+  candidate carrying a full `(tier, band, score, depth)` key. An empty list, or
+  a head chosen by depth alone, means the relation or the done rule is wrong.
+- **Office-hours queue smoke.** Run
+  `npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list` and
+  confirm four tab-separated columns in the pinned order and a plausible
+  ordering; the parked queue is read by two shell parsers that fail silently on
+  a reorder.
+- **The Unit 5 before/after queue diff**, recorded in the PR body with the
+  author-facing judgment about whether the reinterpreted bootstrap boosts
+  produce the intended top of queue. This is the substantive verification; the
+  suites above only prove internal consistency.
+- **Do not cite a zero cross-band inversion count as evidence.** It is
+  structural (band dominates score lexicographically), not empirical. State it
+  as structural if it appears in the PR body at all.
+- **Sibling handoff check.** Confirm the PR leaves
+  `tactic-attention-per-tier-boost-migration` able to proceed: the sparse
+  per-tier map exists, an unauthored tier is distinguishable from an authored
+  lowest value, and the two legacy parse branches are commented with that node's
+  id as their removal owner.
 
-**Re-measured 2026-08-12 — these are no longer ORDERING regression cases.**
-Measured on `origin/main` at `fb1dc4cc`, after the band/residual derivation
-was settled (see "Band and residual — settled" above), against the live
-summing resolver:
+---
 
-| node | own boost | value (summed) | band (max) | residual (corrected) |
-|---|---|---|---|---|
-| `tactic-dispatch-skill-standards-extraction` | 0 | 11.33 | 7.00 | 0.33 |
-| `tactic-office-hours-graph-type-passthrough` | 0 | 8.50 | 6.33 | 0.50 |
+## Findings recorded this round (2026-08-12 `/align-tactics` finalize)
 
-Neither node carries an authored boost of its own, so its whole `authored`
-term is inherited. Under the corrected residual — `value` minus the
-**inherited** authored contribution, i.e. own boost + own `signal` + own
-`capture` — the summed quantity **drops out of the rank key entirely**: the
-band is already a `max` across distributors (7.00, 6.33) and the residual is
-computed from the node's own terms alone (0.33, 0.50, both pure `capture`).
-The corrected residual therefore neutralizes the sum on the ordering path
-**without** touching the combinator.
+Three observations surfaced by this round's drift review. All three are
+**immaterial** — none changes the design or blocks the plan — and they are
+recorded here rather than on `strategy-graph-drives-dispatch` because a
+per-node `/align-tactics <tactic-id>` session never edits the serving
+strategy's frontmatter.
 
-So the crossings these two illustrate are no longer reachable through
-ordering, and it would be wrong to plan them as ordering regression cases.
-**What remains owed is a `value`-honesty defect, not an ordering one.**
-`resolveAttention` still reports 11.33 for a node whose highest-ranked
-distributor resolves to 7.00, which still contradicts the recorded
-max-across-distributors doctrine, and bare `value` is what the consumers
-listed in migration step 3 read directly — `hold-alerts.ts` most sharply,
-since it builds its own `Rank[]` of `{tier, value}` and applies a **top-K
-cutoff**, so an inflated 11.33 selects the wrong nodes no matter how the
-selector sorts. `renderFrontier`, `officeHours.ts`, and `render-rsi-plan.ts`
-read it too.
+1. **This node ORPHANS a live sibling rather than satisfying it.**
+   `tactic-select-targets-redundant-attention-resolve` is an advisory,
+   non-Required cost/perf follow-up proposing that `selectGraphTargets` hoist a
+   redundant `effectivePrecedence` resolve. Unit 3 **deletes**
+   `effectivePrecedence` outright, so that follow-up's premise disappears when
+   this node lands — it is not satisfied, it becomes moot. Flagged, **not
+   actioned**: this plan neither absorbs nor closes it. Disposition (prune as
+   moot, or re-file against whatever replaces the lift) is the author's, in the
+   align/office-hours lane.
 
-**Net effect on this tactic's scope:** the `sum`→`max` fix stays in scope and
-these two nodes stay as its regression cases, but the assertion under test
-changes — from *"a tactic does not invert cross-strategy order"* to *"`value`
-equals the maximum distributing strategy's contribution, never their sum."*
-Write the regression that way.
+2. **One rank consumer is missing from Unit 4's list.**
+   `packages/intentionsutil/scripts/render-rsi-plan.ts:142-217` parses
+   `office-hours-select.ts`'s tab-separated queue row **by regex**, with a
+   column-count check at line 168. Unit 4 names `office-hours-graph` and
+   `dispatch-terminal-gap-audit` as the parsers the 4-column contract must hold
+   for; `render-rsi-plan.ts` is a **third** parser and must be checked in the
+   same breath. It also parses the `NOTE` line, so Unit 4's rewrite of
+   `formatLiftNote` into a band note has to be reflected there too. More
+   generally: the node's own rewrite-surface measurement counted only the
+   **authored**-shape readers (`attention.tier` in two places, `boost`/`override`
+   in five); the **resolved**-shape surface the quadruple actually breaks is
+   wider — four in-process consumers, three of which carry independent
+   hand-rolled copies of the same lexicographic `(tier, value)` compare
+   (`router.ts`'s `Precedence`/`maxPrecedence`, `hold-alerts.ts`'s
+   `Rank`/`compareRankDesc`/`atOrAbove`, `officeHours.ts`'s
+   `AttentionKey`/`liftsKey`/`surfacingKey`/`compareQueueMembers`) — plus the
+   one script-to-script text contract above. Units 3 and 4 already target all
+   four in-process consumers; this note exists so the text contract is not
+   missed.
 
-Method note for whoever re-measures: the same probe counted 75 cross-band
-inversions among open tactics under the old flat `(tier, value)` key and 0
-under `(tier, band, residual)`. The 75 is a real measurement; the **0 is
-structural, not empirical** — band dominates residual lexicographically, so a
-lower-band tactic can never outrank a higher-band one by construction. Do not
-cite that 0 as evidence the key was validated against data. It is the same
-unfalsifiability `tactic-review-band-derivation-ratification` exists to put
-back to the author.
-
-A further class is out of reach of boosts and is *not* claimed as fixed here:
-the `signal` and `capture` terms are computed per-node and do not flow down
-through distribution, so a strategy's resolved rank can exceed the authored
-value its tactics inherit by up to 2. That is why ~1828 pair inversions
-remain against strategy *resolved* rank. Whether `band` derives from the
-strategy's authored term or its full resolved value was left open here; it is
-now **settled — resolved value**. See the next section, which supersedes this
-paragraph's open question and the earlier draft's "the design above says
-authored".
-
-### Band and residual — settled (2026-08-12)
-
-This node was parked on 2026-08-11 because its own body contradicted itself
-on the rank key, and the definition lives on a doctrine node a tactic may not
-rewrite. The office-hours round of 2026-08-12 settled it; `kind-kind`'s
-rank-algebra clarification and `strategy-rsi-delegated-prioritization`'s
-`success_signal` carry the authoritative record, and this section restates it
-so a clean session implementing from this node alone is not misled.
-
-**`band` = the distributing strategy's RESOLVED rank.** Unchanged from
-`kind-kind` — that half was already correct and is ratified.
-
-**`residual` = the node's `value` minus the authored contribution INHERITED
-from its distributors** = its own authored boost + its own `signal` term +
-its own `capture` term. This *corrects* the earlier "value minus its band".
-
-**Why they are not the same thing.** `resolveAttention`'s authored fixpoint
-distributes ancestors' **authored** claims only
-(`packages/intentionsutil/src/attention.ts`, lines 417–437); `signal` and
-`capture` are computed per node and never flow downward (lines 553–556). A
-strategy's resolved rank therefore contains `signal`/`capture` weight its
-tactics never inherited. Subtracting the whole band would subtract weight
-that was never added — driving the residual **negative** (the recorded
-`MINUS 1` case: `strategy-rsi-plan-surface`'s tactics sit in band 9 carrying
-an authored 8) and leaking the distributing strategy's own terms back into
-ordering *within* the band, which is precisely the artifact the residual
-exists to remove.
-
-**Why resolved rank and not the authored term.** Three reasons, in order of
-force:
-
-1. **It is what makes `success_signal` (b) reachable.** Under `band =
-   resolved rank`, `band` dominates `residual` lexicographically, so a tactic
-   can never outrank a tactic of a higher-resolved-rank strategy — the
-   cross-strategy inversion count against resolved rank is *structurally*
-   zero once this lands. Under `band = authored term`, the ~1828 inversions
-   measured against resolved rank stay live and the threshold ("both counts
-   in (b) stay at zero") could never be met.
-2. **It preserves this node's own greenfield assertion** that strategies live
-   on a single flat additive scale, *unchanged from today*. A strategy's own
-   band is its resolved rank, so strategy-vs-strategy order stays exactly
-   today's `value` order, with the residual acting only as a tiebreak. An
-   authored-term band would instead make a strategy's own key the
-   lexicographic pair `(authored, signal+capture)` and **reorder strategies
-   against each other** — which that assertion forbids. This cost was not
-   surfaced when the question was first framed.
-3. **It requires no change to `kind-kind`'s band definition** — only the
-   residual derivation was wrong.
-
-**Implementation obligations this creates.** State the derivation explicitly
-in code rather than letting it fall out: compute the residual from the
-inherited-authored quantity, not by subtracting the band. And **re-measure
-the ~1828 figure** before using it as a baseline — it predates the
-multi-distributor `sum`→`max` fix this same tactic owns, so the two changes
-interact and the figure is stale as a target.
-
-**Held on trust.** The author accepted this resolution rather than deriving
-it, so it is enrolled for re-validation as the born-parked office-hours
-review sitting `tactic-review-band-derivation-ratification`.
+3. **Verification method — which cited figures a grep can and cannot
+   reproduce.** Statically reproducible, and re-confirmed this round: the 19
+   `recovers` edges across 22 delegations, the 5-node tier-2 population (4
+   `bug_fix` marks, 1 `security`), `kind-delegation` carrying no
+   `goal_layer: true`, and rule 18 restricting authored `attributes.tier: 3` to
+   `strategy-main-health` alone. **Not** reproducible by grep: the "tier 3 is 5
+   more nodes" count with its `(9, 8, 8, 4, 3)` distinct-ancestor ordering, the
+   273-vs-122 per-path-versus-dedup max-score comparison, and the ~1828
+   inversion figure — all are resolved-tier/resolved-score quantities requiring
+   a run of `resolveAttention` over the whole node set. Nothing contradicts
+   them; they are unverified statically, not falsified. Any verification step
+   that needs one of them must **execute the resolver**, never a grep.
