@@ -81,6 +81,16 @@ cat >"$PGREP_STUB" <<'STUB'
 exit 0
 STUB
 chmod +x "$PGREP_STUB"
+# The complement, for the one case that needs the BLOCKED-read shape: an
+# exactly-`[]` payload with no daemon process to corroborate it. That is what
+# the sandbox produces, and the library folds it into UNKNOWN rather than "no
+# sessions". Cases point the seam here and back explicitly.
+PGREP_ABSENT_STUB="$TMP/pgrep-absent-stub"
+cat >"$PGREP_ABSENT_STUB" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$PGREP_ABSENT_STUB"
 export CLAUDE_AGENTS_PGREP_CMD="$PGREP_STUB"
 
 # --- Stubs -----------------------------------------------------------------
@@ -107,6 +117,13 @@ echo '[]' >"$AGENTS_ALL_JSON"
 REGISTERED_ROW='[{"pid":4242,"id":"bbbb","cwd":"/x","sessionId":"bbbb-1","name":"tactic-fixture-node","status":"busy","state":"working"}]'
 printf '%s\n' "$REGISTERED_ROW" >"$AGENTS_JSON"
 AGENTS_ARGV="$TMP/agents.argv"   # every registry query, one argv line per call
+# The ACTIVE view's exit code, so a case can make the post-launch verify
+# UNREADABLE (a `claude` that exits non-zero) without disturbing the REGISTERED
+# view the pre-launch claim gate reads. Without this seam the two would move
+# together and every unreadable-registry case would exit 13 at the claim gate
+# instead of reaching the verify under test.
+AGENTS_RC="$TMP/agents.rc"
+echo 0 >"$AGENTS_RC"
 CLAUDE_STUB="$TMP/claude-stub"
 cat >"$CLAUDE_STUB" <<STUB
 #!/usr/bin/env bash
@@ -115,6 +132,7 @@ for a in "\$@"; do
   [[ "\$a" == "--all" ]] && { cat "$AGENTS_ALL_JSON"; exit 0; }
 done
 cat "$AGENTS_JSON"
+exit "\$(cat "$AGENTS_RC")"
 STUB
 chmod +x "$CLAUDE_STUB"
 export CLAUDE_AGENTS_CMD="$CLAUDE_STUB"
@@ -151,6 +169,8 @@ run_case() { # <label> <select-line> <exec-line> <want-exit> <want-stdout-prefix
   # registered after it. Cases that need otherwise set them explicitly.
   echo '[]' >"$AGENTS_ALL_JSON"
   printf '%s\n' "$REGISTERED_ROW" >"$AGENTS_JSON"
+  echo 0 >"$AGENTS_RC"
+  export CLAUDE_AGENTS_PGREP_CMD="$PGREP_STUB"
   : >"$AGENTS_ARGV"
   rm -f "$DISPATCH_RESERVATION_DIR"/* 2>/dev/null
   local out rc
@@ -238,7 +258,8 @@ run_case "an unknown disposition throws rather than passing (exit 11)" \
 # holds the claim for the handoff TTL. These cases pin the verify that turns
 # it into an immediate, named throw.
 
-# The registry stays empty after a reported launch: nothing was started.
+# The registry ANSWERS and stays empty after a reported launch: nothing was
+# started. A definite read, so this is real evidence of a phantom spawn.
 # Not via run_case — that helper restores the "session registered" default.
 printf '%s\n' "$SPEC" >"$SELECT_OUT"
 printf 'launched tactic-fixture-node /qa-fix\n' >"$EXEC_OUT"
@@ -259,6 +280,75 @@ else
   fail "the reservation should be cleared on an unverified launch; got: $(cat "$DISPATCH_RESERVATION_DIR/tactic-fixture-node")"
 fi
 printf '%s\n' "$REGISTERED_ROW" >"$AGENTS_JSON"
+
+# --- Unreadable registry: unverifiABLE, and the claim is KEPT ---------------
+# THE DISTINCTION, and the reason the case above had to be re-labelled: the
+# verify's `not registered` and `could not ask` used to be the same failure.
+# Releasing the reservation is only safe on the first — on the second a real
+# worker may be mid-boot behind an unanswerable daemon, and dropping the claim
+# re-opens the duplicate-worker window the pre-launch gate (where `unknown`
+# counts as occupied) exists to close. Two shapes of unreadable, one verdict.
+#
+# unverifiable_case <label> <setup-fn> — assert the throw token, the exit code,
+# and that the marker SURVIVES. The marker is what the assertion is really
+# about; the token is how the operator learns why.
+unverifiable_case() { # <label> <setup-fn> <exec-line>
+  local label="$1" setup="$2" ex="$3"
+  printf '%s\n' "$SPEC" >"$SELECT_OUT"
+  printf '%s\n' "$ex" >"$EXEC_OUT"
+  echo '[]' >"$AGENTS_ALL_JSON"
+  printf '%s\n' "$REGISTERED_ROW" >"$AGENTS_JSON"
+  echo 0 >"$AGENTS_RC"
+  export CLAUDE_AGENTS_PGREP_CMD="$PGREP_STUB"
+  rm -f "$DISPATCH_RESERVATION_DIR"/* 2>/dev/null
+  "$setup"
+  local out rc
+  out=$("$ADVANCE" tactic-fixture-node 2>/dev/null); rc=$?
+  # Restore the defaults before asserting, so a failing case cannot leak its
+  # registry shape into every case after it.
+  echo 0 >"$AGENTS_RC"
+  export CLAUDE_AGENTS_PGREP_CMD="$PGREP_STUB"
+  printf '%s\n' "$REGISTERED_ROW" >"$AGENTS_JSON"
+  if [[ "$rc" == 11 && "$out" == "throw tactic-fixture-node launch-unverifiable" ]]; then
+    ok "$label — throws launch-unverifiable (exit 11)"
+  else
+    fail "$label — expected exit 11 with 'throw tactic-fixture-node launch-unverifiable', got exit $rc / '$out'"
+  fi
+  if [[ -f "$DISPATCH_RESERVATION_DIR/tactic-fixture-node" ]]; then
+    ok "$label — the reservation is RETAINED, to age out under its TTL"
+  else
+    fail "$label — the reservation must NOT be cleared on an unreadable registry; it was"
+  fi
+  rm -f "$DISPATCH_RESERVATION_DIR"/* 2>/dev/null
+}
+
+# Shape 1: `claude` exits non-zero on the ACTIVE view — the daemon is down, or
+# the binary is missing (127). The REGISTERED view still answers, so the
+# pre-launch claim gate passes and the case reaches the verify under test.
+setup_active_view_fails() { echo 7 >"$AGENTS_RC"; }
+unverifiable_case "a daemon that cannot be queried" setup_active_view_fails \
+  'launched tactic-fixture-node /qa-fix'
+
+# Shape 2: an UNCORROBORATED `[]` — byte-identical to the definite-empty
+# payload above, separated only by whether a `claude daemon` process is
+# visible. This is the sandbox shape (.claude/rules/sandbox.md), the single
+# most likely way this lane meets an unreadable registry in practice. The
+# REGISTERED view is given a non-matching ROW rather than `[]`, because a
+# non-empty array is self-corroborating: without it the same absent probe would
+# make the pre-launch occupancy read UNKNOWN and the run would halt 13 before
+# ever spawning.
+setup_uncorroborated_empty() {
+  printf '%s\n' '[{"pid":1,"id":"zzzz","cwd":"/x","sessionId":"zzzz-1","name":"an-unrelated-session","status":"busy","state":"working"}]' >"$AGENTS_ALL_JSON"
+  echo '[]' >"$AGENTS_JSON"
+  export CLAUDE_AGENTS_PGREP_CMD="$PGREP_ABSENT_STUB"
+}
+unverifiable_case "an uncorroborated empty read (the sandbox shape)" setup_uncorroborated_empty \
+  'launched tactic-fixture-node /qa-fix'
+
+# conflict-lane runs the same verify and must split the same way.
+unverifiable_case "an unreadable registry on the conflict lane" setup_active_view_fails \
+  'conflict-lane tactic-fixture-node'
+echo '[]' >"$AGENTS_ALL_JSON"
 
 # The complement: the same launch line, with the session actually registered.
 run_case "a launch with the session registered is exit 0" \
