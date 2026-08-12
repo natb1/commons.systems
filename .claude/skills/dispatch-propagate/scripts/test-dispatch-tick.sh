@@ -488,7 +488,7 @@ assert_eq "paused-merge-red: exit 0" "0" "$rc"
 assert_eq "paused-merge-red: graph-auto-merge invoked unconditionally" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
 assert_eq "paused-merge-red: paused branch does NOT read the main-red latch itself" "0" \
-  "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo 1 || echo 0)"
+  "$([ -f "$TMPDIR_TEST/logs/main-red-sync.log" ] && echo 1 || echo 0)"
 assert_eq "paused-merge-red: reconcile-graph-merged WAS invoked" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
 tick_teardown
