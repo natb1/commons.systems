@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# dispatch-emulate-await — wait for one node's phase session to finish, then
+# dispatch-ladder-await — wait for one node's phase session to finish, then
 # ask origin/main what actually happened.
 #
-# The other half of the dispatch-emulation loop (built by
-# `intentions/tactic-rsi-implement-skill.md`); `dispatch-emulate-advance`
+# The other half of the dispatch-ladder loop (built by
+# `intentions/tactic-rsi-implement-skill.md`); `dispatch-ladder-advance`
 # launches, this waits and verifies. It makes no graph writes, no merges, and
-# no decisions — it reports one of five outcomes and lets the calling thread
-# (`/dispatch-emulate`, invoked directly or by `/rsi`) judge.
+# no decisions — it reports one of six outcomes and lets the calling thread
+# (`/dispatch-ladder`, invoked directly or by `/rsi`) judge.
 #
 # NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
 # owns every merge (strategy condition, and the node's own plan). A wait loop is
@@ -55,10 +55,10 @@
 # treated as "still running" and keeps polling — never as "finished", which
 # would send the loop on to the next phase while a worker is live.
 #
-# Usage: dispatch-emulate-await <node-id> <from-phase>
+# Usage: dispatch-ladder-await <node-id> <from-phase>
 #                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
 #
-#   <from-phase>       the phase dispatch-emulate-advance printed. The
+#   <from-phase>       the phase dispatch-ladder-advance printed. The
 #                      transition check asks whether the node has moved off
 #                      it.
 #   --timeout-s <n>    give up waiting after n seconds (default 540). The
@@ -73,6 +73,9 @@
 #
 # Stdout, one line:
 #   advanced <id> <from> -> <to-known-via>   the node moved off <from>.
+#   reviewed <id> review -> pending-merge    the review completed clean. It
+#                                            writes a marker, not a phase, so
+#                                            the node is STILL at `review`.
 #   pruned <id>                              the node is gone from origin/main —
 #                                            completed and pruned.
 #   throw <id> <reason>                      parked, or a held session.
@@ -81,9 +84,9 @@
 #   running <id> <from>                      still working at the timeout.
 #
 # Exit codes:
-#   0   advanced or pruned — the loop may take another step.
+#   0   advanced, reviewed or pruned — the loop may take another step.
 #   11  throw: the node is parked, or a session is held un-reaped. Both need the
-#       calling thread (`/dispatch-emulate`, invoked directly or by `/rsi`);
+#       calling thread (`/dispatch-ladder`, invoked directly or by `/rsi`);
 #       neither is retried here.
 #   12  stalled: the session ended with no graph change. Needs judgment — it is
 #       the shape a silently-failed phase takes, and retrying blindly would
@@ -117,7 +120,7 @@ NODE_ID=""
 FROM_PHASE=""
 
 usage() {
-  echo "usage: dispatch-emulate-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
+  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
   exit 2
 }
 
@@ -126,11 +129,11 @@ while [[ $# -gt 0 ]]; do
     --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
     --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
     --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
-    --*)            echo "dispatch-emulate-await: unknown flag $1" >&2; usage ;;
+    --*)            echo "dispatch-ladder-await: unknown flag $1" >&2; usage ;;
     *)
       if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
       elif [[ -z "$FROM_PHASE" ]]; then FROM_PHASE="$1"
-      else echo "dispatch-emulate-await: unexpected argument $1" >&2; usage
+      else echo "dispatch-ladder-await: unexpected argument $1" >&2; usage
       fi
       shift ;;
   esac
@@ -138,19 +141,19 @@ done
 
 [[ -n "$NODE_ID" && -n "$FROM_PHASE" ]] || usage
 [[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
-  echo "dispatch-emulate-await: invalid node id '$NODE_ID'" >&2; exit 2; }
+  echo "dispatch-ladder-await: invalid node id '$NODE_ID'" >&2; exit 2; }
 [[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
-  echo "dispatch-emulate-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+  echo "dispatch-ladder-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
 
 PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
-  echo "dispatch-emulate-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  echo "dispatch-ladder-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
   exit 2
 fi
 
 VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
 [[ -x "$VERIFY_LANDED" ]] || {
-  echo "dispatch-emulate-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
+  echo "dispatch-ladder-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
 
 # --- Session state ---------------------------------------------------------
 # Echoes one of: working | done-held | absent | unknown.
@@ -208,6 +211,29 @@ graph_verdict() {
     *) printf 'unknown\n'; return 0 ;;
   esac
 
+  # A CLEAN REVIEW WRITES NO PHASE. review-fix's completion is the `reviewed`
+  # marker in `execution.markers` (REVIEWED_MARKER,
+  # packages/intentionsutil/src/transitions.ts), landed by `transition-node` as a
+  # state-only graph-commit; the node deliberately STAYS at `review` until the
+  # merge lane absorbs it. Without this check the phase comparison below calls a
+  # finished review `stalled`, and the ladder halts one step short of
+  # merge-and-absorb.
+  #
+  # Gated on the from-phase because markers ACCUMULATE and are never cleared: a
+  # node awaited at `qa` or `main-qa` still carries the `reviewed` marker from
+  # its earlier review pass, so an ungated check would report it complete and
+  # mask a genuine stall.
+  if [[ "$FROM_PHASE" == "review" ]]; then
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+      --jq '(.execution.markers // []) | index("reviewed") != null' >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+      0) printf 'reviewed\n'; return 0 ;;
+      4) ;;
+      *) printf 'unknown\n'; return 0 ;;
+    esac
+  fi
+
   "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
     --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1
   rc=$?
@@ -224,26 +250,30 @@ report_graph_verdict() { # <session-note>
   case "$verdict" in
     pruned)
       echo "pruned $NODE_ID"
-      echo "dispatch-emulate-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
+      echo "dispatch-ladder-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
       exit 0 ;;
     parked)
       echo "throw $NODE_ID parked"
-      echo "dispatch-emulate-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-emulate, invoked directly or by /rsi) conducts the engagement; this script never clears a park." >&2
+      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly or by /rsi) conducts the engagement; this script never clears a park." >&2
       exit 11 ;;
     blocked)
       echo "throw $NODE_ID blocked-by"
-      echo "dispatch-emulate-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
+      echo "dispatch-ladder-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
       exit 11 ;;
+    reviewed)
+      echo "reviewed $NODE_ID review -> pending-merge"
+      echo "dispatch-ladder-await: $NODE_ID carries the 'reviewed' marker at origin/main ($note) — the review completed clean. It stays at phase 'review' by design; the next step is the merge-and-absorb, not another phase session." >&2
+      exit 0 ;;
     advanced)
       echo "advanced $NODE_ID $FROM_PHASE -> origin/main"
       exit 0 ;;
     unchanged)
       echo "stalled $NODE_ID $FROM_PHASE"
-      echo "dispatch-emulate-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
+      echo "dispatch-ladder-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
       exit 12 ;;
     *)
       echo "throw $NODE_ID unknown-graph-read"
-      echo "dispatch-emulate-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
+      echo "dispatch-ladder-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
       exit 14 ;;
   esac
 }
@@ -271,8 +301,8 @@ if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
   # is the same "trust an unanswerable probe" failure rsi-claim refuses to make.
   # Report `running` instead — the caller re-runs, and nothing is claimed.
   echo "running $NODE_ID $FROM_PHASE"
-  echo "dispatch-emulate-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
-  echo "dispatch-emulate-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
+  echo "dispatch-ladder-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
+  echo "dispatch-ladder-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
   exit 20
 fi
 
@@ -296,11 +326,11 @@ while (( SECONDS < DEADLINE )); do
       # session is a throw either way: it occupies a worker slot and keeps the
       # node unselectable until a human releases it.
       echo "throw $NODE_ID held-session"
-      echo "dispatch-emulate-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
-      echo "dispatch-emulate-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
+      echo "dispatch-ladder-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
+      echo "dispatch-ladder-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
       "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" \
         --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1 && \
-        echo "dispatch-emulate-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
+        echo "dispatch-ladder-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
       exit 11
       ;;
   esac
@@ -308,5 +338,5 @@ while (( SECONDS < DEADLINE )); do
 done
 
 echo "running $NODE_ID $FROM_PHASE"
-echo "dispatch-emulate-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call dispatch-emulate-await again with the same arguments." >&2
+echo "dispatch-ladder-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call dispatch-ladder-await again with the same arguments." >&2
 exit 20

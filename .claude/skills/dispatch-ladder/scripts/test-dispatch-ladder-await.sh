@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Unit tests for dispatch-emulate-await — the wait-and-verify half of the
-# dispatch-emulation loop.
+# Unit tests for dispatch-ladder-await — the wait-and-verify half of the
+# dispatch-ladder loop.
 #
 # Two things are worth testing and both are invisible in production until they
 # are wrong:
@@ -15,6 +15,10 @@
 #      outrank the phase change. Both orderings are asserted here, because
 #      getting them backwards produces a plausible-looking wrong answer rather
 #      than an error.
+#   3. THE `reviewed` MARKER, AND ITS FROM-PHASE GATE. A clean review writes a
+#      marker instead of a phase, so it looks exactly like a stall to a
+#      phase-only check — and markers are never cleared, so a marker-only check
+#      would call every later phase complete. Both halves are asserted.
 #
 # The Claude registry and verify-landed are both stubbed — no daemon, no
 # network, no gh. Polling is driven at --poll-s 1 so the suite runs in seconds.
@@ -35,22 +39,22 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- Fixture ---------------------------------------------------------------
 PROJECT="$TMP/project"
-EMULATE_SCRIPTS="$PROJECT/.claude/skills/dispatch-emulate/scripts"
+LADDER_SCRIPTS="$PROJECT/.claude/skills/dispatch-ladder/scripts"
 DISPATCH="$PROJECT/.claude/skills/dispatch-propagate/scripts"
 IUTIL="$PROJECT/packages/intentionsutil/scripts"
-mkdir -p "$EMULATE_SCRIPTS" "$DISPATCH" "$IUTIL"
+mkdir -p "$LADDER_SCRIPTS" "$DISPATCH" "$IUTIL"
 
-cp "$SCRIPT_DIR/dispatch-emulate-await" "$EMULATE_SCRIPTS/dispatch-emulate-await"
-chmod +x "$EMULATE_SCRIPTS/dispatch-emulate-await"
+cp "$SCRIPT_DIR/dispatch-ladder-await" "$LADDER_SCRIPTS/dispatch-ladder-await"
+chmod +x "$LADDER_SCRIPTS/dispatch-ladder-await"
 for lib in lib-claude-agents.sh lib-reservation-ledger.sh lib-graph-worktree.sh lib.sh; do
   src="$SCRIPT_DIR/../../dispatch-propagate/scripts/$lib"
   [[ -f "$src" ]] && cp "$src" "$DISPATCH/$lib"
 done
 
-AWAIT="$EMULATE_SCRIPTS/dispatch-emulate-await"
+AWAIT="$LADDER_SCRIPTS/dispatch-ladder-await"
 export DISPATCH_GRAPH_MAIN_WORKTREE="$PROJECT"
 
-# See test-dispatch-emulate-advance.sh: the empty-read corroboration needs a visible daemon,
+# See test-dispatch-ladder-advance.sh: the empty-read corroboration needs a visible daemon,
 # and CI has none. Stub the probe so the suite does not depend on whether a real
 # Claude daemon happens to be running on the host.
 PGREP_STUB="$TMP/pgrep-stub"
@@ -71,11 +75,12 @@ chmod +x "$CLAUDE_STUB"
 export CLAUDE_AGENTS_CMD="$CLAUDE_STUB"
 
 # verify-landed. Its three answers (0 landed / 4 not-landed / 1 unknown) are
-# what dispatch-emulate-await maps, so the stub is keyed on the spec it is asked about: each
+# what dispatch-ladder-await maps, so the stub is keyed on the spec it is asked about: each
 # case writes the exit code it wants for `absent`, `office_hours`, `blocked_by`,
-# and `phase`.
+# `markers` and `phase`.
 RC_ABSENT="$TMP/rc.absent"; RC_PARKED="$TMP/rc.parked"
 RC_BLOCKED="$TMP/rc.blocked"; RC_PHASE="$TMP/rc.phase"
+RC_REVIEWED="$TMP/rc.reviewed"
 cat >"$IUTIL/verify-landed" <<STUB
 #!/usr/bin/env bash
 args="\$*"
@@ -83,15 +88,19 @@ case "\$args" in
   *"--blob absent"*)   exit "\$(cat "$RC_ABSENT")" ;;
   *office_hours*)      exit "\$(cat "$RC_PARKED")" ;;
   *blocked_by*)        exit "\$(cat "$RC_BLOCKED")" ;;
+  *markers*)           exit "\$(cat "$RC_REVIEWED")" ;;
   *.phase*)            exit "\$(cat "$RC_PHASE")" ;;
 esac
 exit 1
 STUB
 chmod +x "$IUTIL/verify-landed"
 
-set_graph() { # <absent-rc> <parked-rc> <blocked-rc> <phase-rc>
+# The reviewed-marker rc is last and optional: every pre-existing case predates
+# the marker check and wants its "no marker" answer (4).
+set_graph() { # <absent-rc> <parked-rc> <blocked-rc> <phase-rc> [<reviewed-rc>]
   echo "$1" >"$RC_ABSENT"; echo "$2" >"$RC_PARKED"
   echo "$3" >"$RC_BLOCKED"; echo "$4" >"$RC_PHASE"
+  echo "${5:-4}" >"$RC_REVIEWED"
 }
 # The ordinary "present, unparked, unblocked, still at <from>" graph.
 set_graph 4 4 4 4
@@ -103,13 +112,17 @@ REAPED='[]'
 WORKING='[{"pid":1,"id":"a","cwd":"/x","sessionId":"a-1","name":"tactic-fixture-node","status":"busy","state":"working"}]'
 HELD='[{"pid":1,"id":"a","cwd":"/x","sessionId":"a-1","name":"tactic-fixture-node","status":"idle","state":"done"}]'
 
+# The from-phase every run_await case is awaited at. Only the marker cases care
+# — the check that reads the `reviewed` marker is gated on it.
+FROM=qa
+
 run_await() { # <want-exit> <want-stdout-prefix> <label> [extra args...]
   local want_rc="$1" want_out="$2" label="$3"; shift 3
   local out rc
   # --boot-grace-s 1: every reaped-session case below has no worker to register,
   # so the full grace would be spent waiting for one that never comes. The grace
   # itself is exercised by its own case at the end.
-  out=$("$AWAIT" "$NODE" qa --poll-s 1 --boot-grace-s 1 "$@" 2>/dev/null)
+  out=$("$AWAIT" "$NODE" "$FROM" --poll-s 1 --boot-grace-s 1 "$@" 2>/dev/null)
   rc=$?
   if [[ "$rc" != "$want_rc" ]]; then
     fail "$label — expected exit $want_rc, got $rc (stdout: $out)"; return
@@ -167,6 +180,31 @@ run_await 14 "throw $NODE unknown-graph-read" "an unreadable graph is unknown, n
 
 set_graph 4 4 4 1
 run_await 14 "throw $NODE unknown-graph-read" "an unknown phase read is also exit 14"
+
+# --- The `reviewed` marker -------------------------------------------------
+# A clean review writes the marker and NO phase (transitions.ts returns
+# `{phase: "review", armMerge: true}`), so the node is still at `review` when the
+# work is done. Read by phase alone that is indistinguishable from a stall, and
+# the ladder would halt before the merge-and-absorb it exists to reach.
+FROM=review
+set_graph 4 4 4 4 0
+run_await 0 "reviewed $NODE review -> pending-merge" "a clean review is recognized by its marker, not by a phase change"
+
+# The marker is the ONLY evidence: without it an unmoved node at `review` is
+# still a stall, exactly as at any other phase.
+set_graph 4 4 4 4 4
+run_await 12 "stalled $NODE review" "review with no marker and no phase change is still stalled"
+
+set_graph 4 4 4 4 1
+run_await 14 "throw $NODE unknown-graph-read" "an unknown marker read is unknown, not a verdict (exit 14)"
+
+# THE GATE. Markers accumulate and are never cleared, so a node awaited at qa
+# carries the `reviewed` marker from its earlier review pass. Reading it there
+# would report a finished phase for a worker that did nothing — the stall this
+# script exists to surface, silently swallowed.
+FROM=qa
+set_graph 4 4 4 4 0
+run_await 12 "stalled $NODE qa" "a stale reviewed marker is ignored at any phase but review"
 
 # --- Held session ----------------------------------------------------------
 # `state: done` with the row still present means the worker stopped WITHOUT

@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# dispatch-ladder-spawn — launch dispatch-ladder-run for ONE node as a transient
+# `systemd-run --user` unit, so the caller returns immediately.
+#
+# The ladder run outlives any session that starts it: a single phase can take
+# 50 minutes and a full run hours. A Claude session cannot hold that (the Bash
+# tool's ceiling is 600s) and must not try — the two lost awaits that motivated
+# this skill were exactly that failure. systemd owns the process; the session
+# checks in with `dispatch-ladder-status`.
+#
+# Modeled closely on dispatch-spawn-tick, deliberately, with ONE divergence —
+# see NO OnFailure below.
+#
+# Usage: dispatch-ladder-spawn <node-id>
+#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
+#   Every flag after the node id is passed through to dispatch-ladder-run
+#   verbatim. They are validated HERE as well, because a malformed argv would
+#   otherwise be discovered only by a unit that fails seconds after launch, in
+#   a journal nobody is watching.
+#
+# NO SESSION ID IS PASSED THROUGH — deliberately, and there is no --setenv for
+# one. dispatch-ladder-run synthesizes its own `headless:<token>` holder id and
+# writes the PID sentinel that makes it resolvable as live, exactly as the
+# systemd-launched dispatch-tick does (#1068). Forwarding a launching session's
+# id would key the driver's selection lock on a session that ends long before
+# the ladder does.
+#
+# Fixed-unit-name dedup + --collect:
+#   The unit name is FIXED — `dispatch-ladder-<node-id>` — and the name IS the
+#   dedup: while a ladder for this node is running, a second
+#   `systemd-run --unit=dispatch-ladder-<id>` collides ("already exists") and we
+#   report that as a no-op (`deduped`, exit 0). There is no point running two
+#   drivers on one node, and dispatch-ladder-advance's claim discipline would
+#   refuse the second anyway.
+#   `--collect` garbage-collects a finished OR FAILED transient unit so the
+#   fixed name frees for the next run. --collect does not always GC a failed
+#   unit empirically (#2013), so before each launch we also `reset-failed` the
+#   name when `is-failed` reports it stale. The `is-failed` gate leaves a
+#   genuinely running ladder untouched, preserving the intentional `deduped`
+#   collision.
+#
+# NO OnFailure=dispatch-tick-recover.service — the deliberate divergence from
+# dispatch-spawn-tick. That handler is the TICK's recovery chain: it fires a
+# dispatch tick. A halted ladder must never fire a dispatch tick — the ladder
+# exists to walk a node the tick structurally cannot reach, and halting is its
+# designed terminal state, not an abnormality to be recovered from. Every halt
+# is a person's call (see dispatch-ladder-run's header); systemd re-entering
+# the scheduler on its own would be the opposite of that contract. So no
+# OnFailure, and no ensure_recover_unit install.
+#
+# --property=KillMode=process — LOAD-BEARING here. dispatch-ladder-run spawns
+# `claude --bg` phase workers (through dispatch-graph-execute →
+# dispatch-spawn-job), and on hosts without the durable
+# dispatch-claude-daemon.service those workers' bg hosts are born inside this
+# transient unit's cgroup. systemd's default KillMode=control-group would
+# SIGTERM the entire cgroup when the unit stops — so a throw mid-phase would
+# reap every live worker in the fleet, not just this ladder. `detached: true`
+# (setsid) does not help: setsid changes the session/process group, not the
+# cgroup. KillMode=process makes a stopping unit kill only dispatch-ladder-run
+# itself.
+#
+# --setenv=PATH="$PATH" propagates the launching caller's PATH. Without it the
+# unit inherits the systemd user manager's minimal default PATH, which omits
+# the nix store — so on NixOS/WSL /usr/bin/env cannot resolve bash (exit 127)
+# and the driver cannot find git/jq/gh/claude.
+#
+# --working-directory=<main worktree>: the ladder runs from the main checkout,
+# where every autonomous graph read is rooted.
+#
+# Stdout protocol (exactly one word on the success paths):
+#   spawned   the transient unit was created (exit 0).
+#   deduped   a ladder unit for this node is already running (exit 0).
+# Any other systemd-run failure echoes its stderr and passes the code through.
+#
+# Exit codes:
+#   0  spawned or deduped (stdout disambiguates).
+#   2  a malformed node id or driver flag; nothing is launched.
+#   non-zero — systemd-run failed for some other reason; its code passes through.
+#
+# Environment overrides for testability (mirroring dispatch-spawn-tick):
+#   DISPATCH_LADDER_SPAWN_SYSTEMD_RUN_CMD  the `systemd-run` binary.
+#   DISPATCH_LADDER_SPAWN_SYSTEMCTL_CMD    the `systemctl` binary.
+#   DISPATCH_LADDER_SPAWN_MAIN_WORKTREE    the main worktree path. When set, no
+#                                          git repo is required.
+#
+# A Bash-tool caller needs `dangerouslyDisableSandbox: true` — `systemd-run
+# --user` talks to the user's systemd over D-Bus, which the sandbox blocks.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn-tick).
+set -uo pipefail
+
+usage() {
+  echo "usage: dispatch-ladder-spawn <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]" >&2
+  exit 2
+}
+
+# ---- Step 0: parse and validate ---------------------------------------------
+# The node id is interpolated into the unit name and the driver's argv, so it is
+# validated against the same slug regex dispatch-ladder-advance and
+# provision-node-worktree apply. The driver flags are validated too: a bad one
+# would otherwise surface as a unit that dies immediately.
+[[ $# -ge 1 ]] || usage
+NODE_ID="$1"; shift
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "dispatch-ladder-spawn: invalid node id '$NODE_ID'" >&2; usage; }
+
+DRIVER_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-s|--max-run-s|--poll-s|--ci-wait-s)
+      [[ $# -ge 2 ]] || { echo "dispatch-ladder-spawn: $1 requires a value" >&2; usage; }
+      [[ "$2" =~ ^[0-9]+$ ]] || {
+        echo "dispatch-ladder-spawn: $1 must be an integer, got '$2'" >&2; usage; }
+      DRIVER_ARGS+=("$1" "$2"); shift 2 ;;
+    *)
+      echo "dispatch-ladder-spawn: unknown argument '$1'" >&2; usage ;;
+  esac
+done
+
+# ---- Step 1: resolve config -------------------------------------------------
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+# shellcheck source=/dev/null
+source "$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts/lib.sh"
+
+if [[ -n "${DISPATCH_LADDER_SPAWN_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_LADDER_SPAWN_MAIN_WORKTREE"
+else
+  PROJECT_ROOT=$(resolve_project_root) \
+    || { echo "dispatch-ladder-spawn: not in a git repo and DISPATCH_LADDER_SPAWN_MAIN_WORKTREE is unset" >&2; exit 2; }
+  MAIN_WORKTREE="$PROJECT_ROOT"   # de-bare: the project root IS the main checkout
+fi
+
+SYSTEMD_RUN_CMD="${DISPATCH_LADDER_SPAWN_SYSTEMD_RUN_CMD:-systemd-run}"
+SYSTEMCTL_CMD="${DISPATCH_LADDER_SPAWN_SYSTEMCTL_CMD:-systemctl}"
+RUN_PATH="$MAIN_WORKTREE/.claude/skills/dispatch-ladder/scripts/dispatch-ladder-run"
+UNIT_NAME="dispatch-ladder-$NODE_ID"
+
+# ---- Step 2: launch the transient unit immediately --------------------------
+# Free the fixed unit name from a lingering failed transient unit (#2013).
+# is-failed gates this so a genuinely running ladder is untouched — its --unit
+# collision still yields the intentional `deduped` below. Best-effort:
+# systemctl may be absent on a degraded host; never abort the launch on its
+# account.
+if "$SYSTEMCTL_CMD" --user is-failed --quiet "$UNIT_NAME.service" 2>/dev/null; then
+  "$SYSTEMCTL_CMD" --user reset-failed "$UNIT_NAME.service" >/dev/null 2>&1 || true
+fi
+
+RUN_STDERR=$(mktemp)
+trap 'rm -f "$RUN_STDERR"' EXIT
+# Capture the exit code directly — after `if cmd; then … fi`, `$?` is the `if`
+# construct's status, not the command's, and the pass-through contract needs
+# the real one.
+"$SYSTEMD_RUN_CMD" --user \
+     --unit="$UNIT_NAME" \
+     --collect \
+     --property=KillMode=process \
+     --working-directory="$MAIN_WORKTREE" \
+     --setenv=PATH="$PATH" \
+     "$RUN_PATH" "$NODE_ID" "${DRIVER_ARGS[@]+"${DRIVER_ARGS[@]}"}" \
+     2>"$RUN_STDERR"
+RC=$?
+
+if (( RC == 0 )); then
+  echo spawned
+  exit 0
+fi
+
+err=$(cat "$RUN_STDERR")
+# systemd's already-exists message varies across versions ("Unit … already
+# exists" / "Failed to start transient service unit: Unit … already exists").
+# Match the substring AND the unit name, so an unrelated failure whose stderr
+# happens to contain "already exists" is not silently read as a dedup no-op.
+if [[ "$err" == *"already exists"* && "$err" == *"$UNIT_NAME"* ]]; then
+  echo deduped
+  exit 0
+fi
+
+echo "$err" >&2
+exit "$RC"

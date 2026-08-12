@@ -16,7 +16,46 @@
 # and `gh api -X PUT .../pulls/<n>/merge --squash` (via gh_pr_merge_rest). It is
 # a single owned-shell sweep with no agent turn inside the merge loop.
 #
-# Merge gates, in order (a failed gate SKIPS silently, it never demotes):
+# Usage: graph-auto-merge [--node <id>]
+#
+#   --node <id>  Consider ONLY the named node id. A SELECTION FILTER, never a
+#                gate bypass — every gate below still applies verbatim, exactly
+#                as documented for `graph-select-target --node`. Absent the
+#                flag, behavior is byte-identical to the unflagged sweep. This
+#                exists so a single-node caller (the /dispatch-ladder driver)
+#                can reuse this script rather than re-implementing, or
+#                hand-rolling past, the gates it owns.
+#
+# Sweep-wide admission gates (Step 1, before any enumeration; both no-op the
+# WHOLE sweep silently, exit 0):
+#   - the auto-merge config kill-switch (`enabled:false`).
+#   - MAIN HEALTH. `dispatch-graph-main-red-sync --read-only` reports the open
+#     `tactic-main-red-*` latch set; ANY non-empty output (the literal `UNKNOWN`
+#     read-failure sentinel included) suppresses the sweep. A merge onto a
+#     broken main compounds the breakage, and an unknown main health must fail
+#     closed. This is a whole-sweep condition, not a per-candidate hold, so it
+#     emits a stderr note and NO `held <id> (...)` line — matching the config
+#     kill-switch's silent no-op.
+#
+#     `--read-only` is MANDATORY here and never optional: completing the open
+#     latch nodes is an AUTHORITATIVE act that re-arms the gate and lets PRs
+#     land, and that authority belongs to the scheduler's tick alone (see
+#     dispatch-graph-main-red-sync:21-47). A non-tick caller that completed them
+#     could unblock auto-merge onto a still-broken main.
+#
+#     DELIBERATE SEMANTIC CHANGE (tactic-graph-auto-merge-main-health-gate):
+#     this gate used to be computed by the CALLER and applied around the call
+#     site (dispatch-select-tick, dispatch-tick's paused-branch drain), so every
+#     downstream consumer within one tick gated on that tick's INITIAL read
+#     (dispatch-select-tick Step 1c's stated contract). This script now performs
+#     its own, later read. Consequence: a latch completed earlier in the SAME
+#     tick permits a merge in that tick rather than the next. That is strictly
+#     correct — completion only happens once origin/main is green again — and it
+#     is the price of making the gate reusable by a non-tick caller. The tick's
+#     Step 1c read still runs UNFLAGGED and still owns the completion.
+#
+# Per-candidate merge gates, in order (a failed gate SKIPS silently, it never
+# demotes):
 #   - office_hours park. A non-null node.office_hours HOLDS (emits
 #     `held <id> (office-hours)`, no merge) — a parked node awaits a human
 #     decision, and merging its PR would ship the code the park is flagging.
@@ -53,12 +92,28 @@
 #
 # Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored (node
 # enumeration failure, a gh sense/merge error, or a freshness computation
-# crash). NOT set -e: a per-PR hard error must not abort the sweep — each is
-# captured with `|| rc=$?`, logged to stderr, sets HARD_ERROR=1, and `continue`s.
+# crash); 2 on a usage error. NOT set -e: a per-PR hard error must not abort the
+# sweep — each is captured with `|| rc=$?`, logged to stderr, sets HARD_ERROR=1,
+# and `continue`s.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+
+# ---- Argument parsing -------------------------------------------------------
+NODE_FILTER=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "graph-auto-merge: --node requires a non-empty id" >&2; exit 2; }
+      NODE_FILTER="$2"; shift 2 ;;
+    *)
+      echo "graph-auto-merge: unknown argument '$1'" >&2
+      echo "usage: graph-auto-merge [--node <id>]" >&2
+      exit 2 ;;
+  esac
+done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 
@@ -84,6 +139,29 @@ CFG=$("$SCRIPT_DIR/dispatch-config-load" auto-merge) || {
 if [[ "$CFG" != "no-config" ]]; then
   ENABLED=$(jq -r '.enabled' <<<"$CFG")
   [[ "$ENABLED" == "false" ]] && exit 0
+fi
+
+# ---- Step 1b: main-health admission gate (no-op when main is not known-good) --
+# See the DELIBERATE SEMANTIC CHANGE note in the header: this gate used to live
+# at each call site, which is why a single-node caller could not reuse this
+# script without re-implementing it (or, worse, merging without it).
+#
+# `--read-only` is mandatory — this caller reads the latch, it never completes
+# it. Fail closed on every uncertain reading: non-empty stdout (an open
+# `tactic-main-red-*` node), the literal `UNKNOWN` graph-read sentinel, AND a
+# non-zero exit. The script's contract is "ALWAYS exit 0", so a non-zero status
+# means it did not run as designed (missing, unreadable, killed by a caller's
+# `timeout`) and must never be read as "main healthy" — the same disposition
+# dispatch-select-tick gives a failed main-health read via `|| OPEN_MAIN_RED=UNKNOWN`.
+MAIN_RED_RC=0
+OPEN_MAIN_RED=$("$SCRIPT_DIR/dispatch-graph-main-red-sync" --read-only) || MAIN_RED_RC=$?
+if [[ "$MAIN_RED_RC" -ne 0 ]]; then
+  echo "graph-auto-merge: dispatch-graph-main-red-sync --read-only failed (rc=$MAIN_RED_RC); treating main health as UNKNOWN and merging nothing this sweep" >&2
+  exit 0
+fi
+if [[ -n "$OPEN_MAIN_RED" ]]; then
+  echo "graph-auto-merge: main health is not known-good (open main-red latch: $(tr '\n' ' ' <<<"$OPEN_MAIN_RED")); merging nothing this sweep" >&2
+  exit 0
 fi
 
 # ---- Step 2: enumerate merge candidates from the graph ----------------------
@@ -113,9 +191,17 @@ fi
 # Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
 # a corrupt node file must abort the pass loudly rather than silently vanish
 # from the candidate set (or, via a dropped blocker, silently qualify one).
+#
+# `--node <id>` is applied HERE, as the first thing the loop tests: a selection
+# filter layered on top of the enumeration, ahead of every gate, so the gates
+# below apply unchanged to whatever survives it. The id arrives via process.argv
+# (an empty string means "no filter"), not via the environment, so an ambient
+# variable can never silently narrow an unflagged sweep.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const only = process.argv[1] || "";
   for (const n of listNodesStrict("./intentions")) {
+    if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase !== "review") continue;
     const pr = n.execution && n.execution.pr;
@@ -125,7 +211,7 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     if (!markers.includes("reviewed")) continue;
     process.stdout.write(n.id + "\t" + pr + "\t" + (n.office_hours == null ? "clean" : "parked") + "\n");
   }
-') )" || { echo "graph-auto-merge: node enumeration failed" >&2; exit 1; }
+' "$NODE_FILTER") )" || { echo "graph-auto-merge: node enumeration failed" >&2; exit 1; }
 
 [[ -z "$CANDIDATES" ]] && exit 0
 

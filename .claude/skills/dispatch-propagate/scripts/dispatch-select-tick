@@ -493,21 +493,33 @@ if [[ -z "$OPEN_MAIN_RED" ]]; then
 fi
 
 # --- Step 1d (cont.): node-lane auto-merge (tick-owned) ----------------------
-# Graph-lane analog of the issue-lane auto-merge block above, gated on the SAME
-# OPEN_MAIN_RED main-known-good condition: a node-lane merge must be suppressed
-# while main is broken or main health is UNKNOWN, exactly like the issue-lane merge.
-# graph-auto-merge merges reviewed node-lane PRs this tick, keyed off each
-# node's `reviewed` execution marker. reconcile-graph-merged (below, which runs
-# unconditionally and already honors a grace window via its GRACE/AGE check)
-# absorbs the merge to done/main-qa on a subsequent tick, so it never races a
-# still-settling merge from this tick.
-if [[ -z "$OPEN_MAIN_RED" ]]; then
-  GRAPH_MERGE_OUT=$("$SCRIPT_DIR/graph-auto-merge") || true
-  if [[ -n "$GRAPH_MERGE_OUT" ]]; then
-    while IFS= read -r merge_line; do
-      [[ -n "$merge_line" ]] && echo "merge: $merge_line"
-    done <<< "$GRAPH_MERGE_OUT"
-  fi
+# Graph-lane analog of the issue-lane auto-merge block above. graph-auto-merge
+# merges reviewed node-lane PRs this tick, keyed off each node's `reviewed`
+# execution marker. reconcile-graph-merged (below, which runs unconditionally
+# and already honors a grace window via its GRACE/AGE check) absorbs the merge
+# to done/main-qa on a subsequent tick, so it never races a still-settling merge
+# from this tick.
+#
+# NOT gated on $OPEN_MAIN_RED here: graph-auto-merge now performs the
+# main-health admission gate ITSELF, via its own
+# `dispatch-graph-main-red-sync --read-only` read
+# (tactic-graph-auto-merge-main-health-gate). The gate moved INTO the script so
+# a single-node caller — /dispatch-ladder — reuses it rather than
+# re-implementing it; a caller-side copy here would be a second, drifting
+# implementation of a load-bearing safety gate. The issue-lane block above keeps
+# its `$OPEN_MAIN_RED` wrapper: dispatch-auto-merge has no such internal gate.
+#
+# One semantic consequence, deliberate and documented in graph-auto-merge's
+# header: the script re-reads the latch LATER than Step 1c did, so a latch this
+# very tick completed permits a merge in this tick rather than the next. Step 1c
+# still runs unflagged and still owns the completion; $OPEN_MAIN_RED is still
+# consumed by the issue-lane merge (:486) and the main-broken diagnosis gates
+# (:821, :1148).
+GRAPH_MERGE_OUT=$("$SCRIPT_DIR/graph-auto-merge") || true
+if [[ -n "$GRAPH_MERGE_OUT" ]]; then
+  while IFS= read -r merge_line; do
+    [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+  done <<< "$GRAPH_MERGE_OUT"
 fi
 
 # --- Step 1d (cont.): post-merge reconciliation (#2512) ----------------------

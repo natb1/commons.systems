@@ -60,15 +60,42 @@
 # dangerouslyDisableSandbox — gh needs network + TLS, and node --import tsx/esm
 # needs the npm cache (see .claude/rules/sandbox.md).
 #
+# Usage: reconcile-graph-merged [--node <id>]
+#
+#   --node <id>  Absorb ONLY the named node id. A SELECTION FILTER, never a
+#                behavior change — this reconciler records reality and applies
+#                no admission gates to change; the filter simply narrows the
+#                enumeration, exactly as `graph-auto-merge --node` and
+#                `graph-select-target --node` do. Absent the flag, behavior is
+#                byte-identical to the unflagged sweep. It exists so a
+#                single-node caller (the /dispatch-ladder driver) can absorb its
+#                own merge without sweeping — and without racing the tick's
+#                sweep across unrelated nodes.
+#
 # Stdout protocol: exactly `reconciled <id> -> <target>` per tactic acted on,
 # and `deferred <id> (<reason>)` per deferred one; NOTHING for a skip.
 #
 # Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored or the
-# graph-commit failed.
+# graph-commit failed; 2 on a usage error.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+
+# ---- Argument parsing -------------------------------------------------------
+NODE_FILTER=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node)
+      [[ $# -ge 2 && -n "${2:-}" ]] \
+        || { echo "reconcile-graph-merged: --node requires a non-empty id" >&2; exit 2; }
+      NODE_FILTER="$2"; shift 2 ;;
+    *)
+      echo "reconcile-graph-merged: unknown argument '$1'" >&2
+      echo "usage: reconcile-graph-merged [--node <id>]" >&2
+      exit 2 ;;
+  esac
+done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
@@ -90,11 +117,22 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 # character is unsafe downstream (it silently re-keys graph-commit's
 # `--base <id>=<sha>` pin). Refuse the sweep rather than reconcile the node with
 # a broken or mis-keyed compare-and-swap base.
+#
+# `--node <id>` is applied HERE, as the first thing the loop tests (the id
+# arrives via process.argv; an empty string means "no filter", so an ambient
+# variable can never silently narrow an unflagged sweep). It is deliberately
+# ahead of the id-shape validation below: that check guards the `--base <id>=<sha>`
+# pin keys this run will write, and a node the filter excludes is never read,
+# never edited, and never pinned — so it cannot mis-key anything. Validating a
+# filtered-out sibling would abort a single-node absorb over a corruption with
+# no bearing on it.
 OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
   const open = new Set(["implement","fix","qa","review","main-qa"]);
   const idOk = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  const only = process.argv[1] || "";
   for (const n of listNodesStrict("./intentions")) {
+    if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase === null || !open.has(n.phase)) continue;
     const pr = n.execution && n.execution.pr;
@@ -106,7 +144,7 @@ OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     }
     process.stdout.write(n.id + "\t" + pr + "\n");
   }
-') )" || { echo "reconcile-graph-merged: node enumeration failed" >&2; exit 1; }
+' "$NODE_FILTER") )" || { echo "reconcile-graph-merged: node enumeration failed" >&2; exit 1; }
 
 [[ -z "$OPEN_TACTICS" ]] && exit 0
 

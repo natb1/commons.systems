@@ -116,15 +116,15 @@ verify by parsing `origin/main`, never by exit code. Most iterations should be
 mostly this: the harness does the work, rsi decides what the work is.
 
 **4b — Execute (cost 1 each).** Drive the claimed node through the dispatch
-phase skills with **`/dispatch-emulate <node-id>`**, invoked **in this thread**
+phase skills with **`/dispatch-ladder <node-id>`**, invoked **in this thread**
 — never in an Agent-tool subagent. That skill is the loop's only home: it owns
 the advance/await cycle, its exit-code contract, the phase ladder, and the three
 non-negotiable rules that hold throughout. Read it there; do not restate any of
 it here. It refuses a strategy id — run `/align-tactics <strategy-id>` first,
-then emulate a child tactic.
+then run `/dispatch-ladder` on the child tactic it produces.
 
 `/rsi` keeps what is rsi's: the budget above, and the throw. When
-`/dispatch-emulate` stops on a throw, conduct the office-hours engagement here,
+`/dispatch-ladder` stops on a throw, conduct the office-hours engagement here,
 attended, and record the outcome in the graph.
 
 ## Pause and resume authority

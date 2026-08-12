@@ -62,6 +62,25 @@ cp "$SCRIPT_DIR"/graph-auto-merge "$SCRIPT_DIR"/dispatch-config-load \
    "$SCRIPT_DIR"/lib.sh "$GAM_SCRIPTS/"
 GAM_SCRIPT="$GAM_SCRIPTS/graph-auto-merge"
 
+# Fake dispatch-graph-main-red-sync: graph-auto-merge now owns the main-health
+# admission gate itself (tactic-graph-auto-merge-main-health-gate) and calls
+# this sibling with --read-only. The stub serves stub/main-red.txt when present
+# (absent file → empty stdout → main known-good) and, like the real script,
+# ALWAYS exits 0. It asserts --read-only is passed: an unflagged call from this
+# caller would be an authority violation (completing the latch belongs to the
+# tick), so the fixture fails loudly rather than silently tolerating it.
+cat > "$GAM_SCRIPTS/dispatch-graph-main-red-sync" <<'GAMRED'
+#!/usr/bin/env bash
+STUB="$(cd "$(dirname "$0")/../../../.." && pwd)/stub"
+case " $* " in
+  *" --read-only "*) ;;
+  *) echo "main-red stub: caller MUST pass --read-only (got: $*)" >&2; exit 99 ;;
+esac
+[[ -f "$STUB/main-red.txt" ]] && cat "$STUB/main-red.txt"
+exit 0
+GAMRED
+chmod +x "$GAM_SCRIPTS/dispatch-graph-main-red-sync"
+
 # Fake node: enumeration ( -e inline ) applies the
 # id/phase/pr/conflict/reviewed-marker filter over stub/nodes.json;
 # compute-freshness.ts <id> serves stub/freshness-<id>.json.
@@ -77,8 +96,13 @@ if [[ "$*" == *compute-freshness.ts* ]]; then
   cat "$STUB/freshness-$id.json"
   exit 0
 fi
-# enumeration — mirror the script's listNodes filter with jq.
-jq -r '.[]
+# enumeration — mirror the script's listNodes filter with jq. The real script
+# passes its --node selection filter as the LAST argv element after the inline
+# -e program (empty string = no filter); mirror that here so the bash→node
+# plumbing of --node is genuinely exercised rather than assumed.
+only="${!#}"
+jq -r --arg only "$only" '.[]
+  | select($only == "" or .id == $only)
   | select(.kind=="tactic" and .phase=="review"
            and (.execution.pr != null)
            and (.execution.conflict == null)
@@ -113,13 +137,13 @@ gam_reset() {
   rm -f "$GAM_ROOT/stub/"* "$GAM_ROOT/cache/"* "$GAM_ROOT/config/"*.json \
         "$GAM_ROOT/.claude/worktrees/"*.scope-fingerprint 2>/dev/null || true
 }
-run_gam() {
+run_gam() {  # forwards its arguments to graph-auto-merge (e.g. --node <id>)
   PATH="$GAM_ROOT/bin:$SAVED_PATH" \
   DISPATCH_CONFIG_DIR="$GAM_ROOT/config" \
   DISPATCH_CI_VERDICT_CACHE="$GAM_ROOT/cache" \
   GRAPH_AUTO_MERGE_MAIN_ROOT="$GAM_ROOT" \
   GH_RETRY_BASE_DELAY=0 GH_RETRY_ATTEMPTS=1 \
-  "$GAM_SCRIPT"
+  "$GAM_SCRIPT" "$@"
 }
 gam_fresh() {  # write a fresh (not-stale) freshness fixture for node id $1
   printf '%s\n' '{"scopeStale":false,"strategyStale":false,"stampMissing":false,"nodeOnMain":true}' \
@@ -258,6 +282,136 @@ assert_eq "graph-auto-merge (g): office_hours-parked node is held" \
 assert_eq "graph-auto-merge (g): exit 0" "0" "$gam_g_rc"
 if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_g_m=present; else gam_g_m=absent; fi
 assert_eq "graph-auto-merge (g): office_hours hold issues no merge" "absent" "$gam_g_m"
+
+# ============================================================================
+# tactic-graph-auto-merge-main-health-gate / tactic-dispatch-ladder-skill:
+#   --node selection filter + the internal main-health admission gate
+# ============================================================================
+
+# ---- (h) --node selects ONLY the named node; an eligible sibling is passed over
+# Both nodes are fully mergeable. Unflagged, the sweep merges both; with
+# `--node tactic-h1` it must merge exactly one and leave the sibling alone.
+# This is the property the /dispatch-ladder driver depends on: a node-scoped
+# merge must not drag unrelated reviewed work onto main as a side effect.
+gam_reset
+printf '%s\n' '[{"id":"tactic-h1","kind":"tactic","phase":"review","execution":{"pr":110,"markers":["reviewed"]}},{"id":"tactic-h2","kind":"tactic","phase":"review","execution":{"pr":111,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":110,"title":"Tactic H1","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-h1","sha":"sha110"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-110.json"
+printf '%s\n' '{"number":111,"title":"Tactic H2","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-h2","sha":"sha111"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-111.json"
+echo passing > "$GAM_ROOT/cache/sha110"; echo passing > "$GAM_ROOT/cache/sha111"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-h1.scope-fingerprint"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-h2.scope-fingerprint"
+gam_fresh tactic-h1; gam_fresh tactic-h2
+gam_h_out=$(run_gam --node tactic-h1 2>/dev/null); gam_h_rc=$?
+assert_eq "graph-auto-merge (h): --node merges only the named node" \
+  "merged #110 (tactic-h1)" "$gam_h_out"
+assert_eq "graph-auto-merge (h): --node exit 0" "0" "$gam_h_rc"
+if grep -q 'pulls/111/merge' "$GAM_ROOT/stub/merge-calls.log" 2>/dev/null; then gam_h_sib=merged; else gam_h_sib=untouched; fi
+assert_eq "graph-auto-merge (h): eligible sibling is NOT merged" "untouched" "$gam_h_sib"
+# Control: unflagged, the SAME fixture merges both — proving (h) isolated the
+# sibling by the filter, not by some unrelated ineligibility.
+rm -f "$GAM_ROOT/stub/merge-calls.log"
+gam_hc_out=$(run_gam 2>/dev/null)
+assert_eq "graph-auto-merge (h): control — unflagged sweep merges both" \
+  "merged #110 (tactic-h1)
+merged #111 (tactic-h2)" "$gam_hc_out"
+
+# ---- (i) --node with an unknown id merges nothing (empty candidate set) -----
+gam_reset
+printf '%s\n' '[{"id":"tactic-i","kind":"tactic","phase":"review","execution":{"pr":112,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":112,"title":"Tactic I","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-i","sha":"sha112"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-112.json"
+echo passing > "$GAM_ROOT/cache/sha112"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-i.scope-fingerprint"
+gam_fresh tactic-i
+gam_i_out=$(run_gam --node tactic-nonexistent 2>/dev/null); gam_i_rc=$?
+assert_eq "graph-auto-merge (i): --node with an unknown id merges nothing" "" "$gam_i_out"
+assert_eq "graph-auto-merge (i): unknown id exit 0" "0" "$gam_i_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_i_m=present; else gam_i_m=absent; fi
+assert_eq "graph-auto-merge (i): unknown id issues no merge" "absent" "$gam_i_m"
+
+# ---- (j) --node is a SELECTION filter, never a gate bypass -----------------
+# The named node is office_hours-parked. `--node` must still HOLD it — the whole
+# point of routing the ladder's merge through this script rather than `gh pr merge`.
+gam_reset
+printf '%s\n' '[{"id":"tactic-j","kind":"tactic","phase":"review","execution":{"pr":113,"markers":["reviewed"]},"office_hours":{"reason":"fixture park","since":"2026-08-01","recommendation":null,"session_type":"other"}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":113,"title":"Tactic J","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-j","sha":"sha113"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-113.json"
+echo passing > "$GAM_ROOT/cache/sha113"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-j.scope-fingerprint"
+gam_fresh tactic-j
+gam_j_out=$(run_gam --node tactic-j 2>/dev/null)
+assert_eq "graph-auto-merge (j): --node does NOT bypass the office-hours gate" \
+  "held tactic-j (office-hours)" "$gam_j_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_j_m=present; else gam_j_m=absent; fi
+assert_eq "graph-auto-merge (j): --node park hold issues no merge" "absent" "$gam_j_m"
+
+# ---- (k) main-health admission gate suppresses the WHOLE sweep -------------
+# An open tactic-main-red-* latch, the UNKNOWN read-failure sentinel, and a
+# non-zero exit from the sync script must each merge nothing — and must do so
+# WITHOUT emitting a per-candidate `held` line, since main health is a
+# whole-sweep condition (a stderr note + silent exit 0, like the kill-switch).
+gam_reset
+printf '%s\n' '[{"id":"tactic-k","kind":"tactic","phase":"review","execution":{"pr":114,"markers":["reviewed"]}}]' \
+  > "$GAM_ROOT/stub/nodes.json"
+printf '%s\n' '{"number":114,"title":"Tactic K","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-k","sha":"sha114"},"labels":[]}' \
+  > "$GAM_ROOT/stub/pr-114.json"
+echo passing > "$GAM_ROOT/cache/sha114"
+echo fp > "$GAM_ROOT/.claude/worktrees/tactic-k.scope-fingerprint"
+gam_fresh tactic-k
+
+# (k1) empty latch → main known-good → merges (the positive control).
+gam_k1_out=$(run_gam 2>/dev/null); gam_k1_rc=$?
+assert_eq "graph-auto-merge (k1): empty main-red latch permits the merge" \
+  "merged #114 (tactic-k)" "$gam_k1_out"
+assert_eq "graph-auto-merge (k1): exit 0" "0" "$gam_k1_rc"
+
+# (k2) a non-empty latch suppresses the sweep.
+rm -f "$GAM_ROOT/stub/merge-calls.log"
+echo 'tactic-main-red-abc1234' > "$GAM_ROOT/stub/main-red.txt"
+gam_k2_out=$(run_gam 2>/dev/null); gam_k2_rc=$?
+assert_eq "graph-auto-merge (k2): open main-red latch suppresses the sweep (no held line)" "" "$gam_k2_out"
+assert_eq "graph-auto-merge (k2): exit 0" "0" "$gam_k2_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_k2_m=present; else gam_k2_m=absent; fi
+assert_eq "graph-auto-merge (k2): open main-red latch issues no merge" "absent" "$gam_k2_m"
+
+# (k3) the literal UNKNOWN read-failure sentinel suppresses it too (fail closed).
+printf '%s\n' 'UNKNOWN' > "$GAM_ROOT/stub/main-red.txt"
+gam_k3_out=$(run_gam 2>/dev/null); gam_k3_rc=$?
+assert_eq "graph-auto-merge (k3): UNKNOWN main health suppresses the sweep" "" "$gam_k3_out"
+assert_eq "graph-auto-merge (k3): exit 0" "0" "$gam_k3_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_k3_m=present; else gam_k3_m=absent; fi
+assert_eq "graph-auto-merge (k3): UNKNOWN main health issues no merge" "absent" "$gam_k3_m"
+
+# (k4) the gate also fires for --node: a single-node caller cannot merge onto a
+# broken main any more than the sweep can.
+gam_k4_out=$(run_gam --node tactic-k 2>/dev/null)
+assert_eq "graph-auto-merge (k4): --node is still main-health gated" "" "$gam_k4_out"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_k4_m=present; else gam_k4_m=absent; fi
+assert_eq "graph-auto-merge (k4): --node issues no merge while main is red" "absent" "$gam_k4_m"
+
+# (k5) a non-zero exit from the sync script is UNKNOWN, not "healthy". The real
+# script's contract is ALWAYS exit 0, so non-zero means it did not run as
+# designed (missing, unreadable, `timeout`-killed) and must fail closed.
+rm -f "$GAM_ROOT/stub/main-red.txt"
+mv "$GAM_SCRIPTS/dispatch-graph-main-red-sync" "$GAM_ROOT/main-red-sync.bak"
+gam_k5_out=$(run_gam 2>/dev/null); gam_k5_rc=$?
+assert_eq "graph-auto-merge (k5): an unrunnable main-red sync suppresses the sweep" "" "$gam_k5_out"
+assert_eq "graph-auto-merge (k5): exit 0 (a suppressed sweep is not an error)" "0" "$gam_k5_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_k5_m=present; else gam_k5_m=absent; fi
+assert_eq "graph-auto-merge (k5): unrunnable main-red sync issues no merge" "absent" "$gam_k5_m"
+mv "$GAM_ROOT/main-red-sync.bak" "$GAM_SCRIPTS/dispatch-graph-main-red-sync"
+
+# ---- (l) usage errors exit 2 ----------------------------------------------
+gam_reset
+gam_l1_rc=0; run_gam --node >/dev/null 2>&1 || gam_l1_rc=$?
+assert_eq "graph-auto-merge (l): --node without an id is a usage error (exit 2)" "2" "$gam_l1_rc"
+gam_l2_rc=0; run_gam --bogus >/dev/null 2>&1 || gam_l2_rc=$?
+assert_eq "graph-auto-merge (l): an unknown flag is a usage error (exit 2)" "2" "$gam_l2_rc"
 
 rm -rf "$GAM_ROOT" "$GAM_BARE"
 

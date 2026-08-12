@@ -145,8 +145,8 @@
 #      sweep it is paired with. Never gates the tick — a load failure logs
 #      loudly and the tick continues.
 #   5. On the PAUSED branch only: drain the node lane (graph-auto-merge +
-#      reconcile-graph-merged, gated on OPEN_MAIN_RED exactly as
-#      dispatch-select-tick gates them) before the `exit 0`. A paused tick
+#      reconcile-graph-merged, both called unconditionally — graph-auto-merge
+#      owns its own main-health admission gate internally) before the `exit 0`. A paused tick
 #      schedules nothing but still lands reviewed, green node-lane PRs — see
 #      the pause-sentinel block for the operator-facing statement of that
 #      contract and for the three preconditions (main-checkout sync, the
@@ -380,6 +380,24 @@ if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   fi
 fi
 
+# refresh_lock — bump the selection lock's mtime (its heartbeat) so a
+# legitimately-long paused-branch drain never goes stale under the staleness
+# cap (MAX_HOLD_SECONDS, dispatch-acquire-lock:227, default 300). The drain
+# below runs graph-auto-merge and reconcile-graph-merged back to back, each
+# under its own DISPATCH_PAUSED_DRAIN_TIMEOUT_S budget (default 600), so the
+# combined hold can reach 1200s against the 300s default cap — without a
+# heartbeat in between, a second paused tick's `--wait` would read the lock as
+# stale and reclaim it mid-drain. Call ONLY between the two drain calls, on
+# graph-auto-merge's completion, never inside a loop — INVARIANT #2
+# (dispatch-acquire-lock:96-103): a refresh inside a poll/wait loop would keep
+# the mtime fresh while the holder spins there, defeating the cap. Modelled on
+# dispatch-select-tick's refresh_lock (dispatch-select-tick:198-200) and
+# graph-select-target's _refresh_lock (graph-select-target:599-601).
+# Best-effort: a noop (we no longer hold the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
 # --- Pause sentinel: stop autonomous scheduling, keep the node lane draining ---
 # When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
 # timer) SCHEDULES nothing: it never reaches dispatch-select-tick, spawns no
@@ -514,10 +532,10 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   # block comment above), never ledger bookkeeping or draining, and this exit 0 path is
   # the ONLY autonomous tick path that never reaches dispatch-select-tick's own
   # merge/reconcile calls, so pausing spawning would otherwise also stop
-  # already-reviewed green PRs from landing. Compute OPEN_MAIN_RED (main
-  # health), gate graph-auto-merge on it exactly like dispatch-select-tick
-  # does, then run reconcile-graph-merged unconditionally so a merge from this
-  # tick (or an earlier one) is absorbed to done/main-qa. These are plain
+  # already-reviewed green PRs from landing. Run graph-auto-merge (which gates
+  # itself on main health — see the note at its call below), then
+  # reconcile-graph-merged, so a merge from this tick (or an earlier one) is
+  # absorbed to done/main-qa. These are plain
   # subprocess invocations of dispatch-select-tick's own scripts, not sourced
   # library functions, so the conditional-source + verify + loud-failure idiom
   # used for the sweeps above does not apply here.
@@ -546,9 +564,10 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   #      dispatch:sync-broken latch). That is select-tick's job; here a failed
   #      sync just skips, and the next tick retries.
   #   b. The selection lock is held. dispatch-select-tick holds
-  #      `dispatch-acquire-lock --wait` across these same calls, and none of
-  #      graph-auto-merge / reconcile-graph-merged / dispatch-graph-main-red-sync
-  #      locks internally. `dispatch --manual` is permitted during a pause and
+  #      `dispatch-acquire-lock --wait` across these same calls, and neither
+  #      graph-auto-merge (nor the `dispatch-graph-main-red-sync --read-only`
+  #      read it now makes internally) nor reconcile-graph-merged locks
+  #      internally. `dispatch --manual` is permitted during a pause and
   #      the reseed/spawn units are distinct from dispatch-heartbeat.service, so
   #      two ticks can otherwise overlap on this worktree. `busy` (another tick
   #      is draining) skips this drain — the next tick retries.
@@ -584,23 +603,38 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
       if [[ "$DRAIN_LOCK" != acquired ]]; then
         echo "dispatch-tick: paused-branch node-lane drain SKIPPED; dispatch-acquire-lock reported '${DRAIN_LOCK:-error}' (another tick holds the selection lock); the next tick retries" >&2
       else
-        # A timeout here needs no branch of its own: `timeout` returns non-zero,
-        # which the existing `|| OPEN_MAIN_RED=UNKNOWN` folds into the fail-closed
-        # UNKNOWN that suppresses the merge — the same disposition select-tick
-        # gives any other failed main-health read.
-        OPEN_MAIN_RED=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/dispatch-graph-main-red-sync" </dev/null) || OPEN_MAIN_RED=UNKNOWN
-        if [[ -z "$OPEN_MAIN_RED" ]]; then
-          DRAIN_RC=0
-          GRAPH_MERGE_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/graph-auto-merge" </dev/null) || DRAIN_RC=$?
-          if (( DRAIN_RC == 124 )); then
-            echo "dispatch-tick: WARNING: graph-auto-merge timed out after ${DRAIN_TIMEOUT_S}s on the paused-branch drain; continuing (the next tick retries)" >&2
-          fi
-          if [[ -n "$GRAPH_MERGE_OUT" ]]; then
-            while IFS= read -r merge_line; do
-              [[ -n "$merge_line" ]] && echo "merge: $merge_line"
-            done <<< "$GRAPH_MERGE_OUT"
-          fi
+        # No main-health read here: graph-auto-merge performs that admission
+        # gate ITSELF (tactic-graph-auto-merge-main-health-gate), calling
+        # `dispatch-graph-main-red-sync --read-only` internally and merging
+        # nothing when the latch is non-empty, UNKNOWN, or unreadable. This
+        # branch used to compute OPEN_MAIN_RED and wrap the call; that caller-side
+        # copy is gone, so there is exactly one implementation of the gate.
+        #
+        # The `--read-only` flag matters especially here: this drain runs while
+        # dispatch is PAUSED, and completing the latch nodes is the tick's
+        # authoritative act, not a paused drain's.
+        #
+        # A timeout still needs no branch of its own beyond the 124 warning: the
+        # inner script's own gate has already fail-closed on anything it could
+        # not read, and a `timeout`-killed graph-auto-merge simply merges
+        # nothing this tick.
+        DRAIN_RC=0
+        GRAPH_MERGE_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/graph-auto-merge" </dev/null) || DRAIN_RC=$?
+        if (( DRAIN_RC == 124 )); then
+          echo "dispatch-tick: WARNING: graph-auto-merge timed out after ${DRAIN_TIMEOUT_S}s on the paused-branch drain; continuing (the next tick retries)" >&2
         fi
+        if [[ -n "$GRAPH_MERGE_OUT" ]]; then
+          while IFS= read -r merge_line; do
+            [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+          done <<< "$GRAPH_MERGE_OUT"
+        fi
+        # Heartbeat BETWEEN the two drain calls (see refresh_lock's comment
+        # above): graph-auto-merge just completed its own up-to-600s budget,
+        # and reconcile-graph-merged is about to spend up to another 600s — the
+        # combined 1200s worst case exceeds the 300s default staleness cap, so
+        # without this refresh a second paused tick could reclaim the lock
+        # mid-drain.
+        refresh_lock
         DRAIN_RC=0
         RECONCILE_GRAPH_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/reconcile-graph-merged" </dev/null) || DRAIN_RC=$?
         if (( DRAIN_RC == 124 )); then
