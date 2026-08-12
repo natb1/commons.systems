@@ -1,6 +1,6 @@
 ---
 name: dispatch-ladder
-description: Walk ONE tactic node the whole way up the dispatch phase ladder — align-tactics through main-qa, then the node-scoped merge-and-absorb, to phase done — as a detached shell driver with no model turn between phases. For when the dispatch tick structurally cannot reach the node.
+description: Walk ONE tactic node the whole way up the dispatch phase ladder — align-tactics through main-qa, then the node-scoped reconcile pass (merge, absorb, review-stall route), to phase done — as a detached shell driver with no model turn between phases. For when the dispatch tick structurally cannot reach the node.
 user-invocable: true
 ---
 
@@ -84,10 +84,37 @@ caller schedules. The run starts wherever the node's persisted phase says, and
 each step re-reads that phase from `origin/main` — nothing is threaded between
 iterations.
 
+A clean `/review-fix` deliberately writes no phase — it leaves the node at
+`review` and records the `reviewed` marker — so `dispatch-ladder-await` answers
+`reviewed <id> review -> pending-merge` (exit 0) and the loop takes another
+step. It is not a stall.
+
 When there is nothing left to launch and the node is not yet `done`, the driver
-runs the node-scoped **merge-and-absorb** step — `graph-auto-merge --node <id>`
-then `reconcile-graph-merged --node <id>` — once, then takes another ladder
-step. It halts complete when the node is at phase `done` on `origin/main`, or
+runs one node-scoped **reconcile pass**, then takes another ladder step. The
+pass takes the selection lock (`dispatch-acquire-lock` — the same lock
+`dispatch-select-tick` holds across these same scripts) and syncs the main
+checkout (`git fetch origin main`, then `git merge --ff-only origin/main`;
+the reconcilers enumerate their candidates from the local tree, so an unsynced
+checkout would merge straight past a park that landed after the run started).
+Then it runs three scripts, once each:
+
+- `graph-auto-merge --node <id>` — the merge.
+- `reconcile-graph-merged --node <id>` — the absorb.
+- `reconcile-graph-review-stall --node <id>` — the only route for a node the
+  router classifies `pending-merge` (phase `review` plus the `reviewed`
+  marker). Such a node is excluded from selector candidates, so the ordinary
+  red-CI fix interrupt never fires on it. This sweep enters `execution.fix`,
+  the router re-surfaces the node, and the next `advance` answers `launched
+  <id> tactic fix /fix-checks`. **A reviewed node whose CI goes red is routed
+  back into the ladder at `/fix-checks`; it does not halt.**
+
+The pass answers `routed | merged | changed | quiet`. The first three are
+progress, and the loop steps again. `quiet` is one of the two honest silences —
+the reconciler's `GRAPH_RECONCILE_GRACE` window, or a PR whose CI is still
+running — and is re-polled under the `--ci-wait-s` budget. No sleep ever happens
+inside the pass, so none happens while the lock is held.
+
+The run halts complete when the node is at phase `done` on `origin/main`, or
 when it is gone from `origin/main` entirely (`pruned`).
 
 ## How to run
@@ -110,8 +137,17 @@ failure with its stderr passed through.
 
 Pass-through flags, all optional: `--timeout-s <n>` (the await window per phase,
 default 1800), `--max-run-s <n>` (whole-run wall clock, default 21600 = 6h),
-`--poll-s <n>` (re-poll interval for an expected wait, default 60). Defaults are
-sized to measured phase durations; change them only with a reason.
+`--poll-s <n>` (re-poll interval for an expected wait, default 60),
+`--ci-wait-s <n>` (how long the driver will keep re-polling a reconcile pass
+that changed nothing, default 3600 = 1h). Defaults are sized to measured phase
+durations; change them only with a reason.
+
+`--ci-wait-s` is one budget covering both honest silences — the reconciler's
+`GRAPH_RECONCILE_GRACE` window and a PR whose CI is still running — logged as
+distinct dispositions (`grace-wait` / `ci-wait`) in `events.jsonl`. It never
+overrides `GRAPH_RECONCILE_GRACE`, which is the reconciler's policy; it bounds
+how long this process polls, which is the driver's own concern. Exhausting it is
+the exit 10 halt.
 
 **2. Poll to terminus.**
 
@@ -161,7 +197,7 @@ disposition; the journal says which script produced it.
 | --- | --- | --- |
 | 0 | `complete` / `pruned` | run the acceleration review, report. |
 | 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. |
-| 10 | `idle` | nothing left to launch and the merge-and-absorb already ran. Read `dispatch-ladder-advance`'s event lines in the journal for the gate that held it. |
+| 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. |
 | 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, or a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`). |
 | 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. |
 | 13 | `claimed` | another session holds the node. **Stop.** |
@@ -191,8 +227,9 @@ means still running — call again with identical arguments; its default
 `--timeout-s` is 540. Both need `dangerouslyDisableSandbox: true`. Their headers
 carry the full exit-code contracts; read them there.
 
-Merge-and-absorb has no hand equivalent here — it is the driver's step. Do not
-run `graph-auto-merge` yourself to finish a halted ladder.
+The reconcile pass has no hand equivalent here — it is the driver's step. Do not
+run `graph-auto-merge` or `reconcile-graph-review-stall` yourself to finish a
+halted ladder.
 
 ## Three rules, none negotiable
 
@@ -204,6 +241,11 @@ run `graph-auto-merge` yourself to finish a halted ladder.
   main-health admission gate, the park gate and the scope-fingerprint re-check,
   and leaves the node merged-but-unabsorbed. When `graph-auto-merge` prints
   `held`, that is the gate doing its job: engage it, never route around it.
+  The same pass runs `reconcile-graph-review-stall --node <id>`, so red CI after
+  a clean review is the ladder's business too, not an operator's: the sweep
+  enters `execution.fix` and the next step launches `/fix-checks`. Do not set
+  the fix state by hand, file a fix by hand, or re-run the review to shake it
+  loose.
 - **Never run a phase skill in an Agent-tool subagent.** `/qa-fix`,
   `/review-fix` and `/align-tactics` depend on the Workflow tool, which a
   subagent cannot use. They must be spawned sessions — which is what
