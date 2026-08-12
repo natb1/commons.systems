@@ -20,20 +20,60 @@ serves:
 recovers: []
 clarifications:
   - question: What is owed before this can be implemented?
-    answer: "(Recorded 2026-08-12.) The cap decision. Today the capture term is
-      capped at min(1, sum) so a strategy recovering several severe delegations
-      cannot swamp authored intent. Read as lineage the natural form is NO cap,
-      with severity calibrated onto the same integer scale as authored per-tier
-      boosts instead — but that was left open by the author at the close of the
-      round and must be settled before implementation, not decided inside it.
-      Scope otherwise: add `goal_layer: true` to kind-delegation; derive each
-      delegation's score from its divergence and irreversibility axes using the
-      existing scoring helpers in packages/intentionsutil/src/attention.ts
-      rather than a second implementation; add `recovers` to the parent
-      relation; delete the capture term. 19 recovers edges across 22 delegations
-      are in scope. The self-updating property must be preserved: raising a
-      delegation's divergence level re-ranks every recovering strategy with no
-      authoring act."
+    answer: "(Recorded 2026-08-12; the cap half RESOLVED 2026-08-12, see the
+      cap-decision clarification below — nothing on this node is open now.) The
+      cap decision. Today the capture term is capped at min(1, sum) so a
+      strategy recovering several severe delegations cannot swamp authored
+      intent. Read as lineage the natural form is NO cap, with severity
+      calibrated onto the same integer scale as authored per-tier boosts
+      instead — but that was left open by the author at the close of the round
+      and must be settled before implementation, not decided inside it. Scope
+      otherwise: derive each delegation's score from its divergence and
+      irreversibility axes using the existing scoring helpers in
+      packages/intentionsutil/src/attention.ts rather than a second
+      implementation; add `recovers` to the parent relation; delete the capture
+      term. 19 recovers edges across 22 delegations are in scope. The
+      self-updating property must be preserved: raising a delegation's
+      divergence level re-ranks every recovering strategy with no authoring
+      act. (Amended 2026-08-12: the `goal_layer: true` flip on kind-delegation
+      is REMOVED from scope — see the cap-decision clarification.)"
+  - question: Is the capture cap kept, and on what scale does a delegation score?
+    answer: "(Decided 2026-08-12 at author request, on measurement of the live
+      graph.) NO CAP, and the whole capture apparatus collapses to one derived
+      boost plus one weight constant. THE CAP GOES, at zero behavioral cost:
+      across all 18 recovering nodes the axis sum maxes at 6 of a possible 6,
+      so min(1, sum) reduces nothing today — 17 nodes recover exactly one
+      delegation and one (strategy-author-approved-copy) recovers two. Keeping
+      it would also reintroduce a kind-specific rule, the asymmetry-by-kind
+      kind-kind clarification 1 was amended to retire, since summing several
+      parents is what the model does everywhere else. THE `/6` GOES WITH IT:
+      divergenceScore and irreversibilityScore already return integers 0..3, so
+      their raw sum is an integer 0..6 and the divisor exists only to fit the
+      [0,1] cap regime. captureScore, captureScoreFor and CAPTURE_TERM_WEIGHT
+      all delete. THE SCALE IS THE REAL DECISION, and it must not be skipped:
+      post-migration authored boosts run min 1 / median 20 / p75 50 / max 96,
+      strongly bimodal at 20 (32 nodes) and 50 (26 nodes), so a raw 1..6 would
+      make capture invisible — and 15 of the 18 recovering strategies carry NO
+      authored boost at all, so capture is their entire rank claim. Today the
+      opposite holds: raw boosts have median 3 with 46% below 1.0, so the [0,1]
+      capture term is currently competitive with half the authored graph.
+      Preserving that relative weight across the migration requires ONE named
+      constant, DELEGATION_SEVERITY_WEIGHT = 10, giving a range of 10..60 that
+      spans both authored modes. Net: three mechanisms (divisor, cap, term
+      weight) become one constant. NO `goal_layer` FLIP IS NEEDED — this is
+      what makes the change small. resolveAttention's authored fixpoint already
+      sweeps EVERY node and lets an ineligible node relay its distributors'
+      outgoing set, filtering to eligible only when building the output map, so
+      a delegation can seed a derived boost into the lineage sum while never
+      appearing as a rankable node. Flipping goal_layer instead would make
+      office_hours and pace_exempt legal on delegations (validateGraph rule 5
+      gates all three on the same flag) and would add all 22 delegations to
+      hold-alerts.ts's top-K pool, shifting its cutoff. Also note the fixpoint
+      already dedupes by source id (`next.set(src, amt)`), which is exactly the
+      round's count-each-lineage-node-once rule, so no new dedup is required.
+      The derived boost is tier-invariant: per-tier namespacing exists because
+      an AUTHORED magnitude is chosen against a tier's scale, and nothing is
+      authored here."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -62,29 +102,100 @@ open decision the resolver work does not need to wait on.
 
 ## Scope
 
-1. Add `goal_layer: true` to `intentions/kind-delegation.md`.
-2. Derive each delegation's score from its `attributes.divergence.level` and
-   `attributes.irreversibility.{gated,recovery_cost}` axes, **reusing** the
-   existing `divergenceScore` / `irreversibilityScore` / `captureScore`
-   helpers in `packages/intentionsutil/src/attention.ts` rather than writing
-   a second implementation. Their free-text token matching is deliberate
-   (the live store carries compound values such as `low-moderate`) and must
-   be preserved.
-3. Delete the `capture` term and `captureScoreFor` from the composition step;
-   the value now arrives as lineage.
+1. Seed each delegation's derived boost in `resolveAttention`'s authored
+   fixpoint as `divergenceScore(d) + irreversibilityScore(d)`, scaled by
+   `DELEGATION_SEVERITY_WEIGHT` (see below). **Reuse** those two helpers in
+   `packages/intentionsutil/src/attention.ts` rather than writing a second
+   implementation — their free-text token matching is deliberate (the live
+   store carries compound values such as `low-moderate`) and must be
+   preserved.
+2. Add `recovers` to the parent relation (this is item 1 of
+   `tactic-attention-namespaced-rank`'s scope; it is inert until step 1
+   lands).
+3. Delete `captureScore`, `captureScoreFor`, `CAPTURE_TERM_WEIGHT` and the
+   capture term from the composition step; the value now arrives as lineage.
 4. Confirm the self-updating property survives: raising a delegation's
    divergence level must re-rank every recovering strategy with no authoring
    act.
 
-## Open — owed before implementation
+**Explicitly NOT in scope:** flipping `goal_layer: true` on
+`intentions/kind-delegation.md`. An earlier draft of this node carried that
+as step 1; it is unnecessary and harmful — see below.
 
-**Cap or no cap.** Today `captureScoreFor` returns `Math.min(1, sum)`, so a
-strategy recovering several severe delegations cannot swamp authored intent.
-Read as lineage, the natural form of the unified model is **no cap**, with
-severity instead calibrated onto the same integer scale as authored per-tier
-boosts. The author left this open at the close of the 2026-08-12 round; it
-must be settled before implementation, not decided inside it.
+## Cap decision (settled 2026-08-12)
+
+**No cap, no `/6`, one weight constant.**
+
+`divergenceScore` and `irreversibilityScore` already return integers `0..3`,
+so their raw sum is an integer `0..6`. The `/6` divisor and the `min(1, sum)`
+cap both exist only to satisfy the *Weights* invariant of the old regime
+(derived terms bounded by `SIGNAL_TERM_WEIGHT + CAPTURE_TERM_WEIGHT = 2` so an
+authored boost still dominates). That regime is gone: capture is lineage, and
+a delegation is an ordinary parent.
+
+Measured on the live graph, the cap is inert — across all 18 recovering nodes
+the axis sum maxes at **6 of a possible 6**, so `min(1, sum)` reduces nothing.
+17 recover exactly one delegation; `strategy-author-approved-copy` recovers
+two. Keeping the cap would also reintroduce the kind-specific asymmetry that
+`kind-kind` clarification 1 was amended to retire.
+
+### The scale is the real decision — do not skip it
+
+| scale | authored boosts (post-migration) | delegation contribution |
+|---|---|---|
+| min | 1 | 1 |
+| median | 20 | 3 |
+| p75 | 50 | 4 |
+| max | 96 | 6 |
+
+The authored distribution is strongly bimodal at **20** (32 nodes) and **50**
+(26 nodes). A raw `1..6` contribution against that would make capture
+effectively invisible — and **15 of the 18 recovering strategies carry no
+authored boost at all**, so capture is their entire rank claim. Today the
+reverse holds: raw `attention.boost` has median 3 with 46% of values below
+1.0, so the `[0,1]` capture term is currently competitive with half the
+authored graph.
+
+Preserving that relative weight across the migration takes **one named
+constant**:
+
+```
+DELEGATION_SEVERITY_WEIGHT = 10   // severity 1..6 -> 10..60
+```
+
+which spans both authored modes. Net simplification: three mechanisms
+(divisor, cap, term weight) collapse to one constant.
+
+## Why no `goal_layer` flip
+
+`resolveAttention`'s authored fixpoint already sweeps **every** node and lets
+an ineligible node relay its distributors' outgoing set, filtering to eligible
+nodes only when building the output map
+(`packages/intentionsutil/src/attention.ts`, the `authoredOutgoing` loop). So
+a delegation can seed a derived boost into the lineage sum while never
+appearing as a rankable node. No schema change is required.
+
+Flipping the flag instead would cost two things:
+
+- `validateGraph` rule 5 gates `attention`, `office_hours` and `pace_exempt`
+  on the same flag, so `office_hours` and `pace_exempt` would become legal on
+  delegations — a delegation is not parkable and not pace-exempt.
+- All 22 delegations would enter `hold-alerts.ts`'s top-K pool (every node in
+  `resolveAttention`'s output map with `phase !== "done"` and
+  `office_hours === null`), shifting its cutoff.
+
+The router is unaffected either way — `selectGraphTargets` filters to
+`kind === "tactic"` before selection.
+
+## Two properties that come free
+
+- **Dedup.** The fixpoint already dedupes by source id (`next.set(src, amt)`),
+  which is exactly the round's count-each-lineage-node-once rule.
+- **Tier invariance.** The derived boost is the same in every tier. Per-tier
+  namespacing exists because an *authored* magnitude is chosen against a
+  tier's scale; nothing is authored here.
 
 ## Measured scope
 
 19 `recovers` edges across 22 delegation nodes (live graph, 2026-08-12).
+Delegation axis sums: `1:3  2:6  3:5  4:5  5:3` (0 delegations at 0 or 6).
