@@ -66,6 +66,24 @@ cp "$SCRIPT_DIR/lib.sh" "$DISPATCH/lib.sh"
 cat >"$DISPATCH/lib-reservation-ledger.sh" <<STUB
 reservation_sweep() { echo sweep >>"$SEQ_DIR/sweep.log"; return 0; }
 STUB
+# lib-frozen-session-park.sh is STUBBED for the same reason, and its stub records
+# ORDER as well as count. The driver's contract is "sweep, THEN advance" — a
+# sweep that ran after the advance it was meant to protect would still count 1:1
+# while doing nothing for the escalation the advance is about to trip over. So
+# the stub records the advance counter AS IT STANDS at sweep time; the Nth sweep
+# must see N-1 completed advances. The real sweep's behavior (which sessions it
+# parks, and on what evidence) is covered by test-lib-frozen-session-park.sh.
+cat >"$DISPATCH/lib-frozen-session-park.sh" <<STUB
+terminal_without_disposition_sweep() {
+  local n
+  n=\$(cat "$SEQ_DIR/advance.count" 2>/dev/null) || n=missing
+  printf '%s\n' "\$n" >>"$SEQ_DIR/terminal-sweep.log"
+  return 0
+}
+STUB
+# Kept so the load-failure cases at the end can put it back.
+FROZEN_LIB="$DISPATCH/lib-frozen-session-park.sh"
+FROZEN_LIB_GOOD=$(cat "$FROZEN_LIB")
 
 RUN="$LADDER/dispatch-ladder-run"
 NODE=tactic-fixture-node
@@ -162,6 +180,20 @@ sweeps() {
   n=$(grep -c . "$SEQ_DIR/sweep.log" 2>/dev/null) || n=0
   echo "$n"
 }
+# terminal_sweeps — how many times terminal_without_disposition_sweep ran.
+terminal_sweeps() {
+  local n
+  n=$(grep -c . "$SEQ_DIR/terminal-sweep.log" 2>/dev/null) || n=0
+  echo "$n"
+}
+# terminal_sweep_order — the advance counter each sweep observed, comma-joined.
+# "0,1" means: swept, advanced, swept, advanced. Anything else means the sweep
+# is running after the advance it is supposed to precede.
+terminal_sweep_order() {
+  local out
+  out=$(paste -sd, "$SEQ_DIR/terminal-sweep.log" 2>/dev/null) || out=""
+  echo "$out"
+}
 
 # Reset every fake to a benign default, then let each case override what it
 # cares about. `landed 4` = "present at origin/main, not done"; `git 0` = the
@@ -177,6 +209,7 @@ reset_seqs() {
   set_seq lock      '0|acquired'
   : >"$SEQ_DIR/lock.sid"
   : >"$SEQ_DIR/sweep.log"
+  : >"$SEQ_DIR/terminal-sweep.log"
   rm -rf "$STATE_DIR"
 }
 
@@ -217,6 +250,7 @@ rc=0; "$RUN" "$NODE" --nope >/dev/null 2>&1 || rc=$?
 assert_eq "usage: an unknown flag exits 2" "2" "$rc"
 assert_eq "usage: nothing was launched" "0" "$(calls advance)"
 assert_eq "usage: the reservation ledger was not swept either" "0" "$(sweeps)"
+assert_eq "usage: nor was the terminal-disposition sweep run" "0" "$(terminal_sweeps)"
 
 # --- launched → advanced → loop → done --------------------------------------
 echo "Test: launch, advance, then a done node completes the run"
@@ -241,6 +275,16 @@ assert_eq "complete: an awaited/advanced event was recorded" "1" "$(events_have 
 # heartbeat is stopped — the bootstrap-deadlock case this skill exists for.
 assert_eq "complete: the ledger was swept once before every advance" \
   "$(calls advance)" "$(sweeps)"
+# The SECOND tick-only sweep the driver owes. Every node-lane skill's escalation
+# path writes $CLAUDE_JOB_DIR/office-hours-reason and deliberately declares NO
+# node-terminal marker, leaving the park to terminal_without_disposition_sweep.
+# Absent that sweep, dispatch-self-close HOLDs the job and dispatch-ladder-await
+# reads the hold as `throw <id> held-session` (exit 11) forever, on exactly the
+# heartbeat-stopped host this driver exists for.
+assert_eq "complete: the terminal-disposition sweep ran once before every advance" \
+  "$(calls advance)" "$(terminal_sweeps)"
+assert_eq "complete: and ran BEFORE each advance, not after it" "0,1" \
+  "$(terminal_sweep_order)"
 # The acceleration review reads phase wall-clock off this field; if it stops
 # being written the evidence is silently gone.
 TOTAL=$((TOTAL + 1))
@@ -639,5 +683,45 @@ OUT=$("$RUN" "$NODE" --poll-s 1 --max-run-s 2 2>/dev/null) || RC=$?
 assert_eq "max-run: exit 21" "21" "$RC"
 assert_eq "max-run: state.json disposition" "timeout" "$(jq -r .disposition "$STATE_DIR/state.json")"
 assert_eq "max-run: state.json status is halted" "halted" "$(jq -r .status "$STATE_DIR/state.json")"
+
+# --- the terminal-disposition sweep -----------------------------------------
+echo "Test: the terminal-disposition sweep runs once per pass, before each advance"
+# Same 1:1-before-every-advance contract as the ledger sweep, held across a run
+# that takes several quiet passes rather than one launch.
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+run_ladder --max-run-s 600 --ci-wait-s 2
+assert_eq "terminal-sweep: three passes ran" "3" "$(calls advance)"
+assert_eq "terminal-sweep: one sweep per pass" "3" "$(terminal_sweeps)"
+assert_eq "terminal-sweep: each ran BEFORE its advance" "0,1,2" "$(terminal_sweep_order)"
+assert_eq "terminal-sweep: the ledger sweep kept pace with it" "3" "$(sweeps)"
+
+echo "Test: a lib-frozen-session-park.sh that loads without the sweep aborts at startup"
+# dispatch-tick logs a loud line and ticks on when this library fails to load —
+# it runs again in a minute and the skipped sweep is retried. This driver is a
+# ONE-SHOT detached process that exists precisely because no heartbeat is
+# running behind it, so a silently-skipped sweep is not a delayed sweep; it is
+# the wedge the sweep exists to prevent. It must refuse to start instead.
+reset_seqs
+printf '%s\n' ': # loads clean, defines nothing' >"$FROZEN_LIB"
+rc=0; "$RUN" "$NODE" --poll-s 1 >/dev/null 2>&1 || rc=$?
+assert_eq "sweep-undefined: exit 2" "2" "$rc"
+assert_eq "sweep-undefined: nothing was advanced" "0" "$(calls advance)"
+assert_eq "sweep-undefined: and no pass ran at all" "0" "$(sweeps)"
+
+echo "Test: an unreadable lib-frozen-session-park.sh is refused by name, not skipped"
+reset_seqs
+rm -f "$FROZEN_LIB"
+rc=0; ERR=$("$RUN" "$NODE" --poll-s 1 2>&1 >/dev/null) || rc=$?
+assert_eq "sweep-absent: exit 2" "2" "$rc"
+assert_eq "sweep-absent: nothing was advanced" "0" "$(calls advance)"
+TOTAL=$((TOTAL + 1))
+if grep -q 'lib-frozen-session-park\.sh' <<<"$ERR"; then
+  PASS=$((PASS + 1)); echo "  PASS: sweep-absent: the refusal names the missing library"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: sweep-absent: the refusal names the missing library"
+  echo "    stderr: $ERR"
+fi
+printf '%s\n' "$FROZEN_LIB_GOOD" >"$FROZEN_LIB"
 
 report_results

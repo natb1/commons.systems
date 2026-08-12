@@ -117,6 +117,34 @@ inside the pass, so none happens while the lock is held.
 The run halts complete when the node is at phase `done` on `origin/main`, or
 when it is gone from `origin/main` entirely (`pruned`).
 
+## The two tick sweeps the driver owes
+
+Before every `advance` the driver runs two sweeps that are otherwise called only
+from `dispatch-tick`. Both are reused verbatim — no wrapper, no variant policy:
+
+- `reservation_sweep` (`lib-reservation-ledger.sh`) — releases the reservation
+  marker the driver's own previous `advance` wrote. Nothing else in the process
+  releases it, so without this the driver deadlocks its own next step with
+  `claimed <id> reservation:…` (exit 13).
+- `terminal_without_disposition_sweep` (`lib-frozen-session-park.sh`) — parks
+  the node of a phase session that **escalated**. Every node-lane skill's
+  escalation path deliberately declares no `node-terminal` marker: it writes
+  `$CLAUDE_JOB_DIR/office-hours-reason` and leaves the park to this sweep.
+  Without it, `dispatch-self-close` holds the job for want of a marker,
+  `dispatch-ladder-await` reads the hold as `throw <id> held-session`
+  (exit 11), and the node stays unselectable on every later run because
+  `worktree_has_live_session` is name-keyed.
+
+Both are ordinarily safe to leave to the heartbeat, because the heartbeat runs
+again in a minute. This driver exists for the host where it does not — so it is
+the one caller for whom "the next tick will clear it" is false, and it owes both
+sweeps itself. Neither is a gate: the driver adds no reclaim rule and no park
+rule of its own, it only makes the tick's own sweeps run on its cadence.
+
+Unlike `dispatch-tick`, which logs a loud line and ticks on, a library that
+fails to load here is fatal: the driver **refuses to start** (exit 2, naming the
+library) rather than running a ladder with a sweep silently missing.
+
 ## How to run
 
 Every command below needs `dangerouslyDisableSandbox: true`: `gh` TLS, the
