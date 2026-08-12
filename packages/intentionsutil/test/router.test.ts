@@ -9,6 +9,7 @@ import {
   selectGraphTargets,
   strategyAlignSelectable,
   strategyFingerprint,
+  tacticScopeFingerprint,
 } from "../src/router.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
@@ -1175,6 +1176,59 @@ describe("strategyFingerprint", () => {
     const base = strategy({ id: "strategy-s", serves: ["virtue-a", "virtue-b"] });
     const reordered = strategy({ id: "strategy-s", serves: ["virtue-b", "virtue-a"] });
     expect(strategyFingerprint(base)).toBe(strategyFingerprint(reordered));
+  });
+
+  /**
+   * `attributes.measured_impact` must stay OUT of the substance set: a ledger
+   * entry is re-measured routinely, and if a re-measurement moved the
+   * fingerprint every open child of the measured node would soft-freeze.
+   *
+   * The exemption is by construction — the substance object is an explicit
+   * allowlist of six fields, with no denylist to add `measured_impact` to — so
+   * this test is the guard: it goes red the moment someone widens the allowlist
+   * to include it. `attributes.conditions` is the control, confirming the test
+   * would notice a substance field that IS hashed.
+   */
+  it("attributes.measured_impact never changes it (re-measuring must not freeze open children)", () => {
+    const base = strategy({ id: "strategy-s", attributes: { conditions: ["c"] } });
+    const fp = strategyFingerprint(base);
+    const measured = strategyFingerprint({
+      ...base,
+      attributes: {
+        ...base.attributes,
+        measured_impact: [
+          {
+            metric: "recurrence_count",
+            value: 4,
+            unit: "occurrences",
+            window: "7d",
+            sensor: "token-economy-sensor",
+            measured: "2026-08-12",
+          },
+        ],
+      },
+    });
+    expect(measured).toBe(fp);
+    // Control: a substance field inside the same `attributes` record does move it.
+    expect(
+      strategyFingerprint({ ...base, attributes: { ...base.attributes, conditions: ["c2"] } }),
+    ).not.toBe(fp);
+  });
+});
+
+describe("tacticScopeFingerprint", () => {
+  /**
+   * The scope stamp hashes `(statement, body)` and NO frontmatter, so
+   * `attributes.measured_impact` cannot reach it even in principle. Asserted
+   * through the public signature — the function takes no node — so this stays
+   * true no matter what the frontmatter carries.
+   */
+  it("is a function of statement and body alone, so no attributes key can move it", () => {
+    const statement = "Ledger the finding.";
+    const body = "# Ledger the finding.\n";
+    const fp = tacticScopeFingerprint(statement, body);
+    expect(tacticScopeFingerprint(statement, body)).toBe(fp);
+    expect(tacticScopeFingerprint(statement, `${body}\nResidue appended.\n`)).not.toBe(fp);
   });
 });
 

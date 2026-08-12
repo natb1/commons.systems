@@ -9,6 +9,7 @@ import {
   attributeSpend,
   daysBetween,
   externalLedgersOf,
+  measuredImpactOf,
   queueSummaryOf,
   renderRsiPlan,
   rsiTaskCost,
@@ -227,7 +228,7 @@ describe("renderRsiPlan", () => {
     expect(md).toContain("a hand-edited section is a defect");
   });
 
-  it("renders all six sections", () => {
+  it("renders all seven unconditional sections", () => {
     const md = renderRsiPlan(input()).markdown;
     for (const heading of [
       "## 1. Top author priorities",
@@ -236,6 +237,7 @@ describe("renderRsiPlan", () => {
       "## 4. Metrics",
       "## 5. Recommended additional telemetry",
       "## 6. RSI task plan",
+      "## 7. Evaluation finding ledger",
     ]) {
       expect(md).toContain(heading);
     }
@@ -495,7 +497,157 @@ describe("externalLedgersOf", () => {
   });
 });
 
-describe("renderRsiPlan §7 external ledgers", () => {
+describe("measuredImpactOf", () => {
+  const measurement = {
+    metric: "recurrence_count",
+    value: 4,
+    unit: "occurrences",
+    window: "7d",
+    sensor: "token-economy-sensor",
+    measured: "2026-08-12",
+  };
+
+  it("reads well-formed records in order, trimming", () => {
+    const n = node({
+      id: "tactic-finding",
+      attributes: {
+        measured_impact: [
+          { ...measurement, metric: "  recurrence_count  " },
+          { ...measurement, metric: "recoverable_tokens", value: 12_500.5, unit: "tokens" },
+        ],
+      },
+    });
+    expect(measuredImpactOf(n)).toEqual([
+      measurement,
+      { ...measurement, metric: "recoverable_tokens", value: 12_500.5, unit: "tokens" },
+    ]);
+  });
+
+  it("returns [] for absent, non-array, or empty values", () => {
+    expect(measuredImpactOf(undefined)).toEqual([]);
+    expect(measuredImpactOf(node({ id: "t" }))).toEqual([]);
+    expect(measuredImpactOf(node({ id: "t", attributes: { measured_impact: measurement } }))).toEqual(
+      [],
+    );
+    expect(measuredImpactOf(node({ id: "t", attributes: { measured_impact: [] } }))).toEqual([]);
+  });
+
+  it("skips malformed records without dropping well-formed siblings", () => {
+    const n = node({
+      id: "t",
+      attributes: {
+        measured_impact: [
+          "bare string",
+          { ...measurement, metric: "" },
+          { ...measurement, value: "4" },
+          { ...measurement, sensor: "   " },
+          { ...measurement, measured: "August 12 2026" },
+          measurement,
+        ],
+      },
+    });
+    expect(measuredImpactOf(n)).toEqual([measurement]);
+  });
+
+  it("keeps a measured zero — 0 is a measurement, not an absence", () => {
+    const n = node({ id: "t", attributes: { measured_impact: [{ ...measurement, value: 0 }] } });
+    expect(measuredImpactOf(n)).toEqual([{ ...measurement, value: 0 }]);
+  });
+});
+
+describe("renderRsiPlan §7 evaluation finding ledger", () => {
+  /** A ledger entry fixture: an rsi-serving tactic with recurrence metrics. */
+  function entry(
+    id: string,
+    recurrence: number,
+    extra: Partial<IntentionNode> = {},
+    impact: unknown[] = [],
+  ): IntentionNode {
+    return node({
+      id,
+      kind: "tactic",
+      serves: [RSI_STRATEGY_ID],
+      statement: `finding ${id}`,
+      attributes: {
+        ledger_entry: true,
+        first_seen: "2026-08-01",
+        measured_impact: [
+          ...impact,
+          {
+            metric: "recurrence_count",
+            value: recurrence,
+            unit: "occurrences",
+            window: "all-time",
+            sensor: "dispatch-phase-eval",
+            measured: "2026-08-12",
+          },
+        ],
+      },
+      ...extra,
+    });
+  }
+
+  it("keeps ledger entries OUT of the §6 task plan", () => {
+    const nodes = baseNodes([entry("tactic-eval-finding-a", 3)]);
+    const md = renderRsiPlan(input({ nodes })).markdown;
+    const six = md.slice(md.indexOf("## 6."), md.indexOf("## 7."));
+    expect(six).not.toContain("tactic-eval-finding-a");
+    expect(six).toContain("no tasks serve the rsi strategy");
+  });
+
+  it("raises no task-done staleness flag for a RETIRED entry", () => {
+    const nodes = baseNodes([entry("tactic-eval-finding-a", 3, { phase: "done" })]);
+    const { flags } = renderRsiPlan(input({ nodes }));
+    expect(flags.some((f) => f.kind === "task-done")).toBe(false);
+  });
+
+  it("renders each entry with its recurrence count, first/last seen and state", () => {
+    const nodes = baseNodes([entry("tactic-eval-finding-a", 3)]);
+    const md = renderRsiPlan(input({ nodes })).markdown;
+    const seven = md.slice(md.indexOf("## 7."));
+    expect(seven).toContain("`tactic-eval-finding-a`");
+    expect(seven).toContain("| open | 3 | 2026-08-01 | 2026-08-12 |");
+  });
+
+  it("lists retired entries too — a recurrence after a fix is the loudest row", () => {
+    const nodes = baseNodes([entry("tactic-eval-finding-a", 9, { phase: "done" })]);
+    const seven = renderRsiPlan(input({ nodes })).markdown.slice(
+      renderRsiPlan(input({ nodes })).markdown.indexOf("## 7."),
+    );
+    expect(seven).toContain("| retired | 9 |");
+  });
+
+  it("orders by recurrence count, highest first", () => {
+    const nodes = baseNodes([entry("tactic-eval-finding-a", 2), entry("tactic-eval-finding-b", 11)]);
+    const md = renderRsiPlan(input({ nodes })).markdown;
+    expect(md.indexOf("tactic-eval-finding-b")).toBeLessThan(md.indexOf("tactic-eval-finding-a"));
+  });
+
+  it("renders non-recurrence impact figures with their sensor attribution", () => {
+    const nodes = baseNodes([
+      entry("tactic-eval-finding-a", 2, {}, [
+        {
+          metric: "recoverable_tokens",
+          value: 42000,
+          unit: "tokens",
+          window: "7d",
+          sensor: "token-economy",
+          measured: "2026-08-12",
+        },
+      ]),
+    ]);
+    const md = renderRsiPlan(input({ nodes })).markdown;
+    expect(md).toContain("recoverable_tokens 42000 tokens/7d (token-economy)");
+  });
+
+  it("renders an empty-state row rather than vanishing, so §8 never floats", () => {
+    const md = renderRsiPlan(input()).markdown;
+    expect(md).toContain("## 7. Evaluation finding ledger");
+    expect(md).toContain("no findings recorded in the ledger");
+  });
+});
+
+describe("renderRsiPlan §8 external ledgers", () => {
   function withLedgers(ledgers: unknown): IntentionNode[] {
     return baseNodes([
       node({
@@ -514,7 +666,7 @@ describe("renderRsiPlan §7 external ledgers", () => {
         ]),
       }),
     ).markdown;
-    expect(md).toContain("## 7. External operational ledgers");
+    expect(md).toContain("## 8. External operational ledgers");
     expect(md).toContain("`~/.claude/plans/prototype.md`");
     expect(md).toContain("invariants I13-I30, not yet absorbed");
   });
@@ -531,10 +683,10 @@ describe("renderRsiPlan §7 external ledgers", () => {
       && f.detail.includes("ledger"))).toBe(false);
   });
 
-  it("renders §7 last, after the task plan", () => {
+  it("renders §8 last, after the finding ledger", () => {
     const md = renderRsiPlan(
       input({ nodes: withLedgers([{ path: "/p.md", note: "n" }]) }),
     ).markdown;
-    expect(md.indexOf("## 7.")).toBeGreaterThan(md.indexOf("## 6."));
+    expect(md.indexOf("## 8.")).toBeGreaterThan(md.indexOf("## 7."));
   });
 });

@@ -25,7 +25,12 @@
 //                    graph: the graph's own record of instrumentation it wants
 //                    and does not yet have.
 //   §6 task plan   — tactics serving strategy-recursive-self-improvement, with
-//                    `attributes.rsi_cost` as the budget cost.
+//                    `attributes.rsi_cost` as the budget cost. Ledger entries
+//                    are excluded — they are records, not tasks.
+//   §7 finding     — every `attributes.ledger_entry` tactic with its recurrence
+//      ledger        and impact figures from `attributes.measured_impact`.
+//   §8 external    — `attributes.external_ledgers` on the rsi strategy; the one
+//      ledgers       section whose absence is a result rather than a defect.
 //
 // THE QUEUE-SUMMARY FIELD, AND WHY IT IS NOT `reading`. The recorded design
 // says the three model-drafted queue summaries "land first as dated readings on
@@ -42,7 +47,7 @@
 // `attributes`, so re-drafting a summary each iteration does not invalidate the
 // strategy stamp of a single open child.
 
-import { ownTier } from "./schema.js";
+import { isLedgerEntry, ownTier } from "./schema.js";
 import type { IntentionNode } from "./schema.js";
 import { resolveAttention } from "./attention.js";
 import { deriveGap } from "./sensors.js";
@@ -52,6 +57,15 @@ import { classifyTactic, strategyBacklogBand } from "./census.js";
 
 /** The strategy whose loop owns this file, and whose tactics are the task plan. */
 export const RSI_STRATEGY_ID = "strategy-recursive-self-improvement";
+
+/**
+ * The `attributes.measured_impact` metric name carrying a finding ledger
+ * entry's occurrence count. Written by
+ * `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding` (which
+ * spells the same literal — it is a shell script and cannot import this) and
+ * read by §7.
+ */
+export const RECURRENCE_METRIC = "recurrence_count";
 
 /** Owner of the dispatch queue summary. */
 export const DISPATCH_STRATEGY_ID = "strategy-graph-native-dispatch";
@@ -100,6 +114,29 @@ export interface ExternalLedger {
   path: string;
   /** What it still carries that the graph does not, and what would retire it. */
   note: string;
+}
+
+/**
+ * One summary measurement read from `attributes.measured_impact` — the ledger's
+ * prioritization column. `recurrence_count` and `recoverable_tokens` are two
+ * `metric` values in this one shape, not two separate fields.
+ *
+ * Summary, never an event log: a record carries the aggregate over `window`, so
+ * re-measuring rewrites the record instead of appending an occurrence.
+ */
+export interface MeasuredImpact {
+  /** What was measured, e.g. `recurrence_count` or `recoverable_tokens`. */
+  metric: string;
+  /** The measured figure. */
+  value: number;
+  /** The figure's unit, e.g. `occurrences` or `tokens`. */
+  unit: string;
+  /** The period the figure aggregates, e.g. `7d`. */
+  window: string;
+  /** The named instrument the figure came from — the attribution to verify. */
+  sensor: string;
+  /** `YYYY-MM-DD` — the day the measurement was taken. */
+  measured: string;
 }
 
 /**
@@ -228,6 +265,43 @@ export function externalLedgersOf(node: IntentionNode | undefined): ExternalLedg
     if (typeof path !== "string" || path.trim() === "") continue;
     if (typeof note !== "string" || note.trim() === "") continue;
     out.push({ path: path.trim(), note: note.trim() });
+  }
+  return out;
+}
+
+/**
+ * The summary measurements recorded on a node, or `[]` when the field is
+ * absent, malformed, or empty.
+ *
+ * Defensive on the same reasoning as `externalLedgersOf`: a malformed entry is
+ * skipped rather than aborting a render. That is not a second, looser
+ * definition of the shape — `validateGraph` rule 21 rejects a malformed entry
+ * outright, so a committed store never reaches this reader with one. The guards
+ * exist because `attributes` is `Record<string, unknown>` and this reader also
+ * runs over uncommitted working-tree nodes, which nothing has validated yet.
+ */
+export function measuredImpactOf(node: IntentionNode | undefined): MeasuredImpact[] {
+  if (node === undefined) return [];
+  const raw = node.attributes.measured_impact;
+  if (!Array.isArray(raw)) return [];
+  const out: MeasuredImpact[] = [];
+  for (const entry of raw) {
+    if (!isPlainObject(entry)) continue;
+    const { metric, value, unit, window, sensor, measured } = entry;
+    if (typeof metric !== "string" || metric.trim() === "") continue;
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    if (typeof unit !== "string" || unit.trim() === "") continue;
+    if (typeof window !== "string" || window.trim() === "") continue;
+    if (typeof sensor !== "string" || sensor.trim() === "") continue;
+    if (typeof measured !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(measured)) continue;
+    out.push({
+      metric: metric.trim(),
+      value,
+      unit: unit.trim(),
+      window: window.trim(),
+      sensor: sensor.trim(),
+      measured,
+    });
   }
   return out;
 }
@@ -441,6 +515,7 @@ export function renderRsiPlan(input: RsiRenderInput): RsiRender {
   out.push(...renderMetrics(input, flags));
   out.push(...renderTelemetry(nodes));
   out.push(...renderTaskPlan(nodes, byId, generatedAt, flags));
+  out.push(...renderFindingLedger(nodes));
   out.push(...renderLedgers(byId));
 
   return { markdown: `${out.join("\n").replace(/\n+$/, "")}\n`, flags };
@@ -813,8 +888,17 @@ function renderTaskPlan(
   today: string,
   flags: StalenessFlag[],
 ): string[] {
+  // Ledger entries serve this strategy too, but they are RECORDS, not tasks:
+  // they carry no plan, no budget cost, and they retire to `phase: "done"` WITH
+  // their metrics intact and stay on disk forever by design. Rendered here they
+  // would both crowd out the actual task sequence and raise a permanent
+  // `task-done` staleness flag per retired entry — a flag whose remedy ("drop
+  // it from the plan and re-derive the sequence") is exactly what must never
+  // happen to them. They get their own §7 instead.
   const tasks = nodes
-    .filter((n) => n.kind === "tactic" && n.serves.includes(RSI_STRATEGY_ID))
+    .filter(
+      (n) => n.kind === "tactic" && n.serves.includes(RSI_STRATEGY_ID) && !isLedgerEntry(n),
+    )
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const rows: string[] = [];
@@ -860,6 +944,69 @@ function renderTaskPlan(
 // --- §7 ---------------------------------------------------------------------
 
 /**
+ * The evaluation finding ledger — every `attributes.ledger_entry` tactic, with
+ * the recurrence and impact figures its `attributes.measured_impact` carries.
+ *
+ * These are excluded from §6 (see `renderTaskPlan`) because they are records,
+ * not tasks. They are rendered HERE rather than nowhere on purpose: the whole
+ * point of accumulating a recurrence count is to inform what the loop works on
+ * next, and `rsi-plan.md` is where the `/rsi` main thread makes that judgment.
+ * A ledger no reader ever sees would carry its figures and change nothing.
+ *
+ * Retired entries stay listed — a retired entry that keeps recurring is the
+ * most informative row in the table, since it says a landed fix did not hold.
+ * Ordered by recurrence count descending (highest recurrence first), then id.
+ * No staleness flag is raised from this section: a recurrence count is
+ * queryable input to a ranking act, never an ordering authority of its own
+ * (`intentions/kind-tactic.md`, `measured_impact`).
+ */
+function renderFindingLedger(nodes: IntentionNode[]): string[] {
+  const entries = nodes
+    .filter((n) => isLedgerEntry(n))
+    .map((node) => {
+      const impact = measuredImpactOf(node);
+      const recurrence = impact.find((m) => m.metric === RECURRENCE_METRIC);
+      return { node, impact, recurrence: recurrence?.value ?? 0 };
+    })
+    .sort((a, b) => b.recurrence - a.recurrence || a.node.id.localeCompare(b.node.id));
+
+  const rows = entries.map(({ node, impact, recurrence }) => {
+    const other = impact
+      .filter((m) => m.metric !== RECURRENCE_METRIC)
+      .map((m) => `${m.metric} ${m.value} ${m.unit}/${m.window} (${m.sensor})`)
+      .join("; ");
+    const firstSeen =
+      typeof node.attributes.first_seen === "string" ? node.attributes.first_seen : "—";
+    const lastSeen = impact.find((m) => m.metric === RECURRENCE_METRIC)?.measured ?? "—";
+    return (
+      `| \`${node.id}\` | ${node.phase === "done" ? "retired" : "open"} | ${recurrence} | ` +
+      `${firstSeen} | ${lastSeen} | ${other === "" ? "—" : clip(other, 160)} | ` +
+      `${clip(node.statement, 110)} |`
+    );
+  });
+
+  return [
+    "## 7. Evaluation finding ledger",
+    "",
+    "Recurring evaluation findings, one node per distinct finding — never one per",
+    "occurrence. Minted and updated by",
+    "`.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`; the",
+    "recurrence count and impact figures come from `attributes.measured_impact`.",
+    "A retired entry keeps its figures and stays on disk (it is exempt from the",
+    "owed-prune census), so a recurrence after retirement resumes its count.",
+    "",
+    "| entry | state | recurrences | first seen | last seen | impact | finding |",
+    "|---|---|---|---|---|---|---|",
+    ...(rows.length > 0
+      ? rows
+      : ["| — | — | — | — | — | — | no findings recorded in the ledger |"]),
+    "",
+  ];
+}
+
+// --- §8 ---------------------------------------------------------------------
+
+/**
  * Pointers to operational records the graph has not absorbed yet.
  *
  * Omitted entirely when there are none — the section's absence IS the statement
@@ -871,7 +1018,7 @@ function renderLedgers(byId: Map<string, IntentionNode>): string[] {
   if (ledgers.length === 0) return [];
 
   const out = [
-    "## 7. External operational ledgers",
+    "## 8. External operational ledgers",
     "",
     "Records that are still load-bearing and still live outside the graph. Each",
     "is a bootstrap carry: read it before acting on the operational layer, and",
