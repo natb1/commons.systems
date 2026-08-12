@@ -60,17 +60,28 @@ REAL_VERIFY_LANDED="$HARNESS_DIR/../../../../packages/intentionsutil/scripts/ver
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
 
-PASS=0; FAIL=0
-ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
-no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
-assert_eq() { # <label> <expected> <actual>
-  if [[ "$2" == "$3" ]]; then ok "$1"; else no "$1 (expected '$2', got '$3')"; fi
-}
-assert_contains() { # <label> <needle> <haystack>
-  if [[ "$3" == *"$2"* ]]; then ok "$1"; else no "$1 (expected to contain '$2', got '$3')"; fi
-}
+# assert_eq / assert_contains and the PASS/FAIL/TOTAL counters come from the
+# shared harness, which also sources lib-test-decision-log-guard.sh — that
+# redirects DISPATCH_DECISION_LOG_DIR into a per-run tmp sandbox, which is what
+# keeps this suite off the production routing-decision log. Sourcing it is the
+# isolation test-decision-log-isolation.sh's Part B ratchet requires; the
+# sibling test-dispatch-fleet-alarm.sh predates the harness and is allowlisted
+# instead, which that file's own comment marks as the less-preferred route.
+# shellcheck source=test-helpers.sh
+source "$HARNESS_DIR/test-helpers.sh"
+
+# Not in the shared harness; defined here against its counters so a negative
+# assertion tallies identically to a positive one.
 assert_not_contains() { # <label> <needle> <haystack>
-  if [[ "$3" != *"$2"* ]]; then ok "$1"; else no "$1 (expected NOT to contain '$2', got '$3')"; fi
+  local label="$1" needle="$2" haystack="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$haystack" != *"$needle"* ]]; then
+    PASS=$((PASS + 1)); echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: $label"
+    echo "    expected NOT to contain: $needle"
+    echo "    actual: $haystack"
+  fi
 }
 
 # --- fixture repo root -------------------------------------------------------
@@ -397,6 +408,6 @@ assert_not_contains "(11) no absent|retired mint-over case label" 'absent|retire
 assert_contains "(11) retired shares the RESUME path with open" 'open|retired' "$SRC"
 
 # --- summary -----------------------------------------------------------------
-echo
-echo "passed: $PASS  failed: $FAIL"
-[[ "$FAIL" -eq 0 ]]
+# report_results is also the decision-log guard's ONLY call site, so the suite
+# must end here rather than tallying by hand.
+report_results
