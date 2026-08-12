@@ -1042,7 +1042,34 @@ attributes:
       as PR #3068 at phase qa and is itself caught in this loop — the pause
       blocks the worker that would advance it and blocks the merge that would
       land it, so an operator dispatch-tick --manual is the only escape for the
-      repair as well as for the criterion.)"
+      repair as well as for the criterion.) (Amended 2026-08-12, after PR #3068
+      was reviewed, fixed and merged by hand under author authorization to
+      bypass the dispatch workflow. The repair named above LANDED — #3068 merged
+      2026-08-12T15:52:11Z, absorbed to main-qa by reconcile-graph-merged — but
+      criterion 1 does NOT thereby become satisfiable, for two separately
+      measured reasons. FIRST, #3052 is not merely waiting on a merge lane. Its
+      node sits at phase review, but carries markers planned, qa-done with NO
+      reviewed marker, and graph-auto-merge skips any candidate lacking it
+      (graph-auto-merge:125, the label-free successor to the dispatch:reviewed
+      check). It also carries a live execution.fix interrupt (since 2026-08-09,
+      attempt 2), its PR is a DRAFT, and it has three open blocked_by edges
+      (tactic-flake-analyze-go, tactic-flake-acceptance-action-download,
+      tactic-flake-firestore-query-bounds-sensor-action-download). So restoring
+      the merge lane alone merges nothing: criterion 1 needs the review
+      completed, the blockers cleared and the PR undrafted first. SECOND, a
+      bootstrap gap the pause creates for the repair itself.
+      dispatch-heartbeat.service runs
+      ExecStart=/home/n8/natb1/commons.systems/.claude/skills/dispatch-propagat\
+      e/scripts/dispatch-tick — the script file in the MAIN CHECKOUT, not a copy
+      resolved from origin/main. Measured 2026-08-12 immediately after the
+      merge: that checkout contains neither the drain nor its sync guard (grep
+      for the banner text and for the skip warning both return 0). Nothing
+      autonomously fast-forwards that checkout while paused —
+      dispatch-select-tick Step 1 ff-only sync is the only routine caller, and
+      the paused branch exits before it — so a merged fix TO dispatch-tick
+      cannot deploy itself. An operator ff-merge of the main checkout is
+      required before #3068 has any effect at all, and before its own needs-main
+      item can be observed.)"
     resume_criteria:
       - id: reap-gate-landed
         criterion: "PR #3052 is merged, and the sweep demonstrably reaps a 0-ahead clean
@@ -1052,7 +1079,18 @@ attributes:
         status: fails
         measured: "2026-08-11: #3052 OPEN, 23/23 checks SUCCESS, mergeable CLEAN,
           unmerged. Green and unmergeable-by-the-harness for the reason recorded
-          in self_blocking above."
+          in self_blocking above. 2026-08-12 re-measure: #3052 still OPEN and
+          unmerged, and the 2026-08-11 diagnosis above is INCOMPLETE. It is not
+          blocked solely by the disabled merge lane. Its node carries markers
+          planned, qa-done with no reviewed marker (graph-auto-merge:125 skips
+          candidates lacking it), a live execution.fix interrupt (since
+          2026-08-09, attempt 2), a DRAFT PR, and three open blocked_by flake
+          edges. Restoring the merge lane — which PR #3068 did, merged
+          2026-08-12 — is necessary but not sufficient: this criterion
+          additionally needs the review completed, the three flake blockers
+          cleared, and the PR undrafted before any merge lane can act on it.
+          last_measured and decision above are deliberately NOT restamped: only
+          this criterion was re-measured this pass, criteria 2-5 were not."
       - id: held-sessions-bounded
         criterion: Held-for-debug sessions number 3 or fewer, and no held session is
           reap-eligible-but-stuck (each has an OPEN PR).

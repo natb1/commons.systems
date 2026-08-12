@@ -1,9 +1,9 @@
 ---
 id: tactic-flake-hook-tests-graph-commit-fixture-clone
 kind: tactic
-statement: Make test-graph-commit.sh's fixture setup fail loudly so a transient
-  git clone failure reports one clear error instead of cascading into 11
-  misleading test failures
+statement: Stop test-graph-commit.sh fixture clones from racing source-side git
+  object relocation, and make any remaining fixture-setup failure fail loudly,
+  so a clone failure cannot cascade into 11 misleading product-test failures
 owner: ai
 status: raw
 parent: null
@@ -20,7 +20,40 @@ rationale: "Found by the 2026-08-11 rsi iteration while driving
   whole session plus a 23-check CI re-run to retry a clone. The harness already
   sets the opposite precedent one screen earlier: mktemp is guarded `|| { echo
   ...; exit 1; }` at :273. This extends that existing convention to the rest of
-  the fixture bootstrap rather than introducing a new one."
+  the fixture bootstrap rather than introducing a new one. (Amended 2026-08-12
+  after the fix was written and verified; it is open as PR #3071, CI green,
+  unmerged at the time of writing. ROOT CAUSE, now confirmed rather than
+  suspected: make_clone ran `git clone -q \"$ORIGIN\" \"$1\"` — a local-PATH
+  clone, which hardlink/copies $ORIGIN/objects file-by-file and races a
+  source-side loose-to-pack relocation triggered right after the seed push. The
+  object MOVES rather than vanishing, which is exactly why 73 later assertions
+  reading $ORIGIN still passed while precisely the 11 $B-dependent cases died at
+  run_gc s `cd \"$clone\" || exit 99`. TRANSIENCE, corrected in BOTH directions:
+  the statement s original word transient was falsified by the two consecutive
+  identical CI reproductions recorded in the clarification above — but
+  deterministic, the wording that clarification reached for, is also wrong. A
+  third CI run of the unchanged suite, on PR #3068 s 2026-08-12 head, passed
+  hook-tests green. So this is a genuine race with a high but not certain hit
+  rate, not a guaranteed failure. That matters for how the fix is validated: a
+  single green hook-tests run is WEAK evidence either way, and the real argument
+  for the fix is mechanical rather than statistical — --no-local removes the
+  racing code path instead of making it win more often. WHAT THE FIX DOES (all
+  three changes, fixture SETUP only, no assertion touched): (1) make_clone
+  clones with --no-local, routing through upload-pack, which streams a single
+  pack and is immune to source-side object relocation; --no-hardlinks was
+  considered and REJECTED because it keeps the same per-file copy loop and only
+  forces the branch that already failed. (2) `gc.auto 0` and `receive.autogc
+  false` on the scratch $ORIGIN and $SEED, silencing the only asynchronous
+  writer those repos can have. (3) The loud-failure check this node was
+  originally scoped for: make_clone now tests git clone s exit status and aborts
+  with a single `error: fixture setup failed: ...` line, extending the mktemp
+  guard idiom at :271-273. So this node s original scope is the third item, and
+  the widening the clarification called for is items 1 and 2. VERIFIED: local
+  suite passed 84, failed 0. Case 30 (dead-holder steal) was checked by name,
+  because --no-local no longer hands a fresh clone $ORIGIN s refs/graph/**
+  objects for free — it passes because graph-commit s lock path does its own
+  ls-remote/fetch of refs/graph/landing-lock rather than relying on the clone
+  carrying it.)"
 reading: null
 serves:
   - strategy-token-economy
