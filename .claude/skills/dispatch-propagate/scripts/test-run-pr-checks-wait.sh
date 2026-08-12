@@ -270,8 +270,24 @@ cat > "$STUB/checks.json" <<'EOF'
 EOF
 run_sut
 assert_eq "default bound: exit 0" "0" "$RC"
-assert_file_contains "watch runs under timeout with the 1800s default" \
-  "$STUB/timeout-calls.log" "timeout 1800 gh pr checks $PR --watch"
+assert_file_contains "watch runs under timeout with the 540s default" \
+  "$STUB/timeout-calls.log" "timeout 540 gh pr checks $PR --watch"
+
+# Regression guard. The bound exists so the pending-row classification below the
+# watch actually runs; the real caller is a model Bash tool call whose own
+# ceiling is 600s. A default at or above 600 is unreachable — the tool call dies
+# before `timeout` fires and no verdict is produced. Assert the INEQUALITY, not
+# just the literal, so a future edit that raises the default past the ceiling
+# goes red even if it also updates the literal above.
+default_bound=$(sed -n 's/^timeout \([0-9][0-9]*\) gh pr checks.*/\1/p' \
+  "$STUB/timeout-calls.log" | head -1)
+assert_eq "default bound is numeric" "540" "$default_bound"
+if [[ -n "$default_bound" && "$default_bound" -lt 600 ]]; then
+  assert_eq "default bound sits under the 600s Bash-tool ceiling" "ok" "ok"
+else
+  assert_eq "default bound sits under the 600s Bash-tool ceiling" \
+    "ok" "bound ${default_bound:-<unparsed>} is not < 600"
+fi
 teardown
 
 setup

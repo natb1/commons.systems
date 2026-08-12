@@ -16,12 +16,23 @@ set -euo pipefail
 #       parseable JSON, or checks were still pending when the bounded watch gave
 #       up. Explicitly NOT green.
 #
-# The watch is bounded (PR_CHECKS_WATCH_S, default 1800s) because
+# The watch is bounded (PR_CHECKS_WATCH_S, default 540s) because
 # `gh pr checks --watch` can block forever on a check run that never reports —
 # GitHub sometimes leaves a run `queued` with a null conclusion after its parent
 # check suite has concluded. This script is invoked by a model through the Bash
 # tool, whose own ceiling is 600s, so an unbounded watch burns the whole tool
 # call and returns no verdict at all.
+#
+# The default sits BELOW that 600s ceiling on purpose. A bound at or above it is
+# not a bound at all for the real caller: the Bash tool would kill the call
+# first, `timeout` would never fire, and the pending-row classification below —
+# the whole point of bounding the watch — would never run. 540 rather than 600
+# leaves ~60s of headroom for the post-watch work, which is three network round
+# trips (`gh pr checks --json`, `gh_pr_view_rest`, `dispatch_ci_verdict_rest`),
+# any of which `gh_retry` may retry.
+#
+# A caller not subject to the Bash-tool ceiling — a headless or detached driver
+# such as dispatch-ladder-run — can raise the bound via PR_CHECKS_WATCH_S.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
@@ -86,7 +97,7 @@ fi
 # verdict is parsed from --json below, so watch's exit status is deliberately
 # ignored. Falling out of the bound is not a green signal — the pending arm
 # after the fail-bucket parse below handles it.
-watch_bound="${PR_CHECKS_WATCH_S:-1800}"
+watch_bound="${PR_CHECKS_WATCH_S:-540}"
 timeout "$watch_bound" gh pr checks "$pr_number" --watch > /dev/null 2>&1 || true
 
 # Capture the human-readable table for the log / output file (display only).
