@@ -8,7 +8,6 @@ parent: null
 rationale: Auto-created by dispatch-fleet-alarm from an out-of-band fleet
   instrument reading. See the body for the reading.
 reading: null
-gap: null
 serves:
   - strategy-autonomous-execution
 recovers: []
@@ -16,7 +15,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []

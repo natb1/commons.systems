@@ -115,61 +115,17 @@ identified, as graph nodes serving the right strategy. Land via `graph-commit`;
 verify by parsing `origin/main`, never by exit code. Most iterations should be
 mostly this: the harness does the work, rsi decides what the work is.
 
-**4b — Execute (cost 1 each).** Drive a claimed node through the dispatch phase
-skills, one phase at a time, with two scripts:
+**4b — Execute (cost 1 each).** Drive the claimed node through the dispatch
+phase skills with **`/dispatch-emulate <node-id>`**, invoked **in this thread**
+— never in an Agent-tool subagent. That skill is the loop's only home: it owns
+the advance/await cycle, its exit-code contract, the phase ladder, and the three
+non-negotiable rules that hold throughout. Read it there; do not restate any of
+it here. It refuses a strategy id — run `/align-tactics <strategy-id>` first,
+then emulate a child tactic.
 
-```bash
-.claude/skills/rsi/scripts/rsi-advance <node-id>          # launch one phase
-.claude/skills/rsi/scripts/rsi-await   <node-id> <phase>  # wait, then verify
-```
-
-Both need `dangerouslyDisableSandbox: true` (gh, the Claude daemon socket, git,
-direnv — `.claude/rules/sandbox.md`). `rsi-advance` prints
-`launched <id> <kind> <phase> <skill>`; hand that `<phase>` to `rsi-await` as the
-from-phase. The loop is:
-
-1. `rsi-advance <id>`. Exit **0** means a session is running — go to 2. Exit
-   **10** means there is nothing to launch (not selectable, CI still pending, a
-   stale selection); stop the loop and read its stderr. Exit **11** means throw
-   — go to step 5 below. Exit **13** means another session holds the node;
-   **stop**, and never work around it.
-2. `rsi-await <id> <phase>`. Exit **20** means still working — call it again with
-   the same arguments, as many times as it takes. Exit **0** means the node
-   advanced (or was pruned, and the loop is done). Exit **11**, **12** or **14**
-   go to step 5.
-3. On exit 0, return to 1. The next `rsi-advance` re-reads the phase from
-   `origin/main`, so nothing needs to be threaded between iterations.
-4. Stop when `rsi-advance` reports `idle` or `rsi-await` reports `pruned`. A
-   node that reaches `main-qa` and merges leaves the loop through `idle` — the
-   tick's merge lane, not this loop, finishes it.
-5. On any throw: **do not push through and do not retry blindly.** Conduct the
-   office-hours engagement here, attended, and record the outcome in the graph.
-   A `stalled` (12) in particular means the worker stopped having changed
-   nothing — read its transcript before spending budget on a repeat.
-
-**What the scripts do and do not decide.** They decide nothing about
-eligibility. `rsi-advance` delegates the phase directive to
-`graph-select-target --node <id>` — every environmental gate applied verbatim,
-including the CI and PR sensor gates and the fix/conflict interrupts — and the
-launch to `dispatch-graph-execute`, which owns provisioning, the phase-skill
-mapping, the reservation handoff, and every park/hold disposition. `rsi-await`
-takes its verdict from `verify-landed` against `origin/main`, never from a
-session's exit status. **If a rule about when a node may run ever appears in
-these scripts, it is in the wrong place** — that is the second-orchestration-
-surface divergence the record forbids.
-
-Three rules hold, and none of them is negotiable:
-
-- **Never hand-merge.** The tick's merge lane runs even while dispatch is
-  paused. Let it. Neither script makes a merge, a graph write, or a `gh` call.
-- **Never run a phase skill in an Agent-tool subagent.** `/qa-fix`,
-  `/review-fix` and `/align-tactics` depend on the Workflow tool, which a
-  subagent cannot use. They must be spawned sessions — which is what
-  `dispatch-graph-execute` does.
-- **Never work a node dispatch is working.** `rsi-advance` refuses on exit 13
-  when a live session or an unreleased ledger marker claims the node, and it
-  writes its own marker before spawning so the boot window is covered. Exit 13
-  is the mutual exclusion, not an obstacle to route around.
+`/rsi` keeps what is rsi's: the budget above, and the throw. When
+`/dispatch-emulate` stops on a throw, conduct the office-hours engagement here,
+attended, and record the outcome in the graph.
 
 ## Pause and resume authority
 

@@ -4870,6 +4870,230 @@ clarifications:
       this session never classified. Leaving it untouched is the fail-closed
       choice. The re-measurement (47 open children, 1 stamped) updates the
       2026-08-03 finalize-time figure of 46 open and 0 keyed."
+  - question: What gate reviews an /align round's drafted graph updates before they
+      commit?
+    answer: "(Recorded 2026-08-11 interview; amended same day from the bootstrap
+      review's two rounds.) Every /align round whose graph-commit creates or
+      modifies any strategy-* node field other than the router-owned ones
+      (phase, execution, office_hours, reading, and attention stamps), or
+      creates any new node file, runs a mandatory adversarial draft design
+      review after drafting and before that commit — the predicate is the
+      commit's own diff, mechanically checkable, never the session's
+      self-judgment; it covers new-strategy rounds,
+      statement/rationale/signal-only amendments, and draft-tactic-only rounds,
+      while excluding the mechanical phase-transition writers, which touch only
+      router-owned fields. The reviewer is an independent subagent (launched
+      with an explicit model: opus parameter — the launch argument, not skill
+      frontmatter, which is only confirmed honored for context: fork skills)
+      executing /align-review with no drafting-session context. Its handoff pack
+      is assembled by an owned script (assemble-review-pack) from on-disk
+      artifacts, never composed as session narrative: the author's requirement
+      text written verbatim at step 1, the dump-node base JSON and exact
+      write-node input JSON for every edited node, each draft tactic's JSON and
+      body, the design-proposals rule, origin/main renders of every touched node
+      and of every file the round's carrier tactics will amend, and the round's
+      freeze classification and delegation-sweep outcome — each written to the
+      round's pack dir by the /align step that produces it, with the script
+      failing closed when any is missing. Interview resolutions enter the pack
+      as the drafted clarification entries themselves. The reviewer proposes
+      alternate designs against both the author's original proposal and the
+      draft, reconsiders assumptions in the existing graph — evaluating whether
+      the draft is ideal greenfield design — and returns a verdict, a
+      requirement-clause coverage table, and findings ranked MATERIAL/MINOR. The
+      coverage table is the authoritative discharge of the record-completeness
+      contract (condition 7): the reviewer reads only the pack, so it is a
+      fresh-session proxy — the exact reader that contract is written for — and
+      the skill's own coverage walk reconciles against the reviewer's table,
+      escalating any clause the reviewer could not place; the reviewer
+      additionally flags every fact it needed that is not in the material
+      landing on origin/main (the write-node inputs and draft-tactic bodies) —
+      that list is the round's condition-7 defect list. Disposition: MATERIAL
+      findings — anything that changes WHAT the record says, including
+      design-shape problems, contradictions with author-confirmed resolutions,
+      and any challenge to recorded doctrine — go to the author through the
+      interview's question mechanics (recommendation + boldness +
+      accept-as-deferral; a deferred material finding enrolls a Mode-A
+      born-parked review item per the deferral mechanics); MINOR findings are
+      structurally incapable of carrying judgment — they change only HOW the
+      record says something (typo, missing or wrong date, schema/format defect;
+      a wrong-citation fix only when the intended referent is unambiguous and
+      exists) — and fold into the draft, reported in the round summary. If
+      disposition changes the draft's design shape (a new or removed unit, a
+      changed carrier, changed condition semantics), the amended draft is
+      re-reviewed — never for MINOR folds or wording — capped at two review
+      rounds per bundle, after which the round surfaces the residue to the
+      author and proceeds on the author's call. Enforcement floor: graph-commit
+      refuses a gated commit (dedicated exit code) unless it carries --review
+      <report-file> whose report names the node ids it reviewed and a digest of
+      the exact write-node input JSON it was given — graph-commit recomputes the
+      digest from the staged node files and refuses on mismatch, so a stale
+      pre-disposition receipt fails mechanically — or an explicit --ack <reason>
+      flag recorded as a commit trailer (the condition-14 escape-hatch idiom; a
+      message-substring would have no author surface since graph-commit authors
+      its own messages). Judgment stays in the review; the receipt check is
+      mechanical, per the scripted-path condition of 2026-08-11. A multi-topic
+      round reviews per strategy commit bundle. /align-review is also
+      author-invocable standalone against any staged draft. Per-round cost — one
+      opus subagent per gated bundle, at most two — is accepted and read by the
+      token audit's by-node attribution. Arming: the gate as a whole reads
+      not-yet-armed until tactic-align-review-skill lands the skill text, the
+      pack script, and the receipt flag; the interim discharge is a general
+      subagent carrying this clarification's pack spec inline — the proven
+      bootstrap path (two live runs 2026-08-11) — and the interim expires when
+      that tactic's PR merges, after which an inline-pack discharge is drift,
+      not a sanctioned path. Scope is /align only (the author's directive names
+      /align executions); extending the gate to /align-tactics' drafted plans is
+      a recorded candidate — one --review flag, not a redesign. The gate changes
+      no delegation record: the reviewer is itself Claude and material findings
+      route to the author, so judgment stays author-held —
+      delegation-anthropic-claude is unchanged and no recovers edge applies.
+      Skill build tracked at tactic-align-review-skill."
+  - question: Steelman — the interview is already the audit; does a second reviewer
+      diffuse that responsibility?
+    answer: "(Diverged 2026-08-11, reasons recorded.) The rival holds the interview
+      solely responsible for design quality and reads a post-draft reviewer as
+      institutionalizing rushed interviews while adding per-round cost; its
+      softer form — the review as advisory, run at the session's discretion —
+      was offered and rejected in this round's interview. Diverged: the live
+      2026-08-11 precedent (the rsi-plan priorities round in this same session)
+      ran exactly this review ad hoc at author direction and caught three
+      material design-shape problems the completed interview had missed — an
+      actuator set that could defeat the author's forcing mechanism, a
+      mitigation with no recorded carrier, and a brownfield attribute split — at
+      the bounded cost of one subagent. The gate strengthens rather than
+      replaces the audit: findings route back through the interview's own
+      question mechanics, so responsibility stays with the round; and the
+      advisory alternative failed precisely because the precedent ran only by
+      author direction — an optional gate is the one that does not run. The same
+      argument closed the enforcement seam: an unenforced mandatory gate
+      inherits the advisory flaw, so the graph-commit receipt floor (see the
+      gate clarification) is part of the divergence's resolution, not an
+      optional extra."
+  - question: Is the interview still the audit once the draft review gate exists?
+    answer: "(Recorded 2026-08-11, from the bootstrap review's findings.) Yes,
+      amended: the interview is the audit; the draft review is the audit's
+      second reader, not a substitute for it. A rushed interview is still a
+      permanent gap — the reviewer sees only what the pack carries, so it can
+      catch a mis-shaped design but not an unasked question — and the reviewer's
+      material findings return to the interview's own question mechanics rather
+      than replacing them. This entry is the doctrine's graph home: the align
+      skill text previously asserted 'the interview is the audit... there is no
+      downstream review step' citing a clarification on this node that does not
+      exist (the phrase lived only in skill prose and a transient tactic node);
+      the carrier tactic rewrites that skill paragraph to match this record and
+      fixes the citation, and the tactic-graph-native-dispatch spec sentence is
+      reconciled in this same commit."
+  - question: What is /dispatch-emulate, why does the dispatch surface own a
+      hand-driven emulation entry point, and what bounds it?
+    answer: "(Recorded 2026-08-12 /align interview, post-hoc: the skill landed
+      first, at 55d07b51 / PR #3069, and this entry records the requirement it
+      was built to.) THE PROCEDURE. Drive ONE tactic node through the real
+      dispatch phase ladder, one phase at a time, as spawned sessions running
+      the real dispatch phase skills — align-tactics, implement, the fix and
+      conflict interrupts, review, qa, main-qa. Nothing in it re-implements a
+      phase. IT EXISTS FOR the case the tick structurally cannot reach: dispatch
+      is paused and the fix is what would unpause it, or any other bootstrap
+      deadlock the tick has no route into, or an author who wants one node
+      driven under supervision. Before the extraction the procedure was written
+      down only inside /rsi Step 4b, so reaching it meant running a full /rsi
+      iteration with its claim, its plan render, its judgment step and its
+      budget. WHY THE REQUIREMENT IS RECORDED HERE rather than on
+      strategy-recursive-self-improvement, which built it: this strategy owns
+      the dispatch skill surface, and it already carries the emulation doctrine
+      this skill must obey — the clarifications on what a bootstrap-emulating
+      session owes the qa phase and the review phase (2026-07-04, entries
+      19-20). rsi keeps only what is rsi's: the budget, the attendedness, the
+      judgment step, and pause authority; /rsi Step 4b is now a delegation to
+      this skill, and rsi's own rsi-implement-contract clarification is amended
+      to match in the same round. THE BOUND — recorded as a divergence, not an
+      omission. The steelman put to the author: a user-invocable emulation skill
+      IS the second orchestration surface strategy-recursive-self-improvement's
+      condition 3 forbids, and giving it its own front door removes the three
+      guards that bounded the 2026-08-10 divergence — attended, serialized,
+      budget-bounded. DIVERGED 2026-08-12, reason recorded: the extraction moves
+      no scheduling authority at all. graph-select-target --node owns every
+      eligibility question — claim safety, the per-phase CI and PR sensor gates,
+      the fix and conflict interrupts — and --node is a selection-ORDER
+      override, never a gate bypass; dispatch-graph-execute owns provisioning,
+      the phase-to-skill mapping, the spawn, the reservation handoff, and every
+      park and hold disposition; the verdict comes from verify-landed against
+      origin/main, never from a session's exit status. So there is one
+      orchestration surface, now merely named. THE INVARIANT that keeps the
+      divergence honest, and the thing to check any future edit against: THE TWO
+      SCRIPTS DECIDE NOTHING. If a rule about when a node may run ever appears
+      in dispatch-emulate-advance or dispatch-emulate-await, it is in the wrong
+      place and belongs to the selector. Second half of the bound: the skill has
+      NO attendedness and NO pace-exemption of its own — it is attended because
+      its callers are, and it inherits nothing else. A STRATEGY ID IS REFUSED
+      MECHANICALLY, not by prose: dispatch-emulate-advance gates on the
+      selector's own kind, prints 'refused <id> strategy' and exits 2, before
+      any reservation is written, because an /align-tactics pass on a strategy
+      decomposes it into CHILD tactic ids rather than advancing the strategy up
+      the ladder — so there is no single node for the loop to follow. A tactic
+      whose selector rung is align-tactics is a legitimate starting point, since
+      /align-tactics finalizes that same node in place. THE LOOP'S FINAL STEP is
+      the implementation evaluation (author ruling, 2026-08-12), which /rsi
+      inherits through the delegation rather than carrying separately; see
+      strategy-recursive-self-improvement's condition 14 and
+      tactic-rsi-implement-acceleration-review, re-targeted to this skill in the
+      same round."
+  - question: Who merges an emulated run's PR — the tick's merge lane, or the
+      emulation loop itself?
+    answer: "(Author-directed 2026-08-12, after the /align interview surfaced a
+      false instruction shipped in the skill.) THE DEFECT. /dispatch-emulate's
+      SKILL.md ships the rule 'Never hand-merge. The tick's merge lane runs even
+      while dispatch is paused. Let it.' The second sentence is false as
+      written, and this graph already knew it: graph-auto-merge is invoked only
+      at dispatch-select-tick:505, and every dispatch-select-tick invocation
+      sits past the pause short-circuit's exit 0 at dispatch-tick:415, so no
+      node-lane PR merges while the pause sentinel exists. The sentence was
+      inherited verbatim from /rsi's Step 4b during the extraction; note that
+      the extraction REMOVED it from /rsi, so it has one home, not two. THE
+      AUTHOR'S CHALLENGE, and the ruling: the loop delegates every other phase
+      to the same scripts dispatch uses, then outsources the terminal step to
+      the scheduler it exists to route around — a structural inconsistency, and
+      it fails precisely when the loop is most needed. So the answer is not to
+      patch the sentence but to make it unnecessary. GREENFIELD DESIGN, adopted:
+      graph-auto-merge owns ALL of its admission gates — including the
+      main-known-good check that today lives in dispatch-select-tick around the
+      call site rather than inside the script — and takes an optional node-id
+      filter, so a caller can merge one node rather than sweeping the queue;
+      reconcile-graph-merged takes the same filter, because a merge the loop
+      performs must also be absorbed or the node sits merged-but-stuck at phase
+      review. Both the dispatch tick and /dispatch-emulate then call one
+      fully-gated script, and the pause gates worker spawning only, exactly as
+      this graph's pause doctrine already says it should. The emulation loop
+      still decides nothing: it delegates the merge the same way it already
+      delegates selection and launch. WHY THIS DOES NOT BREAK THE ONE-GATE
+      INVARIANT of the 2026-08-05 admission-gate ruling (entry 197) — it extends
+      it. Main health is a FOURTH predicate on the same single admission
+      decision as mergeability, office_hours and blocked_by, and that ruling's
+      named defect is uncoordinated tactics racing the same gate surface. So the
+      main-health predicate is sequenced BEHIND the two gate tactics still open
+      (tactic-graph-auto-merge-up-to-date-gate at implement,
+      tactic-graph-auto-merge-office-hours-gate at main-qa) rather than opening
+      a third racer. ACCEPTED CONSEQUENCES, named: two callers of one gated
+      script can race when dispatch is unpaused — benign, because the second
+      sense reads a non-OPEN PR and skips; and the pause stops meaning 'no
+      merges', which is acceptable because the record already names an
+      operator-run dispatch-tick --manual and an author hand-merge as legitimate
+      escapes, so this formalizes an existing escape rather than inventing one.
+      The skill's stated invariant that neither script makes a merge, a graph
+      write, or a gh call is re-scoped accordingly: neither script makes a
+      DECISION. SEQUENCE: (1) tactic-pause-disables-merge-lane (PR #3068, in
+      flight at phase qa) makes the paused tick run the node-lane merge chain —
+      verified this round to gate correctly on OPEN_MAIN_RED via
+      dispatch-graph-main-red-sync and to run reconcile-graph-merged
+      unconditionally; (2) tactic-graph-auto-merge-main-health-gate moves that
+      gate into the script and adds the node filter, deleting BOTH call-site
+      copies (#3068 adds a second one); (3) tactic-dispatch-emulate-owns-merge
+      adds the node-scoped merge-and-absorb step to the loop and rewrites the
+      false rule. An interim wording correction lands ahead of all three,
+      because the false instruction is live on main while the queue is paused —
+      the exact condition under which someone would read it. OPERATIONAL NOTE
+      worth keeping: #3068 is itself stalled behind the bug it fixes, sitting at
+      qa while the pause blocks worker spawning and blocks the merge that would
+      land it — the same self-blocking loop this graph recorded for PR #3052."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5194,6 +5418,22 @@ attributes:
       alongside per-call bytes. This is a FLOOR, not a ceiling — ad-hoc shell
       stays available for genuinely novel graph questions, so the recovery path
       virtue-progressive-detachment protects stays open (Recorded 2026-08-11)"
+    - "every graph-commit that creates or modifies any strategy-* node field
+      other than the router-owned ones (phase, execution, office_hours, reading,
+      attention stamps), or creates any new node file, passes the adversarial
+      draft review gate: review before commit, MATERIAL findings dispositioned
+      by the author through the question mechanics, MINOR restricted to
+      format-only fixes (anything changing what the record says is MATERIAL by
+      construction), re-review on design-shape change capped at two rounds per
+      bundle, and the commit carries a content-bound review receipt —
+      graph-commit refuses the write without --review (a report naming the
+      reviewed node ids and matching the digest of the staged write-node inputs)
+      or an explicit --ack flag; the gate as a whole reads not-yet-armed until
+      tactic-align-review-skill lands the skill, pack script, and receipt flag —
+      the interim discharge is the inline-pack bootstrap subagent, expiring when
+      that tactic merges; a skipped, silently-failed, or
+      silently-folded-material review is a defect of the round (Recorded
+      2026-08-11)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

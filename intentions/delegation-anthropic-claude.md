@@ -17,12 +17,52 @@ rationale: "The pivotal delegation of the present conditions: tactical software
   vendor's growth, which is not a virtue held here; the owned budgeting pipeline
   (strategy-recover-finance) is what keeps that import visible."
 reading: null
-gap: null
 serves:
   - strategy-owned-orchestration
   - strategy-recover-author-autonomy
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does the delegation include prioritization of the delegated work?
+    answer: "(Recorded 2026-08-11 /align round on
+      strategy-recursive-self-improvement.) Extended to include it: the model
+      orders its own delegated work queue — a self-curation-shaped widening of
+      the attachment. Mitigations recorded on that strategy: per-node priority
+      logs with dated rationales, fitness-function post-hoc audit, author
+      override at the strategy level, and strategies plus owner: human tactics
+      untouchable. BOUNDED 2026-08-11, second round the same day: the ordering
+      authority is band-scoped. A delegated attention write may never invert
+      cross-strategy order within a tier — a tactic's own boost orders it only
+      inside the band of its distributing strategy — so the strongest mitigation
+      of this widening is structural rather than behavioral: the failure becomes
+      inexpressible, not merely forbidden. The model's remaining cross-strategy
+      instruments are classification acts, which are falsifiable and reviewable
+      against the work itself: a bug_fix/security mark (lifting tier) and a
+      serves edge determined to be genuine (lifting band). See
+      strategy-recursive-self-improvement, its amended tier/rank-composition
+      clarification, its classification-escape clarification, and conditions 15
+      and 17; rank algebra at kind-kind; implementation at
+      tactic-attention-namespaced-rank. No recovers edge is owed: this round
+      narrows the blast radius of the delegated authority without unwinding the
+      delegation. (REVERSED 2026-08-11, later the same day.) The judgment that
+      no recovers edge is owed is withdrawn.
+      strategy-rsi-delegated-prioritization — recorded hours after this
+      clarification — now carries recovers: [delegation-anthropic-claude].
+      Ground for the reversal: /align's delegation sweep records that a strategy
+      which unwinds OR REDUCES RELIANCE ON a delegation should carry the edge
+      even when the unwinding is only partial, and that is what this strategy
+      does. It does not take ordering authority back from the model; it bounds
+      that authority — every reordering logged, namespaced inside author-set
+      strategy bands, and answerable to a fitness function the author can read.
+      Narrowing a delegation's blast radius IS partial recovery, and the earlier
+      wording drew the line at full unwinding, which is stricter than the
+      recorded rule. Recorded here, on the node that owns what was handed over,
+      rather than only on the strategy: leaving the two records contradicting
+      each other is the failure mode tactic-align-review-skill names, and it is
+      what an adversarial review caught. Mechanical consequence, so it is not
+      discovered by surprise later: the edge gives that strategy and every
+      tactic serving it this delegation's capture term of 0.5 — captureScore =
+      (divergence low-moderate = 2 + irreversibility gated = 1) / 6 — which is
+      recorded in that strategy's attention rationale."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -35,8 +75,10 @@ pace_exempt: false
 rounds: null
 attributes:
   delegatee: Anthropic (Claude) — vendor institution supplying a construction tool
-  delegated: software construction — tactical execution of build and change work
-    across the repo
+  delegated: "software construction — tactical execution of build and change work
+    across the repo, and tactical prioritization of dispatch-delegated work —
+    ordering owner: ai tactics toward the recorded fitness function (extended
+    2026-08-11, strategy-recursive-self-improvement round)"
   origin: chosen
   divergence:
     level: low-moderate

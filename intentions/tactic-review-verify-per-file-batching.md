@@ -19,12 +19,25 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
+  boost: 0.01
   override: null
-  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-cost
+  rationale: >-
+    Author-directed 2026-08-01: prioritize review-phase token/agent-cost
     reduction. Puts this tactic ahead of the undecomposed baseline and on par
     with other tier-2 improvement work, without contending with active
-    reliability fixes (top-of-band ~55-61)."
+    reliability fixes (top-of-band ~55-61).
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: main-qa
 execution:
@@ -69,7 +82,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 
 # Batch the adversarial skeptic gate per (run, file) instead of per finding, preserving one independent adversarial read per file
