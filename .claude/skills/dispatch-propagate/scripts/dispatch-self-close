@@ -51,10 +51,16 @@
 #   `$CLAUDE_JOB_DIR/node-terminal` marker naming THAT node. The marker is
 #   written by `packages/intentionsutil/scripts/mark-node-terminal`, called from
 #   transition-node (advance / demote), park-node (park), /fix-checks
-#   (fix-attempt), /align-tactics (align-round / no-claim) and
-#   /dispatch-conflict's Lane 3 (conflict-resolved / conflict-hold — the
-#   provision-exit-11 session dispatch-graph-execute spawns under the node's own
-#   name, whose terminal paths call neither transition-node nor park-node):
+#   (fix-attempt), /align-tactics (align-round / no-claim), /qa-fix's
+#   fix-finalize path (fix-attempt — landed PR #2986; previously missing, see
+#   the accepted-residual note below) and /dispatch-conflict's Lane 3
+#   (conflict-resolved / conflict-hold — the provision-exit-11 session
+#   dispatch-graph-execute spawns under the node's own name, whose terminal
+#   paths call neither transition-node nor park-node). This enumeration is a
+#   readability aid, not the source of truth: the authoritative, CI-enforced
+#   inventory of which lane declares (and which paths are registered gaps)
+#   lives in `test-node-terminal-coverage.sh` — re-derive from there, not from
+#   this comment, if the two ever disagree:
 #
 #     node=<node-id>
 #     disposition=<advance|demote|park|fix-attempt|align-round|no-claim
@@ -76,9 +82,17 @@
 #   fails toward HOLD. A held job is visible in `claude agents --json` and can
 #   be resumed or cleared by hand; a wrongly-reaped one is simply gone.
 #
-#   Accepted residual: two of the terminal lanes declare via SKILL.md prose. A
-#   dropped line means the job is HELD, not reaped — no work lost, but the node
-#   stays claimed until someone clears it. The distinctive log line is the
+#   Accepted residual, RE-PRICED 2026-07-29 (see the declared-vs-undeclared
+#   clarification on strategy-graph-native-dispatch): a dropped declaration on
+#   a rare/retry-only path is a rare slip — no work lost, but the node stays
+#   claimed until someone clears it. On a lane's *routine success* path,
+#   though, a dropped declaration is a GUARANTEED deadlock on every success,
+#   not a rare slip — this fired for real on every successful /qa-fix auto-fix
+#   pass until PR #2986 landed the missing call (job c20b2f8d, node
+#   tactic-graph-select-target-node-tests, PR #2985). That re-pricing is why a
+#   CI-time ratchet now exists (`test-node-terminal-coverage.sh`) to catch the
+#   next dropped declaration before it ships, rather than relying solely on
+#   this residual note. The distinctive log line below remains the run-time
 #   canary; broad or repeated firing means a lane is failing to declare.
 #
 #   Asking "why is my job being held?" and finding no matching terminal-
