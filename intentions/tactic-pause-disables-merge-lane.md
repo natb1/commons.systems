@@ -22,7 +22,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: main-qa
 execution:
   branch: tactic-pause-disables-merge-lane
   pr: 3068
@@ -35,7 +35,10 @@ execution:
     attempt: 2
     pushed_sha: 74548a2b793abec41ac2d6f044de22c99040f8ff
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-12T15:52:11Z
+    mergeCommitSha: 41600c4222b939ff732b7d69eefee1eaeab49a1c
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
