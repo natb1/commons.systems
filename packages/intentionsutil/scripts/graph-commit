@@ -1343,7 +1343,12 @@ declare -A SUITE_CONCLUDED_CACHE=()
 check_suite_concluded() { # <suite-id>
   local suite_id="$1" status
   [[ -n "$suite_id" && "$suite_id" != "-" && "$suite_id" != "null" ]] || return 1
-  if [[ -n "${SUITE_CONCLUDED_CACHE[$suite_id]:-}" ]]; then
+  # PRESENCE, not non-emptiness: a successful lookup that returned no `.status`
+  # at all caches the empty string, and an `-n` test would read that answer as a
+  # cache MISS and re-query the same suite for every remaining row sharing it —
+  # exactly the per-row fan-out the memo exists to prevent. A failed lookup is
+  # still never cached (it returns before the assignment below).
+  if [[ -n "${SUITE_CONCLUDED_CACHE[$suite_id]+set}" ]]; then
     [[ "${SUITE_CONCLUDED_CACHE[$suite_id]}" == "completed" ]]
     return
   fi
