@@ -107,21 +107,20 @@ clarifications:
       adopted in the per-band form proposed here; the per-TIER half is adopted
       instead, as per-tier authored boosts, and the per-band stamp stays open on
       kind-kind. (Amended 2026-08-12: the per-band stamp is now CLOSED —
-      author-decided REJECTED, dissolved by making the authored boost
-      vocabulary a closed set of absolute levels rather than free magnitudes.
-      Nothing about this node's scope changes; see
-      tactic-attention-per-tier-boost-migration for the levels and
-      strategy-graph-drives-dispatch for the doctrine.) Scope this node now carries: the widened parent relation,
-      per-tier boosts, the deduplicated lineage score with unauthored boosts
-      contributing 0, the (tier, band, score, depth) key, depth as the
-      child-outranks-parent guarantee, terminal (done) nodes contributing
-      nothing, deletion of attention.override, deletion of the signal term from
-      resolveAttention (leaving computeSignalPath in place for the router's
-      strategy-eligibility gate), and deletion of router.ts's
-      effectivePrecedence lift. Sibling work is split out: delegation scoring to
-      tactic-attention-delegation-scoring, the cycle rule to
-      tactic-attention-unified-relation-cycle-rule, and the boost migration to
-      tactic-attention-per-tier-boost-migration."
+      author-decided REJECTED, dissolved by making the authored boost vocabulary
+      a closed set of absolute levels rather than free magnitudes. Nothing about
+      this node's scope changes; see tactic-attention-per-tier-boost-migration
+      for the levels and strategy-graph-drives-dispatch for the doctrine.) Scope
+      this node now carries: the widened parent relation, per-tier boosts, the
+      deduplicated lineage score with unauthored boosts contributing 0, the
+      (tier, band, score, depth) key, depth as the child-outranks-parent
+      guarantee, terminal (done) nodes contributing nothing, deletion of
+      attention.override, deletion of the signal term from resolveAttention
+      (leaving computeSignalPath in place for the router's strategy-eligibility
+      gate), and deletion of router.ts's effectivePrecedence lift. Sibling work
+      is split out: delegation scoring to tactic-attention-delegation-scoring,
+      the cycle rule to tactic-attention-unified-relation-cycle-rule, and the
+      boost migration to tactic-attention-per-tier-boost-migration."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -129,7 +128,36 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Requirement ambiguity needing author ratification before this node can
+    be planned: scope item 2 (per-tier authored boosts throughout the lineage
+    sum) depends on a per-tier boost storage shape that does not exist in code
+    -- Attention (packages/intentionsutil/src/schema.ts:140-146) carries one
+    scalar boost with a single scalar tier tag, and validateGraph rule 20
+    (checkAttentionTierNamespace, schema.ts:1102-1122) forbids tagging that
+    boost with any tier other than the node own tier. Both the per-tier storage
+    shape and rule 20 retirement are recorded as owned by
+    tactic-attention-per-tier-boost-migration, whose frontmatter carries
+    blocked_by: [tactic-attention-namespaced-rank] -- so on the recorded
+    ordering that sibling lands AFTER this node, not before it. Proposed
+    clarification for the author: does tactic-attention-namespaced-rank itself
+    land the per-tier boost storage shape and retire validateGraph rule 20
+    (inverting the recorded blocked_by and absorbing part of the sibling scope),
+    or does this node resolver read today single tagged boost as this node boost
+    in tier attention.tier, 0 in every other tier, until
+    tactic-attention-per-tier-boost-migration lands (keeping the recorded split,
+    but leaving the per-tier promise inert for the ten tier-2/tier-3 nodes -- a
+    tier-lifted tactic bands and scores at 0 in its own resolved tier, precisely
+    the case the per-tier model was adopted to serve)? The plan central axis
+    differs between the two answers, so it cannot be authored on either premise
+    unratified. Recommend: author decides the storage-shape ownership question
+    via a targeted /align pass on tactic-attention-namespaced-rank and
+    tactic-attention-per-tier-boost-migration (or answers it directly at office
+    hours), then re-invoke /align-tactics tactic-attention-namespaced-rank to
+    author the plan against the ratified premise."
+  since: 2026-08-12
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
