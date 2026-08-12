@@ -464,37 +464,42 @@ assert_eq "paused-merge-ok: reconcile-graph-merged WAS invoked" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- tactic-pause-disables-merge-lane: paused branch suppresses the merge when
-# OPEN_MAIN_RED is non-empty (main known-broken) -------------------------------
-# The fake dispatch-graph-main-red-sync prints an open tactic-main-red-* id and
-# exits 0, so OPEN_MAIN_RED is non-empty → graph-auto-merge must NOT run.
-# reconcile-graph-merged still runs unconditionally (it only absorbs
-# already-merged work, safe during a main-broken episode).
-echo "Test: dispatch-tick paused, main known-broken (OPEN_MAIN_RED set) → graph-auto-merge suppressed, reconcile-graph-merged still runs"
+# --- tactic-graph-auto-merge-main-health-gate: the paused branch no longer owns
+# the main-health gate; graph-auto-merge does ----------------------------------
+# These two cases previously asserted the INVERSE — that a non-empty
+# OPEN_MAIN_RED (main known-broken) and a fail-closed UNKNOWN (main-red-sync exit
+# non-zero) each suppressed the paused branch's graph-auto-merge call. The
+# caller-side `if [[ -z "$OPEN_MAIN_RED" ]]` wrapper that implemented that is
+# deleted, along with this branch's dispatch-graph-main-red-sync call entirely.
+#
+# The safety property is NOT dropped, only relocated to where it is now
+# implemented: test-graph-auto-merge.sh cases (k1)-(k5) exercise the real script
+# directly — empty latch merges; an open latch, the UNKNOWN sentinel, and an
+# unrunnable sync each suppress; and `--node` is gated identically. The fake
+# graph-auto-merge here has no internal gate, so what these cases can still pin,
+# and now do, is that the paused branch calls it unconditionally and never
+# re-grows a caller-side copy of the gate.
+echo "Test: dispatch-tick paused, main known-broken → graph-auto-merge still CALLED (it self-gates), main-red-sync not called"
 tick_setup
 : > "$TMPDIR_TEST/paused"
 export TICK_MAIN_RED="tactic-main-red-abc1234"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "paused-merge-red: exit 0" "0" "$rc"
-assert_eq "paused-merge-red: graph-auto-merge NOT invoked" "0" \
+assert_eq "paused-merge-red: graph-auto-merge invoked unconditionally" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-red: paused branch does NOT read the main-red latch itself" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-main-red-sync.log" ] && echo 1 || echo 0)"
 assert_eq "paused-merge-red: reconcile-graph-merged WAS invoked" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
 tick_teardown
 
-# --- tactic-pause-disables-merge-lane: paused branch fails OPEN_MAIN_RED closed
-# on a dispatch-graph-main-red-sync invocation failure ---------------------------
-# Mirrors dispatch-select-tick:467's fail-closed behavior: a non-zero exit from
-# dispatch-graph-main-red-sync folds OPEN_MAIN_RED to UNKNOWN (non-empty), which
-# must suppress graph-auto-merge exactly like a genuinely broken main does. A
-# transient read failure must never masquerade as "main healthy".
-echo "Test: dispatch-tick paused, dispatch-graph-main-red-sync fails → OPEN_MAIN_RED=UNKNOWN, graph-auto-merge suppressed"
+echo "Test: dispatch-tick paused, a failing main-red-sync no longer affects the drain (the gate is inside graph-auto-merge)"
 tick_setup
 : > "$TMPDIR_TEST/paused"
 export TICK_MAIN_RED_RC=1
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "paused-merge-unknown: exit 0" "0" "$rc"
-assert_eq "paused-merge-unknown: graph-auto-merge NOT invoked" "0" \
+assert_eq "paused-merge-unknown: graph-auto-merge invoked unconditionally" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
 assert_eq "paused-merge-unknown: reconcile-graph-merged WAS invoked" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
@@ -642,8 +647,17 @@ export DISPATCH_PAUSED_DRAIN_TIMEOUT_S=42
 out=$(run_tick) && rc=0 || rc=$?
 export PATH="$saved_path"
 assert_eq "paused-drain-timeout: exit 0" "0" "$rc"
-assert_eq "paused-drain-timeout: main-red-sync ran under the configured budget" "1" \
-  "$(grep -cF "42 $TMPDIR_TEST/dispatch-graph-main-red-sync" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null || echo 0)"
+# The paused branch no longer invokes dispatch-graph-main-red-sync at all
+# (tactic-graph-auto-merge-main-health-gate moved that read inside
+# graph-auto-merge), so it is no longer one of the drain's bounded calls. Assert
+# its ABSENCE rather than deleting the line: a re-added caller-side main-health
+# read would be a second copy of the gate, which is the defect this node fixed.
+# Counted into a variable rather than inline: the `grep -c ... || echo 0` idiom
+# the sibling assertions use is only correct for a NON-zero expectation. On a
+# genuine zero, `grep -c` prints "0" AND exits 1, so the `|| echo 0` fires too
+# and the substitution yields the two-line string "0\n0".
+mrs_drain_count=$(grep -cF "42 $TMPDIR_TEST/dispatch-graph-main-red-sync" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null) || mrs_drain_count=0
+assert_eq "paused-drain-timeout: main-red-sync is NOT a drain call any more" "0" "$mrs_drain_count"
 assert_eq "paused-drain-timeout: graph-auto-merge ran under the configured budget" "1" \
   "$(grep -cF "42 $TMPDIR_TEST/graph-auto-merge" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null || echo 0)"
 assert_eq "paused-drain-timeout: reconcile-graph-merged ran under the configured budget" "1" \

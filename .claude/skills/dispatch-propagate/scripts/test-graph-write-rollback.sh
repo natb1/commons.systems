@@ -770,6 +770,73 @@ else
 fi
 
 # ===========================================================================
+# Case 6b: `reconcile-graph-merged --node <id>` narrows the sweep to one node
+# (tactic-dispatch-ladder-skill Unit 1).
+#
+# The /dispatch-ladder driver absorbs its OWN merge and must not sweep the whole
+# graph as a side effect — a node-scoped absorb that also reconciled unrelated
+# merged work would race the tick's sweep over nodes the driver knows nothing
+# about. Both seeded nodes are equally reconcilable, so the ONLY thing that can
+# separate them is the filter: exactly one `--base` pin, keyed to the named id,
+# and one `reconciled` line.
+# ===========================================================================
+T6B="$WORK/t6b-seed"
+build_seed_repo "$T6B"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T6B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T6B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T6B/intentions/t-r1.md" t-r1 101
+reconcile_node "$T6B/intentions/t-r2.md" t-r2 102
+new_origin t6b
+init_and_push "$T6B"
+
+C6B="$WORK/t6b-clone"
+clone_with_node_modules "$C6B"
+BIN6B="$WORK/t6b-bin"; FIX6B="$WORK/t6b-fixtures"
+reconcile_gh_stub "$BIN6B" "$FIX6B"
+cat >"$C6B/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t6b-argv.txt"
+exit 0
+SH
+chmod +x "$C6B/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C6B" || exit 99
+  export PATH="$BIN6B:$PATH" GC_FIXTURE_DIR="$FIX6B"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --node t-r1 2>&1
+)"; rc=$?
+argv6b="$(cat "$WORK/t6b-argv.txt" 2>/dev/null || true)"
+base_count_6b="$(grep -c -- '^--base$' <<<"$argv6b" || true)"
+pin_r1_6b="$(grep -o '^t-r1=[0-9a-f]\{40\}$' <<<"$argv6b" || true)"
+pin_r2_6b="$(grep -o '^t-r2=[0-9a-f]\{40\}$' <<<"$argv6b" || true)"
+
+if [[ $rc -eq 0 ]] \
+   && [[ "$base_count_6b" -eq 1 ]] \
+   && [[ -n "$pin_r1_6b" ]] \
+   && [[ -z "$pin_r2_6b" ]] \
+   && grep -q '^reconciled t-r1 ->' <<<"$out" \
+   && ! grep -q 't-r2' <<<"$out"; then
+  ok "reconcile-graph-merged --node: narrows the sweep to the named node (one --base pin, sibling t-r2 untouched)"
+else
+  no "reconcile-graph-merged --node (rc=$rc, --base count=$base_count_6b, pin_r2='$pin_r2_6b')"
+  printf '%s\n' "$out"
+  printf 'argv: %s\n' "$argv6b"
+fi
+
+# Usage errors exit 2 rather than silently sweeping everything — a mistyped flag
+# from the driver must not become a full-graph reconcile.
+rc_usage=0
+( cd "$C6B" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --node >/dev/null 2>&1 ) || rc_usage=$?
+rc_bogus=0
+( cd "$C6B" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --bogus >/dev/null 2>&1 ) || rc_bogus=$?
+if [[ $rc_usage -eq 2 && $rc_bogus -eq 2 ]]; then
+  ok "reconcile-graph-merged: --node without an id, and an unknown flag, are usage errors (exit 2)"
+else
+  no "reconcile-graph-merged usage errors (--node rc=$rc_usage, --bogus rc=$rc_bogus)"
+fi
+
+# ===========================================================================
 # Case 7: THE RACE — a park landed between the sweep's read and its commit
 # survives the reconcile. This is the case that actually reproduces bug X, and
 # the one that runs the REAL graph-commit (its check_base_freshness is the

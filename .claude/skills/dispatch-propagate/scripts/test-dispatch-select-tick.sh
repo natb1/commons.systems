@@ -200,11 +200,14 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/dispatch-auto-merge"
   # tactic-graph-tick-node-lane-auto-merge Unit 3: fake graph-auto-merge invoked
-  # by the node-lane Step 1d (cont.) block, gated on the same OPEN_MB condition
-  # as dispatch-auto-merge above. Logs its invocation and emits a configurable
-  # merge line so a wiring test can assert the tick prefixes it with `merge: `.
-  # The real merge logic has its own unit tests (graph-auto-merge); here we only
-  # verify the tick wiring.
+  # by the node-lane Step 1d (cont.) block — UNCONDITIONALLY, unlike
+  # dispatch-auto-merge above, since tactic-graph-auto-merge-main-health-gate
+  # moved the main-health gate inside the real graph-auto-merge. This fake has
+  # NO internal gate, which is what lets the wiring test distinguish "select-tick
+  # suppressed the call" from "the script self-gated". Logs its invocation and
+  # emits a configurable merge line so a wiring test can assert the tick prefixes
+  # it with `merge: `. The real merge logic and its main-health gate have their
+  # own unit tests (test-graph-auto-merge.sh); here we only verify the tick wiring.
   cat > "$TMPDIR_TEST/graph-auto-merge" <<'FAKE'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
@@ -793,26 +796,53 @@ assert_eq "node-lane auto-merge wiring: graph-auto-merge invoked" "present" \
   "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
 sel_tick_teardown
 
-# --- Step 1d (cont.): node-lane auto-merge suppressed while main is broken ----
-# (tactic-graph-tick-node-lane-auto-merge Unit 3). An open main-red latch
-# (OPEN_MAIN_RED non-empty, from SEL_MAIN_RED_NODES) suppresses the node-lane
-# block exactly like it suppresses the issue-lane block: graph-auto-merge is NOT
-# invoked and no `merge:` line attributable to it is emitted, even though the
-# fake would emit one if called.
-echo "Test: select-tick node-lane auto-merge suppressed while main is broken"
+# --- Step 1d (cont.): the node-lane main-health gate moved INTO graph-auto-merge
+# (tactic-graph-auto-merge-main-health-gate). This block previously asserted the
+# INVERSE — that an open main-red latch suppressed select-tick's call to
+# graph-auto-merge — because select-tick wrapped that call in
+# `if [[ -z "$OPEN_MAIN_RED" ]]`. That caller-side wrapper is deleted: the gate
+# now lives inside graph-auto-merge, which makes its own
+# `dispatch-graph-main-red-sync --read-only` read and merges nothing when the
+# latch is non-empty, UNKNOWN, or unreadable.
+#
+# The safety property is NOT dropped, only relocated to where it is now
+# implemented — test-graph-auto-merge.sh cases (k1)-(k5) cover it directly
+# against the real script: empty latch merges, open latch / UNKNOWN /
+# unrunnable-sync each suppress, and `--node` is gated identically. What select-tick
+# still owns, and what this case now pins, is that it calls graph-auto-merge
+# UNCONDITIONALLY — a re-added caller-side wrapper would be a second, drifting
+# copy of a load-bearing safety gate, and would silently re-break the
+# /dispatch-ladder driver's reuse of the script.
+#
+# The fake graph-auto-merge deliberately has NO internal gate, so its merge line
+# appearing here is exactly the evidence that select-tick no longer suppresses it.
+echo "Test: select-tick calls graph-auto-merge unconditionally (gate is internal to it now)"
 sel_tick_setup
 export SEL_MAIN_RED_NODES="tactic-main-red-redsha1"
+export SEL_AUTO_MERGE_OUT="merged #42"
 export SEL_GRAPH_AUTO_MERGE_OUT="merged #77 (tactic-y)"
 out=$(run_sel_tick)
+assert_eq "node-lane auto-merge: graph-auto-merge invoked even while main is broken (it self-gates)" "present" \
+  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
 TOTAL=$((TOTAL + 1))
-if ! grep -q 'merge: merged #77' <<<"$out"; then
-  PASS=$((PASS + 1)); echo "  PASS: no node-lane 'merge:' line while main is broken"
+if grep -q '^merge: merged #77 (tactic-y)$' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: ungated node-lane call still prefixes its output with 'merge: '"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no node-lane 'merge:' line while main is broken"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ungated node-lane call still prefixes its output with 'merge: '"
   echo "    actual stdout: '$out'"
 fi
-assert_eq "node-lane auto-merge suppressed: graph-auto-merge NOT invoked" "absent" \
-  "$([[ -f "$STUB_DIR/graph-auto-merge-calls.log" ]] && echo present || echo absent)"
+# The ISSUE lane keeps its caller-side $OPEN_MAIN_RED wrapper — dispatch-auto-merge
+# has no internal main-health gate, so removing that wrapper would be unsafe.
+# Pin the asymmetry so a later cleanup does not "consistently" delete both.
+assert_eq "issue-lane auto-merge: STILL suppressed while main is broken" "absent" \
+  "$([[ -f "$STUB_DIR/auto-merge-calls.log" ]] && echo present || echo absent)"
+TOTAL=$((TOTAL + 1))
+if ! grep -q 'merge: merged #42' <<<"$out"; then
+  PASS=$((PASS + 1)); echo "  PASS: no issue-lane 'merge:' line while main is broken"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no issue-lane 'merge:' line while main is broken"
+  echo "    actual stdout: '$out'"
+fi
 sel_tick_teardown
 
 # --- Step 2e: re-triage orphaned follow-ups wiring (#1812) -------------------
