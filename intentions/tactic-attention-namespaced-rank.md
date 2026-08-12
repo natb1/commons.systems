@@ -106,7 +106,12 @@ clarifications:
       figure and its re-measurement are moot. The attention.scope stamp is NOT
       adopted in the per-band form proposed here; the per-TIER half is adopted
       instead, as per-tier authored boosts, and the per-band stamp stays open on
-      kind-kind. Scope this node now carries: the widened parent relation,
+      kind-kind. (Amended 2026-08-12: the per-band stamp is now CLOSED —
+      author-decided REJECTED, dissolved by making the authored boost
+      vocabulary a closed set of absolute levels rather than free magnitudes.
+      Nothing about this node's scope changes; see
+      tactic-attention-per-tier-boost-migration for the levels and
+      strategy-graph-drives-dispatch for the doctrine.) Scope this node now carries: the widened parent relation,
       per-tier boosts, the deduplicated lineage score with unauthored boosts
       contributing 0, the (tier, band, score, depth) key, depth as the
       child-outranks-parent guarantee, terminal (done) nodes contributing
@@ -222,13 +227,15 @@ INHERITING tier 3 stays legal; (b) `strategy-main-health` must itself carry
 tier 3. This round changes neither tier authorship nor tier inheritance, so
 nothing in rule 18 is touched.
 
-**Rule 20 does need work, and it is not in the scope list above.**
-`checkAttentionTierNamespace` (`schema.ts:1111`) reads a single scalar
-`node.attention.tier` and requires it to equal `ownTier(node)`. Per-tier
-authored boosts replace that scalar with a per-tier structure, so the rule
-must be reshaped or retired along with the field. Its home is
-`tactic-attention-per-tier-boost-migration`, which owns the authored-value
-migration; recorded there as well so neither node has to infer it.
+**Rule 20 retires** (decided 2026-08-12; not in the scope list above because
+its home is `tactic-attention-per-tier-boost-migration`, which owns the
+authored-value migration). `checkAttentionTierNamespace` (`schema.ts:1111`)
+reads a single scalar `node.attention.tier` and requires it to equal
+`ownTier(node)`. Both of its legs are gone: per-tier boosts replace that
+scalar with a map, and the rule's justification — that a boost is "only
+meaningful within one tier's scale" — is false once the authored vocabulary
+is a closed set of absolute levels. A write-path check that a boost is *in*
+the vocabulary replaces it.
 
 ### Split out, not in this node
 

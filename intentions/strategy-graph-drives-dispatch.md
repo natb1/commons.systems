@@ -478,6 +478,43 @@ clarifications:
       Carried into tactic-attention-per-tier-boost-migration, which owns the
       storage shape and the requirement that an unauthored tier stay
       distinguishable from an authored lowest value."
+  - question: Is an authored boost a free magnitude or a level drawn from a fixed
+      vocabulary?
+    answer: "(Author-decided 2026-08-12, closing the per-band scope-stamp question
+      kind-kind had left open.) A LEVEL, drawn from a closed vocabulary of
+      ABSOLUTE values. A boost is not chosen relative to whatever currently
+      shares the node's band; it names a fixed degree of claim, so the same
+      value means the same thing in every band and every tier. This is what
+      makes the ranking model safe against BAND COLLISION — two previously
+      separate bands converging so that nodes calibrated against different
+      neighbour sets suddenly compare directly. Under free magnitudes that
+      collision silently miscalibrates the order; under a level vocabulary the
+      values are commensurable by construction and the collision is harmless.
+      Note what does NOT break, because the round nearly recorded a defect that
+      does not exist: a plain rerank of a strategy invalidates nothing beneath
+      it. Every descendant carries the reranked node in its lineage, so score
+      and band shift by the identical amount and within-subtree order is exactly
+      preserved; the subtree moves as a block relative to the rest of the graph,
+      which is the intent of the rerank. The alternative considered and REJECTED
+      was an authored per-band `attention.scope` stamp with a validateGraph
+      analogue of rule 20 — rejected because it keys on the resolved band
+      DISTRIBUTOR, so it fires on distributor-identity change (already an
+      explicit authoring act) and is silent on collision, the case that actually
+      goes unnoticed; it was also the only option requiring a stored field and a
+      write-path gate. Evidence the vocabulary already exists in practice: 91
+      authored values across the live graph but only 17 distinct, six values
+      (20, 50, 12, 10, 3, 85) covering 88% and 20/50 alone covering 64%.
+      Exposure that would have been policed: only 6 strategies carry a boost at
+      all, median live-boosted descendants 0, max 35, with 35 of 39 total (90%)
+      under strategy-graph-native-dispatch alone; strategy boosts changed in 9
+      commits since 2026-05-01. PER-TIER BOOSTS ARE RETAINED — the level
+      vocabulary governs WHICH VALUES are authorable, not how many boosts a node
+      carries; per-tier structure serves coverage (a well-defined rank in a tier
+      the node does not belong to), which is orthogonal. validateGraph rule 20
+      retires: its justification is the calibration claim that a value is
+      'only meaningful within one tier's scale', which is false under a closed
+      absolute vocabulary. tactic-attention-per-tier-boost-migration owns the
+      level values and the migration."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with

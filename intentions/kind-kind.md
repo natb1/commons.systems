@@ -220,7 +220,36 @@ clarifications:
       band still means something different after the band-defining parent is
       reranked, and nothing yet stamps or catches that. Recorded explicitly so
       the per-tier adoption is not misread as having closed the per-band
-      question."
+      question. CLOSED 2026-08-12 (author-decided): the per-band scope stamp is
+      REJECTED and the question it addresses is DISSOLVED rather than policed.
+      An authored boost is drawn from a CLOSED VOCABULARY OF ABSOLUTE LEVELS,
+      not chosen as a free magnitude against whatever else currently shares a
+      band, so a value means the same thing everywhere and is commensurable
+      across bands and tiers by construction. Two findings drove it. First, the
+      proposed mechanism is aimed off-target: it keys on the node's resolved
+      BAND DISTRIBUTOR, so it fires on distributor-identity change (a
+      re-parenting, or a multi-parent node whose max-scoring parent flips) —
+      cases that are already explicit authoring acts — and stays SILENT on the
+      case that actually goes unnoticed, two previously separate bands
+      COLLIDING so nodes calibrated against different neighbour sets suddenly
+      compare directly. A pure rerank invalidates nothing: every descendant has
+      the reranked node in its lineage, so score and band shift by the same
+      amount and within-subtree order is preserved exactly. Second, the live
+      graph is already using an informal levels scale — 91 authored values but
+      only 17 distinct, with six values (20, 50, 12, 10, 3, 85) covering 88%
+      and 20/50 alone covering 64% — so codifying levels formalizes existing
+      practice rather than imposing a new discipline. PER-TIER BOOSTS ARE
+      RETAINED (author-directed): a node still carries a boost per tier, each
+      drawn from the level vocabulary. The per-tier structure exists for
+      COVERAGE — making a node's rank well-defined in a tier it does not itself
+      belong to — which the absolute scale does not supply and does not
+      replace. What the absolute scale removes is the CALIBRATION rationale, and
+      with it validateGraph rule 20, whose stated justification is that 'a boost
+      value is only meaningful within one tier's scale'; that premise is false
+      under a closed level vocabulary, and the rule's single-scalar
+      attention.tier shape is obsoleted by the per-tier map independently.
+      Migration and the level values are owned by
+      tactic-attention-per-tier-boost-migration."
   - question: Which order-changing mechanisms sit outside the rank key, and how do
       they compose with it?
     answer: "(Recorded 2026-08-11, third round.) Two, and the second-round record
