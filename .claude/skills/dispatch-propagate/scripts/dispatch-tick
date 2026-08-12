@@ -380,6 +380,24 @@ if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   fi
 fi
 
+# refresh_lock — bump the selection lock's mtime (its heartbeat) so a
+# legitimately-long paused-branch drain never goes stale under the staleness
+# cap (MAX_HOLD_SECONDS, dispatch-acquire-lock:227, default 300). The drain
+# below runs graph-auto-merge and reconcile-graph-merged back to back, each
+# under its own DISPATCH_PAUSED_DRAIN_TIMEOUT_S budget (default 600), so the
+# combined hold can reach 1200s against the 300s default cap — without a
+# heartbeat in between, a second paused tick's `--wait` would read the lock as
+# stale and reclaim it mid-drain. Call ONLY between the two drain calls, on
+# graph-auto-merge's completion, never inside a loop — INVARIANT #2
+# (dispatch-acquire-lock:96-103): a refresh inside a poll/wait loop would keep
+# the mtime fresh while the holder spins there, defeating the cap. Modelled on
+# dispatch-select-tick's refresh_lock (dispatch-select-tick:198-200) and
+# graph-select-target's _refresh_lock (graph-select-target:599-601).
+# Best-effort: a noop (we no longer hold the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
 # --- Pause sentinel: stop autonomous scheduling, keep the node lane draining ---
 # When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
 # timer) SCHEDULES nothing: it never reaches dispatch-select-tick, spawns no
@@ -610,6 +628,13 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
             [[ -n "$merge_line" ]] && echo "merge: $merge_line"
           done <<< "$GRAPH_MERGE_OUT"
         fi
+        # Heartbeat BETWEEN the two drain calls (see refresh_lock's comment
+        # above): graph-auto-merge just completed its own up-to-600s budget,
+        # and reconcile-graph-merged is about to spend up to another 600s — the
+        # combined 1200s worst case exceeds the 300s default staleness cap, so
+        # without this refresh a second paused tick could reclaim the lock
+        # mid-drain.
+        refresh_lock
         DRAIN_RC=0
         RECONCILE_GRAPH_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/reconcile-graph-merged" </dev/null) || DRAIN_RC=$?
         if (( DRAIN_RC == 124 )); then

@@ -598,10 +598,60 @@ tick_setup
 : > "$TMPDIR_TEST/paused"
 out=$(run_tick) && rc=0 || rc=$?
 assert_eq "paused-lock: exit 0" "0" "$rc"
-assert_eq "paused-lock: acquire (--wait) then release, in that order" \
-  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+assert_eq "paused-lock: acquire (--wait), heartbeat between the two drain calls, then release, in that order" \
+  "$(printf -- '--wait\n--heartbeat\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
 assert_eq "paused-lock: drain ran while the lock was held" "1" \
   "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- Unit 6d (finding 5): the paused-branch drain heartbeats the lock BETWEEN
+# its two drain calls, not just somewhere in the run -----------------------------
+# Each drain call runs under its own DISPATCH_PAUSED_DRAIN_TIMEOUT_S budget
+# (default 600s), so the two calls together can hold the lock up to 1200s
+# against the 300s default staleness cap (dispatch-acquire-lock:227) — with no
+# heartbeat in between, a second paused tick's `--wait` would read the first
+# tick's hold as stale and reclaim it mid-drain, letting two graph-commit
+# cycles run in the same worktree at once. The acquire-lock.log assertion above
+# only proves a `--heartbeat` call happened somewhere between `--wait` and
+# `--release`; this test proves it happens strictly BETWEEN the two drain
+# calls, by having graph-auto-merge, dispatch-acquire-lock (on --heartbeat),
+# and reconcile-graph-merged all append to one shared, ordered log.
+echo "Test: dispatch-tick paused drain heartbeats the lock between graph-auto-merge and reconcile-graph-merged"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+echo "graph-auto-merge" >> "$TMPDIR_TEST/logs/drain-order.log"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/graph-auto-merge"
+cat > "$TMPDIR_TEST/reconcile-graph-merged" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/reconcile-graph-merged.log"
+echo "reconcile-graph-merged" >> "$TMPDIR_TEST/logs/drain-order.log"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/reconcile-graph-merged"
+cat > "$TMPDIR_TEST/dispatch-acquire-lock" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/acquire-lock.log"
+if [[ "\$*" == *--heartbeat* ]]; then
+  echo "heartbeat" >> "$TMPDIR_TEST/logs/drain-order.log"
+  echo refreshed
+elif [[ "\$*" == *--release* ]]; then
+  echo released
+else
+  echo "\${TICK_LOCK_RESULT:-acquired}"
+fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-acquire-lock"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-heartbeat-order: exit 0" "0" "$rc"
+assert_eq "paused-heartbeat-order: heartbeat fires strictly between the two drain calls" \
+  "$(printf 'graph-auto-merge\nheartbeat\nreconcile-graph-merged')" \
+  "$(cat "$TMPDIR_TEST/logs/drain-order.log")"
 tick_teardown
 
 echo "Test: dispatch-tick paused, selection lock busy → drain skipped, no merge/reconcile"
@@ -681,8 +731,8 @@ assert_eq "paused-drain-hang: timeout warning on stderr" "1" \
   "$(printf '%s' "$err" | grep -qF 'graph-auto-merge timed out after 1s' && echo 1 || echo 0)"
 assert_eq "paused-drain-hang: reconcile-graph-merged still ran after the timeout" "1" \
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
-assert_eq "paused-drain-hang: lock still released after the timeout" \
-  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+assert_eq "paused-drain-hang: heartbeat still fires after the timed-out step, and lock still released" \
+  "$(printf -- '--wait\n--heartbeat\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------
