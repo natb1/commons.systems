@@ -92,6 +92,17 @@
 #     `synced #<pr> (<id>)`, and defers the merge to a later tick that sees CI
 #     green on that now-current base. This gate never routes fix or conflict
 #     work: it only updates the branch and defers.
+#   - SYNC CAP on that sync arm (tactic-graph-auto-merge-sync-cap). Syncing is
+#     self-limiting per HEAD (each sync moves the oid, so the same oid is never
+#     synced twice) but NOT per PR: under contention the sync re-triggers CI,
+#     main moves again during that 10-20 minute run, and the next tick syncs
+#     again. A PR can lose that race indefinitely, paying a full CI run per
+#     cycle. So before syncing, count the PR's own merge commits — that count IS
+#     the number of times main has been merged into this head, i.e. the sync's
+#     own footprint — and at `GRAPH_AUTO_MERGE_SYNC_MAX` (default 3) HOLD
+#     instead: `held <id> (sync-cap: <n> syncs)`. A hold, not a silent skip,
+#     because a thrashing PR needs a person (rebase it, land it manually, split
+#     it), which is exactly what the `held` verdict means here.
 #
 # Fail-closed freshness gate: before merging, re-check the node's tactic-scope
 # fingerprint against origin/main (compute-freshness.ts). scopeStale==true OR a
@@ -107,7 +118,8 @@
 # Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged,
 # `synced #<pr> (<id>)` per PR whose branch was updated against main instead of
 # merged, and `held <id> (<reason>)` per hold, where <reason> is one of
-# `office-hours`, `missing-stamp`, or `scope-stale`; NOTHING for a plain skip
+# `office-hours`, `missing-stamp`, `scope-stale`, or `sync-cap: <n> syncs`;
+# NOTHING for a plain skip
 # (an ineligible PR is silently passed over). dispatch-select-tick prefixes
 # every line with `merge: `, so a sync surfaces as `merge: synced #<pr> (<id>)`
 # with no change needed there.
@@ -138,6 +150,15 @@ while [[ $# -gt 0 ]]; do
 done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+
+# How many times the up-to-date gate may sync one PR before holding it for a
+# person. Bound and validated ONCE here, so a malformed override fails loudly at
+# startup rather than silently comparing as 0 inside the per-candidate loop
+# (bash `[[ abc -ge 3 ]]` resolves `abc` as a variable name → 0 → never holds).
+SYNC_MAX="${GRAPH_AUTO_MERGE_SYNC_MAX:-3}"
+[[ "$SYNC_MAX" =~ ^[0-9]+$ ]] || {
+  echo "graph-auto-merge: GRAPH_AUTO_MERGE_SYNC_MAX must be a non-negative integer (got '$SYNC_MAX')" >&2
+  exit 2; }
 
 # The scope-fingerprint stamp lives at the MAIN checkout root
 # (provision-node-worktree writes it there). resolve_project_root resolves the
@@ -395,13 +416,46 @@ while IFS=$'\t' read -r id pr parked; do
       # dispatch-select-tick wraps this script in `|| true`, so a non-zero exit
       # never aborts the tick.
       #
-      # Repeated syncing is self-limiting: each sync changes the head oid, so
-      # the same head is never synced twice. A busy main can legitimately cause
-      # a second sync on a later tick.
-      #
       # A residual race remains — main can advance between the tip read above
       # and this call. It is bounded and accepted; GitHub itself rejects an
       # update or merge that has become impossible.
+      #
+      # ---- Sync cap (tactic-graph-auto-merge-sync-cap) ---------------------
+      # Syncing is self-limiting per HEAD — each sync moves the oid, so the same
+      # oid is never synced twice — but NOT per PR. The sync re-triggers CI;
+      # main can move again during that 10-20 minute run; the next tick syncs
+      # again. Since this is the only autonomous merge path, a PR under
+      # contention can lose that race indefinitely, paying a full CI run per
+      # cycle. Cap it, and hand a thrashing PR to a person.
+      #
+      # The counter is the PR's own merge commits — commits with more than one
+      # parent. That count IS how many times main has been merged into this
+      # head: the sync's own footprint, read straight from GitHub, with nothing
+      # to persist, sweep, or race, and correct across processes and hosts.
+      #
+      # Two honest caveats:
+      #   - a merge commit the PR AUTHOR made by hand also counts. That is
+      #     correct: it is still a sync of main into the head.
+      #   - `per_page=100` bounds the listing (gh_api_array does not paginate),
+      #     so a PR with more than 100 commits UNDER-counts and fails OPEN,
+      #     permitting another sync. Better than failing closed on a large PR.
+      rc=0
+      SYNC_COUNT=$(gh_api_array "repos/{owner}/{repo}/pulls/$pr/commits?per_page=100" \
+        '[.[] | select(.parents | length > 1)] | length') || rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "graph-auto-merge: could not list commits on #$pr for $id (cannot run the sync cap)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ ! "$SYNC_COUNT" =~ ^[0-9]+$ ]]; then
+        echo "graph-auto-merge: non-numeric merge-commit count '$SYNC_COUNT' for #$pr ($id)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ "$SYNC_COUNT" -ge "$SYNC_MAX" ]]; then
+        echo "held $id (sync-cap: $SYNC_COUNT syncs)"
+        continue
+      fi
       rc=0
       out=$(gh_pr_update_branch_rest "$pr" --expected-head-sha "$HEAD_OID" 2>&1) || rc=$?
       if [[ "$rc" -ne 0 ]]; then
