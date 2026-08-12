@@ -1366,6 +1366,56 @@ case "$err_pmf" in *"gh_pr_merge_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
 assert_eq "pr-merge: gh-failure stderr names helper" "yes" "$m"
 teardown
 
+# --- gh_pr_update_branch_rest ---
+# (tactic-graph-auto-merge-up-to-date-gate) PUT .../pulls/<N>/update-branch —
+# merges the base branch into the PR head and re-triggers CI on the fresh base.
+echo "Test: gh_pr_update_branch_rest -- PUT to correct path, no expected_head_sha by default"
+setup
+: > "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 42
+if grep -q 'PUT' "$STUB_DIR/gh-pr-update-branch-rest-calls.log"; then m=yes; else m=no; fi
+assert_eq "pr-update-branch: log contains PUT" "yes" "$m"
+if grep -q 'pulls/42/update-branch' "$STUB_DIR/gh-pr-update-branch-rest-calls.log"; then p=yes; else p=no; fi
+assert_eq "pr-update-branch: log contains pulls/42/update-branch path" "yes" "$p"
+if grep -q 'expected_head_sha' "$STUB_DIR/gh-pr-update-branch-rest-calls.log"; then e=yes; else e=no; fi
+assert_eq "pr-update-branch: no expected_head_sha sent by default" "no" "$e"
+teardown
+
+echo "Test: gh_pr_update_branch_rest -- --expected-head-sha sends the CAS guard"
+setup
+: > "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 42 --expected-head-sha abc123
+if grep -q 'expected_head_sha=abc123' "$STUB_DIR/gh-pr-update-branch-rest-calls.log"; then e=yes; else e=no; fi
+assert_eq "pr-update-branch: --expected-head-sha sends expected_head_sha=abc123" "yes" "$e"
+teardown
+
+echo "Test: gh_pr_update_branch_rest -- --repo flag emits cross-repo segment"
+setup
+: > "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 42 --repo owner/other-repo
+if grep -q 'repos/owner/other-repo/pulls/42/update-branch' "$STUB_DIR/gh-pr-update-branch-rest-calls.log"; then seg=yes; else seg=no; fi
+assert_eq "pr-update-branch: --repo uses cross-repo segment" "yes" "$seg"
+teardown
+
+echo "Test: gh_pr_update_branch_rest -- missing number returns non-zero"
+setup
+rc_ub=0
+err_ub=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 2>&1 >/dev/null) || rc_ub=$?
+assert_eq "pr-update-branch: missing number → non-zero" "1" "$rc_ub"
+case "$err_ub" in *"gh_pr_update_branch_rest: PR number is required"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-update-branch: missing-number stderr names helper" "yes" "$m"
+teardown
+
+echo "Test: gh_pr_update_branch_rest -- gh failure returns non-zero with diagnostic stderr"
+setup
+: > "$STUB_DIR/gh-fail-rest"
+rc_ubf=0
+err_ubf=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 42 2>&1 >/dev/null) || rc_ubf=$?
+assert_eq "pr-update-branch: gh failure → non-zero" "1" "$rc_ubf"
+case "$err_ubf" in *"gh_pr_update_branch_rest: gh api failed"*) m=yes ;; *) m=no ;; esac
+assert_eq "pr-update-branch: gh-failure stderr names helper" "yes" "$m"
+teardown
+
 # ============================================================================
 # REST-bucket consumption assertions (#2255)
 # ============================================================================
@@ -1491,6 +1541,14 @@ setup
 : > "$STUB_DIR/gh-pr-merge-rest-calls.log"
 source "$TMPDIR_TEST/lib.sh"; gh_pr_merge_rest 42
 assert_rest_only "pr-merge" "$STUB_DIR/gh-pr-merge-rest-calls.log"
+teardown
+
+# --- gh_pr_update_branch_rest ---
+echo "Test: gh_pr_update_branch_rest -- consumes REST bucket, not GraphQL"
+setup
+: > "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+source "$TMPDIR_TEST/lib.sh"; gh_pr_update_branch_rest 42
+assert_rest_only "pr-update-branch" "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
 teardown
 
 # <<< END MOVED <<<

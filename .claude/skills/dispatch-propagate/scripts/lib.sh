@@ -1587,6 +1587,61 @@ gh_pr_merge_rest() {
   }
 }
 
+# REST-backed mutation: update a pull request's branch with the latest upstream
+# base (tactic-graph-auto-merge-up-to-date-gate).
+# Uses PUT repos/{owner}/{repo}/pulls/<N>/update-branch.
+#
+# The endpoint MERGES the base branch INTO the PR head — it creates a merge
+# commit on the head branch and re-triggers CI on that fresh base. It does NOT
+# rebase, so the head oid changes but the branch's own history is preserved.
+#
+# `expected_head_sha` is a compare-and-swap guard: GitHub rejects the update
+# with HTTP 422 when the head moved since the caller sensed it, so a racing push
+# can never be silently merged over. gh_retry (lib.sh:125) retries only
+# transient failures, so a 422 returns immediately rather than being retried.
+#
+# Args: $1 = <N> (PR number, required); --expected-head-sha <sha> (optional);
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_pr_update_branch_rest() {
+  local num="" expected="" has_expected="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --expected-head-sha) expected="$2"; has_expected=1; shift 2 ;;
+      --repo)              repo="$2";                     shift 2 ;;
+      --*) echo "error: gh_pr_update_branch_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_update_branch_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_update_branch_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num/update-branch"
+  else
+    path="repos/{owner}/{repo}/pulls/$num/update-branch"
+  fi
+
+  # expected_head_sha only when --expected-head-sha is passed; omitting it lets
+  # GitHub update whatever the current head is (no CAS guard).
+  local -a flags=()
+  [[ -n "$has_expected" ]] && flags+=(-f "expected_head_sha=$expected")
+
+  gh_retry gh api -X PUT "$path" "${flags[@]}" >/dev/null || {
+    echo "error: gh_pr_update_branch_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name

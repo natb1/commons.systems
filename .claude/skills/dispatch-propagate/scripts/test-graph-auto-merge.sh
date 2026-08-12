@@ -125,6 +125,18 @@ GAMNODE
 
 # Fake gh: `pr ready` no-ops; `api .../pulls/<N>` serves the raw REST fixture;
 # `api -X PUT .../pulls/<N>/merge` records the call.
+#
+# The up-to-date gate (tactic-graph-auto-merge-up-to-date-gate) adds three arms,
+# ALL of which must precede the `pr-$N.json` fallback below — otherwise
+# `.../commits/main` falls through to `N=main` and looks for `stub/pr-main.json`.
+#
+# `*/compare/*` and `*/commits/main` serve a DEFAULT when their fixture file is
+# absent (up-to-date main tip + `ahead`), mirroring the shared fixture's
+# `compare-status.json` arm (dispatch-test-fixture.sh). Defaulting rather than
+# requiring every case to seed the pair keeps the ~15 pre-existing cases (and
+# any a later unit adds) untouched; the gate itself is still exercised head-on by
+# the (n*) cases below, which write the fixtures explicitly — delete the gate
+# from graph-auto-merge and those go RED.
 cat > "$GAM_ROOT/bin/gh" <<'GAMGH'
 #!/usr/bin/env bash
 STUB="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -135,6 +147,27 @@ if [[ "$1" == "api" ]]; then
   if [[ "$path" == */merge ]]; then
     echo "$*" >> "$STUB/merge-calls.log"
     echo '{}'
+    exit 0
+  fi
+  if [[ "$path" == */update-branch ]]; then
+    echo "$*" >> "$STUB/update-branch-calls.log"
+    if [[ -f "$STUB/update-branch-fail" ]]; then
+      echo "gh stub: forced update-branch failure" >&2; exit 1
+    fi
+    echo '{}'
+    exit 0
+  fi
+  if [[ "$path" == */compare/* ]]; then
+    if [[ -f "$STUB/compare.json" ]]; then cat "$STUB/compare.json"
+    else echo '{"status":"ahead"}'; fi
+    exit 0
+  fi
+  if [[ "$path" == */commits/main ]]; then
+    if [[ -f "$STUB/main-sha-fail" ]]; then
+      echo "gh stub: forced main-tip read failure" >&2; exit 1
+    fi
+    if [[ -f "$STUB/main-sha.json" ]]; then cat "$STUB/main-sha.json"
+    else echo '{"sha":"mainsha"}'; fi
     exit 0
   fi
   N="${path##*/}"
@@ -473,6 +506,111 @@ gam_l1_rc=0; run_gam --node >/dev/null 2>&1 || gam_l1_rc=$?
 assert_eq "graph-auto-merge (l): --node without an id is a usage error (exit 2)" "2" "$gam_l1_rc"
 gam_l2_rc=0; run_gam --bogus >/dev/null 2>&1 || gam_l2_rc=$?
 assert_eq "graph-auto-merge (l): an unknown flag is a usage error (exit 2)" "2" "$gam_l2_rc"
+
+# ============================================================================
+# tactic-graph-auto-merge-up-to-date-gate: a behind branch is SYNCED, not merged
+# ============================================================================
+# The candidate is otherwise fully mergeable (reviewed marker, green CI,
+# MERGEABLE, fresh stamp, unparked) in every case below — the ONLY variable is
+# the compare status (or the reachability of the live main tip), so a pass here
+# can only be the up-to-date gate.
+gam_n_setup() {  # $1 = the compare `.status` value (empty → leave the default)
+  gam_reset
+  printf '%s\n' '[{"id":"tactic-n","kind":"tactic","phase":"review","execution":{"pr":116,"markers":["reviewed"]}}]' \
+    > "$GAM_ROOT/stub/nodes.json"
+  printf '%s\n' '{"number":116,"title":"Tactic N","body":"","state":"open","merged_at":null,"mergeable":true,"mergeable_state":"clean","head":{"ref":"tactic-n","sha":"sha116"},"labels":[]}' \
+    > "$GAM_ROOT/stub/pr-116.json"
+  echo passing > "$GAM_ROOT/cache/sha116"
+  echo fp > "$GAM_ROOT/.claude/worktrees/tactic-n.scope-fingerprint"
+  gam_fresh tactic-n
+  printf '%s\n' '{"sha":"mainsha"}' > "$GAM_ROOT/stub/main-sha.json"
+  [[ -n "${1:-}" ]] && printf '%s\n' "{\"status\":\"$1\"}" > "$GAM_ROOT/stub/compare.json"
+  return 0
+}
+
+# ---- (n1) compare `diverged` → sync the branch, do NOT merge ---------------
+# The ordinary behind-PR case: main has commits the head lacks, so its green CI
+# ran on a stale base. The sweep updates the branch (re-triggering CI on the
+# fresh base) and defers the merge to a later tick.
+gam_n_setup diverged
+gam_n1_rc=0
+gam_n1_out=$(run_gam 2>/dev/null) || gam_n1_rc=$?
+assert_eq "graph-auto-merge (n1): a diverged branch is synced, not merged" \
+  "synced #116 (tactic-n)" "$gam_n1_out"
+assert_eq "graph-auto-merge (n1): exit 0" "0" "$gam_n1_rc"
+if grep -q 'pulls/116/update-branch' "$GAM_ROOT/stub/update-branch-calls.log" 2>/dev/null; then gam_n1_u=yes; else gam_n1_u=no; fi
+assert_eq "graph-auto-merge (n1): update-branch PUT issued for #116" "yes" "$gam_n1_u"
+# The CAS guard must carry the SAME head oid the CI verdict was computed on, so
+# a head that moved between sensing and syncing yields a 422 rather than a blind
+# update.
+if grep -q 'expected_head_sha=sha116' "$GAM_ROOT/stub/update-branch-calls.log" 2>/dev/null; then gam_n1_cas=yes; else gam_n1_cas=no; fi
+assert_eq "graph-auto-merge (n1): update-branch carries expected_head_sha=<sensed head>" "yes" "$gam_n1_cas"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_n1_m=present; else gam_n1_m=absent; fi
+assert_eq "graph-auto-merge (n1): a synced branch issues no merge" "absent" "$gam_n1_m"
+
+# ---- (n2) compare `behind` → same sync-and-defer treatment -----------------
+# The head is an ancestor of the main tip (its commits already landed out of
+# band). Rare, still not up to date — sync and defer; reconcile-graph-merged
+# absorbs the genuinely-already-merged case on a later tick.
+gam_n_setup behind
+gam_n2_rc=0
+gam_n2_out=$(run_gam 2>/dev/null) || gam_n2_rc=$?
+assert_eq "graph-auto-merge (n2): a behind branch is synced, not merged" \
+  "synced #116 (tactic-n)" "$gam_n2_out"
+assert_eq "graph-auto-merge (n2): exit 0" "0" "$gam_n2_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_n2_m=present; else gam_n2_m=absent; fi
+assert_eq "graph-auto-merge (n2): behind issues no merge" "absent" "$gam_n2_m"
+
+# ---- (n3) compare `identical` → up to date, merges -------------------------
+gam_n_setup identical
+gam_n3_rc=0
+gam_n3_out=$(run_gam 2>/dev/null) || gam_n3_rc=$?
+assert_eq "graph-auto-merge (n3): an identical head is up to date and merges" \
+  "merged #116 (tactic-n)" "$gam_n3_out"
+assert_eq "graph-auto-merge (n3): exit 0" "0" "$gam_n3_rc"
+if grep -q 'pulls/116/merge' "$GAM_ROOT/stub/merge-calls.log" 2>/dev/null; then gam_n3_m=yes; else gam_n3_m=no; fi
+assert_eq "graph-auto-merge (n3): squash-merge PUT issued for #116" "yes" "$gam_n3_m"
+if [[ -f "$GAM_ROOT/stub/update-branch-calls.log" ]]; then gam_n3_u=present; else gam_n3_u=absent; fi
+assert_eq "graph-auto-merge (n3): an up-to-date branch is not synced" "absent" "$gam_n3_u"
+
+# ---- (n4) update-branch failure → hard error, no merge ---------------------
+# The 422 a moved head produces lands here: stderr + HARD_ERROR, never a merge.
+gam_n_setup diverged
+touch "$GAM_ROOT/stub/update-branch-fail"
+gam_n4_rc=0
+gam_n4_out=$(run_gam 2>/dev/null) || gam_n4_rc=$?
+assert_eq "graph-auto-merge (n4): a failed sync emits no stdout line" "" "$gam_n4_out"
+assert_eq "graph-auto-merge (n4): a failed sync exits 1" "1" "$gam_n4_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_n4_m=present; else gam_n4_m=absent; fi
+assert_eq "graph-auto-merge (n4): a failed sync issues no merge" "absent" "$gam_n4_m"
+
+# ---- (n5) an unexpected compare status fails CLOSED ------------------------
+# Includes the literal `null` jq prints when the response has no `.status`.
+gam_n_setup weird
+gam_n5_rc=0
+gam_n5_out=$(run_gam 2>/dev/null) || gam_n5_rc=$?
+assert_eq "graph-auto-merge (n5): an unexpected compare status emits no stdout line" "" "$gam_n5_out"
+assert_eq "graph-auto-merge (n5): an unexpected compare status exits 1" "1" "$gam_n5_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_n5_m=present; else gam_n5_m=absent; fi
+assert_eq "graph-auto-merge (n5): an unexpected compare status issues no merge" "absent" "$gam_n5_m"
+if [[ -f "$GAM_ROOT/stub/update-branch-calls.log" ]]; then gam_n5_u=present; else gam_n5_u=absent; fi
+assert_eq "graph-auto-merge (n5): an unexpected compare status issues no sync" "absent" "$gam_n5_u"
+
+# ---- (n6) an unreadable live main tip aborts the sweep ---------------------
+# Fail closed: without the tip the gate cannot run, so nothing merges. The read
+# is deliberately the LIVE REST tip rather than `git rev-parse origin/main` —
+# a stale local ref would make a behind PR look current and silently disable
+# the gate.
+gam_n_setup ahead
+touch "$GAM_ROOT/stub/main-sha-fail"
+gam_n6_rc=0
+gam_n6_out=$(run_gam 2>/dev/null) || gam_n6_rc=$?
+assert_eq "graph-auto-merge (n6): an unreadable main tip emits no stdout line" "" "$gam_n6_out"
+assert_eq "graph-auto-merge (n6): an unreadable main tip exits 1" "1" "$gam_n6_rc"
+if [[ -f "$GAM_ROOT/stub/merge-calls.log" ]]; then gam_n6_m=present; else gam_n6_m=absent; fi
+assert_eq "graph-auto-merge (n6): an unreadable main tip issues no merge" "absent" "$gam_n6_m"
+if [[ -f "$GAM_ROOT/stub/update-branch-calls.log" ]]; then gam_n6_u=present; else gam_n6_u=absent; fi
+assert_eq "graph-auto-merge (n6): an unreadable main tip issues no sync" "absent" "$gam_n6_u"
 
 rm -rf "$GAM_ROOT" "$GAM_BARE"
 

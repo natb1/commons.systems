@@ -78,6 +78,20 @@
 #   - CI passing. `pending` retries next tick; `failing` belongs to the fix
 #     interrupt (do NOT merge, do NOT route the fix here — the next
 #     transition-node / selection tick routes it).
+#   - BRANCH UP TO DATE with the live origin/main tip
+#     (tactic-graph-auto-merge-up-to-date-gate). The LAST gate before merging,
+#     evaluated after the freshness hold below so only a candidate that would
+#     otherwise merge spends the compare call. `mergeable == MERGEABLE` means
+#     only "no textual conflict", and the CI verdict is computed on the PR head
+#     oid — so a green PR dozens of commits behind main can merge and turn main
+#     RED, which then trips the main-health gate above and suppresses the whole
+#     merge lane. The compare (gh_commit_is_ancestor_rest, base=live main tip,
+#     head=PR head) must report `ahead` or `identical`; `behind`/`diverged`
+#     SYNCS instead of merging — `gh_pr_update_branch_rest` merges main into the
+#     PR head, re-triggering CI on the fresh base — emits
+#     `synced #<pr> (<id>)`, and defers the merge to a later tick that sees CI
+#     green on that now-current base. This gate never routes fix or conflict
+#     work: it only updates the branch and defers.
 #
 # Fail-closed freshness gate: before merging, re-check the node's tactic-scope
 # fingerprint against origin/main (compute-freshness.ts). scopeStale==true OR a
@@ -90,10 +104,13 @@
 # node --import tsx/esm needs the npm cache (see .claude/rules/sandbox.md). This
 # script sets NOTHING sandbox-related; that is the caller's responsibility.
 #
-# Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged, and
-# `held <id> (<reason>)` per hold, where <reason> is one of `office-hours`,
-# `missing-stamp`, or `scope-stale`; NOTHING for a plain skip (an ineligible
-# PR is silently passed over).
+# Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged,
+# `synced #<pr> (<id>)` per PR whose branch was updated against main instead of
+# merged, and `held <id> (<reason>)` per hold, where <reason> is one of
+# `office-hours`, `missing-stamp`, or `scope-stale`; NOTHING for a plain skip
+# (an ineligible PR is silently passed over). dispatch-select-tick prefixes
+# every line with `merge: `, so a sync surfaces as `merge: synced #<pr> (<id>)`
+# with no change needed there.
 #
 # Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored (node
 # enumeration failure, a gh sense/merge error, or a freshness computation
@@ -250,6 +267,25 @@ if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x
   exit 1
 fi
 
+# ---- Step 3b: one LIVE origin/main tip read per sweep -----------------------
+# The up-to-date gate's compare base. Read ONCE for the whole sweep, and only
+# after the `[[ -z "$CANDIDATES" ]] && exit 0` early exit above — an empty sweep
+# spends no REST call.
+#
+# Deliberately the LIVE REST tip, never `git rev-parse origin/main`: a stale
+# local ref makes a behind PR look current, so the gate would fail OPEN and
+# silently disable itself — the exact failure it exists to prevent. Same
+# fail-closed stance the snapshot block above takes: a failed read hard-errors
+# rather than merging ungated.
+MAIN_SHA=$(gh_retry gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha') || {
+  echo "graph-auto-merge: could not read the live origin/main tip (cannot run the up-to-date gate)" >&2
+  exit 1
+}
+[[ -n "$MAIN_SHA" && "$MAIN_SHA" != "null" ]] || {
+  echo "graph-auto-merge: empty origin/main tip sha (cannot run the up-to-date gate)" >&2
+  exit 1
+}
+
 # ---- Step 4: per-candidate sense + fail-closed freshness gate + merge --------
 HARD_ERROR=0
 while IFS=$'\t' read -r id pr parked; do
@@ -283,8 +319,11 @@ while IFS=$'\t' read -r id pr parked; do
   # ---- CI verdict (REST, memoized) — merge only on passing ------------------
   # pending → in progress, retry next tick; failing → the fix interrupt owns red
   # CI (do NOT merge, do NOT route the fix here). Both skip silently.
+  # Bind the head oid ONCE so the up-to-date compare below runs against the
+  # SAME oid the CI verdict was computed on.
+  HEAD_OID=$(jq -r '.headRefOid' <<<"$PR_JSON")
   rc=0
-  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$PR_JSON")") || rc=$?
+  VERDICT=$(dispatch_ci_verdict_rest "$HEAD_OID") || rc=$?
   if [[ "$rc" -ne 0 ]]; then
     echo "graph-auto-merge: dispatch_ci_verdict_rest #$pr for $id failed (rc=$rc)" >&2
     HARD_ERROR=1
@@ -321,6 +360,66 @@ while IFS=$'\t' read -r id pr parked; do
     echo "held $id (scope-stale)"
     continue
   fi
+
+  # ---- Up-to-date gate: sync a behind branch instead of merging it ----------
+  # LAST gate before the merge (tactic-graph-auto-merge-up-to-date-gate): only a
+  # candidate that would otherwise merge spends the compare call, and an
+  # existing `held` verdict keeps precedence over a sync. Placing it AFTER the
+  # CI gate is also load-bearing: a red PR must never be synced — red CI belongs
+  # to the fix interrupt, not to this sweep.
+  rc=0
+  CMP=$(gh_commit_is_ancestor_rest "$MAIN_SHA" "$HEAD_OID") || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: compare origin/main...#$pr head failed for $id (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  # `continue` inside a `case` continues the enclosing `while` (a `case` is not
+  # a loop) — correct and intentional. Every non-up-to-date arm ends in one, so
+  # a candidate can never both `synced` and reach the merge PUT.
+  case "$CMP" in
+    ahead|identical)
+      # ahead: main's tip is an ancestor of the head → up to date, merge.
+      # identical: head == main tip → up to date (degenerate). Fall through.
+      ;;
+    behind|diverged)
+      # diverged: the ordinary behind-PR case — main has commits the head lacks.
+      # behind: the head is an ancestor of the main tip, i.e. its commits already
+      #   landed out of band. Rare, and still not up to date, so it takes the
+      #   same sync-and-defer path rather than merging; reconcile-graph-merged
+      #   absorbs the genuinely-already-merged case on a later tick.
+      #
+      # --expected-head-sha is a compare-and-swap guard: a head that moved
+      # between sensing and syncing yields a 422 rather than a blind update.
+      # That is a hard error here, matching how a failed merge is handled below;
+      # dispatch-select-tick wraps this script in `|| true`, so a non-zero exit
+      # never aborts the tick.
+      #
+      # Repeated syncing is self-limiting: each sync changes the head oid, so
+      # the same head is never synced twice. A busy main can legitimately cause
+      # a second sync on a later tick.
+      #
+      # A residual race remains — main can advance between the tip read above
+      # and this call. It is bounded and accepted; GitHub itself rejects an
+      # update or merge that has become impossible.
+      rc=0
+      out=$(gh_pr_update_branch_rest "$pr" --expected-head-sha "$HEAD_OID" 2>&1) || rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "graph-auto-merge: error: gh_pr_update_branch_rest #$pr failed: $out" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      echo "synced #$pr ($id)"
+      continue
+      ;;
+    *)
+      # Anything else — including the literal `null` jq prints when the compare
+      # response carries no `.status` — fails CLOSED: no merge, no sync.
+      echo "graph-auto-merge: unexpected compare status '$CMP' for #$pr ($id)" >&2
+      HARD_ERROR=1
+      continue
+      ;;
+  esac
 
   # ---- Merge label-free -----------------------------------------------------
   # `gh pr ready` is idempotent (no need to gate on draft state — gh_pr_view_rest

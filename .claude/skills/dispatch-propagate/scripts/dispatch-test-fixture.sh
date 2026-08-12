@@ -914,6 +914,18 @@ case "$args" in
     fi
     echo '{}'
     ;;
+  "api -X PUT "*/pulls/*/update-branch*)
+    # gh_pr_update_branch_rest sentinel (tactic-graph-auto-merge-up-to-date-gate):
+    # PUT .../pulls/<N>/update-branch. MUST precede the generic
+    # `api repos/*/pulls/*` branch (case is first-wins).
+    # $args form: "api -X PUT repos/.../pulls/<N>/update-branch -f expected_head_sha=..."
+    echo "$args" >> "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
   api\ repos/*/issues/*)
     # Generic single-issue GET: gh api repos/{owner}/{repo}/issues/<N>. Two
     # consumers route here (case is first-wins; the 9xxx sentinel arm precedes it):
