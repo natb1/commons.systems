@@ -1,0 +1,778 @@
+#!/usr/bin/env bash
+#
+# dispatch-eval-finding — the write surface for the EVALUATION FINDING LEDGER.
+#
+# A per-phase evaluator turns a finding into a GRAPH NODE through this script.
+# One node per DISTINCT FINDING, found-or-created idempotently, its body
+# refreshed and its summary metrics updated on every recurrence — explicitly
+# never one node per occurrence. The ledger's whole purpose is to carry the
+# recurrence and impact figures that inform what the harness works on next
+# (intentions/tactic-eval-finding-ledger.md), and a node per occurrence carries
+# no figure at all: it just grows.
+#
+# Usage:
+#   dispatch-eval-finding --list
+#   dispatch-eval-finding --slug <slug> --statement <text> --body-file <path>
+#                         --sensor <name> [--impact-file <path>] [--now <date>]
+#                         [--serves <strategy-id>]
+#   dispatch-eval-finding --retire --slug <slug>
+#   dispatch-eval-finding -h|--help
+#
+# Node id: tactic-eval-finding-<slug>.
+#
+# ---------------------------------------------------------------------------
+# MODELLED ON dispatch-fleet-alarm, WITH TWO DELIBERATE DIVERGENCES
+# ---------------------------------------------------------------------------
+#
+# The find-or-create machinery below — readNode classification, the
+# write-node.ts -> body-splice -> graph-commit mint path, the dump-node.ts ->
+# graph-commit --base update path, the post-write blob verification, the
+# per-checkout graph-write mutex, the rollback discipline and the one-word
+# stdout protocol — is the sibling dispatch-fleet-alarm's, and the reasoning for
+# each of those is documented in that script's header. What follows is only what
+# is DIFFERENT here, and why.
+#
+# DIVERGENCE 1 — THE KEY IS NOT A CLOSED ENUM.
+# Fleet-alarm's eight KINDS are a fixed fault taxonomy: the set of conditions a
+# fleet watcher can detect is known in advance, so an open-ended id space there
+# would only ever mint garbage from a caller typo. A finding space is not like
+# that. Which findings recur is exactly what the ledger exists to discover, so
+# no enum can be written up front. Target selection here is instead a SIMILARITY
+# JUDGMENT against the open ledger: the calling evaluator runs `--list`, reads
+# the existing entries, and decides whether the finding in hand IS one of them.
+# The slug is only the addressing mechanism for that decision, so this script
+# takes it as an argument and validates its SHAPE (a bounded lowercase-kebab
+# token, so a caller typo cannot mint an id with a delimiter or unbounded
+# length) rather than its membership in a taxonomy it cannot have.
+#
+# `--list` is the input that judgment needs, and it lists RETIRED entries too.
+# An evaluator that only saw open entries would mint a fresh near-duplicate slug
+# for a finding that has recurred after retirement, which is precisely the
+# count-restarting failure divergence 2 exists to prevent.
+#
+# This is the one place a model judgment is load-bearing, and it is where the
+# merge discipline will fail first if it fails.
+#
+# DIVERGENCE 2 — A CLOSED ENTRY IS NEVER MINTED OVER.
+# Fleet-alarm treats a `closed` node as "a since-resolved condition that has
+# recurred: mint over it rather than reopening a completed record by hand"
+# (dispatch-fleet-alarm:645). Inheriting that here would reset the occurrence
+# count to 1 after every retirement — silently understating the exact metric the
+# ledger exists to carry, and doing it worst for the findings that matter most
+# (a finding that keeps coming back after a fix is the highest-value row in the
+# ledger). So a retired entry is RESUMED, never re-minted: this script reads the
+# retired node's existing `recurrence_count`, increments it, and clears `phase`
+# back to null. A recurrence after retirement is evidence the landed fix did not
+# hold, and the count says how many times.
+#
+# Resumption only works if the retired node still EXISTS, so the owed-prune
+# census exempts `attributes.ledger_entry` nodes from its prunable set
+# (packages/intentionsutil/scripts/graph-census-debt.ts). That exemption and
+# this script are one mechanism in two halves; neither is useful alone.
+#
+# TWO CONSEQUENCES OF DIVERGENCE 2, both of which drop fleet-alarm behaviour:
+#
+#   * NO BODY-IDENTITY GATE. Fleet-alarm skips the commit entirely when a
+#     re-detection produces a byte-identical body, because a re-detection there
+#     re-reports ONE ongoing condition and a second commit would say nothing new.
+#     Here, a second invocation IS a second occurrence — an identical body is the
+#     normal case for a recurring finding, and skipping it would drop the count
+#     increment, which is the whole payload.
+#   * NO MINIMUM REFRESH INTERVAL. Fleet-alarm's callers are 2-5 minute systemd
+#     timers, so it rate-limits pushes. This script's caller is a per-phase
+#     evaluator: invocations are rare, and each one is a distinct occurrence that
+#     must be counted. A rate limit here would silently discard occurrences.
+#
+# ---------------------------------------------------------------------------
+# WHAT A RECURRENCE WRITES
+# ---------------------------------------------------------------------------
+#
+# `attributes.measured_impact` (validate-graph rule 21; see
+# intentions/kind-tactic.md) is a SUMMARY list, never an event log. Each record
+# is {metric, value, unit, window, sensor, measured}. This script:
+#
+#   * OWNS the `recurrence_count` record — metric recurrence_count, unit
+#     occurrences, window all-time, sensor from --sensor, measured from --now.
+#     A caller-supplied record with that metric is refused (exit 64) rather than
+#     silently overwritten.
+#   * UPSERTS every record from --impact-file by its (metric, window) key, so
+#     re-measuring rewrites a figure instead of appending an occurrence.
+#   * sets `attributes.first_seen` on the mint and never again.
+#
+# There is no `last_seen` attribute on purpose: the `recurrence_count` record's
+# `measured` field already IS the day the entry was last seen, and one state
+# with two spellings is a defect the graph's own rule 19 refuses elsewhere.
+#
+# The STATEMENT is written at mint only. It is the finding's identity alongside
+# the slug; re-wording it on a recurrence would fork the identity of the very
+# thing the entry is merging occurrences into. --statement is still required on
+# every record call because the caller cannot know whether this occurrence
+# mints, and it is ignored on the update paths.
+#
+# ---------------------------------------------------------------------------
+# THE IN-FLIGHT GUARD
+# ---------------------------------------------------------------------------
+#
+# An entry whose `execution` is non-null is being WORKED — a PR owns its
+# lifecycle, and `tacticScopeFingerprint` hashes (statement, body), so
+# rewriting the body would make the node's scope stamp stale and mis-park the
+# session working it. Such a pass records nothing and exits 0 `noop`, with a
+# loud stderr line naming the uncounted occurrence: an evaluator must not fail
+# its phase over a ledger write, but a dropped occurrence must never be silent.
+#
+# Exit codes: as dispatch-fleet-alarm — 0 landed/no-op/skipped-locked, 1 the
+# graph write failed (rolled back), 64 usage, 69 environment, 70 the write
+# failed AND the rollback left a dirty intentions/<id>.md (escalate, never
+# retry; the log line names the exact `git checkout --` that clears it).
+#
+# Stdout protocol — exactly one word on a successful exit (except --list, which
+# prints a JSON array):
+#   landed          a commit was made AND verified on origin/main.
+#   noop            nothing needed writing.
+#   skipped-locked  another graph writer holds this checkout's mutex.
+#
+# --list takes NO mutex: it is a pure read with no write to serialize, and a
+# caller that cannot get the list cannot make the similarity judgment at all, so
+# skipping it would be worse than a slightly stale read.
+#
+# Dependency-injection seams (unset in production; used by
+# test-dispatch-eval-finding.sh so the suite never touches the real graph or a
+# real git remote). Each holds a command line, split on whitespace:
+#   DISPATCH_EVAL_FINDING_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
+#   DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
+#   DISPATCH_EVAL_FINDING_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts
+#   DISPATCH_EVAL_FINDING_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts
+#   DISPATCH_EVAL_FINDING_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
+#   DISPATCH_EVAL_FINDING_LIST_CMD          default: the node --import tsx/esm listNodes one-liner below
+#   DISPATCH_EVAL_FINDING_INTENTIONS_DIR    default: <repo>/intentions
+#   DISPATCH_EVAL_FINDING_RETRIES           default: 3   (graph-commit attempts)
+#   DISPATCH_EVAL_FINDING_RETRY_DELAY       default: 5   (seconds between attempts)
+#   DISPATCH_GRAPH_WRITE_LOCK_FILE          (lib.sh) overrides the mutex path.
+#
+# NOT set -e: every risky step is guarded explicitly so the script always
+# reaches an intentional exit (same convention as dispatch-fleet-alarm).
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# scripts -> dispatch-propagate -> skills -> .claude -> repo root.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# shellcheck source=/dev/null
+if ! source "$SCRIPT_DIR/lib.sh"; then
+  echo "dispatch-eval-finding: cannot source $SCRIPT_DIR/lib.sh" >&2
+  exit 69
+fi
+
+ID_PREFIX="tactic-eval-finding-"
+# The metric name this script owns. Mirrored by RECURRENCE_METRIC in
+# packages/intentionsutil/src/rsi.ts, which renders it; a shell script cannot
+# import the constant, so the literal is spelled in both places.
+RECURRENCE_METRIC="recurrence_count"
+DEFAULT_SERVES="strategy-recursive-self-improvement"
+# Slug shape: lowercase kebab, 3-60 chars. This is an ADDRESSING guard, not a
+# taxonomy (divergence 1): it bounds the id space without closing it.
+SLUG_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
+SLUG_MAX=60
+SERVES_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
+
+usage() {
+  cat <<'USAGE'
+usage: dispatch-eval-finding --list
+       dispatch-eval-finding --slug <slug> --statement <text> --body-file <path>
+                             --sensor <name> [--impact-file <path>]
+                             [--now <YYYY-MM-DD>] [--serves <strategy-id>]
+       dispatch-eval-finding --retire --slug <slug>
+       dispatch-eval-finding -h|--help
+
+Records one occurrence of a recurring evaluation finding as the graph node
+tactic-eval-finding-<slug> (find-or-create; body refreshed and
+attributes.measured_impact recurrence count incremented on every occurrence).
+
+--list prints the whole ledger as JSON (open AND retired entries) so the caller
+can judge whether the finding in hand IS one of them before choosing a slug.
+--retire completes an entry to phase "done" WITH its metrics intact; a later
+occurrence of the same slug resumes the count rather than restarting at 1.
+
+exit: 0 landed / no-op, 1 graph write failed (rolled back), 64 usage,
+      69 environment, 70 write failed and the rollback left a dirty node file.
+USAGE
+}
+
+log() { printf 'dispatch-eval-finding: %s\n' "$*" >&2; }
+
+# --- Argument parsing --------------------------------------------------------
+SLUG=""
+STATEMENT=""
+BODY_FILE=""
+SENSOR=""
+IMPACT_FILE=""
+SERVES="$DEFAULT_SERVES"
+NOW=""
+RETIRE=0
+LIST=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --slug)
+      [[ $# -ge 2 ]] || { log "--slug requires a value"; usage >&2; exit 64; }
+      SLUG="$2"; shift 2 ;;
+    --statement)
+      [[ $# -ge 2 ]] || { log "--statement requires a value"; usage >&2; exit 64; }
+      STATEMENT="$2"; shift 2 ;;
+    --body-file)
+      [[ $# -ge 2 ]] || { log "--body-file requires a value"; usage >&2; exit 64; }
+      BODY_FILE="$2"; shift 2 ;;
+    --sensor)
+      [[ $# -ge 2 ]] || { log "--sensor requires a value"; usage >&2; exit 64; }
+      SENSOR="$2"; shift 2 ;;
+    --impact-file)
+      [[ $# -ge 2 ]] || { log "--impact-file requires a value"; usage >&2; exit 64; }
+      IMPACT_FILE="$2"; shift 2 ;;
+    --serves)
+      [[ $# -ge 2 ]] || { log "--serves requires a value"; usage >&2; exit 64; }
+      SERVES="$2"; shift 2 ;;
+    --now)
+      [[ $# -ge 2 ]] || { log "--now requires a value"; usage >&2; exit 64; }
+      NOW="$2"; shift 2 ;;
+    --retire) RETIRE=1; shift ;;
+    --list) LIST=1; shift ;;
+    *) log "unknown argument: $1"; usage >&2; exit 64 ;;
+  esac
+done
+
+# --- Environment -------------------------------------------------------------
+for bin in date flock git jq node npx; do
+  command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
+done
+
+INTENTIONS_DIR="${DISPATCH_EVAL_FINDING_INTENTIONS_DIR:-$REPO_ROOT/intentions}"
+RETRIES="${DISPATCH_EVAL_FINDING_RETRIES:-3}"
+RETRY_DELAY="${DISPATCH_EVAL_FINDING_RETRY_DELAY:-5}"
+
+declare -a GRAPH_COMMIT_CMD WRITE_NODE_CMD DUMP_NODE_CMD CLASSIFY_CMD LIST_CMD VERIFY_LANDED_CMD
+if [[ -n "${DISPATCH_EVAL_FINDING_GRAPH_COMMIT_CMD:-}" ]]; then
+  read -r -a GRAPH_COMMIT_CMD <<<"$DISPATCH_EVAL_FINDING_GRAPH_COMMIT_CMD"
+else
+  GRAPH_COMMIT_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/graph-commit")
+fi
+if [[ -n "${DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD:-}" ]]; then
+  read -r -a VERIFY_LANDED_CMD <<<"$DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD"
+else
+  VERIFY_LANDED_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/verify-landed")
+fi
+# write-node.ts / dump-node.ts resolve intentions/ from import.meta.url, NOT
+# cwd — so the copies invoked must be the ones inside the checkout being
+# mutated. Hence the absolute $REPO_ROOT-anchored paths.
+if [[ -n "${DISPATCH_EVAL_FINDING_WRITE_NODE_CMD:-}" ]]; then
+  read -r -a WRITE_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_WRITE_NODE_CMD"
+else
+  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts")
+fi
+if [[ -n "${DISPATCH_EVAL_FINDING_DUMP_NODE_CMD:-}" ]]; then
+  read -r -a DUMP_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_DUMP_NODE_CMD"
+else
+  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts")
+fi
+if [[ -n "${DISPATCH_EVAL_FINDING_CLASSIFY_CMD:-}" ]]; then
+  read -r -a CLASSIFY_CMD <<<"$DISPATCH_EVAL_FINDING_CLASSIFY_CMD"
+else
+  CLASSIFY_CMD=()
+fi
+if [[ -n "${DISPATCH_EVAL_FINDING_LIST_CMD:-}" ]]; then
+  read -r -a LIST_CMD <<<"$DISPATCH_EVAL_FINDING_LIST_CMD"
+else
+  LIST_CMD=()
+fi
+
+# --- --list ------------------------------------------------------------------
+# The similarity judgment's input (divergence 1). Pure read, no mutex, and it
+# lists RETIRED entries alongside open ones so a recurrence after retirement is
+# addressed to the existing slug instead of minting a near-duplicate.
+list_entries() {
+  if [[ ${#LIST_CMD[@]} -gt 0 ]]; then
+    "${LIST_CMD[@]}" "$INTENTIONS_DIR"
+    return
+  fi
+  (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { listNodes } = await import("./packages/intentionsutil/src/store.js");
+    const prefix = "tactic-eval-finding-";
+    const rows = listNodes(process.argv[1])
+      .filter((n) => n.kind === "tactic" && n.attributes?.ledger_entry === true)
+      .map((n) => {
+        const impact = Array.isArray(n.attributes.measured_impact)
+          ? n.attributes.measured_impact
+          : [];
+        const rec = impact.find(
+          (m) => m !== null && typeof m === "object" && m.metric === "recurrence_count",
+        );
+        return {
+          id: n.id,
+          slug: n.id.startsWith(prefix) ? n.id.slice(prefix.length) : null,
+          state: n.phase === "done" ? "retired" : "open",
+          statement: n.statement,
+          first_seen: n.attributes.first_seen ?? null,
+          recurrence_count: rec === undefined ? 0 : rec.value,
+          last_seen: rec === undefined ? null : rec.measured,
+          in_flight: n.execution !== null,
+        };
+      })
+      .sort((a, b) => b.recurrence_count - a.recurrence_count || a.id.localeCompare(b.id));
+    process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
+  ' "$INTENTIONS_DIR")
+}
+
+if [[ "$LIST" == "1" ]]; then
+  if [[ -n "$SLUG$STATEMENT$BODY_FILE$SENSOR$IMPACT_FILE$NOW" || "$RETIRE" == "1" ]]; then
+    log "--list takes no other arguments"
+    exit 64
+  fi
+  if ! list_entries; then
+    log "could not read the ledger from $INTENTIONS_DIR"
+    exit 1
+  fi
+  exit 0
+fi
+
+# --- Mode validation ---------------------------------------------------------
+[[ -n "$SLUG" ]] || { log "--slug is required (or pass --list)"; usage >&2; exit 64; }
+
+if (( ${#SLUG} > SLUG_MAX )) || [[ ! "$SLUG" =~ $SLUG_RE ]]; then
+  log "invalid slug '$SLUG' — must be lowercase-kebab (${SLUG_RE}) and at most $SLUG_MAX characters"
+  exit 64
+fi
+
+ID="$ID_PREFIX$SLUG"
+# Anchored id guard, belt-and-braces with the slug check above: nothing but an
+# exact ledger-entry id may reach the write paths below. The shape is open
+# (divergence 1) but never unbounded.
+if [[ ! "$ID" =~ ^tactic-eval-finding-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  log "refusing to act on id '$ID' — it does not match the anchored ledger-entry id shape"
+  exit 64
+fi
+
+if [[ "$RETIRE" == "1" ]]; then
+  if [[ -n "$STATEMENT$BODY_FILE$SENSOR$IMPACT_FILE" ]]; then
+    log "--retire takes only --slug (no --statement / --body-file / --sensor / --impact-file)"
+    exit 64
+  fi
+else
+  [[ -n "$STATEMENT" ]] || { log "--statement is required (or pass --retire / --list)"; usage >&2; exit 64; }
+  [[ -n "$BODY_FILE" ]] || { log "--body-file is required (or pass --retire / --list)"; usage >&2; exit 64; }
+  [[ -n "$SENSOR" ]] || { log "--sensor is required — a measurement with no named instrument is not admissible ranking input (strategy-token-economy's standing condition)"; usage >&2; exit 64; }
+  [[ -f "$BODY_FILE" ]] || { log "--body-file '$BODY_FILE' does not exist"; exit 64; }
+  [[ "$SERVES" =~ $SERVES_RE ]] || { log "invalid --serves '$SERVES' — must be a node id"; exit 64; }
+fi
+
+if [[ -z "$NOW" ]]; then
+  NOW=$(date -u +%F) || { log "could not read the clock for the measurement date"; exit 69; }
+fi
+[[ "$NOW" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { log "--now must be YYYY-MM-DD, got '$NOW'"; exit 64; }
+
+# --- Caller-supplied impact records ------------------------------------------
+# Validated HERE, before anything is mutated, against the same shape
+# validate-graph rule 21 enforces. A malformed record that reached the node
+# would fail the graph validation at commit time, after the write — a clear
+# error up front is cheaper and names the real fault.
+SUPPLIED='[]'
+if [[ -n "$IMPACT_FILE" ]]; then
+  [[ -f "$IMPACT_FILE" ]] || { log "--impact-file '$IMPACT_FILE' does not exist"; exit 64; }
+  if ! SUPPLIED=$(jq -c . "$IMPACT_FILE" 2>&1); then
+    log "--impact-file '$IMPACT_FILE' is not valid JSON: $SUPPLIED"
+    exit 64
+  fi
+  if ! jq -e '
+        def nonempty($k): (.[$k] | type) == "string" and (.[$k] | test("\\S"));
+        type == "array" and all(.[];
+          type == "object"
+          and nonempty("metric") and nonempty("unit")
+          and nonempty("window") and nonempty("sensor")
+          and (.value | type) == "number"
+          and (.value | isinfinite or isnan | not)
+          and (.measured | type) == "string"
+          and (.measured | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")))
+      ' "$IMPACT_FILE" >/dev/null 2>&1; then
+    log "--impact-file '$IMPACT_FILE' must be an array of {metric, value, unit, window, sensor, measured} records — non-empty strings, a finite value, and a YYYY-MM-DD measured date (validate-graph rule 21)"
+    exit 64
+  fi
+  if jq -e --arg m "$RECURRENCE_METRIC" 'any(.[]; .metric == $m)' "$IMPACT_FILE" >/dev/null 2>&1; then
+    log "--impact-file may not carry a '$RECURRENCE_METRIC' record — this script owns that metric and would overwrite it"
+    exit 64
+  fi
+fi
+
+NODE_FILE="$INTENTIONS_DIR/$ID.md"
+# The path git sees. graph-commit stages exactly `intentions/<id>.md` relative
+# to the repo it resolves, so origin/main lookups always use that spelling.
+NODE_REL="intentions/$ID.md"
+
+# --- Helpers -----------------------------------------------------------------
+
+# classify <id> -> prints absent | open | retired
+# readNode reads only the YAML frontmatter, so classification never touches the
+# body. RETIRED is phase "done" and nothing else — unlike fleet-alarm's
+# `closed`, an office_hours park is NOT a retirement here: a parked entry is an
+# open finding awaiting attention, and its occurrences must keep counting.
+classify() {
+  if [[ ${#CLASSIFY_CMD[@]} -gt 0 ]]; then
+    "${CLASSIFY_CMD[@]}" "$1"
+    return
+  fi
+  (cd "$REPO_ROOT" && node --import tsx/esm -e '
+    const { readNode } = await import("./packages/intentionsutil/src/store.js");
+    try {
+      const n = readNode(process.argv[1], process.argv[2]);
+      process.stdout.write(n.phase === "done" ? "retired\n" : "open\n");
+    } catch {
+      process.stdout.write("absent\n");
+    }
+  ' "$INTENTIONS_DIR" "$1")
+}
+
+# origin_blob / origin_main_ref_ok / restore_from_blob / splice_body /
+# run_graph_commit / verify_landed — the rollback and landing discipline is
+# dispatch-fleet-alarm's, verbatim in behaviour; see that script's header for
+# why each guard exists.
+origin_blob() {
+  local out
+  out=$(git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null) || return 1
+  printf '%s' "$out"
+}
+
+origin_main_ref_ok() {
+  git -C "$REPO_ROOT" rev-parse --verify --quiet origin/main >/dev/null 2>&1
+}
+
+restore_from_blob() {
+  local tmp="$NODE_FILE.tmp"
+  if ! git -C "$REPO_ROOT" show "$1" > "$tmp"; then
+    rm -f "$tmp"
+    log "could not restore $NODE_REL from blob $1 — the node file was left as-is"
+    return 1
+  fi
+  mv "$tmp" "$NODE_FILE"
+}
+
+splice_body() {
+  local tmp="$NODE_FILE.tmp"
+  if ! awk '{print} /^---$/{c++; if(c==2) exit}' "$NODE_FILE" > "$tmp"; then
+    rm -f "$tmp"
+    log "could not read the frontmatter of $NODE_FILE — the body splice was abandoned"
+    return 1
+  fi
+  if [[ "$(head -n 1 "$tmp")" != "---" || "$(tail -n 1 "$tmp")" != "---" ]]; then
+    rm -f "$tmp"
+    log "$NODE_FILE has no complete YAML frontmatter — refusing to splice a malformed node file"
+    return 1
+  fi
+  if ! cat "$BODY_FILE" >> "$tmp"; then
+    rm -f "$tmp"
+    log "could not read the finding from $BODY_FILE — the body splice was abandoned"
+    return 1
+  fi
+  mv "$tmp" "$NODE_FILE"
+}
+
+run_graph_commit() {
+  local attempt=1
+  while :; do
+    if "${GRAPH_COMMIT_CMD[@]}" -C "$REPO_ROOT" "$@" 1>&2 9>&-; then
+      return 0
+    fi
+    if (( attempt >= RETRIES )); then
+      log "graph-commit failed after $attempt attempt(s)"
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    [[ "$RETRY_DELAY" == "0" ]] || sleep "$RETRY_DELAY"
+  done
+}
+
+verify_landed() {
+  if ! git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null 9>&-; then
+    log "could not fetch origin/main before verification; comparing against the local remote-tracking ref"
+  fi
+  local local_blob
+  if ! local_blob=$(git -C "$REPO_ROOT" hash-object -- "$NODE_FILE"); then
+    log "could not hash $NODE_FILE for post-write verification"
+    return 1
+  fi
+  local vl_out vl_rc=0
+  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" --node "$ID" --blob "$local_blob" 2>&1 9>&-) || vl_rc=$?
+  if (( vl_rc == 0 )); then
+    return 0
+  fi
+  log "post-write verification failed (verify-landed exit $vl_rc) for $NODE_REL: $vl_out"
+  return 1
+}
+
+# --- Graph-write mutex --------------------------------------------------------
+# Taken BEFORE the first graph read, so the classification this pass acts on and
+# the write it derives from that classification cannot be split by another
+# writer's rebase / `git reset --hard` in this same checkout. Held on fd 9 until
+# process exit; non-blocking, so a contended pass skips rather than stacking.
+LOCK_FILE_PATH="$(graph_write_lock_file "$REPO_ROOT" 2>/dev/null || printf '<unresolved>')"
+graph_write_lock_acquire "$REPO_ROOT"
+LOCK_RC=$?
+case "$LOCK_RC" in
+  0) ;;
+  1)
+    log "another graph writer holds $LOCK_FILE_PATH — skipping this pass (nothing read, nothing written); THIS OCCURRENCE WAS NOT COUNTED, re-invoke to record it"
+    printf 'skipped-locked\n'
+    exit 0
+    ;;
+  *)
+    log "could not establish the graph-write mutex at $LOCK_FILE_PATH (graph_write_lock_acquire rc=$LOCK_RC) — refusing to write unserialized"
+    exit 69
+    ;;
+esac
+
+TMP_DIR=""
+cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+TMP_DIR=$(mktemp -d) || { log "mktemp failed"; exit 69; }
+
+STATE=$(classify "$ID") || {
+  log "graph read of $ID failed — cannot classify the ledger entry"
+  exit 1
+}
+STATE="${STATE//[$'\t\r\n ']/}"
+
+# --- --retire ----------------------------------------------------------------
+# Retirement is phase "done" WITH the summary metrics intact. Nothing is
+# deleted and nothing is reset: the owed-prune census exempts
+# attributes.ledger_entry nodes precisely so this record survives to be resumed.
+if [[ "$RETIRE" == "1" ]]; then
+  if [[ "$STATE" != "open" ]]; then
+    log "no open $ID to retire (state: $STATE) — nothing to do"
+    printf 'noop\n'
+    exit 0
+  fi
+
+  MANIFEST=$( (cd "$REPO_ROOT" && "${DUMP_NODE_CMD[@]}" --out-dir "$TMP_DIR" "$ID") ) || {
+    log "dump-node of $ID failed; cannot retire"
+    exit 1
+  }
+
+  if ! jq -e '.execution == null' "$TMP_DIR/$ID.json" >/dev/null 2>&1; then
+    log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — refusing to complete it mechanically"
+    printf 'noop\n'
+    exit 0
+  fi
+
+  if ! origin_main_ref_ok; then
+    log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to mutate $ID without a trustworthy pre-write blob"
+    exit 69
+  fi
+  if ! FRESH_BLOB=$(origin_blob) || [[ -z "$FRESH_BLOB" ]]; then
+    log "$NODE_REL does not exist on origin/main — refusing to mutate a node with no landed content to roll back to"
+    exit 1
+  fi
+
+  if ! (
+    set -o pipefail
+    jq '.phase = "done"' "$TMP_DIR/$ID.json" > "$TMP_DIR/$ID.patched.json" || exit 1
+    cd "$REPO_ROOT" || exit 1
+    "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
+  ) 1>&2 || ! run_graph_commit --base "$MANIFEST" -m "graph: retire finding ledger entry $SLUG" "$ID"; then
+    if ! restore_from_blob "$FRESH_BLOB"; then
+      log "retirement of $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+      exit 70
+    fi
+    log "retirement of $ID failed; the write was rolled back to origin/main"
+    exit 1
+  fi
+
+  if ! verify_landed; then
+    log "retirement of $ID could not be verified on origin/main"
+    exit 1
+  fi
+  log "retired $ID (phase: done, metrics intact)"
+  printf 'landed\n'
+  exit 0
+fi
+
+# --- Record one occurrence ---------------------------------------------------
+case "$STATE" in
+  absent)
+    # First occurrence: mint. recurrence_count starts at 1 and first_seen is
+    # stamped once, here, and never rewritten.
+    if ! origin_main_ref_ok; then
+      log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to mint $ID without a trustworthy pre-write blob"
+      exit 69
+    fi
+    PRE_EXISTED=0
+    [[ -e "$NODE_FILE" ]] && PRE_EXISTED=1
+    PRE_BLOB="$(origin_blob || true)"
+    jq -n \
+      --arg id "$ID" \
+      --arg statement "$STATEMENT" \
+      --arg serves "$SERVES" \
+      --arg sensor "$SENSOR" \
+      --arg now "$NOW" \
+      --arg metric "$RECURRENCE_METRIC" \
+      --argjson supplied "$SUPPLIED" \
+      '{
+        id: $id,
+        kind: "tactic",
+        statement: $statement,
+        owner: "ai",
+        status: "raw",
+        parent: null,
+        serves: [$serves],
+        recovers: [],
+        rationale: "Auto-created by dispatch-eval-finding as an evaluation finding ledger entry. Similar findings MERGE into this node — a recurrence updates attributes.measured_impact, never mints a second node. See the body for the finding.",
+        reading: null,
+        gap: null,
+        clarifications: [],
+        tooling_goals: [],
+        success_signal: null,
+        attention: null,
+        phase: null,
+        execution: null,
+        validates: [],
+        blocked_by: [],
+        office_hours: null,
+        pace_exempt: true,
+        rounds: null,
+        attributes: {
+          ledger_entry: true,
+          first_seen: $now,
+          measured_impact: ($supplied + [{
+            metric: $metric,
+            value: 1,
+            unit: "occurrences",
+            window: "all-time",
+            sensor: $sensor,
+            measured: $now
+          }])
+        }
+      }' > "$TMP_DIR/$ID.json" || { log "failed to build the node JSON for $ID"; exit 1; }
+    # Field notes: attention null — rank is never machine-injected, so a ledger
+    # entry never orders itself; the recurrence count is queryable input to a
+    # ranking act the author or a delegated writer performs. pace_exempt true —
+    # recording a finding is not paced work. serves carries band inheritance.
+    # phase null + status raw + execution null is the draft shape.
+
+    if ! (
+      cd "$REPO_ROOT" || exit 1
+      "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.json" || exit 1
+    ) 1>&2 || ! splice_body || ! run_graph_commit -m "graph: record finding ledger entry $SLUG" "$ID"; then
+      rm -f "$NODE_FILE.tmp"
+      if [[ -n "$PRE_BLOB" ]]; then
+        if ! restore_from_blob "$PRE_BLOB"; then
+          log "minting $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+          exit 70
+        fi
+      elif [[ "$PRE_EXISTED" == "1" ]]; then
+        log "minting $ID failed and $NODE_REL pre-existed this pass with no origin/main blob to restore — it was left as-is (NOT deleted) and may be dirty, which will block every later graph write in this checkout; inspect it, then restore or remove it by hand"
+        exit 70
+      else
+        rm -f "$NODE_FILE"
+      fi
+      log "minting $ID failed; the write was rolled back"
+      exit 1
+    fi
+    if ! verify_landed; then
+      log "minting $ID could not be verified on origin/main"
+      exit 1
+    fi
+    log "landed new ledger entry $ID (recurrence 1)"
+    printf 'landed\n'
+    exit 0
+    ;;
+
+  open|retired)
+    # A recurrence. RESUME the existing count — never mint over, never reset
+    # (divergence 2). For a retired entry this also clears `phase` back to null:
+    # a finding that recurs after its fix landed is open again by definition.
+    #
+    # No body-identity gate and no rate limit: every invocation is a distinct
+    # occurrence and must move the count.
+    MANIFEST=$( (cd "$REPO_ROOT" && "${DUMP_NODE_CMD[@]}" --out-dir "$TMP_DIR/base" "$ID") ) || {
+      log "dump-node of $ID failed; cannot record this occurrence"
+      exit 1
+    }
+
+    # The in-flight guard. Rewriting the body of a node a PR is working changes
+    # its (statement, body) scope fingerprint and mis-parks that session, so the
+    # occurrence is dropped instead — loudly, never silently.
+    if ! jq -e '.execution == null' "$TMP_DIR/base/$ID.json" >/dev/null 2>&1; then
+      log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — THIS OCCURRENCE WAS NOT COUNTED; re-record it after that work lands"
+      printf 'noop\n'
+      exit 0
+    fi
+
+    if ! origin_main_ref_ok; then
+      log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to update $ID without a trustworthy pre-write blob"
+      exit 69
+    fi
+    if ! PRE_BLOB=$(origin_blob) || [[ -z "$PRE_BLOB" ]]; then
+      log "$NODE_REL does not exist on origin/main — refusing to mutate a node with no landed content to roll back to"
+      exit 1
+    fi
+
+    # The summary-metric update, in one jq pass:
+    #   * read the previous recurrence_count (0 when absent) and increment it;
+    #   * upsert every caller-supplied record by its (metric, window) key, so a
+    #     re-measurement REWRITES a figure rather than appending an occurrence;
+    #   * stamp first_seen only if it is missing (a pre-ledger node adopted into
+    #     the ledger gets today; an existing entry keeps its original day);
+    #   * clear phase when the entry was retired — this is the resume.
+    if ! (
+      set -o pipefail
+      jq \
+        --arg sensor "$SENSOR" \
+        --arg now "$NOW" \
+        --arg metric "$RECURRENCE_METRIC" \
+        --argjson supplied "$SUPPLIED" '
+        (.attributes // {}) as $attrs
+        | ($attrs.measured_impact // []) as $existing
+        | ([$existing[]
+            | select(type == "object" and .metric == $metric and (.value | type) == "number")
+            | .value] | first) as $prev
+        | ($existing | map(select(type == "object" and .metric != $metric))) as $rest
+        | ($rest
+           | reduce $supplied[] as $r
+               (.; map(select(.metric != $r.metric or .window != $r.window)) + [$r])
+          ) as $merged
+        | .attributes = ($attrs + {
+            ledger_entry: true,
+            first_seen: ($attrs.first_seen // $now),
+            measured_impact: ($merged + [{
+              metric: $metric,
+              value: (($prev // 0) + 1),
+              unit: "occurrences",
+              window: "all-time",
+              sensor: $sensor,
+              measured: $now
+            }])
+          })
+        | .phase = (if .phase == "done" then null else .phase end)
+      ' "$TMP_DIR/base/$ID.json" > "$TMP_DIR/$ID.patched.json" || exit 1
+      cd "$REPO_ROOT" || exit 1
+      "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
+    ) 1>&2 || ! splice_body \
+      || ! run_graph_commit --base "$MANIFEST" -m "graph: finding ledger entry $SLUG recurred" "$ID"; then
+      rm -f "$NODE_FILE.tmp"
+      if ! restore_from_blob "$PRE_BLOB"; then
+        log "recording a recurrence of $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
+        exit 70
+      fi
+      log "recording a recurrence of $ID failed; the write was rolled back to origin/main"
+      exit 1
+    fi
+    if ! verify_landed; then
+      log "the recurrence of $ID could not be verified on origin/main"
+      exit 1
+    fi
+    log "recorded a recurrence of $ID (was $STATE)"
+    printf 'landed\n'
+    exit 0
+    ;;
+
+  *)
+    log "unexpected classification '$STATE' for $ID"
+    exit 1
+    ;;
+esac
