@@ -116,7 +116,44 @@ clarifications:
       claim. Taking the residual keeps every registered term live, keeps
       resolveAttention's composition untouched (the band is a subtraction, not a
       rewrite), and preserves the shape the 2026-07-18 tier amendment already
-      established for tiers: terms-and-weights govern ordering WITHIN a band."
+      established for tiers: terms-and-weights govern ordering WITHIN a band.
+      (Amended 2026-08-12, office-hours round that cleared
+      tactic-attention-namespaced-rank's park.) The RESIDUAL derivation stated
+      above is corrected. 'The node's value MINUS its band' does not equal the
+      gloss that follows it -- 'its own authored boost plus the signal term plus
+      the capture term' -- and the gloss is the intended meaning.
+      resolveAttention distributes ancestors' AUTHORED claims only
+      (packages/intentionsutil/src/attention.ts, the authored fixpoint at lines
+      417-437), while the signal and capture terms are computed per node and
+      never flow downward (lines 553-556). So subtracting a band equal to the
+      distributing strategy's RESOLVED rank subtracts that strategy's own signal
+      and capture weight as well, driving the residual negative by up to that
+      amount -- the worked case recorded on strategy-recursive-self-improvement,
+      where strategy-rsi-plan-surface's tactics sit in band 9 carrying an
+      authored 8 for a residual of MINUS 1 -- and letting the distributing
+      strategy's own terms reorder tactics WITHIN a band, the exact artifact the
+      residual exists to remove. Corrected: BAND is unchanged, a strategy's own
+      RESOLVED rank exactly as stated above. RESIDUAL is the node's value minus
+      the authored contribution INHERITED from its distributors, which is
+      precisely the gloss above -- its own authored boost plus its own signal
+      term plus its own capture term. So defined, the residual is never
+      negative, keeps all three registered terms live in ordering, and leaks
+      nothing from the band into within-band order. This also preserves the
+      flat-additive-strategy-scale property that
+      tactic-attention-namespaced-rank's greenfield target asserts (strategies
+      live on a single flat additive scale, unchanged from today): a strategy's
+      own band is its resolved rank, so strategy-versus-strategy order remains
+      exactly today's value order, with the residual acting only as a tiebreak.
+      Deriving the band from the authored term instead would have made a
+      strategy's own key the lexicographic pair (authored, signal+capture) and
+      reordered strategies against each other, which that property forbids -- a
+      cost the park reason did not surface. This closes, in favour of the
+      resolved value, the ownBand question strategy-recursive-self-improvement
+      records as an open decision recorded on tactic-attention-namespaced-rank.
+      Author-directed: the author accepted this resolution on trust in the same
+      round rather than deriving it, so it is enrolled for re-validation as a
+      born-parked office-hours review sitting
+      (tactic-review-band-derivation-ratification)."
   - question: Is the band derived, or authored and checked?
     answer: "(Author-directed 2026-08-11, third round.) Both, and the second is the
       point. The band is derived as above, but the VALUE chosen inside a band

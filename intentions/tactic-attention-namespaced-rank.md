@@ -21,7 +21,42 @@ serves:
   - strategy-graph-drives-dispatch
   - strategy-rsi-delegated-prioritization
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does band derive from the distributing strategy's authored term or
+      from its full resolved rank, and what does that make the residual?
+    answer: "(Resolved 2026-08-12, office-hours round that cleared this node's park;
+      the decision strategy-recursive-self-improvement recorded as open on this
+      node is now closed.) BAND derives from the distributing strategy's
+      RESOLVED rank -- kind-kind's rank-algebra clarification is ratified
+      unchanged on this point. RESIDUAL is corrected: it is NOT the node's value
+      minus its band, but the node's value minus the authored contribution
+      INHERITED from its distributors, which equals its own authored boost plus
+      its own signal term plus its own capture term. The two differ because
+      resolveAttention distributes ancestors' authored claims only
+      (packages/intentionsutil/src/attention.ts, authored fixpoint lines
+      417-437) while signal and capture are computed per node and never flow
+      downward (lines 553-556); subtracting the full resolved band would
+      therefore subtract the strategy's own signal and capture weight, driving
+      the residual negative (the MINUS 1 case recorded on
+      strategy-recursive-self-improvement for strategy-rsi-plan-surface's
+      tactics) and leaking the band's own terms back into within-band order. The
+      corrected residual is never negative, keeps all three registered terms
+      live, and leaves resolveAttention's composition untouched. Choosing
+      resolved rank over the authored term also preserves this node's own
+      greenfield assertion that strategies live on a single flat additive scale
+      unchanged from today: a strategy's band is its resolved rank, so
+      strategy-versus-strategy order is exactly today's value order with the
+      residual only as a tiebreak, whereas an authored-term band would have made
+      a strategy's key the lexicographic pair (authored, signal+capture) and
+      reordered strategies against each other. It further makes the serving
+      strategy's success_signal half (b) reachable, now recorded on
+      strategy-rsi-delegated-prioritization as measured against resolved rank.
+      Implementation note carried into the plan: state this derivation
+      explicitly in code rather than letting it fall out, and re-measure the
+      ~1828 inversion figure after the multi-distributor sum-to-max fix this
+      node also owns, since that figure predates it. Author-directed and
+      accepted on trust; enrolled for re-validation as
+      tactic-review-band-derivation-ratification."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -29,36 +64,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Requires author ratification of the band-derivation definition before
-    the plan can be authored: does `band` derive from the distributing
-    strategy's authored term or from its full resolved rank? kind-kind's
-    rank-algebra clarification records ownBand as \"a strategy's own resolved
-    rank\" (intentions/kind-kind.md, the 'three components of the rank key'
-    clarification), while this node's own body defines residual as \"its own
-    authored boost plus the signal term plus the capture term\" — true only if
-    band is the authored term — and then asserts \"the design above says
-    authored\" in direct contradiction of its own greenfield bullet. This is not
-    a drafting nit: resolveAttention distributes ancestors' authored claims only
-    (packages/intentionsutil/src/attention.ts:420-437), while signal and capture
-    are per-node and undistributed, so under band = resolved rank the residual
-    goes negative by up to the strategy's own signal+capture weight and the
-    distributing strategy's terms leak back into within-band order — the exact
-    artifact the residual exists to remove; under band = authored term, the
-    ~1828 inversions this node measures against strategy resolved rank stay
-    live, which decides whether the serving strategy's success-signal half (b)
-    (inversion count stays at zero) is reachable. The resolution is author-owned
-    twice over: the definition lives on the doctrine node kind-kind, which a
-    tactic may not rewrite, and it fixes what the author-owned fitness criterion
-    counts. Recommend: run an /align pass on kind-kind (or a targeted interview
-    on strategy-rsi-delegated-prioritization) to settle whether band = strategy
-    authored term or strategy resolved rank, and to state which of the two
-    quantities the success_signal's cross-strategy-inversion count is measured
-    against; then re-run /align-tactics tactic-attention-namespaced-rank to
-    author the plan."
-  since: 2026-08-11
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -113,8 +119,14 @@ Rank orders **lexicographically** by `(tier, band, residual)`, descending.
   `ownBand` is a strategy's own resolved rank and `0` for every other kind.
   Deriving it as a fixpoint rather than as a direct max over the node's own
   distributor set is what makes it **total** — see "Why the fixpoint" below.
-- **`residual`** — the node's `value` **minus** its band: its own authored
-  boost plus the `signal` term plus the `capture` term.
+- **`residual`** — the node's `value` **minus the authored contribution
+  inherited from its distributors**, which equals its own authored boost plus
+  the `signal` term plus the `capture` term. (Corrected 2026-08-12 — see
+  "Band and residual — settled" below. The earlier wording, "the node's
+  `value` minus its band", is **wrong** and does not equal the gloss that
+  followed it: the band carries the distributing strategy's own `signal` and
+  `capture` weight, which the node never inherited, so subtracting the band
+  drives the residual negative.)
 
 **Why the residual and not "the node's own boost".** `resolveAttention`
 computes `value = authored + signal + capture`, and `authored` is itself a
@@ -126,10 +138,10 @@ demoting two of the three registered terms. The bare `value` would
 double-count the distributing strategy's rank — once as the band, once
 inside `value` — so order within a band would still track strategy rank
 rather than the node's own claim. The residual keeps every registered term
-live, keeps `resolveAttention`'s composition untouched (the band is a
-subtraction, not a rewrite), and preserves the shape the 2026-07-18 tier
-amendment already established: terms-and-weights govern ordering **within**
-a band.
+live, keeps `resolveAttention`'s composition untouched (the inherited
+authored contribution is a subtraction, not a rewrite), and preserves the
+shape the 2026-07-18 tier amendment already established: terms-and-weights
+govern ordering **within** a band.
 
 **Why the fixpoint.** A direct max over the node's own distributor set is
 undefined for three real shapes. An **epic child** whose only distributor is
@@ -323,7 +335,68 @@ A further class is out of reach of boosts and is *not* claimed as fixed here:
 the `signal` and `capture` terms are computed per-node and do not flow down
 through distribution, so a strategy's resolved rank can exceed the authored
 value its tactics inherit by up to 2. That is why ~1828 pair inversions
-remain against strategy *resolved* rank. Decide deliberately whether `band`
-derives from the strategy's authored term or its full resolved value — the
-design above says authored, and that choice should be stated in the
-implementation rather than left to fall out of the code.
+remain against strategy *resolved* rank. Whether `band` derives from the
+strategy's authored term or its full resolved value was left open here; it is
+now **settled — resolved value**. See the next section, which supersedes this
+paragraph's open question and the earlier draft's "the design above says
+authored".
+
+### Band and residual — settled (2026-08-12)
+
+This node was parked on 2026-08-11 because its own body contradicted itself
+on the rank key, and the definition lives on a doctrine node a tactic may not
+rewrite. The office-hours round of 2026-08-12 settled it; `kind-kind`'s
+rank-algebra clarification and `strategy-rsi-delegated-prioritization`'s
+`success_signal` carry the authoritative record, and this section restates it
+so a clean session implementing from this node alone is not misled.
+
+**`band` = the distributing strategy's RESOLVED rank.** Unchanged from
+`kind-kind` — that half was already correct and is ratified.
+
+**`residual` = the node's `value` minus the authored contribution INHERITED
+from its distributors** = its own authored boost + its own `signal` term +
+its own `capture` term. This *corrects* the earlier "value minus its band".
+
+**Why they are not the same thing.** `resolveAttention`'s authored fixpoint
+distributes ancestors' **authored** claims only
+(`packages/intentionsutil/src/attention.ts`, lines 417–437); `signal` and
+`capture` are computed per node and never flow downward (lines 553–556). A
+strategy's resolved rank therefore contains `signal`/`capture` weight its
+tactics never inherited. Subtracting the whole band would subtract weight
+that was never added — driving the residual **negative** (the recorded
+`MINUS 1` case: `strategy-rsi-plan-surface`'s tactics sit in band 9 carrying
+an authored 8) and leaking the distributing strategy's own terms back into
+ordering *within* the band, which is precisely the artifact the residual
+exists to remove.
+
+**Why resolved rank and not the authored term.** Three reasons, in order of
+force:
+
+1. **It is what makes `success_signal` (b) reachable.** Under `band =
+   resolved rank`, `band` dominates `residual` lexicographically, so a tactic
+   can never outrank a tactic of a higher-resolved-rank strategy — the
+   cross-strategy inversion count against resolved rank is *structurally*
+   zero once this lands. Under `band = authored term`, the ~1828 inversions
+   measured against resolved rank stay live and the threshold ("both counts
+   in (b) stay at zero") could never be met.
+2. **It preserves this node's own greenfield assertion** that strategies live
+   on a single flat additive scale, *unchanged from today*. A strategy's own
+   band is its resolved rank, so strategy-vs-strategy order stays exactly
+   today's `value` order, with the residual acting only as a tiebreak. An
+   authored-term band would instead make a strategy's own key the
+   lexicographic pair `(authored, signal+capture)` and **reorder strategies
+   against each other** — which that assertion forbids. This cost was not
+   surfaced when the question was first framed.
+3. **It requires no change to `kind-kind`'s band definition** — only the
+   residual derivation was wrong.
+
+**Implementation obligations this creates.** State the derivation explicitly
+in code rather than letting it fall out: compute the residual from the
+inherited-authored quantity, not by subtracting the band. And **re-measure
+the ~1828 figure** before using it as a baseline — it predates the
+multi-distributor `sum`→`max` fix this same tactic owns, so the two changes
+interact and the figure is stale as a target.
+
+**Held on trust.** The author accepted this resolution rather than deriving
+it, so it is enrolled for re-validation as the born-parked office-hours
+review sitting `tactic-review-band-derivation-ratification`.

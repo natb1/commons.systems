@@ -140,12 +140,41 @@ clarifications:
       both the per-iteration reprioritization delta and the post-hoc outcome
       audit. The rendering of that section into rsi-plan.md remains the surface
       child's concern; deriving the measurement is this strategy's."
+  - question: Against which quantity is the cross-strategy inversion count in
+      success_signal (b) measured -- a distributing strategy's authored term or
+      its resolved rank?
+    answer: "(Recorded 2026-08-12, office-hours round that cleared
+      tactic-attention-namespaced-rank's park.) Its RESOLVED rank. The signal
+      named cross-strategy rank inversions without naming the quantity, and that
+      gap blocked the implementing tactic: the two candidate band derivations
+      make the threshold reachable or unreachable as literally written. Under
+      band = the distributing strategy's resolved rank -- the definition
+      kind-kind's rank-algebra clarification records and this round ratifies --
+      a tactic can never outrank a tactic of a higher-resolved-rank strategy,
+      because band dominates residual lexicographically, so the count is
+      structurally zero once tactic-attention-namespaced-rank lands and the
+      threshold (both counts in (b) stay at zero) is genuinely achievable. Under
+      band = the strategy's authored term, the ~1828 inversions measured against
+      resolved rank on 2026-08-11 would stay live and this half of the threshold
+      could never be met, since the signal and capture terms are computed per
+      node and are not distributed downward
+      (packages/intentionsutil/src/attention.ts lines 553-556). Measuring
+      against resolved rank is therefore both the stricter reading and the one
+      the rank key can actually enforce. Caveat carried forward for the
+      implementer: the ~1828 figure predates the sum-to-max multi-distributor
+      combinator fix that tactic-attention-namespaced-rank also owns, so it must
+      be re-measured before being used as a baseline rather than assumed.
+      Author-directed: the author accepted this resolution on trust rather than
+      deriving it, so it is enrolled for re-validation as a born-parked
+      office-hours review sitting (tactic-review-band-derivation-ratification)."
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,
     against the dispatch queue's baseline closure interval; and (b) the count of
-    cross-strategy rank inversions plus the count of model attention writes
-    carrying no priority_log entry
+    cross-strategy rank inversions -- measured against each distributing
+    strategy's RESOLVED rank, the quantity band is derived from (settled
+    2026-08-12) -- plus the count of model attention writes carrying no
+    priority_log entry
   sensor: tactic-rsi-reprioritization-outcome-audit's outcome section (joining
     attributes.priority_log entry dates with node closure dates), plus
     validate-graph's ownership-boundary and marks-asymmetry lint from
