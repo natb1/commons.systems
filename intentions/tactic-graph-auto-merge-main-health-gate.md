@@ -16,13 +16,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-skill
+  pr: 3072
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-12T19:53:41Z
+    mergeCommitSha: c0a66d49844e6ce64eb3224390a64e0d6eade4a3
+    graphCommitSha: null
 validates: []
 blocked_by:
-  - tactic-pause-disables-merge-lane
   - tactic-graph-auto-merge-up-to-date-gate
-  - tactic-graph-auto-merge-office-hours-gate
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -68,3 +77,27 @@ Consumer: `tactic-dispatch-emulate-owns-merge`, which needs the node filter and
 the moved gate before an emulated run can merge safely.
 
 Not yet planned — this is retained interview context, not a clean-session plan.
+
+## Landed 2026-08-12 — PR #3072
+
+Merged as `c0a66d49844e6ce64eb3224390a64e0d6eade4a3` at `2026-08-12T19:53:41Z`,
+as the first unit of the `/dispatch-ladder` work (`tactic-dispatch-ladder-skill`,
+commit `53cf1ab4`) rather than as a PR of its own — that node was `blocked_by`
+this one, and both shipped together.
+
+Both scoped changes landed as written. `graph-auto-merge` now owns the
+main-known-good predicate inside its own admission decision, and the
+`OPEN_MAIN_RED` copies computed around the `dispatch-select-tick` and
+`dispatch-tick` call sites are gone. `graph-auto-merge` and
+`reconcile-graph-merged` each take `--node <id>`, which is a **selection
+filter** over the candidate set and never a gate bypass — every admission gate
+still runs on the selected node.
+
+`blocked_by` is cleared for `tactic-pause-disables-merge-lane` (PR #3068) and
+`tactic-graph-auto-merge-office-hours-gate` (PR #3033); both were merged before
+this work started, so the plan was written against post-#3068 code as the
+sequencing required. `tactic-graph-auto-merge-up-to-date-gate` is deliberately
+**retained** in `blocked_by`: it is still at phase `implement`, so that half of
+the sequencing was never satisfied — the ad hoc work went ahead regardless.
+Whoever implements that node should read the landed admission decision first;
+the uncoordinated-racers hazard the ordering existed to prevent is live for it.

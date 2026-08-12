@@ -32,11 +32,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-skill
+  pr: 3072
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-12T19:53:41Z
+    mergeCommitSha: c0a66d49844e6ce64eb3224390a64e0d6eade4a3
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-graph-auto-merge-main-health-gate
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -170,3 +180,41 @@ run: `/dispatch-ladder <node-id>` on a real tactic, confirming the ladder
 advances between phases with **no model turn in between** (the whole point),
 that a throw halts rather than retries, and that the run survives the invoking
 session ending.
+
+## Landed 2026-08-12 — PR #3072
+
+Merged as `c0a66d49844e6ce64eb3224390a64e0d6eade4a3` at `2026-08-12T19:53:41Z`.
+The work was done ad hoc rather than through the dispatch ladder it builds, so
+this node was closed by hand rather than by the router.
+
+What landed, against the scope above:
+
+- **Item 1** — `dispatch-emulate-advance` / `-await` renamed to
+  `dispatch-ladder-advance` / `-await` with their two test files;
+  `.claude/skills/dispatch-emulate/` deleted (`35494b01`).
+- **Items 2, 3, 4, 5** — `dispatch-ladder-run` (the driver),
+  `dispatch-ladder-spawn` (the transient `systemd-run --user` unit) and
+  `dispatch-ladder-status` (the poller), plus three test suites wired into the
+  `hook-tests` CI job (`48733353`). The node-scoped merge-and-absorb folded in
+  from `tactic-dispatch-emulate-owns-merge` runs `graph-auto-merge --node`
+  then `reconcile-graph-merged --node`, under `dispatch-acquire-lock`, against
+  a freshly-synced main checkout.
+- **Items 6 and 7** — carried by `.claude/skills/dispatch-ladder/SKILL.md`
+  (`80bef25c`): the invoking session polls `dispatch-ladder-status` to terminus
+  and runs the closing acceleration review there, and the skill sizes
+  `--timeout-s` from the measured table above rather than changing the script
+  default.
+- The admission gate this node was `blocked_by` —
+  `tactic-graph-auto-merge-main-health-gate` — landed in the same PR
+  (`53cf1ab4`), which is why that node is closed against #3072 as well.
+
+A closing code review found eight defects, all fixed in the same PR
+(`1673c9ee`, `392df8d0`, `0bdb56f3`, `a1c74c78`, `126b89a4`, `a67d5d1a`). The
+one worth remembering: a clean review pass writes no phase, so `await` had to
+learn the `reviewed` marker — without it the ladder halted one step short of
+its own merge.
+
+Three deferrals from that review are on the record as their own draft tactics
+rather than lost: `tactic-dispatch-ladder-exit-code-space`,
+`tactic-sync-main-checkout-helper`, and
+`tactic-ci-verdict-cache-invalidation`.

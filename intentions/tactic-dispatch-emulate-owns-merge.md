@@ -16,12 +16,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-skill
+  pr: 3072
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-12T19:53:41Z
+    mergeCommitSha: c0a66d49844e6ce64eb3224390a64e0d6eade4a3
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-graph-auto-merge-main-health-gate
-  - tactic-dispatch-ladder-skill
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -77,3 +86,23 @@ sense reads a non-`OPEN` PR and skips), and the pause stops meaning "no merges"
 an author hand-merge as legitimate escapes, so this formalizes an existing one).
 
 Not yet planned — this is retained interview context, not a clean-session plan.
+
+## Closed 2026-08-12 — done via PR #3072, with no PR of its own
+
+Merged as `c0a66d49844e6ce64eb3224390a64e0d6eade4a3` at `2026-08-12T19:53:41Z`.
+
+**This node never had a unit of work of its own.** Its scope was folded into
+`tactic-dispatch-ladder-skill` as that node's item 4 and shipped there:
+`dispatch-ladder-run` calls `graph-auto-merge --node <id>` and then
+`reconcile-graph-merged --node <id>` under `dispatch-acquire-lock`, so a ladder
+run completes its own node instead of waiting on the tick it exists to route
+around. `execution.pr` records #3072 so the merge evidence is readable from
+this node — it is the carrier's PR, not a separate one, and there is no commit
+attributable to this node alone.
+
+The two rewrites scoped above are moot rather than done:
+`.claude/skills/dispatch-emulate/` no longer exists, and
+`.claude/skills/dispatch-ladder/SKILL.md` was written from the start without
+the false "the tick's merge lane runs even while dispatch is paused" claim and
+with the honest form of the invariant (neither script makes a *decision*; the
+gates stay in `graph-auto-merge`).

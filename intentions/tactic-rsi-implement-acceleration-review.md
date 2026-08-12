@@ -36,11 +36,21 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-skill
+  pr: 3072
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-12T19:53:41Z
+    mergeCommitSha: c0a66d49844e6ce64eb3224390a64e0d6eade4a3
+    graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-dispatch-ladder-skill
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -173,3 +183,22 @@ must not be reported as if it did. The real verification is reading the skill's
 loop end to end as a fresh session would, confirming the new step reads as part
 of the loop's control flow rather than an appended note, and that it does not
 conflict with the three non-negotiable rules.
+
+## Closed 2026-08-12 — done via PR #3072, with no PR of its own
+
+Merged as `c0a66d49844e6ce64eb3224390a64e0d6eade4a3` at `2026-08-12T19:53:41Z`.
+
+**This node never had a unit of work of its own.** All three scope items were
+folded into `tactic-dispatch-ladder-skill` and shipped there: the closing
+acceleration review as its item 6, the report item with it, and the
+await-window sizing as its item 7. The carrier is
+`.claude/skills/dispatch-ladder/SKILL.md` (`80bef25c`), and the review is
+performed by the session that polls `dispatch-ladder-status` to terminus —
+a detached driver reaches terminus with no session attached, which is the
+re-ruling noted above. `execution.pr` records #3072 so the merge evidence is
+readable from this node; it is the carrier's PR, not a separate one.
+
+`strategy-recursive-self-improvement` condition 14 is unchanged and still
+binding, and it now has a carrier for the first time. The measured-durations
+table above is reproduced verbatim on the carrier node, so nothing is lost if
+this node is later pruned.
