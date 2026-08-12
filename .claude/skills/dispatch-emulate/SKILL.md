@@ -107,8 +107,15 @@ git, direnv — `.claude/rules/sandbox.md`). `dispatch-emulate-advance` prints
 
 ## Three rules, none negotiable
 
-- **Never hand-merge.** The tick's merge lane runs even while dispatch is paused.
-  Let it. Neither script makes a merge, a graph write, or a `gh` call.
+- **Never hand-merge.** Neither script makes a merge, a graph write, or a `gh`
+  call. The merge belongs to `graph-auto-merge`, which the dispatch tick calls —
+  and while dispatch is **paused** that lane does not run: `graph-auto-merge` is
+  invoked only inside `dispatch-select-tick`, which sits past the pause
+  short-circuit. So a paused run stops with its PR reviewed and unmerged, and an
+  operator clears it with `dispatch-tick --manual`. Do not merge it by hand to
+  get past this. (`tactic-pause-disables-merge-lane` makes the paused tick drain;
+  `tactic-dispatch-emulate-owns-merge` gives this loop its own node-scoped merge
+  step, after which this rule is rewritten again.)
 - **Never run a phase skill in an Agent-tool subagent.** `/qa-fix`, `/review-fix`
   and `/align-tactics` depend on the Workflow tool, which a subagent cannot use.
   They must be spawned sessions — which is what `dispatch-graph-execute` does.
