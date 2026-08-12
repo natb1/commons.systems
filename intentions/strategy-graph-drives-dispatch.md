@@ -477,7 +477,29 @@ clarifications:
       per-tier adoption does not assume tier-2 ordering is already trustworthy.
       Carried into tactic-attention-per-tier-boost-migration, which owns the
       storage shape and the requirement that an unauthored tier stay
-      distinguishable from an authored lowest value."
+      distinguishable from an authored lowest value. (Amended 2026-08-12,
+      office-hours /align round.) Two corrections, neither reopening the
+      accepted cost. FIRST, the storage shape no longer sits here: it moves to
+      tactic-attention-namespaced-rank (see the shape/value-seam clarification
+      below); what tactic-attention-per-tier-boost-migration retains from this
+      entry is the requirement that an unauthored tier stay distinguishable from
+      an authored lowest value, now asserted as a constraint on that shape
+      rather than as ownership of it. SECOND, the degeneracy measured here
+      PREDATES this round's deletion of the signal term, so the interim is
+      slightly worse than what was accepted: the tier-2 population loses its
+      signal input too, leaving those nodes ordered by lineage connectivity and
+      depth alone. The acceptance stands unchanged -- the population is 5 nodes
+      and the remedy is still to author a value in the target tier when work
+      actually arrives there -- but the record should not be read as having
+      priced the signal-term deletion in. STEELMAN CONSIDERED AND DIVERGED FROM:
+      making boosts tier-agnostic, with tier as a pure ordering axis, would give
+      tier-2 nodes a real band today from their tier-1 lineage with no authoring
+      act at all, which is strictly better than the degenerate interim. It is
+      rejected because it contradicts clarification 12 (a tier change does not
+      carry a node's boost) and because the improvement is temporary -- tier-2
+      bands would REGRESS to 0 the moment per-tier landed without simultaneously
+      authored values, converting an accepted standing cost into an unannounced
+      future regression."
   - question: Is an authored boost a free magnitude or a level drawn from a fixed
       vocabulary?
     answer: "(Author-decided 2026-08-12, closing the per-band scope-stamp question
@@ -511,10 +533,59 @@ clarifications:
       vocabulary governs WHICH VALUES are authorable, not how many boosts a node
       carries; per-tier structure serves coverage (a well-defined rank in a tier
       the node does not belong to), which is orthogonal. validateGraph rule 20
-      retires: its justification is the calibration claim that a value is
-      'only meaningful within one tier's scale', which is false under a closed
+      retires: its justification is the calibration claim that a value is 'only
+      meaningful within one tier's scale', which is false under a closed
       absolute vocabulary. tactic-attention-per-tier-boost-migration owns the
-      level values and the migration."
+      level values and the migration. (Amended 2026-08-12, office-hours /align
+      round.) RULE 20 HAS A SECOND, INDEPENDENT GROUND, and it is the one that
+      fixes sequencing. Recorded here the retirement rests only on the
+      calibration claim being false under an absolute vocabulary -- a ground
+      that ties rule 20 to the vocabulary, and so to
+      tactic-attention-per-tier-boost-migration. But rule 20
+      (checkAttentionTierNamespace,
+      packages/intentionsutil/src/schema.ts:1111-1121) requires attention.tier
+      === ownTier(node), which mechanically REJECTS a tier-1 strategy authoring
+      a tier-2 boost -- exactly the authoring act per-tier boosts were adopted
+      to enable, as the per-tier-cost clarification above states in its own
+      terms. Rule 20 therefore cannot outlive the storage shape whatever happens
+      to the vocabulary, and its retirement moves with the shape to
+      tactic-attention-namespaced-rank. This ground is recorded because the
+      calibration ground alone invites a later session to re-sequence rule 20
+      with the vocabulary and reintroduce the deadlock this round cleared.
+      Ownership after this amendment: tactic-attention-per-tier-boost-migration
+      keeps the level VALUES, the exported constant, and the write-path
+      off-vocabulary check."
+  - question: Which node lands the per-tier boost storage shape, and on what
+      principle is implementation work split between a model change and its
+      authored values?
+    answer: "(Author-decided 2026-08-12, office-hours /align round that cleared
+      tactic-attention-namespaced-rank's park.) THE SHAPE/VALUE SEAM. A change
+      to the ranking model's data SHAPE lands with the algebra that consumes it;
+      the authored VALUES that populate the shape, and any judgment about what
+      those values should be, land separately. So
+      tactic-attention-namespaced-rank lands the per-tier boost map and deletes
+      validateGraph rule 20, and tactic-attention-per-tier-boost-migration lands
+      the closed level vocabulary, the write-path check, the 0.01 ladder revert,
+      and the remaining odd values. This resolves the circularity that parked
+      the tactic: the shape was recorded as owned by a node whose blocked_by
+      puts it AFTER the node that needs the shape. The seam is not a scheduling
+      convenience -- it is forced on one side and free on the other. Forced:
+      rule 20 rejects the authoring act per-tier boosts exist to enable, so the
+      shape cannot ship without retiring it, and a resolver written against the
+      scalar in the meantime is dead scaffolding rather than a working interim.
+      Free: parseAttention already defaults an absent tier tag to 1, so the
+      legacy scalar form reinterprets into a one-entry map with ZERO node-file
+      edits, and measured on the live graph no tier-2/3 authored boost exists to
+      migrate (all 92 attention-carrying nodes are tier-1 tagged; none of the 6
+      nodes with ownTier > 1 carries attention). The principle generalizes and
+      is why it is recorded here rather than only on the tactic: it is the same
+      seam tactic-attention-namespaced-rank already uses for the sibling field,
+      deleting attention.override from the schema and resolver while the
+      migration node drops the single remaining override value. The alternative
+      of absorbing the whole migration into the algebra PR was rejected for
+      mixing a 91-node data migration and the level-value judgment into a
+      pure-algebra change, and the alternative of narrowing the algebra node to
+      today's flat scalar was rejected as the dead-scaffolding case above."
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with

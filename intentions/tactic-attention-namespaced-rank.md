@@ -1,10 +1,11 @@
 ---
 id: tactic-attention-namespaced-rank
 kind: tactic
-statement: Implement the unified rank key — one parent relation
-  (parent/serves/recovers/reverse-blocked_by), per-tier boosts, deduplicated
-  lineage score, and the (tier, band, score, depth) quadruple — retiring
-  override, the signal term and the blocked_by precedence lift
+statement: Implement the unified rank key -- one parent relation
+  (parent/serves/recovers/reverse-blocked_by), the per-tier boost storage shape
+  (retiring validateGraph rule 20), deduplicated lineage score, and the (tier,
+  band, score, depth) quadruple -- retiring override, the signal term and the
+  blocked_by precedence lift
 owner: ai
 status: raw
 parent: null
@@ -121,6 +122,45 @@ clarifications:
       is split out: delegation scoring to tactic-attention-delegation-scoring,
       the cycle rule to tactic-attention-unified-relation-cycle-rule, and the
       boost migration to tactic-attention-per-tier-boost-migration."
+  - question: Does this node land the per-tier boost storage shape and validateGraph
+      rule 20's retirement, or does tactic-attention-per-tier-boost-migration?
+    answer: "(Author-decided 2026-08-12, office-hours /align round that cleared this
+      node's park; supersedes the park reason's own framing of the question.)
+      THIS NODE lands both. The park framed a binary -- absorb the sibling's
+      scope, or have the resolver read today's single tagged boost as 'this
+      node's boost in tier attention.tier, 0 in every other tier' until the
+      sibling lands -- and both horns were wrong. THE DEFERRAL HORN IS NOT A
+      WORKING LESSER VERSION: rule 20 (checkAttentionTierNamespace,
+      packages/intentionsutil/src/schema.ts:1111-1121) requires attention.tier
+      === ownTier(node), so no node may author a boost in a tier it does not
+      itself belong to; and per-tier boosts exist precisely so a tier-1 strategy
+      CAN author a tier-2 boost, giving its tier-lifted tactics a band. Under
+      the deferral the per-tier code path is structurally unexercisable -- dead
+      scaffolding that still has to be written and tested, not degraded
+      function. strategy-graph-drives-dispatch's own per-tier-cost clarification
+      already contained the premise ('delivers a meaningful band only once the
+      parent has an authored boost in the lifted tier') without drawing the
+      conclusion. THE ABSORB HORN OVERCORRECTS: it drags a 91-node data
+      migration and the level-vocabulary judgment into a pure-algebra PR, and
+      those are separable. The decision is the SHAPE/VALUE SEAM: this node lands
+      the per-tier map and deletes rule 20;
+      tactic-attention-per-tier-boost-migration keeps the closed level
+      vocabulary, its exported constant, the write-path off-vocabulary check,
+      the 0.01 ladder revert, the 3.5, and the last override value. The seam
+      costs no data migration here: parseAttention already defaults tier to 1
+      (schema.ts:378-380), so the legacy scalar form parses into the one-entry
+      map with ZERO node-file edits. Measured this round on origin/main at
+      bad3e074: all 92 attention-carrying nodes are tier-1 tagged (91 boosts, 1
+      override), and none of the 6 nodes with ownTier > 1 carries attention at
+      all -- so no tier-2/3 authored boost exists to be reinterpreted. The seam
+      also matches the one this node ALREADY uses for the sibling field: scope
+      item 6 deletes attention.override from the schema and resolver while the
+      sibling drops the one remaining override VALUE; splitting override by
+      shape/value and boost by node would have been inconsistent. Rewrite
+      surface measured: attention.tier is read in exactly two places
+      (schema.ts:1114, which IS rule 20, and goals.ts:182); boost/override in
+      five (attention.ts:388-392, 425-426, 541). The sibling's recorded
+      blocked_by on this node is unchanged and becomes genuinely load-bearing."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -128,41 +168,12 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Requirement ambiguity needing author ratification before this node can
-    be planned: scope item 2 (per-tier authored boosts throughout the lineage
-    sum) depends on a per-tier boost storage shape that does not exist in code
-    -- Attention (packages/intentionsutil/src/schema.ts:140-146) carries one
-    scalar boost with a single scalar tier tag, and validateGraph rule 20
-    (checkAttentionTierNamespace, schema.ts:1102-1122) forbids tagging that
-    boost with any tier other than the node own tier. Both the per-tier storage
-    shape and rule 20 retirement are recorded as owned by
-    tactic-attention-per-tier-boost-migration, whose frontmatter carries
-    blocked_by: [tactic-attention-namespaced-rank] -- so on the recorded
-    ordering that sibling lands AFTER this node, not before it. Proposed
-    clarification for the author: does tactic-attention-namespaced-rank itself
-    land the per-tier boost storage shape and retire validateGraph rule 20
-    (inverting the recorded blocked_by and absorbing part of the sibling scope),
-    or does this node resolver read today single tagged boost as this node boost
-    in tier attention.tier, 0 in every other tier, until
-    tactic-attention-per-tier-boost-migration lands (keeping the recorded split,
-    but leaving the per-tier promise inert for the ten tier-2/tier-3 nodes -- a
-    tier-lifted tactic bands and scores at 0 in its own resolved tier, precisely
-    the case the per-tier model was adopted to serve)? The plan central axis
-    differs between the two answers, so it cannot be authored on either premise
-    unratified. Recommend: author decides the storage-shape ownership question
-    via a targeted /align pass on tactic-attention-namespaced-rank and
-    tactic-attention-per-tier-boost-migration (or answers it directly at office
-    hours), then re-invoke /align-tactics tactic-attention-namespaced-rank to
-    author the plan against the ratified premise."
-  since: 2026-08-12
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Implement the unified rank key — one parent relation (parent/serves/recovers/reverse-blocked_by), per-tier boosts, deduplicated lineage score, and the (tier, band, score, depth) quadruple — retiring override, the signal term and the blocked_by precedence lift
+# Implement the unified rank key — one parent relation (parent/serves/recovers/reverse-blocked_by), the per-tier boost storage shape (retiring validateGraph rule 20), deduplicated lineage score, and the (tier, band, score, depth) quadruple — retiring override, the signal term and the blocked_by precedence lift
 
 ## Superseding design (2026-08-12 /align round, author-dictated)
 
@@ -230,7 +241,21 @@ sum-to-max value-honesty defect dissolves for the same reason.
 1. Widen the distributor relation in `resolveAttention`
    (`packages/intentionsutil/src/attention.ts`) to `parent` ∪ `serves` ∪
    `recovers` ∪ reverse-`blocked_by`.
-2. Per-tier authored boosts throughout the lineage sum.
+2. Per-tier authored boosts throughout the lineage sum — **including the
+   storage shape**. `Attention` (`packages/intentionsutil/src/schema.ts`)
+   changes from one scalar `boost` plus one scalar `tier` namespace tag to a
+   per-tier map. An unauthored tier must stay distinguishable from an authored
+   lowest value (a sparse map does this), so "not yet ranked in this tier"
+   never reads as "ranked last". **No node files change**: `parseAttention`
+   already defaults an absent `tier` to 1 (`schema.ts:378-380`), so the legacy
+   `boost: X` / `tier: T` form reinterprets into the one-entry map `{T: X}` at
+   parse time. Measured 2026-08-12 on `origin/main` at `bad3e074`: all 92
+   attention-carrying nodes are tier-1 tagged (91 boosts, 1 override), and none
+   of the 6 nodes with `ownTier > 1` carries `attention` at all — so there is
+   no tier-2/3 authored value to migrate. Read sites are few: `attention.tier`
+   in exactly two places (`schema.ts:1114`, which *is* rule 20, and
+   `goals.ts:182`); `boost`/`override` in five (`attention.ts:388-392`,
+   `425-426`, `541`).
 3. Deduplicated lineage score; unauthored boosts contribute 0.
 4. The `(tier, band, score, depth)` key, and the selector sorting on it.
 5. Terminal (`done`) nodes contribute nothing to any axis.
@@ -240,6 +265,8 @@ sum-to-max value-honesty defect dissolves for the same reason.
    router's strategy-eligibility gate, which this round does not touch.
 8. Delete `router.ts`'s `effectivePrecedence` lift and its `Precedence`
    tuple; blockers are parents now, so the lift is redundant.
+9. Retire `validateGraph` rule 20 (`checkAttentionTierNamespace`). It is
+   inseparable from item 2 — see the rule-20 section below.
 
 ### `validateGraph` rules 18 and 20 (added 2026-08-12, post-round check)
 
@@ -255,15 +282,37 @@ INHERITING tier 3 stays legal; (b) `strategy-main-health` must itself carry
 tier 3. This round changes neither tier authorship nor tier inheritance, so
 nothing in rule 18 is touched.
 
-**Rule 20 retires** (decided 2026-08-12; not in the scope list above because
-its home is `tactic-attention-per-tier-boost-migration`, which owns the
-authored-value migration). `checkAttentionTierNamespace` (`schema.ts:1111`)
-reads a single scalar `node.attention.tier` and requires it to equal
-`ownTier(node)`. Both of its legs are gone: per-tier boosts replace that
-scalar with a map, and the rule's justification — that a boost is "only
-meaningful within one tier's scale" — is false once the authored vocabulary
-is a closed set of absolute levels. A write-path check that a boost is *in*
-the vocabulary replaces it.
+**Rule 20 retires, and it retires HERE** — scope item 9 above. (Retirement
+decided 2026-08-12; ownership moved to this node by the office-hours /align
+round of 2026-08-12 that cleared this node's park. An earlier revision of this
+paragraph placed its home on `tactic-attention-per-tier-boost-migration`; that
+was wrong, and the correction is the whole reason this node was parked.)
+
+`checkAttentionTierNamespace` (`schema.ts:1111-1121`) reads a single scalar
+`node.attention.tier` and requires it to equal `ownTier(node)`. Two independent
+grounds retire it, and they differ in what they imply about *sequencing*:
+
+1. **Shape entailment — the load-bearing one.** Requiring
+   `attention.tier === ownTier(node)` means no node may author a boost in a
+   tier it does not itself belong to. Per-tier boosts exist precisely so a
+   **tier-1 strategy can author a tier-2 boost**, giving its tier-lifted
+   tactics a band to sort against instead of 0
+   (`strategy-graph-drives-dispatch`'s per-tier-cost clarification states this
+   requirement in its own terms). Rule 20 mechanically rejects that write. So
+   rule 20 cannot outlive the storage shape, and item 2 cannot ship without
+   it — a resolver written against the scalar in the meantime would be
+   **structurally unexercisable dead scaffolding**, not a working interim.
+2. **Calibration.** The rule's stated justification — a boost is "only
+   meaningful within one tier's scale" — is false once the authored vocabulary
+   is a closed set of absolute levels.
+
+Ground 1 ties the retirement to the **shape** (this node); ground 2 ties it to
+the **vocabulary** (`tactic-attention-per-tier-boost-migration`). Ground 1
+governs. The write-path check that a boost is *in* the vocabulary is a
+**new** check for a different purpose, not a replacement for a live obligation:
+under a per-tier map a tier-1 boost simply stays a tier-1 boost when the node's
+tier changes, so rule 20's obligation dissolves rather than transferring. That
+check stays with the vocabulary, on the sibling.
 
 ### Split out, not in this node
 
@@ -271,8 +320,17 @@ the vocabulary replaces it.
   so `recovers` can carry lineage (blocks item 1 above from being complete).
 - `tactic-attention-unified-relation-cycle-rule` — `validateGraph` must
   reject cycles over the whole relation.
-- `tactic-attention-per-tier-boost-migration` — the authored-value
-  migration, including reverting the 0.01 namespacing ladder.
+- `tactic-attention-per-tier-boost-migration` — the authored **values** only,
+  not the shape they live in (the **shape/value seam**, recorded on
+  `strategy-graph-drives-dispatch`): the closed level vocabulary and its single
+  exported constant, the write-path off-vocabulary check, reverting the 0.01
+  namespacing ladder from `attributes.pre_namespacing_boost`,
+  `strategy-graph-review-curriculum`'s `3.5`, and the last `override` value
+  (`tactic-transition-node-stamp-landed-body`). Its recorded
+  `blocked_by: [tactic-attention-namespaced-rank]` is unchanged and is now
+  genuinely load-bearing — it writes values *into* the map this node lands.
+  Note this is the same seam scope item 6 already uses for `override`: this
+  node deletes the **field**, the sibling drops the remaining **value**.
 
 ### Consumer note
 

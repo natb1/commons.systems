@@ -1,9 +1,9 @@
 ---
 id: tactic-attention-per-tier-boost-migration
 kind: tactic
-statement: Migrate attention.boost to a per-tier map of absolute levels, retire
-  the interim 0.01 namespacing ladder, the last override, and validateGraph
-  rule 20
+statement: Migrate authored boosts onto the closed absolute level vocabulary,
+  retire the interim 0.01 namespacing ladder and the last override value, and
+  land the write-path vocabulary check
 owner: ai
 status: raw
 parent: null
@@ -36,34 +36,61 @@ clarifications:
       soft penalty (attention x 0.5, strategy-attention-surface): it is a
       multiplier applied by the office-hours selector outside the rank key, and
       this round did not change it — confirm it still composes once boosts are
-      integers."
+      integers. (Amended 2026-08-12, same round.) The storage shape itself moves
+      to tactic-attention-namespaced-rank, which lands it. The REQUIREMENT
+      recorded here survives unchanged as a constraint this node asserts on that
+      shape: an unauthored tier must stay distinguishable from an authored
+      lowest value, so 'not yet ranked in this tier' does not read as 'ranked
+      last'. A sparse map satisfies it, and that is consistent with
+      tactic-attention-namespaced-rank's own scope item that an unauthored boost
+      contributes 0."
   - question: Are authored boosts free magnitudes or a closed vocabulary, and what
       does that decide about the per-band scope stamp and rule 20?
     answer: "(Author-decided 2026-08-12.) A CLOSED VOCABULARY OF ABSOLUTE LEVELS. A
-      boost names a fixed degree of claim rather than a magnitude picked
-      against whatever currently shares the node's band, so a value is
-      commensurable across bands and tiers and BAND COLLISION — two separate
-      bands converging so nodes calibrated against different neighbour sets
-      compare directly — becomes harmless instead of silently miscalibrating.
-      This CLOSES kind-kind's per-band attention.scope stamp as REJECTED: that
-      mechanism keys on the resolved band distributor, so it fires on
-      distributor-identity change (already an explicit authoring act) and is
-      silent on collision, and it was the only option needing a stored field
-      and a write-path gate. It also RETIRES validateGraph rule 20 outright —
-      both the single-scalar attention.tier field it reads (replaced by the
-      per-tier map) and its justification ('a boost value is only meaningful
-      within one tier's scale', false under an absolute vocabulary). This node
-      owns the level values: background 5 / low 10 / normal 20 / high 50 /
-      urgent 85, which snap the live population 10 / 14 / 32 / 28 / 7 with only
-      ~11 of 91 nodes moving more than a rounding step (91 values, 17 distinct
-      today, six values covering 88%). The names and values are the judgment
-      call and are cheap to change; what is decided is that the vocabulary is
-      closed and absolute. Declare the levels as one exported constant so
-      validateGraph can reject an off-vocabulary boost on the write path — the
-      check that replaces rule 20. PER-TIER BOOSTS ARE RETAINED: the vocabulary
-      governs which values are authorable, the per-tier structure governs how
-      many boosts a node carries and exists for coverage; orthogonal, both
-      land."
+      boost names a fixed degree of claim rather than a magnitude picked against
+      whatever currently shares the node's band, so a value is commensurable
+      across bands and tiers and BAND COLLISION — two separate bands converging
+      so nodes calibrated against different neighbour sets compare directly —
+      becomes harmless instead of silently miscalibrating. This CLOSES
+      kind-kind's per-band attention.scope stamp as REJECTED: that mechanism
+      keys on the resolved band distributor, so it fires on distributor-identity
+      change (already an explicit authoring act) and is silent on collision, and
+      it was the only option needing a stored field and a write-path gate. It
+      also RETIRES validateGraph rule 20 outright — both the single-scalar
+      attention.tier field it reads (replaced by the per-tier map) and its
+      justification ('a boost value is only meaningful within one tier's scale',
+      false under an absolute vocabulary). This node owns the level values:
+      background 5 / low 10 / normal 20 / high 50 / urgent 85, which snap the
+      live population 10 / 14 / 32 / 28 / 7 with only ~11 of 91 nodes moving
+      more than a rounding step (91 values, 17 distinct today, six values
+      covering 88%). The names and values are the judgment call and are cheap to
+      change; what is decided is that the vocabulary is closed and absolute.
+      Declare the levels as one exported constant so validateGraph can reject an
+      off-vocabulary boost on the write path — the check that replaces rule 20.
+      PER-TIER BOOSTS ARE RETAINED: the vocabulary governs which values are
+      authorable, the per-tier structure governs how many boosts a node carries
+      and exists for coverage; orthogonal, both land. (Amended 2026-08-12,
+      office-hours /align round that cleared tactic-attention-namespaced-rank's
+      park.) OWNERSHIP CORRECTED: this node no longer owns the per-tier STORAGE
+      SHAPE, nor validateGraph rule 20's retirement. Both move to
+      tactic-attention-namespaced-rank. The reason is an entailment this entry
+      missed: rule 20 (checkAttentionTierNamespace,
+      packages/intentionsutil/src/schema.ts:1111-1121) requires attention.tier
+      === ownTier(node), so it mechanically REJECTS the very authoring act
+      per-tier boosts exist to enable -- a tier-1 strategy authoring a tier-2
+      boost so its tier-lifted tactics band against something rather than
+      against 0. Rule 20's retirement is therefore inseparable from the SHAPE
+      change, not from this node's vocabulary; the calibration ground recorded
+      here is a second, independent reason, not the load-bearing one for
+      sequencing. What this node retains is unchanged in substance: the level
+      values (background 5 / low 10 / normal 20 / high 50 / urgent 85), the
+      single exported constant declaring them, the write-path check rejecting an
+      off-vocabulary boost, the 0.01 ladder revert from
+      attributes.pre_namespacing_boost, strategy-graph-review-curriculum's 3.5,
+      and the last override VALUE (tactic-transition-node-stamp-landed-body).
+      blocked_by: [tactic-attention-namespaced-rank] is unchanged and becomes
+      genuinely load-bearing -- this node's migration now writes values INTO a
+      map shape that node lands, rather than landing the shape itself."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -77,9 +104,18 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Migrate attention.boost to a per-tier map of absolute levels, retire the interim 0.01 namespacing ladder, the last override, and validateGraph rule 20
+# Migrate authored boosts onto the closed absolute level vocabulary, retire the interim 0.01 namespacing ladder and the last override value, and land the write-path vocabulary check
 
 Draft — retained interview context per the retain-not-refine contract.
+
+> **Scope corrected 2026-08-12** (office-hours `/align` round that cleared
+> `tactic-attention-namespaced-rank`'s park). This node no longer owns the
+> per-tier **storage shape** or `validateGraph` rule 20's retirement — both
+> moved to `tactic-attention-namespaced-rank` under the **shape/value seam**
+> recorded on `strategy-graph-drives-dispatch`. This node owns the authored
+> **values** and the write-path check on them. `blocked_by:
+> [tactic-attention-namespaced-rank]` is unchanged and is now genuinely
+> load-bearing: this migration writes values *into* the map that node lands.
 
 ## Measured population (live graph, 2026-08-12)
 
@@ -106,19 +142,31 @@ re-scaled onto the new scale.
 - The single remaining non-null `attention.override`
   (`tactic-transition-node-stamp-landed-body`, phase `done`), dropped with
   the field.
-- **Storage shape** for per-tier boosts. An unauthored tier must stay
-  distinguishable from an authored lowest value, or "not yet ranked in this
-  tier" reads as "ranked last".
-- **`validateGraph` rule 20 retires** (decided 2026-08-12).
-  `checkAttentionTierNamespace` (`packages/intentionsutil/src/schema.ts:1111`)
-  reads a single scalar `node.attention.tier` and requires it to equal
-  `ownTier(node)`, forcing an author to re-pick a boost when a node's tier
-  changes. Both of its legs are gone: the single-scalar `attention.tier` field
-  it reads is replaced by the per-tier map, and its justification — "a boost
-  value is only meaningful within one tier's scale" — is false under the
-  absolute level vocabulary below. Delete the rule with the field. Rule 18 is
-  NOT affected: it is a tier-authorship guard reading raw `attributes.tier`,
-  not a boost guard; see `tactic-attention-namespaced-rank`.
+- **A constraint on the storage shape** — which
+  `tactic-attention-namespaced-rank` now lands, not this node. An unauthored
+  tier must stay distinguishable from an authored lowest value, or "not yet
+  ranked in this tier" reads as "ranked last". A sparse map satisfies it, and
+  that agrees with that node's own scope rule that an unauthored boost
+  contributes 0. Assert the constraint; do not land the shape.
+- **The write-path off-vocabulary check** — `validateGraph` rejects a boost
+  that is not one of the declared levels, reading the single exported constant
+  below. This is a **new** check for a new purpose, not a transfer of retired
+  rule 20's obligation: under a per-tier map a tier-1 boost simply stays a
+  tier-1 boost when the node's tier changes, so that obligation dissolves
+  rather than moving.
+
+**`validateGraph` rule 20 retires with the shape, not with the vocabulary
+(corrected 2026-08-12).** Its retirement was recorded here on the strength of
+one ground — that its justification, "a boost value is only meaningful within
+one tier's scale", is false under an absolute vocabulary. That ground is sound
+but is not the sequencing-critical one. `checkAttentionTierNamespace`
+(`packages/intentionsutil/src/schema.ts:1111-1121`) requires
+`attention.tier === ownTier(node)`, which mechanically **rejects** a tier-1
+strategy authoring a tier-2 boost — exactly the authoring act per-tier boosts
+exist to enable. So the rule cannot outlive the shape whatever happens to the
+vocabulary, and it retires in `tactic-attention-namespaced-rank` alongside it.
+Rule 18 is NOT affected either way: it is a tier-authorship guard reading raw
+`attributes.tier`, not a boost guard; see `tactic-attention-namespaced-rank`.
 
 ## The boost vocabulary is a closed set of absolute levels (decided 2026-08-12)
 
