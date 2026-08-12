@@ -198,9 +198,9 @@ disposition; the journal says which script produced it.
 | 0 | `complete` / `pruned` | run the acceleration review, report. |
 | 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. |
 | 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. |
-| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, or a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`). |
+| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or `launch-unverified` — the spawn reported success and no session ever registered with the daemon (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot; or the run was sandboxed, under which no launch can ever verify). The claim is released before the throw. |
 | 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. |
-| 13 | `claimed` | another session holds the node. **Stop.** |
+| 13 | `claimed` | another session holds the node. **Stop.** The token says which: `live-session` (running, or the probe could not answer), `terminal-session` (registered but finished — an invalid state; release it with `claude rm <session-id>`, named in the stderr, then re-run), `reservation:<owner>` (an unreleased ledger marker; `reservation_sweep` reclaims it on the next dispatch heartbeat). The ladder never releases another session's claim itself. |
 | 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. |
 | 21 | `timeout` | `--max-run-s` exceeded. The ladder is unfinished and nothing was rolled back. |
 | 1 | `internal` | the driver's own error — an unmapped exit code, an unwritable state dir. |

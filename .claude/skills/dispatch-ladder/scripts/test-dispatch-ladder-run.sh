@@ -595,7 +595,9 @@ assert_eq "await unmapped: exit 1 (internal)" "1" "$RC"
 # --- advance's exit codes ----------------------------------------------------
 echo "Test: advance's terminal exit codes are passed through"
 for pair in "11|throw tactic-fixture-node parked" \
+            "11|throw tactic-fixture-node launch-unverified" \
             "13|claimed tactic-fixture-node live-session" \
+            "13|claimed tactic-fixture-node terminal-session" \
             "2|refused tactic-fixture-node strategy"; do
   want_rc="${pair%%|*}"
   reset_seqs
