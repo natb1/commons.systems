@@ -6,6 +6,26 @@ set -euo pipefail
 # (not just the most recent one) are verified.
 #
 # Usage: run-pr-checks-wait.sh <pr-number> [--output <file>] [--delay <seconds>]
+#
+# Exit codes:
+#   0 — every check concluded green (or the only non-green rows are
+#       skipped/neutral noise that the shared CI classifier calls `passing`).
+#   1 — red: some check is in gh's `fail` bucket, or a row that never concluded
+#       classifies `failing` (e.g. an orphaned check run — see below).
+#   2 — indeterminate: no verdict could be obtained. Either gh returned no
+#       parseable JSON, or checks were still pending when the bounded watch gave
+#       up. Explicitly NOT green.
+#
+# The watch is bounded (PR_CHECKS_WATCH_S, default 1800s) because
+# `gh pr checks --watch` can block forever on a check run that never reports —
+# GitHub sometimes leaves a run `queued` with a null conclusion after its parent
+# check suite has concluded. This script is invoked by a model through the Bash
+# tool, whose own ceiling is 600s, so an unbounded watch burns the whole tool
+# call and returns no verdict at all.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 usage() {
   echo "Usage: run-pr-checks-wait.sh <pr-number> [--output <file>] [--delay <seconds>]" >&2
@@ -60,10 +80,14 @@ if [[ -n "$output_file" ]]; then
   fi
 fi
 
-# Wait for all checks to complete (--watch blocks until done). A non-zero exit
-# here only means some check ended non-green; the authoritative verdict is parsed
-# from --json below, so watch's exit status is deliberately ignored.
-gh pr checks "$pr_number" --watch > /dev/null 2>&1 || true
+# Wait for all checks to complete (--watch blocks until done), bounded so a row
+# that never reports cannot pin this call forever. A non-zero exit here only
+# means some check ended non-green, or that the bound fired; the authoritative
+# verdict is parsed from --json below, so watch's exit status is deliberately
+# ignored. Falling out of the bound is not a green signal — the pending arm
+# after the fail-bucket parse below handles it.
+watch_bound="${PR_CHECKS_WATCH_S:-1800}"
+timeout "$watch_bound" gh pr checks "$pr_number" --watch > /dev/null 2>&1 || true
 
 # Capture the human-readable table for the log / output file (display only).
 results=$(gh pr checks "$pr_number" 2>&1) || true
@@ -86,7 +110,56 @@ if [[ -z "$checks_json" ]] || ! printf '%s' "$checks_json" | jq -e . >/dev/null 
   exit 2
 fi
 
-# Exit non-zero if any check landed in the 'fail' bucket.
+# Exit non-zero if any check landed in the 'fail' bucket. This stays the
+# authoritative red signal and runs first: a concluded failure is actionable
+# even while other rows are still moving.
 if printf '%s' "$checks_json" | jq -e 'any(.[]; .bucket == "fail")' >/dev/null; then
   exit 1
+fi
+
+# No red rows — but a row still in the 'pending' bucket is NOT green, and gh's
+# bucket alone cannot tell "still running" from "will never report". Falling
+# through to exit 0 here would report a false green on a PR whose CI never
+# concluded. So resolve the head sha and ask the shared classifier, which
+# already carries the orphaned-check-run rule (a run whose parent suite has
+# concluded is STALE, hence `failing`). `gh pr checks --json` exposes no
+# check_suite id, so the rule cannot be re-derived here — delegating is what
+# keeps a single implementation of it.
+if printf '%s' "$checks_json" | jq -e 'any(.[]; .bucket == "pending")' >/dev/null; then
+  pending_names=$(printf '%s' "$checks_json" \
+    | jq -r '[.[] | select(.bucket == "pending") | .name] | join(", ")')
+
+  pr_json=$(gh_pr_view_rest "$pr_number") || {
+    echo "Error: could not resolve the head sha for PR $pr_number" >&2
+    exit 2
+  }
+  head_sha=$(jq -r '.headRefOid // ""' <<<"$pr_json")
+  if [[ -z "$head_sha" ]]; then
+    echo "Error: PR $pr_number reported no head sha" >&2
+    exit 2
+  fi
+
+  verdict=$(dispatch_ci_verdict_rest "$head_sha") || {
+    echo "Error: could not classify check runs for PR $pr_number ($head_sha)" >&2
+    exit 2
+  }
+
+  case "$verdict" in
+    failing)
+      echo "Error: check(s) never concluded and classify as failing for PR $pr_number: $pending_names" >&2
+      exit 1
+      ;;
+    pending)
+      echo "Error: checks not concluded after ${watch_bound}s for PR $pr_number: $pending_names" >&2
+      exit 2
+      ;;
+    passing)
+      # The pending row is skipped/neutral noise the classifier already counts
+      # as green; fall through to exit 0.
+      ;;
+    *)
+      echo "Error: unrecognized CI verdict '$verdict' for PR $pr_number ($head_sha)" >&2
+      exit 2
+      ;;
+  esac
 fi
