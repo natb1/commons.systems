@@ -773,6 +773,88 @@ clarifications:
       lesson, worth keeping: partial supersession that leaves dead prose in
       place because a dependency points at it is a sign the decomposition is
       wrong, not a sign the prose needs annotating."
+  - question: Should the acceleration review run after each phase rather than only
+      at terminus, given the condition's own 'never interleaved' bar?
+    answer: "(Recorded 2026-08-12 /align round; type-b ground cleared before the
+      design was taken up.) Yes, two-tier — per-phase plus a closing cross-phase
+      synthesis. The 'never interleaved' bar is preserved rather than waived: it
+      targeted evaluating PREDICTIONS mid-flight, and a phase that has already
+      completed is observed result, not prediction. What the amendment does
+      change is named honestly rather than glossed: the 'at no extra budget
+      cost' clause is retired, because N evaluations cost N model turns. Three
+      reasons carried the change. FIRST, evidence freshness — a phase's
+      transcript is small and warm at its own boundary and cold and expensive to
+      recover at the end of a six-hour ladder, so the closing-only review was
+      systematically evaluating best the phases it could still see. SECOND, and
+      independently of the author's request, a run that halts before terminus
+      (exit 10/11/12/13/21) recorded NOTHING under the terminus-only rule, so
+      the most defect-rich runs were exactly the ones that produced no review —
+      a defect, not a tradeoff. THIRD, the driver's no-model-turn-in-the-loop
+      premise is not sacrificed: the per-phase evaluator is spawned
+      fire-and-forget and the driver never waits on it, so nothing re-enters the
+      loop the detached shell script exists to keep empty. The closing pass is
+      narrowed, not deleted: it keeps only what no single phase's evaluator can
+      see (rework loops across phases, halt-cause taxonomy, end-to-end wall
+      clock against the plan). Carrier: tactic-ladder-per-phase-evaluation."
+  - question: Steelman — evaluation is not the bottleneck, action on findings is.
+      Does a per-phase evaluator simply multiply finding production ~5x into a
+      queue that is demonstrably not draining?
+    answer: "(Adopted in part, diverged on the conclusion, 2026-08-12; reasons
+      recorded.) The rival's premises are all true and are read from this
+      graph's own fields: backlog 58/236, 156 parked nodes (21 blocking), 54
+      worktrees, and dispatch paused by author directive since 2026-08-10.
+      Findings do arrive faster than the harness closes them. The rival's
+      CONCLUSION — record less until throughput recovers — is refused on the
+      author's ruling of this same date that the graph's role here is a LEDGER
+      that tracks and prioritizes harness optimizations. A ledger does not
+      defend itself by declining to record; it defends itself by keeping one
+      entry per distinct finding and carrying a prioritization column. So the
+      rival's bound is adopted and its conclusion is not: the evaluation surface
+      may not grow the count of OPEN ledger entries faster than it retires them,
+      which merge-on-similarity enforces by construction (a recurrence updates
+      an existing entry's summary metrics; it does not mint a node), and the
+      prioritization column is attributes.measured_impact on
+      strategy-rsi-delegated-prioritization. Recurrence thereby becomes a
+      CLOSING instrument as well as a ranking input, which was the rival's real
+      point. Honest limit: merge-on-similarity holding entry count flat is a
+      design expectation, not a measurement — the mechanism does not exist yet,
+      and tactic-eval-finding-ledger owes the measurement."
+  - question: What is the graph's role for harness optimizations, and what does that
+      require of a finding record?
+    answer: "(Recorded 2026-08-12 by author ruling, mid-interview; merge semantics
+      confirmed by the author in the same session.) The graph is the LEDGER that
+      tracks and prioritizes harness optimizations — not merely a work queue
+      whose length is itself a problem. Four requirements follow. ONE, ENTRY
+      IDENTITY BY MERGE, NOT BY OCCURRENCE: similar findings merge into ONE
+      node; there is explicitly no node per occurrence. A recurrence updates
+      that entry — refreshing its body and its summary metrics — and mints
+      nothing. TWO, SUMMARY METRICS, NOT AN OCCURRENCE ARRAY: the entry carries
+      recurrence and impact as SUMMARY figures (occurrence count, first-seen,
+      last-seen, cumulative and per-occurrence impact) on
+      attributes.measured_impact, never a per-occurrence log. This is
+      deliberately cheaper than the attributes.priority_log precedent it
+      otherwise resembles: a ledger needs the aggregate to prioritize by, not
+      the raw event stream, and keeping it summary-shaped bounds node growth and
+      the re-measurement write surface. THREE, MERGE IS A JUDGMENT, NOT A HASH:
+      deciding that a new finding IS an existing entry requires reading the open
+      ledger and judging similarity, so the evaluator resolves the target entry
+      against the open set before writing. This diverges knowingly from the
+      dispatch-fleet-alarm precedent this design otherwise follows, whose keys
+      are a CLOSED MECHANICAL ENUM of eight alarm kinds — that works for a fixed
+      fault taxonomy and cannot work for an open-ended finding space. The slug
+      remains the addressing mechanism; similarity is what selects it.
+      Fleet-alarm's other properties are kept: body refreshed on re-detection,
+      and attention null because rank is never machine-injected. FOUR,
+      DURABILITY: a ledger that loses its history is not a ledger, so ledger
+      entries are exempt from unreferenced-pruning. Retirement means phase done
+      with the summary metrics intact, so a later recurrence RESUMES the count
+      rather than restarting at 1. This is a live hazard, not a hypothetical:
+      graph-commit --prune deletes the node file outright, and
+      dispatch-fleet-alarm deliberately mints over a since-closed node on
+      recurrence — inheriting that behavior unmodified would silently understate
+      exactly the recurrence metric the ledger exists to carry.
+      tactic-eval-finding-ledger carries the exemption and owes it as a
+      done-when."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -967,7 +1049,40 @@ attributes:
       same session. Only the home of the mechanism moves, so that the loop and
       its closing evaluation stay in one place.
       tactic-rsi-implement-acceleration-review is re-targeted accordingly in
-      this same round.)"
+      this same round.) (Amended 2026-08-12 /align round; the review becomes
+      TWO-TIER and is no longer terminus-only.) (a) PER-PHASE: at each phase
+      boundary the ladder driver spawns a fire-and-forget evaluation job scoped
+      to the phase that just completed, and does not wait on it — so the
+      driver's no-model-turn-in-the-loop premise, the whole reason it is a
+      detached shell script, is preserved exactly. Evaluating a phase that has
+      ALREADY completed is still post-hoc; the \"never interleaved\" bar above
+      targeted evaluating PREDICTIONS mid-flight and is unchanged by this
+      amendment. (b) CLOSING: a final pass performs ONLY the cross-phase
+      synthesis no single phase's evaluator can see — rework loops across
+      phases, the halt-cause taxonomy, end-to-end wall clock against the plan.
+      The \"inside the same task and at no extra budget cost\" clause is
+      RETIRED: per-phase evaluation costs a model turn per phase, and that cost
+      is accepted for the evidence freshness it buys (a phase's transcript is
+      small and warm at its own boundary, and cold and expensive to recover six
+      hours later). A run that HALTS before terminus — exit 10 idle, 11 throw,
+      12 stalled, 13 claimed, 21 timeout — still owes a review of the phases it
+      did complete; under the old terminus-only rule the most defect-rich runs
+      recorded nothing at all, and closing that gap is an independent reason for
+      this amendment, not merely a consequence of it. Every evaluation,
+      per-phase or closing, must record: recurring errors causing quality
+      issues; unnecessary round trips; variances requiring intervention; rework
+      and backtrack rate (fix and conflict attempts, demotions back to
+      implement, scope-fingerprint custody churn); plan-quality yield (units
+      planned by /align-tactics against units implemented and units reworked,
+      plus qa findings the plan did not anticipate); calibration and waiting
+      (measured elapsed_s per phase against the configured await window,
+      yielding a concrete recommended default rather than an observation, plus
+      ci-wait/grace-wait time burned and halt-to-engagement latency); and
+      friction and adherence (permission prompts and denials, sandbox retries,
+      and violations of documented rules — a rule violated repeatedly is usually
+      a rule written badly). Findings land as ledger entries per the
+      finding-ledger clarification of this same date, never as fresh nodes per
+      occurrence."
     - "each rsi session runs under a task budget — default 1; a task’s cost
       derives from its attributes.rsi_task: an implementation-type task always
       costs 1 (a declared rsi_task.cost is ignored and flagged), other types

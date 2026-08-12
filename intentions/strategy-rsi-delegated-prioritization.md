@@ -167,6 +167,53 @@ clarifications:
       Author-directed: the author accepted this resolution on trust rather than
       deriving it, so it is enrolled for re-validation as a born-parked
       office-hours review sitting (tactic-review-band-derivation-ratification)."
+  - question: How are metrics other than tier marks — recurrence, recoverable token
+      usage — recorded so they can inform ranking without becoming a second
+      ordering authority?
+    answer: "(Recorded 2026-08-12 /align round.) On attributes.measured_impact: a
+      SUMMARY-shaped set of records {metric, value, unit, window, sensor,
+      measured}, where recurrence_count and recoverable_tokens are simply two
+      metrics in ONE shape rather than two primitives. The unifying observation
+      is that recurrence and impact are the same kind of thing — a measured
+      figure about a ledger entry — so the ledger's prioritization column is one
+      field, not a field per question. Four properties bound it. ONE, IT NEVER
+      ORDERS: measured_impact is queryable INPUT to a within-band attention
+      write or to a classification act, and is never an ordering authority of
+      its own. This preserves the recorded bound that no attention number, from
+      any author, crosses a band, and that the model's only tier instrument
+      stays classification. TWO, IT MUST BE CITED: a delegated attention write
+      justified by a measurement names the measured_impact record in its
+      attributes.priority_log rationale, so the anti-thrash log carries the
+      evidence and not just the assertion. THREE, IT IS SENSOR-ATTRIBUTED: the
+      sensor field brings it under strategy-token-economy's standing condition
+      that a yield metric credited to a named instrument is verified to have
+      come from that instrument — an unverified attribution is not admissible
+      ranking input. FOUR, IT IS SUMMARY, NOT AN EVENT LOG: no per-occurrence
+      array, deliberately unlike attributes.priority_log which it otherwise
+      resembles — a ledger prioritizes on aggregates, and summary shape bounds
+      both node growth and the re-measurement write surface. Honest limit:
+      whether a new attributes key needs its own validate-graph rule to be
+      trustworthy, and what fingerprint exemption costs mechanically, were not
+      verified this round — tactic-measured-impact-schema owes both. Carriers:
+      tactic-measured-impact-schema, tactic-eval-finding-ledger."
+  - question: Does a recurrence count ever move a finding's rank or tier automatically?
+    answer: "(Recorded 2026-08-12 /align round.) No. The number never moves rank,
+      and no new authority is created by this round. Crossing a recurrence
+      threshold makes a ledger entry ELIGIBLE for an act the model is ALREADY
+      permitted — adding attributes.bug_fix: true when the recurrence is
+      genuinely a defect — which lifts tier 1 to 2 through ownTier's existing
+      max(explicit, semantic, 1) derivation in schema.ts, with the
+      measured_impact record as the cited justification. Auto-boosting within
+      the band was considered and refused: it would contradict a LIVE precedent,
+      since dispatch-fleet-alarm deliberately writes attention null on
+      machine-minted nodes precisely because rank is never machine-injected, and
+      adopting the opposite convention for ledger entries would leave two
+      contradictory rules for the same class of node. Report-only (every
+      ordering act deferred to the author at office-hours) was also refused:
+      this strategy exists to avoid exactly that bottleneck. The middle path
+      holds because classification is already the model's sanctioned tier
+      instrument — recurrence supplies evidence for the act, it does not become
+      a new kind of act."
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,
@@ -238,5 +285,21 @@ attributes:
     - the model's only tier instrument stays classification — adding a missing
       bug_fix or security mark, never removing or downgrading one, and never
       writing attributes.tier directly
+    - attributes.measured_impact stays outside the substance fingerprints, as
+      attributes.priority_log and queue_summary already are — otherwise
+      re-measuring a ledger entry would freeze that entry's open children and
+      the prioritization column would cost more than it is worth (Recorded
+      2026-08-12)
+    - "measured metrics never order: attributes.measured_impact is queryable
+      INPUT to a within-band attention write or to a classification act, never
+      an ordering authority of its own; a delegated attention write justified by
+      a measurement names the measured_impact record in its priority_log
+      rationale, and a metric credited to a named sensor is verified to have
+      come from that sensor before it is admissible (Recorded 2026-08-12)"
+    - "ledger entries are merged, not accumulated: similar findings resolve to
+      ONE node carrying summary recurrence and impact metrics — never a node per
+      occurrence — and those entries are exempt from unreferenced-pruning so
+      that retirement to phase done preserves the summary and a later recurrence
+      resumes the count rather than restarting at 1 (Recorded 2026-08-12)"
 ---
 # The model holds ordering of dispatch-delegated tactics inside author-set strategy bands — every reordering logged, bounded, and answerable to the fitness function

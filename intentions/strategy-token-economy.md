@@ -965,6 +965,75 @@ clarifications:
       Recorded under the same discipline as clarification 25: a claim that
       entered the record unverified is corrected in the record rather than left
       to be contradicted later.
+  - question: Can /dispatch-token-audit be superseded entirely by the per-session
+      evaluation, for parsimony?
+    answer: "(Recorded 2026-08-12 /align round.) No — but the two are collapsed to
+      ONE INSTRUMENT AT TWO SCOPES, which is where the real duplication was.
+      aggregate-usage.sh already computes both per-session rows (.sessions[])
+      and window aggregates from a single pipeline, and its by_phase buckets
+      already carry cache_creation/cache_read, so the surfaces were never two
+      analyses. The resolution: aggregate-usage.sh gains --session/--node
+      scoping; the same script, the same JSON schema, and the same lens catalog
+      serve both the per-run session evaluation and the periodic audit;
+      /dispatch-token-audit survives as the FLEET-SCOPED INVOCATION of that
+      instrument rather than as a second analysis with its own drifting lens
+      list. Full supersession is refused because some denominators are genuinely
+      fleet-sized and cannot be approximated at n=1 (a ladder run is ~5
+      sessions): pooled by_phase_outcome hit-rates, which are the
+      routing-recommendation input; boot-context median and peak; phase-standup
+      cost; cross-session tool-error signatures; and recurrence itself. Those
+      lenses are TAGGED fleet-only and are ABSENT at n=1, never approximated
+      from one run — an n=1 hit-rate is not a small sample, it is a category
+      error. A further reason to keep the periodic surface: this strategy's own
+      success_signal is weekly allowance utilization, and retiring the fleet
+      scope would leave that signal with no weekly reader. Honest limit: 'a
+      scope filter, not a rewrite' is judgment from reading the pipeline's
+      structure, not a measured diff. Carrier: tactic-audit-instrument-scoping."
+  - question: Does the audit measure cache optimization, and where does that lens belong?
+    answer: "(Recorded 2026-08-12 /align round.) The DATA is already collected and
+      the LENS is missing — aggregate-usage.sh has read
+      cache_creation_input_tokens and cache_read_input_tokens per turn since it
+      was written, prices them separately, and carries them in every by_phase
+      bucket, but no lens reads them and lens 8 only gestures at 'prompt-cache
+      reuse across sibling sessions' qualitatively. Promote it to a measured
+      lens: cache hit ratio as cache_read/(input + cache_creation + cache_read),
+      plus cache-creation churn — repeated prefix re-creation across sibling
+      sessions with staggered start times, which is the shape a cache-boundary
+      violation actually leaves in the data. It is meaningful at BOTH scopes and
+      so is not tagged fleet-only: per-run it says whether this ladder's sibling
+      sessions re-created a prefix they could have shared; fleet-wide it says
+      whether a harness change moved the ratio at all. That second reading is
+      what the existing draft tactic-dispatch-cache-preserving-context already
+      names as its discriminating measurement — this lens supplies it, so the
+      two compose rather than duplicating. Report the measured magnitude only;
+      do not assert hypothetical savings. Carrier:
+      tactic-audit-cache-efficiency-lens."
+  - question: May a token-audit surface EXECUTE a remediation, specifically
+      /fewer-permission-prompts, given both candidate homes are report-only?
+    answer: "(Recorded 2026-08-12 /align round.) Only the ATTENDED surface may.
+      /dispatch-token-audit's step 7 ('report-only... modifies NO dispatch
+      workflow files') and /dispatch-ladder's review ('it records; it never
+      executes') both forbade it. The narrowing: report-only means writes no
+      ROUTING policy and no graph or product files — the contract exists to stop
+      an unattended loop from racing or auto-applying policy, and a permissions
+      allowlist is neither routing policy nor product code. So the
+      author-invoked periodic audit gains a closing step that runs
+      /fewer-permission-prompts and writes .claude/settings.json; the unattended
+      per-phase ladder evaluation MEASURES permission friction (denials and
+      approval round-trips per session) and records it, and never acts. A
+      mechanical fact decided this rather than taste: this repo's
+      .claude/settings.json sits in the sandbox denyWithinAllow list, so writing
+      it requires dangerouslyDisableSandbox — an attended act by construction. A
+      detached evaluator could not perform the write without a standing sandbox
+      override, and granting one to an unattended job is a larger concession
+      than the step is worth. EXPLICITLY UNCHANGED: the no-auto-apply bound on
+      routing policy (clarification 10 / the routing condition) is untouched by
+      this narrowing and is not loosened by it. Honest limit:
+      /fewer-permission-prompts is a built-in and its implementation was not
+      read this round, so how it merges into an existing settings.json, and
+      whether it can collide with a concurrent worker's commit, are unverified —
+      tactic-audit-permission-friction owes that check before the step is
+      wired."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -1032,5 +1101,20 @@ attributes:
       status and output signature), never taken from an agent's account of what
       it ran; an unverified instrument attribution is not admissible input to a
       routing decision
+    - the token audit is ONE instrument at two scopes — the same
+      aggregate-usage.sh, the same JSON schema, and the same lens catalog serve
+      both the per-run session evaluation and the periodic fleet audit; a new
+      lens is added to the catalog, never to a second parallel analysis. Lenses
+      whose denominator is fleet-sized (pooled by_phase_outcome rates,
+      boot-context median/peak, phase-standup, cross-session error signatures,
+      recurrence) are tagged fleet-only and are ABSENT at n=1, never
+      approximated from a single run (Recorded 2026-08-12)
+    - "execution belongs to the attended surface only: the author-invoked
+      periodic audit may run /fewer-permission-prompts and write
+      .claude/settings.json; the unattended per-phase evaluation measures
+      permission friction and records it, never acts. This narrows report-only
+      to 'writes no routing policy and no graph or product files' and leaves the
+      no-auto-apply bound on routing policy entirely unchanged (Recorded
+      2026-08-12)"
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival
