@@ -827,8 +827,16 @@ dispatch_classify_rollup() {
 # ONLY TERMINAL verdicts (`passing`, `failing`) are cached. A `pending` verdict
 # is deliberately never stored: pending is a statement about a moment, and a sha
 # classified pending while its suite was still running must be recomputed once
-# the suite concludes — otherwise the orphan rule above would be permanently
-# shadowed by the very cache entry the orphan produced.
+# the suite concludes — otherwise the orphan rule above is shadowed by the very
+# cache entry the orphan produced, for as long as the cache directory lives.
+# That window is bounded today, not forever: the only producer is
+# dispatch-select-tick, which mktemp -d's the directory and rm -rf's it on EXIT
+# (dispatch-select-tick:296-304), and dispatch-ladder-run unsets the var
+# outright before every reconciler call. The cost of not caching is therefore
+# bounded to repeat queries on one in-flight sha within a single tick. The rule
+# is written against the lifecycle CONTRACT rather than today's only caller —
+# this helper does not own the directory, so a longer-lived owner would extend
+# the shadow without touching this file.
 dispatch_ci_verdict_rest() {
   local sha="$1"
 
