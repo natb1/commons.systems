@@ -870,6 +870,124 @@ assert_eq "case25: second invocation reports status=ok" "1" \
 assert_eq "case25: both invocations report the same summary" \
   "$(cat "$TMPDIR_TEST/cr-25-1.out")" "$(cat "$TMPDIR_TEST/cr-25-2.out")"
 
+# ============================================================================
+# Test 26: an awaiter whose artifacts are collected out from under it replays
+# ============================================================================
+# The narrowest window of the same concurrent-awaiter race as case 25, one step
+# further along. Case 25 covers the loser losing BEFORE it sees `.rc`; this
+# covers the loser losing AFTER — both awaiters observe `.rc` in the same
+# instant and break out of the await loop together, and the winner's
+# `discard_run_record` lands between the loser's `.rc` read and its read of the
+# run record's `.output` / `.untracked-before`. The loser used to exit 1 on "the
+# untracked-before snapshot is missing", which under review-fix Step 1b
+# hard-stops the review phase and discards a completed `high`-effort review.
+#
+# Case 25 cannot reach this branch deterministically: it needs the two awaiters'
+# polls to align within the ~5 ms the winner spends between reading `.rc` and
+# deleting it, which no amount of sleep tuning can guarantee. So this case does
+# not race at all — it RECONSTRUCTS the loser's exact on-disk state and then
+# plays the winner's writes by hand, on the test's clock:
+#
+#   1. a real run to completion produces an authentic `.run` record (captured
+#      mid-flight from the exit-5 call) and an authentic completed summary;
+#   2. the record is reinstated pointing at a live `sleep` (so the await loop
+#      polls instead of taking the dead-pid branch), with the summary cache
+#      removed so the top-of-script replay cannot short-circuit the run;
+#   3. `.rc` appears with the artifacts already gone — precisely what the loser
+#      sees — and only 2 s LATER does the winner's summary land, which also
+#      proves the resolver's retry poll actually retries rather than passing on
+#      a first attempt that happened to be lucky.
+#
+# Nothing here is stubbed or mocked: every file is one a real run wrote.
+echo "Test: an awaiter whose run artifacts are collected out from under it replays the winner's summary"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the losing awaiter." >"$STUB_DIR/cr-fake-output"
+echo "3" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_26="$CR_REPO/tmp/cr-out-26"
+mkdir -p "$OUT_DIR_26"
+OUT_DIR_26_ABS="$(cd "$OUT_DIR_26" && pwd)"
+CACHE_KEY_26="$(printf '%s' "$OUT_DIR_26_ABS" | sha256sum | cut -d' ' -f1)"
+CACHE_FILE_26="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_26.summary"
+RUN_FILE_26="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_26.run"
+RUN_RC_26="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_26.rc"
+RUN_OUTPUT_26="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_26.output"
+RUN_UNTRACKED_26="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_26.untracked-before"
+
+# (1) Kick the run, expire the window, and capture the authentic in-flight record.
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_26" \
+       --await-seconds 1 --deadline-seconds 120 >/dev/null 2>"$TMPDIR_TEST/cr-26a.err"
+) || rc=$?
+assert_eq "case26: setup — the first call leaves the run in flight (exit 5)" "5" "$rc"
+cp "$RUN_FILE_26" "$TMPDIR_TEST/cr-26-saved.run"
+
+# Let the same run finish normally. This writes the completed summary the losing
+# awaiter must later replay, and leaves the out-dir artifacts cache_is_current
+# authenticates against.
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_26" \
+       --await-seconds 30 --deadline-seconds 120 >/dev/null 2>"$TMPDIR_TEST/cr-26b.err"
+) || rc=$?
+assert_eq "case26: setup — the run completes for real (exit 0)" "0" "$rc"
+cp "$CACHE_FILE_26" "$TMPDIR_TEST/cr-26-saved.summary"
+
+# (2) Reconstruct the loser's state. The record must point at a LIVE pid or the
+# await loop takes the dead-pid branch (case 25's window) instead of polling to
+# the `.rc` this case is about. `pid_starttime` is blanked deliberately: the
+# script skips the starttime cross-check when the record carries none, which is
+# the one field a hand-built record cannot honestly supply for a foreign pid.
+sleep 60 &
+live_pid_26=$!
+sed -e "s/^pid=.*/pid=$live_pid_26/" -e 's/^pid_starttime=.*/pid_starttime=/' \
+  "$TMPDIR_TEST/cr-26-saved.run" >"$RUN_FILE_26"
+rm -f "$CACHE_FILE_26" "$RUN_RC_26" "$RUN_OUTPUT_26" "$RUN_UNTRACKED_26"
+
+# (3) The awaiter runs while the "winner" plays its writes on the test's clock.
+rc26_file="$TMPDIR_TEST/cr-26-rc"
+(
+  cd "$CR_REPO" || exit 1
+  rc=0
+  DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+    DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+    "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_26" \
+      --await-seconds 30 --deadline-seconds 600 >"$TMPDIR_TEST/cr-26c.out" 2>"$TMPDIR_TEST/cr-26c.err" \
+    || rc=$?
+  echo "$rc" >"$rc26_file"
+) &
+loser_pid_26=$!
+
+sleep 2
+# `.rc` with the artifacts ALREADY gone: the loser breaks out of the await loop
+# and finds the record collected out from under it.
+echo "0" >"$RUN_RC_26"
+sleep 2
+# Only now does the winner's summary land — the loser must have been retrying.
+cp "$TMPDIR_TEST/cr-26-saved.summary" "$CACHE_FILE_26"
+
+wait "$loser_pid_26" || true
+kill "$live_pid_26" 2>/dev/null || true
+
+conc26_rc=$(cat "$rc26_file" 2>/dev/null || echo "?")
+assert_eq "case26: the losing awaiter exits 0, not 1" "0" "$conc26_rc"
+assert_eq "case26: it replays the winner's summary verbatim" \
+  "$(cat "$TMPDIR_TEST/cr-26-saved.summary")" "$(cat "$TMPDIR_TEST/cr-26c.out")"
+assert_eq "case26: it does not report the artifacts as missing" "0" \
+  "$(grep -c 'is missing' "$TMPDIR_TEST/cr-26c.err" || true)"
+# The whole point: the loser must not pay for a second review. Two invocations
+# across the case's own setup would mean a relaunch, not a replay.
+assert_eq "case26: the built-in was never re-invoked" "1" \
+  "$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')"
+
 teardown
 
 report_results

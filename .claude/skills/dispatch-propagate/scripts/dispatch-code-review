@@ -500,12 +500,12 @@ cache_is_current() {
 # An unresolvable endpoint (a range this worktree cannot resolve to commits)
 # leaves the cache unauthenticatable — re-run rather than replay.
 #
-# TWO callers: this step, and the await loop's completion re-check (Step 4),
-# where a CONCURRENT awaiter may have finished the run and written the summary
-# while we were mid-poll. Factored into one function so the two can never drift
-# apart in what they accept — the authentication is the security boundary
-# described under "Resume cache" in the header, and a second hand-inlined copy
-# is exactly how one of them would end up weaker than the other.
+# TWO callers: this step, and `await_concurrent_completion` below, which serves
+# every site where a CONCURRENT awaiter may have finished the run while we were
+# mid-poll. Factored into one function so they can never drift apart in what
+# they accept — the authentication is the security boundary described under
+# "Resume cache" in the header, and a second hand-inlined copy is exactly how
+# one of them would end up weaker than the other.
 replay_completed_summary() {
   [[ -n "$TARGET_BASE_SHA" && -n "$TARGET_HEAD_SHA" && -n "$HEAD_SHA" ]] || return 1
   [[ -f "$CACHE_FILE" ]] || return 1
@@ -517,6 +517,74 @@ replay_completed_summary() {
 if replay_completed_summary; then
   exit 0
 fi
+
+# --- Step 2a': resolving a concurrent awaiter's completion --------------------
+# A run has exactly ONE detached child but may have MANY awaiters: `review-fix`
+# Step 1b re-invokes this script with identical arguments until it stops
+# returning 5, and nothing serializes those invocations against each other — the
+# launch mutex (Step 2c) guards the LAUNCH decision and is released before the
+# await loop begins. So two awaiters routinely reach the finish line together,
+# and the one that arrives second finds the record already collected AND deleted
+# by the first: `discard_run_record` removes `.rc`, `.output`, `.run` and the
+# untracked-before snapshot in one go.
+#
+# What the loser observes is AMBIGUOUS, never a verdict. The very same on-disk
+# state is produced by two different histories:
+#
+#   1. the child really did die without recording a result — a genuine failure;
+#   2. the run SUCCEEDED milliseconds ago and another awaiter banked it.
+#
+# Concluding (1) from a single observation is what the caller
+# (skills/review-fix/SKILL.md Step 1b) turns into a hard stop of the whole
+# review phase, discarding a completed, expensive `high`-effort review as a
+# crash. So every site that can observe it resolves the ambiguity HERE first,
+# folding toward "still running" while it is unresolved — the empty-read
+# discipline this repo already applies to every liveness probe
+# (lib-claude-agents.sh:1-40, and `run_is_alive` below).
+#
+# NOT A FALLBACK (.claude/rules/code-style.md). Nothing here buries an error: a
+# run that actually died still fails with its caller's own message on
+# exhaustion, and a replayed summary is still authenticated by the full identity
+# check in `cache_is_current` — the winner's summary is accepted only if it
+# describes THIS out-dir, target, head_sha, effort and model, with its artifacts
+# present. The retry only buys the evidence needed to tell the histories apart.
+#
+# Bounded retry, same shape as lib-claude-agents.sh:1738-1789's
+# `verify_agent_registered_under_state`: fixed attempt cap, short fixed
+# interval, NO sleep after the final attempt, fail closed on exhaustion.
+#
+# BUDGET. The summary is the LAST thing the winner writes (Step 7's `cp` to
+# CACHE_FILE), so this poll must outlast its whole Steps 5-7 run:
+# `git diff --name-only`, `git status --untracked-files=all`, a full `git diff`
+# into fix.patch, then the summary write. Measured in this repo those git calls
+# are ~10 ms each, ~30 ms total. Budget 60 attempts x 0.5 s = 59 sleeps ~= 29.5
+# s: a ~1000x margin on the measured cost, and still ~10x on a pessimistic 3 s
+# for a cold page cache on a loaded host with a large `--fix` diff. Half-second
+# spacing keeps the common case (the winner is milliseconds ahead) returning
+# almost immediately; the full budget is only ever paid on a real crash, which
+# is a terminal path.
+#
+# Contract — exactly one of three outcomes:
+#   - EXITS 0, having printed the winner's authenticated summary;
+#   - RETURNS 0 when the optional watch path reappeared, which is equally proof
+#     the run finished: the caller resumes its normal completion path;
+#   - RETURNS 1 on exhaustion: the caller reports its own failure.
+COMPLETION_ATTEMPTS=60
+COMPLETION_INTERVAL_S=0.5
+
+await_concurrent_completion() {
+  local watch="${1-}" i
+  for (( i = 0; i < COMPLETION_ATTEMPTS; i++ )); do
+    if [[ -n "$watch" && -f "$watch" ]]; then
+      return 0
+    fi
+    if replay_completed_summary; then
+      exit 0
+    fi
+    (( i + 1 < COMPLETION_ATTEMPTS )) && sleep "$COMPLETION_INTERVAL_S"
+  done
+  return 1
+}
 
 # --- Step 2b: run-state helpers -----------------------------------------------
 
@@ -597,6 +665,48 @@ collect_output() {
   else
     : >"$OUTPUT_FILE"
   fi
+  return 0
+}
+
+# Hand a COMPLETED run's artifacts to Steps 5-7 at the paths they consume.
+# Returns 1, naming the missing source in MISSING_ARTIFACT, if either source has
+# vanished — which on a completed run means a concurrent awaiter collected and
+# discarded the record (see Step 2a'), since `.output` is created by the child
+# wrapper's redirect before the built-in starts and the snapshot is written at
+# launch, so neither can be absent except by deletion.
+#
+# Two properties this must NOT lose, and why it is not `collect_output` plus a
+# `cp`:
+#
+#   1. Nothing is written into --out-dir until BOTH sources have been read, and
+#      each destination lands by atomic rename. A losing awaiter therefore can
+#      never truncate or half-overwrite the artifacts the winner has already
+#      collected there — `collect_output` alone would happily write an EMPTY
+#      output.txt over the winner's real one on its way to failing.
+#   2. The failure is reported as an ambiguous observation, never as a verdict.
+MISSING_ARTIFACT=""
+collect_run_artifacts() {
+  MISSING_ARTIFACT=""
+  if [[ ! -f "$RUN_OUTPUT" ]]; then
+    MISSING_ARTIFACT="$RUN_OUTPUT"
+    return 1
+  fi
+  if [[ ! -f "$RUN_UNTRACKED" ]]; then
+    MISSING_ARTIFACT="$RUN_UNTRACKED"
+    return 1
+  fi
+  if ! cp "$RUN_OUTPUT" "$OUTPUT_FILE.tmp" 2>/dev/null; then
+    rm -f "$OUTPUT_FILE.tmp"
+    MISSING_ARTIFACT="$RUN_OUTPUT"
+    return 1
+  fi
+  if ! cp "$RUN_UNTRACKED" "$UNTRACKED_BEFORE_FILE.tmp" 2>/dev/null; then
+    rm -f "$OUTPUT_FILE.tmp" "$UNTRACKED_BEFORE_FILE.tmp"
+    MISSING_ARTIFACT="$RUN_UNTRACKED"
+    return 1
+  fi
+  mv -f "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+  mv -f "$UNTRACKED_BEFORE_FILE.tmp" "$UNTRACKED_BEFORE_FILE"
   return 0
 }
 
@@ -906,8 +1016,19 @@ while :; do
   # The rc marker is checked FIRST on every pass, so a run that is already done
   # (always the case at `low` effort) returns without sleeping at all.
   if [[ -f "$RUN_RC" ]]; then
-    rc="$(head -1 "$RUN_RC" | tr -d '[:space:]')"
+    # `|| true` because the read races a concurrent awaiter's
+    # `discard_run_record`: under `set -o pipefail` an unlinked `.rc` would
+    # otherwise abort this script through `set -e`, with no message at all.
+    rc="$(head -1 "$RUN_RC" 2>/dev/null | tr -d '[:space:]' || true)"
     if [[ ! "$rc" =~ ^[0-9]+$ ]]; then
+      # The marker is written atomically (`.rc.tmp` + `mv`), so one that is
+      # PRESENT is always complete — garbage in it really is corruption. But
+      # reading nothing from a file that has since disappeared means it was
+      # unlinked between the test above and the read: the concurrent-awaiter
+      # race of Step 2a', landing in the narrowest window it has.
+      if [[ ! -f "$RUN_RC" ]] && await_concurrent_completion "$RUN_RC"; then
+        continue
+      fi
       echo "$PROG: the detached run's exit-code marker '$RUN_RC' is not an integer ('$rc') — see '$RUN_OUTPUT'" >&2
       collect_output
       discard_run_record
@@ -946,69 +1067,20 @@ while :; do
   fi
 
   if ! run_is_alive "$RUN_PID" "$RUN_STARTTIME"; then
-    # "The process is gone and there is no `.rc`" is an AMBIGUOUS observation,
-    # never a verdict. Two different histories produce it:
-    #
-    #   1. the child really did die without recording an exit code (a crash, a
-    #      SIGKILL) — a genuine failure;
-    #   2. the run FINISHED and another awaiter of the same run got there
-    #      first. Its poll saw `.rc`, called `collect_output`, then
-    #      `discard_run_record` — which deletes `.rc`, `.output` and `.run`.
-    #      Land in that window and the successful run looks byte-identical to
-    #      the crash. The launch mutex (Step 2c) does not help: it guards the
-    #      LAUNCH decision and is released before the await loop starts.
-    #
-    # Concluding (1) from a single observation is what the caller
-    # (skills/review-fix/SKILL.md Step 1b) turns into a hard stop of the whole
-    # review phase, discarding a completed, expensive `high`-effort review as a
-    # crash. So resolve the ambiguity before deciding, folding toward "still
-    # running" while it is unresolved — the empty-read discipline this repo
-    # already applies to every liveness probe (lib-claude-agents.sh:1-40, and
-    # `run_is_alive` above).
-    #
-    # NOT A FALLBACK (.claude/rules/code-style.md). Nothing here buries an
-    # error: a run that actually died still exits 1 with the same message, and
-    # a replayed summary is still authenticated by the full identity check. The
-    # retry only buys the evidence needed to tell the two histories apart.
-    #
-    # Bounded retry, same shape as lib-claude-agents.sh:1738-1789's
-    # `verify_agent_registered_under_state`: fixed attempt cap, short fixed
-    # interval, NO sleep after the final attempt, fail closed on exhaustion.
-    # Either observation is proof the run finished:
-    #   - `.rc` is (back) — take the normal completion path unchanged;
-    #   - a CURRENT completed-summary cache entry exists — the other awaiter
-    #     finished Steps 5-7 for this exact identity; replay it and exit 0.
-    #
-    # BUDGET. The summary is the LAST thing the other awaiter writes (Step 7's
-    # `cp` to CACHE_FILE), so this poll must outlast its whole Steps 5-7 run:
-    # `git diff --name-only`, `git status --untracked-files=all`, a full
-    # `git diff` into fix.patch, then the summary write. Measured in this repo
-    # those git calls are ~10 ms each, ~30 ms total. Budget 60 attempts x 0.5 s
-    # = 59 sleeps ~= 29.5 s: a ~1000x margin on the measured cost, and still
-    # ~10x on a pessimistic 3 s for a cold page cache on a loaded host with a
-    # large `--fix` diff. Half-second spacing keeps the common case (the other
-    # awaiter is milliseconds ahead) returning almost immediately; the full
-    # budget is only ever paid on a real crash, which is a terminal path.
-    COMPLETION_ATTEMPTS=60
-    COMPLETION_INTERVAL_S=0.5
-    rc_reappeared=0
-    for (( i = 0; i < COMPLETION_ATTEMPTS; i++ )); do
-      if [[ -f "$RUN_RC" ]]; then
-        rc_reappeared=1
-        break
-      fi
-      if replay_completed_summary; then
-        exit 0
-      fi
-      (( i + 1 < COMPLETION_ATTEMPTS )) && sleep "$COMPLETION_INTERVAL_S"
-    done
-    if (( ! rc_reappeared )); then
-      echo "$PROG: the detached '/code-review' run (pid=$RUN_PID) is gone and recorded no exit code — see '$RUN_OUTPUT'" >&2
-      collect_output
-      discard_run_record
-      exit 1
+    # "The process is gone and there is no `.rc`" is the widest window of the
+    # concurrent-awaiter ambiguity documented at Step 2a': the winner's
+    # `discard_run_record` deleted `.rc` and `.output` while this poll was
+    # sleeping, so a run that SUCCEEDED looks byte-identical to a child that
+    # crashed without recording an exit code. Resolve before deciding. `.rc`
+    # reappearing is equally proof the run finished, so it is the watch path —
+    # take the normal completion path unchanged when it does.
+    if await_concurrent_completion "$RUN_RC"; then
+      continue
     fi
-    continue
+    echo "$PROG: the detached '/code-review' run (pid=$RUN_PID) is gone and recorded no exit code — see '$RUN_OUTPUT'" >&2
+    collect_output
+    discard_run_record
+    exit 1
   fi
 
   sleep "$POLL_INTERVAL_S"
@@ -1018,13 +1090,24 @@ WALL_CLOCK_S=$(( $(date -u +%s) - RUN_LAUNCHED_AT ))
 
 # Hand the run's artifacts to the (unchanged) verification and yield-derivation
 # steps at exactly the paths they have always consumed.
-collect_output
-if [[ ! -f "$RUN_UNTRACKED" ]]; then
-  echo "$PROG: the run record's untracked-before snapshot '$RUN_UNTRACKED' is missing — the before/after yield derivation cannot run" >&2
-  discard_run_record
-  exit 1
+#
+# This is the LAST place the concurrent-awaiter race of Step 2a' can land, and
+# the narrowest: both awaiters saw `.rc` in the same instant and broke out of
+# the loop together, and the winner's `discard_run_record` lands between this
+# one's `.rc` read and its read of the record. Same ambiguity, same resolution —
+# reporting it as a failure would discard a completed review that another
+# awaiter is at that very moment reporting as a success.
+if ! collect_run_artifacts; then
+  # With no watch path `await_concurrent_completion` either exits 0 on the
+  # winner's authenticated summary or returns 1 exhausted; there is no third
+  # outcome, so reaching the body means the artifacts really are gone.
+  if ! await_concurrent_completion; then
+    echo "$PROG: the completed run's artifact '$MISSING_ARTIFACT' is missing — the before/after yield derivation cannot run" >&2
+    collect_output
+    discard_run_record
+    exit 1
+  fi
 fi
-cp "$RUN_UNTRACKED" "$UNTRACKED_BEFORE_FILE"
 discard_run_record
 
 # --- Step 5: verify at the source ---------------------------------------------
