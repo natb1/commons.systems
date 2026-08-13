@@ -483,6 +483,41 @@ assert_contains "(13) and that nothing will re-invoke it" "NOTHING WILL RE-INVOK
 assert_contains "(13) and names the wait budget it spent" "after waiting 1s" "$OUT"
 wait "$HOLDER" 2>/dev/null || true
 
+# --- (14) `absent` never mints over a LANDED entry ---------------------------
+# classify() reports `absent` for ANY readNode failure — an unfetched checkout,
+# a half-written file, a schema-invalid hand edit — not only for a genuinely new
+# finding. Minting on one of those would overwrite a landed entry and reset its
+# recurrence_count to 1: the count divergence the ledger exists to prevent,
+# done silently. The LANDED BLOB, not the classification, decides existence.
+LANDED_MD="$FR/intentions/$ID.md"
+cat > "$LANDED_MD" <<'MD'
+---
+id: tactic-eval-finding-stop-hook-hold-loop
+phase: null
+attributes:
+  ledger_entry: true
+  first_seen: '2026-08-01'
+---
+
+The finding.
+MD
+git -C "$FR" add -A intentions >/dev/null 2>&1
+git -C "$FR" commit -q -m 'fixture: land the entry' >/dev/null 2>&1
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+rm -f "$LANDED_MD" # the local checkout can no longer read what origin/main has
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug "$SLUG" --statement 'the Stop hook HOLDs forever when no terminal marker is written' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-14
+assert_eq "(14) refuses rather than minting over the landed entry" "1" "$RC"
+assert_eq "(14) nothing was written" "" "$(log_lines graph-commit.log)"
+assert_contains "(14) the log names the uncounted occurrence" "NOT COUNTED" "$OUT"
+assert_contains "(14) and says the entry EXISTS at origin/main" "EXISTS at origin/main" "$OUT"
+assert_contains "(14) and names the checkout that repairs the local copy" \
+  "checkout origin/main -- intentions/$ID.md" "$OUT"
+# The local file stays absent: refusing is not a rollback, so nothing is dirty.
+assert_eq "(14) no local node file was created" "0" "$([[ -e "$LANDED_MD" ]] && echo 1 || echo 0)"
+git -C "$FR" checkout -q origin/main -- "intentions/$ID.md"
+
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite
 # must end here rather than tallying by hand.

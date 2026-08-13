@@ -70,6 +70,13 @@
 # (packages/intentionsutil/scripts/graph-census-debt.ts). That exemption and
 # this script are one mechanism in two halves; neither is useful alone.
 #
+# The same reasoning guards the mint path against classify()'s catch-all
+# `absent`: `absent` covers every readNode failure (an unparseable or
+# not-yet-fetched local file), not only a new finding, so the LANDED BLOB — not
+# the classification — decides whether this is a first occurrence. An entry
+# present at origin/main is never minted over; the pass refuses with exit 1 and
+# names the local file as the thing to repair.
+#
 # TWO CONSEQUENCES OF DIVERGENCE 2, both of which drop fleet-alarm behaviour:
 #
 #   * NO BODY-IDENTITY GATE. Fleet-alarm skips the commit entirely when a
@@ -627,9 +634,23 @@ case "$STATE" in
       log "origin/main does not resolve in $REPO_ROOT (unfetched clone, or a pruned/stale remote-tracking ref) — refusing to mint $ID without a trustworthy pre-write blob"
       exit 69
     fi
+    # THE LANDED BLOB IS THE AUTHORITY ON EXISTENCE, not the classification.
+    # classify() reports `absent` for ANY readNode failure — a half-written node
+    # file, a schema-invalid hand edit, a file the local checkout has not
+    # fetched yet — not only for a genuinely new finding. Minting on one of
+    # those would overwrite a LANDED entry with recurrence_count 1, which is the
+    # count reset divergence 2 exists to prevent, done silently and to the
+    # highest-value rows. So: if origin/main already carries this entry, this is
+    # a recurrence the local checkout cannot read, and the local file is what
+    # needs fixing (.claude/rules/code-style.md — a clear error, never a
+    # fallback that quietly discards the metric).
+    LANDED_BLOB="$(origin_blob || true)"
+    if [[ -n "$LANDED_BLOB" ]]; then
+      log "$ID classified '$STATE', but $NODE_REL EXISTS at origin/main (blob $LANDED_BLOB) — the local copy is missing or unreadable, so this is a recurrence this checkout cannot see, NOT a first occurrence. Refusing to mint over it and reset the recurrence count to 1. THIS OCCURRENCE WAS NOT COUNTED: restore the file with git -C $REPO_ROOT checkout origin/main -- $NODE_REL, then re-record it"
+      exit 1
+    fi
     PRE_EXISTED=0
     [[ -e "$NODE_FILE" ]] && PRE_EXISTED=1
-    PRE_BLOB="$(origin_blob || true)"
     jq -n \
       --arg id "$ID" \
       --arg statement "$STATEMENT" \
@@ -685,12 +706,11 @@ case "$STATE" in
       "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.json" || exit 1
     ) 1>&2 || ! splice_body || ! run_graph_commit -m "graph: record finding ledger entry $SLUG" "$ID"; then
       rm -f "$NODE_FILE.tmp"
-      if [[ -n "$PRE_BLOB" ]]; then
-        if ! restore_from_blob "$PRE_BLOB"; then
-          log "minting $ID failed AND THE ROLLBACK FAILED — $NODE_REL was NOT restored and must be assumed dirty; a dirty node file blocks every later graph write in this checkout, so check git -C $REPO_ROOT status --porcelain -- $NODE_REL and restore it with git -C $REPO_ROOT checkout -- $NODE_REL"
-          exit 70
-        fi
-      elif [[ "$PRE_EXISTED" == "1" ]]; then
+      # No restore-from-blob arm here: the guard above already refused every
+      # case where $NODE_REL exists at origin/main, so on this path there is no
+      # landed content to roll back TO. Rollback is either "leave the local-only
+      # file alone" or "delete what this pass created".
+      if [[ "$PRE_EXISTED" == "1" ]]; then
         log "minting $ID failed and $NODE_REL pre-existed this pass with no origin/main blob to restore — it was left as-is (NOT deleted) and may be dirty, which will block every later graph write in this checkout; inspect it, then restore or remove it by hand"
         exit 70
       else
