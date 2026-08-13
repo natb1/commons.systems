@@ -1186,6 +1186,40 @@ clarifications:
       made with the author's explicit approval, satisfying condition 3. Carrier:
       tactic-review-effort-max-detached-resume-poll (Unit 2, `--model opus`);
       shipped in PR #3078."
+  - question: On a superseded relaunch, what is the review lane before-image that
+      /code-review --fix diffs against, and what makes the edits it reports
+      attributable?
+    answer: "(Recorded 2026-08-13, author-directed; captured in the graph the same
+      day, after the ruling and after ad-hoc PR #3080 shipped it.) HEAD,
+      carrying the killed run's untracked snapshot forward. This implements
+      clarification 25's existing guarantee for the review lane's own accounting
+      — it is not new policy: the before-image is precisely what makes a
+      `/code-review --fix` run's reported output a mechanical derivation rather
+      than an agent's account of what it changed. The defect it settles: when
+      dispatch-code-review supersedes a still-running review it kills that run,
+      and it then took a FRESH `git stash create` as the new before-image; the
+      killed run held `--permission-mode acceptEdits`, so its partial edits had
+      already landed INSIDE that baseline and Step 6's `git diff` could not see
+      them — the review silently under-reported its own writes. Four parts. (1)
+      The baseline is HEAD, and the killed run's untracked snapshot is carried
+      FORWARD rather than re-taken — re-snapshotting would record files the dead
+      run created as pre-existing and drop them from the union. (2) HEAD is
+      sound because /review-fix Step 1b mandates exclusivity: between the
+      launching call and the collecting call the session does nothing else,
+      which is what makes any uncommitted change at the kill point attributable
+      to the killed run. (3) Carrying the superseded run's before_sha forward
+      was considered and REJECTED — that branch fires precisely because head_sha
+      advanced, so the old stash predates the intervening qa-fix/fix-checks
+      commits and would attribute them to the review, a larger attribution error
+      than the one being repaired. (4) A baseline that cannot be derived FAILS
+      CLOSED, exiting 2 and naming both shas, rather than guessing — per the
+      repo's preference for clear errors over defensive fallbacks. The guarantee
+      extends to the failure paths out of that branch: if the relaunch itself
+      fails to start, the killed run's record must be RESTORED rather than
+      discarded, or the retry re-enters as a first-ever launch, takes a fresh
+      stash, and reintroduces the same under-reporting through the back door.
+      Carrier: ad-hoc PR #3080; no tactic node, because the defect was found and
+      shipped outside the ladder."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
