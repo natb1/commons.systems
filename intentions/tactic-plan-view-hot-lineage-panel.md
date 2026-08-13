@@ -17,7 +17,37 @@ reading: null
 serves:
   - strategy-attention-surface
 recovers: []
-clarifications: []
+clarifications:
+  - question: What shipped in the first published cut, and did the recorded
+      honest limit survive contact with the implementation?
+    answer: "SHIPPED 2026-08-13 in PR #3084, inside the published artifact
+      https://claude.ai/code/artifact/2c00af0f-0fdc-404b-b772-de7df6dee7bd:
+      per-ancestor score contribution split into undecomposed and in-flight,
+      a done/total progress readout, the `+ N others` fold at 8, a legend, a
+      table view, and recomputation under the active filter. The delegation
+      limit recorded on this node was SHARPENED by building it: a `recovers`
+      ancestor does not merely read LOW, it does not appear in
+      `ResolvedAttention.sources` AT ALL — the resolver's authored term
+      distributes along parent/serves only, and a delegation feeds the separate
+      capture term as a scalar. So its decomposed share is structurally
+      unavailable rather than small. The panel therefore synthesises the lane
+      from `recovers` edges and renders `0 (until delegation-scoring)`;
+      omitting it would have read as `no capture here`, which is the misreading
+      this node exists to prevent."
+    date: "2026-08-13"
+  - question: How is the share measure verified, given the page is a snapshot?
+    answer: "(2026-08-13.) As a BUILD-TIME assertion, which is what the recorded substrate
+      amendment anticipated. artifacts/plan-view/test/live-store.test.ts checks
+      against the live store that the summed per-ancestor contributions equal
+      the window total, and independently recomputes that total from the rows
+      rather than from the panel's own maps — so a bug that corrupted both
+      halves identically still fails. Scope caveat, stated plainly: the panel
+      follows the active FILTER, which is the lever the page actually has. It
+      does not follow a SCROLL WINDOW, because the table does not virtualize
+      yet and therefore has no scroll window distinct from the filtered set;
+      that half of the recorded scope arrives with
+      tactic-ds-plan-table-primitive."
+    date: "2026-08-13"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -25,7 +55,12 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Delivered and published in PR #3084; held so the router does not
+    select it for a decomposition round while the PR is open. Residual: the
+    scroll-window half of its recorded scope, which depends on
+    tactic-ds-plan-table-primitive."
+  since: "2026-08-13"
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -18,7 +18,55 @@ reading: null
 serves:
   - strategy-owned-web-platform
 recovers: []
-clarifications: []
+clarifications:
+  - question: Which of the five units landed, and where?
+    answer: "ALL FIVE, in PR #3084 (2026-08-13). (1) Workspace
+      `artifacts/plan-view`, registered in the root manifest — covered by the
+      vitest project list, the eslint layering rule, knip and detect-changes
+      with no registration step, which was the point. Named UNSCOPED
+      (`plan-view`, not `@commons-systems/*`) so the layering rule treats it as
+      a dependency-graph root: nothing may import an artifact. (2) Single-file
+      build, `scripts/build.mjs`. (3) Contract check,
+      `scripts/check-artifact.mjs`, with 12 negative tests. (4) From-disk render
+      smoke, `scripts/render-smoke.mjs`, run in all three viewer theme states.
+      (5) `detect-changes.sh` emits `artifact=true`, consumed by the new
+      `artifact-check` job in unit-tests.yml via
+      `.claude/skills/dispatch-propagate/scripts/run-artifact-check.sh`, which
+      discovers artifact workspaces from the manifest rather than a
+      hand-maintained list."
+    date: "2026-08-13"
+  - question: Which recorded assumptions were wrong, and what replaced them?
+    answer: "Three, all found 2026-08-13 while building it. (a)
+      `.design-sync/resync.mjs` DOES NOT EXIST — `.design-sync/`
+      holds config.json, conventions.md and NOTES.md only; the converter lives
+      in a transient gitignored `.ds-sync/`. What was reusable is the SHAPE in
+      NOTES.md, not a script. (b) The claim that esbuild leaves an absolute
+      `url(/fonts/...)` alone is wrong — esbuild tries to RESOLVE it and fails
+      the build. That is the good failure: the silent wrong-typeface outcome the
+      round worried about is unreachable by accident, and a resolve plugin
+      points the five specifiers at the real woff2 for `dataurl` inlining. (c)
+      The zero-external-hosts check cannot be a bare-word scan for
+      fetch/WebSocket: the plan view bakes 400+ human-written node statements
+      into the page and several contain the phrase `git fetch` — 20 false
+      positives on the first run. It matches CALL syntax and skips the inert
+      `application/json` data block."
+    date: "2026-08-13"
+  - question: What did building the contract check reveal about the theme
+      clause specifically?
+    answer: "(2026-08-13.) That it cannot be expressed as a regex, which is worth recording
+      because the obvious implementation passes exactly the page the clause
+      exists to reject. `/:root\\s*\\{[^}]*--/` matches
+      `@media (prefers-color-scheme: dark){:root{--fg:#fff}}` as happily as a
+      top-level rule — so a palette defined ONLY inside a media query passes,
+      and that page renders wrong in the viewer's unstamped system-default
+      state. `hasBareRootTokens` scans brace depth instead and skips at-rule
+      blocks and `:root[data-theme=...]` qualifiers. Caught by its own negative
+      test, not in review. Separately: CSS `light-dark()` on a bare `:root` —
+      which is how @commons-systems/ds already authors its colour tokens —
+      satisfies the clause structurally, needing only `color-scheme` driven per
+      theme state. That is a cleaner answer than duplicating a palette under
+      `prefers-color-scheme` and is worth preferring in future artifacts."
+    date: "2026-08-13"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -26,7 +74,12 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Delivered in PR #3084; held so the router does not select it for a
+    decomposition round while the PR is open. Unpark to dispose of it on merge
+    — all five units landed, so retirement rather than replanning is the likely
+    disposition."
+  since: "2026-08-13"
 pace_exempt: false
 rounds: null
 attributes: {}

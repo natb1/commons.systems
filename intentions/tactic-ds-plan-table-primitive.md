@@ -18,7 +18,49 @@ reading: null
 serves:
   - strategy-attention-surface
 recovers: []
-clarifications: []
+clarifications:
+  - question: The sequencing question this node left open — primitive first, or
+      table first and extract after — was answered by shipping. Which way, and
+      what is now owed?
+    answer: "TABLE FIRST. PR #3084 (2026-08-13) shipped the plan view as a
+      published artifact using @commons-systems/ds TOKENS and `Badge` for the
+      label chips, with bespoke `<table>` markup for the grid itself and NO
+      virtualization — it renders its full 431-row set. This node is therefore
+      still fully owed, and its scope is now sharper rather than smaller: the
+      primitive must be extracted FROM a working consumer instead of designed
+      against a hypothetical one. Read
+      artifacts/plan-view/src/ui/PlanTable.tsx and `spanRuns` in
+      artifacts/plan-view/src/filters.ts first — the latter carries the note
+      that literal `rowSpan` is legal ONLY because the full row set is in hand
+      before the first cell is emitted, which is precisely the property
+      virtualization removes. That is the swap this primitive exists to make."
+    date: "2026-08-13"
+  - question: Do the DS chart tokens satisfy the /dataviz palette validator?
+    answer: "NO — measured 2026-08-13, not assumed. `--chart-1` (#4d6f8f) and
+      `--chart-3` (#a35d5d) FAIL the chroma floor (0.064 and 0.092): they read
+      gray. Against the dark surface `--chart-2` (#c98a3c) additionally falls
+      outside the lightness band. The artifact's three lane hues are stepped
+      replacements (#3b7dd8 / #d2761a / #c0446a) that pass every check against
+      BOTH surfaces, carried in the artifact's own CSS rather than pushed into
+      DS. This is recorded here because the tokens are DS surface and the fix
+      belongs with DS, but it is NOT this node's scope — it is a separate
+      finding about `packages/ds/tokens/colors.css` that wants its own round,
+      since restepping a shared categorical ramp changes every existing
+      consumer's chart."
+    date: "2026-08-13"
+  - question: What does the artifact substrate add to the primitive's
+      requirements?
+    answer: "One hard constraint, confirmed 2026-08-13 by building it: the primitive must
+      survive esbuild bundling into a single self-contained file with no
+      runtime resolution of any kind. The font trap recorded below is real and
+      already bit — `packages/ds/fonts.css` uses absolute `url(/fonts/...)`,
+      and esbuild FAILS the build on it rather than passing it through (the
+      body below predicted a silent fallback; the actual behaviour is a loud
+      error, which is better). A resolve plugin in
+      artifacts/plan-view/scripts/build.mjs handles it. Any asset the primitive
+      introduces — an icon, a sprite, a second font — inherits the same
+      requirement and the same 16MB page budget."
+    date: "2026-08-13"
 tooling_goals: []
 success_signal: null
 attention: null
