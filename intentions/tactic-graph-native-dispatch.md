@@ -95,8 +95,10 @@ rounds:
 ```
 
 - **Draft phase.** `phase: draft` (equivalently: no phase set) marks
-  retained tactical context from strategy work. The router never selects a
-  draft tactic, and drafts do not count as children for strategy
+  undecomposed tactical context from strategy work. The router **does**
+  select a draft tactic, emitting it at the `align-tactics` directive rung
+  (gated on `office_hours` null, blockers all `done`, and not being another
+  tactic's `parent`); drafts do not count as children for strategy
   eligibility — they are `/align-tactics` input.
 - **Phase is persisted, transitions are sensed.** The router never
   re-derives phase from GitHub; it reads the node's `phase`, consults the

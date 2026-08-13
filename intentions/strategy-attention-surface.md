@@ -170,27 +170,42 @@ clarifications:
       rather than rejected, which would make a structured label a false record."
   - question: Where does this surface end and strategy-rsi-plan-surface begin? Both
       name a surface, and both end up in the same office-hours application.
-    answer: "(Recorded 2026-08-11, by the /align round that created
+    answer: >-
+      (Recorded 2026-08-11, by the /align round that created
       strategy-rsi-plan-surface; the same boundary is recorded on that node, and
       a session planning GUI work should read both.) Split by CONTENT, not by
       application. This strategy keeps the office-hours ritual, parked-node
       selection and its session-type ranking, and the SIGNALS queue —
-      tactic-attention-surface-status-page's \"one attention-ranked queue of
-      typed signals with per-signal context panel\", i.e. the things that
-      trigger review. strategy-rsi-plan-surface owns the harness status and
-      PRIORITY view — what the harness is doing, what comes next, and when —
-      starting as rsi-plan.md and later migrating into a view inside this same
-      application. The two therefore do not compete for the GUI; they occupy
-      different content within it. The boundary was drawn because this node's
-      statement (\"status signals and goals exploration\") and the rsi-plan.md
-      contents contract (which records that the document \"eventually integrates
-      into the office-hours GUI project\") both reached for the same
-      destination, and a fresh session reading only one of them would plan the
-      status view under the wrong owner. Practical test when a future round is
-      unsure which node owns a proposed view: ask whether the content is a
-      signal that should trigger the author to look, or a statement of what the
-      harness is doing and in what order. The first is this node; the second is
-      strategy-rsi-plan-surface."
+      tactic-attention-surface-status-page's "one attention-ranked queue of
+      typed signals with per-signal context panel", i.e. the things that trigger
+      review. strategy-rsi-plan-surface owns the harness status and PRIORITY
+      view — what the harness is doing, what comes next, and when — starting as
+      rsi-plan.md and later migrating into a view inside this same application.
+      The two therefore do not compete for the GUI; they occupy different
+      content within it. The boundary was drawn because this node's statement
+      ("status signals and goals exploration") and the rsi-plan.md contents
+      contract (which records that the document "eventually integrates into the
+      office-hours GUI project") both reached for the same destination, and a
+      fresh session reading only one of them would plan the status view under
+      the wrong owner. Practical test when a future round is unsure which node
+      owns a proposed view: ask whether the content is a signal that should
+      trigger the author to look, or a statement of what the harness is doing
+      and in what order. The first is this node; the second is
+      strategy-rsi-plan-surface.
+
+
+      (AMENDED 2026-08-13 /align round. The routing half of this entry is
+      SUPERSEDED; the content distinction it draws is retained as doctrine.)
+      strategy-rsi-plan-surface was retired 2026-08-12 and pruned 2026-08-13, so
+      the node this entry routes PRIORITY content to no longer exists. A fresh
+      session reading the test above would send the harness status and priority
+      view to a deleted id. That half is dead: the plan view is absorbed by THIS
+      node, recorded in the plan-view clarification below. What survives is the
+      practical test itself — signal-that-triggers-you-to-look versus
+      statement-of-what-the-harness-is-doing — which is still the right question
+      to ask when placing a view; both answers now resolve here, so the test
+      discriminates page (STATUS versus the plan view) rather than owning
+      strategy.
   - question: What was the freeze blast radius when this node's substance last
       changed, on 2026-08-11?
     answer: "(Recorded 2026-08-11 after adversarial review, filling a gap in the
@@ -218,6 +233,233 @@ clarifications:
       provenance field, so a classification is recorded per edited strategy
       rather than once on the round's headline node, is proposed at
       tactic-align-review-skill."
+  - question: The strategy that owned the harness priority view was pruned. Where
+      does the plan view live, and why is it not called a priority view?
+    answer: "(Recorded 2026-08-13 /align interview.) It lives HERE, on a single
+      serves edge, and it is named the PLAN view / plan table at author
+      direction — never the priority view. PLACEMENT follows the author's stated
+      purpose: to see which parts of the graph dominate the focus of the author
+      and the delegatees, and to track progress in those areas. That is an
+      attention-concentration claim, which is this node's statement almost
+      verbatim, and its goals-page tooling_goal already claims subtree shape and
+      development, delegation and capture, resolved attention, and router
+      now/queue. The rival owner considered and declined was
+      strategy-rsi-delegated-prioritization, which records that both halves of
+      its own signal read insufficient data for want of any surface from which
+      delegated ordering can be audited. It was declined on that node's OWN
+      recorded stay-vs-move test: its signal is (a) closure interval of
+      front-loaded tactics and (b) inversion plus unlogged-write counts, and a
+      read-only view reorders nothing, logs nothing and lints nothing, so it
+      moves neither half — while it does move this node's threshold that the
+      office-hours ritual runs on the redesigned surface. Artifact-owner
+      placement (clarification 27) agrees: the artifact is the office-hours app,
+      which this node owns. A multi-entry serves was considered and declined
+      because under the greenfield rank key a serves edge is a parent edge, so
+      adding one would make placement a ranking act. NAMING, recorded because
+      'plan' is heavily overloaded in this repository and a fresh session will
+      otherwise misread it: the plan view is the forward-looking schedule of
+      graph work. It is NOT the clean-session plan carried in a tactic node's
+      body, NOT the dispatch `plan` phase or its dispatch:plan comment, and NOT
+      rsi-plan.md — which it supersedes. SUPERSESSION: this view answers the
+      question strategy-rsi-plan-surface's retirement rationale deliberately
+      left open ('they show findings and spend, not priorities or estimated
+      delivery dates. Whether that is sufficient oversight is an open question
+      for the author, recorded here rather than settled'). The author's answer
+      is that it is not sufficient, and the successor surface is a view in this
+      application rather than a rendered document."
+  - question: What does the plan table inherit from the pruned rsi-plan contract,
+      and what of it is deprecated?
+    answer: "(Recorded 2026-08-13 /align interview; author direction was to treat
+      the pruned requirements as deprecated but to mine them for gaps.)
+      INHERITED. The ETA basis, unchanged: a row's ETA is today + (its 1-based
+      position in the router's selection order / velocity), velocity being the
+      dispatch queue's 28-day closure rate in closures per day, rendering
+      honestly as unavailable at zero velocity rather than as a date. Verified
+      unit-consistent this round rather than assumed: selectGraphTargets' two
+      candidate loops are disjoint, so each tactic emits exactly ONE candidate
+      per tick, and position therefore counts distinct tactics rather than
+      selections. Also inherited: the row set — every non-done tactic, drafts
+      included, parked rows included and MARKED, never dropped. DEPRECATED. The
+      two independent `delegated` and `parked` COLUMNS collapse into chips in
+      one labels column (author direction: the same two facts stay independent,
+      carried by streamlined chip elements rather than by columns). The
+      strategy-group header rows are gone — grouping is now the lineage column
+      group described below. The markdown render, the six-section document
+      structure, and the tier-band section headers are all moot with
+      rsi-plan.md. ROW SET, measured on the live store 2026-08-13 and stated
+      with the count as that contract required: 415 open tactics, of which 223
+      are selectable and therefore carry a real ETA — 175 drafts emitted at the
+      align-tactics directive rung plus 48 phase-set executable rows. The 192
+      without a position are 144 parked, 45 blocked on incomplete blockers, and
+      3 subtree-parent containers. Those three are DISTINCT reasons and the ETA
+      cell renders the reason — 'unavailable — parked', 'unavailable — blocked
+      by <id>', 'unavailable — container' — never a blank. Parked rows keep the
+      inherited rule that they carry no position and are excluded from the
+      position counter that feeds every other row's ETA. That 78% of the
+      reachable queue is undecomposed drafts is a headline the view must show,
+      not hide: a first draft of this design defaulted to a narrower
+      scheduled-only row set on a MEASUREMENT ERROR (that drafts are
+      unselectable), which the author corrected in interview. See the
+      draft-selectability clarification below."
+  - question: Filtering changes the visible row set, which changes position, which
+      changes ETA. What does ETA mean under an active filter?
+    answer: "(Recorded 2026-08-13 /align interview.) ETA is ABSOLUTE and never
+      recomputes over the filtered set: a row's date is when the router will
+      actually reach it, and hiding rows does not make the router arrive sooner.
+      This falls directly out of the inherited basis, which defines position
+      against the ROUTER's selection order rather than against the view. The
+      failure it forecloses is concrete: under a recomputing ETA, filtering to
+      `bug` would show every bug arriving next week because each is now near
+      position 1, which is false. The hot-lineage panel deliberately does the
+      OPPOSITE and recomputes its heat over the filtered window, because scoping
+      the heat measure is the entire point of filtering. The asymmetry is
+      intended, not an inconsistency: ETA is a forecast about the world and must
+      not move with the view, while heat is a statement about the current
+      selection and must."
+  - question: Lineage is a DAG, not a tree. How is it rendered as columns, given
+      that rowspan requires a laminar family?
+    answer: "(Recorded 2026-08-13 /align interview; the author proposed recursive
+      rowspanned columns over common parent subsets and asked for better options
+      if any existed.) Three layers. ONE, SPINE COLUMNS — the author's sketch,
+      made sound. Rowspan requires a LAMINAR family (any two blocks nested or
+      disjoint), and ancestor sets in a DAG are not laminar: for adjacent rows
+      with lineages {V,S1,S2} and {V,S2,S3} the common subset is {V,S2} but S1
+      and S3 have no consistent column position, so spans must break and resume
+      — reading as several things when they are one — and an ancestor shared
+      with no neighbour gets no column at all. The fix is to render the one
+      sub-DAG that IS a tree: each row's BAND SPINE, its band-defining parent,
+      then that parent's band-defining parent, to a root. Spines are paths, so
+      they nest exactly as the author drew, recursively, with spans growing
+      leftward. The spine is not an arbitrary reduction — it is precisely the
+      chain that set the row's rank. TWO, LANE GUTTER — the off-spine ancestors
+      the spine drops (a second serves, a recovers delegation, a
+      reverse-blocked_by blocker) render as vertical lanes painted per viewport
+      rather than as table cells. This is where the DAG-ness survives: a lane
+      repeats segments where an ancestor is non-contiguous, several lanes light
+      on one row for a multi-parent node, and nothing needs a span extent.
+      THREE, the hot-lineage panel, below. WHY THIS IS ONLY NOW SOUND: the
+      pruned contract conceded that grouping by lineage DESTROYS rank order
+      (measured then: one strategy's rows spanned up to 160 selection positions)
+      and kept grouping only because the author asked for it. Under the
+      greenfield key (tier, band, score, depth) band is the SECOND sort
+      component, so band blocks are contiguous BY CONSTRUCTION and the
+      concession dissolves. Two caveats carried to the implementer: contiguity
+      holds on the band VALUE, not on the band-defining parent NODE, so distinct
+      parents with equal scores share a block and blocks fragment on ties; and a
+      span whose extent exceeds the loaded window must render as a STICKY HEADER
+      rather than a literal growing rowspan, since a rowspan must know its
+      extent at render time and infinite scroll cannot supply one — a span that
+      mutates as rows stream causes layout thrash, and one that breaks at a page
+      boundary shows a pagination artifact as though it were data. This applies
+      to the tier column too."
+  - question: What does the hot-lineage panel measure, and why is an aggregate panel
+      needed at all when the lineage is already on every row?
+    answer: "(Recorded 2026-08-13 /align interview.) Because the author's purpose —
+      which parts of the graph dominate focus — is an AGGREGATE question, and
+      the spine columns and gutter only let it be inferred. The panel answers it
+      directly, scoped to the current filter and scroll window. MEASURE: score
+      contribution. Under the greenfield model score is a DEDUPLICATED LINEAGE
+      SUM — score_T(n) = boost_T(n) + the sum of boost_T(a) over every distinct
+      ancestor a — so each ancestor's contribution to a rank region is an exact
+      decomposition of the ranking rather than a proxy for it. Row-count share
+      was considered and declined: it scores a large unweighted lineage and a
+      small high-boost one as equally hot, which answers where the volume is
+      rather than what dominates, and volume is not focus. TWO POPULATIONS: each
+      ancestor's heat is shown twice, over UNDECOMPOSED descendants (the 175
+      drafts awaiting an /align-tactics session) and over IN-FLIGHT descendants
+      (the 48 phase-set rows being built), alongside a done/total progress
+      readout that discharges the 'track progress in those areas' half of the
+      purpose. The GAP is the signal: a lineage heavy in undecomposed and light
+      in in-flight is accumulating intent faster than it is being delivered; the
+      reverse is draining. This split is Claude's proposal, not the author's
+      request, and was accepted in interview after being corrected once — an
+      earlier cut at scheduled-versus-unscheduled was wrong because it rested on
+      the draft-selectability error. Both populations are reachable work, which
+      is what makes the gap a pipeline reading rather than an artifact of what
+      happens to be parked. The /dataviz procedure governs the rendering and is
+      not restated here beyond the two constraints that shaped the design: more
+      than 8 ancestors fold to a '+ N others' row because a 9th categorical hue
+      may never be generated, and the bars take ONE sequential hue because color
+      must follow the entity and never its rank."
+  - question: What do the row labels carry, and is the overlap between the tier
+      column and the bug/security/outage chips duplication to be removed?
+    answer: "(Recorded 2026-08-13 /align interview.) Six chips — bug, security,
+      outage, parked, delegated, blocked — plus a compact 5-segment phase ladder
+      pip carrying per-row progress inside the same labels column, so the
+      author's specified column order (tier, lineage group, node id, labels,
+      ETA) is unchanged. `blocked` was NOT in the author's requested set and was
+      added on measurement: on the 415 open tactics it covers 73 nodes, 45 of
+      which are unreachable because of it, against bug 4, security 1 and outage
+      0. Without it the view could not show that a large share of the queue is
+      dammed. It also coheres with the greenfield relation, where a blocker IS a
+      lineage parent, so a blocked row already shows its blocker in the gutter
+      and the chip merely names it. THE OVERLAP IS DELIBERATE AND MUST NOT BE
+      'FIXED'. Tier is DERIVED from the marks the chips name: ownTier resolves 2
+      from attributes.bug_fix or attributes.security, and tier 3 is
+      strategy-main-health's exclusive reserve, so `outage` and 'tier 3' are the
+      same fact. The chip is retained because it says WHY a row is tier-lifted,
+      which the tier number alone does not. Recorded here so a later reviewer
+      does not remove it as redundancy. Honest limit, stated rather than
+      discovered: with 0 explicit tier-2/3 authored among open tactics, the tier
+      column and the tier filter are near-vacuous TODAY — they earn their place
+      structurally (tier is the outermost sort key and a tier-2 node outranks
+      every tier-1 row) rather than empirically."
+  - question: What has this design been specified against that has not landed, and
+      what will read wrong until it does?
+    answer: "(Recorded 2026-08-13 /align interview; author direction: 'we are
+      building the table against greenfield ranking design in the graph'.) The
+      plan view is specified against the GREENFIELD rank model, not the resolver
+      on main. That model is the unified parent relation — a node's parents are
+      its parent field, everything it serves, every delegation it recovers, and
+      every node listing it in blocked_by — with the rank key (tier, band,
+      score, depth), score a deduplicated lineage sum, and band the max parent
+      score. The author's framing of lineage as 'strategies, delegations and
+      blockers' is exactly that relation, and is NOT true of today's resolver,
+      where blocked_by is deliberately excluded from the distributor relation
+      and capture is a separate term. A session reading this clarification
+      against main will therefore find the code disagrees; the graph is the
+      specification here. CARRIERS AND THEIR STATE at recording:
+      tactic-attention-namespaced-rank at phase review (PR 3075, reviewed) lands
+      the key; its three siblings sit at phase null blocked on it. WHAT READS
+      WRONG UNTIL THEY LAND: delegation lanes render heat 0 rather than low,
+      because a recovers edge is a parent edge whose parent contributes boost 0
+      until tactic-attention-delegation-scoring lands — the panel must say '0
+      (until delegation-scoring)' rather than imply a delegation is cold. Band 0
+      is a large degenerate bucket (74 of 248 candidates when last measured)
+      until tactic-attention-per-tier-boost-migration reverts the 0.01 stopgap
+      ladder, so spine blocks will over-merge at the bottom of the table. And
+      the band derivation itself — band from the distributing node's RESOLVED
+      rank — is held on trust by the author and enrolled at
+      tactic-review-band-derivation-ratification; the plan view renders it and
+      does not ratify it. SEPARATELY: the design system has no table primitive
+      at all (Button, Badge, Card, Metric, Input, Select, Checkbox, Nav, the
+      templates, BudgetPaceChart). Badge is the chip primitive; a virtualized
+      data table with sticky spans is net-new DS work, tracked at
+      tactic-ds-plan-table-primitive."
+  - question: A round premise about draft tactics was wrong. What was the error,
+      where did it come from, and what was done about it?
+    answer: "(Recorded 2026-08-13, author correction in interview.) Claude asserted
+      that draft tactics are not router-selectable and therefore carry no ETA,
+      and sized the row set on it — reporting that only 77 of 415 open tactics
+      could carry a date and recommending a narrower default view. The author
+      challenged the claim and asked for it to be confirmed and the source
+      corrected. IT IS FALSE. router.ts's frozen-tactic candidate loop emits
+      draft/raw tactics as first-class candidates at the align-tactics directive
+      rung, gated on office_hours null, blockers all done, and not being another
+      tactic's parent. Corrected figure: 223 selectable, not 77. The
+      recommendation was withdrawn and the inherited row set kept. THE SOURCE
+      was /align's own Step 4 prose ('the router never selects a draft tactic'),
+      a known defect already tracked at
+      tactic-align-skill-draft-selectability-stale-prose since 2026-08-11 and
+      still unexecuted. This round applied that fix rather than leaving it, and
+      found a SECOND site the tracking node had not swept:
+      intentions/tactic-graph-native-dispatch's body carried the same claim.
+      Both are corrected in this round's commit. Worth stating as the general
+      lesson, since it is the second time this class has bitten: a stale prose
+      claim in a skill body is not inert documentation debt — it is an input a
+      future session reasons FROM, and this round reached a wrong recommendation
+      from it before the author caught it. The tracking node's own 'consequence
+      if left' section predicted exactly this."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -233,6 +475,12 @@ tooling_goals:
     statement: local signal adapters mapping non-versioned files (budget .benc,
       office-hours snapshot, pace telemetry, analytics exports) to their owning
       strategies' signals
+  - kind: actuator
+    statement: plan view — the rank-ordered table of every non-done tactic with tier
+      and band-spine lineage columns, an off-spine ancestor lane gutter, label
+      chips with a phase pip, position-derived ETA, tier/label filters, and a
+      filter-scoped hot-lineage panel showing each ancestor's score contribution
+      across undecomposed and in-flight work
 success_signal:
   observable: office-hours sessions conducted from the surface, with every
     rendered signal tracing to a graph node (success_signal or condition) and a
@@ -296,5 +544,13 @@ attributes:
     - Type-aware office-hours ranking holds while parked-node selection is
       driven by office-hours-select.ts / officeHours.ts; if selection moves to
       another surface, the session-type ranking moves with it.
+    - the plan view reads rank and selection order from the resolver and
+      selector the router itself uses, never a reimplementation — a table that
+      computes its own order can drift from the queue it claims to show
+      (Recorded 2026-08-13)
+    - the plan view is specified against the greenfield rank key (tier, band,
+      score, depth) and its unified parent relation, not the resolver on main;
+      while the carriers are unlanded the view renders unavailable terms
+      honestly rather than as low values (Recorded 2026-08-13)
 ---
 # Office hours runs on the graph — one local-first surface (status signals and goals exploration) allocates the author's strategic attention

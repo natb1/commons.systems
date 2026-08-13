@@ -17,11 +17,41 @@ reading: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Was this fix applied, and did the recorded scope cover every site of
+      the stale claim?
+    answer: "(Recorded 2026-08-13. Applied in the /align round that recorded the
+      office-hours plan view on strategy-attention-surface; the node's phase
+      moves to done in that same commit.) Applied, and the recorded scope was
+      INCOMPLETE by one site. Site 1, as recorded: .claude/skills/align/SKILL.md
+      Step 4. Claim 1 is replaced with the actual behavior — a draft marks
+      undecomposed work whose next step is an /align-tactics session, and the
+      router DOES select it at the align-tactics directive rung, subject to the
+      three gates this node named (office_hours null, blockers all done, not
+      another tactic's parent). Claim 2 survives, restated with the reason the
+      router comment gives: a strategy with only draft children still emits its
+      own fresh-round candidate and the two compete by rank. Site 2, NOT in the
+      recorded scope and found by this round's sweep:
+      intentions/tactic-graph-native-dispatch's body carried the same claim in
+      its 'Draft phase' bullet. Corrected in the same commit. The recorded scope
+      told the implementer to sweep '.claude/skills/align/ and
+      .claude/skills/align-tactics/, including references/' — a skill-only
+      sweep, which would have missed this. GENERAL LESSON for the same class of
+      prose-correction node: sweep the GRAPH as well as the skill surface,
+      because doctrine bullets in tactic and kind bodies restate skill prose and
+      drift with it. The align-family sweep itself is now clean. CONSEQUENCE
+      REALIZED, exactly as this node's own 'consequence if left' section
+      predicted: before the fix landed, the 2026-08-13 /align session reasoned
+      FROM the stale Step 4 prose, concluded that only 77 of 415 open tactics
+      could carry an ETA when the true figure is 223, and recommended a narrower
+      default row set for the plan view on that basis. The author caught it and
+      directed the correction. The mis-modelling is one-directional and
+      non-destructive as recorded, but it did propagate into a design
+      recommendation before being caught."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
