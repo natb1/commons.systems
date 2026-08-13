@@ -92,6 +92,18 @@ they are multi-megabyte `.jsonl` files, and `aggregate-usage.sh` exists so a
 model reads compact aggregates instead of re-implementing its ~1000-line jq
 program.
 
+**If you reach for `find` at all, bound it unambiguously.** `find -newermt`
+parses a bare timestamp in the host's **local** zone, but `events.jsonl`
+stamps UTC — a bare bound can search a window hours away from the one
+intended. Use `-newer <file>`, `@<epoch>`, or `TZ=UTC find …`. These jobs
+already receive `--since` as a Unix epoch, so the unambiguous form costs
+nothing.
+
+**Never conclude absence from a single negative search.** A "zero trace"
+finding needs a positive control first — confirm the same search *does*
+return something known to exist in the window. The instrument must
+demonstrate it can see before its blindness is recorded as evidence.
+
 ```bash
 .claude/skills/rsi-audit/scripts/aggregate-usage.sh \
   --node <node-id> --json-out "$TMPDIR/ladder-eval-<node-id>-<phase>.json"

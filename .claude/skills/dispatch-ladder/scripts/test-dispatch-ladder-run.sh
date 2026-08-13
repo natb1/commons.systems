@@ -880,10 +880,10 @@ fi
 # The tier is dispatch-phase-model's answer for the `ladder-eval` pseudo-phase,
 # not a literal at the call site.
 TOTAL=$((TOTAL + 1))
-if grep -q -- "--model sonnet" "$SEQ_DIR/spawnjob.argv"; then
-  PASS=$((PASS + 1)); echo "  PASS: eval: the model came from dispatch-phase-model (sonnet)"
+if grep -q -- "--model opus" "$SEQ_DIR/spawnjob.argv"; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the model came from dispatch-phase-model (opus)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the model came from dispatch-phase-model (sonnet)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the model came from dispatch-phase-model (opus)"
   echo "    argv: $(cat "$SEQ_DIR/spawnjob.argv")"
 fi
 # The default verify path, deliberately: these one-offs have no reservation
