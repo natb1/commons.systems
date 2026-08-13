@@ -112,15 +112,22 @@ setup_root() {
   export TMPDIR="$ROOT"      # isolates the hook's pre-relocation log per case
 
   BRANCH="42-foo"
-  WT="$ROOT/.bare/.claude/worktrees/$BRANCH"
-  mkdir -p "$ROOT/.bare" "$ROOT/.bare/.claude/worktrees/main" "$WT"
+  # Standard layout: `.git` is a normal directory inside the working tree, so
+  # the git common dir is <repo>/.git and the repo root is its PARENT — the
+  # worktrees root is <repo>/.claude/worktrees, not <common-dir>/.claude/...
+  # (the `.bare` bare-repo layout this fixture used to model was retired
+  # 2026-07-21). Anchoring the fixture at the common dir made the suite agree
+  # with the hook's own wrong arithmetic while both disagreed with reality, so
+  # the dead worktrees root never showed up as a failure.
+  WT="$ROOT/.claude/worktrees/$BRANCH"
+  mkdir -p "$ROOT/.git" "$ROOT/.claude/worktrees/main" "$WT"
 
   REMOVED_LOG="$ROOT/removed.log"
   HOOK_LOG="$ROOT/tmp/worktree-remove.log"
 
-  export STUB_GIT_COMMON_DIR="$ROOT/.bare"
+  export STUB_GIT_COMMON_DIR="$ROOT/.git"
   export STUB_REVPARSE_RC=0
-  export STUB_WT_LIST="worktree $ROOT/.bare/.claude/worktrees/main
+  export STUB_WT_LIST="worktree $ROOT/.claude/worktrees/main
 worktree $WT"
   export STUB_STATUS=""        # clean working tree
   export STUB_STATUS_RC=0
@@ -265,13 +272,13 @@ assert_remove_not_called  "safety: target outside worktrees/: not removed"
 assert_log                "safety: target outside worktrees/: log refuses" "not under"
 
 setup_root
-run_hook "$(jq -nc --arg p "$ROOT/.bare/.claude/worktrees/main" '{worktree_path: $p}')"
+run_hook "$(jq -nc --arg p "$ROOT/.claude/worktrees/main" '{worktree_path: $p}')"
 assert_exit0              "safety: target is main: exit 0"
 assert_remove_not_called  "safety: target is main: not removed"
 assert_log                "safety: target is main: log refuses" "is main"
 
 setup_root
-run_hook "$(jq -nc --arg p "$ROOT/.bare/.claude/worktrees/99-ghost" '{worktree_path: $p}')"
+run_hook "$(jq -nc --arg p "$ROOT/.claude/worktrees/99-ghost" '{worktree_path: $p}')"
 assert_exit0              "safety: target not registered: exit 0"
 assert_remove_not_called  "safety: target not registered: not removed"
 assert_log                "safety: target not registered: log no-ops" "not a registered worktree"
@@ -284,10 +291,10 @@ assert_remove_not_called  "safety: empty worktree list: not removed"
 assert_log                "safety: empty worktree list: log no-ops" "not a registered worktree"
 
 setup_root
-run_hook "$(jq -nc --arg p "$ROOT/.bare" '{worktree_path: $p}')"
-assert_exit0              "safety: .bare path: exit 0"
-assert_remove_not_called  "safety: .bare path: not removed"
-assert_log                "safety: .bare path: log refuses" "not under"
+run_hook "$(jq -nc --arg p "$ROOT/.git" '{worktree_path: $p}')"
+assert_exit0              "safety: git dir path: exit 0"
+assert_remove_not_called  "safety: git dir path: not removed"
+assert_log                "safety: git dir path: log refuses" "not under"
 
 # --- Robustness -------------------------------------------------------------
 
