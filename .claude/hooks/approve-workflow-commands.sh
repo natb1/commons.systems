@@ -30,8 +30,18 @@ SCRIPT_RE='(^|/)\.claude/skills/[a-zA-Z0-9_-]+/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SETTINGS_DIR="$HOOK_DIR/.."
 
+# The `|| { … }` is not decoration. A bare `source` that fails is a plain
+# simple command, so it trips the ERR trap above and exits the hook 0 with no
+# output — silently disabling EVERY auto-approval here, not just the git -C
+# path, and turning the whole allowlist into permission prompts. Absorb the
+# failure instead so the degradation stays scoped: with the library missing,
+# the two lookups below hit command-not-found (127), fall to their `|| VAR=""`
+# branches, and is_allowed_git_c fails closed while script/allowedTools
+# approval keeps working.
 # shellcheck source=../skills/dispatch-propagate/scripts/lib-repo-roots.sh
-source "$HOOK_DIR/../skills/dispatch-propagate/scripts/lib-repo-roots.sh"
+source "$HOOK_DIR/../skills/dispatch-propagate/scripts/lib-repo-roots.sh" || {
+  echo "[approve-workflow-commands] WARNING: failed to source lib-repo-roots.sh; 'git -C' approval disabled" >&2
+}
 
 # Build list of allowed single-word commands from settings.json Bash(cmd:*) entries.
 # Multi-word prefixes like "gh issue view" are skipped because CMD_TOKEN extraction

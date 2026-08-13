@@ -2028,9 +2028,13 @@ get_worktree_id() {
 # test rather than a silent divergence. Collapsing these into one definition
 # means converting those fixtures to the `lib-*.sh` glob form that a few
 # already use; that is a separate, mechanical change.
+#
+# The `[ -n "$common_dir" ]` guard is load-bearing — see lib-repo-roots.sh's
+# copy for the rationale. Keep the two bodies byte-identical.
 resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$common_dir" ] || return 1
   dirname "$common_dir"
 }
 

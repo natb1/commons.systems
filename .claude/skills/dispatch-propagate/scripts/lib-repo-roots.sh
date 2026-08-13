@@ -40,9 +40,20 @@ _LIB_REPO_ROOTS_SH_SOURCED=1
 # Print the project root (parent of git --git-common-dir) to stdout.
 # Returns non-zero if not in a git repo. Prints no error and does not exit —
 # the caller supplies its own message/cleanup via `|| { … }`.
+#
+# The `[ -n "$common_dir" ]` guard is load-bearing, not belt-and-braces: the
+# function's status would otherwise be `dirname`'s, and `dirname ""` prints `.`
+# and exits 0. A git that succeeds while printing nothing would therefore hand
+# every caller a RELATIVE `.` root that PASSES their non-empty fail-closed
+# checks — approve-workflow-commands.sh would build `./worktrees` patterns, and
+# worktree-remove.sh would mkdir a stray `./tmp` in whatever cwd the hook fired
+# from instead of logging "keeping worktree". The open-coded call sites this
+# file replaced all guarded with `[ -n "$GIT_COMMON_DIR" ]`; that guard moves
+# here rather than being dropped.
 resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$common_dir" ] || return 1
   dirname "$common_dir"
 }
 

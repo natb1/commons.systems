@@ -85,8 +85,15 @@ assert_eq "double-sourcing is harmless (include guard) and the functions still w
 
 # --- 5. DRIFT GUARD: lib.sh's copy must agree with the canonical one --------
 
-lib_sh_answer=$(cd "$LRR_ROOT" && bash -c "source '$LIB_SH' >/dev/null 2>&1; resolve_project_root")
-canonical=$(cd "$LRR_ROOT" && bash -c "source '$LIB_REPO_ROOTS'; resolve_project_root")
+# `|| VAR=…` on both: this suite runs under `set -e`, and the failure these
+# lines are here to detect (a definition that went missing, so `bash -c` exits
+# 127) would otherwise abort the whole run at this point — before section 6's
+# named assertion, with no FAIL line and no temp-dir cleanup. Absorb the
+# failure so it lands as a readable assertion instead.
+lib_sh_answer=$(cd "$LRR_ROOT" && bash -c "source '$LIB_SH' >/dev/null 2>&1; resolve_project_root") \
+  || lib_sh_answer="<lib.sh resolve_project_root missing or failed>"
+canonical=$(cd "$LRR_ROOT" && bash -c "source '$LIB_REPO_ROOTS'; resolve_project_root") \
+  || canonical="<lib-repo-roots.sh resolve_project_root missing or failed>"
 assert_eq "DRIFT GUARD: lib.sh's resolve_project_root agrees with lib-repo-roots.sh" \
   "$canonical" "$lib_sh_answer"
 
@@ -102,9 +109,26 @@ assert_eq "DRIFT GUARD: both definitions agree on the outside-a-repo return code
 LONE=$(mktemp -d)
 mkdir -p "$LONE/scripts"
 cp "$LIB_SH" "$LONE/scripts/lib.sh"
+# Measure the SOURCE itself, on its own, before running anything from it.
+# `2>&1 >/dev/null` keeps stderr and discards stdout (order matters: stderr is
+# duped to the capture pipe first, then stdout is sent to /dev/null).
+#
+# Exit status alone is not enough. bash keeps going after a failed `source` of
+# a missing sibling, so the regression this section exists to catch — lib.sh
+# growing a `source "$SCRIPT_DIR/lib-<x>.sh"` line — leaves the lone copy
+# exiting 0 with resolve_project_root still defined (it is defined in lib.sh
+# itself) whenever the new sibling feeds some OTHER function. The only visible
+# symptom in that case is the `No such file or directory` every one of the ~17
+# lib.sh-copying fixtures then prints at source time. So assert on the
+# diagnostics too, or the guard passes while those fixtures break.
 rc=0
-out=$(cd "$LRR_ROOT" && bash -c "source '$LONE/scripts/lib.sh' >/dev/null 2>&1; resolve_project_root" 2>&1) || rc=$?
+src_err=$(cd "$LRR_ROOT" && bash -c "source '$LONE/scripts/lib.sh'" 2>&1 >/dev/null) || rc=$?
 assert_eq "lib.sh sources cleanly when copied ALONE into a temp scripts dir (no sibling deps)" "0" "$rc"
+assert_eq "lib.sh's lone copy sources SILENTLY (no unresolved sibling 'No such file' on stderr)" "" "$src_err"
+
+rc=0
+out=$(cd "$LRR_ROOT" && bash -c "source '$LONE/scripts/lib.sh' >/dev/null 2>&1; resolve_project_root") \
+  || { rc=$?; out="<resolve_project_root missing from the lone copy (exit $rc)>"; }
 assert_eq "and resolve_project_root still works from that lone copy" "$LRR_ROOT" "$out"
 
 rm -rf "$LRR_ROOT" "$outside" "$LONE"
