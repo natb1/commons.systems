@@ -185,13 +185,18 @@ export function renderSpendFold(spend: WorkflowSpend[], source: string): string 
  * Read the aggregate at `path`, or throw with the path and the reason. No
  * fallback to an empty document: see the exit-code note at the top of the file.
  */
+/** Narrow an unknown thrown value to a message string without a type cast. */
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function readAggregate(path: string): Record<string, SpendBucket> {
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
   } catch (err) {
     throw new Error(
-      `attribute-spend: cannot read usage aggregate '${path}': ${(err as Error).message}. ` +
+      `attribute-spend: cannot read usage aggregate '${path}': ${errMessage(err)}. ` +
         "Produce one with `.claude/skills/rsi-audit/scripts/aggregate-usage.sh --days <N> " +
         "--json-out tmp/usage-audit.json`.",
     );
@@ -201,7 +206,7 @@ function readAggregate(path: string): Record<string, SpendBucket> {
     doc = JSON.parse(raw);
   } catch (err) {
     throw new Error(
-      `attribute-spend: '${path}' is not valid JSON: ${(err as Error).message}. ` +
+      `attribute-spend: '${path}' is not valid JSON: ${errMessage(err)}. ` +
         "Expected an `aggregate-usage.sh --json-out` document.",
     );
   }
@@ -237,7 +242,7 @@ function main(argv: string[]): void {
   try {
     buckets = readAggregate(path);
   } catch (err) {
-    process.stderr.write(`${(err as Error).message}\n`);
+    process.stderr.write(`${errMessage(err)}\n`);
     process.exit(1);
   }
   process.stdout.write(renderSpendFold(attributeSpend(buckets), path) + "\n");
