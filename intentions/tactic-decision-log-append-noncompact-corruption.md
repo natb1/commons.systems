@@ -54,6 +54,7 @@ execution:
     mergedAt: 2026-08-10T12:55:13Z
     mergeCommitSha: efde7eebd7866eac9f83a153e00889866bdfe1aa
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:

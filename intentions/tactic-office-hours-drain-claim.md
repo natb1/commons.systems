@@ -68,6 +68,7 @@ execution:
     mergedAt: 2026-08-04T06:47:20Z
     mergeCommitSha: edddaad820a127429fdc520515d71bfeeb9d3717
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-office-hours-concurrency-dedup
