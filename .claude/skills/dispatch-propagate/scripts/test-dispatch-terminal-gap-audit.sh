@@ -198,9 +198,9 @@ select_row_template() {
 # The column order the audit depends on, spelled as the producer spells it. Not
 # a fourth hand-kept copy of a prose literal (cf. the ratchet above) — this is
 # the assertion itself, and it is the only place the expected order is written.
-EXPECTED_ROW_TEMPLATE='${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}'
+EXPECTED_ROW_TEMPLATE='${m.score}\t${m.sessionType}\t${m.nodeId}\t${m.since}'
 
-ROW_LABEL="office-hours-select.ts formatQueueRow still returns <rank>\\t<sessionType>\\t<nodeId>\\t<since>"
+ROW_LABEL="office-hours-select.ts formatQueueRow still returns <score>\\t<sessionType>\\t<nodeId>\\t<since>"
 if [[ ! -f "$OFFICE_HOURS_SELECT" ]]; then
   TOTAL=$((TOTAL + 1))
   FAIL=$((FAIL + 1))

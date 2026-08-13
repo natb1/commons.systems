@@ -646,7 +646,13 @@ else
     B_HOLD="the unclaimed-hold enumerator (list-unclaimed-hold-alerts.ts) could not be run"
   else
     HOLD_PARSE_OK=1
-    while IFS=$'\t' read -r H_ID H_SRC H_KIND H_AGE H_TIER H_VALUE; do
+    # Seven columns, per list-unclaimed-hold-alerts.ts's stdout contract:
+    # hold-id, source-id, kind, age-seconds, source-tier, source-band,
+    # source-score. Columns 1-5 have never moved; band/score replaced the old
+    # single `value` column when the resolved rank became the
+    # (tier, band, score, depth) quadruple, with score APPENDED so this read
+    # stays positional.
+    while IFS=$'\t' read -r H_ID H_SRC H_KIND H_AGE H_TIER H_BAND H_SCORE; do
       [[ -n "${H_ID}${H_SRC}" ]] || continue
       # Unparseable is unknown, not clear: a row we cannot read may be the very
       # alert that matters. Both ids also become path components below.
@@ -667,7 +673,7 @@ else
       fi
       HOLD_COUNT=$(( HOLD_COUNT + 1 ))
       HOLD_PAIRS+="$H_ID -> $H_SRC"$'\n'
-      HOLD_READINGS+="$H_ID -> $H_SRC (${H_KIND:-<kind?>}, unclaimed ${H_AGE}s, source ${H_TIER:-<tier?>}/${H_VALUE:-<value?>}); "
+      HOLD_READINGS+="$H_ID -> $H_SRC (${H_KIND:-<kind?>}, unclaimed ${H_AGE}s, source tier ${H_TIER:-<tier?>} band ${H_BAND:-<band?>} rank ${H_SCORE:-<score?>}); "
     done <<<"$HOLD_OUT"
     if [[ "$HOLD_PARSE_OK" -ne 1 ]]; then
       V_HOLD="unknown"

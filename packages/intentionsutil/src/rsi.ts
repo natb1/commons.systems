@@ -12,11 +12,12 @@
 //
 // WHERE EACH SECTION'S SOURCE OF TRUTH LIVES (all of it in the graph):
 //
-//   §1 priorities  — strategy nodes ordered by resolved `(tier, rank)`.
+//   §1 priorities  — strategy nodes ordered by the resolved rank key
+//                    `(tier, band, rank)`.
 //   §2 dispatch    — `attributes.queue_summary` on strategy-graph-native-dispatch
 //                    plus the mechanical phase census of its tactics.
 //   §3 parked      — `attributes.queue_summary` on strategy-attention-surface
-//                    plus `office-hours-select.ts --list` rows (rank-lifted
+//                    plus `office-hours-select.ts --list` rows (band-source
 //                    NOTE lines included — never a hand-rolled park probe).
 //   §4 metrics     — every goal-layer node whose `success_signal.sensor` name
 //                    is REGISTERED in the read-sensors registry, with its
@@ -44,7 +45,7 @@
 
 import { ownTier } from "./schema.js";
 import type { IntentionNode } from "./schema.js";
-import { resolveAttention } from "./attention.js";
+import { compareRankKeyDesc, resolveAttention } from "./attention.js";
 import { deriveGap } from "./sensors.js";
 import { classifyTactic, strategyBacklogBand } from "./census.js";
 
@@ -67,12 +68,13 @@ export const OFFICE_HOURS_STRATEGY_ID = "strategy-attention-surface";
 export const SUMMARY_STALE_DAYS = 7;
 
 /**
- * How many UNLIFTED parks §3 lists. Every rank-lifted park is always shown —
- * those are the critical-path ones. The rest are a long tail (the store carries
- * ~90 parks), so the section shows the highest-ranked few and states how many it
- * dropped rather than reproducing the whole queue.
+ * How many UNBANDED parks §3 lists. Every park that ranks in a band it got from
+ * a parent is always shown — those are the critical-path ones, since a park's
+ * blocked source is one of its parents. The rest are a long tail (the store
+ * carries ~90 parks), so the section shows the highest-ranked few and states how
+ * many it dropped rather than reproducing the whole queue.
  */
-export const PARKED_UNLIFTED_SHOWN = 10;
+export const PARKED_UNBANDED_SHOWN = 10;
 
 // --- Inputs -----------------------------------------------------------------
 
@@ -105,10 +107,12 @@ export interface ExternalLedger {
 /**
  * One parked row as emitted by `office-hours-select.ts --list`. `note` carries
  * the selector's `NOTE —` advisory verbatim when the row has one: that line is
- * how a rank-LIFTED park declares the blocked source it inherited its rank
- * from, which is precisely the critical-path signal §3 exists to surface.
+ * how a BANDED park declares the parent it got its band from — under the
+ * widened attention relation a park's blocked source IS one of its parents, so
+ * that is precisely the critical-path signal §3 exists to surface.
  */
 export interface ParkedItem {
+  /** The row's first column: the park's penalized `score`. */
   rank: number;
   sessionType: string;
   id: string;
@@ -454,27 +458,39 @@ function renderPriorities(nodes: IntentionNode[]): string[] {
     .filter((n) => n.kind === "strategy")
     .map((n) => {
       const attention = resolved.get(n.id);
+      // A strategy of a non-goal-layer kind has no resolved entry; it falls back
+      // to its OWN tier (never a flat 1) and a zero band/score/depth, matching
+      // `projectGoals`' fallback in goals.ts.
       return {
         node: n,
-        tier: attention?.tier ?? ownTier(n),
-        rank: attention?.value ?? 0,
+        key: {
+          tier: attention?.tier ?? ownTier(n),
+          band: attention?.band ?? 0,
+          score: attention?.score ?? 0,
+          depth: attention?.depth ?? 0,
+        },
       };
     })
-    .sort((a, b) => b.tier - a.tier || b.rank - a.rank || a.node.id.localeCompare(b.node.id))
+    .sort((a, b) => compareRankKeyDesc(a.key, b.key) || a.node.id.localeCompare(b.node.id))
     .slice(0, 10);
 
   const out = [
     "## 1. Top author priorities",
     "",
-    "Ordered by the graph's own attention resolution — effective tier first, then",
-    "composed rank (`resolveAttention`, `src/attention.ts`). No hand-ranking: to",
-    "move an item, author an `attention` boost or a tier on its node.",
+    "Ordered by the graph's own attention resolution — the `(tier, band, rank)` key",
+    "`resolveAttention` derives (`src/attention.ts`), tier outermost. `band` is the",
+    "best rank among a node's parents, so a whole cohort under one hot parent sorts",
+    "together before each member's own rank breaks ties inside it. No hand-ranking:",
+    "to move an item, author an `attention` boost or a tier on its node.",
     "",
-    "| # | tier | rank | strategy | open / total tactics |",
-    "|---|---|---|---|---|",
+    "| # | tier | band | rank | strategy | open / total tactics |",
+    "|---|---|---|---|---|---|",
   ];
   strategies.forEach((s, i) => {
-    const band = strategyBacklogBand(nodes, s.node.id);
+    // The BACKLOG band (census.ts) — the share of this strategy's tactics that
+    // are backlogged. Nothing to do with the ranking `band` above; named apart
+    // so the two never read as the same quantity.
+    const backlogBand = strategyBacklogBand(nodes, s.node.id);
     const open = nodes.filter(
       (n) =>
         n.kind === "tactic" &&
@@ -482,8 +498,8 @@ function renderPriorities(nodes: IntentionNode[]): string[] {
         classifyTactic(n) === "open",
     ).length;
     out.push(
-      `| ${i + 1} | ${s.tier} | ${num(s.rank)} | \`${s.node.id}\` — ` +
-        `${clip(s.node.statement, 90)} | ${open} / ${band.total} |`,
+      `| ${i + 1} | ${s.key.tier} | ${num(s.key.band)} | ${num(s.key.score)} | ` +
+        `\`${s.node.id}\` — ${clip(s.node.statement, 90)} | ${open} / ${backlogBand.total} |`,
     );
   });
   out.push("");
@@ -584,29 +600,30 @@ function renderParked(
     ...renderQueueSummary("office-hours", OFFICE_HOURS_STRATEGY_ID, byId, today, flags),
   );
 
-  // Rank-lifted rows first: a park carrying a NOTE inherited its rank from a
-  // blocked source, which is exactly the "what does this park block?" question
-  // §3 exists to answer. Within each group, rank descending, id ascending.
+  // Banded rows first: a park carrying a NOTE ranks in a band it got from a
+  // parent — and a park's blocked source IS one of its parents — which is
+  // exactly the "what does this park block?" question §3 exists to answer.
+  // Within each group, rank descending, id ascending.
   const sorted = [...input.parked].sort(
     (a, b) =>
       Number(b.note !== null) - Number(a.note !== null) ||
       b.rank - a.rank ||
       a.id.localeCompare(b.id),
   );
-  // §3 is the CRITICAL-PATH view, not the whole queue: every rank-lifted park
-  // (each one holds open work) plus the highest-ranked unlifted parks. The
+  // §3 is the CRITICAL-PATH view, not the whole queue: every banded park (each
+  // one hangs off live work) plus the highest-ranked unbanded parks. The
   // remainder is reported as a count with the command that lists it — a cap
   // that is stated is a scope decision; a cap that is silent reads as "this is
   // everything".
-  const lifted = sorted.filter((p) => p.note !== null);
-  const unlifted = sorted.filter((p) => p.note === null);
-  const shownUnlifted = unlifted.slice(0, PARKED_UNLIFTED_SHOWN);
-  const shown = [...lifted, ...shownUnlifted];
+  const banded = sorted.filter((p) => p.note !== null);
+  const unbanded = sorted.filter((p) => p.note === null);
+  const shownUnbanded = unbanded.slice(0, PARKED_UNBANDED_SHOWN);
+  const shown = [...banded, ...shownUnbanded];
   out.push(
     "Canonical source: `office-hours-select.ts --list`, read at the same ref as the",
-    "rest of this render. Parked blockers are already rank-lifted from what they",
-    "block — the `blocks` column names the source a park inherited its rank from,",
-    "which is what makes it critical-path. Never hand-roll this list.",
+    "rest of this render. A parked blocker already ranks in the band of the work it",
+    "blocks — the `blocks` column names the parent a park got its band from, which",
+    "is what makes it critical-path. Never hand-roll this list.",
     "",
     "| rank | type | parked node | since | blocks |",
     "|---|---|---|---|---|",
@@ -614,16 +631,16 @@ function renderParked(
   for (const item of shown) {
     out.push(
       `| ${num(item.rank)} | ${cell(item.sessionType)} | \`${item.id}\` | ${cell(item.since)} | ` +
-        `${liftedSource(item)} |`,
+        `${bandSourceOf(item)} |`,
     );
   }
   if (shown.length === 0) out.push("| — | — | nothing parked | — | — |");
   out.push("");
-  if (unlifted.length > shownUnlifted.length) {
+  if (unbanded.length > shownUnbanded.length) {
     out.push(
-      `Showing every rank-lifted park (${lifted.length}) and the top ` +
-        `${shownUnlifted.length} of ${unlifted.length} unlifted parks by rank. The ` +
-        `remaining **${unlifted.length - shownUnlifted.length}** are not shown here — ` +
+      `Showing every banded park (${banded.length}) and the top ` +
+        `${shownUnbanded.length} of ${unbanded.length} unbanded parks by rank. The ` +
+        `remaining **${unbanded.length - shownUnbanded.length}** are not shown here — ` +
         "`npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list` is the full queue.",
       "",
     );
@@ -631,8 +648,8 @@ function renderParked(
 
   const blockedByParked = countBlockedByParked(input.nodes);
   out.push(
-    `Parked total: **${sorted.length}**, of which **${sorted.filter((p) => p.note !== null).length}** are ` +
-      `rank-lifted from a blocked source. Live nodes held by a \`blocked_by\` edge onto ` +
+    `Parked total: **${sorted.length}**, of which **${banded.length}** rank in a band ` +
+      `they got from a parent. Live nodes held by a \`blocked_by\` edge onto ` +
       `a parked node: **${blockedByParked}**.`,
     "",
   );
@@ -640,16 +657,16 @@ function renderParked(
 }
 
 /**
- * The blocked source a rank-lifted park inherited its rank from, as a table
- * cell. The selector's advisory reads `<id> ranks at tier T/R inherited from
- * blocked source <source> (own: …)`; the source id is the only part §3 needs —
- * the rank is already its own column, and the park's own id is already the row.
- * A note that does not match the expected shape is rendered verbatim rather
- * than dropped, so a selector wording change degrades to noisy, not silent.
+ * The parent a banded park got its band from, as a table cell. The selector's
+ * advisory reads `<id> ranks at tier T band B via <source> (own score S)`; the
+ * source id is the only part §3 needs — the rank is already its own column, and
+ * the park's own id is already the row. A note that does not match the expected
+ * shape is rendered verbatim rather than dropped, so a selector wording change
+ * degrades to noisy, not silent.
  */
-function liftedSource(item: ParkedItem): string {
+function bandSourceOf(item: ParkedItem): string {
   if (item.note === null) return "—";
-  const match = item.note.match(/blocked source (\S+)/);
+  const match = item.note.match(/ via (\S+)/);
   return match === null ? clip(item.note, 160) : `\`${match[1]}\``;
 }
 

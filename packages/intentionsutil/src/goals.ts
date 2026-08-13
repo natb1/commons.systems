@@ -1,5 +1,5 @@
-import type { ResolvedAttention, TermContribution } from "./attention.js";
-import { resolveAttention } from "./attention.js";
+import type { RankKey, ResolvedAttention } from "./attention.js";
+import { compareRankKeyDesc, resolveAttention } from "./attention.js";
 import { ownTier } from "./schema.js";
 import type { IntentionNode, Owner } from "./schema.js";
 import { deriveGap } from "./sensors.js";
@@ -18,8 +18,8 @@ export interface Goal {
   /**
    * The node's derived attention, or null when the node is not goal-layer
    * eligible (no `resolveAttention` entry). Drives the primary sort key and the
-   * band marker in `renderFrontier`; when null, both fall back to the node's
-   * own `ownTier` (never a flat tier 1) and value 0.
+   * rank marker in `renderFrontier`; when null, both fall back to the node's
+   * own `ownTier` (never a flat tier 1) and a zero band/score/depth.
    */
   attention: ResolvedAttention | null;
 }
@@ -63,41 +63,45 @@ export function activeFrontier(nodes: IntentionNode[]): IntentionNode[] {
  * Attention is resolved over the FULL input node list (not just the frontier),
  * because a frontier leaf's flow may be inherited from a non-frontier ancestor
  * (a strategy the leaf serves/parents up to). A frontier node with no resolver
- * entry carries value 0.
+ * entry carries a zero band/score/depth.
  *
  * Sort is a TOTAL order, independent of input order:
- *   1. resolved attention tier DESCENDING (the outermost key — a node with no
- *      resolver entry falls back to its OWN tier, `ownTier(node)`, NOT a flat
- *      1: the frontier admits every non-codified leaf of any kind, while
- *      `resolveAttention` only maps goal-layer kinds, and nothing gates
+ *   1. the shared `compareRankKeyDesc` order over the resolved rank key —
+ *      `(tier, band, score, depth)` descending. A node with no resolver entry
+ *      falls back to its OWN tier, `ownTier(node)`, NOT a flat 1: the frontier
+ *      admits every non-codified leaf of any kind, while `resolveAttention`
+ *      only maps goal-layer kinds, and nothing gates
  *      `attributes.tier`/`bug_fix`/`security` to goal-layer kinds — so a
  *      delegation/virtue/tradition leaf can genuinely carry tier 2 or 3 and a
  *      `?? 1` fallback would silently bury it at the bottom of the list. Same
  *      fallback as the selector's `tierOf` (`router.ts`), so the two consumers
- *      of this axis agree on the same node);
- *   2. then resolved attention value DESCENDING (the derived attention flow
- *      within a tier; a node with no resolver entry has value 0);
- *   3. then gap-present (non-null) before gap-absent;
- *   4. then success_signal-present (non-null) before absent;
- *   5. then `id` ascending (the unique tiebreak guaranteeing totality).
+ *      of this axis agree on the same node. Its other three components fall
+ *      back to 0;
+ *   2. then gap-present (non-null) before gap-absent;
+ *   3. then success_signal-present (non-null) before absent;
+ *   4. then `id` ascending (the unique tiebreak guaranteeing totality).
  *
- * When no node carries an injection or a tier mark anywhere, every tier is 1
- * and every value is 0, so keys 1–2 never discriminate and the order is
- * EXACTLY the pre-attention gap/signal/id order.
+ * When no node carries a boost or a tier mark anywhere, every rank key is
+ * `(1, 0, 0, 0)`, so key 1 never discriminates and the order is EXACTLY the
+ * pre-attention gap/signal/id order.
  *
  * The input array is not mutated (a copy is sorted).
  */
 export function projectGoals(nodes: IntentionNode[]): Goal[] {
   const attention = resolveAttention(nodes);
   const frontier = activeFrontier(nodes);
+  const keyOf = (n: IntentionNode): RankKey => {
+    const resolved = attention.get(n.id);
+    return {
+      tier: resolved?.tier ?? ownTier(n),
+      band: resolved?.band ?? 0,
+      score: resolved?.score ?? 0,
+      depth: resolved?.depth ?? 0,
+    };
+  };
   const sorted = [...frontier].sort((a, b) => {
-    const aTier = attention.get(a.id)?.tier ?? ownTier(a);
-    const bTier = attention.get(b.id)?.tier ?? ownTier(b);
-    if (aTier !== bTier) return bTier - aTier;
-
-    const aVal = attention.get(a.id)?.value ?? 0;
-    const bVal = attention.get(b.id)?.value ?? 0;
-    if (aVal !== bVal) return bVal - aVal;
+    const byRank = compareRankKeyDesc(keyOf(a), keyOf(b));
+    if (byRank !== 0) return byRank;
 
     const aGap = deriveGap(a) !== null ? 0 : 1;
     const bGap = deriveGap(b) !== null ? 0 : 1;
@@ -129,28 +133,6 @@ function formatRank(value: number): string {
 }
 
 /**
- * Render a per-term breakdown suffix (e.g. ` {authored 6, signal 1}`) — the
- * explainability detail behind a composed rank (strategy clarification 11).
- * Absent `terms` (hand-built `ResolvedAttention` literals) renders nothing.
- *
- * A single nonzero `authored` term is suppressed because a nonzero authored
- * contribution always populates `sources`, which `renderFrontier` already
- * surfaces as `[rank N via X]` — the breakdown would be redundant. But
- * `signal` and `capture` never populate `sources`, so a single nonzero
- * `signal`/`capture` term is the value's only explanation and must be shown;
- * otherwise it renders as a bare `[rank N]` indistinguishable from a legacy
- * anonymous boost. So render whenever more than one term is nonzero, OR the
- * sole nonzero term is not `authored`.
- */
-function formatTermBreakdown(terms: TermContribution[] | undefined): string {
-  if (terms === undefined) return "";
-  const nonZero = terms.filter((t) => t.value !== 0);
-  if (nonZero.length === 0) return "";
-  if (nonZero.length === 1 && nonZero[0].term === "authored") return "";
-  return ` {${nonZero.map((t) => `${t.term} ${formatRank(t.value)}`).join(", ")}}`;
-}
-
-/**
  * Render the projected goals as deterministic markdown, one line per goal in
  * `projectGoals` order. The output is byte-stable across repeated calls with
  * the same input: no dates, no wall-clock, no environment data. Ends with a
@@ -164,14 +146,12 @@ function formatTermBreakdown(terms: TermContribution[] | undefined): string {
  * MARKED as such instead of rendering as an unexplained tier-1 line. Tier 1
  * renders no tier marker.
  *
- * Goals with `value > 0` get a rank marker appended after the
+ * A goal whose band or score is nonzero gets a rank marker appended after the
  * `_(owner: … → …)_` segment (and after the tier marker, when present) and
- * before the gap suffix: ` [rank <value> via <sources[0]>]` naming the top
- * contributing source, or ` [rank <value>]` when `sources` is empty. Value 0 /
- * null renders unmarked, so a store with no injection anywhere is
- * byte-identical to the pre-attention render. When more than one term
- * contributes, a ` {term v, term v}` breakdown follows the rank marker for
- * explainability.
+ * before the gap suffix: ` [band <band> rank <score> via <sources[0]>]` naming
+ * the top contributing source, or ` [band <band> rank <score>]` when `sources`
+ * is empty. Band and score both 0 (or a null attention) renders unmarked, so a
+ * store with no boost anywhere is byte-identical to the pre-attention render.
  */
 export function renderFrontier(goals: Goal[]): string {
   if (goals.length === 0) {
@@ -183,13 +163,12 @@ export function renderFrontier(goals: Goal[]): string {
     if (tier > 1) {
       line += ` [tier ${tier}]`;
     }
-    if (attention !== null && attention.value > 0) {
-      const rank = formatRank(attention.value);
+    if (attention !== null && (attention.band > 0 || attention.score > 0)) {
+      const marker = `band ${formatRank(attention.band)} rank ${formatRank(attention.score)}`;
       line +=
         attention.sources.length > 0
-          ? ` [rank ${rank} via ${attention.sources[0]}]`
-          : ` [rank ${rank}]`;
-      line += formatTermBreakdown(attention.terms);
+          ? ` [${marker} via ${attention.sources[0]}]`
+          : ` [${marker}]`;
     }
     const gap = deriveGap(node);
     if (gap !== null) line += ` — gap: ${gap}`;

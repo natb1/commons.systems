@@ -61,10 +61,8 @@ describe("store round-trip", () => {
         is_proxy: false,
       },
       attention: {
-        boost: 4,
-        override: null,
+        boosts: { "1": 4 },
         rationale: "This root draws attention this cycle.",
-        tier: 1,
       },
       phase: null,
       execution: null,
@@ -81,12 +79,12 @@ describe("store round-trip", () => {
     expect(read).toEqual(node);
   });
 
-  it("round-trips a node carrying an override injection", () => {
+  it("round-trips a node carrying boosts in several tiers", () => {
     const dir = tempDir();
     const node: IntentionNode = {
       id: "capped-1",
       kind: "strategy",
-      statement: "A branch capped by an override.",
+      statement: "A branch boosted in more than one tier.",
       owner: "human",
       status: "refining",
       parent: "root-1",
@@ -98,10 +96,8 @@ describe("store round-trip", () => {
       tooling_goals: [],
       success_signal: null,
       attention: {
-        boost: null,
-        override: 0,
-        rationale: "Parked this branch until the blocker clears.",
-        tier: 1,
+        boosts: { "1": 2, "3": 7 },
+        rationale: "Ordinary work now, but it is on the security path.",
       },
       phase: null,
       execution: null,

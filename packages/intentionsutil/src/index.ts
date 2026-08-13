@@ -9,8 +9,13 @@ export type {
   ToolingKind,
   Attention,
 } from "./schema.js";
-export { resolveAttention, computeSignalPath, isSignalUnvalidated } from "./attention.js";
-export type { ResolvedAttention } from "./attention.js";
+export {
+  resolveAttention,
+  computeSignalPath,
+  isSignalUnvalidated,
+  compareRankKeyDesc,
+} from "./attention.js";
+export type { ResolvedAttention, RankKey } from "./attention.js";
 export { officeHoursQueue, openBlockers, selectOfficeHours } from "./officeHours.js";
 export type { QueueMember, OpenBlocker, OfficeHoursSelection } from "./officeHours.js";
 export {

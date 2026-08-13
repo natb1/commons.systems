@@ -142,11 +142,14 @@ export function parseArgs(argv: string[]): Args {
 /**
  * Parse `office-hours-select.ts --list` output into rows.
  *
- * The selector's `--list` mode emits one TAB-separated `rank<TAB>type<TAB>id<TAB>since`
- * row per parked node, and — for a rank-LIFTED park — a following
- * `NOTE — <id> ranks at tier …` line on the SAME stream. The NOTE binds to the
- * row above it, which is how a park declares the blocked source it inherited
- * its rank from. Attaching it to the preceding row (rather than dropping it as
+ * The selector's `--list` mode emits one TAB-separated
+ * `score<TAB>type<TAB>id<TAB>since` row per parked node (four columns, pinned by
+ * `formatQueueRow`; the first is the penalized `score` of the resolved rank
+ * key), and — for a BANDED park — a following
+ * `NOTE — <id> ranks at tier <t> band <b> via <source> (own score <s>)` line on
+ * the SAME stream. The NOTE binds to the row above it, which is how a park
+ * declares the parent it got its band from — and a park's blocked source is one
+ * of its parents. Attaching it to the preceding row (rather than dropping it as
  * chatter) is the whole point of §3: it answers "what does this park block?".
  *
  * Exported for tests, which feed it captured selector output rather than
@@ -178,7 +181,7 @@ export function parseParkedList(stdout: string): ParkedItem[] {
  *
  * BOTH streams are parsed. The selector writes rows to stdout and its
  * `NOTE — <id> ranks at tier …` advisories to STDERR; a render that read stdout
- * alone would drop exactly the rank-lift lines §3 is built around. `spawnSync`
+ * alone would drop exactly the band-source lines §3 is built around. `spawnSync`
  * (not `execFileSync`) is used because it surfaces both captured streams — and
  * the two are interleaved by re-attaching each NOTE to the row it names, so the
  * binding survives the fact that the streams arrive separately.

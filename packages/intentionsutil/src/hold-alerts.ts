@@ -16,10 +16,10 @@
 //      holds whose source is gone, and drops holds whose `blocked_by` edge has
 //      already cleared.
 //   2. `resolveAttention` (./attention.ts), called exactly once, supplies the
-//      `(tier, value)` of the blocked source.
+//      `RankKey` quadruple `(tier, band, score, depth)` of the blocked source.
 //   3. Age comes from the hold's own `office_hours.since`.
 
-import { resolveAttention } from "./attention.js";
+import { compareRankKeyDesc, resolveAttention, type RankKey } from "./attention.js";
 import { listHoldCandidates } from "./hold-sweep.js";
 import type { HoldKind } from "./holds.js";
 import type { IntentionNode } from "./schema.js";
@@ -31,7 +31,10 @@ export interface UnclaimedHoldAlert {
   kind: HoldKind;
   ageSeconds: number;
   sourceTier: number;
-  sourceValue: number;
+  /** The blocked source's `band` — the best score among its parents, in its tier. */
+  sourceBand: number;
+  /** The blocked source's own per-tier `score`. */
+  sourceScore: number;
 }
 
 export interface HoldAlertOpts {
@@ -41,24 +44,6 @@ export interface HoldAlertOpts {
   minAgeSeconds: number;
   /** How many top-ranked live nodes count as "important" for the source gate. */
   topK: number;
-}
-
-/** The two-axis rank consumers order by: tier dominates, value breaks ties. */
-interface Rank {
-  tier: number;
-  value: number;
-}
-
-/** Lexicographic descending compare on `(tier, value)` — tier dominates. */
-function compareRankDesc(a: Rank, b: Rank): number {
-  if (a.tier !== b.tier) return b.tier - a.tier;
-  return b.value - a.value;
-}
-
-/** Whether `(tier, value)` is at or above `cutoff`, lexicographically. */
-function atOrAbove(rank: Rank, cutoff: Rank): boolean {
-  if (rank.tier !== cutoff.tier) return rank.tier > cutoff.tier;
-  return rank.value >= cutoff.value;
 }
 
 /**
@@ -85,20 +70,22 @@ function atOrAbove(rank: Rank, cutoff: Rank): boolean {
  * **Top-K gate.** The pool is every node that is eligible (present in
  * `resolveAttention`'s map — that map holds exactly the goal-layer-eligible
  * nodes, per the `kind-<k>.attributes.goal_layer` test), live (`phase !==
- * "done"`), and unparked (`office_hours === null`). Their `(tier, value)` pairs
- * are sorted lexicographically descending and the Kth entry is the cutoff; a
- * candidate is emitted only when its source's `(tier, value)` is at or above it.
- * With fewer than K such nodes there is no cutoff and every source qualifies.
+ * "done"`), and unparked (`office_hours === null`). Their `RankKey` quadruples
+ * are sorted with the shared `compareRankKeyDesc` and the Kth entry is the
+ * cutoff; a candidate is emitted only when its source's key is at or above it —
+ * `compareRankKeyDesc(rank, cutoff) <= 0`, since that comparator is descending,
+ * so "sorts no later than the cutoff" IS "ranks at or above it". With fewer than
+ * K such nodes there is no cutoff and every source qualifies.
  *
- * Top-K rather than an absolute value floor on purpose: resolved values drift as
+ * Top-K rather than an absolute score floor on purpose: resolved scores drift as
  * the graph changes, so an absolute floor needs periodic retuning, while "is
  * this blocking one of the top K things in the graph" does not.
  *
  * A candidate whose source has no resolved attention (an ineligible source) is
- * skipped — it has no `(tier, value)` to gate or report on, and by construction
- * it is not in the top-K pool either.
+ * skipped — it has no rank key to gate or report on, and by construction it is
+ * not in the top-K pool either.
  *
- * @returns Alerts sorted by source `(tier, value)` descending, then `holdId`
+ * @returns Alerts sorted by the source's rank key descending, then `holdId`
  *   ascending.
  */
 export function listUnclaimedHoldAlerts(
@@ -115,19 +102,22 @@ export function listUnclaimedHoldAlerts(
   const attention = resolveAttention(nodes);
 
   // The top-K pool: eligible (in the resolved map), live, unparked.
-  const pool: Rank[] = [];
+  const pool: RankKey[] = [];
   for (const node of nodes) {
     const resolved = attention.get(node.id);
     if (resolved === undefined) continue; // not goal-layer eligible
     if (node.phase === "done") continue;
     if (node.office_hours !== null) continue;
-    pool.push({ tier: resolved.tier, value: resolved.value });
+    pool.push(resolved);
   }
-  pool.sort(compareRankDesc);
+  pool.sort(compareRankKeyDesc);
   // Fewer than K entries ⇒ no cutoff ⇒ every source qualifies.
   const cutoff = pool.length >= opts.topK ? pool[opts.topK - 1] : null;
 
-  const alerts: UnclaimedHoldAlert[] = [];
+  // The rank key rides alongside each alert for the final sort: the emitted
+  // record reports the source's tier/band/score, but ordering is the FULL
+  // quadruple (depth included), so it agrees with every other consumer.
+  const alerts: { alert: UnclaimedHoldAlert; rank: RankKey }[] = [];
   for (const candidate of listHoldCandidates(nodes)) {
     if (candidate.cls !== "manual") continue;
 
@@ -144,25 +134,26 @@ export function listUnclaimedHoldAlerts(
 
     const sourceRank = attention.get(candidate.sourceId);
     if (sourceRank === undefined) continue; // ineligible source: nothing to rank
-    if (cutoff !== null && !atOrAbove(sourceRank, cutoff)) continue;
+    if (cutoff !== null && compareRankKeyDesc(sourceRank, cutoff) > 0) continue;
 
     alerts.push({
-      holdId: candidate.holdId,
-      sourceId: candidate.sourceId,
-      kind: candidate.kind,
-      ageSeconds,
-      sourceTier: sourceRank.tier,
-      sourceValue: sourceRank.value,
+      alert: {
+        holdId: candidate.holdId,
+        sourceId: candidate.sourceId,
+        kind: candidate.kind,
+        ageSeconds,
+        sourceTier: sourceRank.tier,
+        sourceBand: sourceRank.band,
+        sourceScore: sourceRank.score,
+      },
+      rank: sourceRank,
     });
   }
 
   alerts.sort((a, b) => {
-    const byRank = compareRankDesc(
-      { tier: a.sourceTier, value: a.sourceValue },
-      { tier: b.sourceTier, value: b.sourceValue },
-    );
+    const byRank = compareRankKeyDesc(a.rank, b.rank);
     if (byRank !== 0) return byRank;
-    return a.holdId < b.holdId ? -1 : a.holdId > b.holdId ? 1 : 0;
+    return a.alert.holdId < b.alert.holdId ? -1 : a.alert.holdId > b.alert.holdId ? 1 : 0;
   });
-  return alerts;
+  return alerts.map((a) => a.alert);
 }

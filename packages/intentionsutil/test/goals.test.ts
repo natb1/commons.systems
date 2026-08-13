@@ -181,7 +181,7 @@ describe("projectGoals attention ordering", () => {
       id: "strategy-s",
       kind: "strategy",
       status: "raw",
-      attention: { boost: 10, override: null, rationale: "urgent", tier: 1 },
+      attention: { boosts: { "1": 10 }, rationale: "urgent" },
     });
     // The frontier leaf that inherits the strategy's flow. Highest id, no gap —
     // so gap/id keys alone would rank it LAST.
@@ -200,7 +200,7 @@ describe("projectGoals attention ordering", () => {
       id: "t-eligible",
       kind: "tactic",
       status: "raw",
-      attention: { boost: 10, override: null, rationale: "r", tier: 1 },
+      attention: { boosts: { "1": 10 }, rationale: "r" },
     });
     // kind "note" has no goal_layer flag → not eligible → no resolver entry.
     const ineligible = node({ id: "n-note", kind: "note", status: "raw" });
@@ -208,23 +208,23 @@ describe("projectGoals attention ordering", () => {
     const goals = projectGoals([kindTactic, kindKind, kindNote, eligible, ineligible]);
     const byId = Object.fromEntries(goals.map((g) => [g.node.id, g.attention]));
     expect(byId["t-eligible"]).not.toBeNull();
-    expect(byId["t-eligible"]?.value).toBeGreaterThan(0);
+    expect(byId["t-eligible"]?.score).toBeGreaterThan(0);
     expect(byId["n-note"]).toBeNull();
   });
 
-  it("sorts a tier-2 goal ahead of a tier-1 goal even with a lower raw value", () => {
+  it("sorts a tier-2 goal ahead of a tier-1 goal even with a lower raw score", () => {
     const tier2LowValue = node({
       id: "t-tier2",
       kind: "tactic",
       status: "raw",
-      attention: { boost: 1, override: null, rationale: "r", tier: 1 },
+      attention: { boosts: { "2": 1 }, rationale: "r" },
       attributes: { tier: 2 },
     });
     const tier1HighValue = node({
       id: "t-tier1",
       kind: "tactic",
       status: "raw",
-      attention: { boost: 50, override: null, rationale: "r", tier: 1 },
+      attention: { boosts: { "1": 50 }, rationale: "r" },
     });
 
     const goals = projectGoals([kindStrategy, kindTactic, kindKind, tier1HighValue, tier2LowValue]);
@@ -233,38 +233,65 @@ describe("projectGoals attention ordering", () => {
 });
 
 describe("renderFrontier attention markers", () => {
-  it("emits `[rank <value> via <id>]` for value > 0 and no marker for value = 0", () => {
-    // Drive renderFrontier from Goal literals directly: it reads only `value`
-    // and `sources[0]`, so this decouples the marker assertion from the
+  it("emits `[band <b> rank <s> via <id>]` when band or score is nonzero, and nothing when both are 0", () => {
+    // Drive renderFrontier from Goal literals directly: it reads only `band`,
+    // `score` and `sources[0]`, so this decouples the marker assertion from the
     // resolver's additive-rank math.
     const goals: Goal[] = [
       {
         node: node({ id: "hi-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 20, tier: 1, sources: ["strategy-x"] },
+        attention: {
+          tier: 1,
+          band: 12,
+          score: 20,
+          depth: 1,
+          bandSource: "strategy-x",
+          sources: ["strategy-x"],
+        },
       },
       {
         node: node({ id: "lo-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 0, tier: 1, sources: [] },
+        attention: { tier: 1, band: 0, score: 0, depth: 0, bandSource: null, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
-      "- **hi-goal** — Statement for hi-goal _(owner: human → issue/PR)_ [rank 20 via strategy-x]\n" +
+      "- **hi-goal** — Statement for hi-goal _(owner: human → issue/PR)_ [band 12 rank 20 via strategy-x]\n" +
         "- **lo-goal** — Statement for lo-goal _(owner: human → issue/PR)_\n",
     );
   });
 
-  it("emits a bare `[rank <value>]` marker when sources is empty and value > 0", () => {
+  it("emits a marker with no ` via` suffix when sources is empty", () => {
     const goals: Goal[] = [
       {
         node: node({ id: "r-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 5, tier: 1, sources: [] },
+        attention: { tier: 1, band: 0, score: 5, depth: 0, bandSource: null, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
-      "- **r-goal** — Statement for r-goal _(owner: human → issue/PR)_ [rank 5]\n",
+      "- **r-goal** — Statement for r-goal _(owner: human → issue/PR)_ [band 0 rank 5]\n",
+    );
+  });
+
+  it("emits the marker for a nonzero band even when the node's own score is 0", () => {
+    const goals: Goal[] = [
+      {
+        node: node({ id: "b-goal", status: "raw" }),
+        realization: "issue-or-pr",
+        attention: {
+          tier: 1,
+          band: 8,
+          score: 0,
+          depth: 1,
+          bandSource: "strategy-y",
+          sources: [],
+        },
+      },
+    ];
+    expect(renderFrontier(goals)).toBe(
+      "- **b-goal** — Statement for b-goal _(owner: human → issue/PR)_ [band 8 rank 0]\n",
     );
   });
 
@@ -273,7 +300,7 @@ describe("renderFrontier attention markers", () => {
       {
         node: node({ id: "t1-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 0, tier: 1, sources: [] },
+        attention: { tier: 1, band: 0, score: 0, depth: 0, bandSource: null, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
@@ -286,11 +313,11 @@ describe("renderFrontier attention markers", () => {
       {
         node: node({ id: "t2-goal", status: "raw" }),
         realization: "issue-or-pr",
-        attention: { value: 5, tier: 2, sources: [] },
+        attention: { tier: 2, band: 0, score: 5, depth: 0, bandSource: null, sources: [] },
       },
     ];
     expect(renderFrontier(goals)).toBe(
-      "- **t2-goal** — Statement for t2-goal _(owner: human → issue/PR)_ [tier 2] [rank 5]\n",
+      "- **t2-goal** — Statement for t2-goal _(owner: human → issue/PR)_ [tier 2] [band 0 rank 5]\n",
     );
   });
 

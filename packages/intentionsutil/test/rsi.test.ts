@@ -3,7 +3,7 @@ import type { IntentionNode, OfficeHours } from "../src/schema.js";
 import {
   DISPATCH_STRATEGY_ID,
   OFFICE_HOURS_STRATEGY_ID,
-  PARKED_UNLIFTED_SHOWN,
+  PARKED_UNBANDED_SHOWN,
   RSI_STRATEGY_ID,
   SUMMARY_STALE_DAYS,
   attributeSpend,
@@ -198,14 +198,14 @@ describe("parseParkedList", () => {
     const rows = parseParkedList(
       [
         "55.3\tother\ttactic-a\t2026-08-05",
-        "NOTE — tactic-a ranks at tier 1/55.3 inherited from blocked source tactic-b (own: tier 1/5)",
+        "NOTE — tactic-a ranks at tier 1 band 55.3 via tactic-b (own score 5)",
         "1\trequirement-discovery\ttactic-c\t2026-08-01",
         "",
       ].join("\n"),
     );
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ rank: 55.3, id: "tactic-a", sessionType: "other" });
-    expect(rows[0].note).toContain("blocked source tactic-b");
+    expect(rows[0].note).toContain("via tactic-b");
     expect(rows[1]).toMatchObject({ id: "tactic-c", note: null });
   });
 
@@ -350,18 +350,18 @@ describe("renderRsiPlan", () => {
     ).toBe(false);
   });
 
-  it("shows every rank-lifted park, caps unlifted ones, and states what it dropped", () => {
-    const lifted = parkedRow({
+  it("shows every banded park, caps unbanded ones, and states what it dropped", () => {
+    const banded = parkedRow({
       id: "tactic-hold-x",
       rank: 2,
-      note: "tactic-hold-x ranks at tier 1/2 inherited from blocked source tactic-source (own: tier 1/0)",
+      note: "tactic-hold-x ranks at tier 1 band 2 via tactic-source (own score 0)",
     });
-    const unlifted = Array.from({ length: PARKED_UNLIFTED_SHOWN + 5 }, (_, i) =>
+    const unbanded = Array.from({ length: PARKED_UNBANDED_SHOWN + 5 }, (_, i) =>
       parkedRow({ id: `tactic-park-${String(i).padStart(2, "0")}`, rank: 100 - i }),
     );
-    const md = renderRsiPlan(input({ parked: [...unlifted, lifted] })).markdown;
+    const md = renderRsiPlan(input({ parked: [...unbanded, banded] })).markdown;
     expect(md).toContain("`tactic-hold-x`");
-    // The lift's blocked SOURCE is what the column carries — not the park's own id.
+    // The BAND SOURCE is what the column carries — not the park's own id.
     expect(md).toContain("| `tactic-source` |");
     expect(md).toContain("`tactic-park-00`");
     expect(md).not.toContain("`tactic-park-14`");
@@ -440,7 +440,7 @@ describe("renderRsiPlan", () => {
       node({
         id: "strategy-boosted",
         kind: "strategy",
-        attention: { boost: 50, override: null, rationale: "urgent", tier: 1 },
+        attention: { boosts: { "1": 50 }, rationale: "urgent" },
       }),
     ]);
     const md = renderRsiPlan(input({ nodes })).markdown;
