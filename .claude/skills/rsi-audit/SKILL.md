@@ -199,6 +199,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    - **Per-workflow spend fold**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. Run `npx tsx packages/intentionsutil/scripts/attribute-spend.ts tmp/usage-audit.json` and reproduce its four rows, its TOTAL row, and its verdict line in the report. Like routing recommendations it is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — see "Per-workflow spend fold" below for what the fold measures, what the deviation flag obliges you to do, and what it does not measure.
    - **Parked-population survey**: a separate labeled, **fleet-only** section, rendered on EVERY fleet-scoped run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — it carries no cost-magnitude figure at all, the same reasoning that keeps the spend fold and routing recommendations out of the numbered list. See "Parked-population survey" below for the read procedure, the parse algorithm, and the chosen `blocked`-count denominator.
    - **Routing recommendations**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` (it is a yield lens, not a cost-magnitude one) — do not merge it into the numbered ranked list and do not reorder it by the Step 5 ranking rule. Build it at report-generation time from the `by_phase_outcome` rates slice plus the static phase→model map, exactly as specified in "Rendering routing recommendations in the report" below. Entries tagged `untrusted` are rendered but explicitly excluded from the actionable set. This section does not depend on `DISPATCH_AUDIT_AGGREGATES_ENABLED` — it is produced whether or not the optional Firestore persist path is on.
+   - **Strategy attention recommendations**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — see "Strategy attention recommendations" below for what it recommends, the measured instruments it draws on, and why it writes nothing.
 
 8. **Writes no routing policy, and no product files.** The skill writes no control artifacts, creates NO GitHub issues, and modifies NO dispatch workflow files. The user reads the report and decides what to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172). Step 6's graph ledger write is not covered by this bound: landing the top-ranked opportunities as `tactic-eval-finding-<slug>` nodes through `dispatch-eval-finding` writes to the evaluation-finding ledger, a different graph surface than routing policy (`dispatch-phase-model` / `dispatch-phase-effort`) — it carries a finding statement and its measured magnitude, never a phase→model mapping. The other thing this skill may write is step 9's `.claude/settings.json` remediation — attended, reviewed, and committed by the human. Nothing here, in step 6, or in step 9 loosens the no-routing-policy bound: `.claude/settings.json` is a permissions file, not routing policy; the evaluation-finding ledger is a measurement record, not routing policy; and this skill still never applies a routing recommendation automatically — see "Acting on routing recommendations" below, which that bound continues to govern unchanged.
 
@@ -414,6 +415,74 @@ comment at the top of `dispatch-phase-model`), and it is required by
 strategy-token-economy clarification 10 / condition 3: no audit-driven routing change
 may ever be applied automatically. A future change must not reintroduce an auto-write
 path for either map — any such mechanism would violate that condition.
+
+## Strategy attention recommendations
+
+`strategy-rsi-delegated-prioritization` splits its delegated-prioritization duty in
+two: the model WRITES within-band attention boosts on `owner: ai` tactics, and the
+model RECOMMENDS strategy-level attention boosts toward value throughput, which the
+author ratifies. This section is the second half only. **It writes nothing** — no
+`attention` field on any node, no graph node of any kind. It only names a strategy, the
+measured evidence for reconsidering its rank, and the direction of the suggested
+change; the author decides whether and how much to move it, at office hours, the same
+way step 9's `/fewer-permission-prompts` remediation and the "Routing recommendations"
+section above both stop at recommendation and never self-apply. This preserves the
+existing bound unchanged: the skill never writes attention on a strategy, a virtue, or
+an `owner: human` tactic — it stays true here because nothing is written at all.
+
+**This section depends on no part of today's `Attention` interface shape.** It never
+computes or restates a `band`, an `override`, or a resolved-rank arithmetic result, and
+it never proposes a specific target number. `tactic-attention-namespaced-rank` (`phase:
+implement`) is presently rewriting `interface Attention` itself — deleting
+`attention.override`, deleting `router.ts`'s `effectivePrecedence`, and retiring a
+validateGraph rule — so a recommendation section built against today's band arithmetic
+would be obsolete before an author ever read it. Recommendations here are qualitative
+only: which strategy, what was measured, which direction (raise or lower), and why.
+
+**The measured basis is drawn from instruments this skill already computes — no new
+data source.** Three sources feed a recommendation:
+
+1. **Per-workflow spend fold** (above). Its `SPEND-DEVIATION FLAG` is already a review
+   trigger in its own right when a rival workflow reaches or passes dispatch's
+   price-proxy spend. When the rival workflow's spend traces to a strategy whose
+   attention currently ranks it low relative to the draw it is already producing,
+   that gap is the recommendation: name the strategy, cite the fold's row (workflow,
+   price-proxy share, and whether the deviation flag fired), and recommend the author
+   review raising its attention to match the resources it is already consuming.
+2. **Parked-population survey** (above). A rank-lifted row's `blocks` id names the
+   parked source holding up a live node. When one strategy's subtree recurs as the
+   `blocks` source across multiple lifted rows in a window, its current rank is not
+   translating into throughput — work behind it keeps stalling. Name the strategy,
+   cite the recurring `blocks` id and the count of lifted rows it appears under, and
+   recommend the author review either raising it (clear the backlog) or leaving it
+   (the block is intentional) — the survey does not judge which.
+3. **Ranked lenses** (Step 4). When a lens's top evidence rows (e.g. lens 1's error
+   signatures, lens 5's Opus-on-non-codegen entries, lens 8's payload offenders)
+   repeatedly trace back to sessions or tactics under one strategy, that strategy's
+   subtree is drawing a disproportionate share of the window's ranked spend. Name the
+   strategy, cite the lens number and the specific evidence rows (`price_proxy_usd`
+   magnitude included), and recommend the author weigh whether the strategy's current
+   rank matches that draw.
+
+Render each recommendation as: **strategy id**, **measured basis** (instrument name +
+the specific figure or row cited), and **recommended direction** (raise / lower / no
+change) with a one-line reason. Omit the section's prose (not the heading) when a
+window surfaces no such evidence — a report should say "no strategy attention
+recommendations this window" rather than manufacture one from thin evidence.
+
+**The write half is deliberately not built here, and is not forgotten.** Within-band
+boosts on `owner: ai` tactics, plus the matching `attributes.priority_log` append, are
+`tactic-rsi-audit-prioritization-writer`'s scope (serves
+`strategy-rsi-delegated-prioritization`),
+not this skill's. That tactic is blocked on two measured facts, not a scheduling
+choice: no attention writer exists on `main` today — `boost-node` lived only on a
+branch whose PR was closed, not merged, and abandoned after a 27-attempt fix cap, so
+it is a design reference, not reusable code — and `attributes.priority_log` itself has
+zero code today (no schema entry, no validate-graph rule, no reader, no writer; it is
+prose in eight node files). Building a writer against today's `Attention` shape would
+also be deleted by `tactic-attention-namespaced-rank`'s first unit, per the interface
+rewrite two paragraphs up. The write half stays a recorded, tracked tactic; this
+section is the recommend-only path that is unblocked today.
 
 ## Per-session artifact join
 
