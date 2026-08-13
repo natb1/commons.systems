@@ -56,103 +56,86 @@ attributes:
       window: tactic-attention-namespaced-rank qa phase attempt 4, 2026-08-13
       sensor: aggregate-usage.sh
       measured: 2026-08-13
-    - metric: recurrence_count
+    - metric: stale_selection_requeues
+      value: 10
+      unit: requeues
+      window: tactic-attention-namespaced-rank runs A+B 2026-08-13T14:05..14:31Z
+      sensor: events.jsonl
+      measured: 2026-08-13
+    - metric: runs_halted
       value: 1
+      unit: runs
+      window: tactic-attention-namespaced-rank runs A+B 2026-08-13T14:05..14:31Z
+      sensor: events.jsonl
+      measured: 2026-08-13
+    - metric: launch_delay_s
+      value: 61
+      unit: seconds
+      window: tactic-attention-namespaced-rank review launch 2026-08-13
+      sensor: events.jsonl
+      measured: 2026-08-13
+    - metric: recurrence_count
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-13
 ---
-## What was observed
+## Recurrence — `tactic-attention-namespaced-rank`, review launch, 2026-08-13
 
-`dispatch-ladder` halted a run with exit 12 (`stalled`) **40 seconds after the
-phase it was driving succeeded**, because the worker-start selection gate reads
-the main checkout's working tree while the selector reads `origin/main`.
+The symptom recurred twice in eight minutes, on consecutive runs, either side of
+the `review` phase's launch.
 
-Node `tactic-attention-namespaced-rank`, phase `qa`, run started
-2026-08-13T14:05:13Z (unit `dispatch-ladder-tactic-attention-namespaced-rank`,
-pid 1025134).
-
-Sequence, from `.claude/worktrees/tactic-attention-namespaced-rank.ladder/events.jsonl`
-and the unit's journald log:
-
-- `14:22:27Z` `awaited` / `advanced` (`elapsed_s=1009 await_repolls=0 window_s=1800`).
-  The qa worker's own `graph-commit` had landed `db9e7f2c` — `qa` → `review`,
-  marker `qa-done` — on `origin/main` at `14:19:41Z`.
-- `14:22:35Z` … `14:23:07Z`: six consecutive selection attempts, each logging
-  `stale-selection: phase: selected review but node is now qa`,
-  `requeue_budget` 4 → 0.
-- `14:23:07Z` `halt` / `stalled`, exit 12; systemd records
-  `Consumed 55.447s CPU time over 17min 53.578s wall clock`.
-
-## The mechanism
-
-The two halves of the selection round trip read different stores:
-
-- `graph-select-target` (`.claude/skills/dispatch-propagate/scripts/graph-select-target:476`)
-  snapshots `git archive origin/main intentions` into a temp dir — **fresh**, so
-  it correctly emitted `review`.
-- `provision-node-worktree:129-131` runs
-  `check-node-selection.ts "$NODE_ID" "$SELECTED_PHASE" --dir "$PROJECT_ROOT/intentions"`
-  — the **main checkout's working tree**. That tree was still at `fbb9be83`,
-  three commits behind `origin/main`, where the node's `phase:` is `qa`. The gate
-  therefore reported the transition backwards ("selected review but node is now
-  qa") and refused with exit 12 on every attempt.
-
-`dispatch-ladder-advance:155` does fetch `origin/main`, but a fetch only moves the
-remote-tracking ref; nothing on the advance path fast-forwards the checkout. The
-only `merge --ff-only origin/main` in the driver is inside the reconcile step
-(`dispatch-ladder-run:795-802`), which sits behind the selection lock and is
-never reached when advance keeps returning exit 10.
-
-Reproduced read-only from the main checkout at 2026-08-13T14:4xZ, with the
-checkout still at `fbb9be83`:
+**Run A** (started 14:05:13Z). The `qa` phase advanced cleanly at 14:22:27Z
+(`awaited` / `advanced`, `elapsed_s=1009`). The transition was at `origin/main`
+— `db9e7f2c` reached it at 14:20:39Z per `git reflog show origin/main`. The
+driver then burned its whole requeue budget on the node it had just advanced:
 
 ```
-$ assert-node-selection tactic-attention-namespaced-rank review   # fetches origin/main itself
-2a1976fcd8e77e0729ef066eecdd48298803c5706a11e0e0f9b9b6302b723294   # exit 0 — VALID
-$ assert-node-selection tactic-attention-namespaced-rank qa
-stale-selection: phase: selected qa but node is now review        # exit 12
+14:22:35Z idle qa stale-selection requeue_budget=4
+14:22:41Z idle qa stale-selection requeue_budget=3
+14:22:48Z idle qa stale-selection requeue_budget=2
+14:22:54Z idle qa stale-selection requeue_budget=1
+14:23:00Z idle qa stale-selection requeue_budget=0
+14:23:07Z halt qa stalled  "the requeue budget ran out on repeated
+                            'stale-selection' — the node keeps being
+                            re-selected without progressing"
 ```
 
-i.e. against a fresh store the selection the ladder was refusing is the valid
-one. The refusal is purely an artifact of which directory the gate reads.
+**Run B** (started 14:29:51Z), 6 minutes 44 s later. Identical, from a cold
+start, with no phase yet launched (`phase: null`):
 
-## Why it matters
+```
+14:29:58Z idle stale-selection requeue_budget=4
+14:30:06Z idle stale-selection requeue_budget=3
+14:30:13Z idle stale-selection requeue_budget=2
+14:30:20Z idle stale-selection requeue_budget=1
+14:30:27Z idle stale-selection requeue_budget=0
+14:30:52Z launched review  kind=tactic skill=/review-fix
+```
 
-The failure mode is self-inflicted and phase-independent: the ladder's own worker
-pushes a transition, and that push is precisely what makes the next selection
-un-provisionable until something else fast-forwards the checkout. Nothing in the
-driver does. A run therefore cannot follow a node across more than one graph
-transition unless a `dispatch-select-tick` happens to sync the checkout in
-between — the exact condition `/dispatch-ladder` exists to work without.
+Run B consumed all five requeues and then succeeded 25 s later. So the same
+condition that terminated Run A cleared on its own inside Run B — consistent
+with the entry's diagnosis that the blocker is the **main checkout's working
+tree** lagging `origin/main`, with recovery whenever something else
+fast-forwards it, rather than with anything the driver did.
 
-The halt is also *mislabelled*: exit 12 `stalled` reads as "the worker stopped and
-nothing happened", when in fact the phase completed cleanly (`findings_surfaced 1`,
-`followups_filed 1`, `disposition completed`, marker `qa-done` landed). A person
-reading the halt is sent to diagnose a worker that did its job.
+## Cost measured here
 
-## Existing carrier
+- **10 stale-selection requeues** across the two runs.
+- **One run terminated** (Run A, exit 12 `stalled`) on a phase that had
+  succeeded 40 s earlier.
+- **61 s** of Run B's wall clock (14:29:51 → 14:30:52) spent before the review
+  phase could launch, with zero requeue budget left as a safety margin — one
+  more stale read and Run B would have halted exactly as Run A did.
+- Run A's halt cost a full driver restart: a human or scheduler had to start
+  Run B.
 
-The root cause is already recorded as **`tactic-graph-execute-fresh-main-read`**
-(status `codified`, found 2026-08-05 by the iteration-N+4 invariant audit): "the
-node-selection gate must perform its own origin/main freshness read so every
-caller inherits it — today check-node-selection.ts reads the main checkout's
-working-tree intentions/ store whose freshness is maintained only by
-dispatch-select-tick". That node frames the harm as a worker launched onto a node
-parked on `origin/main`. This occurrence is a second, cheaper-to-observe harm from
-the same defect — a healthy run halting on its own transition — and it lands in a
-lane (`dispatch-ladder`) that did not exist when the node was written.
+## Attribution note
 
-## What would have to change
-
-Either fix direction (a) already recorded on `tactic-graph-execute-fresh-main-read`
-(push the freshness read into `check-node-selection.ts` so every caller inherits
-it, mirroring `tactic-office-hours-select-fresh-main`), or — narrower, and
-ladder-local — have `dispatch-ladder-run` fast-forward the main checkout on the
-advance path as well as the reconcile path, which the driver's own comment at
-`dispatch-ladder-run:791-793` already flags as a deferred `sync_main_checkout`
-helper across its three call sites.
-
-This evaluator records the finding; it does not choose between them and does not
-apply either.
+This occurrence matches the entry's described symptom exactly (repeated
+`stale-selection` on a just-landed transition, until the requeue budget runs
+out) and is on the same driver. It was **not** independently verified that the
+main checkout's working-tree HEAD lagged `origin/main` at 14:22:35Z and
+14:29:58Z — that state is no longer observable. The symptom match is exact; the
+causal attribution is inherited from the entry, not re-proven here.
