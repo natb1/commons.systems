@@ -10,17 +10,28 @@ One path is in the sandbox write-allowlist — `sandbox.filesystem.allowWrite`
 in `.claude/settings.json` — relative to the project root:
 
 - `.git` — the git directory (index, objects, refs, and worktree registrations
-  under `.git/worktrees/`). The worktree checkouts themselves live under the
-  working tree (`.claude/worktrees/`), which is writable by default.
+  under `.git/worktrees/`). The worktree checkouts live under the working tree
+  (`.claude/worktrees/`), but only the session's **own** worktree is writable.
+  The sandbox is a mount namespace with a read-only root; writability comes from
+  per-session rw bind-mounts on that one worktree and on `<repo>/.git`. Nothing
+  mounts `.claude/worktrees/` itself, so a **sibling** worktree's checkout
+  inherits the read-only root.
 
 Most git operations work **without** `dangerouslyDisableSandbox`:
 
 - `git add` / `git commit` — write to the index and objects under the writable `.git` dir.
-- `git worktree add` / `git worktree remove` — register/deregister under
-  `.git/worktrees/` and create/delete the checkout under the writable working tree.
+- `git worktree add` — registers under `.git/worktrees/` and creates the checkout
+  under the working tree. Sandbox-safe only from a session whose own rw mount
+  covers the destination — i.e. from the repo-root checkout. From a
+  **worktree-isolated** session the new checkout lands under
+  `<repo>/.claude/worktrees/`, which that session's mounts do not cover (see
+  above), so it fails read-only and needs `dangerouslyDisableSandbox: true`
+  like any other write there. (`git worktree remove` needs the override from
+  anywhere; see the next section.)
 - `git push` / `git fetch` — use HTTPS to `github.com`, an allowlisted host.
 
-Tree-updating ops (`merge`, `checkout`, `rebase`, `reset`) require care — see the next section.
+Tree-updating ops (`merge`, `checkout`, `rebase`, `reset`, `worktree remove`)
+require care — see the next section.
 
 If the `.git` allowlist entry is missing, the matching write fails read-only —
 e.g. `Unable to create '.git/worktrees/<branch>/index.lock': Read-only file
@@ -28,9 +39,9 @@ system` on a commit.
 
 ## Tree-updating git ops touching read-only paths
 
-`git merge`, `git checkout`, `git rebase`, and `git reset` update the working tree
-**non-transactionally**: they write files one at a time and abort on the first
-failure. When such an op touches files under the sandbox's read-only
+`git merge`, `git checkout`, `git rebase`, `git reset`, and `git worktree remove`
+update the working tree **non-transactionally**: they write files one at a time
+and abort on the first failure. When such an op touches files under the read-only
 `denyWithinAllow` carve-out paths — `.claude/skills/`, `.claude/hooks/`, and the
 other `.claude/` config carve-outs — it:
 
@@ -53,6 +64,27 @@ runs `git fetch origin main && git merge --ff-only origin/main` on the `main`
 worktree. `origin/main` frequently carries `.claude/skills/**` changes (the
 dispatch skills are actively developed), so this sync routinely hits the hazard.
 It must run with `dangerouslyDisableSandbox: true`.
+
+Canonical case: `git worktree remove` on a **sibling** worktree, whose checkout is
+under the read-only root. Sandboxed, it deletes what it can — including the
+target's `.git` file — then aborts:
+
+```
+error: failed to delete '.../tactic-...': Read-only file system
+error: failed to delete '.git/worktrees/tactic-...': Device or resource busy
+```
+
+The `Device or resource busy` half has its own cause: the sandbox overlays
+`/dev/null` onto `.git/worktrees/<name>/config.worktree`, and a mount point cannot
+be unlinked. Retrying does not recover — the second attempt fails validation with
+`'.../.git' is not a .git file, error code 7`, because the first attempt already
+destroyed the file the second validates against. So set
+`dangerouslyDisableSandbox: true` on the *first* attempt. Once partially deleted,
+recover with `rm -rf <path>` then `git worktree prune`.
+
+Run it **without** `--force`, so git's own clean-check still gates the removal, and
+confirm `git rev-list --count origin/main..<branch>` is 0 **after a fresh fetch** —
+a stale local `origin/main` makes an unmerged branch look merged.
 
 ## gh CLI (GitHub API)
 
@@ -152,9 +184,35 @@ should use. The `Bash(npx vitest:*)` wildcard already matches it.
 
 ### `git -C /path` is auto-approved for worktrees
 
-`git -C <path>` is auto-approved by the PreToolUse hook when the path resolves
-to a directory under the worktrees root and the git subcommand is permitted by
-`settings.json`. Paths outside the worktrees directory are rejected.
+Only outside a worktree-isolated session. There, the PreToolUse hook approves
+`git -C <path>` when the path is under the worktrees root and the subcommand is
+permitted by `settings.json`; paths outside it are rejected.
+
+From a **worktree-isolated session, every `git -C` to a path other than its own
+worktree is refused** — including a sanctioned sibling under `.claude/worktrees/`:
+
+```
+This session is isolated in the worktree .../<A>, but this command redirects
+git to the shared checkout via -C. Refusing to run it
+```
+
+That is a Claude Code built-in, a separate and earlier gate than the PreToolUse
+hook, so the hook's approval never reaches it. It keys on the **`-C` flag**, not
+on where the flag points — relocating a scratch checkout under `.claude/worktrees/`
+changes nothing, and the message says "the shared checkout" even when the target is
+a sibling worktree. A second variant refuses compound commands as too complex to
+verify that they stay inside the worktree; break those into plain separate commands.
+
+Alternatives that do work from an isolated session:
+
+- `git worktree list` and `git worktree remove <abs path>` are not blocked — they
+  take a path argument rather than redirecting git.
+- Read committed state from your own worktree: `git show origin/main:<path>`.
+- Compare a foreign checkout's content with path-based tools: `cmp`,
+  `git hash-object <abs path>`, `grep`.
+- Let the target worktree's own scripts manage its repo — invoke its copy by
+  absolute path; `graph-commit`, `dump-node.ts` and `write-node.ts` resolve
+  `REPO_ROOT` from the script's own location.
 
 ### Avoid inline env var prefixes
 

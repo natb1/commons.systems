@@ -4,9 +4,11 @@
 # intentions/tactic-graph-native-dispatch.md).
 #
 #   <issue-num>-<slug>  LEGACY lane (the draining gh queue): placed at
-#                       <git-common-dir>/.claude/worktrees/<branch>/ — anchored
-#                       at the shared common dir (not a per-worktree-nested
-#                       path) so it matches where Claude Code's own
+#                       <repo-root>/.claude/worktrees/<branch>/ — anchored at
+#                       the repo root, i.e. the PARENT of --git-common-dir
+#                       (post-de-baring `.git` is a normal directory inside the
+#                       working tree), not a per-worktree-nested path, so it
+#                       matches where Claude Code's own
 #                       `path:`-based re-entry validator looks, and so a
 #                       session's cwd already contains the `.claude/worktrees/`
 #                       substring the bg-job isolation check short-circuits on
@@ -98,11 +100,16 @@ fi
 if [ "$LANE" = legacy ]; then
   # --git-common-dir is the same absolute path from any worktree of this repo
   # (now `.git` at the repo root; the former `.bare` bare-repo layout was
-  # retired 2026-07-21), so anchoring there gives every legacy worktree a
-  # consistent, non-nested registry root.
+  # retired 2026-07-21), so anchoring at its PARENT gives every legacy worktree
+  # a consistent, non-nested registry root. Take the dirname: post-de-baring
+  # `.git` is a normal directory inside the working tree, so --git-common-dir
+  # is <repo>/.git and the repo root is its parent. Anchoring at the common dir
+  # itself placed worktrees under <repo>/.git/.claude/worktrees, which never
+  # exists — and which worktree-remove.sh then refused to clean up, since it
+  # anchors at the repo root.
   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
     || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
-  NEW_PATH="$GIT_COMMON_DIR/.claude/worktrees/$BRANCH"
+  NEW_PATH="$(dirname "$GIT_COMMON_DIR")/.claude/worktrees/$BRANCH"
 else
   # Graph lane: the harness default location, <project-root>/.claude/worktrees/,
   # where the project root is the worktree with `main` checked out (substrate

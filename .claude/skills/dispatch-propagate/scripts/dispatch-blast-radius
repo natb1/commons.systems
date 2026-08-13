@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# Compute the blast radius of a unified diff: the files OUTSIDE the diff that
+# reference a symbol the diff added, changed, or deleted.
+# Usage: git diff <base>..HEAD | dispatch-blast-radius [--root <dir>]
+#
+# Reads a unified diff on stdin. Prints key=value lines to stdout:
+#   blast_radius_symbols=<n>            symbols extracted from the diff
+#   blast_radius_generic=<n>            symbols dropped as too-generic (see below)
+#   blast_radius_files=<n>              referencing files EMITTED below
+#   blast_radius_truncated=true|false   true when a cap dropped something
+#   blast_radius_symbol=<name>          one line per considered symbol
+#   blast_radius_file=<path>            one line per referencing file, sorted
+#
+# Exit 0 always — this is a classifier, not a check. Empty stdin yields the
+# zero verdict.
+#
+# WHY THIS EXISTS. /review-fix reviews a re-entered PR from the last-reviewed
+# sha rather than from the merge base (dispatch-review-base). A literal
+# `git diff <last-reviewed>..HEAD` cannot see the caller three files away that
+# a changed helper contract just broke — and CI-repair commits from /fix-checks
+# are exactly the class that changes contracts under time pressure. The files
+# this script emits become REQUIRED READING in the reviewers' brief, which is
+# what makes the narrow-diff/wide-context design preserve detection rather than
+# reduce it (strategy-token-economy clarification 50).
+#
+# NOT PURE, deliberately — and the one way this differs from its three
+# siblings on this seam (dispatch-changed-files, dispatch-security-surface,
+# dispatch-api-call-site, all pure stdin->stdout). Finding the referencing
+# sites means reading the working tree. It is READ-ONLY: `grep -rlwF` and
+# nothing else, no git, no network, no writes — so it still needs no
+# `dangerouslyDisableSandbox`.
+#
+# GENERIC-SYMBOL DROP, not a stoplist. A symbol like `run` or `main` matches
+# half the repo, and a reading list nobody can read is the same as no reading
+# list. Rather than hand-maintain a list of names to ignore, the bound is
+# measured: a symbol referenced by more than GENERIC_FILE_THRESHOLD out-of-diff
+# files carries no locality and is dropped, counted in blast_radius_generic.
+# That adapts to the repo instead of to whatever names a past author thought of.
+#
+# CAPS ARE REPORTED, never silent. blast_radius_truncated=true whenever the
+# symbol cap or the file cap dropped anything, so a partial reading list is
+# visible to the reviewer as partial. A silently truncated list reads as
+# "everything relevant", which is the failure mode this flag exists to prevent.
+set -euo pipefail
+
+PROG=$(basename "$0")
+ROOT=.
+
+# Symbols considered, in first-seen order. Beyond this the diff is broad enough
+# that a per-symbol reading list is not the right instrument anyway.
+MAX_SYMBOLS=40
+# A symbol referenced by more than this many out-of-diff files is generic.
+GENERIC_FILE_THRESHOLD=20
+# Total files emitted as required reading.
+MAX_FILES=40
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --root)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --root requires a value" >&2
+        exit 2
+      fi
+      ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "$PROG: unknown argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ! -d "$ROOT" ]]; then
+  echo "$PROG: --root '$ROOT' is not a directory" >&2
+  exit 2
+fi
+
+input=$(cat)
+
+# --- the diff's own files: excluded from the reading list --------------------
+# `+++ b/path` is the post-image header. `/dev/null` (a deletion) is skipped by
+# the pattern itself. Paths are stored with a leading/trailing newline sentinel
+# so a substring test cannot match a path prefix.
+diff_files=$(printf '%s\n' "$input" \
+  | sed -n 's|^+++ b/||p' \
+  | sed 's/[[:space:]].*$//' \
+  | sort -u || true)
+
+# --- changed lines: added AND removed ---------------------------------------
+# Both halves matter. An added line carries a new or re-shaped contract; a
+# removed line carries a deleted one, whose out-of-diff callers are exactly the
+# sites that now fail to resolve. The `+++`/`---` file headers are excluded.
+changed=$(printf '%s\n' "$input" \
+  | grep -E '^[+-]' \
+  | grep -vE '^(\+\+\+|---)' || true)
+
+# --- symbol extraction -------------------------------------------------------
+# Declaration forms across the languages in this repo. Deliberately anchored on
+# DECLARATIONS, not on every identifier: a diff that merely CALLS `foo` has not
+# changed foo's contract, and treating every mentioned identifier as a symbol
+# would make the reading list the whole repo.
+extract() { printf '%s\n' "$changed" | sed -nE "$1" || true; }
+
+symbols=$(
+  {
+    # TS/JS: function / async function / generator
+    extract 's/^[+-].*\b(export[[:space:]]+)?(default[[:space:]]+)?(async[[:space:]]+)?function[[:space:]]+\*?([A-Za-z_$][A-Za-z0-9_$]*).*/\4/p'
+    # TS/JS: const / let / var binding
+    extract 's/^[+-][[:space:]]*(export[[:space:]]+)?(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\3/p'
+    # TS/JS: class / interface / type / enum
+    extract 's/^[+-].*\b(export[[:space:]]+)?(abstract[[:space:]]+)?(class|interface|type|enum)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\4/p'
+    # Go: func, with or without a receiver
+    extract 's/^[+-][[:space:]]*func[[:space:]]+(\([^)]*\)[[:space:]]*)?([A-Za-z_][A-Za-z0-9_]*).*/\2/p'
+    # Go: type
+    extract 's/^[+-][[:space:]]*type[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\1/p'
+    # Bash: name() { ... }  /  function name { ... }
+    extract 's/^[+-][[:space:]]*(function[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*\(\)[[:space:]]*\{.*/\2/p'
+    extract 's/^[+-][[:space:]]*function[[:space:]]+([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*\{.*/\1/p'
+  } | awk 'length($0) >= 3 && !seen[$0]++'
+)
+
+symbol_total=0
+if [[ -n "$symbols" ]]; then
+  symbol_total=$(printf '%s\n' "$symbols" | wc -l | tr -d ' ')
+fi
+
+truncated=false
+if (( symbol_total > MAX_SYMBOLS )); then
+  truncated=true
+fi
+
+# `awk NR<=N`, NOT `head -n N`. `head` exits after N lines and closes the pipe
+# while `printf` is still writing; once the symbol list exceeds the 64KB pipe
+# buffer — reachable on a large delta — `printf` takes SIGPIPE, `pipefail`
+# propagates it, and `set -e` kills the script with NO output at all. The
+# caller's `$(...)` then captures an empty string, so the required-reading list
+# silently disappears on exactly the large diffs that need it. Same SIGPIPE
+# class as the `grep -qE`/`grep -cE` correction in dispatch-api-call-site:37-46;
+# awk reads stdin to EOF, so no stage is ever SIGPIPE'd.
+considered=$(printf '%s\n' "$symbols" | awk -v n="$MAX_SYMBOLS" 'NR<=n')
+[[ -n "$symbols" ]] || considered=""
+
+# --- reference search --------------------------------------------------------
+# `--exclude-dir` takes the DIRECTORY NAME, and is inert when the search target
+# is an expanded glob rather than a directory — so the target stays "$ROOT".
+# `-w` keeps `fooBar` from matching a search for `foo`; `-F` keeps a symbol
+# containing regex metacharacters from being interpreted as a pattern.
+GREP_ARGS=(-rlwF
+  --exclude-dir=.git
+  --exclude-dir=node_modules
+  --exclude-dir=dist
+  --exclude-dir=build
+  --exclude-dir=coverage
+  --exclude-dir=.next
+  --exclude-dir=tmp)
+
+generic=0
+emitted_symbols=""
+hits=""
+
+while IFS= read -r sym; do
+  [[ -n "$sym" ]] || continue
+  # `|| true`: grep exits 1 on no match, which `set -e` would treat as fatal.
+  # Searched from INSIDE $ROOT rather than by passing $ROOT as the target, so
+  # every hit comes back "./<path>" and strips to a ROOT-relative path. That is
+  # what makes the two comparisons below sound: against the diff's own
+  # repo-relative `+++ b/<path>` names, and as a reading list the reviewer can
+  # open. Passing $ROOT as the target would emit "$ROOT/<path>", which matches
+  # neither.
+  refs=$(cd "$ROOT" && grep "${GREP_ARGS[@]}" -- "$sym" . 2>/dev/null || true)
+  refs=$(printf '%s\n' "$refs" | sed 's|^\./||' | grep -v '^$' || true)
+  # Drop the diff's own files — they are already in the reviewer's diff.
+  if [[ -n "$diff_files" ]]; then
+    refs=$(printf '%s\n' "$refs" | grep -vxF -f <(printf '%s\n' "$diff_files") || true)
+  fi
+  ref_count=0
+  if [[ -n "$refs" ]]; then
+    ref_count=$(printf '%s\n' "$refs" | wc -l | tr -d ' ')
+  fi
+  if (( ref_count > GENERIC_FILE_THRESHOLD )); then
+    generic=$(( generic + 1 ))
+    continue
+  fi
+  emitted_symbols+="$sym"$'\n'
+  if (( ref_count > 0 )); then
+    hits+="$refs"$'\n'
+  fi
+done <<<"$considered"
+
+files=$(printf '%s' "$hits" | grep -v '^$' | sort -u || true)
+file_total=0
+if [[ -n "$files" ]]; then
+  file_total=$(printf '%s\n' "$files" | wc -l | tr -d ' ')
+fi
+if (( file_total > MAX_FILES )); then
+  truncated=true
+  # awk, not head — same SIGPIPE reasoning as the symbol cap above.
+  files=$(printf '%s\n' "$files" | awk -v n="$MAX_FILES" 'NR<=n')
+  file_total=$MAX_FILES
+fi
+
+echo "blast_radius_symbols=$symbol_total"
+echo "blast_radius_generic=$generic"
+echo "blast_radius_files=$file_total"
+echo "blast_radius_truncated=$truncated"
+
+if [[ -n "$emitted_symbols" ]]; then
+  printf '%s' "$emitted_symbols" | grep -v '^$' | sed 's/^/blast_radius_symbol=/' || true
+fi
+if [[ -n "$files" ]]; then
+  printf '%s\n' "$files" | sed 's/^/blast_radius_file=/'
+fi

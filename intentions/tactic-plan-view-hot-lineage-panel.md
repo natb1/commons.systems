@@ -17,7 +17,37 @@ reading: null
 serves:
   - strategy-attention-surface
 recovers: []
-clarifications: []
+clarifications:
+  - question: What shipped in the first published cut, and did the recorded
+      honest limit survive contact with the implementation?
+    answer: "SHIPPED 2026-08-13 in PR #3084, inside the published artifact
+      https://claude.ai/code/artifact/2c00af0f-0fdc-404b-b772-de7df6dee7bd:
+      per-ancestor score contribution split into undecomposed and in-flight,
+      a done/total progress readout, the `+ N others` fold at 8, a legend, a
+      table view, and recomputation under the active filter. The delegation
+      limit recorded on this node was SHARPENED by building it: a `recovers`
+      ancestor does not merely read LOW, it does not appear in
+      `ResolvedAttention.sources` AT ALL — the resolver's authored term
+      distributes along parent/serves only, and a delegation feeds the separate
+      capture term as a scalar. So its decomposed share is structurally
+      unavailable rather than small. The panel therefore synthesises the lane
+      from `recovers` edges and renders `0 (until delegation-scoring)`;
+      omitting it would have read as `no capture here`, which is the misreading
+      this node exists to prevent."
+    date: "2026-08-13"
+  - question: How is the share measure verified, given the page is a snapshot?
+    answer: "(2026-08-13.) As a BUILD-TIME assertion, which is what the recorded substrate
+      amendment anticipated. artifacts/plan-view/test/live-store.test.ts checks
+      against the live store that the summed per-ancestor contributions equal
+      the window total, and independently recomputes that total from the rows
+      rather than from the panel's own maps — so a bug that corrupted both
+      halves identically still fails. Scope caveat, stated plainly: the panel
+      follows the active FILTER, which is the lever the page actually has. It
+      does not follow a SCROLL WINDOW, because the table does not virtualize
+      yet and therefore has no scroll window distinct from the filtered set;
+      that half of the recorded scope arrives with
+      tactic-ds-plan-table-primitive."
+    date: "2026-08-13"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -25,7 +55,12 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Delivered and published in PR #3084; held so the router does not
+    select it for a decomposition round while the PR is open. Residual: the
+    scroll-window half of its recorded scope, which depends on
+    tactic-ds-plan-table-primitive."
+  since: "2026-08-13"
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -111,6 +146,35 @@ parent contributes boost 0 until `tactic-attention-delegation-scoring` lands.
 The panel must render this as `0 (until delegation-scoring)` rather than imply
 a delegation is cold — otherwise the panel actively misleads on exactly the
 "where does capture concentrate" question this strategy names.
+
+### Substrate — AMENDED 2026-08-13: this ships inside a published claude artifact
+
+The panel is part of `tactic-plan-view-table`, whose delivery substrate changed
+this date from an office-hours panel to a **published claude artifact** (see
+that node's amended Substrate section and `strategy-owned-web-platform`'s
+artifact-delivery clarifications). Three consequences bind this node
+specifically:
+
+- **Shares are computed at build time, in Node, not in the browser.** The panel
+  renders precomputed contributions rather than recomputing from a live graph
+  read. Its verification below — "asserted against the live store" — is a
+  **build-time** assertion, run in the artifact's test suite against the
+  working clone; it is not a runtime property of the page.
+- **The panel is a snapshot of the same instant as the table.** It carries no
+  independent freshness; the page-level `origin/main` sha and build stamp cover
+  both. A panel that could disagree with its table about which commit it
+  describes would be a defect.
+- **Filtering stays fully client-side.** Filters change panel scope, and the
+  page has no way to fetch anything, so every row and every ancestor the
+  filters can reach must already be in the baked payload. Size this against the
+  16MB page cap when the payload shape is chosen.
+
+`/dataviz`'s palette rules and its validator apply unchanged — the artifact
+renders in the viewer's theme, which has three states (explicit dark, explicit
+light, and system default), so the "selected, not auto-flipped" dark mode the
+skill requires must be authored as tokens on bare `:root` with the dark
+redefinitions guarded, never as a colour whose only definition lives inside a
+media query.
 
 ### Verification
 

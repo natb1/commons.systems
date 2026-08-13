@@ -38,7 +38,10 @@ cr_setup() {
 #   $STUB_DIR/cr-fake-exit        exit code to return (default: 0)
 #   $STUB_DIR/cr-fake-sleep       seconds to sleep before responding (default: 0)
 #   $STUB_DIR/cr-fake-edit-file   path (relative to CWD) to write/touch before
-#                                 responding, modeling a --fix edit
+#                                 responding, modeling a --fix edit. Written
+#                                 BEFORE cr-fake-sleep (not after), so a run
+#                                 killed mid-sleep has already written its edit
+#                                 to disk — cases 29/30 depend on this ordering
 #   $STUB_DIR/cr-fake-crash       if present, the stub kills its own process
 #                                 group (SIGKILL) instead of exiting normally —
 #                                 models a crash that writes no exit-code
@@ -66,14 +69,14 @@ if [[ -f "$STUB_DIR/cr-fake-crash" ]]; then
   kill -9 0
 fi
 
-if [[ -f "$STUB_DIR/cr-fake-sleep" ]]; then
-  sleep "$(cat "$STUB_DIR/cr-fake-sleep")"
-fi
-
 if [[ -f "$STUB_DIR/cr-fake-edit-file" ]]; then
   edit_target="$(cat "$STUB_DIR/cr-fake-edit-file")"
   mkdir -p "$(dirname "$edit_target")"
   echo "edited by fake code-review" >> "$edit_target"
+fi
+
+if [[ -f "$STUB_DIR/cr-fake-sleep" ]]; then
+  sleep "$(cat "$STUB_DIR/cr-fake-sleep")"
 fi
 
 if [[ -f "$STUB_DIR/cr-fake-output" ]]; then
@@ -389,10 +392,18 @@ done
 echo "Test: review-fix SKILL.md Step 1b passes a rev-range --target"
 RF_SKILL="$(cd "$SCRIPT_DIR/../../.." && pwd)/skills/review-fix/SKILL.md"
 assert_eq "SKILL.md: readable" "1" "$([[ -r "$RF_SKILL" ]] && echo 1 || echo 0)"
+# The call site now passes REVIEW_BASE, not MERGE_BASE
+# (tactic-review-delta-base-and-blast-radius): a re-review diffs from the sha the
+# previous pass covered, falling back to MERGE_BASE whenever
+# dispatch-review-base cannot vouch for a narrower one. The row's MEANING is
+# unchanged and this is not a weakening — it pins exactly what it always
+# pinned, that Step 1b passes a RANGE and never a bare commit-ish. The bare-SHA
+# guard below is widened to cover BOTH variable names, so renaming the base
+# cannot be used to slip a bare SHA past it.
 assert_eq "SKILL.md: Step 1b --target is a range" "1" \
-  "$(grep -c -F -- '--target "$MERGE_BASE..HEAD"' "$RF_SKILL" || true)"
+  "$(grep -c -F -- '--target "$REVIEW_BASE..HEAD"' "$RF_SKILL" || true)"
 assert_eq "SKILL.md: no bare-SHA --target call site" "0" \
-  "$(grep -c -E -- '--target "\$MERGE_BASE"' "$RF_SKILL" || true)"
+  "$(grep -c -E -- '--target "\$(REVIEW_BASE|MERGE_BASE)"' "$RF_SKILL" || true)"
 
 # ============================================================================
 # Test 13: a planted summary.txt in --out-dir never short-circuits the review
@@ -1114,6 +1125,222 @@ assert_eq "case28: it says the marker is not an integer" "1" \
 # The property: the winner's bytes are still there, not a zero-byte file.
 assert_eq "case28: the winner's output.txt is not truncated" \
   "$WINNER_BYTES_28" "$(cat "$OUT_DIR_28/output.txt")"
+
+# ============================================================================
+# Test 29: a superseded run's already-written TRACKED-file edit stays visible
+# ============================================================================
+# Guards the branch-(c)/(d') before-image fix: the killed run's edit must not
+# be swallowed into a fresh `git stash create` baseline when it is relaunched.
+# Shape follows case 23 (the closest template for driving branch (c)), plus a
+# middle read of the RELAUNCH's own in-flight run record to assert its
+# before_sha directly, since the final completed summary carries no
+# before_sha field and the record is deleted on completion.
+echo "Test: dispatch-code-review keeps a superseded run's tracked-file edit visible after relaunch"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the killed run (tracked edit)." >"$STUB_DIR/cr-fake-output"
+echo "$CR_REPO/tracked.ts" >"$STUB_DIR/cr-fake-edit-file"
+echo "20" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_29="$CR_REPO/tmp/cr-out-29"
+mkdir -p "$OUT_DIR_29"
+OUT_DIR_29_ABS="$(cd "$OUT_DIR_29" && pwd)"
+CACHE_KEY_29="$(printf '%s' "$OUT_DIR_29_ABS" | sha256sum | cut -d' ' -f1)"
+RUN_FILE_29="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_29.run"
+
+TRACKED_LINES_BEFORE_29=$(wc -l <"$CR_REPO/tracked.ts" | tr -d '[:space:]')
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_29" \
+       --await-seconds 1 --deadline-seconds 120 2>"$TMPDIR_TEST/cr-29a.err"
+) || rc=$?
+assert_eq "case29: first call still in flight, exit 5" "5" "$rc"
+
+old_pid_29="$(sed -n 's/^pid=//p' "$RUN_FILE_29" | head -1)"
+assert_eq "case29: old pid recorded and alive before HEAD moves" "1" \
+  "$([[ -n "$old_pid_29" ]] && kill -0 "$old_pid_29" 2>/dev/null && echo 1 || echo 0)"
+TRACKED_LINES_INFLIGHT_29=$(wc -l <"$CR_REPO/tracked.ts" | tr -d '[:space:]')
+assert_eq "case29: the killed run's edit already landed on disk before the kill" "1" \
+  "$(( TRACKED_LINES_INFLIGHT_29 - TRACKED_LINES_BEFORE_29 ))"
+
+# Advance HEAD via an UNRELATED file — the in-flight run is now reviewing a
+# superseded diff, but tracked.ts already carries its uncommitted edit.
+( cd "$CR_REPO" && echo "advance for case29" >case29-advance.txt \
+    && git add case29-advance.txt && git commit -q -m "advance head for case29" )
+EXPECTED_BEFORE_29="$(cd "$CR_REPO" && git rev-parse HEAD)"
+
+# Reconfigure the stub for the relaunch: no further edit (isolates the
+# assertion to the KILLED run's edit) and a short sleep so this call also
+# lands in flight, letting us read the relaunch's own before_sha directly.
+rm -f "$STUB_DIR/cr-fake-edit-file"
+echo "2" >"$STUB_DIR/cr-fake-sleep"
+printf '%s\n' "Findings from the relaunch (case29)." >"$STUB_DIR/cr-fake-output"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_29" \
+       --await-seconds 1 --deadline-seconds 120 2>"$TMPDIR_TEST/cr-29b.err"
+) || rc=$?
+assert_eq "case29: relaunch call (branch c) still in flight, exit 5" "5" "$rc"
+sleep 0.5
+assert_eq "case29: the killed run's old pid is dead" "0" \
+  "$([[ -n "$old_pid_29" ]] && kill -0 "$old_pid_29" 2>/dev/null && echo 1 || echo 0)"
+
+relaunch_before_29="$(sed -n 's/^before_sha=//p' "$RUN_FILE_29" | head -1)"
+assert_eq "case29: the relaunch's BEFORE is HEAD, not a fresh stash object" \
+  "$EXPECTED_BEFORE_29" "$relaunch_before_29"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_29" \
+       --await-seconds 30 --deadline-seconds 120 2>"$TMPDIR_TEST/cr-29c.err"
+) || rc=$?
+assert_eq "case29: final resumed call completes, exit 0" "0" "$rc"
+assert_eq "case29: the killed run's tracked-file edit appears in touched_file" "1" \
+  "$(grep -c '^touched_file=tracked\.ts$' <<<"$out")"
+assert_eq "case29: the killed run's edit appears as an ADDED line in the patch" "1" \
+  "$(grep -c '^+edited by fake code-review$' "$OUT_DIR_29/fix.patch" || true)"
+calls_29=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case29: exactly two invocations (killed launch + relaunch)" "2" "$calls_29"
+# Restore a clean tree for the next case — the killed run's edit to tracked.ts
+# is deliberately left uncommitted by this case, and later cases assume a
+# clean starting tree (as every earlier case in this suite does).
+( cd "$CR_REPO" && git checkout -- tracked.ts )
+
+# ============================================================================
+# Test 30: a superseded run's UNTRACKED-file snapshot is carried forward
+# ============================================================================
+# Guards the untracked-snapshot half of the same fix: SUPERSEDED_RELAUNCH must
+# skip re-snapshotting untracked files, or a file the killed run created would
+# look pre-existing to the relaunch's fresh snapshot and Step 6's `comm -13`
+# would drop it from the touched-files union. Shape follows case 23 directly
+# (no need for case 29's extra mid-flight read here).
+echo "Test: dispatch-code-review carries a superseded run's untracked-file snapshot across the relaunch"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the killed run (untracked)." >"$STUB_DIR/cr-fake-output"
+UNTRACKED_TARGET_30="$CR_REPO/case30-untracked.txt"
+rm -f "$UNTRACKED_TARGET_30"
+echo "$UNTRACKED_TARGET_30" >"$STUB_DIR/cr-fake-edit-file"
+echo "20" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_30="$CR_REPO/tmp/cr-out-30"
+mkdir -p "$OUT_DIR_30"
+OUT_DIR_30_ABS="$(cd "$OUT_DIR_30" && pwd)"
+CACHE_KEY_30="$(printf '%s' "$OUT_DIR_30_ABS" | sha256sum | cut -d' ' -f1)"
+RUN_FILE_30="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_30.run"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_30" \
+       --await-seconds 1 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-30a.err"
+) || rc=$?
+assert_eq "case30: first call still in flight, exit 5" "5" "$rc"
+
+old_pid_30="$(sed -n 's/^pid=//p' "$RUN_FILE_30" | head -1)"
+assert_eq "case30: old pid recorded and alive before HEAD moves" "1" \
+  "$([[ -n "$old_pid_30" ]] && kill -0 "$old_pid_30" 2>/dev/null && echo 1 || echo 0)"
+assert_eq "case30: the killed run's untracked file already exists before the kill" "1" \
+  "$([[ -f "$UNTRACKED_TARGET_30" ]] && echo 1 || echo 0)"
+
+( cd "$CR_REPO" && echo "advance for case30" >case30-advance.txt \
+    && git add case30-advance.txt && git commit -q -m "advance head for case30" )
+
+rm -f "$STUB_DIR/cr-fake-edit-file"
+echo "0" >"$STUB_DIR/cr-fake-sleep"
+printf '%s\n' "Findings from the relaunch (case30)." >"$STUB_DIR/cr-fake-output"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_30" \
+       --await-seconds 30 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-30b.err"
+) || rc=$?
+assert_eq "case30: relaunch call (new HEAD) exits 0" "0" "$rc"
+sleep 0.5
+assert_eq "case30: the killed run's old pid is dead" "0" \
+  "$([[ -n "$old_pid_30" ]] && kill -0 "$old_pid_30" 2>/dev/null && echo 1 || echo 0)"
+assert_eq "case30: the killed run's untracked file is reported as newly touched" "1" \
+  "$(grep -c '^touched_file=case30-untracked\.txt$' <<<"$out")"
+calls_30=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case30: exactly two invocations (killed launch + relaunch)" "2" "$calls_30"
+
+# ============================================================================
+# Test 31: a tree already dirty at the killed run's OWN launch fails closed
+# ============================================================================
+# Guards the fail-closed guard: when the killed run's before_sha != its own
+# head_sha, the tree was already dirty when IT launched, so HEAD cannot
+# separate those pre-existing edits from the killed run's own edits. Must
+# exit 2 naming both shas, and must never relaunch a second review.
+echo "Test: dispatch-code-review fails closed when the killed run's tree was already dirty at its own launch"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the killed run (dirty-at-launch)." >"$STUB_DIR/cr-fake-output"
+echo "20" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_31="$CR_REPO/tmp/cr-out-31"
+mkdir -p "$OUT_DIR_31"
+OUT_DIR_31_ABS="$(cd "$OUT_DIR_31" && pwd)"
+CACHE_KEY_31="$(printf '%s' "$OUT_DIR_31_ABS" | sha256sum | cut -d' ' -f1)"
+RUN_FILE_31="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_31.run"
+
+# Dirty the tree BEFORE the first launch — this is the uncommitted edit that
+# the killed run's own before-image (a real `git stash create` object) must
+# capture, making its before_sha diverge from its head_sha.
+( cd "$CR_REPO" && echo "case31 pre-existing dirty edit" >>README.md )
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_31" \
+       --await-seconds 1 --deadline-seconds 120 2>"$TMPDIR_TEST/cr-31a.err"
+) || rc=$?
+assert_eq "case31: first call still in flight, exit 5" "5" "$rc"
+
+stale_before_31="$(sed -n 's/^before_sha=//p' "$RUN_FILE_31" | head -1)"
+stale_head_31="$(sed -n 's/^head_sha=//p' "$RUN_FILE_31" | head -1)"
+assert_eq "case31: setup — the first launch's before_sha diverges from its head_sha (dirty at launch)" "1" \
+  "$([[ -n "$stale_before_31" && "$stale_before_31" != "$stale_head_31" ]] && echo 1 || echo 0)"
+
+# Advance HEAD via an UNRELATED file — README.md's uncommitted dirty edit
+# stays uncommitted throughout, exactly as it was at the killed run's launch.
+( cd "$CR_REPO" && echo "advance for case31" >case31-advance.txt \
+    && git add case31-advance.txt && git commit -q -m "advance head for case31" )
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_31" \
+       --await-seconds 30 --deadline-seconds 120 2>"$TMPDIR_TEST/cr-31b.err"
+) || rc=$?
+err_31="$(cat "$TMPDIR_TEST/cr-31b.err")"
+assert_eq "case31: fails closed, exit 2" "2" "$rc"
+assert_eq "case31: stderr names the killed run's before_sha" "1" \
+  "$(grep -c -F -- "$stale_before_31" <<<"$err_31")"
+# Named on TWO lines: the branch-(c) "discarding a superseded run" diagnostic
+# and the fail-closed guard message both echo the killed run's head_sha.
+assert_eq "case31: stderr names the killed run's head_sha" "2" \
+  "$(grep -c -F -- "$stale_head_31" <<<"$err_31")"
+calls_31=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case31: no second review was launched" "1" "$calls_31"
 
 teardown
 

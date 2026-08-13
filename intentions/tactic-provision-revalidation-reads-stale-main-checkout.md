@@ -167,3 +167,84 @@ succeeded. That one was the *await* reading real graph state and drawing the
 wrong conclusion from it; this one is the *provision gate* reading state that is
 not current at all. Fixing the await did not fix this — both halts documented
 above happened after `7410e07f` merged.
+
+## Resolved
+
+Fixed in **PR #3079**, squash-merged `43d13914` on 2026-08-13.
+
+### Direction 2 was taken, not direction 1
+
+The node proposed direction 1 — give `check-node-selection.ts` a `--ref` mode
+and read the node with `git show origin/main:intentions/<id>.md` — as the
+greenfield answer. The implemented fix is **direction 2**: make the checkout
+current before the read. Three reasons, recorded so the choice is not
+re-litigated from the direction list alone:
+
+1. **It fixes every reader of that tree, not one.** Direction 1 corrects the one
+   gate; every other consumer of `$PROJECT_ROOT/intentions` — including the
+   reconcilers that *write* through it — keeps reading a possibly-stale
+   checkout. A `--ref` fix would have had to list "audit the other `--dir`
+   readers" as out of scope, which is a tell.
+2. **Direction 1 is not actually cheap.** It breaks
+   `check-node-selection.ts`'s stated "no git" contract, and the script needs
+   the *whole store* (`listNodesStrict` at `:321`/`:329`/`:351`), so a bare
+   `git show` of one file could not have served it.
+3. **It discharges a follow-up the codebase already owed.**
+   `dispatch-ladder-run:792` recorded "a shared `sync_main_checkout` helper
+   across the three call sites is a deliberately deferred follow-up". The fix is
+   that helper, extended by a fourth call site.
+
+`sync_main_checkout` now lives in `lib.sh:2094` (fetch, then
+`merge --ff-only`, with distinct return codes for fetch-failed vs merge-failed
+so each caller phrases its own escalation) and is wired into all four sites:
+`dispatch-ladder-run:884`, `dispatch-tick:595`, and — the actual fix —
+`provision-node-worktree:161`, **before** the gate rather than after a bare
+fetch. The three pre-existing sites keep their exact prior behaviour; only
+provision's is new.
+
+**Accepted cost, stated plainly:** a dirty or diverged main checkout previously
+produced silently stale reads and now produces a loud refusal. That converts a
+throughput bug into a hard stop. It is the right direction per
+`.claude/rules/code-style.md`, and it is already how `dispatch-ladder-run` and
+`dispatch-tick` treat the same condition — consistent, not novel.
+
+### Direction 3 — what was actually done
+
+Direction 3 asked that the `stale-selection` requeue arm "refresh something".
+It still does not reconcile between attempts, and with the gate fixed it no
+longer needs to — the arm's premise (an identical computation re-run with no
+intervening state change) was a *consequence* of the stale gate, not an
+independent defect.
+
+What did change is the arm's honesty. The halt text no longer asserts "the node
+keeps being re-selected without progressing" — a causal claim the driver never
+established and which was false in both observed cases. It now reports "the
+requeue budget drained on repeated '$REASON'", and
+`dispatch-ladder-advance`'s stderr reason reaches `events.jsonl` alongside the
+budget figure, so the arm names what it saw instead of guessing why. Same exit
+code (12), same disposition (`stalled`).
+
+### The starvation link — the part most likely to be re-discovered
+
+The same defect **suppressed the merged-tree guarantee**. The gate at the old
+`:129` refuses *before* `provision-node-worktree`'s unconditional
+`origin/main` merge into the node worktree (`~:347`) ever runs. That is why a
+phase could execute against a stale skill — the improvements had landed on main
+and the worktree never received them.
+
+This presented as a second, separate bug and is not one. Fixing the gate
+restores skill freshness and early conflict detection for free. Anyone who
+re-encounters "the node worktree is missing a change that merged mid-run"
+should read this section before filing.
+
+### Also landed in the same PR
+
+`dispatch-ladder-run` gained a read-only, **advisory** mid-phase conflict
+prediction (`check_main_conflict_prediction`, `:782`) using
+`git merge-tree --write-tree origin/main "origin/$NODE_ID"`, which writes only
+to the object store and so is safe against a branch a live worker is committing
+to. It reuses the existing poll cadence and is **edge-triggered** — one event on
+a change of verdict, never one per poll. It never gates and never halts; the
+authoritative answer stays provision's real merge at the next phase boundary.
+This closes the remaining gap that a conflicting commit landing *during* a phase
+goes unnoticed until the next provision, which may be an hour later.

@@ -65,7 +65,14 @@ clarifications:
       automatically. The audit-written policy loop is now advisory: it surfaces
       routing recommendations grounded in verified yield metrics, and every
       routing change (demotion, promotion, or effort tuning) requires explicit
-      author approval before implementation. See clarification 10."
+      author approval before implementation. See clarification 10. Amended
+      2026-08-13: SCOPED, not loosened. This bar governs STANDING POLICY — the
+      default a phase runs at for every future run, changed on audit evidence
+      the author has not seen. It does not reach PER-INPUT selection inside an
+      author-fixed band, which moves one run on properties of that run's own
+      diff. Clarification 49 records that carve-out for the review lane,
+      together with the three requirements that keep this bar unweakened; a
+      mechanism missing any of them is not covered by it."
   - question: Do the skill-contract disciplines get recorded, or stay folklore?
     answer: "Recorded, two families. Context discipline: Explore-subagent fan-out
       returning compact findings, clean-context phase boundaries, and model
@@ -1186,6 +1193,315 @@ clarifications:
       made with the author's explicit approval, satisfying condition 3. Carrier:
       tactic-review-effort-max-detached-resume-poll (Unit 2, `--model opus`);
       shipped in PR #3078."
+  - question: On a superseded relaunch, what is the review lane before-image that
+      /code-review --fix diffs against, and what makes the edits it reports
+      attributable?
+    answer: "(Recorded 2026-08-13, author-directed; captured in the graph the same
+      day, after the ruling and after ad-hoc PR #3080 shipped it.) HEAD,
+      carrying the killed run's untracked snapshot forward. This implements
+      clarification 25's existing guarantee for the review lane's own accounting
+      — it is not new policy: the before-image is precisely what makes a
+      `/code-review --fix` run's reported output a mechanical derivation rather
+      than an agent's account of what it changed. The defect it settles: when
+      dispatch-code-review supersedes a still-running review it kills that run,
+      and it then took a FRESH `git stash create` as the new before-image; the
+      killed run held `--permission-mode acceptEdits`, so its partial edits had
+      already landed INSIDE that baseline and Step 6's `git diff` could not see
+      them — the review silently under-reported its own writes. Four parts. (1)
+      The baseline is HEAD, and the killed run's untracked snapshot is carried
+      FORWARD rather than re-taken — re-snapshotting would record files the dead
+      run created as pre-existing and drop them from the union. (2) HEAD is
+      sound because /review-fix Step 1b mandates exclusivity: between the
+      launching call and the collecting call the session does nothing else,
+      which is what makes any uncommitted change at the kill point attributable
+      to the killed run. (3) Carrying the superseded run's before_sha forward
+      was considered and REJECTED — that branch fires precisely because head_sha
+      advanced, so the old stash predates the intervening qa-fix/fix-checks
+      commits and would attribute them to the review, a larger attribution error
+      than the one being repaired. (4) A baseline that cannot be derived FAILS
+      CLOSED, exiting 2 and naming both shas, rather than guessing — per the
+      repo's preference for clear errors over defensive fallbacks. The guarantee
+      extends to the failure paths out of that branch: if the relaunch itself
+      fails to start, the killed run's record must be RESTORED rather than
+      discarded, or the retry re-enters as a first-ever launch, takes a fresh
+      stash, and reintroduces the same under-reporting through the back door.
+      Carrier: ad-hoc PR #3080; no tactic node, because the defect was found and
+      shipped outside the ladder."
+  - question: May the review lane's pre-pass set /code-review's effort per PR, given
+      the no-auto-apply bound on routing changes, and what band may it reach?
+    answer: "(Recorded 2026-08-13 /align round, author-directed.) YES, as PER-INPUT
+      dispatch inside an author-fixed band — and the no-auto-apply bar is SCOPED
+      rather than loosened to admit it. THE DISTINCTION, which the record did
+      not previously draw: clarification 3 (amended 2026-07-16) and the routing
+      condition govern STANDING POLICY — the default every future run gets,
+      changed on audit evidence the author has not seen. A per-input selection
+      is a different act: it moves ONE run on properties of that run's own diff,
+      inside a band the author fixed in advance. The alternative — advisory
+      only, the planner recommends and never sets — was put and DECLINED,
+      because it buys measurement but no throughput this round. THREE
+      REQUIREMENTS keep the bar unweakened, and a mechanism missing any of them
+      is not covered by this ruling: (1) the reachable band is AUTHOR-SET, not
+      skill-chosen, and is not re-openable by the skill; (2) effort `high`
+      (clarification 44) stays the default and is what an absent, failed, or
+      unparseable verdict gets — the fail-open condition added this same day;
+      (3) every deviation records the chosen level AND the planner's rationale,
+      so clarification 46's owed measurement is STRATIFIED rather than
+      confounded. Requirement (3) answers the strongest argument against this
+      whole ruling — that varying effort per PR destroys the clean `high`
+      baseline clarification 46 requires — and it answers it by recording, not
+      by refusing. THE BAND, author-ruled: `low` through `max`, full range,
+      default `high`. CLAUDE RECOMMENDED EXCLUDING `max` AND THE AUTHOR
+      OVERRULED IT; the override is better grounded than the recommendation and
+      is recorded as such rather than as a live objection. The recommendation
+      rested on `max`'s measured profile — 2363 s against a real diff, killed,
+      ZERO BYTES produced, ~$371.54 price proxy totally lost — and on
+      clarification 44 having superseded `max` that same morning. What defeats
+      it is clarification 45, the author's own ruling the same day: an
+      overrunning instrument run is NEVER killed, and the detached harness
+      bounds it at 5400 s instead. The $371.54 figure is the cost of a KILL, and
+      kills no longer happen — so that catastrophic profile belongs to the
+      retired synchronous regime, not to `max`. RESIDUAL EXPOSURE, recorded
+      rather than dismissed: an automatic mechanism can now reach a level whose
+      realized DETACHED cost nobody has measured. That is why requirement (3) is
+      load-bearing rather than bookkeeping. The routing condition requires
+      explicit author approval for every routing change; this round is that
+      approval for the band. Carrier: tactic-review-plan-preflight-skill."
+  - question: What is a re-review's diff base, and what stops a narrowed base from
+      reducing detection?
+    answer: "(Recorded 2026-08-13 /align round, author-directed.) The base narrows
+      to the LAST-REVIEWED SHA; the reviewers' READ ACCESS does not narrow with
+      it. MOTIVATING EVIDENCE, traced end-to-end this session: node
+      tactic-attention-namespaced-rank completed a full /review-fix pass costing
+      3 h 26 min and 32 subagents (marker landed f3e0a632); /fix-checks then
+      pushed ONE CI-repair commit; resolving the fix-interrupt (c49270f1)
+      stripped the `reviewed` marker — correctly, see clarification 51 — and the
+      lane re-entered review and began re-reviewing the ENTIRE PR from
+      merge-base. The waste is the whole prior review, re-performed for one
+      commit. WHY THIS IS LEGAL: the quality-preservation condition names
+      trigger narrowing as a sanctioned structural lever, and clarification 16
+      restates the same at phase level. WHAT WOULD MAKE IT ILLEGAL: a defect
+      whose cause is the INTERACTION between the new delta and untouched code —
+      a helper's contract changes and an unmodified caller three files away
+      breaks — is invisible to a literal `git diff <last-reviewed>..HEAD`. Not
+      hypothetical for the motivating case: /fix-checks repairs under CI
+      pressure are exactly the class that changes contracts. THREE PARTS,
+      required together — shipping the narrowed base without them IS the
+      detection reduction the condition forbids: (1) reviewers keep the whole
+      tree readable and are briefed to follow the delta's blast radius outward;
+      (2) the out-of-diff files referencing any changed symbol are computed
+      MECHANICALLY and named as required reading (clarification 54 records why
+      this is a stdin-to-stdout classifier rather than an LLM analysis); (3)
+      unresolved and deferred findings from the prior review CARRY FORWARD into
+      the re-review pool, so re-scoping cannot silently drop a finding the
+      earlier pass raised. Two alternatives were put and DECLINED: a hard delta
+      where reviewers see only the changed lines (it accepts the interaction
+      blind spot for precisely the change class that most needs it), and
+      narrowing only for review-lane-caused deltas (two code paths and a
+      provenance test that can be wrong, for a narrower saving than part 1
+      already gives). MECHANISM NOTE for a clean session: both lanes read one
+      variable — `MERGE_BASE=$(git merge-base HEAD origin/main)` at
+      .claude/skills/review-fix/SKILL.md:267 — which feeds the built-in's
+      `--target \"$MERGE_BASE..HEAD\"` (Step 1b) and the Workflow's `merge_base`
+      arg, so the narrowing has ONE site, not two. Carrier:
+      tactic-review-delta-base-and-blast-radius."
+  - question: Where does the last-reviewed sha live, given that the `reviewed`
+      marker is stripped when a fix-interrupt resolves?
+    answer: "(Recorded 2026-08-13 /align round, author-directed; the sidecar is
+      author-approved on Claude's recommendation with two verifications
+      explicitly OWED rather than assumed.) A WORKTREE-LOCAL SIDECAR,
+      `.claude/worktrees/<node-id>.review-base`. THE GAP, verified from source
+      this session: nothing records what sha was reviewed. The node lane's
+      completion marker is the bare string `reviewed` in `execution.markers`;
+      the PR lane's is the `dispatch:reviewed` gh label. Neither carries a sha.
+      Worse, packages/intentionsutil/scripts/apply-fix-state.ts:219-227
+      deliberately STRIPS that marker on `--clear-fix` so the re-review actually
+      re-runs (both the selector's phase:review+reviewed emit-guard and
+      check-node-selection's reviewed-marker guard would otherwise skip the
+      node) — correct behaviour, and the direct cause of clarification 50's full
+      re-review. Whatever holds the sha must therefore survive that strip. WHY A
+      SIDECAR: it keeps runtime state out of the graph, which the pace-machinery
+      condition requires and which clarification 45 invoked when it rejected a
+      graph-layer lock for \"putting runtime machinery in the graph\"; and it
+      matches two existing precedents on this exact surface —
+      `.claude/worktrees/<id>.scope-fingerprint` and the `.code-review-lock`
+      sidecar clarification 45 chose. apply-fix-state does not touch it, so the
+      strip cannot erase it. IT FAILS CLOSED: sidecar absent, unreadable, or
+      naming a sha not reachable from HEAD means a full `MERGE_BASE..HEAD`
+      review, never a silently narrow one. This is the ONE place in this round's
+      design that fails closed rather than open, and deliberately — here the
+      cheap outcome is the narrow review, so the safe failure is the expensive
+      one. TWO VERIFICATIONS OWED, flagged by Claude as unverified at ruling
+      time and accepted by the author on those terms: (a) whether these sidecars
+      survive every worktree-sweep path, and (b) how the key is formed for the
+      PR lane, which is not node-id-keyed. Both belong in the carrier's first
+      unit as probes, not as assumptions. TWO ALTERNATIVES DECLINED: recording
+      the sha on the node (most durable, but puts runtime state in the graph
+      against the condition above), and deriving it from the GitHub timeline
+      (breaks for node-lane reviews that deliberately never apply the label, and
+      the verified-attribution condition prefers reading a value at its source
+      over reconstructing it). Carrier:
+      tactic-review-delta-base-and-blast-radius."
+  - question: What may a pre-review planner gate, and what may it never turn off?
+    answer: "(Recorded 2026-08-13 /align round, author-directed.) SEMANTIC TRIGGERS
+      ONLY — never cost-based or yield-based cuts. The planner may narrow a
+      lens's TRIGGER on the semantics of the diff, and may widen one; it may
+      never disable a lens because that lens is expensive or has been low-yield.
+      WHY THE ASYMMETRY: the quality-preservation condition forbids removing a
+      lens that produces confirmed findings, and clarification 18 is a directly
+      worked precedent against the cheaper reading — api-cost was measured at
+      ZERO findings across a window and was RETAINED with its trigger WIDENED,
+      on the ground that \"a zero-finding window is read as sampling error, not
+      as zero yield ... the correct response is more sampling rather than
+      less\". Yield-based pruning was put and DECLINED for a second, independent
+      reason: the lens that would ground it
+      (tactic-audit-review-effort-yield-lens) does not exist, so pruning today
+      would rest on intuition, which the verified-attribution condition makes
+      inadmissible input to a routing decision. NOT NET-NEW MECHANISM: this
+      extends a gate that already runs. `agentFinderSet(surface, app_or_rules,
+      api_call_site)` at .claude/workflows/review-fix.js:597-609 already selects
+      finders from a diff-CONTENT flag (`api_call_site`, emitted by
+      dispatch-api-call-site), per clarification 34's ruling. The planner emits
+      the same shaped flags that function already consumes, plus per-lens on/off
+      WITH a recorded reason, so every gate decision is auditable against the
+      quality-preservation condition. DEFAULT IS ON: an absent or unparseable
+      verdict runs the full roster — the fail-open condition added this same
+      day. Carrier: tactic-review-plan-preflight-skill."
+  - question: Which analyses does the review pre-pass run, and what governs how they
+      combine?
+    answer: "(Recorded 2026-08-13 /align round; Claude-recommended and
+      author-accepted in full. UNMEASURED — no run of any of this exists; the
+      ordering and the raise/lower asymmetry are design judgment, not readings.)
+      EIGHT ANALYSES, six mechanical and two Opus-judgment. The design principle
+      is that a mechanical signal is auditable in a way an LLM verdict is not,
+      and the repo already has three pure stdin-to-stdout classifiers on this
+      exact seam (dispatch-changed-files, dispatch-security-surface,
+      dispatch-api-call-site), so Opus judgment is spent only on what a grep
+      genuinely cannot do. (1) BLAST RADIUS [mechanical] — for each symbol
+      added, changed, or deleted in the delta, find referencing sites OUTSIDE
+      the diff; outputs the out-of-diff files reviewers MUST read (this is what
+      makes clarification 50's narrow-diff/ wide-context work) and raises effort
+      on large fan-out. (2) CONTRACT DELTA [Opus] — did it change a signature,
+      return shape, error or exit path, public export, schema, config default,
+      or CLI flag? Raises effort and forces the analysis-1 reading list to be
+      honoured. (3) IRREVERSIBILITY SURFACE [mechanical] — does it touch
+      migrations, destructive git ops (reset --hard, push --force, rm -rf),
+      deletes, deploy or release config, credentials, billing, or graph writes?
+      HARD FLOOR at `xhigh` regardless of size; overrides every cheapening
+      signal. This is the cost-of-being-wrong axis. (4) CHANGE-CLASS MIX [Opus]
+      — classify hunks as mechanical / test-only / docs / config / new-logic /
+      control-flow / concurrency / error-handling / data-schema; the primary
+      effort driver AND the primary finder gate (all-mechanical tends to `low`,
+      concurrency plus error-handling tends to `xhigh`). (5) PRIOR-FINDING
+      RECURRENCE [mechanical] — does the delta touch lines the PREVIOUS review
+      flagged, or that the finding ledger records against? Raises effort and
+      passes the prior finding into the brief; this is also the mechanism
+      serving clarification 50's carry-forward requirement. (6) TEST-COVERAGE
+      DELTA [mechanical] — production logic changed with no corresponding test
+      change raises effort; test-only additions lower it. (7) DELTA PROVENANCE
+      [mechanical] — authored by /fix-checks, /qa-fix, /code-review --fix, or a
+      human? Lane-authored CI repairs are the recurrence-prone class, and
+      /code-review --fix's OWN edits are the ones no reviewer has ever looked
+      at; raises effort for lane-authored deltas. Motivated directly by
+      clarification 50's incident. (8) SIZE AND DISPERSION [mechanical] — lines
+      added/removed and distinct top-level directories touched. TIE-BREAKER
+      ONLY, listed last and deliberately demoted: size is the obvious wrong
+      primary driver, since a one-line change to an auth predicate outranks a
+      900-line mechanical rename. FOUR GOVERNING RULES, which bind the
+      combination and are the part most likely to be dropped by a later editor.
+      FAIL-OPEN: error, timeout, or unparseable verdict runs today's defaults
+      (`high`, full roster) — never a cheaper review; this is the condition
+      added the same day. BOUNDED: the pre-pass reads the delta once plus the
+      mechanical outputs, never the whole repo, and returns a small structured
+      verdict rather than prose — otherwise the pre-pass becomes the cost it
+      exists to reduce. ASYMMETRIC: raising is any-of, cheapening requires ALL
+      signals to agree — unanimous to go cheap, one hit to go deep. RECORDED:
+      the chosen effort, the finder set, and the rationale are written out,
+      which is clarification 49's requirement (3) and what keeps clarification
+      46's measurement interpretable. Two smaller sets were put and declined: a
+      core four (1-4), and a minimal two (3-4) which was argued against by
+      Claude on the ground that dropping blast radius re-opens the interaction
+      blind spot clarification 50 just closed. Carrier:
+      tactic-review-plan-preflight-skill, except analysis 1, which clarification
+      54 moves to tactic-review-delta-base-and-blast-radius. MODEL PIN, added
+      2026-08-13 by this round's own clause-coverage walk after the interview
+      had otherwise closed: the pre-pass runs as an OPUS subagent, and the pin
+      is EXPLICIT. This was the author's stated requirement (\"an opus
+      subagent\") and it is a routing decision, so the routing condition
+      requires it be recorded here with author approval rather than left in a
+      carrier's draft body — which is where it had survived until this walk. It
+      is pinned rather than inherited for the reason clarification 47
+      established for the review-lane session itself: a nested run does not
+      inherit the launching session's model, so omitting the flag silently
+      accepts a default. Note the shape this produces is the cheap-parent/
+      expensive-child pattern clarification 4 already sanctioned as a special
+      case — the /review-fix parent is not itself Opus-pinned, and one expensive
+      child deciding the depth of a much more expensive stage is the same trade
+      the /align-tactics orchestrator makes. The BOUNDED rule above is what
+      keeps that trade honest: an Opus pre-pass that read the whole repo would
+      cost more than the review depth it saves."
+  - question: "STEELMAN: is a review pre-pass the per-run cleverness that the
+      sanctioned structural lever excludes?"
+    answer: "(Diverged 2026-08-13 /align round, author-directed — and the divergence
+      changed the shape of the work.) THE RIVAL CONCEPTION, sourced from this
+      strategy's own record rather than invented: a pre-pass is a META-OPTIMIZER
+      that spends an Opus pass to decide how to spend an Opus pass, and every
+      such layer must beat the far simpler rival of narrowing the base and
+      tuning the default by hand. Three citations support it — clarification 46
+      DECLINED an auto-reverting effort gate, clarification 18 DECLINED
+      cost-based lens removal, and this strategy's rationale names STRUCTURAL
+      RESTRUCTURING (batching, deduplication, context reuse, trigger narrowing)
+      as the sanctioned lever. On that reading the delta-scoping is sanctioned
+      and the pre-pass is not. WHAT WORKING THROUGH IT SURFACED — a real
+      coupling, not a rhetorical one: clarification 50's
+      narrow-diff/wide-context remedy DEPENDS on the blast-radius analysis,
+      which was originally placed inside the pre-pass. As first shaped, the
+      delta-scoping therefore could not ship safely without the very layer the
+      steelman argues against. THE DIVERGENCE, which resolves it by DECOUPLING
+      rather than by rejecting the steelman: blast radius moves OUT of the
+      pre-pass into its own mechanical classifier — pure stdin-to-stdout,
+      exactly like dispatch-api-call-site and dispatch-security-surface. That
+      makes tactic-review-delta-base-and-blast-radius complete and safe ON ITS
+      OWN, entirely within the sanctioned structural lever, capturing most of
+      the saving; and it makes tactic-review-plan-preflight-skill a separate
+      second step whose value is measured AGAINST THE DELTA-ONLY BASELINE rather
+      than against today's full re-review. The pre-pass must therefore earn its
+      own cost honestly instead of being credited with the delta-scoping's
+      saving — which is the steelman's real demand, granted. Two alternatives
+      were put and DECLINED: adopting the steelman outright and dropping the
+      pre-pass (gives up per-diff effort selection and finder gating entirely),
+      and building both as one coupled change (no independent baseline, so a
+      worse result could not be attributed to either half — clarification 46's
+      \"unmeasured quality bet\" problem, repeated). SEQUENCING CONSEQUENCE for
+      decomposition: tactic-review-plan-preflight-skill is blocked_by
+      tactic-review-delta-base-and-blast-radius, and must not be planned as one
+      PR with it. NO `recovers` EDGE, on the same ground clarification 44
+      recorded: this round deepens reliance on delegation-anthropic-claude's
+      review instrument rather than reducing it — the pre-pass orchestrates
+      /code-review more finely rather than displacing it — recorded here to stay
+      visible per virtue-alignment-of-attachments' every-import-raises-exit-cost
+      clause. AMENDMENT (2026-08-13, author-directed; recorded at implementation
+      time, after the ruling above). THE AUTHOR COLLAPSED THE SEQUENCING RULED
+      HERE. Both tactics shipped in ONE PR (#3087) rather than the pre-pass
+      following the delta-scoping as a separate second step. This is an author
+      ruling, not a defect and not a lane deviation. MEASUREMENT CONSEQUENCE,
+      stated plainly because the record must not imply a baseline that does not
+      exist: the delta-only baseline was NEVER established, so the
+      delta-scoping's saving and the pre-pass's saving landed together and
+      CANNOT be separated retrospectively. The \"must earn its own cost
+      honestly\" demand above — the steelman's real demand, granted at ruling
+      time — is therefore not satisfiable by the measurement route this
+      clarification designed. What carries it instead is clarification 49's
+      requirement (3), the RECORDED effort, finder set and rationale on every
+      pass: it is now the ONLY thing keeping the two savings distinguishable,
+      and is correspondingly more load-bearing than when it was written. It is
+      enforced mechanically rather than by convention — reviewPlanEffort and
+      reviewPlanFinderSet each return a rationale, /review-fix's call site logs
+      both, and test-review-plan-gate.sh asserts every verdict carries a
+      non-empty one. The DECOUPLING this clarification directed was still
+      performed and still holds: blast radius shipped as its own stdin-to-stdout
+      classifier (dispatch-blast-radius) rather than inside the pre-pass, so
+      tactic-review-delta-base-and-blast-radius is complete and safe on its own.
+      Only the SHIPPING SEQUENCE was overridden, not the decoupling."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -1235,11 +1551,15 @@ attributes:
     - the token audit stays runnable and attributable across the router
       migration — a session that cannot be attributed to a node and phase is
       invisible to every control loop here
-    - routing recommendations are grounded only on yield metrics whose
+    - "routing recommendations are grounded only on yield metrics whose
       accounting is verified (the qa fixes_applied gap is open as of
       2026-07-04), and every routing change requires explicit author approval
       before implementation — the audit-written policy loop surfaces
-      recommendations, it never auto-applies (clarification 10)
+      recommendations, it never auto-applies (clarification 10). Scoped
+      2026-08-13 (clarification 49): this bar governs standing policy defaults,
+      not per-input selection inside an author-fixed band — the carve-out holds
+      only while the band is author-set, the default is what a failed or absent
+      verdict gets, and every deviation is recorded with its rationale"
     - pace machinery stays operational config outside the graph
       (strategy-graph-native-dispatch clarification 14); this strategy records
       requirements, not machinery
@@ -1274,5 +1594,13 @@ attributes:
       await boundary, and the node stays locked for the detached run's own
       lifetime independently of whether the launching session survives (Recorded
       2026-08-13)
+    - an efficiency mechanism that selects review depth or lens coverage FAILS
+      OPEN — an error, timeout, absent input, or unparseable verdict runs the
+      unconditional defaults (effort `high`, the full finder roster), never a
+      cheaper or narrower review; a cheapening path reachable by failure is a
+      detection reduction wearing an efficiency label. The one deliberate
+      exception is the review BASE, which fails closed to the full merge-base
+      diff — there the cheap outcome is the narrow review, so the safe failure
+      is the expensive one (Recorded 2026-08-13)
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival

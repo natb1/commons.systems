@@ -18,7 +18,59 @@ reading: null
 serves:
   - strategy-attention-surface
 recovers: []
-clarifications: []
+clarifications:
+  - question: Where is the published artifact, and what runtime contract is it
+      pinned to?
+    answer: "Published 2026-08-13 at
+      https://claude.ai/code/artifact/2c00af0f-0fdc-404b-b772-de7df6dee7bd —
+      the FIRST instance of the claude-artifact delivery practice recorded on
+      strategy-owned-web-platform. Runtime contract 0.1.31. NO runtime
+      capabilities are declared: the page is static, needs neither `downloads`
+      nor `mcp`, and an mcp-declaring page cannot be shared publicly, so
+      declaring one would cost sharing for nothing. Built from 25776b4b on
+      branch artifact-plan-view (PR #3084), a clean tree. To update it, pass
+      THIS url to the Artifact tool — publishing without it creates a SECOND
+      artifact and silently orphans this one, which under graph-native dispatch
+      is the whole reason the url is recorded here rather than remembered.
+      Moving the `contract` pin is a deliberate gesture, never a side effect of
+      editing: omitting the field on a redeploy carries the stored pin
+      forward."
+    date: "2026-08-13"
+  - question: What actually shipped in the first published cut, and what is
+      still owed?
+    answer: "SHIPPED 2026-08-13 (PR #3084): all 431 open-tactic rows with tier, the nested
+      band-spine lineage group, the lane gutter, label chips with the 5-segment
+      phase pip, position-derived ETA with typed unavailable reasons, and
+      tier/label/text filters. The hot-lineage panel shipped with it
+      (tactic-plan-view-hot-lineage-panel). STILL OWED: row virtualization and
+      the sticky span headers it requires — the table renders its full row set,
+      which is exactly what makes literal rowSpan legal today, and
+      `spanRuns` in artifacts/plan-view/src/filters.ts carries the note on what
+      must change when virtualization arrives
+      (tactic-ds-plan-table-primitive). Also owed: the band spine is currently
+      read from the resolver's CONTRIBUTION ORDERING, not from a band-defining
+      parent, because tactic-attention-namespaced-rank has not landed; the
+      switch is a one-function change in src/lineage.ts. Both limits are stated
+      in the page's own footer, not only here — a reader of the artifact should
+      not have to consult the graph to learn what it is not."
+    date: "2026-08-13"
+  - question: Did the node:crypto browser-safety work turn out to be owed after
+      all?
+    answer: "No — confirmed 2026-08-13 by building it. The Node build calls
+      `selectGraphTargets` and `resolveAttention` directly, and
+      artifacts/plan-view/test/live-store.test.ts asserts against the LIVE store
+      that the rendered order equals the router's candidate order exactly. The
+      strictest reading of strategy-attention-surface condition 7 is satisfied
+      literally rather than approximately, and no comparator was reimplemented.
+      One correction to the amended body below: it named
+      `.design-sync/resync.mjs` as the build to reuse. That file does not exist
+      in the repo — `.design-sync/` holds only config.json, conventions.md and
+      NOTES.md; the converter lives in a transient, gitignored `.ds-sync/`
+      working directory. What was actually reusable was the SHAPE documented in
+      NOTES.md (esbuild straight from TypeScript source, no dist/ build, fonts
+      inlined), which is what artifacts/plan-view/scripts/build.mjs
+      implements."
+    date: "2026-08-13"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -26,7 +78,13 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Delivered and published in PR #3084; held so the router does not
+    select it for a decomposition round while the PR is open. Unpark on merge
+    if residual work (row virtualization, the band-spine switch) is to be
+    carried here rather than on tactic-ds-plan-table-primitive and
+    tactic-attention-namespaced-rank."
+  since: "2026-08-13"
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -164,20 +222,53 @@ must **not** change any ETA.
 
 Read rank and selection order from the same resolver and selector the router
 uses. **Do not invent a comparator** — a table that computes its own order can
-drift from the queue it claims to show. Note that `router.ts` is not currently
-browser-safe (it imports `node:crypto` for `strategyFingerprint`), and the
-`@commons-systems/intentionsutil/graph` subpath exports only the fs-free
-modules; making the selection order reachable from the browser is part of this
-node's work.
+drift from the queue it claims to show.
 
-### Substrate that already exists
+### Substrate — AMENDED 2026-08-13: this is a published claude artifact
 
-`office-hours/src/graph-source.ts` is the browser graph read layer: FSA
-directory handle over the local clone, per-file YAML parse and validate,
-`buildTree`, `resolveAttention`, and the clone-staleness guard that
-structurally omits the ranked view past `STALE_CLONE_THRESHOLD_MS`. The plan
-view reads through it and inherits that guard — it must not render rank from a
-stale clone.
+**Supersedes the in-app substrate this node originally carried.** The plan view
+is built as a **published claude artifact**, not an office-hours panel — the
+first instance of the artifact-delivery practice recorded on
+`strategy-owned-web-platform` (see its clarifications on the practice, the
+runtime constraints, and the CI split). The author's framing: prior development
+has been mostly Firebase applications, and this table is meant to be a claude
+artifact instead.
+
+What that fixes, and it is the paragraph this node previously worried about:
+`router.ts` is **not** browser-safe — it imports `node:crypto` for
+`strategyFingerprint`, and the `@commons-systems/intentionsutil/graph` subpath
+exports only the fs-free modules. The original design therefore had to make
+selection order reachable from the browser, i.e. reimplement or re-export it,
+in tension with the "do not invent a comparator" rule above. **That work is no
+longer owed.** The artifact's rows are baked in at build time by a **Node**
+step, which calls `selectGraphTargets` and the resolver *directly*. The
+strictest reading of `strategy-attention-surface` condition 7 is now literally
+satisfied rather than approximately.
+
+What that costs. A published artifact **cannot read the graph at runtime by any
+route** — the capability set is `downloads` and `mcp` only, a strict CSP blocks
+every external host including fetch/XHR, and there is no File System Access
+path. The page is a **snapshot**. It must therefore stamp, prominently, the
+`origin/main` sha and the build timestamp it was built from. That replaces the
+`STALE_CLONE_THRESHOLD_MS` guard inherited from
+`office-hours/src/graph-source.ts`, which no longer applies: there is no live
+clone read to go stale, only a build that has a date. Do **not** port that
+guard; port its *intent*, which is that the reader never mistakes old rank for
+current rank.
+
+`office-hours/src/graph-source.ts` remains the reference for the read shape
+(per-file YAML parse and validate, `buildTree`, `resolveAttention`) even though
+the plan view no longer runs through it — the build step performs the same
+reads in Node, against the working clone rather than an FSA handle.
+
+Build and delivery obligations, from the practice on
+`strategy-owned-web-platform`: source lives in a **workspace** so the
+manifest-derived CI mechanisms cover it with no registration; the build emits
+**one** self-contained file with all CSS/JS inlined; CI runs the artifact
+contract check and a headless from-disk render smoke; a session publishes; and
+the returned **URL and contract pin are recorded on this node** — republishing
+without the existing url creates a second artifact rather than updating the
+live one.
 
 ### Verification
 
@@ -193,3 +284,7 @@ stale clone.
   viewport renders sticky rather than re-rendering as rows stream.
 - The order rendered equals the order `selectGraphTargets` produces, asserted
   against the live store rather than a fixture alone.
+- The built page is exactly one self-contained file, references zero external
+  hosts, and opens from `file://` with the network disabled — the artifact
+  contract check plus the from-disk render smoke.
+- The rendered sha and build timestamp match the commit the build ran against.

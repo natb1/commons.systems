@@ -2053,6 +2053,50 @@ assert_primary_checkout_on_main() {
   return 1
 }
 
+# Fast-forward the main checkout at <project-root> onto origin/main.
+#
+# WHY THIS IS A FUNCTION AND NOT A BARE FETCH. `git fetch` moves REFS ONLY — it
+# never touches a working tree. So anything that then READS that checkout (a
+# store directory under intentions/, a candidate enumeration, a merge base) is
+# reading whatever happened to be checked out last, which may be arbitrarily far
+# behind origin/main. Fetch-without-merge is the defect recorded as
+# tactic-provision-revalidation-reads-stale-main-checkout: provision-node-worktree
+# fetched, then pointed check-node-selection.ts at the unmoved working tree and
+# reported a false `stale-selection` (exit 12) against a perfectly current
+# selection, halting a /dispatch-ladder run twice on 2026-08-13. Callers that
+# READ FROM or WRITE INTO the main checkout call this, never a bare fetch.
+#
+# `--ff-only` doubles as the dirty/diverged-tree guard: a checkout carrying
+# uncommitted changes or local commits refuses to fast-forward, and that is
+# exactly the state no caller may merge into or write from.
+#
+# Args: $1 = the main checkout's path (the project root — what
+#            resolve_main_worktree, or resolve_project_root on the de-bared
+#            layout, prints).
+#
+# Both git calls send their STDOUT to stderr (`1>&2`), the form every call site
+# already used, so nothing here can contaminate the caller's stdout. git's own
+# STDERR is left to inherit the caller's fd 2 — a call site that wants it
+# captured redirects at the call site rather than this function hardcoding it.
+#
+# Returns 0 on a clean fast-forward; 1 if the FETCH failed (origin unreachable,
+# auth, a broken remote); 2 if the MERGE failed (the tree is dirty or diverged).
+# The two are DISTINCT because the escalations differ and each call site phrases
+# its own: a failed fetch is a transient/environment problem, a failed merge is
+# a wedged tree that needs a person.
+#
+# Sandbox: `git merge` updates the working tree non-transactionally, and this
+# repo's checkout contains the read-only `.claude/` carve-outs, so every caller
+# must already run with `dangerouslyDisableSandbox: true`
+# (.claude/rules/sandbox.md, "Tree-updating git ops touching read-only paths").
+# This adds no new requirement — every current call site already required it for
+# the open-coded merge this replaces.
+sync_main_checkout() {
+  local root="$1"
+  git -C "$root" fetch origin main 1>&2 || return 1
+  git -C "$root" merge --ff-only origin/main 1>&2 || return 2
+}
+
 # Print the canonical dispatch selection-lock file path to stdout. An explicit
 # DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup (tests rely on
 # this). Otherwise the lock lives at the shared project-root tmp/ (not a per-
