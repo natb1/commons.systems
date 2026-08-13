@@ -98,62 +98,113 @@ attributes:
       window: fix phase of tactic-attention-namespaced-rank 2026-08-13T18:11:06Z
       sensor: aggregate-usage.sh
       measured: 2026-08-13
+    - metric: since_bound_skew_s
+      value: 13.26
+      unit: s
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z
+      sensor: aggregate-usage.sh + events.jsonl
+      measured: 2026-08-13
+    - metric: phase_price_proxy_dropped_usd
+      value: 25.04
+      unit: usd
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: phase_price_proxy_dropped_fraction
+      value: 0.663
+      unit: fraction
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: phase_turns_dropped_fraction
+      value: 0.629
+      unit: fraction
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: findings_invisible_under_prescribed_bound
+      value: 2
+      unit: findings
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: phases_with_measured_skew
+      value: 4
+      unit: phases
+      window: tactic-attention-namespaced-rank ladder 2026-08-12..2026-08-13
+      sensor: events.jsonl + aggregate-usage.sh
+      measured: 2026-08-13
     - metric: recurrence_count
-      value: 3
+      value: 4
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-13
 ---
-## Third occurrence — this time the drop was total, not partial
+## Fourth occurrence — the dropped row was the only one that explained the halt
 
-Observed 2026-08-13 evaluating the `fix` phase of
+Observed 2026-08-13 evaluating the `review` phase of
 `tactic-attention-namespaced-rank`
-(eval `rsi-eval-tactic-attention-namespaced-rank-fix-1786644666`).
+(eval `rsi-eval-tactic-attention-namespaced-rank-review-1786657321`).
 
-The driver stamped `eval_since_epoch=1786644666` = `2026-08-13T18:11:06Z`, the
+The driver stamped `eval_since_epoch=1786657321` = `2026-08-13T21:42:01Z`, the
 instant it wrote the `launched` line. The phase worker session
-`b3e6cb28-75b4-4e38-b6bc-761977b94c16` (`launch_skill=fix-checks`) has
-`started_at=2026-08-13T18:10:52.342Z` — **13.7 s before the bound**.
+`e68cfcc4-f3b7-4e99-875a-1363aeedcb9e` (`launch_skill=review-fix`) has
+`started_at=2026-08-13T21:41:47.736Z` — **13.26 s before the bound**, the same
+~13 s skew measured on the `qa` and `fix` phases.
 
-Applying the filter exactly as `.claude/skills/rsi/SKILL.md` step 2 prescribes
-returned `0` of 66 rows:
+Applying the filter exactly as `.claude/skills/rsi/SKILL.md` step 2
+prescribes returned **4 of 72 rows**: three subagents and one 0-turn `other`
+row. The worker was dropped, taking with it:
 
-```
-jq --argjson since 1786644666 '[.sessions[]|select(...>= $since)]|length'  ->  0
-```
+- **$25.04** of $37.75 phase price proxy (**66.3%**)
+- **61** of 97 phase turns (**62.9%**)
+- the phase's only `launch_skill`, `artifact.node_id`, `peak_context` (166811),
+  `hit_ratio` (0.943) and `outcome` fields
 
-The two prior occurrences were on fan-out phases (qa, review), where the
-subagents started after the bound and survived, so the loss read as "the worker
-row is missing". **On a phase that launches no subagents the loss is 100 %.**
-Every figure this evaluation owes — 97 turns, 171 641 peak context,
-$31.66 price proxy, $6.33 cost, 0.968 hit ratio, 16 sandbox overrides — was
-dropped, and the SKILL's own guard ("an empty selection is a missing
-measurement... report the lens as unmeasured") would have converted a fully
-measurable phase into seven unmeasured lenses.
+What makes this occurrence worth recording separately from the first three is
+what the dropped row contained. This phase **halted** (ladder exit 12,
+`stalled`). The entire causal chain lives on the worker row and nowhere else:
+its `permission_friction` (`user_rejections: 1`, `sandbox_overrides: 13`), and
+the transcript pointer that leads to the `"User rejected tool use"` record at
+`21:49:38.668Z` which is the reason the phase died.
 
-The offset is systematic, not jitter — the same ~13 s appears on every phase of
-this ladder:
+Read through the prescribed filter, the `review` phase of a halted ladder run
+looks like **$12.71 of anonymous subagent work with no worker, no launch skill,
+and no visible failure** — an evaluation that covers all seven lenses and
+concludes nothing. The two findings landed from this phase
+(`detached-code-review-dies-with-launcher`,
+`unattended-worker-tool-use-rejected-midflight`) are both invisible under the
+prescribed bound and were only reachable by widening it by 60 s.
 
-| phase | `eval_since_epoch` | bound (UTC) | worker `started_at` | offset |
-| --- | --- | --- | --- | --- |
-| qa | 1786629938 | 14:05:38Z | 14:05:24.779Z | −13.2 s |
-| review | 1786631452 | 14:30:52Z | 14:30:38.676Z | −13.3 s |
-| fix | 1786644666 | 18:11:06Z | 18:10:52.342Z | −13.7 s |
+The empty-selection guard in the skill does not fire here, because the
+selection is not empty — it is 4 rows of real subagents. A guard keyed on
+"zero rows" cannot catch a bound that drops exactly the one row that matters.
 
-Because the bound is the `launched` **log** timestamp and the session is born
-before `dispatch-graph-execute` returns for the driver to log it, the bound can
-never precede the worker it selects.
+## Prior occurrences (retained)
 
-Positive control (per the SKILL's own requirement before recording absence): the
-same document, filtered at `>= 1786644600` (18:10:00Z), returns the worker row
-with all fields populated — the instrument can see; only the prescribed bound is
-blind.
+- **First** — `qa` attempt 4: 13.2 s skew, 94.9% of phase price proxy and 97.7%
+  of phase turns excluded.
+- **Second** — `review` phase, launch `2026-08-13T14:30:52Z`: 13.3 s skew,
+  $53.66 worker price proxy excluded (18.7% of a large fan-out phase).
+- **Third** — `fix` phase, launch `2026-08-13T18:11:06Z`: 13.7 s skew, the drop
+  was **total** — 0 of 66 rows selected, 100% of the $31.66 phase spend gone,
+  which *did* trip the empty-selection guard.
+
+The pattern across four phases is consistent: the worker starts ~13–14 s before
+the driver logs `launched`, so the bound the driver hands the evaluator is
+*always* after the worker's `started_at`. This is not a sampling accident; it
+is deterministic.
 
 ## What would have to change
 
-One of: (a) `dispatch-ladder-run` stamps `eval_since_epoch` before spawning the
-worker rather than after logging `launched`; or (b) it passes the worker's
-session id / birth instant instead of a wall clock; or (c) the bound carries a
-documented slack margin and the SKILL's filter subtracts it. This entry records
-the defect; the choice belongs to the script's author.
+The driver should stamp `eval_since_epoch` at the moment it **spawns** the
+worker rather than after launch verification, or hand the evaluator the phase
+worker's session id directly. Failing either, the skill's prescribed filter
+needs a documented back-off (e.g. `since - 60`) — but a back-off is a
+workaround that widens into the previous phase's tail, so the stamp is the
+right fix.
+
+Verifiable afterwards: for any phase, `min(started_at)` over the selected
+sessions should be ≥ the launch and the selection should contain exactly one
+row whose `type` is `worker`.
