@@ -454,9 +454,22 @@ const tokenEconomySensor: Sensor = {
 // distinct sampled store states), or a per-sample `skipped` token (that
 // historical ref's store does not read/validate).
 
-/** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
+/**
+ * The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch.
+ * Load-bearing: this string is the registry key the anti-drift test
+ * (lifecycle-sensor.test.ts) compares character-for-character against the
+ * node's live `success_signal.sensor` frontmatter. Any edit to that field
+ * (including via /align) must be mirrored here in the same round.
+ *
+ * The trailing clause below — "a park-cause reading over office_hours.reason
+ * across parked nodes counts /align-tactics parks attributable to an
+ * upstream recording round's own record gap" — was added to the node prose
+ * by a later /align round and has NO corresponding reading implemented in
+ * this file yet. That is a known, separate gap; this constant only keeps the
+ * registry name in sync with the node text, it does not add the reading.
+ */
 export const LIFECYCLE_SENSOR_NAME =
-  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions";
+  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions; and a park-cause reading over office_hours.reason across parked nodes counts /align-tactics parks attributable to an upstream recording round’s own record gap (the reading that surfaced three such parks on 2026-08-12)";
 
 /** The band the recorded threshold declares ("at or below 35%"). */
 export const BACKLOG_BAND_PCT = 35;

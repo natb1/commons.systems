@@ -903,6 +903,6 @@ describe("compareRankKeyDesc", () => {
     expect(child?.score).toBe(parent?.score);
     expect(child?.depth).toBe(1);
     expect(parent?.depth).toBe(0);
-    expect(compareRankKeyDesc(child!, parent!)).toBeLessThan(0);
+    expect(compareRankKeyDesc(child!, parent!)).toBeLessThan(0); // type-safety-ok: the toBeDefined() assertions on parent and child above already proved both are non-null; Map.get()'s return type just doesn't narrow across separate expect() statements
   });
 });

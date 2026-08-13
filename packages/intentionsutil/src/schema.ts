@@ -131,7 +131,7 @@ export interface ToolingGoal {
  *    tier — treating a missing tier as 0 is a RESOLVER-time convention, not a
  *    storage-time one.
  *  - A plain object, never a `Map`: nodes are serialized with `yaml.stringify`
- *    (`src/store.ts`) and re-serialized as JSON into the office-hours seed.
+ *    (`src/store.ts`) and re-serialized to JSON into the office-hours seed.
  *
  * Valid only on goal-layer kinds (those whose kind node sets
  * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
