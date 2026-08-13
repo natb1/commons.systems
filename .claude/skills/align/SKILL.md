@@ -494,10 +494,18 @@ JSON
 npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic-draft.json"
 ```
 
-No `phase` field (equivalently `phase: draft`) marks it as retained
-context, not selectable work — the router never selects a draft tactic and
-it does not count as a child for the strategy's `/align-tactics`
-eligibility. If the byproduct is more than a one-line statement, follow
+No `phase` field (equivalently `phase: draft`) marks it as **undecomposed
+work whose next step is an `/align-tactics` session** — not executable phase
+work, but not inert either. The router **does** select a draft tactic,
+emitting it at the `align-tactics` directive rung
+(`packages/intentionsutil/src/router.ts`'s frozen-tactic candidate loop),
+subject to three gates: `office_hours` must be null (so a born-parked review
+item from Step 2's deferral mechanics is skipped), its blockers must all be
+`done`, and it must not be named as another tactic's `parent` (a permanent
+subtree container is skipped rather than surfaced as an undecomposed draft).
+A draft does **not** count as a child for the strategy's `/align-tactics`
+eligibility — a strategy with only draft children still emits its own
+fresh-round candidate, and the two compete by rank. If the byproduct is more than a one-line statement, follow
 with a direct `Edit` of the node body (everything after the closing `---`
 fence) to carry the fuller context — `writeNode` preserves an existing
 tactic body verbatim across later frontmatter-only rewrites, so this
