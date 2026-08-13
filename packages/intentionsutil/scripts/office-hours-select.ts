@@ -178,9 +178,7 @@ export function formatDisposition(
  * `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit` reads
  * these rows with `IFS=$'\t' read -r _rank _stype nid _since` to enumerate the
  * parked population, and misparses silently on a reorder — see the
- * LOAD-BEARING note in this file's header block. A THIRD lives in
- * `packages/intentionsutil/scripts/render-rsi-plan.ts` (`parseParkedList`),
- * which splits on TAB and requires at least four fields.
+ * LOAD-BEARING note in this file's header block.
  * `.claude/skills/dispatch-propagate/scripts/test-dispatch-terminal-gap-audit.sh`
  * ratchets the template literal below: it extracts the returned string from
  * this source file and fails if the four columns move.
