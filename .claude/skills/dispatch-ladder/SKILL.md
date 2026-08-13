@@ -131,9 +131,20 @@ from `dispatch-tick`. Both are reused verbatim — no wrapper, no variant policy
   escalation path deliberately declares no `node-terminal` marker: it writes
   `$CLAUDE_JOB_DIR/office-hours-reason` and leaves the park to this sweep.
   Without it, `dispatch-self-close` holds the job for want of a marker,
-  `dispatch-ladder-await` reads the hold as `throw <id> held-session`
-  (exit 11), and the node stays unselectable on every later run because
+  `dispatch-ladder-await` reads the hold as `held-observing` (exit 21), and the
+  node stays unselectable on every later run because
   `worktree_has_live_session` is name-keyed.
+
+The second sweep is also run **again on every `held-observing` answer**, and
+that is what makes it reachable at all. The sweep needs
+`DISPATCH_TERMINAL_DISPOSITION_GRACE_S` (300s by default) of idle before it will
+park anything, so a driver that halted on the first held poll could only ever
+run its own healer *after* the halt. Instead the driver re-runs both sweeps and
+re-polls for up to `HELD_GRACE_S` (default 420s, comfortably clear of that
+300s), after which the next `await` answers `throw <id> parked` — a terminus a
+person can read. It is a bounded wait on one named script, not a retry: the
+phase is never relaunched, and a hold nothing heals still halts 11 when the
+window runs out.
 
 Both are ordinarily safe to leave to the heartbeat, because the heartbeat runs
 again in a minute. This driver exists for the host where it does not — so it is
@@ -249,7 +260,7 @@ disposition; the journal says which script produced it.
 | 0 | `complete` / `pruned` | run the acceleration review, report. |
 | 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. |
 | 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. |
-| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or one of the two failed-verify tokens. `launch-unverified`: the spawn reported success, the daemon **answered**, and no session named for the node was in it (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot) — real evidence of a phantom spawn, so the claim is released before the throw. `launch-unverifiable`: the daemon could not be queried at all, so whether a session started is unknown — the claim is deliberately **retained** and ages out under `reservation_sweep`'s TTL, because releasing it on a non-observation would let a concurrent tick select a node whose worker may still be booting. A sandboxed run produces one or the other and never verifies either way; re-run with `dangerouslyDisableSandbox`. |
+| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a session still held un-reaped after `HELD_GRACE_S` (release it with `claude rm <session-id>` once you have read its transcript), a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or one of the two failed-verify tokens. `launch-unverified`: the spawn reported success, the daemon **answered**, and no session named for the node was in it (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot) — real evidence of a phantom spawn, so the claim is released before the throw. `launch-unverifiable`: the daemon could not be queried at all, so whether a session started is unknown — the claim is deliberately **retained** and ages out under `reservation_sweep`'s TTL, because releasing it on a non-observation would let a concurrent tick select a node whose worker may still be booting. A sandboxed run produces one or the other and never verifies either way; re-run with `dangerouslyDisableSandbox`. |
 | 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. |
 | 13 | `claimed` | another session holds the node. **Stop.** The token says which: `live-session` (running, or the probe could not answer), `terminal-session` (registered but finished — an invalid state; release it with `claude rm <session-id>`, named in the stderr, then re-run), `reservation:<owner>` (an unreleased ledger marker; `reservation_sweep` reclaims it on the next dispatch heartbeat). The ladder never releases another session's claim itself. |
 | 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. |
@@ -275,8 +286,12 @@ remove.
 `dispatch-ladder-advance` prints `launched <id> <kind> <phase> <skill>`; hand
 that `<phase>` to `dispatch-ladder-await` as the from-phase. `await` exit **20**
 means still running — call again with identical arguments; its default
-`--timeout-s` is 540. Both need `dangerouslyDisableSandbox: true`. Their headers
-carry the full exit-code contracts; read them there.
+`--timeout-s` is 540. Exit **21** (`held-observing`) means the session stopped
+without declaring a terminal disposition and no park has landed yet: nothing is
+claimed, and the caller is the one that runs
+`terminal_without_disposition_sweep` and calls again. Both need
+`dangerouslyDisableSandbox: true`. Their headers carry the full exit-code
+contracts; read them there.
 
 The reconcile pass has no hand equivalent here — it is the driver's step. Do not
 run `graph-auto-merge` or `reconcile-graph-review-stall` yourself to finish a

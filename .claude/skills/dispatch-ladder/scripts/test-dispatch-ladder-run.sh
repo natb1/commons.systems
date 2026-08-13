@@ -21,6 +21,12 @@
 #      sleep under the lock would wedge a concurrent dispatch tick for the whole
 #      poll interval, and a pass that skipped the lock entirely would let the
 #      tick merge and absorb the same node at the same time.
+#   4. `held-observing` (await exit 21) re-runs the owed sweeps and re-polls,
+#      bounded by HELD_GRACE_S. The sweep that heals a held escalation is called
+#      by this driver and needs 300s of idle before it acts, so halting on the
+#      first held answer made the driver's own healer unreachable. Both halves
+#      are asserted: the sweeps DO run between held polls, and a hold nothing
+#      heals still halts 11 on its own budget.
 #
 # The fakes are sequence-driven: each one reads the Nth line of its own script
 # file on its Nth call, as `<exit-code>|<stdout>`, reusing the last line once
@@ -271,6 +277,13 @@ rc=0; "$RUN" "$NODE" --ci-wait-s x >/dev/null 2>&1 || rc=$?
 assert_eq "usage: a non-integer --ci-wait-s exits 2" "2" "$rc"
 rc=0; "$RUN" "$NODE" --nope >/dev/null 2>&1 || rc=$?
 assert_eq "usage: an unknown flag exits 2" "2" "$rc"
+# HELD_GRACE_S is an environment knob rather than a flag, but it is validated at
+# the same boundary: a typo must be a cheap exit 2 here, not an arithmetic
+# surprise hours into a detached run.
+export HELD_GRACE_S=x
+rc=0; "$RUN" "$NODE" >/dev/null 2>&1 || rc=$?
+unset HELD_GRACE_S
+assert_eq "usage: a non-integer HELD_GRACE_S exits 2" "2" "$rc"
 assert_eq "usage: nothing was launched" "0" "$(calls advance)"
 assert_eq "usage: the reservation ledger was not swept either" "0" "$(sweeps)"
 assert_eq "usage: nor was the terminal-disposition sweep run" "0" "$(terminal_sweeps)"
@@ -302,8 +315,13 @@ assert_eq "complete: the ledger was swept once before every advance" \
 # path writes $CLAUDE_JOB_DIR/office-hours-reason and deliberately declares NO
 # node-terminal marker, leaving the park to terminal_without_disposition_sweep.
 # Absent that sweep, dispatch-self-close HOLDs the job and dispatch-ladder-await
-# reads the hold as `throw <id> held-session` (exit 11) forever, on exactly the
-# heartbeat-stopped host this driver exists for.
+# reads the hold as `held-observing` (exit 21) forever, on exactly the
+# heartbeat-stopped host this driver exists for. The wedge was subtler than
+# "the sweep is missing": the sweep was CALLED here and still unreachable,
+# because the driver halted on the first held answer while the sweep needs
+# DISPATCH_TERMINAL_DISPOSITION_GRACE_S (300s) of idle before it acts. The
+# exit-21 arm below is what closes that — it re-runs these sweeps between held
+# polls, so this 1:1-before-every-advance count is a floor, not a ceiling.
 assert_eq "complete: the terminal-disposition sweep ran once before every advance" \
   "$(calls advance)" "$(terminal_sweeps)"
 assert_eq "complete: and ran BEFORE each advance, not after it" "0,1" \
@@ -637,6 +655,64 @@ if [[ "$(sed -n 1p "$SEQ_DIR/await.argv")" == "$(sed -n 3p "$SEQ_DIR/await.argv"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: re-call: the arguments were identical on every call"
   echo "    argv: $(cat "$SEQ_DIR/await.argv")"
+fi
+
+# --- await exit 21: the held session is waited out, once ---------------------
+echo "Test: await exit 21 re-runs the owed sweeps and re-polls, rather than halting"
+# THE WEDGE THIS ARM CLOSES. An escalating phase stops WITHOUT a node-terminal
+# marker on purpose, so dispatch-self-close HOLDs its job and await answers
+# `held-observing` (21). The park that resolves it comes from
+# terminal_without_disposition_sweep — run by this very driver, but needing
+# DISPATCH_TERMINAL_DISPOSITION_GRACE_S (300s) of idle first. While the driver
+# halted on the first held answer, its own healer could only ever run AFTER the
+# halt, i.e. never. So the arm must re-run BOTH sweeps between held polls.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '21|held-observing tactic-fixture-node qa' \
+                '21|held-observing tactic-fixture-node qa' \
+                '0|advanced tactic-fixture-node qa -> origin/main'
+set_seq landed  '0|'
+run_ladder
+assert_eq "held: exit 0 — the wait ended in progress, not a halt" "0" "$RC"
+assert_eq "held: await was re-called until it answered" "3" "$(calls await)"
+assert_eq "held: a held-sweep event was recorded per held poll" "2" \
+  "$(events_have held-sweep held-observing)"
+# The point of the arm: 2 sweeps before the 2 advances, PLUS one per held poll.
+assert_eq "held: the terminal-disposition sweep ran on every held poll too" "4" \
+  "$(terminal_sweeps)"
+assert_eq "held: the ledger sweep kept pace with it" "4" "$(sweeps)"
+# It is a wait, never a retry: the phase is not relaunched, and the verdict
+# still comes from the next await's read of origin/main.
+assert_eq "held: the phase was never relaunched" "2" "$(calls advance)"
+TOTAL=$((TOTAL + 1))
+if [[ "$(sed -n 1p "$SEQ_DIR/await.argv")" == "$(sed -n 3p "$SEQ_DIR/await.argv")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: held: the re-poll used identical await arguments"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: held: the re-poll used identical await arguments"
+  echo "    argv: $(cat "$SEQ_DIR/await.argv")"
+fi
+
+echo "Test: a held session the sweeps never heal still halts 11, unconditionally"
+# The wait is BOUNDED. HELD_GRACE_S=1 with --poll-s 1: the first held poll
+# charges 1s (not yet past), the second charges 2s and halts. Nothing here is
+# retried forever just because a healer exists for the ordinary case.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix'
+set_seq await   '21|held-observing tactic-fixture-node qa'
+export HELD_GRACE_S=1
+run_ladder --max-run-s 600
+unset HELD_GRACE_S
+assert_eq "held-grace: exit 11 (throw)" "11" "$RC"
+assert_eq "held-grace: the wait was bounded at two polls" "2" "$(calls await)"
+assert_eq "held-grace: state.json status is halted" "halted" "$(jq -r .status "$STATE_DIR/state.json")"
+TOTAL=$((TOTAL + 1))
+if jq -r 'select(.event == "halt") | .detail' "$STATE_DIR/events.jsonl" 2>/dev/null \
+     | grep -q 'HELD_GRACE_S'; then
+  PASS=$((PASS + 1)); echo "  PASS: held-grace: the halt names the window it exhausted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: held-grace: the halt names the window it exhausted"
+  echo "    detail: $(jq -r 'select(.event == "halt") | .detail' "$STATE_DIR/events.jsonl")"
 fi
 
 echo "Test: await's terminal exit codes are passed through, never reinterpreted"
