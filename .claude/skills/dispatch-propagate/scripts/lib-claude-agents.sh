@@ -15,6 +15,7 @@
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   worktree_occupancy_state           <worktree-path> [exclude_sid]
+#   worktree_code_review_lock_path     <worktree-path>
 #   claude_agents_count_busy_workers
 #   claude_agents_list_blocked_workers
 #   claude_agents_count_held_for_debug
@@ -1001,6 +1002,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # --json --all`): a session that has stopped but has not been `claude rm`'d
   # still holds its worktree. Registration IS the claim; release is an explicit
   # human act. No timeout — see the header contract.
+  # It ALSO reports occupied while the worktree's code-review lock is held by a
+  # detached `/code-review --fix` run, whose nested session never appears in the
+  # registered view at all — see `worktree_occupancy_state`'s contract. That is
+  # a pure widening of "occupied": no worktree this predicate used to call
+  # occupied becomes free.
   # Name-keyed, two-name check against a SINGLE claude_agents_list_registered fetch
   # (one daemon round-trip per worktree, not two): exact-matches the live-session
   # name against both the worktree basename (the phase-worker session spawned
@@ -1040,13 +1046,40 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
-  # WORKTREE_OCCUPANCY_STATE / WORKTREE_OCCUPANCY_SESSION_ID — the granular
-  # verdict and the matched holder's sessionId from the most recent
+  # WORKTREE_OCCUPANCY_STATE / WORKTREE_OCCUPANCY_SESSION_ID /
+  # WORKTREE_OCCUPANCY_REASON — the granular verdict, the matched holder's
+  # sessionId, and WHY the verdict came out that way, from the most recent
   # `worktree_occupancy_state` call. Initialized here so a read before the first
   # call under `set -u` is not an unbound-variable error (same idiom as
   # CLAUDE_SESSION_ID_LIVE_STATE).
   WORKTREE_OCCUPANCY_STATE="unknown"
   WORKTREE_OCCUPANCY_SESSION_ID=""
+  WORKTREE_OCCUPANCY_REASON=""
+
+  # WORKTREE_CODE_REVIEW_LOCK_SUFFIX — the sidecar name a detached
+  # `/code-review --fix` run holds while it is writing a worktree. The file sits
+  # BESIDE the worktree, never inside it: `<worktrees-root>/<basename><suffix>`,
+  # the same sidecar convention as `<id>.scope-fingerprint` and `<id>.ladder`.
+  # Inside the worktree would be wrong twice over — it is the reviewed (and so
+  # attacker-writable) tree, and it would be swept away with the worktree while
+  # the run it describes was still going.
+  WORKTREE_CODE_REVIEW_LOCK_SUFFIX=".code-review-lock"
+
+  # worktree_code_review_lock_path <worktree-path> — the sidecar path for a
+  # worktree. Pure string derivation; touches no filesystem and creates nothing.
+  worktree_code_review_lock_path() {
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
+      printf 'lib-claude-agents: worktree_code_review_lock_path requires a <path> argument\n' >&2
+      return 1
+    fi
+    # Strip any trailing slash so `basename`/`dirname` see the worktree itself
+    # rather than its parent (a caller passing "<root>/<id>/" must key the same
+    # sidecar as one passing "<root>/<id>").
+    while [[ "$pth" == */ && "$pth" != "/" ]]; do pth="${pth%/}"; done
+    printf '%s/%s%s\n' "$(dirname "$pth")" "$(basename "$pth")" "$WORKTREE_CODE_REVIEW_LOCK_SUFFIX"
+    return 0
+  }
 
   # worktree_occupancy_state <path> [exclude_sid] — the granular OCCUPANCY
   # classifier behind `worktree_has_live_session`.
@@ -1057,7 +1090,8 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # written as a predicate: it has four outcomes, not two.
   #
   #   free      — the daemon answered and no session claims this worktree.
-  #   live      — a registered session claims it and is NOT in a terminal state.
+  #   live      — a registered session claims it and is NOT in a terminal state,
+  #               OR the worktree's code-review lock is held (see below).
   #               A valid claim: callers skip the node and never spawn into it.
   #   terminal  — a registered session claims it but its state is terminal
   #               (see CLAUDE_AGENTS_TERMINAL_STATES_JQ). Nothing is running, yet
@@ -1068,9 +1102,50 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   #               an invalid state: a daemon hiccup must never manufacture an
   #               intervention.
   #
-  # Also sets WORKTREE_OCCUPANCY_STATE (mirrors stdout) and
+  # Also sets WORKTREE_OCCUPANCY_STATE (mirrors stdout),
   # WORKTREE_OCCUPANCY_SESSION_ID (the matched row's sessionId; empty for `free`
-  # and `unknown`) for callers that need the evidence rather than the verdict.
+  # and `unknown`, and empty for a code-review lock, which is not a session) and
+  # WORKTREE_OCCUPANCY_REASON (why: `code-review-lock`,
+  # `code-review-lock-unverifiable`, `session`, `daemon-unreadable`, `no-path`,
+  # or empty for `free`) for callers that need the evidence rather than the
+  # verdict.
+  #
+  # THE CODE-REVIEW LOCK, checked BEFORE the daemon is queried
+  # ---------------------------------------------------------
+  # A `/code-review --fix` run launched by `dispatch-code-review` is DETACHED:
+  # it outlives the session that launched it, and the nested `claude -p` session
+  # it runs never appears in the registered view at all
+  # (review-fix/references/code-review-invocation.md §6). So the registered view
+  # alone can report a worktree free while a review is still writing it — and a
+  # worker spawned into that worktree corrupts both trees and makes
+  # dispatch-code-review's `git diff <before-image>` attribute unrelated changes
+  # to the review.
+  #
+  # The launcher runs the detached child under `flock -w 1 <sidecar>`, so the
+  # KERNEL holds the lock for exactly the child's lifetime and releases it on
+  # any death, SIGKILL and host crash included. Here we only ask the kernel:
+  #
+  #   no sidecar file            → no lock. Today's logic, unchanged.
+  #   sidecar + acquire FAILS    → held → `live`, reason `code-review-lock`.
+  #   sidecar + acquire SUCCEEDS → a stale file, not a held lock. Today's logic,
+  #                                unchanged. The file is NOT deleted: deletion
+  #                                races a launcher that is at this instant
+  #                                creating it, and would drop the lock it is
+  #                                about to take.
+  #   no `flock` on PATH + file  → `unknown`, which every caller folds toward
+  #                                occupied. Fail-safe, the same posture an
+  #                                unreadable daemon gets — not a silent
+  #                                downgrade to free.
+  #
+  # LIMITS (strategy-token-economy clarification 45). `flock` is ADVISORY: it
+  # binds only claimers that check for it. That is sound here only because the
+  # claim paths are few and every one of them routes through this one predicate
+  # (`worktree_has_live_session` is a thin wrapper over this function) — which is
+  # why the check lives here rather than being taught separately to
+  # provision-node-worktree, the reservation sweep, the invalid-state lane and
+  # office-hours select. A human who walks into the worktree by hand bypasses
+  # the lock exactly as they bypass the registered-session claim today; the lock
+  # narrows the machine's own races, and does not fence people out.
   #
   # CAVEAT — the two globals are observable ONLY on a DIRECT call:
   #     worktree_occupancy_state "$wt" >/dev/null   # globals set
@@ -1091,16 +1166,69 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   worktree_occupancy_state() {
     WORKTREE_OCCUPANCY_STATE="unknown"
     WORKTREE_OCCUPANCY_SESSION_ID=""
+    WORKTREE_OCCUPANCY_REASON=""
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: worktree_occupancy_state requires a <path> argument\n' >&2
       # Fail safe: no path is not evidence of freedom. `unknown` folds to
       # occupied in every caller, matching worktree_has_live_session's own
       # empty-arg handling.
+      WORKTREE_OCCUPANCY_REASON="no-path"
       printf 'unknown\n'
       return 0
     fi
     local exclude_sid="${2:-}"
+
+    # --- the code-review lock, BEFORE the daemon query --------------------
+    # Deliberately first: the whole point is that the session which launched
+    # the run may already be gone from the registered view (or never appeared
+    # in it), so consulting the daemon first would answer `free` for a worktree
+    # that is actively being written. See the contract above for the four
+    # cases, and for why `flock` being advisory is acceptable here.
+    #
+    # `exclude_sid` does NOT apply: it excludes a caller's own SESSION, and a
+    # held lock is not a session — it is a running process with no registry
+    # row. A caller cannot exempt itself from a lock it does not hold.
+    local _crlock
+    _crlock="$(worktree_code_review_lock_path "$pth")"
+    if [[ -n "$_crlock" && -e "$_crlock" ]]; then
+      if ! command -v flock >/dev/null 2>&1; then
+        # The file exists and we cannot ask the kernel whether it is held.
+        # Fail safe: `unknown` folds to occupied in every caller. Say so once,
+        # naming the remedy, so this is a visible degradation and not a silent
+        # one.
+        printf 'lib-claude-agents: %s has a code-review lock sidecar but `flock` is not on PATH — reporting unknown (occupied); install util-linux to get a definite answer\n' \
+          "$pth" >&2
+        WORKTREE_OCCUPANCY_STATE="unknown"
+        WORKTREE_OCCUPANCY_REASON="code-review-lock-unverifiable"
+        printf 'unknown\n'
+        return 0
+      fi
+      # `flock -n <file> true` acquires and immediately releases. Failing to
+      # acquire is the ONLY liveness signal — never the file's existence, never
+      # its body (the body is diagnostics the holder wrote, and a leftover file
+      # from a crashed run keeps its stale body forever). The probe cannot
+      # create the file: we already know it exists.
+      #
+      # The probe is EXCLUSIVE for the fork+exec of `true` (~ms), and this
+      # predicate runs across the whole worktrees root on every claim path — so
+      # a launcher's own acquire can land inside one of those holds. That is why
+      # `dispatch-code-review`'s launch wrapper acquires with `-w 1` rather than
+      # `-n`: a millisecond probe hold must not be reported as a rival run.
+      if ! flock -n "$_crlock" true 2>/dev/null; then
+        WORKTREE_OCCUPANCY_STATE="live"
+        WORKTREE_OCCUPANCY_REASON="code-review-lock"
+        # No sessionId: the holder is a detached process, not a registered
+        # session. A caller reporting WHY this worktree is occupied reads
+        # WORKTREE_OCCUPANCY_REASON, and can read the sidecar's body for the
+        # pid/node/target the holder recorded.
+        printf 'live\n'
+        return 0
+      fi
+      # Acquired — the file is stale residue from a finished run. Fall through
+      # to the registered-session logic unchanged, and leave the file alone:
+      # removing it here would race a launcher creating it right now.
+    fi
     local base oh
     base="$(basename "$pth")"
     # The office-hours key is only meaningful for a legacy `<N>-<slug>` issue
@@ -1131,6 +1259,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       # evidence exists, and a blocked read must never manufacture an invalid
       # state.
       WORKTREE_OCCUPANCY_STATE="unknown"
+      WORKTREE_OCCUPANCY_REASON="daemon-unreadable"
       printf 'unknown\n'
       return 0
     fi
@@ -1165,6 +1294,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       msid="${matched%%$'\t'*}"
       mstate="${matched#*$'\t'}"
       WORKTREE_OCCUPANCY_SESSION_ID="$msid"
+      WORKTREE_OCCUPANCY_REASON="session"
 
       # Classify the matched row's state against the single shared terminal
       # enumeration. jq (not a bash case) so this cannot drift from the two

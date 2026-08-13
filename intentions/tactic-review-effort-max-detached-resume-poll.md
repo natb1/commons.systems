@@ -247,15 +247,41 @@ text already called Variant B known-safe: "A busy foreground Bash call is not
 `blocked`, so the foreground shape is known safe." A shape already known safe
 by the plan's own reasoning does not need a probe to select it.
 
-Shipped: a bounded re-invocation loop, at most **8 attempts**, each one Bash
+Shipped: a bounded re-invocation loop, at most **10 attempts**, each one Bash
 call with `dangerouslyDisableSandbox: true, timeout: 600000` running the exact
 same command with identical arguments. Exit 5 → loop again. Exit 0 → leave the
 loop. Exit 6 → **not** retryable, hard-stop immediately (a lock conflict means
 nothing was launched, and looping on it burns attempts waiting on a run this
 session does not own). Anything else → the existing `case $CR_RC` hard-stops
-the phase. 8 × 540 s ≈ 72 min sits inside the script's own 5400 s (90 min)
-deadline, so the caller's cap trips first. Exhausting the cap is a **failure,
-not a pass** — it takes the `4` branch, named "attempt cap exhausted."
+the phase. Exhausting the cap is a **failure, not a pass** — it takes the `4`
+branch, named "attempt cap exhausted."
+
+The cap is **10, not the 8 this node recorded when PR #3078 first landed**
+(corrected 2026-08-13, same day, author-ruled). At 8 the arithmetic was
+8 × 540 s = 4320 s, 18 minutes short of the script's own 5400 s deadline, and
+this node stated that gap approvingly — "the caller's cap trips first." That
+was a **deviation from a ruling this strategy already carried**, not an intent:
+`strategy-token-economy`'s 2026-08-13 `/align` round, ruling (2) of "when the
+built-in's detached run outlives its await window, what holds the node, and
+what ends the run", states that the hard stop "fires at deadline exhaustion,
+**never at the await boundary**". Cap exhaustion is a count of await
+boundaries, so at 8 the script's exit-4 path — the only thing that kills the
+detached run and releases the worktree `flock` — was unreachable, and the phase
+hard-stopped while the run kept writing an abandoned worktree for ~18 more
+minutes, holding the node lock and blocking `dispatch-ladder-advance` /
+`graph-select-target`, with the finished review never collected.
+
+10 × 540 s = 5400 s makes the two bounds **exactly** equal, and equality is
+sufficient: the script's await loop computes its per-call window as
+`min(--await-seconds, deadline - elapsed)`, so `window_end` can never fall past
+the deadline instant, and it tests `elapsed >= DEADLINE_SECONDS` **before**
+`now >= window_end`, so on a tie the deadline branch wins and the call returns
+4, not 5. Per-call overhead counts toward `elapsed` and so only brings the
+deadline forward in attempt count. The alternative — lowering
+`--deadline-seconds` to 4320 s — was rejected because it would override
+clarification 45's independently-chosen 5400 s figure. Cap exhaustion survives
+as a fail-closed backstop for the cases that bypass the arithmetic (an
+overridden `--await-seconds`, or a call returning 5 early).
 
 **Variant A (`background-notify`) is an explicit open follow-up**, gated on a
 later probe of harness completion-notification behavior. No `ScheduleWakeup`
