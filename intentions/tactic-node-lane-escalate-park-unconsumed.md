@@ -60,8 +60,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: fix-node-lane-escalate-park
+  pr: 3076
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T03:42:10Z
+    mergeCommitSha: 5e42fa53cd8a924fa92ffff11716e0e228118ac1
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -183,3 +194,74 @@ fix — it is one operator doing by hand what no automated arm would do.
 Related: [[tactic-qa-fix-terminal-marker-ratchet]] covers the *marker* half of
 this same path — a prose-only guarantee with no mechanical pin. This node is the
 *consumer* half: even a correctly-written marker set has nobody to land it.
+
+## Resolved — PR #3076, merged as `5e42fa53`
+
+Landed as one ad-hoc PR because dispatch is paused: there was no router to route
+this, and the node it unwedges is the one the router would have needed.
+
+Two of the three directions recorded above were taken; the third was
+deliberately not.
+
+### Direction 1 — taken (the sweep parks before routing)
+
+`terminal_without_disposition_sweep` now skips the invalid-state lane pre-tier
+when the escalation is **authored** — when `office-hours-reason` was read from
+the job dir rather than produced by the synthesized fallback. The lane exists
+for a node held by a terminal worker in an *undiagnosed* state; a session that
+wrote its own reason diagnosed itself and asked for a park, so there is nothing
+for an intervention session to investigate, and the proven
+park-with-landing-proof block was already sitting directly below the pre-tier.
+
+`authored_escalation` is a per-candidate local set only when the marker actually
+yields text; when set, `lane_rc=10` — the route gate's own escalate value —
+drops the candidate into the park block by the same path an absent router
+already takes. A synthesized reason routes exactly as before, so
+`invalid_state_route_gate` (shared with `frozen_session_sweep`), that sweep's
+own pre-tier, and the park block are all unmodified.
+
+This was the smaller of direction 1's two halves, and the one that matches the
+marker-deletion-as-proof discipline already written into the sweep.
+
+### Direction 3 — taken (the await's grace now clears the sweep's)
+
+`dispatch-ladder-await`'s `done-held` arm no longer throws on the first poll. It
+asks the graph first — so once the sweep lands the park, the run terminates on
+the correct terminus, `throw <id> parked` — and otherwise reports
+`held-observing <id> <from>` at a new exit 21. `dispatch-ladder-run` answers 21
+by re-running the owed sweeps (extracted into `run_owed_sweeps`, a pure
+extraction of the same call site and caps) and re-polling, up to a new
+`HELD_GRACE_S` (default 420s, clear of the sweep's 300s
+`DISPATCH_TERMINAL_DISPOSITION_GRACE_S`), past which it halts `11 throw`
+unconditionally.
+
+A bounded wait on one *named* healer whose effect the next await checks at
+`origin/main` — not a retry of the phase, and not a gate of the driver's own.
+
+### Direction 2 — NOT taken, and still the better greenfield answer
+
+`dispatch-mark-node-park` calling `park-node` in-process remains the right
+design. It removes the cross-process handoff that broke here rather than
+repairing one arm of it, and `park-node` already respects the node lane's
+no-`gh` rule via `mark-node-terminal`. It was not taken because it is a larger
+change than unwedging the ladder warranted, and because the two changes above
+are independently correct regardless of which process ultimately owns the park.
+
+Whoever picks direction 2 up should treat this fix as the floor, not the
+ceiling: the sweep's authored-escalation carve-out stays useful as a backstop
+even after `dispatch-mark-node-park` lands a park of its own.
+
+### Still open
+
+[[tactic-qa-fix-terminal-marker-ratchet]] — the *marker* half of this same path,
+a prose-only guarantee with no mechanical pin — is untouched by this fix and
+stays open.
+
+### Not proven end-to-end yet
+
+The fix is verified by unit tests (`lib-frozen-session-park` 296/296,
+`dispatch-ladder-await` 24/24, `-run` 197/197, `-advance` 41/41, all confirmed
+to have run in CI), not by a live re-run. The escalation this node was found on
+is still parked awaiting the author's answer on PR #3075, so the live proof —
+an escalating phase that parks itself and a ladder that reports
+`throw <id> parked` — is owed on the next run that escalates.
