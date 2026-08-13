@@ -460,6 +460,41 @@ clarifications:
       future session reasons FROM, and this round reached a wrong recommendation
       from it before the author caught it. The tracking node's own 'consequence
       if left' section predicted exactly this."
+  - question: The plan view was specified as an office-hours panel reading the graph
+      live. It is now to be a published claude artifact. What changes, and which
+      of this strategy's conditions still bind it?
+    answer: "(Recorded 2026-08-13 /align interview; supersedes the substrate named
+      in clarifications 13-19 of the same date, which assumed an in-app panel.)
+      The plan view is delivered as a PUBLISHED CLAUDE ARTIFACT — a
+      self-contained page built from in-repo source and published to claude.ai —
+      not as an office-hours panel, and it is the deliberate FIRST instance of
+      the artifact-delivery practice recorded on strategy-owned-web-platform
+      this same day. The author's framing: previous development efforts have
+      been mostly Firebase applications, and this table is meant to be built as
+      a claude artifact instead. Scope was held to this one surface;
+      office-hours itself does not move. WHAT CHANGES. The page cannot read the
+      graph at runtime — the artifact capability set is `downloads` and `mcp`
+      only and a strict CSP blocks every external host, with no File System
+      Access path — so the rows are BAKED IN at build time by a Node step that
+      reads the local intentions/ clone. The view is therefore a SNAPSHOT, and
+      must display the origin/main sha and build timestamp it was built from
+      prominently; that is condition 2's fail-loudly-rather-than-render-stale
+      posture met in the only form this substrate allows, since the page has no
+      way to detect its source becoming unreachable and can only be honest about
+      when it was made. Adopted as snapshot-now, mcp-later. WHICH CONDITIONS
+      BIND. Conditions 1, 2 and 4 (clone freshness, reachable signal sources,
+      File System Access) are conditions on the IN-APP surfaces and do not bind
+      the plan view: its read happens in Node on the author's machine at build
+      time, not in a browser. Condition 4 in particular cannot bind it — no
+      artifact has FSA. Conditions 3, 7 and 8 bind unchanged. WHERE THE
+      SUBSTRATE IS STRICTLY BETTER: condition 7 requires the view read rank and
+      selection order from the router's own resolver and selector, never a
+      reimplementation. The in-app path could not fully honour that — router.ts
+      imports node:crypto and is not browser-safe, which was recorded as a
+      caveat on tactic-plan-view-table — whereas a build-time Node step calls
+      that code DIRECTLY. Moving to the artifact substrate removes the
+      reimplementation the previous design was forced into, rather than adding a
+      constraint."
 tooling_goals:
   - kind: actuator
     statement: status page — one attention-ranked queue of typed signals, each type
@@ -476,11 +511,15 @@ tooling_goals:
       office-hours snapshot, pace telemetry, analytics exports) to their owning
       strategies' signals
   - kind: actuator
-    statement: plan view — the rank-ordered table of every non-done tactic with tier
-      and band-spine lineage columns, an off-spine ancestor lane gutter, label
-      chips with a phase pip, position-derived ETA, tier/label filters, and a
-      filter-scoped hot-lineage panel showing each ancestor's score contribution
-      across undecomposed and in-flight work
+    statement: "plan view — delivered as a published claude artifact built from
+      in-repo source (strategy-owned-web-platform's artifact practice): the
+      rank-ordered table of every non-done tactic with tier and band-spine
+      lineage columns, an off-spine ancestor lane gutter, label chips with a
+      phase pip, position-derived ETA, tier/label filters, and a filter-scoped
+      hot-lineage panel showing each ancestor's score contribution across
+      undecomposed and in-flight work; rows baked at build time by a Node step
+      calling the router's own resolver and selector, stamped with the
+      origin/main sha and build time"
 success_signal:
   observable: office-hours sessions conducted from the surface, with every
     rendered signal tracing to a graph node (success_signal or condition) and a
@@ -552,5 +591,18 @@ attributes:
       score, depth) and its unified parent relation, not the resolver on main;
       while the carriers are unlanded the view renders unavailable terms
       honestly rather than as low values (Recorded 2026-08-13)
+    - conditions 1, 2 and 4 scope to the IN-APP office-hours surfaces (status
+      page, goals page, browser graph read layer). A surface delivered as a
+      published claude artifact has no browser-side read path at all — no File
+      System Access, no external host reachable under the artifact CSP — so it
+      reads the graph in Node at build time and renders a snapshot; its honesty
+      obligation is to stamp the origin/main sha and build time it was built
+      from, not to detect an unreachable source it never reads (Recorded
+      2026-08-13)
+    - the plan view's build-time read runs the router's own resolver and
+      selector in Node — the mechanism that makes condition 7 literally true
+      rather than approximately true — so a change making that code unusable
+      outside the router breaks this surface and is a defect, not an incidental
+      refactor (Recorded 2026-08-13)
 ---
 # Office hours runs on the graph — one local-first surface (status signals and goals exploration) allocates the author's strategic attention

@@ -72,6 +72,37 @@ edge or the two land together is a decomposition decision for
 first and extracting the primitive afterwards is a legitimate alternative
 ordering, and the author has not been asked which they prefer.
 
+### Substrate — AMENDED 2026-08-13: the consumer is a published claude artifact
+
+The primitive's home is unchanged — it belongs in `packages/ds` regardless of
+who renders it. What changed this date is its **first consumer**:
+`tactic-plan-view-table` is now built as a published claude artifact rather
+than an office-hours panel (see that node's amended Substrate section and
+`strategy-owned-web-platform`'s artifact-delivery clarifications). Two
+consequences, both concrete:
+
+- **The DS must bundle into one self-contained file.** This is already a solved
+  problem here and the solution should be reused rather than reinvented:
+  `.design-sync/resync.mjs` bundles `packages/ds/src/index.ts` straight from
+  TypeScript source via esbuild for the claude.ai design canvas — there is no
+  `dist/` build and none is needed. The artifact build is the same shape with a
+  different output target. `.design-sync/NOTES.md` carries the gotchas that
+  will otherwise be rediscovered, including that `packages/ds/package.json`'s
+  `"types": "src/index.ts"` is load-bearing for extraction.
+- **Fonts must become `data:` URIs.** The DS's IBM Plex woff2 files live under
+  `packages/ds/.storybook/public/fonts/` and `fonts.css` references them with
+  **absolute** `url("/fonts/...")`, served by Storybook's `staticDirs`. A
+  published artifact has no such static root and its CSP blocks every external
+  host, so those absolute references resolve to nothing and the page silently
+  falls back down the `--font-mono` stack. The build must inline the five woff2
+  as `data:` URIs — the same five `.design-sync/config.json` already lists
+  under `extraFonts` — and their combined size counts against the 16MB page
+  cap.
+
+This does not change what the primitive is or where it lives; it constrains how
+the artifact consumes it, and it is recorded here so the font failure is
+designed out rather than diagnosed later.
+
 ### Verification
 
 - The plan view imports its table from `@commons-systems/ds` and defines no

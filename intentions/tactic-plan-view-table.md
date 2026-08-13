@@ -164,20 +164,53 @@ must **not** change any ETA.
 
 Read rank and selection order from the same resolver and selector the router
 uses. **Do not invent a comparator** — a table that computes its own order can
-drift from the queue it claims to show. Note that `router.ts` is not currently
-browser-safe (it imports `node:crypto` for `strategyFingerprint`), and the
-`@commons-systems/intentionsutil/graph` subpath exports only the fs-free
-modules; making the selection order reachable from the browser is part of this
-node's work.
+drift from the queue it claims to show.
 
-### Substrate that already exists
+### Substrate — AMENDED 2026-08-13: this is a published claude artifact
 
-`office-hours/src/graph-source.ts` is the browser graph read layer: FSA
-directory handle over the local clone, per-file YAML parse and validate,
-`buildTree`, `resolveAttention`, and the clone-staleness guard that
-structurally omits the ranked view past `STALE_CLONE_THRESHOLD_MS`. The plan
-view reads through it and inherits that guard — it must not render rank from a
-stale clone.
+**Supersedes the in-app substrate this node originally carried.** The plan view
+is built as a **published claude artifact**, not an office-hours panel — the
+first instance of the artifact-delivery practice recorded on
+`strategy-owned-web-platform` (see its clarifications on the practice, the
+runtime constraints, and the CI split). The author's framing: prior development
+has been mostly Firebase applications, and this table is meant to be a claude
+artifact instead.
+
+What that fixes, and it is the paragraph this node previously worried about:
+`router.ts` is **not** browser-safe — it imports `node:crypto` for
+`strategyFingerprint`, and the `@commons-systems/intentionsutil/graph` subpath
+exports only the fs-free modules. The original design therefore had to make
+selection order reachable from the browser, i.e. reimplement or re-export it,
+in tension with the "do not invent a comparator" rule above. **That work is no
+longer owed.** The artifact's rows are baked in at build time by a **Node**
+step, which calls `selectGraphTargets` and the resolver *directly*. The
+strictest reading of `strategy-attention-surface` condition 7 is now literally
+satisfied rather than approximately.
+
+What that costs. A published artifact **cannot read the graph at runtime by any
+route** — the capability set is `downloads` and `mcp` only, a strict CSP blocks
+every external host including fetch/XHR, and there is no File System Access
+path. The page is a **snapshot**. It must therefore stamp, prominently, the
+`origin/main` sha and the build timestamp it was built from. That replaces the
+`STALE_CLONE_THRESHOLD_MS` guard inherited from
+`office-hours/src/graph-source.ts`, which no longer applies: there is no live
+clone read to go stale, only a build that has a date. Do **not** port that
+guard; port its *intent*, which is that the reader never mistakes old rank for
+current rank.
+
+`office-hours/src/graph-source.ts` remains the reference for the read shape
+(per-file YAML parse and validate, `buildTree`, `resolveAttention`) even though
+the plan view no longer runs through it — the build step performs the same
+reads in Node, against the working clone rather than an FSA handle.
+
+Build and delivery obligations, from the practice on
+`strategy-owned-web-platform`: source lives in a **workspace** so the
+manifest-derived CI mechanisms cover it with no registration; the build emits
+**one** self-contained file with all CSS/JS inlined; CI runs the artifact
+contract check and a headless from-disk render smoke; a session publishes; and
+the returned **URL and contract pin are recorded on this node** — republishing
+without the existing url creates a second artifact rather than updating the
+live one.
 
 ### Verification
 
@@ -193,3 +226,7 @@ stale clone.
   viewport renders sticky rather than re-rendering as rows stream.
 - The order rendered equals the order `selectGraphTargets` produces, asserted
   against the live store rather than a fixture alone.
+- The built page is exactly one self-contained file, references zero external
+  hosts, and opens from `file://` with the network disabled — the artifact
+  contract check plus the from-disk render smoke.
+- The rendered sha and build timestamp match the commit the build ran against.

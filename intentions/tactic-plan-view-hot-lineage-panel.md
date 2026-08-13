@@ -112,6 +112,35 @@ The panel must render this as `0 (until delegation-scoring)` rather than imply
 a delegation is cold — otherwise the panel actively misleads on exactly the
 "where does capture concentrate" question this strategy names.
 
+### Substrate — AMENDED 2026-08-13: this ships inside a published claude artifact
+
+The panel is part of `tactic-plan-view-table`, whose delivery substrate changed
+this date from an office-hours panel to a **published claude artifact** (see
+that node's amended Substrate section and `strategy-owned-web-platform`'s
+artifact-delivery clarifications). Three consequences bind this node
+specifically:
+
+- **Shares are computed at build time, in Node, not in the browser.** The panel
+  renders precomputed contributions rather than recomputing from a live graph
+  read. Its verification below — "asserted against the live store" — is a
+  **build-time** assertion, run in the artifact's test suite against the
+  working clone; it is not a runtime property of the page.
+- **The panel is a snapshot of the same instant as the table.** It carries no
+  independent freshness; the page-level `origin/main` sha and build stamp cover
+  both. A panel that could disagree with its table about which commit it
+  describes would be a defect.
+- **Filtering stays fully client-side.** Filters change panel scope, and the
+  page has no way to fetch anything, so every row and every ancestor the
+  filters can reach must already be in the baked payload. Size this against the
+  16MB page cap when the payload shape is chosen.
+
+`/dataviz`'s palette rules and its validator apply unchanged — the artifact
+renders in the viewer's theme, which has three states (explicit dark, explicit
+light, and system default), so the "selected, not auto-flipped" dark mode the
+skill requires must be authored as tokens on bare `:root` with the dark
+redefinitions guarded, never as a colour whose only definition lives inside a
+media query.
+
 ### Verification
 
 - An ancestor's reported share equals its recomputed contribution to the
