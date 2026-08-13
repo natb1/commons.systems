@@ -14,7 +14,31 @@ reading: null
 serves:
   - strategy-rsi-delegated-prioritization
 recovers: []
-clarifications: []
+clarifications:
+  - question: Is this skill still to be built, after the collapse retired the loop
+      it would have lived in?
+    answer: >-
+      (Recorded 2026-08-13. No — do not build this.) /rsi-evaluate was recorded
+      2026-08-11 as the delegated evaluation and reprioritization subagent of
+      the rsi loop, sitting between the render and the main-thread judgment. The
+      2026-08-12 collapse retired both of those: there is no render and no
+      judgment session, so there is no seam this skill fits into.
+
+
+      Its capability was not dropped — it moved. Evaluation moved to /rsi, the
+      per-phase ladder evaluator that fires at every phase boundary and lands
+      findings in the merged ledger. Reprioritization moved to /rsi-audit, whose
+      unblocked half (recommending strategy boosts for author ratification)
+      shipped with PR 3074 and whose blocked half is recorded as
+      tactic-rsi-audit-prioritization-writer.
+
+
+      This node is left standing rather than pruned because pruning is its own
+      graph act with its own prose-reference sweep — several nodes still cite
+      it, including this strategy's scope clarification and the collapse round's
+      own open-conflict record. It belongs in the same pruning round as
+      strategy-rsi-plan-surface and its tactics. Until then this clarification
+      is the answer to anyone who selects it: the work is done elsewhere.
 tooling_goals: []
 success_signal: null
 attention: null

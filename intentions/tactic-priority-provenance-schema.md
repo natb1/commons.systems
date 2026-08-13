@@ -15,7 +15,34 @@ reading: null
 serves:
   - strategy-rsi-delegated-prioritization
 recovers: []
-clarifications: []
+clarifications:
+  - question: Which writer does this tactic document provenance FOR, now that
+      /rsi-evaluate is retired — and does the attributes.rsi_task half survive?
+    answer: >-
+      (Recorded 2026-08-13, repointing this node after the collapse landed as PR
+      3074.) The writer is tactic-rsi-audit-prioritization-writer, which carries
+      /rsi-audit's within-band boost writer and the priority_log append. The
+      priority_log half of this tactic is unchanged and still owed: the log, its
+      append-only cap, its fingerprint exemption, and the ownership-boundary and
+      marks-asymmetry lint are what hold a delegated write to its bound, and
+      today they are documentation-and-lint with no code behind them at all.
+
+
+      The attributes.rsi_task half does NOT survive on the same footing.
+      rsi_task ({type, reasoning, cost?}) and the legacy attributes.rsi_cost
+      were the task budget's carriers, and the task budget is retired doctrine
+      as of the 2026-08-12 collapse — the code that read rsi_cost went with the
+      deleted renderer. Documenting a retired field's semantics is not worth
+      doing; what remains worth doing is the lint that makes a standalone
+      rsi_cost a violation, so the retirement is mechanically enforced rather
+      than merely recorded. Scoping that split is planning work for whoever
+      picks this node up, stated here so it is not rediscovered.
+
+
+      This node is deliberately NOT blocked on the writer. Its lint is over
+      graph shape, not over the Attention interface, so it can land first — and
+      landing first is better, because the bound should exist before the
+      actuator that it bounds.
 tooling_goals: []
 success_signal: null
 attention: null
