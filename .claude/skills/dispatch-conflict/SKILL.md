@@ -1260,7 +1260,8 @@ done and recorded.
 
 ### 7b. Record the pass, then declare the conflict-interrupt disposition
 
-This step has **two halves**. The first half always runs. The second runs only
+This step is reached only from a Step 6 that **committed** the resolution. It has
+**two halves**. The first half always runs on that path. The second runs only
 when the node carries an in-flight `execution.conflict` — i.e. only when this
 session was dispatched by the router's conflict interrupt rather than by
 provision exit 11. Both halves write the same file, so **one** `graph-commit` at
@@ -1274,7 +1275,7 @@ deliberately pushed nothing — no PR exists yet and the subsequent `implement`
 phase pushes the merge commit. Stamp anyway; the recorded sha is the node
 branch's local HEAD and the pass did happen.)
 
-#### First half — stamp the lane pass (always)
+#### First half — stamp the lane pass (always, on the committed path)
 
 The dispatch ladder decides whether a phase pass completed by reading
 `origin/main` graph state. This lane completes its work by pushing to the node's
@@ -1297,6 +1298,15 @@ and substitute it as a **literal**, the way this lane substitutes `$SOURCE_ID`,
     "$SOURCE_ID" --stamp --lane conflict --phase "$NODE_PHASE" \
     --sha "$(git -C "$WT" rev-parse HEAD)" --dir "$PROJECT_ROOT/intentions" )
 ```
+
+**Known gap, deliberately left alone here.** The reader matches the stamp's
+`phase` against the rung it awaited at, and the node's `phase` is that rung only
+on the provisioning entry. On the router's conflict interrupt the selector emits
+`conflict` as the rung, so the stamp written above cannot match. It costs
+nothing today: on any rung that is not a real phase the reader's phase probe
+fires first and returns `advanced` regardless — the separately-filed vacuous-
+`advanced` defect. Whoever fixes that must make this call pass `conflict` on the
+interrupt path, which the second half already distinguishes.
 
 `apply-lane-pass.ts` is pure of git/gh — it only writes `intentions/$SOURCE_ID.md`
 — so the `graph-commit` below lands it, exactly as it lands
@@ -1407,6 +1417,16 @@ the PR while it is set, and the selector re-dispatches or parks the node.
 the resolution was abandoned and the tree restored, so the interrupt is still
 live and must stay live, and no pass completed to stamp. Step 6 jumps straight
 from an ambiguous verdict to Step 10, so this step is simply never reached.
+
+**Run none of this step on the config-grant park path either** (Step 7) — again
+neither half. Step 7 is reached when Step 6's `git commit --no-edit` was DENIED
+by the permission classifier: the resolution is staged but uncommitted, the push
+never ran, and `park-node` has already recorded the whole state for the human.
+Stamping there would claim a completed pass over a node whose resolution does not
+exist at `origin`, which is exactly what the push-first-stamp-second rule above
+forbids — and the stamp is durable, so it would still be sitting on the node when
+the human unparks it. Step 7's `park-node` is itself the terminal disposition (it
+writes the node-terminal marker for free — see Step 9), so that path stops there.
 
 The selector's own MERGEABLE arm (`_gate_conflict_active` in
 `graph-select-target`) is a **backstop for a session that died before reaching

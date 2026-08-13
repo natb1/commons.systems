@@ -75,8 +75,32 @@ export const PHASES: readonly Phase[] = [
  * pass a lane runs, and `execution.attempts` is ALREADY keyed by exactly this
  * wider set — see `scripts/apply-conflict-state.ts`'s `CONFLICT_ATTEMPTS_KEY`.
  *
- * `LanePass.phase` is validated against this, not against `PHASES`: the two
- * lanes that stamp a lane pass run in exactly those interrupt phases.
+ * `LanePass.phase` is validated against this rather than against `PHASES`
+ * because `fix` and `conflict` are REAL awaited rungs, not merely printable
+ * names: `graph-select-target`'s `sensor_gate` emits both as the selected phase,
+ * `dispatch-ladder-advance` passes that through, and `dispatch-ladder-await` is
+ * then invoked with it as the from-phase.
+ *
+ * THE RULE FOR A WRITER: stamp the rung the ladder awaited at. The reader's
+ * probe is `.execution.lane_pass.phase == "$FROM_PHASE"`, so nothing else can
+ * match. That is NOT always the node's persisted `phase`, and the two entries
+ * into `dispatch-conflict` are exactly where they diverge:
+ *
+ * - provision exit 11 (`execution.conflict` null) — advance reports the node's
+ *   own ladder phase as the from-phase, so the node's `phase` IS the rung.
+ * - the router's conflict interrupt (`execution.conflict` non-null) — the
+ *   selector emits `conflict`, so the rung is `conflict`, NOT the node's phase.
+ *
+ * `dispatch-conflict` SKILL 7b stamps the node's persisted `phase` on both, so
+ * it is right on the first and wrong on the second; qa-fix's auto-fix lane
+ * stamps the literal `qa`, which is right because its front door already gated
+ * on `phase == qa`. The `dispatch-conflict` mismatch is currently UNREACHABLE
+ * rather than fixed: on any rung that is not a `Phase` member the reader's
+ * phase probe runs first and asks `.phase != "conflict"`, which is true for
+ * every node, so it returns `advanced` before the lane-pass probe is consulted.
+ * That vacuous-`advanced` defect is filed separately; when it is fixed, this
+ * writer must start stamping the rung. Do not "simplify" this set down to
+ * `PHASES` in the meantime — that would break the fix rather than the bug.
  */
 export const DISPATCH_PHASE_NAMES: readonly string[] = [...PHASES, "fix", "conflict"];
 

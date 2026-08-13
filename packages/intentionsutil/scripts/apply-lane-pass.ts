@@ -40,6 +40,16 @@
 // value is a loud usage error here rather than a stamp the ladder reader
 // silently fails to match.
 //
+// PASS THE RUNG THE LADDER AWAITED AT, which is not always the node's persisted
+// `phase`. `dispatch-ladder-await`'s probe is
+// `.execution.lane_pass.phase == "$FROM_PHASE"`, and the selector emits `fix`
+// and `conflict` as real rungs — so on the router's conflict interrupt the rung
+// is `conflict`, while on the provision-exit-11 entry it is the node's own
+// phase. Today dispatch-conflict passes the node's phase on both paths and
+// qa-fix passes the literal `qa`; see the `DISPATCH_PHASE_NAMES` doc comment in
+// `src/schema.ts` for why the first of those is currently unreachable rather
+// than correct.
+//
 // Stdout: one JSON object —
 //   { "mode": "stamp", "id", "at": <YYYY-MM-DDTHH:MM:SSZ>, "lane", "phase", "sha": <sha|null>, "wrote": true }
 
