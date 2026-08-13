@@ -1422,7 +1422,23 @@ clarifications:
       Claude on the ground that dropping blast radius re-opens the interaction
       blind spot clarification 50 just closed. Carrier:
       tactic-review-plan-preflight-skill, except analysis 1, which clarification
-      54 moves to tactic-review-delta-base-and-blast-radius."
+      54 moves to tactic-review-delta-base-and-blast-radius. MODEL PIN, added
+      2026-08-13 by this round's own clause-coverage walk after the interview
+      had otherwise closed: the pre-pass runs as an OPUS subagent, and the pin
+      is EXPLICIT. This was the author's stated requirement (\"an opus
+      subagent\") and it is a routing decision, so the routing condition
+      requires it be recorded here with author approval rather than left in a
+      carrier's draft body — which is where it had survived until this walk. It
+      is pinned rather than inherited for the reason clarification 47
+      established for the review-lane session itself: a nested run does not
+      inherit the launching session's model, so omitting the flag silently
+      accepts a default. Note the shape this produces is the cheap-parent/
+      expensive-child pattern clarification 4 already sanctioned as a special
+      case — the /review-fix parent is not itself Opus-pinned, and one expensive
+      child deciding the depth of a much more expensive stage is the same trade
+      the /align-tactics orchestrator makes. The BOUNDED rule above is what
+      keeps that trade honest: an Opus pre-pass that read the whole repo would
+      cost more than the review depth it saves."
   - question: "STEELMAN: is a review pre-pass the per-run cleverness that the
       sanctioned structural lever excludes?"
     answer: "(Diverged 2026-08-13 /align round, author-directed — and the divergence
