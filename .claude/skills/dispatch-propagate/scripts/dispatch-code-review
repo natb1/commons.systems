@@ -94,6 +94,26 @@
 # --await-seconds and --deadline-seconds are OPERATIONAL, not identity: changing
 # how long a caller is willing to wait must not discard a live run.
 #
+# Killing a superseded run does NOT reset the before-image (branch (c))
+# -----------------------------------------------------------------------------
+# When the identity test fails on an in-flight run, branch (c) kills it and
+# relaunches. That killed run held `--permission-mode acceptEdits` and may
+# already have WRITTEN files. Taking a fresh `git stash create` after the kill
+# would capture those edits into the new run's baseline, so Step 6's
+# `git diff <before-image>` could never see them: the summary would under-report
+# the yield and `commit-merge-push` would commit files nothing attributed —
+# defeating the mechanical derivation that strategy-token-economy
+# clarification 25 requires ("not any agent's self-report").
+#
+# So on that path alone the baseline is HEAD, and the KILLED run's
+# untracked-before snapshot is carried forward rather than re-taken. HEAD, not
+# the killed run's own before_sha: (c) fires BECAUSE head_sha advanced, so that
+# stash predates the intervening qa-fix / fix-checks commits and would attribute
+# those commits to the review — a larger error than the one it fixes. HEAD is
+# sound because /review-fix Step 1b runs this as an exclusive pre-stage, so any
+# UNCOMMITTED change present at the kill point is the killed run's. When that
+# cannot be established the script exits 2 rather than guessing.
+#
 # summary.txt under --out-dir is still written, as a durable artifact for
 # humans and for the caller's own reading. It is NEVER read back as the resume
 # key — it lives in attacker-writable space.
@@ -187,7 +207,11 @@
 #      resume of an identical earlier run — see "Resume cache")
 #   1  `claude -p` exited non-zero, or the detached run could not be launched /
 #      died without recording an exit code
-#   2  invalid arguments, unusable resume-cache location, or empty output
+#   2  invalid arguments, unusable resume-cache location or run state, or empty
+#      output. "Unusable run state" includes a superseded in-flight run whose
+#      before-image baseline cannot be derived (branch (c) below): the review
+#      cannot be relaunched over an attributable diff, and refusing beats
+#      emitting a yield that is confidently wrong
 #   3  output carries a rejection / unavailability signature
 #   4  the detached run exceeded --deadline-seconds and was killed
 #   5  the detached run is still in flight — call again with the same arguments
@@ -786,6 +810,10 @@ RUN_PID=""
 RUN_STARTTIME=""
 RUN_LAUNCHED_AT=""
 BEFORE=""
+# Set by branch (c) when this launch REPLACES a killed superseded run, which
+# changes the before-image rule (d') applies. See "Killing a superseded run does
+# NOT reset the before-image" in the header.
+SUPERSEDED_RELAUNCH=0
 
 if [[ -f "$RUN_FILE" ]] && run_identity_matches "$RUN_FILE"; then
   # (b) Resume: the record describes this exact invocation's run.
@@ -800,15 +828,66 @@ else
     # would describe a diff nobody is asking about, so it is killed rather than
     # left spending. ONE stderr line, naming both head_shas, so the discarded
     # spend is attributable.
+    #
+    # The killed run ran under `--permission-mode acceptEdits` and may already
+    # have WRITTEN files, so this path also fixes the before-image (d') will
+    # take. A fresh `git stash create` after the kill would swallow those edits
+    # into the baseline, hiding them from Step 6's `git diff "$BEFORE"`: the
+    # summary would under-report touched_files_count and commit-merge-push would
+    # commit files nothing attributed — defeating the mechanical yield
+    # derivation strategy-token-economy clarification 25 requires ("not any
+    # agent's self-report"). SUPERSEDED_RELAUNCH tells (d') to baseline at HEAD
+    # and to KEEP this run's untracked snapshot instead of re-taking one.
+    #
+    # HEAD, not the killed run's before_sha: (c) fires BECAUSE head_sha
+    # advanced, so that stash predates the intervening qa-fix / fix-checks
+    # commits and would attribute those commits to this review — a larger error
+    # than the one being fixed.
     stale_pid="$(summary_field "$RUN_FILE" pid)"
     stale_head="$(summary_field "$RUN_FILE" head_sha)"
     stale_effort="$(summary_field "$RUN_FILE" effort)"
     stale_model="$(summary_field "$RUN_FILE" model)"
+    stale_before="$(summary_field "$RUN_FILE" before_sha)"
     echo "$PROG: discarding a superseded in-flight run (pid=${stale_pid:-unknown} head_sha=${stale_head:-unknown} effort=${stale_effort:-unknown} model=${stale_model:-unknown}); this invocation reviews head_sha=${HEAD_SHA:-unknown} effort=$EFFORT model=$MODEL" >&2
     if [[ "$stale_pid" =~ ^[0-9]+$ ]]; then
       kill_tree "$stale_pid" || true
     fi
+
+    # Fail closed when HEAD cannot serve as the baseline. `git stash create`
+    # prints nothing on a clean tree and (d') falls back to `git rev-parse
+    # HEAD`, so the killed run's tree was clean at ITS OWN launch exactly when
+    # its before_sha EQUALS its head_sha. When the two differ, the tree already
+    # carried uncommitted edits that predate the killed review, and HEAD cannot
+    # separate those from the killed run's own edits — no baseline yields an
+    # attributable diff, so refuse rather than emit a yield that is confidently
+    # wrong (.claude/rules/code-style.md: prefer clear errors over defensive
+    # fallbacks). This should essentially never fire: /review-fix Step 1b runs
+    # this as an exclusive pre-stage on a clean tree.
+    #
+    # Exit 2, NOT 1: /review-fix maps exit 1 to "the nested run crashed", the
+    # mis-reporting defect finding 2 of this same review fixed. Exit 2 is the
+    # unusable-resume/run-state code, and this is unusable run state.
+    #
+    # The run record is deliberately NOT discarded here. Left in place, a
+    # re-invocation lands in this same branch and refuses identically, instead
+    # of finding no record and silently taking the fresh, wrong before-image
+    # this guard exists to prevent. The killed pid is already dead, so the
+    # repeat costs nothing.
+    if [[ -n "$stale_before" && -n "$stale_head" && "$stale_before" != "$stale_head" ]]; then
+      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's tree was already dirty at ITS launch (before_sha=$stale_before != its head_sha=$stale_head), so HEAD (head_sha=${HEAD_SHA:-unknown}) cannot separate those pre-existing uncommitted edits from the killed run's own --fix edits; resolve the working tree (commit or revert the unattributed changes) and re-run" >&2
+      exit 2
+    fi
+    if [[ ! -f "$RUN_UNTRACKED" ]]; then
+      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's untracked-before snapshot '$RUN_UNTRACKED' is gone (killed run head_sha=${stale_head:-unknown}, this invocation head_sha=${HEAD_SHA:-unknown}), and re-taking one would record any file the killed run created as pre-existing; clear the run record at '$RUN_FILE' after resolving the working tree, then re-run" >&2
+      exit 2
+    fi
+
+    # Carry the killed run's untracked snapshot across `discard_run_record`,
+    # which deletes $RUN_UNTRACKED along with the rest of the record.
+    SUPERSEDED_RELAUNCH=1
+    cp "$RUN_UNTRACKED" "$RUN_UNTRACKED.superseded"
     discard_run_record
+    mv -f "$RUN_UNTRACKED.superseded" "$RUN_UNTRACKED"
 
     # We just killed the holder of the node lock, and we are about to ask for
     # it back. `kill_tree` reaches the child and its descendants, but the
@@ -834,24 +913,48 @@ else
   # WITHOUT touching either, and prints nothing on a clean tree. This is the
   # mechanical ground truth for "what the built-in changed"
   # (strategy-token-economy clarification 25) — not any agent's self-report.
-  BEFORE=$(git stash create)
-  if [[ -z "$BEFORE" ]]; then
+  #
+  # EXCEPT when branch (c) just killed a superseded run that may already have
+  # written files. Stashing then would capture ITS edits into the baseline and
+  # Step 6 could never see them, so the baseline is HEAD instead:
+  #   - uncommitted at the kill point ⇒ the killed run's edits (Step 1b's
+  #     exclusivity rule — "between the launching call and the collecting call
+  #     the session must do nothing else" — leaves nothing else they could be)
+  #     ⇒ correctly VISIBLE in this run's derived yield;
+  #   - already committed in HEAD ⇒ qa-fix / fix-checks' commits, which are what
+  #     advanced head_sha and triggered (c) ⇒ correctly EXCLUDED.
+  # Branch (c) has already proved HEAD is a usable baseline (its exit-2 guard
+  # refuses otherwise), so this is a derived rule, not a fallback.
+  if [[ "$SUPERSEDED_RELAUNCH" == "1" ]]; then
     BEFORE=$(git rev-parse HEAD)
+  else
+    BEFORE=$(git stash create)
+    if [[ -z "$BEFORE" ]]; then
+      BEFORE=$(git rev-parse HEAD)
+    fi
   fi
 
   # `git stash create` does not capture untracked files; snapshot them separately
   # so newly-untracked paths created by --fix can be unioned into touched-files.
   # The snapshot lives in CACHE_DIR because a LATER invocation reads it back —
   # it is run state now, not an out-dir artifact.
-  git status --porcelain --untracked-files=all \
-    | awk '$1=="??"{print $2}' >"$RUN_UNTRACKED.raw"
-  if [[ -n "$OUT_DIR_REL" ]]; then
-    grep -v -e "^${OUT_DIR_REL}/" -e "^${OUT_DIR_REL}\$" "$RUN_UNTRACKED.raw" \
-      | sort >"$RUN_UNTRACKED" || true
-  else
-    sort "$RUN_UNTRACKED.raw" >"$RUN_UNTRACKED"
+  #
+  # Skipped on the SUPERSEDED_RELAUNCH path, which keeps the KILLED run's
+  # snapshot (branch (c) carried it across `discard_run_record` for exactly
+  # this). Re-snapshotting would record every untracked file the dead run
+  # CREATED as pre-existing, so Step 6's `comm -13` would drop them from the
+  # union — the same attribution loss as a fresh stash, in the untracked half.
+  if [[ "$SUPERSEDED_RELAUNCH" != "1" ]]; then
+    git status --porcelain --untracked-files=all \
+      | awk '$1=="??"{print $2}' >"$RUN_UNTRACKED.raw"
+    if [[ -n "$OUT_DIR_REL" ]]; then
+      grep -v -e "^${OUT_DIR_REL}/" -e "^${OUT_DIR_REL}\$" "$RUN_UNTRACKED.raw" \
+        | sort >"$RUN_UNTRACKED" || true
+    else
+      sort "$RUN_UNTRACKED.raw" >"$RUN_UNTRACKED"
+    fi
+    rm -f "$RUN_UNTRACKED.raw"
   fi
-  rm -f "$RUN_UNTRACKED.raw"
 
   PROMPT="/code-review $EFFORT --fix"
   if [[ -z "$NO_COMMENT" ]]; then
