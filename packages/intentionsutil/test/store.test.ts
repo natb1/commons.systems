@@ -169,7 +169,7 @@ describe("store round-trip", () => {
         owner: "human",
         status: "raw",
         attention: spelling.authored,
-      } as unknown as IntentionNodeInput;
+      } as unknown as IntentionNodeInput; // type-safety-ok: legacy attention spellings intentionally omit fields IntentionNodeInput requires
 
       writeNode(dir, input);
       const read = readNode(dir, "attn-1");
@@ -197,7 +197,7 @@ describe("store round-trip", () => {
     // not produce a file that only fails on the next read.
     for (const attention of [{ override: 0, rationale: "r" }, { boosts: {}, rationale: "r" }]) {
       expect(() =>
-        writeNode(dir, { ...base, attention } as unknown as IntentionNodeInput),
+        writeNode(dir, { ...base, attention } as unknown as IntentionNodeInput), // type-safety-ok: claim-nothing attention fixtures intentionally omit fields IntentionNodeInput requires
       ).toThrow();
     }
     expect(existsSync(join(dir, "attn-zero.md"))).toBe(false);
