@@ -719,6 +719,84 @@ phase_is_done() {
   esac
 }
 
+# --- Advisory main-conflict prediction --------------------------------------
+# check_main_conflict_prediction — a read-only, edge-triggered heads-up that
+# origin/main and the node's own branch would no longer merge cleanly RIGHT
+# NOW. It exists to shrink the one gap this driver cannot close by merging:
+# provision-node-worktree merges origin/main into the node worktree at every
+# phase boundary, but a conflicting commit that lands on main WHILE a phase is
+# RUNNING goes unnoticed until the NEXT boundary — possibly an hour later,
+# given implement/qa/fix's measured durations.
+#
+# The worktree cannot be merged mid-phase — a live worker owns it as its cwd,
+# and merging would rewrite files out from under a running agent — but the
+# conflict CAN be predicted without touching the working tree, index or any
+# ref: `git merge-tree --write-tree` writes ONLY to the object store, so it is
+# safe to run against a branch a live worker is concurrently committing to.
+#
+# ADVISORY ONLY, PERMANENTLY. This must NEVER halt, requeue, or change any
+# disposition of its own — the authoritative answer stays
+# provision-node-worktree's real merge at the next phase boundary. A LATER
+# EDITOR MUST NOT PROMOTE THIS TO A GATE: there is no safe action to gate ON
+# here (the worktree cannot be merged mid-phase), only a value-free heads-up
+# for a person reading events.jsonl or dispatch-ladder-status.
+#
+# RUNS ON THE SAME POLL_S CADENCE AS THE DRIVER'S OWN IDLE/HELD/CI-WAIT
+# POLLING — reused, not a second timer. See poll_wait below, the one place
+# `sleep "$POLL_S"` happens in this script. It deliberately does NOT run
+# inside the inner await loop (dispatch-ladder-await's own exit-20 re-poll):
+# that loop's cadence is TIMEOUT_S, not POLL_S — dispatch-ladder-await polls
+# internally on ITS OWN --poll-s (default 15s) for up to --timeout-s before
+# ever returning to this script — and this driver's remit does not extend to
+# editing that script.
+#
+# EDGE-TRIGGERED, NOT LEVEL-TRIGGERED. A conflict that persists for an hour
+# must not write a line per poll — only a TRANSITION in
+# CONFLICT_PREDICTION_LAST does. The starting assumption is `clean`:
+# provision-node-worktree's own merge already confirmed the node clean against
+# main when the CURRENT phase launched (or it would not have launched), so the
+# first fact worth a line is a WORSENING, not the starting state repeated back.
+#
+# NO FETCH HERE, DELIBERATELY. This reads local refs exactly as they stand —
+# the same `git merge-tree --write-tree origin/main origin/<node>` verified
+# read-only and safe to run against a live node's branch. origin/main is
+# refreshed by reconcile_pass's own fetch on every "not-selectable" quiet
+# pass, and the node's own branch by provision-node-worktree at each phase
+# boundary, so staleness only DELAYS detection — it can never produce a false
+# gate action, because there is no gate here to falsely trip.
+#
+#   exit 0   merges clean                              -> clean
+#   exit 1   conflicts                                  -> conflict
+#   exit >1  error (e.g. the node's branch does not yet -> unknown
+#            exist on origin, or another infra failure)
+CONFLICT_PREDICTION_LAST=clean
+
+check_main_conflict_prediction() {
+  local rc verdict
+  git -C "$PROJECT_ROOT" merge-tree --write-tree origin/main "origin/$NODE_ID" \
+    >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) verdict=clean ;;
+    1) verdict=conflict ;;
+    *) verdict=unknown ;;
+  esac
+  if [[ "$verdict" != "$CONFLICT_PREDICTION_LAST" ]]; then
+    log_event main-conflict-prediction "$PHASE" "$verdict" \
+      "advisory only, never gates or halts: predicted merge of origin/main into origin/$NODE_ID transitioned ${CONFLICT_PREDICTION_LAST} -> $verdict (git merge-tree rc=$rc); the authoritative answer stays provision-node-worktree's real merge at the next phase boundary"
+    CONFLICT_PREDICTION_LAST="$verdict"
+  fi
+}
+
+# poll_wait — the one place `sleep "$POLL_S"` happens in this script, reused
+# (never duplicated) as the cadence for check_main_conflict_prediction above.
+# Every idle/held/quiet re-poll below calls this instead of a bare
+# `sleep "$POLL_S"`.
+poll_wait() {
+  check_main_conflict_prediction
+  sleep "$POLL_S"
+}
+
 # --- The reconcile pass ----------------------------------------------------
 # ONE pass over the three reconcilers, under the selection lock, with NO sleep
 # anywhere inside it. Sets two globals and returns 0:
@@ -786,17 +864,21 @@ reconcile_pass() {
   # Step 1 — which never runs for a node the tick cannot reach, i.e. precisely
   # the case this driver exists for. Fetch and merge are SEPARATE steps so a
   # fetch failure is distinguishable from a divergence (#1546,
-  # dispatch-select-tick:377-382, dispatch-tick:569-572). `--ff-only` doubles as
+  # dispatch-select-tick:377-382, dispatch-tick:583-597). `--ff-only` doubles as
   # the dirty/diverged-tree guard: the reconcilers write node files into this
   # tree and push through graph-commit, so a wedged tree must not be drained
-  # into. A shared sync_main_checkout helper across the three call sites is a
-  # deliberately deferred follow-up.
+  # into. The fetch/merge pair now lives in lib.sh's `sync_main_checkout` (rc 1
+  # = fetch failed, rc 2 = merge failed) — the shared helper this comment used
+  # to defer; the two halts below keep their own wording, which is the whole
+  # reason the helper reports the two failures distinctly.
   STEP=sync; write_state
-  if ! git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
+  SYNC_RC=0
+  sync_main_checkout "$PROJECT_ROOT" || SYNC_RC=$?
+  if [[ "$SYNC_RC" -eq 1 ]]; then
     release_lock
     halt 11 throw "main-sync-failed: 'git fetch origin main' failed in $PROJECT_ROOT — merging against a stale checkout could merge past a park landed since this run started"
   fi
-  if ! git -C "$PROJECT_ROOT" merge --ff-only origin/main 1>&2; then
+  if [[ "$SYNC_RC" -ne 0 ]]; then
     release_lock
     halt 11 throw "main-sync-failed: 'git merge --ff-only origin/main' failed in $PROJECT_ROOT (the tree is dirty or diverged) — this checkout needs a person before anything may be merged or written into it"
   fi
@@ -990,8 +1072,21 @@ while :; do
   # the launch, i.e. as a stall. LAUNCH_EPOCH itself is left alone: it is also
   # the evaluator's aggregate-usage.sh window and means something else.
   PASS_SINCE=$(now_epoch)
-  ADV_OUT=$("$ADVANCE" "$NODE_ID"); adv_rc=$?
+  # dispatch-ladder-advance's one diagnostic line for a stale-selection /
+  # scope-stale-demoted case (e.g. "selected review but node is now qa") goes
+  # to ITS stderr, inherited from provision-node-worktree/assert-node-selection
+  # further down the call chain — it was previously visible only via a
+  # journalctl trawl, because ADV_OUT above captures stdout only. Capture
+  # stderr to a scratch file in the same per-node STATE_DIR mktemp uses below
+  # (so it cannot collide with another node's concurrently-running driver),
+  # read its last line, and remove it immediately — mirroring write_state's
+  # mktemp-then-mv/rm pattern rather than adding a second EXIT trap.
+  ADV_ERR_FILE=$(mktemp "$STATE_DIR/.adv-stderr.XXXXXX") || {
+    echo "dispatch-ladder-run: mktemp failed in $STATE_DIR" >&2; exit 1; }
+  ADV_OUT=$("$ADVANCE" "$NODE_ID" 2>"$ADV_ERR_FILE"); adv_rc=$?
   ADV_OUT=$(head -n1 <<<"$ADV_OUT")
+  ADV_ERR_LAST=$(tail -n1 "$ADV_ERR_FILE" 2>/dev/null)
+  rm -f "$ADV_ERR_FILE"
 
   case "$adv_rc" in
     0)
@@ -1068,7 +1163,7 @@ while :; do
             if (( HELD_S > HELD_GRACE_S )); then
               halt 11 throw "$AW_OUT — held un-reaped for ${HELD_S}s, past the HELD_GRACE_S ${HELD_GRACE_S}s window in which terminal_without_disposition_sweep would have parked an escalation (its own grace is DISPATCH_TERMINAL_DISPOSITION_GRACE_S, 300s by default). The session stopped without a node-terminal marker and no park landed: read its transcript, then release it with 'claude rm <session-id>' — it holds a worker slot and keeps $NODE_ID unselectable"
             fi
-            sleep "$POLL_S"
+            poll_wait
             run_owed_sweeps
             check_deadline
             continue
@@ -1091,17 +1186,30 @@ while :; do
           # The normal state right after implement opens a draft PR. Halting
           # here would halt after every implement phase.
           log_event idle "$PHASE" ci-waiting "re-polling in ${POLL_S}s"
-          sleep "$POLL_S"
+          poll_wait
           continue
           ;;
         stale-selection|scope-stale-demoted)
           # dispatch-graph-execute already cleared the claim and the node is
           # re-runnable. Bounded, because an unbounded requeue is a spin.
           if (( requeue_budget == 0 )); then
-            halt 12 stalled "the requeue budget ran out on repeated '$REASON' — the node keeps being re-selected without progressing"
+            # Only the fact this driver actually established: the budget
+            # drained on repeated occurrences of the last reason seen. NOT a
+            # claim about WHY the reselection kept happening — this driver
+            # never diagnoses that, and asserting a cause here was found to be
+            # actively wrong in the case that exposed this message (the node
+            # had already progressed to review; a separate gate defect misread
+            # it as still at qa). Whatever advance itself observed, when it
+            # wrote a diagnostic line, is on the idle event just below instead.
+            halt 12 stalled "the requeue budget drained on repeated '$REASON'"
           fi
           requeue_budget=$(( requeue_budget - 1 ))
-          log_event idle "$PHASE" "$REASON" "requeue_budget=$requeue_budget"
+          # advance's own stderr diagnosis, when it wrote one, folded into the
+          # detail so it lands in events.jsonl instead of being visible only
+          # via a journalctl trawl of dispatch-ladder-advance's unit. Truncated
+          # so one pathological line cannot bloat the event log.
+          log_event idle "$PHASE" "$REASON" \
+            "requeue_budget=$requeue_budget${ADV_ERR_LAST:+; ${ADV_ERR_LAST:0:200}}"
           continue
           ;;
         *)
@@ -1126,7 +1234,7 @@ while :; do
               # logged apart so the evaluation can tell them apart.
               log_event idle "$PHASE" "$QUIET_REASON" \
                 "ci_waited=${ci_waited}s of ${CI_WAIT_S}s; re-polling in ${POLL_S}s"
-              sleep "$POLL_S"
+              poll_wait
               ci_waited=$(( ci_waited + POLL_S ))
               if (( ci_waited > CI_WAIT_S )); then
                 halt 10 idle "nothing to launch for $NODE_ID: ${ci_waited}s of reconcile polling, past the --ci-wait-s ${CI_WAIT_S}s budget, produced no merge, no absorb and no fix route (last silence: $QUIET_REASON; advance reason: ${REASON:-unknown}) — the PR's CI is most likely still pending, or a gate is holding it; read the PR's checks and dispatch-ladder-advance's event lines in the journal"

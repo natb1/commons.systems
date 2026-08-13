@@ -589,6 +589,83 @@ assert_eq "held: the absorb was never reached" "0" "$(calls reconcile)"
 assert_eq "held: state.json status is halted" "halted" "$(jq -r .status "$STATE_DIR/state.json")"
 assert_eq "held: the lock was released before halting" "1" "$(lock_modes --release)"
 
+# --- Advisory main-conflict prediction (check_main_conflict_prediction) -----
+# check_main_conflict_prediction runs `git merge-tree --write-tree origin/main
+# origin/<node>` on the SAME POLL_S cadence as the driver's own idle/quiet
+# re-polls (poll_wait), and logs a `main-conflict-prediction` event ONLY on a
+# transition in the verdict (clean/conflict/unknown) — never once per poll.
+# It is advisory: it must never change RC, never gate, never requeue.
+#
+# All three cases below drive the "not-selectable" quiet-reconcile arm with
+# merge/reconcile/stall all no-op (mirrors "a silent reconcile is a noop"
+# above), so each pass is exactly THREE git calls in order: fetch, merge
+# --ff-only, then the advisory merge-tree check from poll_wait.
+echo "Test: a clean prediction on every poll writes no event"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+run_ladder --ci-wait-s 2
+assert_eq "predict-clean: exit 10 (the ci-wait budget ran out, unaffected)" "10" "$RC"
+TOTAL=$((TOTAL + 1))
+if ! jq -e 'select(.event == "main-conflict-prediction")' "$STATE_DIR/events.jsonl" \
+     >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: predict-clean: no main-conflict-prediction event of any disposition was recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: predict-clean: no main-conflict-prediction event of any disposition was recorded"
+  echo "    events: $(jq -c 'select(.event == "main-conflict-prediction")' "$STATE_DIR/events.jsonl")"
+fi
+
+echo "Test: a conflict prediction fires exactly one event on the transition, and stays quiet while it persists"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+# 4 passes x 3 calls (fetch, merge, merge-tree): pass1's merge-tree is clean
+# (no event — matches the assumed starting state); pass2's is the transition
+# to conflict (the one event); passes 3 and 4 see the SAME conflict verdict
+# and must write nothing more.
+set_seq git     '0|' '0|' '0|' \
+                '0|' '0|' '1|' \
+                '0|' '0|' '1|' \
+                '0|' '0|' '1|'
+run_ladder --ci-wait-s 3
+assert_eq "predict-conflict: exit 10 (the ci-wait budget ran out, unaffected by the prediction)" "10" "$RC"
+assert_eq "predict-conflict: four quiet passes ran (four merge-tree checks among them)" \
+  "12" "$(calls git)"
+assert_eq "predict-conflict: exactly one event fired on the clean->conflict transition" \
+  "1" "$(events_have main-conflict-prediction conflict)"
+assert_eq "predict-conflict: no clean event was recorded (only the transition is logged)" \
+  "0" "$(events_have main-conflict-prediction clean)"
+TOTAL=$((TOTAL + 1))
+N_EVENTS=$(jq -c 'select(.event == "main-conflict-prediction")' "$STATE_DIR/events.jsonl" 2>/dev/null | grep -c .) || N_EVENTS=0
+if [[ "$N_EVENTS" == "1" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: predict-conflict: exactly ONE main-conflict-prediction event total, despite three polls seeing the conflict persist"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: predict-conflict: exactly ONE main-conflict-prediction event total, despite three polls seeing the conflict persist"
+  echo "    count: $N_EVENTS"
+fi
+TOTAL=$((TOTAL + 1))
+DETAIL=$(jq -r 'select(.event == "main-conflict-prediction") | .detail' "$STATE_DIR/events.jsonl" 2>/dev/null)
+if grep -q 'advisory only, never gates or halts' <<<"$DETAIL"; then
+  PASS=$((PASS + 1)); echo "  PASS: predict-conflict: the event's own detail declares it advisory-only, for a later editor reading the journal"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: predict-conflict: the event's own detail declares it advisory-only, for a later editor reading the journal"
+  echo "    detail: $DETAIL"
+fi
+
+echo "Test: a prediction that cannot be computed (exit >1) logs 'unknown' and the run continues unaffected"
+# rc=128 stands in for merge-tree's real-world failure mode named in the
+# driver's own comment: the node's branch does not exist on origin yet.
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+set_seq git     '0|' '0|' '128|'
+run_ladder --ci-wait-s 0
+assert_eq "predict-unknown: exit 10 (idle halt) — the SAME disposition an ordinary quiet pass reaches" \
+  "10" "$RC"
+assert_eq "predict-unknown: exactly one 'unknown' event was recorded" \
+  "1" "$(events_have main-conflict-prediction unknown)"
+assert_eq "predict-unknown: no 'conflict' or 'clean' event accompanied it" \
+  "0" "$(( $(events_have main-conflict-prediction conflict) + $(events_have main-conflict-prediction clean) ))"
+assert_eq "predict-unknown: the pass still reached the reconciler despite the failed prediction" \
+  "1" "$(calls reconcile)"
+
 echo "Test: repeated quiet passes exhaust --ci-wait-s and halt naming CI"
 reset_seqs
 set_seq advance '10|idle tactic-fixture-node not-selectable'
@@ -623,7 +700,15 @@ run_ladder
 assert_eq "lock-busy: exit 0 (the loop carried on and finished)" "0" "$RC"
 assert_eq "lock-busy: two lock/busy events were recorded" "2" "$(events_have lock busy)"
 assert_eq "lock-busy: a busy pass merged nothing" "1" "$(calls merge)"
-assert_eq "lock-busy: a busy pass did not sync the checkout either" "2" "$(calls git)"
+# 2 sync calls (fetch + merge --ff-only) from the ONE acquiring pass, plus 2
+# advisory `git merge-tree` calls from check_main_conflict_prediction — one per
+# busy-lock quiet poll (poll_wait's cadence, unconditional on lock state: the
+# prediction is read-only and needs no lock, so it still runs on a busy pass).
+# The busy passes themselves still skip fetch/merge entirely — see the argv
+# assertion just below, which is what actually pins "no sync on a busy pass".
+assert_eq "lock-busy: a busy pass did not sync the checkout either" "4" "$(calls git)"
+assert_eq "lock-busy: only ONE pass ran fetch (the acquiring one)" \
+  "1" "$(grep -c -- '-C .* fetch origin main$' "$SEQ_DIR/git.argv" 2>/dev/null || true)"
 assert_eq "lock-busy: only the acquiring pass released" "1" "$(lock_modes --release)"
 
 echo "Test: a main checkout that will not sync halts 11 and merges NOTHING"
@@ -1102,5 +1187,43 @@ else
   echo "    stderr: $ERR"
 fi
 printf '%s\n' "$FROZEN_LIB_GOOD" >"$FROZEN_LIB"
+
+# --- advance's stderr diagnosis reaching events.jsonl ------------------------
+echo "Test: advance's stderr reason on a stale-selection requeue reaches events.jsonl"
+# make_seq_fake only ever writes stdout, so a bespoke one-off fake stands in for
+# dispatch-ladder-advance here — one that ALSO writes the one diagnostic line
+# the real script emits on this path (e.g. "selected review but node is now
+# qa") to stderr, which is exactly what the driver must now capture instead of
+# losing it to a journalctl-only trawl (the defect this row exists to pin).
+# Restored to the sequence-driven fake below so every later case (there are
+# none after this one today, but the restore is not conditional on that) keeps
+# working.
+reset_seqs
+cat >"$LADDER/dispatch-ladder-advance" <<'STUB'
+#!/usr/bin/env bash
+echo "idle tactic-fixture-node stale-selection"
+echo "dispatch-ladder-advance: stale-selection: phase: selected review but node is now qa" >&2
+exit 10
+STUB
+chmod +x "$LADDER/dispatch-ladder-advance"
+run_ladder --max-run-s 600
+assert_eq "stderr-detail: the budget still drains to exit 12 (stalled)" "12" "$RC"
+TOTAL=$((TOTAL + 1))
+if jq -r 'select(.event == "idle" and .disposition == "stale-selection") | .detail' \
+     "$STATE_DIR/events.jsonl" 2>/dev/null | grep -q 'selected review but node is now qa'; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr-detail: advance's stderr reason reaches the idle event's detail"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr-detail: advance's stderr reason reaches the idle event's detail"
+  echo "    events: $(jq -c 'select(.event == "idle")' "$STATE_DIR/events.jsonl" 2>/dev/null)"
+fi
+TOTAL=$((TOTAL + 1))
+if jq -r 'select(.event == "idle" and .disposition == "stale-selection") | .detail' \
+     "$STATE_DIR/events.jsonl" 2>/dev/null | grep -q 'requeue_budget='; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr-detail: the requeue_budget figure is still present alongside it"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr-detail: the requeue_budget figure is still present alongside it"
+  echo "    events: $(jq -c 'select(.event == "idle")' "$STATE_DIR/events.jsonl" 2>/dev/null)"
+fi
+make_seq_fake "$LADDER/dispatch-ladder-advance" advance
 
 report_results
