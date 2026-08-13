@@ -1,25 +1,38 @@
 ---
 id: strategy-rsi-plan-surface
 kind: strategy
-statement: rsi-plan.md is the author's readable surface for harness status and
-  what comes next — every section derived from graph state, nothing
-  hand-maintained
+statement: RETIRED 2026-08-12 — rsi-plan.md and its render are withdrawn; the
+  author's view of the delegated harness is the finding ledger and the
+  /rsi-audit report, neither of which is a rendered document this strategy owns
 owner: human
 status: refining
 parent: strategy-recursive-self-improvement
-rationale: "Recorded 2026-08-11 by the /align round that subdivided
-  strategy-recursive-self-improvement into ranking-namespace children, executing
-  the concrete work its child-strategy clarification records as owed. This child
-  owns the author-facing status and priority VIEW of the harness —
-  render-rsi-plan.ts, the rsi-plan.md format contract, and the view's eventual
-  migration into the office-hours GUI. Its end is not that a document exists but
-  that the author's oversight of a delegated harness is DERIVED from the record
-  rather than reconstructed by hand: who sets the problem stays with the author
-  only if the author can see what the delegatee is doing without asking it.
-  Ranking function, the reason it is a child rather than a tactic group: tactics
-  serving it resolve one band above tactics left directly on the parent, which
-  is the author's only doctrine-sanctioned channel for ordering delegated work
-  (a direct tactic boost sits inside the surface delegated to /rsi-evaluate)."
+rationale: >-
+  (Retired 2026-08-12 by author ruling, in the /align round that collapsed the
+  rsi skill family into two measurement skills.) This child strategy was
+  recorded 2026-08-11 to own the author-facing status and priority VIEW of the
+  harness — render-rsi-plan.ts, the rsi-plan.md format contract, and the view's
+  eventual migration into the office-hours GUI — and to serve as a ranking
+  namespace, since a direct author boost on an owner: ai tactic sits inside the
+  surface delegated to /rsi-evaluate.
+
+
+  Both reasons lapsed in the same round. rsi-plan.md is withdrawn, taking the
+  format contract and the render with it; and the delegated-prioritization
+  surface this node was a workaround for now has no actuator, since
+  /rsi-evaluate was specified 2026-08-11 and never built and the judgment
+  session it belonged to is retired.
+
+
+  The END this strategy named is not disowned and should not be quietly lost:
+  'the author's oversight of a delegated harness is DERIVED from the record
+  rather than reconstructed by hand — who sets the problem stays with the author
+  only if the author can see what the delegatee is doing without asking it.' The
+  successor surfaces are the finding ledger (dispatch-eval-finding --list, one
+  entry per distinct finding with a recurrence count) and the /rsi-audit report.
+  They are thinner than a rendered plan: they show findings and spend, not
+  priorities or estimated delivery dates. Whether that is sufficient oversight
+  is an open question for the author, recorded here rather than settled.
 reading: null
 serves: []
 recovers: []
@@ -181,18 +194,28 @@ clarifications:
       is the duplicate pattern tactic-graph-self-consistency-sweep Unit 4
       already stripped once. Removed; inheritance through parent is deliberate,
       not an omission."
+  - question: What happens to this node and its three tactics?
+    answer: >-
+      (Recorded 2026-08-12.) The node is retired in place rather than pruned in
+      this round, because six other nodes reference it or its tactics in prose —
+      kind-kind, strategy-attention-surface,
+      strategy-rsi-delegated-prioritization, tactic-attention-namespaced-rank,
+      tactic-priority-provenance-schema and
+      tactic-rsi-reprioritization-outcome-audit — and deleting the files without
+      de-referencing them first breaks validate-graph's prose-reference check.
+      The prune is owed by the implementation tactic that also deletes the
+      render code.
+
+
+      Its three tactics are moot and go with it:
+      tactic-rsi-plan-merged-priority-table and tactic-rsi-plan-priority-render
+      (both phase null), and tactic-rsi-plan-render-pause-block, which sat at
+      phase implement with no live worktree — it existed to render the pause
+      resume criteria into rsi-plan.md, and this round retires the pause
+      condition and the document in one stroke. No session was interrupted; the
+      node was checked for a live worktree and had none.
 tooling_goals: []
-success_signal:
-  observable: sections of rsi-plan.md that are not derived from graph state —
-    hand-maintained content, plus the renderer's own staleness FLAGs naming a
-    section it cannot derive
-  sensor: the FLAG stream render-rsi-plan.ts already writes to stderr (one `FLAG
-    <kind> <subject> — <detail>` line per finding), counted per render
-  threshold: zero underivable sections across consecutive rsi iterations — a
-    nonzero count names exactly which section still depends on a human keeping
-    it current, which is the claim this strategy makes and the only thing its
-    tactics can move
-  is_proxy: true
+success_signal: null
 attention:
   boost: 2
   override: null
@@ -223,19 +246,6 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  conditions:
-    - render-rsi-plan.ts remains the sole writer of rsi-plan.md, under the
-      single-writer worktree claim and the direct-push-to-main exception the
-      parent's render condition grants — a second writer would break the
-      fidelity signal by construction
-    - every section stays derivable from graph state; a section that cannot be
-      derived is a defect against this strategy, never a hand-maintained
-      exception
-    - the content boundary with strategy-attention-surface holds as recorded —
-      that node keeps the office-hours ritual, parked-node selection, and the
-      signals queue; this one keeps the status and priority view
-    - the parent's ownership boundary holds — the author owns strategy-level
-      attention, so what this surface renders as priority order is the author's
-      order, not the renderer's
+  conditions: []
 ---
-# rsi-plan.md is the author's readable surface for harness status and what comes next — every section derived from graph state, nothing hand-maintained
+# RETIRED 2026-08-12 — rsi-plan.md and its render are withdrawn; the author's view of the delegated harness is the finding ledger and the /rsi-audit report, neither of which is a rendered document this strategy owns
