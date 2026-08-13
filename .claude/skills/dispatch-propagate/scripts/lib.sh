@@ -2017,9 +2017,24 @@ get_worktree_id() {
 # Print the project root (parent of git --git-common-dir) to stdout.
 # Returns non-zero if not in a git repo. Prints no error and does not exit —
 # the caller supplies its own message/cleanup via `|| { … }`.
+#
+# This body is duplicated, deliberately, in lib-repo-roots.sh — which is the
+# canonical home and the single definition the three worktree hooks share.
+# lib.sh does NOT source it: ~17 test fixtures copy lib.sh into a temp scripts
+# dir by name (`cp "$SCRIPT_DIR/lib.sh" "$TMP/scripts/lib.sh"`), so giving
+# lib.sh a new sibling dependency breaks every one of them at source time with
+# `resolve_project_root: command not found`. Measured — CI caught exactly that.
+# test-lib-repo-roots.sh asserts the two definitions agree, so drift is a red
+# test rather than a silent divergence. Collapsing these into one definition
+# means converting those fixtures to the `lib-*.sh` glob form that a few
+# already use; that is a separate, mechanical change.
+#
+# The `[ -n "$common_dir" ]` guard is load-bearing — see lib-repo-roots.sh's
+# copy for the rationale. Keep the two bodies byte-identical.
 resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$common_dir" ] || return 1
   dirname "$common_dir"
 }
 
