@@ -97,7 +97,7 @@ attention:
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
   tier: 1
-phase: implement
+phase: done
 execution:
   branch: review-lane-code-review-high-detached
   pr: 3078
@@ -106,7 +106,11 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-13T14:14:07Z
+    mergeCommitSha: fbb9be83c73af02da0eb6920c387f5c29bcd4a3d
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
