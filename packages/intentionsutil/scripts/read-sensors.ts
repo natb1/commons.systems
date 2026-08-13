@@ -1288,7 +1288,7 @@ export function makeIntentionStoreSensor(
 //
 // Reading format (stable and parseable), one segment per source the declared
 // sensor names, plus the token attribution the fitness function needs:
-//   `pause: <state>; backlog: <B>/<T> = <P>% (band ≤35%); parked: <N> (<M> blocking); worktrees: <W>; tokens <window>: dispatch <x>% / office-hours <y>% / rsi <z>%`
+//   `pause: <state>; backlog: <B>/<T> = <P>% (band ≤35%); parked: <N> (<M> blocked); worktrees: <W>; tokens <window>: dispatch <x>% / office-hours <y>% / rsi <z>%`
 // Every segment degrades independently to `unknown` and never throws (the
 // total-sensor contract at the top of this file).
 
@@ -1362,10 +1362,43 @@ function readWorktreeCount(repoDir: string): string {
 }
 
 /**
- * Parked-node census over the store: how many nodes are parked, and how many of
- * those actually BLOCK an open node (`blocked_by` edge onto them). The second
+ * Parked-node census over a node set: how many nodes are parked, and how many
+ * OPEN nodes are held by a `blocked_by` edge onto one of them. The second
  * number is the critical-path one — a park nothing depends on costs nothing,
  * whereas a park holding open work is the one the author has to clear.
+ *
+ * DENOMINATOR, chosen deliberately: `blocked` counts HELD NODES (open nodes
+ * with at least one `blocked_by` edge onto a parked node), not the number of
+ * DISTINCT parked nodes doing the blocking. The two disagree whenever one
+ * park blocks several open nodes, or several parks together block one node.
+ * This function used to compute the other denominator (distinct blocking
+ * parks) while the retired `rsi-plan.md` renderer's `countBlockedByParked`
+ * computed this one on the same input — a real divergence between two
+ * implementations of "what does a park block?", caught when
+ * `/rsi-audit`'s parked-population lens (`.claude/skills/rsi-audit/SKILL.md`)
+ * was re-homed onto this sensor. Held-node is the one kept: it answers "how
+ * much open work is stuck," which is what
+ * `strategy-recursive-self-improvement`'s own declared sensor name means by
+ * "parked critical-path count" (see `RSI_SENSOR_NAME` above). This is now the
+ * ONE place that count is computed — `readParkedCensus` below and the audit
+ * lens both read it from here, so the two can no longer drift apart.
+ */
+export function parkedCensus(nodes: IntentionNode[]): { parked: number; blocked: number } {
+  const parkedIds = new Set(nodes.filter((n) => n.office_hours !== null).map((n) => n.id));
+  const blocked = nodes.filter(
+    (n) =>
+      n.office_hours === null &&
+      n.phase !== null &&
+      n.phase !== "done" &&
+      n.blocked_by.some((b) => parkedIds.has(b)),
+  ).length;
+  return { parked: parkedIds.size, blocked };
+}
+
+/**
+ * Parked-node census over the store, formatted for the rsi sensor reading.
+ * Delegates to `parkedCensus` — see its doc comment for the denominator this
+ * reports.
  */
 export function readParkedCensus(storeDir: string): string {
   let nodes: IntentionNode[];
@@ -1374,15 +1407,8 @@ export function readParkedCensus(storeDir: string): string {
   } catch {
     return "unknown";
   }
-  const parked = new Set(nodes.filter((n) => n.office_hours !== null).map((n) => n.id));
-  const blocking = new Set<string>();
-  for (const node of nodes) {
-    if (node.office_hours !== null || node.phase === null || node.phase === "done") continue;
-    for (const blocker of node.blocked_by) {
-      if (parked.has(blocker)) blocking.add(blocker);
-    }
-  }
-  return `${parked.size} (${blocking.size} blocking)`;
+  const { parked, blocked } = parkedCensus(nodes);
+  return `${parked} (${blocked} blocked)`;
 }
 
 /**
