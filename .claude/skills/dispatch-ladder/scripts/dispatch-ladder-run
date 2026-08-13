@@ -38,6 +38,45 @@
 # decision of its own. If a rule about WHEN something may happen ever appears
 # here, it is in the wrong file.
 #
+# TWO TICK SWEEPS RUN HERE, for the very reason this driver exists. Both are
+# reused verbatim — no wrapper, no variant policy — and both run once before
+# every advance:
+#
+#   reservation_sweep                   (lib-reservation-ledger.sh) releases the
+#                                       ledger marker this driver's OWN previous
+#                                       advance wrote.
+#   terminal_without_disposition_sweep  (lib-frozen-session-park.sh) parks the
+#                                       node of a phase session that ESCALATED —
+#                                       an `office-hours-reason` file and,
+#                                       deliberately, no `node-terminal` marker.
+#
+# Both are otherwise called only from dispatch-tick. A detached driver on a host
+# whose heartbeat is stopped — the bootstrap-deadlock case — is the one caller
+# for whom "the next tick will clear it" is false, so it owes both sweeps
+# itself. Neither is a gate: the driver adds no reclaim rule and no park rule of
+# its own, it only makes the tick's own sweeps run on its own cadence.
+#
+# FLEET-WIDE SCOPE, DELIBERATE. terminal_without_disposition_sweep takes no
+# node filter — it walks every escalated session in the fleet, not just
+# NODE_ID's. That is not an oversight this driver should scope away: the sweep
+# exists for the bootstrap-deadlock case where NO heartbeat is running at all,
+# so narrowing it to this driver's own node would silently drop every OTHER
+# node's escalation for as long as the heartbeat stays down — defeating the
+# reason this call exists. A reader watching this driver walk "one node" WILL
+# see it take park actions on unrelated nodes; that is the sweep doing its job,
+# not a bug to file.
+#
+# BUDGET-BOUNDED, NOT POLICY-CHANGED. The tick's defaults size the sweep for a
+# 15-minute tick: park_max=2 x park_timeout=120s + lock_wait=60s is up to 300s,
+# tolerable buried inside a tick period. This driver instead reports progress
+# on --poll-s cadence against a --max-run-s wall clock, so that same 300s can
+# overshoot --max-run-s by minutes on a single pass. The driver exports smaller
+# per-pass caps through the library's existing tunables at the call site below
+# — a bound on how long ONE pass may spend, not a change to what gets parked or
+# when: the sweep runs every pass, so a lower per-pass cap catches up over
+# subsequent passes rather than dropping work. Each cap stays overridable from
+# the environment.
+#
 # THE CI BRANCH IS OBSERVED, NEVER COMPUTED. For every interruptible phase
 # (`implement`, `qa`, `review` before the marker) red CI already routes to
 # `fix` inside the SAME selection pass, so the next `advance` simply answers
@@ -110,6 +149,12 @@
 #                             and a stale scope are all a person's call; a
 #                             driver that retried them would be making the call.
 #       `merged #N (<id>)` -> merged
+#       `synced #N (<id>)` -> quiet. The up-to-date gate found the PR behind
+#                             origin/main and merged main INTO it instead, which
+#                             re-triggers CI on the fresh base. No merge this
+#                             pass; the outer wait re-polls until CI is green on
+#                             the now-current base (or the --ci-wait-s budget
+#                             runs out and the run halts `idle`).
 #     reconcile-graph-merged --node <id>
 #       `reconciled <id> -> <target>`  -> changed; take another ladder step
 #       `deferred <id> (...)`          -> quiet (the outer wait re-polls)
@@ -257,18 +302,32 @@ PROJECT_SCRIPTS="$PROJECT_ROOT/.claude/skills/dispatch-propagate/scripts"
 
 # lib.sh          — dispatch_lock_file / headless_sentinel_path, for the
 #                   headless-liveness sentinel below.
-# lib-reservation-ledger.sh — reservation_sweep, run before every advance.
-# Both are sourced (not executed), so the CHECKOUT_ROOT hazard above does not
+# lib-reservation-ledger.sh   — reservation_sweep, run before every advance.
+# lib-frozen-session-park.sh  — terminal_without_disposition_sweep, likewise run
+#                   before every advance. It resolves its OWN siblings (lib.sh,
+#                   lib-claude-agents.sh, lib-standdown-recheck.sh,
+#                   lib-decision-log.sh) by BASH_SOURCE dirname, so taking IT
+#                   from PROJECT_SCRIPTS takes the main checkout's copy of all
+#                   of them — the same one-version rule as the two above.
+# All are sourced (not executed), so the CHECKOUT_ROOT hazard above does not
 # apply to them directly; they are taken from PROJECT_SCRIPTS anyway so the
-# driver runs ONE version of the ledger and lock helpers — the main checkout's
-# — rather than a feature branch's in-progress edit of them.
-for lib in lib.sh lib-reservation-ledger.sh; do
+# driver runs ONE version of the ledger, lock and sweep helpers — the main
+# checkout's — rather than a feature branch's in-progress edit of them.
+for lib in lib.sh lib-reservation-ledger.sh lib-frozen-session-park.sh; do
   [[ -r "$PROJECT_SCRIPTS/$lib" ]] || {
     echo "dispatch-ladder-run: required library not readable: $PROJECT_SCRIPTS/$lib" >&2; exit 2; }
   # shellcheck source=/dev/null
   source "$PROJECT_SCRIPTS/$lib"
 done
-for fn in dispatch_lock_file headless_sentinel_path reservation_sweep; do
+# A LOAD FAILURE IS FATAL HERE, deliberately UNLIKE dispatch-tick, which logs a
+# loud line and ticks on (dispatch-tick:509-519). The tick can afford that: it
+# runs again in a minute, and the sweep it skipped is retried then. This driver
+# is a ONE-SHOT detached process that exists precisely because no heartbeat is
+# running — nothing behind it retries anything. A silently-skipped sweep here is
+# not a delayed sweep, it is the deadlock the sweep prevents. Refuse to start
+# instead (.claude/rules/code-style.md: a clear error, never a quiet fallback).
+for fn in dispatch_lock_file headless_sentinel_path reservation_sweep \
+          terminal_without_disposition_sweep; do
   declare -f "$fn" >/dev/null 2>&1 || {
     echo "dispatch-ladder-run: $PROJECT_SCRIPTS libraries loaded but '$fn' is undefined; refusing to run without it" >&2
     exit 2; }
@@ -551,6 +610,13 @@ reconcile_pass() {
     merged=1
     MERGED_ANY=1
     log_event merge "$PHASE" merged "$(grep "^merged #" <<<"$out" | head -n1)"
+  elif grep -q "^synced #" <<<"$out"; then
+    # The up-to-date gate: the PR was behind origin/main, so graph-auto-merge
+    # merged main into the head instead of merging the PR, and CI restarted on
+    # the fresh base. Not a merge and not a graph change — but it is NOT the
+    # silence the `else` arm below describes either, and a run that halts `idle`
+    # after this needs the sync in its journal to be readable at all.
+    log_event merge "$PHASE" synced "$(grep "^synced #" <<<"$out" | head -n1)"
   else
     # Silence covers several honest cases — the node is not a merge candidate,
     # the PR is already merged, CI is still pending, the config kill-switch is
@@ -645,6 +711,46 @@ while :; do
   # own — a driver that cleared markers by hand would be re-implementing the
   # claim discipline it depends on.
   reservation_sweep 1>&2
+
+  # And sweep the OTHER out-of-session disposition the tick owns. Every
+  # node-lane skill's ESCALATION path deliberately declares no in-session
+  # terminal marker: it writes `$CLAUDE_JOB_DIR/office-hours-reason` and leaves
+  # the park to a sweep (qa-fix/SKILL.md:203-210, fix-checks/SKILL.md:117-123,
+  # review-fix/SKILL.md:197-199, implement/SKILL.md:137-143). That sweep is
+  # terminal_without_disposition_sweep, and it too runs today only from a
+  # dispatch heartbeat (dispatch-tick:509-516, :799-800). With the heartbeat
+  # stopped — again, the bootstrap-deadlock case this skill exists to serve —
+  # an escalating phase leaves a job that `dispatch-self-close` HOLDs for want
+  # of a `node-terminal` marker (dispatch-self-close:48-101, and :70-77 for why
+  # it fails toward HOLD), which dispatch-ladder-await then reads as
+  # `done-held` → `throw <id> held-session` (dispatch-ladder-await:322-334),
+  # with the node left unselectable because worktree_has_live_session is
+  # name-keyed. Nothing in this process would ever clear that. So run the
+  # sweep the tick runs, unchanged — it consumes the escalation reason and
+  # parks the node to office_hours, turning a silent wedge into a halt a person
+  # can read. NO park policy of the driver's own: sequencing, not gating.
+  #
+  # Driver-appropriate budget caps, via the seams the library already exposes
+  # (lib-frozen-session-park.sh:150-167) rather than a copy of its logic. Each
+  # uses `${VAR:-default}` so an inherited environment override still wins —
+  # this only supplies a driver-sized default where none is set. See
+  # BUDGET-BOUNDED, NOT POLICY-CHANGED above for why these are smaller than the
+  # tick's own (park_max=2, park_timeout=120s, lock_wait=60s).
+  DISPATCH_TERMINAL_DISPOSITION_PARK_MAX="${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-1}" \
+  DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S="${DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S:-30}" \
+  DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S="${DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S:-15}" \
+    terminal_without_disposition_sweep 1>&2
+
+  # Re-check the deadline HERE, after both sweeps and before the advance they
+  # guard. check_deadline already ran once at the top of this pass, but the two
+  # sweeps above are real work with their own budget (bounded, just above) —
+  # without this second check, a pass whose sweeps ran right up to the
+  # deadline would still START an advance, and the overshoot would compound
+  # every pass instead of costing at most one sweep's worth. This keeps the
+  # promise made to --max-run-s: the driver never BEGINS new work once its
+  # deadline has passed, even though the sweeps themselves are not
+  # interruptible mid-call.
+  check_deadline
 
   # Captured WITHOUT a `| head` pipeline: inside `$( … )` the pipeline runs in a
   # subshell, so PIPESTATUS is invisible out here and the assignment's status

@@ -70,9 +70,43 @@
 #     resolved conflict can flip the PR back to MERGEABLE before the selector
 #     pass self-heals the interrupt and routes the re-review; merging then
 #     lands code the completed review never saw.
+#   - blocked_by satisfied (applied in the Step 2 enumeration, via the shared
+#     `blockersComplete` predicate). A node whose blocker is still open must not
+#     land ahead of it — the blocker exists precisely because this PR's code
+#     depends on, or must not precede, the blocker's. Silent skip, not a `held`
+#     line: the node is simply not a candidate yet.
 #   - CI passing. `pending` retries next tick; `failing` belongs to the fix
 #     interrupt (do NOT merge, do NOT route the fix here — the next
 #     transition-node / selection tick routes it).
+#   - BRANCH UP TO DATE with the live origin/main tip
+#     (tactic-graph-auto-merge-up-to-date-gate). The LAST gate before merging,
+#     evaluated after the freshness hold below so only a candidate that would
+#     otherwise merge spends the compare call. `mergeable == MERGEABLE` means
+#     only "no textual conflict", and the CI verdict is computed on the PR head
+#     oid — so a green PR dozens of commits behind main can merge and turn main
+#     RED, which then trips the main-health gate above and suppresses the whole
+#     merge lane. The compare (gh_commit_is_ancestor_rest, base=live main tip,
+#     head=PR head) must report `ahead` or `identical`; `behind`/`diverged`
+#     SYNCS instead of merging — `gh_pr_update_branch_rest` merges main into the
+#     PR head, re-triggering CI on the fresh base — emits
+#     `synced #<pr> (<id>)`, and defers the merge to a later tick that sees CI
+#     green on that now-current base. This gate never routes fix or conflict
+#     work: it only updates the branch and defers.
+#   - SYNC CAP on that sync arm (tactic-graph-auto-merge-sync-cap). Syncing is
+#     self-limiting per HEAD (each sync moves the oid, so the same oid is never
+#     synced twice) but NOT per PR: under contention the sync re-triggers CI,
+#     main moves again during that 10-20 minute run, and the next tick syncs
+#     again. A PR can lose that race indefinitely, paying a full CI run per
+#     cycle. So before syncing, count the PR's merge commits whose subject is
+#     GitHub's update-branch form, `Merge branch 'main' into <head-ref>` — that
+#     count IS the number of times THIS gate has merged main into the head, i.e.
+#     its own footprint. The worker's local `git merge origin/main`
+#     (commit-merge-push) writes the remote-tracking form and is NOT counted,
+#     which would otherwise hold healthy multi-unit PRs that this gate had never
+#     synced. At `GRAPH_AUTO_MERGE_SYNC_MAX` (default 3) HOLD
+#     instead: `held <id> (sync-cap: <n> syncs)`. A hold, not a silent skip,
+#     because a thrashing PR needs a person (rebase it, land it manually, split
+#     it), which is exactly what the `held` verdict means here.
 #
 # Fail-closed freshness gate: before merging, re-check the node's tactic-scope
 # fingerprint against origin/main (compute-freshness.ts). scopeStale==true OR a
@@ -85,10 +119,14 @@
 # node --import tsx/esm needs the npm cache (see .claude/rules/sandbox.md). This
 # script sets NOTHING sandbox-related; that is the caller's responsibility.
 #
-# Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged, and
-# `held <id> (<reason>)` per hold, where <reason> is one of `office-hours`,
-# `missing-stamp`, or `scope-stale`; NOTHING for a plain skip (an ineligible
-# PR is silently passed over).
+# Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged,
+# `synced #<pr> (<id>)` per PR whose branch was updated against main instead of
+# merged, and `held <id> (<reason>)` per hold, where <reason> is one of
+# `office-hours`, `missing-stamp`, `scope-stale`, or `sync-cap: <n> syncs`;
+# NOTHING for a plain skip
+# (an ineligible PR is silently passed over). dispatch-select-tick prefixes
+# every line with `merge: `, so a sync surfaces as `merge: synced #<pr> (<id>)`
+# with no change needed there.
 #
 # Exit codes: 0 (including a no-op sweep); 1 if any item hard-errored (node
 # enumeration failure, a gh sense/merge error, or a freshness computation
@@ -116,6 +154,15 @@ while [[ $# -gt 0 ]]; do
 done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
+
+# How many times the up-to-date gate may sync one PR before holding it for a
+# person. Bound and validated ONCE here, so a malformed override fails loudly at
+# startup rather than silently comparing as 0 inside the per-candidate loop
+# (bash `[[ abc -ge 3 ]]` resolves `abc` as a variable name → 0 → never holds).
+SYNC_MAX="${GRAPH_AUTO_MERGE_SYNC_MAX:-3}"
+[[ "$SYNC_MAX" =~ ^[0-9]+$ ]] || {
+  echo "graph-auto-merge: GRAPH_AUTO_MERGE_SYNC_MAX must be a non-negative integer (got '$SYNC_MAX')" >&2
+  exit 2; }
 
 # The scope-fingerprint stamp lives at the MAIN checkout root
 # (provision-node-worktree writes it there). resolve_project_root resolves the
@@ -188,9 +235,20 @@ fi
 # set. It reads the FIRST-CLASS `execution.conflict` field only — never the
 # `attributes` squatter path some other readers tolerate.
 #
+# A node with an UNSATISFIED `blocked_by` blocker is EXCLUDED here too, via the
+# shared `blockersComplete` predicate (packages/intentionsutil/src/router.ts) —
+# the same completeness rule the selector and the review-stall sweep apply: a
+# blocker is complete when ABSENT from the store (prune-on-done makes absence
+# completion) or present at `phase: done`. Nothing else in this script reads
+# `blocked_by`, so without this an autonomously-merged node could land ahead of
+# the very work it declares itself blocked by. It is an added conjunct on the
+# enumeration's existing strict read, not a second traversal.
+#
 # Enumeration is STRICT (`listNodesStrict`): this drives an autonomous merge, so
 # a corrupt node file must abort the pass loudly rather than silently vanish
-# from the candidate set (or, via a dropped blocker, silently qualify one).
+# from the candidate set (or, via a dropped blocker, silently qualify one) —
+# the latter is exactly `blockersComplete`'s documented precondition, since it
+# reads an absent blocker id as COMPLETE.
 #
 # `--node <id>` is applied HERE, as the first thing the loop tests: a selection
 # filter layered on top of the enumeration, ahead of every gate, so the gates
@@ -199,14 +257,18 @@ fi
 # variable can never silently narrow an unflagged sweep.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
+  const nodes = listNodesStrict("./intentions");
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const only = process.argv[1] || "";
-  for (const n of listNodesStrict("./intentions")) {
+  for (const n of nodes) {
     if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase !== "review") continue;
     const pr = n.execution && n.execution.pr;
     if (pr === null || pr === undefined) continue;
     if (n.execution.conflict !== null && n.execution.conflict !== undefined) continue;
+    if (!blockersComplete(n, byId)) continue;
     const markers = (n.execution && n.execution.markers) || [];
     if (!markers.includes("reviewed")) continue;
     process.stdout.write(n.id + "\t" + pr + "\t" + (n.office_hours == null ? "clean" : "parked") + "\n");
@@ -229,6 +291,25 @@ if ! (cd "$REPO_ROOT" && git archive origin/main intentions 2>/dev/null | tar -x
   echo "graph-auto-merge: git archive origin/main intentions failed (cannot build freshness snapshot)" >&2
   exit 1
 fi
+
+# ---- Step 3b: one LIVE origin/main tip read per sweep -----------------------
+# The up-to-date gate's compare base. Read ONCE for the whole sweep, and only
+# after the `[[ -z "$CANDIDATES" ]] && exit 0` early exit above — an empty sweep
+# spends no REST call.
+#
+# Deliberately the LIVE REST tip, never `git rev-parse origin/main`: a stale
+# local ref makes a behind PR look current, so the gate would fail OPEN and
+# silently disable itself — the exact failure it exists to prevent. Same
+# fail-closed stance the snapshot block above takes: a failed read hard-errors
+# rather than merging ungated.
+MAIN_SHA=$(gh_retry gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha') || {
+  echo "graph-auto-merge: could not read the live origin/main tip (cannot run the up-to-date gate)" >&2
+  exit 1
+}
+[[ -n "$MAIN_SHA" && "$MAIN_SHA" != "null" ]] || {
+  echo "graph-auto-merge: empty origin/main tip sha (cannot run the up-to-date gate)" >&2
+  exit 1
+}
 
 # ---- Step 4: per-candidate sense + fail-closed freshness gate + merge --------
 HARD_ERROR=0
@@ -263,8 +344,11 @@ while IFS=$'\t' read -r id pr parked; do
   # ---- CI verdict (REST, memoized) — merge only on passing ------------------
   # pending → in progress, retry next tick; failing → the fix interrupt owns red
   # CI (do NOT merge, do NOT route the fix here). Both skip silently.
+  # Bind the head oid ONCE so the up-to-date compare below runs against the
+  # SAME oid the CI verdict was computed on.
+  HEAD_OID=$(jq -r '.headRefOid' <<<"$PR_JSON")
   rc=0
-  VERDICT=$(dispatch_ci_verdict_rest "$(jq -r '.headRefOid' <<<"$PR_JSON")") || rc=$?
+  VERDICT=$(dispatch_ci_verdict_rest "$HEAD_OID") || rc=$?
   if [[ "$rc" -ne 0 ]]; then
     echo "graph-auto-merge: dispatch_ci_verdict_rest #$pr for $id failed (rc=$rc)" >&2
     HARD_ERROR=1
@@ -301,6 +385,119 @@ while IFS=$'\t' read -r id pr parked; do
     echo "held $id (scope-stale)"
     continue
   fi
+
+  # ---- Up-to-date gate: sync a behind branch instead of merging it ----------
+  # LAST gate before the merge (tactic-graph-auto-merge-up-to-date-gate): only a
+  # candidate that would otherwise merge spends the compare call, and an
+  # existing `held` verdict keeps precedence over a sync. Placing it AFTER the
+  # CI gate is also load-bearing: a red PR must never be synced — red CI belongs
+  # to the fix interrupt, not to this sweep.
+  rc=0
+  CMP=$(gh_commit_is_ancestor_rest "$MAIN_SHA" "$HEAD_OID") || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "graph-auto-merge: compare origin/main...#$pr head failed for $id (rc=$rc)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  # `continue` inside a `case` continues the enclosing `while` (a `case` is not
+  # a loop) — correct and intentional. Every non-up-to-date arm ends in one, so
+  # a candidate can never both `synced` and reach the merge PUT.
+  case "$CMP" in
+    ahead|identical)
+      # ahead: main's tip is an ancestor of the head → up to date, merge.
+      # identical: head == main tip → up to date (degenerate). Fall through.
+      ;;
+    behind|diverged)
+      # diverged: the ordinary behind-PR case — main has commits the head lacks.
+      # behind: the head is an ancestor of the main tip, i.e. its commits already
+      #   landed out of band. Rare, and still not up to date, so it takes the
+      #   same sync-and-defer path rather than merging; reconcile-graph-merged
+      #   absorbs the genuinely-already-merged case on a later tick.
+      #
+      # --expected-head-sha is a compare-and-swap guard: a head that moved
+      # between sensing and syncing yields a 422 rather than a blind update.
+      # That is a hard error here, matching how a failed merge is handled below;
+      # dispatch-select-tick wraps this script in `|| true`, so a non-zero exit
+      # never aborts the tick.
+      #
+      # A residual race remains — main can advance between the tip read above
+      # and this call. It is bounded and accepted; GitHub itself rejects an
+      # update or merge that has become impossible.
+      #
+      # ---- Sync cap (tactic-graph-auto-merge-sync-cap) ---------------------
+      # Syncing is self-limiting per HEAD — each sync moves the oid, so the same
+      # oid is never synced twice — but NOT per PR. The sync re-triggers CI;
+      # main can move again during that 10-20 minute run; the next tick syncs
+      # again. Since this is the only autonomous merge path, a PR under
+      # contention can lose that race indefinitely, paying a full CI run per
+      # cycle. Cap it, and hand a thrashing PR to a person.
+      #
+      # The counter is THIS GATE's own syncs, not every merge commit on the PR.
+      # A multi-parent commit alone does not identify one: commit-merge-push
+      # runs `git merge origin/main` at the end of every implement unit and
+      # every fix pass, so an ordinary multi-unit PR carries several worker
+      # merges that this gate never made. Counting those held healthy PRs at
+      # the cap before the gate had synced them even once.
+      #
+      # The two forms are distinguishable by commit subject, because they are
+      # made by different mechanisms:
+      #   - GitHub's update-branch API — what gh_pr_update_branch_rest calls
+      #     below — writes `Merge branch 'main' into <head-ref>`.
+      #   - a local `git merge origin/main` writes git's remote-tracking form,
+      #     `Merge remote-tracking branch 'origin/main' into <head-ref>`.
+      # So count multi-parent commits whose subject (first line of the message)
+      # starts with `Merge branch 'main'`. That count IS how many times THIS
+      # gate has merged main into this head: its own footprint, read straight
+      # from GitHub, with nothing to persist, sweep, or race, and correct
+      # across processes and hosts. The multi-parent predicate is kept as well
+      # — a non-merge commit could in principle carry that subject.
+      #
+      # Two honest caveats:
+      #   - a person who runs `git merge main` (the local branch, not
+      #     `origin/main`) by hand produces the same subject and is counted. No
+      #     script in this repo does that — every scripted merge names
+      #     `origin/main` — so it takes a rare human action, and it over-counts,
+      #     failing CLOSED: an unnecessary hold, which is that person's call
+      #     anyway.
+      #   - `per_page=100` bounds the listing (gh_api_array does not paginate),
+      #     so a PR with more than 100 commits UNDER-counts and fails OPEN,
+      #     permitting another sync. Better than failing closed on a large PR.
+      rc=0
+      SYNC_COUNT=$(gh_api_array "repos/{owner}/{repo}/pulls/$pr/commits?per_page=100" \
+        '[.[] | select((.parents | length > 1)
+           and ((.commit.message | split("\n")[0]) | startswith("Merge branch '\''main'\''")))] | length') || rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "graph-auto-merge: could not list commits on #$pr for $id (cannot run the sync cap)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ ! "$SYNC_COUNT" =~ ^[0-9]+$ ]]; then
+        echo "graph-auto-merge: non-numeric merge-commit count '$SYNC_COUNT' for #$pr ($id)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ "$SYNC_COUNT" -ge "$SYNC_MAX" ]]; then
+        echo "held $id (sync-cap: $SYNC_COUNT syncs)"
+        continue
+      fi
+      rc=0
+      out=$(gh_pr_update_branch_rest "$pr" --expected-head-sha "$HEAD_OID" 2>&1) || rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "graph-auto-merge: error: gh_pr_update_branch_rest #$pr failed: $out" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      echo "synced #$pr ($id)"
+      continue
+      ;;
+    *)
+      # Anything else — including the literal `null` jq prints when the compare
+      # response carries no `.status` — fails CLOSED: no merge, no sync.
+      echo "graph-auto-merge: unexpected compare status '$CMP' for #$pr ($id)" >&2
+      HARD_ERROR=1
+      continue
+      ;;
+  esac
 
   # ---- Merge label-free -----------------------------------------------------
   # `gh pr ready` is idempotent (no need to gate on draft state — gh_pr_view_rest

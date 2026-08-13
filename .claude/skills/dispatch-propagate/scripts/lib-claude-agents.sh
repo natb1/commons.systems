@@ -20,6 +20,7 @@
 #   claude_agents_count_held_for_debug
 #   claude_agents_list_terminal_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
+#   verify_agent_registered_under_state <agent-name> <cwd>
 #   claude_agents_snapshot_capture            <path>
 #   claude_agents_snapshot_capture_registered <path>
 #   claude_job_id_for_name_all         <name>
@@ -225,6 +226,39 @@
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
 #   Used by `dispatch-launch-worker` / `dispatch-spawn-job` Step 4 verify.
+#   THIS BOOLEAN CONFLATES TWO OUTCOMES. `return 1` means either "the registry
+#   answered and the agent is not there" or "the registry could not be asked at
+#   all". A caller whose response to a failed verify is destructive — releasing
+#   a claim, say — MUST NOT use it: use
+#   `verify_agent_registered_under_state` below and act on the token.
+#
+# verify_agent_registered_under_state <agent-name> <cwd>
+#   The granular verify: same probe, same budget, same seam, but it reports
+#   WHICH of the two `return 1` outcomes happened. Prints exactly ONE token on
+#   stdout and ALWAYS returns 0 — the same token-not-exit-code contract
+#   `worktree_occupancy_state` uses, and for the same reason: there are three
+#   outcomes, not two.
+#
+#     registered — an attempt observed a non-`stopped` row named <agent-name>.
+#     absent     — at least one attempt was a DEFINITE read (`claude_sessions_under`
+#                  returned 0) and no attempt matched the name. The agent really
+#                  is not registered.
+#     unknown    — EVERY attempt was UNKNOWN (`claude` missing, non-zero exit,
+#                  non-array payload, or an uncorroborated `[]`). NOT evidence
+#                  of anything: the registry was never read. Callers MUST NOT
+#                  treat this as absence — in particular, must not release a
+#                  reservation, reap a worktree, or declare a phantom spawn on
+#                  it, because a real worker may be booting behind an
+#                  unanswerable daemon.
+#
+#   Also sets VERIFY_AGENT_REGISTERED_STATE (mirrors stdout).
+#   CAVEAT — that global is observable ONLY on a DIRECT call:
+#       verify_agent_registered_under_state "$n" "$cwd" >/dev/null  # global set
+#       st=$(verify_agent_registered_under_state "$n" "$cwd")       # NOT set
+#   Command substitution runs the function in a subshell, so the assignment dies
+#   with it. The TOKEN is the contract; the global is a convenience for callers
+#   that already redirect stdout (see worktree_occupancy_state's identical
+#   CAVEAT).
 #
 # claude_session_id_is_live <sid>
 #   The winner-liveness predicate for the duplicate-worker stand-down protocol.
@@ -1565,18 +1599,28 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
-  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
-  # that closes the async-registration race after `claude --bg` returns.
-  # See the header comment for the return-code contract.
+  # VERIFY_AGENT_REGISTERED_STATE — the granular verdict from the most recent
+  # `verify_agent_registered_under_state` call. Initialized here so a read
+  # before the first call under `set -u` is not an unbound-variable error (same
+  # idiom as WORKTREE_OCCUPANCY_STATE / CLAUDE_SESSION_ID_LIVE_STATE).
+  VERIFY_AGENT_REGISTERED_STATE="unknown"
+
+  # verify_agent_registered_under_state <agent-name> <cwd> — the granular
+  # bounded-retry verify behind `verify_agent_registered_under`.
+  # See the header comment for the token contract and the globals CAVEAT.
   # STAYS ON THE ACTIVE VIEW (via claude_sessions_under): the registration race
   # needs a LIVE successor; a stale done row of the same name would falsely
   # report success.
-  verify_agent_registered_under() {
+  verify_agent_registered_under_state() {
+    VERIFY_AGENT_REGISTERED_STATE="unknown"
     local agent_name="${1:-}"
     local cwd="${2:-}"
     if [[ -z "$agent_name" || -z "$cwd" ]]; then
       printf 'lib-claude-agents: verify_agent_registered_under requires <agent-name> <cwd>\n' >&2
-      return 1
+      # Fail safe: a missing argument is a caller bug, not an observation that
+      # the agent is absent. `unknown` keeps every destructive response off.
+      printf 'unknown\n'
+      return 0
     fi
     local max_attempts=5
     local interval_s="${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:-0.2}"
@@ -1587,17 +1631,53 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       interval_s=0.2
     fi
     local i sessions status name
+    # The discriminator between `absent` and `unknown`: did the registry EVER
+    # answer? A `claude_sessions_under` return of 0 is a definite read — an
+    # empty one included, since the library already refuses an uncorroborated
+    # `[]`. Non-zero attempts are retried (a daemon momentarily unresponsive
+    # during async registration is exactly what the retry absorbs), but they
+    # contribute no evidence, so a run of nothing but non-zero attempts
+    # exhausts to `unknown`, never `absent`.
+    local definite_read=0
     for (( i = 0; i < max_attempts; i++ )); do
       if sessions=$(claude_sessions_under "$cwd"); then
+        definite_read=1
         while IFS=$'\t' read -r _ _ status name; do
           # Confirm only a live successor: a "stopped" row with the target name
           # must not count as registered (mirrors the spawn-script dedup guards).
           [[ "$status" == "stopped" ]] && continue
-          [[ "$name" == "$agent_name" ]] && return 0
+          if [[ "$name" == "$agent_name" ]]; then
+            VERIFY_AGENT_REGISTERED_STATE="registered"
+            printf 'registered\n'
+            return 0
+          fi
         done <<<"$sessions"
       fi
       (( i + 1 < max_attempts )) && sleep "$interval_s"
     done
+    if (( definite_read )); then
+      VERIFY_AGENT_REGISTERED_STATE="absent"
+      printf 'absent\n'
+    else
+      VERIFY_AGENT_REGISTERED_STATE="unknown"
+      printf 'unknown\n'
+    fi
+    return 0
+  }
+
+  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
+  # that closes the async-registration race after `claude --bg` returns.
+  # See the header comment for the return-code contract.
+  #
+  # A thin wrapper over the classifier above. The boolean contract is UNCHANGED
+  # for every existing caller: only `registered` returns 0, and both `absent`
+  # and `unknown` return 1 — preserving the conservative-fail semantic verbatim.
+  # Callers that must tell the two apart (because their response to a failed
+  # verify is destructive) ask for the token instead.
+  verify_agent_registered_under() {
+    local _st
+    _st="$(verify_agent_registered_under_state "$@")"
+    [[ "$_st" == "registered" ]] && return 0
     return 1
   }
 

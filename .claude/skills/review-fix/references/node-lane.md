@@ -23,9 +23,14 @@ Every step runs unchanged except these re-keyed seams:
   the skill hands it the node id and never writes the graph directly. Merging is
   deferred entirely to the tick's `graph-auto-merge` reconciler, which runs every
   tick keyed off the `reviewed` marker: for each reviewed-marked node it senses the
-  PR and — only when it is `mergeable == MERGEABLE`, green on CI, and the node's
-  tactic-scope fingerprint is fresh against `origin/main` — squash-merges it
-  label-free. `reconcile-graph-merged` then absorbs that out-of-band merge to
+  PR and — only when it is `mergeable == MERGEABLE`, green on CI, the node's
+  tactic-scope fingerprint is fresh against `origin/main`, and the branch is up
+  to date with the live `origin/main` tip — squash-merges it label-free. A
+  branch that is behind is **not** merged: the reconciler updates it against
+  main (`PUT .../pulls/<n>/update-branch`, which re-triggers CI on the fresh
+  base), reports `merge: synced #<pr> (<id>)`, and defers the merge to a later
+  tick that sees CI green on that now-current base.
+  `reconcile-graph-merged` then absorbs that out-of-band merge to
   `done`/`main-qa` on a later tick.
 - **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
   findings become **draft tactic nodes**, not gh follow-up issues — see the
