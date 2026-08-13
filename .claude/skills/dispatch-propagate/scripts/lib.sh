@@ -2014,14 +2014,14 @@ get_worktree_id() {
   fi
 }
 
-# Print the project root (parent of git --git-common-dir) to stdout.
-# Returns non-zero if not in a git repo. Prints no error and does not exit —
-# the caller supplies its own message/cleanup via `|| { … }`.
-resolve_project_root() {
-  local common_dir
-  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
-  dirname "$common_dir"
-}
+# resolve_project_root (and its siblings worktrees_root / legacy_worktrees_root)
+# are defined in lib-repo-roots.sh — the single definition of the
+# --git-common-dir-to-repo-root dirname arithmetic (formerly duplicated inline
+# across three hook files; see that file's header for the full dirname
+# contract). Source it here so every existing caller of resolve_project_root
+# keeps working unchanged.
+# shellcheck source=lib-repo-roots.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib-repo-roots.sh"
 
 # Assert the primary checkout at <path> is on `main`. Returns 0 silently when it
 # is; otherwise prints a loud, labeled error to stderr and returns 1 — never

@@ -45,6 +45,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/../skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../skills/dispatch-propagate/scripts/lib-repo-roots.sh"
 
 WORKTREE_REGISTERED=0
 NEW_PATH=""
@@ -106,10 +108,11 @@ if [ "$LANE" = legacy ]; then
   # is <repo>/.git and the repo root is its parent. Anchoring at the common dir
   # itself placed worktrees under <repo>/.git/.claude/worktrees, which never
   # exists — and which worktree-remove.sh then refused to clean up, since it
-  # anchors at the repo root.
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir) \
+  # anchors at the repo root. The dirname arithmetic is centralised in
+  # lib-repo-roots.sh's worktrees_root; see its header for the full contract.
+  LEGACY_LANE_ROOT=$(worktrees_root) \
     || { echo "[worktree-create] ERROR: git rev-parse --git-common-dir failed" >&2; exit 1; }
-  NEW_PATH="$(dirname "$GIT_COMMON_DIR")/.claude/worktrees/$BRANCH"
+  NEW_PATH="$LEGACY_LANE_ROOT/$BRANCH"
 else
   # Graph lane: the harness default location, <project-root>/.claude/worktrees/,
   # where the project root is the worktree with `main` checked out (substrate
