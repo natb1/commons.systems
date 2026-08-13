@@ -2151,4 +2151,76 @@ td_run
 assert_eq "lane/td-escalate: park-node invoked exactly once" "1" "$(td_park_calls)"
 td_teardown
 
+# --- The AUTHORED-ESCALATION carve-out ---------------------------------------
+#
+# The lane is for a node held by a terminal worker in an UNDIAGNOSED state. A
+# session that wrote `office-hours-reason` diagnosed itself and asked to be
+# parked, so there is nothing for an intervention session to investigate — and
+# routing it stranded the text: the router defers without parking and leaves the
+# markers, while dispatch-invalid-state-sweep disclaims parking entirely. The
+# carve-out must hold even against the STRONGEST lane verdict, `handled` (rc 0),
+# which is what the first row forces with the route stub.
+
+echo "Test: lane pre-tier (terminal) — an AUTHORED escalation skips the lane and parks even on a handled verdict"
+td_setup
+fs_write_route_stub 0 0 "$TD_REPO" "$TD_DIR"
+td_write_node "tactic-td-authored" working
+td_commit_nodes
+td_write_transcript "0dd4-4444" $(( TD_NOW - 4000 ))
+td_add_session "0dd4-4444" "tactic-td-authored" "done" "dd404444"
+td_write_job_file "dd404444" "tactic-td-authored" office-hours-reason "the worker asked for this park itself"
+td_write_job_file "dd404444" "tactic-td-authored" office-hours-recommendation "the worker's own recommendation"
+td_install_claude 0
+td_run
+assert_eq "lane/authored: sweep returns 0" "0" "$TD_RC"
+assert_eq "lane/authored: the router is NEVER consulted" "0" "$(fs_route_calls)"
+assert_eq "lane/authored: park-node invoked exactly once" "1" "$(td_park_calls)"
+assert_eq "lane/authored: the worker's own reason is parked verbatim" \
+  "the worker asked for this park itself" "$(td_park_arg 4)"
+assert_eq "lane/authored: the decision record says parked" "parked" "$(td_log_dispositions)"
+assert_eq "lane/authored: stderr explains the carve-out" "yes" \
+  "$(td_contains 'tactic-td-authored carries an authored office-hours escalation; skipping the invalid-state lane pre-tier')"
+assert_eq "lane/authored: nothing was routed" "no" \
+  "$(td_contains 'routed tactic-td-authored to the invalid-state lane')"
+assert_eq "lane/authored: no pre-tier line is printed when nothing was routed" "no" \
+  "$(td_contains 'lane pre-tier (routed=')"
+# Landing proof, and the markers deleted as that proof — the same oracle Test 43
+# uses. This is the whole point of the carve-out: the escalation reaches the node.
+assert_eq "lane/authored: the reason marker was removed" "gone" \
+  "$([[ -e "$TD_JOBS/dd404444/office-hours-reason" ]] && printf 'present' || printf 'gone')"
+assert_eq "lane/authored: the recommendation marker was removed" "gone" \
+  "$([[ -e "$TD_JOBS/dd404444/office-hours-recommendation" ]] && printf 'present' || printf 'gone')"
+assert_eq "lane/authored: origin/main really carries the park (the fixture is not vacuous)" "1" \
+  "$(git -C "$TD_REPO" show 'origin/main:intentions/tactic-td-authored.md' | grep -c '^office_hours:$')"
+td_teardown
+
+# The regression guard on the unchanged path: a job dir the node owns but with
+# NO `office-hours-reason` in it is a synthesized escalation, so it still routes
+# and its markers are still left intact.
+
+echo "Test: lane pre-tier (terminal) — a SYNTHESIZED escalation still routes to the lane and keeps its markers"
+td_setup
+fs_write_route_stub 0 0 "$TD_REPO" "$TD_DIR"
+td_write_node "tactic-td-synth" working
+td_commit_nodes
+td_write_transcript "0ee5-5555" $(( TD_NOW - 4000 ))
+td_add_session "0ee5-5555" "tactic-td-synth" "done" "ee505555"
+# An owned job dir with a marker, but no office-hours-reason: the sweep
+# synthesizes the reason, so this candidate is undiagnosed and belongs to the lane.
+td_write_job_file "ee505555" "tactic-td-synth" office-hours-pr "4242"
+td_install_claude 0
+td_run
+assert_eq "lane/synth: sweep returns 0" "0" "$TD_RC"
+assert_eq "lane/synth: the router was consulted exactly once" "1" "$(fs_route_calls)"
+assert_eq "lane/synth: a handled verdict parks NOTHING" "0" "$(td_park_calls)"
+assert_eq "lane/synth: stderr says deferred, not parked" "yes" \
+  "$(td_contains 'routed tactic-td-synth to the invalid-state lane')"
+assert_eq "lane/synth: the carve-out line is NOT printed" "no" \
+  "$(td_contains 'carries an authored office-hours escalation')"
+assert_eq "lane/synth: the pre-tier line reports the routed count" "yes" \
+  "$(td_contains 'terminal-disposition lane pre-tier (routed=1 kept-by-lane=0)')"
+assert_eq "lane/synth: the job dir's marker is left intact" "present" \
+  "$([[ -e "$TD_JOBS/ee505555/office-hours-pr" ]] && printf 'present' || printf 'gone')"
+td_teardown
+
 report_results

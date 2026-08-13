@@ -1282,7 +1282,11 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # `--pr <n>`, which preserves the `execution.pr` custody the deleted
       # Stop-hook backstop provided; it reads a file the session already wrote,
       # so the sweep stays gh-free.
-      local job_dir="" job_owned=0 reason="" recommendation="" pr=""
+      # `authored_escalation` is a PER-CANDIDATE local, declared here with the
+      # rest of the job-dir state so a previous candidate's value can never leak
+      # into this one: it gates the lane pre-tier below, and a stale 1 would
+      # silently skip the lane for a node that never authored anything.
+      local job_dir="" job_owned=0 reason="" recommendation="" pr="" authored_escalation=0
       if [[ -n "$jid" && "$jid" =~ ^[0-9a-fA-F-]+$ ]]; then
         local job_name
         job_name=$(jq -r '.name // empty' "$jobs_root/$jid/state.json" 2>/dev/null) || job_name=""
@@ -1300,6 +1304,13 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       if (( job_owned )); then
         if [[ -s "$job_dir/office-hours-reason" ]]; then
           reason=$(cat "$job_dir/office-hours-reason" 2>/dev/null) || reason=""
+          # The escalation is AUTHORED: this session diagnosed itself and asked
+          # for a park in its own words. Recorded here, at the only site that can
+          # know it, and consumed by the lane pre-tier below. Gated on the text
+          # actually arriving rather than on the `-s` test alone, so an
+          # unreadable marker falls back to the synthesized reason AND to the
+          # synthesized reason's routing.
+          [[ -n "$reason" ]] && authored_escalation=1
           if [[ -s "$job_dir/office-hours-recommendation" ]]; then
             recommendation=$(cat "$job_dir/office-hours-recommendation" 2>/dev/null) || recommendation=""
           fi
@@ -1347,8 +1358,28 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       #
       # This sweep still owns escalation this round; extracting the
       # park-with-landing-proof block into the router is a declared residual.
+      #
+      # CARVE-OUT — an AUTHORED escalation skips the pre-tier entirely and falls
+      # straight through to the park. The invalid-state lane exists for a node
+      # held by a terminal worker in an UNDIAGNOSED state: there is a dead
+      # session, no declared disposition, and an intervention session has to read
+      # the transcript to work out what happened. A session that left
+      # `office-hours-reason` behind is the opposite case — it diagnosed itself
+      # and asked, in its own words, to be parked. There is nothing for an
+      # intervention to investigate, and routing it strands that text in the job
+      # dir: the router defers without parking and deliberately leaves the
+      # markers, while `dispatch-invalid-state-sweep` disclaims parking on the
+      # grounds that the sweep tier is always the escalation path. Each arm named
+      # the other as the owner and the escalation went nowhere. So the flag set
+      # above decides: authored → park below (the proven
+      # park-with-landing-proof path); synthesized → the lane, exactly as before.
       local lane_rc=0
-      invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( authored_escalation )); then
+        printf 'lib-frozen-session-park: %s carries an authored office-hours escalation; skipping the invalid-state lane pre-tier (nothing to investigate) and parking with the session'"'"'s own text\n' "$name" >&2
+        lane_rc=10
+      else
+        invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      fi
       if (( lane_rc == 0 )); then
         routed_count=$(( routed_count + 1 ))
         printf 'lib-frozen-session-park: routed %s to the invalid-state lane (terminal-session; session=%s) — deferred, not parked; markers left intact\n' "$name" "$sid" >&2
