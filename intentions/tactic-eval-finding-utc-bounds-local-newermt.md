@@ -91,6 +91,38 @@ Direction 1 is the mechanical fix. Direction 2 is what would have caught this
 regardless of cause, and generalizes past `find` to any absence-based
 measurement an eval makes.
 
+## Resolved
+
+Fixed by PR #3077, merged 2026-08-13 as `7410e07f`.
+
+**Both directions were taken — as guidance in `.claude/skills/rsi/SKILL.md`,
+not as code.** That placement is the substantive part of the fix, so it is
+worth stating why. The `/rsi` skill never told the eval to use `find -newermt`;
+the eval **improvised** it, against the skill's own standing rule that a
+session transcript is never read by hand. The sanctioned instrument,
+`aggregate-usage.sh`, already gets this right (`env TZ=UTC find …`) and its
+contract already warns about `find`'s parsing. So there was no wrong
+instruction to correct. Patching an instrument that was not used would have
+left the actual failure — an unsanctioned improvisation — untouched. The fix
+belongs where the failure happened: in the guidance that permits improvisation
+at all.
+
+What shipped, as a new subsection in `rsi/SKILL.md`:
+
+1. **If you reach for `find` at all, the bound must be unambiguous** —
+   `-newer <file>`, `@<epoch>`, or `TZ=UTC`. These jobs already receive
+   `--since` as a Unix epoch, so the unambiguous form costs nothing.
+2. **Never conclude absence from a single negative search.** A "zero trace"
+   conclusion requires a positive control first — confirm the same search *does*
+   return something known to exist in the window — before it may become a
+   finding.
+
+Also in the same PR: `lane-complete` was added to the skill's `awaited`
+disposition table. And separately, `dispatch-phase-model` now returns **opus**
+for the `ladder-eval` pseudo-phase — split out of the sonnet arm into its own
+arm, set explicitly rather than left to fall through to the empty default, so
+it cannot drift to a launcher default.
+
 ## Related
 
 - [[tactic-eval-finding-conflict-lane-registered-phantom]] — the false finding

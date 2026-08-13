@@ -115,6 +115,35 @@ sweep are individually reasonable and jointly hostile.
 Direction 1 is the immediate fix; direction 2 is the ordering the guard should
 have had from the start.
 
+## Resolved
+
+Fixed by PR #3077, merged 2026-08-13 as `7410e07f`.
+
+**Direction 1 was taken.** `node_cwd_has_live_session` is now wired into both
+the merged arm (`SKIP_MERGED_LIVE_SESSION_CWD`) and the closed-issue arm
+(`SKIP_CLOSED_LIVE_SESSION_CWD`) in
+`.claude/skills/dispatch-propagate/scripts/dispatch-sweep`. The function's
+section header, which read "NODE-arm gates", was retitled — it is no longer
+node-specific.
+
+**Direction 2 was NOT taken and is still the better answer.** Making cwd-keyed
+liveness the *default* guard, with name-keyed as the addition, is the ordering
+the guard should have had from the start. Direction 1 leaves the weaker signal
+leading and bolts the stronger one on beside it. That is a smaller change, not
+a better design. It stays open.
+
+**Direction 3 is satisfied by construction**, with no new code:
+`claude_sessions_under` returns rc 1 on an uncorroborated `[]`, and
+`node_cwd_has_live_session` maps that rc to "occupied", so both new gates
+inherit the fail-safe from the function they call.
+
+**What the new tests do and do not prove.** The harness stub ignores `--cwd`
+and returns its payload unconditionally — it does not emulate the daemon's own
+`--cwd` filtering. So the new rows prove the guard is **wired** (the arm calls
+`node_cwd_has_live_session` and reacts correctly to a non-empty result), not
+that the `--cwd` filter works. That filter's semantics are covered separately
+in `test-lib-claude-agents.sh`.
+
 ## Related
 
 - [[tactic-ladder-await-phase-only-completion-test]] — the other defect surfaced

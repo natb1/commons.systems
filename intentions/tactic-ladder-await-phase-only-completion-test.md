@@ -120,8 +120,64 @@ Direction 2 is the design to aim for; direction 1 is the smaller change that
 unwedges the ladder now. They are compatible — 1 is a driver-side stopgap that
 2 later makes redundant.
 
+## Resolved
+
+Fixed by PR #3077, merged 2026-08-13 as `7410e07f`.
+
+**Direction 2 was taken**, and it supersedes direction 1 — the driver does not
+carry launch identity, and no bounded re-entry was added. Direction 3 is
+satisfied as a by-product: the new `lane-complete` disposition is exactly the
+distinct disposition it asked for.
+
+What shipped:
+
+- **`execution.lane_pass`** in `packages/intentionsutil/src/schema.ts` —
+  `{at, lane, phase, sha}`, validated by `validateLanePass`, with `at` pinned to
+  a fixed-width `YYYY-MM-DDTHH:MM:SSZ` shape by `requireTimestampString`. The
+  second-precision-with-literal-`Z` format is load-bearing: it makes
+  lexicographic order equal chronological order, which is what lets the reader
+  compare with a plain jq `>=` and no date arithmetic.
+
+- **A new writer**, `packages/intentionsutil/scripts/apply-lane-pass.ts`.
+  Direction 2 above suggested reusing `apply-fix-state --set-fix` and
+  `apply-conflict-state`. That suggestion was examined and rejected.
+  `--set-fix` *enters* the live CI-fix interrupt — routing state the selector
+  re-dispatches on, and whose `--clear-fix` resets `phase` to `review` and
+  strips the reviewed marker. And every `apply-conflict-state` mode but
+  `--set-conflict` throws on a null interrupt (`requireConflict`), which is
+  exactly the ladder's own entry state. An orthogonal field was the right call
+  because the stamp's whole job is to record that a pass *finished* while
+  changing no routing state at all; folding it into either interrupt would have
+  made a completion record double as a dispatch instruction.
+
+- **Two lanes stamp it**: `dispatch-conflict` SKILL Step 7b, and `qa-fix`'s
+  auto-fix lane. Policy in both is push first, stamp second; a failed stamp
+  WARNS and continues rather than hard-stopping. A Lane 3 session that stops
+  before its terminal marker wedges a worker slot, which is strictly worse than
+  today's false `stalled`.
+
+- **The reader**: `dispatch-ladder-await` gained a `--since <epoch>` flag and a
+  new probe after the `.phase != FROM_PHASE` arm, reporting `lane-complete` at
+  exit 0 (sharing that code with `reviewed`). `dispatch-ladder-run` captures
+  `PASS_SINCE` immediately before the advance and passes it through.
+
+**The one design decision a future reader will be tempted to undo.** The
+comparison is against a **launch window**, not mere presence of a stamp. A
+stamp that is merely present would mask a genuine stall at a later pass on the
+same phase — the accumulation trap the `reviewed` carve-out's own comment
+already documents. `--since` is what keeps a previous pass's stamp from
+answering for this one.
+
+And the halt discipline is unchanged: a genuine `unchanged` with no stamp still
+halts exactly as before — exit 12, `stalled`. No re-entry, no retry, no
+branch-tip backstop. Every halt stays unconditional.
+
 ## Related
 
+- [[tactic-ladder-await-interrupt-rung-vacuous-advanced]] — the mirror-image
+  defect found while reviewing the fix: a false *success* on rungs that are not
+  `Phase` members, where the phase probe short-circuits before the lane-pass
+  probe is consulted.
 - [[tactic-node-lane-escalate-park-unconsumed]] — the same family, already
   fixed: an arm whose output no consumer read. This node is the reporting-side
   twin of that defect.
