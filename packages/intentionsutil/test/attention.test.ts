@@ -453,6 +453,47 @@ describe("resolveAttention terminal (done) nodes", () => {
     expect(result.get("tactic-solo")?.tier).toBe(1); // own bug_fix mark ignored
     expect(result.get("tactic-under-solo")?.tier).toBe(1);
   });
+
+  it("drops a DONE blockee from the relation instead of letting it keep lifting its blocker", () => {
+    // tactic-blocker blocks two nodes: one still live, one finished. Only the
+    // live one may reach it. `blocked_by` edges to a completed node are never
+    // rewritten (blockersComplete treats a done blocker as cleared), so the
+    // stale edge would otherwise pin the blocker at the finished work's urgency
+    // forever — the "a done blocker is cleared" convention openBlockers and the
+    // retired officeHours surfacing lift both applied.
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-hot", attributes: { tier: 3 }, attention: boost({ 3: 9 }) }),
+      anode({
+        id: "tactic-finished",
+        kind: "tactic",
+        serves: ["strategy-hot"],
+        phase: "done",
+        blocked_by: ["tactic-blocker"],
+      }),
+      anode({ id: "tactic-blocker", kind: "tactic" }),
+    ];
+
+    const blocker = resolveAttention(nodes).get("tactic-blocker");
+    // The done blockee carried score 9 and tier 3; neither reaches the blocker.
+    expect(blocker?.score).toBe(0);
+    expect(blocker?.band).toBe(0);
+    expect(blocker?.bandSource).toBeNull();
+    expect(blocker?.depth).toBe(0);
+    expect(blocker?.tier).toBe(1);
+
+    // Flip the blockee back to live and every axis flows again — the drop is
+    // keyed on `phase: "done"`, not on the edge being absent.
+    const live = nodes.map((n) =>
+      n.id === "tactic-finished" ? ({ ...n, phase: "implement" } as typeof n) : n,
+    );
+    const lifted = resolveAttention(live).get("tactic-blocker");
+    expect(lifted?.tier).toBe(3);
+    expect(lifted?.score).toBe(9);
+    expect(lifted?.band).toBe(9);
+    expect(lifted?.bandSource).toBe("tactic-finished");
+    expect(lifted?.depth).toBe(2); // tactic-finished + strategy-hot
+  });
 });
 
 describe("resolveAttention cycle handling", () => {

@@ -1100,16 +1100,33 @@ describe("validateNode", () => {
     expect(result.attention).toEqual({ boosts: { "3": 60 }, rationale: "capped" });
   });
 
-  it("reinterprets a legacy override: 0 as an empty (claim-nothing) map", () => {
-    const result = validateNode({
-      id: "n8c2",
-      kind: "strategy",
-      statement: "Legacy zeroed branch.",
-      owner: "human",
-      status: "raw",
-      attention: { override: 0, rationale: "parked" },
-    });
-    expect(result.attention).toEqual({ boosts: {}, rationale: "parked" });
+  // `override: 0` must NOT canonicalize to `{boosts: {}}`: the empty map is not
+  // a writable shape (the next test rejects it on read), so accepting it here
+  // would mint a node that `writeNode` emits and `readNode` can no longer load.
+  it("rejects a legacy override: 0 rather than minting an unreadable empty map", () => {
+    expect(() =>
+      validateNode({
+        id: "n8c2",
+        kind: "strategy",
+        statement: "Legacy zeroed branch.",
+        owner: "human",
+        status: "raw",
+        attention: { override: 0, rationale: "parked" },
+      }),
+    ).toThrow(/override must be > 0, got 0 — the legacy "zero this branch" spelling/);
+  });
+
+  it("rejects a negative legacy override", () => {
+    expect(() =>
+      validateNode({
+        id: "n8c3",
+        kind: "strategy",
+        statement: "Legacy negative override.",
+        owner: "human",
+        status: "raw",
+        attention: { override: -1, rationale: "parked" },
+      }),
+    ).toThrow(/override must be > 0, got -1/);
   });
 
   it("rejects a non-null attention whose boosts map is empty", () => {

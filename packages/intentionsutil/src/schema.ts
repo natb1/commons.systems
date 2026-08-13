@@ -412,11 +412,6 @@ function validateAttention(value: unknown, field: string): Attention {
   }
 
   const boosts: Record<string, number> = {};
-  // An `override: 0` is the ONE legitimate way to land an empty boosts map: it
-  // meant "zero this branch", which in the per-tier shape is simply "claim
-  // nothing anywhere". Tracked so the empty-map rejection below can let it
-  // through while still rejecting a pointlessly empty authored block.
-  let emptyByLegacyOverrideZero = false;
 
   if (value.boosts != null) {
     // Canonical form. YAML integer keys reach us as JS string keys on a plain
@@ -448,26 +443,34 @@ function validateAttention(value: unknown, field: string): Attention {
     // LEGACY compatibility sugar, owned by
     // tactic-attention-per-tier-boost-migration: the old branch-cap semantics
     // of `override` are gone; this is now purely a shape mapping. `override: X`
-    // with optional `tier: T` becomes `{ "T": X }` when X > 0, and the empty map
-    // when X === 0. Required, not optional cleanup — one live node is still on
-    // `override: 60`. Delete this branch with the `boost:` branch above.
+    // with optional `tier: T` becomes `{ "T": X }`. Required, not optional
+    // cleanup — one live node is still on `override: 60`. Delete this branch
+    // with the `boost:` branch above.
+    //
+    // `override: 0` — the old "zero this branch" spelling — is REJECTED, not
+    // mapped to the empty map. Accepting it would make the read-accepted and
+    // write-emitted shapes disagree: `validateNode` would yield
+    // `{boosts: {}, rationale}`, `writeNode` serializes exactly that
+    // (`stringify(validated)`), and re-reading that file hits the empty-map
+    // rejection below — so any write that round-trips the node (read-sensors'
+    // reading write-back, write-node, graph-commit, the boost scripts) would
+    // permanently corrupt it into a file `listNodes` can only warn about and
+    // skip, silently dropping the node (and any `blocked_by` gate it holds)
+    // out of the graph. Rejecting at parse time keeps the failure loud and at
+    // the authoring seam.
     const key = legacyTierKey(value.tier, field);
     if (typeof value.override !== "number" || !Number.isFinite(value.override)) {
       throw new IntentionSchemaError(`Expected finite number for ${field}.override`);
     }
-    if (value.override < 0) {
+    if (value.override <= 0) {
       throw new IntentionSchemaError(
-        `${field}.override must be >= 0, got ${value.override}`,
+        `${field}.override must be > 0, got ${value.override} — the legacy "zero this branch" spelling has no meaning in the per-tier boosts map; drop the ${field} block entirely to claim nothing`,
       );
     }
-    if (value.override === 0) {
-      emptyByLegacyOverrideZero = true;
-    } else {
-      boosts[key] = value.override;
-    }
+    boosts[key] = value.override;
   }
 
-  if (Object.keys(boosts).length === 0 && !emptyByLegacyOverrideZero) {
+  if (Object.keys(boosts).length === 0) {
     throw new IntentionSchemaError(
       `${field} must claim at least one tier in ${field}.boosts — an attention block with no boosts says nothing; drop the block instead`,
     );

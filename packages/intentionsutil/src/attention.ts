@@ -221,10 +221,16 @@ function captureAddendFor(n: IntentionNode, byId: Map<string, IntentionNode>): n
       sum += captureScore(delegation);
     }
   }
-  // Cap at 1 so the capture term never exceeds CAPTURE_TERM_WEIGHT: the
-  // "Weights" invariant (an authored boost still dominates the derived term)
-  // only holds if a node recovering several high-severity delegations can't
-  // sum past 1.
+  // Cap at 1 so ONE node's own addend never exceeds CAPTURE_TERM_WEIGHT: a
+  // single node recovering several high-severity delegations cannot sum past 1.
+  //
+  // The cap is PER NODE, not per resolved score. `score` sums the contribution
+  // of every distinct member of `{n} ∪ lineage(n)`, so a node whose lineage
+  // holds several recovering strategies accumulates one capped addend from each
+  // and its total capture contribution CAN exceed 1 (the live store already
+  // reaches 1.67). That is the same additive treatment authored boosts get and
+  // is deliberate; what it means is that "an authored boost always dominates
+  // the derived term" holds per node, not per resolved score.
   return CAPTURE_TERM_WEIGHT * Math.min(1, sum);
 }
 
@@ -387,13 +393,16 @@ function bandFor(
  *
  * ## One relation
  *
- * `parents(n) = { n.parent } ∪ n.serves ∪ n.recovers ∪ { c : n ∈ c.blocked_by }`
- * — the node it hangs under, the nodes it expresses, the delegations it
- * unwinds, and the nodes it unblocks. Every axis below (tier, lineage, score,
- * band) is derived from this ONE relation; there is no second edge set and no
- * per-axis special case. `serves`/`recovers`/reverse-`blocked_by` are gated on
- * the node being goal-layer eligible, because a delegation's `serves` is
- * deliberately unenforced and must not be read as an attention edge.
+ * `parents(n) = { n.parent } ∪ n.serves ∪ n.recovers ∪ { c : n ∈ c.blocked_by,
+ * c not done }` — the node it hangs under, the nodes it expresses, the
+ * delegations it unwinds, and the nodes it STILL unblocks. Every axis below
+ * (tier, lineage, score, band) is derived from this ONE relation; there is no
+ * second edge set and no per-axis special case.
+ * `serves`/`recovers`/reverse-`blocked_by` are gated on the node being
+ * goal-layer eligible, because a delegation's `serves` is deliberately
+ * unenforced and must not be read as an attention edge. The reverse-`blocked_by`
+ * half additionally drops DONE blockees (see the construction below): a done
+ * parent stays transparent, but a done blockee leaves the relation entirely.
  *
  * ## Axes
  *
@@ -420,10 +429,15 @@ function bandFor(
  *
  * A done node contributes NOTHING: its boost reads as 0, its own tier mark is
  * ignored (it asserts tier 1), and it is not a member of any lineage set, so it
- * adds no depth. It stays TRANSPARENT — traversal passes THROUGH it, and it
- * still relays an inherited tier — so a live child under a done parent keeps
- * everything above that parent. Severing the edge instead would demote live
- * children to band 0, which is wrong.
+ * adds no depth. As a PARENT it stays TRANSPARENT — traversal passes THROUGH
+ * it, and it still relays an inherited tier — so a live child under a done
+ * parent keeps everything above that parent. Severing the edge instead would
+ * demote live children to band 0, which is wrong.
+ *
+ * As a BLOCKEE the ruling is the opposite: the edge is severed. Transparency is
+ * right downward because a done parent still expresses what its live children
+ * are FOR; it is wrong upward because a done blockee is no longer being held up
+ * by anything, so a blocker must not go on inheriting its urgency.
  *
  * ## Cycles
  *
@@ -445,6 +459,7 @@ function bandFor(
 export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAttention> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const sortedNodeIds = nodes.map((n) => n.id).sort();
+  const doneIds = new Set(nodes.filter((n) => n.phase === "done").map((n) => n.id));
 
   const isEligible = (n: IntentionNode): boolean => {
     const kindNode = byId.get(`kind-${n.kind}`);
@@ -465,7 +480,20 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     if (isEligible(n)) {
       for (const s of n.serves) if (byId.has(s)) ids.add(s);
       for (const r of n.recovers) if (byId.has(r)) ids.add(r);
-      for (const b of reverseBlocked.get(n.id) ?? []) if (byId.has(b)) ids.add(b);
+      // A DONE blockee is dropped from the relation entirely — not merely made
+      // transparent like a done PARENT. The two directions are not symmetric.
+      // A done parent still expresses what its live children are FOR, so its
+      // own lineage must keep reaching them. A done blockee expresses nothing
+      // any more: `id` is not holding it up, because it is finished. Keeping
+      // the edge would let a blocker inherit, forever, the tier/band/score of
+      // work that already completed — and `blocked_by` edges to done nodes are
+      // never cleaned up (`blockersComplete` treats a done blocker as cleared
+      // rather than rewriting the edge), so those stale edges accumulate. This
+      // is the same "a done blocker is cleared" convention `openBlockers` and
+      // the retired `officeHours` surfacing lift both applied.
+      for (const b of reverseBlocked.get(n.id) ?? []) {
+        if (byId.has(b) && !doneIds.has(b)) ids.add(b);
+      }
     }
     parentIds.set(n.id, [...ids].sort());
   }
@@ -501,7 +529,6 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
   // a sufficient change test precisely because growth is monotone. The least
   // fixpoint does not depend on sweep order, so the result is input-order
   // independent.
-  const doneIds = new Set(nodes.filter((n) => n.phase === "done").map((n) => n.id));
   const lineage = new Map<string, Set<string>>();
   for (const id of sortedNodeIds) lineage.set(id, new Set<string>());
 

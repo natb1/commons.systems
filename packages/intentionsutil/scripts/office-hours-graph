@@ -242,7 +242,7 @@ resolve_directive() {
     echo "office-hours: selector --list failed" >&2
     exit 1
   fi
-  # Column order is the `--list` contract: `<rank>\t<sessionType>\t<nodeId>\t
+  # Column order is the `--list` contract: `<score>\t<sessionType>\t<nodeId>\t
   # <since>`. Its canonical statement is the `--list output columns` comment
   # block in office-hours-select.ts (search for that phrase — do not trust a
   # line number), rendered by that file's exported `formatQueueRow` and pinned

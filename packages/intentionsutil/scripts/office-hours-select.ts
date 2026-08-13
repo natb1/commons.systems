@@ -190,14 +190,22 @@ export function formatQueueRow(m: QueueMember): string {
 /**
  * The stderr advisory for a queue member that ranks in a band it got from a
  * parent (`bandSource !== null`) — surfaces WHY the park sorts where it does,
- * with its own un-penalized score alongside for contrast. Follows the
- * `formatBlockerNote` `NOTE —` convention. Never called for a member with
- * `bandSource === null` (band 0: there is no source to name).
+ * with its own score alongside for contrast. Follows the `formatBlockerNote`
+ * `NOTE —` convention. Never called for a member with `bandSource === null`
+ * (band 0: there is no source to name).
+ *
+ * `band` and `score` on a `QueueMember` carry the session-type penalty;
+ * `ownScore` does NOT. Printing the two side by side unqualified would invite
+ * the reader to conclude that a park whose band reads below its own score is
+ * banded by a WEAKER parent, when the gap is only the penalty. So whenever the
+ * penalty actually bites (`score !== ownScore`) the note says so and prints the
+ * penalized score — the number that really sorts — next to it.
  */
 export function formatBandNote(m: QueueMember): string {
+  const penaltyNote = m.score !== m.ownScore ? `, un-penalized; penalized ${m.score}` : "";
   return (
     `NOTE — ${m.nodeId} ranks at tier ${m.tier} band ${m.band} via ${m.bandSource} ` +
-    `(own score ${m.ownScore})`
+    `(own score ${m.ownScore}${penaltyNote})`
   );
 }
 
