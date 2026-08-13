@@ -431,9 +431,13 @@ each fork site.
    Otherwise run Step 4, Step 5, `dispatch-mark-complete --phase qa` (NO
    `dispatch:qa-done`), emit the outcome envelope (`--disposition
    completed_with_fixes`, `--fixes-applied <fixes_applied_count>`); node lane
-   then writes `mark-node-terminal "$N" fix-attempt` (**after** the PR
-   comment, phase marker, and outcome envelope — `Stop` fires on every turn
-   yield, not only terminal exit, so writing it any earlier risks the hook
+   then stamps the pass — `apply-lane-pass.ts "$N" --stamp --lane qa-fix --phase
+   qa --sha "$(git rev-parse HEAD)"` plus a `graph-commit`, so a successful
+   fixing pass does not read as `stalled` (a failed stamp **warns and
+   continues** — it is not a hard stop) — and then writes
+   `mark-node-terminal "$N" fix-attempt` (**after** the PR
+   comment, phase marker, outcome envelope, and stamp — `Stop` fires on every
+   turn yield, not only terminal exit, so writing it any earlier risks the hook
    reaping the job mid-write); and **STOP**.
 
    **Escalate finalize path** (cap / scope-deviation / planning-failed /
