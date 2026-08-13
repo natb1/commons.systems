@@ -1837,5 +1837,476 @@ assert_eq "ws: sess-ws-other phases keys == [<none>] (no whole-session override 
 
 rm -rf "$WS_ROOT"
 
+# ---------------------------------------------------------------------------
+# Audit-instrument scoping (tactic-audit-instrument-scoping): --session and
+# --node collapse the fleet-wide audit and a future per-node/per-session
+# evaluator onto ONE measurement instrument. Four fixtures below cover:
+#   (A) --session ID selects exactly that session.
+#   (B) --node ID selects the node's sessions AND their subagent transcripts
+#       (which have no sidecar of their own — the whole point of the
+#       stem-resolution reuse), while excluding a different node and an
+#       unstamped session.
+#   (C) the mtime-window decision: --session/--node with no explicit
+#       --day/--days is UNBOUNDED (finds a session far outside the --days 7
+#       default); an explicit --days still bounds a scoped run.
+#   (D) the mutual-exclusion / window.days / no-persist decisions:
+#       --session + --node together exits 2; window.days is null on an
+#       unbounded scoped run and the integer DAYS value on a bounded one;
+#       DISPATCH_AUDIT_AGGREGATES_ENABLED=1 never invokes the writer for a
+#       scoped run.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- (A) --session ID selects exactly that session ---"
+
+SCOPE_SESS_ROOT=$(mktemp -d)
+trap 'rm -rf "$SCOPE_SESS_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+scope_sess_worktree="$SCOPE_SESS_ROOT/-home-x-worktrees-scope-session"
+mkdir -p "$scope_sess_worktree"
+
+write_min_session "$scope_sess_worktree/sess-scope-a.jsonl" 1000
+write_min_session "$scope_sess_worktree/sess-scope-b.jsonl" 2000
+touch "$scope_sess_worktree/sess-scope-a.jsonl" "$scope_sess_worktree/sess-scope-b.jsonl"
+
+OUT_SCOPE_SESS=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_SESS_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --session sess-scope-a
+)
+assert_eq "session-scope: files_scanned == 1" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SCOPE_SESS")"
+assert_eq "session-scope: totals.sessions == 1" "1" \
+  "$(jq '.totals.sessions' <<<"$OUT_SCOPE_SESS")"
+assert_eq "session-scope: the one session is sess-scope-a" '["sess-scope-a"]' \
+  "$(jq -c '[.sessions[].id]' <<<"$OUT_SCOPE_SESS")"
+assert_eq "session-scope: sess-scope-b excluded (input stays 1000, not 3000)" "1000" \
+  "$(jq '.totals.input' <<<"$OUT_SCOPE_SESS")"
+assert_eq "session-scope: window.scope.type == session" "session" \
+  "$(jq -r '.window.scope.type' <<<"$OUT_SCOPE_SESS")"
+assert_eq "session-scope: window.scope.id == sess-scope-a" "sess-scope-a" \
+  "$(jq -r '.window.scope.id' <<<"$OUT_SCOPE_SESS")"
+
+rm -rf "$SCOPE_SESS_ROOT"
+
+echo ""
+echo "--- (B) --node ID selects the node's sessions AND their subagents ---"
+
+SCOPE_NODE_ROOT=$(mktemp -d)
+trap 'rm -rf "$SCOPE_NODE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+scope_node_worktree="$SCOPE_NODE_ROOT/-home-x-worktrees-scope-node"
+mkdir -p "$scope_node_worktree/sess-scope-x/subagents"
+
+# sess-scope-x: stamped node_id == tactic-scope-x (the target), with ONE
+# nested subagent transcript that carries NO sidecar of its own.
+write_min_session "$scope_node_worktree/sess-scope-x.jsonl" 1000
+printf '%s\n' '{"schema":1,"session_id":"sess-scope-x","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"scope-x","base_sha":"aaa","node_id":"tactic-scope-x","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$scope_node_worktree/sess-scope-x.dispatch-stamp.json"
+jq . "$scope_node_worktree/sess-scope-x.dispatch-stamp.json" >/dev/null
+write_min_session "$scope_node_worktree/sess-scope-x/subagents/agent-x1.jsonl" 500
+
+# sess-scope-y: stamped node_id == tactic-scope-y (a DIFFERENT node) — must
+# be excluded from a --node tactic-scope-x run.
+write_min_session "$scope_node_worktree/sess-scope-y.jsonl" 2000
+printf '%s\n' '{"schema":1,"session_id":"sess-scope-y","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"scope-y","base_sha":"bbb","node_id":"tactic-scope-y","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$scope_node_worktree/sess-scope-y.dispatch-stamp.json"
+jq . "$scope_node_worktree/sess-scope-y.dispatch-stamp.json" >/dev/null
+
+# sess-scope-z: no sidecar at all — must be excluded.
+write_min_session "$scope_node_worktree/sess-scope-z.jsonl" 4000
+
+touch "$scope_node_worktree/sess-scope-x.jsonl" "$scope_node_worktree/sess-scope-x/subagents/agent-x1.jsonl" \
+  "$scope_node_worktree/sess-scope-y.jsonl" "$scope_node_worktree/sess-scope-z.jsonl"
+
+OUT_SCOPE_NODE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_NODE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --node tactic-scope-x
+)
+assert_eq "node-scope: files_scanned == 2 (session + its subagent)" "2" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SCOPE_NODE")"
+assert_eq "node-scope: scanned ids are sess-scope-x + agent-x1" '["agent-x1","sess-scope-x"]' \
+  "$(jq -c '[.sessions[].id] | sort' <<<"$OUT_SCOPE_NODE")"
+assert_eq "node-scope: totals.input == 1000+500 (other node/unstamped excluded)" "1500" \
+  "$(jq '.totals.input' <<<"$OUT_SCOPE_NODE")"
+assert_eq "node-scope: window.scope.type == node" "node" \
+  "$(jq -r '.window.scope.type' <<<"$OUT_SCOPE_NODE")"
+assert_eq "node-scope: window.scope.id == tactic-scope-x" "tactic-scope-x" \
+  "$(jq -r '.window.scope.id' <<<"$OUT_SCOPE_NODE")"
+
+rm -rf "$SCOPE_NODE_ROOT"
+
+echo ""
+echo "--- (C) mtime-window decision: scoped default is UNBOUNDED, --days still bounds it ---"
+
+SCOPE_WIN_ROOT=$(mktemp -d)
+trap 'rm -rf "$SCOPE_WIN_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+scope_win_worktree="$SCOPE_WIN_ROOT/-home-x-worktrees-scope-window"
+mkdir -p "$scope_win_worktree"
+
+write_min_session "$scope_win_worktree/sess-scope-old.jsonl" 1000
+# 40 days old — well outside the --days default of 7.
+touch -d "40 days ago" "$scope_win_worktree/sess-scope-old.jsonl"
+
+# (C1) --session with NO --day/--days: unbounded window, the old file IS found.
+OUT_SCOPE_UNBOUNDED=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_WIN_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-old
+)
+assert_eq "scoped unbounded: files_scanned == 1 (40-day-old file found)" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SCOPE_UNBOUNDED")"
+assert_eq "scoped unbounded: window.days is null" "null" \
+  "$(jq '.window.days' <<<"$OUT_SCOPE_UNBOUNDED")"
+assert_eq "scoped unbounded: window.since is the epoch" "1970-01-01 00:00:00" \
+  "$(jq -r '.window.since' <<<"$OUT_SCOPE_UNBOUNDED")"
+
+# (C2) --session WITH explicit --days 7: bounded window, the old file is NOT
+# found — proves the scope filter does not silently override an explicit
+# window (this run should behave exactly like the fleet-wide default would).
+OUT_SCOPE_BOUNDED=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_WIN_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-old --days 7
+)
+assert_eq "scoped + explicit --days 7: files_scanned == 0 (old file excluded)" "0" \
+  "$(jq '.window.files_scanned' <<<"$OUT_SCOPE_BOUNDED")"
+assert_eq "scoped + explicit --days 7: window.days == 7" "7" \
+  "$(jq '.window.days' <<<"$OUT_SCOPE_BOUNDED")"
+
+rm -rf "$SCOPE_WIN_ROOT"
+
+echo ""
+echo "--- (D) --session/--node mutual exclusion + no-persist for scoped runs ---"
+
+# (D1) --session and --node together exits 2, both orders.
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-a --node tactic-b >/dev/null 2>&1 ); then
+  rc_scope1=0; else rc_scope1=$?; fi
+assert_eq "mutual-exclusion: --session then --node exits 2" "2" "$rc_scope1"
+
+if ( bash "$SCRIPT_DIR/aggregate-usage.sh" --node tactic-b --session sess-a >/dev/null 2>&1 ); then
+  rc_scope2=0; else rc_scope2=$?; fi
+assert_eq "mutual-exclusion: --node then --session exits 2 (other order)" "2" "$rc_scope2"
+
+# (D2) DISPATCH_AUDIT_AGGREGATES_ENABLED=1 never invokes the writer for a
+# scoped run, even though the gate is on. Reuses the shared fixture ($ROOT)
+# and the FAKE_WRITER_DIR sentinel idiom from the persist-wiring block above.
+SCOPE_PERSIST_ROOT=$(mktemp -d)
+trap 'rm -rf "$SCOPE_PERSIST_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+scope_persist_worktree="$SCOPE_PERSIST_ROOT/-home-x-worktrees-scope-persist"
+mkdir -p "$scope_persist_worktree"
+write_min_session "$scope_persist_worktree/sess-scope-persist.jsonl" 1000
+touch "$scope_persist_worktree/sess-scope-persist.jsonl"
+
+SENTINEL_SCOPE_PERSIST="$FAKE_WRITER_DIR/invoked-scope-persist"
+printf '#!/usr/bin/env bash\n: > %s\ncat >/dev/null\n' "'$SENTINEL_SCOPE_PERSIST'" \
+  > "$FAKE_WRITER_DIR/fake-writer-scope-persist"
+chmod +x "$FAKE_WRITER_DIR/fake-writer-scope-persist"
+if (
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_PERSIST_ROOT"
+  export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
+  export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-scope-persist"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-persist >/dev/null
+); then rc_scope_persist=0; else rc_scope_persist=$?; fi
+assert_eq "scoped + gate ON: script still succeeds" "0" "$rc_scope_persist"
+assert_eq "scoped + gate ON: writer NOT invoked (no persist for a scoped run)" "1" \
+  "$([[ ! -e "$SENTINEL_SCOPE_PERSIST" ]] && echo 1 || echo 0)"
+
+rm -rf "$SCOPE_PERSIST_ROOT"
+
+# ---------------------------------------------------------------------------
+# lenses.cache_efficiency: hit_ratio (tactic-audit-cache-efficiency-lens).
+# ISOLATED fixture, own mktemp root:
+#   sess-hr-1: launch /implement, ONE turn, usage input=100 cc=300 cr=600
+#              (total 1000) -> hit_ratio = 600/1000 = 0.6. Carries a real
+#              timestamp so the stage-1 started_at addition is also asserted
+#              populated here.
+#   sess-hr-2: launch /qa-fix, ONE turn, ALL-ZERO usage -> hit_ratio must be
+#              null (divide-by-zero guard), never a fabricated 0.
+# sess-hr-2 contributes nothing to any totals, so window-wide hit_ratio equals
+# sess-hr-1's own 0.6 exactly.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- lenses.cache_efficiency.hit_ratio + started_at (tactic-audit-cache-efficiency-lens) ---"
+
+HR_ROOT=$(mktemp -d)
+trap 'rm -rf "$HR_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+hr_worktree="$HR_ROOT/-home-x-worktrees-hit-ratio-fixture"
+mkdir -p "$hr_worktree"
+
+hr1_jsonl="$hr_worktree/sess-hr-1.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"},"timestamp":"2026-08-01T00:00:00.000Z"}' \
+  >> "$hr1_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"hit-ratio-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":300,"cache_read_input_tokens":600,"output_tokens":10}},"timestamp":"2026-08-01T00:00:05.000Z"}' \
+  >> "$hr1_jsonl"
+jq . "$hr1_jsonl" >/dev/null
+
+hr2_jsonl="$hr_worktree/sess-hr-2.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' \
+  >> "$hr2_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"qa-fix","isSidechain":false,"gitBranch":"hit-ratio-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$hr2_jsonl"
+jq . "$hr2_jsonl" >/dev/null
+
+touch "$hr1_jsonl" "$hr2_jsonl"
+
+OUT_HR=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$HR_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "hit_ratio: sess-hr-1.started_at populated" "2026-08-01T00:00:00.000Z" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-hr-1")][0].started_at' <<<"$OUT_HR")"
+assert_eq "hit_ratio: sess-hr-1.hit_ratio == 0.6" "0.6" \
+  "$(jq '[.sessions[]|select(.id=="sess-hr-1")][0].hit_ratio' <<<"$OUT_HR")"
+assert_eq "hit_ratio: sess-hr-2.hit_ratio is null (divide-by-zero guard)" "null" \
+  "$(jq '[.sessions[]|select(.id=="sess-hr-2")][0].hit_ratio' <<<"$OUT_HR")"
+assert_eq "hit_ratio: lenses.cache_efficiency.hit_ratio.window == 0.6" "0.6" \
+  "$(jq '.lenses.cache_efficiency.hit_ratio.window' <<<"$OUT_HR")"
+assert_eq "hit_ratio: lenses.cache_efficiency.hit_ratio.by_phase.implement == 0.6" "0.6" \
+  "$(jq '.lenses.cache_efficiency.hit_ratio.by_phase.implement' <<<"$OUT_HR")"
+assert_eq 'hit_ratio: lenses.cache_efficiency.hit_ratio.by_phase["qa-fix"] is null (zero-usage phase, divide-by-zero guard)' "null" \
+  "$(jq '.lenses.cache_efficiency.hit_ratio.by_phase["qa-fix"]' <<<"$OUT_HR")"
+
+rm -rf "$HR_ROOT"
+
+# ---------------------------------------------------------------------------
+# lenses.cache_efficiency.creation_churn (tactic-audit-cache-efficiency-lens).
+# ISOLATED fixture, own mktemp root. Three node groups exercise every branch:
+#
+#   tactic-ce-fixture (3 timestamped siblings, sorted by started_at):
+#     sess-ce-a t=:00 usage in=100 cc=1000 cr=0   -> hit_ratio 0        (earliest: baseline, never counted as churned)
+#     sess-ce-b t=:05 usage in=100 cc=900  cr=100 -> hit_ratio 100/1100 (staggered, BELOW threshold 0.5 -> churned)
+#     sess-ce-c t=:10 usage in=100 cc=100  cr=800 -> hit_ratio 0.8     (staggered, at/above threshold -> NOT churned)
+#     -> node_groups_considered +1, staggered_sessions +2 (b,c), churned_sessions +1 (b only)
+#
+#   tactic-ce-lone (ONE session only, no sibling) -> group length 1, excluded
+#     entirely (an unordered singleton proves nothing about cache reuse).
+#
+#   tactic-ce-notime (two sessions sharing the node, but sess-ce-notime-a
+#     carries NO timestamp anywhere in its transcript -> started_at null ->
+#     excluded from the candidate list BEFORE grouping, leaving only
+#     sess-ce-notime-b -> singleton group -> also excluded).
+#
+# So across the whole fixture: node_groups_considered == 1, staggered == 2,
+# churned == 1, churn_rate == 0.5, churn_price_proxy_usd == sess-ce-b's
+# cache_creation (900) priced at RATE_CACHE_CREATION (18.75/Mtok, opus proxy).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- lenses.cache_efficiency.creation_churn (tactic-audit-cache-efficiency-lens) ---"
+
+CE_ROOT=$(mktemp -d)
+trap 'rm -rf "$CE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+ce_worktree="$CE_ROOT/-home-x-worktrees-creation-churn-fixture"
+mkdir -p "$ce_worktree"
+
+write_ce_session() {
+  # write_ce_session <path> <ts-or-empty> <input> <cache_creation> <cache_read>
+  local f="$1" ts="$2" in="$3" cc="$4" cr="$5"
+  if [[ -n "$ts" ]]; then
+    printf '%s\n' "{\"type\":\"user\",\"message\":{\"content\":\"<command-name>/implement</command-name>\"},\"timestamp\":\"$ts\"}" \
+      >> "$f"
+    printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"implement\",\"isSidechain\":false,\"gitBranch\":\"creation-churn-fixture\",\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":$in,\"cache_creation_input_tokens\":$cc,\"cache_read_input_tokens\":$cr,\"output_tokens\":1}},\"timestamp\":\"$ts\"}" \
+      >> "$f"
+  else
+    printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
+      >> "$f"
+    printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"implement\",\"isSidechain\":false,\"gitBranch\":\"creation-churn-fixture\",\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":$in,\"cache_creation_input_tokens\":$cc,\"cache_read_input_tokens\":$cr,\"output_tokens\":1}}}" \
+      >> "$f"
+  fi
+  jq . "$f" >/dev/null
+}
+
+write_ce_stamp() {
+  # write_ce_stamp <sidecar-path> <session-id> <node-id>
+  local f="$1" sid="$2" nid="$3"
+  printf '%s\n' "{\"schema\":1,\"session_id\":\"$sid\",\"repo\":\"natb1/commons.systems\",\"issue\":null,\"pr\":null,\"branch\":\"creation-churn-fixture\",\"base_sha\":\"ce\",\"node_id\":\"$nid\",\"stamped_at\":\"2026-08-01T00:00:00Z\"}" \
+    > "$f"
+  jq . "$f" >/dev/null
+}
+
+# tactic-ce-fixture: 3 timestamped siblings.
+write_ce_session "$ce_worktree/sess-ce-a.jsonl" "2026-08-01T00:00:00.000Z" 100 1000 0
+write_ce_stamp    "$ce_worktree/sess-ce-a.dispatch-stamp.json" sess-ce-a tactic-ce-fixture
+write_ce_session "$ce_worktree/sess-ce-b.jsonl" "2026-08-01T00:05:00.000Z" 100 900 100
+write_ce_stamp    "$ce_worktree/sess-ce-b.dispatch-stamp.json" sess-ce-b tactic-ce-fixture
+write_ce_session "$ce_worktree/sess-ce-c.jsonl" "2026-08-01T00:10:00.000Z" 100 100 800
+write_ce_stamp    "$ce_worktree/sess-ce-c.dispatch-stamp.json" sess-ce-c tactic-ce-fixture
+
+# tactic-ce-lone: singleton node, must not contribute.
+write_ce_session "$ce_worktree/sess-ce-lone.jsonl" "2026-08-01T00:00:00.000Z" 100 1000 0
+write_ce_stamp    "$ce_worktree/sess-ce-lone.dispatch-stamp.json" sess-ce-lone tactic-ce-lone
+
+# tactic-ce-notime: one sibling has NO timestamp at all -> excluded before
+# grouping, leaving the other as a singleton -> also excluded.
+write_ce_session "$ce_worktree/sess-ce-notime-a.jsonl" "" 100 1000 0
+write_ce_stamp    "$ce_worktree/sess-ce-notime-a.dispatch-stamp.json" sess-ce-notime-a tactic-ce-notime
+write_ce_session "$ce_worktree/sess-ce-notime-b.jsonl" "2026-08-01T00:00:00.000Z" 100 1000 0
+write_ce_stamp    "$ce_worktree/sess-ce-notime-b.dispatch-stamp.json" sess-ce-notime-b tactic-ce-notime
+
+touch "$ce_worktree"/sess-ce-*.jsonl "$ce_worktree"/sess-ce-*.dispatch-stamp.json
+
+OUT_CE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$CE_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+EXPECTED_B_HIT=$(jq -n '100/1100')
+EXPECTED_CHURN_PRICE=$(jq -n '900 * 18.75 / 1e6')
+
+assert_eq "creation_churn: threshold_hit_ratio == 0.5" "0.5" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.threshold_hit_ratio' <<<"$OUT_CE")"
+assert_eq "creation_churn: node_groups_considered == 1 (lone + notime nodes excluded)" "1" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.node_groups_considered' <<<"$OUT_CE")"
+assert_eq "creation_churn: staggered_sessions == 2 (b,c; a is the earliest baseline)" "2" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.staggered_sessions' <<<"$OUT_CE")"
+assert_eq "creation_churn: churned_sessions == 1 (only b is below threshold)" "1" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.churned_sessions' <<<"$OUT_CE")"
+assert_eq "creation_churn: churn_rate == 0.5" "0.5" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.churn_rate' <<<"$OUT_CE")"
+assert_close "creation_churn: churn_price_proxy_usd == sess-ce-b's cache_creation priced" \
+  "$EXPECTED_CHURN_PRICE" "$(jq '.lenses.cache_efficiency.creation_churn.churn_price_proxy_usd' <<<"$OUT_CE")"
+assert_eq "creation_churn: examples[0].id == sess-ce-b" '"sess-ce-b"' \
+  "$(jq '.lenses.cache_efficiency.creation_churn.examples[0].id' <<<"$OUT_CE")"
+assert_eq "creation_churn: examples[0].node_id == tactic-ce-fixture" '"tactic-ce-fixture"' \
+  "$(jq '.lenses.cache_efficiency.creation_churn.examples[0].node_id' <<<"$OUT_CE")"
+assert_close "creation_churn: examples[0].hit_ratio == 100/1100" \
+  "$EXPECTED_B_HIT" "$(jq '.lenses.cache_efficiency.creation_churn.examples[0].hit_ratio' <<<"$OUT_CE")"
+
+rm -rf "$CE_ROOT"
+
+# ---------------------------------------------------------------------------
+# lenses.permission_friction (tactic-audit-permission-friction).
+# ISOLATED fixture, own mktemp root. Three sessions cover all four markers,
+# both discriminators, the back-to-back retry-charge guard, and the negatives.
+#
+#   sess-pf-1 (launch /implement) — SIGNATURE discriminator, all four markers:
+#     ev1  user rejection ("The user doesn't want to proceed with this tool
+#          use...") -> next assistant turn in=100 out=10 charged as retry
+#     ev2  auto-mode classifier denial -> next assistant turn in=200 out=20
+#     ev3  hook refusal ("This session is isolated in the worktree /a/b/c...")
+#     ev4  permission-rule denial ("Permission to use Bash has been denied...")
+#          ev3 and ev4 are BACK TO BACK, so the single assistant turn that
+#          follows (in=300 out=30, and itself carrying the one
+#          dangerouslyDisableSandbox:true tool_use) is charged ONCE, not twice.
+#     -> user_rejections 1, automode_denials 1, policy_blocks 2,
+#        sandbox_overrides 1, events 4
+#
+#   sess-pf-2 (launch /qa-fix) — LINE-LEVEL discriminator + negatives:
+#     a rejection whose result text is the human's own typed reason (no fixed
+#     prefix, so the signature discriminator cannot classify it) but whose line
+#     carries toolDenialKind:"user-rejected" -> user_rejections 1. It is the
+#     LAST message, so nothing follows it and no retry cost is charged — the
+#     armed-but-never-fired branch. Also carries an ORDINARY error
+#     ("error: File not found /x/y/z") that must land in tool_errors and NOT in
+#     the friction lens.
+#     -> user_rejections 1, events 1, retry_price_proxy_usd 0
+#
+#   sess-pf-3 (launch /review-fix) — clean session, no friction at all:
+#     -> every count 0, and NOT in sessions_affected.
+#
+# Window-wide: events 5, user_rejections 2, automode_denials 1,
+# policy_blocks 2, sandbox_overrides 1, sessions_affected 2 (pf-1, pf-2).
+# retry_price_proxy_usd = price(in=600, out=60) at the opus proxy rates
+# (15/Mtok input, 75/Mtok output).
+#
+# The isolation-refusal signature also LOCKS err_signature's PATH collapse:
+# the fixture's literal worktree path must come back as the token PATH, which
+# is what merges per-worktree variants of one refusal into a single key.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- lenses.permission_friction (tactic-audit-permission-friction) ---"
+
+PF_ROOT=$(mktemp -d)
+trap 'rm -rf "$PF_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+pf_worktree="$PF_ROOT/-home-x-worktrees-permission-friction-fixture"
+mkdir -p "$pf_worktree"
+
+pf_asst() {
+  # pf_asst <path> <input> <output> [extra-content-block-json]
+  local f="$1" in="$2" out="$3" extra="${4:-}"
+  local blocks='{"type":"text","text":"ok"}'
+  if [[ -n "$extra" ]]; then
+    blocks="$blocks,$extra"
+  fi
+  printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"<none>\",\"isSidechain\":false,\"gitBranch\":\"permission-friction-fixture\",\"message\":{\"model\":\"claude-opus-4-8\",\"content\":[$blocks],\"usage\":{\"input_tokens\":$in,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":$out}}}" \
+    >> "$f"
+}
+
+pf1="$pf_worktree/sess-pf-1.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' >> "$pf1"
+
+# ev1 — user rejection, signature discriminator (line field also present).
+printf '%s\n' '{"type":"user","toolUseResult":"User rejected tool use","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"The user doesn'"'"'t want to proceed with this tool use. The tool use was rejected."}]}}' >> "$pf1"
+pf_asst "$pf1" 100 10
+
+# ev2 — auto-mode classifier denial.
+printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","is_error":true,"content":"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Irreversible Local Destruction] nope."}]}}' >> "$pf1"
+pf_asst "$pf1" 200 20
+
+# ev3 + ev4 — hook refusal then permission-rule denial, back to back.
+printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t3","is_error":true,"content":"This session is isolated in the worktree /home/x/worktrees/permission-friction-fixture, but this command is too complex."}]}}' >> "$pf1"
+printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t4","is_error":true,"content":"Permission to use Bash has been denied. IMPORTANT: you may attempt other tools."}]}}' >> "$pf1"
+pf_asst "$pf1" 300 30 '{"type":"tool_use","id":"t5","name":"Bash","input":{"command":"git status","dangerouslyDisableSandbox":true}}'
+jq . "$pf1" >/dev/null
+
+pf2="$pf_worktree/sess-pf-2.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' >> "$pf2"
+pf_asst "$pf2" 50 5
+# Ordinary error — must reach tool_errors, must NOT reach the friction lens.
+printf '%s\n' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"u1","is_error":true,"content":"error: File not found /x/y/z/thing.txt"}]}}' >> "$pf2"
+pf_asst "$pf2" 60 6
+# Line-level-only rejection, and it is the LAST message: armed, never charged.
+printf '%s\n' '{"type":"user","toolDenialKind":"user-rejected","message":{"content":[{"type":"tool_result","tool_use_id":"u2","is_error":true,"content":"stop doing that please"}]}}' >> "$pf2"
+jq . "$pf2" >/dev/null
+
+pf3="$pf_worktree/sess-pf-3.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/review-fix</command-name>"}}' >> "$pf3"
+pf_asst "$pf3" 70 7
+jq . "$pf3" >/dev/null
+
+touch "$pf_worktree"/sess-pf-*.jsonl
+
+OUT_PF=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$PF_ROOT"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+EXPECTED_PF_RETRY=$(jq -n '(600 * 15 + 60 * 75) / 1e6')
+
+assert_eq "permission_friction: events == 5" "5" \
+  "$(jq '.lenses.permission_friction.events' <<<"$OUT_PF")"
+assert_eq "permission_friction: user_rejections == 2 (signature + line-level fallback)" "2" \
+  "$(jq '.lenses.permission_friction.user_rejections' <<<"$OUT_PF")"
+assert_eq "permission_friction: automode_denials == 1" "1" \
+  "$(jq '.lenses.permission_friction.automode_denials' <<<"$OUT_PF")"
+assert_eq "permission_friction: policy_blocks == 2 (hook refusal + permission-rule denial)" "2" \
+  "$(jq '.lenses.permission_friction.policy_blocks' <<<"$OUT_PF")"
+assert_eq "permission_friction: sandbox_overrides == 1 (dangerouslyDisableSandbox tool_use)" "1" \
+  "$(jq '.lenses.permission_friction.sandbox_overrides' <<<"$OUT_PF")"
+assert_eq "permission_friction: sessions_affected == 2 (clean sess-pf-3 excluded)" "2" \
+  "$(jq '.lenses.permission_friction.sessions_affected' <<<"$OUT_PF")"
+assert_close "permission_friction: retry_price_proxy_usd charges the following turn once per run of events" \
+  "$EXPECTED_PF_RETRY" "$(jq '.lenses.permission_friction.retry_price_proxy_usd' <<<"$OUT_PF")"
+
+assert_eq "permission_friction: top_signatures[0] is the PATH-collapsed isolation refusal" \
+  '"This session is isolated in the worktree PATH, but this command is too complex."' \
+  "$(jq -c '[.lenses.permission_friction.top_signatures[]|select(.signature|startswith("This session is isolated"))][0].signature' <<<"$OUT_PF")"
+assert_eq "permission_friction: ordinary error is NOT a friction signature" "0" \
+  "$(jq '[.lenses.permission_friction.top_signatures[]|select(.signature|startswith("error: File not found"))]|length' <<<"$OUT_PF")"
+assert_eq "permission_friction: ordinary error IS still a tool_errors signature" "1" \
+  "$(jq '[.tool_errors[]|select(.signature|startswith("error: File not found"))]|length' <<<"$OUT_PF")"
+
+assert_eq "permission_friction: sess-pf-1 per-session policy_blocks == 2" "2" \
+  "$(jq '[.sessions[]|select(.id=="sess-pf-1")][0].permission_friction.policy_blocks' <<<"$OUT_PF")"
+assert_eq "permission_friction: sess-pf-1 per-session sandbox_overrides == 1" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-pf-1")][0].permission_friction.sandbox_overrides' <<<"$OUT_PF")"
+assert_eq "permission_friction: sess-pf-2 retry_price_proxy_usd == 0 (armed on the last message, nothing follows)" "0" \
+  "$(jq '[.sessions[]|select(.id=="sess-pf-2")][0].permission_friction.retry_price_proxy_usd' <<<"$OUT_PF")"
+assert_eq "permission_friction: sess-pf-2 user_rejections == 1 (line-level toolDenialKind fallback)" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-pf-2")][0].permission_friction.user_rejections' <<<"$OUT_PF")"
+assert_eq "permission_friction: sess-pf-3 (clean) events == 0" "0" \
+  "$(jq '[.sessions[]|select(.id=="sess-pf-3")][0].permission_friction.events' <<<"$OUT_PF")"
+
+rm -rf "$PF_ROOT"
+
 report_results
 exit $FAIL

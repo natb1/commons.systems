@@ -691,6 +691,28 @@ problem set rather than the first entry. It enforces:
     `attention`/`attention.boost` is null there is no dominance to protect and
     the guard is inert. A node opts out by placing the literal substring
     `ACK: main-health-dominance` in its `attention.rationale`.
+19. Tier marks are well-shaped: `attributes.bug_fix` and `attributes.security`,
+    when present, are booleans; `attributes.tier`, when present, is the number 2
+    or 3. An explicit `attributes.tier: 1` is rejected — 1 is the implicit
+    default every unmarked node already carries, so authoring it would give one
+    state two spellings.
+20. Per-tier boost namespace: a node with non-null `attention` sets
+    `attention.tier` equal to its OWN tier — its own marks, not the effective
+    tier it inherits down `parent`/`serves`. A boost value is only meaningful
+    within one tier's scale, so a node whose tier changes must have its value
+    re-selected in the new tier's namespace. The check deliberately uses the own
+    tier: an effective-tier check would cascade, invalidating every boosted
+    descendant the moment any ancestor gained a mark.
+21. `attributes.measured_impact`, when present, is an array of summary
+    measurement records `{metric, value, unit, window, sensor, measured}` —
+    `metric`/`unit`/`window`/`sensor` non-empty strings, `value` a finite
+    number, `measured` a `YYYY-MM-DD` date. `attributes` is otherwise free-form,
+    so without this rule a malformed measurement would reach every consumer
+    unchallenged; the key is cited evidence for attention and classification
+    writes, so it earns a shape rule as tier marks do. The rule checks shape
+    only and never reads a value — a measurement is queryable input to a ranking
+    act, never an ordering authority of its own. `kind-tactic` carries the
+    field's normative detail.
 
 Rules 6–9 judge only edges whose target already resolves — rules 2–4 report the
 dangling case — so a single broken edge is not double-reported. Rules 13–14 own

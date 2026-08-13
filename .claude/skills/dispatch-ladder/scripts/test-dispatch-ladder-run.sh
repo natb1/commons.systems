@@ -139,6 +139,15 @@ make_seq_fake "$DISPATCH/graph-auto-merge"      merge
 make_seq_fake "$DISPATCH/reconcile-graph-merged" reconcile
 make_seq_fake "$DISPATCH/reconcile-graph-review-stall" stall
 make_seq_fake "$IUTIL/verify-landed"            landed
+# The per-phase evaluation spawn. Faked as a sequence so a case can make the
+# spawn fail and assert the ladder's own disposition is unchanged by it.
+make_seq_fake "$DISPATCH/dispatch-spawn-job"    spawnjob
+# The model/effort policy is copied REAL, not faked: the point of routing the
+# evaluator's tier through dispatch-phase-model is that the policy lives there,
+# so a test against a fake would assert nothing about the actual answer.
+cp "$SCRIPT_DIR/dispatch-phase-model"  "$DISPATCH/dispatch-phase-model"
+cp "$SCRIPT_DIR/dispatch-phase-effort" "$DISPATCH/dispatch-phase-effort"
+chmod +x "$DISPATCH/dispatch-phase-model" "$DISPATCH/dispatch-phase-effort"
 # git is faked on PATH, not by path: the driver syncs the main checkout with
 # `git -C <root> fetch` then `git -C <root> merge --ff-only`, two calls per
 # pass, and the sequence drives which of them fails.
@@ -228,6 +237,7 @@ reset_seqs() {
   set_seq landed    '4|'
   set_seq git       '0|'
   set_seq lock      '0|acquired'
+  set_seq spawnjob  '0|spawned'
   : >"$SEQ_DIR/lock.sid"
   : >"$SEQ_DIR/sweep.log"
   : >"$SEQ_DIR/terminal-sweep.log"
@@ -308,8 +318,8 @@ assert_eq "complete: the terminal-disposition sweep ran once before every advanc
   "$(calls advance)" "$(terminal_sweeps)"
 assert_eq "complete: and ran BEFORE each advance, not after it" "0,1" \
   "$(terminal_sweep_order)"
-# The acceleration review reads phase wall-clock off this field; if it stops
-# being written the evidence is silently gone.
+# The evaluation reads phase wall-clock off this field; if it stops being
+# written the evidence is silently gone.
 TOTAL=$((TOTAL + 1))
 if jq -e 'select(.event == "awaited") | .detail | test("elapsed_s=[0-9]+")' \
      "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
@@ -492,8 +502,8 @@ assert_eq "grace: exit 0" "0" "$RC"
 assert_eq "grace: the reconciler was polled 3 times" "3" "$(calls reconcile)"
 assert_eq "grace: two absorb/grace-wait events were recorded" "2" "$(events_have absorb grace-wait)"
 # Only the SECOND of those is a wait: the first pass merged, which is progress.
-# The wait it does take is charged to the budget as grace, never as CI — the
-# acceleration review cannot tell the two apart afterwards.
+# The wait it does take is charged to the budget as grace, never as CI — no
+# later evaluation can tell the two apart afterwards.
 assert_eq "grace: the wait was charged as grace, not CI" "1" "$(events_have idle grace-wait)"
 assert_eq "grace: and never as CI" "0" "$(events_have idle ci-wait)"
 
@@ -706,6 +716,171 @@ OUT=$("$RUN" "$NODE" --poll-s 1 --max-run-s 2 2>/dev/null) || RC=$?
 assert_eq "max-run: exit 21" "21" "$RC"
 assert_eq "max-run: state.json disposition" "timeout" "$(jq -r .disposition "$STATE_DIR/state.json")"
 assert_eq "max-run: state.json status is halted" "halted" "$(jq -r .status "$STATE_DIR/state.json")"
+
+# --- the per-phase evaluation ------------------------------------------------
+# The driver spawns /rsi at every phase boundary and, from
+# halt(), for the phase a halted run still owes. Everything asserted here is
+# invisible until it costs a real run: a name that dedups would silently drop
+# every phase after the first, and a spawn that could halt the ladder would let
+# the review gate the work.
+echo "Test: a per-phase evaluation is spawned at EVERY phase boundary, with distinct names"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '0|launched tactic-fixture-node tactic qa /qa-fix' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|advanced tactic-fixture-node implement -> origin/main' \
+                '0|advanced tactic-fixture-node qa -> origin/main'
+set_seq landed  '0|'
+run_ladder
+assert_eq "eval: exit 0" "0" "$RC"
+assert_eq "eval: one spawn per phase boundary" "2" "$(calls spawnjob)"
+assert_eq "eval: both spawns were recorded as events" "2" "$(events_have eval spawned)"
+# THE --name IS THE DEDUP KEY. dispatch-spawn-job spawns NOTHING for a name a
+# live session already holds, so two phases sharing a name would evaluate the
+# first and silently skip the second.
+EVAL_NAME_1=$(sed -n 1p "$SEQ_DIR/spawnjob.argv" | sed 's/.*--name \([^ ]*\).*/\1/')
+EVAL_NAME_2=$(sed -n 2p "$SEQ_DIR/spawnjob.argv" | sed 's/.*--name \([^ ]*\).*/\1/')
+TOTAL=$((TOTAL + 1))
+if [[ -n "$EVAL_NAME_1" && "$EVAL_NAME_1" != "$EVAL_NAME_2" \
+      && "$EVAL_NAME_1" == *"$NODE"*implement* && "$EVAL_NAME_2" == *"$NODE"*qa* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the two spawns carry distinct node+phase names"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the two spawns carry distinct node+phase names"
+  echo "    names: '$EVAL_NAME_1' '$EVAL_NAME_2'"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--cwd $PROJECT " "$SEQ_DIR/spawnjob.argv" \
+   && grep -q -- "/rsi $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the prompt carries the node, the phase and the launch epoch"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the prompt carries the node, the phase and the launch epoch"
+  echo "    argv: $(cat "$SEQ_DIR/spawnjob.argv")"
+fi
+# The tier is dispatch-phase-model's answer for the `ladder-eval` pseudo-phase,
+# not a literal at the call site.
+TOTAL=$((TOTAL + 1))
+if grep -q -- "--model sonnet" "$SEQ_DIR/spawnjob.argv"; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the model came from dispatch-phase-model (sonnet)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the model came from dispatch-phase-model (sonnet)"
+  echo "    argv: $(cat "$SEQ_DIR/spawnjob.argv")"
+fi
+# The default verify path, deliberately: these one-offs have no reservation
+# ledger and no sweep to reconcile a kick that never came up.
+TOTAL=$((TOTAL + 1))
+if ! grep -q -- "--no-verify" "$SEQ_DIR/spawnjob.argv"; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the spawn keeps the default registration verify"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the spawn keeps the default registration verify"
+fi
+# elapsed_s / window_s / await_repolls as NUMBERS, not text inside detail.
+TOTAL=$((TOTAL + 1))
+if jq -e 'select(.event == "awaited")
+          | (.elapsed_s | type == "number")
+            and (.window_s == 3) and (.await_repolls | type == "number")' \
+     "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: eval: the awaited event carries structured numeric timing fields"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: eval: the awaited event carries structured numeric timing fields"
+  echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
+echo "Test: halt() spawns the evaluation a mid-run halt still owes"
+# Exit 12: the worker stopped with no graph change — the phase never reached its
+# boundary, so nothing spawned there. Under the old terminus-only rule this run,
+# one of the most defect-rich kinds, recorded nothing at all.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+set_seq await   '12|stalled tactic-fixture-node implement'
+run_ladder
+assert_eq "halt-eval: exit 12 (stalled), unchanged by the spawn" "12" "$RC"
+assert_eq "halt-eval: the owed evaluation was spawned once" "1" "$(calls spawnjob)"
+TOTAL=$((TOTAL + 1))
+if grep -q -- "/rsi $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
+  PASS=$((PASS + 1)); echo "  PASS: halt-eval: it evaluated the phase the run was in"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: halt-eval: it evaluated the phase the run was in"
+  echo "    argv: $(cat "$SEQ_DIR/spawnjob.argv")"
+fi
+
+echo "Test: every halting exit code owes it — one halt() edit, not five call sites"
+for pair in "11|throw tactic-fixture-node parked" \
+            "14|throw tactic-fixture-node unknown-graph-read"; do
+  want_rc="${pair%%|*}"
+  reset_seqs
+  set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix'
+  set_seq await "$pair"
+  run_ladder
+  assert_eq "halt-eval $want_rc: exit passed through" "$want_rc" "$RC"
+  assert_eq "halt-eval $want_rc: the owed evaluation was spawned" "1" "$(calls spawnjob)"
+done
+
+echo "Test: a halt with no launched phase spawns NOTHING"
+# `refused`/`claimed`/`throw` straight off the first advance: no phase ran, so
+# there is nothing to evaluate and a spawn would be a job with no subject.
+for pair in "2|refused tactic-fixture-node strategy" \
+            "13|claimed tactic-fixture-node live-session" \
+            "11|throw tactic-fixture-node parked"; do
+  want_rc="${pair%%|*}"
+  reset_seqs
+  set_seq advance "$pair"
+  run_ladder
+  assert_eq "no-phase $want_rc: exit passed through" "$want_rc" "$RC"
+  assert_eq "no-phase $want_rc: nothing was evaluated" "0" "$(calls spawnjob)"
+done
+
+echo "Test: a phase already evaluated at its boundary is not evaluated twice by halt()"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic review /review-fix' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|reviewed tactic-fixture-node review -> pending-merge'
+set_seq merge   '0|held tactic-fixture-node (office-hours)'
+run_ladder
+assert_eq "no-double: exit 11 (the hold still throws)" "11" "$RC"
+assert_eq "no-double: the review phase was evaluated exactly once" "1" "$(calls spawnjob)"
+
+echo "Test: a spawn that fails is a warning, never the ladder's disposition"
+# The review must never gate the work: a ladder that reached `done` reports 0
+# whatever happened to its evaluation job.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|'
+set_seq spawnjob '1|'
+run_ladder
+assert_eq "eval-fail: exit 0 — the run completed regardless" "0" "$RC"
+assert_eq "eval-fail: the failure was recorded, not swallowed" "2" \
+  "$(events_have eval spawn-failed)"
+assert_eq "eval-fail: state.json still reports complete" "complete" \
+  "$(jq -r .status "$STATE_DIR/state.json")"
+
+echo "Test: a failed boundary spawn is still OWED, so halt() retries it once"
+# The claim rule: a spawn that failed evaluated nothing, so it must not mark the
+# phase done. halt() is the one terminal path and runs once, so the retry budget
+# is exactly one — the sequence below fails the boundary attempt and succeeds on
+# the halt attempt, and the phase ends up evaluated rather than silently skipped.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|'
+set_seq spawnjob '1|' '0|spawned'
+run_ladder
+assert_eq "eval-retry: exit 0" "0" "$RC"
+assert_eq "eval-retry: the boundary failure is on the record" "1" \
+  "$(events_have eval spawn-failed)"
+assert_eq "eval-retry: and halt() paid the debt" "1" "$(events_have eval spawned)"
+assert_eq "eval-retry: exactly two attempts — the budget is one retry, not a loop" \
+  "2" "$(calls spawnjob)"
+
+echo "Test: a deduped spawn is recorded as deduped, not as spawned"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|'
+set_seq spawnjob '0|deduped'
+run_ladder
+assert_eq "eval-dedup: exit 0" "0" "$RC"
+assert_eq "eval-dedup: the event says deduped" "1" "$(events_have eval deduped)"
 
 # --- the terminal-disposition sweep -----------------------------------------
 echo "Test: the terminal-disposition sweep runs once per pass, before each advance"

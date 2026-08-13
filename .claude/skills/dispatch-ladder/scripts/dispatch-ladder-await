@@ -6,7 +6,7 @@
 # `intentions/tactic-rsi-implement-skill.md`); `dispatch-ladder-advance`
 # launches, this waits and verifies. It makes no graph writes, no merges, and
 # no decisions — it reports one of six outcomes and lets the calling thread
-# (`/dispatch-ladder`, invoked directly or by `/rsi`) judge.
+# (`/dispatch-ladder`, invoked directly by an author) judge.
 #
 # NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
 # owns every merge (strategy condition, and the node's own plan). A wait loop is
@@ -86,7 +86,7 @@
 # Exit codes:
 #   0   advanced, reviewed or pruned — the loop may take another step.
 #   11  throw: the node is parked, or a session is held un-reaped. Both need the
-#       calling thread (`/dispatch-ladder`, invoked directly or by `/rsi`);
+#       calling thread (`/dispatch-ladder`, invoked directly by an author);
 #       neither is retried here.
 #   12  stalled: the session ended with no graph change. Needs judgment — it is
 #       the shape a silently-failed phase takes, and retrying blindly would
@@ -254,7 +254,7 @@ report_graph_verdict() { # <session-note>
       exit 0 ;;
     parked)
       echo "throw $NODE_ID parked"
-      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly or by /rsi) conducts the engagement; this script never clears a park." >&2
+      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly by an author) conducts the engagement; this script never clears a park." >&2
       exit 11 ;;
     blocked)
       echo "throw $NODE_ID blocked-by"
@@ -298,7 +298,8 @@ if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
   # "no session". Falling through to the graph here would let an unreadable
   # registry produce a real verdict: a node whose phase had not landed YET would
   # be reported `stalled` while its worker was alive and simply invisible. That
-  # is the same "trust an unanswerable probe" failure rsi-claim refuses to make.
+  # is the same "trust an unanswerable probe" failure every claim primitive in
+  # this family refuses to make.
   # Report `running` instead — the caller re-runs, and nothing is claimed.
   echo "running $NODE_ID $FROM_PHASE"
   echo "dispatch-ladder-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2

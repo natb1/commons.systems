@@ -28,7 +28,7 @@ grep -rn '/file-issue' .claude/skills/
 ```
 
 (that grep also surfaces non-invocation mentions — dispatch script comments,
-`dispatch-token-audit` test fixtures, `align` narrative prose — which are
+`rsi-audit` test fixtures, `align` narrative prose — which are
 descriptive, not call sites.)
 
 - `.claude/skills/qa-fix/references/needs-main-followups.md` — Step 3.6

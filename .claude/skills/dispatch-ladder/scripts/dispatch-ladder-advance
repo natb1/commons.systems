@@ -34,10 +34,8 @@
 # pace curve, and its header says so plainly: a --standalone caller is treated
 # as unattended and degrades to `empty` at the ceiling. This script has no
 # attended/pace-exempt status of its own — that property belongs to its
-# caller. `/rsi` is attended (strategy-recursive-self-improvement condition 9)
-# and pace-exempt (condition 7 — "the budget and the serialization are the
-# throttle, not the pace curve"), and `/dispatch-ladder` inherits both from
-# whichever attended thread invokes it. More concretely: the execute lane
+# caller. `/dispatch-ladder` inherits attended and pace-exempt status from
+# whichever attended thread invokes it — an author directly. More concretely: the execute lane
 # exists FOR the bootstrap-deadlock case, where dispatch is paused and the fix
 # is what would unpause it. Under a pause the worker target is 0, so
 # --standalone would print `empty` on every call and the lane would be dead in
@@ -96,7 +94,7 @@
 #       an error; the loop stops or retries later. The graph-select-target
 #       event lines on stderr say which.
 #   11  throw: parked, held, a failed launch, or an UNVERIFIED one. The calling
-#       thread (`/dispatch-ladder`, invoked directly or by `/rsi`) conducts the
+#       thread (`/dispatch-ladder`, invoked directly by an author) conducts the
 #       office-hours engagement — this script never pushes through one.
 #   13  claimed: a live session, a terminal-but-unreleased session, or an
 #       unreclaimed ledger marker holds the node. NEVER proceed past this; it is

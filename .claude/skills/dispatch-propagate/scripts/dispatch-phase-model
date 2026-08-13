@@ -23,6 +23,15 @@
 #   fix-checks    → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   fix-conflicts → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   main-qa       → sonnet   (#2274: review-like; no product-code authoring)
+#   ladder-eval   → sonnet   (the /rsi per-phase evaluation job
+#                             spawned by dispatch-ladder-run at each phase
+#                             boundary. Not a ladder rung — a pseudo-phase, so
+#                             the job's tier is policy here rather than a
+#                             `--model sonnet` literal at the spawn site. It
+#                             reads one bounded aggregate plus one events.jsonl
+#                             and writes ledger entries; it authors no product
+#                             code. Sonnet also matches the sibling one-off jobs
+#                             dispatch-tick spawns.)
 #   *             → (empty)  unmapped phases inherit the session default
 #
 # Contract:
@@ -53,7 +62,7 @@ PHASE="$1"
 # Static map. The orchestrator is always Sonnet for the workflow phases; every
 # other phase inherits the session default (empty → no --model flag).
 case "$PHASE" in
-  qa|review|fix-checks|fix-conflicts|main-qa)
+  qa|review|fix-checks|fix-conflicts|main-qa|ladder-eval)
     printf '%s\n' "sonnet"
     ;;
   *)

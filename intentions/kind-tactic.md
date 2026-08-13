@@ -84,6 +84,14 @@ attributes:
   fields:
     - "attention: valid on this kind (goal_layer: true) — a TOP-LEVEL field, not
       an attributes entry; canonical definition on kind-kind's field list"
+    - "measured_impact: list of summary measurement records {metric, value,
+      unit, window, sensor, measured} about this tactic — queryable input to a
+      ranking or classification act, never an ordering authority of its own;
+      shape enforced by validateGraph rule 21"
+    - "ledger_entry: true marks this tactic an evaluation finding ledger entry —
+      one node per distinct recurring finding, merged not accumulated, and
+      EXEMPT from unreferenced-pruning so a retirement keeps its
+      measured_impact; absent or false on every other tactic"
   status_vocabulary:
     raw: not yet dialectically examined
     refining: under active dialectic
@@ -104,6 +112,12 @@ uniformly (`phase: null`, `execution: null`, `validates: []`, `blocked_by: []`).
 What makes them tactic-scoped is graph rule 10: `validateGraph` rejects a
 non-null `phase` or `execution`, or a non-empty `validates` or `blocked_by`, on
 any node whose `kind` is not `tactic`.
+
+The last two sections cover `attributes.measured_impact` and
+`attributes.ledger_entry` instead — not top-level fields but attributes
+sub-keys, declared in this kind node's `attributes.fields` list. They are
+documented here for the same reason: they carry normative detail no shape rule
+does.
 
 ## `phase`
 
@@ -158,3 +172,93 @@ Dangling edges are reported by rule 13 rather than traversed.
 Because tactics are transient, a blocking tactic disappears when it completes;
 the blocked tactic's entry must be removed at the same time, or rule 13 will
 report it as unresolved.
+
+## `measured_impact`
+
+A list of summary measurement records about this tactic — the ledger's
+prioritization column. Each record is
+`{metric, value, unit, window, sensor, measured}`: `metric` names what was
+measured (`recurrence_count` and `recoverable_tokens` are two `metric` values in
+this one shape, not two separate fields), `value` is the figure, `unit` its unit,
+`window` the period it aggregates, `sensor` the instrument it came from, and
+`measured` the `YYYY-MM-DD` day it was taken. `validateGraph` rule 21 enforces
+that shape: `metric`/`unit`/`window`/`sensor` non-empty strings, `value` a finite
+number, `measured` a date. `attributes` is otherwise free-form, so without the
+rule a malformed measurement would reach every consumer unchallenged.
+
+Four properties bound the field (recorded on
+`strategy-rsi-delegated-prioritization`, 2026-08-12).
+
+**It never orders.** A measurement is queryable INPUT to a within-band attention
+write or to a classification act — never an ordering authority of its own. Rule
+21 checks shape and never reads a value, and no machinery writes `attention` or
+`attributes.tier` from a measurement. Crossing a recurrence threshold makes a
+tactic ELIGIBLE for an act the model is already permitted — adding
+`attributes.bug_fix: true` when the recurrence is genuinely a defect — which
+lifts tier 1→2 through `ownTier`'s existing derivation. The measurement is the
+cited justification for that act, not a new kind of act.
+
+**It must be cited.** A delegated attention write justified by a measurement
+names the record in its `attributes.priority_log` rationale, so the anti-thrash
+log carries the evidence and not just the assertion.
+
+**It is sensor-attributed.** The `sensor` field brings a record under
+`strategy-token-economy`'s standing condition that a yield metric credited to a
+named instrument is verified to have come from that instrument. An unverified
+attribution is not admissible ranking input.
+
+**It is summary, not an event log.** Re-measuring rewrites the record for that
+`metric`/`window`; it never appends an occurrence. This is the deliberate
+difference from `attributes.priority_log`, which the field otherwise resembles,
+and it is what bounds both node growth and the re-measurement write surface.
+
+Re-measurement is fingerprint-safe by construction, so it never freezes a
+tactic's open children. `strategyFingerprint` hashes an explicit allowlist of six
+substance fields — `statement`, `clarifications`, `attributes.conditions`,
+`serves`, `success_signal`, `tooling_goals` — and `tacticScopeFingerprint` hashes
+only `(statement, body)`, no frontmatter at all. `measured_impact` is exempt
+because neither allowlist names it, not because either carries an exclusion for
+it; a regression test in the router suite locks that in.
+
+## `ledger_entry`
+
+`true` marks this tactic an **evaluation finding ledger entry**: the durable
+record of one recurring evaluation finding, carrying that finding's summary
+figures on `attributes.measured_impact`. Absent (or `false`) on every other
+tactic. Written only by
+`.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`.
+
+**One node per distinct finding — never one per occurrence.** Similar findings
+MERGE. A recurrence refreshes the entry's body and increments the
+`recurrence_count` record on `measured_impact`; it does not mint a second node.
+Deciding whether a finding in hand *is* an existing entry is a similarity
+judgment the calling evaluator makes against the ledger (`dispatch-eval-finding
+--list`), not a lookup in a closed taxonomy — the set of findings that recur is
+exactly what the ledger exists to discover, so it cannot be enumerated up front.
+The entry's slug is only the addressing mechanism for that judgment.
+
+**Retirement keeps the figures.** An entry retires by transitioning to `phase:
+"done"` with `measured_impact` intact. Nothing is reset, because a recurrence
+after retirement is evidence the landed fix did not hold, and the count is what
+says how many times. Such a recurrence therefore RESUMES the entry — the count
+continues and `phase` clears back to `null` — rather than starting a fresh
+record at 1.
+
+**Exempt from unreferenced-pruning.** Resumption only works if the retired node
+still exists, so a ledger entry is excluded from the owed-prune census's
+prunable set (`computeDebt` in
+`packages/intentionsutil/scripts/graph-census-debt.ts`). That is where the
+exemption has to live: `graph-commit --prune` is content-blind, so nothing
+downstream can honour a convention the candidate query does not encode, and a
+convention the pruner does not read is not an exemption. `phase: "done"` on a
+ledger entry consequently does NOT mean "finished, drop it" the way it does
+elsewhere; `isLedgerEntry` (`packages/intentionsutil/src/schema.ts`) is the one
+predicate every such consumer shares, and `rsi.ts`'s §6 task plan is the other
+caller — an entry is a record, not a task, and rendering one there would raise a
+permanent `task-done` staleness flag whose remedy is precisely what must never
+happen to it. §7 of `rsi-plan.md` renders the ledger instead.
+
+**It never orders.** Like `measured_impact` itself, a recurrence count is
+queryable input to a ranking act, not an ordering authority. An entry is minted
+with `attention: null` — rank is never machine-injected — and with
+`pace_exempt: true`, because recording a finding is not paced work.

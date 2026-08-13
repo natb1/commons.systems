@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Token-usage aggregation for the /dispatch-token-audit skill (#1177).
+# Token-usage aggregation for the /rsi-audit skill (#1177).
 #
 # This is the mechanical, token-heavy parsing layer. It scans Claude session
 # transcripts within a time window and emits ONE structured JSON document that
@@ -19,7 +19,7 @@
 #
 # USAGE
 #   aggregate-usage.sh [--days N | --day YYYY-MM-DD] [--json-out PATH]
-#                      [--exclude-sidecar-sessions]
+#                      [--exclude-sidecar-sessions] [--session ID | --node ID]
 #     --days N        window in days (default 7); files with mtime newer than
 #                     "N days ago" are scanned. N must be a positive integer.
 #     --day YYYY-MM-DD  scan a single UTC calendar day [day 00:00:00, day+1
@@ -31,6 +31,21 @@
 #                     nested subagent transcripts (<sid>/subagents/agent-*.jsonl)
 #                     are dropped with it — the sidecar totals already include
 #                     subagent usage, so scanning them would double-count.
+#     --session ID    scope to exactly one session: the transcript whose
+#                     filename stem is ID, plus its nested subagent transcripts
+#                     (<ID>/subagents/agent-*.jsonl). Mutually exclusive with
+#                     --node. With no explicit --day/--days, the mtime window
+#                     is UNBOUNDED rather than the --days default — see
+#                     BEHAVIOR CONTRACT. The Firestore persist path
+#                     (DISPATCH_AUDIT_AGGREGATES_ENABLED) is unconditionally
+#                     skipped for a scoped run — see BEHAVIOR CONTRACT.
+#     --node ID       scope to one node: every session whose sibling
+#                     <stem>.dispatch-stamp.json carries node_id==ID, plus
+#                     each matched session's nested subagent transcripts
+#                     (which have no sidecar of their own). Mutually
+#                     exclusive with --session. Same unbounded-window and
+#                     no-persist behavior as --session — see BEHAVIOR
+#                     CONTRACT.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
@@ -84,6 +99,27 @@
 #     document" contract holds regardless of the gate setting. Writer failure
 #     exits non-zero (clear error, fail-closed) but only after the report is
 #     written.
+#   - SCOPING (--session/--node), two decisions:
+#     1. Unbounded window by default. A scoped run targets one session or
+#        node, not a wall-clock window. With no explicit --day/--days, the
+#        mtime window is UNBOUNDED (SINCE = epoch) instead of the --days
+#        default — a scoped session/node older than 7 days under the default
+#        window would silently return an empty document, a silent wrong
+#        answer (.claude/rules/code-style.md: clear errors over defensive
+#        fallbacks). Pass --days/--day explicitly to bound a scoped run.
+#        window.days is null in the output when the run is unbounded — there
+#        is no meaningful days figure to report.
+#     2. No Firestore persist for a scoped run. DISPATCH_AUDIT_AGGREGATES_ENABLED
+#        is unconditionally ignored when --session/--node is set, regardless
+#        of the env var. The fleet denominators the persisted aggregate feeds
+#        — pooled by_phase_outcome rates, lenses.baseline_context
+#        median/peak, lenses.phase_standup, cross-session tool_errors
+#        signatures/recurrence — cannot be reconstructed from one session or
+#        node's worth of data (an n=1 hit-rate is a category error, not a
+#        small sample), and window.days is null for an unbounded scoped run
+#        anyway, which the writer's `Number.isInteger(win.days)` validation
+#        rejects. Persisting a scoped aggregate under the fleet doc id would
+#        also corrupt the fleet's rolling denominators.
 #
 # EXIT CODES
 #   0  ok
@@ -109,7 +145,7 @@ PRICE_MODEL=$(cat "$SCRIPT_DIR/price-model.json")
 # inside the stage-2 program, so compute each file's line/byte counts HERE and
 # pass them into stage-2 via --argjson skill_body_tokens. est_tokens is a bytes/4
 # ESTIMATE (a documented heuristic, NOT an exact tokenizer count). SKILLS_DIR is
-# .claude/skills (SCRIPT_DIR is .claude/skills/dispatch-token-audit/scripts). A
+# .claude/skills (SCRIPT_DIR is .claude/skills/rsi-audit/scripts). A
 # missing file fails loudly under `set -e` (clear error over a silent fallback —
 # .claude/rules/code-style.md). Phase enum matches dispatch-graph-execute's
 # tactic:<phase> -> orchestrator mapping.
@@ -146,6 +182,8 @@ DAY=""
 DAYS_GIVEN=0
 JSON_OUT=""
 EXCLUDE_SIDECAR=0
+SESSION_ID=""
+NODE_ID=""
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
 
 while [[ $# -gt 0 ]]; do
@@ -179,6 +217,26 @@ while [[ $# -gt 0 ]]; do
       EXCLUDE_SIDECAR=1
       shift
       ;;
+    --session)
+      if [[ -n "$NODE_ID" ]]; then
+        echo "error: --session and --node are mutually exclusive" >&2; exit 2
+      fi
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --session requires a value" >&2; exit 2
+      fi
+      SESSION_ID="$2"
+      shift 2
+      ;;
+    --node)
+      if [[ -n "$SESSION_ID" ]]; then
+        echo "error: --session and --node are mutually exclusive" >&2; exit 2
+      fi
+      if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
+        echo "error: --node requires a value" >&2; exit 2
+      fi
+      NODE_ID="$2"
+      shift 2
+      ;;
     --json-out)
       if [[ $# -lt 2 || "${2:-}" == -* || -z "${2:-}" ]]; then
         echo "error: --json-out requires a value" >&2; exit 2
@@ -188,7 +246,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "error: unknown argument '$1'" >&2
-      echo "usage: aggregate-usage.sh [--days N | --day YYYY-MM-DD] [--json-out PATH] [--exclude-sidecar-sessions]" >&2
+      echo "usage: aggregate-usage.sh [--days N | --day YYYY-MM-DD] [--json-out PATH] [--exclude-sidecar-sessions] [--session ID | --node ID]" >&2
       exit 2
       ;;
   esac
@@ -197,6 +255,15 @@ done
 if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: --days must be a positive integer, got '$DAYS'" >&2
   exit 2
+fi
+
+# SCOPED (--session/--node) UNBOUNDED-WINDOW decision (see BEHAVIOR CONTRACT):
+# with no explicit --day/--days, a scoped run's mtime window is unbounded
+# rather than defaulting to --days 7 — a session or node older than 7 days
+# would otherwise silently return an empty document.
+WINDOW_UNBOUNDED=0
+if [[ ( -n "$SESSION_ID" || -n "$NODE_ID" ) && -z "$DAY" && "$DAYS_GIVEN" == 0 ]]; then
+  WINDOW_UNBOUNDED=1
 fi
 
 # Explicit-timestamp window bounds. The relative `-newermt '7 days ago'` form is
@@ -209,6 +276,12 @@ if [[ -n "$DAY" ]]; then
   UNTIL="$(date -u -d "$DAY + 1 day" '+%Y-%m-%d') 00:00:00"
   # The window spans exactly one calendar day; keep window metadata self-consistent.
   DAYS=1
+elif [[ "$WINDOW_UNBOUNDED" == 1 ]]; then
+  # Unbounded: lower-bound at the epoch so every mtime in the projects root
+  # qualifies; the --session/--node filter in the find loop below is what
+  # actually narrows the result, not the mtime window.
+  SINCE="1970-01-01 00:00:00"
+  UNTIL=$(date -u -d '+1 second' '+%Y-%m-%d %H:%M:%S')
 else
   # Both bounds are rendered in UTC (`date -u`): the find below interprets them
   # under TZ=UTC, so a local-TZ rendering would silently shift the window by the
@@ -304,6 +377,67 @@ def cmd_prefix(c):
   | gsub("[0-9]+"; "N")
   | .[0:120];
 
+# ---- permission-friction markers (tactic-audit-permission-friction) --------
+# FOUR measurable markers. Note first what is deliberately ABSENT: approval
+# round-trips and prompt latency are NOT derivable from transcript data — a
+# transcript records denials and blocks, never an approval or the wall-clock a
+# human spent sitting at a prompt. The node records that gap.
+#
+#   user_rejections   — the human declined the tool call.
+#   automode_denials  — the auto-mode classifier denied it. This is the
+#                       /fewer-permission-prompts signal specifically: the
+#                       denial text itself ends by telling the user to add a
+#                       permission rule.
+#   policy_blocks     — a settings permission rule, or a PreToolUse hook,
+#                       refused the call.
+#   sandbox_overrides — a tool call carrying dangerouslyDisableSandbox:true.
+#                       This is the friction WORKAROUND, not a denial: it is
+#                       counted, and never charged retry cost.
+#
+# TWO discriminators, applied in that order per error block:
+#   (a) the error SIGNATURE text, via the same err_signature() the tool_errors
+#       lens uses — so any signature this lens reports is byte-identical to its
+#       tool_errors row, and the PATH/digit collapse already merges per-worktree
+#       and per-pid variants of one refusal into one key.
+#   (b) the LINE-level `toolDenialKind` / `toolUseResult` fields the harness
+#       stamps on the denied user message.
+# (a) runs first because it is per-BLOCK and present on every transcript
+# generation; (b) is the fallback that catches what (a) cannot — a user
+# rejection whose result text is the human's own typed reason, which has no
+# fixed prefix — and it is absent from older transcripts.
+#
+# Hook refusals carry toolDenialKind:null — a PreToolUse hook returns an
+# ordinary error tool_result, so the harness stamps no denial kind on the line.
+# They are matchable by refusal text ALONE; extend friction_kind below when a
+# new blocking hook lands.
+def friction_kind($sig):
+  if ($sig | startswith("Permission for this action was denied by the Claude Code auto mode classifier")) then "automode_denials"
+  elif ($sig | test("^Permission to use [A-Za-z_]+ has been denied")) then "policy_blocks"
+  elif ($sig | startswith("This session is isolated in the worktree")) then "policy_blocks"
+  elif ($sig | startswith("The user doesn't want to proceed with this tool use")) then "user_rejections"
+  elif (($sig | startswith("Claude requested permissions to")) and ($sig | test("granted it yet"))) then "user_rejections"
+  else null end;
+
+def line_friction_kind(m):
+  (m.toolDenialKind // null) as $dk
+  | if   $dk == "user-rejected"    then "user_rejections"
+    elif ($dk == "automode-blocked" or $dk == "automode-unavailable") then "automode_denials"
+    elif $dk == "permission-rule"  then "policy_blocks"
+    elif (((m.toolUseResult | type) == "string") and (m.toolUseResult == "User rejected tool use")) then "user_rejections"
+    else null end;
+
+# Friction events carried by ONE user message — one event per error
+# tool_result block, so a batched turn that had several calls denied counts
+# each of them.
+def friction_events(m):
+  ( line_friction_kind(m) ) as $lk
+  | [ (m.message.content // []) | if type=="array" then .[]? else empty end
+      | select(type=="object" and .type=="tool_result" and .is_error==true)
+      | err_signature(.content) as $sig
+      | (friction_kind($sig) // $lk) as $k
+      | select($k != null)
+      | { kind: $k, signature: $sig } ];
+
 # Dispatch worker phase-skill set (plus the graph-native align family). SINGLE
 # SOURCE for stage 1: consumed TWICE — once by the session-type classifier below
 # (a first-user <command-name> match types the session "worker") and once by the
@@ -318,6 +452,17 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
 | (asst) as $a
 | (input_filename) as $path
 | ($path | sub("\\.jsonl$"; "") | sub(".*/"; "")) as $id
+
+# Session start time (tactic-audit-cache-efficiency-lens): the earliest
+# non-null `.timestamp` across every message in the transcript, INCLUDING
+# non-assistant/non-user lines. Real transcripts open with a few metadata
+# lines (custom-title, agent-name, mode) that carry timestamp:null, so `.[0]`
+# alone would pick up a null; filter those out first. Used downstream (stage
+# 2) to order sibling sessions sharing a graph node by when they actually
+# started, for the cache-creation-churn sub-metric. null when no message
+# carries a timestamp (never a fabricated fallback value —
+# .claude/rules/code-style.md).
+| ( [ $msgs[] | .timestamp ] | map(select(. != null)) | (.[0] // null) ) as $started_at
 
 # First-user content as a flat string (for type classification).
 | ( [ $msgs[] | select(.type=="user") ] | (.[0] // null) ) as $firstuser
@@ -404,6 +549,34 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
       | select(type=="object" and .type=="tool_result" and .is_error==true)
       | err_signature(.content)
     ] ) as $errors
+
+# Permission-friction events across all user lines (see the marker block above
+# for what each kind means and why approval round-trips are not among them).
+| ( [ $msgs[] | select(.type=="user") | friction_events(.)[] ] ) as $friction_events
+
+# Sandbox overrides: tool calls carrying dangerouslyDisableSandbox:true. NOT
+# filtered to Bash — the flag is a Bash input today, but keying on the flag
+# rather than the tool name keeps the count correct if another tool adopts it.
+| ( [ $msgs[] | select(.type=="assistant")
+      | (.message.content // []) | if type=="array" then .[] else empty end
+      | select(type=="object" and .type=="tool_use"
+               and (.input.dangerouslyDisableSandbox == true))
+    ] | length ) as $sandbox_overrides
+
+# Retry cost of permission friction: the usage of the assistant turn that
+# FOLLOWS each friction event — the turn actually spent recovering from the
+# denial. This is a MEASURED figure (real tokens on a real turn), never a
+# hypothetical "would have saved $X" delta, per the lens-9/10 discipline. When
+# several friction events land back to back, the single following assistant
+# turn is charged ONCE, not once per event. Sandbox overrides are excluded:
+# they succeed, so no recovery turn follows.
+| ( reduce $msgs[] as $m (
+      {armed: false, u: {input:0, cache_creation:0, cache_read:0, output:0}};
+      if ($m.type == "user") and ((friction_events($m) | length) > 0) then .armed = true
+      elif ($m.type == "assistant") and .armed then
+        .u = sum_usage([.u, usage_of($m)]) | .armed = false
+      else . end
+    ) | .u ) as $friction_retry_usage
 
 # Outcome envelope (#1860). The phase emits a `<!-- dispatch:outcome:v1 -->`
 # marker followed by a fenced ```json block as a Bash tool_result. Scan every
@@ -510,6 +683,7 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
     peak_context: $peak_context,
     init_input: ($init_u.input),
     init_cache_creation: ($init_u.cache_creation),
+    started_at: $started_at,
     usage: sum_usage([ $rows[].u ]),
     by_skill: $by_skill,
     by_skill_model: $by_skill_model,
@@ -519,6 +693,9 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
     by_attribution_skill: $by_attribution_skill,
     attributed_turns_raw: ([ $rows[] | select(.skill != "<none>") ] | length),
     errors: $errors,
+    friction_events: $friction_events,
+    sandbox_overrides: $sandbox_overrides,
+    friction_retry_usage: $friction_retry_usage,
     tool_calls: $tool_calls,
     payload: $payload,
     outcome: $outcome
@@ -582,7 +759,7 @@ def cost(u; $model):
   | ((u.input//0)+(u.cache_creation//0)+(u.cache_read//0)+(u.output//0)) as $tok
   | if $fam == null then
       (if $tok == 0 then 0
-       else error("dispatch-token-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
+       else error("rsi-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
     else (ACTUAL_RATES[$rc]) as $r
       | ( (u.input//0)*$r.input + (u.cache_creation//0)*$r.cache_creation
         + (u.cache_read//0)*$r.cache_read + (u.output//0)*$r.output ) / 1e6
@@ -639,12 +816,34 @@ def is_scriptable($t; $subs):
 # in .claude/docs/outcome-envelope.md. The `num`/`den` are the already-summed
 # counts (per-run: one envelope's counts; pooled: sums across a phase's rows).
 def rate($num; $den): if ($den // 0) == 0 then null else ($num // 0) / $den end;
+# Cache hit ratio (tactic-audit-cache-efficiency-lens): the fraction of a
+# usage object's context tokens that were served from cache rather than
+# freshly ingested (input) or freshly created (cache_creation). Reuses rate()'s
+# null guard, so an all-zero usage object yields null, never a fabricated 0.
+def hit_ratio(u):
+  rate(u.cache_read; ((u.input // 0) + (u.cache_creation // 0) + (u.cache_read // 0)));
 # Build the three rates {hit_rate, actionability, fix_rate} from a counts object.
 def outcome_rates($o):
   {
     hit_rate:      rate($o.fixes_applied;       $o.findings_surfaced),
     actionability: rate($o.findings_actionable; $o.findings_surfaced),
     fix_rate:      rate($o.fixes_applied;       $o.findings_actionable)
+  };
+
+# Permission-friction counts (tactic-audit-permission-friction). SINGLE SOURCE
+# for the two places this shape is built: the window-wide
+# lenses.permission_friction rollup and each .sessions[] entry's own copy (the
+# lens is any-scope, so a --session/--node run reads its own numbers directly).
+# $retry_usd is passed already priced rather than as a usage object: price() is
+# linear, so summing per-session prices equals pricing the summed usage.
+def friction_counts($evs; $overrides; $retry_usd):
+  {
+    events:            ($evs | length),
+    user_rejections:   ([ $evs[] | select(.kind == "user_rejections")   ] | length),
+    automode_denials:  ([ $evs[] | select(.kind == "automode_denials")  ] | length),
+    policy_blocks:     ([ $evs[] | select(.kind == "policy_blocks")     ] | length),
+    sandbox_overrides: $overrides,
+    retry_price_proxy_usd: $retry_usd
   };
 
 def topic_labels: ["security","dispatch","testing infrastructure","landing","fellspiral","budget","print","audio"];
@@ -892,6 +1091,8 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         turns: .turns, peak_context: .peak_context,
         input: .usage.input, cache_creation: .usage.cache_creation,
         cache_read: .usage.cache_read, output: .usage.output,
+        started_at: .started_at,
+        hit_ratio: hit_ratio(.usage),
         price_proxy_usd: price(.usage),
         cost_usd: session_cost(.),
         phases: ( reduce (.by_skill | to_entries[]) as $e ({}; .[$e.key] = price($e.value.usage)) ),
@@ -904,6 +1105,13 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         # instructions.
         by_attribution_skill: .by_attribution_skill,
         attributed_turns_raw: .attributed_turns_raw,
+        # Permission friction, per session (tactic-audit-permission-friction).
+        # The lens is any-scope, so a --session/--node-scoped run reads its own
+        # counts here rather than approximating them from the window rollup.
+        permission_friction:
+          friction_counts((.friction_events // []);
+                          (.sandbox_overrides // 0);
+                          price(.friction_retry_usage // {})),
         outcome: .outcome,
         outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
       } ] ) as $sessions
@@ -949,6 +1157,99 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
             else (.[length/2-1] + .[length/2]) / 2 end ),
       peak_boot_tokens: ($boot_tokens | max // 0)
     } ) as $baseline_lens
+
+# ---- cache_efficiency lens (tactic-audit-cache-efficiency-lens) ----
+# Hit ratio = cache_read / (input+cache_creation+cache_read), the fraction of
+# context tokens served from cache rather than freshly ingested or freshly
+# created. Meaningful at BOTH scopes (any-scope, not fleet-only): a single
+# --session/--node run's own ratio is well-defined on its own data, and the
+# fleet-wide/per-phase figures pool every session's usage. No stage-1 change
+# needed for this sub-metric — $totals and $by_phase's bucket fields already
+# carry input/cache_creation/cache_read.
+| ( hit_ratio($totals) ) as $hit_ratio_window
+| ( reduce ($by_phase | to_entries[]) as $e ({}; .[$e.key] = hit_ratio($e.value)) ) as $hit_ratio_by_phase
+#
+# Creation churn: repeated prefix re-creation across SIBLING sessions — every
+# session sharing one graph node's artifact.node_id (a node's ladder walks
+# through several phase sessions, e.g. implement then qa-fix then review-fix,
+# each stamping the same node_id) — with STAGGERED start times, using the
+# stage-1 $started_at addition above (the one sub-metric that needed it; hit
+# ratio above did not). Sessions with no node_id or no started_at are excluded
+# from grouping — an unordered pair proves nothing about who could have reused
+# whose cache. Within each node's group (>=2 timestamped siblings), the
+# EARLIEST session is the expected first payer of a fresh cache_creation; a
+# LATER (staggered) sibling that also shows a low hit ratio re-created that
+# same prefix rather than reading it from cache — the shape a cache-boundary
+# violation leaves in the data. This lens SUPPLIES the "cache_read against
+# cache_creation" measurement the draft tactic-dispatch-cache-preserving-
+# context already names as its own discriminating measurement; that tactic
+# should read this lens rather than re-implementing the comparison.
+| 0.5 as $churn_hit_ratio_threshold
+| ( [ $sessions[] | select(.artifact != null and .artifact.node_id != null and .started_at != null) ]
+    | group_by(.artifact.node_id)
+    | map(select(length > 1) | sort_by(.started_at)) ) as $node_groups
+| ( [ $node_groups[] | .[1:][] ] ) as $staggered
+| ( [ $staggered[] | select(.hit_ratio != null and .hit_ratio < $churn_hit_ratio_threshold) ] ) as $churned
+| ( {
+      threshold_hit_ratio: $churn_hit_ratio_threshold,
+      node_groups_considered: ($node_groups | length),
+      staggered_sessions: ($staggered | length),
+      churned_sessions: ($churned | length),
+      churn_rate: rate(($churned | length); ($staggered | length)),
+      # MEASURED magnitude only (.claude/rules/writing-style.md /
+      # lenses-9-and-10 discipline): the price-proxy cost of the
+      # cache_creation these churned sessions actually incurred. This is NOT
+      # a hypothetical "would have saved $X by sharing the prefix" figure —
+      # no such delta is computed here.
+      churn_price_proxy_usd:
+        ( [ $churned[] | (.cache_creation * RATE_CACHE_CREATION / 1e6) ] | add // 0 ),
+      examples: ( $churned | sort_by(-.cache_creation) | .[0:5]
+                  | map({ id, node_id: .artifact.node_id, started_at,
+                          hit_ratio, cache_creation, cache_read }) )
+    } ) as $creation_churn_lens
+| ( {
+      hit_ratio: { window: $hit_ratio_window, by_phase: $hit_ratio_by_phase },
+      creation_churn: $creation_churn_lens
+    } ) as $cache_efficiency_lens
+
+# ---- permission_friction lens (tactic-audit-permission-friction) ----
+# any-scope: every figure is a per-session count or a per-session priced usage
+# summed across the window, so a --session/--node run's own numbers are
+# well-defined (and are also surfaced on each .sessions[] entry above).
+# NOT measured here, because it is not derivable: approval round-trips and
+# prompt latency. Transcripts record denials and blocks; they never record an
+# approval or the wall-clock a human spent at a prompt.
+| ( [ $rows[] | (.friction_events // [])[] ] ) as $all_friction
+# top_signatures: same count/sessions_affected accumulation idiom as
+# tool_errors, over the SAME err_signature keys — so a friction signature here
+# joins directly to its tool_errors row. This is the harness-DOCUMENTATION gap
+# signal: a rule blocked over and over is usually a rule written badly, so a
+# high-count signature is a ledger entry against the doc, not only the session.
+| ( reduce $rows[] as $r ({};
+      ( [ ($r.friction_events // [])[] | .signature ] ) as $sigs
+      | ( $sigs | unique ) as $distinct
+      | reduce ($sigs[]) as $sig (.;
+          .[$sig].count = ((.[$sig].count // 0) + 1)
+        )
+      | reduce ($distinct[]) as $sig (.;
+          .[$sig].sessions_affected = ((.[$sig].sessions_affected // 0) + 1)
+        )
+    )
+    | to_entries | map(select(.key != ""))
+    | map({ signature: .key, count: .value.count, sessions_affected: .value.sessions_affected })
+    | sort_by(.signature) | sort_by(-.count)
+    | .[0:10]
+  ) as $friction_top_signatures
+| ( friction_counts($all_friction;
+                    ([ $rows[] | (.sandbox_overrides // 0) ] | add // 0);
+                    ([ $rows[] | price(.friction_retry_usage // {}) ] | add // 0))
+    + {
+      sessions_affected:
+        ( [ $rows[]
+            | select((((.friction_events // []) | length) > 0)
+                     or ((.sandbox_overrides // 0) > 0)) ] | length ),
+      top_signatures: $friction_top_signatures
+    } ) as $permission_friction_lens
 
 # ---- phase_standup lens (strategy-token-economy clarification 12) ----
 # Per-phase standup cost for the five phase orchestrators, keyed by the phase
@@ -1076,6 +1377,8 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       context_over_120k: $ctx_lens,
       small_sessions: $small_lens,
       baseline_context: $baseline_lens,
+      cache_efficiency: $cache_efficiency_lens,
+      permission_friction: $permission_friction_lens,
       phase_standup: $phase_standup_lens
     },
     sessions: $sessions
@@ -1093,24 +1396,51 @@ FILES_FAILED=0
 if [[ -d "$PROJECTS_ROOT" ]]; then
   # Gather candidate project dirs (worktrees + bare), then find *.jsonl in window.
   while IFS= read -r -d '' file; do
+    # Resolved base stem for this transcript's OWN session: its own
+    # <path>/<stem> for a top-level session file, or the PARENT session's
+    # <path>/<stem> for a nested subagent transcript
+    # (<projectdir>/<sid>/subagents/agent-*.jsonl) — a subagent has no
+    # sidecar of its own, so every sidecar-keyed check below (file-issue
+    # attribution, --node's dispatch-stamp.json) must resolve through the
+    # parent. SINGLE SOURCE for all three checks that follow.
+    session_stem="${file%.jsonl}"
+    if [[ "$file" == */subagents/*.jsonl ]]; then
+      session_stem="${file%/subagents/*}"
+    fi
+
     # --exclude-sidecar-sessions (opt-in, default off): drop a file-issue session
     # entirely when its sibling sidecar <stem>.file-issue-attribution.json exists,
     # so it never lands in any bucket. Skip BEFORE counting/scanning. A subagent
-    # transcript (<projectdir>/<sid>/subagents/agent-*.jsonl) has no sidecar of
-    # its own, but its PARENT session's sidecar totals already include subagent
-    # usage — so it resolves to the parent's sidecar
+    # transcript resolves to the parent's sidecar
     # (<projectdir>/<sid>.file-issue-attribution.json) and is excluded with the
     # parent; keeping it in the scan would count those tokens twice once the
     # priced sidecar is folded back.
     if [[ "$EXCLUDE_SIDECAR" == 1 ]]; then
-      sidecar_stem="${file%.jsonl}"
-      if [[ "$file" == */subagents/*.jsonl ]]; then
-        sidecar_stem="${file%/subagents/*}"
-      fi
-      if [[ -f "$sidecar_stem.file-issue-attribution.json" ]]; then
+      if [[ -f "$session_stem.file-issue-attribution.json" ]]; then
         continue
       fi
     fi
+
+    # --session ID: keep only the named session's own transcript, plus its
+    # nested subagent transcripts (both resolve to the same session_stem).
+    if [[ -n "$SESSION_ID" ]]; then
+      if [[ "$(basename "$session_stem")" != "$SESSION_ID" ]]; then
+        continue
+      fi
+    fi
+
+    # --node ID: keep only sessions whose sidecar <stem>.dispatch-stamp.json
+    # carries node_id==ID, plus their nested subagent transcripts. A subagent
+    # transcript has no sidecar of its own, so without resolving through
+    # session_stem to the PARENT's stamp, a --node run would silently drop
+    # every subagent of the matched node — often where much of the spend is.
+    if [[ -n "$NODE_ID" ]]; then
+      node_stamp="$session_stem.dispatch-stamp.json"
+      if [[ ! -f "$node_stamp" ]] || [[ "$(jq -r '.node_id // empty' "$node_stamp" 2>/dev/null)" != "$NODE_ID" ]]; then
+        continue
+      fi
+    fi
+
     FILES_SCANNED=$((FILES_SCANNED + 1))
     # Per-session sidecar (#1861): <stem>.dispatch-stamp.json next to the
     # transcript. Most transcripts have none; --slurpfile needs a readable file,
@@ -1130,13 +1460,44 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
   )
 fi
 
-WINDOW_JSON=$(jq -n \
-  --argjson days "$DAYS" \
-  --arg since "$SINCE" \
-  --arg until "$UNTIL" \
-  --argjson scanned "$FILES_SCANNED" \
-  --argjson failed "$FILES_FAILED" \
-  '{days:$days, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed}')
+# scope: {type: "fleet"|"session"|"node", id: null|"<id>"} — always present so
+# a report reader (and a later per-phase evaluator invoking this same
+# instrument) can tell at a glance which of the two measurement scopes
+# produced the document, without inferring it from days:null alone.
+if [[ -n "$SESSION_ID" ]]; then
+  SCOPE_TYPE="session"; SCOPE_ID="$SESSION_ID"
+elif [[ -n "$NODE_ID" ]]; then
+  SCOPE_TYPE="node"; SCOPE_ID="$NODE_ID"
+else
+  SCOPE_TYPE="fleet"; SCOPE_ID=""
+fi
+
+if [[ "$WINDOW_UNBOUNDED" == 1 ]]; then
+  # days:null — a scoped run has no meaningful fixed-days figure to report
+  # (see BEHAVIOR CONTRACT decision 1). This also fails the writer's
+  # Number.isInteger(win.days) validation on purpose; decision 2 skips the
+  # writer call entirely for a scoped run, so that never fires in practice.
+  WINDOW_JSON=$(jq -n \
+    --arg since "$SINCE" \
+    --arg until "$UNTIL" \
+    --argjson scanned "$FILES_SCANNED" \
+    --argjson failed "$FILES_FAILED" \
+    --arg scope_type "$SCOPE_TYPE" \
+    --arg scope_id "$SCOPE_ID" \
+    '{days:null, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed,
+      scope:{type:$scope_type, id:(if $scope_id=="" then null else $scope_id end)}}')
+else
+  WINDOW_JSON=$(jq -n \
+    --argjson days "$DAYS" \
+    --arg since "$SINCE" \
+    --arg until "$UNTIL" \
+    --argjson scanned "$FILES_SCANNED" \
+    --argjson failed "$FILES_FAILED" \
+    --arg scope_type "$SCOPE_TYPE" \
+    --arg scope_id "$SCOPE_ID" \
+    '{days:$days, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed,
+      scope:{type:$scope_type, id:(if $scope_id=="" then null else $scope_id end)}}')
+fi
 
 # Build a map of issue-number string -> array of label-name strings, fetched once
 # per distinct issue (the `sort -u` is the per-issue cache). Keyed by issue number
@@ -1171,9 +1532,16 @@ else
 fi
 
 if [[ "${DISPATCH_AUDIT_AGGREGATES_ENABLED:-}" == "1" ]]; then
-  WRITER="${DISPATCH_AUDIT_AGGREGATES_WRITER:-$SCRIPT_DIR/audit-aggregate-writer.mjs}"
-  if ! printf '%s' "$DOC" | "$WRITER" >&2; then
-    echo "aggregate-usage.sh: audit-aggregate-writer failed; aggregate not persisted (report still written)" >&2
-    exit 1
+  if [[ -n "$SESSION_ID" || -n "$NODE_ID" ]]; then
+    # Decision 2 (BEHAVIOR CONTRACT): a scoped run never persists, regardless
+    # of the env var — the fleet denominators the persisted aggregate feeds
+    # are a category error at n=1, not a small sample.
+    echo "aggregate-usage.sh: DISPATCH_AUDIT_AGGREGATES_ENABLED is set but this run is scoped (--session/--node); skipping Firestore persist (report still written)" >&2
+  else
+    WRITER="${DISPATCH_AUDIT_AGGREGATES_WRITER:-$SCRIPT_DIR/audit-aggregate-writer.mjs}"
+    if ! printf '%s' "$DOC" | "$WRITER" >&2; then
+      echo "aggregate-usage.sh: audit-aggregate-writer failed; aggregate not persisted (report still written)" >&2
+      exit 1
+    fi
   fi
 fi

@@ -245,7 +245,7 @@ if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
       fi
     fi
     if [[ "$_TU_ALREADY_RAN" == "0" ]]; then
-      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../dispatch-token-audit/scripts/topic-usage-writer.mjs}"
+      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../rsi-audit/scripts/topic-usage-writer.mjs}"
       mkdir -p "$_TU_STATE_DIR" 2>/dev/null || true
       # Launch detached so the producer survives tick exit and never blocks the
       # tick (a first-run backfill can take a while).  Backgrounding with `&`

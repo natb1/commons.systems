@@ -39,7 +39,7 @@
 #
 # WHAT IT SCANS
 #   Projects root: ${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects} — the
-#   SAME env-var seam .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh
+#   SAME env-var seam .claude/skills/rsi-audit/scripts/aggregate-usage.sh
 #   uses, deliberately reusing the identical name so a caller can point both
 #   tools at one fixture root. A recursive find for *.jsonl picks up top-level
 #   session transcripts (<projectdir>/<sessionid>.jsonl), subagent transcripts

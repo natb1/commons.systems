@@ -9,7 +9,7 @@
 #
 # WHERE IT READS / WRITES
 #   Projects root (default $HOME/.claude/projects, overridable via
-#   FILE_ISSUE_PROJECTS_ROOT — mirrors dispatch-token-audit's
+#   FILE_ISSUE_PROJECTS_ROOT — mirrors rsi-audit's
 #   DISPATCH_AUDIT_PROJECTS_ROOT, used by the Unit-2 test fixture) contains
 #   per-project directories. The session's transcripts are:
 #     - top-level:  <projectdir>/<session_id>.jsonl
@@ -81,7 +81,7 @@ EOF
 }
 
 # --- jq usage helpers (copied VERBATIM from
-# --- dispatch-token-audit/scripts/aggregate-usage.sh lines ~131-152) ---------
+# --- rsi-audit/scripts/aggregate-usage.sh lines ~131-152) ---------
 JQ_FUNCS='
 def usage_of(m):
   ( m.message.usage // {} )
