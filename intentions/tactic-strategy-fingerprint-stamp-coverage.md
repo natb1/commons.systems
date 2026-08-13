@@ -66,14 +66,15 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 909b0876657fb73a185833bf748ff8a24686e17ca64b701b24d30b24839bf10c
-      sha: bad3e0742eb941e3c52a2739f4f7dcdfa38a34ae
+      hash: a55adfc1845e1942d773aafc1cf5226ccd5694454dad03d24e97e746f4482f2d
+      sha: f3e0a63256a6de4640d51633a58e76ded522822c
   fix:
     since: 2026-08-03
     attempt: 1
     pushed_sha: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

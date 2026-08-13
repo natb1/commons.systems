@@ -5286,6 +5286,99 @@ clarifications:
       registered Sensor names and this strategy’s prose was already
       unregistered. Filing it rather than deferring it is this condition applied
       to the round that recorded it."
+  - question: Is a session orphaned by a daemon crash, restart, or version roll an
+      invalid state?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) No — and this
+      is a ruling on the taxonomy, not a routing exception. An environmental
+      failure is a legitimate, expected state whose casualties are ORTHOGONAL to
+      the invalid-state dimension, the same shape as the 2026-08-04
+      done-but-parked ruling that phase and office_hours are orthogonal
+      dimensions. Clarification 185's detection design is a binary —
+      occupied-by-terminal routes to the lane, occupied-by-live is a valid skip
+      — and a daemon casualty is neither: the session is genuinely dead, yet the
+      state is legitimate and expected. That binary is amended here: detection
+      SUPPRESSES an environmental casualty, so no surface classifies it. Neither
+      the dispatch tick's sweeps nor /dispatch-ladder may recognise an orphaned
+      session as terminal-session or frozen-session; the lane never sees it and
+      spends nothing on it. Recovery is the AUTHOR's, by restart. Orphaned
+      background sessions are deliberately NOT proactively adopted when a new
+      daemon generation starts — that behaviour is kept exactly as it is today
+      and is not a defect to fix; the harness's own lazy re-adoption may still
+      recover such a session, but no machinery recorded here is owed that
+      outcome. Rejected alternative, the strongest rival framing put to the
+      author: make environmental a sixth invalid-state kind whose intervention
+      tier is notify-and-stop. It would preserve one uniform
+      detect-resolve-escalate pipeline and give the casualty a durable record,
+      but it spends lane machinery — a per-node attempt cap, a spawned model
+      session, a follow-up node — on a state that needs none, and it would keep
+      producing exactly the false positive this ruling exists to stop. Evidence:
+      2026-08-13, node tactic-attention-namespaced-rank, session 40c253c4. The
+      daemon crashed at 15:04:29Z (journald: \"Scheduled restart job, restart
+      counter is at 1\"), then a deliberate stop/start rolled the CLI from
+      2.1.227 to 2.1.231 at 15:12:56-15:13:01Z, killing an in-flight review-fix
+      Workflow's finder agents mid-fan-out. dispatch-fleet-watch alarmed the
+      outage correctly at 15:04:28Z and landed
+      tactic-fleet-alarm-daemon-degraded at 15:05:38Z; dispatch-tick nonetheless
+      routed the casualty to the invalid-state lane as terminal-session at
+      15:16:12Z. The session was re-adopted at 16:37:08Z and its Workflow
+      resumed and completed — an 84-minute stall with no work lost. One root
+      event, classified twice: once correctly as environmental and author-owned,
+      once wrongly as an invalid state and machinery-owned. Implementation
+      retained as draft tactic-invalid-state-environmental-suppression."
+  - question: What discriminates an environmental casualty from a genuine
+      terminal-session, without racing the daemon's own recovery?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) Classification
+      consults the daemon's current GENERATION, never its current health. A
+      health check races the recovery and fails silently: on 2026-08-13 the tick
+      classified at 15:16:12Z when the daemon had already been healthy since
+      15:13:01Z, so an \"is the daemon up now?\" gate would have answered yes
+      and routed anyway. The generation test has no such window — it stays
+      correct however long after the outage it runs. The chosen signal is
+      systemd's ExecMainStartTimestamp on dispatch-claude-daemon.service: a
+      session whose last activity predates the current generation's start
+      belongs to a previous generation and is therefore an orphan. Applied to
+      the incident, the session's agents last wrote at 15:04:27Z against a
+      generation that started at 15:13:01Z. Chosen over stamping the daemon's
+      InvocationID into session job state at spawn — which is exact and
+      race-free by construction — because ExecMainStartTimestamp needs NO new
+      write path: both values already exist today, and an InvocationID stamp
+      would protect only sessions spawned after it ships, leaving a fallback
+      needed anyway. The residual few-second race at a restart boundary biases
+      toward suppression, which is the fail-toward-keep posture clarification
+      185 already ratified for every mechanical-tier gate. NRestarts is NOT
+      usable and must not be built on: it read 0 immediately after this
+      incident, because the version roll's explicit Stop/Start reset it, even
+      though journald had recorded \"restart counter is at 1\" for the crash
+      minutes earlier. The check stays in owned script code with no per-node
+      model spend, per condition 23: dispatch-daemon-liveness is already an
+      owned, offline-testable script that dispatch-fleet-watch calls, while
+      lib-frozen-session-park.sh — the classifier that routed this node, at its
+      terminal-session route site — references it zero times today."
+  - question: The author is the recovery mechanism for an environmental failure —
+      what does the fleet alarm owe them?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) The restart
+      worklist. Because recovery is author-initiated by ruling (the
+      environmental-casualty clarification of this same date), the alarm that
+      reports the outage must also name what the outage stalled:
+      tactic-fleet-alarm-daemon-degraded's body carries the in-flight nodes and
+      /dispatch-ladder runs orphaned by the generation change, not merely the
+      daemon fault. A fault the author cannot act on without first enumerating
+      casualties by hand is not yet a signal — it names the cause and withholds
+      the work. This is the condition that makes \"the author restarts on daemon
+      failure\" a real recovery path rather than a hope: on 2026-08-13 the alarm
+      fired correctly within four seconds of the crash and the stall still ran
+      84 minutes, because nothing connected \"the daemon died\" to \"this ladder
+      run is stalled, restart it\". Implementation retained as draft
+      tactic-fleet-alarm-daemon-casualty-list. A sibling defect found in the
+      same reading is retained separately as
+      tactic-fleet-alarm-resolve-rollback-latch: dispatch-fleet-alarm --resolve
+      --kind daemon-degraded failed on every pass after the daemon returned
+      (11:05:52, 11:11:38 and 11:16:34 EDT, each logging \"resolve of
+      tactic-fleet-alarm-daemon-degraded failed; the write was rolled back to
+      origin/main\"), leaving the alarm latched open against a managed-live
+      reading — an alarm that cannot clear stops being a signal in the other
+      direction, and a latched alarm degrades the very channel this
+      clarification makes load-bearing."
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5659,6 +5752,14 @@ attributes:
       on genuine requirement ambiguity remains correct (Recorded 2026-08-12: the
       inverted blocked_by authored in 8249f664 cost a ~13-minute autonomous
       /align-tactics session and an author park at 2184103c)"
+    - "an environmental failure — the managed dispatch daemon dying, restarting,
+      or rolling to a new version — is never an invalid state: its orphaned
+      sessions are not routed to the invalid-state lane by any surface (neither
+      the tick's sweeps nor /dispatch-ladder), orphaned background sessions are
+      deliberately NOT proactively adopted when a new daemon generation starts,
+      and recovery is the author's by restart — signalled by the fleet's
+      daemon-degraded alarm, which carries the list of nodes and ladder runs the
+      outage stalled (Recorded 2026-08-13)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
