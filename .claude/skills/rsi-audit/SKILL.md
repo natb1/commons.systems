@@ -1,9 +1,9 @@
 ---
-name: dispatch-token-audit
-description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across twelve lenses, ranked by measured price-proxy magnitude. Writes no routing policy and no graph or product files; its one closing remediation step is attended-only and touches only .claude/settings.json, for the human to review and commit. Accepts an optional window, e.g. /dispatch-token-audit 2d.
+name: rsi-audit
+description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across twelve lenses, ranked by measured price-proxy magnitude. Writes no routing policy and no graph or product files; its one closing remediation step is attended-only and touches only .claude/settings.json, for the human to review and commit. Accepts an optional window, e.g. /rsi-audit 2d.
 ---
 
-# Dispatch Token Audit
+# RSI Audit
 
 This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It **writes no routing policy and no graph or product files**: it creates no GitHub issues, writes no control artifacts, and edits no workflow files — the user decides what to act on from the report. The single exception is step 8's closing remediation, which is **attended-only** and touches exactly one file, `.claude/settings.json`, which the human reviews and commits; nothing else this skill does writes anything but the report. (The learned phase→model routing policy this skill used to write was retired in #2872: the phase orchestrator is now always Sonnet, and Opus tiering lives at the `agent()`/subagent layer inside each phase's Workflow, not in an audit-written policy.) Two cost figures appear in the output:
 
@@ -23,7 +23,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
 
    ```bash
    mkdir -p tmp
-   .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh --days <N> --json-out tmp/usage-audit.json
+   .claude/skills/rsi-audit/scripts/aggregate-usage.sh --days <N> --json-out tmp/usage-audit.json
    ```
 
    The script prints paths of any corrupt files and the total `files_failed` count to stderr. If `files_failed` is nonzero, surface that count in the report header so the reader knows the window data is incomplete.

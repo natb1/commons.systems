@@ -4,7 +4,7 @@
 //
 // PURPOSE
 //   Reads one token-audit window aggregate JSON document on stdin (the output of
-//   .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh), validates
+//   .claude/skills/rsi-audit/scripts/aggregate-usage.sh), validates
 //   env-var config and the payload (fail-closed), projects a CURATED subset into
 //   an `audit-aggregates` Firestore document, and writes it idempotently to
 //   `office-hours/{env}/audit-aggregates/{docId}` via the firebase-admin SDK.

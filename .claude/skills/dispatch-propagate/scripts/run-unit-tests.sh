@@ -15,7 +15,6 @@ RUN_CI_SCRIPTS=false
 RUN_PR_SCRIPTS=false
 RUN_TOKEN_AUDIT_SCRIPTS=false
 RUN_FILE_ISSUE_SCRIPTS=false
-RUN_RSI_SCRIPTS=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -56,13 +55,8 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
-    --rsi-scripts)
-      RUN_RSI_SCRIPTS=true
-      EXPLICIT=true
-      shift
-      ;;
     *)
-      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts] [--file-issue-scripts] [--rsi-scripts]" >&2
+      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts] [--file-issue-scripts]" >&2
       exit 1
       ;;
   esac
@@ -92,9 +86,8 @@ if [ "$EXPLICIT" = false ]; then
       firestore.rules) RUN_RULES=true ;;
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
       .claude/skills/dispatch-propagate/scripts/*) RUN_PR_SCRIPTS=true ;;
-      .claude/skills/dispatch-token-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
+      .claude/skills/rsi-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
       .claude/skills/file-issue/scripts/*) RUN_FILE_ISSUE_SCRIPTS=true ;;
-      .claude/skills/rsi/scripts/*) RUN_RSI_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -210,10 +203,10 @@ if [ "$RUN_PR_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run dispatch-token-audit script tests (no test-helpers.sh in that dir)
+# Run rsi-audit script tests (no test-helpers.sh in that dir)
 if [ "$RUN_TOKEN_AUDIT_SCRIPTS" = true ]; then
-  echo "=== Dispatch token-audit script tests ==="
-  TOKEN_AUDIT_SCRIPTS="$REPO_ROOT/.claude/skills/dispatch-token-audit/scripts"
+  echo "=== RSI audit script tests ==="
+  TOKEN_AUDIT_SCRIPTS="$REPO_ROOT/.claude/skills/rsi-audit/scripts"
   TOKEN_AUDIT_FAIL=false
   for test_script in "$TOKEN_AUDIT_SCRIPTS"/test-*.sh; do
     name=$(basename "$test_script")
@@ -252,28 +245,7 @@ if [ "$RUN_FILE_ISSUE_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run rsi script tests (the /rsi claim primitive; no test-helpers.sh in that dir)
-if [ "$RUN_RSI_SCRIPTS" = true ]; then
-  echo "=== RSI script tests ==="
-  RSI_SCRIPTS="$REPO_ROOT/.claude/skills/rsi/scripts"
-  RSI_FAIL=false
-  for test_script in "$RSI_SCRIPTS"/test-*.sh; do
-    name=$(basename "$test_script")
-    [[ "$name" == "test-helpers.sh" ]] && continue
-    echo "--- $name ---"
-    if "$test_script"; then
-      echo "PASS: $name"
-    else
-      echo "FAIL: $name" >&2
-      RSI_FAIL=true
-    fi
-  done
-  if [ "$RSI_FAIL" = true ]; then
-    FAILURES+=(rsi-scripts)
-  fi
-fi
-
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ] && [ "$RUN_FILE_ISSUE_SCRIPTS" = false ] && [ "$RUN_RSI_SCRIPTS" = false ]; then
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ] && [ "$RUN_FILE_ISSUE_SCRIPTS" = false ]; then
   echo "No test suites matched changed files. Nothing to check."
   exit 0
 fi

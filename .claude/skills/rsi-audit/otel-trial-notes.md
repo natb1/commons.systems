@@ -236,7 +236,7 @@ run.
 
 ## Reuse anchors (grounding for the above)
 
-- `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh` — incumbent
+- `.claude/skills/rsi-audit/scripts/aggregate-usage.sh` — incumbent
   scrape; `by_node` fold `:593-601`, sidecar slurp `:872-874`, per-model cost
   `:454-488`, subagent-nesting note `:15-18`.
 - `.claude/skills/dispatch-propagate/scripts/dispatch-stamp-session` — sidecar

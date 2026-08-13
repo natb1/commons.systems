@@ -23,7 +23,7 @@
 #   fix-checks    → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   fix-conflicts → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   main-qa       → sonnet   (#2274: review-like; no product-code authoring)
-#   ladder-eval   → sonnet   (the /dispatch-ladder-eval per-phase evaluation job
+#   ladder-eval   → sonnet   (the /rsi per-phase evaluation job
 #                             spawned by dispatch-ladder-run at each phase
 #                             boundary. Not a ladder rung — a pseudo-phase, so
 #                             the job's tier is policy here rather than a

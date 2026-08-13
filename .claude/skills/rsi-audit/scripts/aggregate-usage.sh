@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Token-usage aggregation for the /dispatch-token-audit skill (#1177).
+# Token-usage aggregation for the /rsi-audit skill (#1177).
 #
 # This is the mechanical, token-heavy parsing layer. It scans Claude session
 # transcripts within a time window and emits ONE structured JSON document that
@@ -145,7 +145,7 @@ PRICE_MODEL=$(cat "$SCRIPT_DIR/price-model.json")
 # inside the stage-2 program, so compute each file's line/byte counts HERE and
 # pass them into stage-2 via --argjson skill_body_tokens. est_tokens is a bytes/4
 # ESTIMATE (a documented heuristic, NOT an exact tokenizer count). SKILLS_DIR is
-# .claude/skills (SCRIPT_DIR is .claude/skills/dispatch-token-audit/scripts). A
+# .claude/skills (SCRIPT_DIR is .claude/skills/rsi-audit/scripts). A
 # missing file fails loudly under `set -e` (clear error over a silent fallback —
 # .claude/rules/code-style.md). Phase enum matches dispatch-graph-execute's
 # tactic:<phase> -> orchestrator mapping.
@@ -759,7 +759,7 @@ def cost(u; $model):
   | ((u.input//0)+(u.cache_creation//0)+(u.cache_read//0)+(u.output//0)) as $tok
   | if $fam == null then
       (if $tok == 0 then 0
-       else error("dispatch-token-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
+       else error("rsi-audit: unpriceable model '\($model)' carries \($tok) tokens; add it to the price table") end)
     else (ACTUAL_RATES[$rc]) as $r
       | ( (u.input//0)*$r.input + (u.cache_creation//0)*$r.cache_creation
         + (u.cache_read//0)*$r.cache_read + (u.output//0)*$r.output ) / 1e6

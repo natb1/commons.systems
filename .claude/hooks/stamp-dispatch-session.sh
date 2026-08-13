@@ -17,7 +17,7 @@
 #     and `git remote get-url`; if git is unavailable or CWD is wrong the stamp
 #     silently no-ops (never blocks).
 #
-# MONITOR: dispatch-token-audit now surfaces window.sidecar_eligible (count of
+# MONITOR: rsi-audit now surfaces window.sidecar_eligible (count of
 # top-level worker sessions scanned), window.sidecar_present (those carrying a
 # .dispatch-stamp.json sidecar), and a derived window.sidecar_present_rate
 # (float in [0,1], or null when no workers were scanned). A drop in

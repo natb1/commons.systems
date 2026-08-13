@@ -98,7 +98,7 @@
 # working, not the loop stuck.
 #
 # THE EVALUATION IS PER PHASE, AND IT IS FIRE-AND-FORGET. At every phase
-# boundary — the `awaited` event — the driver spawns `/dispatch-ladder-eval` for
+# boundary — the `awaited` event — the driver spawns `/rsi` for
 # the phase that just finished (dispatch-spawn-job, `claude --bg`) and does NOT
 # wait on the evaluation. What the driver waits for is the spawn's own
 # registration check, seconds; what it never waits for is a model turn. A
@@ -523,7 +523,7 @@ spawn_phase_eval() {
   [[ -x "$PHASE_EFFORT" ]] && effort=$("$PHASE_EFFORT" "$EVAL_POLICY_PHASE" 2>/dev/null)
 
   # node id AND phase AND launch epoch — see THE `--name` IS THE DEDUP KEY above.
-  local name="ladder-eval-$NODE_ID-$phase-$since"
+  local name="rsi-eval-$NODE_ID-$phase-$since"
   local args=(--name "$name" --cwd "$PROJECT_ROOT")
   # Both scripts' contract: EMPTY means "omit the flag, inherit the default".
   [[ -n "$model" ]] && args+=(--model "$model")
@@ -531,7 +531,7 @@ spawn_phase_eval() {
   # No --no-verify: this is an unledgered one-off with no reservation-sweep
   # safety net, so it keeps the default registration check, exactly as the
   # sibling diagnose-main / jit-reminder spawns do (dispatch-tick).
-  args+=("/dispatch-ladder-eval $NODE_ID $phase --since $since")
+  args+=("/rsi $NODE_ID $phase --since $since")
 
   local out rc=0 fields
   fields=$(jq -nc --arg name "$name" --argjson since "$since" \

@@ -21,13 +21,12 @@ systemd unit and outlives the session that launched it. What detaches is the
 auto-park, no resume — and stays halted until a person reads it and acts. The
 session's job is to launch, poll, engage a halt if there is one, and run the
 closing cross-phase synthesis. **Each phase is already evaluated by then** — the
-driver spawns `/dispatch-ladder-eval` for every phase at its own boundary, and
+driver spawns `/rsi` for every phase at its own boundary, and
 for the phase a halted run owes — so what is left for this session is only what
 no single phase's evaluator can see.
 
 `/dispatch-ladder` inherits attended and pace-exempt status from whichever
-attended thread invokes it (an author directly, or `/rsi` Step 4b). It has none
-of its own.
+attended thread invokes it — an author directly. It has none of its own.
 
 ## What this is not
 
@@ -122,7 +121,7 @@ when it is gone from `origin/main` entirely (`pruned`).
 
 ## The per-phase evaluation
 
-At every phase boundary the driver spawns `/dispatch-ladder-eval <node-id>
+At every phase boundary the driver spawns `/rsi <node-id>
 <phase> --since <launch-epoch>` as its own `claude --bg` job and **does not wait
 on it**. The driver waits for the spawn's registration check, seconds; it never
 waits for a model turn. A blocking evaluation would reintroduce exactly the
@@ -269,7 +268,7 @@ cat <main-root>/.claude/worktrees/<node-id>.ladder/events.jsonl
 re-poll counts and the await window — as numeric `elapsed_s`, `await_repolls`
 and `window_s` fields on the phase events, not as text to regex out of `detail`.
 These are the evaluation's inputs, and nothing else records them. Its `eval`
-lines say which phases were handed to `/dispatch-ladder-eval` and which spawn
+lines say which phases were handed to `/rsi` and which spawn
 failed.
 
 ## Halt dispositions
@@ -351,7 +350,7 @@ halted ladder.
 Required by `strategy-recursive-self-improvement` condition 14 as amended
 2026-08-12 — read it at `origin/main`; it is authoritative and this is the
 closing half of its mechanism. The per-phase half already ran: see
-`/dispatch-ladder-eval`, spawned by the driver at every phase boundary and for
+`/rsi`, spawned by the driver at every phase boundary and for
 the phase a halted run owes.
 
 Run it **after** the run reaches terminus — complete or halted — never
@@ -362,7 +361,7 @@ terminus and runs it there.
 **It covers only what no single phase's evaluator can see.** Everything
 phase-local — that phase's errors, round trips, rework counters, permission
 friction, its own elapsed-against-window calibration — belongs to
-`/dispatch-ladder-eval` and is not re-derived here. What is left is exactly
+`/rsi` and is not re-derived here. What is left is exactly
 three things:
 
 - **Rework loops across phases** — the shape the sequence makes: `implement` →
@@ -397,6 +396,6 @@ State:
 - what landed at `origin/main` (commits, PR, the merge and absorb);
 - what a next invocation would pick up;
 - the cross-phase synthesis's findings and the ledger entries they landed as;
-- which phases the driver handed to `/dispatch-ladder-eval`, from the `eval`
+- which phases the driver handed to `/rsi`, from the `eval`
   lines in `events.jsonl` — a phase with no `eval` line is an unevaluated phase,
   and saying so is part of the report.

@@ -260,8 +260,6 @@ jobs:
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run verify-landed tests
         run: packages/intentionsutil/scripts/test-verify-landed.sh
-      - name: Run rsi-claim tests
-        run: .claude/skills/rsi/scripts/test-rsi-claim.sh
       - name: Run dispatch-ladder-advance tests
         run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
       - name: Run dispatch-ladder-await tests

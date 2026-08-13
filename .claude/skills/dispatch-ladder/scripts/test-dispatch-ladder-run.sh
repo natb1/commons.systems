@@ -718,7 +718,7 @@ assert_eq "max-run: state.json disposition" "timeout" "$(jq -r .disposition "$ST
 assert_eq "max-run: state.json status is halted" "halted" "$(jq -r .status "$STATE_DIR/state.json")"
 
 # --- the per-phase evaluation ------------------------------------------------
-# The driver spawns /dispatch-ladder-eval at every phase boundary and, from
+# The driver spawns /rsi at every phase boundary and, from
 # halt(), for the phase a halted run still owes. Everything asserted here is
 # invisible until it costs a real run: a name that dedups would silently drop
 # every phase after the first, and a spawn that could halt the ladder would let
@@ -750,7 +750,7 @@ else
 fi
 TOTAL=$((TOTAL + 1))
 if grep -q -- "--cwd $PROJECT " "$SEQ_DIR/spawnjob.argv" \
-   && grep -q -- "/dispatch-ladder-eval $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
+   && grep -q -- "/rsi $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
   PASS=$((PASS + 1)); echo "  PASS: eval: the prompt carries the node, the phase and the launch epoch"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: eval: the prompt carries the node, the phase and the launch epoch"
@@ -796,7 +796,7 @@ run_ladder
 assert_eq "halt-eval: exit 12 (stalled), unchanged by the spawn" "12" "$RC"
 assert_eq "halt-eval: the owed evaluation was spawned once" "1" "$(calls spawnjob)"
 TOTAL=$((TOTAL + 1))
-if grep -q -- "/dispatch-ladder-eval $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
+if grep -q -- "/rsi $NODE implement --since [0-9]" "$SEQ_DIR/spawnjob.argv"; then
   PASS=$((PASS + 1)); echo "  PASS: halt-eval: it evaluated the phase the run was in"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: halt-eval: it evaluated the phase the run was in"
