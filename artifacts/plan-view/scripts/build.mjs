@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build the plan view as ONE self-contained file.
+ * Build the plan view into a single self-contained file.
  *
  * The artifact viewer enforces a strict CSP that blocks every external host —
  * CDN scripts, external stylesheets, remote fonts and images, fetch/XHR and

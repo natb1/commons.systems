@@ -142,8 +142,9 @@ describe("lane gutter", () => {
       row("t2", { lanes: [{ id: "b", kind: "blocker" }] }),
     ];
     const slots = assignLaneSlots(rows);
-    const slotOfB = slots.get("b")?.slot;
-    expect(laneTrack(rows[0].lanes, slots)[slotOfB as number]).toBe("blocker");
-    expect(laneTrack(rows[1].lanes, slots)[slotOfB as number]).toBe("blocker");
+    const assigned = slots.get("b");
+    if (assigned === undefined) throw new Error("lane b was never assigned a slot");
+    expect(laneTrack(rows[0].lanes, slots)[assigned.slot]).toBe("blocker");
+    expect(laneTrack(rows[1].lanes, slots)[assigned.slot]).toBe("blocker");
   });
 });

@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { buildPageData } from "../src/build-payload.js";
 
 /**
- * Emit the baked snapshot as JSON.
+ * Write the baked snapshot to a JSON file.
  *
  * Run under `tsx` by `scripts/build.mjs`. Split out from the assembler so the
  * build has two clean halves — derive the data in TypeScript against the real

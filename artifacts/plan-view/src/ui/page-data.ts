@@ -14,6 +14,10 @@ function readPageData(): PageData {
   if (element === null || element.textContent === null) {
     throw new Error("plan-view: #plan-view-payload missing — the page assembler did not emit it");
   }
+  // type-safety-ok: JSON.parse returns `any` at a real system edge — the
+  // serialized payload the build wrote. The shape is guaranteed by the
+  // build emitting it from a typed PageData, and the two null checks above
+  // are the boundary validation for the part that can actually vary.
   return JSON.parse(element.textContent) as PageData;
 }
 

@@ -136,7 +136,7 @@ export function buildRows(input: BuildRowsInput): PlanRow[] {
       tier: resolved?.tier ?? 1,
       rank: resolved?.value ?? 0,
       phase: node.phase,
-      phaseIndex: node.phase === null ? -1 : PHASE_LADDER.indexOf(node.phase as never),
+      phaseIndex: node.phase === null ? -1 : PHASE_LADDER.indexOf(node.phase),
       spine,
       lanes: laneEdges(node, byId, reverseBlockers, spine),
       sources,

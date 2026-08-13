@@ -132,7 +132,13 @@ export interface PageData {
  * if they had skipped a rung. `fix` is an INTERRUPT, not a rung — a fixing row
  * pips at its persisted phase and is marked separately.
  */
-export const PHASE_LADDER = ["implement", "qa", "review", "main-qa", "done"] as const;
+export const PHASE_LADDER: readonly string[] = [
+  "implement",
+  "qa",
+  "review",
+  "main-qa",
+  "done",
+];
 
 /** The six label chips, in render order. */
 export const LABELS = [
