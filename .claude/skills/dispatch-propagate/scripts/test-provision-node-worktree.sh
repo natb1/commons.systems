@@ -85,6 +85,15 @@ printf -- '---\nid: prov-seed-node\nkind: tactic\nphase: implement\n---\n\nSeed 
 git -C "$MAIN_WT" add intentions
 git -C "$MAIN_WT" commit -q -m "seed"
 git -C "$MAIN_WT" push -q -u origin main
+# Point the bare repo's HEAD at the branch that now exists. `git init --bare`
+# names HEAD after init.defaultBranch, which is `main` on a developer machine
+# that configures it and `master` on a bare CI runner that does not — so the
+# fixture's HEAD is left dangling on CI. $MAIN_WT sidesteps that with its own
+# symbolic-ref above (it clones the repo while still EMPTY), but any LATER
+# clone of $ORIGIN checks out nothing and has no local `main` to push, which
+# fails as `src refspec main does not match any` on CI only. Setting HEAD here
+# makes the fixture behave like a real repo for every clone.
+git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
 mkdir -p "$MAIN_WT/.claude/worktrees"
 
 export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
