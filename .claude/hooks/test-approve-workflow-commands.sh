@@ -371,9 +371,41 @@ assert_approves \
 # realpath() resolves.
 _GCD=$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 _DERIVED_WORKTREES_ROOT="$(dirname "$_GCD")/.claude/worktrees"
+# is_allowed_git_c resolves the -C path with a plain `realpath` and returns 1
+# when that fails, so the path must EXIST for the allow path to be exercised
+# at all. Creating it is the normal route, but $_DERIVED_WORKTREES_ROOT is
+# READ-ONLY from a worktree-isolated session: nothing mounts
+# `.claude/worktrees/` rw (see .claude/rules/sandbox.md). There the mkdir
+# fails and, under `set -e`, aborts the whole suite before a single case runs
+# — and that is the session this suite is usually invoked from. (Until this
+# PR the same mkdir targeted <repo>/.git/.claude/worktrees/, which IS on the
+# sandbox write-allowlist, so it silently kept working.)
+#
+# So fall back to a worktree that already exists under the root. The case
+# analysis is complete: the mkdir succeeds wherever the root is writable (CI's
+# plain checkout, or a session mounted at the repo root), and where it is not,
+# the session is isolated INSIDE a worktree under this very root, so one is
+# guaranteed to exist. Either way a real directory is used and the assertion
+# is unchanged — it still proves an existing path under NEW_WORKTREES_ROOT is
+# approved.
 _DUMMY_WT="$_DERIVED_WORKTREES_ROOT/test-approve-hook-dummy"
-mkdir -p "$_DUMMY_WT"
-trap 'rm -rf "$_DUMMY_WT" 2>/dev/null || true' EXIT
+_DUMMY_WT_CREATED=0
+if mkdir -p "$_DUMMY_WT" 2>/dev/null; then
+  _DUMMY_WT_CREATED=1
+else
+  # Buffer before awk: an awk that `exit`s early SIGPIPEs its writer, which
+  # under `set -o pipefail` fails the whole command substitution. Match without
+  # early exit for the same reason.
+  _WT_LIST_FB=$(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null) || _WT_LIST_FB=""
+  _DUMMY_WT=$(printf '%s\n' "$_WT_LIST_FB" \
+    | awk -v r="$_DERIVED_WORKTREES_ROOT/" '/^worktree /{ if (!f && index($2, r) == 1) { print $2; f=1 } }')
+  if [ -z "$_DUMMY_WT" ] || [ ! -d "$_DUMMY_WT" ]; then
+    echo "FAIL: '$_DERIVED_WORKTREES_ROOT' is not writable and holds no registered worktree to test against" >&2
+    exit 1
+  fi
+fi
+# Remove ONLY what this script created — never a real worktree checkout.
+trap '[ "$_DUMMY_WT_CREATED" = "1" ] && rm -rf "$_DUMMY_WT" 2>/dev/null || true' EXIT
 
 # Regression test (tactic-fix-sandbox-doc-hook-roots-before-image): assert the
 # formula above resolves to the ACTUAL .claude/worktrees directory this repo

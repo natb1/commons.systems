@@ -4,9 +4,11 @@
 # intentions/tactic-graph-native-dispatch.md).
 #
 #   <issue-num>-<slug>  LEGACY lane (the draining gh queue): placed at
-#                       <git-common-dir>/.claude/worktrees/<branch>/ — anchored
-#                       at the shared common dir (not a per-worktree-nested
-#                       path) so it matches where Claude Code's own
+#                       <repo-root>/.claude/worktrees/<branch>/ — anchored at
+#                       the repo root, i.e. the PARENT of --git-common-dir
+#                       (post-de-baring `.git` is a normal directory inside the
+#                       working tree), not a per-worktree-nested path, so it
+#                       matches where Claude Code's own
 #                       `path:`-based re-entry validator looks, and so a
 #                       session's cwd already contains the `.claude/worktrees/`
 #                       substring the bg-job isolation check short-circuits on
