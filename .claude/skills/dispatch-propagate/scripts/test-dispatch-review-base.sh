@@ -147,8 +147,40 @@ assert_eq "merged-main: recorded sha is NOT a descendant of the merge base" "1" 
 
 # The guard must still accept it, so pass 2 reviews only the delta.
 out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
-assert_eq "merged-main: pass 2 STILL narrows to the reviewed sha" "$MM_WORK" "$(field "$out" review_base)"
-assert_eq "merged-main: pass 2 source is sidecar" "sidecar" "$(field "$out" review_base_source)"
+
+# THE CHURN CANCELLATION. The recorded sha is accepted, but it is NOT usable as
+# the base directly: `MM_WORK..HEAD` is two-dot, so it re-admits main2.txt — the
+# commit that reached this branch only via the origin/main merge, and that was
+# already reviewed on main. The base is therefore the synthetic merge of the
+# recorded sha with the merge base, which cancels exactly that churn.
+#
+# Non-vacuity first: prove the naive range really does admit the churn, so the
+# assertions below are testing a live condition rather than an empty one.
+naive_files=$(git -C "$MM" diff --name-only "$MM_WORK..HEAD" | sort | tr '\n' ' ')
+assert_eq "merged-main: the NAIVE range admits main churn (the bug)" \
+  "fix.txt main2.txt " "$naive_files"
+
+assert_eq "merged-main: pass 2 source is sidecar-rebased" "sidecar-rebased" "$(field "$out" review_base_source)"
+assert_eq "merged-main: pass 2 still reports the recorded sha" "$MM_WORK" "$(field "$out" review_base_recorded)"
+
+MM_RB=$(field "$out" review_base)
+rc=0; [[ "$MM_RB" == "$MM_WORK" ]] || rc=1
+assert_eq "merged-main: the base is NOT the raw recorded sha" "1" "$rc"
+
+# The payload assertion: the delta is the CI-repair commit and nothing else.
+fixed_files=$(git -C "$MM" diff --name-only "$MM_RB..HEAD" | sort | tr '\n' ' ')
+assert_eq "merged-main: the narrowed range is the repair commit alone" "fix.txt " "$fixed_files"
+
+# The synthetic base must be reproducible: dispatch-code-review's run-dedup
+# identity includes target_base_sha, so a drifting base defeats the resume cache.
+out2=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "merged-main: the synthetic base is deterministic" "$MM_RB" "$(field "$out2" review_base)"
+
+# A branch that has NOT re-merged main since its review needs no synthetic base:
+# the recorded sha already contains the merge base, so it is returned as-is.
+out3=$(cd "$MM" && "$SUT" --merge-base "$MM_M1")
+assert_eq "merged-main: no churn to cancel → the recorded sha itself" "$MM_WORK" "$(field "$out3" review_base)"
+assert_eq "merged-main: no churn to cancel → plain sidecar source" "sidecar" "$(field "$out3" review_base_source)"
 
 # And the stale case must still be rejected in the SAME repo shape — proving the
 # guard discriminates rather than just accepting everything reachable.

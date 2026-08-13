@@ -317,10 +317,24 @@ REVIEWED_HEAD=$(git rev-parse HEAD)
 
 # REVIEW_BASE: the base a RE-review diffs from — the sha the previous review
 # covered, or MERGE_BASE when there wasn't one. Fails closed; see below.
+#
+# REVIEW_BASE IS NOT ALWAYS A COMMIT ON THE BRANCH, and a log reader should not
+# be surprised to see a sha that `git log` does not show. When main moved between
+# the two passes — which it does at every phase boundary, because
+# provision-node-worktree merges origin/main into the branch — the recorded sha
+# cannot be used directly: `<recorded>..HEAD` is two-dot and would re-admit every
+# origin/main commit merged in since, all of it already reviewed on main, making
+# the "narrowed" review WIDER than the full one. So the script returns a
+# synthetic merge of the recorded sha with MERGE_BASE, which cancels that churn
+# and leaves only branch-authored work. `review_base_source=sidecar-rebased`
+# marks that path, and `review_base_recorded` still reports the real sha.
 RB_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-base \
   --merge-base "$MERGE_BASE")
 REVIEW_BASE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base=//p')
 REVIEW_BASE_SOURCE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_source=//p')
+# The sha actually recorded by the previous pass. Empty unless the source is
+# `sidecar-rebased`. Report it, never diff from it — see above.
+REVIEW_BASE_RECORDED=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_recorded=//p')
 
 # Blast radius: the files OUTSIDE the delta that reference a symbol the delta
 # added, changed, or deleted. Computed from the NARROWED range — its whole job
