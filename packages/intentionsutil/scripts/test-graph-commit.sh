@@ -256,7 +256,7 @@
 #      which would deny land-align-round its park marker for a park that IS on
 #      main. origin/main must not move.
 #
-# Cases 60-68 cover build_commit_plumbing() — the no-working-tree writer behind
+# Cases 60-69 cover build_commit_plumbing() — the no-working-tree writer behind
 # GRAPH_COMMIT_WRITER. Unlike every case above they do NOT drive the CLI end to
 # end: the function is not wired into try_land() yet (see GRAPH_COMMIT_WRITER in
 # graph-commit), so they source graph-commit (which defines its functions and
@@ -289,6 +289,9 @@
 #  68. base-commit fidelity: the builder builds against the BASE COMMIT it is
 #      handed, not against HEAD or the index — a commit built on an older base
 #      carries that base's content for paths it does not name
+#  69. a --prune id naming a path the base commit does not carry is REFUSED —
+#      `update-index --force-remove` would silently succeed there, so the
+#      builder dies instead of emitting a commit that pruned nothing
 #
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
@@ -2840,11 +2843,19 @@ echo "line3: plumb-mixed" >>"$P/intentions/t-plumb-a.md"
 echo "line3: plumb-mixed-b" >>"$P/intentions/t-plumb-b.md"
 rm -f "$P/intentions/t-plumb-prune.md"
 rm -f "$P/intentions/t-plumb-prune2.md"
+# `git show … | grep -q` is deliberately NOT used for the content assertions in
+# these cases: this suite runs under `set -o pipefail`, so a grep -q that exits
+# on its first match can SIGPIPE the git show ahead of it and make the whole
+# pipeline non-zero regardless of the match. In a negated assertion (cases 64
+# and 68) that turns a real regression into a silent pass. Capture the blob
+# into a variable first and grep the variable.
+mixed_a=""
 if plumb_case "t-plumb-a t-plumb-b" "t-plumb-prune t-plumb-prune2" "" \
    && [[ "$PLUMB_TREE" == "$WT_TREE" ]] \
    && ! git -C "$P" cat-file -e "$PLUMB_SHA:intentions/t-plumb-prune.md" 2>/dev/null \
    && ! git -C "$P" cat-file -e "$PLUMB_SHA:intentions/t-plumb-prune2.md" 2>/dev/null \
-   && git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-a.md" | grep -q 'plumb-mixed'; then
+   && mixed_a="$(git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-a.md")" \
+   && grep -q 'plumb-mixed' <<<"$mixed_a"; then
   ok "plumbing writer, mixed edit + prune in one commit: same tree SHA, both prunes removed, both edits present"
 else
   no "plumbing writer, mixed edit + prune (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
@@ -2859,9 +2870,12 @@ fi
 plumb_reset
 echo "line3: plumb-edit-a" >>"$P/intentions/t-plumb-a.md"
 echo "line3: RESURRECTED-MUST-NOT-LAND" >>"$P/intentions/t-plumb-res.md"
+res_body=""
 if plumb_case "t-plumb-a t-plumb-res" "" "t-plumb-res" \
    && [[ "$PLUMB_TREE" == "$WT_TREE" ]] \
-   && ! git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-res.md" | grep -q 'RESURRECTED-MUST-NOT-LAND' \
+   && res_body="$(git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-res.md")" \
+   && [[ -n "$res_body" ]] \
+   && ! grep -q 'RESURRECTED-MUST-NOT-LAND' <<<"$res_body" \
    && [[ "$(git -C "$P" rev-parse "$PLUMB_SHA:intentions/t-plumb-res.md")" \
        == "$(git -C "$P" rev-parse "$PBASE:intentions/t-plumb-res.md")" ]]; then
   ok "plumbing writer, RESURRECTED_IDS: the resurrected node is excluded from the tree and still carries base content (a landed deletion is not reverted)"
@@ -2966,13 +2980,44 @@ old_base_sha="$(
   CURRENT_MSG="$PLUMB_MSG"
   build_commit_plumbing "$PBASE"
 )"; rc=$?
+old_a=""; old_b=""
 if [[ $rc -eq 0 ]] \
    && [[ "$(git -C "$P" rev-parse "$old_base_sha^")" == "$PBASE" ]] \
-   && git -C "$P" show "$old_base_sha:intentions/t-plumb-a.md" | grep -q 'plumb-old-base' \
-   && ! git -C "$P" show "$old_base_sha:intentions/t-plumb-b.md" | grep -q 'newer-head-content'; then
+   && old_a="$(git -C "$P" show "$old_base_sha:intentions/t-plumb-a.md")" \
+   && old_b="$(git -C "$P" show "$old_base_sha:intentions/t-plumb-b.md")" \
+   && grep -q 'plumb-old-base' <<<"$old_a" \
+   && [[ -n "$old_b" ]] \
+   && ! grep -q 'newer-head-content' <<<"$old_b"; then
   ok "plumbing writer builds against the base commit it is handed, not HEAD (parent is the given base; unnamed paths carry the base's content)"
 else
   no "plumbing writer base fidelity (rc=$rc sha=$old_base_sha)"
+fi
+plumb_reset
+
+# --- Case 69: a --prune id absent from the base commit is refused -------------
+# The one place the plumbing writer is deliberately STRICTER than `git add`:
+# `git update-index --force-remove` silently succeeds on a path the base tree
+# does not carry, where `git add -- <path>` rejects the unmatched pathspec. The
+# builder must die rather than emit a commit that pruned nothing — and it must
+# not leave its throwaway index dir behind when it does.
+absent_sha="$(
+  {
+    cd "$P" || exit 99
+    # shellcheck source=/dev/null
+    source "$GC_SCRIPT"
+    IDS=(); PRUNE_IDS=(t-plumb-absent); RESURRECTED_IDS=()
+    ALL_IDS=("${PRUNE_IDS[@]}")
+    CURRENT_MSG="$PLUMB_MSG"
+    build_commit_plumbing HEAD
+  } 2>"$WORK/plumb-absent.err"
+)"; rc=$?
+absent_head="$(git -C "$P" rev-parse HEAD)"
+if [[ $rc -ne 0 ]] && [[ -z "$absent_sha" ]] \
+   && grep -q 'names a path absent from base commit' "$WORK/plumb-absent.err" \
+   && [[ "$absent_head" == "$(git -C "$P" rev-parse HEAD)" ]]; then
+  ok "plumbing writer refuses a --prune id absent from the base commit instead of emitting a no-op commit"
+else
+  no "plumbing writer absent-prune refusal (rc=$rc sha=$absent_sha)"; cat "$WORK/plumb-absent.err"
 fi
 plumb_reset
 
