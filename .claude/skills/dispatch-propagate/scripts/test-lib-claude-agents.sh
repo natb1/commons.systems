@@ -63,6 +63,10 @@ ca_teardown() {
   # snapshot set by a ca_all_* case can never leak into a case using this
   # (older) pair — a stale snapshot would shadow the fake daemon entirely.
   unset CLAUDE_AGENTS_CMD DISPATCH_AGENTS_SNAPSHOT_ALL
+  # A case that stubs PATH to hide `flock` (the no-flock occupancy case) must
+  # never leak that override into a later case — restore unconditionally here
+  # rather than relying on each case to put it back itself.
+  export PATH="$SAVED_PATH"
 }
 
 # write_fake_claude <stdout-payload> <exit-code> — install a fake `claude` that
@@ -1811,6 +1815,120 @@ case "$diag" in
   *) diag_ok="no: $diag" ;;
 esac
 assert_eq "wrapper: the operator diagnostic still reaches stderr" "yes" "$diag_ok"
+ca_teardown
+
+# --- Test 73: a held code-review lock alone reports live -----------------------
+# The lock is checked BEFORE the daemon is queried (see the "THE CODE-REVIEW
+# LOCK" comment above worktree_occupancy_state). Stub the daemon to `free` so a
+# `live` verdict here can only be coming from the lock, never from a session
+# match.
+echo "Test: worktree_occupancy_state reports live when the code-review lock is held, daemon stubbed free"
+ca_setup
+write_fake_claude '[]' 0
+
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+# `flock <file> <cmd>` forks: the backgrounded `flock`'s CHILD (`sleep`)
+# inherits the locked fd from its parent, so releasing the lock later means
+# killing BOTH — killing only the pid captured in `$!` (the `flock` process)
+# would leave `sleep` running (and the lock still held), since `sleep` is the
+# one holding the inherited fd. (A whole-process-GROUP kill is the wrong tool
+# here: this job is backgrounded from a non-interactive script with no job
+# control, so it shares the SCRIPT's own process group rather than getting
+# its own — signalling the group would take down the test harness itself.)
+flock "$lockfile" sleep 5 &
+holder_pid=$!
+# Wait for the background flock to actually acquire the lock rather than
+# assume a fixed startup delay: a non-blocking acquire attempt keeps
+# succeeding (and instantly releasing) until the background holder has it.
+for (( i = 0; i < 50; i++ )); do
+  if ! flock -n "$lockfile" true 2>/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "held lock: occupancy reports live" "live" "$out"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "held lock: reason is code-review-lock" "code-review-lock" "$WORKTREE_OCCUPANCY_REASON"
+assert_eq "held lock: no session id — the holder is a process, not a session" \
+  "" "$WORKTREE_OCCUPANCY_SESSION_ID"
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "held lock: worktree_has_live_session reports occupied" "occupied" "$live"
+
+# Release: kill `flock`'s child (`sleep`, which holds the inherited locked
+# fd) FIRST, then `flock` itself. Killing only $holder_pid would leave the
+# child running with the fd still open and the lock still held.
+holder_child=$(pgrep -P "$holder_pid" 2>/dev/null | head -1)
+[[ -n "$holder_child" ]] && kill -9 "$holder_child" 2>/dev/null || true
+kill -9 "$holder_pid" 2>/dev/null || true
+wait "$holder_pid" 2>/dev/null || true
+rm -f "$lockfile"
+ca_teardown
+
+# --- Test 74: a stale (unheld) lock file leaves the daemon verdict unchanged ---
+# The sidecar's mere EXISTENCE is never the liveness signal — only a failed
+# `flock -n` acquire is. A leftover file from a finished run must fall through
+# to the ordinary registered-session logic, and must not be deleted by the
+# reader (deleting it would race a launcher creating it at that instant).
+echo "Test: a stale code-review lock file (nobody holding it) does not change the verdict, and is not deleted"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+write_fake_claude '[]' 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "stale lock, daemon free: verdict is free" "free" "$out"
+assert_eq "stale lock, daemon free: lock file untouched" "1" "$([[ -e "$lockfile" ]] && echo 1 || echo 0)"
+
+write_fake_claude "[{\"sessionId\":\"sess-live\",\"status\":\"busy\",\"name\":\"$ca_basename\",\"state\":\"working\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "stale lock, daemon live: verdict is live" "live" "$out"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "stale lock, daemon live: reason is session, not the lock" "session" "$WORKTREE_OCCUPANCY_REASON"
+assert_eq "stale lock, daemon live: lock file still present" "1" "$([[ -e "$lockfile" ]] && echo 1 || echo 0)"
+
+rm -f "$lockfile"
+ca_teardown
+
+# --- Test 75: no `flock` on PATH + a lock file present ⇒ unknown ---------------
+# `flock`'s absence is the ONLY way to tell "held" from "stale" apart, so
+# losing it while the file exists must fail safe to `unknown` (which every
+# caller folds toward occupied) rather than silently falling through to the
+# session check as if the file were not there.
+echo "Test: no flock on PATH with a lock file present yields unknown (fail safe, occupied)"
+ca_setup
+write_fake_claude '[]' 0
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+# Hide `flock` from PATH while keeping the two externals the guard still needs
+# before it ever reaches the `command -v flock` check (`dirname`/`basename`,
+# used by worktree_code_review_lock_path) resolvable — the lock check runs
+# BEFORE any daemon call, so nothing else on PATH is exercised here.
+noflock_bin="$CA_DIR-noflock-bin"
+mkdir -p "$noflock_bin"
+ln -s "$(command -v dirname)" "$noflock_bin/dirname"
+ln -s "$(command -v basename)" "$noflock_bin/basename"
+export PATH="$noflock_bin"
+
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null); rc=$?
+assert_eq "no-flock: missing flock + lock file yields unknown" "unknown" "$out"
+assert_eq "no-flock: unknown still returns 0" "0" "$rc"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "no-flock: reason is code-review-lock-unverifiable" \
+  "code-review-lock-unverifiable" "$WORKTREE_OCCUPANCY_REASON"
+
+# Restore PATH before cleanup — `rm` itself is not resolvable under the
+# flock-hiding PATH stub. ca_teardown restores it too (belt and suspenders,
+# per the "restore in the fixture teardown" rule), but the cleanup below
+# needs it back immediately.
+export PATH="$SAVED_PATH"
+rm -f "$lockfile"
+rm -rf "$noflock_bin"
 ca_teardown
 
 report_results
