@@ -68,112 +68,115 @@ attributes:
       window: tactic-attention-namespaced-rank review 2026-08-13T21:42:01Z..21:51:58Z
       sensor: aggregate-usage.sh
       measured: 2026-08-13
-    - metric: recurrence_count
+    - metric: unattended_denials_in_phase
+      value: 2
+      unit: events
+      window: tactic-attention-namespaced-rank/review@1786661088
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: denial_retry_price_proxy_usd
+      value: 0.1743795
+      unit: usd
+      window: tactic-attention-namespaced-rank/review@1786661088
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: sessions_affected_in_phase
       value: 1
+      unit: sessions
+      window: tactic-attention-namespaced-rank/review@1786661088
+      sensor: aggregate-usage.sh
+      measured: 2026-08-13
+    - metric: phase_disposition_masked_denial
+      value: 1
+      unit: phases
+      window: tactic-attention-namespaced-rank/review@1786661088
+      sensor: events.jsonl
+      measured: 2026-08-13
+    - metric: recurrence_count
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-13
 ---
-# An unattended ladder worker's tool use is rejected mid-flight with no human present
+# Occurrence — tactic-attention-namespaced-rank / review / `--since 1786661088`
 
-## What was observed
+Second sighting. The first killed the phase; this one did not — the phase
+completed `reviewed` — which is the useful new information: the denial is not
+always fatal, so it is not self-announcing, and a phase can carry silent
+coverage loss past a green disposition.
 
-`tactic-attention-namespaced-rank`, `review` phase, ladder launch
-`2026-08-13T21:42:01Z` (`--since 1786657321`).
+## Observed
 
-The review-fix worker `e68cfcc4-f3b7-4e99-875a-1363aeedcb9e` — a detached
-`claude --bg` ladder worker with no human attached — issued its Step 1b Bash
-tool use at `21:48:33.717Z`. The command **began executing** (the
-`code-review-lock` sidecar was written at `21:48:35Z`, the child session at
-`21:48:36.314Z`). Then, **65 seconds into execution**, at `21:49:38.668Z`, the
-transcript records:
+Session `agent-abeb8e443ad63b2eb` (a `/code-review` pre-stage subagent under
+shell session `c8f2d453-b186-4b9e-8651-e3e4ba8b9280`, 25 turns, $3.88 price
+proxy, started 2026-08-13T22:49:44Z) took **2** permission-friction events, both
+`user_rejections`, with `retry_price_proxy_usd = 0.1743795`.
 
-```
-toolUseResult: "User rejected tool use"
-tool_result: "The user doesn't want to proceed with this tool use. …
-              STOP what you are doing and wait for the user to tell you how to proceed."
-[Request interrupted by user for tool use]
-```
+There was no user. The ladder driver (`dispatch-ladder-run`, pid 2993618,
+`state.json status=running`) spawned this phase detached at 22:44; nothing was
+attached to approve anything.
 
-The worker obeyed and stopped. The ladder halted 2m20s later
-(`21:51:58Z`, exit 12) with `stalled — the worker stopped with no graph
-change; read its transcript before re-running`. That halt verdict was
-**accurate about the worker**: the defect is upstream of it.
+## The two denials, verbatim from the transcript
 
-No human was present. The mechanism behind the rejection is not established by
-this evidence — it is either the auto-mode classifier arriving late on an
-already-running call, or an interrupt delivered to the worker — but the effect
-is recorded by `aggregate-usage.sh` as `permission_friction.user_rejections`,
-so it is indistinguishable from an attended refusal in every downstream figure.
-
-## It is not isolated
-
-Two of the three subagents in this phase window carry the same signature:
-
-| session | rejections | note |
-| --- | --- | --- |
-| `e68cfcc4-…` (worker) | 1 | the Step 1b `dispatch-code-review` launch |
-| `agent-a79a2c3f3c15e889b` (code-review angle) | 1 | rejected while doing read-only inspection (`wc -l` over six `packages/intentionsutil/src/*.ts` paths, `Read` of `attention.ts`) |
-| `agent-a34ac99010b84a930` (code-review angle) | 1 | — |
-
-At node scope across the whole ladder, `aggregate-usage.sh` reports the
-signature `The user doesn't want to proceed with this tool use` **6 times
-across 5 sessions** — the single largest non-`Exit code N` tool-error class on
-this node. Adjacent signatures in the same table are the shell analyzer giving
-up rather than a policy decision: `Contains simple_expansion`,
-`IFS assignment changes word-splitting — cannot model statically`,
-`This Bash command contains multiple operations. The following part requires
-approval: …`.
-
-## The shape of the rejected command
-
-The Step 1b command the review-fix skill prescribes begins with a bare `cd`
-into the worktree and then runs a multi-statement body with command
-substitution and a stderr redirect:
+Both carry `"toolDenialKind":"user-rejected"` and both are the compound-command
+classifier, not a policy or sandbox rule:
 
 ```
-cd /home/n8/natb1/commons.systems/.claude/worktrees/tactic-attention-namespaced-rank
-N="tactic-attention-namespaced-rank"
-…
-CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
-  --target "$REVIEW_BASE..HEAD" … 2>"tmp/code-review-$N.err")
+This Bash command contains multiple operations. The following part requires
+approval: .PATH --scan-stdin; echo "EXIT=$?"
+
+This Bash command contains multiple operations. The following part requires
+approval: bash .github/scripts/check-type-safety-escapes.sh
 ```
 
-`.claude/rules/sandbox.md` §"Avoid `cd && command` for write/execute commands"
-documents exactly this hazard: `allowedTools` rules match from the start of the
-command string, so a `cd`-prefixed compound never matches a static allow and
-falls through to the classifier. The skill's own prescribed command violates
-the repo's own documented rule, which is why the call is classifier-gated at
-all rather than statically allowed. (Note the *preceding* Bash in the same
-session — also `cd`-prefixed, but a plain heredoc plus one script call — was
-allowed; the failing one adds `$( )` and `2>`.)
+**Note for a future evaluator: do not grep for the string "The user doesn't want
+to proceed with this tool use" to find these.** `aggregate-usage.sh` classifies
+`user_rejections` from the JSON field `toolDenialKind == "user-rejected"`
+(aggregate-usage.sh:423), and that phrase appears nowhere in this transcript. A
+literal search for the human-readable rejection text returns zero and reads as a
+clean session. Grep `toolDenialKind` instead.
 
-## Why it matters
+## Why this occurrence matters more than its cost
 
-An unattended worker that is told "STOP … and wait for the user to tell you how
-to proceed" has no user. It cannot proceed and cannot escalate; it simply dies,
-and the ladder sees an unexplained stall requiring a human to read the
-transcript. The measured price of this one occurrence is **$37.75 price proxy
-($9.25 cost) for zero graph change**, plus the destroyed detached review (see
-`detached-code-review-dies-with-launcher`).
+$0.17 of retry is nothing. The content is everything: the denied command is
+`.github/scripts/check-type-safety-escapes.sh` — the **type-safety gate**, run by
+a reviewer whose entire review delta (1 file, +2/−2) was two `// type-safety-ok:`
+suppression comments added to silence that exact sensor.
+
+So the one reviewer that tried to verify the suppression against the tool that
+produced it was denied twice, and the review still reported `disposition:
+completed`, `findings_surfaced: 10`, `findings_actionable: 0`. The phase's
+headline result — "nothing actionable in this suppression" — was reached with the
+verifying check blocked. Nothing in the outcome record marks that.
+
+This compounds `type-safety-marker-invisible-at-write-time` (the marker is run by
+no local gate): here an agent *tried* to run the gate locally and the permission
+layer stopped it.
 
 ## What would have to change
 
-Two independent levers, both outside this evaluator's authority to apply:
+The command shapes are both routine and both avoidable —
+`cmd; echo "EXIT=$?"` and a plain `bash <script>` that the classifier split. But
+writing "agents should not use compound commands" is the wrong fix twice over: it
+has been written already (`.claude/rules/sandbox.md`, "Command pattern matching")
+and it still fires, which per lens 7 means the rule, not the session, is the
+defect.
 
-1. Make the Step 1b launch statically allowable — drop the `cd` prefix and the
-   compound body in favour of a single script invocation that takes the
-   worktree as an argument, so it matches an `allowedTools` prefix rule and is
-   never classifier-gated. This is what `.claude/rules/sandbox.md` already
-   prescribes.
-2. Give an unattended worker somewhere to go on a rejection. Today the
-   rejection text's instruction ("wait for the user") is unfollowable in a
-   `--bg` session and the worker's only exit is silent death with a null
-   `outcome` record.
+The load-bearing gap is that an unattended detached session has no distinct
+handling for "no user exists to approve this". It is told to stop and wait for a
+human who is not there, and the surrounding phase absorbs the loss silently. A
+denial in an unattended session should be a recorded, surfaced event on the
+outcome record — not an invisible coverage hole behind a `completed` verdict.
 
-Evidence a later session cannot rediscover: the worker transcript's rejection
-record is at `21:49:38.668Z` in
-`~/.claude/projects/-home-n8-natb1-commons-systems--claude-worktrees-tactic-attention-namespaced-rank/e68cfcc4-f3b7-4e99-875a-1363aeedcb9e.jsonl`,
-and `dispatch-session-digest --session e68cfcc4-…` surfaces it as
-`last_user_request: "[Request interrupted by user for tool use]"`.
+Recording only; the rule about what an unattended session may do belongs to the
+script that owns the decision.
+
+## Evidence a later session cannot rediscover
+
+- Transcript: `~/.claude/projects/-home-n8-natb1-commons-systems--claude-worktrees-tactic-attention-namespaced-rank/c8f2d453-b186-4b9e-8651-e3e4ba8b9280/subagents/agent-abeb8e443ad63b2eb.jsonl`
+  — 2 hits for `toolDenialKind":"user-rejected"`.
+- Phase-scoped: these are the only 2 denials among the window's 17 sessions
+  (grep of all 17 transcript paths; positive control `review-fix` matched 16/17).
+- Node-wide `tool_errors` for the same signature class: 6 occurrences across 5
+  sessions.
