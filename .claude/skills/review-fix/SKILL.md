@@ -255,6 +255,18 @@ second one. A separate prior-findings store would be a second source of truth
 about the same dispositions, and the two would drift the first time a run died
 between writing one and the other.
 
+**Carry the follow-up reference with each deferred finding, and never re-file
+it.** A `deferred` disposition is a recorded verdict that *already produced a
+durable artifact*: Step 5 turned it into a `blocked_by` tracking issue (issue
+lane) or a draft tactic node (node lane), and the prior comment names it. Carry
+that reference alongside the finding. Step 5 must **not** file a second record
+for a finding that arrives carrying one — it reuses the existing reference for
+Step 6's **Deferred** bucket. Without this, a PR that re-enters review three
+times accumulates three identical follow-ups for every deferred finding, and
+`--followups-filed` counts work nobody did. Carrying them forward is for
+*detection*, so a re-scoped pass cannot lose sight of them; it is not a
+re-filing trigger.
+
 ### 1. Capture the diff context and run the inline bash scans
 
 All reviews look at the same diff — and the preamble's single
@@ -318,6 +330,18 @@ BR_OUT=$(git diff "$REVIEW_BASE"..HEAD \
   | .claude/skills/dispatch-propagate/scripts/dispatch-blast-radius)
 blast_radius_files=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_file=//p')
 blast_radius_truncated=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_truncated=//p')
+# blast_radius_generic MUST be carried too — it is not optional detail. A
+# symbol dropped as too-widely-referenced produces NO reading list entry and
+# does NOT set `truncated`, so without this field a delta that changes a shared
+# helper looks byte-identical to one with no out-of-diff callers at all. That is
+# the largest blast radius there is, reported as silence.
+blast_radius_generic=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_generic=//p')
+
+# The DELTA's file list, for the reviewers' brief. `changed_files` (from the
+# context pack) is the whole PR's list, computed from MERGE_BASE; pairing it
+# with a narrowed base would tell a finder "review only the delta" and then hand
+# it an inventory of every file the PR ever touched.
+review_changed_files=$(git diff --name-only "$REVIEW_BASE"..HEAD)
 ```
 
 **`REVIEW_BASE` — narrow the base; keep `MERGE_BASE` bound and unchanged.**
@@ -446,15 +470,39 @@ covered by `test-review-plan-gate.sh`. Do not re-implement any of it here, and
 do not "simplify" it away on the grounds that the skill already checked: the
 verdict is derived from text the diff under review can influence.
 
-Bind the effort and its deadline for Step 1b:
+**Bind the effort by running the gate — never by reading the verdict yourself.**
+Write the verdict to `tmp/review-plan-$N.json` and pipe it through
+`dispatch-review-plan-gate`:
 
 ```bash
-# From the verdict, after the gate has constrained it. `high` on any fail-open
-# path — see reviewPlanEffort / reviewPlanDeadline in review-fix.js.
-CR_EFFORT=<the gate-constrained effort>
-CR_DEADLINE_S=<the matching deadline from REVIEW_PLAN_DEADLINES>
-CR_POLL_CAP=$(( CR_DEADLINE_S / 540 ))
+CR_GATE=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-plan-gate \
+  < "tmp/review-plan-$N.json")
+CR_EFFORT=$(printf '%s\n' "$CR_GATE" | sed -n 's/^effort=//p')
+CR_EFFORT_REASON=$(printf '%s\n' "$CR_GATE" | sed -n 's/^effort_reason=//p')
+CR_DEADLINE_S=$(printf '%s\n' "$CR_GATE" | sed -n 's/^deadline_s=//p')
+CR_POLL_CAP=$(printf '%s\n' "$CR_GATE" | sed -n 's/^poll_cap=//p')
 ```
+
+**This step is load-bearing and must not be collapsed into "use the verdict's
+effort".** The gate has to bind *here*, because Step 1b — which consumes
+`CR_EFFORT` — runs **before** the Step 2 Workflow. A gate that lived only inside
+`review-fix.js` would execute too late to constrain anything: it would record a
+constrained level in its log while Step 1b had already launched the real review
+at whatever the verdict asked for. The recorded rationale would then disagree
+with what actually ran, which is worse than having no gate, because it reads as
+enforcement. `dispatch-review-plan-gate` is not a second implementation — it
+slices and evals the same `review plan gate` region of `review-fix.js` that
+`test-review-plan-gate.sh` covers, so there is exactly one home for the rules.
+
+The script **fails open on everything**: no verdict file, empty input,
+unparseable JSON, missing `node`, an unreadable or sentinel-less `review-fix.js`
+— all yield `effort=high`, `deadline_s=5400`, `poll_cap=10`, i.e. today's
+behaviour exactly. It always exits 0, so `set -e` cannot turn a depth
+*suggestion* into a failed phase.
+
+If the subagent returned nothing usable, skip writing the file and run the gate
+on empty input (or simply bind the fail-open values directly) — do not invent a
+verdict.
 
 ### 1b. Run the built-in `/code-review` as an exclusive pre-stage
 
@@ -806,9 +854,12 @@ args = {
   merge_base:          <MERGE_BASE>,    // the FULL branch base — what may be READ
   review_base:         <REVIEW_BASE>,   // the narrowed base — what is REPORTED on
   review_base_source:  <REVIEW_BASE_SOURCE>,
+  review_changed_files: [ <review_changed_files lines> ], // the DELTA's file list
   blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
   blast_radius_truncated: <true|false>,
-  prior_findings:      [ ...unresolved + deferred findings carried forward; [] if none... ],
+  blast_radius_generic: <int>,          // symbols too widely referenced to list callers for
+  prior_findings:      [ ...unresolved + deferred findings carried forward, each deferred one
+                          carrying its EXISTING follow-up reference; [] if none... ],
   review_plan:         <REVIEW_PLAN>,   // Step 1a's verdict; OMIT it on any fail-open
                                         // path. review-fix.js re-enforces the band, the
                                         // xhigh irreversibility floor, the raise/cheapen
@@ -1189,13 +1240,32 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    (use `dangerouslyDisableSandbox: true`). This skill owns the label; it is
    applied regardless of whether any fixes were made. This skill does **not**
    ready the PR — the router's `dispatch-reconcile-ready` owns promotion.
-4. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`,
-   sandboxed (it writes one sidecar file and runs read-only git). This is what
-   lets the NEXT pass review only the delta. It sits here, beside the `reviewed`
-   marker, because the two mean the same thing: this review is complete and
-   covered up to that sha. A failure here is not fatal — the next pass simply
-   falls back to `MERGE_BASE` and reviews everything, which is what happens
-   today. Log it and continue.
+4. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`
+   with **`dangerouslyDisableSandbox: true`**. This is what lets the NEXT pass
+   review only the delta. It sits here, beside the `reviewed` marker, because the
+   two mean the same thing: this review is complete and covered up to that sha.
+   A failure here is not fatal — the next pass falls back to `MERGE_BASE` and
+   reviews everything, which is what happens today. Log it and continue.
+
+   **The sandbox override is required, not cautionary.** The sidecar is written
+   to `<repo>/.claude/worktrees/<name>.review-base` — *beside* the worktree, not
+   inside it — and `.claude/rules/sandbox.md:14-17` states that only the
+   session's **own** worktree is writable and that nothing mounts
+   `.claude/worktrees/` itself. Sandboxed, the write fails read-only, the script
+   exits non-zero, this step's own "not fatal, log and continue" swallows it,
+   and every subsequent pass resolves `no-sidecar` — so the entire feature
+   silently never engages while every run still looks clean. Same reason every
+   `dispatch-code-review` call needs the override for its `.code-review-lock`
+   sibling.
+
+   **Run this only when the Workflow ran this session** — same gating as the
+   phase-log write (item 2) and the outcome envelope (item 6), and for a
+   stronger reason. `REVIEWED_HEAD` is bound in Step 1, and the re-entry path
+   documented in the preamble **skips Steps 1–6 entirely**, so on re-entry the
+   variable does not exist. Recording the current HEAD instead is exactly the
+   silent permanent hole warned about just below: at re-entry, HEAD carries the
+   *interrupted* pass's own unreviewed Lane-A and Lane-B fix commits. Skipping
+   is safe and costs nothing but a wider next review; substituting is not.
 
    **Record `REVIEWED_HEAD` — the Step 1 HEAD — not the HEAD at this point.**
    This is a detection decision, not a convenience. Lane A's `--fix` (Step 1b)

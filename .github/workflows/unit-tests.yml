@@ -220,6 +220,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
       - name: Run review-fix /review-plan gate tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-plan-gate.sh
+      - name: Run dispatch-review-plan-gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-review-plan-gate.sh
       - name: Run review-fix skeptic-batching tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-skeptic-batch.sh
       - name: Run dispatch-verify-instrument-invocation tests

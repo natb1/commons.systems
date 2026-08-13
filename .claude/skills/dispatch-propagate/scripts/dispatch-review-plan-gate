@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Constrain a /review-plan verdict into the effort actually passed to
+# dispatch-code-review, and the deadline/poll-cap that effort requires.
+# Usage: dispatch-review-plan-gate < verdict.json
+#
+# Reads the /review-plan verdict as JSON on stdin — or anything at all,
+# including empty input, prose, or a hostile object. Prints key=value lines:
+#   effort=<low|medium|high|xhigh|max>
+#   effort_reason=<one line>
+#   deadline_s=<int>
+#   poll_cap=<int>
+#   await_s=<int>
+#
+# Exit 0 always. This is the FAIL-OPEN seam: any failure at all yields effort
+# `high` with today's 5400s/10-attempt bounds, i.e. exactly today's behaviour.
+#
+# WHY THIS SCRIPT EXISTS RATHER THAN JUST THE JS. The constraint has to bind
+# BEFORE the effort is used, and the effort is used at /review-fix Step 1b —
+# which runs before the Step 2 Workflow. A gate that lives only in review-fix.js
+# executes too late to constrain anything: it would record a constrained value
+# in its log while Step 1b had already launched the real review at whatever the
+# verdict asked for, so the recorded rationale would disagree with what actually
+# ran. That is worse than no gate, because it reads as enforcement.
+#
+# ONE IMPLEMENTATION, NOT TWO. This does not re-implement the rules. It slices
+# the `review plan gate` sentinel region out of .claude/workflows/review-fix.js
+# and evals it, exactly as review-fix-review-plan-probe.mjs does — so the band,
+# the xhigh irreversibility floor, the raise/cheapen asymmetry, and the
+# deadline table have a single home, and test-review-plan-gate.sh covers the
+# same code this script runs. A second copy of these rules in bash would drift
+# from the first, and the direction it would drift is toward being cheaper.
+#
+# Pure: no network, no git, no gh, no writes. Reads two files (this script's
+# sibling probe path and review-fix.js) and stdin.
+set -uo pipefail
+
+PROG=$(basename "$0")
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REVIEW_FIX_JS="$SCRIPT_DIR/../../../workflows/review-fix.js"
+
+# The fail-open answer, emitted by every error path below. Keep these values
+# identical to REVIEW_PLAN_DEADLINES.high / REVIEW_PLAN_DEFAULT_EFFORT in
+# review-fix.js — test-review-plan-gate.sh asserts the JS side, and
+# test-dispatch-review-plan-gate.sh asserts this side agrees with it.
+fail_open() {
+  echo "effort=high"
+  echo "effort_reason=fail-open: $1"
+  echo "deadline_s=5400"
+  echo "poll_cap=10"
+  echo "await_s=540"
+  exit 0
+}
+
+VERDICT=$(cat)
+
+if ! command -v node >/dev/null 2>&1; then
+  fail_open "node is not available to evaluate the gate"
+fi
+if [[ ! -r "$REVIEW_FIX_JS" ]]; then
+  fail_open "cannot read review-fix.js at $REVIEW_FIX_JS"
+fi
+if [[ -z "${VERDICT//[[:space:]]/}" ]]; then
+  fail_open "empty verdict on stdin"
+fi
+
+OUT=$(printf '%s' "$VERDICT" | node "$SCRIPT_DIR/review-fix-review-plan-gate.mjs" "$REVIEW_FIX_JS" 2>/dev/null)
+RC=$?
+
+if [[ $RC -ne 0 || -z "$OUT" ]]; then
+  fail_open "gate evaluation failed (rc=$RC)"
+fi
+if ! printf '%s\n' "$OUT" | grep -q '^effort='; then
+  fail_open "gate produced no effort line"
+fi
+
+printf '%s\n' "$OUT"

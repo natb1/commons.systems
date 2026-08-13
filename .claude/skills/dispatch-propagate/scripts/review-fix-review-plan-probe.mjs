@@ -77,18 +77,23 @@ const {
   REVIEW_PLAN_DEFAULT_EFFORT,
   REVIEW_PLAN_DEADLINES,
   REVIEW_PLAN_AWAIT_S,
+  REVIEW_PLAN_KNOWN_FINDERS,
   reviewPlanEffort,
   reviewPlanFinderSet,
   reviewPlanDeadline,
 } = (function () {
   // eslint-disable-next-line no-eval -- the slice has several top-level statements, not a single expression, so `new Function('return ' + src)()` cannot wrap it // type-safety-ok: eval is required here
   return eval(
-    `(function () { ${gateSlice}\nreturn { REVIEW_PLAN_BAND, REVIEW_PLAN_DEFAULT_EFFORT, REVIEW_PLAN_DEADLINES, REVIEW_PLAN_AWAIT_S, reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline }; })()`
+    `(function () { ${gateSlice}\nreturn { REVIEW_PLAN_BAND, REVIEW_PLAN_DEFAULT_EFFORT, REVIEW_PLAN_DEADLINES, REVIEW_PLAN_AWAIT_S, REVIEW_PLAN_KNOWN_FINDERS, reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline }; })()`
   );
 })();
 
 // Today's full roster for surface=code with app_or_rules — the FLOOR.
 const FLOOR = ['input-validation', 'domain-sweep', 'red-team', 'security-review', 'api-cost'];
+// A NON-code surface floor, so the widen vectors add a KNOWN agent name. Using a
+// prescanned source name like `erosion` here would be wrong twice over: it is
+// not an agent finder, and the allowlist now rejects it.
+const CODE_FLOOR_NOAPP = ['input-validation', 'domain-sweep', 'red-team', 'security-review'];
 
 const results = {};
 
@@ -156,7 +161,11 @@ results.deadline_equality_holds = REVIEW_PLAN_BAND.every((e) => {
 // --- finder set ---------------------------------------------------------------
 results.finders_fail_open = reviewPlanFinderSet(FLOOR, undefined);
 results.finders_no_finder_set = reviewPlanFinderSet(FLOOR, { effort: 'low' });
-results.finders_widen = reviewPlanFinderSet(FLOOR, { finder_set: FLOOR.concat(['erosion']) });
+// A genuine widen: `api-cost` is a KNOWN agent finder absent from the
+// no-app_or_rules floor, so a verdict may add it on the semantics of the diff.
+results.finders_widen = reviewPlanFinderSet(CODE_FLOOR_NOAPP, {
+  finder_set: CODE_FLOOR_NOAPP.concat(['api-cost']),
+});
 // A verdict that OMITS floor lenses must not remove them.
 results.finders_removal_refused = reviewPlanFinderSet(FLOOR, { finder_set: ['red-team'] });
 results.finders_empty_refused = reviewPlanFinderSet(FLOOR, { finder_set: [] });
@@ -166,9 +175,24 @@ results.finders_empty_refused = reviewPlanFinderSet(FLOOR, { finder_set: [] });
 results.finders_empty_floor_widen = reviewPlanFinderSet([], { finder_set: ['red-team'] });
 results.finders_empty_floor_fail_open = reviewPlanFinderSet([], undefined);
 // Junk entries are dropped, not propagated into a spawn loop.
-results.finders_junk = reviewPlanFinderSet(FLOOR, {
-  finder_set: FLOOR.concat([null, 42, '', 'erosion', 'erosion']),
+results.finders_junk = reviewPlanFinderSet(CODE_FLOOR_NOAPP, {
+  finder_set: CODE_FLOOR_NOAPP.concat([null, 42, '', 'api-cost', 'api-cost']),
 });
 results.finders_bad_base = reviewPlanFinderSet(undefined, { finder_set: ['red-team'] });
+
+// --- the allowlist ------------------------------------------------------------
+// A name outside the known agent roster must NEVER reach the spawn loop.
+// `erosion`/`codeql`/`npm` are PRESCANNED sources, not agent finders: launching
+// one as an agent gives it a brief reading "Domain: undefined" and tags its
+// findings with a Source that collides with the real prescanned one in dedup.
+results.finders_unknown_name = reviewPlanFinderSet(FLOOR, {
+  finder_set: FLOOR.concat(['erosion', 'codeql', 'npm']),
+});
+// A prototype-shaped name would reach DOMAIN_PROMPTS[name] as an inherited
+// function and stringify into a prompt.
+results.finders_proto_name = reviewPlanFinderSet(FLOOR, {
+  finder_set: FLOOR.concat(['__proto__', 'constructor', 'toString']),
+});
+results.known_finders = REVIEW_PLAN_KNOWN_FINDERS;
 
 process.stdout.write(JSON.stringify(results) + '\n');

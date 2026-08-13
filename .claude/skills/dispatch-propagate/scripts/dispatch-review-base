@@ -30,15 +30,32 @@
 # today's full review. A planted or stale sidecar can only ever make the review
 # WIDER than it should be, never narrower.
 #
-# NOT-AHEAD-OF-MERGE-BASE, the guard a first reading tends to drop. Reachable
-# from HEAD is not sufficient on its own. Sidecars survive `git worktree remove`
-# (every removal path targets `<root>/<id>`, and the sidecar is the sibling
-# `<root>/<id>.<suffix>` — verified against .claude/hooks/worktree-remove.sh,
-# lib-session-reap.sh and dispatch-sweep), so a sidecar written for a node's
-# PREVIOUS, already-merged PR outlives that PR. After the merge its sha is an
-# ancestor of the new merge base, hence still reachable from HEAD — and
-# narrowing to it would skip the entire new PR. Requiring the recorded sha to be
-# a DESCENDANT of the merge base rejects exactly that case.
+# THE STALE-SIDECAR GUARD, and why it is phrased as "not an ancestor of the
+# merge base" rather than "a descendant of it".
+#
+# Reachable from HEAD is not sufficient on its own. Sidecars survive
+# `git worktree remove` (every removal path targets `<root>/<id>`, and the
+# sidecar is the sibling `<root>/<id>.<suffix>` — verified against
+# .claude/hooks/worktree-remove.sh, lib-session-reap.sh and dispatch-sweep), so
+# a sidecar written for a node's PREVIOUS, already-merged PR outlives that PR.
+# After that merge its sha is an ancestor of the new merge base, hence still
+# reachable from HEAD — and narrowing to it would skip the entire new PR.
+#
+# The obvious phrasing — require the recorded sha to be a DESCENDANT of the
+# merge base — is WRONG, and wrong in the direction that silently disables this
+# whole mechanism. provision-node-worktree merges origin/main into the branch
+# before every phase (its step 4, "the merged-tree guarantee every phase runs
+# under"), so on a re-review MERGE_BASE is the origin/main tip that was just
+# merged in. The previously-reviewed branch head is never a descendant of a
+# commit that landed on main after it. A descendant test therefore rejects the
+# recorded sha on every pass where main moved between reviews — which is nearly
+# every pass — and the lane falls back to the full re-review this script exists
+# to prevent, reporting a plausible-looking reason while doing so.
+#
+# The stale case is distinguished by the INVERSE test. A previous PR's sha, once
+# merged, IS an ancestor of the current merge base; a live branch head on the
+# current PR is not, because it is not on main at all. So: reject when the
+# candidate is an ancestor of the merge base, and accept otherwise.
 #
 # WHERE THE SIDECAR LIVES, and why not `tmp/code-review-$N`. Keyed on the
 # reviewed WORKTREE's own basename, beside the worktree and never inside it:
@@ -146,11 +163,12 @@ CANDIDATE=$(git -C "$WORKTREE" rev-parse --verify --quiet "$RAW^{commit}" 2>/dev
 [[ -n "$CANDIDATE" ]] || fallback unreachable
 git -C "$WORKTREE" merge-base --is-ancestor "$CANDIDATE" HEAD 2>/dev/null || fallback unreachable
 
-# Strictly ahead of the merge base — see NOT-AHEAD-OF-MERGE-BASE above. `==`
-# is allowed (a prior review that covered exactly the merge base narrows to
-# nothing, which is correct and harmless); an ANCESTOR of it is not.
-git -C "$WORKTREE" merge-base --is-ancestor "$MB_RESOLVED" "$CANDIDATE" 2>/dev/null \
-  || fallback not-ahead-of-merge-base
+# Not already merged into the branch's base — see THE STALE-SIDECAR GUARD above.
+# `CANDIDATE == MB_RESOLVED` is an ancestor of itself and so is rejected too,
+# which is the fail-closed direction and costs only a full review.
+if git -C "$WORKTREE" merge-base --is-ancestor "$CANDIDATE" "$MB_RESOLVED" 2>/dev/null; then
+  fallback already-in-merge-base
+fi
 
 echo "review_base=$CANDIDATE"
 echo "review_base_source=sidecar"

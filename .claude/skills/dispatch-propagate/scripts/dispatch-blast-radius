@@ -130,7 +130,15 @@ if (( symbol_total > MAX_SYMBOLS )); then
   truncated=true
 fi
 
-considered=$(printf '%s\n' "$symbols" | head -n "$MAX_SYMBOLS")
+# `awk NR<=N`, NOT `head -n N`. `head` exits after N lines and closes the pipe
+# while `printf` is still writing; once the symbol list exceeds the 64KB pipe
+# buffer — reachable on a large delta — `printf` takes SIGPIPE, `pipefail`
+# propagates it, and `set -e` kills the script with NO output at all. The
+# caller's `$(...)` then captures an empty string, so the required-reading list
+# silently disappears on exactly the large diffs that need it. Same SIGPIPE
+# class as the `grep -qE`/`grep -cE` correction in dispatch-api-call-site:37-46;
+# awk reads stdin to EOF, so no stage is ever SIGPIPE'd.
+considered=$(printf '%s\n' "$symbols" | awk -v n="$MAX_SYMBOLS" 'NR<=n')
 [[ -n "$symbols" ]] || considered=""
 
 # --- reference search --------------------------------------------------------
@@ -187,7 +195,8 @@ if [[ -n "$files" ]]; then
 fi
 if (( file_total > MAX_FILES )); then
   truncated=true
-  files=$(printf '%s\n' "$files" | head -n "$MAX_FILES")
+  # awk, not head — same SIGPIPE reasoning as the symbol cap above.
+  files=$(printf '%s\n' "$files" | awk -v n="$MAX_FILES" 'NR<=n')
   file_total=$MAX_FILES
 fi
 

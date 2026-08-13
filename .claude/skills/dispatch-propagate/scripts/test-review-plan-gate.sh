@@ -103,8 +103,8 @@ assert_eq "every finder verdict carries a non-empty reason" "true" \
 # `api-cost` at a MEASURED ZERO finding rate and widened its trigger instead.
 # Enforced as a union, because once a removal reaches the roster it is
 # indistinguishable from a removal for cost.
-assert_eq "verdict may widen the roster" \
-  '["input-validation","domain-sweep","red-team","security-review","api-cost","erosion"]' \
+assert_eq "verdict may widen the roster with a KNOWN finder" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
   "$(fc '.finders_widen.set')"
 assert_eq "verdict omitting floor lenses does NOT remove them" \
   '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
@@ -122,10 +122,37 @@ assert_eq "empty floor + no verdict → stays empty" '[]' "$(fc '.finders_empty_
 
 # Junk entries never reach a spawn loop.
 assert_eq "junk finder_set entries are dropped and deduped" \
-  '["input-validation","domain-sweep","red-team","security-review","api-cost","erosion"]' \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
   "$(fc '.finders_junk.set')"
 assert_eq "a non-array base degrades to an empty floor, not a throw" '["red-team"]' \
   "$(fc '.finders_bad_base.set')"
+
+# --- THE ALLOWLIST -----------------------------------------------------------
+# The verdict is derived from text the diff under review can influence, and
+# reviewPlanFinderSet is the one place in this region where it reaches a SPAWN
+# LOOP. An unknown name is not inert: launchFinder -> finderPrompt falls through
+# to `Domain: ${DOMAIN_PROMPTS[name]}`, so it launches a real Opus subagent whose
+# entire brief reads "Domain: undefined", and tags its findings with that Source.
+assert_eq "known-finder roster is exactly the agent finders" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(fc '.known_finders')"
+
+# erosion / codeql / npm are PRESCANNED sources, not agent finders. Spawning one
+# as an agent also collides with the real prescanned source in dedup and in
+# per-lens accounting.
+assert_eq "prescanned source names are rejected, not spawned" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(fc '.finders_unknown_name.set')"
+assert_eq "rejected names are RECORDED, not silently dropped" "true" \
+  "$(printf '%s' "$out" | jq '.finders_unknown_name.reason | test("REJECTED")')"
+assert_eq "rejection reason names the offending entries" "true" \
+  "$(printf '%s' "$out" | jq '.finders_unknown_name.reason | test("erosion") and test("codeql") and test("npm")')"
+
+# A prototype-shaped name reaches DOMAIN_PROMPTS[name] as an INHERITED function
+# and stringifies into the prompt. The allowlist is what stops it.
+assert_eq "prototype-shaped names are rejected" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(fc '.finders_proto_name.set')"
 
 # --- DEADLINE SCALING --------------------------------------------------------
 # Raising effort above `high` without also raising --deadline-seconds AND Step

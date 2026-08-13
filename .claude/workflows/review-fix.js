@@ -786,25 +786,56 @@ function reviewPlanDeadline(effort) {
 // roster it is indistinguishable from a removal for cost, and the rule that
 // forbids the second cannot be enforced while permitting the first. A union is
 // the only form of this gate that is mechanically checkable.
+// The ONLY names that may be added. A widen is a widen within the known agent
+// roster, never an invitation to name an arbitrary agent.
+//
+// This is an allowlist rather than a filter on `DOMAIN_PROMPTS` because the
+// failure it prevents is silent, not loud: `launchFinder` → `finderPrompt` has
+// explicit branches for `security-review`, `api-cost` and `domain-sweep` and
+// falls through to `Domain: ${DOMAIN_PROMPTS[name]}` for everything else. An
+// unknown name therefore launches a real Opus subagent whose entire brief reads
+// "Domain: undefined", and its findings come back tagged with that Source —
+// colliding in dedup and in per-lens accounting with the prescanned `codeql` /
+// `npm` / `erosion` sources, which are NOT agent finders and must never be
+// spawned as one. A `__proto__`- or `constructor`-shaped name would reach
+// `DOMAIN_PROMPTS[name]` as an inherited function and stringify into the prompt.
+//
+// The verdict is derived from text the diff under review can influence, and
+// this is the one place in this region where it reaches a spawn loop. Constrain
+// it here.
+const REVIEW_PLAN_KNOWN_FINDERS = [
+  'input-validation',
+  'domain-sweep',
+  'red-team',
+  'security-review',
+  'api-cost',
+];
+
 function reviewPlanFinderSet(base, plan) {
   const floor = Array.isArray(base) ? base.slice() : [];
   if (!plan || typeof plan !== 'object' || Array.isArray(plan) || !Array.isArray(plan.finder_set)) {
     return { set: floor, reason: 'fail-open: full roster (no usable finder_set in the verdict)' };
   }
   const added = [];
+  const rejected = [];
   for (const name of plan.finder_set) {
     if (typeof name !== 'string' || !name) continue;
     if (floor.indexOf(name) !== -1 || added.indexOf(name) !== -1) continue;
+    if (REVIEW_PLAN_KNOWN_FINDERS.indexOf(name) === -1) {
+      if (rejected.indexOf(name) === -1) rejected.push(name);
+      continue;
+    }
     added.push(name);
   }
   const dropped = floor.filter((n) => plan.finder_set.indexOf(n) === -1);
-  const reason = added.length
-    ? `widened by ${added.join(', ')}`
-    : 'roster unchanged';
-  const note = dropped.length
-    ? `; ${dropped.length} floor lens(es) omitted by the verdict and RETAINED anyway (${dropped.join(', ')}) — a lens is never removed for cost or yield`
-    : '';
-  return { set: floor.concat(added), reason: reason + note };
+  let reason = added.length ? `widened by ${added.join(', ')}` : 'roster unchanged';
+  if (dropped.length) {
+    reason += `; ${dropped.length} floor lens(es) omitted by the verdict and RETAINED anyway (${dropped.join(', ')}) — a lens is never removed for cost or yield`;
+  }
+  if (rejected.length) {
+    reason += `; ${rejected.length} unknown finder name(s) REJECTED (${rejected.join(', ')}) — not in the known agent roster`;
+  }
+  return { set: floor.concat(added), reason };
 }
 // <<< review plan gate <<<
 
@@ -1007,7 +1038,20 @@ const LANE_A_BLURB = [
 function diffContext(args) {
   const fullBase = args.merge_base || 'origin/main';
   const base = args.review_base || fullBase;
-  const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
+  // The file list must describe the range the finder is told to review. On a
+  // re-review, `changed_files` is the WHOLE PR's list (the context pack computes
+  // it from merge_base), so pairing it with a narrowed base tells the finder
+  // "review only the delta" and then hands it an inventory of every file the PR
+  // ever touched. The file list is the more concrete instruction of the two, so
+  // the finder either reviews the full PR anyway (no saving at all) or treats
+  // the list as the delta (wrong scope). Prefer the delta list when the caller
+  // supplies one; fall back to changed_files, which is correct whenever
+  // review_base === merge_base.
+  const deltaFiles =
+    base !== fullBase && Array.isArray(args.review_changed_files) && args.review_changed_files.length
+      ? args.review_changed_files
+      : args.changed_files || [];
+  const filesStr = deltaFiles.join(', ') || '(see git diff HEAD)';
   const lines = [
     `Review ONLY the pending diff against \`${base}\`. Changed files: ${filesStr}.`,
     'Read full files for the context needed to judge each change, but report findings only',
@@ -1036,6 +1080,22 @@ function diffContext(args) {
       'NOTE: that required-reading list was TRUNCATED at its cap — it is not exhaustive.',
       'Treat out-of-delta callers as under-covered and widen your reading where the delta',
       'changes a shared contract.',
+    );
+  }
+  // The generic-symbol drop needs its OWN warning, and it is the one that
+  // matters most. A symbol referenced by more out-of-diff files than the
+  // classifier's threshold is dropped as carrying no locality — but that fires
+  // precisely when the delta changes a WIDELY-USED helper, which is the largest
+  // blast radius there is. Without this line, that case emits no reading list
+  // and no truncation flag, byte-identical to "this delta has no out-of-diff
+  // callers at all" — the most dangerous possible silence.
+  const generic = Number(args.blast_radius_generic || 0);
+  if (generic > 0) {
+    lines.push(
+      `NOTE: ${generic} changed symbol(s) were too widely referenced to list callers for.`,
+      'That means the delta touches a shared helper, NOT that it has no callers — the',
+      'out-of-delta reading list is silent about exactly the highest-fan-out symbols.',
+      'If the delta changes any of their contracts, check callers yourself.',
     );
   }
   const prior = args.prior_findings || [];

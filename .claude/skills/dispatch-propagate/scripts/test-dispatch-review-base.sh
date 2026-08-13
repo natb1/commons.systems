@@ -82,16 +82,80 @@ printf '%s\n' "$BASE_SHA" > "$SIDECAR"
 git -C "$WT" checkout -q -b later
 LATER_BASE=$C2
 out=$(cd "$WT" && "$SUT" --merge-base "$LATER_BASE")
-assert_eq "sidecar behind the merge base → fall back" "$LATER_BASE" "$(field "$out" review_base)"
-assert_eq "sidecar behind the merge base → source" "not-ahead-of-merge-base" "$(field "$out" review_base_source)"
+assert_eq "sidecar already in the merge base → fall back" "$LATER_BASE" "$(field "$out" review_base)"
+assert_eq "sidecar already in the merge base → source" "already-in-merge-base" "$(field "$out" review_base_source)"
 git -C "$WT" checkout -q main
 
-# A sidecar EQUAL to the merge base is allowed — a prior review that covered
-# exactly the merge base narrows to nothing, which is correct and harmless.
+# A sidecar EQUAL to the merge base is rejected: it is an ancestor of itself.
+# Fail-closed direction, and it costs only a full review of a delta that is
+# empty anyway.
 printf '%s\n' "$BASE_SHA" > "$SIDECAR"
 out=$(cd "$WT" && "$SUT" --merge-base "$BASE_SHA")
-assert_eq "sidecar == merge base → accepted" "$BASE_SHA" "$(field "$out" review_base)"
-assert_eq "sidecar == merge base → source is sidecar" "sidecar" "$(field "$out" review_base_source)"
+assert_eq "sidecar == merge base → rejected (fail-closed)" "$BASE_SHA" "$(field "$out" review_base)"
+assert_eq "sidecar == merge base → source" "already-in-merge-base" "$(field "$out" review_base_source)"
+
+# ---------------------------------------------------------------------------
+# THE MERGED-MAIN RE-REVIEW — the case the whole mechanism exists for, and the
+# one a "must be a DESCENDANT of the merge base" guard silently breaks.
+#
+# provision-node-worktree merges origin/main into the branch before EVERY phase.
+# So on a re-review MERGE_BASE is the origin/main tip that was just merged in,
+# and the previously-reviewed branch head is NOT a descendant of it — that
+# commit landed on main after the review happened. A descendant test therefore
+# rejects a perfectly good recorded sha on every pass where main moved, which is
+# nearly every pass, and the lane falls back to the full re-review this script
+# exists to prevent.
+#
+# Reproduce it exactly: a branch, a review, main advances, main is merged in, a
+# fix commit lands, and the second pass must still narrow to the reviewed sha.
+MM="$RB_TMP/.claude/worktrees/tactic-mergedmain"
+mkdir -p "$MM"
+git -C "$MM" init -q -b main
+git -C "$MM" config user.email "test@example.com"
+git -C "$MM" config user.name "Test"
+mm_commit() {
+  printf '%s\n' "$2" > "$MM/$1"
+  git -C "$MM" add -A
+  git -C "$MM" commit -qm "$1"
+  git -C "$MM" rev-parse HEAD
+}
+MM_SIDECAR="$RB_TMP/.claude/worktrees/tactic-mergedmain.review-base"
+
+MM_M1=$(mm_commit main1.txt m1)          # main tip at branch time
+git -C "$MM" checkout -q -b feature
+MM_WORK=$(mm_commit feat.txt work)       # the PR's work
+# Pass 1 reviews and records the branch head.
+out=$(cd "$MM" && "$SUT" --record "$MM_WORK")
+assert_eq "merged-main: pass 1 records the branch head" "$MM_WORK" "$(field "$out" review_base_recorded)"
+
+# main advances while the PR is open.
+git -C "$MM" checkout -q main
+MM_M2=$(mm_commit main2.txt m2)
+# The tick merges origin/main into the branch before the next phase.
+git -C "$MM" checkout -q feature
+git -C "$MM" merge -q --no-edit main
+# /fix-checks pushes one CI-repair commit.
+MM_FIX=$(mm_commit fix.txt repair)
+
+# MERGE_BASE is now M2 — the main tip that was merged in.
+MM_MB=$(git -C "$MM" merge-base HEAD main)
+assert_eq "merged-main: the merge base IS the advanced main tip" "$MM_M2" "$MM_MB"
+# And the recorded sha is NOT a descendant of it — the exact condition that
+# would make a descendant test reject.
+rc=0; git -C "$MM" merge-base --is-ancestor "$MM_MB" "$MM_WORK" || rc=$?
+assert_eq "merged-main: recorded sha is NOT a descendant of the merge base" "1" "$rc"
+
+# The guard must still accept it, so pass 2 reviews only the delta.
+out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "merged-main: pass 2 STILL narrows to the reviewed sha" "$MM_WORK" "$(field "$out" review_base)"
+assert_eq "merged-main: pass 2 source is sidecar" "sidecar" "$(field "$out" review_base_source)"
+
+# And the stale case must still be rejected in the SAME repo shape — proving the
+# guard discriminates rather than just accepting everything reachable.
+printf '%s\n' "$MM_M1" > "$MM_SIDECAR"
+out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "merged-main: a sha already on main is still rejected" "$MM_MB" "$(field "$out" review_base)"
+assert_eq "merged-main: rejected with the stale reason" "already-in-merge-base" "$(field "$out" review_base_source)"
 
 # --- outside a .claude/worktrees root ----------------------------------------
 # A plain clone (a hand-run review, the test suite's throwaway repo) has no
