@@ -392,10 +392,18 @@ done
 echo "Test: review-fix SKILL.md Step 1b passes a rev-range --target"
 RF_SKILL="$(cd "$SCRIPT_DIR/../../.." && pwd)/skills/review-fix/SKILL.md"
 assert_eq "SKILL.md: readable" "1" "$([[ -r "$RF_SKILL" ]] && echo 1 || echo 0)"
+# The call site now passes REVIEW_BASE, not MERGE_BASE
+# (tactic-review-delta-base-and-blast-radius): a re-review diffs from the sha the
+# previous pass covered, falling back to MERGE_BASE whenever
+# dispatch-review-base cannot vouch for a narrower one. The row's MEANING is
+# unchanged and this is not a weakening — it pins exactly what it always
+# pinned, that Step 1b passes a RANGE and never a bare commit-ish. The bare-SHA
+# guard below is widened to cover BOTH variable names, so renaming the base
+# cannot be used to slip a bare SHA past it.
 assert_eq "SKILL.md: Step 1b --target is a range" "1" \
-  "$(grep -c -F -- '--target "$MERGE_BASE..HEAD"' "$RF_SKILL" || true)"
+  "$(grep -c -F -- '--target "$REVIEW_BASE..HEAD"' "$RF_SKILL" || true)"
 assert_eq "SKILL.md: no bare-SHA --target call site" "0" \
-  "$(grep -c -E -- '--target "\$MERGE_BASE"' "$RF_SKILL" || true)"
+  "$(grep -c -E -- '--target "\$(REVIEW_BASE|MERGE_BASE)"' "$RF_SKILL" || true)"
 
 # ============================================================================
 # Test 13: a planted summary.txt in --out-dir never short-circuits the review
