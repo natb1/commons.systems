@@ -147,8 +147,40 @@ assert_eq "merged-main: recorded sha is NOT a descendant of the merge base" "1" 
 
 # The guard must still accept it, so pass 2 reviews only the delta.
 out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
-assert_eq "merged-main: pass 2 STILL narrows to the reviewed sha" "$MM_WORK" "$(field "$out" review_base)"
-assert_eq "merged-main: pass 2 source is sidecar" "sidecar" "$(field "$out" review_base_source)"
+
+# THE CHURN CANCELLATION. The recorded sha is accepted, but it is NOT usable as
+# the base directly: `MM_WORK..HEAD` is two-dot, so it re-admits main2.txt — the
+# commit that reached this branch only via the origin/main merge, and that was
+# already reviewed on main. The base is therefore the synthetic merge of the
+# recorded sha with the merge base, which cancels exactly that churn.
+#
+# Non-vacuity first: prove the naive range really does admit the churn, so the
+# assertions below are testing a live condition rather than an empty one.
+naive_files=$(git -C "$MM" diff --name-only "$MM_WORK..HEAD" | sort | tr '\n' ' ')
+assert_eq "merged-main: the NAIVE range admits main churn (the bug)" \
+  "fix.txt main2.txt " "$naive_files"
+
+assert_eq "merged-main: pass 2 source is sidecar-rebased" "sidecar-rebased" "$(field "$out" review_base_source)"
+assert_eq "merged-main: pass 2 still reports the recorded sha" "$MM_WORK" "$(field "$out" review_base_recorded)"
+
+MM_RB=$(field "$out" review_base)
+rc=0; [[ "$MM_RB" == "$MM_WORK" ]] || rc=1
+assert_eq "merged-main: the base is NOT the raw recorded sha" "1" "$rc"
+
+# The payload assertion: the delta is the CI-repair commit and nothing else.
+fixed_files=$(git -C "$MM" diff --name-only "$MM_RB..HEAD" | sort | tr '\n' ' ')
+assert_eq "merged-main: the narrowed range is the repair commit alone" "fix.txt " "$fixed_files"
+
+# The synthetic base must be reproducible: dispatch-code-review's run-dedup
+# identity includes target_base_sha, so a drifting base defeats the resume cache.
+out2=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "merged-main: the synthetic base is deterministic" "$MM_RB" "$(field "$out2" review_base)"
+
+# A branch that has NOT re-merged main since its review needs no synthetic base:
+# the recorded sha already contains the merge base, so it is returned as-is.
+out3=$(cd "$MM" && "$SUT" --merge-base "$MM_M1")
+assert_eq "merged-main: no churn to cancel → the recorded sha itself" "$MM_WORK" "$(field "$out3" review_base)"
+assert_eq "merged-main: no churn to cancel → plain sidecar source" "sidecar" "$(field "$out3" review_base_source)"
 
 # And the stale case must still be rejected in the SAME repo shape — proving the
 # guard discriminates rather than just accepting everything reachable.
@@ -202,5 +234,64 @@ assert_eq "resolve with no sidecar exits 0" "0" "$rc"
 printf 'garbage\n' > "$SIDECAR"
 rc=0; (cd "$WT" && "$SUT" --merge-base "$BASE_SHA") >/dev/null 2>&1 || rc=$?
 assert_eq "resolve with a malformed sidecar exits 0" "0" "$rc"
+
+# --- the git-version gate on `merge-tree --write-tree` ------------------------
+#
+# `--write-tree` needs git >= 2.38. On older git the flag is not recognised as a
+# mode switch and the command dies — which, WITHOUT the version gate, is
+# indistinguishable from a merge conflict: the seam would degrade to a full
+# review on every pass, silently and forever, while the log blamed some branch
+# for conflicting. These rows pin the gate, and pin that it stays fail-CLOSED.
+#
+# The stub passes everything through to the real git except `version`, so the
+# churn path is reached exactly as it would be in production.
+REALGIT=$(command -v git)
+STUB_DIR="$RB_TMP/stub-oldgit"
+mkdir -p "$STUB_DIR"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' '# Report an ancient version; delegate everything else to the real git.'
+  printf '%s\n' 'for a in "$@"; do'
+  printf '%s\n' '  if [ "$a" = "version" ]; then echo "git version 2.30.0"; exit 0; fi'
+  printf '%s\n' 'done'
+  printf 'exec %s "$@"\n' "$REALGIT"
+} > "$STUB_DIR/git"
+chmod +x "$STUB_DIR/git"
+
+# Re-record the reviewed sha: the stale-case block just above overwrote the
+# sidecar with a sha already on main, which would short-circuit before the gate.
+printf '%s\n' "$MM_WORK" > "$MM_SIDECAR"
+
+out=$(cd "$MM" && PATH="$STUB_DIR:$PATH" "$SUT" --merge-base "$MM_MB")
+assert_eq "old git: named as unsupported, not blamed on a conflict" \
+  "churn-merge-tree-unsupported" "$(field "$out" review_base_source)"
+assert_eq "old git: falls CLOSED to the merge base" "$MM_MB" "$(field "$out" review_base)"
+
+# Non-vacuity: the very same sidecar and merge base take the synthetic path on
+# the real git, so the two rows above are the GATE firing, not the fixture
+# having drifted into some other fallback.
+out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "old git: same inputs on real git still take the synthetic path" \
+  "sidecar-rebased" "$(field "$out" review_base_source)"
+
+# An unparseable version is its own verdict — a git whose `version` output this
+# script cannot read is a different operational problem from a git that is
+# merely too old, and collapsing them would send an operator to the wrong fix.
+STUB2_DIR="$RB_TMP/stub-junkgit"
+mkdir -p "$STUB2_DIR"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'for a in "$@"; do'
+  printf '%s\n' '  if [ "$a" = "version" ]; then echo "git version wat"; exit 0; fi'
+  printf '%s\n' 'done'
+  printf 'exec %s "$@"\n' "$REALGIT"
+} > "$STUB2_DIR/git"
+chmod +x "$STUB2_DIR/git"
+
+out=$(cd "$MM" && PATH="$STUB2_DIR:$PATH" "$SUT" --merge-base "$MM_MB")
+assert_eq "unparseable git version: its own verdict" \
+  "churn-git-version-unknown" "$(field "$out" review_base_source)"
+assert_eq "unparseable git version: falls CLOSED to the merge base" \
+  "$MM_MB" "$(field "$out" review_base)"
 
 report_results
