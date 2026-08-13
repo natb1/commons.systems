@@ -47,11 +47,27 @@ clarifications:
       default row set for the plan view on that basis. The author caught it and
       directed the correction. The mis-modelling is one-directional and
       non-destructive as recorded, but it did propagate into a design
-      recommendation before being caught."
+      recommendation before being caught. CORRECTED SAME DAY (2026-08-13),
+      because the entry above overstated what landed. The two sites did NOT land
+      together. graph-commit rebuilds its edit on an intentions/-only base, so
+      it silently EXCLUDED the .claude/skills/align/SKILL.md change from the
+      commit it pushed — 405bdae8 carries site 2 (tactic-graph-native-dispatch)
+      and this node's own disposition, but NOT site 1. Site 1 is therefore open
+      at PR 3081 and the skill prose on main is still stale. phase is reverted
+      to null accordingly: this node is not done until 3081 merges, and leaving
+      it done would have left the graph asserting a fix that main does not carry
+      — the same class of false record the node itself exists to correct.
+      MECHANISM WORTH KNOWING for any future round that pairs a graph edit with
+      a non-graph file edit: graph-commit is not a general commit path. It lands
+      intentions/ only, reports 'landed' for the ids it was given, and says
+      nothing about a non-intentions change sitting in the same worktree — which
+      it also resets away on exit. Land the non-graph half on its own branch and
+      verify it against origin/main separately; do not infer it from
+      graph-commit's verdict."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: done
+phase: null
 execution: null
 validates: []
 blocked_by: []
