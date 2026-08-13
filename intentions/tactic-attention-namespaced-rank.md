@@ -231,12 +231,8 @@ execution:
   markers:
     - planned
     - qa-done
-    - reviewed
   strategy_fingerprint: null
-  fix:
-    since: 2026-08-13
-    attempt: 2
-    pushed_sha: 6e1f5770abd44a9cc6b3f967a1c0ab133d089aaa
+  fix: null
   conflict: null
   completion: null
   lane_pass: null
