@@ -40,51 +40,34 @@ system` on a commit.
 ## Tree-updating git ops touching read-only paths
 
 `git merge`, `git checkout`, `git rebase`, `git reset`, and `git worktree remove`
-update the working tree **non-transactionally**: they write files one at a time
-and abort on the first failure. When such an op touches files under the read-only
-`denyWithinAllow` carve-out paths — `.claude/skills/`, `.claude/hooks/`, and the
-other `.claude/` config carve-outs — it:
-
-1. Writes the writable files successfully.
-2. Aborts with an error like:
+update the working tree **non-transactionally** — file by file, aborting on the
+first failure. Against the read-only `denyWithinAllow` carve-outs
+(`.claude/skills/`, `.claude/hooks/`, the other `.claude/` config paths) such an
+op writes the writable files, aborts, and leaves HEAD unmoved — so the written
+files are left modified-but-uncommitted, indistinguishable from a stray manual
+edit:
 
 ```
 error: unable to unlink old '.claude/skills/...': Read-only file system
-```
-
-3. Leaves HEAD unmoved.
-
-The result: the already-written writable files are left modified-but-uncommitted,
-indistinguishable from a stray manual edit.
-
-**Such ops must run with `dangerouslyDisableSandbox: true`.**
-
-Canonical case: `dispatch-select-tick` (run by the headless `dispatch-tick`)
-runs `git fetch origin main && git merge --ff-only origin/main` on the `main`
-worktree. `origin/main` frequently carries `.claude/skills/**` changes (the
-dispatch skills are actively developed), so this sync routinely hits the hazard.
-It must run with `dangerouslyDisableSandbox: true`.
-
-Canonical case: `git worktree remove` on a **sibling** worktree, whose checkout is
-under the read-only root. Sandboxed, it deletes what it can — including the
-target's `.git` file — then aborts:
-
-```
 error: failed to delete '.../tactic-...': Read-only file system
 error: failed to delete '.git/worktrees/tactic-...': Device or resource busy
 ```
 
-The `Device or resource busy` half has its own cause: the sandbox overlays
-`/dev/null` onto `.git/worktrees/<name>/config.worktree`, and a mount point cannot
-be unlinked. Retrying does not recover — the second attempt fails validation with
-`'.../.git' is not a .git file, error code 7`, because the first attempt already
-destroyed the file the second validates against. So set
-`dangerouslyDisableSandbox: true` on the *first* attempt. Once partially deleted,
-recover with `rm -rf <path>` then `git worktree prune`.
+(`Device or resource busy`: the sandbox overlays `/dev/null` onto
+`.git/worktrees/<name>/config.worktree`, and a mount point cannot be unlinked.)
 
-Run it **without** `--force`, so git's own clean-check still gates the removal, and
-confirm `git rev-list --count origin/main..<branch>` is 0 **after a fresh fetch** —
-a stale local `origin/main` makes an unmerged branch look merged.
+**Such ops must run with `dangerouslyDisableSandbox: true`** — set on the
+**first** attempt, because a half-deleted worktree cannot be recovered by
+retrying: the retry fails `'.../.git' is not a .git file, error code 7`, the
+first attempt having destroyed the file the second validates against. Recover a
+half-deleted worktree with `rm -rf <path>` then `git worktree prune`.
+
+The procedures themselves live in code — run these rather than hand-running the
+git command: `sync_main_checkout` (`lib.sh`) for the main-checkout sync, whose
+header carries the requirement (`dispatch-select-tick` is its canonical caller),
+and `.claude/skills/dispatch-propagate/scripts/remove-worktree` for removal
+(fresh fetch, content safety gate, no `--force`, partial-delete recovery,
+verified post-state).
 
 ## gh CLI (GitHub API)
 

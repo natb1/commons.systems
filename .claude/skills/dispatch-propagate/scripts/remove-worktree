@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# remove-worktree <absolute-path-to-worktree>
+#
+# The one safe way to remove a git worktree in this repo. Encodes, as code, the
+# procedure that used to live as prose in .claude/rules/sandbox.md
+# ("Tree-updating git ops touching read-only paths"): validate the target,
+# refuse the footguns, fetch before judging, gate on CONTENT, remove without
+# --force, and — if the sandbox tore the checkout in half anyway — recover and
+# VERIFY rather than assume.
+#
+# CALLER MUST SET `dangerouslyDisableSandbox: true`.
+# A script cannot grant itself the override — only the caller (the Bash tool
+# call that runs this) sets it. Nothing in here can compensate for its absence.
+#
+# SET IT ON THE **FIRST** ATTEMPT. `git worktree remove` updates the working
+# tree non-transactionally. Sandboxed against a sibling worktree (whose checkout
+# inherits the read-only root) it deletes what it can — INCLUDING the target's
+# `.git` file — and then aborts. Retrying the same command does not recover:
+# the second attempt fails validation with `'.../.git' is not a .git file, error
+# code 7`, because the first attempt already destroyed the file the second
+# validates against. This script detects that half-deleted state and recovers it
+# (`rm -rf` + `git worktree prune`), but a caller that only remembers the
+# override after the first failure has already paid for it.
+#
+# SAFETY MODEL — fail closed at every step. Every unknown (a git probe that
+# errors, a fetch that fails, a post-state that cannot be read) KEEPS the
+# worktree. The only exit-0 path is a verified removal.
+#
+# The unlanded-work gate judges by CONTENT, not commits-ahead: GitHub
+# squash-merges, so a perfectly safe branch routinely reads many commits ahead
+# of origin/main. Same predicates as `session_reap_node`
+# (lib-session-reap.sh, gates 7a/7b) — clean tracked tree, plus
+# `git diff --quiet origin/main HEAD -- . ':!intentions'`. That function reaps
+# dispatch SESSIONS (registry rows, `claude rm`, dispositions) and is
+# deliberately left alone; this is the standalone worktree primitive with no
+# session semantics.
+#
+# The sync half of the sandbox hazard already has a code home —
+# `sync_main_checkout` (lib.sh) — and is not duplicated here.
+#
+# Usage:  remove-worktree /abs/path/to/.claude/worktrees/<name>
+# Prints: `removed` or `removed-after-recovery` on stdout; diagnostics on stderr.
+#
+# Exit codes:
+#   0   worktree gone AND deregistered, verified
+#   2   usage / not an absolute path
+#   3   not a registered worktree
+#   4   refused: that is the current worktree (cwd is inside it)
+#   5   refused: primary checkout, or `main` is checked out there
+#   6   fresh fetch of origin main failed (safety cannot be judged)
+#   7   refused: uncommitted tracked changes
+#   8   a git probe failed (unknown state → keep)
+#   9   refused: branch carries unlanded content
+#   10  `git worktree remove` refused; worktree left intact
+#   11  removal/recovery did not verify — manual intervention needed
+set -euo pipefail
+
+PROG="remove-worktree"
+
+log()    { printf '%s: %s\n' "$PROG" "$*" >&2; }
+refuse() { local code="$1"; shift; printf '%s: REFUSED: %s\n' "$PROG" "$*" >&2; exit "$code"; }
+fail()   { local code="$1"; shift; printf '%s: FAILED: %s\n' "$PROG" "$*" >&2; exit "$code"; }
+
+usage() {
+  printf 'Usage: %s <absolute-path-to-worktree>\n' "$PROG" >&2
+  printf '  Run the Bash call with dangerouslyDisableSandbox: true.\n' >&2
+}
+
+# ---------------------------------------------------------------------------
+# 1. Validate the argument
+# ---------------------------------------------------------------------------
+if [[ $# -ne 1 ]]; then
+  usage
+  fail 2 "expected exactly one argument, got $#"
+fi
+
+TARGET_ARG="$1"
+if [[ "$TARGET_ARG" != /* ]]; then
+  usage
+  fail 2 "not an absolute path: '$TARGET_ARG'"
+fi
+
+command -v realpath >/dev/null 2>&1 \
+  || fail 8 "realpath not found; cannot canonicalize paths (unknown state → keeping)"
+
+TARGET=$(realpath -m -- "$TARGET_ARG")
+
+# Paranoia before anything in this file can ever reach `rm -rf`: the target must
+# be a real directory, must not be the filesystem root, and must be at least two
+# components deep.
+[[ -d "$TARGET" ]] || refuse 3 "no such directory: $TARGET"
+[[ "$TARGET" != "/" ]] || refuse 3 "refusing to operate on /"
+[[ "$TARGET" == /*/* ]] || refuse 3 "implausibly shallow path: $TARGET"
+
+# Anchor the repo on the TARGET itself, not on this script's location: the
+# script is invoked from anywhere, and the worktree names its own repository.
+# Read before any removal — a half-deleted checkout can no longer answer this.
+GIT_COMMON_DIR=$(git -C "$TARGET" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+  || refuse 3 "$TARGET is not inside a git repository"
+REPO_ROOT=$(dirname "$GIT_COMMON_DIR")
+
+# The worktree's admin directory — `<repo>/.git/worktrees/<name>`. `<name>` is
+# git's own registration name, which is NOT always basename(path), so it is read
+# from git rather than guessed. This is the registration whose survival is the
+# second half of the post-state check.
+REG_DIR=$(git -C "$TARGET" rev-parse --path-format=absolute --git-dir 2>/dev/null) \
+  || refuse 3 "$TARGET has no readable git dir"
+
+# git must actually claim this path as a registered worktree. Never rm -rf a
+# path git does not list.
+WT_LIST=$(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null) \
+  || fail 8 "git worktree list failed in $REPO_ROOT (unknown state → keeping)"
+
+PRIMARY=""
+registered=0
+wt_index=0
+while IFS= read -r listing_line; do
+  case "$listing_line" in
+    "worktree "*)
+      listed_path=$(realpath -m -- "${listing_line#worktree }")
+      wt_index=$((wt_index + 1))
+      # The FIRST entry git prints is the primary checkout.
+      if [[ $wt_index -eq 1 ]]; then PRIMARY="$listed_path"; fi
+      if [[ "$listed_path" == "$TARGET" ]]; then registered=1; fi
+      ;;
+  esac
+done <<<"$WT_LIST"
+
+[[ $registered -eq 1 ]] \
+  || refuse 3 "$TARGET is not a registered worktree of $REPO_ROOT (git worktree list does not report it)"
+
+# ---------------------------------------------------------------------------
+# 2. Refuse the two footguns: the current worktree, and the primary checkout
+# ---------------------------------------------------------------------------
+CWD=$(realpath -m -- "$PWD")
+if [[ "$CWD" == "$TARGET" || "$CWD" == "$TARGET"/* ]]; then
+  refuse 4 "$TARGET is the CURRENT worktree (cwd is $CWD); run this from outside it"
+fi
+
+[[ "$TARGET" != "$PRIMARY" ]] \
+  || refuse 5 "$TARGET is the PRIMARY checkout of $REPO_ROOT"
+[[ "$TARGET" != "$REPO_ROOT" ]] \
+  || refuse 5 "$TARGET is the repository root"
+
+# A detached HEAD reads back as the literal "HEAD", which is not a branch name.
+TARGET_BRANCH=$(git -C "$TARGET" rev-parse --abbrev-ref HEAD 2>/dev/null) || TARGET_BRANCH=""
+if [[ "$TARGET_BRANCH" == "HEAD" ]]; then TARGET_BRANCH=""; fi
+[[ "$TARGET_BRANCH" != "main" ]] \
+  || refuse 5 "$TARGET has 'main' checked out"
+
+# ---------------------------------------------------------------------------
+# 3. Fresh fetch — BEFORE any safety judgement
+# ---------------------------------------------------------------------------
+# A stale local origin/main makes an unmerged branch look merged. The content
+# gate below is only as trustworthy as this fetch, so a failed fetch is fatal
+# rather than a warning.
+log "fetching origin main (a stale origin/main makes an unmerged branch look merged)"
+git -C "$TARGET" fetch origin main 1>&2 \
+  || fail 6 "git fetch origin main failed in $TARGET; cannot judge safety → keeping"
+git -C "$TARGET" rev-parse --verify --quiet refs/remotes/origin/main >/dev/null \
+  || fail 6 "refs/remotes/origin/main missing after fetch; cannot judge safety → keeping"
+
+# ---------------------------------------------------------------------------
+# 4. Safety gate — fail closed
+# ---------------------------------------------------------------------------
+# 4a. Clean tracked tree. `--untracked-files=no`: untracked residue is build
+#     output and scratch, not work; the CONTENT gate is what protects work.
+STATUS_OUT=$(git -C "$TARGET" status --porcelain --untracked-files=no 2>/dev/null) \
+  || fail 8 "git status failed in $TARGET (unknown state → keeping)"
+if [[ -n "$STATUS_OUT" ]]; then
+  printf '%s\n' "$STATUS_OUT" >&2
+  refuse 7 "$TARGET has uncommitted tracked changes (listed above)"
+fi
+
+# 4b. CONTENT gate, not a commits-ahead count — see the header.
+#     `--quiet` exits 0 (no diff), 1 (diff), >1 (error → unknown → keep).
+diff_rc=0
+git -C "$TARGET" diff --quiet origin/main HEAD -- . ':!intentions' 2>/dev/null || diff_rc=$?
+case "$diff_rc" in
+  0) ;;
+  1)
+    refuse 9 "branch '${TARGET_BRANCH:-<detached>}' carries unlanded content (tree differs from origin/main outside intentions/)"
+    ;;
+  *)
+    fail 8 "git diff against origin/main failed in $TARGET (rc=$diff_rc, unknown state → keeping)"
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# 5. Remove — deliberately WITHOUT --force
+# ---------------------------------------------------------------------------
+# The gates above proved the tree clean, so git's own clean-check should pass.
+# Leaving it in place means a removal that still refuses is telling us something
+# we did not model — and the safe answer to that is to keep the worktree.
+log "removing $TARGET (no --force: git's own clean-check still gates this)"
+rm_rc=0
+rm_out=$(git -C "$REPO_ROOT" worktree remove "$TARGET" 2>&1) || rm_rc=$?
+if [[ -n "$rm_out" ]]; then printf '%s\n' "$rm_out" >&2; fi
+
+# ---------------------------------------------------------------------------
+# 6. Partial-delete detection and recovery
+# ---------------------------------------------------------------------------
+RESULT="removed"
+if [[ $rm_rc -ne 0 ]]; then
+  # Damaged means: the removal got far enough to destroy the checkout's identity
+  # (its `.git` file), or the directory itself is gone while the registration
+  # survives. Either way retrying `git worktree remove` cannot recover it — the
+  # retry fails validation with `'.../.git' is not a .git file, error code 7`.
+  #
+  # The test is `-e "$TARGET/.git"` and a git-dir IDENTITY comparison, NOT a
+  # bare `git -C "$TARGET" rev-parse`: this repo's worktrees live UNDER the main
+  # working tree (.claude/worktrees/<name>), so a checkout whose `.git` file was
+  # destroyed still answers rev-parse — by walking up and finding the main
+  # repository's `.git`. That answer says nothing about the target.
+  damaged=0
+  if [[ ! -e "$TARGET" ]]; then
+    damaged=1
+  elif [[ ! -e "$TARGET/.git" ]]; then
+    damaged=1
+  else
+    cur_git_dir=$(git -C "$TARGET" rev-parse --path-format=absolute --git-dir 2>/dev/null) \
+      || cur_git_dir=""
+    if [[ "$cur_git_dir" != "$REG_DIR" ]]; then damaged=1; fi
+  fi
+
+  if [[ $damaged -eq 0 ]]; then
+    fail 10 "git worktree remove refused (rc=$rm_rc) and the checkout is INTACT; worktree kept — see git's error above"
+  fi
+
+  log "PARTIAL DELETE detected: '$TARGET' is half-removed (its .git is gone or the directory is)."
+  log "  Recovering with rm -rf + git worktree prune. If this run was NOT sandbox-disabled, that is the cause."
+  rm -rf -- "$TARGET" || fail 11 "rm -rf '$TARGET' failed; run the Bash call with dangerouslyDisableSandbox: true"
+  git -C "$REPO_ROOT" worktree prune 1>&2 \
+    || fail 11 "git worktree prune failed in $REPO_ROOT after recovering '$TARGET'"
+  RESULT="removed-after-recovery"
+else
+  # Prune on the happy path too: cheap, idempotent, and it clears any orphan
+  # registration a previous half-run left behind.
+  git -C "$REPO_ROOT" worktree prune 1>&2 \
+    || fail 11 "git worktree prune failed in $REPO_ROOT after removing '$TARGET'"
+fi
+
+# ---------------------------------------------------------------------------
+# 7. Verify the post-state — never assume
+# ---------------------------------------------------------------------------
+residue=""
+[[ ! -e "$TARGET" ]]  || residue+="  checkout still present: $TARGET"$'\n'
+[[ ! -e "$REG_DIR" ]] || residue+="  registration still present: $REG_DIR"$'\n'
+
+POST_LIST=$(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null) \
+  || fail 11 "git worktree list failed in $REPO_ROOT; removal of '$TARGET' is UNVERIFIED"
+while IFS= read -r listing_line; do
+  case "$listing_line" in
+    "worktree "*)
+      listed_path=$(realpath -m -- "${listing_line#worktree }")
+      if [[ "$listed_path" == "$TARGET" ]]; then
+        residue+="  still listed by git worktree list: $TARGET"$'\n'
+      fi
+      ;;
+  esac
+done <<<"$POST_LIST"
+
+if [[ -n "$residue" ]]; then
+  printf '%s' "$residue" >&2
+  fail 11 "'$TARGET' is NOT fully gone (residue listed above); manual intervention needed"
+fi
+
+log "$RESULT: $TARGET (branch '${TARGET_BRANCH:-<detached>}' retained)"
+printf '%s\n' "$RESULT"
