@@ -357,6 +357,31 @@ LOCK_TTL_SECONDS="${GRAPH_COMMIT_LOCK_TTL_SECONDS:-$((CHECK_TIMEOUT_SECONDS + 60
 LOCK_POLL_SECONDS="${GRAPH_COMMIT_LOCK_POLL_SECONDS:-5}"
 LOCK_WAIT_SECONDS="${GRAPH_COMMIT_LOCK_WAIT_SECONDS:-$((MAX_PUSH_ATTEMPTS * (CHECK_TIMEOUT_SECONDS + 30)))}"
 
+# Which primitive BUILDS the commit that lands. Two accepted values:
+#
+#   worktree  (default, and the only wired-in writer today) — commit_files()
+#             stages `intentions/<id>.md` into the checkout's own index with
+#             `git add` and runs `git commit`, so the commit is HEAD of the
+#             checkout graph-commit was pointed at. This is why every caller
+#             must first provision a throwaway checkout whose HEAD is
+#             origin/main.
+#   plumbing  — build_commit_plumbing() builds the SAME tree with
+#             read-tree/update-index/write-tree against a THROWAWAY index and
+#             seals it with `git commit-tree`, touching neither the working
+#             tree nor the repo's own .git/index. It needs no checkout at all,
+#             which is what eventually removes the provision/remove dance.
+#
+# NOT YET WIRED IN. try_land()'s whole downstream — `git pull --rebase`, `git
+# rev-parse HEAD`, the scratch push of `HEAD:`, the layer-2 rebase-conflict
+# merge — reads the commit off HEAD, which a detached commit-tree SHA is not.
+# Switching the writer therefore means rewriting that loop, which is a separate
+# unit. Until then `plumbing` is REFUSED up front (see main()) rather than
+# silently handing the caller the worktree writer: a config knob that quietly
+# does the other thing is worse than one that says it is not ready.
+# Unset (the overwhelmingly common case) is exactly `worktree`, so no existing
+# caller's control flow is touched by this variable's existence.
+GRAPH_COMMIT_WRITER="${GRAPH_COMMIT_WRITER:-worktree}"
+
 # --- Globals set by main() -------------------------------------------------
 # IDS         — the node ids to commit (positional args) — ordinary edits whose
 #               new content already exists on disk.
@@ -394,6 +419,13 @@ declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
 CURRENT_MSG=""
+# TMP_INDEX_DIR — tempdir holding the THROWAWAY index build_commit_plumbing()
+# builds its tree in (exported as GIT_INDEX_FILE for exactly those git calls).
+# Never the repo's own .git/index, which that writer must not touch. Non-empty
+# only for the duration of one build_commit_plumbing() call: that function
+# removes the dir on both its success and its failure paths, and cleanup()
+# removes it again as the backstop for a die() unwinding past the function.
+TMP_INDEX_DIR=""
 PARK_CONTENT_DIR=""
 # SCRATCH_BRANCH — the throwaway `graph/**` branch name used to stamp SHAs.
 # SCRATCH_PUSHED — 1 once we have pushed it at least once, so cleanup() knows to
@@ -784,6 +816,16 @@ cleanup() {
   fi
   if [[ -n "$SNAP_DIR" && "$KEEP_SNAP" -eq 0 ]]; then
     rm -rf "$SNAP_DIR"
+  fi
+  # Backstop for build_commit_plumbing()'s throwaway index dir. That function
+  # removes it itself on both its own exit paths, so this only does real work
+  # when a die() unwound past it. Integrated here rather than behind a second
+  # trap: a competing EXIT trap would REPLACE this one, silently disabling the
+  # snapshot removal, the scratch-branch delete and the lock release.
+  # A no-op whenever GRAPH_COMMIT_WRITER is left at its `worktree` default,
+  # which never sets this variable.
+  if [[ -n "$TMP_INDEX_DIR" ]]; then
+    rm -rf "$TMP_INDEX_DIR"
   fi
   if [[ "$SCRATCH_PUSHED" -eq 1 && -n "$SCRATCH_BRANCH" ]]; then
     git push origin --delete "$SCRATCH_BRANCH" >&2 || true
@@ -1297,6 +1339,132 @@ commit_files() {
   done
   assert_staged_safe
   git commit -q -m "$CURRENT_MSG"
+}
+
+# --- Commit, without a working tree (GRAPH_COMMIT_WRITER=plumbing) -----------
+# node_file_mode <base-commit> <path> -> prints the 6-digit index mode.
+#
+# The plumbing writer must record the SAME mode `git add` would, or its tree
+# SHA diverges from the working-tree writer's on identical content — and the
+# tree SHA is the whole equivalence claim. So this reproduces git's own rule
+# (read-cache.c's ce_mode_from_stat):
+#   - core.fileMode true (the default, and every Linux checkout this repo runs
+#     in): the mode comes from the file's own executable bit.
+#   - core.fileMode false (a filesystem whose exec bit is not trustworthy —
+#     e.g. a Windows share): git PRESERVES the mode already recorded for the
+#     path, falling back to 0644 for a path it has never seen.
+# Every one of the repo's 659 intentions/*.md files is 100644 today, and
+# write-node.ts creates them non-executable, so both arms agree in practice —
+# this exists so they keep agreeing if that ever stops being true.
+#
+# Symlinks and other non-regular files are refused rather than guessed at: a
+# node file is authored by write-node.ts as a regular file, so anything else is
+# a broken environment, not a case to paper over (code-style.md).
+node_file_mode() { # <base-commit> <path>
+  local base="$1" path="$2" trust_exec base_entry base_mode=""
+  if [[ -L "$path" ]]; then
+    die "intentions path '$path' is a symlink — graph-commit lands regular node files only"
+  fi
+  if [[ ! -f "$path" ]]; then
+    die "intentions path '$path' is not a regular file — nothing to hash for the plumbing writer"
+  fi
+  trust_exec="$(git config --bool core.fileMode 2>/dev/null || true)"
+  # Unset means git's built-in default, which is true (environment.c:
+  # `int trust_executable_bit = 1`).
+  [[ -n "$trust_exec" ]] || trust_exec=true
+  if [[ "$trust_exec" == "true" ]]; then
+    if [[ -x "$path" ]]; then printf '100755\n'; else printf '100644\n'; fi
+    return 0
+  fi
+  base_entry="$(git ls-tree "$base" -- "$path" 2>/dev/null || true)"
+  base_mode="${base_entry%% *}"
+  case "$base_mode" in
+    100644|100755) printf '%s\n' "$base_mode" ;;
+    *) printf '100644\n' ;;
+  esac
+}
+
+# build_commit_plumbing <base-commit> -> prints the new commit SHA on stdout.
+#
+# Builds this invocation's commit with git's tree plumbing instead of a working
+# tree: the base commit's tree is read into a THROWAWAY index, exactly this
+# invocation's node paths are added (edits) or removed (prunes) on top of it,
+# the result is sealed with `git write-tree` + `git commit-tree`, and the index
+# is deleted. Neither the checkout nor the repo's own .git/index is touched, and
+# the resulting commit is reachable from no ref until a caller pushes it.
+#
+# It is the exact plumbing twin of commit_files() and MUST stay so, including
+# the RESURRECTED_IDS exclusion below. Same inputs -> same tree SHA; that
+# equivalence is what test-graph-commit.sh's plumbing cases assert directly.
+# The `-p <base>` single parent and CURRENT_MSG message mirror the worktree
+# writer's `git commit` on a checkout sitting at <base>.
+#
+# Everything in the base tree that this invocation does not name is carried
+# through untouched — read-tree seeds the index with the WHOLE base tree, and
+# only the named paths are then mutated.
+#
+# Style follows build_lock_commit() above, which already builds a commit in
+# this repo with no index and no checkout (against the universal empty tree).
+#
+# NOT CALLED BY try_land() YET — see GRAPH_COMMIT_WRITER at the top of this
+# file for why, and for how `plumbing` is refused until it is.
+build_commit_plumbing() { # <base-commit>
+  local base="$1" base_sha id path blob mode tree sha idx
+  [[ -n "$base" ]] || die "build_commit_plumbing: no base commit given"
+  base_sha="$(git rev-parse --verify "$base^{commit}" 2>/dev/null)" \
+    || die "build_commit_plumbing: '$base' does not resolve to a commit in this repo"
+
+  # A dedicated tempdir, not a bare temp FILE: `git read-tree` writes its index
+  # plus a sibling lock file (index.lock) next to it, so it needs a directory it
+  # can own. Registered in TMP_INDEX_DIR first, so cleanup() can still remove it
+  # if any die() below unwinds past this function.
+  TMP_INDEX_DIR="$(mktemp -d)" || die "build_commit_plumbing: could not create the throwaway index dir"
+  idx="$TMP_INDEX_DIR/index"
+
+  GIT_INDEX_FILE="$idx" git read-tree "$base_sha" \
+    || die "build_commit_plumbing: could not read $base_sha's tree into the throwaway index"
+
+  for id in "${ALL_IDS[@]}"; do
+    # THE RESURRECTED_IDS EXCLUSION — identical in force and in reason to
+    # commit_files()' (see its comment block above). park_write() re-materializes
+    # a node another writer's ALREADY-LANDED change DELETED from origin/main;
+    # putting that path back into the tree would push the deleted node's content
+    # straight onto main with no PR, no CI and no review, silently reverting a
+    # landed deletion (a redaction, a retraction). The landed deletion wins; the
+    # re-materialized file stays local and untracked.
+    is_resurrected_id "$id" && continue
+    path="intentions/$id.md"
+    if is_prune_id "$id"; then
+      # A prune lands a DELETION: the caller already removed the file from disk
+      # (the existence guard inverts), so there is nothing to hash — the path is
+      # dropped from the tree, exactly as `git add -- <path>` stages a deletion
+      # for a tracked file missing from the working tree.
+      #
+      # --force-remove would silently succeed on a path the base tree does not
+      # carry, which `git add` would instead reject as an unmatched pathspec.
+      # Refuse loudly rather than emit a commit that silently pruned nothing.
+      if ! git cat-file -e "$base_sha:$path" 2>/dev/null; then
+        die "build_commit_plumbing: --prune $id names a path absent from base commit $base_sha — nothing to delete"
+      fi
+      GIT_INDEX_FILE="$idx" git update-index --force-remove -- "$path" \
+        || die "build_commit_plumbing: could not remove $path from the throwaway index"
+      continue
+    fi
+    blob="$(git hash-object -w -- "$path")" \
+      || die "build_commit_plumbing: could not hash-object $path"
+    mode="$(node_file_mode "$base_sha" "$path")"
+    GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "$mode,$blob,$path" \
+      || die "build_commit_plumbing: could not stage $path ($mode,$blob) into the throwaway index"
+  done
+
+  tree="$(GIT_INDEX_FILE="$idx" git write-tree)" \
+    || die "build_commit_plumbing: could not write the tree from the throwaway index"
+  sha="$(git commit-tree "$tree" -p "$base_sha" -m "$CURRENT_MSG")" \
+    || die "build_commit_plumbing: could not commit-tree $tree onto $base_sha"
+
+  rm -rf "$TMP_INDEX_DIR"
+  TMP_INDEX_DIR=""
+  printf '%s\n' "$sha"
 }
 
 # --- Rebase-state detection ------------------------------------------------
@@ -2852,6 +3020,19 @@ main() {
   if rebase_in_progress; then
     die "a rebase is already in progress in $REPO_ROOT — graph-commit will not run on a mid-operation worktree; finish or 'git rebase --abort' it first"
   fi
+
+  # GRAPH_COMMIT_WRITER gate. Placed alongside the refusal above, and for the
+  # same reason: before `trap cleanup EXIT` is installed, so a refusal here
+  # attempts no write and disturbs no checkout. Unset resolves to `worktree`,
+  # so the default path reaches the `worktree` arm and falls straight through —
+  # this block is inert for every caller that does not set the variable.
+  case "$GRAPH_COMMIT_WRITER" in
+    worktree) : ;;
+    plumbing)
+      die "GRAPH_COMMIT_WRITER=plumbing is not wired into the landing loop yet — build_commit_plumbing() exists and is covered by test-graph-commit.sh, but try_land() still reads the commit off HEAD (pull --rebase, the scratch push of HEAD:, the layer-2 rebase merge). Unset the variable (or set it to 'worktree') to land; refusing rather than silently using the worktree writer you did not ask for" ;;
+    *)
+      die "GRAPH_COMMIT_WRITER must be 'worktree' or 'plumbing', got '$GRAPH_COMMIT_WRITER'" ;;
+  esac
 
   if [[ "${#IDS[@]}" -eq 0 && "${#PRUNE_IDS[@]}" -eq 0 ]]; then
     usage
