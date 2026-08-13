@@ -530,7 +530,12 @@ clarifications:
       never does. The entry point itself is UNVERIFIED: no one has confirmed
       that claude -p '/code-review max' runs in a dispatch worktree, what a
       nested session costs, or how it attributes against condition 2. Verifying
-      it gates any rewiring.
+      it gates any rewiring. (Amended 2026-08-13 /align round.) The effort level
+      named here is superseded: the dispatch lane runs the built-in at `high`,
+      not `max` — see the 2026-08-13 clarification recording that supersession
+      and its reason. Everything else in this clarification stands: the
+      disable-model-invocation diagnosis, the `claude -p` user-turn entry point,
+      and the text-parsing consequence are unaffected by the effort level.
   - question: Does the token audit attribute a phase worker's whole session cost to
       that phase?
     answer: "(Recorded 2026-07-31; measured.) No — condition 2's attributability
@@ -562,7 +567,13 @@ clarifications:
       unjudged, and what was actually applied is read from a before/after git
       diff rather than from any agent's self-report. /security-review is
       unaffected and stays in the parallel fan-out — it carries no
-      disable-model-invocation mark, invokes cleanly, and edits nothing."
+      disable-model-invocation mark, invokes cleanly, and edits nothing.
+      (Amended 2026-08-13 /align round.) `max` is superseded by `high` — see the
+      2026-08-13 clarification. The serialization and exclusivity reasoning in
+      this clarification is unchanged and is in fact strengthened by the
+      detached-run design recorded the same day: the caller must do nothing else
+      between the launching call and the collecting call, which is the same
+      exclusivity property stated across a wider window."
   - question: What must hold before a yield metric may be credited to a named instrument?
     answer: (Recorded 2026-07-31, second interview.) Verified provenance — the
       metric must be shown to have come from that instrument, not merely to have
@@ -1034,6 +1045,124 @@ clarifications:
       whether it can collide with a concurrent worker's commit, are unverified —
       tactic-audit-permission-friction owes that check before the step is
       wired."
+  - question: At what effort level does the dispatch review lane run the built-in
+      /code-review, and what supersedes the 2026-08-09 `max` ruling?
+    answer: "(Recorded 2026-08-13 /align round, author-directed.) `high`,
+      superseding the 2026-08-09 office-hours ruling that directed `max`. The
+      author's requirement this round was stated as `/code-review high --fix
+      --comment`; put to the author that it disagreed on one word with a
+      three-day-old ruling of their own, the author ruled it a deliberate
+      supersession rather than an interim operating point. RECORD CORRECTION
+      worth keeping: `--fix` and `--comment` were ALREADY in place and are not
+      part of the change — `dispatch-code-review` builds its prompt as
+      `/code-review $EFFORT --fix --comment $TARGET`, and `--no-comment` exists
+      only for its own test suite, so the requirement reduces to the single-word
+      change of that script's `EFFORT` default. Condition 3 requires explicit
+      author approval for every routing change, effort tuning included; this
+      round is that approval, and the change is author-initiated rather than
+      surfaced by the advisory audit loop. WHY THE MEASURED RECORD DOES NOT
+      FORBID THIS: what `references/code-review-invocation.md` falsifies is
+      `max` synchronously (2363 s, killed, zero bytes, $371.54 proxy); its own
+      section 7 says the untested middle — `medium`, `high`, `xhigh` — 'is where
+      the usable operating point probably sits and should be measured', so
+      `high` is unmeasured rather than refuted. STEELMAN, PUT AND DIVERGED FROM:
+      that raising the BUILT-IN's depth spends on the wrong instrument, since
+      clarification 17 measured the owned Lane-B lenses producing 27 confirmed
+      findings against /security-review's 1 across 18 runs. Diverged on
+      clarification 21's own re-divergence ground — /code-review is 'not a
+      proven best instrument but an untested one, and testing it is the reason
+      to keep it in the design rather than drop it' — so running it at depth is
+      how that test is performed. The owned lenses are neither cut nor narrowed
+      by this round, which condition 5 forbids independently of this ruling.
+      CARRIER: tactic-review-effort-max-detached-resume-poll. Its plan's Unit 2
+      step 2 (`EFFORT=\"low\"` to `EFFORT=\"max\"`) and its id both name `max`
+      and must be re-planned and renamed to `high`; every other element of that
+      plan — detached launch, bounded await across calls, exit code 5 for an
+      in-flight run, hard-stop preserved, and the 5400 s deadline — survives
+      unchanged, because the detached harness is what makes ANY raised effort
+      reachable and is not specific to `max`. BLOCKER, flagged rather than
+      buried: that node is office_hours-parked since 2026-08-10 (a worker
+      session froze at a permission/classifier denial and the frozen-session
+      sweep parked it), so the re-plan cannot proceed until the park clears. No
+      `recovers` edge — this round deepens reliance on
+      delegation-anthropic-claude's review instrument rather than reducing it,
+      recorded here to stay visible per virtue-alignment-of-attachments'
+      every-import-raises-exit-cost clause."
+  - question: When the built-in's detached run outlives its await window, what holds
+      the node, and what ends the run?
+    answer: "(Recorded 2026-08-13 /align round, author-directed; the locking
+      mechanism is author-delegated to Claude and held on trust.) FOUR RULINGS.
+      (1) An overrunning instrument run is NEVER killed. `claude -p` buffers all
+      output until completion, so killing a run is a total loss rather than a
+      degraded result; the run continues so it still has the potential to
+      complete, and its result is served on the next pass through the existing
+      resume cache. (2) The hard stop is PRESERVED but relocated: /review-fix
+      still fails the review phase rather than degrading to a Lane-B-only review
+      — that degradation is what condition 6 and
+      tactic-lane-instrument-substitution-guard exist to prevent — but the stop
+      fires at deadline exhaustion, never at the await boundary. The supervising
+      session holds across the await and does nothing else in that window, which
+      is the exclusivity property Unit 3 of the carrier node already states. (3)
+      THE NODE REMAINS LOCKED FOR THE DETACHED RUN'S LIFETIME, INDEPENDENTLY OF
+      THE LAUNCHING SESSION. An earlier draft of this round tied the claim to
+      session liveness, on the repo's standing worktree-is-the-claim invariant;
+      the author rejected that as insufficient, because a session that dies for
+      an unrelated reason — a frozen-session park, an API error, `claude rm`, a
+      host restart — evaporates the claim while an active `--fix` run is still
+      writing the tree. That is not hypothetical: the carrier node is parked
+      right now for exactly that reason. (4) The 5400 s (90 minute) deadline
+      bounds the run's duration; the carrier's plan already defaults
+      `--deadline-seconds` to 5400, so the author's independently-chosen figure
+      and the existing plan agree. MECHANISM, HELD ON TRUST: the author
+      delegated the choice and Claude recommends a kernel-released `flock` held
+      by the detached child itself, on a sidecar
+      `.claude/worktrees/<node-id>.code-review-lock` whose body carries pid,
+      node id, target range, launch HEAD, effort and deadline as diagnostics.
+      The argument is that it delegates the hardest property — release exactly
+      when the holder dies, for any reason including SIGKILL and host crash — to
+      the kernel, where a pid-plus-timestamp sidecar needs staleness heuristics
+      and carries a pid-reuse window, a heartbeat needs a second process that
+      can itself die, and a graph-layer lock needs a reaper and would strand a
+      node forever when the child dies, besides putting runtime machinery in the
+      graph that condition 4 keeps out. Launch shape `setsid flock -n <lockfile>
+      <child>`; readers test with `flock -n <lockfile> true`. LIMITS RECORDED
+      RATHER THAN BURIED: `flock` is advisory, so it binds only claimers that
+      check — enforcement rests on the claim paths being few and enumerable
+      (provision-node-worktree, the reservation sweep, the invalid-state lane,
+      office-hours select), and a human entering the worktree by hand bypasses
+      it exactly as today; and `flock` availability plus `setsid` fd-inheritance
+      inside a dispatch worktree are UNVERIFIED and belong in the carrier's Unit
+      1 probe rather than being assumed. This is net-new scope that the carrier
+      node does not cover — its `$CACHE_KEY.lock` mkdir mutex guards the cache,
+      not the worktree — and is carried by
+      tactic-code-review-detached-node-lock, which the effort raise must not
+      ship without, since a survivor with no lock is the corruption case.
+      Enrolled for review as tactic-review-sitting-code-review-lock-design."
+  - question: What must the first `high` runs record, and does anything become a
+      threshold?
+    answer: "(Recorded 2026-08-13 /align round, author-directed.) Record realized
+      figures; assert no threshold. The first `high` runs record realized wall
+      clock, realized price-proxy draw, findings count, and whether the run
+      completed inside its budget or continued as a detached run; the 90 minute
+      deadline is re-set from those runs rather than defended as a gate. This is
+      the same discipline the record has now applied four times — clarification
+      18's '~$14 toward ~$25-30' restated as an expected range,
+      tactic-review-verify-per-file-batching's 3.2x restated as an upper bound,
+      the 2026-08-03 ruling to re-baseline rather than assert stale
+      $614/$754/75% figures, and now this. An auto-reverting completion-rate
+      gate was put to the author and DECLINED, because an automatically-applied
+      effort reversion is precisely the auto-applied routing change condition 3
+      forbids without explicit author approval, and carving an exception would
+      weaken the condition to buy a convenience. OWED AND NOT CURRENTLY COMPUTED
+      BY ANY SENSOR: the comparison that actually answers whether the raise was
+      worth it is findings at `high` against the `low` baseline for comparable
+      diffs. The token-economy sensor reads spend and attribution, not
+      per-effort review yield, so this is a missing lens rather than a missing
+      query — carried by tactic-audit-review-effort-yield-lens, and by condition
+      7 it is added to the one instrument's shared lens catalog
+      (aggregate-usage.sh) rather than to a second parallel analysis. Until that
+      lens exists the raise is an unmeasured quality bet, which is recorded here
+      as the honest state rather than presented as a measured improvement."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -1116,5 +1245,11 @@ attributes:
       to 'writes no routing policy and no graph or product files' and leaves the
       no-auto-apply bound on routing policy entirely unchanged (Recorded
       2026-08-12)"
+    - an instrument run that overruns its await window is never killed — `claude
+      -p` buffers output, so a kill is a total loss rather than a degraded
+      result; the phase's hard stop fires at deadline exhaustion, never at the
+      await boundary, and the node stays locked for the detached run's own
+      lifetime independently of whether the launching session survives (Recorded
+      2026-08-13)
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival
