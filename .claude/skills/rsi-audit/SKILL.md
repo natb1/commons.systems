@@ -167,6 +167,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
      - The evidence rows from the script (error signatures with counts, phase-model rows, etc.).
      - A concrete, specific suggestion (not a vague "consider X" — name the phase, the model, the script, the error signature).
    - **All twelve lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
+   - **Per-workflow spend fold**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. Run `npx tsx packages/intentionsutil/scripts/attribute-spend.ts tmp/usage-audit.json` and reproduce its four rows, its TOTAL row, and its verdict line in the report. Like routing recommendations it is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — see "Per-workflow spend fold" below for what the fold measures, what the deviation flag obliges you to do, and what it does not measure.
    - **Routing recommendations**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` (it is a yield lens, not a cost-magnitude one) — do not merge it into the numbered ranked list and do not reorder it by the Step 5 ranking rule. Build it at report-generation time from the `by_phase_outcome` rates slice plus the static phase→model map, exactly as specified in "Rendering routing recommendations in the report" below. Entries tagged `untrusted` are rendered but explicitly excluded from the actionable set. This section does not depend on `DISPATCH_AUDIT_AGGREGATES_ENABLED` — it is produced whether or not the optional Firestore persist path is on.
 
 7. **Writes no routing policy, and no graph or product files.** The skill writes no control artifacts, creates NO GitHub issues, and modifies NO dispatch workflow files. The user reads the report and decides what to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172). The one thing this skill may write is step 8's `.claude/settings.json` remediation — attended, reviewed, and committed by the human. Nothing in step 8 loosens the bound above: `.claude/settings.json` is a permissions file, not routing policy.
@@ -184,6 +185,26 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    3. Commit it deliberately, as its own commit, separate from anything else the session is carrying. Drop the change (`git checkout -- .claude/settings.json`) if the review is not clean — do not hand-patch the generated block into shape.
 
    The report is unaffected by this step: it is already written by the time step 8 runs, and step 8 adds nothing to it beyond a line saying whether it ran and what it changed.
+
+## Per-workflow spend fold
+
+`strategy-recursive-self-improvement` states its fitness function **per workflow**, over the same `by_phase` buckets the lenses are computed from: the harness's token spend should be dominated by **dispatch** — the workflow that ships work — with office-hours and rsi (harness self-measurement) minor beside it. Fold the audit document into that split with:
+
+```bash
+npx tsx packages/intentionsutil/scripts/attribute-spend.ts tmp/usage-audit.json
+```
+
+It prints four rows — `dispatch` / `office-hours` / `rsi` / `other` — each with price proxy, cost, turns and share, then a `TOTAL` row (which reconciles against `.totals` in the same document, so a mis-folded window is visible on its face), then one verdict line. Exit 0 means the fold printed, **including when the deviation flag fired**; a non-zero exit means the aggregate could not be read, never a zero fold.
+
+**Do not recompute this in jq.** The dispatch/office-hours/rsi split is defined once, in `packages/intentionsutil/src/spend.ts` (`WORKFLOW_SKILLS`, `attributeSpend`), which the rsi sensor in `packages/intentionsutil/scripts/read-sensors.ts` also reads. A second copy would be a second denominator for a fitness function stated as a share — the two would drift the first time a skill joined a workflow.
+
+**It is not a lens, and the lens count is unchanged.** A lens is one ranked cost-magnitude finding, sorted against the others by `price_proxy_usd` (step 5). This fold's denominator is the *whole window*: every lens's spend is already inside these four rows, so ranking it alongside them would double-count the window. It sits with routing recommendations as an unranked section, not as a thirteenth lens.
+
+**The greenfield expectation is that dispatch dominates.** That is the recorded expectation the fold exists to check, not merely a pattern that has held so far. Report the four shares plainly against it.
+
+**A deviation is itself a review trigger — not a datum to note and pass.** When the CLI prints `SPEND-DEVIATION FLAG`, a rival workflow has reached or passed dispatch's price-proxy spend (the threshold is `>=`: a rival that has merely *caught* dispatch already meets the condition). Say in the report that the recorded expectation is violated and that this run is grounds for reviewing the rival workflow's spend — do not record the number and move on. `other` is deliberately not a rival: a large `other` share means `WORKFLOW_SKILLS` is missing a skill that has started appearing as an `attributionSkill`, which is a map-maintenance finding against `spend.ts`, not a workflow outspending dispatch.
+
+**Bound — this is the fitness function's DENOMINATOR only.** The fold says what the window *spent*. It says nothing about what the spend *bought*: the numerator — closure velocity, and progress against the strategy's own signals — is not computed anywhere, by this skill or by anything else. It was prose inside the retired `rsi-plan.md` renderer, never a measurement. So `/rsi-audit` can report the spend split and whether dispatch dominates it; it cannot report whether the spend was worth it. State that bound in the report so the fold is not read as the whole fitness function.
 
 ## Per-run outcome hit-rates
 
