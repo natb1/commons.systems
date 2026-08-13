@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
+import { readNode, writeNode } from "../src/store.js";
 
 describe("validateNode", () => {
   it("accepts a valid full node", () => {
@@ -25,16 +29,13 @@ describe("validateNode", () => {
         is_proxy: true,
       },
       attention: {
-        boost: 2,
-        override: null,
+        boosts: { "1": 2 },
         rationale: "Draws attention now.",
       },
       attributes: { source: "github:natb1/commons.systems#1" },
     };
     expect(validateNode(input)).toEqual({
       ...input,
-      // attention.tier defaults to 1 when the author names no tier.
-      attention: { ...input.attention, tier: 1 },
       // Graph-native dispatch fields default when absent.
       phase: null,
       execution: null,
@@ -877,57 +878,106 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
-  it("accepts an attention with only a boost", () => {
+  it("accepts the canonical sparse per-tier boosts map", () => {
     const result = validateNode({
       id: "n8a",
       kind: "strategy",
-      statement: "Boosted.",
+      statement: "Boosted in two tiers.",
+      owner: "human",
+      status: "raw",
+      attention: { boosts: { "1": 3, "2": 20 }, rationale: "urgent" },
+    });
+    // Sparse: tier 3 is absent, NOT defaulted to 0.
+    expect(result.attention).toEqual({ boosts: { "1": 3, "2": 20 }, rationale: "urgent" });
+  });
+
+  it("normalizes number boosts keys to string keys", () => {
+    const result = validateNode({
+      id: "n8a2",
+      kind: "strategy",
+      statement: "Number keys from a JS/JSON parse path.",
+      owner: "human",
+      status: "raw",
+      attention: { boosts: { 1: 3, 2: 20 }, rationale: "urgent" },
+    });
+    expect(result.attention).toEqual({ boosts: { "1": 3, "2": 20 }, rationale: "urgent" });
+  });
+
+  it("reinterprets a legacy untagged boost as a tier-1 claim", () => {
+    const result = validateNode({
+      id: "n8b",
+      kind: "strategy",
+      statement: "Legacy boost.",
       owner: "human",
       status: "raw",
       attention: { boost: 3, rationale: "urgent" },
     });
-    expect(result.attention).toEqual({ boost: 3, override: null, rationale: "urgent", tier: 1 });
+    expect(result.attention).toEqual({ boosts: { "1": 3 }, rationale: "urgent" });
   });
 
-  it("accepts an attention with only an override (including override 0)", () => {
+  it("reinterprets a legacy tier-tagged boost as a claim in that tier", () => {
     const result = validateNode({
-      id: "n8b",
+      id: "n8b2",
       kind: "strategy",
-      statement: "Zeroed branch.",
+      statement: "Legacy tagged boost.",
+      owner: "human",
+      status: "raw",
+      attention: { boost: 5, tier: 2, rationale: "urgent" },
+    });
+    expect(result.attention).toEqual({ boosts: { "2": 5 }, rationale: "urgent" });
+  });
+
+  it("reinterprets a legacy positive override as a plain claim in its tier", () => {
+    const result = validateNode({
+      id: "n8c",
+      kind: "strategy",
+      statement: "Legacy override.",
+      owner: "human",
+      status: "raw",
+      attention: { override: 60, tier: 3, rationale: "capped" },
+    });
+    expect(result.attention).toEqual({ boosts: { "3": 60 }, rationale: "capped" });
+  });
+
+  it("reinterprets a legacy override: 0 as an empty (claim-nothing) map", () => {
+    const result = validateNode({
+      id: "n8c2",
+      kind: "strategy",
+      statement: "Legacy zeroed branch.",
       owner: "human",
       status: "raw",
       attention: { override: 0, rationale: "parked" },
     });
-    expect(result.attention).toEqual({ boost: null, override: 0, rationale: "parked", tier: 1 });
+    expect(result.attention).toEqual({ boosts: {}, rationale: "parked" });
   });
 
-  it("rejects an attention that sets both boost and override", () => {
-    expect(() =>
-      validateNode({
-        id: "n8c",
-        kind: "strategy",
-        statement: "Both set.",
-        owner: "human",
-        status: "raw",
-        attention: { boost: 1, override: 2, rationale: "r" },
-      }),
-    ).toThrow(/exactly one of boost\/override/);
-  });
-
-  it("rejects an attention that sets neither boost nor override", () => {
+  it("rejects a non-null attention whose boosts map is empty", () => {
     expect(() =>
       validateNode({
         id: "n8d",
         kind: "strategy",
-        statement: "Neither set.",
+        statement: "Empty boosts.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: {}, rationale: "r" },
+      }),
+    ).toThrow(/must claim at least one tier/);
+  });
+
+  it("rejects an attention block that claims nothing at all", () => {
+    expect(() =>
+      validateNode({
+        id: "n8d2",
+        kind: "strategy",
+        statement: "No boosts key at all.",
         owner: "human",
         status: "raw",
         attention: { rationale: "r" },
       }),
-    ).toThrow(/exactly one of boost\/override/);
+    ).toThrow(/must claim at least one tier/);
   });
 
-  it("rejects a boost of 0 (points at override: 0 for explicit zeroing)", () => {
+  it("rejects a boost value of 0", () => {
     expect(() =>
       validateNode({
         id: "n8e",
@@ -935,12 +985,12 @@ describe("validateNode", () => {
         statement: "Zero boost.",
         owner: "human",
         status: "raw",
-        attention: { boost: 0, rationale: "r" },
+        attention: { boosts: { "1": 0 }, rationale: "r" },
       }),
-    ).toThrow(/boost must be > 0.*override: 0/);
+    ).toThrow(/boosts\[1\] must be > 0/);
   });
 
-  it("rejects a negative boost", () => {
+  it("rejects a negative boost value", () => {
     expect(() =>
       validateNode({
         id: "n8f",
@@ -948,22 +998,48 @@ describe("validateNode", () => {
         statement: "Negative boost.",
         owner: "human",
         status: "raw",
-        attention: { boost: -1, rationale: "r" },
+        attention: { boosts: { "1": -1 }, rationale: "r" },
       }),
-    ).toThrow();
+    ).toThrow(/boosts\[1\] must be > 0/);
   });
 
-  it("rejects a negative override", () => {
+  it("rejects a non-finite boost value", () => {
+    expect(() =>
+      validateNode({
+        id: "n8g",
+        kind: "strategy",
+        statement: "Infinite boost.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: { "1": Number.POSITIVE_INFINITY }, rationale: "r" },
+      }),
+    ).toThrow(/Expected finite number for attention\.boosts\[1\]/);
+  });
+
+  it("rejects a boosts key outside the tier vocabulary", () => {
+    expect(() =>
+      validateNode({
+        id: "n8h",
+        kind: "strategy",
+        statement: "Bogus tier key.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: { "4": 3 }, rationale: "r" },
+      }),
+    ).toThrow(/boosts key must be one of 1, 2, 3/);
+  });
+
+  it("rejects a legacy tier tag outside the tier vocabulary", () => {
     expect(() =>
       validateNode({
         id: "n9a",
         kind: "strategy",
-        statement: "Negative override.",
+        statement: "Bogus legacy tier tag.",
         owner: "human",
         status: "raw",
-        attention: { override: -1, rationale: "r" },
+        attention: { boost: 3, tier: 4, rationale: "r" },
       }),
-    ).toThrow(/override must be >= 0/);
+    ).toThrow(/tier must be one of 1, 2, 3/);
   });
 
   it("rejects an attention missing a rationale", () => {
@@ -974,7 +1050,7 @@ describe("validateNode", () => {
         statement: "No rationale.",
         owner: "human",
         status: "raw",
-        attention: { boost: 1 },
+        attention: { boosts: { "1": 1 } },
       }),
     ).toThrow();
   });
@@ -987,7 +1063,7 @@ describe("validateNode", () => {
         statement: "Empty rationale.",
         owner: "human",
         status: "raw",
-        attention: { boost: 1, rationale: "" },
+        attention: { boosts: { "1": 1 }, rationale: "" },
       }),
     ).toThrow(/rationale must be a non-empty string/);
   });
@@ -1053,10 +1129,8 @@ describe("validateGraph", () => {
         serves: ["virtue-root"],
         recovers: ["delegation-1"],
         attention: {
-          boost: 3,
-          override: null,
+          boosts: { "1": 3 },
           rationale: "A live strategy that draws attention.",
-          tier: 1,
         },
       }),
       gnode({
@@ -1119,7 +1193,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
+        attention: { boosts: { "1": 1 }, rationale: "r" },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
@@ -1253,7 +1327,7 @@ describe("validateGraph", () => {
       gnode({
         id: "broken-2",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
+        attention: { boosts: { "1": 1 }, rationale: "r" },
       }),
       // Same-kind-parent violation: a tactic parented to a virtue.
       gnode({ id: "broken-3", kind: "tactic", parent: "virtue-root" }),
@@ -1701,10 +1775,8 @@ describe("validateGraph", () => {
     const nodes = mainHealthNodes({
       attributes: { tier: 3 },
       attention: {
-        boost: 5,
-        override: null,
+        boosts: { "3": 5 },
         rationale: "Deliberately co-dominant. ACK: main-health-dominance",
-        tier: 3,
       },
     });
     expect(() => validateGraph(nodes)).not.toThrow();
@@ -1740,17 +1812,13 @@ describe("validateGraph", () => {
   });
 
   it("Rule 18: strategy-main-health opts out of the must-hold half via attention.rationale", () => {
-    // With no tier mark its ownTier is the implicit default 1, so rule 20
-    // requires attention.tier: 1 here.
     const nodes = mainHealthNodes(
       {},
       {
         mainHealth: {
           attention: {
-            boost: 5,
-            override: null,
+            boosts: { "1": 5 },
             rationale: "Deliberately demoted. ACK: main-health-dominance",
-            tier: 1,
           },
         },
       },
@@ -1768,7 +1836,9 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  // Rules 19 & 20: tier-mark shape and the per-tier boost namespace.
+  // Rule 19: tier-mark shape. (Rule 20, the per-tier boost namespace check, is
+  // retired — attention now carries a per-tier boosts map with no namespace tag
+  // to cross-check.)
 
   /** A goal-layer kind set plus one strategy carrying the fields under test. */
   function tierNodes(partial: Partial<IntentionNode>): IntentionNode[] {
@@ -1808,25 +1878,26 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 20: rejects a tier-2 node whose attention.tier still reads 1, telling the author to re-select", () => {
+  it("accepts a tier-marked node whose boosts claim a tier other than its own", () => {
+    // Retired rule 20 would have rejected this: the node's own tier is 2 (via
+    // bug_fix) while its only claim sits in tier 1. With the per-tier map the
+    // two are independent — a node may claim attention in any tier's scale.
     const nodes = tierNodes({
       attributes: { bug_fix: true },
-      attention: { boost: 5, override: null, rationale: "hot", tier: 1 },
-    });
-    expect(() => validateGraph(nodes)).toThrow(
-      /strategy-under-test: attention\.tier is 1 but the node's own tier is 2 — .*pick a fresh boost\/override value on the tier-2 scale and set attention\.tier: 2 to match/,
-    );
-  });
-
-  it("Rule 20: accepts the same node once attention.tier matches its own tier", () => {
-    const nodes = tierNodes({
-      attributes: { bug_fix: true },
-      attention: { boost: 5, override: null, rationale: "hot", tier: 2 },
+      attention: { boosts: { "1": 5 }, rationale: "hot" },
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 20: is inert on a marked node with no attention at all", () => {
+  it("accepts a tier-marked node claiming several tiers at once", () => {
+    const nodes = tierNodes({
+      attributes: { bug_fix: true },
+      attention: { boosts: { "1": 5, "2": 40 }, rationale: "hot" },
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("accepts a marked node with no attention at all", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
@@ -1991,5 +2062,24 @@ describe("validateGraphProseRefs", () => {
     if (!(caught instanceof Error)) throw new Error("unreachable");
     expect(caught.message).toContain("tactic-a: prose reference `tactic-x`");
     expect(caught.message).toContain("tactic-b: prose reference `tactic-y`");
+  });
+});
+
+describe("attention store round-trip", () => {
+  it("round-trips a per-tier boosts map through writeNode/readNode", () => {
+    // YAML serializes the string key "1" as the bare scalar `1` and parses it
+    // back as a number-ish key, so this is the test that actually proves the
+    // canonicalization is stable in BOTH directions, not just on read.
+    const dir = mkdtempSync(join(tmpdir(), "intentions-attention-"));
+    const attention = { boosts: { "1": 3, "2": 20 }, rationale: "Two-tier claim." };
+    writeNode(dir, {
+      id: "strategy-round-trip",
+      kind: "strategy",
+      statement: "A node whose attention claims two tiers.",
+      owner: "human",
+      status: "codified",
+      attention,
+    });
+    expect(readNode(dir, "strategy-round-trip").attention).toEqual(attention);
   });
 });

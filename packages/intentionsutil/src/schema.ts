@@ -117,22 +117,21 @@ export interface ToolingGoal {
 }
 
 /**
- * A user-authored attention injection. Exactly one of `boost` / `override` is
- * non-null (authored YAML supplies one key); the other is `null`.
+ * A user-authored attention injection: a SPARSE per-tier map of boost values.
  *
- *  - `boost` adds `(self, boost)` to this node's outgoing source set — a
- *    RELATIVE claim that survives upstream re-weighting. Must be finite and
- *    `> 0` (a zero boost is meaningless; use `override: 0` to explicitly zero a
- *    branch).
- *  - `override` REPLACES this node's outgoing set with `{(self, override)}` —
- *    an ABSOLUTE cap on this node's own branch. Must be finite and `>= 0`.
- *  - `tier` is the per-tier boost NAMESPACE tag: the tier whose scale the value
- *    was chosen in — NOT the node's tier (that is derived by `ownTier`, and the
- *    effective tier is derived by `resolveAttention`). Defaults to 1 when
- *    absent, so every pre-tier boost is implicitly a tier-1 boost. Rule 20 in
- *    `validateGraph` requires it to equal the node's OWN tier, which is what
- *    forces an author to re-select a boost value when a node's tier changes:
- *    a value meaningful on the tier-1 scale means nothing on the tier-2 scale.
+ *  - `boosts` maps a tier key (the decimal strings `"1"`, `"2"`, `"3"` — the
+ *    members of `TIERS`) to the boost the author chose ON THAT TIER'S SCALE.
+ *    Each value must be finite and `> 0`. Namespacing by tier is what makes a
+ *    value meaningful: a magnitude picked on the tier-1 scale says nothing on
+ *    the tier-2 scale, so a node claiming attention in two tiers states each
+ *    claim separately rather than carrying one value plus a namespace tag.
+ *  - Sparseness is load-bearing. An ABSENT tier key means "this node makes no
+ *    claim in that tier" and must stay distinguishable from an authored lowest
+ *    value. Never write a `0` into the stored map to stand for an unauthored
+ *    tier — treating a missing tier as 0 is a RESOLVER-time convention, not a
+ *    storage-time one.
+ *  - A plain object, never a `Map`: nodes are serialized with `yaml.stringify`
+ *    (`src/store.ts`) and re-serialized as JSON into the office-hours seed.
  *
  * Valid only on goal-layer kinds (those whose kind node sets
  * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
@@ -140,10 +139,8 @@ export interface ToolingGoal {
  * in frontmatter.
  */
 export interface Attention {
-  boost: number | null; // finite, > 0 when present
-  override: number | null; // finite, >= 0 when present
+  boosts: Record<string, number>; // tier key ("1"|"2"|"3") -> finite value > 0; sparse
   rationale: string; // required, non-empty
-  tier: number; // 1 | 2 | 3; the tier whose scale the value was chosen in (default 1)
 }
 
 // --- Node ------------------------------------------------------------------
@@ -326,37 +323,82 @@ function validateToolingGoals(value: unknown, field: string): ToolingGoal[] {
   });
 }
 
+/** The legal tier keys of an `attention.boosts` map, as decimal strings. */
+const TIER_KEYS: readonly string[] = TIERS.map((t) => String(t));
+
+/**
+ * Read a legacy `tier:` namespace tag, defaulting to `"1"` when absent — every
+ * boost authored before the tier axis existed was chosen on the tier-1 scale.
+ * Accepts the number or the string form (YAML scalar keys/values arrive as
+ * either depending on the parse path).
+ */
+function legacyTierKey(value: unknown, field: string): string {
+  if (value == null) return String(DEFAULT_TIER);
+  const key = typeof value === "number" ? String(value) : value;
+  if (typeof key !== "string" || !TIER_KEYS.includes(key)) {
+    throw new IntentionSchemaError(
+      `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value)}`,
+    );
+  }
+  return key;
+}
+
+function requirePositiveBoost(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new IntentionSchemaError(`Expected finite number for ${field}`);
+  }
+  if (value <= 0) {
+    throw new IntentionSchemaError(`${field} must be > 0, got ${value}`);
+  }
+  return value;
+}
+
 function validateAttention(value: unknown, field: string): Attention {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
   }
 
-  const hasBoost = value.boost != null;
-  const hasOverride = value.override != null;
-  if (hasBoost && hasOverride) {
-    throw new IntentionSchemaError(
-      `${field} must set exactly one of boost/override, not both`,
-    );
-  }
-  if (!hasBoost && !hasOverride) {
-    throw new IntentionSchemaError(
-      `${field} must set exactly one of boost/override, got neither`,
-    );
-  }
+  const boosts: Record<string, number> = {};
+  // An `override: 0` is the ONE legitimate way to land an empty boosts map: it
+  // meant "zero this branch", which in the per-tier shape is simply "claim
+  // nothing anywhere". Tracked so the empty-map rejection below can let it
+  // through while still rejecting a pointlessly empty authored block.
+  let emptyByLegacyOverrideZero = false;
 
-  let boost: number | null = null;
-  let override: number | null = null;
-  if (hasBoost) {
-    if (typeof value.boost !== "number" || !Number.isFinite(value.boost)) {
-      throw new IntentionSchemaError(`Expected finite number for ${field}.boost`);
-    }
-    if (value.boost <= 0) {
+  if (value.boosts != null) {
+    // Canonical form. YAML integer keys reach us as JS string keys on a plain
+    // object, but a JSON/JS caller may hand us number keys — normalize both.
+    if (!isPlainObject(value.boosts)) {
       throw new IntentionSchemaError(
-        `${field}.boost must be > 0, got ${value.boost} (use override: 0 to explicitly zero a branch)`,
+        `Expected object for ${field}.boosts, got ${typeof value.boosts}`,
       );
     }
-    boost = value.boost;
-  } else {
+    for (const [rawKey, rawValue] of Object.entries(value.boosts)) {
+      const key = String(rawKey);
+      if (!TIER_KEYS.includes(key)) {
+        throw new IntentionSchemaError(
+          `${field}.boosts key must be one of ${TIER_KEYS.join(", ")}, got ${JSON.stringify(rawKey)}`,
+        );
+      }
+      boosts[key] = requirePositiveBoost(rawValue, `${field}.boosts[${key}]`);
+    }
+  } else if (value.boost != null) {
+    // LEGACY compatibility sugar, owned by
+    // tactic-attention-per-tier-boost-migration: `boost: X` with an optional
+    // `tier: T` namespace tag becomes `{ "T": X }` (tier "1" when untagged).
+    // Required, not optional cleanup — the live intentions/ store still has 91
+    // nodes on this form. Delete this branch once those node files are
+    // rewritten to the canonical `boosts:` map.
+    const key = legacyTierKey(value.tier, field);
+    boosts[key] = requirePositiveBoost(value.boost, `${field}.boost`);
+  } else if (value.override != null) {
+    // LEGACY compatibility sugar, owned by
+    // tactic-attention-per-tier-boost-migration: the old branch-cap semantics
+    // of `override` are gone; this is now purely a shape mapping. `override: X`
+    // with optional `tier: T` becomes `{ "T": X }` when X > 0, and the empty map
+    // when X === 0. Required, not optional cleanup — one live node is still on
+    // `override: 60`. Delete this branch with the `boost:` branch above.
+    const key = legacyTierKey(value.tier, field);
     if (typeof value.override !== "number" || !Number.isFinite(value.override)) {
       throw new IntentionSchemaError(`Expected finite number for ${field}.override`);
     }
@@ -365,7 +407,17 @@ function validateAttention(value: unknown, field: string): Attention {
         `${field}.override must be >= 0, got ${value.override}`,
       );
     }
-    override = value.override;
+    if (value.override === 0) {
+      emptyByLegacyOverrideZero = true;
+    } else {
+      boosts[key] = value.override;
+    }
+  }
+
+  if (Object.keys(boosts).length === 0 && !emptyByLegacyOverrideZero) {
+    throw new IntentionSchemaError(
+      `${field} must claim at least one tier in ${field}.boosts — an attention block with no boosts says nothing; drop the block instead`,
+    );
   }
 
   const rationale = requireString(value.rationale, `${field}.rationale`);
@@ -373,20 +425,7 @@ function validateAttention(value: unknown, field: string): Attention {
     throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
   }
 
-  // Absent/null defaults to 1: every boost authored before the tier axis existed
-  // was chosen on the tier-1 scale, so the default keeps the field additive over
-  // the whole existing store with no node-file edits.
-  let tier = 1;
-  if (value.tier != null) {
-    if (typeof value.tier !== "number" || !Number.isInteger(value.tier) || !TIERS.includes(value.tier)) {
-      throw new IntentionSchemaError(
-        `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value.tier)}`,
-      );
-    }
-    tier = value.tier;
-  }
-
-  return { boost, override, rationale, tier };
+  return { boosts, rationale };
 }
 
 /**
@@ -402,8 +441,8 @@ function validateAttention(value: unknown, field: string): Attention {
  *    true` — the marks that mean "this is a defect/security fix", which sit in
  *    tier 2 without the author naming a tier at all.
  *
- * One implementation, shared by `attention.ts`'s effective-tier fixpoint and by
- * `validateGraph`'s rule 20.
+ * One implementation, used by `attention.ts`'s effective-tier fixpoint. (It was
+ * also the basis of the retired rule 20; see the `validateGraph` rule catalog.)
  */
 export function ownTier(node: IntentionNode): number {
   const attributes = isPlainObject(node.attributes) ? node.attributes : {};
@@ -1100,27 +1139,6 @@ function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
 }
 
 /**
- * Rule 20: the per-tier boost namespace. A non-null `attention` must tag the
- * tier its value was chosen in, and that tag must equal the node's OWN tier
- * (`ownTier`) — never its effective/inherited tier. An effective-tier check
- * would cascade: marking one ancestor tier 2 would instantly invalidate every
- * boosted descendant, none of whose authors did anything wrong. Checking the
- * node's own tier localizes the obligation to the node whose tier actually
- * changed.
- */
-function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): void {
-  if (node.attention === null) return;
-  const own = ownTier(node);
-  if (node.attention.tier !== own) {
-    problems.push(
-      `${node.id}: attention.tier is ${node.attention.tier} but the node's own tier is ${own} — ` +
-        `a boost value is only meaningful within one tier's scale, so pick a fresh boost/override ` +
-        `value on the tier-${own} scale and set attention.tier: ${own} to match`,
-    );
-  }
-}
-
-/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1226,14 +1244,10 @@ function checkBlockedByCycles(
  *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is
  *      rejected — 1 is the implicit default every unmarked node already
  *      carries, so authoring it would give one state two spellings.
- *  20. Per-tier boost namespace: a node with non-null `attention` must set
- *      `attention.tier` equal to its OWN tier (`ownTier` — its own marks, NOT
- *      the effective tier it inherits down parent/serves). A boost value is
- *      only meaningful within one tier's scale, so when a node's tier changes
- *      the author must re-select the value in the new tier's namespace. The
- *      check deliberately uses the own tier, not the effective one: an
- *      effective-tier check would cascade, invalidating every boosted
- *      descendant the moment any ancestor gained a mark.
+ *  20. RETIRED — was the per-tier boost namespace check, retired along with the
+ *      `attention.tier` namespace tag when attention became a per-tier boost
+ *      map. Rule numbers are cross-referenced from node bodies; 20 is burned,
+ *      so the next new rule takes 21.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1282,8 +1296,6 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierDominance(node, mainHealthPresent, problems);
     // Rule 19: tier marks are well-shaped.
     checkTierMarkShape(node, problems);
-    // Rule 20: attention.tier tags the node's own tier namespace.
-    checkAttentionTierNamespace(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);
