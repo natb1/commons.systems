@@ -1121,7 +1121,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # dispatch-code-review's `git diff <before-image>` attribute unrelated changes
   # to the review.
   #
-  # The launcher runs the detached child under `flock -n <sidecar>`, so the
+  # The launcher runs the detached child under `flock -w 1 <sidecar>`, so the
   # KERNEL holds the lock for exactly the child's lifetime and releases it on
   # any death, SIGKILL and host crash included. Here we only ask the kernel:
   #
@@ -1209,6 +1209,12 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       # its body (the body is diagnostics the holder wrote, and a leftover file
       # from a crashed run keeps its stale body forever). The probe cannot
       # create the file: we already know it exists.
+      #
+      # The probe is EXCLUSIVE for the fork+exec of `true` (~ms), and this
+      # predicate runs across the whole worktrees root on every claim path — so
+      # a launcher's own acquire can land inside one of those holds. That is why
+      # `dispatch-code-review`'s launch wrapper acquires with `-w 1` rather than
+      # `-n`: a millisecond probe hold must not be reported as a rival run.
       if ! flock -n "$_crlock" true 2>/dev/null; then
         WORKTREE_OCCUPANCY_STATE="live"
         WORKTREE_OCCUPANCY_REASON="code-review-lock"

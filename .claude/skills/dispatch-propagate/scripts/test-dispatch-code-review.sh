@@ -988,6 +988,133 @@ assert_eq "case26: it does not report the artifacts as missing" "0" \
 assert_eq "case26: the built-in was never re-invoked" "1" \
   "$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')"
 
+# ============================================================================
+# Test 27: a value-less --await-seconds / --deadline-seconds is an ARGUMENT
+# error, not a crash
+# ============================================================================
+# Both flags used to take their value as "${2:-}" and then `shift 2`. bash's
+# `shift` returns non-zero when n > $# and does not shift, so under
+# `set -euo pipefail` a trailing flag killed the script with a silent exit 1 and
+# no output at all. review-fix Step 1b's `case $CR_RC` reads exit 1 as "the
+# nested session crashed" and parks the phase on a review that never started —
+# for what is only a malformed command line. `--model` already guarded its
+# arity; these two now match it.
+echo "Test: a value-less --await-seconds / --deadline-seconds exits 2, not a silent 1"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD \
+       --out-dir "$CR_REPO/tmp/cr-out-27" --await-seconds \
+       >/dev/null 2>"$TMPDIR_TEST/cr-27a.err"
+) || rc=$?
+assert_eq "case27: trailing --await-seconds exits 2, not 1" "2" "$rc"
+assert_eq "case27: the error names the flag" "1" \
+  "$(grep -c -- '--await-seconds requires a value' "$TMPDIR_TEST/cr-27a.err" || true)"
+
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD \
+       --out-dir "$CR_REPO/tmp/cr-out-27" --deadline-seconds \
+       >/dev/null 2>"$TMPDIR_TEST/cr-27b.err"
+) || rc=$?
+assert_eq "case27: trailing --deadline-seconds exits 2, not 1" "2" "$rc"
+assert_eq "case27: the error names the flag" "1" \
+  "$(grep -c -- '--deadline-seconds requires a value' "$TMPDIR_TEST/cr-27b.err" || true)"
+
+# The built-in must never have been reached: this fails before any launch.
+assert_eq "case27: no review was launched" "0" \
+  "$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')"
+
+# ============================================================================
+# Test 28: a failing awaiter never blanks the winner's collected output.txt
+# ============================================================================
+# `collect_output` runs on EVERY terminal path so the operator finds an artifact
+# at the path the error message names. It used to write an empty file whenever
+# the run's `.output` was absent — but on the concurrent-awaiter paths that
+# absence means the WINNER collected and discarded it, and the winner has by
+# then already written its real output.txt to this very out-dir. The loser
+# truncated it to zero bytes on its way out, destroying the only record of a
+# review that SUCCEEDED. Worse, `cache_is_current` tests those artifacts for
+# existence rather than content, so a later resume would replay `status=ok`
+# pointing at an empty findings file.
+#
+# Driven through the corrupt-marker branch, which reaches `collect_output`
+# without the resolver's retry wait: `.rc` PRESENT but not an integer is real
+# corruption, not the race, so the script reports it immediately.
+echo "Test: a failing awaiter preserves the winner's already-collected output.txt"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings the winner collected." >"$STUB_DIR/cr-fake-output"
+echo "2" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_28="$CR_REPO/tmp/cr-out-28"
+mkdir -p "$OUT_DIR_28"
+OUT_DIR_28_ABS="$(cd "$OUT_DIR_28" && pwd)"
+CACHE_KEY_28="$(printf '%s' "$OUT_DIR_28_ABS" | sha256sum | cut -d' ' -f1)"
+CACHE_FILE_28="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_28.summary"
+RUN_FILE_28="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_28.run"
+RUN_RC_28="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_28.rc"
+RUN_OUTPUT_28="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_28.output"
+RUN_UNTRACKED_28="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_28.untracked-before"
+
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_28" \
+       --await-seconds 1 --deadline-seconds 120 >/dev/null 2>"$TMPDIR_TEST/cr-28a.err"
+) || rc=$?
+assert_eq "case28: setup — the first call leaves the run in flight (exit 5)" "5" "$rc"
+cp "$RUN_FILE_28" "$TMPDIR_TEST/cr-28-saved.run"
+
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_28" \
+       --await-seconds 30 --deadline-seconds 120 >/dev/null 2>"$TMPDIR_TEST/cr-28b.err"
+) || rc=$?
+assert_eq "case28: setup — the run completes for real (exit 0)" "0" "$rc"
+
+# The winner's evidence, as it sits in the out-dir after a successful collect.
+WINNER_BYTES_28="winner output that must survive the loser"
+printf '%s\n' "$WINNER_BYTES_28" >"$OUT_DIR_28/output.txt"
+
+# The loser's state: a live run record, the run's own artifacts already
+# discarded by the winner, and a `.rc` that is present but corrupt.
+sleep 60 &
+live_pid_28=$!
+sed -e "s/^pid=.*/pid=$live_pid_28/" -e 's/^pid_starttime=.*/pid_starttime=/' \
+  "$TMPDIR_TEST/cr-28-saved.run" >"$RUN_FILE_28"
+rm -f "$CACHE_FILE_28" "$RUN_OUTPUT_28" "$RUN_UNTRACKED_28"
+printf '%s\n' "not-an-exit-code" >"$RUN_RC_28"
+
+rc=0
+(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_28" \
+       --await-seconds 20 --deadline-seconds 600 \
+       >"$TMPDIR_TEST/cr-28c.out" 2>"$TMPDIR_TEST/cr-28c.err"
+) || rc=$?
+kill "$live_pid_28" 2>/dev/null || true
+
+assert_eq "case28: the corrupt marker is still reported as a failure" "1" "$rc"
+assert_eq "case28: it says the marker is not an integer" "1" \
+  "$(grep -c 'is not an integer' "$TMPDIR_TEST/cr-28c.err" || true)"
+# The property: the winner's bytes are still there, not a zero-byte file.
+assert_eq "case28: the winner's output.txt is not truncated" \
+  "$WINNER_BYTES_28" "$(cat "$OUT_DIR_28/output.txt")"
+
 teardown
 
 report_results

@@ -114,7 +114,7 @@
 # `git diff <before-image>` attributes the intruder's changes to the review,
 # breaching condition 6 with a derivation that is confidently wrong.
 #
-# So the child is launched under `flock -n <sidecar>`. The KERNEL holds the
+# So the child is launched under `flock -w 1 <sidecar>`. The KERNEL holds the
 # lock for exactly the child's lifetime and releases it on any death — clean
 # exit, SIGKILL, host crash — which is the property no bookkeeping file can
 # have. `worktree_occupancy_state` (lib-claude-agents.sh) probes it BEFORE it
@@ -249,11 +249,24 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --await-seconds)
-      AWAIT_SECONDS="${2:-}"
+      # Explicit arity guard, like --model above. Without it a value-less flag
+      # reaches `shift 2` with $# == 1; bash's `shift` returns non-zero when
+      # n > $# and does not shift, so `set -euo pipefail` kills the script with
+      # a silent exit 1 — which the caller's `case` reads as "the nested
+      # session crashed", not as an argument error.
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --await-seconds requires a value" >&2
+        exit 2
+      fi
+      AWAIT_SECONDS="$2"
       shift 2
       ;;
     --deadline-seconds)
-      DEADLINE_SECONDS="${2:-}"
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --deadline-seconds requires a value" >&2
+        exit 2
+      fi
+      DEADLINE_SECONDS="$2"
       shift 2
       ;;
     --no-comment)
@@ -659,10 +672,20 @@ discard_run_record() {
 # Copy the child's captured output into --out-dir. Called on EVERY terminal
 # path, success and failure alike, so the operator still finds the artifact at
 # the path this script's error messages name.
+#
+# NEVER truncates an existing '$OUTPUT_FILE'. Three of its callers sit on the
+# concurrent-awaiter paths of Step 2a', where `.output` is missing precisely
+# because the WINNER collected and discarded it — and the winner has by then
+# already written its real output.txt here. Blanking that file would destroy
+# the only evidence of the run for the operator the error message is
+# addressing, and (since `cache_is_current` tests existence, not content) would
+# let a later resume replay `status=ok` with an empty `findings_path`. This is
+# the same property `collect_run_artifacts` documents below; it must hold on
+# the failure paths too, not just the success one.
 collect_output() {
   if [[ -f "$RUN_OUTPUT" ]]; then
     cp "$RUN_OUTPUT" "$OUTPUT_FILE"
-  else
+  elif [[ ! -f "$OUTPUT_FILE" ]]; then
     : >"$OUTPUT_FILE"
   fi
   return 0
@@ -901,18 +924,30 @@ else
               "$CLAUDE_CMD" "$PROMPT" "$MODEL" )
 
   if [[ -n "$LOCK_FILE" ]]; then
-    # `flock -n` holds the node lock for exactly the child's lifetime — see
-    # "The node lock" in the header. `-E 111` gives a failed ACQUIRE its own
-    # exit code, distinct from anything the child can return, and the thin
-    # wrapper turns that code into the RUN_CONFLICT marker. Without it, a lost
-    # acquire is indistinguishable from a child that never started, and the
-    # launcher below would blame the child. 111 is chosen to sit outside both
-    # `claude`'s range and the shell's 126/127/128+n signal codes; the child's
-    # own last statement is an `mv`, so it cannot return 111 by accident.
+    # `flock` holds the node lock for exactly the child's lifetime — see "The
+    # node lock" in the header. `-E 111` gives a failed ACQUIRE its own exit
+    # code, distinct from anything the child can return, and the thin wrapper
+    # turns that code into the RUN_CONFLICT marker. Without it, a lost acquire
+    # is indistinguishable from a child that never started, and the launcher
+    # below would blame the child. 111 is chosen to sit outside both `claude`'s
+    # range and the shell's 126/127/128+n signal codes; the child's own last
+    # statement is an `mv`, so it cannot return 111 by accident.
+    #
+    # `-w 1`, not `-n`. The READER side of this lock
+    # (`worktree_occupancy_state`) probes with `flock -n <file> true`, which
+    # holds the lock exclusively for the fork+exec of `true`, and every dispatch
+    # claim path routes through that predicate — so those probes fire routinely
+    # across the whole worktrees root. A `-n` acquire landing inside one of
+    # those millisecond holds would report exit 6 ("another detached run holds
+    # this worktree") for a lock nobody owns, which the caller treats as
+    # terminal and non-retryable, hard-stopping the whole review phase. One
+    # second absorbs a probe's hold completely while still expiring long before
+    # a REAL holder (a whole `/code-review` run) could release, so a genuine
+    # conflict is still reported as 111.
     LAUNCH_CMD=( setsid bash -c '
       lockfile="$1"; conflict="$2"; shift 2
       rc=0
-      flock -n -E 111 "$lockfile" "$@" || rc=$?
+      flock -w 1 -E 111 "$lockfile" "$@" || rc=$?
       if [ "$rc" = "111" ]; then
         printf "conflict=1\nlockfile=%s\n" "$lockfile" >"$conflict"
       fi
@@ -951,8 +986,10 @@ else
     (( i + 1 < LAUNCH_ATTEMPTS )) && sleep "$LAUNCH_INTERVAL_S"
   done
   if [[ -z "$RUN_PID" && -n "$LOCK_FILE" && -s "$RUN_CONFLICT" ]]; then
-    # `flock -n` did not get the lock: another detached run already owns this
-    # worktree. Nothing was launched and no review ran — a fact of its own,
+    # `flock -w 1` waited out its second and still did not get the lock:
+    # another detached run already owns this worktree. A reader probe's
+    # millisecond hold cannot reach here — that is what the wait absorbs.
+    # Nothing was launched and no review ran — a fact of its own,
     # with its own exit code (6), never folded into the exit-1 "the child
     # failed" path and never into a status=ok summary.
     echo "$PROG: the node lock '$LOCK_FILE' for worktree '$GIT_ROOT' is already held by another detached '/code-review' run — nothing was launched; read the lock file for the holder's diagnostics, or wait for it to finish" >&2
