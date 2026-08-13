@@ -19,6 +19,20 @@
  * args IN:
  *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"tests"|"code",
  *     deps:bool, app_or_rules:bool,
+ *     review_base?:string,        // the NARROWED base a re-review reports on
+ *       // (dispatch-review-base). Defaults to merge_base, so a caller that omits
+ *       // it gets exactly today's full-PR review. merge_base stays bound and
+ *       // unchanged: it is what may be READ, review_base is what is REPORTED on.
+ *     review_base_source?:string, // which resolution path produced review_base
+ *     blast_radius_files?:[...],  // files OUTSIDE the delta referencing a symbol
+ *       // it changed — REQUIRED reading, the guard that keeps the narrowed base
+ *       // from being a detection reduction (clarification 50)
+ *     blast_radius_truncated?:bool, // the reading list hit its cap; say so
+ *     prior_findings?:[...],      // unresolved + deferred findings from the
+ *       // previous pass, carried forward so re-scoping cannot silently drop one
+ *     review_plan?:{ effort, finder_set:[...], reasons:{...} }, // /review-plan's
+ *       // verdict (SKILL.md Step 1a). Absent/failed/unparseable ⇒ today's
+ *       // defaults: effort `high`, FULL finder roster. Fails OPEN, always.
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
  *     implementing_issues:[N,...], run_started_at:string (ISO8601, captured by
@@ -789,15 +803,68 @@ const LANE_A_BLURB = [
   'Return { "fixed": [ ... ], "residue": [ ... ], "instrument": { ... } }. Use [] for an empty array.',
 ].join('\n');
 
+// Two bases, deliberately. `review_base` is what the finder REPORTS on; on a
+// re-review it is the sha the previous pass covered, so the delta is one
+// /fix-checks commit rather than the whole PR (dispatch-review-base). `merge_base`
+// is the full branch base and stays in the brief because "you may read anything in
+// this PR" must remain true — narrowing what is reported must never narrow what
+// may be read, or the narrowed base becomes the detection reduction
+// strategy-token-economy clarification 50 forbids.
+//
+// `blast_radius_files` is the third element and the one that makes the narrowing
+// safe: files OUTSIDE the delta that reference a symbol the delta changed. A
+// helper's contract changes and an unmodified caller three files away breaks —
+// invisible to a literal `git diff <review_base>..HEAD`. They are REQUIRED
+// reading, not a suggestion.
+//
+// review_base falls back to merge_base, which falls back to origin/main, so a
+// caller that passes neither gets exactly today's behaviour.
 function diffContext(args) {
-  const base = args.merge_base || 'origin/main';
+  const fullBase = args.merge_base || 'origin/main';
+  const base = args.review_base || fullBase;
   const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
-  return [
-    `Review ONLY the pending diff against the merge base \`${base}\` (the branch's`,
-    `changes vs origin/main). Changed files: ${filesStr}.`,
+  const lines = [
+    `Review ONLY the pending diff against \`${base}\`. Changed files: ${filesStr}.`,
     'Read full files for the context needed to judge each change, but report findings only',
     'on the pending changes. You report findings ONLY — edit no files, commit nothing, push nothing.',
-  ].join(' ');
+  ];
+  if (base !== fullBase) {
+    lines.push(
+      `This is a RE-review: \`${base}\` is the sha the previous review already covered, and`,
+      `\`${fullBase}\` is the branch's full merge base. You may read anything in the branch —`,
+      `\`git diff ${fullBase}..HEAD\` is available and in scope to READ — but report findings`,
+      'only on the delta above, except where a required-reading file below is genuinely broken',
+      'by it.',
+    );
+  }
+  const br = args.blast_radius_files || [];
+  if (br.length) {
+    lines.push(
+      `REQUIRED READING — these files are outside the delta but reference a symbol it added,`,
+      `changed, or deleted, so a broken contract shows up here and nowhere in the diff:`,
+      `${br.join(', ')}.`,
+      'Read each one and check it against the changed symbol. A finding here is in scope.',
+    );
+  }
+  if (args.blast_radius_truncated) {
+    lines.push(
+      'NOTE: that required-reading list was TRUNCATED at its cap — it is not exhaustive.',
+      'Treat out-of-delta callers as under-covered and widen your reading where the delta',
+      'changes a shared contract.',
+    );
+  }
+  const prior = args.prior_findings || [];
+  if (prior.length) {
+    lines.push(
+      `CARRIED FORWARD — ${prior.length} finding(s) the previous pass raised and left unresolved`,
+      'or deferred. Their sites may predate the delta, so nothing else would re-surface them.',
+      'Re-assess each against the current code and report it if it still holds:',
+      prior
+        .map((f) => `- ${f.location || f.file || '(no location)'}: ${f.description || f.title || ''}`)
+        .join('\n'),
+    );
+  }
+  return lines.join(' ');
 }
 
 // Direct security-domain reviewer descriptions — mirror SKILL.md §1c. This region
@@ -2451,7 +2518,11 @@ const residueResolvedByIdx = new Map();
 // or unvoted items before the residue agent sees them. Dropped items still appear
 // in the audit as Refuted, so nothing disappears silently.
 {
-  const residueBase = _a.merge_base || 'origin/main';
+  // review_base, not merge_base: these residue items came out of Lane A, which
+  // reviewed `review_base..HEAD`. Judging them against a WIDER range than the one
+  // that produced them would put the skeptic's "is this location inside the diff"
+  // test out of step with the review that raised them.
+  const residueBase = _a.review_base || _a.merge_base || 'origin/main';
   const residueItems = [];
   laneAResidue.forEach((r, i) => {
     if (r.source === 'code-review') residueItems.push({ i, r });
@@ -2969,7 +3040,9 @@ if (laneAResidue.length === 0) {
     recommended_fix: r.recommended_fix,
     source: r.source,
   }));
-  const base = _a.merge_base || 'origin/main';
+  // Same reasoning as residueBase above: the residue was raised against
+  // `review_base..HEAD`, so that is the range the disposition agent judges within.
+  const base = _a.review_base || _a.merge_base || 'origin/main';
   const filesStr = (_a.changed_files || []).join(', ') || '(see git diff HEAD)';
   const residuePrompt = [
     'You are the residue-disposition subagent for the trust-the-built-in review lane.',

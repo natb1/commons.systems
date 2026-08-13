@@ -240,6 +240,21 @@ re-litigate a recorded verdict and never redo a committed fix. The worktree and
 the PR survive a dead session; only reasoning-in-progress is lost, so a resumed
 run rebuilds nothing that already reached durable state.
 
+**Prior findings carry forward — the third guard on the narrowed base.** The
+same prior-comment read is also what stops re-scoping from silently dropping a
+finding the earlier pass raised. Once `REVIEW_BASE` narrows the diff (Step 1),
+a finding whose site sits *before* `REVIEW_BASE` is no longer in the delta at
+all, so nothing would re-surface it. From the prior comment's recorded
+dispositions, carry every **unresolved** and **deferred** finding back into this
+pass's pool and pass them to the Workflow as `prior_findings` (Step 2). Do not
+carry `resolved` or `ignore` findings — those are recorded verdicts, and
+re-raising them is exactly the re-litigation the paragraph above forbids.
+
+This is deliberately an extension of the existing resume channel rather than a
+second one. A separate prior-findings store would be a second source of truth
+about the same dispositions, and the two would drift the first time a run died
+between writing one and the other.
+
 ### 1. Capture the diff context and run the inline bash scans
 
 All reviews look at the same diff — and the preamble's single
@@ -282,7 +297,69 @@ app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
 api_call_site=$(git diff "$MERGE_BASE"...HEAD \
   | .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site \
   | sed -n 's/^api_call_site=//p')
+
+# REVIEWED_HEAD: the sha this pass actually covers. Bound HERE, at Step 1, and
+# written to the sidecar at Step 7 — see the write point there for why the
+# Step 7 HEAD would be wrong.
+REVIEWED_HEAD=$(git rev-parse HEAD)
+
+# REVIEW_BASE: the base a RE-review diffs from — the sha the previous review
+# covered, or MERGE_BASE when there wasn't one. Fails closed; see below.
+RB_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-base \
+  --merge-base "$MERGE_BASE")
+REVIEW_BASE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base=//p')
+REVIEW_BASE_SOURCE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_source=//p')
+
+# Blast radius: the files OUTSIDE the delta that reference a symbol the delta
+# added, changed, or deleted. Computed from the NARROWED range — its whole job
+# is to cover what narrowing hid. Same pipe-through-a-classifier discipline as
+# api_call_site above: the diff text never enters this skill's context.
+BR_OUT=$(git diff "$REVIEW_BASE"..HEAD \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-blast-radius)
+blast_radius_files=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_file=//p')
+blast_radius_truncated=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_truncated=//p')
 ```
+
+**`REVIEW_BASE` — narrow the base; keep `MERGE_BASE` bound and unchanged.**
+`MERGE_BASE` still means what it always meant and still feeds the dependency
+audit and the `api_call_site` pipeline above; nothing about it moves. What is
+new is a *second* base for the diff a re-review reads.
+
+The incident this closes: a `/review-fix` pass on PR #3075 cost 3h26m and 32
+subagents, `/fix-checks` pushed **one** CI-repair commit, resolving the
+fix-interrupt stripped the `reviewed` marker (correctly, by design at
+`packages/intentionsutil/scripts/apply-fix-state.ts:219-227`), and the lane
+re-reviewed the entire PR from merge-base — the whole prior review, re-performed
+for one commit.
+
+`dispatch-review-base` reads a sidecar beside the reviewed worktree
+(`<worktrees-root>/<basename>.review-base`, the same convention as
+`.scope-fingerprint` / `.ladder` / `.code-review-lock`) and **fails closed**:
+absent, unreadable, malformed, unreachable from `HEAD`, or not strictly ahead of
+`MERGE_BASE` all yield `REVIEW_BASE=$MERGE_BASE`, i.e. today's full review.
+`REVIEW_BASE_SOURCE` names which. This is the one deliberately fail-*closed*
+mechanism in this design — everything else here fails open — because here the
+cheap outcome is the narrow review, so the safe failure is the expensive one.
+The script's header carries the full argument; do not re-derive it.
+
+**Narrowing the base is only safe with all three guards.** Shipping the narrowed
+base without them *is* the detection reduction `strategy-token-economy`
+clarification 50 forbids:
+
+1. **The blast-radius reading list** above. A helper's contract changes and an
+   unmodified caller three files away breaks — invisible to a literal
+   `git diff <last-reviewed>..HEAD`, and `/fix-checks` repairs under CI pressure
+   are exactly the class that changes contracts. Those files are **required
+   reading** in the reviewers' brief, which is what makes narrow-diff/wide-context
+   preserve detection rather than reduce it.
+2. **The full `MERGE_BASE` still reaches the reviewers**, so "you may read
+   anything in this PR" stays true. The narrowed base says what to *report* on;
+   it never says what may be *read*.
+3. **Prior findings carry forward** — see "Resume from durable state" above.
+
+When `blast_radius_truncated` is `true` the reading list hit a cap. Say so in
+the brief (Step 2 passes it through) — a silently truncated list reads as
+"everything relevant", which is the failure this flag exists to prevent.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
@@ -338,10 +415,13 @@ Workflow's parallel finder fan-out, which would race concurrent writers
 against the same tree. This is why it is its own serialized step between
 Step 1 and Step 2, not a finder inside the Workflow.
 
-`MERGE_BASE` is already bound by Step 1 above — reuse it; do not recompute or
+`REVIEW_BASE` is already bound by Step 1 above — reuse it; do not recompute or
 hand-roll a second target formatter. Pass it as the **rev-range**
-`"$MERGE_BASE..HEAD"`, never as the bare `"$MERGE_BASE"` SHA. The built-in
-resolves a bare SHA to *that single commit's* diff, not to the diff from that
+`"$REVIEW_BASE..HEAD"`, never as a bare SHA. On a first review `REVIEW_BASE` is
+`MERGE_BASE` and this is byte-identical to what the step passed before; on a
+re-review it is the narrowed base. Everything the paragraph below says about a
+bare SHA applies unchanged — it is a property of the built-in's target parsing,
+not of which base is passed. The built-in resolves a bare SHA to *that single commit's* diff, not to the diff from that
 commit to `HEAD`: measured live, `claude -p '/code-review low <bare-sha>'`
 reviewed only the one commit at that SHA (a 1-file graph phase-bump), while
 `claude -p '/code-review low <sha>..HEAD'` reviewed the PR's full accumulated
@@ -625,7 +705,12 @@ RESULT_OUT_DIR=$(cd "$RESULT_OUT_DIR" && pwd)
 ```
 args = {
   pr_num:              <PR_NUM>,
-  merge_base:          <MERGE_BASE>,
+  merge_base:          <MERGE_BASE>,    // the FULL branch base — what may be READ
+  review_base:         <REVIEW_BASE>,   // the narrowed base — what is REPORTED on
+  review_base_source:  <REVIEW_BASE_SOURCE>,
+  blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
+  blast_radius_truncated: <true|false>,
+  prior_findings:      [ ...unresolved + deferred findings carried forward; [] if none... ],
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
@@ -1002,13 +1087,28 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    (use `dangerouslyDisableSandbox: true`). This skill owns the label; it is
    applied regardless of whether any fixes were made. This skill does **not**
    ready the PR — the router's `dispatch-reconcile-ready` owns promotion.
-4. **Write the phase-completed marker, or park on deviation.** Deviation fires
+4. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`,
+   sandboxed (it writes one sidecar file and runs read-only git). This is what
+   lets the NEXT pass review only the delta. It sits here, beside the `reviewed`
+   marker, because the two mean the same thing: this review is complete and
+   covered up to that sha. A failure here is not fatal — the next pass simply
+   falls back to `MERGE_BASE` and reviews everything, which is what happens
+   today. Log it and continue.
+
+   **Record `REVIEWED_HEAD` — the Step 1 HEAD — not the HEAD at this point.**
+   This is a detection decision, not a convenience. Lane A's `--fix` (Step 1b)
+   and Lane B's fix fan-out (Step 2) both commit *during* the pass, and nobody
+   has reviewed those commits. Recording the Step 7 HEAD would put them behind
+   the next pass's base and exclude them from review **forever** — a silent,
+   permanent hole in exactly the code the review lane itself wrote.
+
+5. **Write the phase-completed marker, or park on deviation.** Deviation fires
    when `result.deviation === true` (a high-confidence Required+Upheld finding
    left unresolved): skip the marker, run the in-session recommend step, and call
    `dispatch-mark-deviation`. No deviation: call `dispatch-mark-complete`.
-5. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
+6. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
    the Workflow ran this session; skip on re-entry.
-6. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
+7. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
    (no-deviation success path only) — it self-closes the session, so all prior
    steps must complete first.
 
