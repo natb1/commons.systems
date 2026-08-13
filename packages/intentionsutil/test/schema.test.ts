@@ -82,6 +82,7 @@ describe("validateNode", () => {
       fix: null,
       conflict: null,
       completion: null,
+      lane_pass: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -117,6 +118,7 @@ describe("validateNode", () => {
       fix: null,
       conflict: null,
       completion: null,
+      lane_pass: null,
     });
   });
 
@@ -289,6 +291,165 @@ describe("validateNode", () => {
         },
       }),
     ).toThrow(IntentionSchemaError);
+  });
+
+  // --- execution.lane_pass -------------------------------------------------
+  //
+  // The completed-pass stamp the dispatch ladder reads to tell a successful
+  // conflict/qa-fix pass (which never moves `phase`) from a stall.
+
+  /** An `execution` block carrying `lane_pass`, for the round-trip tests below. */
+  function nodeWithLanePass(id: string, lanePass: unknown): unknown {
+    return {
+      id,
+      kind: "tactic",
+      statement: "Execution with a lane-pass stamp.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        lane_pass: lanePass,
+      },
+    };
+  }
+
+  it("round-trips a valid execution.lane_pass stamp", () => {
+    const result = validateNode(
+      nodeWithLanePass("n1-lane-pass", {
+        at: "2026-08-13T09:41:06Z",
+        lane: "conflict",
+        phase: "conflict",
+        sha: "deadbeef",
+      }),
+    );
+    expect(result.execution?.lane_pass).toEqual({
+      at: "2026-08-13T09:41:06Z",
+      lane: "conflict",
+      phase: "conflict",
+      sha: "deadbeef",
+    });
+  });
+
+  it("defaults execution.lane_pass.sha to null when absent", () => {
+    const result = validateNode(
+      nodeWithLanePass("n1-lane-pass-no-sha", {
+        at: "2026-08-13T09:41:06Z",
+        lane: "qa-fix",
+        phase: "qa",
+      }),
+    );
+    expect(result.execution?.lane_pass?.sha).toBeNull();
+  });
+
+  it("defaults execution.lane_pass to null when absent", () => {
+    const result = validateNode({
+      id: "n1-lane-pass-absent",
+      kind: "tactic",
+      statement: "Execution with no lane_pass field at all.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    expect(result.execution?.lane_pass).toBeNull();
+  });
+
+  // The `at` format is load-bearing: the ladder compares stamps with a plain
+  // string `>=`, so anything but fixed-width second precision ending in `Z`
+  // breaks chronological ordering. Each rejected shape below is a real way a
+  // writer drifts.
+
+  it("rejects an execution.lane_pass.at carrying milliseconds", () => {
+    // `toISOString()` straight from the clock. `"…:06.789Z" >= "…:06Z"` is
+    // false (`.` is 0x2E, `Z` is 0x5A) — a same-second landmine.
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-ms", {
+          at: "2026-08-13T09:41:06.789Z",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a date-only execution.lane_pass.at", () => {
+    // The repo's `YYYY-MM-DD` convention: a stamp written this morning would
+    // qualify for every launch window for the rest of the day.
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-date-only", {
+          at: "2026-08-13",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an execution.lane_pass.at with no trailing Z", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-no-z", {
+          at: "2026-08-13T09:41:06",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an unknown execution.lane_pass.lane", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-bad-lane", {
+          at: "2026-08-13T09:41:06Z",
+          lane: "review-fix",
+          phase: "review",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an unknown execution.lane_pass.phase", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-bad-phase", {
+          at: "2026-08-13T09:41:06Z",
+          lane: "conflict",
+          phase: "shipping",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("accepts the interrupt phase names fix and conflict, which PHASES excludes", () => {
+    // `lane_pass.phase` is validated against DISPATCH_PHASE_NAMES, the wider
+    // vocabulary `execution.attempts` is already keyed by.
+    for (const phase of ["fix", "conflict"]) {
+      const result = validateNode(
+        nodeWithLanePass(`n1-lane-pass-${phase}`, {
+          at: "2026-08-13T09:41:06Z",
+          lane: "conflict",
+          phase,
+        }),
+      );
+      expect(result.execution?.lane_pass?.phase).toBe(phase);
+      // ...and the node's own `phase` field still refuses them.
+      expect(() =>
+        validateNode({
+          id: "n1-phase-strict",
+          kind: "tactic",
+          statement: "s",
+          owner: "ai",
+          status: "raw",
+          phase,
+        }),
+      ).toThrow(IntentionSchemaError);
+    }
   });
 
   it("accepts a per-strategy strategy_fingerprint map", () => {
