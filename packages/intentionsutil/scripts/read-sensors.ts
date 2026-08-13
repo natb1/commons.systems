@@ -454,13 +454,24 @@ const tokenEconomySensor: Sensor = {
 // distinct sampled store states), or a per-sample `skipped` token (that
 // historical ref's store does not read/validate).
 
-/** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
-// The trailing park-cause clause was appended to the recorded sensor by the
-// 2026-08-12 /align round (56039748). The name is the registry key, so until
-// this constant matched again the sensor was de-registered and read nothing.
-// Re-registering restores the three readings below; the park-cause reading the
-// clause names is NOT implemented here yet — see the finding recorded against
-// this gap. Do not drop the clause to make them match.
+/**
+ * The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch.
+ * Load-bearing: this string is the registry key the anti-drift test
+ * (lifecycle-sensor.test.ts) compares character-for-character against the
+ * node's live `success_signal.sensor` frontmatter. Any edit to that field
+ * (including via /align) must be mirrored here in the same round — while the
+ * two differ the sensor is de-registered by name and reads nothing at all.
+ *
+ * The trailing clause below — "a park-cause reading over office_hours.reason
+ * across parked nodes counts /align-tactics parks attributable to an upstream
+ * recording round's own record gap" — was appended to the recorded sensor by
+ * the 2026-08-12 /align round (56039748), which is exactly how the sensor went
+ * silent until this constant matched it again. Re-registering restores the
+ * three readings below; the park-cause reading the clause names is NOT
+ * implemented here yet — that is a known, separate gap with its own recorded
+ * finding, and this constant only keeps the registry name in sync with the
+ * node text. Do not drop the clause to make the two match.
+ */
 export const LIFECYCLE_SENSOR_NAME =
   "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions; and a park-cause reading over office_hours.reason across parked nodes counts /align-tactics parks attributable to an upstream recording round’s own record gap (the reading that surfaced three such parks on 2026-08-12)";
 

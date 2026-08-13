@@ -73,7 +73,12 @@ function hold(
   });
 }
 
-/** The source node a hold blocks, boosted to `boost` and optionally tiered. */
+/**
+ * The source node a hold blocks, boosted to `boost` in the tier it resolves in
+ * (tier 1 unless `tier` says otherwise) and optionally tiered. The boost is
+ * authored on the RESOLVED tier because boosts are per-tier namespaced: a
+ * tier-1 boost on a tier-3 node contributes nothing to that node's tier-3 score.
+ */
 function source(
   id: string,
   blockedBy: string[],
@@ -85,7 +90,7 @@ function source(
     kind: "tactic",
     phase: "implement",
     blocked_by: blockedBy,
-    attention: { boost, override: null, rationale: "because", tier: 1 },
+    attention: { boosts: { [String(tier ?? 1)]: boost }, rationale: "because" },
     attributes: tier === undefined ? {} : { tier },
   });
 }
@@ -105,7 +110,8 @@ describe("listUnclaimedHoldAlerts", () => {
         kind: "provision-conflict",
         ageSeconds: FIVE_DAYS,
         sourceTier: 1,
-        sourceValue: 5,
+        sourceBand: 0,
+        sourceScore: 5,
       },
     ]);
   });
@@ -175,7 +181,7 @@ describe("listUnclaimedHoldAlerts", () => {
     expect(listUnclaimedHoldAlerts(nodes, { now: NOW, minAgeSeconds: 0, topK: 5 })).toEqual([]);
   });
 
-  it("orders by source (tier, value) descending", () => {
+  it("orders by the source's rank key descending", () => {
     const a = hold("tactic-a", "provision-conflict");
     const b = hold("tactic-b", "provision-conflict");
     const nodes = [
@@ -189,7 +195,7 @@ describe("listUnclaimedHoldAlerts", () => {
     expect(result.map((r) => r.sourceId)).toEqual(["tactic-b", "tactic-a"]);
   });
 
-  it("breaks (tier, value) ties by holdId ascending", () => {
+  it("breaks rank-key ties by holdId ascending", () => {
     const a = hold("tactic-a", "provision-conflict");
     const b = hold("tactic-b", "provision-conflict");
     const nodes = [
@@ -206,20 +212,20 @@ describe("listUnclaimedHoldAlerts", () => {
     ]);
   });
 
-  it("lets tier dominate value in both ordering and the top-K cutoff", () => {
+  it("lets tier dominate score in both ordering and the top-K cutoff", () => {
     const lowTierHot = hold("tactic-a", "provision-conflict");
     const highTierCold = hold("tactic-b", "provision-conflict");
     const nodes = [
       ...kinds(),
       lowTierHot,
-      source("tactic-a", [lowTierHot.id], 9), // tier 1, value 9
+      source("tactic-a", [lowTierHot.id], 9), // tier 1, score 9
       highTierCold,
-      source("tactic-b", [highTierCold.id], 0, 3), // tier 3, value 0
+      source("tactic-b", [highTierCold.id], 0, 3), // tier 3, score 0
     ];
     const result = listUnclaimedHoldAlerts(nodes, { now: NOW, minAgeSeconds: 0, topK: 5 });
-    expect(result.map((r) => [r.sourceId, r.sourceTier, r.sourceValue])).toEqual([
-      ["tactic-b", 3, 0],
-      ["tactic-a", 1, 9],
+    expect(result.map((r) => [r.sourceId, r.sourceTier, r.sourceBand, r.sourceScore])).toEqual([
+      ["tactic-b", 3, 0, 0],
+      ["tactic-a", 1, 0, 9],
     ]);
     // And with K narrowed to 1, the tier-3 source is the only one at/above cutoff.
     const narrow = listUnclaimedHoldAlerts(nodes, { now: NOW, minAgeSeconds: 0, topK: 1 });

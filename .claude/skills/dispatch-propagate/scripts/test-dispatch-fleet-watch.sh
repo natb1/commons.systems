@@ -108,7 +108,7 @@ chmod +x "$BIN/alarm"
 
 # predicate 5's enumerator stub (list-unclaimed-hold-alerts.ts). The watcher
 # runs it with NO arguments appended, so the stub takes none. STUB_HOLDALERT_OUT
-# is the raw 6-column TSV; STUB_HOLDALERT_RC fakes an enumeration failure.
+# is the raw 7-column TSV; STUB_HOLDALERT_RC fakes an enumeration failure.
 cat > "$BIN/holdalert" <<'STUB'
 #!/usr/bin/env bash
 [[ -n "${STUB_HOLDALERT_OUT:-}" ]] && printf '%s\n' "$STUB_HOLDALERT_OUT"
@@ -509,10 +509,14 @@ assert_contains "case16 automerge body still names the offending node" "tactic-m
 # DISPATCH_FLEET_WATCH_HOLDALERT_CMD, the claim ladder through the `claude`
 # stub (live sessions) and an empty $RESVDIR (reservations).
 #
-# hold_row <hold-id> <source-id> <kind> <age> <tier> <value> — one enumerator
-# TSV line, built with real TABs so the watcher's `IFS=$'\t' read` sees the
-# same six columns list-unclaimed-hold-alerts.ts emits.
-hold_row() { printf '%s\t%s\t%s\t%s\t%s\t%s' "$1" "$2" "$3" "$4" "$5" "$6"; }
+# hold_row <hold-id> <source-id> <kind> <age> <tier> <band> [score] — one
+# enumerator TSV line, built with real TABs so the watcher's `IFS=$'\t' read`
+# sees the same seven columns list-unclaimed-hold-alerts.ts emits. `score` is the
+# column appended when the resolved rank became the (tier, band, score, depth)
+# quadruple; it defaults to 0 so a case that does not care about it stays terse.
+hold_row() {
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$1" "$2" "$3" "$4" "$5" "$6" "${7:-0}"
+}
 
 # Case 18: one unclaimed candidate, no live session, empty reservation ledger
 # -> exactly one unclaimed-hold finding alarm, exit 1.

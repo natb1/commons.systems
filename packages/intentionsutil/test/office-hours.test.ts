@@ -15,8 +15,8 @@ import {
 } from "../src/officeHours.js";
 import type { SessionType } from "../src/schema.js";
 import {
+  formatBandNote,
   formatDisposition,
-  formatLiftNote,
   formatQueueRow,
   parseSelectorArgs,
   resolveSessionCwd,
@@ -91,7 +91,7 @@ function kinds(): IntentionNode[] {
 }
 
 function boost(amount: number): Attention {
-  return { boost: amount, override: null, rationale: "because", tier: 1 };
+  return { boosts: { "1": amount }, rationale: "because" };
 }
 
 function parked(recommendation: string | null = null): OfficeHours {
@@ -122,8 +122,8 @@ describe("officeHoursQueue", () => {
       "tactic-b",
       "tactic-quiet",
     ]);
-    expect(queue.find((m) => m.nodeId === "tactic-quiet")?.rank).toBe(0);
-    expect(queue.find((m) => m.nodeId === "tactic-a")?.rank).toBe(5);
+    expect(queue.find((m) => m.nodeId === "tactic-quiet")?.score).toBe(0);
+    expect(queue.find((m) => m.nodeId === "tactic-a")?.score).toBe(5);
   });
 
   it("returns an empty queue when nothing is parked", () => {
@@ -157,8 +157,10 @@ describe("officeHoursQueue", () => {
     const queue = officeHoursQueue(nodes);
 
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-other", "tactic-currev", "tactic-reqdisc"]);
-    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(10);
-    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.rank).toBe(10 * SESSION_TYPE_PENALTY);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.score).toBe(10);
+    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.score).toBe(
+      10 * SESSION_TYPE_PENALTY,
+    );
   });
 
   it("lets a sufficiently boosted penalized park overtake a lower-boost other park (soft, not a hard floor)", () => {
@@ -183,7 +185,7 @@ describe("officeHoursQueue", () => {
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-reqdisc-high", "tactic-other-low"]);
   });
 
-  it("computes QueueMember.rank as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
+  it("computes QueueMember.score as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
     const nodes = [
       ...kinds(),
       anode({
@@ -202,8 +204,8 @@ describe("officeHoursQueue", () => {
 
     const queue = officeHoursQueue(nodes);
 
-    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(8);
-    expect(queue.find((m) => m.nodeId === "tactic-currev")?.rank).toBe(8 * SESSION_TYPE_PENALTY);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.score).toBe(8);
+    expect(queue.find((m) => m.nodeId === "tactic-currev")?.score).toBe(8 * SESSION_TYPE_PENALTY);
   });
 
   it("puts a tier-2 parked node ahead of a higher-raw-rank tier-1 node (hard outer axis)", () => {
@@ -264,7 +266,10 @@ describe("officeHoursQueue", () => {
     expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
 
-  it("lifts a parked hold to the rank of the live work it blocks", () => {
+  it("bands a parked hold with the live work it blocks, and sums that work's score into its own", () => {
+    // Under the widened attention relation the blocked source is one of the
+    // hold's PARENTS, so the source's score reaches the hold as its `band` (and
+    // its lineage contribution as score) — no separate lift step.
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -287,12 +292,15 @@ describe("officeHoursQueue", () => {
 
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-hold", "tactic-unrelated"]);
     const hold = queue.find((m) => m.nodeId === "tactic-hold");
-    expect(hold?.rank).toBe(60);
-    expect(hold?.ownRank).toBe(0);
-    expect(hold?.liftedFrom).toBe("tactic-source");
+    expect(hold?.band).toBe(60);
+    expect(hold?.score).toBe(60);
+    expect(hold?.ownScore).toBe(60);
+    expect(hold?.bandSource).toBe("tactic-source");
+    // The unbanded park outranks nothing: band is compared before score.
+    expect(queue.find((m) => m.nodeId === "tactic-unrelated")?.band).toBe(0);
   });
 
-  it("lifts the tier when a blocking source is at a higher tier (tier dominates value)", () => {
+  it("inherits a higher tier from a node it blocks, and scores per-tier there (tier is a namespace)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(100), office_hours: parked() }),
@@ -309,13 +317,15 @@ describe("officeHoursQueue", () => {
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
     expect(hold?.tier).toBe(2);
-    expect(hold?.rank).toBe(1);
-    expect(hold?.ownTier).toBe(1);
-    expect(hold?.ownRank).toBe(100);
-    expect(hold?.liftedFrom).toBe("tactic-source");
+    expect(hold?.ownTier).toBe(2);
+    // Both boosts are authored on tier 1, so neither counts in the tier-2
+    // ranking the hold now resolves in — the point of per-tier namespacing.
+    expect(hold?.band).toBe(0);
+    expect(hold?.score).toBe(0);
+    expect(hold?.bandSource).toBeNull();
   });
 
-  it("takes the max over several blocking sources", () => {
+  it("bands with the highest-scoring blocked source and sums every one of them", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -337,11 +347,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(30);
-    expect(hold?.liftedFrom).toBe("tactic-src-high");
+    expect(hold?.band).toBe(30);
+    expect(hold?.bandSource).toBe("tactic-src-high");
+    // Score is the whole deduped lineage's contribution: 5 + 30.
+    expect(hold?.score).toBe(35);
   });
 
-  it("breaks a tie between equal blocking sources by id ascending", () => {
+  it("breaks a band tie between equal blocked sources by id ascending", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -363,11 +375,11 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(9);
-    expect(hold?.liftedFrom).toBe("tactic-src-a");
+    expect(hold?.band).toBe(9);
+    expect(hold?.bandSource).toBe("tactic-src-a");
   });
 
-  it("does not lift from a blocking source already at phase done (cleared blocker)", () => {
+  it("takes no band or score from a blocked source already at phase done (cleared blocker)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(2), office_hours: parked() }),
@@ -382,12 +394,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(2);
+    expect(hold?.score).toBe(2);
+    expect(hold?.band).toBe(0);
     expect(hold?.tier).toBe(1);
-    expect(hold?.liftedFrom).toBeNull();
+    expect(hold?.bandSource).toBeNull();
   });
 
-  it("keeps its own key when it outranks every blocking source", () => {
+  it("bands with a blocked source that scores below it, its own score still summing both", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(20), office_hours: parked() }),
@@ -402,12 +415,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(20);
-    expect(hold?.ownRank).toBe(20);
-    expect(hold?.liftedFrom).toBeNull();
+    expect(hold?.band).toBe(3);
+    expect(hold?.bandSource).toBe("tactic-source");
+    expect(hold?.score).toBe(23);
+    expect(hold?.ownScore).toBe(23);
   });
 
-  it("applies the session-type penalty to a lifted value without crossing a tier", () => {
+  it("applies the session-type penalty to BOTH band and score, and never to tier", () => {
     const nodes = [
       ...kinds(),
       anode({
@@ -434,14 +448,16 @@ describe("officeHoursQueue", () => {
     const queue = officeHoursQueue(nodes);
     const hold = queue.find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(40 * SESSION_TYPE_PENALTY);
-    expect(hold?.ownRank).toBe(0);
+    expect(hold?.band).toBe(40 * SESSION_TYPE_PENALTY);
+    expect(hold?.score).toBe(40 * SESSION_TYPE_PENALTY);
+    // `ownScore` reports the UN-penalized value.
+    expect(hold?.ownScore).toBe(40);
     expect(hold?.tier).toBe(1);
-    // The penalized lift is huge, but tier is still the hard outer axis.
+    // The penalized band is huge, but tier is still the hard outer axis.
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-tier2", "tactic-hold"]);
   });
 
-  it("leaves a parked node with no inbound blocked_by edges unchanged", () => {
+  it("leaves a parked node with no inbound blocked_by edges unbanded", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-alone", kind: "tactic", attention: boost(7), office_hours: parked() }),
@@ -450,10 +466,11 @@ describe("officeHoursQueue", () => {
 
     const alone = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-alone");
 
-    expect(alone?.liftedFrom).toBeNull();
-    expect(alone?.rank).toBe(alone?.ownRank);
+    expect(alone?.bandSource).toBeNull();
+    expect(alone?.band).toBe(0);
+    expect(alone?.score).toBe(alone?.ownScore);
     expect(alone?.tier).toBe(alone?.ownTier);
-    expect(alone?.rank).toBe(7);
+    expect(alone?.score).toBe(7);
   });
 });
 
@@ -742,11 +759,13 @@ describe("formatQueueRow", () => {
     // here breaks every park lookup and reports a false empty queue.
     const row = formatQueueRow({
       nodeId: "tactic-a",
-      rank: 12.5,
       tier: 1,
+      band: 0,
+      score: 12.5,
+      depth: 0,
       ownTier: 1,
-      ownRank: 12.5,
-      liftedFrom: null,
+      ownScore: 12.5,
+      bandSource: null,
       sessionType: "curriculum-review",
       since: "2026-07-01",
     });
@@ -754,36 +773,40 @@ describe("formatQueueRow", () => {
     expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
   });
 
-  it("emits exactly four tab-separated fields, even for a lifted member", () => {
+  it("emits exactly four tab-separated fields, even for a banded member", () => {
     const row = formatQueueRow({
       nodeId: "tactic-b",
-      rank: 30,
       tier: 3,
-      ownTier: 1,
-      ownRank: 5,
-      liftedFrom: "tactic-blocked",
+      band: 30,
+      score: 35,
+      depth: 1,
+      ownTier: 3,
+      ownScore: 35,
+      bandSource: "tactic-blocked",
       sessionType: "other",
       since: "2026-08-01",
     });
     expect(row.split("\t")).toHaveLength(4);
-    expect(row).toBe("30\tother\ttactic-b\t2026-08-01");
+    expect(row).toBe("35\tother\ttactic-b\t2026-08-01");
   });
 });
 
-describe("formatLiftNote", () => {
-  it("renders the advisory naming the lifted-from source and own values", () => {
-    const note = formatLiftNote({
+describe("formatBandNote", () => {
+  it("renders the advisory naming the band source and the member's own score", () => {
+    const note = formatBandNote({
       nodeId: "tactic-b",
-      rank: 30,
       tier: 3,
-      ownTier: 1,
-      ownRank: 5,
-      liftedFrom: "tactic-blocked",
+      band: 30,
+      score: 35,
+      depth: 1,
+      ownTier: 3,
+      ownScore: 35,
+      bandSource: "tactic-blocked",
       sessionType: "other",
       since: "2026-08-01",
     });
     expect(note).toBe(
-      "NOTE — tactic-b ranks at tier 3/30 inherited from blocked source tactic-blocked (own: tier 1/5)",
+      "NOTE — tactic-b ranks at tier 3 band 30 via tactic-blocked (own score 35)",
     );
   });
 });

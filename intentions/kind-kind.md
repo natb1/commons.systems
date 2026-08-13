@@ -491,15 +491,26 @@ node that owns them:
 
 ### `Attention`
 
-A user-authored injection that seeds the derived rank. Exactly one of `boost` /
-`override` is set — the authored YAML supplies one key and the other resolves to
-`null`. Setting both, or neither, is rejected.
+A user-authored injection that seeds the derived rank: a SPARSE per-tier map of
+boost values, plus the rationale for claiming them.
 
-| Name        | Type             | Meaning |
-| ----------- | ---------------- | ------- |
-| `boost`     | `number \| null` | A RELATIVE claim: adds `(self, boost)` to this node's outgoing source set, surviving upstream re-weighting. Must be finite and `> 0` — a zero boost is meaningless; use `override: 0` to explicitly zero a branch. |
-| `override`  | `number \| null` | An ABSOLUTE cap: replaces this node's outgoing set with `{(self, override)}`, capping its own branch only (a descendant's other parents still contribute). Must be finite and `>= 0`. |
-| `rationale` | `string`         | Why this node draws (or defers) attention now. Must be non-empty. |
+| Name        | Type                      | Meaning |
+| ----------- | ------------------------- | ------- |
+| `boosts`    | `Record<string, number>`  | A RELATIVE claim per tier: `{"<tier>": <boost>}`, where the key is one of the decimal tier strings `"1"`, `"2"`, `"3"` and the value is the boost chosen ON THAT TIER'S SCALE. Each value must be finite and `> 0`. SPARSE: an absent tier key means "makes no claim in that tier" and must stay distinguishable from an authored lowest value — never write a `0` to stand for an unauthored tier. |
+| `rationale` | `string`                  | Why this node draws attention now. Must be non-empty. |
+
+An `attention` block must claim at least one tier: a block whose `boosts` map is
+empty says nothing, and is rejected. To claim nothing, drop the `attention`
+block entirely (`attention: null`) — there is no "zero this branch" spelling.
+
+The pre-tier fields `boost` (with an optional `tier:` namespace tag) and a
+positive `override` are still accepted on read as LEGACY compatibility sugar and
+canonicalize into `boosts` — `boost: X` ⇒ `{"1": X}` untagged, `{"<tier>": X}`
+when tagged; `override: X` ⇒ `{"<tier>": X}`. They are read-only spellings: every
+writer emits the `boosts` map, and `tactic-attention-per-tier-boost-migration`
+rewrites the remaining node files, after which both are deleted. The old
+absolute-cap semantics of `override` are gone (it is now purely a shape
+mapping), and the old `override: 0` "zero this branch" spelling is rejected.
 
 ### `Execution`
 
