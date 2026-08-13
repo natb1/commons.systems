@@ -21,7 +21,7 @@
 # Node id: tactic-eval-finding-<slug>.
 #
 # ---------------------------------------------------------------------------
-# MODELLED ON dispatch-fleet-alarm, WITH TWO DELIBERATE DIVERGENCES
+# MODELLED ON dispatch-fleet-alarm, WITH THREE DELIBERATE DIVERGENCES
 # ---------------------------------------------------------------------------
 #
 # The find-or-create machinery below — readNode classification, the
@@ -83,6 +83,15 @@
 #     evaluator: invocations are rare, and each one is a distinct occurrence that
 #     must be counted. A rate limit here would silently discard occurrences.
 #
+# DIVERGENCE 3 — THE GRAPH-WRITE MUTEX IS WAITED FOR, NOT SKIPPED.
+# Fleet-alarm takes the mutex NON-BLOCKING because it is a systemd-timer oneshot:
+# blocking would pin its service and stack passes, and the next pass is a minute
+# away. This script's caller is spawned fire-and-forget and has no next pass, so
+# a skipped pass is a LOST occurrence. It therefore takes lib.sh's bounded-wait
+# verb instead. Both verbs and the reasoning for the split live beside
+# graph_write_lock_acquire in lib.sh; the acquisition site below repeats the
+# short form.
+#
 # ---------------------------------------------------------------------------
 # WHAT A RECURRENCE WRITES
 # ---------------------------------------------------------------------------
@@ -129,7 +138,10 @@
 # prints a JSON array):
 #   landed          a commit was made AND verified on origin/main.
 #   noop            nothing needed writing.
-#   skipped-locked  another graph writer holds this checkout's mutex.
+#   skipped-locked  another graph writer STILL held this checkout's mutex after
+#                   the bounded wait below. Unlike the sibling's non-blocking
+#                   skip, this is a LOST occurrence, not a deferred one — see
+#                   "Graph-write mutex" further down.
 #
 # --list takes NO mutex: it is a pure read with no write to serialize, and a
 # caller that cannot get the list cannot make the similarity judgment at all, so
@@ -147,6 +159,8 @@
 #   DISPATCH_EVAL_FINDING_INTENTIONS_DIR    default: <repo>/intentions
 #   DISPATCH_EVAL_FINDING_RETRIES           default: 3   (graph-commit attempts)
 #   DISPATCH_EVAL_FINDING_RETRY_DELAY       default: 5   (seconds between attempts)
+#   DISPATCH_EVAL_FINDING_LOCK_WAIT         default: 120 (seconds to wait for the
+#                                           graph-write mutex before giving up)
 #   DISPATCH_GRAPH_WRITE_LOCK_FILE          (lib.sh) overrides the mutex path.
 #
 # NOT set -e: every risky step is guarded explicitly so the script always
@@ -510,19 +524,30 @@ verify_landed() {
 # Taken BEFORE the first graph read, so the classification this pass acts on and
 # the write it derives from that classification cannot be split by another
 # writer's rebase / `git reset --hard` in this same checkout. Held on fd 9 until
-# process exit; non-blocking, so a contended pass skips rather than stacking.
+# process exit.
+#
+# BOUNDED WAIT, NOT THE SIBLING'S NON-BLOCKING SKIP. dispatch-fleet-alarm takes
+# graph_write_lock_acquire because it is a systemd-timer oneshot: a blocked pass
+# there pins the service and stacks, and the next pass is a minute away, so a
+# skip defers nothing. This script's caller is the per-phase evaluator, spawned
+# FIRE-AND-FORGET by the ladder driver. Nothing re-invokes it. A skip here is not
+# a deferred occurrence, it is a LOST one — and losing occurrences under
+# concurrency understates exactly the recurrence figure the ledger exists to
+# carry (worst for the findings that recur most, which are the ones that matter).
+# So we wait, bounded, and only give up when the wait budget is spent.
+LOCK_WAIT="${DISPATCH_EVAL_FINDING_LOCK_WAIT:-120}"
 LOCK_FILE_PATH="$(graph_write_lock_file "$REPO_ROOT" 2>/dev/null || printf '<unresolved>')"
-graph_write_lock_acquire "$REPO_ROOT"
+graph_write_lock_acquire_wait "$REPO_ROOT" "$LOCK_WAIT"
 LOCK_RC=$?
 case "$LOCK_RC" in
   0) ;;
   1)
-    log "another graph writer holds $LOCK_FILE_PATH — skipping this pass (nothing read, nothing written); THIS OCCURRENCE WAS NOT COUNTED, re-invoke to record it"
+    log "another graph writer still holds $LOCK_FILE_PATH after waiting ${LOCK_WAIT}s — skipping this pass (nothing read, nothing written); THIS OCCURRENCE WAS NOT COUNTED AND IS LOST: this script's caller is a fire-and-forget per-phase evaluator, so NOTHING WILL RE-INVOKE IT. The recorded recurrence count now understates reality by this occurrence. Raise DISPATCH_EVAL_FINDING_LOCK_WAIT, or investigate the holder of $LOCK_FILE_PATH"
     printf 'skipped-locked\n'
     exit 0
     ;;
   *)
-    log "could not establish the graph-write mutex at $LOCK_FILE_PATH (graph_write_lock_acquire rc=$LOCK_RC) — refusing to write unserialized"
+    log "could not establish the graph-write mutex at $LOCK_FILE_PATH (graph_write_lock_acquire_wait rc=$LOCK_RC, wait budget '$LOCK_WAIT') — refusing to write unserialized"
     exit 69
     ;;
 esac

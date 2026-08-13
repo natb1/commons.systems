@@ -39,9 +39,19 @@
 #   (10) the named silent-PASS invariant — a graph-commit that exits 0 without
 #        landing must make the SUT exit 1, not 0.
 #   (11) a doctrine ratchet over the SUT source: no cmp -s body-identity gate,
-#        no minimum-refresh-interval brake, and no `absent|retired` mint-over
-#        case label. Re-introducing any of those silently understates the
+#        no minimum-refresh-interval brake, no `absent|retired` mint-over case
+#        label, and the BOUNDED-WAIT mutex verb rather than the sibling's
+#        non-blocking one. Re-introducing any of those silently understates the
 #        recurrence count, which is the one metric the ledger exists to carry.
+#   (12) a CONTENDED mutex is WAITED for, not skipped: with the lock held by a
+#        background holder that releases inside the wait budget, the SUT blocks
+#        and then lands. This is divergence 3 — the caller is a fire-and-forget
+#        per-phase evaluator with no next pass, so the sibling's immediate skip
+#        would silently drop the occurrence.
+#   (13) and the wait is BOUNDED: a holder that outlives the budget still gets
+#        the `skipped-locked` disposition, but the log line must state the loss
+#        outright (not counted, nothing will re-invoke) rather than the sibling's
+#        benign "re-invoke to record it".
 #
 # Run under bash -c, never zsh.
 
@@ -406,6 +416,72 @@ assert_not_contains "(11) no minimum-refresh-interval brake (it would drop occur
 assert_not_contains "(11) no absent|closed mint-over case label" 'absent|closed' "$SRC"
 assert_not_contains "(11) no absent|retired mint-over case label" 'absent|retired' "$SRC"
 assert_contains "(11) retired shares the RESUME path with open" 'open|retired' "$SRC"
+# Divergence 3: the sibling's non-blocking verb here would restore the silent
+# under-count this ledger exists to avoid.
+assert_contains "(11) takes the BOUNDED-WAIT mutex verb" \
+  'graph_write_lock_acquire_wait "$REPO_ROOT"' "$SRC"
+assert_not_contains "(11) never the sibling's non-blocking acquire" \
+  'graph_write_lock_acquire "$REPO_ROOT"' "$SRC"
+
+# --- (12) a contended mutex is WAITED for, then the write lands --------------
+# A background holder takes the same flock the SUT will contend on and keeps it
+# for 3s. The SUT is given a 30s budget, so it must BLOCK and then land — the
+# pre-fix behaviour (non-blocking acquire) exits `skipped-locked` at once, which
+# for a fire-and-forget caller is a lost occurrence, not a deferred one.
+HOLDER=""
+hold_lock() { # <seconds> — hold $LOCK_FILE for that long; sets $HOLDER to its pid
+  local secs="$1"
+  # NOT called in a command substitution, deliberately: a background job inside
+  # `$(...)` inherits the substitution's stdout pipe, so the substitution would
+  # not return until the holder exited — which is the whole delay being staged.
+  ( exec 9>>"$LOCK_FILE"; flock 9; sleep "$secs" ) &
+  HOLDER=$!
+  # Block until the flock is genuinely taken, so the SUT contends rather than
+  # racing the holder to an uncontended acquire.
+  local waited=0
+  while (( waited < 50 )); do
+    if ! ( exec 8>>"$LOCK_FILE"; flock -n 8 ) 2>/dev/null; then break; fi
+    sleep 0.1; waited=$((waited + 1))
+  done
+}
+
+hold_lock 3
+LOCK_T0=$(date +%s)
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" \
+  DISPATCH_EVAL_FINDING_LOCK_WAIT=30 -- \
+  --slug "$SLUG" --statement 'ignored on an update' --body-file "$BODY" \
+  --sensor dispatch-phase-eval --now 2026-08-05
+LOCK_ELAPSED=$(( $(date +%s) - LOCK_T0 ))
+wait "$HOLDER" 2>/dev/null || true
+assert_eq "(12) contended run exits 0" "0" "$RC"
+assert_eq "(12) it WAITED and LANDED — never skipped-locked" "landed" "$SOUT"
+assert_contains "(12) and the write really reached graph-commit" "$ID" "$(log_lines graph-commit.log)"
+assert_eq "(12) the recurrence count moved (the occurrence was counted)" "2" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
+# The holder kept the lock ~3s; an uncontended pass through this fixture is
+# sub-second, so a run that took at least 2s demonstrably blocked on the flock.
+assert_eq "(12) it blocked on the flock rather than returning at once" "yes" \
+  "$( ((LOCK_ELAPSED >= 2)) && echo yes || echo "no (${LOCK_ELAPSED}s)")"
+
+# --- (13) the wait is BOUNDED, and the timeout says the occurrence is LOST ----
+# Same contention, but the holder outlives a 1s budget. The disposition stays
+# `skipped-locked` (an evaluator must not fail its phase over a ledger write),
+# and nothing is read or written — but the log line must NOT read like the
+# sibling's benign deferral, because no next pass exists to recover this write.
+hold_lock 4
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" \
+  DISPATCH_EVAL_FINDING_LOCK_WAIT=1 -- \
+  --slug "$SLUG" --statement 'ignored on an update' --body-file "$BODY" \
+  --sensor dispatch-phase-eval --now 2026-08-05
+assert_eq "(13) a spent wait budget still exits 0" "0" "$RC"
+assert_eq "(13) stdout says skipped-locked" "skipped-locked" "$SOUT"
+assert_eq "(13) nothing was read" "" "$(log_lines classify.log)"
+assert_eq "(13) nothing was written" "" "$(log_lines graph-commit.log)"
+assert_contains "(13) the log names the uncounted occurrence" "NOT COUNTED" "$OUT"
+assert_contains "(13) and says it is LOST, not deferred" "IS LOST" "$OUT"
+assert_contains "(13) and that nothing will re-invoke it" "NOTHING WILL RE-INVOKE" "$OUT"
+assert_contains "(13) and names the wait budget it spent" "after waiting 1s" "$OUT"
+wait "$HOLDER" 2>/dev/null || true
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite
