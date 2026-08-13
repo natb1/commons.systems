@@ -693,6 +693,33 @@ discard_run_record() {
   return 0
 }
 
+# Terminal cleanup for a launch that never got off the ground — used ONLY on
+# the failure paths BETWEEN branch (c)'s kill and the new record's write.
+#
+# On the SUPERSEDED_RELAUNCH path a plain `discard_run_record` there is
+# destructive: it deletes `$RUN_UNTRACKED`, which by then holds the KILLED
+# run's carried-forward snapshot and is the only copy, and it leaves no record
+# at all. The caller's retry would then find nothing, fall into (d') as a
+# first-ever launch, take a fresh `git stash create` (swallowing the killed
+# run's uncommitted --fix edits) and a fresh untracked snapshot (marking the
+# files it CREATED as pre-existing) — precisely the attribution loss branch (c)
+# exists to prevent, and silently. The exit-6 path is not hypothetical: branch
+# (c) drains the dying run's `flock` for at most 5 s and then "launches anyway
+# and takes the honest conflict".
+#
+# So restore the killed run's record instead. The retry re-enters branch (c),
+# re-runs its fail-closed guard, and re-derives the same HEAD baseline off the
+# same preserved snapshot. The restored record names a pid that is already
+# dead, which costs the retry only a no-op `kill_tree`.
+discard_or_restore_run_record() {
+  if [[ "$SUPERSEDED_RELAUNCH" == "1" && -f "$RUN_FILE.superseded" ]]; then
+    rm -f "$RUN_OUTPUT" "$RUN_RC" "$RUN_RC.tmp" "$RUN_PIDFILE" "$RUN_CONFLICT"
+    mv -f "$RUN_FILE.superseded" "$RUN_FILE"
+    return 0
+  fi
+  discard_run_record
+}
+
 # Copy the child's captured output into --out-dir. Called on EVERY terminal
 # path, success and failure alike, so the operator still finds the artifact at
 # the path this script's error messages name.
@@ -873,8 +900,16 @@ else
     # of finding no record and silently taking the fresh, wrong before-image
     # this guard exists to prevent. The killed pid is already dead, so the
     # repeat costs nothing.
-    if [[ -n "$stale_before" && -n "$stale_head" && "$stale_before" != "$stale_head" ]]; then
-      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's tree was already dirty at ITS launch (before_sha=$stale_before != its head_sha=$stale_head), so HEAD (head_sha=${HEAD_SHA:-unknown}) cannot separate those pre-existing uncommitted edits from the killed run's own --fix edits; resolve the working tree (commit or revert the unattributed changes) and re-run" >&2
+    # ABSENT is not CLEAN: an empty before_sha or head_sha is unusable run
+    # state, not proof the killed run launched on a clean tree. Only
+    # `run_identity_matches` requires before_sha to be non-empty, and branch
+    # (c) is by definition the path where that test FAILED — so a record from
+    # a different `run_version`, or one whose fields this version does not
+    # know, reaches here with either field empty. Testing `-n` first would let
+    # exactly those records skip the guard and take the HEAD baseline it exists
+    # to refuse, so the empties fail closed alongside a real divergence.
+    if [[ -z "$stale_before" || -z "$stale_head" || "$stale_before" != "$stale_head" ]]; then
+      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's tree was already dirty at ITS launch, or its record does not say (before_sha=${stale_before:-<absent>} != its head_sha=${stale_head:-<absent>}), so HEAD (head_sha=${HEAD_SHA:-unknown}) cannot separate any pre-existing uncommitted edits from the killed run's own --fix edits; resolve the working tree (commit or revert the unattributed changes), clear the run record at '$RUN_FILE', and re-run" >&2
       exit 2
     fi
     if [[ ! -f "$RUN_UNTRACKED" ]]; then
@@ -883,9 +918,13 @@ else
     fi
 
     # Carry the killed run's untracked snapshot across `discard_run_record`,
-    # which deletes $RUN_UNTRACKED along with the rest of the record.
+    # which deletes $RUN_UNTRACKED along with the rest of the record. The
+    # record itself is copied aside too, so a relaunch that never gets off the
+    # ground can put it back rather than leaving the next invocation with no
+    # evidence at all — see `discard_or_restore_run_record`.
     SUPERSEDED_RELAUNCH=1
     cp "$RUN_UNTRACKED" "$RUN_UNTRACKED.superseded"
+    cp "$RUN_FILE" "$RUN_FILE.superseded"
     discard_run_record
     mv -f "$RUN_UNTRACKED.superseded" "$RUN_UNTRACKED"
 
@@ -1096,12 +1135,12 @@ else
     # with its own exit code (6), never folded into the exit-1 "the child
     # failed" path and never into a status=ok summary.
     echo "$PROG: the node lock '$LOCK_FILE' for worktree '$GIT_ROOT' is already held by another detached '/code-review' run — nothing was launched; read the lock file for the holder's diagnostics, or wait for it to finish" >&2
-    discard_run_record
+    discard_or_restore_run_record
     exit 6
   fi
   if [[ -z "$RUN_PID" ]]; then
     echo "$PROG: the detached '/code-review' run did not come up — no pid appeared at '$RUN_PIDFILE' within $(( LAUNCH_ATTEMPTS ))x${LAUNCH_INTERVAL_S}s (target=$TARGET, effort=$EFFORT, model=$MODEL)" >&2
-    discard_run_record
+    discard_or_restore_run_record
     exit 1
   fi
   # A run that has ALREADY finished is equally proof that it came up — a `low`
@@ -1111,7 +1150,7 @@ else
     if [[ ! -f "$RUN_RC" ]]; then
       echo "$PROG: the detached '/code-review' run (pid=$RUN_PID) is not alive and recorded no exit code — see '$RUN_OUTPUT'" >&2
       collect_output
-      discard_run_record
+      discard_or_restore_run_record
       exit 1
     fi
   fi
@@ -1137,6 +1176,9 @@ else
     echo "untracked_before_path=$RUN_UNTRACKED"
   } >"$RUN_FILE.tmp"
   mv -f "$RUN_FILE.tmp" "$RUN_FILE"
+  # The relaunch is recorded and owns the state now: the killed run's saved
+  # record has nothing left to restore to.
+  rm -f "$RUN_FILE.superseded"
 fi
 
 release_lock
