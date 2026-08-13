@@ -501,6 +501,16 @@ timing_fields() {
 #                                          own name dedup only covers a still-
 #                                          LIVE evaluator, so the driver tracks
 #                                          this itself rather than relying on it.
+#
+# THE KEY IS CLAIMED ON A DISPOSITION, NEVER ON AN ATTEMPT. A boundary spawn
+# that FAILS leaves the phase unevaluated, so the debt halt() exists to pay is
+# still owed and the key stays unclaimed — halt() retries it exactly once, which
+# is the whole retry budget a run has (halt is the one terminal path and runs
+# once). Claiming before the attempt would mark a phase evaluated because a
+# spawn was tried, reopening the "halted runs produce no review" hole this
+# mechanism closes. Every other disposition — spawned, deduped, an unrecognized
+# answer, or no executable spawner at all — DOES claim: those are answers, and
+# for the last one a retry cannot make the binary executable.
 EVAL_LAUNCH_PHASE=""
 EVAL_LAUNCH_EPOCH=""
 EVAL_SPAWNED_KEY=""
@@ -510,9 +520,9 @@ spawn_phase_eval() {
   [[ -n "$phase" && -n "$since" ]] || return 0
   local key="$phase@$since"
   [[ "$key" != "$EVAL_SPAWNED_KEY" ]] || return 0
-  EVAL_SPAWNED_KEY="$key"
 
   if [[ ! -x "$SPAWN_JOB" ]]; then
+    EVAL_SPAWNED_KEY="$key"
     log_event eval "$phase" skipped \
       "no executable dispatch-spawn-job at $SPAWN_JOB; this phase is unevaluated"
     return 0
@@ -538,6 +548,7 @@ spawn_phase_eval() {
               '{eval_name: $name, eval_since_epoch: $since}')
   out=$("$SPAWN_JOB" "${args[@]}" 2>&1) || rc=$?
   if (( rc == 0 )); then
+    EVAL_SPAWNED_KEY="$key"
     # dispatch-spawn-job's stdout protocol is exactly one word, but stderr is
     # merged in above so a diagnostic line can precede it. Match the protocol
     # words themselves rather than taking whatever line came first, so the
@@ -549,7 +560,8 @@ spawn_phase_eval() {
     log_event eval "$phase" "$disp" "name=$name model=${model:-default}" "$fields"
   else
     # A WARNING, NEVER FATAL. The ladder's disposition is about the node, not
-    # about whether its review started.
+    # about whether its review started. The key is deliberately NOT claimed
+    # here — see the claim rule above; halt() gets the one retry.
     echo "dispatch-ladder-run: WARNING — the per-phase evaluation of '$phase' did not spawn (rc=$rc): $(head -n1 <<<"$out")" >&2
     log_event eval "$phase" spawn-failed "rc=$rc name=$name" "$fields"
   fi

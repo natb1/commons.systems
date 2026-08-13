@@ -849,10 +849,28 @@ set_seq landed  '0|'
 set_seq spawnjob '1|'
 run_ladder
 assert_eq "eval-fail: exit 0 — the run completed regardless" "0" "$RC"
-assert_eq "eval-fail: the failure was recorded, not swallowed" "1" \
+assert_eq "eval-fail: the failure was recorded, not swallowed" "2" \
   "$(events_have eval spawn-failed)"
 assert_eq "eval-fail: state.json still reports complete" "complete" \
   "$(jq -r .status "$STATE_DIR/state.json")"
+
+echo "Test: a failed boundary spawn is still OWED, so halt() retries it once"
+# The claim rule: a spawn that failed evaluated nothing, so it must not mark the
+# phase done. halt() is the one terminal path and runs once, so the retry budget
+# is exactly one — the sequence below fails the boundary attempt and succeeds on
+# the halt attempt, and the phase ends up evaluated rather than silently skipped.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|'
+set_seq spawnjob '1|' '0|spawned'
+run_ladder
+assert_eq "eval-retry: exit 0" "0" "$RC"
+assert_eq "eval-retry: the boundary failure is on the record" "1" \
+  "$(events_have eval spawn-failed)"
+assert_eq "eval-retry: and halt() paid the debt" "1" "$(events_have eval spawned)"
+assert_eq "eval-retry: exactly two attempts — the budget is one retry, not a loop" \
+  "2" "$(calls spawnjob)"
 
 echo "Test: a deduped spawn is recorded as deduped, not as spawned"
 reset_seqs
