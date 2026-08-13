@@ -750,11 +750,13 @@ interrupt is the second entry path into this same lane — the router emits phas
 `conflict` and `dispatch-graph-execute` spawns this session.
 
 That entry path adds **one** obligation the provisioning path does not have:
-Step 7b, declaring the mechanical-vs-intention disposition of the resolution on
-`execution.conflict`. It is conditional on the field being set, so the
-provisioning path skips it, but on the router path it is required — it is the
-only place the system decides whether the completed review verdict still covers
-the code that will merge.
+Step 7b's **second half**, declaring the mechanical-vs-intention disposition of
+the resolution on `execution.conflict`. It is conditional on the field being set,
+so the provisioning path skips it, but on the router path it is required — it is
+the only place the system decides whether the completed review verdict still
+covers the code that will merge. Step 7b's **first half** — the
+`execution.lane_pass` stamp — is not conditional: it runs on **both** entry
+paths, and it is the only graph write the provisioning path makes.
 
 Run every `gh` call, and every script that invokes `gh`/`git` over the network,
 with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -810,8 +812,10 @@ Every Bash tool call in this lane must therefore do one of exactly two things:
    command text — exactly what Step 5's subagent brief already requires for
    `$WT`.
 
-`$NODE_MD` (read off fresh `origin/main` by the preamble) has no bootstrap: its
-one consumer is Step 6's verification pipe, so re-read it in that same call.
+`$NODE_MD` (read off fresh `origin/main` by the preamble) has no bootstrap. It
+has two consumers — Step 6's verification pipe and Step 7b, which reads the
+node's `phase` and its `execution.conflict` off it — so re-read it in each of
+those calls.
 
 Never carry a value forward by assuming a previous call's shell is still alive.
 
@@ -1254,18 +1258,76 @@ This is the self-modification doctrine's **fallback** lane. The human's only
 interaction is **approving the permission prompt**; everything else is already
 done and recorded.
 
-### 7b. Declare the conflict-interrupt disposition
+### 7b. Record the pass, then declare the conflict-interrupt disposition
 
-**This step is required whenever the node carries an in-flight
-`execution.conflict`** — i.e. whenever this session was dispatched by the
-router's conflict interrupt rather than by provision exit 11. It is the
-**terminal act of the resolution**: nothing else in the system classifies what
-the resolution changed, so skipping it means the merge lands on whatever the
-selector's backstop decides.
+This step has **two halves**. The first half always runs. The second runs only
+when the node carries an in-flight `execution.conflict` — i.e. only when this
+session was dispatched by the router's conflict interrupt rather than by
+provision exit 11. Both halves write the same file, so **one** `graph-commit` at
+the end lands whatever they wrote.
+
+**Both halves run after Step 6's push, never before it.** The stamp claims "this
+lane finished a pass over this node," and that claim is only honest once the
+resolution is durable at `origin`. Push first, stamp second: that makes "stamp
+landed, push failed" rare rather than reachable. (When `PR_NUM` was empty, Step 6
+deliberately pushed nothing — no PR exists yet and the subsequent `implement`
+phase pushes the merge commit. Stamp anyway; the recorded sha is the node
+branch's local HEAD and the pass did happen.)
+
+#### First half — stamp the lane pass (always)
+
+The dispatch ladder decides whether a phase pass completed by reading
+`origin/main` graph state. This lane completes its work by pushing to the node's
+branch and writing job-dir markers — it never moves the node's `phase`. Without a
+durable graph write, a **successful** Lane 3 pass reads as `stalled` and the
+ladder halts a run that in fact made progress. On the provisioning entry path
+(exit 11, `execution.conflict` null) this stamp is the **only** graph write the
+lane makes, so without it the ladder sees nothing at all.
+
+`execution.lane_pass` is that write: a single object each pass overwrites, never
+cleared.
+
+Read the node's `phase` from the `NODE_MD` copy the preamble took off fresh
+`origin/main` — the same copy the second half reads `execution.conflict` from —
+and substitute it as a **literal**, the way this lane substitutes `$SOURCE_ID`,
+`$WT` and `$PROJECT_ROOT`: no shell variable survives from an earlier Bash call.
+
+```bash
+( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-lane-pass.ts \
+    "$SOURCE_ID" --stamp --lane conflict --phase "$NODE_PHASE" \
+    --sha "$(git -C "$WT" rev-parse HEAD)" --dir "$PROJECT_ROOT/intentions" )
+```
+
+`apply-lane-pass.ts` is pure of git/gh — it only writes `intentions/$SOURCE_ID.md`
+— so the `graph-commit` below lands it, exactly as it lands
+`apply-conflict-state`. Run it out of `$PROJECT_ROOT` (the fresh primary
+checkout), never out of `$WT`: a graph write from a stale checkout is a known
+`origin/main`-reverting hazard. It needs `dangerouslyDisableSandbox: true` (`npx`
+writes the npm cache).
+
+**A non-zero exit from this call is a WARNING, not a hard stop.** Print it to
+stderr and carry on — to the second half if an interrupt is set, otherwise
+straight to the commit below and Step 8. **This deliberately inverts the
+hard-stop rule the clear carries further down; the two are meant to disagree, so
+do not "fix" one to match the other.** The reason: a Lane 3 session that stops
+here never reaches Steps 9/10, so it writes no `mark-node-terminal`,
+`dispatch-self-close` HOLDs the job, the node becomes permanently unselectable,
+and a worker slot is consumed. A failed stamp costs one false `stalled` read —
+today's status quo, and the very thing this stamp exists to remove — which is
+strictly cheaper than a wedged worker.
+
+#### Second half — declare the conflict-interrupt disposition
+
+**This half is required whenever the node carries an in-flight
+`execution.conflict`.** It is the **terminal act of the resolution**: nothing else
+in the system classifies what the resolution changed, so skipping it means the
+merge lands on whatever the selector's backstop decides.
 
 Read the node's `execution.conflict` from the `NODE_MD` copy the preamble took
 off fresh `origin/main`. If it is `null` (the provision-exit-11 entry — no
-interrupt was ever set), **skip this step entirely** and go to Step 8.
+interrupt was ever set), **skip the rest of this half**: the stamp above is the
+only write this step made, so land it with the stamp-only `graph-commit` below
+and go to Step 8.
 
 Otherwise decide the **verdict** — this is a judgment only this session can make,
 because only it saw the hunks and the resolution:
@@ -1281,12 +1343,12 @@ because only it saw the hunks and the resolution:
   is one review pass; the cost of a wrong `mechanical` is conflict-resolution
   code merged to `main` that no review ever saw.
 
-Then land the verdict on the node. `apply-conflict-state` is pure of git/gh — it
-only writes `intentions/$SOURCE_ID.md` — so `graph-commit` lands it. Run both out
-of `$PROJECT_ROOT` (the fresh primary checkout), never out of `$WT`: a graph
-write from a stale checkout is a known `origin/main`-reverting hazard. Both calls
-need `dangerouslyDisableSandbox: true` (`npx` writes the npm cache; `graph-commit`
-pushes over the network).
+Then write the verdict onto the node. `apply-conflict-state` is pure of git/gh —
+it only writes `intentions/$SOURCE_ID.md` — so the `graph-commit` below lands it
+together with the stamp. Run it out of `$PROJECT_ROOT` (the fresh primary
+checkout), never out of `$WT`: a graph write from a stale checkout is a known
+`origin/main`-reverting hazard. It needs `dangerouslyDisableSandbox: true` (`npx`
+writes the npm cache).
 
 **mechanical** — the `reviewed` marker and the ladder phase are preserved, so
 `graph-auto-merge` lands the PR once GitHub reports MERGEABLE:
@@ -1294,8 +1356,6 @@ pushes over the network).
 ```bash
 ( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
     "$SOURCE_ID" --clear-conflict-mechanical --dir "$PROJECT_ROOT/intentions" )
-"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
-  -m "graph: clear conflict-interrupt on $SOURCE_ID (mechanical resolution)" "$SOURCE_ID"
 ```
 
 **intention** — re-draft the PR first (when `PR_NUM` is non-empty) so no merge
@@ -1306,21 +1366,47 @@ the review pass actually re-runs against the resolved tree:
 gh pr ready --undo "$PR_NUM"
 ( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
     "$SOURCE_ID" --clear-conflict-intention --dir "$PROJECT_ROOT/intentions" )
-"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
-  -m "graph: clear conflict-interrupt on $SOURCE_ID (intention changed — re-review)" "$SOURCE_ID"
 ```
 
 The `( cd … && npx … )` **scoped subshell** is the same shape Step 6's
 verification pipe uses and carries the same rationale: the session's own cwd is
 never mutated.
 
+#### Land both halves in one graph-commit
+
+Both writers edit the same file, so **one** commit covers everything this step
+wrote. Pick the message by which halves ran:
+
+```bash
+"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
+  -m "<message>" "$SOURCE_ID"
+```
+
+- **stamp only** (the provision-exit-11 entry — the ladder's whole path through
+  this lane) → `graph: record conflict pass on <source-id>`. A one-line state
+  edit.
+- **stamp + mechanical** →
+  `graph: clear conflict-interrupt on <source-id> (mechanical resolution)`
+- **stamp + intention** →
+  `graph: clear conflict-interrupt on <source-id> (intention changed — re-review)`
+
+Substitute the literal source id into the message, and run the call with
+`dangerouslyDisableSandbox: true` (`graph-commit` pushes over the network). If the
+stamp warned **and** no interrupt was set, nothing was written — skip the commit
+and go to Step 8.
+
+The rule below governs the **clear** — `apply-conflict-state` and the
+`graph-commit` that carries it. It is the opposite of the stamp's
+warn-and-continue rule above, on purpose.
+
 A **non-zero exit from either call is a hard stop** — do not go on to Step 8/9.
 Leaving `execution.conflict` set is the safe failure: no merge lane will touch
 the PR while it is set, and the selector re-dispatches or parks the node.
 
-**Do not declare a disposition on the `ambiguous` path** (Step 10). There the
-resolution was abandoned and the tree restored, so the interrupt is still live
-and must stay live.
+**Run none of this step on the `ambiguous` path** (Step 10) — neither half. There
+the resolution was abandoned and the tree restored, so the interrupt is still
+live and must stay live, and no pass completed to stamp. Step 6 jumps straight
+from an ambiguous verdict to Step 10, so this step is simply never reached.
 
 The selector's own MERGEABLE arm (`_gate_conflict_active` in
 `graph-select-target`) is a **backstop for a session that died before reaching
