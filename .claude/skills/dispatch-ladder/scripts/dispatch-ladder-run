@@ -416,8 +416,16 @@ done
 # running — nothing behind it retries anything. A silently-skipped sweep here is
 # not a delayed sweep, it is the deadlock the sweep prevents. Refuse to start
 # instead (.claude/rules/code-style.md: a clear error, never a quiet fallback).
+# sync_main_checkout is on this list for the same reason as the sweeps, and one
+# sharper: lib.sh is taken from PROJECT_SCRIPTS (the MAIN checkout's copy), so a
+# main checkout that predates the helper — this driver running from a feature
+# branch before that branch merges, or after a revert — leaves it undefined.
+# reconcile_pass calls it as `sync_main_checkout … || SYNC_RC=$?`, which turns
+# bash's 127 "command not found" into SYNC_RC=127, and the `-ne 0` arm then
+# halts 11 claiming "the tree is dirty or diverged — this checkout needs a
+# person" about a perfectly clean tree that was never synced at all.
 for fn in dispatch_lock_file headless_sentinel_path reservation_sweep \
-          terminal_without_disposition_sweep; do
+          terminal_without_disposition_sweep sync_main_checkout; do
   declare -f "$fn" >/dev/null 2>&1 || {
     echo "dispatch-ladder-run: $PROJECT_SCRIPTS libraries loaded but '$fn' is undefined; refusing to run without it" >&2
     exit 2; }
@@ -1086,6 +1094,14 @@ while :; do
   ADV_OUT=$("$ADVANCE" "$NODE_ID" 2>"$ADV_ERR_FILE"); adv_rc=$?
   ADV_OUT=$(head -n1 <<<"$ADV_OUT")
   ADV_ERR_LAST=$(tail -n1 "$ADV_ERR_FILE" 2>/dev/null)
+  # REPLAY IT TO OUR OWN STDERR BEFORE DISCARDING. Capturing is for folding the
+  # last line into the requeue event below; it must not SWALLOW the rest.
+  # Everything advance's call chain writes — graph-select-target's gate event
+  # lines, dispatch-graph-execute's park reasons, provision-node-worktree's
+  # refusals — reached the journal by inheriting fd 2 before this capture, and
+  # the driver's own halt text still tells the operator to read exactly those
+  # lines there (see the exit-10 halt below).
+  cat "$ADV_ERR_FILE" >&2
   rm -f "$ADV_ERR_FILE"
 
   case "$adv_rc" in
