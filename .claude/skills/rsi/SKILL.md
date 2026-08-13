@@ -76,7 +76,7 @@ The dispositions that matter, and what each means:
 
 | disposition | on event | means |
 | --- | --- | --- |
-| `advanced` / `reviewed` / `pruned` | `awaited` | the phase ended and `verify-landed` saw the change at `origin/main`. |
+| `advanced` / `reviewed` / `pruned` / `lane-complete` | `awaited` | the phase ended and `verify-landed` saw the change at `origin/main`; `lane-complete` means the lane completed by pushing, without moving `phase`. |
 | `running` | `await-repoll` | the await window expired with the worker still live — a calibration signal, not a fault. |
 | `grace-wait` | `absorb` / `idle` | the reconciler's `GRAPH_RECONCILE_GRACE` window. |
 | `ci-wait` | `idle` | a PR whose CI is still running. |

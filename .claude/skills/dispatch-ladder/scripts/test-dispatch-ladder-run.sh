@@ -195,6 +195,23 @@ set_seq() { # <name> <line>...
 }
 calls() { cat "$SEQ_DIR/$1.count"; }
 
+# await_argv <n> — the Nth recorded await argv with the launch-window flag
+# normalized out. `--since <epoch>` is wall-clock and so cannot be written into
+# an exact-match expectation; stripping it keeps the pins below asserting
+# exactly what they always asserted (node, phase, timeout) rather than being
+# loosened to a prefix match. The flag's own presence and shape are asserted
+# separately by await_since_count.
+await_argv() {
+  sed -n "${1}p" "$SEQ_DIR/await.argv" | sed -E 's/ --since [0-9]+$//'
+}
+# await_since_count — how many recorded await calls end in a plausible
+# `--since <epoch>` (10 digits: seconds since the epoch, through 2286).
+await_since_count() {
+  local n
+  n=$(grep -cE ' --since [0-9]{10}$' "$SEQ_DIR/await.argv" 2>/dev/null) || n=0
+  echo "$n"
+}
+
 # lock_modes <flag> — how many times dispatch-acquire-lock was called with it.
 # `grep -c` prints 0 AND exits 1 on a genuine zero, so the status is discarded
 # into the assignment rather than piped through a `|| echo 0` that would fire
@@ -308,7 +325,11 @@ run_ladder
 assert_eq "complete: exit 0" "0" "$RC"
 assert_eq "complete: await was called once" "1" "$(calls await)"
 assert_eq "complete: the phase was passed to await" "$NODE implement --timeout-s 3" \
-  "$(head -n1 "$SEQ_DIR/await.argv")"
+  "$(await_argv 1)"
+# And the launch window the await's lane-pass probe compares stamps against. A
+# lane that completes by pushing never moves `.phase`, so without this flag its
+# successful pass is indistinguishable from a stall.
+assert_eq "complete: await was given a --since launch window" "1" "$(await_since_count)"
 assert_eq "complete: state.json status" "complete" "$(jq -r .status "$STATE_DIR/state.json")"
 assert_eq "complete: state.json exit_code" "0" "$(jq -r .exit_code "$STATE_DIR/state.json")"
 assert_eq "complete: state.json unit name" "dispatch-ladder-$NODE" \
@@ -448,6 +469,29 @@ fi
 assert_eq "reviewed: the liveness sentinel was removed on exit" "0" \
   "$(find "$TMPDIR_TEST/lock" -name '*.live' 2>/dev/null | grep -c . || true)"
 
+echo "Test: an awaited 'lane-complete' takes another ladder step rather than halting"
+# The sibling of the `reviewed` case above. dispatch-conflict's Lane 3 and
+# qa-fix's fixing pass complete by PUSHING and never move `.phase`, so await
+# answers `lane-complete <id> <phase>` at exit 0 off the `execution.lane_pass`
+# stamp. The driver has NO case arm for it on purpose: the exit-0 arm only
+# special-cases `pruned`, so the disposition flows through the phase evaluation
+# and straight into the next advance — which is exactly right, because the node
+# is still at the same phase and the ladder's next step is to look again.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|lane-complete tactic-fixture-node qa'
+set_seq landed  '0|'
+run_ladder
+assert_eq "lane-complete: exit 0" "0" "$RC"
+assert_eq "lane-complete: the await verdict was recorded verbatim" "1" \
+  "$(events_have awaited lane-complete)"
+assert_eq "lane-complete: the phase was NOT re-awaited" "1" "$(calls await)"
+# The point of the row: the driver took another ladder step instead of halting.
+assert_eq "lane-complete: the driver advanced again" "2" "$(calls advance)"
+assert_eq "lane-complete: the phase boundary was evaluated, as on any exit-0 verdict" "1" \
+  "$(calls spawnjob)"
+
 echo "Test: a 'recovered -> fix' route is the intervention: the next advance launches /fix-checks"
 # Red CI on a `pending-merge` node is routed by reconcile-graph-review-stall and
 # by nothing else — the node is excluded from selector candidates, so
@@ -467,7 +511,8 @@ assert_eq "routed: a review-stall/recovered event was recorded" "1" \
 assert_eq "routed: the pass reported 'routed' and reset the budget" "1" \
   "$(events_have reconcile routed)"
 assert_eq "routed: the very next advance launched the fix phase" "$NODE fix --timeout-s 3" \
-  "$(head -n1 "$SEQ_DIR/await.argv")"
+  "$(await_argv 1)"
+assert_eq "routed: that await carried a --since launch window too" "1" "$(await_since_count)"
 assert_eq "routed: the driver never slept on a routed pass" "0" "$(events_have idle ci-wait)"
 
 echo "Test: --node reaches all three reconcilers, never an unscoped sweep"
