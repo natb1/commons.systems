@@ -155,6 +155,16 @@
 #                        --standalone is allowed but IS ceiling-gated — see the
 #                        EXPLICIT-NODE DIVERGENCE note under --standalone.
 #
+# WIP ceiling: the work-in-progress limit comes from
+# dispatch.config/wip.json via `dispatch-config-load wip` (its one field,
+# `limit`) — absent config means unbounded (today's behavior). `--node`
+# bypasses the bound entirely; `--top`, `--standalone`, and
+# `--pace-exempt-only` all honor it. This script only reads the configured
+# number, passes it to select-targets.ts as `--wip-limit`, and reports the
+# resulting `wip` block on stderr and in the selection log — the restriction
+# itself (in-flight count, whether it applies, fail-open behavior) is computed
+# inside select-targets.ts / packages/intentionsutil/src/router.ts.
+#
 # Env:
 #   GRAPH_CONFLICT_COMMIT_BUDGET  Max graph-commits the merge-conflict lane may
 #                        land in ONE selection pass (enter/spend/clear/park —
@@ -281,9 +291,10 @@ _selection_log_emit() {
     --argjson selected "$SELECTED_JSON" \
     --argjson skipped "$SKIPPED_JSON" \
     --argjson events "$EVENTS_JSON" \
+    --argjson wip "${WIP_JSON:-null}" \
     '{ts: $ts, site: $site, mode: $mode, disposition: $disposition,
       top: ($top | tonumber), eligible: ($eligible | tonumber),
-      selected: $selected, skipped: $skipped, events: $events}' 2>/dev/null) || return 0
+      selected: $selected, skipped: $skipped, events: $events, wip: $wip}' 2>/dev/null) || return 0
   command -v decision_log_append >/dev/null 2>&1 && decision_log_append "$json" || true
 }
 
@@ -478,17 +489,60 @@ if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$SNAPSHOT_D
   exit 2
 fi
 
+# --- Resolve the WIP ceiling (config override, else unbounded) ----------------
+# Mirror dispatch-graph-census's loader idiom: fold dispatch-config-load's
+# stderr into CFG (2>&1) so a malformed wip.json is distinguishable from an
+# absent one. FAIL-OPEN, deliberately the OPPOSITE posture from
+# dispatch-select-tick's pace-ceiling config (which fails closed): an
+# unreadable/invalid wip.json must degrade to unbounded (today's behavior),
+# never to a fleet-wide freeze — a mis-set WIP ceiling that failed closed would
+# freeze ALL new work on a typo, whereas unbounded can never make things worse
+# than not landing this feature at all.
+WIP_LIMIT=""
+if CFG=$("$SCRIPT_DIR/dispatch-config-load" wip 2>&1); then
+  if [[ "$CFG" != "no-config" ]]; then
+    v=$(jq -r '.limit // empty' <<<"$CFG")
+    [[ -n "$v" ]] && WIP_LIMIT="$v"
+  fi
+else
+  echo "graph-select-target: wip config load failed, running unbounded: $CFG" >&2
+fi
+# Guard before use: a malformed-but-JSON-valid config (or any other unexpected
+# shape) must never reach select-targets.ts under its own `set -u` as garbage.
+if [[ -n "$WIP_LIMIT" ]] && ! [[ "$WIP_LIMIT" =~ ^[0-9]+$ ]]; then
+  echo "graph-select-target: wip config limit '$WIP_LIMIT' is not a non-negative integer; ignoring, running unbounded" >&2
+  WIP_LIMIT=""
+fi
+
 # --- Run the pure selector -----------------------------------------------------
-# select-targets.ts emits {candidates:[...], events:[...]} — eligibility and
-# ordering already applied; only environmental gates remain.
+# select-targets.ts emits {candidates:[...], events:[...], wip:{...}} —
+# eligibility and ordering already applied; only environmental gates remain.
+# --node bypasses the WIP bound entirely (an explicitly named node is not
+# "starting unbounded new work" — see the --node usage note above); every
+# other mode (--top, --standalone, --pace-exempt-only) honors it, which needs
+# no special-casing beyond the MODE != "node" check since none of those modes
+# change MODE away from "normal"/"pace-exempt". MODE is computed earlier
+# (selection-log emitter section, above), well before this call.
+SELECT_ARGS=(--dir "$SNAPSHOT_DIR/intentions")
+if [[ -n "$WIP_LIMIT" && "$MODE" != "node" ]]; then
+  SELECT_ARGS+=(--wip-limit "$WIP_LIMIT")
+fi
 SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
-  --dir "$SNAPSHOT_DIR/intentions") \
+  "${SELECT_ARGS[@]}") \
   || { echo "graph-select-target: select-targets.ts failed" >&2; exit 2; }
 
 EVENTS_JSON=$(jq -c '.events' <<<"$SELECTION") || EVENTS_JSON="[]"
 for evt in $(jq -r '.events[] | @base64' <<<"$SELECTION"); do
   echo "graph-select-target: event $(base64 -d <<<"$evt")" >&2
 done
+
+# --- Report the WIP bound (every invocation, even when unset) -----------------
+# So in-flight count is observable from the first tick with no config written.
+WIP_JSON=$(jq -c '.wip' <<<"$SELECTION" 2>/dev/null) || WIP_JSON="null"
+# restricted/failed_open use an explicit null test rather than jq's `//`
+# operator: `//` treats JSON `false` as absent, which would misrender a
+# legitimate `false` as "?".
+echo "graph-select-target: wip in_flight=$(jq -r '.in_flight // "?"' <<<"$WIP_JSON") limit=$(jq -r 'if .limit == null then "unset" else .limit end' <<<"$WIP_JSON") restricted=$(jq -r 'if .restricted == null then "?" else (.restricted | tostring) end' <<<"$WIP_JSON") bypassed=$(jq -r '.bypassed // "?"' <<<"$WIP_JSON") failed_open=$(jq -r 'if .failed_open == null then "?" else (.failed_open | tostring) end' <<<"$WIP_JSON")" >&2
 
 # --- Environmental gates, in selection order -----------------------------------
 # The native node-id worktree location (<project-root>/.claude/worktrees/<id>;

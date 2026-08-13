@@ -406,7 +406,41 @@ implement → align-tactics`. This reorders `fix`/`qa` relative to the old
 closest-to-done ladder (which had `fix` before `qa`); `align-tactics` now
 covers both a strategy candidate and a frozen-tactic candidate at that
 same directive rung. Topic categories retire — topical priority is
-authored attention on the owning strategy.
+authored attention on the owning strategy. → 5. **work-in-progress
+(WIP) bound**: count in-flight tactics — tactics in a phase past
+`draft` and not yet `done`, the existing `isOpenTactic` predicate in
+`router.ts`, which counts parked and blocked nodes too, since each open
+in-flight node is a live claim regardless of whether it is currently
+selectable. When that count is at or above an operator-configured
+limit, restrict the candidate set to in-flight nodes only — new "start
+work" candidates (draft-tactic decomposition and fresh strategy
+align-tactics rounds) are withheld; below the limit, behavior is
+unchanged from steps 1-4 above. Tier-2 candidates bypass the bound —
+tier remains the preemption escape hatch, so genuinely urgent new work
+still gets through even while the fleet is at the WIP ceiling. Fail
+open: if the restricted candidate set would be empty (every in-flight
+node currently parked or blocked), the selector falls back to the full
+unrestricted candidate list rather than emitting nothing — the bound
+must never cause a selectable-but-empty deadlock. The limit is operator
+config, living at `dispatch.config/wip.json` (a single `limit` field),
+absent by default — so this bound is off (unbounded, byte-identical to
+steps 1-4 alone) until an operator explicitly sets it. An alternative
+design — swapping the comparator's sort-key order to `(tier,
+progression, rank, id)` so the closest-to-done ordinal outranks
+authored rank — was considered and rejected on 2026-08-04: it would
+permanently change every ranking decision and silently defeat authored
+boosts on draft work until the backlog drains, whereas the adopted
+WIP-bound design preserves the existing `(tier, rank)` ordering in the
+normal (below-limit) case.
+
+The bound is a START throttle applied once at selection, never an
+eligibility gate — so three `router.ts` helpers that re-call the selector
+outside the start path, `strategyAlignSelectable`, `resolveFrozenDescendant`,
+and `frozenTacticSelectable`, deliberately call it UNBOUNDED. Those helpers
+back the worker-start re-validation gate
+(`packages/intentionsutil/scripts/check-node-selection.ts`): re-validating
+an already-claimed, already-launched worker under a bound that flipped on
+since its selection would wrongly exit-12 it.
 
 Claimed-set, reservation ledger, concurrency pacing
 (`dispatch-target-workers` curve), the selection lock, and the

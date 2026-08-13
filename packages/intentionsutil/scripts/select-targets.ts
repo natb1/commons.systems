@@ -9,12 +9,21 @@
 // this script's only intended caller besides manual dry-runs.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/select-targets.ts [--dir <intentions-dir>]
+//   npx tsx packages/intentionsutil/scripts/select-targets.ts [--dir <intentions-dir>] [--wip-limit <n>]
 //
 // --dir points at a store SNAPSHOT (the wrapper extracts `intentions/` from
 // origin/main into a temp dir — selection never reads a branch's working
 // tree). Without --dir it falls back to the repo-local `intentions/` for
 // manual dry-runs, resolved relative to this file, never cwd.
+//
+// --wip-limit is environmental config (the work-in-progress ceiling), resolved
+// by the shell wrapper `.claude/skills/dispatch-propagate/scripts/graph-select-target`
+// from `dispatch.config/`. This script never reads `dispatch.config/` itself —
+// that separation is what keeps `packages/intentionsutil` a standalone,
+// dispatch-agnostic package, the same posture `--dir` establishes for the
+// store location (see `packages/intentionsutil/SEPARABILITY.md` Gap 1, which
+// names this script's `--dir` flag as the pattern the other CLI wrappers are
+// missing).
 //
 // Determinism: `listNodesStrict` returns nodes in id-sorted order and
 // `selectGraphTargets` orders with a unique `id` final tiebreak, so two runs
@@ -42,6 +51,7 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
 
 function main(argv: string[]): void {
   let intentionsDir = join(repoRoot, "intentions");
+  let wipLimit: number | null = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--dir") {
       const value = argv[i + 1];
@@ -50,12 +60,22 @@ function main(argv: string[]): void {
       }
       intentionsDir = value;
       i++;
+    } else if (argv[i] === "--wip-limit") {
+      const value = argv[i + 1];
+      if (value === undefined || value === "") {
+        throw new Error("select-targets: --wip-limit requires a non-negative integer argument");
+      }
+      if (!/^\d+$/.test(value)) {
+        throw new Error(`select-targets: --wip-limit must be a non-negative integer, got '${value}'`);
+      }
+      wipLimit = Number(value);
+      i++;
     } else {
       throw new Error(`select-targets: unknown argument '${argv[i]}'`);
     }
   }
 
-  const selection = selectGraphTargets(listNodesStrict(intentionsDir));
+  const selection = selectGraphTargets(listNodesStrict(intentionsDir), { wipLimit });
   process.stdout.write(`${JSON.stringify(selection)}\n`);
 }
 

@@ -1305,6 +1305,106 @@ else
 fi
 config_teardown
 
+# --- wip config type validation ----------------------------------------------
+# The wip config gates the work-in-progress ceiling for the graph selector
+# (selectGraphTargets). Its validator is the only path that catches a
+# malformed limit BEFORE it reaches the selector's integer in-flight-count
+# comparison. Mirrors the selection-lock validator tests: absent → no-config;
+# empty object → valid; valid integer → printed; fractional/negative/wrong-type
+# /non-object → rejected naming the field.
+
+# --- Test 7w-a: absent wip.json → no-config, exit 0 --------------------------
+echo "Test: absent wip.json prints no-config and exits 0"
+config_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>/dev/null); rc=$?
+assert_eq "7w-a absent wip.json exits 0" "0" "$rc"
+assert_eq "7w-a absent wip.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 7w-b: empty-object wip.json → valid, prints {} ---------------------
+echo "Test: empty-object wip.json is valid and prints the normalized object"
+config_setup
+printf '{}\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>/dev/null); rc=$?
+assert_eq "7w-b empty-object wip.json exits 0" "0" "$rc"
+norm=$(printf '%s' "$out" | jq -c '.')
+assert_eq "7w-b empty-object wip.json normalizes to {}" "{}" "$norm"
+config_teardown
+
+# --- Test 7w-c: limit integer → valid, value round-trips ---------------------
+echo "Test: wip.json with a valid integer limit round-trips"
+config_setup
+printf '{"limit":24}\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>/dev/null); rc=$?
+assert_eq "7w-c integer limit exits 0" "0" "$rc"
+lim=$(printf '%s' "$out" | jq -r '.limit')
+assert_eq "7w-c integer limit round-trips" "24" "$lim"
+config_teardown
+
+# --- Test 7w-d: limit fractional → exit 1 -------------------------------------
+echo "Test: wip.json with a fractional limit exits 1 and names the field"
+config_setup
+printf '{"limit":0.5}\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>&1 1>/dev/null) || rc=$?
+assert_eq "7w-d fractional limit exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"limit"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7w-d fractional limit error names limit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7w-d fractional limit error names limit"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7w-e: limit negative → exit 1 ---------------------------------------
+echo "Test: wip.json with a negative limit exits 1 and names the field"
+config_setup
+printf '{"limit":-1}\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>&1 1>/dev/null) || rc=$?
+assert_eq "7w-e negative limit exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"limit"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7w-e negative limit error names limit"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7w-e negative limit error names limit"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7w-f: limit wrong type (string) → exit 1 ----------------------------
+echo "Test: wip.json with a string limit exits 1 and names the field"
+config_setup
+printf '{"limit":"24"}\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>&1 1>/dev/null) || rc=$?
+assert_eq "7w-f string limit exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"limit"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7w-f string limit error names the field and 'number'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7w-f string limit error names the field and 'number'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7w-g: non-object top-level wip.json → exit 1 -----------------------
+echo "Test: non-object top-level wip.json exits 1 and stderr mentions object"
+config_setup
+printf '[]\n' > "$DISPATCH_CONFIG_DIR/wip.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" wip 2>&1 1>/dev/null) || rc=$?
+assert_eq "7w-g non-object wip.json exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"object"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: 7w-g non-object wip.json error mentions 'object'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: 7w-g non-object wip.json error mentions 'object'"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # <<< END MOVED <<<
 
 report_results
