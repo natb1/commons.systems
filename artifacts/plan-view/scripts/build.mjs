@@ -30,8 +30,17 @@ const REPO = resolve(PKG, "..", "..");
 const DIST = join(PKG, "dist");
 const OUT = join(DIST, "plan-view.html");
 
-/** The page title. Must appear within the first 8KB — only that prefix is scanned. */
-const TITLE = "Plan View";
+/**
+ * The page title — the artifact's name in the browser tab and the gallery,
+ * where it sits beside every other artifact this account has published. Named
+ * for its subject (the dispatch router's queue) rather than labelled with a
+ * page-type word, and kept STABLE across redeploys: readers find a tab by its
+ * name and its favicon.
+ *
+ * Must appear within the first 8KB — only that prefix is scanned — so it is
+ * emitted first.
+ */
+const TITLE = "Dispatch Plan View";
 
 const FONT_DIR = join(REPO, "packages/ds/.storybook/public/fonts");
 

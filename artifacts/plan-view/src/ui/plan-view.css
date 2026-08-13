@@ -82,6 +82,7 @@ body {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
+  text-wrap: balance;
 }
 
 /* The snapshot stamp. Prominent by contract: the page cannot read the graph at
@@ -151,6 +152,7 @@ body {
   font-weight: 700;
   margin: 0;
   font-size: 0.95rem;
+  text-wrap: balance;
 }
 
 .pv-note {
@@ -287,6 +289,11 @@ body {
   background: var(--bg);
   color: var(--fg);
   min-width: 12rem;
+}
+
+.pv-search:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* --- table ----------------------------------------------------------------- */
