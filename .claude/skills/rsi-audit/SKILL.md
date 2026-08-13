@@ -1,11 +1,11 @@
 ---
 name: rsi-audit
-description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across twelve lenses, ranked by measured price-proxy magnitude. Writes no routing policy and no graph or product files; its one closing remediation step is attended-only and touches only .claude/settings.json, for the human to review and commit. Accepts an optional window, e.g. /rsi-audit 2d.
+description: Audit recent dispatch session transcripts and emit a ranked report of token-reduction opportunities across twelve lenses, ranked by measured price-proxy magnitude, and land the top-ranked opportunities as graph ledger tactics through dispatch-eval-finding. Writes no routing policy and no product files; its one closing remediation step is attended-only and touches only .claude/settings.json, for the human to review and commit. Accepts an optional window, e.g. /rsi-audit 2d.
 ---
 
 # RSI Audit
 
-This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It **writes no routing policy and no graph or product files**: it creates no GitHub issues, writes no control artifacts, and edits no workflow files — the user decides what to act on from the report. The single exception is step 8's closing remediation, which is **attended-only** and touches exactly one file, `.claude/settings.json`, which the human reviews and commits; nothing else this skill does writes anything but the report. (The learned phase→model routing policy this skill used to write was retired in #2872: the phase orchestrator is now always Sonnet, and Opus tiering lives at the `agent()`/subagent layer inside each phase's Workflow, not in an audit-written policy.) Two cost figures appear in the output:
+This skill parses recent Claude session transcripts and emits a ranked report of token-reduction opportunities. It **writes no routing policy and no product files**: it creates no GitHub issues, writes no control artifacts, and edits no workflow files — the user decides what to act on from the report. It DOES write to the graph: step 6 lands the top-ranked opportunities as ledger tactics through `dispatch-eval-finding`, a find-or-create write to the evaluation-finding ledger (`tactic-eval-finding-<slug>` nodes) — a different graph surface than routing policy, so it does not loosen the bound in the previous sentence. The only other exception is step 9's closing remediation, which is **attended-only** and touches exactly one file, `.claude/settings.json`, which the human reviews and commits; nothing else this skill does writes anything but the report, the ledger, and that one settings file. (The learned phase→model routing policy this skill used to write was retired in #2872: the phase orchestrator is now always Sonnet, and Opus tiering lives at the `agent()`/subagent layer inside each phase's Workflow, not in an audit-written policy.) Two cost figures appear in the output:
 
 - **`price_proxy_usd`** — a uniform Opus-list-price rate applied to every token regardless of the actual model. Holding price constant isolates token count, so this figure ranks opportunities by relative magnitude. It is **not** the actual bill.
 - **`cost_usd`** — the truthful per-model bill. Each model is priced at its real rate (Sonnet, Haiku, or Opus), so this figure measures real dollars and shows the actual savings from model-routing decisions.
@@ -137,7 +137,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
 
    12. **Permission friction (denials, blocks, sandbox overrides)** — **[any-scope]** — `lenses.permission_friction`. Four counts, each a per-session number that sums cleanly across the window, so a `--session`/`--node` run reads its own figures off `.sessions[].permission_friction` instead of approximating the window rollup:
        - `user_rejections` — the human declined the tool call.
-       - `automode_denials` — the auto-mode classifier denied it. **This is the `/fewer-permission-prompts` signal specifically**: the denial text itself ends by telling the user to add a permission rule, so a high count here is exactly what step 8's closing remediation acts on.
+       - `automode_denials` — the auto-mode classifier denied it. **This is the `/fewer-permission-prompts` signal specifically**: the denial text itself ends by telling the user to add a permission rule, so a high count here is exactly what step 9's closing remediation acts on.
        - `policy_blocks` — a settings permission rule, or a PreToolUse hook, refused the call.
        - `sandbox_overrides` — tool calls carrying `dangerouslyDisableSandbox: true`. This is the friction **workaround**, not a denial: it is counted, and never charged retry cost.
 
@@ -157,7 +157,35 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
 
 5. **Ranking rule.** Rank ALL recommendations strictly by measured `price_proxy_usd` magnitude — higher proxy spend sorts higher. State explicitly at the top of the report that these figures are an Opus-list-price-equivalent PROXY, not the actual bill. Lenses whose measured magnitude is negligible (the prior study found context-size and session-combining near-zero) sort to the bottom of the ranked list and are reported WITH their measured near-zero magnitude. Do not assert hypothetical savings for negligible lenses — reporting the measured number is sufficient and avoids inflating the priority of low-impact work (this is lens 6 applied to the skill itself).
 
-6. **Emit the ranked markdown report.** Structure it as follows:
+6. **Land the top-N ranked opportunities in the graph ledger.** A ranked opportunity that exists only in the markdown report the next step emits is exactly the findings-in-prose-only defect `strategy-recursive-self-improvement` names: the report alone gives the ordinary dispatch queue nothing to execute. Before the report is emitted, land the top **N = 5** ranked opportunities from step 5's ranking (the highest `price_proxy_usd` magnitude entries, same order the report itself will use) as graph ledger tactics through `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`, passing `--sensor rsi-audit`.
+
+   **Why N = 5.** Step 5 already sorts negligible-magnitude lenses to the bottom of the ranked list rather than treating them as calls to action; minting a ledger tactic for a near-zero opportunity would manufacture dispatch-queue work with no measured payoff. Five keeps ledger churn bounded to the opportunities actually worth a standalone tactic on this skill's default weekly (7-day window) cadence, while still covering more than a single lens per run so one dominant finding cannot crowd out the rest of the window's evidence. If fewer than 5 opportunities carry non-negligible magnitude for the window, land only those — never pad the ledger with a negligible entry to reach 5.
+
+   **Find-or-create, not append-only — this is the entire point of the writer.** `dispatch-eval-finding` creates the graph node `tactic-eval-finding-<slug>` on first sight of a finding and, on every later run where the SAME finding recurs, updates that SAME node instead of minting a second one: it refreshes the body and increments `attributes.measured_impact`'s `recurrence_count` record. A finding that lands in this week's top 5 and again in next week's top 5 is ONE ledger tactic with a rising recurrence count, not two. Reading the ledger first (below) before choosing a slug is mandatory: minting a near-duplicate slug for a finding that already has an entry — open OR retired, since a retired entry RESUMES its count on recurrence rather than restarting at 1 — defeats the whole mechanism.
+
+   For each of the top N opportunities, in ranked order:
+
+   1. **Read the existing ledger**: `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding --list` — prints the whole ledger (open and retired entries) as JSON. Judge whether this occurrence IS one of the listed findings (same lens, same root cause) before choosing a slug; reuse the existing slug for a recurrence, and only choose a new one when nothing listed matches.
+   2. **Choose or confirm the slug** — lowercase-kebab, at most 60 characters, naming the finding itself (not the lens number, which can be reordered run to run) — e.g. `review-fix-opus-nongen-phase` for a lens-5 finding about Opus spend on a non-codegen phase.
+   3. **Write the body to a file** (for `--body-file`) carrying the same evidence the report entry carries: the lens name, the measured `price_proxy_usd` magnitude, the evidence rows, and the concrete suggestion — enough for the ordinary dispatch queue to act on the tactic without re-reading this run's report.
+   4. **Optionally write an impact file** (`--impact-file`, a JSON array of `{metric, value, unit, window, sensor, measured}` records — the same shape `attributes.measured_impact` already validates against) to carry the measured magnitude itself, e.g. `{"metric":"price_proxy_usd","value":<n>,"unit":"usd","window":"<N>d","sensor":"rsi-audit","measured":"<YYYY-MM-DD>"}`. Never include a `recurrence_count` record — `dispatch-eval-finding` owns that metric and refuses a caller-supplied one (exit 64).
+   5. **Invoke it**:
+
+      ```bash
+      .claude/skills/dispatch-propagate/scripts/dispatch-eval-finding \
+        --slug <slug> \
+        --statement "<one-line finding statement>" \
+        --body-file <path> \
+        --sensor rsi-audit \
+        --impact-file <path>   # optional
+      ```
+
+      `--serves` defaults to `strategy-recursive-self-improvement`; leave it unless the finding serves a different strategy. `--now` defaults to today (UTC); leave it unless backfilling a past window. The statement is written only at mint — on a recurrence it is read but ignored, so re-wording it on a later run does not fork the finding's identity.
+   6. **Record the outcome.** The script prints exactly one word on a successful exit: `landed` (a new occurrence committed and verified on `origin/main`), `noop` (nothing needed writing — most often the in-flight guard, because the entry's `execution` is non-null and a PR already owns its lifecycle), or `skipped-locked` (another writer held the graph-write mutex after the bounded wait; this occurrence is LOST, not deferred, and the next run's `--list` read is where it would be caught again). A non-zero exit (`1` write failed and rolled back, `64` usage, `69` environment, `70` write failed with a dirty node file requiring the named `git checkout --`) is a landing failure, not a skip — surface the exit code and stderr in the report's ledger-landing subsection rather than dropping the finding silently.
+
+   This step is a WRITE step, not a thirteenth lens: it produces no ranked entry of its own, it is not sorted by `price_proxy_usd`, and it consumes step 5's output rather than adding to it — the lens count in step 4 is unaffected. It writes to the graph's evaluation-finding ledger only; it still never writes routing policy or any product file (see the narrowed contract in the renumbered step below).
+
+7. **Emit the ranked markdown report.** Structure it as follows:
 
    - **Header**: window (e.g. "Last 7 days"), date range (`since`/`until`), total sessions, total turns, total proxy spend in USD, and total actual cost in USD. Include the proxy caveat: "Magnitudes are an Opus-list-price-equivalent USD proxy — a relative-magnitude figure for ranking, not the actual bill; see `cost_usd` for the real bill."
    - **Real cost breakdown**: a subsection showing per-model and per-phase `cost_usd` alongside `price_proxy_usd`. Include the AC#3 comparison explicitly: a Sonnet or Haiku phase costs materially less in `cost_usd` than an equivalent-token Opus phase — this gap is the model-routing savings that the uniform proxy erases. Label clearly: proxy = relative-magnitude ranking lens; cost_usd = truthful bill. Note `files_failed` if nonzero.
@@ -166,16 +194,17 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
      - The measured price-proxy magnitude (USD proxy) as the lead figure.
      - The evidence rows from the script (error signatures with counts, phase-model rows, etc.).
      - A concrete, specific suggestion (not a vague "consider X" — name the phase, the model, the script, the error signature).
+   - **Ledger-landing outcomes**: a short subsection listing each of the N opportunities landed in step 6 — its slug, the `tactic-eval-finding-<slug>` id, and its landing outcome (`landed` / `noop` / `skipped-locked` / a failure exit code). This is the audit trail that a ranked opportunity actually reached the graph, not only this report.
    - **All twelve lenses represented**: lenses with negligible measured impact appear at the bottom with their measured magnitude and a note that the data shows near-zero impact.
    - **Per-workflow spend fold**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. Run `npx tsx packages/intentionsutil/scripts/attribute-spend.ts tmp/usage-audit.json` and reproduce its four rows, its TOTAL row, and its verdict line in the report. Like routing recommendations it is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — see "Per-workflow spend fold" below for what the fold measures, what the deviation flag obliges you to do, and what it does not measure.
    - **Parked-population survey**: a separate labeled, **fleet-only** section, rendered on EVERY fleet-scoped run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` — it carries no cost-magnitude figure at all, the same reasoning that keeps the spend fold and routing recommendations out of the numbered list. See "Parked-population survey" below for the read procedure, the parse algorithm, and the chosen `blocked`-count denominator.
    - **Routing recommendations**: a separate labeled section, rendered on EVERY run, AFTER the ranked opportunities list. It is **not** a thirteenth lens and is **not** ranked by `price_proxy_usd` (it is a yield lens, not a cost-magnitude one) — do not merge it into the numbered ranked list and do not reorder it by the Step 5 ranking rule. Build it at report-generation time from the `by_phase_outcome` rates slice plus the static phase→model map, exactly as specified in "Rendering routing recommendations in the report" below. Entries tagged `untrusted` are rendered but explicitly excluded from the actionable set. This section does not depend on `DISPATCH_AUDIT_AGGREGATES_ENABLED` — it is produced whether or not the optional Firestore persist path is on.
 
-7. **Writes no routing policy, and no graph or product files.** The skill writes no control artifacts, creates NO GitHub issues, and modifies NO dispatch workflow files. The user reads the report and decides what to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172). The one thing this skill may write is step 8's `.claude/settings.json` remediation — attended, reviewed, and committed by the human. Nothing in step 8 loosens the bound above: `.claude/settings.json` is a permissions file, not routing policy.
+8. **Writes no routing policy, and no product files.** The skill writes no control artifacts, creates NO GitHub issues, and modifies NO dispatch workflow files. The user reads the report and decides what to file. This keeps the skill from racing or duplicating the optimization issues it surfaces (e.g. #1171, #1172). Step 6's graph ledger write is not covered by this bound: landing the top-ranked opportunities as `tactic-eval-finding-<slug>` nodes through `dispatch-eval-finding` writes to the evaluation-finding ledger, a different graph surface than routing policy (`dispatch-phase-model` / `dispatch-phase-effort`) — it carries a finding statement and its measured magnitude, never a phase→model mapping. The other thing this skill may write is step 9's `.claude/settings.json` remediation — attended, reviewed, and committed by the human. Nothing here, in step 6, or in step 9 loosens the no-routing-policy bound: `.claude/settings.json` is a permissions file, not routing policy; the evaluation-finding ledger is a measurement record, not routing policy; and this skill still never applies a routing recommendation automatically — see "Acting on routing recommendations" below, which that bound continues to govern unchanged.
 
    The phase→model routing this report informs is applied by hand, not by an audit-written policy. The phase orchestrator is always Sonnet (`dispatch-phase-model`); Opus is spent only on the complex generative subtasks each phase delegates to `agent()`/subagent calls inside its Workflow (e.g. review-fix's `/code-review` and `/security-review` finders and its fix-authoring agents). The learned per-phase promote-to-Opus policy this skill used to write was retired in #2872. The `cost_usd` breakdown above is what tells you whether that subagent tiering is paying off.
 
-8. **Closing remediation — `/fewer-permission-prompts` (ATTENDED RUNS ONLY).** Run this only when a human is present, which is the only way this skill is invoked. **A per-node/per-session evaluator running `aggregate-usage.sh --session`/`--node` gets lens 12 and never this step.**
+9. **Closing remediation — `/fewer-permission-prompts` (ATTENDED RUNS ONLY).** Run this only when a human is present, which is the only way this skill is invoked. **A per-node/per-session evaluator running `aggregate-usage.sh --session`/`--node` gets lens 12 and never this step.**
 
    The split is mechanical, not stylistic: `.claude/settings.json` sits in this repo's sandbox `denyWithinAllow` carve-out (`.claude/rules/sandbox.md`), so writing it needs `dangerouslyDisableSandbox` — attended by construction. Granting a standing sandbox override to a detached evaluator is a larger concession than this step is worth.
 
@@ -185,7 +214,7 @@ Ranking (step 5) stays on `price_proxy_usd`. `cost_usd` is reported alongside it
    2. **Review the resulting diff before it is committed** — `git diff .claude/settings.json`. Its merge semantics are not readable from this repo, so the review is the guard, not a claim about the built-in's internals. Check specifically that the hand-authored `permissions.allow` rules are still present and unmodified, and that nothing it added grants more than a read-only call.
    3. Commit it deliberately, as its own commit, separate from anything else the session is carrying. Drop the change (`git checkout -- .claude/settings.json`) if the review is not clean — do not hand-patch the generated block into shape.
 
-   The report is unaffected by this step: it is already written by the time step 8 runs, and step 8 adds nothing to it beyond a line saying whether it ran and what it changed.
+   The report is unaffected by this step: it is already written by the time step 9 runs, and step 9 adds nothing to it beyond a line saying whether it ran and what it changed.
 
 ## Per-workflow spend fold
 
@@ -280,13 +309,13 @@ jq '[.sessions[] | select(.outcome_rates.hit_rate != null)] | sort_by(-.outcome_
 jq '.by_phase_outcome | to_entries | map({phase:.key, hit_rate:.value.hit_rate, actionability:.value.actionability, fix_rate:.value.fix_rate, sessions:.value.sessions, findings_surfaced:.value.findings_surfaced, findings_actionable:.value.findings_actionable, fixes_applied:.value.fixes_applied})' tmp/usage-audit.json
 ```
 
-These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness. The last slice above is also the input to the report's **Routing recommendations** section (Step 6) — see "Rendering routing recommendations in the report" below.
+These slices are yield metrics, not cost metrics — they do not sort into the ranked token-reduction report. Read them alongside the report to correlate phase spend with phase effectiveness. The last slice above is also the input to the report's **Routing recommendations** section (Step 7) — see "Rendering routing recommendations in the report" below.
 
 ### `routing_recommendations` (advisory, persisted aggregate doc)
 
 When the optional Firestore persist path is enabled (`DISPATCH_AUDIT_AGGREGATES_ENABLED=1` — see Step 2), `audit-aggregate-writer.mjs` derives a `routing_recommendations` array from `by_phase_outcome` and adds it to the persisted doc. It is NOT part of `tmp/usage-audit.json`; it exists on the persisted aggregate only.
 
-**Two mechanisms, one computation.** The same recommendations are ALSO rendered as the report's "Routing recommendations" section on every run (Step 6). The two are deliberate duplicates of one computation, differing only in where and when they run: this one is JS-computed by `audit-aggregate-writer.mjs` on the persisted doc, and only when the optional persist gate is on; the report section is LLM-computed at report time from the same `by_phase_outcome` slice and the same static map, on every run including the (usual) runs with the persist path off. Both apply the identical grounding rule below, so they must agree for any window where both are produced. Neither applies anything — both are advisory.
+**Two mechanisms, one computation.** The same recommendations are ALSO rendered as the report's "Routing recommendations" section on every run (Step 7). The two are deliberate duplicates of one computation, differing only in where and when they run: this one is JS-computed by `audit-aggregate-writer.mjs` on the persisted doc, and only when the optional persist gate is on; the report section is LLM-computed at report time from the same `by_phase_outcome` slice and the same static map, on every run including the (usual) runs with the persist path off. Both apply the identical grounding rule below, so they must agree for any window where both are produced. Neither applies anything — both are advisory.
 
 One entry per phase key present in `by_phase_outcome`:
 
@@ -307,7 +336,7 @@ The field is a recommendation surface only. The writer never writes `dispatch-ph
 
 ### Rendering routing recommendations in the report
 
-Step 6 emits a **Routing recommendations** section on every run. There is no rendering
+Step 7 emits a **Routing recommendations** section on every run. There is no rendering
 script — compute it in-session, the same way the twelve lenses are interpreted. Inputs:
 
 1. The `by_phase_outcome` rates slice (last jq slice in the block above): one row per
@@ -360,7 +389,7 @@ set** and must not be acted on. Never rank or present an untrusted entry alongsi
 verified ones as if it were actionable.
 
 The section is advisory output only. Applying a recommendation is a hand edit by the
-author (next subsection); this skill's report step writes no file other than the report.
+author (next subsection); this skill's report step writes no file other than the report and the ledger entries step 6 lands separately.
 
 ### Acting on routing recommendations
 
