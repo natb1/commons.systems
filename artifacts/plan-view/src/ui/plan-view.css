@@ -1,0 +1,448 @@
+/* The design system, bundled from source. `packages/ds` ships TypeScript and
+ * CSS directly — there is no `dist/` build and none is needed. This one import
+ * pulls in fonts.css, the four token sheets and the base/layout/chart layers;
+ * the build then rewrites the font URLs to `data:` URIs. */
+@import "@commons-systems/ds/styles.css";
+
+/* Plan view — artifact-local styling on top of @commons-systems/ds tokens.
+ *
+ * THEME. The artifact viewer has THREE states: an explicit choice stamps
+ * `data-theme="dark"` / `data-theme="light"` on the root element, and the
+ * default "system" setting stamps nothing. The DS colour tokens are authored
+ * with CSS `light-dark()` on a bare `:root`, so every colour has its full
+ * light AND dark value defined outside any media query — which is exactly the
+ * artifact contract's requirement, satisfied structurally rather than by
+ * duplicating a palette under `prefers-color-scheme`. All that is left is to
+ * drive `color-scheme`, which is what `light-dark()` keys on. */
+
+:root {
+  /* System default: follow the OS, which is what an unstamped root means. */
+  color-scheme: light dark;
+
+  /* Lane hues — three fixed categorical slots. Hue encodes ancestor KIND, never
+   * ancestor identity: the store holds 57 strategies and 22 delegations and a
+   * 9th categorical hue is never generated. Validated with the /dataviz
+   * validator against BOTH surfaces (#ece5d8 light, #252017 dark): lightness
+   * band, chroma floor, CVD separation and normal-vision floor all pass. The
+   * DS `--chart-1..3` tokens were tried first and FAILED the chroma floor
+   * (they read gray); these are stepped replacements in the same warm family. */
+  --lane-strategy: #3b7dd8;
+  --lane-delegation: #d2761a;
+  --lane-blocker: #c0446a;
+
+  /* Sequential pair for the hot-lineage bars — ONE hue, two steps, never two
+   * categorical hues. Ordering is consistent in both modes: `strong` is always
+   * the higher-contrast step. */
+  --heat-strong: light-dark(#b8600a, #e8943a);
+  --heat-soft: light-dark(#e0a15e, #8a5a22);
+
+  --pip-filled: light-dark(#b8600a, #e8943a);
+  --pip-empty: light-dark(#d8cdb8, #3d3529);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* The viewer paints its own ground behind the page, so a transparent body
+ * borrows the host's theme. Always explicit. */
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+}
+
+.pv-root {
+  max-width: 100%;
+  padding: 1.25rem;
+  box-sizing: border-box;
+}
+
+/* --- header ---------------------------------------------------------------- */
+
+.pv-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.pv-title {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* The snapshot stamp. Prominent by contract: the page cannot read the graph at
+ * runtime, so nothing here refreshes, and the reader must never mistake old
+ * rank for current rank. */
+.pv-stamp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
+.pv-stamp b {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.pv-dirty {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.pv-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.pv-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.pv-metric-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.pv-metric-label {
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
+/* --- panels ---------------------------------------------------------------- */
+
+.pv-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.pv-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.pv-panel-title {
+  font-weight: 700;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.pv-note {
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}
+
+.pv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
+.pv-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pv-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+
+/* --- hot lineage ----------------------------------------------------------- */
+
+.pv-heat-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 18rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.18rem 0;
+}
+
+.pv-heat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs, 12px);
+}
+
+.pv-heat-track {
+  position: relative;
+  height: 12px;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.pv-heat-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  /* 4px rounded data-end anchored to the baseline; segments keep a 2px surface
+   * gap between fills so adjacent populations never read as one block. */
+  border-radius: 0 3px 3px 0;
+}
+
+.pv-heat-undecomposed {
+  background: var(--heat-soft);
+}
+.pv-heat-inflight {
+  background: var(--heat-strong);
+}
+
+.pv-heat-value {
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-heat-zero {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* --- filters --------------------------------------------------------------- */
+
+.pv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.pv-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pv-filter-label {
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+  margin-right: 0.15rem;
+}
+
+.pv-toggle {
+  font: inherit;
+  font-size: var(--text-xs, 12px);
+  font-family: var(--font-mono);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.pv-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.pv-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.pv-search {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 12px);
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 12rem;
+}
+
+/* --- table ----------------------------------------------------------------- */
+
+/* Wide content scrolls inside its OWN container — the page body must never
+ * scroll horizontally. */
+.pv-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pv-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-xs, 12px);
+}
+
+.pv-table th {
+  text-align: left;
+  font-weight: 700;
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.pv-table td {
+  padding: 0.3rem 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  vertical-align: top;
+}
+
+/* Span cells carry a left rule so a block reads as one region even when its
+ * neighbours change every row. */
+.pv-span {
+  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.pv-tier {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  font-weight: 700;
+}
+
+.pv-id {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.pv-statement {
+  color: var(--muted);
+  display: block;
+  max-width: 34rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pv-eta {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-unavailable {
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.pv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+/* --- lane gutter ----------------------------------------------------------- */
+
+/* Lanes are painted as vertical bands, not table cells: no span extent is
+ * needed, a lane repeats segments where an ancestor is non-contiguous, and
+ * several lanes light on one row for a multi-parent node. */
+.pv-lanes {
+  display: flex;
+  gap: 2px;
+  height: 1.1rem;
+  align-items: stretch;
+}
+
+.pv-lane {
+  width: 5px;
+  flex: none;
+  background: transparent;
+}
+
+.pv-lane-on-strategy {
+  background: var(--lane-strategy);
+}
+.pv-lane-on-delegation {
+  background: var(--lane-delegation);
+}
+.pv-lane-on-blocker {
+  background: var(--lane-blocker);
+}
+
+/* --- phase pip ------------------------------------------------------------- */
+
+.pv-pip {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.pv-pip-seg {
+  width: 7px;
+  height: 7px;
+  background: var(--pip-empty);
+  flex: none;
+}
+
+.pv-pip-seg.on {
+  background: var(--pip-filled);
+}
+
+.pv-pip-draft {
+  color: var(--muted);
+  font-size: var(--text-xs, 12px);
+}
+
+/* --- misc ------------------------------------------------------------------ */
+
+.pv-footer {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
+.pv-footer p {
+  margin: 0.3rem 0;
+}
+
+.pv-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--muted);
+}

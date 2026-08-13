@@ -1,0 +1,19 @@
+{
+  "name": "plan-view",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/check-artifact.mjs dist/plan-view.html",
+    "smoke": "node scripts/render-smoke.mjs dist/plan-view.html"
+  },
+  "dependencies": {
+    "@commons-systems/ds": "*",
+    "@commons-systems/intentionsutil": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

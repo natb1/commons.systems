@@ -38,6 +38,15 @@ fi
 if echo "$CHANGED" | grep -qE '^(packages/ds/|\.claude/skills/dispatch-propagate/scripts/run-storybook-smoke\.sh$)'; then
   echo "ds=true" >> "$GITHUB_OUTPUT"
 fi
+# artifact-check builds the published claude artifacts and asserts the artifact
+# contract plus a from-disk render smoke. Trigger on any artifacts/ change, on
+# packages/ds (the artifact bundles DS from source, so a token or component edit
+# changes what ships), on intentions/ (the plan view bakes the store in at build
+# time, so a graph change changes the built page), and on the runner script
+# itself.
+if echo "$CHANGED" | grep -qE '^(artifacts/|packages/ds/|intentions/|\.claude/skills/dispatch-propagate/scripts/run-artifact-check\.sh$)'; then
+  echo "artifact=true" >> "$GITHUB_OUTPUT"
+fi
 # dead-code check runs knip at repo root — any TS/JS/knip-config change can
 # orphan code elsewhere, so trigger on any such change across the repo.
 if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs)$|^knip\.(json|jsonc|ts)$'; then

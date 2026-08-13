@@ -31,7 +31,8 @@
     "packages/router",
     "packages/style",
     "packages/rules-test",
-    "packages/firebase-audit"
+    "packages/firebase-audit",
+    "artifacts/plan-view"
   ],
   "scripts": {
     "audit:firebase": "tsx packages/firebase-audit/src/cli.ts"

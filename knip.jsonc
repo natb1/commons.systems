@@ -34,7 +34,10 @@
     // --- Harness-invoked binaries: declared and used, but only via
     //     node_modules/.bin from a .claude/** shell script, which knip's
     //     ignoreFiles excludes from the module graph. ---
-    "jscpd" // dispatch-review-erosion runs node_modules/.bin/jscpd; .claude/** is in ignoreFiles so knip can't trace it
+    "jscpd", // dispatch-review-erosion runs node_modules/.bin/jscpd; .claude/** is in ignoreFiles so knip can't trace it
+    // --- Artifact build: imported by a .mjs build script, which knip does not
+    //     resolve dependencies for. ---
+    "esbuild" // artifacts/plan-view/scripts/build.mjs imports esbuild's JS API; the root declares it as an override
   ],
 
   // System binaries invoked via execFileSync or similar — not npm packages, so
@@ -83,6 +86,12 @@
     "packages/firebaseutil": { "entry": ["bin/**"] },
     "packages/firestoreutil": { "entry": ["bin/**", "test/*.type-check.ts"] },
     "functions": { "entry": ["scripts/**"] },
-    "packages/intentionsutil": { "entry": ["scripts/**"] }
+    "packages/intentionsutil": { "entry": ["scripts/**"] },
+    // The artifact workspace has two entry points no TS import reaches:
+    // `scripts/**` (the build/check/smoke runners, invoked by CI and by
+    // `npm run build`) and `src/ui/main.tsx`, which esbuild bundles as the
+    // published page's client entry. Both are `entry` rather than `ignore` so
+    // the modules they import stay traced.
+    "artifacts/plan-view": { "entry": ["scripts/**", "src/ui/main.tsx"] }
   }
 }
