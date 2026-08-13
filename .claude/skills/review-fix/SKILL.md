@@ -460,7 +460,7 @@ CR_LOG="tmp/code-review-$N/output.txt"
 case $CR_RC in
   0) ;;
   1) echo "/review-fix: the detached 'claude -p /code-review' exited non-zero, failed to launch, or died recording no exit code (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
+  2) echo "/review-fix: dispatch-code-review argument, empty-output, or unusable run-state error — including a superseded in-flight run whose before-image baseline cannot be derived, which needs the working tree resolved by hand (see $CR_ERR)" >&2; exit 1 ;;
   3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   4) echo "/review-fix: the detached '/code-review' run hit its deadline, or the 10-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   5) : ;; # still in flight — NOT terminal. Re-invoke with identical arguments,
@@ -523,7 +523,8 @@ The reason must instead carry, in this order:
 
 1. The exit code and what it means (`3` = instrument unavailable, `4` = the
    detached run's deadline was exhausted, `1` = nested session exited non-zero
-   or the run died recording no exit code, `2` = argument/empty output, `6` =
+   or the run died recording no exit code, `2` = argument, empty output, or
+   unusable run state (an underivable before-image baseline), `6` =
    another detached run holds this worktree's code-review lock, anything else =
    unexpected exit — see the catch-all above). `5` never reaches a park: it is
    an intermediate state the loop absorbs. A park for exhaustion — either the
