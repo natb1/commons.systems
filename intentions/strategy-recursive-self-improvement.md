@@ -1,39 +1,39 @@
 ---
 id: strategy-recursive-self-improvement
 kind: strategy
-statement: A serialized recursive self-improvement loop — /rsi — evaluates the
-  harness each iteration, maintains rsi-plan.md as the author-facing status/plan
-  surface, and shortcuts critical-path work that blocks model execution of
-  author intention
+statement: Harness self-improvement is measurement, not a second orchestrator —
+  /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures
+  token economy at any scope, and both land findings as merged ledger entries
+  the dispatch queue executes
 owner: human
 status: refining
 parent: strategy-autonomous-execution
-rationale: "The graph-native dispatch bootstrap has been in flight for several
-  weeks since the GitHub-issue-native workflow was sunset; the harness's
-  implementation of itself produces bootstrap deadlocks (the 2026-08 reap-gate
-  incident held every reap; dispatch is paused by author directive 2026-08-10)
-  and slow progress that the harness's own machinery-defect lane cannot always
-  drain. /rsi is the meta-loop: one iteration per invocation evaluates the
-  harness and ranks the main blockers, bottlenecks, and critical path for model
-  implementation of author intention — implementation bugs inconsistent with
-  documented intention, execution inefficiencies (token waste from poorly
+rationale: >-
+  The graph-native dispatch bootstrap produced a meta-loop: /rsi, an attended
+  session that evaluated the harness each iteration, maintained rsi-plan.md as
+  the author-facing status surface, held pause authority over the dispatch
+  queue, and shortcut critical-path work the harness could not reach. (Retired
+  2026-08-12 by author ruling.) What replaces it is smaller and mechanical: the
+  harness measures itself continuously and records what it finds, and the
+  ordinary dispatch queue executes the repairs. /rsi is now the per-phase
+  evaluator the ladder driver spawns fire-and-forget at every phase boundary;
+  /rsi-audit is the token-economy instrument at fleet or single-node scope; both
+  write findings into one merged ledger, one node per distinct finding carrying
+  a recurrence count and summary impact metrics. Neither judges, routes,
+  executes, pauses, or escalates.
+
+
+  The evaluation scope is unchanged in intent — implementation bugs inconsistent
+  with documented intention, execution inefficiencies (token waste from poorly
   managed context, unoptimized model choice, redundant work, repeated errors),
-  ambiguities in author intention (e.g. parked office-hours nodes on the
-  critical path), and technical debt not justified by current greenfield design
-  — and either drafts graph tactics for harness optimization or shortcuts
-  high-impact critical-path items by driving them through the dispatch phase
-  skills itself under the same quality standards. Its purpose is planning and
-  acceleration, never wholesale graph execution: the harness
-  (strategy-autonomous-execution, strategy-graph-native-dispatch) remains the
-  execution path; rsi exists to keep that path viable and improving, including
-  where harness implementation of itself would deadlock. Goals: (a) accelerate
-  bootstrap of a stable graph-native dispatch workflow; (b) establish a
-  recursive workflow for ongoing harness optimization and improvement. (Amended
-  2026-08-10 research-lane round: a scheduled /rsi-research sensor lane — weekly
-  /deep-research over the author-ratified seed texts of
-  tradition-agentic-engineering — feeds the fit-function evaluation with
-  external hypotheses; sensor-only, author-gated incorporation, recorded in the
-  clarifications and conditions of that date.)"
+  ambiguities in author intention, and technical debt not justified by current
+  greenfield design — but two of those four now have weak or absent mechanical
+  carriers, which the collapse clarifications state plainly rather than paper
+  over. Goal (a), accelerating the bootstrap of a stable graph-native dispatch
+  workflow, is retired with the shortcut path; goal (b), a recursive workflow
+  for ongoing harness optimization, is what remains, and it is now a measurement
+  loop feeding the ordinary queue. The research lane recorded 2026-08-10 remains
+  specified and unbuilt.
 reading: "pause: paused; backlog: 58/236 = 24.6% (band ≤35%); parked: 156 (21
   blocking); worktrees: 54; tokens 7d: dispatch 91% / office-hours 0% / rsi 0% /
   other 9%"
@@ -855,6 +855,206 @@ clarifications:
       exactly the recurrence metric the ledger exists to carry.
       tactic-eval-finding-ledger carries the exemption and owes it as a
       done-when."
+  - question: What survives the 2026-08-12 collapse, and which conditions were
+      retired outright?
+    answer: >-
+      (Recorded 2026-08-12 /align round, author-ruled on four questions put with
+      a coverage matrix in hand.) The strategy keeps its end — the harness
+      improves itself — and gives up the machinery it had grown to pursue it.
+      What survives is MEASUREMENT: the two-tier ladder evaluation, the finding
+      ledger, and the token audit. What goes is every part that JUDGED or ACTED.
+
+
+      Seven conditions were retired outright, and are enumerated here because
+      removing them from the conditions list would otherwise erase the trace:
+
+
+      1. Single-active-session serialization (worktree-as-claim, rsi-claim,
+      fail-closed exit 11/12). The two things it protected are both gone:
+      rsi-plan.md's single-writer discipline and rsi node execution. The
+      surviving write surface, dispatch-eval-finding, takes its own per-checkout
+      mutex.
+
+      2. Nodes worked by rsi shortcut implementation being claimed exactly as
+      dispatch claims them. There is no rsi shortcut implementation.
+
+      3. rsi shortcut implementation reusing the dispatch phase skills verbatim,
+      and maintaining no second orchestration surface. Moot here; the bound
+      itself survives where it now belongs, on strategy-graph-native-dispatch,
+      which owns /dispatch-emulate.
+
+      4. Pause/resume authority over the dispatch queue, including the
+      requirement that every pause record mechanically evaluable resume
+      criteria. Dropped by explicit author ruling. See the separate
+      clarification on the standing pause.
+
+      5. rsi-plan.md as a derived, fully rendered artifact, and its recorded
+      direct-push exception. The document is retired. This also removes the
+      reason tactic-rsi-direct-push-condition-reconcile existed.
+
+      6. rsi metrics as sensors registered in the success_signal/readings
+      machinery. Retired together with threshold reporting.
+
+      7. The session task budget (default 1, rsi_task.cost, the retired
+      standalone rsi_cost). Nothing remains to budget.
+
+
+      Two more were amended rather than retired and carry their own notes: the
+      pace exemption narrows to evaluation jobs, and the attended/unattended
+      condition INVERTS.
+  - question: Why drop the judgment step, and what is lost — stated plainly rather
+      than minimized?
+    answer: >-
+      (Recorded 2026-08-12; author chose 'drop judgment and authority too' over
+      three alternatives that preserved them.) The judgment step was the old
+      /rsi's Step 2: read the flags, decide what each MEANS (a threshold breach
+      may be a real regression, a sensor measuring the wrong thing, or a
+      threshold that has outlived its framing), decide which graph updates are
+      required, route harness-versus-rsi, and decide whether an /align session
+      is owed. It was explicitly main-thread and never delegated.
+
+
+      What is genuinely lost, recorded so a later round is not surprised by it:
+      (a) nothing interprets a finding — the ledger accumulates observations and
+      the author reads them; (b) nothing escalates to /align when author intent
+      is unrecorded, so an unrecorded intent is now noticed only when a human
+      notices it; (c) two of the four evaluation-scope categories this
+      strategy's own rationale names have no mechanical carrier — 'ambiguities
+      in author intention, e.g. parked office-hours nodes on the critical path'
+      survives only as the /rsi-audit parked-population survey, which measures
+      without judging, and 'technical debt not justified by current greenfield
+      design' has no carrier at all and now depends on review and qa-main
+      catching it per-change; (d) the fitness function keeps its denominator
+      (per-workflow spend) and loses its numerator (closure velocity and
+      strategy-signal progress), so it can say what was spent and not what it
+      bought.
+
+
+      The case FOR dropping it: the judgment step's specified successor,
+      /rsi-evaluate, was recorded 2026-08-11 and never built, and the loop it
+      belonged to has not run since 2026-08-11. An unbuilt judgment surface
+      carrying live doctrine is worse than an honest absence, because the record
+      reads as though something is watching.
+  - question: The dispatch queue is paused and pause authority is being retired.
+      What happens to the standing pause?
+    answer: >-
+      (Recorded 2026-08-12.) The pause condition is retired, so no skill holds
+      authority to lift it and nothing re-measures its criteria. The
+      attributes.pause block on this node — state, since, mechanism, authority,
+      reason, the self_blocking analysis, and five resume_criteria with
+      per-criterion checks and dated measurements — is deliberately LEFT IN
+      PLACE as a dated record of why the queue was paused on 2026-08-10 and what
+      was measured on 2026-08-11 and 2026-08-12. It is now inert data, not a
+      live contract: no condition requires it to be re-measured, and no check
+      evaluates it.
+
+
+      Two consequences worth stating rather than discovering later. FIRST,
+      lifting the pause is now purely an author act with no recorded gate —
+      which is what dropping the authority means, and is a real loosening
+      relative to 'never lift a pause early without recording why'. SECOND,
+      while the pause stands, no dispatch ladder runs, so the per-phase
+      evaluator never fires: the surviving self-improvement machinery is
+      entirely downstream of a queue that is currently stopped. The old attended
+      loop was the one thing that worked in exactly that state, which is the
+      bootstrap-deadlock case this strategy was created for. Recorded as an
+      accepted consequence of the author's ruling, not as a hidden cost.
+  - question: Does the original /rsi do self-improvement analysis that neither the
+      per-phase evaluator nor the token audit does?
+    answer: >-
+      (Recorded 2026-08-12, from a coverage audit of every capability of /rsi,
+      /rsi-plan, render-rsi-plan.ts, rsi.ts and read-sensors.ts against the
+      per-phase evaluator's seven lenses and the token audit's twelve.) Yes —
+      three, all of them MEASUREMENT rather than judgment, so all three survive
+      the author's ruling and merge into /rsi-audit:
+
+
+      1. Per-workflow token attribution. The audit produces spend per SKILL and
+      never folds it into the dispatch / office-hours / rsi / other workflows
+      the fitness function is stated in. The fold already exists as code
+      (WORKFLOW_SKILLS and attributeSpend in rsi.ts), as does the
+      spend-deviation check that flags dispatch failing to dominate; only their
+      caller is being deleted.
+
+      2. Landing findings in the ledger. The audit's ranked opportunities exist
+      only in a markdown report, which is precisely the findings-in-prose-only
+      condition this strategy calls a defect. It should write through
+      dispatch-eval-finding like the per-phase evaluator does, so a recurring
+      fleet-scale opportunity accumulates a recurrence count instead of being
+      re-discovered every audit.
+
+      3. The standing parked-population survey. rsi-plan §3 ran
+      office-hours-select.ts --list and parsed the rank-lift notes to say which
+      park inherited rank from which blocked source. The per-phase evaluator
+      sees a park only where its own ladder tripped over one, so at fleet scale
+      this has no successor. The instrument survives; nothing calls it.
+
+
+      Everything else the old skills did was either covered (execution
+      inefficiencies are covered strictly more richly by the nineteen combined
+      lenses; producing the usage aggregate; findings-land-in-the-graph; the
+      pace exemption), obviated (the claim primitive), dropped by author ruling
+      (judgment, authority, pause, threshold reporting, budget, the parallel
+      execution plan), or pure dashboard (the rsi-plan sections, each a re-query
+      of state available from align-tactics-census.ts, graph-census-debt.ts,
+      office-hours-select.ts --list and dispatch-eval-finding --list).
+  - question: What is the record conflict this round leaves open, and why was it not
+      resolved here?
+    answer: >-
+      (Recorded 2026-08-12.) Three conditions on this node — delegated
+      prioritization being ownership-bounded, every model reprioritization being
+      logged to attributes.priority_log, and tactic rank being namespaced by its
+      distributing strategy — name /rsi-evaluate as the actuator that owns
+      prioritization of dispatch-delegated (owner: ai) tactics. This round
+      removed the judgment surface that actuator would have lived in, and
+      /rsi-evaluate was never built.
+
+
+      They are left untouched deliberately. The author's ruling was scoped to
+      three named things — pause/resume authority, judging what a finding means,
+      and escalating to /align — and delegated prioritization is a fourth,
+      carried substantially by a separate child strategy
+      (strategy-rsi-delegated-prioritization) whose machinery is the router's
+      attention arithmetic rather than a judgment session. Retiring it as a side
+      effect of this round would delete doctrine the author did not authorize
+      deleting.
+
+
+      The open question, stated so the next round finds it: with no judgment
+      session, who writes a delegated boost, and is the answer 'nobody, and the
+      attention arithmetic is enough', or 'the router, mechanically', or 'a
+      surface still to be built'? Until that is answered these three conditions
+      specify an actuator that does not exist.
+  - question: Why was success_signal left standing when this round falsified every
+      part of it?
+    answer: >-
+      (Recorded 2026-08-12, deliberately.) The signal names rsi-plan.md's
+      metrics section, render-rsi-plan.ts, the pause resume criteria, and
+      iterations completing 'with zero critical-path blockers requiring shortcut
+      implementation'. All four are retired by this round, so the signal is
+      false as written and must be rewritten.
+
+
+      It was NOT rewritten here because the sensor field is a REGISTRY KEY.
+      read-sensors.ts exports RSI_SENSOR_NAME as a character-for-character copy
+      of this node's success_signal.sensor and registers the sensor under it;
+      rewording the node alone de-registers the sensor, which then stops being
+      read while keeping its last reading forever, so nothing looks broken. That
+      is not a hypothetical: it has now happened twice on this graph — 47219a1a
+      de-registered this very sensor on 2026-08-10 when the research lane clause
+      was appended, and 56039748 did the same to
+      strategy-graph-native-dispatch's lifecycle sensor on 2026-08-12. The
+      second is tracked as the finding ledger's first entry,
+      tactic-eval-finding-sensor-registry-key-prose-drift, which also records
+      the underlying class defect: no guard of any kind runs on the graph write
+      path, because /align lands via graph-commit to graph/** and the unit-test
+      workflow ignores those branches.
+
+
+      So the rewrite is owed by the implementation tactic that edits
+      read-sensors.ts, and node prose and constant must move in the SAME change.
+      Until then this signal is knowingly stale, and that is preferable to
+      silently unregistering the sensor to make the record look tidy.
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation and each
@@ -921,73 +1121,29 @@ attributes:
         entry once that residue lands as graph nodes or memories, and do not
         delete the file while the entry stands.
   conditions:
-    - at most one /rsi session is active at a time — invocation claims a
-      singleton resource (the strategy-recursive-self-improvement worktree,
-      worktree-as-claim, the same liveness rule the router uses) and fails with
-      a printed error when the claim is held; fail-closed and automatic, never
-      operator discipline, and never a second detection mechanism beside the
-      claim primitive
-    - a node worked by rsi shortcut implementation is claimed exactly as
-      dispatch claims it (worktree-as-claim, launch-path refusal of an
-      already-claimed node), so no node is ever worked concurrently by the
-      dispatch workflow and the rsi skill — rsi meets the same serialized
-      implementation standards as the dispatch workflow
-    - "rsi shortcut implementation reuses the dispatch phase skills verbatim,
-      driven through the same execution substrate — spawned sessions via
-      dispatch-graph-execute / dispatch-spawn-job, with the tick's merge lane
-      doing every merge (rsi never hand-merges) — so the quality bar is
-      identical because the skills are identical; rsi maintains no second
-      orchestration surface and no divergent copy of a standard, and a standards
-      extraction into common skills happens only when a concrete consumer
-      requires it (none does today) (Amended 2026-08-12: the parenthetical
-      \"none does today\" is now dated — a concrete consumer exists. The
-      emulation loop was extracted from /rsi into the user-invocable
-      /dispatch-emulate skill (55d07b51, PR #3069) so the procedure has one home
-      and is reachable without a full rsi iteration. The bound this condition
-      states is unchanged and was re-tested this round against its steelman: the
-      extraction moved NO scheduling authority — graph-select-target owns every
-      eligibility gate, dispatch-graph-execute owns provisioning, spawn and
-      every disposition, and the two loop scripts decide nothing — so rsi still
-      maintains no second orchestration surface. The divergence and its
-      invariant are recorded on strategy-graph-native-dispatch, which owns the
-      extracted skill.)"
-    - rsi holds pause/resume authority over the dispatch queue for integrity
-      errors affecting the stability or correctness of the dispatch workflow;
-      pauses go through the doctrinal mechanism (the dispatch.config boolean
-      once tactic-dispatch-pause-config-field lands; the sentinel file is
-      interim practice), and every pause records explicit, mechanically
-      evaluable resume criteria as structured data rendered into rsi-plan.md — a
-      pause with no recorded resume criterion, or with prose-only criteria no
-      check can evaluate, is a defect
-    - "the graph stays the sole tracker: rsi-plan.md is a derived, fully
-      rendered artifact — every section is produced by render-rsi-plan.ts from
-      graph state, including the model-generated queue summaries, which land
-      first as dated readings on their owning strategy nodes (dispatch →
-      strategy-graph-native-dispatch, office-hours → strategy-attention-surface,
-      rsi → strategy-recursive-self-improvement) and are rendered from there; a
-      hand-edited section is a defect. The file is single-writer (rsi-only,
-      serialized) and direct-pushed to main without PR flow — a recorded
-      exception to strategy-graph-native-dispatch's
-      direct-push-restricted-to-intentions/-paths condition, carried until
-      tactic-rsi-direct-push-condition-reconcile amends that condition"
-    - rsi sessions and their rsi-implement work are pace-exempt —
-      author-invoked, serialized, and budget-bounded, so the budget and the
-      serialization are the throttle rather than the pace curve; the exemption
-      is named here so the pace-exempt marked-set discipline on
-      strategy-graph-native-dispatch stays deliberate
-    - rsi metrics are sensors registered in the graph's existing
-      success_signal/readings machinery on their owning strategies — never a
-      parallel metric registry; rsi-plan.md renders readings, and registering an
-      rsi metric reduces the graph's standing unregistered-sensor gap rather
-      than adding a side system
-    - "/rsi is an attended, author-invoked loop — never scheduled or
-      cron-driven; unattended recursion is the harness's job, and the
-      interactive limbs (the /align escalation, the office-hours conduct on an
-      rsi-implement throw) exist precisely because the author is present —
-      scoped 2026-08-10: this binds the /rsi loop proper; the scheduled
-      /rsi-research sensor lane (weekly, sensor-only, author-gated
-      incorporation) is not /rsi and is governed by the research-lane conditions
-      below"
+    - "evaluation jobs are pace-exempt: a per-phase /rsi run and an /rsi-audit
+      run are recording work, not queue work, and must never consume pace-curve
+      budget or be gated by it (mechanism today: EVAL_POLICY_PHASE=ladder-eval
+      in dispatch-ladder-run, and dispatch-eval-finding's own exemption).
+      (Amended 2026-08-12 collapse round: this condition previously exempted
+      \"rsi sessions and their rsi-implement work\" on the grounds that the
+      session budget and the serialization were the throttle. Both of those
+      throttles are retired with rsi execution; what survives is the narrower
+      and more defensible claim that measuring the queue must not compete with
+      the queue.)"
+    - 'the split is by write surface, not by attendance: /rsi runs UNATTENDED
+      and auto-spawned by dispatch-ladder-run at every phase boundary, and is
+      therefore bound to record-only — no fix, no skill or script edit, no phase
+      transition, no merge, no label, and never /fewer-permission-prompts or any
+      other write to .claude/settings.json. /rsi-audit is author-invoked and may
+      hold the attended-only remediation steps that need a sandbox override.
+      (Amended 2026-08-12 collapse round, INVERTING the prior condition. That
+      condition read "/rsi is an attended, author-invoked loop — never scheduled
+      or cron-driven", which was true of the judgment loop and is false of its
+      replacement. The safety the old wording bought — that nothing recursive
+      runs without the author present — is now bought mechanically instead: the
+      unattended half cannot execute anything, so its running unsupervised costs
+      a model turn and nothing else.)'
     - "the research lane is sensor-only: a scheduled /rsi-research run writes
       only inert output — one dated reading on this strategy, born-parked
       candidate curriculum chunks, and draft tactics — and never grounding
@@ -996,12 +1152,20 @@ attributes:
       judgment step, or /align), and the lane's token spend stays small relative
       to dispatch under the existing per-workflow attribution — spend
       approaching dispatch is itself a review trigger"
-    - the research lane runs weekly via harness cron invoking /rsi-research,
+    - "the research lane runs weekly via harness cron invoking /rsi-research,
       independent of the dispatch pause state (its output is inert, and research
-      continuing while dispatch is paused is the bootstrap case rsi exists for);
-      each run claims the strategy-recursive-self-improvement worktree
-      fail-closed against a live /rsi session, the same worktree-as-claim
-      serialization as /rsi itself
+      continuing while dispatch is paused is the bootstrap case rsi exists for).
+      (Amended 2026-08-12 collapse round: the clause requiring each run to claim
+      the strategy-recursive-self-improvement worktree fail-closed against a
+      live /rsi session is RETIRED — it named a serialization primitive
+      (rsi-claim) and a competitor (the attended /rsi loop) that this round both
+      retire. The lane remains UNBUILT: no /rsi-research skill exists in
+      .claude/skills/, so these four research-lane conditions are specification
+      without a carrier. They are deliberately retained rather than retired —
+      the author authorized dropping the judgment loop, rsi-plan.md and the
+      parallel execution plan, not the research lane — but a future round should
+      decide whether an unbuilt lane is still wanted before more doctrine
+      accretes on it.)"
     - "the research lane's unread pool stays bounded: research-produced
       born-parked items (candidate chunks, review items) accumulating across
       cycles without an office-hours sitting is a review trigger recorded in the
@@ -1026,73 +1190,64 @@ attributes:
       failure shape of a lane that drafts from external findings and then judges
       its own output. Build detail and the lane's spec corrections are recorded
       on tactic-rsi-research-skill."
-    - "every rsi-implement task ends with a recorded acceleration review, inside
-      the same task and at no extra budget cost: once the node reaches its
-      terminus for the session, the observed execution is evaluated for
-      optimizations to rsi shortcut implementation and to implementation in
-      general — phase wall-clock against the await window, failed or wasted
-      launch cycles, repeated operator interventions, round trips that produced
-      no code change, and CI/fix-lane spend — and every finding lands in the
-      graph in that same session as a tactic, or as a dated clarification on an
-      existing node when one already covers it. The review is performed after
-      the implementation reaches its terminus, never interleaved with it, so it
-      evaluates observed results rather than predictions. A session that reports
-      an rsi-implement outcome with no recorded review, or that leaves its
-      findings in session prose only, is a defect — the graph is the sole
-      tracker, so an unrecorded acceleration finding is indistinguishable from
-      one never made. (Amended 2026-08-12 by author ruling: the review's CARRIER
-      is now the final step of /dispatch-emulate, and /rsi inherits it through
-      the Step 4b delegation rather than carrying a separate closing step of its
-      own. The condition itself is unchanged — it still binds rsi-implement
-      tasks, still runs after the node reaches its terminus, still costs no
-      extra budget, and still requires every finding to land in the graph in the
-      same session. Only the home of the mechanism moves, so that the loop and
-      its closing evaluation stay in one place.
-      tactic-rsi-implement-acceleration-review is re-targeted accordingly in
-      this same round.) (Amended 2026-08-12 /align round; the review becomes
-      TWO-TIER and is no longer terminus-only.) (a) PER-PHASE: at each phase
-      boundary the ladder driver spawns a fire-and-forget evaluation job scoped
-      to the phase that just completed, and does not wait on it — so the
-      driver's no-model-turn-in-the-loop premise, the whole reason it is a
-      detached shell script, is preserved exactly. Evaluating a phase that has
-      ALREADY completed is still post-hoc; the \"never interleaved\" bar above
-      targeted evaluating PREDICTIONS mid-flight and is unchanged by this
-      amendment. (b) CLOSING: a final pass performs ONLY the cross-phase
-      synthesis no single phase's evaluator can see — rework loops across
-      phases, the halt-cause taxonomy, end-to-end wall clock against the plan.
-      The \"inside the same task and at no extra budget cost\" clause is
-      RETIRED: per-phase evaluation costs a model turn per phase, and that cost
-      is accepted for the evidence freshness it buys (a phase's transcript is
-      small and warm at its own boundary, and cold and expensive to recover six
-      hours later). A run that HALTS before terminus — exit 10 idle, 11 throw,
-      12 stalled, 13 claimed, 21 timeout — still owes a review of the phases it
-      did complete; under the old terminus-only rule the most defect-rich runs
-      recorded nothing at all, and closing that gap is an independent reason for
-      this amendment, not merely a consequence of it. Every evaluation,
-      per-phase or closing, must record: recurring errors causing quality
-      issues; unnecessary round trips; variances requiring intervention; rework
-      and backtrack rate (fix and conflict attempts, demotions back to
-      implement, scope-fingerprint custody churn); plan-quality yield (units
-      planned by /align-tactics against units implemented and units reworked,
-      plus qa findings the plan did not anticipate); calibration and waiting
-      (measured elapsed_s per phase against the configured await window,
-      yielding a concrete recommended default rather than an observation, plus
-      ci-wait/grace-wait time burned and halt-to-engagement latency); and
-      friction and adherence (permission prompts and denials, sandbox retries,
-      and violations of documented rules — a rule violated repeatedly is usually
-      a rule written badly). Findings land as ledger entries per the
-      finding-ledger clarification of this same date, never as fresh nodes per
-      occurrence."
-    - "each rsi session runs under a task budget — default 1; a task’s cost
-      derives from its attributes.rsi_task: an implementation-type task always
-      costs 1 (a declared rsi_task.cost is ignored and flagged), other types
-      default 0 unless the node declares attributes.rsi_task.cost; the legacy
-      standalone attributes.rsi_cost is retired — its existing carriers repoint
-      to rsi_task.cost, and a standalone rsi_cost thereafter is a lint
-      violation; plan execution continues until the budget is exhausted;
-      render-rsi-plan.ts flags an implementation row whose reasoning omits the
-      rsi-vs-dispatch justification or whose declared cost contradicts the
-      derivation"
+    - "every dispatch-ladder run is evaluated, in two tiers, and every finding
+      lands in the graph. (a) PER-PHASE: at each phase boundary the ladder
+      driver spawns a fire-and-forget /rsi job scoped to the phase that just
+      completed and does not wait on it, so the driver's
+      no-model-turn-in-the-loop premise — the whole reason it is a detached
+      shell script — is preserved exactly. Evaluating a phase that has ALREADY
+      completed is post-hoc, so the never-interleaved bar (which targeted
+      evaluating PREDICTIONS mid-flight) is unaffected. (b) CLOSING: a final
+      pass performs ONLY the cross-phase synthesis no single phase's evaluator
+      can see — rework loops across phases, the halt-cause taxonomy, end-to-end
+      wall clock against the plan. A run that HALTS before terminus (exit 10
+      idle, 11 throw, 12 stalled, 13 claimed, 21 timeout) still owes a review of
+      the phases it did complete; under the old terminus-only rule the most
+      defect-rich runs recorded nothing at all. Every evaluation, per-phase or
+      closing, must record: recurring errors causing quality issues; unnecessary
+      round trips; variances requiring intervention; rework and backtrack rate
+      (fix and conflict attempts, demotions back to implement, scope-fingerprint
+      custody churn); plan-quality yield (units planned by /align-tactics
+      against units implemented and units reworked, plus qa findings the plan
+      did not anticipate); calibration and waiting (measured elapsed_s per phase
+      against the configured await window, yielding a concrete recommended
+      default rather than an observation, plus ci-wait/grace-wait time burned
+      and halt-to-engagement latency); and friction and adherence (permission
+      denials, sandbox retries, and violations of documented rules — a rule
+      violated repeatedly is usually a rule written badly). Findings land as
+      ledger entries, never as fresh nodes per occurrence. (Amended 2026-08-12
+      collapse round. Two changes. FIRST, the binding scope widens from
+      rsi-implement tasks to every ladder run — the old narrowing was justified
+      by 'an rsi task has an attending author and an explicit budget; a dispatch
+      phase worker has neither', and with the attended loop and the budget both
+      retired that distinction no longer exists. SECOND, the carrier is named:
+      the per-phase half is /rsi (formerly /dispatch-ladder-eval) and the
+      closing half stays in /dispatch-ladder. The 'inside the same task and at
+      no extra budget cost' clause remains RETIRED: per-phase evaluation costs a
+      model turn per phase, accepted for the evidence freshness it buys.)"
+    - "/rsi-audit is the measurement instrument at every scope — fleet-wide by
+      default, and --session/--node for one run — and it owes three things the
+      per-phase evaluator structurally cannot produce: per-workflow token
+      attribution (the dispatch / office-hours / rsi / other fold) with the
+      recorded expectation that dispatch dominates and a deviation is itself a
+      review trigger; the fleet-only figures that are a category error at n=1
+      (pooled outcome rates, medians, cross-session recurrence); and a survey of
+      the standing parked population and what each park blocks, which a
+      single-run evaluator only ever sees where its own ladder tripped over one.
+      Its findings land through the same finding ledger the per-phase evaluator
+      writes — a ranked opportunity that exists only in a markdown report is the
+      findings-in-prose-only defect this strategy already names, not a report.
+      (Recorded 2026-08-12 collapse round, from the coverage audit of what the
+      retired /rsi and /rsi-plan did that neither successor did.)"
+    - "the finding ledger's recurrence count is the figure the ledger exists to
+      carry, so an occurrence must never be silently dropped: a writer that
+      cannot take the graph-write lock must not skip-and-warn when its caller is
+      a detached job that nobody will re-invoke. (Recorded 2026-08-12 collapse
+      round from a measured defect, not a hypothetical: dispatch-eval-finding
+      skips on lock contention and tells the caller to re-invoke, and the
+      per-phase evaluator is spawned fire-and-forget, so concurrent ladders
+      under-count exactly the metric that makes recurrence visible. Tracked for
+      repair; recorded here because the bound outlives the current writer.)"
     - "priority delegation is ownership-bounded: the author owns prioritization
       of strategies and owner: human tactics; /rsi-evaluate owns prioritization
       of dispatch-delegated (owner: ai) tactics, ordered toward the recorded
@@ -1247,4 +1402,4 @@ attributes:
           unclaimed-hold 2026-08-10, busy-stall 2026-08-09, watch-unknown
           2026-08-09, heal-fired 2026-08-08."
 ---
-# A serialized recursive self-improvement loop — /rsi — evaluates the harness each iteration, maintains rsi-plan.md as the author-facing status/plan surface, and shortcuts critical-path work that blocks model execution of author intention
+# Harness self-improvement is measurement, not a second orchestrator — /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures token economy at any scope, and both land findings as merged ledger entries the dispatch queue executes

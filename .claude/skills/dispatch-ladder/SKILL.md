@@ -148,6 +148,57 @@ Model and effort are policy, not a call-site literal: `dispatch-phase-model` /
 matching the sibling one-off jobs). Both events land in `events.jsonl` as
 `eval` lines, so what was and was not evaluated is on the record.
 
+## The two tick sweeps the driver owes
+
+Before every `advance` the driver runs two sweeps that are otherwise called only
+from `dispatch-tick`. Both are reused verbatim — no wrapper, no variant policy:
+
+- `reservation_sweep` (`lib-reservation-ledger.sh`) — releases the reservation
+  marker the driver's own previous `advance` wrote. Nothing else in the process
+  releases it, so without this the driver deadlocks its own next step with
+  `claimed <id> reservation:…` (exit 13).
+- `terminal_without_disposition_sweep` (`lib-frozen-session-park.sh`) — parks
+  the node of a phase session that **escalated**. Every node-lane skill's
+  escalation path deliberately declares no `node-terminal` marker: it writes
+  `$CLAUDE_JOB_DIR/office-hours-reason` and leaves the park to this sweep.
+  Without it, `dispatch-self-close` holds the job for want of a marker,
+  `dispatch-ladder-await` reads the hold as `throw <id> held-session`
+  (exit 11), and the node stays unselectable on every later run because
+  `worktree_has_live_session` is name-keyed.
+
+Both are ordinarily safe to leave to the heartbeat, because the heartbeat runs
+again in a minute. This driver exists for the host where it does not — so it is
+the one caller for whom "the next tick will clear it" is false, and it owes both
+sweeps itself. Neither is a gate: the driver adds no reclaim rule and no park
+rule of its own, it only makes the tick's own sweeps run on its cadence.
+
+Unlike `dispatch-tick`, which logs a loud line and ticks on, a library that
+fails to load here is fatal: the driver **refuses to start** (exit 2, naming the
+library) rather than running a ladder with a sweep silently missing.
+
+**`terminal_without_disposition_sweep` is fleet-wide, not node-scoped, and that
+is deliberate.** It takes no node filter — a driver walking one node will still
+watch it take park actions on unrelated nodes elsewhere in the fleet. That is
+not a leak to fix: the sweep exists for the bootstrap-deadlock case where no
+heartbeat is running at all, so scoping it to this driver's own node would
+silently drop every other node's escalation for as long as the heartbeat stays
+down, defeating the reason the driver calls it. Do not be surprised watching a
+"walk one node" driver park several.
+
+**The sweep's budget is capped smaller here than on the tick.** The tick sizes
+`terminal_without_disposition_sweep` for a 15-minute period
+(`DISPATCH_TERMINAL_DISPOSITION_PARK_MAX` x `_PARK_TIMEOUT_S` +
+`_LOCK_WAIT_S`, defaults 2 x 120s + 60s = up to 300s). This driver reports
+progress on `--poll-s` cadence against a `--max-run-s` wall clock, where 300s
+on one pass is a real overshoot, so it exports smaller defaults for those same
+three tunables at the call site — a budget bound, not a change to park policy:
+the sweep still runs every pass, so a lower per-pass cap catches up over
+subsequent passes instead of dropping work. Each stays overridable from the
+environment. The driver also re-checks its own deadline immediately after both
+sweeps and before the advance they guard, so a pass whose sweeps ran up to the
+deadline halts there rather than starting an advance past it — overshoot is
+bounded to one sweep's worth, not compounded every pass.
+
 ## How to run
 
 Every command below needs `dangerouslyDisableSandbox: true`: `gh` TLS, the
@@ -232,9 +283,9 @@ disposition; the journal says which script produced it.
 | 0 | `complete` / `pruned` | run the cross-phase synthesis, report. |
 | 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. No phase ran, so nothing is owed. |
 | 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. Then the synthesis, over the phases that did run. |
-| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, or a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`). Then the synthesis. |
+| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or one of the two failed-verify tokens. `launch-unverified`: the spawn reported success, the daemon **answered**, and no session named for the node was in it (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot) — real evidence of a phantom spawn, so the claim is released before the throw. `launch-unverifiable`: the daemon could not be queried at all, so whether a session started is unknown — the claim is deliberately **retained** and ages out under `reservation_sweep`'s TTL, because releasing it on a non-observation would let a concurrent tick select a node whose worker may still be booting. A sandboxed run produces one or the other and never verifies either way; re-run with `dangerouslyDisableSandbox`. Then the synthesis. |
 | 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. Then the synthesis. |
-| 13 | `claimed` | another session holds the node. **Stop.** The synthesis belongs to whoever holds it. |
+| 13 | `claimed` | another session holds the node. **Stop.** The token says which: `live-session` (running, or the probe could not answer), `terminal-session` (registered but finished — an invalid state; release it with `claude rm <session-id>`, named in the stderr, then re-run), `reservation:<owner>` (an unreleased ledger marker; `reservation_sweep` reclaims it on the next dispatch heartbeat). The ladder never releases another session's claim itself. The synthesis belongs to whoever holds it. |
 | 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. Then the synthesis, if a phase ran. |
 | 21 | `timeout` | `--max-run-s` exceeded. The ladder is unfinished and nothing was rolled back. Then the synthesis. |
 | 1 | `internal` | the driver's own error — an unmapped exit code, an unwritable state dir. Then the synthesis, if a phase ran. |

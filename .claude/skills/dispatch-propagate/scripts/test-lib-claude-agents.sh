@@ -578,6 +578,138 @@ fi
 unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 ca_teardown
 
+# --- Test 25b: verify_agent_registered_under_state — the three verdicts -------
+# THE REQUIREMENT: the boolean above collapses "the registry answered and the
+# agent is not there" and "the registry could not be asked" into one `return 1`.
+# A caller whose response is destructive (dispatch-ladder-advance releases the
+# node's reservation) must be able to tell them apart, or one daemon hiccup
+# drops the claim on a node whose worker is still booting.
+
+echo "Test: verify_agent_registered_under_state reports registered/absent/unknown"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+
+# registered — a live row with the target name.
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+assert_eq "verify-state: a live matching row is registered" \
+  "registered" "$(verify_agent_registered_under_state "dispatch-live" "$CA_DIR")"
+
+# absent — the registry ANSWERED (a corroborated `[]`) and the name is not in it.
+write_fake_claude '[]' 0
+assert_eq "verify-state: a corroborated empty registry is absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR")"
+
+# absent — a definite read carrying OTHER sessions, still no match.
+write_fake_claude '[{"sessionId":"s-2","pid":8,"status":"busy","name":"someone-else"}]' 0
+assert_eq "verify-state: a definite read without the name is absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR")"
+
+# absent — a `stopped` row bearing the target name is NOT a live successor, and
+# the read that produced it was definite.
+write_fake_claude '[{"sessionId":"s-3","pid":9,"status":"stopped","name":"dispatch-dead"}]' 0
+assert_eq "verify-state: a stopped row of the target name is absent, not registered" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-dead" "$CA_DIR")"
+
+# unknown — `claude` exits non-zero on every attempt. Nothing was observed.
+write_fake_claude '' 1
+assert_eq "verify-state: a non-zero claude exit is unknown, never absent" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# unknown — a missing `claude` binary (127).
+CA_SAVED_CMD="$CLAUDE_AGENTS_CMD"
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+assert_eq "verify-state: a missing claude binary is unknown" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+CLAUDE_AGENTS_CMD="$CA_SAVED_CMD"
+
+# unknown — a non-array payload.
+write_fake_claude '{"daemon":"unreachable"}' 0
+assert_eq "verify-state: a non-array payload is unknown" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# unknown — an UNCORROBORATED `[]`: byte-identical to the definite-empty case
+# above, separated only by the daemon-process probe. This is the sandbox shape,
+# and the one that must never read as absence.
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+assert_eq "verify-state: an uncorroborated [] is unknown, not absent" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+CLAUDE_AGENTS_PGREP_CMD="$CA_DIR/pgrep-daemon-visible"
+
+# unknown — a missing argument is a caller bug, not an observation of absence.
+assert_eq "verify-state: a missing argument fails safe to unknown" \
+  "unknown" "$(verify_agent_registered_under_state "" "$CA_DIR" 2>/dev/null)"
+
+# The global mirrors stdout on a DIRECT call (the documented CAVEAT: it does
+# NOT survive a `$( )`, which is why the token is the contract).
+write_fake_claude '[]' 0
+verify_agent_registered_under_state "dispatch-x" "$CA_DIR" >/dev/null
+assert_eq "verify-state: VERIFY_AGENT_REGISTERED_STATE mirrors the token" \
+  "absent" "$VERIFY_AGENT_REGISTERED_STATE"
+
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25c: a mixed run — one UNKNOWN attempt does not poison the verdict --
+# The retry exists because the daemon can be momentarily unresponsive DURING
+# async registration. A single failed attempt must neither force `unknown` when
+# a later attempt reads cleanly, nor block a late registration from counting.
+echo "Test: verify_agent_registered_under_state discriminates per attempt, not per run"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+CA_COUNTER="$CA_DIR/attempts"
+: > "$CA_COUNTER"
+# Attempt 1 fails; attempts 2+ answer with a corroborated empty registry.
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+echo x >> "$CA_COUNTER"
+n=\$(wc -l < "$CA_COUNTER")
+if (( n == 1 )); then exit 1; fi
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+assert_eq "verify-state-mixed: a later definite read makes the verdict absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# The complement: attempt 1 fails, attempt 3 carries the registration.
+: > "$CA_COUNTER"
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+echo x >> "$CA_COUNTER"
+n=\$(wc -l < "$CA_COUNTER")
+if (( n == 1 )); then exit 1; fi
+if (( n < 3 )); then echo '[]'; exit 0; fi
+echo '[{"sessionId":"s-late","pid":5,"status":"busy","name":"dispatch-late"}]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+assert_eq "verify-state-mixed: a late registration still reads as registered" \
+  "registered" "$(verify_agent_registered_under_state "dispatch-late" "$CA_DIR" 2>/dev/null)"
+
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25d: the boolean wrapper's contract is unchanged -------------------
+# Every existing caller (dispatch-spawn-job, dispatch-resume-worker,
+# office-hours) still sees exactly two outcomes: only `registered` returns 0.
+echo "Test: verify_agent_registered_under still folds absent and unknown to rc 1"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+if verify_agent_registered_under "dispatch-live" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: registered is rc 0" "0" "$rc"
+write_fake_claude '[]' 0
+if verify_agent_registered_under "dispatch-x" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: absent is rc 1" "1" "$rc"
+write_fake_claude '' 1
+if verify_agent_registered_under "dispatch-x" "$CA_DIR" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: unknown is rc 1" "1" "$rc"
+if verify_agent_registered_under "" "$CA_DIR" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: a missing argument is rc 1" "1" "$rc"
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
 # --- Test 26: claude_agents_list_all UNKNOWN on a missing claude binary -------
 
 echo "Test: claude_agents_list_all returns rc 1 (UNKNOWN) when claude binary is missing"
