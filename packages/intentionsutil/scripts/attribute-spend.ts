@@ -79,12 +79,22 @@ export interface SpendDeviation {
  *   condition the strategy says to review.
  * - An all-zero window flags nothing. With no spend measured, every rival ties
  *   dispatch at 0 and `>=` would fire on every empty aggregate.
+ *
+ * The measured-window guard reads the ATTRIBUTED rows only — dispatch and its
+ * rivals — never `other`. Including `other` in it (as the retired render did)
+ * meant a window whose whole spend sat in the unattributed remainder counted as
+ * "measured", and then dispatch (0) tied every rival (0) under `>=` and the flag
+ * fired naming rivals that had spent nothing. That is the same all-zero case the
+ * guard exists to suppress, and the honest finding there is a `WORKFLOW_SKILLS`
+ * map that needs extending — which the `other` row already says on its face.
  */
 export function spendDeviation(spend: WorkflowSpend[]): SpendDeviation | null {
   const dispatch = spend.find((s) => s.workflow === "dispatch");
   const rivals = spend.filter((s) => s.workflow !== "dispatch" && s.workflow !== "other");
-  const measured = spend.some((s) => s.priceProxyUsd > 0);
-  if (!measured || dispatch === undefined) return null;
+  if (dispatch === undefined) return null;
+  const measured =
+    dispatch.priceProxyUsd > 0 || rivals.some((r) => r.priceProxyUsd > 0);
+  if (!measured) return null;
   const bigger = rivals.filter((r) => r.priceProxyUsd >= dispatch.priceProxyUsd);
   if (bigger.length === 0) return null;
   return {

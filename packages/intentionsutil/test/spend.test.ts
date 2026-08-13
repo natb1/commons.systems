@@ -78,6 +78,18 @@ describe("spendDeviation / renderSpendFold", () => {
     expect(spendDeviation(attributeSpend({}))).toBeNull();
   });
 
+  it("does not flag a window whose whole spend is unattributed `other`", () => {
+    // Every attributed row is 0, so the rivals only TIE dispatch at 0 — the
+    // same all-zero case above, reached through a window of unmapped skills.
+    // Counting `other` as "something was measured" would fire the flag naming
+    // office-hours and rsi, neither of which spent anything.
+    const spend = attributeSpend({
+      "some-future-skill": { price_proxy_usd: 90, cost_usd: 9, turns: 9 },
+    });
+    expect(spendDeviation(spend)).toBeNull();
+    expect(renderSpendFold(spend, "fixture.json")).not.toContain("SPEND-DEVIATION FLAG");
+  });
+
   it("prints one row per workflow plus a TOTAL that carries the window's whole spend", () => {
     const spend = attributeSpend({
       "qa-fix": { price_proxy_usd: 60, cost_usd: 20, turns: 6 },
