@@ -228,7 +228,7 @@ reap_or_skip_not_in_sync() {
   return 0
 }
 
-# ---- NODE-arm gates: completion signal, age, cwd-keyed liveness -------------
+# ---- Liveness gates: completion signal, age, cwd-keyed liveness -------------
 # Every other removal path in this script keys off positive remote evidence that
 # the work is finished (a MERGED PR, a CLOSED issue). A bare node-id worktree has
 # neither, so the NODE arm must NOT reap on the mere absence of a signal — that
@@ -367,9 +367,10 @@ done < <(list_worktree_records)
 # its local branch; not-in-sync worktrees are logged with a SKIP line so the
 # user can investigate — the unpushed work may belong to a live session.
 # Liveness gate: even a removable worktree is skipped when a live session is
-# registered under its basename (worktree_has_live_session) — the worker owns it
-# and will clean up on its own tick. A per-worktree gh failure is isolated:
-# logged and skipped, never aborting the whole sweep (#1313).
+# registered under its basename (worktree_has_live_session) OR resident under
+# its path by cwd (node_cwd_has_live_session) — the worker owns it and will
+# clean up on its own tick. A per-worktree gh failure is isolated: logged and
+# skipped, never aborting the whole sweep (#1313).
 i=0
 while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   wt_path="${WT_PATHS[$i]}"
@@ -414,6 +415,8 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
         CLOSED)
           if worktree_has_live_session "$wt_path"; then
             log "SKIP_CLOSED_LIVE_SESSION: '$wt_path' branch=$wt_branch issue=#$issue_num"
+          elif node_cwd_has_live_session "$wt_path"; then
+            log "SKIP_CLOSED_LIVE_SESSION_CWD: '$wt_path' branch=$wt_branch issue=#$issue_num"
           elif worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
             if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
               git worktree prune 2>/dev/null || true
@@ -494,6 +497,13 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
   # Branch is merged. Guard against removing a worktree a live worker owns.
   if worktree_has_live_session "$wt_path"; then
     log "SKIP_MERGED_LIVE_SESSION: '$wt_path' branch=$wt_branch pr=#$pr_num"
+    continue
+  fi
+
+  # Name-keyed liveness misses a session resident in the worktree under some
+  # other name (EnterWorktree, a manually created worktree). Ask by cwd too.
+  if node_cwd_has_live_session "$wt_path"; then
+    log "SKIP_MERGED_LIVE_SESSION_CWD: '$wt_path' branch=$wt_branch pr=#$pr_num"
     continue
   fi
 
