@@ -59,19 +59,22 @@ for _SETTINGS_FILE in "$SETTINGS_DIR/settings.json" "$SETTINGS_DIR/settings.loca
 done
 
 # Two valid worktree roots coexist during the create/remove-hook migration to
-# common-dir-anchored placement: the legacy <project-root>/worktrees (still
+# repo-root-anchored placement: the legacy <project-root>/worktrees (still
 # used by headless dispatch provisioning, and by every pre-migration
-# worktree), and <git-common-dir>/.claude/worktrees (worktree-create.sh's
-# current placement). Derive both from --git-common-dir, which resolves to
-# the same absolute path regardless of which worktree hosts this session —
-# unlike the old $HOOK_DIR-relative arithmetic, which only ever recovered the
-# root matching whichever convention the CURRENT worktree happens to follow.
+# worktree), and <project-root>/.claude/worktrees (worktree-create.sh's
+# current placement, and the standard layout post-de-baring — .git is a
+# normal directory inside the working tree, so dirname of --git-common-dir
+# IS the repo root, not a parent of it). Derive both from --git-common-dir,
+# which resolves to the same absolute path regardless of which worktree
+# hosts this session — unlike the old $HOOK_DIR-relative arithmetic, which
+# only ever recovered the root matching whichever convention the CURRENT
+# worktree happens to follow.
 GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || GIT_COMMON_DIR=""
 LEGACY_WORKTREES_ROOT=""
 NEW_WORKTREES_ROOT=""
 if [ -n "$GIT_COMMON_DIR" ]; then
   LEGACY_WORKTREES_ROOT="$(dirname "$GIT_COMMON_DIR")/worktrees"
-  NEW_WORKTREES_ROOT="$GIT_COMMON_DIR/.claude/worktrees"
+  NEW_WORKTREES_ROOT="$(dirname "$GIT_COMMON_DIR")/.claude/worktrees"
 fi
 
 # --- Helper functions ----------------------------------------------------

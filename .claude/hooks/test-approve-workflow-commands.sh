@@ -364,12 +364,43 @@ assert_approves \
 
 # Unit 2: the multi-line heredoc branch must apply the same separator-splitting
 # and per-segment allowlist as the single-line path. Build a worktree-scoped
-# git -C path the same way the hook derives its roots, and create it so
-# is_allowed_git_c's realpath() resolves.
+# git -C path the same way the hook derives NEW_WORKTREES_ROOT (repo root,
+# i.e. dirname of --git-common-dir, since .git is a normal directory inside
+# the working tree — not $GIT_COMMON_DIR itself, which is <repo>/.git and
+# has no .claude/worktrees under it), and create it so is_allowed_git_c's
+# realpath() resolves.
 _GCD=$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-_DUMMY_WT="$(dirname "$_GCD")/worktrees/test-approve-hook-dummy"
+_DERIVED_WORKTREES_ROOT="$(dirname "$_GCD")/.claude/worktrees"
+_DUMMY_WT="$_DERIVED_WORKTREES_ROOT/test-approve-hook-dummy"
 mkdir -p "$_DUMMY_WT"
 trap 'rm -rf "$_DUMMY_WT" 2>/dev/null || true' EXIT
+
+# Regression test (tactic-fix-sandbox-doc-hook-roots-before-image): assert the
+# formula above resolves to the ACTUAL .claude/worktrees directory this repo
+# uses, derived independently — via `git worktree list`'s primary (always-
+# first, per git's own porcelain contract) entry, which is the repo root in
+# this layout, NOT via filesystem parent-traversal from SCRIPT_DIR. The
+# SCRIPT_DIR route is unusable here: this test suite itself typically runs
+# from inside a worktree checkout (e.g.
+# <repo>/.claude/worktrees/<name>/.claude/hooks), so walking up from
+# SCRIPT_DIR would recover that worktree's own root instead of the shared
+# repo root — exactly the "$HOOK_DIR-relative arithmetic" trap the hook's own
+# comment warns against. Before this test existed, the fixture built its own
+# root from the SAME wrong formula the hook used
+# ($GIT_COMMON_DIR/.claude/worktrees, i.e. <repo>/.git/.claude/worktrees,
+# which never exists post-de-baring), so the fixture and the hook always
+# agreed with each other while both disagreed with reality — the defect
+# never showed up as a test failure. This test would have caught it.
+TOTAL=$((TOTAL + 1))
+_WT_LIST=$(git -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null) || _WT_LIST=""
+_MAIN_WT=$(printf '%s\n' "$_WT_LIST" | awk '/^worktree /{print $2; exit}')
+_EXPECTED_WORKTREES_ROOT="$_MAIN_WT/.claude/worktrees"
+if [ -n "$_MAIN_WT" ] && [ "$_DERIVED_WORKTREES_ROOT" = "$_EXPECTED_WORKTREES_ROOT" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: derived worktrees root '$_DERIVED_WORKTREES_ROOT' != actual '$_EXPECTED_WORKTREES_ROOT' (main worktree: '$_MAIN_WT')"
+fi
 
 assert_approves \
   "heredoc git -C commit to worktree (legit multi-line)" \
