@@ -43,7 +43,15 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: null
-execution: null
+execution:
+  branch: review-lane-code-review-high-detached
+  pr: 3078
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -51,4 +59,92 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Lock the node for the detached /code-review run's own lifetime, independently of the launching session — a kernel-released flock held by the detached child, honored by every worktree-claim path, so a survivor that outlives its session cannot have another worker spawned into the tree it is still writing
+# Lock the node for the detached /code-review run's own lifetime, independently of the launching session
+
+## Context
+
+`strategy-token-economy` condition 9 (2026-08-13 /align round) requires that
+an overrunning `/code-review` run is never killed, and that the node stays
+locked for the detached run's own lifetime independently of whether the
+launching session survives. Nothing in the repo's claim invariant provided
+that: worktree-is-the-claim is keyed on the REGISTERED session, and the
+nested `claude -p` session never appears in that view at all
+(`code-review-invocation.md` §6). The launching session can die for reasons
+that have nothing to do with the review — a frozen-session park, an API
+error, `claude rm`, a host restart — while its child keeps writing. What
+follows is a worker spawning into a worktree an active `--fix` run is still
+writing: both trees corrupt, and the sibling node's Step 6 mechanical
+`git diff <before-image>` attributes the intruder's changes to the review,
+breaching condition 6 with a derivation that is confidently wrong. Not
+hypothetical: the sibling carrier node
+(`tactic-review-effort-max-detached-resume-poll`) was itself parked
+office_hours for exactly that failure mode before this round.
+
+## Design finding — one insertion point, not four
+
+This node's own `rationale` originally proposed teaching the lock separately
+to `provision-node-worktree`, the reservation sweep, the invalid-state lane
+and office-hours select. **Shipped design diverges from that.** Every claim
+path already routes through one predicate: `worktree_has_live_session` is a
+thin wrapper over `worktree_occupancy_state` (`lib-claude-agents.sh`), whose
+`free`/`live`/`terminal`/`unknown` vocabulary already has the right shape to
+carry a fifth fact. Teaching that ONE function gives every caller the
+property at once, with no call-site enumeration to drift — the four separate
+call sites the rationale named would each need their own edit, and any
+future new call site would need to remember to add a fifth.
+
+## What shipped (PR #3078)
+
+- **Sidecar lock file**, not a lock inside the worktree:
+  `<worktrees-root>/<worktree-basename>.code-review-lock`, beside the
+  worktree, following the existing `.scope-fingerprint` / `.ladder`
+  convention. Inside the worktree would be wrong twice over — it is the
+  reviewed (so attacker-writable) tree, and it would be swept away with the
+  worktree itself.
+- **Kernel-held, not bookkeeping-held.** The detached child runs under
+  `setsid flock -n <sidecar> <child>`. The KERNEL holds the lock for exactly
+  the child's lifetime and releases it on any death — clean exit, SIGKILL, or
+  a host crash — which is the property no pid-plus-timestamp sidecar or
+  heartbeat process can have on its own (a pid-plus-timestamp file needs
+  staleness heuristics and carries a pid-reuse window; a heartbeat needs a
+  second process that can itself die; a graph-layer lock needs a reaper and
+  would strand a node forever when the child dies, besides putting runtime
+  machinery in the graph that condition 4 keeps out).
+- **Reader states.** `worktree_occupancy_state` probes the lock BEFORE it
+  queries the daemon. A held lock returns `live`. A **stale** lock file (the
+  child died holding no live flock) falls through **unchanged and is never
+  deleted** — deletion would race a launcher taking the lock at that instant.
+  A **missing `flock` binary** with the lock file present returns `unknown`,
+  which every caller folds toward occupied rather than free.
+- **Taken only inside a dispatch worktree.** The lock acquire is gated on the
+  reviewed tree's parent directory being a `.claude/worktrees` root — a test
+  suite's throwaway repo or a hand-run review in a plain clone has no
+  dispatch claim to protect and no worktrees root for a sidecar, so the run
+  proceeds unlocked there. That is an explicit, tested condition on the path
+  shape, not a swallowed error: a missing `flock` while the condition DOES
+  hold is a hard `exit 2`, never a quiet unlocked run.
+- **Advisory, not enforced against every actor.** `flock` binds only claimers
+  that check it. Enforcement rests on the claim paths being few and
+  enumerable (now: the one `worktree_occupancy_state` predicate every one of
+  them already calls) — a human entering the worktree by hand bypasses it
+  exactly as today, unchanged by this node.
+- **New exit 6** on the launching script (`dispatch-code-review`): the lock
+  is already held by a different detached run — nothing was launched, no
+  review ran. `review-fix/SKILL.md`'s Step 1b treats exit 6 as **not**
+  retryable — looping on it would burn attempts waiting on a run this session
+  does not own and cannot collect.
+
+Implemented as part of `tactic-review-effort-max-detached-resume-poll`'s
+Unit 2 (the `dispatch-code-review` launch path) and `lib-claude-agents.sh`'s
+`worktree_occupancy_state` / `worktree_code_review_lock_path`, landed
+together in PR #3078 — the effort raise ships with the lock in the same PR,
+per condition 9's requirement that a survivor with no lock is the corruption
+case.
+
+## Verification (as landed)
+
+Covered by the sibling node's suites: `test-dispatch-code-review.sh`
+(115/115) and `test-lib-claude-agents.sh` (266/266), both run via CI's
+`RUN_PR_SCRIPTS` path. `flock` and `setsid` availability was measured present
+at a fixed `util-linux` Nix store path (`code-review-invocation.md` §9.2)
+before this node's design was built on it.
