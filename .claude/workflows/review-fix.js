@@ -623,6 +623,191 @@ function agentFinderSet(surface, app_or_rules, api_call_site) {
 }
 // <<< domain sweep gate <<<
 
+// The /review-plan pre-pass's verdict, mechanically enforced.
+//
+// SKILL.md Step 1a runs a `/review-plan` subagent (pinned `model: opus`) that
+// reads the delta ONCE plus the mechanical classifier outputs and returns a
+// small structured verdict: an effort level, a finder gate set, and a per-lens
+// reason. This region is where that verdict is CONSTRAINED. Nothing below
+// trusts the verdict's own arithmetic — a verdict is an untrusted proposal
+// derived from text the diff under review can influence, and the four governing
+// rules (strategy-token-economy clarifications 49, 52, 53) have to hold whether
+// or not the skill honoured them.
+//
+// THE FOUR GOVERNING RULES — the part a later editor is most likely to drop:
+//
+//   FAIL-OPEN. Error, timeout, absent, or unparseable verdict runs TODAY'S
+//   defaults: effort `high`, FULL finder roster. Never cheaper, never narrower.
+//   This is a condition on the strategy, not a preference. Note the deliberate
+//   contrast with dispatch-review-base, which fails CLOSED — there the cheap
+//   outcome is the narrow review, so the safe failure is the expensive one;
+//   here the cheap outcome is the degraded one, so the safe failure is the
+//   expensive one too. Both rules point the same way: when in doubt, review
+//   MORE.
+//
+//   BOUNDED. The skill reads the delta once plus the mechanical outputs, never
+//   the whole repo. Enforced in the skill, not here — but recorded here so the
+//   constraint has a home a reader reaches from the code.
+//
+//   ASYMMETRIC. Raising is ANY-OF; cheapening requires ALL signals to agree.
+//   Unanimous to go cheap, one hit to go deep. Enforced by reviewPlanEffort
+//   below: a cheapen is refused outright if any raise signal is present.
+//
+//   RECORDED. Effort, finder set and rationale are written out. With both
+//   tactics landing in one PR at author direction (overriding clarification
+//   54's sequencing), the delta-only baseline was never measured — so this is
+//   now the ONLY thing that keeps the delta-scoping's saving and the
+//   depth-selection's saving distinguishable. Both functions return a `reason`
+//   for exactly that.
+//
+// THE BAND IS AUTHOR-SET and this code may not re-open it: `low` … `max`,
+// default `high`. `dispatch-code-review` also accepts `ultra`; the band stops
+// at `max`. A verdict naming anything outside the band is REJECTED — it falls
+// back to `high` — never silently CLAMPED to the nearest legal value. Clamping
+// would turn a malformed or injected verdict into a valid-looking one.
+// >>> review plan gate: sliced + eval'd by review-fix-review-plan-probe.mjs >>>
+const REVIEW_PLAN_BAND = ['low', 'medium', 'high', 'xhigh', 'max'];
+const REVIEW_PLAN_DEFAULT_EFFORT = 'high';
+
+// Per-effort deadline for dispatch-code-review, and the matching Step 1b poll
+// cap. Raising effort above `high` WITHOUT raising both converts an expensive
+// review into a TOTAL LOSS: dispatch-code-review kills a run past its deadline
+// (:1225-1226), and `claude -p` buffers all output until the run completes, so
+// a killed run yields ZERO BYTES — the recorded `max` run burned 2363s and
+// produced nothing. The upper half of the band is a trap without this table.
+//
+// Every deadline is an exact multiple of the script's 540s default await
+// window, so SKILL.md Step 1b's `cap × 540 == deadline` equality — which is
+// load-bearing, not decorative (it is what makes the script's own exit-4 path
+// reachable, and that path is the only thing that kills the detached run and
+// releases the worktree flock) — holds at every level, not just at `high`.
+// `high` is 5400/10, byte-identical to today.
+const REVIEW_PLAN_AWAIT_S = 540;
+const REVIEW_PLAN_DEADLINES = {
+  low: 2160,
+  medium: 3240,
+  high: 5400,
+  xhigh: 10800,
+  max: 16200,
+};
+
+function reviewPlanRank(effort) {
+  return REVIEW_PLAN_BAND.indexOf(effort);
+}
+
+// reviewPlanEffort(plan) -> { effort, reason }
+// `plan` is the /review-plan verdict, or anything at all — including null,
+// undefined, a string, or an object with hostile fields.
+function reviewPlanEffort(plan) {
+  const dflt = REVIEW_PLAN_DEFAULT_EFFORT;
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    return { effort: dflt, reason: 'fail-open: no usable /review-plan verdict' };
+  }
+
+  const proposed = plan.effort;
+  if (reviewPlanRank(proposed) === -1) {
+    return {
+      effort: dflt,
+      reason: `band-violation: effort '${String(proposed)}' is outside the author-set band ${REVIEW_PLAN_BAND.join('|')} — rejected, not clamped`,
+    };
+  }
+
+  const raise = Array.isArray(plan.raise) ? plan.raise : [];
+  const cheapen = Array.isArray(plan.cheapen) ? plan.cheapen : [];
+
+  // ANALYSIS 3 — the irreversibility floor. Migrations, destructive git ops,
+  // deletes, deploy/release config, credentials, billing, graph writes: a HARD
+  // `xhigh` floor that overrides every cheapening signal, applied before the
+  // asymmetry test so a cheapen can never survive it. A one-line change to an
+  // auth predicate outranks a 900-line rename, which is also why analysis 8
+  // (size and dispersion) is a tie-breaker only.
+  if (plan.irreversible === true) {
+    if (reviewPlanRank(proposed) < reviewPlanRank('xhigh')) {
+      return {
+        effort: 'xhigh',
+        reason: `irreversibility-floor: raised from '${proposed}' — an irreversible surface overrides every cheapening signal`,
+      };
+    }
+    return { effort: proposed, reason: `irreversibility-floor satisfied at '${proposed}'` };
+  }
+
+  // ASYMMETRY. Below the default is a CHEAPEN and needs unanimity: no raise
+  // signal may be present, and the verdict must actually name the signals that
+  // agreed. At or above the default is a RAISE (or a no-op) and needs nothing —
+  // one hit is enough to go deep.
+  if (reviewPlanRank(proposed) < reviewPlanRank(dflt)) {
+    if (raise.length > 0) {
+      return {
+        effort: dflt,
+        reason: `cheapen-blocked: ${raise.length} raise signal(s) present (${raise.join(', ')}) — cheapening requires ALL signals to agree`,
+      };
+    }
+    if (cheapen.length === 0) {
+      return {
+        effort: dflt,
+        reason: 'cheapen-blocked: verdict proposed a cheaper level but named no cheapening signals',
+      };
+    }
+    return { effort: proposed, reason: `cheapened to '${proposed}': ${cheapen.join(', ')}` };
+  }
+
+  if (reviewPlanRank(proposed) > reviewPlanRank(dflt)) {
+    const why = raise.length ? raise.join(', ') : 'unstated';
+    return { effort: proposed, reason: `raised to '${proposed}': ${why}` };
+  }
+  return { effort: proposed, reason: `default '${proposed}' retained` };
+}
+
+// reviewPlanDeadline(effort) -> { deadline_s, poll_cap, await_s }
+// An out-of-band effort yields the `high` row rather than throwing: this is
+// consumed on the fail-open path, where a throw would take the whole phase
+// down over a depth SUGGESTION.
+function reviewPlanDeadline(effort) {
+  const level = REVIEW_PLAN_DEADLINES[effort] ? effort : REVIEW_PLAN_DEFAULT_EFFORT;
+  const deadlineS = REVIEW_PLAN_DEADLINES[level];
+  return {
+    deadline_s: deadlineS,
+    poll_cap: deadlineS / REVIEW_PLAN_AWAIT_S,
+    await_s: REVIEW_PLAN_AWAIT_S,
+  };
+}
+
+// reviewPlanFinderSet(base, plan) -> { set, reason }
+// GATING AUTHORITY IS SEMANTIC TRIGGERS ONLY, and it is enforced as UNION —
+// today's agentFinderSet output is the FLOOR and nothing can fall below it.
+//
+// The skill may WIDEN a lens's trigger on the semantics of the diff; it may
+// NEVER disable a lens for being expensive or low-yield. Clarification 18 is
+// the precedent and it is unambiguous: `api-cost` was retained at a MEASURED
+// ZERO finding rate and its trigger was WIDENED instead of cut.
+//
+// So semantic narrowing lives in the BRIEF — which sections a launched lens is
+// told to emphasise — and never in the roster. Once a removal reaches the
+// roster it is indistinguishable from a removal for cost, and the rule that
+// forbids the second cannot be enforced while permitting the first. A union is
+// the only form of this gate that is mechanically checkable.
+function reviewPlanFinderSet(base, plan) {
+  const floor = Array.isArray(base) ? base.slice() : [];
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan) || !Array.isArray(plan.finder_set)) {
+    return { set: floor, reason: 'fail-open: full roster (no usable finder_set in the verdict)' };
+  }
+  const added = [];
+  for (const name of plan.finder_set) {
+    if (typeof name !== 'string' || !name) continue;
+    if (floor.indexOf(name) !== -1 || added.indexOf(name) !== -1) continue;
+    added.push(name);
+  }
+  const dropped = floor.filter((n) => plan.finder_set.indexOf(n) === -1);
+  const reason = added.length
+    ? `widened by ${added.join(', ')}`
+    : 'roster unchanged';
+  const note = dropped.length
+    ? `; ${dropped.length} floor lens(es) omitted by the verdict and RETAINED anyway (${dropped.join(', ')}) — a lens is never removed for cost or yield`
+    : '';
+  return { set: floor.concat(added), reason: reason + note };
+}
+// <<< review plan gate <<<
+
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
 // Collapse one partition subgroup of same-root findings into one representative.
 // Each finding must carry an `_idx` (its global input index) for tie-breaking.
@@ -1198,7 +1383,21 @@ let subagentsLaunched = 0;
 
 // --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
-const finderNames = agentFinderSet(_a.surface, _a.app_or_rules, _a.api_call_site);
+// agentFinderSet's output is the FLOOR; reviewPlanFinderSet may only add to it.
+// With no `review_plan` in args this is byte-identical to the bare call it
+// replaced — the fail-open path IS the old behaviour, not a reconstruction of it.
+const finderPlan = reviewPlanFinderSet(
+  agentFinderSet(_a.surface, _a.app_or_rules, _a.api_call_site),
+  _a.review_plan
+);
+const finderNames = finderPlan.set;
+// RECORDED (governing rule 4). With both tactics landing in one PR, this line
+// and effortPlan.reason below are the only things that keep the delta-scoping's
+// saving and the depth-selection's saving distinguishable in measurement.
+const effortPlan = reviewPlanEffort(_a.review_plan);
+log(
+  `review-plan: effort=${effortPlan.effort} (${effortPlan.reason}); finders=${finderNames.length} (${finderPlan.reason})`
+);
 // Probe-wave throttle short-circuit: `security-review` is real review work that
 // runs whenever there are ANY agent finders at all (it is added by agentFinderSet
 // under the same `surface === 'code'` gate as the rest of the roster), so launch it

@@ -403,6 +403,59 @@ Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow. **See `references/inline-scans.md`** for the exact
 command block, normalization rules, and the per-finder roster and descriptions.
 
+### 1a. Run `/review-plan` to set this pass's depth
+
+**Fork one subagent, with `model: opus` set explicitly on the Agent call**, and
+have it run `/review-plan`. The pin is not inherited and not optional: a nested
+run does not inherit this session's model, so omitting it silently accepts a
+default and leaves clarification 46's cost measurement uninterpretable — the same
+argument that pins `dispatch-code-review` to `--model opus`.
+
+This runs **before** Step 1b's detached `/code-review` and before the Step 2
+Workflow, because its verdict sets the effort the first uses and the roster the
+second uses.
+
+Hand it, and nothing else — the **Bounded** rule is a real constraint, not
+advice:
+
+- `REVIEW_BASE`, `MERGE_BASE`, and `REVIEWED_HEAD` (it reads the delta once,
+  itself);
+- `$BR_OUT` — the blast-radius output from Step 1 (analysis 1; it does not
+  recompute this);
+- `surface`, `deps`, `app_or_rules`, `api_call_site`, and `REVIEW_BASE_SOURCE`;
+- the prior pass's carried-forward findings (analysis 5), if any;
+- the worktree root as an absolute path.
+
+It returns the structured verdict documented in
+`.claude/skills/review-plan/SKILL.md`. Bind it as `REVIEW_PLAN` and pass it to
+the Workflow as `review_plan` (Step 2).
+
+**Fails open, always.** An error, a timeout, an absent verdict, or output that
+does not parse as that object runs today's defaults: effort `high` and the
+**full** finder roster. Never cheaper, never narrower — this is a condition on
+the strategy, not a preference. Do not retry it and do not substitute your own
+judgment for it; take the default and continue. A fail-open bug here presents as
+a clean review, which is why there is no degraded middle path.
+
+**The verdict is a proposal, not an instruction.** Every rule that keeps it from
+becoming a silent detection cut is re-enforced mechanically in `review-fix.js`'s
+`review plan gate` region (`reviewPlanEffort`, `reviewPlanFinderSet`,
+`reviewPlanDeadline`) — the author-set band, the `xhigh` irreversibility floor,
+the raise/cheapen asymmetry, and the never-remove-a-lens union. That region is
+covered by `test-review-plan-gate.sh`. Do not re-implement any of it here, and
+do not "simplify" it away on the grounds that the skill already checked: the
+verdict is derived from text the diff under review can influence.
+
+Bind the effort and its deadline for Step 1b:
+
+```bash
+# From the verdict, after the gate has constrained it. `high` on any fail-open
+# path — see reviewPlanEffort / reviewPlanDeadline in review-fix.js.
+CR_EFFORT=<the gate-constrained effort>
+CR_DEADLINE_S=<the matching deadline from REVIEW_PLAN_DEADLINES>
+CR_POLL_CAP=$(( CR_DEADLINE_S / 540 ))
+```
+
 ### 1b. Run the built-in `/code-review` as an exclusive pre-stage
 
 `dispatch-code-review` shells `claude -p '/code-review <effort> --fix
@@ -431,15 +484,45 @@ phase-transition commit that *started* the review phase and returns
 this stage exists to eliminate. `dispatch-code-review` now rejects a
 non-range `--target` with exit 2, so this is enforced, not just documented.
 
-Do **not** pass `--effort` or `--model` to `dispatch-code-review` here — the
-script owns both, and both defaults are 2026-08-13 author rulings: effort
-`high` (`strategy-token-economy` clarification 44, superseding the earlier
-`max` ruling) and the nested session pinned to `--model opus` (the same-day
-model-pin ruling). The pin is explicit because a nested `claude -p` does not
-inherit the launching session's model, and at `high` effort the model is the
-dominant cost and quality term — an unpinned run would leave clarification
-46's realized-cost measurement uninterpretable. Both flags exist on the script
-and are overridable; this caller overrides neither.
+**`--model` stays pinned and untouched. `--effort` is now the caller's — within
+the author-set band.** This replaces, rather than deletes, the rule that used to
+forbid both.
+
+- **`--model`**: do **not** pass it. The script owns it and pins the nested
+  session to `opus` (the 2026-08-13 model-pin ruling). The pin is explicit
+  because a nested `claude -p` does not inherit the launching session's model,
+  and the model is the dominant cost and quality term — an unpinned run would
+  leave clarification 46's realized-cost measurement uninterpretable.
+- **`--effort`**: pass `"$CR_EFFORT"` — Step 1a's gate-constrained verdict,
+  which is `high` on every fail-open path. The 2026-08-13 ruling that `high` is
+  the default (`strategy-token-economy` clarification 44, superseding the
+  earlier `max` ruling) is **preserved, not overturned**: it is still what an
+  absent, failed, unparseable, or band-violating verdict gets. What changed is
+  that a per-input verdict may move within `low` … `max` — a carve-out from the
+  no-auto-apply bar that holds only while the band stays author-set, `high`
+  stays the fallback, and every deviation is recorded.
+- **`--deadline-seconds`**: pass `"$CR_DEADLINE_S"`, and run the loop below to
+  `CR_POLL_CAP` attempts rather than a hardcoded 10.
+
+**Raising effort without also raising the deadline turns an expensive review
+into a total loss.** `dispatch-code-review` **kills** a run that exceeds its
+deadline (`:1225-1226`), default `5400`s, and `claude -p` buffers all output
+until the run completes — so a killed run yields **zero bytes**, not a partial
+result. The recorded `max` run burned 2363s and produced nothing. `xhigh` and
+`max` on today's 5400s deadline would be exactly that failure, every time. The
+per-effort table lives in `review-fix.js` (`REVIEW_PLAN_DEADLINES`) and every
+row is an exact multiple of the script's 540s await window, so the cap/deadline
+equality below holds at every level rather than only at `high`.
+
+**`--effort` participates in the run-dedup identity match** (`dispatch-code-review`
+header, "self-authenticating"): the cached-or-resumed run must match on
+cache-schema version, out-dir, target, resolved target commits, HEAD, effort,
+model and the comment flag. `--await-seconds` / `--deadline-seconds` are
+explicitly OPERATIONAL, not identity, so scaling the deadline does **not**
+discard a live run — but changing the **effort** between attempts does, killing
+the in-flight run as superseded and relaunching. So bind `CR_EFFORT` **once** in
+Step 1a and pass the identical value on every attempt of the loop below. Never
+re-derive it inside the loop.
 
 `high` is reachable only because the invocation is detached. The measured
 record is unchanged (`references/code-review-invocation.md` §1.2, §5.4, §7,
@@ -472,14 +555,15 @@ whole await window, not just during the first call.
 Invoke the script in a **bounded re-invocation loop** — the same fixed-cap,
 fail-closed-on-exhaustion shape as
 `.claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh:16-31`. At most
-**10 attempts**. Each attempt is one Bash call running the exact command below,
-unchanged and with **identical arguments** every time; identical arguments are
-what make the next call resume the same detached run rather than pay for a
-second one.
+**`$CR_POLL_CAP` attempts** (10 at effort `high`, i.e. unchanged from before).
+Each attempt is one Bash call running the exact command below, unchanged and
+with **identical arguments** every time; identical arguments are what make the
+next call resume the same detached run rather than pay for a second one.
 
 ```bash
 CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
-  --target "$MERGE_BASE..HEAD" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
+  --target "$REVIEW_BASE..HEAD" --out-dir "tmp/code-review-$N" \
+  --effort "$CR_EFFORT" --deadline-seconds "$CR_DEADLINE_S" 2>"tmp/code-review-$N.err")
 CR_RC=$?
 ```
 
@@ -492,8 +576,9 @@ CR_RC=$?
   cause "attempt cap exhausted", and hard-stop the phase. Never continue to
   Step 2 on an unfinished review.
 
-The cap is arithmetic, not a guess: 10 attempts × the script's 540s default
-await window = 5400s, **exactly** the script's own deadline. The equality is
+The cap is arithmetic, not a guess: `CR_POLL_CAP` attempts × the script's 540s
+default await window = `CR_DEADLINE_S`, **exactly** the deadline passed to the
+script. At effort `high` that is the familiar 10 × 540 = 5400. The equality is
 the point, and it is a correction of an earlier 8 (= 4320s ≈ 72 minutes). At 8
 the caller always gave up 18 minutes before the script's deadline could fire,
 which made the exit-4 path — **the only thing that kills the detached run and
@@ -502,7 +587,16 @@ the run kept writing an abandoned worktree, holding the node lock and blocking
 `dispatch-ladder-advance` / `graph-select-target`, with the finished review
 never collected. The two bounds must agree, and they now do.
 
-With them equal the deadline is what actually trips, on the 10th attempt at the
+**That equality is exactly why the deadline had to scale with effort rather than
+the cap alone.** Raising only the cap would leave the script killing the run at
+5400s while the caller kept polling; raising only the deadline would leave the
+caller giving up before the exit-4 path could fire — the 8-attempt defect
+again, in a new place. Every row of `REVIEW_PLAN_DEADLINES` is an exact multiple
+of 540 so `CR_POLL_CAP` is a whole number at every band level, and
+`test-review-plan-gate.sh` asserts that property directly rather than trusting
+the table to have been edited consistently.
+
+With them equal the deadline is what actually trips, on the last attempt at the
 latest. Two properties of the script's await loop make that certain rather than
 a coin flip: its per-call window is `min(--await-seconds, deadline - elapsed)`,
 so `window_end` can never fall *past* the deadline instant; and the loop tests
@@ -542,9 +636,9 @@ case $CR_RC in
   1) echo "/review-fix: the detached 'claude -p /code-review' exited non-zero, failed to launch, or died recording no exit code (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   2) echo "/review-fix: dispatch-code-review argument, empty-output, or unusable run-state error — including a superseded in-flight run whose before-image baseline cannot be derived, which needs the working tree resolved by hand (see $CR_ERR)" >&2; exit 1 ;;
   3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  4) echo "/review-fix: the detached '/code-review' run hit its deadline, or the 10-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: the detached '/code-review' run hit its ${CR_DEADLINE_S}s deadline, or the ${CR_POLL_CAP}-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   5) : ;; # still in flight — NOT terminal. Re-invoke with identical arguments,
-          # up to the 10-attempt cap; only cap exhaustion is terminal, and it
+          # up to the $CR_POLL_CAP cap; only cap exhaustion is terminal, and it
           # routes to the 4 branch above.
   6) echo "/review-fix: the reviewed worktree's .code-review-lock is held by another detached /code-review run — nothing was launched and no review ran (see $CR_ERR)" >&2; exit 1 ;;
   *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
@@ -615,7 +709,11 @@ The reason must instead carry, in this order:
 2. The `--target` passed above, plus the effort level and the model actually
    used. Read those back from the script's own output (`effort=` and `model=`
    on the summary, `effort=` on a `status=running` block) rather than restating
-   a remembered default; today they are `high` and `opus`.
+   a remembered default — the effort is now per-input (Step 1a), so a remembered
+   value is wrong more often than it is right. The model is always `opus`.
+   Include Step 1a's recorded effort **rationale** too: a park that says only
+   "ran at `low`" leaves a human unable to tell a correct cheapening from a
+   fail-open that should have been `high`.
 3. The on-disk paths of the full, unredacted evidence — `tmp/code-review-$N.err`
    and `tmp/code-review-$N/output.txt` — so the human reviewer can read it in
    the worktree, where it never leaves the machine.
@@ -711,6 +809,10 @@ args = {
   blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
   blast_radius_truncated: <true|false>,
   prior_findings:      [ ...unresolved + deferred findings carried forward; [] if none... ],
+  review_plan:         <REVIEW_PLAN>,   // Step 1a's verdict; OMIT it on any fail-open
+                                        // path. review-fix.js re-enforces the band, the
+                                        // xhigh irreversibility floor, the raise/cheapen
+                                        // asymmetry, and never-remove-a-lens.
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
