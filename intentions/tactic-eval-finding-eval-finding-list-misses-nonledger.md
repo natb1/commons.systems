@@ -44,73 +44,61 @@ attributes:
       window: intentions/ at origin/main db9e7f2c, 2026-08-13
       sensor: graph read
       measured: 2026-08-13
+    - metric: ledger_entries_listed
+      value: 8
+      unit: entries
+      window: 2026-08-13 fix-phase eval
+      sensor: dispatch-eval-finding
+      measured: 2026-08-13
+    - metric: ledger_entries_on_disk
+      value: 10
+      unit: entries
+      window: 2026-08-13 fix-phase eval
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: ledger_invisible_fraction
+      value: 0.2
+      unit: fraction
+      window: 2026-08-13 fix-phase eval
+      sensor: rsi
+      measured: 2026-08-13
     - metric: recurrence_count
-      value: 1
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-13
 ---
-## What was observed
+## Second occurrence — hit directly while running the prescribed similarity judgment
 
-`dispatch-eval-finding --list` — the input the skill designates as "the
-load-bearing step" for the similarity judgment — does not show every node that
-occupies the `tactic-eval-finding-<slug>` id space. On `origin/main` at
-`db9e7f2c` (2026-08-13):
+Observed 2026-08-13 evaluating the `fix` phase of
+`tactic-attention-namespaced-rank`.
 
-| node | shown by `--list`? | why |
-| --- | --- | --- |
-| `tactic-eval-finding-conflict-lane-registered-phantom` | yes | `ledger_entry: true` |
-| `tactic-eval-finding-sensor-registry-key-prose-drift` | yes | `ledger_entry: true` |
-| `tactic-eval-finding-ledger` | no | no `ledger_entry` attribute |
-| `tactic-eval-finding-lock-wait` | no | no `ledger_entry` attribute |
-| `tactic-eval-finding-utc-bounds-local-newermt` | no | no `ledger_entry` attribute |
+`dispatch-eval-finding --list` returned **8** entries. `ls intentions/ | grep
+tactic-eval-finding` returns **11** files. The three the ledger does not show:
 
-Three of five live nodes carrying the ledger's own id prefix are invisible to the
-listing. The filter is `list_entries()` at
-`.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding:322-323`:
+- `tactic-eval-finding-ledger.md` (the family root — correctly absent)
+- `tactic-eval-finding-lock-wait.md` — a real finding, `phase: done`, PR 3074
+- `tactic-eval-finding-utc-bounds-local-newermt.md` — a real finding, and the
+  *superseding* entry named in the body of `conflict-lane-registered-phantom`,
+  which `--list` **does** show
 
-```
-.filter((n) => n.kind === "tactic" && n.attributes?.ledger_entry === true)
-```
+That last one is the sharp edge. `--list` shows an entry whose own statement
+says "Superseded by … `tactic-eval-finding-utc-bounds-local-newermt`", while
+hiding the successor it points at. An evaluator following the documented
+procedure — the SKILL calls the similarity judgment "the load-bearing step" —
+reads a pointer to an entry the instrument will not show it.
 
-The three hidden nodes are real, live findings — `utc-bounds-local-newermt` and
-`lock-wait` both describe defects in this very evaluation lane — that were minted
-by `/align` rather than by `dispatch-eval-finding`, so they never got the
-attribute.
+This occurrence was only caught because this evaluator independently ran
+`ls intentions/` while checking for pre-existing owners of two unrelated
+candidate findings. Nothing in the prescribed procedure would have surfaced it.
 
-## Why it matters
+Two of the ten real entries — 20 % of the ledger — are invisible to the tool the
+SKILL designates as the sole input to the mint-or-reuse decision.
 
-Two distinct harms, and the second is a graph-integrity hazard rather than a
-reporting one:
+### What would have to change
 
-1. **The similarity judgment is made against a partial ledger.** The skill's
-   contract is that a near-duplicate slug destroys `recurrence_count`, which it
-   calls "the whole point of the ledger". An evaluator that reads `--list`, sees
-   two entries, and mints a third for something `tactic-eval-finding-lock-wait`
-   already covers has followed the documented procedure exactly and still
-   produced the duplicate the procedure exists to prevent.
-
-2. **Slug collision onto a non-ledger node.** `--slug utc-bounds-local-newermt`
-   derives the node id `tactic-eval-finding-utc-bounds-local-newermt`, which
-   already exists as an ordinary `phase: null`, `status: raw` tactic. What
-   find-or-create does when its target id exists but is not a ledger entry is not
-   established here — establishing it would require a write, which this evaluator
-   may not perform. The two possibilities are that it refuses (an unexplained
-   failure for a caller who consulted `--list` and saw nothing) or that it
-   rewrites the node's body and attributes (silently converting a planned tactic
-   into a ledger entry). Neither is a good outcome, and a fire-and-forget caller
-   sees neither.
-
-## What would have to change
-
-Some pairing of: `--list` widening to the id prefix and labelling entries that
-lack `ledger_entry` (so the judgment sees the whole namespace it writes into); a
-guard in the find-or-create path that refuses a target id lacking
-`ledger_entry: true` with a named error; and back-stamping `ledger_entry: true`
-on the three existing prefix-holders that are genuinely ledger findings.
-
-Which of those is right is a judgment about the ledger's contract, so it is
-recorded for the author and not applied. Related: `tactic-eval-finding-lock-wait`
-records the sibling under-count (an occurrence silently dropped on lock
-contention); this is the same metric threatened from the other side.
+`--list`'s filter on `attributes.ledger_entry` excludes entries that predate the
+attribute or were minted by another path. Either backfill the attribute on the
+existing `tactic-eval-finding-*` nodes, or widen `--list` to key on the id prefix
+it already owns. The author's call which.
