@@ -21,6 +21,10 @@
 #  10  content-equal but commits ahead    → exit 0 (content gate, not count)
 #  11  divergence only under intentions/  → exit 0 (':!intentions' exclusion)
 #  12  fetch fails (broken origin)        → exit 6, worktree survives
+#  15  untracked residue                  → exit 10 naming it, worktree survives
+#  16  ALREADY half-deleted checkout      → exit 12, refused, nothing deleted
+#  17  registration-only residue          → exit 0, pruned
+#  18  gutted checkout, `.git` survived   → damage detected, recovered
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -320,5 +324,108 @@ assert_contains "intact refusal → says the checkout is intact" "checkout is IN
 assert_eq "intact refusal → worktree kept" "yes" "$([[ -d "$WT" ]] && echo yes || echo no)"
 assert_eq "intact refusal → still registered" "yes" \
   "$(git -C "$MAIN" worktree list --porcelain | grep -qF "worktree $WT" && echo yes || echo no)"
+
+echo ""
+echo "=== untracked residue ==="
+
+# 15. Gate 4a passes untracked files on purpose, but `git worktree remove`
+#     WITHOUT --force counts them as unclean and refuses. That is the common
+#     real input (scratch files, logs), so the refusal must name the actual
+#     cause rather than reporting an unmodelled state.
+echo "Test: untracked residue → exit 10 naming it"
+new_fixture
+WT=$(add_wt node-untracked)
+printf 'scratch\n' >"$WT/scratch.txt"
+run_sut "$WT"
+assert_eq "untracked residue → exit 10" "10" "$RUN_RC"
+assert_contains "untracked residue → names untracked as the cause" "UNTRACKED files" "$RUN_ERR"
+assert_contains "untracked residue → lists the file" "scratch.txt" "$RUN_ERR"
+assert_eq "untracked residue → worktree survives" "yes" "$([[ -d "$WT" ]] && echo yes || echo no)"
+assert_eq "untracked residue → the file survives" "yes" \
+  "$([[ -f "$WT/scratch.txt" ]] && echo yes || echo no)"
+
+echo ""
+echo "=== an ALREADY half-deleted target ==="
+
+# 16. The state an EARLIER sandboxed run left behind: the `.git` file is gone,
+#     the checkout and its registration survive. Every probe aimed at such a
+#     checkout walks UP and answers for the MAIN checkout instead (branch
+#     `main`, the primary tree's cleanliness), so the safety gates cannot be
+#     re-run — and without them there is no evidence that `rm -rf` is safe.
+#     Refuse, and say so; never mistake the primary checkout for the target.
+echo "Test: already half-deleted checkout → exit 12, nothing deleted"
+new_fixture
+WT=$(add_wt node-prehalf)
+REG=$(reg_dir_of "$WT")
+printf 'work in progress\n' >"$WT/wip.txt"
+rm -f "$WT/.git"
+run_sut "$WT"
+assert_eq "pre-half-deleted → exit 12" "12" "$RUN_RC"
+assert_contains "pre-half-deleted → names the state" "ALREADY HALF-DELETED" "$RUN_ERR"
+assert_eq "pre-half-deleted → does NOT claim main is checked out" "" \
+  "$(printf '%s' "$RUN_ERR" | grep -F "has 'main' checked out" || true)"
+assert_eq "pre-half-deleted → checkout kept" "yes" "$([[ -d "$WT" ]] && echo yes || echo no)"
+assert_eq "pre-half-deleted → its files kept" "yes" "$([[ -f "$WT/wip.txt" ]] && echo yes || echo no)"
+assert_eq "pre-half-deleted → registration kept" "yes" "$([[ -e "$REG" ]] && echo yes || echo no)"
+
+echo ""
+echo "=== registration-only residue ==="
+
+# 17. The other half of a torn removal: the checkout is gone, its
+#     `.git/worktrees/<name>` registration survives. Nothing to judge and
+#     nothing to delete — prune clears it, and the post-state is verified.
+echo "Test: checkout gone, registration survives → pruned"
+new_fixture
+WT=$(add_wt node-orphan-reg)
+REG=$(reg_dir_of "$WT")
+rm -rf "$WT"
+run_sut "$WT"
+assert_eq "registration-only residue → exit 0" "0" "$RUN_RC"
+assert_eq "registration-only residue → prints removed-after-recovery" \
+  "removed-after-recovery" "$RUN_OUT"
+assert_eq "registration-only residue → registration gone" "no" \
+  "$([[ -e "$REG" ]] && echo yes || echo no)"
+assert_eq "registration-only residue → no longer listed" "" \
+  "$(git -C "$MAIN" worktree list --porcelain | grep -F "worktree $WT" || true)"
+
+echo ""
+echo "=== a gutted checkout whose .git survived ==="
+
+# 18. Deletion is entry-by-entry in directory order, so the abort can land after
+#     much of the tree is gone but before `.git` is reached. An identity check
+#     alone reads that as healthy and reports "the checkout is INTACT" over a
+#     gutted tree. Gate 4a proved the tracked tree clean moments earlier, so a
+#     tracked deletion now is proof the removal got in.
+echo "Test: tracked files deleted but .git survived → damage detected, recovered"
+new_fixture
+WT=$(add_wt node-gutted)
+REG=$(reg_dir_of "$WT")
+REAL_GIT=$(command -v git)
+STUB_BIN="$FIX/stub-bin"
+mkdir -p "$STUB_BIN"
+cat >"$STUB_BIN/git" <<STUB
+#!/usr/bin/env bash
+# Delete a tracked file and abort, leaving the target's \`.git\` file in place.
+if [[ "\${1:-}" == "-C" && "\${3:-}" == "worktree" && "\${4:-}" == "remove" ]]; then
+  rm -f "\${5:-}/README.md"
+  printf "error: failed to delete '%s': Read-only file system\n" "\${5:-}" >&2
+  exit 1
+fi
+exec "$REAL_GIT" "\$@"
+STUB
+chmod +x "$STUB_BIN/git"
+if RUN_OUT=$(cd "$TMP" && PATH="$STUB_BIN:$PATH" "$SUT" "$WT" 2>"$ERRLOG"); then
+  RUN_RC=0
+else
+  RUN_RC=$?
+fi
+RUN_ERR=$(cat "$ERRLOG")
+assert_eq "gutted checkout → exit 0" "0" "$RUN_RC"
+assert_eq "gutted checkout → prints removed-after-recovery" "removed-after-recovery" "$RUN_OUT"
+assert_contains "gutted checkout → detection reported" "PARTIAL DELETE detected" "$RUN_ERR"
+assert_eq "gutted checkout → not reported as intact" "" \
+  "$(printf '%s' "$RUN_ERR" | grep -F "checkout is INTACT" || true)"
+assert_eq "gutted checkout → checkout gone" "no" "$([[ -e "$WT" ]] && echo yes || echo no)"
+assert_eq "gutted checkout → registration gone" "no" "$([[ -e "$REG" ]] && echo yes || echo no)"
 
 report_results
