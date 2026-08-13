@@ -365,7 +365,7 @@ dispatch budget.
 **solved** by this entry point — skill and node attribution both work. The
 *magnitude* problem is created by it. Do not adopt `max` for the dispatch lane on
 the strength of this record; treat effort level as an open cost decision, and
-re-measure with `/dispatch-token-audit` after the first real passes.
+re-measure with `/rsi-audit` after the first real passes.
 
 ---
 

@@ -1055,22 +1055,123 @@ clarifications:
       read-sensors.ts, and node prose and constant must move in the SAME change.
       Until then this signal is knowingly stale, and that is preferable to
       silently unregistering the sensor to make the record look tidy.
+  - question: With /rsi-evaluate retired unbuilt, who writes a delegated boost — the
+      question the collapse round left open?
+    answer: >-
+      (Recorded 2026-08-13, answering the open conflict the 2026-08-12 collapse
+      round deliberately left standing, from an author interview the same day.)
+      Of the three answers that round posed — 'nobody, and the attention
+      arithmetic is enough', 'the router, mechanically', or 'a surface still to
+      be built' — the answer is the third, and the surface is /rsi-audit.
+
+
+      The split follows the ownership boundary already recorded here, one level
+      down. /rsi-audit WRITES attention boosts on dispatch-delegated (owner: ai)
+      tactics, within band, appending {date, old→new, rationale} to
+      attributes.priority_log. It RECOMMENDS strategy boosts with measured
+      justification, and the author ratifies. It never writes attention on a
+      strategy, a virtue, or an owner: human tactic. Because a recommendation
+      writes nothing, this is not a loosening of the recorded bound: it is a
+      reporting path where there was previously silence, and it matches this
+      node's own recorded answer that the author's forcing mechanism is the
+      strategy level, never a race on the delegated entries.
+
+
+      Only the recommend half is built. The write half is recorded as
+      tactic-rsi-audit-prioritization-writer, blocked on
+      tactic-attention-namespaced-rank, and the block is measured rather than
+      assumed. No attention writer exists on main at all — boost-node lives only
+      on a branch whose PR was closed, not merged, and abandoned under a fix
+      cap. attributes.priority_log has zero code behind it: no schema entry, no
+      validate-graph rule, no reader, no writer; it is prose in eight node
+      files. And tactic-attention-namespaced-rank rewrites interface Attention
+      itself, deleting attention.override and retiring the matching
+      validateGraph rule, so a writer built against today's shape would be
+      deleted by that node's first unit. Building it now means building it
+      twice.
+
+
+      tactic-rsi-evaluate-skill is therefore never to be built. Its capability
+      moved to /rsi-audit and its own node records that.
+  - question: What does the fitness function still measure after the collapse, and
+      what stopped being measured?
+    answer: >-
+      (Recorded 2026-08-13 on landing the collapse, PR 3074.) It keeps its
+      DENOMINATOR and loses its NUMERATOR, and that is worth stating plainly
+      rather than leaving for someone to discover from a thin report.
+
+
+      What survives: the per-workflow spend fold — dispatch / office-hours / rsi
+      / other — now runs from attribute-spend.ts over the same WORKFLOW_SKILLS
+      map read-sensors.ts already used, so the fitness function has ONE
+      denominator rather than two that could disagree. The spend-deviation check
+      survives with it: a non-other rival reaching dispatch's price proxy is
+      itself a review trigger, not a datum to note and pass.
+
+
+      What does not survive: closure velocity and strategy-signal progress.
+      Those were never computed by anything — they were prose inside the deleted
+      renderer's metrics section. So /rsi-audit can say what a window spent; it
+      cannot say what the spend bought. The fold is not the whole function.
+
+
+      One deliberate consequence of the collapse, recorded because it changes
+      what the deviation trigger MEANS. /rsi's own spend is attributed to the
+      DISPATCH bucket, not the rsi one: the per-phase evaluator is spawned by
+      the ladder and fires once per phase, so it scales with dispatch volume —
+      it is the cost of dispatch measuring itself. Left in the rsi bucket, rsi
+      spend would track dispatch by construction and the deviation trigger would
+      fire permanently and mean nothing. /rsi-audit is what the rsi bucket now
+      counts.
+  - question: Why do node bodies across this graph still name /rsi-plan,
+      /dispatch-ladder-eval, /dispatch-token-audit and rsi-plan.md?
+    answer: >-
+      (Recorded 2026-08-13 with the collapse, PR 3074, merge
+      c3c229f0de63db09df7dc01ce02177f3d1b56c95.) Because they are dated records,
+      and rewriting them would cost more than it is worth. The family collapsed
+      to two instruments: /dispatch-ladder-eval became /rsi (the per-phase
+      evaluator), /dispatch-token-audit became /rsi-audit, and the retired
+      attended /rsi, /rsi-plan, rsi-plan.md and render-rsi-plan.ts were deleted.
+      About 25 node files carry an old name in prose. tacticScopeFingerprint
+      hashes {statement, body}, so rewriting those bodies churns scope
+      fingerprints and can mis-park live sessions through transition-node's
+      scope gate. The old names are historical; this clarification is what makes
+      them readable as historical rather than stale.
+
+
+      Two node files were exceptions, forced by atomicity rather than chosen: a
+      ```verify fence path in two LIVE nodes cited the pre-rename script path,
+      and lint-verify-fence-paths.sh's baseline explicitly must not grow. The
+      new path does not exist on main until the rename merges, so deferring the
+      fix to this graph round would have reddened main instead. One fence line
+      changed in each, nothing else.
+
+
+      The sensor rewrite was NOT atomic, exactly as the preceding clarification
+      predicted it could not be. RSI_SENSOR_NAME moved with the code in the PR
+      and this node's success_signal.sensor moves here; in between, the sensor
+      was de-registered. Measured, not predicted: the unregistered-sensor count
+      read 58 with this node sitting in read-sensors' skipped tail carrying its
+      old prose. The readings count cannot see that — the unregistered count is
+      the only signal. The class defect is unchanged and still tracked at
+      tactic-eval-finding-sensor-registry-key-prose-drift: no guard of any kind
+      runs on the graph write path.
 tooling_goals: []
 success_signal:
-  observable: graph-native dispatch reaches stable autonomous operation and each
-    subsequent /rsi iteration lands an rsi-plan.md update whose metrics hold
-    their review thresholds
-  sensor: the rsi-plan.md metrics section — sensors registered in the graph's
-    existing success_signal/readings machinery on their owning strategies
-    (backlog band, parked critical-path count, held-session/worktree census,
-    pause state), rendered by render-rsi-plan.ts each iteration, plus
-    per-workflow token attribution across dispatch, office-hours, and rsi; plus
-    the research lane's weekly dated readings on this strategy (research-cycle
-    landings)
-  threshold: dispatch runs unpaused with the recorded resume criteria held,
-    strategy-graph-native-dispatch's own 35% non-increasing band holds, and
-    consecutive rsi iterations complete with zero critical-path blockers
-    requiring shortcut implementation
+  observable: graph-native dispatch reaches stable autonomous operation, every
+    ladder phase boundary is evaluated, and each /rsi-audit pass reports a
+    per-workflow spend fold that holds its review thresholds — with the
+    opportunities it ranks landing in the graph rather than in a report
+  sensor: sensors registered in the graph's existing success_signal/readings
+    machinery on their owning strategies (backlog band, parked critical-path
+    count, held-session/worktree census, pause state), plus per-workflow token
+    attribution across dispatch, office-hours, and rsi reported by /rsi-audit;
+    plus the research lane's weekly dated readings on this strategy
+    (research-cycle landings)
+  threshold: dispatch runs unpaused, strategy-graph-native-dispatch's own 35%
+    non-increasing band holds, consecutive /rsi-audit windows keep dispatch
+    dominating the per-workflow fold, and the parked critical-path count is
+    non-increasing across them
   is_proxy: true
 attention:
   boost: 6
@@ -1249,8 +1350,8 @@ attributes:
       under-count exactly the metric that makes recurrence visible. Tracked for
       repair; recorded here because the bound outlives the current writer.)"
     - "priority delegation is ownership-bounded: the author owns prioritization
-      of strategies and owner: human tactics; /rsi-evaluate owns prioritization
-      of dispatch-delegated (owner: ai) tactics, ordered toward the recorded
+      of strategies and owner: human tactics; /rsi-audit owns prioritization of
+      dispatch-delegated (owner: ai) tactics, ordered toward the recorded
       fitness function (front-load high impact, bugs affecting
       throughput/integrity, token optimizations); its actuators are boost and
       override only — it never writes attributes.tier (tier moves only by adding
@@ -1263,12 +1364,26 @@ attributes:
       write is additionally namespaced — it orders the tactic only within its
       distributing strategy's band and may never invert cross-strategy order
       within a tier, superseding the accepted-risk carve-out that previously
-      permitted an override to displace the strategy-distributed value"
+      permitted an override to displace the strategy-distributed value. Amended
+      2026-08-13: the actuator is /rsi-audit, replacing the /rsi-evaluate this
+      condition named until the surface it would have lived in was retired and
+      the skill was never built. The strategy level becomes a CHANNEL rather
+      than silence: /rsi-audit recommends strategy boosts with measured
+      justification and the author ratifies. A recommendation writes nothing, so
+      the bound above is unchanged in scope — the model still never writes
+      attention on a strategy, a virtue, or an owner: human tactic. Only the
+      recommend half is built; the write half is
+      tactic-rsi-audit-prioritization-writer, blocked on
+      tactic-attention-namespaced-rank"
     - "every model reprioritization is logged: the attention write appends
       {date, old→new, rationale} to the node’s attributes.priority_log
       (append-only, capped ~10, fingerprint-exempt), and a prior reordering is
       never reversed without citing new evidence — prioritization thrash is a
-      defect the log exists to make visible (Recorded 2026-08-11)"
+      defect the log exists to make visible (Recorded 2026-08-11). Amended
+      2026-08-13: the writer that owes the log entry is /rsi-audit. A
+      strategy-level recommendation is not a reprioritization and logs nothing,
+      because it writes nothing — the log records acts, and a recommendation the
+      author has not ratified is not one"
     - "tactic rank is namespaced by its distributing strategy: no tactic's own
       attention — whoever authored it — may order it ahead of a tactic of a
       higher-ranked strategy at the same tier, and a tactic distributed to by
@@ -1282,7 +1397,9 @@ attributes:
       higher-ranked strategy (lifting band), and the blocked_by precedence lift
       moves a blocker to the urgency of what it holds up; no attention number,
       from any author, crosses a band (Recorded 2026-08-11, amended same day
-      third round)"
+      third round). Amended 2026-08-13: 'the model' in this condition is
+      /rsi-audit, the one delegated actuator; the classification acts it may
+      perform and the rank algebra that bounds them are unchanged"
   pause:
     state: paused
     since: 2026-08-10

@@ -2168,26 +2168,64 @@ graph_write_lock_file() {
   printf '%s\n' "$repo_root/tmp/graph-write.lock"
 }
 
-# graph_write_lock_acquire <repo-root> — take that checkout's graph-write mutex
-# NON-BLOCKING on fd 9 of the CALLING shell. The flock is held for the caller's
-# whole process lifetime and released when fd 9 closes (process exit), so there
-# is deliberately no release verb: an out-of-band instrument that could "release
-# early" would reopen the window this mutex exists to close.
+# TWO ACQUIRE VERBS, ONE MUTEX — WHICH ONE A CALLER TAKES DEPENDS ON WHETHER IT
+# HAS A NEXT PASS.
 #
-# NON-BLOCKING ON PURPOSE. Every caller is an unattended instrument fired by a
-# systemd timer. A pass that BLOCKS on a wedged holder pins its oneshot service
-# until the next fire and stacks passes on top of each other; skipping costs
-# nothing, because these instruments re-derive their entire reading from scratch
-# on the next pass. Callers must SKIP the pass on return 1, never wait.
+# Both verbs take the same flock on fd 9 of the CALLING shell, held for the
+# caller's whole process lifetime and released when fd 9 closes (process exit).
+# Neither has a release verb, deliberately: an out-of-band instrument that could
+# "release early" would reopen the window this mutex exists to close. They
+# differ only in what they do when the lock is already held.
 #
-# fd inheritance: children (git, npx, graph-commit) inherit fd 9 and would hold
-# the flock past our exit if one of them ever daemonized. Callers that invoke a
-# child which can fork a background helper should close it there with `9>&-`.
+#   graph_write_lock_acquire       — NON-BLOCKING. For a caller fired by a
+#                                    systemd TIMER (dispatch-fleet-alarm and the
+#                                    other fleet instruments). A pass that blocks
+#                                    on a wedged holder pins its oneshot service
+#                                    until the next fire and stacks passes on top
+#                                    of each other. Skipping costs nothing there:
+#                                    these instruments re-derive their entire
+#                                    reading from scratch on the next pass, which
+#                                    is a minute or two away. Such callers must
+#                                    SKIP on return 1, never wait.
 #
-# Return: 0 acquired; 1 another writer holds it (SKIP the pass, do not block);
+#   graph_write_lock_acquire_wait  — BOUNDED WAIT. For a FIRE-AND-FORGET one-shot
+#                                    job that has NO next pass — nothing
+#                                    re-invokes it, so a skipped pass is not a
+#                                    deferred write, it is a LOST write. The
+#                                    per-phase evaluator's call to
+#                                    dispatch-eval-finding is the case this
+#                                    exists for: it is spawned fire-and-forget by
+#                                    the ladder driver, and a skip silently
+#                                    under-counts the recurrence metric the
+#                                    evaluation-finding ledger exists to carry.
+#                                    Concurrent ladders make that contention
+#                                    routine, not exceptional.
+#
+# THE WAIT IS ALWAYS BOUNDED, NEVER UNBOUNDED. The timeout is a required
+# argument precisely so no caller can acquire an open-ended block: a wedged
+# holder must eventually release every waiter, and a job that waits forever is
+# a new wedge rather than a fix for the old one. On timeout the waiting caller
+# is back in the skip case and must say so loudly — the write it just lost has
+# no next pass to recover it.
+#
+# This split is the documented exception to the older "callers must SKIP, never
+# wait" rule, whose stated premise (every caller is a timer oneshot) stopped
+# being true when the per-phase evaluator arrived. A contract with an
+# undocumented exception is the next defect, so the exception lives here.
+#
+# fd inheritance (both verbs): children (git, npx, graph-commit) inherit fd 9 and
+# would hold the flock past our exit if one of them ever daemonized. Callers that
+# invoke a child which can fork a background helper should close it there with
+# `9>&-`.
+#
+# Return (both verbs, identical contract):
+#         0 acquired;
+#         1 another writer holds it (for _acquire, immediately; for
+#           _acquire_wait, still after the timeout elapsed);
 #         2 the mutex could not be established at all (no repo root, no `flock`
-#           binary, unwritable directory) — an environment error the caller must
-#           surface, NEVER silently downgrade to an unserialized graph write.
+#           binary, unwritable directory, and for _acquire_wait a missing or
+#           malformed timeout) — an environment error the caller must surface,
+#           NEVER silently downgrade to an unserialized graph write.
 graph_write_lock_acquire() {
   local repo_root="${1:-}" lock_file
   lock_file=$(graph_write_lock_file "$repo_root") || return 2
@@ -2197,6 +2235,24 @@ graph_write_lock_acquire() {
   # race a concurrent holder's open.
   exec 9>>"$lock_file" || return 2
   flock -n 9 || return 1
+  return 0
+}
+
+# graph_write_lock_acquire_wait <repo-root> <timeout-seconds> — as
+# graph_write_lock_acquire, but waits up to <timeout-seconds> for a held lock
+# instead of returning 1 at once. Same fd, same held-until-process-exit
+# contract, same return codes (see the block above). The timeout is REQUIRED and
+# must be a non-negative number (integer or decimal, as `flock -w` accepts); a
+# missing or malformed one is return 2, not a silent unbounded wait.
+graph_write_lock_acquire_wait() {
+  local repo_root="${1:-}" timeout="${2:-}" lock_file
+  [[ "$timeout" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 2
+  lock_file=$(graph_write_lock_file "$repo_root") || return 2
+  command -v flock >/dev/null 2>&1 || return 2
+  mkdir -p "$(dirname "$lock_file")" 2>/dev/null || return 2
+  # Append-open, never truncate — same reasoning as the non-blocking verb.
+  exec 9>>"$lock_file" || return 2
+  flock -w "$timeout" 9 || return 1
   return 0
 }
 

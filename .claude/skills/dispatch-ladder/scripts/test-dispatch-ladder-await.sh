@@ -19,6 +19,11 @@
 #      marker instead of a phase, so it looks exactly like a stall to a
 #      phase-only check — and markers are never cleared, so a marker-only check
 #      would call every later phase complete. Both halves are asserted.
+#   4. THE HELD PATH ASKS THE GRAPH FIRST. A held session is how an escalation
+#      looks BEFORE terminal_without_disposition_sweep parks it, so the park is
+#      checked ahead of the hold: parked → `throw <id> parked`, unparked →
+#      `held-observing` at exit 21, which claims nothing and lets the caller run
+#      the sweep and call again.
 #
 # The Claude registry and verify-landed are both stubbed — no daemon, no
 # network, no gh. Polling is driven at --poll-s 1 so the suite runs in seconds.
@@ -208,15 +213,35 @@ run_await 12 "stalled $NODE qa" "a stale reviewed marker is ignored at any phase
 
 # --- Held session ----------------------------------------------------------
 # `state: done` with the row still present means the worker stopped WITHOUT
-# declaring a terminal disposition, so the Stop hook is holding the job alive. It
-# occupies a slot and keeps the node unselectable until a human runs `claude rm`
-# — so it throws even when the graph looks fine.
+# declaring a terminal disposition, so the Stop hook is holding the job alive.
+#
+# THE HOLD IS NOT THE VERDICT. That is also precisely the shape of an
+# ESCALATION mid-flight: every node-lane skill's escalation path writes
+# $CLAUDE_JOB_DIR/office-hours-reason and deliberately declares no
+# node-terminal marker, leaving the park to terminal_without_disposition_sweep,
+# which lands it seconds-to-minutes later. So the graph is asked about a park
+# FIRST, and a hold with no park is an OBSERVATION (`held-observing`, exit 21)
+# that the caller re-polls after running that sweep — not a throw. This suite
+# previously pinned the opposite ("a held session throws regardless of the
+# graph"), which made the sweep structurally unreachable: dispatch-ladder-run
+# halted on the first poll, and the healer only ever ran after the halt.
 session_rows "$HELD"
+
+# THE TERMINUS. Once the sweep has consumed the escalation reason and parked the
+# node, the hold resolves into the one answer a person can read.
+set_graph 4 0 4 4
+run_await 11 "throw $NODE parked" "a held session whose node has since been parked reports the park, not the hold"
+
+# The park is checked ahead of the phase, exactly as on the reaped path: a
+# worker can advance the node AND escalate in the same pass.
+set_graph 4 0 4 0
+run_await 11 "throw $NODE parked" "a park outranks an advance on the held path too"
+
 set_graph 4 4 4 0
-run_await 11 "throw $NODE held-session" "a done-but-unreaped session throws even when the phase advanced"
+run_await 21 "held-observing $NODE" "a done-but-unreaped session is held-observing even when the phase advanced"
 
 set_graph 4 4 4 4
-run_await 11 "throw $NODE held-session" "a held session throws regardless of the graph"
+run_await 21 "held-observing $NODE" "an unparked held session is held-observing (exit 21), never a verdict"
 
 # --- Still working ---------------------------------------------------------
 # A long phase is the expected case, not a failure: the timeout sits under the

@@ -138,7 +138,7 @@ export interface ProduceDeps {
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 const TOPIC_USAGE_WRITER = path.join(
   REPO_ROOT,
-  ".claude/skills/dispatch-token-audit/scripts/topic-usage-writer.mjs",
+  ".claude/skills/rsi-audit/scripts/topic-usage-writer.mjs",
 );
 const USAGE_SAMPLE_WRITER = path.join(
   REPO_ROOT,

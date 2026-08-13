@@ -11,14 +11,14 @@ rationale: "Recorded 2026-08-11 by the /align round that subdivided
   strategy-recursive-self-improvement into ranking-namespace children, executing
   the concrete work its child-strategy clarification records as owed. This child
   owns the machinery that holds the delegatee to the ordering bound the parent
-  records: /rsi-evaluate (the delegated evaluation and reprioritization
-  subagent), the attributes.priority_log anti-thrash provenance and its lint,
-  and the structural namespacing of rank so a delegated boost cannot invert the
-  author's cross-strategy order. The delegation itself is not being unwound —
-  ordering stays delegated — but its blast radius is, which is why the node
-  carries a recovers edge to delegation-anthropic-claude. Ranking function:
-  tactics serving it resolve one band above tactics left directly on the parent,
-  and one below the rsi-plan surface child."
+  records: /rsi-audit (the measurement instrument that carries the delegated
+  prioritization actuator), the attributes.priority_log anti-thrash provenance
+  and its lint, and the structural namespacing of rank so a delegated boost
+  cannot invert the author's cross-strategy order. The delegation itself is not
+  being unwound — ordering stays delegated — but its blast radius is, which is
+  why the node carries a recovers edge to delegation-anthropic-claude. Ranking
+  function: tactics serving it resolve one band above tactics left directly on
+  the parent, and one below the rsi-plan surface child."
 reading: null
 serves: []
 recovers:
@@ -214,6 +214,43 @@ clarifications:
       holds because classification is already the model's sanctioned tier
       instrument — recurrence supplies evidence for the act, it does not become
       a new kind of act."
+  - question: The carrier of the delegated actuator changed. What does that change
+      about this strategy's scope?
+    answer: >-
+      (Recorded 2026-08-13, following the 2026-08-12 author interview and the
+      collapse that landed as PR 3074.) Nothing about the scope; only the
+      carrier. This node was recorded naming /rsi-evaluate — the delegated
+      evaluation and reprioritization subagent — as the surface that would hold
+      the delegatee to the ordering bound. That surface was retired unbuilt when
+      the collapse removed the judgment loop it would have lived in, so the
+      carrier is now /rsi-audit, the measurement instrument that survives.
+
+
+      The delegation itself is unchanged: ordering of dispatch-delegated (owner:
+      ai) tactics stays delegated, bounded by band, logged to
+      attributes.priority_log, and structurally namespaced. What the interview
+      added is the strategy level as a RECOMMENDATION channel — /rsi-audit
+      recommends strategy boosts with measured justification and the author
+      ratifies. A recommendation writes nothing, so the recovers edge to
+      delegation-anthropic-claude is neither widened nor narrowed by it.
+
+
+      Three tactics were recorded as this node's scope.
+      tactic-rsi-evaluate-skill is superseded: it built the retired surface, and
+      its capability moved to /rsi-audit. Its replacement is
+      tactic-rsi-audit-prioritization-writer, blocked on
+      tactic-attention-namespaced-rank because that node rewrites interface
+      Attention itself — a writer built against today's shape would be deleted
+      by its first unit. tactic-priority-provenance-schema and
+      tactic-attention-namespaced-rank are otherwise unchanged.
+
+
+      Worth stating rather than discovering: until the writer lands, this node's
+      integrity half reads as insufficient data, not as passing. There is no
+      delegated attention writer on main at all, so 'zero unlogged attention
+      writes' is currently scored by a system that performs no writes — the
+      conform-by-doing-nothing failure this node's own paired-signal
+      clarification already names.
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,

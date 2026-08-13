@@ -74,7 +74,7 @@ carrier of this judgment, so specify **all** of:
   issue/PR documents as non-assertable at merge time — verified downstream by
   monitoring or audit tooling rather than at this PR's merge. Example: "no
   regression in caught-finding rate, measured downstream by
-  `dispatch-token-audit`." Classify such an item `needs-human-judgment` (it is
+  `rsi-audit`." Classify such an item `needs-human-judgment` (it is
   not script- or browser-verifiable) **and** add the `Flag: planned-deferral —
   <reason>` line with a one-line reason. The flag annotates; it does not replace
   the classification axis — both lines must appear.

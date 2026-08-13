@@ -130,7 +130,7 @@ implementation session.
 ## Verification
 
 ```verify
-.claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh
+.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
 ```
 
 Beyond the unit tests, the acceptance test is a **measured comparison against a

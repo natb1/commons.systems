@@ -20,11 +20,13 @@ systemd unit and outlives the session that launched it. What detaches is the
 **waiting**, not the judgment: every halt is unconditional — no retry, no
 auto-park, no resume — and stays halted until a person reads it and acts. The
 session's job is to launch, poll, engage a halt if there is one, and run the
-closing acceleration review.
+closing cross-phase synthesis. **Each phase is already evaluated by then** — the
+driver spawns `/rsi` for every phase at its own boundary, and
+for the phase a halted run owes — so what is left for this session is only what
+no single phase's evaluator can see.
 
 `/dispatch-ladder` inherits attended and pace-exempt status from whichever
-attended thread invokes it (an author directly, or `/rsi` Step 4b). It has none
-of its own.
+attended thread invokes it — an author directly. It has none of its own.
 
 ## What this is not
 
@@ -117,6 +119,34 @@ inside the pass, so none happens while the lock is held.
 The run halts complete when the node is at phase `done` on `origin/main`, or
 when it is gone from `origin/main` entirely (`pruned`).
 
+## The per-phase evaluation
+
+At every phase boundary the driver spawns `/rsi <node-id>
+<phase> --since <launch-epoch>` as its own `claude --bg` job and **does not wait
+on it**. The driver waits for the spawn's registration check, seconds; it never
+waits for a model turn. A blocking evaluation would reintroduce exactly the
+turn-in-the-loop the detached script exists to remove, and would leave the
+driver gating on its own review.
+
+`halt()` — the one terminal path, so exits 10, 11, 12, 13 and 21 all pass
+through it — spawns the evaluation the run still owes for the phase it launched.
+A halted run no longer records nothing; under the old terminus-only rule the
+most defect-rich runs were exactly the ones that produced no review. A halt that
+never launched a phase (`usage` / `refused`) spawns nothing, and a phase already
+evaluated at its own boundary is not evaluated twice.
+
+The spawn's `--name` carries the node id, the phase **and** the phase's launch
+epoch. `dispatch-spawn-job` dedups on the name, so a name keyed on the node
+alone would evaluate the first phase of a ladder and silently skip every phase
+after it — and a name without the epoch would drop the second visit to a
+recurring `fix` or `conflict` interrupt. A spawn failure is a logged warning and
+never changes the run's exit code.
+
+Model and effort are policy, not a call-site literal: `dispatch-phase-model` /
+`dispatch-phase-effort` answer for the pseudo-phase `ladder-eval` (Sonnet today,
+matching the sibling one-off jobs). Both events land in `events.jsonl` as
+`eval` lines, so what was and was not evaluated is on the record.
+
 ## The two tick sweeps the driver owes
 
 Before every `advance` the driver runs two sweeps that are otherwise called only
@@ -131,9 +161,20 @@ from `dispatch-tick`. Both are reused verbatim — no wrapper, no variant policy
   escalation path deliberately declares no `node-terminal` marker: it writes
   `$CLAUDE_JOB_DIR/office-hours-reason` and leaves the park to this sweep.
   Without it, `dispatch-self-close` holds the job for want of a marker,
-  `dispatch-ladder-await` reads the hold as `throw <id> held-session`
-  (exit 11), and the node stays unselectable on every later run because
+  `dispatch-ladder-await` reads the hold as `held-observing` (exit 21), and the
+  node stays unselectable on every later run because
   `worktree_has_live_session` is name-keyed.
+
+The second sweep is also run **again on every `held-observing` answer**, and
+that is what makes it reachable at all. The sweep needs
+`DISPATCH_TERMINAL_DISPOSITION_GRACE_S` (300s by default) of idle before it will
+park anything, so a driver that halted on the first held poll could only ever
+run its own healer *after* the halt. Instead the driver re-runs both sweeps and
+re-polls for up to `HELD_GRACE_S` (default 420s, comfortably clear of that
+300s), after which the next `await` answers `throw <id> parked` — a terminus a
+person can read. It is a bounded wait on one named script, not a retry: the
+phase is never relaunched, and a hold nothing heals still halts 11 when the
+window runs out.
 
 Both are ordinarily safe to leave to the heartbeat, because the heartbeat runs
 again in a minute. This driver exists for the host where it does not — so it is
@@ -224,8 +265,8 @@ Terminal statuses:
 | `halted` | the driver stopped and wrote why — read `<disposition>`. |
 | `orphaned` | state says running but the unit is not active: the driver was killed without writing a terminal state. Treat as terminal and read the journal. |
 
-**3. Engage the halt, if there is one.** Then run the closing acceleration
-review, then report.
+**3. Engage the halt, if there is one.** Then run the closing cross-phase
+synthesis, then report.
 
 **Evidence.** Two places, both needed:
 
@@ -235,8 +276,11 @@ cat <main-root>/.claude/worktrees/<node-id>.ladder/events.jsonl
 ```
 
 `events.jsonl` is append-only and carries per-phase elapsed seconds, await
-re-poll counts and the await window — the acceleration review's inputs, which
-nothing else records.
+re-poll counts and the await window — as numeric `elapsed_s`, `await_repolls`
+and `window_s` fields on the phase events, not as text to regex out of `detail`.
+These are the evaluation's inputs, and nothing else records them. Its `eval`
+lines say which phases were handed to `/rsi` and which spawn
+failed.
 
 ## Halt dispositions
 
@@ -246,15 +290,21 @@ disposition; the journal says which script produced it.
 
 | exit | disposition | what the session does |
 | --- | --- | --- |
-| 0 | `complete` / `pruned` | run the acceleration review, report. |
-| 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. |
-| 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. |
-| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a held session, a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or one of the two failed-verify tokens. `launch-unverified`: the spawn reported success, the daemon **answered**, and no session named for the node was in it (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot) — real evidence of a phantom spawn, so the claim is released before the throw. `launch-unverifiable`: the daemon could not be queried at all, so whether a session started is unknown — the claim is deliberately **retained** and ages out under `reservation_sweep`'s TTL, because releasing it on a non-observation would let a concurrent tick select a node whose worker may still be booting. A sandboxed run produces one or the other and never verifies either way; re-run with `dangerouslyDisableSandbox`. |
-| 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. |
-| 13 | `claimed` | another session holds the node. **Stop.** The token says which: `live-session` (running, or the probe could not answer), `terminal-session` (registered but finished — an invalid state; release it with `claude rm <session-id>`, named in the stderr, then re-run), `reservation:<owner>` (an unreleased ledger marker; `reservation_sweep` reclaims it on the next dispatch heartbeat). The ladder never releases another session's claim itself. |
-| 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. |
-| 21 | `timeout` | `--max-run-s` exceeded. The ladder is unfinished and nothing was rolled back. |
-| 1 | `internal` | the driver's own error — an unmapped exit code, an unwritable state dir. |
+| 0 | `complete` / `pruned` | run the cross-phase synthesis, report. |
+| 2 | `usage` / `refused` | fix the argument, or run `/align-tactics` on a refused strategy id. No phase ran, so nothing is owed. |
+| 10 | `idle` | nothing left to launch, and the `--ci-wait-s` budget ran out with the reconcile pass producing no merge, no absorb and no fix route. Most likely the PR's CI is still pending, or a gate is holding it. Read the PR's checks and `dispatch-ladder-advance`'s event lines in the journal. Then the synthesis, over the phases that did run. |
+| 11 | `throw` | **engage, attended, in this thread.** Parked, blocked-by, a session still held un-reaped after `HELD_GRACE_S` (release it with `claude rm <session-id>` once you have read its transcript), a `held <id> (…)` from `graph-auto-merge` (`office-hours`, `missing-stamp`, `scope-stale`), or one of the two failed-verify tokens. `launch-unverified`: the spawn reported success, the daemon **answered**, and no session named for the node was in it (a classifier denial, a bg-supervisor parenting failure, a stale daemon, an OOM during boot) — real evidence of a phantom spawn, so the claim is released before the throw. `launch-unverifiable`: the daemon could not be queried at all, so whether a session started is unknown — the claim is deliberately **retained** and ages out under `reservation_sweep`'s TTL, because releasing it on a non-observation would let a concurrent tick select a node whose worker may still be booting. A sandboxed run produces one or the other and never verifies either way; re-run with `dangerouslyDisableSandbox`. Then the synthesis. |
+| 12 | `stalled` | a phase ended with no graph change, or the requeue budget ran out. Read the worker's transcript before re-running. Then the synthesis. |
+| 13 | `claimed` | another session holds the node. **Stop.** The token says which: `live-session` (running, or the probe could not answer), `terminal-session` (registered but finished — an invalid state; release it with `claude rm <session-id>`, named in the stderr, then re-run), `reservation:<owner>` (an unreleased ledger marker; `reservation_sweep` reclaims it on the next dispatch heartbeat). The ladder never releases another session's claim itself. The synthesis belongs to whoever holds it. |
+| 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. Then the synthesis, if a phase ran. |
+| 21 | `timeout` | `--max-run-s` exceeded. The ladder is unfinished and nothing was rolled back. Then the synthesis. |
+| 1 | `internal` | the driver's own error — an unmapped exit code, an unwritable state dir. Then the synthesis, if a phase ran. |
+
+**A halted run still owes its review.** Every row above except `usage` /
+`refused` and `claimed` carries the synthesis, and the driver has already
+spawned the per-phase evaluation for the phase it was in. Halting is not an
+exemption: the most defect-rich runs are exactly the ones that halt, and a
+halted run that recorded nothing was the defect the two-tier review closed.
 
 **Never push through a halt and never re-spawn blindly.** A halt is a person's
 call; a re-spawn that has not first addressed the cause spends budget on a
@@ -275,8 +325,12 @@ remove.
 `dispatch-ladder-advance` prints `launched <id> <kind> <phase> <skill>`; hand
 that `<phase>` to `dispatch-ladder-await` as the from-phase. `await` exit **20**
 means still running — call again with identical arguments; its default
-`--timeout-s` is 540. Both need `dangerouslyDisableSandbox: true`. Their headers
-carry the full exit-code contracts; read them there.
+`--timeout-s` is 540. Exit **21** (`held-observing`) means the session stopped
+without declaring a terminal disposition and no park has landed yet: nothing is
+claimed, and the caller is the one that runs
+`terminal_without_disposition_sweep` and calls again. Both need
+`dangerouslyDisableSandbox: true`. Their headers carry the full exit-code
+contracts; read them there.
 
 The reconcile pass has no hand equivalent here — it is the driver's step. Do not
 run `graph-auto-merge` or `reconcile-graph-review-stall` yourself to finish a
@@ -306,29 +360,44 @@ halted ladder.
   launches as a convenience; it is never the authority on whether a node is
   held.
 
-## The closing acceleration review
+## The closing cross-phase synthesis
 
-Required by `strategy-recursive-self-improvement` condition 14 — read it at
-`origin/main`; it is authoritative and this is its mechanism.
+Required by `strategy-recursive-self-improvement` condition 14 as amended
+2026-08-12 — read it at `origin/main`; it is authoritative and this is the
+closing half of its mechanism. The per-phase half already ran: see
+`/rsi`, spawned by the driver at every phase boundary and for
+the phase a halted run owes.
 
-Run it **after** the run reaches terminus, never interleaved: it evaluates
-observed results, not predictions. The invoking session runs it, or a later
-author-started session polls the same node to terminus and runs it there.
+Run it **after** the run reaches terminus — complete or halted — never
+interleaved: it evaluates observed results, not predictions. The invoking
+session runs it, or a later author-started session polls the same node to
+terminus and runs it there.
 
-Evaluate the observed execution for optimizations to this ladder and to
-implementation in general, naming evidence a later session cannot rediscover:
+**It covers only what no single phase's evaluator can see.** Everything
+phase-local — that phase's errors, round trips, rework counters, permission
+friction, its own elapsed-against-window calibration — belongs to
+`/rsi` and is not re-derived here. What is left is exactly
+three things:
 
-- phase wall-clock against the await window (`events.jsonl`: `elapsed_s`,
-  `window_s`, `await_repolls`);
-- launches that produced no code change;
-- repeated operator interventions;
-- CI and fix-lane spend.
+- **Rework loops across phases** — the shape the sequence makes: `implement` →
+  `qa` → `fix` → `qa` again, a demotion back to `implement`, a `review` that had
+  to be re-run. One phase's evaluator sees its own attempt; only the whole run
+  shows the loop.
+- **The halt-cause taxonomy** — which halt this run took, and whether the cause
+  belonged to the node, the gates, or the driver. Over runs this is what
+  separates a recurring structural halt from a one-off.
+- **End-to-end wall clock against the plan** — total run time against what the
+  plan predicted, and where it actually went: phase time against `ci-wait` and
+  `grace-wait` time (`events.jsonl` keeps the two silences distinct, and nothing
+  can tell them apart afterwards).
 
 **It records; it never executes.** Every finding lands in the graph in this same
-session — a new tactic, or a dated clarification on an existing node when one
-already covers it. Findings left in session prose only are a defect: the graph
-is the sole tracker, so an unrecorded finding is indistinguishable from one
-never made.
+session, through the same ledger the per-phase evaluator uses
+(`dispatch-eval-finding`: `--list` first, judge whether the finding in hand IS
+an existing entry, then record against that slug) — one entry per distinct
+finding, never one per occurrence. Findings left in session prose only are a
+defect: the graph is the sole tracker, so an unrecorded finding is
+indistinguishable from one never made.
 
 It is never a place to invent an orchestration rule. A finding that wants one is
 recorded as a node for the author, not applied.
@@ -341,4 +410,7 @@ State:
 - the terminal disposition and which script produced it;
 - what landed at `origin/main` (commits, PR, the merge and absorb);
 - what a next invocation would pick up;
-- the acceleration review's findings and the node ids they landed as.
+- the cross-phase synthesis's findings and the ledger entries they landed as;
+- which phases the driver handed to `/rsi`, from the `eval`
+  lines in `events.jsonl` — a phase with no `eval` line is an unevaluated phase,
+  and saying so is part of the report.

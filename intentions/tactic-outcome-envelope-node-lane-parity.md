@@ -316,7 +316,7 @@ Auto-runnable:
 
 ```verify
 bash .claude/skills/dispatch-propagate/scripts/test-emit-outcome.sh
-bash .claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh
+bash .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 

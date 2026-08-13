@@ -6,7 +6,7 @@
 # `intentions/tactic-rsi-implement-skill.md`); `dispatch-ladder-advance`
 # launches, this waits and verifies. It makes no graph writes, no merges, and
 # no decisions — it reports one of six outcomes and lets the calling thread
-# (`/dispatch-ladder`, invoked directly or by `/rsi`) judge.
+# (`/dispatch-ladder`, invoked directly by an author) judge.
 #
 # NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
 # owns every merge (strategy condition, and the node's own plan). A wait loop is
@@ -30,9 +30,25 @@
 #   row gone            — declared terminal and reaped. The normal path.
 #   row present, done   — stopped WITHOUT declaring terminal. The session is
 #                         holding a worker slot and keeping the node
-#                         unselectable until a human runs `claude rm`. Reported
-#                         as `held-session`, because it needs that human act.
+#                         unselectable. Reported as `held-observing`, NOT as a
+#                         throw — see A HOLD IS NOT YET A VERDICT below.
 #   row present, other  — still working. Keep polling.
+#
+# A HOLD IS NOT YET A VERDICT. A held row is the shape an ESCALATING phase
+# leaves behind on purpose: every node-lane skill's escalation path writes
+# `$CLAUDE_JOB_DIR/office-hours-reason` and deliberately declares NO
+# `node-terminal` marker, leaving the park to
+# `terminal_without_disposition_sweep` (lib-frozen-session-park.sh) — so
+# `dispatch-self-close` HOLDs the job and the row survives with `state: done`.
+# The park lands SECONDS TO MINUTES later, once that sweep runs.
+#
+# So the hold is read in two steps. The graph is asked about a park FIRST: once
+# the sweep has landed it, this reports `throw <id> parked` — the terminus a
+# person can actually read. With no park yet, the answer is an OBSERVATION, not
+# a verdict: `held-observing` at exit 21, which says "still held, nothing
+# claimed" and leaves it to the caller (dispatch-ladder-run) to run the owed
+# sweep and call again. This script still never retries and never sweeps; it
+# only stops mistaking a mid-escalation hold for a final answer.
 #
 # BOOT GRACE. `dispatch-graph-execute` returns as soon as the spawn kick
 # succeeds, before the worker's session registers with the daemon. Polling
@@ -78,15 +94,18 @@
 #                                            the node is STILL at `review`.
 #   pruned <id>                              the node is gone from origin/main —
 #                                            completed and pruned.
-#   throw <id> <reason>                      parked, or a held session.
+#   throw <id> <reason>                      parked, or blocked by an edge.
 #   stalled <id> <from>                      the worker stopped and NOTHING
 #                                            changed at origin/main.
+#   held-observing <id> <from>               the worker stopped without
+#                                            declaring a terminal disposition
+#                                            and no park has landed yet.
 #   running <id> <from>                      still working at the timeout.
 #
 # Exit codes:
 #   0   advanced, reviewed or pruned — the loop may take another step.
-#   11  throw: the node is parked, or a session is held un-reaped. Both need the
-#       calling thread (`/dispatch-ladder`, invoked directly or by `/rsi`);
+#   11  throw: the node is parked, or held by a blocked_by edge. Both need the
+#       calling thread (`/dispatch-ladder`, invoked directly by an author);
 #       neither is retried here.
 #   12  stalled: the session ended with no graph change. Needs judgment — it is
 #       the shape a silently-failed phase takes, and retrying blindly would
@@ -95,6 +114,11 @@
 #       Nothing is claimed either way; re-run once the read works.
 #   20  still running at the timeout. Call again — this is the expected result
 #       for any phase longer than --timeout-s, not a failure.
+#   21  held-observing: the session stopped without declaring a terminal
+#       disposition, and the graph carries no park. Nothing is claimed — the
+#       caller runs `terminal_without_disposition_sweep` (the known healer for
+#       an escalation) and calls again. A hold that no sweep ever heals is the
+#       caller's halt to make, on the caller's own budget, not this script's.
 #   2   usage or environment error.
 #
 # Requires `dangerouslyDisableSandbox: true` — the liveness read reaches the
@@ -244,9 +268,17 @@ graph_verdict() {
   esac
 }
 
-report_graph_verdict() { # <session-note>
-  local note="$1" verdict
-  verdict=$(graph_verdict)
+# report_graph_verdict <session-note> [<already-computed-verdict>]
+#
+# The second argument exists for the held-session arm, which must ASK the graph
+# (is there a park?) before it decides whether to report at all. Passing the
+# verdict it already has keeps that one decision on a single read of
+# origin/main: re-deriving it here would both double the verify-landed calls
+# and open a window where the second read answers a different question than the
+# one the caller branched on.
+report_graph_verdict() {
+  local note="$1" verdict="${2:-}"
+  [[ -n "$verdict" ]] || verdict=$(graph_verdict)
   case "$verdict" in
     pruned)
       echo "pruned $NODE_ID"
@@ -254,7 +286,7 @@ report_graph_verdict() { # <session-note>
       exit 0 ;;
     parked)
       echo "throw $NODE_ID parked"
-      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly or by /rsi) conducts the engagement; this script never clears a park." >&2
+      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly by an author) conducts the engagement; this script never clears a park." >&2
       exit 11 ;;
     blocked)
       echo "throw $NODE_ID blocked-by"
@@ -298,7 +330,8 @@ if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
   # "no session". Falling through to the graph here would let an unreadable
   # registry produce a real verdict: a node whose phase had not landed YET would
   # be reported `stalled` while its worker was alive and simply invisible. That
-  # is the same "trust an unanswerable probe" failure rsi-claim refuses to make.
+  # is the same "trust an unanswerable probe" failure every claim primitive in
+  # this family refuses to make.
   # Report `running` instead — the caller re-runs, and nothing is claimed.
   echo "running $NODE_ID $FROM_PHASE"
   echo "dispatch-ladder-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
@@ -321,17 +354,25 @@ while (( SECONDS < DEADLINE )); do
       ;;
     done-held)
       # Stopped without declaring a terminal disposition, so the Stop hook is
-      # holding the job. The graph may still have advanced (the transition can
-      # land before the marker is written), so report that first — but a held
-      # session is a throw either way: it occupies a worker slot and keeps the
-      # node unselectable until a human releases it.
-      echo "throw $NODE_ID held-session"
-      echo "dispatch-ladder-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive." >&2
-      echo "dispatch-ladder-await: it occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'. Read its transcript first — the missing marker usually means it stopped mid-phase." >&2
-      "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" \
-        --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1 && \
+      # holding the job. THE PARK IS ASKED FIRST — see A HOLD IS NOT YET A
+      # VERDICT above: this is exactly the shape an escalating phase leaves
+      # behind, and once terminal_without_disposition_sweep has consumed its
+      # `office-hours-reason` the node carries office_hours and the run
+      # terminates on `throw <id> parked`, the terminus a person can read.
+      HELD_VERDICT=$(graph_verdict)
+      if [[ "$HELD_VERDICT" == parked ]]; then
+        report_graph_verdict "the session stopped without declaring a terminal disposition, and the node has since been parked" "$HELD_VERDICT"
+      fi
+      # No park. Report the OBSERVATION and stop — nothing is claimed about the
+      # hold, because the sweep that would resolve it has not run yet and this
+      # script never runs it. The caller re-polls.
+      echo "held-observing $NODE_ID $FROM_PHASE"
+      echo "dispatch-ladder-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive, and $NODE_ID carries no office_hours park at origin/main." >&2
+      echo "dispatch-ladder-await: that is the shape of an escalation mid-flight (office-hours-reason written, no node-terminal marker), so the caller runs terminal_without_disposition_sweep and calls again. A hold no sweep heals occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'." >&2
+      if [[ "$HELD_VERDICT" == advanced ]]; then
         echo "dispatch-ladder-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
-      exit 11
+      fi
+      exit 21
       ;;
   esac
   sleep "$POLL_S"
