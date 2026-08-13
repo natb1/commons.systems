@@ -126,20 +126,48 @@ assert_eq "fail-open await matches REVIEW_PLAN_AWAIT_S" \
 # The slice is the single source of truth, so losing it must degrade to today's
 # defaults rather than take the review down.
 BROKEN=$(mktemp -d)
-mkdir -p "$BROKEN/scripts" "$BROKEN/workflows"
-cp "$SCRIPT_DIR/dispatch-review-plan-gate" "$BROKEN/scripts/"
-cp "$SCRIPT_DIR/review-fix-review-plan-gate.mjs" "$BROKEN/scripts/"
-# The script resolves review-fix.js at ../../../workflows/ relative to itself.
-mkdir -p "$BROKEN/a/b/workflows" "$BROKEN/a/b/c/scripts"
-cp "$SCRIPT_DIR/dispatch-review-plan-gate" "$BROKEN/a/b/c/scripts/"
-cp "$SCRIPT_DIR/review-fix-review-plan-gate.mjs" "$BROKEN/a/b/c/scripts/"
-printf 'const x = 1;\n' > "$BROKEN/a/b/workflows/review-fix.js"   # no sentinels
-out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$BROKEN/a/b/c/scripts/dispatch-review-plan-gate")
+# The script resolves review-fix.js at $SCRIPT_DIR/../../../workflows/, mirroring
+# the real layout (.claude/skills/dispatch-propagate/scripts ->  .claude/workflows).
+# So the fixture needs THREE directory levels between the scripts dir and the
+# root holding `workflows/`. Getting this off by one would make both rows below
+# pass for the same wrong reason — a missing file — and the sentinel-less case
+# would never actually be exercised.
+FAKE_ROOT="$BROKEN/dotclaude"
+FAKE_SCRIPTS="$FAKE_ROOT/skills/some-skill/scripts"
+mkdir -p "$FAKE_ROOT/workflows" "$FAKE_SCRIPTS"
+cp "$SCRIPT_DIR/dispatch-review-plan-gate" "$FAKE_SCRIPTS/"
+cp "$SCRIPT_DIR/review-fix-review-plan-gate.mjs" "$FAKE_SCRIPTS/"
+
+# Assert the fixture resolves where we think it does, before relying on it.
+assert_eq "fixture: the gate resolves review-fix.js into the fake workflows dir" \
+  "$FAKE_ROOT/workflows" \
+  "$(cd "$FAKE_SCRIPTS/../../../workflows" && pwd)"
+
+# (a) present but sentinel-less — the slice cannot be taken.
+printf 'const x = 1;\n' > "$FAKE_ROOT/workflows/review-fix.js"
+assert_eq "fixture: the sentinel-less file really is there" "1" \
+  "$([[ -r "$FAKE_ROOT/workflows/review-fix.js" ]] && echo 1 || echo 0)"
+out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$FAKE_SCRIPTS/dispatch-review-plan-gate")
 assert_eq "sentinel-less review-fix.js → fail-open high" "high" "$(f "$out" effort)"
 assert_eq "sentinel-less review-fix.js → today's deadline" "5400" "$(f "$out" deadline_s)"
-rm -f "$BROKEN/a/b/workflows/review-fix.js"
-out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$BROKEN/a/b/c/scripts/dispatch-review-plan-gate")
+
+# (b) duplicated sentinels — an ambiguous slice must not be guessed at.
+{ cat "$SCRIPT_DIR/../../../workflows/review-fix.js"
+  printf '\n// >>> review plan gate: sliced + evaled by review-fix-review-plan-probe.mjs >>>\n// <<< review plan gate <<<\n'
+} > "$FAKE_ROOT/workflows/review-fix.js"
+out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$FAKE_SCRIPTS/dispatch-review-plan-gate")
+assert_eq "duplicated sentinels → fail-open high" "high" "$(f "$out" effort)"
+
+# (c) missing entirely.
+rm -f "$FAKE_ROOT/workflows/review-fix.js"
+out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$FAKE_SCRIPTS/dispatch-review-plan-gate")
 assert_eq "missing review-fix.js → fail-open high" "high" "$(f "$out" effort)"
+
+# Sanity: the SAME fixture WITH a good review-fix.js must NOT fail open — else
+# every row above would pass no matter what the script did.
+cp "$SCRIPT_DIR/../../../workflows/review-fix.js" "$FAKE_ROOT/workflows/review-fix.js"
+out=$(printf '{"effort":"low","raise":[],"cheapen":["x"]}' | "$FAKE_SCRIPTS/dispatch-review-plan-gate")
+assert_eq "fixture control: a GOOD review-fix.js gates normally (not fail-open)" "low" "$(f "$out" effort)"
 rm -rf "$BROKEN"
 
 # --- the reason is always a single line --------------------------------------
