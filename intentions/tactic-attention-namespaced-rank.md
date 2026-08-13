@@ -164,6 +164,62 @@ clarifications:
       (schema.ts:1114, which IS rule 20, and goals.ts:182); boost/override in
       five (attention.ts:388-392, 425-426, 541). The sibling's recorded
       blocked_by on this node is unchanged and becomes genuinely load-bearing."
+  - question: Must the new rank order be validated as the author's intended work
+      order before this node can land?
+    answer: >-
+      (Author-decided 2026-08-12, office-hours session that cleared this node's
+      park.) NO. Rank accuracy is not an acceptance criterion for this node.
+      Nodes are dispatched MANUALLY by the author today, and the ranking is not
+      expected to be accurate until all three sibling tactics are fully
+      implemented: tactic-attention-per-tier-boost-migration (the authored
+      values), tactic-attention-delegation-scoring (making recovers edges
+      score-bearing), and tactic-attention-unified-relation-cycle-rule
+      (write-path cycle rejection). The acceptance bar for the resulting queue
+      order is therefore "no obvious errors surfaced", NOT "the head of the
+      queue is what the author wants worked next". This supersedes /qa-fix item
+      6 on PR #3075 -- the sole needs-human item, which asked exactly that
+      superseded question, against 5/5 other script-verifiable items that PASSed
+      against the live store.
+
+
+      The park was additionally CIRCULAR, which is independently sufficient to
+      clear it. All three siblings named above record blocked_by:
+      [tactic-attention-namespaced-rank] and sit at phase null, so none of them
+      can start until this node lands. Holding this node parked pending an
+      accurate rank order blocks precisely the work that would produce one;
+      waiting for item 6 to become answerable is a deadlock rather than
+      patience.
+
+
+      Obvious-error check run this round on the PR branch at 78cfb0de over the
+      live 248-candidate selectable set: 0 nodes with band > score -- the band
+      <= score invariant that licenses retiring residual, here verified
+      empirically over the whole candidate set rather than only argued from the
+      lineage form; 0 negative or malformed rank keys; and a tier distribution
+      of 248/248 tier-1 that is IDENTICAL to origin/main's, so the all-tier-1
+      candidate population is pre-existing composition and not a collapse of the
+      tier axis introduced by this change. The two visible outliers are
+      documented design behavior, not defects:
+      strategy-recursive-self-improvement falls from #12 to #175 with band 0,
+      because none of its parents carries an authored tier-1 boost (74 of 248
+      candidates sit at band 0 -- the accepted degeneracy that
+      tactic-attention-per-tier-boost-migration resolves); and
+      tactic-dispatch-skill-standards-extraction /
+      tactic-ladder-per-phase-evaluation fall from #1-2 to #9-10 while carrying
+      the highest scores in the top 30 (11.33) under band 6, because band
+      dominates score lexicographically and band <= score still holds. Neither
+      is an error no authored boost value would fix, which is this node's own
+      routing test for an algorithm defect.
+
+
+      This decision does NOT ratify the band derivation. "Band derives from the
+      distributing node's RESOLVED rank" remains accepted on trust and stays
+      enrolled for re-derivation on the born-parked node
+      tactic-review-band-derivation-ratification; unparking here ships the
+      mechanism without closing that question. Consistent with this node's own
+      recorded caveat, no zero-inversion count was cited as evidence in reaching
+      this decision -- the checks above are invariant checks, not a validation
+      of the key against data.
 tooling_goals: []
 success_signal: null
 attention: null
@@ -180,109 +236,7 @@ execution:
   completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "/qa-fix: QA needs a human judgment call on PR #3075 — item 6 ('is the
-    new top of the dispatch queue what the author wants worked next') classified
-    needs-human by the disposition Workflow (2/2 skeptics upheld); 5/5 other
-    script-verifiable items PASSed against the live store. This exact question
-    is already enrolled for re-validation on the born-parked node
-    tactic-review-band-derivation-ratification."
-  since: 2026-08-13
-  recommendation: >-
-    # Office-hours recommendation — `tactic-attention-namespaced-rank` (phase
-    `qa`)
-
-
-    ## The decision
-
-
-    Look at the dispatch queue as it stands right now and say one of two things:
-    **the order is fine to dispatch against**, or **node X is in the wrong
-    place**. That's it. Everything else about this PR passed automated QA (5/5
-    script-verifiable items against the live 627-node store).
-
-
-    The change: ranking went from a flat `(tier, value)` pair to a `(tier, band,
-    score, depth)` quadruple over a widened parent relation
-    (parent/serves/recovers/reverse-blocked_by), with per-tier authored boosts
-    and a deduplicated lineage score. 107 of 248 shared candidates moved more
-    than 5 places.
-
-
-    ## Fastest way to look
-
-
-    ```
-
-    npx tsx packages/intentionsutil/scripts/select-targets.ts          # live
-    queue order
-
-    npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list   #
-    parked-queue view
-
-    ```
-
-
-    Don't re-derive the design from the code. Read the top ~25 rows and ask
-    "would I want these worked next?"
-
-
-    Two specific things to check while you're in there:
-
-
-    - **New head** is a tight RSI-plan cluster:
-    `tactic-rsi-plan-priority-render`, `tactic-rsi-plan-render-pause-block`,
-    `tactic-rsi-plan-merged-priority-table`. Currently live work — plausible,
-    but it's your call.
-
-    - **Biggest mover**: `strategy-recursive-self-improvement` went #13 → #175.
-    Its band is 0 because none of its parents (`strategy-autonomous-execution`,
-    the `virtue-*` nodes it serves) carry an authored boost in its tier. This is
-    real behavior, not an artifact. Is burying it acceptable for now?
-
-
-    ## Not in scope for this park
-
-
-    - **Authoring the missing boost values.** 74 of 248 candidates sit at `band
-    == 0` (none tier-2/3). That's a known, accepted degeneracy until boosts get
-    authored across the graph — and that work belongs to
-    `tactic-attention-per-tier-boost-migration`.
-
-    - **Whether "band = a parent's resolved rank" is the right design.** That
-    question is already enrolled as its own born-parked sitting,
-    `tactic-review-band-derivation-ratification`. It was taken on trust when
-    this design was finalized and gets re-derived there, not here.
-
-
-    Also worth naming: the author-session's own note that the new head "looks
-    defensible" does not settle this. This node's recorded clarifications say
-    structural non-inversion must never be cited as data validation of author
-    intent. The algorithm being internally consistent tells you nothing about
-    whether the resulting order matches what you want worked next — which is
-    exactly why this one sat out of the automated pass.
-
-
-    ## Two outcomes
-
-
-    **(a) Looks right.** Clear the park; dispatch resumes against the new order.
-    No code change.
-
-
-    **(b) Something's wrong.** Name the specific node(s) and where they should
-    sit instead. Then route it:
-
-    - *Wrong because a boost value is missing* → folds into
-    `tactic-attention-per-tier-boost-migration`.
-
-    - *Wrong in a way no boost value would fix* → that's an algorithm defect;
-    file a fresh node against it.
-
-
-    Don't hand-edit the ranking to patch a single node's position — either the
-    boosts are wrong or the algorithm is, and each has a home.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

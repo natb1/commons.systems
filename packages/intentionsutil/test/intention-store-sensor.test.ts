@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { IntentionNode, SuccessSignal } from "../src/schema.js";
+import type { IntentionNode, OfficeHours, SuccessSignal } from "../src/schema.js";
 import {
   INTENTION_STORE_SENSOR_NAME,
   makeIntentionStoreSensor,
   openTacticServesCoverage,
+  parkedCensus,
   sensorReadingCoverage,
 } from "../scripts/read-sensors.js";
 
@@ -43,6 +44,11 @@ function signal(sensor: string): SuccessSignal {
     threshold: "some threshold",
     is_proxy: false,
   };
+}
+
+/** An `office_hours` park record, e.g. `office_hours: parked("needs a ruling")`. */
+function parked(recommendation: string | null = null): OfficeHours {
+  return { reason: "parked", since: "2026-07-06", recommendation, session_type: "other" };
 }
 
 describe("openTacticServesCoverage", () => {
@@ -111,6 +117,65 @@ describe("sensorReadingCoverage", () => {
       total: 0,
       unregistered: 0,
     });
+  });
+});
+
+describe("parkedCensus", () => {
+  // Re-expressed from the retired `rsi-plan.md` renderer's test suite
+  // (packages/intentionsutil/test/rsi.test.ts, salvaged in
+  // /home/n8/.claude/jobs/54283386/tmp/unit6-salvage.ts): "counts open nodes
+  // held by a blocked_by edge onto a parked node". The carrier moved from
+  // `renderRsiPlan`'s markdown output to `parkedCensus`'s `blocked` field
+  // directly — the salvaged fixtures (`node`, `parked`) are reproduced above
+  // in this file's local helpers, so the expectation is asserted on the
+  // return value rather than on rendered markdown. The expected count (1) is
+  // unchanged: this is the HELD-NODE denominator (see `parkedCensus`'s doc
+  // comment in read-sensors.ts), which is exactly what the retired
+  // `countBlockedByParked` this test originally exercised computed.
+  it("counts open nodes held by a blocked_by edge onto a parked node", () => {
+    const nodes = [
+      node({ id: "tactic-parked", office_hours: parked("needs a ruling") }),
+      node({ id: "tactic-held", phase: "qa", blocked_by: ["tactic-parked"] }),
+      node({ id: "tactic-done-held", phase: "done", blocked_by: ["tactic-parked"] }),
+    ];
+    expect(parkedCensus(nodes).blocked).toBe(1);
+  });
+
+  it("counts the parked total independently of how many are held", () => {
+    const nodes = [
+      node({ id: "tactic-parked-a", office_hours: parked() }),
+      node({ id: "tactic-parked-b", office_hours: parked() }),
+      node({ id: "tactic-open", phase: "implement" }),
+    ];
+    expect(parkedCensus(nodes)).toEqual({ parked: 2, blocked: 0 });
+  });
+
+  it("counts a held node only once even when blocked by two parked nodes (held-node, not distinct-blocker)", () => {
+    const nodes = [
+      node({ id: "tactic-parked-a", office_hours: parked() }),
+      node({ id: "tactic-parked-b", office_hours: parked() }),
+      node({
+        id: "tactic-held",
+        phase: "qa",
+        blocked_by: ["tactic-parked-a", "tactic-parked-b"],
+      }),
+    ];
+    // Two DISTINCT blocking parks, but exactly one HELD node — this is the
+    // divergence between the two denominators the doc comment on
+    // `parkedCensus` describes: a distinct-blocker count would read 2 here.
+    expect(parkedCensus(nodes).blocked).toBe(1);
+  });
+
+  it("does not count a node blocked by a non-parked node", () => {
+    const nodes = [
+      node({ id: "tactic-open-blocker" }),
+      node({ id: "tactic-held", phase: "qa", blocked_by: ["tactic-open-blocker"] }),
+    ];
+    expect(parkedCensus(nodes).blocked).toBe(0);
+  });
+
+  it("returns zeroes for an empty store", () => {
+    expect(parkedCensus([])).toEqual({ parked: 0, blocked: 0 });
   });
 });
 

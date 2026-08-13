@@ -1830,6 +1830,82 @@ describe("validateGraph", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
+
+  // Rule 21: attributes.measured_impact shape.
+
+  /** A well-formed measurement record, the base every rule-21 fixture mutates. */
+  const measurement = {
+    metric: "recurrence_count",
+    value: 4,
+    unit: "occurrences",
+    window: "7d",
+    sensor: "token-economy-sensor",
+    measured: "2026-08-12",
+  };
+
+  /** A goal-layer kind set plus one strategy carrying `measured_impact`. */
+  function impactNodes(measured_impact: unknown): IntentionNode[] {
+    return tierNodes({ attributes: { measured_impact } });
+  }
+
+  it("Rule 21: accepts an array of well-formed measurement records", () => {
+    const nodes = impactNodes([
+      measurement,
+      { ...measurement, metric: "recoverable_tokens", value: 12_500.5, unit: "tokens" },
+    ]);
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: is inert when the key is absent, and accepts an empty list", () => {
+    expect(() => validateGraph(tierNodes({ attributes: {} }))).not.toThrow();
+    expect(() => validateGraph(impactNodes([]))).not.toThrow();
+  });
+
+  it("Rule 21: rejects a non-array measured_impact", () => {
+    expect(() => validateGraph(impactNodes(measurement))).toThrow(
+      /strategy-under-test: attributes\.measured_impact must be an array of measurement records, got object/,
+    );
+    expect(() => validateGraph(impactNodes(null))).toThrow(
+      /attributes\.measured_impact must be an array of measurement records, got null/,
+    );
+  });
+
+  it("Rule 21: rejects a non-record entry", () => {
+    expect(() => validateGraph(impactNodes(["recurrence_count=4"]))).toThrow(
+      /strategy-under-test: attributes\.measured_impact\[0\] must be a \{metric, value, unit, window, sensor, measured\} record, got string/,
+    );
+  });
+
+  it("Rule 21: rejects a missing or empty string field, naming its index", () => {
+    const { sensor: _dropped, ...noSensor } = measurement;
+    expect(() => validateGraph(impactNodes([measurement, noSensor]))).toThrow(
+      /strategy-under-test: attributes\.measured_impact\[1\]\.sensor must be a non-empty string, got undefined/,
+    );
+    expect(() => validateGraph(impactNodes([{ ...measurement, metric: "   " }]))).toThrow(
+      /attributes\.measured_impact\[0\]\.metric must be a non-empty string, got "   "/,
+    );
+  });
+
+  it("Rule 21: rejects a non-finite or non-numeric value", () => {
+    expect(() => validateGraph(impactNodes([{ ...measurement, value: "4" }]))).toThrow(
+      /attributes\.measured_impact\[0\]\.value must be a finite number, got "4"/,
+    );
+    expect(() =>
+      validateGraph(impactNodes([{ ...measurement, value: Number.POSITIVE_INFINITY }])),
+    ).toThrow(/attributes\.measured_impact\[0\]\.value must be a finite number/);
+  });
+
+  it("Rule 21: rejects a measured date that is not YYYY-MM-DD", () => {
+    expect(() =>
+      validateGraph(impactNodes([{ ...measurement, measured: "August 12 2026" }])),
+    ).toThrow(
+      /attributes\.measured_impact\[0\]\.measured must be a YYYY-MM-DD date, got "August 12 2026"/,
+    );
+  });
+
+  it("Rule 21: accepts a value of 0 — a measured zero is a measurement", () => {
+    expect(() => validateGraph(impactNodes([{ ...measurement, value: 0 }]))).not.toThrow();
+  });
 });
 
 describe("validateGraphProseRefs", () => {

@@ -114,6 +114,42 @@
 # dispatch-ladder-advance print `idle <id> ci-waiting`, which is the loop
 # working, not the loop stuck.
 #
+# THE EVALUATION IS PER PHASE, AND IT IS FIRE-AND-FORGET. At every phase
+# boundary — the `awaited` event — the driver spawns `/rsi` for
+# the phase that just finished (dispatch-spawn-job, `claude --bg`) and does NOT
+# wait on the evaluation. What the driver waits for is the spawn's own
+# registration check, seconds; what it never waits for is a model turn. A
+# blocking evaluation would reintroduce exactly the turn-in-the-loop this
+# detached script exists to remove, and the driver would then be gating on its
+# own review. Required by strategy-recursive-self-improvement condition 14 as
+# amended 2026-08-12 (two-tier: per-phase here, cross-phase synthesis in the
+# session that reads the terminus).
+#
+# The evaluator is scoped by NODE ID PLUS A TIME BOUND, not by session id.
+# dispatch-graph-execute spawns every phase worker with `--name <node-id>` — the
+# same name each phase — and nothing propagates a session id back here, so there
+# is no per-phase session id to hand over. LAUNCH_EPOCH is the discriminator the
+# driver does have, and `aggregate-usage.sh --node <id>` is the instrument that
+# turns it into one phase's measured usage.
+#
+# THE `--name` IS THE DEDUP KEY. dispatch-spawn-job spawns NOTHING and exits 0
+# when another live session under the same --cwd already carries the name. A
+# name keyed on the node id alone would therefore evaluate the first phase of
+# every ladder and silently skip every phase after it, so the name carries the
+# node id, the phase, AND the phase's launch epoch — the last because `fix` and
+# `conflict` are interrupts that recur within one run, and a node+phase name
+# would drop the second visit the same way.
+#
+# A HALT OWES THE EVALUATION TOO. halt() is the ONE terminal path (exits
+# 10/11/12/13/21 all route through it), so the owed spawn lives there and
+# nowhere else. Under the old terminus-only rule a halted run recorded nothing
+# at all, which made the most defect-rich runs exactly the ones that produced no
+# review. The spawn is guarded on a phase having LAUNCHED — a `usage`/`refused`
+# halt that never ran one spawns nothing — and on the phase not already having
+# been evaluated at its own boundary. A spawn failure is a logged warning and
+# never changes the halt's exit code: an evaluation that did not start must not
+# rewrite the disposition the driver is reporting.
+#
 # Usage: dispatch-ladder-run <node-id>
 #          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
 #
@@ -136,7 +172,9 @@
 #                     reconciler's GRAPH_RECONCILE_GRACE window and a PR whose
 #                     CI is still running. They are logged as DISTINCT
 #                     dispositions (`grace-wait` / `ci-wait`) in events.jsonl
-#                     so the closing acceleration review can tell them apart.
+#                     so the evaluation can tell them apart — neither the
+#                     per-phase evaluator nor the closing synthesis can
+#                     reconstruct which silence it was afterwards.
 #                     This never overrides GRAPH_RECONCILE_GRACE — that is the
 #                     reconciler's policy and the driver may not set policy.
 #                     It bounds how long THIS PROCESS polls, which is the
@@ -245,6 +283,11 @@
 #   13  claimed       another session holds the node.
 #   14  unknown       origin/main could not be read. Nothing is claimed.
 #   21  timeout       --max-run-s exceeded.
+#                     NOT the same 21 dispatch-ladder-await exits: that one is
+#                     `held-observing`, consumed by the 21) arm of the await
+#                     case below and never propagated out of this script. The
+#                     two codes live in different namespaces — await's rc is an
+#                     input here, this list is what a caller sees.
 #   1   internal      this script's own error (an unmapped exit code from a
 #                     driven script, an unwritable state dir).
 #
@@ -254,10 +297,16 @@
 #
 #   state.json    one object, rewritten atomically (mktemp in the same dir +
 #                 mv), for `dispatch-ladder-status` to read.
-#   events.jsonl  append-only. This is the evidence the closing acceleration
-#                 review needs and cannot rediscover later: phase wall-clock
-#                 against the await window, launches that produced no code
-#                 change, and re-poll counts. Nothing else records it.
+#   events.jsonl  append-only. This is the evidence the evaluation needs and
+#                 cannot rediscover later: phase wall-clock against the await
+#                 window, launches that produced no code change, and re-poll
+#                 counts. Nothing else records it. `elapsed_s`, `window_s` and
+#                 `await_repolls` are STRUCTURED NUMERIC FIELDS on the phase
+#                 events, not text inside `detail` — an evaluator reads a number
+#                 rather than regexing a free-form string. They are additive:
+#                 the five original keys (ts, event, phase, disposition, detail)
+#                 are unchanged, `detail` still spells the same figures, and the
+#                 file is append-only so older lines keep parsing.
 #
 # Everything written to those files is also written to stdout/stderr, which
 # journald captures for the transient unit.
@@ -386,6 +435,19 @@ for exe in "$ADVANCE" "$AWAIT" "$ACQUIRE_LOCK" "$AUTO_MERGE" "$RECONCILE" \
   [[ -x "$exe" ]] || { echo "dispatch-ladder-run: required script not found or not executable: $exe" >&2; exit 2; }
 done
 
+# The per-phase evaluation's three scripts, deliberately NOT in the required
+# list above. They are the review path, not the ladder path: a checkout missing
+# them must still be able to drive a node to `done` and say so, with the missing
+# evaluation logged as a skip. The ladder halting because its own review tool is
+# absent would be the review gating the work.
+SPAWN_JOB="$PROJECT_SCRIPTS/dispatch-spawn-job"
+PHASE_MODEL="$PROJECT_SCRIPTS/dispatch-phase-model"
+PHASE_EFFORT="$PROJECT_SCRIPTS/dispatch-phase-effort"
+# The pseudo-phase the model/effort policy is keyed on. Not a ladder rung — it
+# names the evaluation JOB, so that its tier is policy in dispatch-phase-model
+# rather than a `--model sonnet` literal at this call site.
+EVAL_POLICY_PHASE=ladder-eval
+
 # --- State -----------------------------------------------------------------
 STATE_DIR="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.ladder"
 mkdir -p "$STATE_DIR" || {
@@ -437,28 +499,138 @@ write_state() {
     rm -f "$tmp"; echo "dispatch-ladder-run: could not install $STATE_FILE" >&2; exit 1; }
 }
 
-# log_event <event> <phase> <disposition> <detail>
+# log_event <event> <phase> <disposition> <detail> [<fields-json>]
 # Append-only, one JSON object per line, and the same fact on stdout for
 # journald.
+#
+# The OPTIONAL fifth argument is a JSON object merged into the record. It exists
+# so the figures an evaluator ranks on — elapsed_s, window_s, await_repolls —
+# are numeric FIELDS it reads directly rather than key=value text it regexes out
+# of `detail`. The four positional arguments and the five original keys are
+# unchanged, so every existing call site keeps working and the append-only file
+# keeps parsing across the change; `detail` still spells the same figures for a
+# human reading the journal.
 log_event() {
+  local fields="${5:-}"
+  [[ -n "$fields" ]] || fields='{}'
   jq -nc --arg ts "$(now_iso)" --arg event "$1" --arg phase "$2" \
-     --arg disposition "$3" --arg detail "$4" \
+     --arg disposition "$3" --arg detail "$4" --argjson fields "$fields" \
      '{ts: $ts, event: $event,
        phase: (if $phase == "" then null else $phase end),
        disposition: (if $disposition == "" then null else $disposition end),
-       detail: (if $detail == "" then null else $detail end)}' >>"$EVENTS_FILE" \
+       detail: (if $detail == "" then null else $detail end)} + $fields' >>"$EVENTS_FILE" \
     || echo "dispatch-ladder-run: WARNING — could not append to $EVENTS_FILE" >&2
   printf '%s %s %s | %s\n' "$1" "${2:--}" "${3:--}" "${4:--}"
+}
+
+# timing_fields <elapsed_s> <await_repolls> <window_s> — the structured half of
+# a phase event. All three are integers by construction (two counters and a
+# validated flag), so --argjson is safe.
+timing_fields() {
+  jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
+     '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window}'
+}
+
+# --- The per-phase evaluation ----------------------------------------------
+# spawn_phase_eval <phase> <launch-epoch> — fire-and-forget, ALWAYS returns 0.
+#
+# Never gates, never halts, never calls halt(). Three globals track what is
+# owed, so the boundary spawn and the halt spawn cannot double-evaluate one
+# phase and cannot lose one either:
+#
+#   EVAL_LAUNCH_PHASE / EVAL_LAUNCH_EPOCH  the phase this driver most recently
+#                                          launched, and when. Empty until the
+#                                          first launch — which is what makes a
+#                                          `usage`/`refused` halt spawn nothing.
+#   EVAL_SPAWNED_KEY                       the <phase>@<epoch> already handed to
+#                                          an evaluator. dispatch-spawn-job's
+#                                          own name dedup only covers a still-
+#                                          LIVE evaluator, so the driver tracks
+#                                          this itself rather than relying on it.
+#
+# THE KEY IS CLAIMED ON A DISPOSITION, NEVER ON AN ATTEMPT. A boundary spawn
+# that FAILS leaves the phase unevaluated, so the debt halt() exists to pay is
+# still owed and the key stays unclaimed — halt() retries it exactly once, which
+# is the whole retry budget a run has (halt is the one terminal path and runs
+# once). Claiming before the attempt would mark a phase evaluated because a
+# spawn was tried, reopening the "halted runs produce no review" hole this
+# mechanism closes. Every other disposition — spawned, deduped, an unrecognized
+# answer, or no executable spawner at all — DOES claim: those are answers, and
+# for the last one a retry cannot make the binary executable.
+EVAL_LAUNCH_PHASE=""
+EVAL_LAUNCH_EPOCH=""
+EVAL_SPAWNED_KEY=""
+
+spawn_phase_eval() {
+  local phase="${1:-}" since="${2:-}"
+  [[ -n "$phase" && -n "$since" ]] || return 0
+  local key="$phase@$since"
+  [[ "$key" != "$EVAL_SPAWNED_KEY" ]] || return 0
+
+  if [[ ! -x "$SPAWN_JOB" ]]; then
+    EVAL_SPAWNED_KEY="$key"
+    log_event eval "$phase" skipped \
+      "no executable dispatch-spawn-job at $SPAWN_JOB; this phase is unevaluated"
+    return 0
+  fi
+
+  local model="" effort=""
+  [[ -x "$PHASE_MODEL" ]] && model=$("$PHASE_MODEL" "$EVAL_POLICY_PHASE" 2>/dev/null)
+  [[ -x "$PHASE_EFFORT" ]] && effort=$("$PHASE_EFFORT" "$EVAL_POLICY_PHASE" 2>/dev/null)
+
+  # node id AND phase AND launch epoch — see THE `--name` IS THE DEDUP KEY above.
+  local name="rsi-eval-$NODE_ID-$phase-$since"
+  local args=(--name "$name" --cwd "$PROJECT_ROOT")
+  # Both scripts' contract: EMPTY means "omit the flag, inherit the default".
+  [[ -n "$model" ]] && args+=(--model "$model")
+  [[ -n "$effort" ]] && args+=(--effort "$effort")
+  # No --no-verify: this is an unledgered one-off with no reservation-sweep
+  # safety net, so it keeps the default registration check, exactly as the
+  # sibling diagnose-main / jit-reminder spawns do (dispatch-tick).
+  args+=("/rsi $NODE_ID $phase --since $since")
+
+  local out rc=0 fields
+  fields=$(jq -nc --arg name "$name" --argjson since "$since" \
+              '{eval_name: $name, eval_since_epoch: $since}')
+  out=$("$SPAWN_JOB" "${args[@]}" 2>&1) || rc=$?
+  if (( rc == 0 )); then
+    EVAL_SPAWNED_KEY="$key"
+    # dispatch-spawn-job's stdout protocol is exactly one word, but stderr is
+    # merged in above so a diagnostic line can precede it. Match the protocol
+    # words themselves rather than taking whatever line came first, so the
+    # disposition vocabulary in events.jsonl stays closed.
+    local disp=unknown-answer
+    if grep -qx spawned <<<"$out"; then disp=spawned
+    elif grep -qx deduped <<<"$out"; then disp=deduped
+    fi
+    log_event eval "$phase" "$disp" "name=$name model=${model:-default}" "$fields"
+  else
+    # A WARNING, NEVER FATAL. The ladder's disposition is about the node, not
+    # about whether its review started. The key is deliberately NOT claimed
+    # here — see the claim rule above; halt() gets the one retry.
+    echo "dispatch-ladder-run: WARNING — the per-phase evaluation of '$phase' did not spawn (rc=$rc): $(head -n1 <<<"$out")" >&2
+    log_event eval "$phase" spawn-failed "rc=$rc name=$name" "$fields"
+  fi
+  return 0
 }
 
 # halt <exit-code> <disposition> <detail> — the ONLY terminal path. Never
 # called from inside a command substitution or subshell (`exit` there would
 # only leave the subshell and the loop would carry on past a halt).
+#
+# It is also where a halted run pays the evaluation it owes. Every halting exit
+# — 0, 2, 10, 11, 12, 13, 14, 21 — passes through here, so ONE call covers them
+# all without touching a single call site. The spawn runs AFTER the state write
+# and the halt event, so the halt is recorded whatever the spawn does, and its
+# result can never change the exit code below it.
 halt() {
   EXIT_CODE="$1"; DISPOSITION="$2"; DETAIL="$3"
   if [[ "$1" == "0" ]]; then STATUS=complete; else STATUS=halted; fi
   write_state
   log_event halt "$PHASE" "$DISPOSITION" "$DETAIL"
+  # Guarded twice inside spawn_phase_eval: on a phase having launched at all,
+  # and on that phase not already having been evaluated at its own boundary.
+  spawn_phase_eval "$EVAL_LAUNCH_PHASE" "$EVAL_LAUNCH_EPOCH" || true
   printf 'dispatch-ladder-run: %s %s (exit %s) — %s\n' "$STATUS" "$NODE_ID" "$1" "$3" >&2
   exit "$1"
 }
@@ -554,8 +726,8 @@ phase_is_done() {
 #   RECONCILE_RESULT  routed | merged | changed | quiet
 #   QUIET_REASON      on `quiet` only: grace-wait | ci-wait — which of the two
 #                     honest silences we are waiting out. Kept distinct in
-#                     events.jsonl because the acceleration review cannot tell
-#                     them apart afterwards.
+#                     events.jsonl because no later evaluation can tell them
+#                     apart afterwards.
 #
 # It halts, never returns, on anything that needs a person.
 #
@@ -824,6 +996,10 @@ while :; do
       ci_waited=0
       requeue_budget=5
       LAUNCH_EPOCH=$(now_epoch)
+      # What the halt path evaluates if this phase does not reach its boundary,
+      # and the time bound the evaluator scopes `aggregate-usage.sh --node` with.
+      EVAL_LAUNCH_PHASE="$PHASE"
+      EVAL_LAUNCH_EPOCH="$LAUNCH_EPOCH"
       REPOLLS=0
       HELD_S=0
       log_event launched "$PHASE" launched "kind=${KIND:-?} skill=${SKILL:-?}"
@@ -836,8 +1012,14 @@ while :; do
         AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
         case "$aw_rc" in
           0)
+            ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
             log_event awaited "$PHASE" "$AW_DISP" \
-              "elapsed_s=$(( $(now_epoch) - LAUNCH_EPOCH )) await_repolls=$REPOLLS window_s=$TIMEOUT_S"
+              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S")"
+            # THE PHASE BOUNDARY. The phase that just finished is evaluated
+            # here, while its transcript is small and warm, and the driver takes
+            # its next ladder step without waiting on the evaluation.
+            spawn_phase_eval "$PHASE" "$LAUNCH_EPOCH"
             if [[ "$AW_DISP" == "pruned" ]]; then
               halt 0 pruned "$NODE_ID is absent from origin/main — it completed and was pruned"
             fi
@@ -845,8 +1027,10 @@ while :; do
             ;;
           20)
             REPOLLS=$(( REPOLLS + 1 ))
+            ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
             log_event await-repoll "$PHASE" running \
-              "await_repolls=$REPOLLS window_s=$TIMEOUT_S elapsed_s=$(( $(now_epoch) - LAUNCH_EPOCH ))"
+              "await_repolls=$REPOLLS window_s=$TIMEOUT_S elapsed_s=$ELAPSED_S" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S")"
             continue
             ;;
           21)
@@ -928,7 +1112,7 @@ while :; do
             *)
               # quiet. The two honest silences — the reconciler's grace window
               # and a PR whose CI is still running — share ONE budget, and are
-              # logged apart so the acceleration review can tell them apart.
+              # logged apart so the evaluation can tell them apart.
               log_event idle "$PHASE" "$QUIET_REASON" \
                 "ci_waited=${ci_waited}s of ${CI_WAIT_S}s; re-polling in ${POLL_S}s"
               sleep "$POLL_S"

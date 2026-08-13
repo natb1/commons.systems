@@ -293,7 +293,7 @@ const classifyPrompt = [
   '  when there is no code defect to fix, only a positive confirmation; no code',
   '  change and no human needed.',
   '  INSTRUMENT SIGN-OFF: a heuristic/threshold sign-off on a NON-user-facing',
-  '  measurement or audit instrument (e.g. a /dispatch-token-audit lens, a',
+  '  measurement or audit instrument (e.g. a /rsi-audit lens, a',
   '  sensor, an aggregator metric) — "is this substring list / this proxy-metric',
   '  definition acceptable?" — that is sound on its face with no code defect to',
   '  fix is "already-satisfied", NOT "opus-fixable". It is a positive',

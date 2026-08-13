@@ -116,6 +116,7 @@ execution: null
 validates: []
 blocked_by:
   - tactic-attention-namespaced-rank
+  - tactic-attention-per-tier-boost-migration
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -133,6 +134,21 @@ Draft — retained interview context per the retain-not-refine contract.
 `attention` field at all today. This node supplies the missing half — a
 schema change to a kind node plus a derivation — and it also carries an
 open decision the resolver work does not need to wait on.
+
+## Both blockers are load-bearing (edge corrected 2026-08-12)
+
+`blocked_by` carries **two** entries, for different reasons:
+
+- `tactic-attention-namespaced-rank` — supplies the widened parent relation
+  that makes `recovers` a distributor edge at all. One-way: that node is
+  self-consistent without this one (a `recovers` edge is simply a parent edge
+  contributing boost 0 until this lands), so it need not wait.
+- `tactic-attention-per-tier-boost-migration` — owns the exported level
+  vocabulary constant that scope item 1 maps severity onto and forbids
+  redeclaring here. **This is a compile-order dependency, not a preference**:
+  without that constant this node has no level values to name. The edge was
+  missing until 2026-08-12; the prose dependency predated it, so the router
+  could have selected this node into a build that cannot compile.
 
 ## Scope
 

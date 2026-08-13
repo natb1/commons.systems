@@ -413,6 +413,29 @@ export function ownTier(node: IntentionNode): number {
   return Math.max(explicit, semantic, DEFAULT_TIER);
 }
 
+/**
+ * Whether a node is an EVALUATION FINDING LEDGER ENTRY — a tactic carrying
+ * `attributes.ledger_entry: true`, minted by
+ * `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`.
+ *
+ * A ledger entry is a durable record of a recurring evaluation finding: its
+ * `attributes.measured_impact` carries the recurrence count and impact figures
+ * that inform ranking. Retirement is `phase: "done"` WITH those figures intact,
+ * so a later recurrence resumes the count instead of restarting it — which is
+ * only true if a retired entry is never deleted. Every consumer that treats
+ * `phase: "done"` as "finished, delete or drop it" must therefore exempt these:
+ * the owed-prune census (`scripts/graph-census-debt.ts`) and `rsi.ts`'s §6 task
+ * plan both call this. `intentions/kind-tactic.md`'s `ledger_entry` section is
+ * the normative contract.
+ *
+ * One implementation rather than a predicate re-spelled at each call site: a
+ * consumer that spells it differently silently un-exempts the ledger.
+ */
+export function isLedgerEntry(node: IntentionNode): boolean {
+  const attributes = isPlainObject(node.attributes) ? node.attributes : {};
+  return node.kind === "tactic" && attributes.ledger_entry === true;
+}
+
 // --- Dispatch-state structured fields --------------------------------------
 
 /**
@@ -1121,6 +1144,68 @@ function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): v
 }
 
 /**
+ * The four string-valued fields every `attributes.measured_impact` entry
+ * carries. `value` (a finite number) and `measured` (a `YYYY-MM-DD` date) are
+ * checked separately because their types differ.
+ */
+const MEASURED_IMPACT_STRING_FIELDS: readonly string[] = [
+  "metric",
+  "unit",
+  "window",
+  "sensor",
+];
+
+/**
+ * Rule 21: `attributes.measured_impact` shape — an array of SUMMARY measurement
+ * records `{metric, value, unit, window, sensor, measured}`. See
+ * `intentions/kind-tactic.md`'s `measured_impact` section for what each field
+ * means and why the key never orders anything.
+ *
+ * `attributes` is otherwise a free-form record, so a malformed measurement would
+ * reach every consumer unchallenged. This key drives decisions — it is the
+ * evidence a delegated attention write or a `bug_fix` classification cites — so
+ * it gets a shape rule, on the same reasoning as rule 19's tier marks.
+ */
+function checkMeasuredImpactShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.measured_impact;
+  if (raw === undefined) return;
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${node.id}: attributes.measured_impact must be an array of measurement records, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return;
+  }
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const at = `${node.id}: attributes.measured_impact[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${at} must be a {metric, value, unit, window, sensor, measured} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const field of MEASURED_IMPACT_STRING_FIELDS) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(
+          `${at}.${field} must be a non-empty string, got ${JSON.stringify(value)}`,
+        );
+      }
+    }
+    const value = entry.value;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      problems.push(`${at}.value must be a finite number, got ${JSON.stringify(value)}`);
+    }
+    const measured = entry.measured;
+    if (typeof measured !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(measured)) {
+      problems.push(
+        `${at}.measured must be a YYYY-MM-DD date, got ${JSON.stringify(measured)}`,
+      );
+    }
+  }
+}
+
+/**
  * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
  * flags every node that participates in a cycle (a tactic transitively blocked
  * by itself). Dangling edges are reported by rule 13, not traversed.
@@ -1234,6 +1319,16 @@ function checkBlockedByCycles(
  *      check deliberately uses the own tier, not the effective one: an
  *      effective-tier check would cascade, invalidating every boosted
  *      descendant the moment any ancestor gained a mark.
+ *  21. `attributes.measured_impact`, when present, is an array of summary
+ *      measurement records `{metric, value, unit, window, sensor, measured}` —
+ *      `metric`/`unit`/`window`/`sensor` non-empty strings, `value` a finite
+ *      number, `measured` a `YYYY-MM-DD` date. `attributes` is otherwise
+ *      free-form, so without this rule a malformed measurement would reach
+ *      every consumer unchallenged; the key is cited evidence for attention
+ *      and classification writes, so it earns a shape rule like rule 19's tier
+ *      marks. The rule checks shape only — it never reads a value, because a
+ *      measurement is queryable input to a ranking act, never an ordering
+ *      authority of its own.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1284,6 +1379,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierMarkShape(node, problems);
     // Rule 20: attention.tier tags the node's own tier namespace.
     checkAttentionTierNamespace(node, problems);
+    // Rule 21: measured_impact entries are well-shaped summary records.
+    checkMeasuredImpactShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

@@ -59,6 +59,37 @@ function openCensusTactic(id: string): IntentionNode {
   });
 }
 
+/**
+ * A RETIRED evaluation finding ledger entry: `phase: "done"` with its summary
+ * metrics intact. This is the shape the owed-prune census must never batch for
+ * deletion — see `intentions/tactic-eval-finding-ledger.md`.
+ */
+function retiredLedgerEntry(id: string): IntentionNode {
+  return validateNode({
+    id,
+    kind: "tactic",
+    statement: "a recurring evaluation finding",
+    owner: "ai",
+    status: "codified",
+    serves: [STRATEGY],
+    phase: "done",
+    attributes: {
+      ledger_entry: true,
+      first_seen: "2026-08-01",
+      measured_impact: [
+        {
+          metric: "recurrence_count",
+          value: 7,
+          unit: "occurrences",
+          window: "all-time",
+          sensor: "dispatch-phase-eval",
+          measured: "2026-08-12",
+        },
+      ],
+    },
+  });
+}
+
 const NOW = "2026-07-11";
 
 describe("computeDebt", () => {
@@ -95,6 +126,62 @@ describe("computeDebt", () => {
     const nodes = [strategy(), openCensusTactic("tactic-graph-census-2026-07-01")];
     const debt = computeDebt(nodes, new Set());
     expect(debt.openCensus).toEqual(["tactic-graph-census-2026-07-01"]);
+  });
+
+  // tactic-eval-finding-ledger — the prune exemption. donePresent is the batch a
+  // census DELETES with `graph-commit --prune`, and a retired ledger entry must
+  // survive with its summary metrics intact so a later recurrence resumes the
+  // count instead of restarting at 1.
+  it("exempts a retired ledger entry from the owed-prune batch", () => {
+    const nodes = [strategy(), retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual([]);
+    expect(debt.total).toBe(0);
+  });
+
+  it("still counts ordinary done nodes alongside an exempt ledger entry", () => {
+    const nodes = [
+      strategy(),
+      doneTactic("tactic-a"),
+      retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop"),
+    ];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual(["tactic-a"]);
+    expect(debt.total).toBe(1);
+  });
+
+  it("does not exempt a done node whose ledger_entry is not literally true", () => {
+    const nodes = [
+      strategy(),
+      validateNode({
+        id: "tactic-not-a-ledger-entry",
+        kind: "tactic",
+        statement: "t",
+        owner: "ai",
+        status: "codified",
+        serves: [STRATEGY],
+        phase: "done",
+        attributes: { ledger_entry: "true" },
+      }),
+    ];
+    expect(computeDebt(nodes, new Set()).donePresent).toEqual(["tactic-not-a-ledger-entry"]);
+  });
+
+  it("keeps a retired ledger entry out of the batch a birthed census would drain", () => {
+    const nodes = [
+      strategy(),
+      doneTactic("tactic-a"),
+      doneTactic("tactic-b"),
+      doneTactic("tactic-c"),
+      retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop"),
+    ];
+    const d = decideCensus(nodes, new Set(), 3, NOW);
+    expect(d.shouldBirth).toBe(true);
+    expect(d.node?.attributes.batch.donePresent.sort()).toEqual([
+      "tactic-a",
+      "tactic-b",
+      "tactic-c",
+    ]);
   });
 });
 

@@ -136,7 +136,7 @@ non-zero.
 
 ### Which rate reflects which phase
 
-`/dispatch-token-audit` reports each phase on the metric that phase can actually
+`/rsi-audit` reports each phase on the metric that phase can actually
 move. (These rates once fed an automated promote-to-Opus routing policy generator;
 that policy was retired in #2872 — the phase orchestrator is now always Sonnet and
 Opus tiering is chosen per-`agent()` inside each Workflow. The rates now inform the

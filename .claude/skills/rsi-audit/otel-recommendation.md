@@ -1,7 +1,7 @@
 # OTel attribution substrate — recommendation (tactic-otel-sensor-substrate, Unit 2)
 
 Recommendation memo closing `tactic-otel-sensor-substrate`. Unit 1
-(`.claude/skills/dispatch-token-audit/otel-trial-notes.md`) is the mechanism-level
+(`.claude/skills/rsi-audit/otel-trial-notes.md`) is the mechanism-level
 comparison this verdict rests on. Every claim here is grounded in that document;
 no new measurement is introduced, because none was taken.
 
