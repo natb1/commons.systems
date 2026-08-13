@@ -41,7 +41,9 @@ A command that fails loudly under the sandbox — TLS error, `EROFS`,
 `Read-only file system` — should be **retried** with
 `dangerouslyDisableSandbox: true`, never run with it pre-emptively: an
 always-on override carries no signal. The sections below are the known
-exceptions; everything else is a retry, not a rule.
+exceptions — read them first, since a few must be pre-emptive because the first
+sandboxed attempt already does damage (`git worktree remove`) or fails silently
+with nothing to retry on (`claude agents --json`).
 
 ## Tree-updating git ops touching read-only paths
 
@@ -101,6 +103,13 @@ sandboxed (measured; see
 `.claude/skills/review-fix/references/code-review-invocation.md` §3.1). Don't
 set the override pre-emptively for `gh` — if the TLS error shows up, retry with
 it, per the general principle above.
+
+## npm cache writes
+
+`npx` was documented as unable to write `~/.npm/_cacache/` under the sandbox
+(`EROFS`). **Not reproducible on this Linux/WSL host**: sandboxed, a cold
+`npx --yes cowsay@1.6.0`, an `npm pack` registry download with its cache write,
+and `npx tsx --version` all succeed. Retry on `EROFS`, don't pre-empt.
 
 ## Network namespace isolation
 
