@@ -53,7 +53,7 @@ import { listNodes, writeNode } from "../src/store.js";
 import { strategyBacklogBand } from "../src/census.js";
 import { listNodesAtRef } from "./lib-store-at-ref.js";
 import { SensorRegistry, type Sensor } from "../src/sensors.js";
-import { attributeSpend, spendBucketsFrom } from "../src/rsi.js";
+import { attributeSpend, spendBucketsFrom } from "../src/spend.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { computeDependencyAudit } from "./dependency-audit.js";
@@ -1282,9 +1282,9 @@ export function makeIntentionStoreSensor(
 // Why it is registered HERE rather than in a metrics registry of its own: that
 // strategy's condition 8 says rsi metrics are "sensors registered in the graph's
 // existing success_signal/readings machinery on their owning strategies — never
-// a parallel metric registry". Registering here is what makes `rsi-plan.md`'s
-// metrics section a render of readings rather than a side system, and it drops
-// the graph's standing unregistered-sensor count by one.
+// a parallel metric registry". Registering here is what makes the strategy's own
+// dated reading the measurement of record rather than a side system, and it
+// drops the graph's standing unregistered-sensor count by one.
 //
 // Reading format (stable and parseable), one segment per source the declared
 // sensor names, plus the token attribution the fitness function needs:
@@ -1299,18 +1299,29 @@ export function makeIntentionStoreSensor(
  * The registry matches this against the node's prose character-for-character, so
  * any `/align` round that rewords the sensor field silently de-registers this
  * sensor — the node stops getting a reading and only shows up in read-sensors'
- * "skipped (unregistered sensor)" tail, which already runs 52 entries deep. That
+ * "skipped (unregistered sensor)" tail, which already runs 57 entries deep. That
  * is exactly what happened when the research lane was appended in `47219a1a`;
  * the trailing clause below is that amendment. Re-read the node's sensor field
  * before trusting a null reading here.
+ *
+ * THE LOCKSTEP IS SPLIT ACROSS TWO COMMITS, BY CONSTRUCTION. This constant lands
+ * in an ordinary code commit; the matching node prose lands separately through
+ * `graph-commit`, which owns every write under `intentions/`. So there is a
+ * KNOWN WINDOW between the two landings in which the two strings differ and this
+ * sensor is de-registered. That is expected, not a defect — but it must be
+ * closed, and the check for it is read-sensors' UNREGISTERED-SENSOR COUNT (the
+ * `skipped (unregistered sensor)` figure and its named tail), not the readings
+ * count. The readings count moves for unrelated reasons on every run and will
+ * not show this at all; the unregistered count rises by exactly one while the
+ * window is open and falls back when the node prose lands.
  */
 export const RSI_SENSOR_NAME =
-  "the rsi-plan.md metrics section — sensors registered in the graph's existing " +
-  "success_signal/readings machinery on their owning strategies (backlog band, " +
-  "parked critical-path count, held-session/worktree census, pause state), " +
-  "rendered by render-rsi-plan.ts each iteration, plus per-workflow token " +
-  "attribution across dispatch, office-hours, and rsi; plus the research lane's " +
-  "weekly dated readings on this strategy (research-cycle landings)";
+  "sensors registered in the graph's existing success_signal/readings machinery " +
+  "on their owning strategies (backlog band, parked critical-path count, " +
+  "held-session/worktree census, pause state), plus per-workflow token " +
+  "attribution across dispatch, office-hours, and rsi reported by /rsi-audit; " +
+  "plus the research lane's weekly dated readings on this strategy " +
+  "(research-cycle landings)";
 
 /**
  * Dispatch pause state, delegated to the canonical shell helper
@@ -1354,7 +1365,7 @@ function readWorktreeCount(repoDir: string): string {
  * Parked-node census over the store: how many nodes are parked, and how many of
  * those actually BLOCK an open node (`blocked_by` edge onto them). The second
  * number is the critical-path one — a park nothing depends on costs nothing,
- * whereas a park holding open work is what `rsi-plan.md` §3 exists to surface.
+ * whereas a park holding open work is the one the author has to clear.
  */
 export function readParkedCensus(storeDir: string): string {
   let nodes: IntentionNode[];
@@ -1379,7 +1390,7 @@ export function readParkedCensus(storeDir: string): string {
  *
  * The aggregate is NOT produced here. `aggregate-usage.sh` parses every session
  * transcript in the window — far too heavy for a batch sensor driver that runs
- * over the whole store. `/rsi-plan` runs it once per iteration and this sensor
+ * over the whole store. `/rsi-audit` produces one per audit and this sensor
  * reads the artifact, reporting `unavailable` when there is none. Reporting
  * absence honestly matters more than usual here: a fabricated 0% for rsi would
  * silently satisfy the recorded "dispatch dominates spend" expectation, which is
@@ -1461,8 +1472,9 @@ export function buildDefaultRegistry(): SensorRegistry {
  * The names the default registry resolves — the set a consumer needs to answer
  * "is this node's declared sensor actually measured?".
  *
- * `render-rsi-plan.ts` uses it to decide which graph signals are real metrics
- * (measured, with a threshold) versus declared-but-unread aspirations. Derived
+ * Consumers use it to separate real metrics (measured, with a threshold) from
+ * declared-but-unread aspirations — the same split the driver's own
+ * unregistered-sensor tail reports. Derived
  * from the registry itself, never hand-listed, for the same reason
  * `makeIntentionStoreSensor` derives its set: a hand-list silently drifts the
  * moment a sensor is added above.

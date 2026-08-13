@@ -178,9 +178,10 @@ if ! source "$SCRIPT_DIR/lib.sh"; then
 fi
 
 ID_PREFIX="tactic-eval-finding-"
-# The metric name this script owns. Mirrored by RECURRENCE_METRIC in
-# packages/intentionsutil/src/rsi.ts, which renders it; a shell script cannot
-# import the constant, so the literal is spelled in both places.
+# The metric name this script owns. It used to be mirrored by RECURRENCE_METRIC
+# in packages/intentionsutil/src/rsi.ts, which rendered it into rsi-plan.md;
+# both the renderer and that constant are retired, so this script is now the
+# metric's only definition.
 RECURRENCE_METRIC="recurrence_count"
 DEFAULT_SERVES="strategy-recursive-self-improvement"
 # Slug shape: lowercase kebab, 3-60 chars. This is an ADDRESSING guard, not a
