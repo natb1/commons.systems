@@ -460,7 +460,10 @@ advice:
   itself);
 - `$BR_OUT` — the blast-radius output from Step 1 (analysis 1; it does not
   recompute this);
-- `surface`, `deps`, `app_or_rules`, `api_call_site`, and `REVIEW_BASE_SOURCE`;
+- `surface`, `deps`, `app_or_rules`, `api_call_site`, `REVIEW_BASE_SOURCE`, and
+  `REVIEW_BASE_RECORDED` (empty unless the source is `sidecar-rebased`; it is the
+  only sha on that path that `git log` can resolve, so a reader who wants to see
+  what the previous pass covered needs it);
 - the prior pass's carried-forward findings (analysis 5), if any;
 - the worktree root as an absolute path.
 
@@ -868,6 +871,10 @@ args = {
   merge_base:          <MERGE_BASE>,    // the FULL branch base — what may be READ
   review_base:         <REVIEW_BASE>,   // the narrowed base — what is REPORTED on
   review_base_source:  <REVIEW_BASE_SOURCE>,
+  review_base_recorded: <REVIEW_BASE_RECORDED>, // '' unless source is `sidecar-rebased`.
+                                        // On that path `review_base` is a SYNTHETIC commit
+                                        // no `git log` resolves; this is the real sha the
+                                        // previous pass covered. REPORT it, never diff from it.
   review_changed_files: [ <review_changed_files lines> ], // the DELTA's file list
   blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
   blast_radius_truncated: <true|false>,

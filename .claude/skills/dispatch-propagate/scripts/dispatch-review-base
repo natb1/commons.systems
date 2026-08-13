@@ -9,7 +9,7 @@
 # Resolve mode prints two lines to stdout — three on the `sidecar-rebased` path —
 # and always exits 0:
 #   review_base=<sha>
-#   review_base_source=<sidecar|sidecar-rebased|no-sidecar|no-worktrees-root|unreadable|malformed|unreachable|already-in-merge-base|churn-merge-conflict|churn-commit-failed|no-merge-base>
+#   review_base_source=<sidecar|sidecar-rebased|no-sidecar|no-worktrees-root|unreadable|malformed|unreachable|already-in-merge-base|churn-git-version-unknown|churn-merge-tree-unsupported|churn-merge-conflict|churn-commit-failed|no-merge-base>
 #   review_base_recorded=<sha>   # sidecar-rebased only: the sha actually recorded,
 #                                # since review_base is then a synthetic commit
 #
@@ -213,6 +213,23 @@ if git -C "$WORKTREE" merge-base --is-ancestor "$MB_RESOLVED" "$CANDIDATE" 2>/de
   exit 0
 fi
 
+# `merge-tree --write-tree` needs git >= 2.38. On older git the flag is not
+# recognised as a mode switch and the command dies — which, without this gate,
+# would be indistinguishable from a merge CONFLICT and would blame the branch for
+# a toolchain gap. Gate on the version so the degradation is NAMED: otherwise
+# this seam falls back to a full review on every pass, silently and forever,
+# while the log reads as if some branch kept conflicting.
+GIT_VER=$(git -C "$WORKTREE" version 2>/dev/null | awk '{print $3}')
+GIT_MAJ=${GIT_VER%%.*}
+GIT_VER_REST=${GIT_VER#*.}
+GIT_MIN=${GIT_VER_REST%%.*}
+if [[ ! "$GIT_MAJ" =~ ^[0-9]+$ ]] || [[ ! "$GIT_MIN" =~ ^[0-9]+$ ]]; then
+  fallback churn-git-version-unknown
+fi
+if (( GIT_MAJ < 2 || (GIT_MAJ == 2 && GIT_MIN < 38) )); then
+  fallback churn-merge-tree-unsupported
+fi
+
 # `merge-tree --write-tree` exits non-zero on a CONFLICT and still prints a tree
 # oid, so the exit code — not the output — is what decides. Accepting a
 # conflicted tree would silently review against a state that never existed.
@@ -224,8 +241,13 @@ set -e
 
 # `awk NR==1`, not `head -n1`: head closes the pipe early and can SIGPIPE the
 # producer under `set -o pipefail`.
+#
+# `{40,64}` — 40 for SHA-1, 64 for a SHA-256 repository. A hard-coded {40} would
+# reject every oid in a SHA-256 repo and degrade this seam to a full review on
+# every pass there, which is the same silent-forever failure the version gate
+# above exists to prevent.
 SYN_TREE=$(printf '%s\n' "$SYN_OUT" | awk 'NR==1')
-[[ "$SYN_TREE" =~ ^[0-9a-f]{40}$ ]] || fallback churn-merge-conflict
+[[ "$SYN_TREE" =~ ^[0-9a-f]{40,64}$ ]] || fallback churn-merge-conflict
 
 SYNTHETIC=$(GIT_AUTHOR_NAME=review-base GIT_AUTHOR_EMAIL=review-base@local \
             GIT_COMMITTER_NAME=review-base GIT_COMMITTER_EMAIL=review-base@local \
@@ -235,7 +257,7 @@ SYNTHETIC=$(GIT_AUTHOR_NAME=review-base GIT_AUTHOR_EMAIL=review-base@local \
               -p "$CANDIDATE" -p "$MB_RESOLVED" \
               -m 'review-base: previously-reviewed state brought up to the merge base' \
             2>/dev/null || true)
-[[ "$SYNTHETIC" =~ ^[0-9a-f]{40}$ ]] || fallback churn-commit-failed
+[[ "$SYNTHETIC" =~ ^[0-9a-f]{40,64}$ ]] || fallback churn-commit-failed
 
 echo "review_base=$SYNTHETIC"
 echo "review_base_source=sidecar-rebased"

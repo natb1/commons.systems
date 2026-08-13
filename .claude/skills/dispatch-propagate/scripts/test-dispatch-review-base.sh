@@ -235,4 +235,63 @@ printf 'garbage\n' > "$SIDECAR"
 rc=0; (cd "$WT" && "$SUT" --merge-base "$BASE_SHA") >/dev/null 2>&1 || rc=$?
 assert_eq "resolve with a malformed sidecar exits 0" "0" "$rc"
 
+# --- the git-version gate on `merge-tree --write-tree` ------------------------
+#
+# `--write-tree` needs git >= 2.38. On older git the flag is not recognised as a
+# mode switch and the command dies — which, WITHOUT the version gate, is
+# indistinguishable from a merge conflict: the seam would degrade to a full
+# review on every pass, silently and forever, while the log blamed some branch
+# for conflicting. These rows pin the gate, and pin that it stays fail-CLOSED.
+#
+# The stub passes everything through to the real git except `version`, so the
+# churn path is reached exactly as it would be in production.
+REALGIT=$(command -v git)
+STUB_DIR="$RB_TMP/stub-oldgit"
+mkdir -p "$STUB_DIR"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' '# Report an ancient version; delegate everything else to the real git.'
+  printf '%s\n' 'for a in "$@"; do'
+  printf '%s\n' '  if [ "$a" = "version" ]; then echo "git version 2.30.0"; exit 0; fi'
+  printf '%s\n' 'done'
+  printf 'exec %s "$@"\n' "$REALGIT"
+} > "$STUB_DIR/git"
+chmod +x "$STUB_DIR/git"
+
+# Re-record the reviewed sha: the stale-case block just above overwrote the
+# sidecar with a sha already on main, which would short-circuit before the gate.
+printf '%s\n' "$MM_WORK" > "$MM_SIDECAR"
+
+out=$(cd "$MM" && PATH="$STUB_DIR:$PATH" "$SUT" --merge-base "$MM_MB")
+assert_eq "old git: named as unsupported, not blamed on a conflict" \
+  "churn-merge-tree-unsupported" "$(field "$out" review_base_source)"
+assert_eq "old git: falls CLOSED to the merge base" "$MM_MB" "$(field "$out" review_base)"
+
+# Non-vacuity: the very same sidecar and merge base take the synthetic path on
+# the real git, so the two rows above are the GATE firing, not the fixture
+# having drifted into some other fallback.
+out=$(cd "$MM" && "$SUT" --merge-base "$MM_MB")
+assert_eq "old git: same inputs on real git still take the synthetic path" \
+  "sidecar-rebased" "$(field "$out" review_base_source)"
+
+# An unparseable version is its own verdict — a git whose `version` output this
+# script cannot read is a different operational problem from a git that is
+# merely too old, and collapsing them would send an operator to the wrong fix.
+STUB2_DIR="$RB_TMP/stub-junkgit"
+mkdir -p "$STUB2_DIR"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'for a in "$@"; do'
+  printf '%s\n' '  if [ "$a" = "version" ]; then echo "git version wat"; exit 0; fi'
+  printf '%s\n' 'done'
+  printf 'exec %s "$@"\n' "$REALGIT"
+} > "$STUB2_DIR/git"
+chmod +x "$STUB2_DIR/git"
+
+out=$(cd "$MM" && PATH="$STUB2_DIR:$PATH" "$SUT" --merge-base "$MM_MB")
+assert_eq "unparseable git version: its own verdict" \
+  "churn-git-version-unknown" "$(field "$out" review_base_source)"
+assert_eq "unparseable git version: falls CLOSED to the merge base" \
+  "$MM_MB" "$(field "$out" review_base)"
+
 report_results
