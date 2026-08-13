@@ -93,3 +93,44 @@ the marker and have rule (a-handoff) reclaim as soon as the job is definitively
 absent from `claude agents --json --all` (the `claude_session_id_is_live` /
 `claude_job_id_for_name_all` primitives already exist), falling back to the
 TTL only on an UNKNOWN registry.
+
+## Partially addressed 2026-08-13 — PR #3073, merge `3fea9f35`. NODE STAYS OPEN.
+
+PR #3073 fixed **the `/dispatch-ladder` lane only**. Both directions remain
+open on every other spawn path, which is why this node is re-scoped rather
+than closed.
+
+**What landed.** `dispatch-ladder-advance` (branch commit `4a4be10d`) now
+verifies, after `dispatch-graph-execute` reports a launch, that a session
+named `$NODE_ID` actually registered with the daemon
+(`dispatch-ladder-advance:278-395`). On a miss it releases the reservation and
+throws with a named diagnostic that enumerates the known exit-0-without-a-
+session causes. Direction B — the probe false-negativing under load — is
+handled by widening `LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S` to 3s through the
+library's existing seam (≈12s per candidate cwd, two candidates tried
+sequentially, worst case ≈24s, comfortably inside
+`dispatch-ladder-await`'s 90s `BOOT_GRACE_S`). A second unit (`13f60b5b`) made
+the claim read fail-safe: an unreadable registry never drops a claim.
+
+**The scope note in the shipped code is explicit**: *"The tick's own
+`--no-verify` path is untouched"* (`dispatch-ladder-advance:289`).
+
+## Remaining scope
+
+1. **The tick's budget path.** `dispatch-graph-execute` still spawns through
+   `dispatch-spawn-job --no-verify`, and `reservation_mark_spawned`
+   (`lib-reservation-ledger.sh:609`) still stamps a handoff on the sole
+   evidence of exit 0. Every phantom-stall mechanism in the statement above is
+   live for the tick — the fleet-scale case, where enough phantoms pin
+   `LIVE_COUNT >= TARGET_N` and hard-stop every subsequent tick at
+   concurrency-cap.
+2. **Probe correctness itself.** The ladder lane widened a *timeout*; it did
+   not make the registration probe correct. Direction B is worked around, not
+   fixed, and the workaround does not generalize — the tick cannot afford
+   ≈24s of sequential polling per spawn, which is precisely why it passes
+   `--no-verify` in the first place.
+
+The original framing still holds and should not be split: any real fix must
+make the probe correct rather than choose which way it is allowed to be wrong.
+The ladder lane is evidence that the verify-side fix works when its cost is
+affordable; it says nothing about the budget path, which is the harder half.

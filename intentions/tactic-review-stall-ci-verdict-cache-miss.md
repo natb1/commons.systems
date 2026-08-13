@@ -58,3 +58,41 @@ step was skipped for it (cost findings are always `Deferred`, never
 `Required`).
 
 **Source PR**: #2920
+
+## The terminal-only cache decision, and its accepted residual cost (2026-08-13)
+
+Recorded here rather than as a new node: this is the same cost, re-measured
+from a second direction, and it belongs against the node that already owns it.
+
+PR #3073's `/code-review high` rounds re-raised the verdict-cache miss while
+adding the orphaned-check-run rule
+(`tactic-orphaned-check-run-pins-pending-ci-guard`). That rule forced an
+explicit decision about *what* `dispatch_ci_verdict_rest` may memoize, because
+a sha classified `pending` while its check suite was still running must be
+recomputed once the suite concludes — otherwise the orphan rule is shadowed by
+the very cache entry the orphan produced, for as long as the cache directory
+lives (`.claude/skills/dispatch-propagate/scripts/lib.sh:829-831`).
+
+**The decision taken: the cache stays terminal-only.** Only a verdict that
+cannot change again is memoized. A non-terminal verdict is recomputed on every
+read. This is deliberate and is not to be re-litigated as a caching bug — it
+is what makes the orphan rule sound.
+
+**The accepted cost**, stated plainly so a later reader does not re-discover
+it as a defect: roughly 2–3 redundant `check-runs` refetches per in-flight PR
+per tick. That is the price of correctness under the terminal-only rule, and
+it was weighed and accepted rather than overlooked.
+
+**What this does and does not do to this node.** It does not close it. The two
+fixes this node actually proposes are both still open and both still worth
+doing, because neither depends on caching a non-terminal verdict:
+
+1. Read `.mergeable` first, so a `CONFLICTING` candidate short-circuits
+   without any CI call at all — a call avoided, not a call memoized.
+2. Persist the last-swept `headRefOid` per node and skip candidates whose head
+   is unchanged since the previous sweep concluded no regression — a
+   *per-node sweep* memo, which is a different thing from memoizing the
+   verdict itself and is unaffected by the terminal-only rule.
+
+If anything, the terminal-only decision raises this node's value: it fixes the
+residual cost at the caller, which is the only place left that can fix it.

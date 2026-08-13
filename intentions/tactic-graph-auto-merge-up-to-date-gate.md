@@ -53,8 +53,19 @@ attention:
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
   tier: 1
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-e2e-unblock
+  pr: 3073
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T00:21:45Z
+    mergeCommitSha: 3fea9f35f7aeaf5ae48623c87cbf0724c9f5f819
+    graphCommitSha: null
 validates: []
 blocked_by:
   - tactic-graph-tick-node-lane-auto-merge
@@ -429,3 +440,43 @@ check the tick log for `merge: synced #<pr> (<id>)` lines and confirm each names
 shows as behind, that the PR's branch gained an "Merge branch 'main' into ..." commit, that
 CI re-ran on the new head, and that the PR merged on a later tick only after that re-run went
 green.
+
+## Shipped 2026-08-13 — PR #3073, merge `3fea9f35`
+
+Both units landed (branch commit `5cf5d32d`), plus two follow-on hardening
+units from the same PR's `/code-review high` rounds.
+
+- **Unit 1** added `gh_pr_update_branch_rest` to
+  `.claude/skills/dispatch-propagate/scripts/lib.sh`, modelled on
+  `gh_pr_merge_rest`, with the `--expected-head-sha` compare-and-swap guard.
+- **Unit 2** added the fifth conjunct to `graph-auto-merge`: one live
+  `origin/main` tip read per sweep, the head oid bound once so the currency
+  compare uses the same oid the CI verdict ran on, and the
+  `ahead|identical` → merge / `behind|diverged` → sync-and-defer arm placed
+  last, after the freshness gate. Gate ordering as specified: OPEN →
+  MERGEABLE → CI passing → fingerprint fresh → up to date.
+- **Units 10 + 12** (review residue) added the sync cap that keeps the sync
+  arm from thrashing a PR indefinitely. That work is recorded on its own node,
+  `tactic-graph-auto-merge-sync-cap`, which the shipped code cites by id at
+  `graph-auto-merge:95` and `:427`.
+
+**Why this one blocked the e2e run.** `MERGEABLE` means only "no textual
+conflict", so a green PR far behind `main` could merge and turn `main` red —
+which trips the main-health gate and suppresses the whole merge lane. A
+multi-hour ladder run is exactly the window in which `main` moves.
+
+Suites green at merge: `test-graph-auto-merge.sh` 84/84 (was 49),
+`test-lib-gh-rest.sh` 334/334 (was 321).
+
+**On the `blocked_by` edge.** This node was implemented over an open blocker,
+knowingly. `tactic-graph-tick-node-lane-auto-merge` sits at `phase: main-qa`,
+office-hours parked because needs-main item 9b never fired in production — but
+its *code* landed in merged PR #2904, which is the only thing this node
+depended on. The edge is a bookkeeping park, not a missing dependency, and it
+is left in place: the blocker's own disposition is still owed.
+
+**Known residue, deliberately not fixed here.** The `behind` arm — a PR whose
+commits already landed out of band — syncs rather than merging, and that sync
+can produce an empty diff. It is recorded as
+`tactic-graph-auto-merge-behind-arm-out-of-band` rather than patched; see that
+node for the corrected failure model.

@@ -30,8 +30,7 @@ execution:
     mergeCommitSha: c0a66d49844e6ce64eb3224390a64e0d6eade4a3
     graphCommitSha: null
 validates: []
-blocked_by:
-  - tactic-graph-auto-merge-up-to-date-gate
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -101,3 +100,19 @@ sequencing required. `tactic-graph-auto-merge-up-to-date-gate` is deliberately
 the sequencing was never satisfied — the ad hoc work went ahead regardless.
 Whoever implements that node should read the landed admission decision first;
 the uncoordinated-racers hazard the ordering existed to prevent is live for it.
+
+## Edge cleared 2026-08-13
+
+`blocked_by: [tactic-graph-auto-merge-up-to-date-gate]` is dropped in the same
+graph write that closes that blocker to `phase: done` (PR #3073, merge
+`3fea9f35`). The sequencing concern recorded above is resolved rather than
+waived: the up-to-date gate is now landed code in the same script this node
+edits, so the hazard it named — two uncoordinated racers editing one admission
+decision — no longer exists.
+
+A shipped blocker left in `blocked_by` is not inert. This node is already at
+`phase: done`, so no selection is being withheld today, but the stale edge
+half-gates any future re-selection and it is read by `blockersComplete`, which
+PR #3073 just wired into `graph-auto-merge`'s own merge enumeration
+(`tactic-graph-auto-merge-blocked-by-gate`). Clearing it keeps the graph's
+ordering edges meaning what they say.

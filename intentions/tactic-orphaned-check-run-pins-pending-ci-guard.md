@@ -37,8 +37,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-e2e-unblock
+  pr: 3073
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T00:21:45Z
+    mergeCommitSha: 3fea9f35f7aeaf5ae48623c87cbf0724c9f5f819
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -364,3 +375,50 @@ GitHub orphaning a job in the first place is external and not addressable here.
 This node's claim is narrower: when it happens, the router reaches an accurate
 verdict and recovers through the fix lane's existing budgeted retry, instead of
 holding the node forever with no automated exit.
+
+## Shipped 2026-08-13 — PR #3073, merge `3fea9f35`
+
+Landed as Unit 4 (branch commit `b0657c98`), plus Unit 8 from the PR's
+`/code-review high` round.
+
+The orphan rule now lives in exactly one place: `dispatch_ci_verdict_rest`
+(`.claude/skills/dispatch-propagate/scripts/lib.sh:803-894`), applied once at
+adaptation time so every downstream classifier inherits it rather than each
+re-deriving it. A check run that is not `completed` **and carries no
+conclusion** is looked up against its parent `check_suite`; if that suite
+reports `status: completed`, the row is adapted as stale rather than pending —
+a suite cannot conclude and still be running one of its own jobs.
+
+Cost discipline as designed: the suite lookups are lazy. When every row is
+`completed`, or no pending row carries a `check_suite.id`, zero extra REST
+calls are made; otherwise one call per **distinct** parent suite
+(`lib.sh:820-821`, `:863-891`).
+
+**The narrowing is deliberate and worth a reader's attention.** The rule fires
+only on NULL-conclusion rows, not on every non-`completed` row whose suite has
+finished. That is narrower than the node body above argues for, and it is the
+conservative reading: a row that carries a conclusion has reported a real
+result, whatever its status field says.
+
+**Cache shadowing closed too** (`lib.sh:829-831`): a sha classified pending
+while its suite was still running is recomputed once the suite concludes,
+otherwise the orphan rule would be shadowed by the very cache entry the orphan
+produced for as long as the cache directory lived.
+
+**Unit 8** hardened the consumer side — `run-pr-checks-wait.sh` now delegates
+its verdict to the same classifier rather than carrying a second copy of the
+rule, and its watch is bounded (`edd11a54` put that bound under the 600s
+ceiling that motivates it).
+
+**Confirmed against the live incident.** Re-run against sha `74548a2b`
+(PR #3068): 21 `success` + 1 `neutral` + 1 null-conclusion row now returns
+`failing` where it previously returned `pending` — the classification that
+would have released the node from `pending-ci-guard`.
+
+**Why this one blocked the e2e run.** A node pinned this way keeps the
+reconcile pass quiet, so the ladder driver burns its entire `--ci-wait-s`
+budget and halts naming CI — a false halt on a PR that is in fact green, the
+worst possible outcome for a first end-to-end run.
+
+Suites green at merge: `test-lib-gh-rest.sh` 334/334,
+`test-run-pr-checks-wait.sh` (new, 321 lines), `test-graph-commit.sh` 87.
