@@ -392,7 +392,7 @@ whole await window, not just during the first call.
 Invoke the script in a **bounded re-invocation loop** — the same fixed-cap,
 fail-closed-on-exhaustion shape as
 `.claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh:16-31`. At most
-**8 attempts**. Each attempt is one Bash call running the exact command below,
+**10 attempts**. Each attempt is one Bash call running the exact command below,
 unchanged and with **identical arguments** every time; identical arguments are
 what make the next call resume the same detached run rather than pay for a
 second one.
@@ -412,11 +412,31 @@ CR_RC=$?
   cause "attempt cap exhausted", and hard-stop the phase. Never continue to
   Step 2 on an unfinished review.
 
-The cap is arithmetic, not a guess: 8 attempts × the script's 540s default
-await window = 4320s ≈ 72 minutes, which sits inside the script's own 5400s
-(90-minute) deadline. So the caller's cap trips first and the loop is bounded
-by its own count, never by waiting for the script's deadline enforcement; and
-each individual call's 540s await fits well inside the 600000ms Bash tool cap.
+The cap is arithmetic, not a guess: 10 attempts × the script's 540s default
+await window = 5400s, **exactly** the script's own deadline. The equality is
+the point, and it is a correction of an earlier 8 (= 4320s ≈ 72 minutes). At 8
+the caller always gave up 18 minutes before the script's deadline could fire,
+which made the exit-4 path — **the only thing that kills the detached run and
+releases the worktree's `flock`** — unreachable. The phase hard-stopped while
+the run kept writing an abandoned worktree, holding the node lock and blocking
+`dispatch-ladder-advance` / `graph-select-target`, with the finished review
+never collected. The two bounds must agree, and they now do.
+
+With them equal the deadline is what actually trips, on the 10th attempt at the
+latest. Two properties of the script's await loop make that certain rather than
+a coin flip: its per-call window is `min(--await-seconds, deadline - elapsed)`,
+so `window_end` can never fall *past* the deadline instant; and the loop tests
+`elapsed >= DEADLINE_SECONDS` **before** it tests `now >= window_end`, so when
+the two coincide the deadline branch wins and the call returns 4, not 5. Any
+per-call overhead (process start, launch verification, the caller's own gap
+between Bash calls) counts toward `elapsed` and so only brings the deadline
+*forward* in attempt count — it cannot push it out of reach.
+
+So cap exhaustion is now a backstop that the normal timeline does not reach,
+not the routine exit it used to be. It stays fail-closed anyway, for the cases
+that bypass the arithmetic: an overridden `--await-seconds`, or a call that
+returns 5 early. Each individual call's 540s await still fits well inside the
+600000ms Bash tool cap.
 
 **Open follow-up — Variant A.** This loop is the foreground-poll shape, chosen
 because it is known safe (`references/code-review-invocation.md` §9.4). If a
@@ -442,9 +462,9 @@ case $CR_RC in
   1) echo "/review-fix: the detached 'claude -p /code-review' exited non-zero, failed to launch, or died recording no exit code (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
   3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  4) echo "/review-fix: the detached '/code-review' run hit its deadline, or the 8-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: the detached '/code-review' run hit its deadline, or the 10-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   5) : ;; # still in flight — NOT terminal. Re-invoke with identical arguments,
-          # up to the 8-attempt cap; only cap exhaustion is terminal, and it
+          # up to the 10-attempt cap; only cap exhaustion is terminal, and it
           # routes to the 4 branch above.
   6) echo "/review-fix: the reviewed worktree's .code-review-lock is held by another detached /code-review run — nothing was launched and no review ran (see $CR_ERR)" >&2; exit 1 ;;
   *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
