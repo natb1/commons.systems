@@ -21,7 +21,13 @@ Most git operations work **without** `dangerouslyDisableSandbox`:
 
 - `git add` / `git commit` — write to the index and objects under the writable `.git` dir.
 - `git worktree add` — registers under `.git/worktrees/` and creates the checkout
-  under the working tree. (`git worktree remove` does not; see the next section.)
+  under the working tree. Sandbox-safe only from a session whose own rw mount
+  covers the destination — i.e. from the repo-root checkout. From a
+  **worktree-isolated** session the new checkout lands under
+  `<repo>/.claude/worktrees/`, which that session's mounts do not cover (see
+  above), so it fails read-only and needs `dangerouslyDisableSandbox: true`
+  like any other write there. (`git worktree remove` needs the override from
+  anywhere; see the next section.)
 - `git push` / `git fetch` — use HTTPS to `github.com`, an allowlisted host.
 
 Tree-updating ops (`merge`, `checkout`, `rebase`, `reset`, `worktree remove`)
