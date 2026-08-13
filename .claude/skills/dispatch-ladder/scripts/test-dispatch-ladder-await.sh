@@ -24,6 +24,12 @@
 #      checked ahead of the hold: parked → `throw <id> parked`, unparked →
 #      `held-observing` at exit 21, which claims nothing and lets the caller run
 #      the sweep and call again.
+#   5. THE `execution.lane_pass` STAMP, AND ITS LAUNCH WINDOW. Two lanes complete
+#      by pushing and never move `.phase`, so a successful pass reads as a stall
+#      by phase alone. The stamp is read ONLY with `--since`, and only when it is
+#      at or after that launch — a presence-only read would repeat the
+#      accumulation trap the `reviewed` gate exists for. Both halves are pinned,
+#      and so is the halt this must not break: no stamp is still `stalled`.
 #
 # The Claude registry and verify-landed are both stubbed — no daemon, no
 # network, no gh. Polling is driven at --poll-s 1 so the suite runs in seconds.
@@ -85,7 +91,7 @@ export CLAUDE_AGENTS_CMD="$CLAUDE_STUB"
 # `markers` and `phase`.
 RC_ABSENT="$TMP/rc.absent"; RC_PARKED="$TMP/rc.parked"
 RC_BLOCKED="$TMP/rc.blocked"; RC_PHASE="$TMP/rc.phase"
-RC_REVIEWED="$TMP/rc.reviewed"
+RC_REVIEWED="$TMP/rc.reviewed"; RC_LANE="$TMP/rc.lane"
 cat >"$IUTIL/verify-landed" <<STUB
 #!/usr/bin/env bash
 args="\$*"
@@ -94,18 +100,24 @@ case "\$args" in
   *office_hours*)      exit "\$(cat "$RC_PARKED")" ;;
   *blocked_by*)        exit "\$(cat "$RC_BLOCKED")" ;;
   *markers*)           exit "\$(cat "$RC_REVIEWED")" ;;
+  # ORDERING TRAP — this arm MUST precede *.phase*. The lane-pass filter reads
+  # \`.execution.lane_pass.phase\`, which the *.phase* glob below matches too. If
+  # this arm came after it, every lane-pass probe would silently return the
+  # PHASE rc and the lane-pass cases would pass for entirely the wrong reason.
+  # So it matches on \`lane_pass\`, which appears in no other filter.
+  *lane_pass*)         exit "\$(cat "$RC_LANE")" ;;
   *.phase*)            exit "\$(cat "$RC_PHASE")" ;;
 esac
 exit 1
 STUB
 chmod +x "$IUTIL/verify-landed"
 
-# The reviewed-marker rc is last and optional: every pre-existing case predates
-# the marker check and wants its "no marker" answer (4).
-set_graph() { # <absent-rc> <parked-rc> <blocked-rc> <phase-rc> [<reviewed-rc>]
+# The reviewed-marker and lane-pass rcs are last and optional: every
+# pre-existing case predates those checks and wants their "no" answer (4).
+set_graph() { # <absent-rc> <parked-rc> <blocked-rc> <phase-rc> [<reviewed-rc>] [<lane-rc>]
   echo "$1" >"$RC_ABSENT"; echo "$2" >"$RC_PARKED"
   echo "$3" >"$RC_BLOCKED"; echo "$4" >"$RC_PHASE"
-  echo "${5:-4}" >"$RC_REVIEWED"
+  echo "${5:-4}" >"$RC_REVIEWED"; echo "${6:-4}" >"$RC_LANE"
 }
 # The ordinary "present, unparked, unblocked, still at <from>" graph.
 set_graph 4 4 4 4
@@ -211,6 +223,47 @@ FROM=qa
 set_graph 4 4 4 4 0
 run_await 12 "stalled $NODE qa" "a stale reviewed marker is ignored at any phase but review"
 
+# --- The `execution.lane_pass` stamp ---------------------------------------
+# dispatch-conflict's Lane 3 and qa-fix's auto-fix fixing pass complete by
+# pushing to the node's branch and writing job-dir markers; neither touches
+# `.phase`. Read by phase alone a SUCCESSFUL pass on either can only ever be
+# `stalled`, so both stamp `execution.lane_pass` and this script reads it —
+# but only against a launch window, and only when the caller supplies one.
+SINCE=1750000000
+
+# THE GATE, and the reason no case above changed meaning: without `--since` the
+# stamp is not consulted at all. `RC_LANE=0` here says "a fresh stamp is on the
+# node"; the answer is still `stalled`, because a hand caller has no launch time
+# to assert and a defaulted window would invent evidence.
+set_graph 4 4 4 4 4 0
+run_await 12 "stalled $NODE qa" "a stamp is never consulted without --since"
+
+set_graph 4 4 4 4 4 0
+run_await 0 "lane-complete $NODE qa" "a stamp at or after this launch is lane-complete (exit 0)" --since "$SINCE"
+
+# THE HALT THIS DESIGN MUST NOT BREAK. No stamp and a stamp older than the
+# launch are the same answer from verify-landed (the predicate is simply false,
+# rc 4), and both stay exit 12. Nothing here re-enters, retries, or falls back
+# to a branch tip.
+set_graph 4 4 4 4 4 4
+run_await 12 "stalled $NODE qa" "no stamp, or one older than the launch, is still stalled (exit 12)" --since "$SINCE"
+
+set_graph 4 4 4 4 4 1
+run_await 14 "throw $NODE unknown-graph-read" "an unreadable stamp is unknown, never completion (exit 14)" --since "$SINCE"
+
+# PROBE ORDER. The phase check runs FIRST: if a lane ever stamps AND moves the
+# phase, `advanced` is the stronger fact and stays the answer.
+set_graph 4 4 4 0 4 0
+run_await 0 "advanced $NODE qa" "a phase change outranks a fresh stamp" --since "$SINCE"
+
+# And every halting probe above it still outranks it. A stamp is the weakest
+# evidence in the chain, never a way past a park or a prune.
+set_graph 4 0 4 4 4 0
+run_await 11 "throw $NODE parked" "a park outranks a fresh stamp" --since "$SINCE"
+
+set_graph 0 4 4 4 4 0
+run_await 0 "pruned $NODE" "a pruned node outranks a fresh stamp" --since "$SINCE"
+
 # --- Held session ----------------------------------------------------------
 # `state: done` with the row still present means the worker stopped WITHOUT
 # declaring a terminal disposition, so the Stop hook is holding the job alive.
@@ -242,6 +295,12 @@ run_await 21 "held-observing $NODE" "a done-but-unreaped session is held-observi
 
 set_graph 4 4 4 4
 run_await 21 "held-observing $NODE" "an unparked held session is held-observing (exit 21), never a verdict"
+
+# A fresh lane-pass stamp does not resolve a hold either. The held row means a
+# worker slot is still occupied and the node still unselectable, whatever the
+# graph says about the pass — so this stays an observation the caller re-polls.
+set_graph 4 4 4 4 4 0
+run_await 21 "held-observing $NODE" "a held session with a fresh stamp is still held-observing" --since "$SINCE"
 
 # --- Still working ---------------------------------------------------------
 # A long phase is the expected case, not a failure: the timeout sits under the
@@ -295,6 +354,17 @@ fi
 "$AWAIT" "$NODE" qa --boot-grace-s x >/dev/null 2>&1
 [[ $? == 2 ]] && ok "a non-integer --boot-grace-s is rejected (exit 2)" \
   || fail "non-integer --boot-grace-s should exit 2"
+
+# A --since that cannot become a timestamp is an environment error, never a
+# quiet skip of the probe: a silently disabled probe is indistinguishable from
+# a node that carries no stamp, which is the whole defect this exists to fix.
+"$AWAIT" "$NODE" qa --since x >/dev/null 2>&1
+[[ $? == 2 ]] && ok "a non-integer --since is rejected (exit 2)" \
+  || fail "non-integer --since should exit 2"
+
+"$AWAIT" "$NODE" qa --since >/dev/null 2>&1
+[[ $? == 2 ]] && ok "--since with no value is a usage error (exit 2)" \
+  || fail "--since with no value should exit 2"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 )) || exit 1

@@ -71,8 +71,43 @@
 # treated as "still running" and keeps polling — never as "finished", which
 # would send the loop on to the next phase while a worker is live.
 #
+# A LANE THAT COMPLETES WITHOUT MOVING THE PHASE. Two lanes finish a pass by
+# pushing to the node's branch and writing job-dir markers, never by touching
+# `.phase`: dispatch-conflict's Lane 3 (an origin/main conflict resolved on the
+# node's own branch) and qa-fix's auto-fix fixing pass. Read by phase alone, a
+# SUCCESSFUL pass on either can only ever come back `stalled`. So both stamp
+# `execution.lane_pass` — `{at, lane, phase}` — on the node, and this script
+# reads that stamp.
+#
+# THE STAMP IS COMPARED AGAINST A WINDOW, NOT MERELY READ. `--since <epoch>` is
+# the caller's launch time, and a stamp counts only when its `at` is at or after
+# it. A presence-only check would repeat the weakness the `reviewed` carve-out
+# below documents: stamps persist, so the pass AFTER a completed one would read
+# its predecessor's stamp and report a genuine stall as complete. The `at`
+# format — `YYYY-MM-DDTHH:MM:SSZ`, fixed width, literal `Z` — is what makes the
+# comparison a plain lexicographic `>=` with no date arithmetic.
+#
+# SAME-HOST CLOCK. Writer and reader are the same machine by construction: the
+# lane worker is spawned by this ladder's own driver, on this host. A future
+# multi-host dispatch breaks that assumption, and this probe with it.
+#
+# THE SKEW IS BOUNDED ON THE SIDE THAT MATTERS. A clock stepped BACKWARD between
+# launch and stamp makes a completed pass read `stalled` — today's answer, and
+# the safe direction. A backward step between two passes at the SAME phase could
+# make a stale stamp read fresh: a false `lane-complete`. That one is affordable
+# because of what this probe can and cannot produce. It is never `pruned` (halt
+# 0) and never `parked` (halt 11) — only a NON-TERMINAL, self-correcting
+# disposition the loop steps through. A false `lane-complete` costs one
+# iteration; the next advance re-derives the truth from origin/main. That
+# asymmetry is what makes clock-derived evidence acceptable here.
+#
+# A STALL WITH NO STAMP STILL HALTS. The probe splits the `unchanged` arm; it
+# does not soften it. No stamp, or one older than this launch, is `stalled` at
+# exit 12 exactly as before — no re-entry, no retry, no branch-tip backstop.
+#
 # Usage: dispatch-ladder-await <node-id> <from-phase>
 #                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
+#                  [--since <epoch>]
 #
 #   <from-phase>       the phase dispatch-ladder-advance printed. The
 #                      transition check asks whether the node has moved off
@@ -86,12 +121,23 @@
 #   --poll-s <n>       seconds between daemon reads (default 15).
 #   --boot-grace-s <n> how long to wait for the worker to REGISTER before
 #                      concluding none exists (default 90 — see BOOT GRACE).
+#   --since <epoch>    unix epoch of THIS launch. Only with it is
+#                      `execution.lane_pass` consulted at all, and only a stamp
+#                      dated at or after it counts — see A LANE THAT COMPLETES
+#                      WITHOUT MOVING THE PHASE. Omitted (the by-hand form
+#                      above), the stamp is not read: a hand caller has no
+#                      launch time to assert, and a defaulted window would
+#                      invent evidence rather than reproduce today's behavior.
 #
 # Stdout, one line:
 #   advanced <id> <from> -> <to-known-via>   the node moved off <from>.
 #   reviewed <id> review -> pending-merge    the review completed clean. It
 #                                            writes a marker, not a phase, so
 #                                            the node is STILL at `review`.
+#   lane-complete <id> <from>                the lane completed its pass by
+#                                            pushing, stamping
+#                                            `execution.lane_pass` rather than
+#                                            moving `phase`. Needs --since.
 #   pruned <id>                              the node is gone from origin/main —
 #                                            completed and pruned.
 #   throw <id> <reason>                      parked, or blocked by an edge.
@@ -103,7 +149,11 @@
 #   running <id> <from>                      still working at the timeout.
 #
 # Exit codes:
-#   0   advanced, reviewed or pruned — the loop may take another step.
+#   0   advanced, reviewed, lane-complete or pruned — the loop may take another
+#       step. `lane-complete` shares this code with `reviewed` deliberately: it
+#       is the same class of answer, and a code of its own would force a new
+#       branch in dispatch-ladder-run for no behavioral difference. The distinct
+#       TOKEN is what carries the information onward (events.jsonl, status).
 #   11  throw: the node is parked, or held by a blocked_by edge. Both need the
 #       calling thread (`/dispatch-ladder`, invoked directly by an author);
 #       neither is retried here.
@@ -142,9 +192,13 @@ POLL_S=15
 BOOT_GRACE_S=90
 NODE_ID=""
 FROM_PHASE=""
+# Empty means "no launch window was asserted", which is NOT a window of zero:
+# with it empty the lane-pass probe is skipped entirely.
+SINCE_EPOCH=""
+SINCE_ISO=""
 
 usage() {
-  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]" >&2
+  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>] [--since <epoch>]" >&2
   exit 2
 }
 
@@ -153,6 +207,7 @@ while [[ $# -gt 0 ]]; do
     --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
     --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
     --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
+    --since)        [[ $# -ge 2 ]] || usage; SINCE_EPOCH="$2"; shift 2 ;;
     --*)            echo "dispatch-ladder-await: unknown flag $1" >&2; usage ;;
     *)
       if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
@@ -168,6 +223,20 @@ done
   echo "dispatch-ladder-await: invalid node id '$NODE_ID'" >&2; exit 2; }
 [[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
   echo "dispatch-ladder-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+
+# Converted ONCE, here, into the same fixed-width UTC form the lanes stamp, so
+# the probe below is a plain lexicographic compare. A `date` that cannot do this
+# is an environment error and exits — NEVER a silent skip of the probe, which
+# would resurrect the missed-lane-pass defect invisibly, as a `stalled` nobody
+# could tell apart from a real one.
+if [[ -n "$SINCE_EPOCH" ]]; then
+  [[ "$SINCE_EPOCH" =~ ^[0-9]+$ ]] || {
+    echo "dispatch-ladder-await: --since must be an integer unix epoch, got '$SINCE_EPOCH'" >&2; exit 2; }
+  SINCE_ISO=$(date -u -d "@$SINCE_EPOCH" +%FT%TZ) || {
+    echo "dispatch-ladder-await: could not convert --since '$SINCE_EPOCH' to a UTC timestamp with 'date -u -d @<epoch>'" >&2; exit 2; }
+  [[ -n "$SINCE_ISO" ]] || {
+    echo "dispatch-ladder-await: 'date -u -d @$SINCE_EPOCH' produced an empty timestamp" >&2; exit 2; }
+fi
 
 PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
 if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
@@ -247,6 +316,14 @@ graph_verdict() {
   # node awaited at `qa` or `main-qa` still carries the `reviewed` marker from
   # its earlier review pass, so an ungated check would report it complete and
   # mask a genuine stall.
+  #
+  # NOT folded into the `execution.lane_pass` probe below, and deliberately so.
+  # `reviewed` is live ROUTING state, not a reporting artifact — graph-auto-merge
+  # arms on it, selectGraphTargets excludes on it, check-node-selection.ts:294-305
+  # asserts on it — so a stamp cannot replace it, only duplicate it. And the
+  # accumulation weakness this from-phase gate guards against is structurally
+  # unreachable anyway: every path that needs a re-review strips the marker, and
+  # the selector refuses to select a `review` node still carrying one.
   if [[ "$FROM_PHASE" == "review" ]]; then
     "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
       --jq '(.execution.markers // []) | index("reviewed") != null' >/dev/null 2>&1
@@ -262,10 +339,33 @@ graph_verdict() {
     --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1
   rc=$?
   case "$rc" in
-    0) printf 'advanced\n' ;;
-    4) printf 'unchanged\n' ;;
-    *) printf 'unknown\n' ;;
+    0) printf 'advanced\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
   esac
+
+  # THE PHASE PROBE STAYS AHEAD OF THIS ONE. If a lane ever stamps AND moves the
+  # phase, `advanced` is the stronger fact and remains the answer; this only
+  # splits what used to be the single `unchanged` arm.
+  #
+  # Null-total by construction: `.execution` absent → jq yields null → `// ""`
+  # → `"" >= "<iso>"` is false → verify-landed's 4. There is no error path for a
+  # node that simply carries no stamp, so an absent stamp can never masquerade
+  # as an unreadable graph.
+  if [[ -n "$SINCE_ISO" ]]; then
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+      --jq "((.execution.lane_pass.phase // \"\") == \"$FROM_PHASE\") and ((.execution.lane_pass.at // \"\") >= \"$SINCE_ISO\")" >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+      0) printf 'lane-complete\n'; return 0 ;;
+      4) ;;
+      # Same three-answer discipline as every probe above: an unreadable stamp
+      # is `unknown` (exit 14), never quietly read as "no stamp".
+      *) printf 'unknown\n'; return 0 ;;
+    esac
+  fi
+
+  printf 'unchanged\n'
 }
 
 # report_graph_verdict <session-note> [<already-computed-verdict>]
@@ -296,12 +396,19 @@ report_graph_verdict() {
       echo "reviewed $NODE_ID review -> pending-merge"
       echo "dispatch-ladder-await: $NODE_ID carries the 'reviewed' marker at origin/main ($note) — the review completed clean. It stays at phase 'review' by design; the next step is the merge-and-absorb, not another phase session." >&2
       exit 0 ;;
+    lane-complete)
+      echo "lane-complete $NODE_ID $FROM_PHASE"
+      echo "dispatch-ladder-await: $NODE_ID carries an execution.lane_pass stamp for phase '$FROM_PHASE' dated at or after this launch ($note) — the lane completed its pass by pushing to the node's branch, not by moving the phase. Same class as 'reviewed': the loop may take another step." >&2
+      exit 0 ;;
     advanced)
       echo "advanced $NODE_ID $FROM_PHASE -> origin/main"
       exit 0 ;;
     unchanged)
       echo "stalled $NODE_ID $FROM_PHASE"
       echo "dispatch-ladder-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
+      if [[ -n "$SINCE_ISO" ]]; then
+        echo "dispatch-ladder-await: if a lane pass did complete, execution.lane_pass on origin/main will show it and its timestamp; a stamp older than this launch means a previous pass, not this one." >&2
+      fi
       exit 12 ;;
     *)
       echo "throw $NODE_ID unknown-graph-read"
@@ -371,6 +478,8 @@ while (( SECONDS < DEADLINE )); do
       echo "dispatch-ladder-await: that is the shape of an escalation mid-flight (office-hours-reason written, no node-terminal marker), so the caller runs terminal_without_disposition_sweep and calls again. A hold no sweep heals occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'." >&2
       if [[ "$HELD_VERDICT" == advanced ]]; then
         echo "dispatch-ladder-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
+      elif [[ "$HELD_VERDICT" == lane-complete ]]; then
+        echo "dispatch-ladder-await: NOTE — $NODE_ID DOES carry an execution.lane_pass stamp for '$FROM_PHASE' dated at or after this launch, despite the missing marker; the lane pass may be complete." >&2
       fi
       exit 21
       ;;

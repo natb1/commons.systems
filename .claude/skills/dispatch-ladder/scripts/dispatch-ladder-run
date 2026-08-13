@@ -983,6 +983,13 @@ while :; do
   # subshell, so PIPESTATUS is invisible out here and the assignment's status
   # would be `head`'s, silently discarding every exit code this loop branches
   # on. Take the first line afterwards instead.
+  # The launch window the await's lane-pass probe compares stamps against, taken
+  # HERE rather than beside LAUNCH_EPOCH below. dispatch-ladder-advance blocks on
+  # verify_launch before it returns, so LAUNCH_EPOCH is already later than the
+  # spawn — a lane that stamped inside that window would be read as older than
+  # the launch, i.e. as a stall. LAUNCH_EPOCH itself is left alone: it is also
+  # the evaluator's aggregate-usage.sh window and means something else.
+  PASS_SINCE=$(now_epoch)
   ADV_OUT=$("$ADVANCE" "$NODE_ID"); adv_rc=$?
   ADV_OUT=$(head -n1 <<<"$ADV_OUT")
 
@@ -1007,7 +1014,11 @@ while :; do
       STEP=await; write_state
       while :; do
         check_deadline
-        AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S"); aw_rc=$?
+        # --since is PASS_SINCE, captured before the advance and constant for
+        # the whole await loop — the exit-20 re-poll must call with identical
+        # arguments, and a window recomputed per poll would walk forward past a
+        # stamp already written.
+        AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S" --since "$PASS_SINCE"); aw_rc=$?
         AW_OUT=$(head -n1 <<<"$AW_OUT")
         AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
         case "$aw_rc" in

@@ -36,6 +36,18 @@ for ph in qa review fix-checks fix-conflicts main-qa; do
 done
 
 # ============================================================================
+# Case 1b: the ladder-eval pseudo-phase is pinned to opus, on its own — it is
+# NOT part of the sonnet arm above. A sonnet-tier eval once improvised an
+# ambiguous `find -newermt` call and recorded a displaced search window's
+# blindness as proof no artifact existed; the lane is opus because the job
+# reasons about evidence and its own blindness, not because it authors code.
+# ============================================================================
+echo "Case 1b: ladder-eval -> opus"
+run_phase "" "ladder-eval"
+assert_eq "static: ladder-eval -> opus" "opus" "$OUT"
+assert_eq "static: ladder-eval exit 0" "0" "$RC"
+
+# ============================================================================
 # Case 2: unmapped phases -> empty (inherit the session default, no --model).
 # ============================================================================
 echo "Case 2: unmapped phases -> empty"

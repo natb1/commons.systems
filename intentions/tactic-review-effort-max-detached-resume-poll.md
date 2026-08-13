@@ -2,15 +2,18 @@
 id: tactic-review-effort-max-detached-resume-poll
 kind: tactic
 statement: Raise the review phase's nested `/code-review` pre-stage from `low`
-  to `max` effort, together with the detached/resume-poll invocation harness
-  that makes a `max` run survivable — a measured `max` run on a real diff ran
-  39m23s and was killed having produced ZERO bytes, because `claude -p` buffers
-  all output until completion, so raising the effort constant alone converts
-  every review into a total loss
+  to `high` effort, together with the detached-launch / bounded-await invocation
+  harness and the node lock that make it survivable — the harness exists because
+  a measured `max` run on a real diff ran 39m23s and was killed having produced
+  ZERO bytes (`claude -p` buffers all output until completion), so raising the
+  effort constant alone converts every review into a total loss; the same
+  harness is what makes the shipped `high` level reachable. Node id retains
+  `max` as a historical handle; the shipped level is `high`.
 owner: ai
 status: codified
 parent: null
-rationale: "Author-decided 2026-08-09 at the office-hours sitting that closed
+rationale: >-
+  Author-decided 2026-08-09 at the office-hours sitting that closed
   tactic-review-code-review-invocation-contract. That node's needs-main residue
   item 3 asked whether `low` is the right cost/quality point for the review
   phase; the author ruled that it is not, and directed `max`. This node exists
@@ -41,7 +44,7 @@ rationale: "Author-decided 2026-08-09 at the office-hours sitting that closed
   `dispatch-code-review` already rejects a non-range `--target` with exit 2,
   because a bare SHA reviews only the single commit at that SHA. Cost is NOT
   unattributed: section 5.2 confirms every assistant message in the review
-  subagent transcripts carries `attributionSkill: \"code-review\"`, so the spend
+  subagent transcripts carries `attributionSkill: "code-review"`, so the spend
   lands on a `code-review` phase line rather than in `<none>`. PLANNED
   2026-08-09 by an /align-tactics tactic-target session (drift review found no
   blocker; the 2026-08-09 sitting's ruling is a self-standing author decision,
@@ -49,7 +52,20 @@ rationale: "Author-decided 2026-08-09 at the office-hours sitting that closed
   node for the standing routing-approval condition's application here). Full
   plan landed in the body; see
   `.claude/skills/review-fix/references/code-review-invocation.md` for the
-  underlying measurement this plan builds on."
+  underlying measurement this plan builds on.
+
+
+  AMENDED 2026-08-13 (Unit F of the graph-correction round, same-day follow-up):
+  the 2026-08-09 `max` ruling recorded above was itself superseded the same day
+  this node's harness shipped — strategy-token-economy clarification 44 records
+  the author's directed change from `max` to `high`, a deliberate supersession
+  rather than an interim operating point. This node's id deliberately RETAINS
+  `max` as a historical handle per author ruling this session — no rename, no
+  prose repointing, no prune — while its statement and plan body reflect the
+  shipped `high` level. Landed as PR #3078 (branch
+  `review-lane-code-review-high-detached`), which also ships the node lock
+  (sibling node tactic-code-review-detached-node-lock) that condition 9 requires
+  ship in the same PR as the effort raise.
 reading: null
 serves:
   - strategy-token-economy
@@ -82,600 +98,254 @@ attention:
     attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: implement
-execution: null
+execution:
+  branch: review-lane-code-review-high-detached
+  pr: 3078
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: worker session froze at a permission/classifier denial — claude agents
-    reports state=blocked and the transcript has had no activity for 1707s; the
-    session cannot make progress and cannot park itself (a blocked session never
-    reaches the Stop hook), so the dispatch-tick frozen-session sweep parked
-    this node
-  since: 2026-08-10
-  recommendation: Find the holding job with 'claude agents --all' and attach it
-    ('claude attach <job-id>'), then answer the pending prompt. If the denied
-    command was gratuitous, cancel it and let the worker continue; if it is
-    genuinely needed, run it yourself or add a standing permission rule — do NOT
-    rewrite the command to route around the classifier. If the session is
-    unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the
-    worktree, then run clear-park <node-id> to return the node to the lane.
-    Until that session is gone, office-hours reports this node as 'all-held'
-    rather than launching a review session for it, because the frozen session
-    still holds the node-id session name.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
   pre_namespacing_boost: 20
 ---
+# `high` review effort requires a detached resume-poll harness to be reachable
 
-# `max` review effort requires a detached resume-poll harness to be reachable
+Node id retains `max` as a historical handle — see "Node id" at the end.
 
 ## Context
 
-The review phase's nested `/code-review` pre-stage currently runs at `low`
-effort. The author ruled at the 2026-08-09 office-hours sitting (the sitting
-that closed `tactic-review-code-review-invocation-contract`, whose needs-main
-residue item 3 asked whether `low` is the right cost/quality point) that it is
-not, and directed `max`.
+The review phase's nested `/code-review` pre-stage ran at `low` effort. The
+author ruled at the 2026-08-09 office-hours sitting (closing
+`tactic-review-code-review-invocation-contract`) that `low` was not the right
+cost/quality point, and directed `max`. Measured on a real diff, `max` ran
+2363 s (39 m 23 s) before being killed, produced ZERO bytes (`claude -p`
+buffers all output until the run completes, so a killed run is a total loss,
+not a degraded result), at a $371.54 price proxy. `medium` did not complete in
+300 s; only `low` (14-30 s) is measured to complete inside the Bash tool's
+600 000 ms cap. So no foreground call can run anything between `medium` and
+`max`, `max` included, which is why the invocation must be detached — the
+reference doc's own conclusion (`code-review-invocation.md` §1.2's
+consequence 3) warns explicitly: "Design this deliberately; do not just raise
+the timeout constant."
 
-**`max` cannot be reached by changing the effort argument.** It was measured on
-a real diff and did not complete:
+**Superseded 2026-08-13.** The 2026-08-09 `max` ruling was itself superseded
+the same day, before this node's harness shipped: `strategy-token-economy`
+clarification 44 records the author's directed change from `max` to `high`, a
+deliberate supersession rather than an interim operating point. What the
+measured record forbids is `max` synchronously; `high` is unmeasured, not
+refuted — the reference doc's §7 already named the untested `medium`/`high`/
+`xhigh` middle as "where the usable operating point probably sits." The
+detached/bounded-await harness this node ships is unchanged by which effort
+level it carries: it is what makes ANY raised effort — `high` as shipped, or
+`max` had the earlier ruling stood — reachable at all.
 
-| | measured |
-|---|---|
-| wall time before kill | 2363 s (39 m 23 s) |
-| exit | 143 (SIGTERM) |
-| bytes of output recovered | **0** |
-| price proxy for that zero-byte run | **$371.54** |
-| Bash tool cap | 600 000 ms |
-| current `DISPATCH_CODE_REVIEW_TIMEOUT` | 540 s |
+**Scope coupling, still deliberate.** Landing `high` without the harness
+leaves the review lane deterministically broken (every review a $372-shaped
+zero-byte loss); landing the harness without the node lock (see below) leaves
+the corruption case open; landing the harness without the effort raise leaves
+the author's decision unimplemented. All three ship together in PR #3078.
 
-Source: `.claude/skills/review-fix/references/code-review-invocation.md` §1.2
-(lines 50-100), §5.4 (348-368), §7 (420-437). Two properties combine badly. The
-run exceeds every available synchronous budget, and `claude -p` **buffers all
-output until the run completes** — so a timeout does not yield a partial
-review, it yields nothing at all. At `max` pricing the naive one-word change is
-strictly worse than `low`: maximum spend, zero output, every time. The run's
-internal shape explains the duration — one root `general-purpose` subagent fans
-out 10 angle subagents; the angles finished at ~24 min, the root was still
-synthesizing and deduping at 39 min when killed.
+## Shipped in PR #3078 (`review-lane-code-review-high-detached`)
 
-The reference doc's own conclusion (§1.2 consequence 3, lines 97-100) is that
-the invocation must either run detached with a resume-poll, or drop the effort
-level, and it warns verbatim: *"Design this deliberately; do not just raise the
-timeout constant."* The author chose the first branch.
+Six files: `dispatch-code-review`, `lib-claude-agents.sh`, their two test
+suites, `review-fix/SKILL.md`, and
+`review-fix/references/code-review-invocation.md`. Tests 115/115 and 266/266.
 
-**Intended outcome.** `dispatch-code-review` launches the nested run
-**detached** — outliving any single Bash tool call — and every invocation
-becomes a bounded *await* over that one detached run, resumable across calls.
-The effort default becomes `max`. Because the mode is derived from the run
-itself and not from a flag, the effort raise and the harness are structurally
-inseparable: there is no code path that runs `max` synchronously.
+**Recommended model** — opus, per the original plan (Units 1-3 each carried
+this tag); all units are now shipped, so this is a historical record, not an
+open instruction.
 
-**Scope coupling is deliberate — do not split these units across PRs.** Landing
-`max` without the harness leaves the review lane deterministically broken;
-landing the harness alone leaves the author's decision unimplemented.
+### Unit A (was Unit 1) — measured before building on it, as shipped
 
-**Constraints any implementation must respect**, carried forward from the
-node's own record:
+Recorded in `code-review-invocation.md` §9. Only the cheap probe ran:
 
-- **Range targets only.** `<base>..<head>`, never a bare SHA — a bare SHA
-  reviews only the single commit at that SHA.
-  `dispatch-code-review:150-157` already rejects a non-range `--target` with
-  exit 2. Preserve that check untouched.
-- **Do not just raise the timeout constant.** No timeout value makes a
-  39-minute buffered run fit a 600 s cap.
-- **Attribution already works.** Every review-subagent message carries
-  `attributionSkill: "code-review"` (§5.2, lines 309-329) and the nested
-  session gets its own `dispatch-stamp.json` with the node id (§5.3), so the
-  new spend lands on a `code-review` phase line and on the right node — never
-  in `<none>`. A `/dispatch-token-audit` after the change can therefore
-  quantify the cost/quality trade the sitting declined to pre-judge.
-- **`strategy-token-economy` clarification 11 binds the poll shape.** The
-  harness auto-resumes a session when a tracked background Workflow/Task
-  completes, so a hand-rolled short-interval poll loop or a `ScheduleWakeup`
-  fallback for work the harness can already observe is wasted spend. Prefer a
-  mechanism the harness itself tracks and notifies on.
+- **§9.1, detached-child survival.** A `setsid`-launched child survives both
+  the launching Bash call returning cleanly AND the launching call's own
+  process chain being killed outright (`kill -9` on the launcher's wrapper
+  shell and its foreground `sleep`) — the child keeps its own session id,
+  untouched. A **sandboxed** launch does not survive either shape: each
+  sandboxed Bash call gets its own PID namespace, so the recorded pid is
+  namespace-local and the child is gone by the next call.
+  `DETACHED_LAUNCH_MECHANISM: setsid` — this is what Unit 2's launch uses.
+- **§9.2**, `flock` and `setsid` both resolve from the same `util-linux`
+  derivation at a fixed Nix store path — measured present, not assumed.
+- **§9.3**, `high` itself stays **inferred, not measured**: nothing about
+  `high` was run in this unit. It sits, unmeasured, between measured `medium`
+  (>300 s) and measured `max` (>2363 s, killed, zero bytes) — which is
+  exactly why the harness ships before any `high` run, not after: there is no
+  foreground-call-shaped way to take that measurement safely at all.
 
-**Non-goals, recorded so a later reader does not "improve" them in:**
+**Probe 2 was dropped** — the plan's one real `max` run to completion
+(~40 min, ~$372 price proxy). Recorded as a deliberate deviation
+(`code-review-invocation.md` §9.4): the shipped level is `high`, not `max`, so
+a completed `max` run would not source any constant this node needs; the
+5400 s deadline was fixed independently by the author (clarification 45), not
+derived from a `max` completion time; and clarification 46 already rules that
+the **first production `high` runs** record realized wall clock, price proxy
+and findings count, asserting no threshold in advance. Running `max` to
+completion would have spent real money measuring a level nothing downstream
+uses.
 
-- *Incremental re-review.* The review phase is legitimately re-entered after a
-  `qa-fix`/`fix-checks` push; each re-entry re-runs a full `max` review at full
-  cost. Reviewing only `<previously-reviewed-head>..HEAD` would cut that, but
-  it changes detection coverage, and `strategy-token-economy` condition 5
-  forbids efficiency changes that reduce detection. Out of scope; surfaced to
-  the author as a follow-up.
-- *Effort selection by diff size.* Routing `max` only at some diff threshold is
-  a routing policy change, and condition 3 requires explicit author approval
-  for routing changes. Out of scope.
-- *Raising the effort of anything other than this pre-stage.* The Lane-B finder
-  fan-out and the adversarial-verify skeptics are untouched.
+### Unit 2 — `dispatch-code-review`, as shipped
 
----
+There is no mode: every run launches (or resumes) detached under `setsid`,
+and every invocation is a bounded **await** with a new exit **5** — call
+again with identical arguments to resume the same run. `low` still finishes
+inside the first await window and behaves byte-identically to before.
 
-## Unit 1 — Measure the detached invocation before building on it
+Shipped shape:
 
-**Scope.** Documentation only; no behavior change. Append a new `## 9.
-Detached `max` invocation — measured` section to
-`.claude/skills/review-fix/references/code-review-invocation.md` (the file ends
-at line 502 with the `## Verdict` section; append after it, and add a
-forward-pointer line inside §1.2's consequence 3 at lines 97-100 so a reader
-who starts there is sent to §9). Same discipline as the rest of that file:
-every statement is a measurement or is explicitly marked **inferred**. Change
-no script.
+- `EFFORT="high"` is the new default (was `low`); `--effort` stays
+  overridable, and `review-fix` deliberately never passes it.
+- **`--model opus`** is a new, explicit pin, joining the resume cache's run
+  identity — see "Model pin" below.
+- Run-state (`.run`, `.output`, `.rc`, `.untracked-before`) lives in
+  `CACHE_DIR`, **never** `--out-dir` — `--out-dir` sits inside the reviewed
+  worktree, writable by the very PR under review, so a planted `rc=0` marker
+  there would let a review that never ran report `status=ok`.
+  `CACHE_VERSION` bumped 2 → 3.
+- **`DISPATCH_CODE_REVIEW_TIMEOUT` is retired, not aliased.** Setting it now
+  exits **2** naming its replacements, `--await-seconds` (default 540 s) and
+  `--deadline-seconds` (default 5400 s, the author's ruling in clarification
+  45) — a stale value would otherwise set a meaningless budget
+  (`.claude/rules/code-style.md`: clear errors over silent fallbacks).
+- **New exit 6** — the reviewed worktree's `.code-review-lock` sidecar is
+  already held by a different detached run; nothing was launched, no review
+  ran. Distinct from exit 1 on purpose: a failed lock acquire is a different
+  fact from a child that failed, and must never be reported as either.
+- **Rollback stays one line**: `EFFORT="high"` back to `EFFORT="low"`. The
+  harness stays correct at `low` — the run completes inside the first await
+  window — so rollback is an effort change, never a structural one.
 
-Every probe below runs from a dispatch-style worktree with
-`dangerouslyDisableSandbox: true` (§3.2, lines 244-258, records that the
-auto-mode classifier permits this from a headless worker when the call is
-framed as *"invoke the dispatch-code-review script"*, never as *"bypass the
-sandbox"*).
+**Model pin — contract fact (`code-review-invocation.md` §9.5).** A nested
+`claude -p` does not inherit the launching session's model. At `high` effort
+the model is the dominant cost and quality term, so an unpinned run would
+leave clarification 46's realized-cost measurement uninterpretable — a later
+reader could not tell whether a recorded price proxy reflects `opus` or some
+other default. `model` therefore joins effort level, target and flags as part
+of the detached run's identity for the resume cache: two runs differing only
+in model are different runs, never resumed against each other.
 
-Measure and record, in this order (the cheap probes gate the expensive one):
+**The node lock** ships as part of this unit's launch path (`setsid flock -n
+<sidecar> <child>`) but is designed and recorded on the sibling node
+`tactic-code-review-detached-node-lock` — see "Node lock" below.
 
-1. **Detached-child survival.** Launch `setsid bash -c 'echo $$
-   >PIDFILE; sleep 900' </dev/null >/dev/null 2>&1 &` from one Bash tool call;
-   return from that call; from a *later* call assert the pid is still alive
-   (`kill -0`). Then repeat with the launching Bash call killed at its own tool
-   timeout rather than returning cleanly. Record: does the child survive both?
-   If it does not, record whether `systemd-run --user --scope` /
-   `--unit=... --collect` does (the repo already uses transient user units —
-   `dispatch-schedule-rate-limit-resume:1-90`), and name the surviving
-   mechanism as `DETACHED_LAUNCH_MECHANISM:` in §9. Unit 2 uses whatever this
-   line names.
-2. **One real `max` run to completion, detached.** Pick a real non-trivial diff
-   (a live PR branch, ≥5 non-test files). Launch
-   `claude -p '/code-review max --fix <base>..HEAD' --permission-mode
-   acceptEdits` detached via the mechanism from probe 1, output redirected to a
-   file, with an exit-code marker written after it exits. Poll from later Bash
-   calls until the marker appears or 5400 s elapse. Record: **total wall
-   clock**, exit code, bytes of output, whether `--fix` edits landed in the
-   working tree, whether `--comment` posted, and the price proxy from
-   `/dispatch-token-audit` filtered to the `code-review` skill bucket. Record
-   the completion time as `MAX_COMPLETION_S:` in §9.
-   *This probe deliberately spends roughly one $372-price-proxy run.* It is the
-   only way to learn whether a `max` run terminates at all (39 m 23 s is a
-   lower bound on an unfinished run) and the only defensible basis for the
-   deadline constant Unit 2 ships. Do not substitute an estimate.
-3. **Await-shape verdict.** From a headless dispatch worker session, issue one
-   `Bash(run_in_background: true, dangerouslyDisableSandbox: true)` call
-   running a poll script that sleeps ~15 min then exits 0. Record three things:
-   (a) does the harness deliver a completion notification that resumes the
-   session; (b) does the sandbox override actually apply inside the
-   backgrounded call (probe it with a sandbox-off-only read, e.g.
-   `claude agents --json --all | jq length` — a sandboxed call returns `[]`
-   vacuously); (c) **while awaiting**, what `state` does the daemon report for
-   the awaiting session. (c) is load-bearing:
-   `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh` parks
-   a session whose state is `blocked` once transcript idle reaches
-   `DISPATCH_FROZEN_SESSION_GRACE_S` (default 900, line 373) — a 40-minute
-   await that presents as `blocked` would be parked out from under itself. A
-   busy foreground Bash call is not `blocked`, so the foreground shape is known
-   safe; the background shape is not.
-   Write the verdict as a single line `DETACHED_AWAIT_SHAPE:
-   background-notify` (all three of (a), (b) pass and (c) is not `blocked`) or
-   `DETACHED_AWAIT_SHAPE: foreground-poll` (anything else). Unit 3 branches on
-   exactly this string.
-4. **Optional, record only if trivially answerable.** Whether
-   `claude -p --max-budget-usd <n>` has any effect on a Max-plan subscription
-   run (the flag documents itself as capping API-call dollars). Do not build on
-   it; it is a note for a future cost guard.
+### Unit 3 — `review-fix` Step 1b, as shipped: Variant B only
 
-Out of scope for this unit: any edit to `dispatch-code-review`,
-`review-fix/SKILL.md`, or the test suite.
+The carrier's own two-variant fork (`background-notify` vs. `foreground-poll`,
+gated on a harness-notification probe) resolved to **Variant B
+(`foreground-poll`) without running that probe** — recorded as the second
+deliberate deviation (`code-review-invocation.md` §9.4). The carrier's own
+text already called Variant B known-safe: "A busy foreground Bash call is not
+`blocked`, so the foreground shape is known safe." A shape already known safe
+by the plan's own reasoning does not need a probe to select it.
 
-**Recommended model** — opus.
+Shipped: a bounded re-invocation loop, at most **8 attempts**, each one Bash
+call with `dangerouslyDisableSandbox: true, timeout: 600000` running the exact
+same command with identical arguments. Exit 5 → loop again. Exit 0 → leave the
+loop. Exit 6 → **not** retryable, hard-stop immediately (a lock conflict means
+nothing was launched, and looping on it burns attempts waiting on a run this
+session does not own). Anything else → the existing `case $CR_RC` hard-stops
+the phase. 8 × 540 s ≈ 72 min sits inside the script's own 5400 s (90 min)
+deadline, so the caller's cap trips first. Exhausting the cap is a **failure,
+not a pass** — it takes the `4` branch, named "attempt cap exhausted."
 
----
+**Variant A (`background-notify`) is an explicit open follow-up**, gated on a
+later probe of harness completion-notification behavior. No `ScheduleWakeup`
+fallback may be added alongside it in the meantime: `strategy-token-economy`
+clarification 11 records that a self-scheduled fallback timer for
+harness-tracked work fires redundantly after the auto-notification has
+already resumed and finished the work, burning a no-progress round.
 
-## Unit 2 — `dispatch-code-review`: detached launch, bounded await, resume-collect
+The `*)` catch-all and its rationale are unchanged and load-bearing — without
+it a stale worktree (127), a lost `+x` bit or sandbox denial (126), or a
+signal (128+n) all leave `CR_OUT` empty and would otherwise pass the
+Workflow's contract check on a review that never ran.
 
-**Scope.** One file:
-`.claude/skills/dispatch-propagate/scripts/dispatch-code-review` (426 lines
-today). Everything downstream of the invocation is effort-agnostic and must
-survive **unchanged in substance**: Step 5 verify-at-source (308-355), Step 6
-mechanical before/after `git diff` yield derivation (357-396), Step 7 summary
-emission (398-426). Only *how the run is started and awaited* changes.
+### Node lock — carried by the sibling node, not implemented here
 
-**Dependencies:** Unit 1 (its `DETACHED_LAUNCH_MECHANISM:` and
-`MAX_COMPLETION_S:` lines are inputs).
+Condition 9 (`strategy-token-economy`, 2026-08-13) requires the node stay
+locked for the detached run's own lifetime, independently of whether the
+launching session survives — the carrier node itself was parked office_hours
+for exactly that failure mode (a frozen-session park evaporating the claim
+while a `--fix` run kept writing). This node's Unit 2 launches the child
+under the lock (`setsid flock -n <sidecar> <child>`); the lock's design — why
+a kernel `flock`, the sidecar path convention, the `unknown`/`live` fold, and
+the "one insertion point not four" finding — is recorded on
+`tactic-code-review-detached-node-lock`, which this effort raise must not
+ship without: a survivor with no lock is the corruption case.
 
-### The design: there is no mode
+## Defect found and fixed during implementation
 
-Every run is detached. Every invocation launches-or-resumes the one detached
-run for this out-dir and then awaits it for at most `--await-seconds`. If the
-run finishes inside that window the script behaves **byte-identically to
-today**: exit 0, `status=ok` summary on stdout. If it does not, the script
-exits **5** and the caller invokes it again. `low` (14-30 s measured) finishes
-on the first call and never sees exit 5; `max` takes several rounds.
+The test unit surfaced a real race: two invocations awaiting the *same*
+in-flight run could have the loser see `.rc` already collected-and-deleted by
+the winner, plus a dead pid, and report exit 1 — "recorded no exit code" — on
+a run that had actually **succeeded**. Under the Step 1b loop that hard-stops
+the whole review phase and discards a completed, expensive `high`-effort
+review as a crash.
 
-This is what makes the coupling structural rather than a convention: raising
-`--effort` cannot re-create the zero-byte total loss, because no code path runs
-the nested CLI in the foreground of a bounded call.
+Fixed with a bounded retry poll (60 attempts × 0.5 s, no sleep after the
+final attempt, fail closed on exhaustion — the same shape as
+`lib-claude-agents.sh`'s `verify_agent_registered_under_state`) that accepts
+either observation as proof the run finished: `.rc` reappearing, or a CURRENT
+authenticated completed-summary cache entry (the other awaiter's own Step 7
+replay target). Only exhausting the retry with neither signal concludes a
+real crash and exits 1. This is the same empty-read discipline
+`lib-claude-agents.sh` already applies to every liveness probe: an ambiguous
+observation folds toward "still running," never toward "finished" or
+"failed." Reproduced 15/15 against the pre-fix path; 98/100 clean after (the
+2 outliers were external SIGTERMs to the awaiting script, not this path).
 
-### Changes, in file order
+## Verification (as landed)
 
-1. **Header (lines 5-21, 71-90, 92-99).** Rewrite the usage block to document
-   `--await-seconds` / `--deadline-seconds`. Replace the *"Effort level — why
-   the default is `low`"* block (71-90) with *"Effort level — why the default
-   is `max`, and why that requires a detached run"*: cite the 2026-08-09
-   author ruling, §1.2's 2363 s / 0 bytes / $371.54, and Unit 1's §9 measured
-   completion. Extend the exit-code table (92-99) with:
-   `5  the detached run is still in flight — call again with the same arguments`.
-2. **`EFFORT="low"` → `EFFORT="max"`** (line 106).
-3. **New arguments** in the `while`/`case` parser (109-132):
-   - `--await-seconds N`, default `${DISPATCH_CODE_REVIEW_AWAIT_S:-540}` — the
-     per-call window. 540 s sits comfortably inside the caller's 600 000 ms
-     Bash-tool cap.
-   - `--deadline-seconds N`, default `${DISPATCH_CODE_REVIEW_DEADLINE_S:-5400}`
-     — total wall clock for the detached run before it is killed. If Unit 1's
-     `MAX_COMPLETION_S` exceeds 2700, ship `2 × MAX_COMPLETION_S` rounded up to
-     the next 900 instead of 5400, and say so in the header comment.
-   - Both integer-guarded, falling back to the default on a malformed value
-     (the house convention — `lib-frozen-session-park.sh:373-374`).
-   - **Retire `DISPATCH_CODE_REVIEW_TIMEOUT`.** Its only two references are
-     line 302/333 of this script and `test-dispatch-code-review.sh:252`; the
-     reference doc mentions it only historically. Do not keep it as a silent
-     alias — a stale value would set a meaningless budget. If it is set,
-     `exit 2` with a message naming its replacements
-     (`.claude/rules/code-style.md`: clear errors over defensive fallbacks).
-4. **Run-state files, all in `CACHE_DIR`** — never in `--out-dir`. The header's
-   existing security argument (23-52) applies verbatim and must be extended to
-   cover them: `--out-dir` is `tmp/code-review-$N` inside the reviewed
-   worktree, writable by the very PR under review, so a planted `rc=0` marker
-   plus a planted output file would let a review that never ran report
-   `status=ok`. `CACHE_DIR` resolution (209-222) is unchanged, including its
-   refusal (219-222) to sit inside the reviewed worktree. Keyed by the existing
-   `CACHE_KEY` (226-234):
-   - `$CACHE_KEY.run` — the in-flight record: `run_version`, the full identity
-     block (`out_dir`, `target`, `target_base_sha`, `target_head_sha`,
-     `head_sha`, `effort`, `comment`), `pid`, `pid_starttime` (field 22 of
-     `/proc/<pid>/stat`, so a recycled pid cannot be mistaken for the run),
-     `launched_at` (epoch), `before_sha`, and the paths below.
-   - `$CACHE_KEY.output` — the detached child's stdout+stderr. Copied to
-     `$OUT_DIR/output.txt` at collect time (including on the failure paths, so
-     the operator still gets the artifact path the caller's error messages
-     name).
-   - `$CACHE_KEY.rc` — the exit-code marker, written **atomically** (write
-     `.rc.tmp`, then `mv`). Its existence is the completion signal; nothing
-     polls `claude agents --json`, so the vacuous-`[]` sandbox hazard
-     (`lib-claude-agents.sh:1-40`) never applies here.
-   - `$CACHE_KEY.untracked-before` — the untracked snapshot currently written
-     to `$OUT_DIR/untracked-before.txt` at 282-292; move it here because it is
-     now read back by a *later* invocation.
-   - `$CACHE_KEY.lock` — an `mkdir`-based mutex (mkdir is atomic) held **only**
-     across read-record → decide → launch → write-record, released by an `EXIT`
-     trap. Never held across the await loop. Without it two concurrent
-     invocations for one out-dir would each launch a $372 run.
-   - Bump `CACHE_VERSION` 2 → 3 (line 192), per the script's own header rule,
-     since the summary schema grows.
-5. **Control flow replacing Steps 2-4 (236-306):**
-   - **(a)** Completed-summary replay — `cache_is_current` (245-262) and the
-     replay at 266-270 are unchanged. `--await-seconds` / `--deadline-seconds`
-     are operational, **not** identity: do not add them to the identity block.
-   - **(b)** `$CACHE_KEY.run` exists and its identity block matches this
-     invocation → this is a resume; go to (d).
-   - **(c)** `$CACHE_KEY.run` exists and the identity **mismatches** (normally
-     `head_sha` advanced because `qa-fix`/`fix-checks` pushed while the review
-     was in flight) → the in-flight run is reviewing a superseded diff.
-     `kill_tree` it (`lib.sh:2108-2129` — SIGTERM pass, 2 s grace, SIGKILL
-     survivors; sourced the way the other scripts source `lib.sh`), delete the
-     record and its artifacts, emit **one** stderr line naming the old and new
-     `head_sha` so the discarded spend is attributable, then fall through to
-     (d')'s fresh launch.
-   - **(d')** No usable record → capture the before-image exactly as Step 3
-     does today (`git stash create`, 272-281, with the `HEAD` fallback) and the
-     untracked snapshot (282-292, now written to `CACHE_DIR`), then **launch
-     detached** using Unit 1's `DETACHED_LAUNCH_MECHANISM`. The prompt is built
-     unchanged (295-299): `/code-review $EFFORT --fix [--comment] $TARGET`.
-     The child is a wrapper that (i) writes its own pid to the record's pidfile
-     as its first action, (ii) runs
-     `"$CLAUDE_CMD" -p "$PROMPT" --permission-mode acceptEdits </dev/null
-     >"$CACHE_OUTPUT" 2>&1`, (iii) writes the exit code atomically to
-     `$CACHE_KEY.rc`. Then **verify it came up**: bounded-retry poll for the
-     pidfile (the `verify_agent_registered_under` idiom at
-     `lib-claude-agents.sh:1568-1602` — fixed attempt cap, short fixed
-     interval, no sleep after the final attempt, fail closed on exhaustion),
-     then assert `kill -0 $pid`. Launch-verification failure is `exit 1` with a
-     clear message — never a silent "assume it started", which is the
-     `dispatch-spawn-job:324-336` discipline. Write the record, release the
-     lock, fall into (d).
-   - **(d)** Await loop. `elapsed = now - launched_at`;
-     `window = min(await_seconds, deadline_seconds - elapsed)`. Poll every
-     `${DISPATCH_CODE_REVIEW_POLL_INTERVAL_S:-5}` seconds:
-     - `.rc` appears → read it into `rc`, copy `$CACHE_KEY.output` to
-       `$OUTPUT_FILE` and `$CACHE_KEY.untracked-before` to
-       `$UNTRACKED_BEFORE_FILE`, delete the run record, and continue into the
-       **unchanged** Steps 5-7 (308-426) with `rc` and `$OUTPUT_FILE` exactly
-       as they are consumed today.
-     - Window expires while `elapsed < deadline_seconds` → print an in-flight
-       block whose **first line is `status=running`** (then `run_id=`, `pid=`,
-       `elapsed_s=`, `deadline_s=`, `target=`, `effort=`) and `exit 5`. The
-       run record stays; nothing in `--out-dir` is finalized.
-     - `elapsed >= deadline_seconds` → `kill_tree` the child, copy whatever
-       output exists (expect 0 bytes — say so in the message), delete the
-       record, `exit 4` naming the deadline and the elapsed time.
-     - Process is not alive **and** no `.rc` file → re-check for `.rc` once
-       after a short sleep (closing the race between child exit and marker
-       write); if still absent the child died without recording an exit code →
-       delete the record, `exit 1` with a message naming the pid and the output
-       path.
-     - Liveness is `kill -0 $pid` **plus** a `/proc/<pid>/stat` starttime match.
-       If liveness is *unknowable* (unreadable `/proc`), treat the run as
-       **alive** — unknown never means "finished" or "failed"; the deadline is
-       the backstop. This mirrors the empty-read discipline documented at
-       `lib-claude-agents.sh:1-40`.
-6. **Summary (398-426).** Field names are a contract other code parses with
-   `sed -n 's/^key=//p'` — extend, never rename. Add `wall_clock_s=` (from
-   `launched_at`). Everything else stays, including `effort=` (which now
-   carries `max`) and the `cp "$SUMMARY_FILE" "$CACHE_FILE"` at 423.
-
-Explicitly **out of scope for this unit**: the `--target` range validation
-(145-157), the reject-pattern list (326-330), the before/after diff derivation
-(357-396), the cache-dir security checks (219-222), and every caller.
-
-**Recommended model** — opus.
-
----
-
-## Unit 3 — `review-fix` Step 1b: await across calls, hard-stop preserved
-
-**Scope.** One file: `.claude/skills/review-fix/SKILL.md`, section
-`### 1b. Run the built-in /code-review as an exclusive pre-stage`
-(lines 329-491). No other section of the file changes; Step 1's `MERGE_BASE`
-binding is reused, not recomputed.
-
-**Dependencies:** Unit 1 (for `DETACHED_AWAIT_SHAPE`), Unit 2 (for exit 5).
-
-1. **Replace the effort paragraph (354-363).** It currently instructs *"Do
-   **not** pass `--effort` … leave it at the script's own default (`low`)"* and
-   cites the 39-minute/$372/zero-byte measurement as the reason. That reasoning
-   is now inverted, not deleted: keep the measurement, and state that the
-   script's default is `max`, that `max` is reachable only because the
-   invocation is detached and awaited across calls, and that the caller still
-   must not pass `--effort` — the script owns it. Cite the 2026-08-09 author
-   ruling and `references/code-review-invocation.md` §9.
-2. **Replace the invocation block (365-373)** with the await shape Unit 1's
-   `DETACHED_AWAIT_SHAPE:` line names. Both variants keep
-   `dangerouslyDisableSandbox: true` and the same
-   `stdout`-to-`CR_OUT` / `stderr`-to-`tmp/code-review-$N.err` split.
-
-   **Variant A — `background-notify`** (preferred; this is
-   `strategy-token-economy` clarification 11's shape — the harness tracks the
-   background Bash and re-invokes the session on completion, so the wait costs
-   zero polling turns). One Bash call with
-   `run_in_background: true, dangerouslyDisableSandbox: true` running the
-   script with `--await-seconds` equal to the deadline, wrapped so the exit
-   code survives the notification:
-
-   ```bash
-   .claude/skills/dispatch-propagate/scripts/dispatch-code-review \
-     --target "$MERGE_BASE..HEAD" --out-dir "tmp/code-review-$N" \
-     --await-seconds 5400 \
-     >"tmp/code-review-$N.out" 2>"tmp/code-review-$N.err"
-   echo "CR_RC=$?" >"tmp/code-review-$N.rc"
-   ```
-
-   On the completion notification, read `CR_RC` from
-   `tmp/code-review-$N.rc` and `CR_OUT` from `tmp/code-review-$N.out`, then run
-   the same `case` block below. Do **not** self-schedule a `ScheduleWakeup`
-   fallback alongside it — clarification 11 records that a fallback timer for
-   harness-tracked work fires redundantly after the auto-notification already
-   finished the work, burning a no-progress round.
-
-   **Variant B — `foreground-poll`.** A bounded re-invocation loop, matching
-   the house bounded-retry idiom (`npm-ci-with-retry.sh:16-31`,
-   `verify_agent_registered_under`): at most **8** attempts, each one Bash call
-   with `dangerouslyDisableSandbox: true, timeout: 600000` running the exact
-   command that is in the file today (unchanged — no new flags needed, the
-   540 s default await fits the cap). Exit 5 → attempt again with identical
-   arguments. Exit 0 → leave the loop. Anything else → the `case` below. Eight
-   × 540 s ≈ 72 min ceiling; exhausting it is a **failure**, not a pass — treat
-   it as the `4` branch (name it "deadline/attempt cap exhausted") and hard-stop
-   the phase.
-
-3. **Extend the `case $CR_RC` block (380-391)** with a `5)` branch — loop
-   (Variant B) or, if a notification path somehow returns 5 (Variant A), treat
-   it as an error naming the mismatch. **Do not touch the `*)` catch-all**: the
-   rationale at 393-403 is load-bearing (127 from a stale worktree, 126 from a
-   lost `+x` or a sandbox denial, 128+n from a signal, and every one of them
-   leaves `CR_OUT` empty — without the catch-all the Workflow's contract check
-   passes on a review that never ran, reinstating the silent-substitution
-   defect this stage exists to eliminate). Keep the ordering rule explicit: the
-   `status=ok` gate at 465-479 runs **only after** the loop leaves with rc 0 —
-   an in-flight `status=running` block must never reach it.
-4. **State the exclusivity requirement for the await window.** Step 1b is
-   serialized before the Workflow fan-out precisely because `--fix` writes the
-   working tree (335-339). With a detached run that property now depends on the
-   *caller*: between the launching call and the collecting call the session must
-   do nothing else — no other reads of the tree, no other steps, no other tool
-   calls that touch the worktree. Say this in the file, in those words.
-5. **Update the redaction rule's item 2 (line 431)** — the effort level it tells
-   the park reason to record is no longer `low`. Add the new failure modes to
-   item 1: `5` never reaches a park (it is an intermediate state); a cap/
-   deadline exhaustion parks as a timeout and must record elapsed wall clock
-   and the deadline. Everything else about the redaction rule (417-446) stands
-   unchanged — the captured text is a review *of the pending diff* and is
-   pushed to a public repo, so it is still paths-not-payload.
-6. **Do not change** the parse block (448-456), the `status=ok` gate (465-479),
-   or the "do not recompute surface/changed_files" note (486-491).
-
-**Recommended model** — opus.
-
----
-
-## Unit 4 — Tests for the detached lifecycle
-
-**Scope.** One file:
-`.claude/skills/dispatch-propagate/scripts/test-dispatch-code-review.sh` (433
-lines). Extend the existing harness — do not build a second one. `cr_setup`
-(lines 14-31) already makes a throwaway git repo and points
-`DISPATCH_CODE_REVIEW_CACHE_DIR` at the run's tmp sandbox;
-`write_fake_code_review_claude` (33-64) is a stub CLI driven by
-`$STUB_DIR/cr-fake-{output,exit,sleep,edit-file,calls.log}`; `cr_reset_stubs`
-(66-72) clears them.
-
-**Dependencies:** Unit 2.
-
-Harness extensions:
-- Make the stub log its argv (append `"$@"` to a new `cr-fake-argv.log`), so
-  the shipped effort can be asserted. Add the new file to `cr_reset_stubs`.
-- Add a stub mode that dies without exiting normally (`kill -9 $$`), for the
-  no-marker crash case.
-
-Cases to add (each asserts an exit code plus at least one on-disk fact):
-1. **Fast completion is unchanged.** Stub sleeps 0 → exit 0, `status=ok`, no
-   `*.run` record left in the cache dir. Existing cases 1-8, 10 and 11 must
-   still pass verbatim — that is the byte-identical-at-low regression guard.
-2. **Default effort is `max`.** Assert `cr-fake-argv.log` contains
-   `/code-review max --fix --comment <range>`.
-3. **Await expiry → exit 5, then resume → exit 0, with ONE invocation.** Stub
-   sleeps 6; call with `--await-seconds 1 --deadline-seconds 60` → exit 5,
-   stdout's first line is `status=running`, the `.run` record exists. Call
-   again with `--await-seconds 30` → exit 0, `status=ok`, and
-   `cr-fake-calls.log` still has **exactly one** line. This is the core test:
-   it proves the second call resumed the same run rather than paying for a
-   second one.
-4. **Deadline expiry → exit 4.** Stub sleeps 30, `--await-seconds 1
-   --deadline-seconds 2`; the second call after the deadline exits 4, the child
-   pid is dead, the record is gone. This replaces today's case 9 (239-255),
-   whose `DISPATCH_CODE_REVIEW_TIMEOUT=1` no longer exists — rewrite it, and
-   add a case asserting that setting `DISPATCH_CODE_REVIEW_TIMEOUT` now exits 2
-   with a message naming the replacement variables.
-5. **Identity change relaunches.** Kick a long run, then create a new commit in
-   the throwaway repo (HEAD moves), then re-invoke → the old pid is dead and
-   `cr-fake-calls.log` has exactly two lines.
-6. **Crash with no marker → exit 1**, not a hang: the self-killing stub, then a
-   collect call.
-7. **Concurrent double-invocation launches once.** Two invocations in parallel
-   against the same out-dir with a 5 s stub → `cr-fake-calls.log` has exactly
-   one line.
-8. **The in-flight record does not satisfy the completed-summary replay.** With
-   only a `.run` present, `cache_is_current` must not fire.
-9. **Cache-dir placement.** Assert `.run`, `.rc` and `.output` are created
-   under `DISPATCH_CODE_REVIEW_CACHE_DIR` and that **no** run-state file lands
-   under `--out-dir` (the security property from Unit 2 step 4).
-
-CI vector: `run-unit-tests.sh:88,187-190` sets `RUN_PR_SCRIPTS=true` when a
-changed path matches `.claude/skills/dispatch-propagate/scripts/*` and then
-runs every `test-*.sh` there, so this suite runs on this PR without any
-workflow edit. Keep the suite free of any dependency on a real `claude` binary
-and keep total runtime bounded (the sleeps above are seconds, not minutes).
-
-**Recommended model** — sonnet.
-
----
-
-## Reuse
-
-- `.claude/skills/dispatch-propagate/scripts/dispatch-code-review:236-270` —
-  the existing authenticated resume-by-replay cache (`cache_is_current`). The
-  new in-flight state is a **sibling** file with its own identity check, not a
-  replacement; the completed-run replay path is untouched.
-- `.../dispatch-code-review:272-292, 308-426` — before-image capture
-  (`git stash create`), verify-at-source (exit status **plus** reject-pattern
-  grep, because an unknown command exits 0), mechanical before/after
-  `git diff` yield derivation, and the `key=value` summary. All preserved.
-- `.claude/skills/dispatch-propagate/scripts/lib.sh:2108-2129` — `kill_tree`
-  (SIGTERM pass, 2 s grace, SIGKILL survivors). Use it for both the
-  deadline kill and the superseded-identity kill; `timeout`/`kill` alone leaves
-  the nested CLI's subagent grandchildren alive.
-- `.claude/skills/dispatch-propagate/scripts/lib.sh:1731-1803` — the existing
-  bounded-background-subprocess + watchdog + `kill_tree`-on-stall shape. Reuse
-  as the supervision-loop *shape*; it does not address `claude -p`'s buffering.
-- `.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:1568-1602`
-  (`verify_agent_registered_under`) — the house bounded-retry poll idiom:
-  fixed attempt cap, short fixed interval, **no sleep after the final
-  attempt**, fail closed on exhaustion. Match it for the pidfile
-  came-up check and the rc-marker poll.
-- `.claude/skills/dispatch-propagate/scripts/lib-claude-agents.sh:1-40` — the
-  empty-read/UNKNOWN discipline: an unreadable liveness probe folds to "still
-  running", never to "finished".
-- `.claude/skills/dispatch-propagate/scripts/dispatch-spawn-job:280-291,
-  324-336` — the house detached-launch-then-verify-it-came-up discipline
-  (kick, then prove it started rather than trusting the kick's exit code).
-  Borrow the discipline, not the mechanism: `--bg` starts a *registered
-  session* whose output lives in a transcript, which would force this script to
-  parse JSONL instead of reading a captured text file, and would leave a
-  session-registry footprint. A backgrounded `claude -p` with a pidfile and an
-  exit-code marker keeps `output.txt` and the whole Step 5-7 contract intact.
-- `.claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh:16-31` —
-  bounded-attempts-then-fail-closed; the model for Variant B's caller loop.
-- `.claude/skills/dispatch-propagate/scripts/wait-for-url.sh:5-16` — the
-  simplest house bounded poll-until-ready loop shape.
-- `.claude/skills/dispatch-propagate/scripts/test-dispatch-code-review.sh:14-72`
-  — `cr_setup`, `write_fake_code_review_claude`, `cr_reset_stubs`; extend, do
-  not replace.
-- `.claude/skills/review-fix/references/code-review-invocation.md:50-100,
-  244-258, 348-368, 372-416, 420-437` — the measured record. Cite it; do not
-  re-derive its numbers. §6 (372-416) is why the nested run is safe with
-  respect to session detection: `worktree_has_live_session` matches session
-  *name* against the worktree basename and never sees the nested run, and
-  `claude_sessions_under` seeing it only makes the sweep more conservative
-  while the worktree is already occupied by the review worker.
-- `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh:45,
-  373` — the parked-when-`blocked`-and-idle-≥900 s rule that Unit 1 probe 3
-  checks the awaiting session against.
-
----
-
-## Verification
-
-Unit 4's suite is the primary gate. It requires no real `claude` binary.
-
-```verify
-bash -n .claude/skills/dispatch-propagate/scripts/dispatch-code-review
+```
+bash -n dispatch-code-review                    OK
+bash -n lib-claude-agents.sh                    OK
+test-dispatch-code-review.sh                    115/115 passed
+test-lib-claude-agents.sh                       266/266 passed
+run-lint.sh                                     all checks passed
 ```
 
-```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-code-review.sh
-```
+Both suites run in CI via `run-unit-tests.sh`'s `RUN_PR_SCRIPTS` path (any
+changed `.claude/skills/dispatch-propagate/scripts/*` path), no workflow edit
+needed. Cross-file contract check: every exit code the script can return
+(0/1/2/3/4/5/6) has a branch in `review-fix/SKILL.md`'s `case $CR_RC`; the
+catch-all is intact; no parsed summary field was renamed;
+`DISPATCH_CODE_REVIEW_TIMEOUT` appears nowhere outside the script's own
+rejection message and historical prose.
 
-```verify
-.claude/skills/dispatch-propagate/scripts/run-lint.sh
-```
+**Still owed — manual verification on the first real dispatch review pass**
+(cannot be simulated): the launching call returns quickly with exit 5 rather
+than blocking; await rounds resume the same run (the `code-review` subagent
+count does not multiply); the summary carries `effort=high` and `model=opus`
+with non-empty `findings_path`/`patch_path`; the lock file exists and
+`flock -n` is refused mid-run while the router does not spawn a second
+worker; and, post-merge, a `/dispatch-token-audit 7d` recording realized cost
+and throughput per clarification 46 — asserting no threshold. This is the
+missing-lens gap tracked as `tactic-audit-review-effort-yield-lens`
+(clarification 46): findings at `high` against the `low` baseline is not yet
+computed by any sensor.
 
-**Cross-file contract check (manual, do it before opening the PR).** The script
-and its caller must agree on the exit-code table in lockstep. Confirm that
-every code the script can return (0/1/2/3/4/**5**) has a branch in
-`review-fix/SKILL.md`'s `case $CR_RC` block, that the `*)` catch-all is still
-present and still carries its rationale paragraph, and that no summary field
-name the SKILL parses with `sed -n 's/^key=//p'` was renamed. Confirm the
-retired `DISPATCH_CODE_REVIEW_TIMEOUT` appears nowhere outside the historical
-prose in `references/code-review-invocation.md`.
+## Rollback
 
-**End-to-end on a real PR (manual, the first real dispatch review pass).** This
-cannot be simulated — it needs the live built-in. On the first review-phase
-entry after merge, confirm: the launching call returns quickly (exit 5, not a
-10-minute block); the await rounds resume the same run (the `code-review`
-subagent count in the transcript does not multiply); the run completes; the
-summary carries `effort=max` with a non-empty `findings_path` and
-`patch_path`; `--fix` edits are present in the working tree and are the ones
-Step 6's before/after diff derived (never the review's own narration); and the
-PR comment posts once. If the run hits the deadline, the failure must be an
-exit 4 that hard-stops the phase with the redacted park reason — never a
-degraded substitute review.
+One line: `dispatch-code-review`'s `EFFORT="high"` back to `EFFORT="low"`.
+The harness stays correct at `low`, so rollback is an effort change, never a
+structural one. Per condition 3, an effort reversion still requires explicit
+author approval — an auto-reverting completion-rate gate was put to the
+author and declined (clarification 46) for exactly that reason.
 
-**Cost and throughput observation (post-merge / main-qa; the trade the sitting
-declined to pre-judge).** After at least three real passes, run
-`/dispatch-token-audit 7d` and record: the `code-review` phase line's total and
-per-pass price proxy against the measured `low` baseline of $1.40-$1.77 per
-run; weekly allowance utilization; and the count of open claude-eligible
-tactics (created vs closed). The strategy's success signal is utilization near
-100% **with a non-increasing backlog** — full utilization with a growing
-backlog fails it. Two second-order effects to watch specifically, because both
-are throughput costs this change buys quality with: each review pass now
-occupies a worker exclusively for the whole run (~40+ min instead of ~30 s),
-which reduces effective fleet concurrency under the worker ceiling; and every
-review-phase **re-entry** after a `qa-fix`/`fix-checks` push discards the
-in-flight run and pays for a full fresh `max` review.
+## Node id
 
-**Rollback knob (record it in the script header so a future operator finds
-it).** The whole change reverts to the previous cost point by setting
-`EFFORT="low"` back at `dispatch-code-review:106` — one line. The harness stays
-correct at `low` (the run simply completes inside the first await window), so
-rollback is an effort change, never a structural one. If the observation above
-shows closure velocity dropping, take that knob and bring the measurement back
-to office-hours rather than tuning effort autonomously: `strategy-token-economy`
-condition 3 requires explicit author approval for routing changes, and the
-`low`→`max` direction was itself an author ruling.
+This node's id, `tactic-review-effort-max-detached-resume-poll`, deliberately
+retains `max` as a historical handle even though the shipped level is `high`.
+Author ruling, this session (2026-08-13, Unit F of the graph-correction
+round): no rename, no prose repointing, no prune — a later reader who notices
+the id says `max` while the statement and this body say `high` should read
+that as the id's origin, not as drift.

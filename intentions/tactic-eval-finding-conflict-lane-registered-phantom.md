@@ -1,10 +1,14 @@
 ---
 id: tactic-eval-finding-conflict-lane-registered-phantom
 kind: tactic
-statement: The conflict-lane post-launch check treats claude-daemon registration
-  as sufficient evidence a worker started, but a session can register and then
-  die before writing any file, leaving dispatch-ladder-await to burn its full
-  timeout before an unfollowable "stalled" halt.
+statement: "FALSIFIED (2026-08-13, see body): this entry claimed the
+  conflict-lane session registered with the daemon and then died before writing
+  any file. It did not — it left an 850KB transcript and SUCCEEDED, resolving
+  five conflicts and pushing 855a060e. The zero-trace evidence was an artifact
+  of the eval passing UTC bounds to find -newermt, which parses them as local
+  time. Superseded by tactic-ladder-await-phase-only-completion-test (the real
+  defect behind the halt) and tactic-eval-finding-utc-bounds-local-newermt (the
+  search bug)."
 owner: ai
 status: raw
 parent: null
@@ -37,18 +41,14 @@ attributes:
       window: single-run
       sensor: events.jsonl
       measured: 2026-08-13
-    - metric: conflict-lane-post-launch-filesystem-trace-count
-      value: 0
-      unit: files
-      window: single-run
-      sensor: rsi
-      measured: 2026-08-13
     - metric: recurrence_count
       value: 1
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-13
+  falsified: true
+  falsified_on: 2026-08-13
 ---
 ## Finding: conflict-lane launch verifies "registered" yet produces zero filesystem trace
 
@@ -101,3 +101,69 @@ cheaper confirmation beyond registry presence — e.g. polling for the
 short window (tens of seconds) after registration, before committing to the
 full multi-minute await budget. This is a recommendation for the finding's
 author to weigh, not a rule this eval job may apply.
+
+---
+
+## FALSIFIED (2026-08-13)
+
+Everything above this line is wrong in its central claim, and is kept only as
+the audit trail of a finding that was raised and disproved. Written by the
+attended `/dispatch-ladder` thread that conducted the run, after reading the
+transcript the finding above reports as nonexistent.
+
+### The session was not a phantom, and it did not fail
+
+It left, at minimum:
+
+- `~/.claude/projects/-home-n8-natb1-commons-systems/675bbbc1-85dd-4e23-bb95-35543051163b.jsonl`
+  — an 850 KB transcript whose first user message is stamped
+  `2026-08-13T03:46:48.315Z` (the launch instant itself) and whose last write is
+  `03:59:00Z`;
+- the matching session directory, a `~/.claude/session-env/675bbbc1-…` entry,
+  and two `~/.claude/security/…675bbbc1…` files.
+
+It also **succeeded**: it resolved five conflicts against `c3c229f0`, `git rm`'d
+three files `origin/main` had already retired, pushed merge commit `855a060e`,
+and flipped PR #3075 from `CONFLICTING` to `MERGEABLE`/`CLEAN` with all 23
+checks passing. `execution.conflict` remained `null` because Lane 3 never writes
+that counter — not because the lane died.
+
+### Why the search saw nothing
+
+`find -newermt` parses a bare timestamp in the **local** zone. The bounds were
+taken from `events.jsonl`, which stamps UTC, and passed through unconverted, so
+on this host (EDT, `-0400`) the window sat about four hours in the future and
+could not match any file that existed. Reproduced:
+
+```
+$ find ~/.claude/projects -name '675bbbc1*.jsonl' -newermt '2026-08-13 03:46:48'
+        (no output — the eval's window)
+$ find ~/.claude/projects -name '675bbbc1*.jsonl' -newermt '2026-08-12 23:46:48'
+/home/n8/.claude/projects/.../675bbbc1-….jsonl        (the same instant, local)
+```
+
+Filed as [[tactic-eval-finding-utc-bounds-local-newermt]].
+
+### What the halt actually was
+
+The real defect is in the consumer, not the launcher:
+[[tactic-ladder-await-phase-only-completion-test]]. `dispatch-ladder-await`
+decides completion from `origin/main` graph state alone, while the conflict lane
+completes via a branch push and job-dir markers — so a *successful* lane can
+only ever read as `stalled`. The same run then reproduced it a second time with
+a `/qa-fix` fixing pass, confirming it is structural rather than specific to
+conflicts.
+
+### What survives
+
+Two observations from the original hold and are carried into the superseding
+nodes:
+
+- **No `*.dispatch-stamp.json` sidecar** was written for this session, confirmed
+  with correct local-time bounds. `aggregate-usage.sh --node` scopes on that
+  sidecar, so the conflict lane's usage is genuinely unmeasurable — an empty
+  selection there is a missing measurement, not a zero.
+- **734s elapsed from launch to halt** is a real number. Its reading is not: it
+  is the await observing a live, working session, not a timeout burned on a
+  phantom. The original also measures it against `TIMEOUT_S=540`/`POLL_S=15`,
+  while this run's ledger records `timeout_s=1800 poll_s=60`.

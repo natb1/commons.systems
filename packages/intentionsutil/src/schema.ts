@@ -67,6 +67,59 @@ export const PHASES: readonly Phase[] = [
 ];
 
 /**
+ * The wider dispatch phase vocabulary: every `PHASES` member plus the two
+ * orthogonal interrupt names a dispatch driver prints as a phase — `fix` (the
+ * CI-fix interrupt, carried in `execution.fix`) and `conflict` (the
+ * merge-conflict interrupt, carried in `execution.conflict`). Neither is a
+ * `Phase` member by deliberate design (see `Phase` above), but both name a real
+ * pass a lane runs, and `execution.attempts` is ALREADY keyed by exactly this
+ * wider set — see `scripts/apply-conflict-state.ts`'s `CONFLICT_ATTEMPTS_KEY`.
+ *
+ * `LanePass.phase` is validated against this rather than against `PHASES`
+ * because `fix` and `conflict` are REAL awaited rungs, not merely printable
+ * names: `graph-select-target`'s `sensor_gate` emits both as the selected phase,
+ * `dispatch-ladder-advance` passes that through, and `dispatch-ladder-await` is
+ * then invoked with it as the from-phase.
+ *
+ * THE RULE FOR A WRITER: stamp the rung the ladder awaited at. The reader's
+ * probe is `.execution.lane_pass.phase == "$FROM_PHASE"`, so nothing else can
+ * match. That is NOT always the node's persisted `phase`, and the two entries
+ * into `dispatch-conflict` are exactly where they diverge:
+ *
+ * - provision exit 11 (`execution.conflict` null) — advance reports the node's
+ *   own ladder phase as the from-phase, so the node's `phase` IS the rung.
+ * - the router's conflict interrupt (`execution.conflict` non-null) — the
+ *   selector emits `conflict`, so the rung is `conflict`, NOT the node's phase.
+ *
+ * `dispatch-conflict` SKILL 7b stamps the node's persisted `phase` on both, so
+ * it is right on the first and wrong on the second; qa-fix's auto-fix lane
+ * stamps the literal `qa`, which is right because its front door already gated
+ * on `phase == qa`. The `dispatch-conflict` mismatch is currently UNREACHABLE
+ * rather than fixed: on any rung that is not a `Phase` member the reader's
+ * phase probe runs first and asks `.phase != "conflict"`, which is true for
+ * every node, so it returns `advanced` before the lane-pass probe is consulted.
+ * That vacuous-`advanced` defect is filed separately; when it is fixed, this
+ * writer must start stamping the rung. Do not "simplify" this set down to
+ * `PHASES` in the meantime — that would break the fix rather than the bug.
+ */
+export const DISPATCH_PHASE_NAMES: readonly string[] = [...PHASES, "fix", "conflict"];
+
+/**
+ * The closed set of lanes that may stamp `execution.lane_pass` — the lanes that
+ * complete a pass by pushing to the node's branch and writing job-dir markers
+ * without moving the node's `phase`, so a successful pass is otherwise
+ * indistinguishable from a stall.
+ *
+ * `fix-checks` is listed here as vocabulary before it has a writer: the
+ * constant is the one place the lane names are declared, and the ladder reader
+ * accepts any member, so listing it now costs nothing and keeps the set from
+ * being re-spelled per lane.
+ */
+export type LanePassLane = "conflict" | "qa-fix" | "fix-checks";
+
+export const LANE_PASS_LANES: readonly LanePassLane[] = ["conflict", "qa-fix", "fix-checks"];
+
+/**
  * What kind of office-hours attention a parked node needs, keyed to the
  * criterion actually used to backfill this field:
  *
@@ -551,6 +604,37 @@ export interface ConflictState {
 }
 
 /**
+ * A COMPLETED lane pass, stamped by the lane that finished it. The durable
+ * graph-state answer to "did that pass actually run?".
+ *
+ * The dispatch ladder driver (`dispatch-ladder-await`) decides whether a phase
+ * pass completed by reading `origin/main` graph state. Two lanes — the
+ * merge-conflict lane and qa-fix's auto-fix "fixing pass" — complete their work
+ * by pushing to the node's branch and writing job-dir markers; neither moves
+ * the node's `phase`. Without a stamp, a SUCCESSFUL pass by either lane can
+ * only ever read as `stalled`. So the completing lane writes this and the
+ * ladder compares it against the launch window.
+ *
+ *  - `at` is the completion instant, `YYYY-MM-DDTHH:MM:SSZ` (see
+ *    `requireTimestampString` for why the format is load-bearing).
+ *  - `lane` is which lane completed the pass, one of `LANE_PASS_LANES`.
+ *  - `phase` is the dispatch phase the pass ran in, one of
+ *    `DISPATCH_PHASE_NAMES` — the wider vocabulary, not `PHASES`.
+ *  - `sha` is the sha the lane pushed, when it pushed one; null otherwise.
+ *    Optional at the type level for the same additive-only reason
+ *    `Execution.conflict` itself is; `validateLanePass` always populates it.
+ *
+ * A single object, not a list: each pass OVERWRITES the previous stamp. It is
+ * bounded, and no consumer reads history, so it never needs clearing.
+ */
+export interface LanePass {
+  at: string;
+  lane: string;
+  phase: string;
+  sha?: string | null;
+}
+
+/**
  * Merge-verification evidence recorded on `Execution` at the done-transition,
  * so a merge-verification gate need not trust `execution.pr` alone. There are
  * two independent sufficient proofs:
@@ -596,6 +680,13 @@ export interface Execution {
    */
   conflict?: ConflictState | null;
   completion?: Completion | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  lane_pass?: LanePass | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -649,6 +740,33 @@ function requireDateString(value: unknown, field: string): string {
 function optionalDateString(value: unknown, field: string): string | null {
   if (value == null) return null;
   return requireDateString(value, field);
+}
+
+/**
+ * A fixed-width UTC second-precision timestamp, `YYYY-MM-DDTHH:MM:SSZ`. Shape
+ * only, like `requireDateString` — semantic calendar validity is not this
+ * layer's job.
+ *
+ * The repo's date-only convention is unusable for the launch-window comparison
+ * `LanePass` exists for: a stamp written this morning would qualify for every
+ * launch for the rest of the day (the accumulation trap). Fixed-width second
+ * precision with a literal `Z` is LOAD-BEARING — it makes lexicographic order
+ * equal chronological order, which is what lets the reader compare with a plain
+ * jq `>=` and no date arithmetic.
+ *
+ * A writer must therefore truncate `toISOString()` output with
+ * `.replace(/\.\d{3}Z$/, "Z")`. Left in, the milliseconds are a same-second
+ * landmine: `"…:06.789Z" >= "…:06Z"` is FALSE, because `.` is 0x2E and `Z` is
+ * 0x5A.
+ */
+function requireTimestampString(value: unknown, field: string): string {
+  const s = requireString(value, field);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(s)) {
+    throw new IntentionSchemaError(
+      `Expected YYYY-MM-DDTHH:MM:SSZ timestamp string for ${field}, got "${s}"`,
+    );
+  }
+  return s;
 }
 
 function validateAttempts(value: unknown, field: string): Record<string, number> {
@@ -736,6 +854,29 @@ function validateConflictState(value: unknown, field: string): ConflictState | n
 }
 
 /**
+ * Nullable `LanePass` object: second-precision `at`, `lane` from
+ * `LANE_PASS_LANES`, `phase` from `DISPATCH_PHASE_NAMES` (the wider dispatch
+ * vocabulary — `fix` and `conflict` are members, unlike in `PHASES`), and a
+ * nullable `sha`. Mirrors `validateConflictState`.
+ *
+ * Both vocabularies are closed on purpose: a stamp naming a lane or phase the
+ * reader does not recognize would be silently rejected at compare time and read
+ * as a stall, which is the exact failure this field exists to remove.
+ */
+function validateLanePass(value: unknown, field: string): LanePass | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    at: requireTimestampString(value.at, `${field}.at`),
+    lane: requireOneOf(value.lane, LANE_PASS_LANES, `${field}.lane`),
+    phase: requireOneOf(value.phase, DISPATCH_PHASE_NAMES, `${field}.phase`),
+    sha: optionalString(value.sha, `${field}.sha`),
+  };
+}
+
+/**
  * Nullable `Completion` object: nullable strings `mergedAt`, `mergeCommitSha`,
  * `graphCommitSha`. Deliberately uses `optionalString` (not
  * `optionalDateString`) for `mergedAt` — GitHub's `merged_at` is a full
@@ -767,6 +908,7 @@ function validateExecution(value: unknown, field: string): Execution {
     fix: validateFixState(value.fix, `${field}.fix`),
     conflict: validateConflictState(value.conflict, `${field}.conflict`),
     completion: validateCompletion(value.completion, `${field}.completion`),
+    lane_pass: validateLanePass(value.lane_pass, `${field}.lane_pass`),
   };
 }
 

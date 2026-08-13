@@ -184,19 +184,58 @@ Otherwise (opus-fixable items present), choose exactly one path:
      --subagents-launched <SKILL_SUBAGENTS + result.subagents_launched> \
      --disposition completed_with_fixes
    ```
-6. **Write the node lane's terminal-disposition marker** (`TARGET_KIND=node`
+6. **Stamp the lane pass on the node** (`TARGET_KIND=node` only). The dispatch
+   ladder decides whether a phase pass completed by reading `origin/main` graph
+   state. A fixing pass finishes by pushing fix commits to the node's branch and
+   writing job-dir markers — it deliberately does **not** move the node's `phase`
+   (that is the re-QA mechanism, below). With no durable graph write, a
+   **successful** fixing pass reads as `stalled` and the ladder halts a run that
+   made progress. `execution.lane_pass` is that write: a single object each pass
+   overwrites, never cleared.
+
+   Run it from the node's worktree, exactly as the clean path runs
+   `transition-node "$N" --set-pr "$PR_NUM"` (`.claude/skills/qa-fix/SKILL.md`,
+   the node-lane **Completion** bullet). Use `dangerouslyDisableSandbox: true` —
+   `npx` writes the npm cache and `graph-commit` pushes over the network:
+   ```bash
+   npx tsx packages/intentionsutil/scripts/apply-lane-pass.ts "$N" --stamp \
+     --lane qa-fix --phase qa --sha "$(git rev-parse HEAD)"
+   packages/intentionsutil/scripts/graph-commit -m "graph: record qa fixing pass on $N" "$N"
+   ```
+
+   `--phase qa` is a **literal**, not a read. The front door already gated on
+   `phase == qa` (`.claude/skills/qa-fix/references/target-resolution.md:18-23`),
+   so there is nothing to read and no drift to guard against.
+
+   **Push first, stamp second.** This item sits after the `/implement-unit` loop
+   because each unit's `/commit-merge-push` has already pushed by then — the
+   stamp claims a pass completed, and that claim is only honest once the fixes
+   are durable at `origin`. It makes "stamp landed, push failed" rare rather
+   than reachable.
+
+   **A non-zero exit from either call is a WARNING, not a hard stop.** Print it
+   to stderr and continue to item 7. **This inverts the usual graph-write
+   discipline — where a failed write stops the path — and it is meant to; do not
+   "fix" it to match a neighboring hard-stop rule.** A pass that stops here
+   never writes the node-terminal marker in item 7, so `dispatch-self-close`
+   HOLDs the job, the node becomes permanently unselectable, and a worker slot
+   is consumed. A failed stamp costs one false `stalled` read — today's status
+   quo, and the exact thing the stamp exists to remove — which is strictly
+   cheaper than a wedged worker.
+
+7. **Write the node lane's terminal-disposition marker** (`TARGET_KIND=node`
    only; the legacy issue lane has no such marker). This must come **after**
-   the PR comment (Step 4), the phase-completed marker (item 4 above), and the
-   outcome envelope (item 5 above) — `Stop` fires on every turn yield, not
-   only on terminal exit, so writing this marker early would let the hook reap
-   the job before those writes land:
+   the PR comment (Step 4), the phase-completed marker (item 4 above), the
+   outcome envelope (item 5 above), and the lane-pass stamp (item 6 above) —
+   `Stop` fires on every turn yield, not only on terminal exit, so writing this
+   marker early would let the hook reap the job before those writes land:
    ```bash
    packages/intentionsutil/scripts/mark-node-terminal "$N" fix-attempt
    ```
    `fix-attempt` is correct here too: this pass spent an attempt via the fix
    lane, same as `/fix-checks`' own node lane (retry by design — the selector
    re-routes on a later tick).
-7. **STOP.**
+8. **STOP.**
 
 ## Escalate finalize path
 

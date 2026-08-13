@@ -1163,6 +1163,29 @@ clarifications:
       (aggregate-usage.sh) rather than to a second parallel analysis. Until that
       lens exists the raise is an unmeasured quality bet, which is recorded here
       as the honest state rather than presented as a measured improvement."
+  - question: What model does the detached `/code-review` review-lane session run
+      on, and how is that recorded so `high`'s cost/quality measurement stays
+      interpretable?
+    answer: "(Recorded 2026-08-13 /align round, author-directed; captured in the
+      graph retroactively this same day, after the ruling and after PR #3078
+      shipped it, because this round's interview did not itself capture the
+      model-pin requirement.) `opus`, explicit and pinned. The author's
+      requirement is that the detached review-lane session runs on Opus. The pin
+      is EXPLICIT rather than inherited, because a nested `claude -p` does not
+      inherit the launching session's model — omitting the flag would silently
+      accept whatever the CLI defaults to, not the launcher's model. At `high`
+      effort the model is the dominant cost and quality term, so an unpinned run
+      would leave clarification 46's required measurement (the first production
+      `high` runs recording realized wall clock, price proxy and findings count)
+      uninterpretable — a later reader could not tell whether a recorded figure
+      reflects `opus` or some other default. `model` therefore JOINS the resume
+      cache's run identity alongside effort level, target and flags: two runs
+      differing only in model are different runs, and a summary produced under
+      one model is never replayed for another. This is a routing decision —
+      condition 3 requires explicit author approval for every routing change —
+      made with the author's explicit approval, satisfying condition 3. Carrier:
+      tactic-review-effort-max-detached-resume-poll (Unit 2, `--model opus`);
+      shipped in PR #3078."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
