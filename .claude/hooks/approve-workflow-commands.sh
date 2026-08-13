@@ -30,6 +30,19 @@ SCRIPT_RE='(^|/)\.claude/skills/[a-zA-Z0-9_-]+/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SETTINGS_DIR="$HOOK_DIR/.."
 
+# The `|| { … }` is not decoration. A bare `source` that fails is a plain
+# simple command, so it trips the ERR trap above and exits the hook 0 with no
+# output — silently disabling EVERY auto-approval here, not just the git -C
+# path, and turning the whole allowlist into permission prompts. Absorb the
+# failure instead so the degradation stays scoped: with the library missing,
+# the two lookups below hit command-not-found (127), fall to their `|| VAR=""`
+# branches, and is_allowed_git_c fails closed while script/allowedTools
+# approval keeps working.
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-repo-roots.sh
+source "$HOOK_DIR/../skills/dispatch-propagate/scripts/lib-repo-roots.sh" || {
+  echo "[approve-workflow-commands] WARNING: failed to source lib-repo-roots.sh; 'git -C' approval disabled" >&2
+}
+
 # Build list of allowed single-word commands from settings.json Bash(cmd:*) entries.
 # Multi-word prefixes like "gh issue view" are skipped because CMD_TOKEN extraction
 # yields only the first word, which would never equal the full multi-word entry.
@@ -64,18 +77,13 @@ done
 # worktree), and <project-root>/.claude/worktrees (worktree-create.sh's
 # current placement, and the standard layout post-de-baring — .git is a
 # normal directory inside the working tree, so dirname of --git-common-dir
-# IS the repo root, not a parent of it). Derive both from --git-common-dir,
-# which resolves to the same absolute path regardless of which worktree
-# hosts this session — unlike the old $HOOK_DIR-relative arithmetic, which
-# only ever recovered the root matching whichever convention the CURRENT
-# worktree happens to follow.
-GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || GIT_COMMON_DIR=""
-LEGACY_WORKTREES_ROOT=""
-NEW_WORKTREES_ROOT=""
-if [ -n "$GIT_COMMON_DIR" ]; then
-  LEGACY_WORKTREES_ROOT="$(dirname "$GIT_COMMON_DIR")/worktrees"
-  NEW_WORKTREES_ROOT="$(dirname "$GIT_COMMON_DIR")/.claude/worktrees"
-fi
+# IS the repo root, not a parent of it). Derive both from --git-common-dir via
+# lib-repo-roots.sh (legacy_worktrees_root / worktrees_root), which resolves
+# to the same absolute path regardless of which worktree hosts this session —
+# unlike the old $HOOK_DIR-relative arithmetic, which only ever recovered the
+# root matching whichever convention the CURRENT worktree happens to follow.
+LEGACY_WORKTREES_ROOT=$(legacy_worktrees_root) || LEGACY_WORKTREES_ROOT=""
+NEW_WORKTREES_ROOT=$(worktrees_root) || NEW_WORKTREES_ROOT=""
 
 # --- Helper functions ----------------------------------------------------
 

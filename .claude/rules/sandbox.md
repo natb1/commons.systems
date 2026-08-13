@@ -37,6 +37,14 @@ If the `.git` allowlist entry is missing, the matching write fails read-only —
 e.g. `Unable to create '.git/worktrees/<branch>/index.lock': Read-only file
 system` on a commit.
 
+A command that fails loudly under the sandbox — TLS error, `EROFS`,
+`Read-only file system` — should be **retried** with
+`dangerouslyDisableSandbox: true`, never run with it pre-emptively: an
+always-on override carries no signal. The sections below are the known
+exceptions — read them first, since a few must be pre-emptive because the first
+sandboxed attempt already does damage (`git worktree remove`) or fails silently
+with nothing to retry on (`claude agents --json`).
+
 ## Tree-updating git ops touching read-only paths
 
 `git merge`, `git checkout`, `git rebase`, `git reset`, and `git worktree remove`
@@ -88,27 +96,20 @@ a stale local `origin/main` makes an unmerged branch look merged.
 
 ## gh CLI (GitHub API)
 
-`gh` uses the macOS Security framework for TLS certificate validation, which sandbox blocks:
-
-```
-tls: failed to verify certificate: x509: OSStatus -26276
-```
-
-Use `dangerouslyDisableSandbox: true` on **all** Bash calls that invoke `gh` directly or via scripts
-(e.g., `post-pr-comment.sh`). Apply this from the start — do not wait for a TLS error before
-setting it.
+`gh` can fail sandboxed with `tls: failed to verify certificate: x509: OSStatus
+-26276` — but that's the macOS Security framework rejecting the sandbox's TLS
+interception, so it's **macOS-specific**. On this Linux/WSL host `gh` runs fine
+sandboxed (measured; see
+`.claude/skills/review-fix/references/code-review-invocation.md` §3.1). Don't
+set the override pre-emptively for `gh` — if the TLS error shows up, retry with
+it, per the general principle above.
 
 ## npm cache writes
 
-`npx` downloads packages to `~/.npm/_cacache/`, which sandbox blocks:
-
-```
-EROFS: read-only file system, open '~/.npm/_cacache/tmp/...'
-```
-
-Use `dangerouslyDisableSandbox: true` on Bash calls that run `npx` for packages not
-already cached (e.g., `npx firebase-tools`, `npx playwright test`), or scripts that
-invoke them (e.g., `run-qa-server.sh`).
+`npx` was documented as unable to write `~/.npm/_cacache/` under the sandbox
+(`EROFS`). **Not reproducible on this Linux/WSL host**: sandboxed, a cold
+`npx --yes cowsay@1.6.0`, an `npm pack` registry download with its cache write,
+and `npx tsx --version` all succeed. Retry on `EROFS`, don't pre-empt.
 
 ## Network namespace isolation
 
@@ -211,8 +212,13 @@ Alternatives that do work from an isolated session:
 - Compare a foreign checkout's content with path-based tools: `cmp`,
   `git hash-object <abs path>`, `grep`.
 - Let the target worktree's own scripts manage its repo — invoke its copy by
-  absolute path; `graph-commit`, `dump-node.ts` and `write-node.ts` resolve
-  `REPO_ROOT` from the script's own location.
+  absolute path; `dump-node.ts` and `write-node.ts` resolve `REPO_ROOT` from
+  the script's own location (`import.meta.url`).
+- `graph-commit` is the exception: it resolves the repo root from `-C`/`--repo`
+  (else **cwd**), never from its own location
+  (`packages/intentionsutil/scripts/graph-commit:38`). Always pass an explicit
+  `-C <path>`. Without it you commit your own cwd's checkout — and if that one
+  holds the node unchanged it exits 0 as "a 'landed' that landed nothing".
 
 ### Avoid inline env var prefixes
 

@@ -24,6 +24,10 @@
  *       // it gets exactly today's full-PR review. merge_base stays bound and
  *       // unchanged: it is what may be READ, review_base is what is REPORTED on.
  *     review_base_source?:string, // which resolution path produced review_base
+ *     review_base_recorded?:string, // on the `sidecar-rebased` path review_base is a
+ *       // SYNTHETIC commit that no `git log` resolves; this is the real sha the
+ *       // previous pass covered. For REPORTING only — never diff from it, since
+ *       // diffing from it is exactly the origin/main churn bug it replaced.
  *     blast_radius_files?:[...],  // files OUTSIDE the delta referencing a symbol
  *       // it changed — REQUIRED reading, the guard that keeps the narrowed base
  *       // from being a detection reduction (clarification 50)
@@ -1035,22 +1039,35 @@ const LANE_A_BLURB = [
 //
 // review_base falls back to merge_base, which falls back to origin/main, so a
 // caller that passes neither gets exactly today's behaviour.
+// >>> diff context: sliced + eval'd by review-fix-diff-context-probe.mjs >>>
 function diffContext(args) {
   const fullBase = args.merge_base || 'origin/main';
-  const base = args.review_base || fullBase;
+  const narrowedBase = args.review_base || fullBase;
   // The file list must describe the range the finder is told to review. On a
   // re-review, `changed_files` is the WHOLE PR's list (the context pack computes
   // it from merge_base), so pairing it with a narrowed base tells the finder
   // "review only the delta" and then hands it an inventory of every file the PR
   // ever touched. The file list is the more concrete instruction of the two, so
   // the finder either reviews the full PR anyway (no saving at all) or treats
-  // the list as the delta (wrong scope). Prefer the delta list when the caller
-  // supplies one; fall back to changed_files, which is correct whenever
-  // review_base === merge_base.
-  const deltaFiles =
-    base !== fullBase && Array.isArray(args.review_changed_files) && args.review_changed_files.length
-      ? args.review_changed_files
-      : args.changed_files || [];
+  // the list as the delta (wrong scope).
+  //
+  // So base and file list move TOGETHER — there are only two coherent pairs,
+  // (narrowed base, delta list) and (full base, whole-PR list), and `narrowed`
+  // picks one of them for both.
+  //
+  // An EMPTY delta list takes the FULL pair, not the narrowed one. The caller
+  // always supplies `review_changed_files` when it narrows, so an empty array
+  // means "nothing changed since the last review", not "no opinion" — and an
+  // empty list paired with a narrowed base instructs the finder to review
+  // nothing at all. Falling back to the full pair is the same fail-CLOSED
+  // direction as every other fallback on this seam: the narrowing can make a
+  // review wider than necessary, never narrower than correct.
+  const narrowed =
+    narrowedBase !== fullBase &&
+    Array.isArray(args.review_changed_files) &&
+    args.review_changed_files.length > 0;
+  const base = narrowed ? narrowedBase : fullBase;
+  const deltaFiles = narrowed ? args.review_changed_files : args.changed_files || [];
   const filesStr = deltaFiles.join(', ') || '(see git diff HEAD)';
   const lines = [
     `Review ONLY the pending diff against \`${base}\`. Changed files: ${filesStr}.`,
@@ -1065,6 +1082,19 @@ function diffContext(args) {
       'only on the delta above, except where a required-reading file below is genuinely broken',
       'by it.',
     );
+    // Without this, an agent that tries to orient itself with `git log <base>` on
+    // the `sidecar-rebased` path gets "unknown revision" and has no way to reach
+    // the real previous-pass sha — the base it was handed is synthetic and
+    // unreferenced. Name the resolvable sha, and say plainly that it is not the
+    // range start, so nobody "helpfully" re-diffs from it and re-admits the churn.
+    if (args.review_base_recorded) {
+      lines.push(
+        `(\`${base}\` is a SYNTHETIC commit — the previously-reviewed state brought up to the`,
+        `merge base — so \`git log\` will not resolve it. The previous pass actually covered`,
+        `\`${args.review_base_recorded}\`; read that for history, but do NOT diff from it —`,
+        `it predates the merge base and its range re-admits already-reviewed origin/main work.)`,
+      );
+    }
   }
   const br = args.blast_radius_files || [];
   if (br.length) {
@@ -1111,6 +1141,7 @@ function diffContext(args) {
   }
   return lines.join(' ');
 }
+// <<< diff context <<<
 
 // Direct security-domain reviewer descriptions — mirror SKILL.md §1c. This region
 // also holds the `api-cost` brief: the COST_BRIEF text and the apiCostDomains/
@@ -2823,7 +2854,13 @@ const residueResolvedByIdx = new Map();
         '- the defect is not present in the pending diff (pre-existing, or simply not there);',
         '- it is not a defect report at all — an assertion or instruction with no observable',
         '  wrong behavior behind it.',
-        `Check read-only against the code: read the named file and \`git diff ${residueBase}...HEAD\`.`,
+        // TWO dots, not three. `review_base` may be a SYNTHETIC merge of the
+        // previously-reviewed sha with MERGE_BASE (dispatch-review-base's
+        // `sidecar-rebased` path). Both of its parents are ancestors of HEAD and
+        // neither dominates the other, so `<synthetic>...HEAD` has TWO merge
+        // bases; git warns and picks one arbitrarily, re-admitting exactly the
+        // origin/main churn the synthetic base exists to cancel.
+        `Check read-only against the code: read the named file and \`git diff ${residueBase}..HEAD\`.`,
         'Default to verdict="refuted" under uncertainty — this gate guards handing an Opus agent',
         'with working-tree edit authority a finding nothing has independently confirmed.',
         '',
@@ -3326,7 +3363,10 @@ if (laneAResidue.length === 0) {
     '',
     `Contract context: the pending diff is against merge base \`${base}\`. Changed files: ${filesStr}.`,
     'Inspect the introduced diff read-only to judge whether each item is IN-CONTRACT: use',
-    `Bash/git (e.g. \`git diff ${base}...HEAD\`) or read the changed files, and reason about`,
+    // TWO dots, not three — same reason as the residue skeptic above: on the
+    // `sidecar-rebased` path `base` is a synthetic merge commit with two merge
+    // bases against HEAD, and the three-dot form picks one of them arbitrarily.
+    `Bash/git (e.g. \`git diff ${base}..HEAD\`) or read the changed files, and reason about`,
     "whether the finding concerns something the diff's own tactic/plan claims to deliver, or",
     'the security/integrity of code the diff itself introduced, versus pre-existing surface',
     'the diff merely touched.',

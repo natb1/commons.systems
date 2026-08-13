@@ -6,9 +6,12 @@
 #   dispatch-review-base --merge-base <sha> [--worktree <path>]
 #   dispatch-review-base --record <sha>     [--worktree <path>]
 #
-# Resolve mode prints exactly two lines to stdout and always exits 0:
+# Resolve mode prints two lines to stdout — three on the `sidecar-rebased` path —
+# and always exits 0:
 #   review_base=<sha>
-#   review_base_source=<sidecar|no-sidecar|no-worktrees-root|unreadable|malformed|unreachable|not-ahead-of-merge-base|no-merge-base>
+#   review_base_source=<sidecar|sidecar-rebased|no-sidecar|no-worktrees-root|unreadable|malformed|unreachable|already-in-merge-base|churn-git-version-unknown|churn-merge-tree-unsupported|churn-merge-conflict|churn-commit-failed|no-merge-base>
+#   review_base_recorded=<sha>   # sidecar-rebased only: the sha actually recorded,
+#                                # since review_base is then a synthetic commit
 #
 # Record mode prints one line and exits 0, or 2 on a usage/write error:
 #   review_base_recorded=<sha>
@@ -170,5 +173,92 @@ if git -C "$WORKTREE" merge-base --is-ancestor "$CANDIDATE" "$MB_RESOLVED" 2>/de
   fallback already-in-merge-base
 fi
 
-echo "review_base=$CANDIDATE"
-echo "review_base_source=sidecar"
+# --- cancel the origin/main churn --------------------------------------------
+# THE CHURN PROBLEM, and why the recorded sha is not usable as the base on its
+# own. `CANDIDATE..HEAD` is a two-dot range, so it contains EVERY commit merged
+# into the branch since CANDIDATE — including everything provision-node-worktree
+# merged in from origin/main at each phase boundary (its step 4, "the merged-tree
+# guarantee every phase runs under"). Those commits were already reviewed on
+# main. Re-admitting them makes the "narrowed" re-review WIDER than the full one
+# it replaces, which inverts the entire point of this seam.
+#
+# Measured on tactic-attention-namespaced-rank (PR #3075), the node this seam was
+# built for: a CANDIDATE of d3bf3ac0 gives 64 files / 8108 changed lines, against
+# the full merge-base review's 23 files / 3106. Nearly all of the excess is
+# `intentions/*.md` graph nodes that landed on main between the two passes.
+#
+# MERGE_BASE does not have this problem — it IS the origin/main tip that was just
+# merged in, so `MERGE_BASE..HEAD` cancels main's churn and shows only the
+# branch's own work. The delta needs that same cancellation, from a later start.
+#
+# So: diff from the previously-reviewed state BROUGHT UP TO the merge base — a
+# synthetic merge of CANDIDATE and MB_RESOLVED, written to the object store and
+# deliberately never referenced. `<synthetic>..HEAD` is then exactly the
+# branch-authored work since the last review. Same measurement, same candidate:
+# 1 file / 4 lines — the single CI-repair commit, which is precisely the incident
+# in the WHY block above.
+#
+# The synthetic commit is DETERMINISTIC — pinned author/committer identity and
+# dates — because dispatch-code-review's run-dedup identity includes
+# target_base_sha (its lines 517-519, 635-637). A base sha that drifted per
+# invocation would make every re-review look like a brand-new run, defeating the
+# resume cache and the superseded-run detection along with it.
+if git -C "$WORKTREE" merge-base --is-ancestor "$MB_RESOLVED" "$CANDIDATE" 2>/dev/null; then
+  # The recorded sha already contains the merge base: no main churn to cancel,
+  # so the honest base is the recorded sha itself. This is the common shape on a
+  # branch that has not been re-merged since its last review, and it keeps the
+  # object store clean in that case.
+  echo "review_base=$CANDIDATE"
+  echo "review_base_source=sidecar"
+  exit 0
+fi
+
+# `merge-tree --write-tree` needs git >= 2.38. On older git the flag is not
+# recognised as a mode switch and the command dies — which, without this gate,
+# would be indistinguishable from a merge CONFLICT and would blame the branch for
+# a toolchain gap. Gate on the version so the degradation is NAMED: otherwise
+# this seam falls back to a full review on every pass, silently and forever,
+# while the log reads as if some branch kept conflicting.
+GIT_VER=$(git -C "$WORKTREE" version 2>/dev/null | awk '{print $3}')
+GIT_MAJ=${GIT_VER%%.*}
+GIT_VER_REST=${GIT_VER#*.}
+GIT_MIN=${GIT_VER_REST%%.*}
+if [[ ! "$GIT_MAJ" =~ ^[0-9]+$ ]] || [[ ! "$GIT_MIN" =~ ^[0-9]+$ ]]; then
+  fallback churn-git-version-unknown
+fi
+if (( GIT_MAJ < 2 || (GIT_MAJ == 2 && GIT_MIN < 38) )); then
+  fallback churn-merge-tree-unsupported
+fi
+
+# `merge-tree --write-tree` exits non-zero on a CONFLICT and still prints a tree
+# oid, so the exit code — not the output — is what decides. Accepting a
+# conflicted tree would silently review against a state that never existed.
+set +e
+SYN_OUT=$(git -C "$WORKTREE" merge-tree --write-tree "$CANDIDATE" "$MB_RESOLVED" 2>/dev/null)
+SYN_RC=$?
+set -e
+[[ "$SYN_RC" -eq 0 ]] || fallback churn-merge-conflict
+
+# `awk NR==1`, not `head -n1`: head closes the pipe early and can SIGPIPE the
+# producer under `set -o pipefail`.
+#
+# `{40,64}` — 40 for SHA-1, 64 for a SHA-256 repository. A hard-coded {40} would
+# reject every oid in a SHA-256 repo and degrade this seam to a full review on
+# every pass there, which is the same silent-forever failure the version gate
+# above exists to prevent.
+SYN_TREE=$(printf '%s\n' "$SYN_OUT" | awk 'NR==1')
+[[ "$SYN_TREE" =~ ^[0-9a-f]{40,64}$ ]] || fallback churn-merge-conflict
+
+SYNTHETIC=$(GIT_AUTHOR_NAME=review-base GIT_AUTHOR_EMAIL=review-base@local \
+            GIT_COMMITTER_NAME=review-base GIT_COMMITTER_EMAIL=review-base@local \
+            GIT_AUTHOR_DATE='1970-01-01T00:00:00Z' \
+            GIT_COMMITTER_DATE='1970-01-01T00:00:00Z' \
+            git -C "$WORKTREE" commit-tree "$SYN_TREE" \
+              -p "$CANDIDATE" -p "$MB_RESOLVED" \
+              -m 'review-base: previously-reviewed state brought up to the merge base' \
+            2>/dev/null || true)
+[[ "$SYNTHETIC" =~ ^[0-9a-f]{40,64}$ ]] || fallback churn-commit-failed
+
+echo "review_base=$SYNTHETIC"
+echo "review_base_source=sidecar-rebased"
+echo "review_base_recorded=$CANDIDATE"

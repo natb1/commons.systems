@@ -317,10 +317,24 @@ REVIEWED_HEAD=$(git rev-parse HEAD)
 
 # REVIEW_BASE: the base a RE-review diffs from — the sha the previous review
 # covered, or MERGE_BASE when there wasn't one. Fails closed; see below.
+#
+# REVIEW_BASE IS NOT ALWAYS A COMMIT ON THE BRANCH, and a log reader should not
+# be surprised to see a sha that `git log` does not show. When main moved between
+# the two passes — which it does at every phase boundary, because
+# provision-node-worktree merges origin/main into the branch — the recorded sha
+# cannot be used directly: `<recorded>..HEAD` is two-dot and would re-admit every
+# origin/main commit merged in since, all of it already reviewed on main, making
+# the "narrowed" review WIDER than the full one. So the script returns a
+# synthetic merge of the recorded sha with MERGE_BASE, which cancels that churn
+# and leaves only branch-authored work. `review_base_source=sidecar-rebased`
+# marks that path, and `review_base_recorded` still reports the real sha.
 RB_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-base \
   --merge-base "$MERGE_BASE")
 REVIEW_BASE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base=//p')
 REVIEW_BASE_SOURCE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_source=//p')
+# The sha actually recorded by the previous pass. Empty unless the source is
+# `sidecar-rebased`. Report it, never diff from it — see above.
+REVIEW_BASE_RECORDED=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_recorded=//p')
 
 # Blast radius: the files OUTSIDE the delta that reference a symbol the delta
 # added, changed, or deleted. Computed from the NARROWED range — its whole job
@@ -446,7 +460,10 @@ advice:
   itself);
 - `$BR_OUT` — the blast-radius output from Step 1 (analysis 1; it does not
   recompute this);
-- `surface`, `deps`, `app_or_rules`, `api_call_site`, and `REVIEW_BASE_SOURCE`;
+- `surface`, `deps`, `app_or_rules`, `api_call_site`, `REVIEW_BASE_SOURCE`, and
+  `REVIEW_BASE_RECORDED` (empty unless the source is `sidecar-rebased`; it is the
+  only sha on that path that `git log` can resolve, so a reader who wants to see
+  what the previous pass covered needs it);
 - the prior pass's carried-forward findings (analysis 5), if any;
 - the worktree root as an absolute path.
 
@@ -854,6 +871,10 @@ args = {
   merge_base:          <MERGE_BASE>,    // the FULL branch base — what may be READ
   review_base:         <REVIEW_BASE>,   // the narrowed base — what is REPORTED on
   review_base_source:  <REVIEW_BASE_SOURCE>,
+  review_base_recorded: <REVIEW_BASE_RECORDED>, // '' unless source is `sidecar-rebased`.
+                                        // On that path `review_base` is a SYNTHETIC commit
+                                        // no `git log` resolves; this is the real sha the
+                                        // previous pass covered. REPORT it, never diff from it.
   review_changed_files: [ <review_changed_files lines> ], // the DELTA's file list
   blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
   blast_radius_truncated: <true|false>,
