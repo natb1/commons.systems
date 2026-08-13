@@ -1105,14 +1105,36 @@ echo "Test: the deadline is re-checked after both sweeps, before the advance"
 # check_deadline runs once at the top of the loop, and the sweeps run after
 # that — so a sweep that eats the remaining budget must be caught by a SECOND
 # check_deadline call, or the pass would still START an advance past
-# --max-run-s. --max-run-s 1 lets the top-of-loop check pass (0s elapsed), then
-# the terminal sweep stub sleeps 2s — past the 1s deadline — before the driver
-# ever reaches dispatch-ladder-advance.
+# --max-run-s. --max-run-s 3 lets the top-of-loop check pass, then the terminal
+# sweep stub sleeps 5s — past the 3s deadline — before the driver ever reaches
+# dispatch-ladder-advance.
+#
+# WHY 3 AND 5, AND NOT 1 AND 2. The old pair raced. dispatch-ladder-run:468-469
+# captures START_EPOCH as a WHOLE SECOND and sets DEADLINE_EPOCH =
+# START_EPOCH + MAX_RUN_S; check_deadline (:646-648) halts when
+# now_epoch() >= DEADLINE_EPOCH. At --max-run-s 1 the top-of-loop check at
+# :1053 therefore passes only if it lands in the SAME wall-clock second as
+# :469 — and because START_EPOCH is truncated, the usable margin is only
+# whatever fraction of a second was left when the script started, anywhere from
+# ~1s down to ~0. When process startup crossed the boundary, the run halted
+# BEFORE the sweeps and the two sweep-count rows below went red. The margin is
+# now 3s, comfortably past process-startup jitter, and the sleep is raised in
+# step so it still exhausts it.
+#
+# The assertions are byte-identical to what they were: this row still proves
+# exactly what it proved — the top-of-loop check passes, a sweep eats the
+# budget, and the SECOND check_deadline catches it before an advance starts.
+# Net cost is +3s per suite run (the stub sleeps in the terminal sweep only).
+#
+# Deliberately NOT fixed by making now_epoch/START_EPOCH sub-second. That is
+# real precision, but production runs default to MAX_RUN_S=21600 where
+# truncation is irrelevant — it would be a production change made solely for a
+# test.
 reset_seqs
 set_seq advance '10|idle tactic-fixture-node not-selectable'
-printf '2\n' >"$SEQ_DIR/sweep-sleep-s"
+printf '5\n' >"$SEQ_DIR/sweep-sleep-s"
 RC=0
-OUT=$("$RUN" "$NODE" --poll-s 1 --max-run-s 1 2>/dev/null) || RC=$?
+OUT=$("$RUN" "$NODE" --poll-s 1 --max-run-s 3 2>/dev/null) || RC=$?
 assert_eq "deadline-after-sweep: exit 21 (timeout), not idle or complete" "21" "$RC"
 assert_eq "deadline-after-sweep: BOTH sweeps ran once this pass" "1" "$(sweeps)"
 assert_eq "deadline-after-sweep: including the one that ate the budget" "1" "$(terminal_sweeps)"

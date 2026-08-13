@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Resolve — or record — the base a re-review should diff from: the sha the
+# PREVIOUS review actually covered, not the branch's merge base.
+#
+# Usage:
+#   dispatch-review-base --merge-base <sha> [--worktree <path>]
+#   dispatch-review-base --record <sha>     [--worktree <path>]
+#
+# Resolve mode prints exactly two lines to stdout and always exits 0:
+#   review_base=<sha>
+#   review_base_source=<sidecar|no-sidecar|no-worktrees-root|unreadable|malformed|unreachable|not-ahead-of-merge-base|no-merge-base>
+#
+# Record mode prints one line and exits 0, or 2 on a usage/write error:
+#   review_base_recorded=<sha>
+#
+# WHY. A /review-fix pass on PR #3075 cost 3h26m and 32 subagents. /fix-checks
+# then pushed ONE CI-repair commit; resolving the fix-interrupt stripped the
+# `reviewed` marker (correctly — apply-fix-state.ts:219-227), and the lane
+# re-reviewed the ENTIRE PR from merge-base. The whole prior review, re-performed
+# for one commit. This script is the seam that lets the second pass read only
+# the delta (strategy-token-economy clarifications 50, 51).
+#
+# FAILS CLOSED — and it is the ONE deliberately fail-closed mechanism in this
+# round's design, where every other new mechanism fails OPEN. The asymmetry is
+# not an inconsistency. Everywhere else the cheap outcome is the DEGRADED one,
+# so failing open means failing safe. Here the cheap outcome is the NARROW
+# review, so the safe failure is the expensive one: any doubt at all about the
+# recorded sha — absent, unreadable, malformed, unreachable from HEAD, or not
+# actually ahead of the merge base — and the answer is the merge base, i.e.
+# today's full review. A planted or stale sidecar can only ever make the review
+# WIDER than it should be, never narrower.
+#
+# THE STALE-SIDECAR GUARD, and why it is phrased as "not an ancestor of the
+# merge base" rather than "a descendant of it".
+#
+# Reachable from HEAD is not sufficient on its own. Sidecars survive
+# `git worktree remove` (every removal path targets `<root>/<id>`, and the
+# sidecar is the sibling `<root>/<id>.<suffix>` — verified against
+# .claude/hooks/worktree-remove.sh, lib-session-reap.sh and dispatch-sweep), so
+# a sidecar written for a node's PREVIOUS, already-merged PR outlives that PR.
+# After that merge its sha is an ancestor of the new merge base, hence still
+# reachable from HEAD — and narrowing to it would skip the entire new PR.
+#
+# The obvious phrasing — require the recorded sha to be a DESCENDANT of the
+# merge base — is WRONG, and wrong in the direction that silently disables this
+# whole mechanism. provision-node-worktree merges origin/main into the branch
+# before every phase (its step 4, "the merged-tree guarantee every phase runs
+# under"), so on a re-review MERGE_BASE is the origin/main tip that was just
+# merged in. The previously-reviewed branch head is never a descendant of a
+# commit that landed on main after it. A descendant test therefore rejects the
+# recorded sha on every pass where main moved between reviews — which is nearly
+# every pass — and the lane falls back to the full re-review this script exists
+# to prevent, reporting a plausible-looking reason while doing so.
+#
+# The stale case is distinguished by the INVERSE test. A previous PR's sha, once
+# merged, IS an ancestor of the current merge base; a live branch head on the
+# current PR is not, because it is not on main at all. So: reject when the
+# candidate is an ancestor of the merge base, and accept otherwise.
+#
+# WHERE THE SIDECAR LIVES, and why not `tmp/code-review-$N`. Keyed on the
+# reviewed WORKTREE's own basename, beside the worktree and never inside it:
+# `<worktrees-root>/<basename>.review-base`, the established convention shared
+# by `<id>.scope-fingerprint`, `<id>.ladder` and `<id>.code-review-lock`. The
+# PR-number-keyed `tmp/code-review-$N` was the other candidate and is rejected
+# on the argument dispatch-code-review already makes at its own resume cache
+# (lines 60-78): `tmp/` is INSIDE the reviewed worktree, so the PR whose content
+# is under review can write it — and a planted `.review-base` naming HEAD would
+# narrow the next review to nothing. Basename-keying also needs no lane split:
+# on the node lane the basename IS the node id, and on the PR lane it is the
+# issue-branch worktree's name, stable for that PR's whole life.
+#
+# Outside a `.claude/worktrees` root there is no sidecar home and no dispatch
+# claim to protect (the test suite's throwaway repo, a hand-run review in a
+# plain clone). Resolve reports `no-worktrees-root` and falls back; record
+# refuses. Same explicit path-shape condition dispatch-code-review:399-413 uses
+# for its node lock.
+set -euo pipefail
+
+PROG=$(basename "$0")
+SUFFIX=".review-base"
+
+MERGE_BASE=""
+RECORD_SHA=""
+WORKTREE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --merge-base)
+      [[ $# -ge 2 ]] || { echo "$PROG: --merge-base requires a value" >&2; exit 2; }
+      MERGE_BASE="$2"; shift 2 ;;
+    --record)
+      [[ $# -ge 2 ]] || { echo "$PROG: --record requires a value" >&2; exit 2; }
+      RECORD_SHA="$2"; shift 2 ;;
+    --worktree)
+      [[ $# -ge 2 ]] || { echo "$PROG: --worktree requires a value" >&2; exit 2; }
+      WORKTREE="$2"; shift 2 ;;
+    *)
+      echo "$PROG: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+done
+
+if [[ -n "$MERGE_BASE" && -n "$RECORD_SHA" ]]; then
+  echo "$PROG: --merge-base and --record are separate modes; pass exactly one" >&2
+  exit 2
+fi
+if [[ -z "$MERGE_BASE" && -z "$RECORD_SHA" ]]; then
+  echo "$PROG: pass --merge-base <sha> (resolve) or --record <sha>" >&2
+  exit 2
+fi
+
+# --- resolve the worktree and its sidecar path -------------------------------
+if [[ -z "$WORKTREE" ]]; then
+  WORKTREE=$(git rev-parse --show-toplevel 2>/dev/null || true)
+fi
+
+SIDECAR=""
+if [[ -n "$WORKTREE" ]]; then
+  while [[ "$WORKTREE" == */ && "$WORKTREE" != "/" ]]; do WORKTREE="${WORKTREE%/}"; done
+  case "$(dirname "$WORKTREE")" in
+    */.claude/worktrees)
+      SIDECAR="$(dirname "$WORKTREE")/$(basename "$WORKTREE")$SUFFIX" ;;
+  esac
+fi
+
+# --- record mode -------------------------------------------------------------
+if [[ -n "$RECORD_SHA" ]]; then
+  if [[ -z "$SIDECAR" ]]; then
+    echo "$PROG: '$WORKTREE' is not a dispatch worktree (its parent is not a .claude/worktrees root) — nothing to record" >&2
+    exit 2
+  fi
+  RESOLVED=$(git -C "$WORKTREE" rev-parse --verify --quiet "$RECORD_SHA^{commit}" 2>/dev/null || true)
+  if [[ -z "$RESOLVED" ]]; then
+    echo "$PROG: --record '$RECORD_SHA' does not resolve to a commit in '$WORKTREE'" >&2
+    exit 2
+  fi
+  printf '%s\n' "$RESOLVED" > "$SIDECAR"
+  echo "review_base_recorded=$RESOLVED"
+  exit 0
+fi
+
+# --- resolve mode ------------------------------------------------------------
+# Every failure below prints the merge base. `verdict` names WHICH failure, so
+# a caller (and an operator reading a phase log) can tell "there was no prior
+# review" from "the prior review's sha is unusable".
+fallback() {
+  echo "review_base=$MERGE_BASE"
+  echo "review_base_source=$1"
+  exit 0
+}
+
+MB_RESOLVED=$(git -C "${WORKTREE:-.}" rev-parse --verify --quiet "$MERGE_BASE^{commit}" 2>/dev/null || true)
+[[ -n "$MB_RESOLVED" ]] || fallback no-merge-base
+
+[[ -n "$SIDECAR" ]] || fallback no-worktrees-root
+[[ -f "$SIDECAR" ]] || fallback no-sidecar
+[[ -r "$SIDECAR" ]] || fallback unreadable
+
+RAW=$(head -n1 "$SIDECAR" 2>/dev/null | tr -d '[:space:]' || true)
+[[ "$RAW" =~ ^[0-9a-f]{7,40}$ ]] || fallback malformed
+
+# Reachable from HEAD. A sha from a force-pushed or rebased branch is gone.
+CANDIDATE=$(git -C "$WORKTREE" rev-parse --verify --quiet "$RAW^{commit}" 2>/dev/null || true)
+[[ -n "$CANDIDATE" ]] || fallback unreachable
+git -C "$WORKTREE" merge-base --is-ancestor "$CANDIDATE" HEAD 2>/dev/null || fallback unreachable
+
+# Not already merged into the branch's base — see THE STALE-SIDECAR GUARD above.
+# `CANDIDATE == MB_RESOLVED` is an ancestor of itself and so is rejected too,
+# which is the fail-closed direction and costs only a full review.
+if git -C "$WORKTREE" merge-base --is-ancestor "$CANDIDATE" "$MB_RESOLVED" 2>/dev/null; then
+  fallback already-in-merge-base
+fi
+
+echo "review_base=$CANDIDATE"
+echo "review_base_source=sidecar"
