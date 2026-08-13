@@ -251,6 +251,26 @@ clarifications:
       writes' is currently scored by a system that performs no writes — the
       conform-by-doing-nothing failure this node's own paired-signal
       clarification already names.
+  - question: tactic-rsi-evaluate-skill is now pruned. What is this strategy's
+      tactic set, and what is readable from its signal today?
+    answer: >-
+      (Recorded 2026-08-13 with the prune round.) The preceding clarification
+      said tactic-rsi-evaluate-skill was left standing only because pruning is
+      its own graph act; that act is this round, and the node is gone. Three
+      tactics serve this strategy now: tactic-rsi-audit-prioritization-writer
+      (the within-band boost writer and the priority_log append, blocked on
+      tactic-attention-namespaced-rank), tactic-priority-provenance-schema (the
+      log's schema, cap, and the ownership-boundary lint — the bound), and
+      tactic-rsi-reprioritization-outcome-audit (the sensor).
+
+
+      Both halves of the signal read as insufficient data, for the same root
+      cause and not as a pass. There is no attention writer on main, so
+      attributes.priority_log is empty everywhere: the outcome half joins
+      against nothing, and the integrity half's 'attention writes carrying no
+      priority_log entry' counts zero because zero writes occur. That is the
+      conform-by-doing-nothing failure this node's own paired-signal
+      clarification names, and it stays true until the writer lands.
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,

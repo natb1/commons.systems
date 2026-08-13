@@ -19,15 +19,59 @@ reading: null
 serves:
   - strategy-rsi-delegated-prioritization
 recovers: []
-clarifications: []
+clarifications:
+  - question: This node's blocker was pruned and its implementation file was
+      deleted. Where does the work live now, and is the node still worth
+      building?
+    answer: >-
+      (Recorded 2026-08-13 with the prune round that followed the collapse, PR
+      3074.) Still worth building — this node is the SENSOR named by
+      strategy-rsi-delegated-prioritization's success signal, so pruning it
+      would leave that strategy's outcome half with no carrier at all. What
+      changes is where it lives and what it waits on.
+
+
+      The blocked_by on tactic-rsi-plan-priority-render is cleared. That node is
+      pruned: it typed the rsi-plan.md task-plan section and added the
+      renderer's staleness FLAG kinds, and both the section and the renderer are
+      retired doctrine. This also settles a contradiction that was standing on
+      main — the body below says 'No blocked_by' in its own Dependencies section
+      while the frontmatter carried one. The body was right.
+
+
+      The carrier moves from the renderer to /rsi-audit. The body says 'All work
+      is in packages/intentionsutil/scripts/render-rsi-plan.ts'; that file was
+      deleted by the collapse. Both halves — the per-iteration reprioritization
+      delta and the post-hoc outcome audit — become /rsi-audit lens sections,
+      alongside the per-workflow spend fold that landed with PR 3074. The
+      measurement is unchanged: join attributes.priority_log entry dates with
+      node closure dates, derived on read, no new stored state, and report
+      'insufficient data' honestly rather than a median computed from three
+      closures.
+
+
+      The actuator whose acts it audits is /rsi-audit, not the /rsi-evaluate
+      named in the statement and body — that skill was retired unbuilt and its
+      node is pruned in this same round. The statement is left as written
+      because it is a dated record and this clarification is what makes it
+      readable as one.
+
+
+      Worth stating rather than discovering: nothing can be measured yet.
+      attributes.priority_log has no writer anywhere on main — it is prose in
+      eight node files — so the join has an empty left side by construction. The
+      real prerequisite is tactic-rsi-audit-prioritization-writer, itself
+      blocked on tactic-attention-namespaced-rank. That is deliberately NOT
+      recorded as a blocked_by: this node can be built against the field as
+      written and will read 'insufficient data' until entries exist, which is
+      the honest reading and not a failure.
 tooling_goals: []
 success_signal: null
 attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-rsi-plan-priority-render
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null

@@ -1156,6 +1156,55 @@ clarifications:
       the only signal. The class defect is unchanged and still tracked at
       tactic-eval-finding-sensor-registry-key-prose-drift: no guard of any kind
       runs on the graph write path.
+  - question: What was pruned when the rsi collapse finished, and why are live nodes
+      still allowed to name the pruned ids in prose?
+    answer: >-
+      (Recorded 2026-08-13, the prune round following PR 3074's merge as
+      c3c229f0de63db09df7dc01ce02177f3d1b56c95.) Five nodes were deleted:
+
+
+      strategy-rsi-plan-surface — the child strategy that owned the rsi-plan.md
+      surface, already restated as RETIRED on 2026-08-12 when this node's own
+      /align round withdrew the render. A retired strategy carrying live tactics
+      is worse than no node: the router still distributes rank through it.
+
+
+      Its three tactics, all unbuilt with execution: null —
+      tactic-rsi-plan-merged-priority-table (the merged tier-banded priority
+      table), tactic-rsi-plan-priority-render (the typed task-plan section and
+      the renderer's FLAG kinds), and tactic-rsi-plan-render-pause-block (the
+      pause and resume criteria rendered from attributes.pause). Every one of
+      them renders INTO rsi-plan.md through render-rsi-plan.ts, and PR 3074
+      deleted both. tactic-rsi-plan-render-pause-block was sitting at phase
+      implement, so it was queue-eligible: it would have been selected and
+      dispatched against a file that no longer exists.
+
+
+      tactic-rsi-evaluate-skill — the delegated evaluation and reprioritization
+      subagent. Retired unbuilt; its evaluation half moved to /rsi and its
+      reprioritization half to /rsi-audit, recorded as
+      tactic-rsi-audit-prioritization-writer.
+
+
+      Deliberately NOT pruned, and worth naming so the omission does not read as
+      an oversight. tactic-rsi-plan-skill and tactic-rsi-plan-render-retire are
+      phase: done — they are records of work that was actually performed (the
+      renderer was built, then deleted), and deleting a completed record is
+      falsifying history, not tidying. tactic-rsi-reprioritization-outcome-audit
+      survives because it is the sensor named by
+      strategy-rsi-delegated-prioritization's success signal; it is repointed at
+      /rsi-audit in its own clarification instead.
+
+
+      On the prose: about ten live nodes name the pruned ids in backticks. That
+      is not a violation and needs no sweep. validateGraphProseRefs resolves a
+      reference against live nodes AND the deleted-id set that
+      lib-deleted-node-ids.ts derives from git history, so a pruned id stays
+      resolvable — classified pruned rather than missing — for as long as the
+      repository is not a shallow clone. This was verified by running
+      validate-graph after the deletion commit, not assumed. Rewriting those
+      bodies would churn tacticScopeFingerprint on live nodes for no integrity
+      gain, the same reasoning that left the historical skill names standing.
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation, every
