@@ -31,14 +31,22 @@
 # a bare origin repo + a `main` checkout (PROJECT_ROOT), with
 # DISPATCH_GRAPH_MAIN_WORKTREE pointing at it so
 # lib-graph-worktree.sh's resolve_main_worktree skips `git worktree list`.
-# The SUT and lib-graph-worktree.sh are copied into a scratch scripts dir so
+# The SUT and its sourced libs are copied into a scratch scripts dir so
 # "$SCRIPT_DIR/dispatch-ci-ready" resolves to a stub sibling (the CI gate is
 # not under test). PATH shims stand in for `npx` (the SUT's
-# check-node-selection.ts gate call — the shim ignores its args and always
-# prints a fixed fingerprint) and `direnv` (both subcommands exit 0). Does
-# NOT cover the check-node-selection gate plumbing itself (arg forwarding,
-# exit 12/13, stamp contents) — that is
+# check-node-selection.ts gate call — the shim always prints a fixed
+# fingerprint and exits 0, and journals its argv plus a copy of the store
+# directory it was handed) and `direnv` (both subcommands exit 0). Because the
+# gate binary itself never runs, this file cannot assert the gate's VERDICT —
+# it asserts WHICH STORE provisioning hands it and WHAT STATE that store is in,
+# which is what tactic-provision-revalidation-reads-stale-main-checkout is
+# about (cases 14-17). Does NOT cover the check-node-selection gate plumbing
+# itself (exit 12/13 pass-through, stamp contents) — that is
 # tactic-provision-worktree-script-tests.
+#
+# origin/main carries a real `intentions/` store from the seed commit on, so
+# every case has a store for the gate's `--dir` to name and the argv shim's
+# directory copy to snapshot.
 #
 # Assertion helpers (assert_eq, assert_contains, report_results) come from
 # test-helpers.sh.
@@ -67,6 +75,14 @@ git -C "$MAIN_WT" config user.email test@example.com
 git -C "$MAIN_WT" config user.name "Test User"
 echo "seed" >"$MAIN_WT/README.md"
 git -C "$MAIN_WT" add README.md
+# The intentions store the worker-start re-validation gate is pointed at
+# (`--dir "$PROJECT_ROOT/intentions"`). It lives on origin/main from the seed
+# commit so every case has a real store: the npx shim below copies whatever
+# directory it is handed, and cases 14-17 read node phases out of it.
+mkdir -p "$MAIN_WT/intentions"
+printf -- '---\nid: prov-seed-node\nkind: tactic\nphase: implement\n---\n\nSeed store node.\n' \
+  >"$MAIN_WT/intentions/prov-seed-node.md"
+git -C "$MAIN_WT" add intentions
 git -C "$MAIN_WT" commit -q -m "seed"
 git -C "$MAIN_WT" push -q -u origin main
 mkdir -p "$MAIN_WT/.claude/worktrees"
@@ -78,6 +94,10 @@ export DISPATCH_GRAPH_MAIN_WORKTREE="$MAIN_WT"
 cp "$SCRIPT_DIR/provision-node-worktree" "$SUT_DIR/provision-node-worktree"
 cp "$SCRIPT_DIR/lib-graph-worktree.sh" "$SUT_DIR/lib-graph-worktree.sh"
 cp "$SCRIPT_DIR/lib-worktree-residue.sh" "$SUT_DIR/lib-worktree-residue.sh"
+# lib.sh, REAL: the SUT's main-checkout fast-forward is lib.sh's
+# `sync_main_checkout`, and that fast-forward is the whole subject of cases
+# 14-17. A stub of it would fake away the only thing they assert.
+cp "$SCRIPT_DIR/lib.sh" "$SUT_DIR/lib.sh"
 chmod +x "$SUT_DIR/provision-node-worktree"
 
 # dispatch-ci-ready stub: the CI gate is not under test here.
@@ -87,14 +107,47 @@ exit 0
 STUB
 chmod +x "$SUT_DIR/dispatch-ci-ready"
 
-# npx shim: the SUT runs `npx tsx …/check-node-selection.ts …`; ignore the
-# args and always report a fixed passing fingerprint.
-cat >"$BIN_DIR/npx" <<'STUB'
+# npx shim: the SUT runs `npx tsx …/check-node-selection.ts …`. Its VERDICT is
+# deliberately unchanged — a fixed passing fingerprint on stdout and exit 0 — so
+# no case that predates this journalling changes meaning. What is added is
+# observability, for cases 14-17:
+#   - $NPX_LOG gets the full argv, one arg per line, TRUNCATED per invocation
+#     (the SUT calls the gate exactly once per run, so the log always describes
+#     the run that just happened). An EMPTY log means the gate was never
+#     reached — which is what "provisioning refused before reading the store"
+#     looks like from the outside.
+#   - $NPX_DIR_COPY gets a copy of the store directory the SUT passed as --dir,
+#     taken AT GATE TIME. That is stronger than reading the checkout after the
+#     run: it proves the store was already current when the gate read it, not
+#     that something fixed it afterwards.
+# Nothing but the fingerprint may reach stdout here — the SUT captures it as
+# GATE_FP and writes it to the phase-start stamp.
+NPX_LOG="$TMP/npx-argv.log"
+NPX_DIR_COPY="$TMP/npx-dir-copy"
+: >"$NPX_LOG"
+cat >"$BIN_DIR/npx" <<STUB
 #!/usr/bin/env bash
+: >"$NPX_LOG"
+printf '%s\n' "\$@" >>"$NPX_LOG"
+prev=""
+for a in "\$@"; do
+  if [[ "\$prev" == "--dir" ]]; then
+    rm -rf "$NPX_DIR_COPY"
+    cp -R "\$a" "$NPX_DIR_COPY" >&2
+    break
+  fi
+  prev="\$a"
+done
 echo "test-fixed-fingerprint"
 exit 0
 STUB
 chmod +x "$BIN_DIR/npx"
+
+# The value the SUT passed as --dir on the most recent gate call (empty when the
+# gate was never reached).
+npx_logged_dir() {
+  awk 'seen == 1 { print; exit } $0 == "--dir" { seen = 1 }' "$NPX_LOG"
+}
 
 # direnv shim: `direnv allow` / `direnv exec … true` both no-op successfully,
 # and each invocation is journalled so a test can assert the .envrc gate
@@ -331,8 +384,19 @@ assert_eq "case9 worktree recreated" "yes" "$([[ -d "$WT9" ]] && echo yes || ech
 # refuse (exit 2, `orphan-directory`) before running any of them — in
 # particular it must NOT abort the main checkout's in-progress rebase, and
 # must NOT report the main checkout's dirt as this node's residue (exit 14).
+#
+# SPLIT INTO 10a/10b. The single run this case used to make staged the
+# in-progress rebase in the MAIN checkout FIRST and then asserted the
+# orphan-directory refusal. Provisioning now fast-forwards the main checkout
+# before anything else, and a mid-rebase checkout cannot fast-forward — so that
+# one run can no longer reach the identity assertion. Both claims are kept, one
+# run each: 10a proves the orphan-directory refusal (main checkout clean and
+# current, so provisioning gets all the way to the identity assertion), 10b
+# proves a wedged MAIN checkout is never touched (it is now refused a step
+# earlier, at the sync, which guarantees the same thing more strongly — the
+# rebase is not aborted because nothing downstream ran at all).
 # ==========================================================================
-echo "Case 10: orphan directory (registration pruned, files left) -> exit 2, main checkout untouched"
+echo "Case 10a: orphan directory (registration pruned, files left) -> exit 2"
 id10="prov-case-orphan-directory"
 
 run_prov "$id10"
@@ -342,8 +406,15 @@ rm -f "$WT10/.git"
 git -C "$MAIN_WT" worktree prune
 echo "residue-content" >"$WT10/residue.txt"
 
+run_prov "$id10"
+assert_eq "case10a exit 2 (orphan directory is not a worktree)" "2" "$PROV_RC"
+assert_contains "case10a stderr names the orphan-directory refusal" \
+  "is not the linked worktree for" "$PROV_STDERR"
+assert_eq "case10a residue left untouched" "residue-content" "$(cat "$WT10/residue.txt")"
+
 # Stage an in-progress, conflicted rebase in the MAIN checkout. Pre-fix, the
 # guard's `git -C "$WT" rebase --abort` aborted exactly this.
+echo "Case 10b: mid-rebase MAIN checkout -> exit 2, rebase NOT aborted"
 git -C "$MAIN_WT" checkout -q -b case10-topic
 echo "topic" >"$MAIN_WT/case10.txt"
 git -C "$MAIN_WT" add case10.txt
@@ -359,13 +430,16 @@ set -e
 assert_eq "case10 fixture: main checkout is mid-rebase" "yes" \
   "$([[ -d "$MAIN_WT/.git/rebase-merge" || -d "$MAIN_WT/.git/rebase-apply" ]] && echo yes || echo no)"
 
+: >"$NPX_LOG"
 run_prov "$id10"
-assert_eq "case10 exit 2 (orphan directory is not a worktree)" "2" "$PROV_RC"
-assert_contains "case10 stderr names the orphan-directory refusal" \
-  "is not the linked worktree for" "$PROV_STDERR"
-assert_eq "case10 main checkout's rebase NOT aborted" "yes" \
+assert_eq "case10b exit 2 (the main checkout will not fast-forward)" "2" "$PROV_RC"
+assert_contains "case10b stderr names the main-checkout sync refusal" \
+  "this checkout needs a person" "$PROV_STDERR"
+assert_eq "case10b gate never invoked (refused before reading any store)" "" \
+  "$(cat "$NPX_LOG")"
+assert_eq "case10b main checkout's rebase NOT aborted" "yes" \
   "$([[ -d "$MAIN_WT/.git/rebase-merge" || -d "$MAIN_WT/.git/rebase-apply" ]] && echo yes || echo no)"
-assert_eq "case10 residue left untouched" "residue-content" "$(cat "$WT10/residue.txt")"
+assert_eq "case10b residue left untouched" "residue-content" "$(cat "$WT10/residue.txt")"
 
 set +e
 git -C "$MAIN_WT" rebase --abort >/dev/null 2>&1
@@ -431,5 +505,137 @@ assert_eq "case13 exit 14" "14" "$PROV_RC"
 assert_contains "case13 stderr names wrong-branch" "wrong-branch" "$PROV_STDERR"
 assert_eq "case13 foreign branch still checked out, untouched" "$FOREIGN_HEAD13" \
   "$(git -C "$WT13" rev-parse HEAD)"
+
+# ==========================================================================
+# Cases 14-17 — tactic-provision-revalidation-reads-stale-main-checkout.
+#
+# The worker-start re-validation gate is a pure filesystem read of a store
+# DIRECTORY, and provisioning hands it `$PROJECT_ROOT/intentions` — the main
+# checkout's WORKING TREE. `git fetch` moves REFS ONLY, so the bare fetch that
+# used to precede the gate left that tree wherever it happened to be: whenever
+# the checkout lagged origin/main the gate answered from stale files and
+# reported a false `stale-selection` (exit 12) against a current selection.
+# Provisioning now FAST-FORWARDS the checkout first, so the tree `--dir` names
+# is current by construction.
+#
+# advance_origin_main moves origin/main from a SEPARATE clone, so $MAIN_WT's
+# checkout is left behind — clean, just not fast-forwarded. That is the shape
+# the defect actually takes; a DIRTY tree is a different thing entirely (it
+# makes the fast-forward fail, which is a refusal — cases 15-16).
+# ==========================================================================
+advance_origin_main() {  # $1=repo-relative path $2=content $3=commit message
+  local rel="$1" content="$2" msg="$3"
+  local scratch="$TMP/origin-pusher"
+  rm -rf "$scratch"
+  git clone -q "$ORIGIN" "$scratch"
+  git -C "$scratch" config user.email test@example.com
+  git -C "$scratch" config user.name "Test User"
+  mkdir -p "$(dirname "$scratch/$rel")"
+  printf '%s' "$content" >"$scratch/$rel"
+  git -C "$scratch" add "$rel"
+  git -C "$scratch" commit -q -m "$msg"
+  git -C "$scratch" push -q origin main
+  rm -rf "$scratch"
+}
+
+# ==========================================================================
+# Case 14 — THE REGRESSION PIN. The main checkout is BEHIND origin/main and
+# clean. Provisioning must fast-forward it before the gate reads it.
+# ==========================================================================
+echo "Case 14: main checkout behind origin/main -> fast-forwarded before the gate reads it"
+id14="prov-case-stale-main-checkout"
+NODE14="intentions/$id14.md"
+printf -- '---\nid: %s\nkind: tactic\nphase: qa\n---\n\nCase 14 node.\n' "$id14" >"$MAIN_WT/$NODE14"
+git -C "$MAIN_WT" add "$NODE14"
+git -C "$MAIN_WT" commit -q -m "case14 node at phase qa"
+git -C "$MAIN_WT" push -q origin main
+# origin/main moves on to `review`; $MAIN_WT stays on the `qa` commit.
+advance_origin_main "$NODE14" \
+  "$(printf -- '---\nid: %s\nkind: tactic\nphase: review\n---\n\nCase 14 node.\n' "$id14")" \
+  "case14 advance the node to phase review on origin/main"
+assert_file_contains "case14 fixture: the checkout is behind (still phase qa)" \
+  "$MAIN_WT/$NODE14" "phase: qa"
+
+: >"$NPX_LOG"
+rm -rf "$NPX_DIR_COPY"
+run_prov "$id14" review
+assert_eq "case14 exit 0" "0" "$PROV_RC"
+# THE PIN: pre-fix the SUT only fetched, so the checkout stayed on the `qa`
+# commit and the gate read `phase: qa` for a selection that says `review`.
+assert_file_contains "case14 main checkout fast-forwarded (now phase review)" \
+  "$MAIN_WT/$NODE14" "phase: review"
+assert_eq "case14 gate still pointed at the main checkout's own store" \
+  "$MAIN_WT/intentions" "$(npx_logged_dir)"
+assert_file_contains "case14 the store was ALREADY current when the gate read it" \
+  "$NPX_DIR_COPY/$id14.md" "phase: review"
+assert_eq "case14 the gate did NOT see the pre-sync phase" "no" \
+  "$(grep -qF 'phase: qa' "$NPX_DIR_COPY/$id14.md" && echo yes || echo no)"
+
+# ==========================================================================
+# Case 15: a DIRTY main checkout cannot fast-forward. That is a refusal, not a
+# stale read — provisioning must exit 2 and must NOT fall back to reading the
+# checkout anyway (.claude/rules/code-style.md). The dirty file is the same one
+# the incoming commit touches, since git only refuses a fast-forward that would
+# overwrite local changes.
+# ==========================================================================
+echo "Case 15: dirty main checkout -> exit 2, gate never invoked"
+id15="prov-case-dirty-main-checkout"
+echo "case15-base" >"$MAIN_WT/case15.txt"
+git -C "$MAIN_WT" add case15.txt
+git -C "$MAIN_WT" commit -q -m "case15 seed"
+git -C "$MAIN_WT" push -q origin main
+advance_origin_main "case15.txt" "case15-origin" "case15 advance origin/main"
+echo "case15-local-uncommitted" >"$MAIN_WT/case15.txt"
+
+: >"$NPX_LOG"
+run_prov "$id15"
+assert_eq "case15 exit 2" "2" "$PROV_RC"
+assert_contains "case15 stderr names the ff-only refusal" \
+  "'git merge --ff-only origin/main' failed" "$PROV_STDERR"
+assert_contains "case15 stderr names the remedy in the ladder's register" \
+  "this checkout needs a person" "$PROV_STDERR"
+assert_eq "case15 gate never invoked (no silent fallback to a stale read)" "" \
+  "$(cat "$NPX_LOG")"
+assert_eq "case15 the uncommitted edit is left exactly as found" \
+  "case15-local-uncommitted" "$(cat "$MAIN_WT/case15.txt")"
+git -C "$MAIN_WT" checkout -- case15.txt
+
+# ==========================================================================
+# Case 16: a DIVERGED main checkout (a local commit origin/main does not have,
+# with origin/main moved on independently) — same refusal.
+# ==========================================================================
+echo "Case 16: diverged main checkout -> exit 2, gate never invoked"
+id16="prov-case-diverged-main-checkout"
+advance_origin_main "case16.txt" "case16-origin" "case16 advance origin/main"
+echo "case16-local-only" >"$MAIN_WT/case16-local.txt"
+git -C "$MAIN_WT" add case16-local.txt
+git -C "$MAIN_WT" commit -q -m "case16 local-only commit"
+
+: >"$NPX_LOG"
+run_prov "$id16"
+assert_eq "case16 exit 2" "2" "$PROV_RC"
+assert_contains "case16 stderr names the ff-only refusal" \
+  "'git merge --ff-only origin/main' failed" "$PROV_STDERR"
+assert_eq "case16 gate never invoked (no silent fallback to a stale read)" "" \
+  "$(cat "$NPX_LOG")"
+git -C "$MAIN_WT" reset -q --hard origin/main
+
+# ==========================================================================
+# Case 17: an ALREADY-CURRENT main checkout — the common case — is unchanged:
+# the fast-forward is a no-op, the gate runs, and provisioning succeeds. (Every
+# case above this block also runs against a current checkout; this one says so
+# explicitly and pins the `--dir` the gate is handed.)
+# ==========================================================================
+echo "Case 17: already-current main checkout -> exit 0, gate reads the same store"
+id17="prov-case-current-main-checkout"
+HEAD17=$(git -C "$MAIN_WT" rev-parse HEAD)
+
+: >"$NPX_LOG"
+run_prov "$id17"
+assert_eq "case17 exit 0" "0" "$PROV_RC"
+assert_eq "case17 main checkout unmoved (the fast-forward was a no-op)" "$HEAD17" \
+  "$(git -C "$MAIN_WT" rev-parse HEAD)"
+assert_eq "case17 gate handed the main checkout's store" "$MAIN_WT/intentions" \
+  "$(npx_logged_dir)"
 
 report_results

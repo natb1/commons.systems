@@ -546,9 +546,10 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   #   a. The main checkout is synced with origin/main. graph-auto-merge
   #      enumerates its candidate set from the LOCAL working tree
   #      (listNodesStrict("./intentions")) and reads each node's `office_hours`
-  #      from it. The only routine thing that advances that checkout is
-  #      dispatch-select-tick's Step 1 `git fetch origin main && git merge
-  #      --ff-only origin/main` — which this branch exits before. During a
+  #      from it. The routine things that advance that checkout are
+  #      dispatch-select-tick's Step 1 sync — which this branch exits before —
+  #      and provision-node-worktree's own sync, which only runs when a worker
+  #      is being provisioned (i.e. not during a pause). During a
   #      standing pause nothing else would ever refresh it, so the drain would
   #      run forever against the tree as it stood when the pause began: a node
   #      reviewed after the pause is invisible (the drain does nothing), and an
@@ -584,12 +585,21 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   DRAIN_SYNC_OK=0
   if [[ "$DRAIN_MAIN_BRANCH" != "main" ]]; then
     echo "dispatch-tick: WARNING: main checkout '$MAIN_WORKTREE' is on branch '${DRAIN_MAIN_BRANCH:-<unresolved>}', not 'main'; SKIPPING the paused-branch node-lane merge/reconcile drain this tick (a drain against a non-main checkout would merge from a stale candidate set)" >&2
-  elif ! git -C "$MAIN_WORKTREE" fetch origin main 1>&2; then
-    echo "dispatch-tick: WARNING: 'git fetch origin main' failed in '$MAIN_WORKTREE'; SKIPPING the paused-branch node-lane merge/reconcile drain this tick (draining against a stale checkout would merge past parks landed since the pause began)" >&2
-  elif ! git -C "$MAIN_WORKTREE" merge --ff-only origin/main 1>&2; then
-    echo "dispatch-tick: WARNING: 'git merge --ff-only origin/main' failed in '$MAIN_WORKTREE' (tree dirty or diverged); SKIPPING the paused-branch node-lane merge/reconcile drain this tick — select-tick's sync-repair escalation does not run while paused, so this tree needs a human" >&2
   else
-    DRAIN_SYNC_OK=1
+    # sync_main_checkout (lib.sh) is the shared fetch+ff-merge: same two git
+    # calls in the same order this branch open-coded, with rc 1 = fetch failed
+    # and rc 2 = merge failed so the two warnings below stay distinct. Captured
+    # with `|| rc=$?` so a non-zero return is a value here, never a control-flow
+    # surprise.
+    DRAIN_SYNC_RC=0
+    sync_main_checkout "$MAIN_WORKTREE" || DRAIN_SYNC_RC=$?
+    if [[ "$DRAIN_SYNC_RC" -eq 1 ]]; then
+      echo "dispatch-tick: WARNING: 'git fetch origin main' failed in '$MAIN_WORKTREE'; SKIPPING the paused-branch node-lane merge/reconcile drain this tick (draining against a stale checkout would merge past parks landed since the pause began)" >&2
+    elif [[ "$DRAIN_SYNC_RC" -ne 0 ]]; then
+      echo "dispatch-tick: WARNING: 'git merge --ff-only origin/main' failed in '$MAIN_WORKTREE' (tree dirty or diverged); SKIPPING the paused-branch node-lane merge/reconcile drain this tick — select-tick's sync-repair escalation does not run while paused, so this tree needs a human" >&2
+    else
+      DRAIN_SYNC_OK=1
+    fi
   fi
 
   if (( DRAIN_SYNC_OK )); then

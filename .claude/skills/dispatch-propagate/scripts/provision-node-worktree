@@ -5,6 +5,12 @@
 # Launched phase agents invoke THIS as one command — agents never hand-roll
 # provisioning. Mechanics stay owned and deterministic:
 #
+#   0. Fast-forward the main checkout onto origin/main (sync_main_checkout).
+#      Everything below either READS that checkout (the worker-start
+#      re-validation gate reads its intentions/ store) or merges out of it, and
+#      `git fetch` alone moves refs without touching the tree — so the sync, not
+#      a bare fetch, is what makes both correct. Refuses (exit 2) rather than
+#      reading a stale tree.
 #   1. Resolve the native location: <project-root>/.claude/worktrees/<node-id>,
 #      where the project root is the worktree with `main` checked out. No
 #      graph-native path assumes the legacy `.bare` common-dir layout.
@@ -70,8 +76,12 @@
 #       and `git diff --stat` evidence. The caller routes it to a tracked
 #       hold, not to the conflict lane.
 #   2   usage or mechanical error (bad node id, unresolvable project root,
-#       failed add/fetch, an `orphan-directory` that is not the node's linked
-#       worktree, or an `.envrc` that differs from origin/main's). The caller
+#       failed add/fetch, a main checkout that will not fast-forward onto
+#       origin/main — dirty or diverged — an `orphan-directory` that is not the
+#       node's linked worktree, or an `.envrc` that differs from origin/main's).
+#       Note the dirty/diverged main checkout is deliberately NOT exit 14: 14 is
+#       about THIS NODE's worktree residue, and its evidence capture would
+#       serialize the MAIN checkout's status into a hold node. The caller
 #       parks the node via the office_hours graph write (park-node) — never an
 #       office-hours label. Note the caller does NOT re-enter the directory
 #       with git on this code, which is why `orphan-directory` routes here
@@ -79,12 +89,20 @@
 #       MAIN checkout's status into a hold node).
 #
 # Requires `dangerouslyDisableSandbox: true` from a Claude session: git push
-# fetch/worktree writes, gh (inside dispatch-ci-ready), and direnv.
+# fetch/worktree writes, gh (inside dispatch-ci-ready), and direnv. The main-
+# checkout fast-forward below (sync_main_checkout) is a TREE-UPDATING git op on
+# a checkout containing the read-only `.claude/skills/**` carve-out, which is
+# the canonical hazard in .claude/rules/sandbox.md — so it needs sandbox-off
+# too. That is NOT a new requirement: dispatch-graph-execute already runs this
+# script with the sandbox disabled for the reasons above.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
+# sync_main_checkout — the shared main-checkout fast-forward, used below.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib.sh"
 # The read-only worktree inspection half (identity assertion + residue
 # condition), shared with the stale-hold sweep. The REPAIR half stays here.
 # shellcheck source=/dev/null
@@ -112,19 +130,52 @@ fi
 
 WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
 
-if ! git -C "$PROJECT_ROOT" fetch origin main 1>&2; then
-  echo "provision-node-worktree: git fetch origin main failed" >&2
+# Fast-forward the main checkout onto origin/main — a FETCH IS NOT ENOUGH, and
+# this line is load-bearing for TWO separate things below:
+#
+#   1. The worker-start re-validation gate (next block) reads a STORE DIRECTORY
+#      off the filesystem: `--dir "$PROJECT_ROOT/intentions"` is the main
+#      checkout's WORKING TREE. `git fetch` moves REFS only, so a bare fetch
+#      left that tree wherever it happened to be — arbitrarily far behind
+#      origin/main — and the gate answered from stale files, reporting a false
+#      `stale-selection` (exit 12) against a current selection. That is
+#      tactic-provision-revalidation-reads-stale-main-checkout, which halted a
+#      /dispatch-ladder run twice on 2026-08-13.
+#   2. The merged-tree guarantee further down (the origin/main merge into the
+#      node's branch, ~line 350) — the gate above it used to refuse first, so a
+#      stale checkout STARVED the guarantee: the phase never got the fresh
+#      skills, and a real conflict was never detected early.
+#
+# The previous comment here claimed dispatch-select-tick keeps this checkout
+# fast-forwarded. That is true of the tick path and FALSE of every other caller
+# — /dispatch-ladder, a manual dispatch-graph-execute, and any path at all while
+# dispatch is paused, when select-tick does not run. Provisioning no longer
+# depends on someone else having done it: it fast-forwards the checkout ITSELF,
+# so the gate is correct for every caller.
+#
+# A failure is a hard refusal, never a fall-through to a stale read
+# (.claude/rules/code-style.md). Exit 2 is the table's mechanical-error code,
+# whose caller (dispatch-graph-execute's `*)` arm) parks the node via park-node
+# with "fix the environment" — exactly right for a checkout that needs a person.
+SYNC_RC=0
+sync_main_checkout "$PROJECT_ROOT" || SYNC_RC=$?
+if [[ "$SYNC_RC" -eq 1 ]]; then
+  echo "provision-node-worktree: 'git fetch origin main' failed in $PROJECT_ROOT — cannot verify the selection against current origin/main, refusing to provision on unverified state" >&2
+  exit 2
+fi
+if [[ "$SYNC_RC" -ne 0 ]]; then
+  echo "provision-node-worktree: 'git merge --ff-only origin/main' failed in $PROJECT_ROOT (the tree is dirty or diverged) — this checkout needs a person before anything may be read from or written into it" >&2
   exit 2
 fi
 
 # Worker-start re-validation (tactic-worker-start-revalidation): selection froze
 # this node's directive at tick start, but the worker may start minutes later.
-# Re-check it against the just-fetched origin/main BEFORE any worktree/branch
-# work, so a stale selection yields before it provisions. The main checkout is
-# kept fast-forwarded to origin/main by dispatch-select-tick, so its intentions/
-# store is the fresh-origin/main snapshot the gate requires. The stamp path sits
-# adjacent to the worktree (outside every checkout), so it never dirties a tree;
-# it is refreshed by every transition write and removed with the worktree.
+# Re-check it against origin/main BEFORE any worktree/branch work, so a stale
+# selection yields before it provisions. `--dir "$PROJECT_ROOT/intentions"` is
+# the main checkout's own store, which the sync above just made current by
+# construction. The stamp path sits adjacent to the worktree (outside every
+# checkout), so it never dirties a tree; it is refreshed by every transition
+# write and removed with the worktree.
 STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 GATE_FP=$(cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
   "$NODE_ID" "$SELECTED_PHASE" --dir "$PROJECT_ROOT/intentions" --stamp "$STAMP_PATH")
