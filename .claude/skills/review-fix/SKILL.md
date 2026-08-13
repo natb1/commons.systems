@@ -351,20 +351,51 @@ phase-transition commit that *started* the review phase and returns
 this stage exists to eliminate. `dispatch-code-review` now rejects a
 non-range `--target` with exit 2, so this is enforced, not just documented.
 
-Do **not** pass `--effort` to `dispatch-code-review` here — leave it at the
-script's own default (`low`). This is deliberate, not an oversight: Unit 1's
-measured investigation (`references/code-review-invocation.md` §1.2, §5.4, §7)
-found that `max` effort against a real, non-trivial diff ran over 39 minutes
-without completing — `claude -p` buffers all output until the run completes,
-so the timeout was a total loss of ~$372 of price-proxy spend for zero bytes
-of output — and that `medium` effort did not complete within 300s either.
-Only `low` effort is measured to reliably complete (14-30s observed). Raising
-the effort level for this lane is an open follow-up for
-`strategy-token-economy`, not settled by this node.
+Do **not** pass `--effort` or `--model` to `dispatch-code-review` here — the
+script owns both, and both defaults are 2026-08-13 author rulings: effort
+`high` (`strategy-token-economy` clarification 44, superseding the earlier
+`max` ruling) and the nested session pinned to `--model opus` (the same-day
+model-pin ruling). The pin is explicit because a nested `claude -p` does not
+inherit the launching session's model, and at `high` effort the model is the
+dominant cost and quality term — an unpinned run would leave clarification
+46's realized-cost measurement uninterpretable. Both flags exist on the script
+and are overridable; this caller overrides neither.
 
-Run this call with `dangerouslyDisableSandbox: true` and `timeout: 600000`
-(it is a nested `claude` session — `--comment` shells `gh` and it touches the
-local Claude daemon; see `.claude/rules/sandbox.md`):
+`high` is reachable only because the invocation is detached. The measured
+record is unchanged (`references/code-review-invocation.md` §1.2, §5.4, §7,
+§9): `low` completes in 14-30s, `medium` did not complete within 300s, and
+`max` ran 2363s against a real diff before being killed having produced **zero
+bytes** — `claude -p` buffers all output until the run completes, so that kill
+was a total loss of ~$372 of price-proxy spend, not a partial result. `high`
+sits between the two failing points and so cannot finish inside a single
+600000ms Bash call at all. `dispatch-code-review` therefore launches the run
+detached (`setsid`) and makes every invocation a bounded **await** over that
+one run: the caller pays for one review and collects it across as many calls
+as it takes.
+
+Run **every** call with `dangerouslyDisableSandbox: true` and
+`timeout: 600000`. The sandbox override is load-bearing twice over: this is a
+nested `claude` session (`--comment` shells `gh`, and it touches the local
+Claude daemon; see `.claude/rules/sandbox.md`), *and* a sandboxed launch does
+not survive at all — measured in §9.1, each sandboxed Bash call gets its own
+PID namespace, so the detached child records a namespace-local pid and is gone
+by the next call.
+
+**Between the launching call and the collecting call the session must do
+nothing else.** Step 1b is serialized before the Workflow fan-out precisely
+because `--fix` writes the working tree. With a detached run that property now
+depends on the *caller*: between the launching call and the collecting call the
+session must do nothing else — no other reads of the tree, no other steps, no
+other tool calls that touch the worktree. The run is writing that tree for the
+whole await window, not just during the first call.
+
+Invoke the script in a **bounded re-invocation loop** — the same fixed-cap,
+fail-closed-on-exhaustion shape as
+`.claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh:16-31`. At most
+**8 attempts**. Each attempt is one Bash call running the exact command below,
+unchanged and with **identical arguments** every time; identical arguments are
+what make the next call resume the same detached run rather than pay for a
+second one.
 
 ```bash
 CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
@@ -372,7 +403,33 @@ CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
 CR_RC=$?
 ```
 
-**Hard stop on any non-zero `CR_RC`**, following the same stdout/stderr-split,
+- `CR_RC` is `5` — the detached run is still in flight. Attempt again with
+  identical arguments, up to the cap.
+- `CR_RC` is `0` — leave the loop; the `case` below passes it through.
+- anything else — leave the loop immediately and let the `case` below decide.
+- the cap is reached with no attempt returning `0` — **exhausting the cap is a
+  failure, not a pass.** Take the `4` branch of the `case` below, naming the
+  cause "attempt cap exhausted", and hard-stop the phase. Never continue to
+  Step 2 on an unfinished review.
+
+The cap is arithmetic, not a guess: 8 attempts × the script's 540s default
+await window = 4320s ≈ 72 minutes, which sits inside the script's own 5400s
+(90-minute) deadline. So the caller's cap trips first and the loop is bounded
+by its own count, never by waiting for the script's deadline enforcement; and
+each individual call's 540s await fits well inside the 600000ms Bash tool cap.
+
+**Open follow-up — Variant A.** This loop is the foreground-poll shape, chosen
+because it is known safe (`references/code-review-invocation.md` §9.4). If a
+later probe shows the harness delivers a completion notification for a
+backgrounded Bash call **and** that the awaiting session does not present as
+`blocked` while it waits, the whole loop collapses to a single
+`run_in_background: true` call. No `ScheduleWakeup` fallback may be added
+alongside it: `strategy-token-economy` clarification 11 records that a
+self-scheduled fallback timer for harness-tracked work fires redundantly after
+the auto-notification has already resumed and finished the work, burning a
+no-progress round.
+
+**Hard stop on any non-zero `CR_RC` other than `5`**, following the same stdout/stderr-split,
 case-on-exit-code idiom this file already uses for the front door
 (`DERIVE_OUT`/`DERIVE_ERR`, preamble above) and for `commit-merge-push`
 (Step 3):
@@ -382,16 +439,35 @@ CR_ERR="tmp/code-review-$N.err"
 CR_LOG="tmp/code-review-$N/output.txt"
 case $CR_RC in
   0) ;;
-  1) echo "/review-fix: 'claude -p /code-review' exited non-zero (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  1) echo "/review-fix: the detached 'claude -p /code-review' exited non-zero, failed to launch, or died recording no exit code (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
   2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
   3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  4) echo "/review-fix: 'claude -p /code-review' timed out (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: the detached '/code-review' run hit its deadline, or the 8-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  5) : ;; # still in flight — NOT terminal. Re-invoke with identical arguments,
+          # up to the 8-attempt cap; only cap exhaustion is terminal, and it
+          # routes to the 4 branch above.
+  6) echo "/review-fix: the reviewed worktree's .code-review-lock is held by another detached /code-review run — nothing was launched and no review ran (see $CR_ERR)" >&2; exit 1 ;;
   *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
 esac
 ```
 
+Exit `6` is **not** a retryable in-flight state and must never be fed back into
+the loop. `5` means *this* run is still working; `6` means the script never
+launched anything, because a **different** detached review already holds the
+kernel `flock` on this worktree's `<worktree>.code-review-lock` sidecar. Looping
+on it would burn attempts waiting on a run this session does not own and cannot
+collect. Hard-stop the phase and let the human read the lock file for the
+holder's diagnostics.
+
+**Order matters, and it is not negotiable.** The parse block and the
+`status=ok` gate further down run **only after** the loop has left with
+`CR_RC` 0. An exit-5 `CR_OUT` is a `status=running` block, not a summary: it
+carries no `findings_path=` and no `patch_path=`, so letting one reach the gate
+would hard-stop the phase on a review that is merely still working. Loop first,
+`case` second, parse and gate only on rc 0.
+
 The `*)` catch-all is **load-bearing, not defensive padding**. The script's
-documented exit codes are 0/1/2/3/4, but a stale worktree checked out before
+documented exit codes are 0/1/2/3/4/5/6, but a stale worktree checked out before
 this node landed yields 127 (missing script), a lost `+x` bit or a sandbox
 denial yields 126, a signal yields 128+n (130 on SIGINT), and a `set -euo
 pipefail` abort inside the script (e.g. `mkdir -p` on an unwritable
@@ -425,10 +501,20 @@ that carries a credential (the reason the finder roster has a dedicated
 
 The reason must instead carry, in this order:
 
-1. The exit code and what it means (`3` = instrument unavailable, `4` =
-   timeout, `1` = nested session exited non-zero, `2` = argument/empty output,
-   anything else = unexpected exit — see the catch-all above).
-2. The `--target` passed above and the effort level (`low`).
+1. The exit code and what it means (`3` = instrument unavailable, `4` = the
+   detached run's deadline was exhausted, `1` = nested session exited non-zero
+   or the run died recording no exit code, `2` = argument/empty output, `6` =
+   another detached run holds this worktree's code-review lock, anything else =
+   unexpected exit — see the catch-all above). `5` never reaches a park: it is
+   an intermediate state the loop absorbs. A park for exhaustion — either the
+   script's own deadline (`4`) or the caller's exhausted attempt cap — **must
+   record the elapsed wall clock and the deadline it ran against**; both are in
+   the script's exit-4 stderr line, and `elapsed_s=`/`deadline_s=` are on every
+   `status=running` block the loop saw.
+2. The `--target` passed above, plus the effort level and the model actually
+   used. Read those back from the script's own output (`effort=` and `model=`
+   on the summary, `effort=` on a `status=running` block) rather than restating
+   a remembered default; today they are `high` and `opus`.
 3. The on-disk paths of the full, unredacted evidence — `tmp/code-review-$N.err`
    and `tmp/code-review-$N/output.txt` — so the human reviewer can read it in
    the worktree, where it never leaves the machine.

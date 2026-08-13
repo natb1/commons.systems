@@ -31,19 +31,40 @@ cr_setup() {
 }
 
 # write_fake_code_review_claude — a fake `claude` CLI that only understands
-# `-p <prompt> --permission-mode acceptEdits` (stdin already redirected to
-# /dev/null by the caller). Behavior is driven by files under $STUB_DIR:
+# `-p <prompt> --model <alias> --permission-mode acceptEdits` (stdin already
+# redirected to /dev/null by the caller). Behavior is driven by files under
+# $STUB_DIR:
 #   $STUB_DIR/cr-fake-output      text to print on stdout (default: empty)
 #   $STUB_DIR/cr-fake-exit        exit code to return (default: 0)
 #   $STUB_DIR/cr-fake-sleep       seconds to sleep before responding (default: 0)
 #   $STUB_DIR/cr-fake-edit-file   path (relative to CWD) to write/touch before
 #                                 responding, modeling a --fix edit
+#   $STUB_DIR/cr-fake-crash       if present, the stub kills its own process
+#                                 group (SIGKILL) instead of exiting normally —
+#                                 models a crash that writes no exit-code
+#                                 marker. Safe here only because the launcher
+#                                 always runs this stub under `setsid`
+#                                 (dispatch-code-review's detached launch), so
+#                                 the stub's process group is disjoint from the
+#                                 test harness's own — `kill -9 0` cannot reach
+#                                 anything outside the detached run's own tree.
 #   $STUB_DIR/cr-fake-calls.log   appended once per invocation (call-count probe)
+#   $STUB_DIR/cr-fake-argv.log    the invocation's argv, one element per line
+#                                 (proves the shipped effort/model/target)
 write_fake_code_review_claude() {
   cat >"$TMPDIR_TEST/fake-claude-code-review" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")" && pwd)/stub"
 echo "call" >> "$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "$@" >> "$STUB_DIR/cr-fake-argv.log"
+
+if [[ -f "$STUB_DIR/cr-fake-crash" ]]; then
+  # `kill -9 0` targets the CALLER's own process group — the whole detached
+  # setsid tree this stub is running under, never anything outside it. No
+  # exit-code marker gets written: the parent CHILD_SCRIPT wrapper dies with
+  # us before it can reach its own `printf ... >"$rcfile.tmp"` line.
+  kill -9 0
+fi
 
 if [[ -f "$STUB_DIR/cr-fake-sleep" ]]; then
   sleep "$(cat "$STUB_DIR/cr-fake-sleep")"
@@ -69,7 +90,8 @@ STUB
 cr_reset_stubs() {
   rm -f "$STUB_DIR"/cr-fake-output "$STUB_DIR"/cr-fake-exit \
         "$STUB_DIR"/cr-fake-sleep "$STUB_DIR"/cr-fake-edit-file \
-        "$STUB_DIR"/cr-fake-calls.log
+        "$STUB_DIR"/cr-fake-calls.log "$STUB_DIR"/cr-fake-argv.log \
+        "$STUB_DIR"/cr-fake-crash
 }
 
 # ============================================================================
@@ -237,22 +259,82 @@ assert_eq "case8: exit 2" "2" "$rc"
 assert_eq "case8: fake never invoked" "0" "$inj_calls"
 
 # ============================================================================
-# Test 9: timeout
+# Test 9: deadline expiry (replaces the old foreground-timeout case — the
+# script no longer has one; the run is detached and every invocation is a
+# bounded await, so exceeding the total wall clock is the deadline path now)
 # ============================================================================
-echo "Test: dispatch-code-review timeout"
+# Two calls: the first launches a run the stub will never finish naturally
+# (sleep 30) and returns exit 5 (still in flight) once its short
+# --await-seconds window elapses. The second call resumes the SAME run and,
+# because the run is still going once the (short) --deadline-seconds total is
+# reached, kills it and returns exit 4. DISPATCH_CODE_REVIEW_POLL_INTERVAL_S
+# is set to 1 so the await loop's polling granularity does not itself add
+# multiple seconds of slack on top of the deadline.
+echo "Test: dispatch-code-review deadline expiry (exit 4)"
 cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
 printf '%s\n' "unreachable" >"$STUB_DIR/cr-fake-output"
-echo "5" >"$STUB_DIR/cr-fake-sleep"
+echo "30" >"$STUB_DIR/cr-fake-sleep"
 
 OUT_DIR_9="$CR_REPO/tmp/cr-out-9"
 rc=0
 out=$(
   cd "$CR_REPO" \
   && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
-     DISPATCH_CODE_REVIEW_TIMEOUT=1 \
-     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_9" 2>"$TMPDIR_TEST/cr-9.err"
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_9" \
+       --await-seconds 2 --deadline-seconds 4 2>"$TMPDIR_TEST/cr-9a.err"
 ) || rc=$?
-assert_eq "case9: exit 4" "4" "$rc"
+assert_eq "case9: first call is still in flight, exit 5" "5" "$rc"
+
+run_file=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | head -1)
+child_pid=""
+[[ -n "$run_file" ]] && child_pid=$(sed -n 's/^pid=//p' "$run_file" | head -1)
+assert_eq "case9: the launched pid is alive before the deadline" "1" \
+  "$([[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null && echo 1 || echo 0)"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_9" \
+       --await-seconds 2 --deadline-seconds 4 2>"$TMPDIR_TEST/cr-9b.err"
+) || rc=$?
+assert_eq "case9: second call hits the deadline and exits 4" "4" "$rc"
+sleep 0.3
+assert_eq "case9: the killed run's pid is no longer alive" "0" \
+  "$([[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null && echo 1 || echo 0)"
+run_left=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | wc -l | tr -d '[:space:]')
+assert_eq "case9: the run record is discarded after the deadline kill" "0" "$run_left"
+
+# ============================================================================
+# Test 9b: DISPATCH_CODE_REVIEW_TIMEOUT is retired, not aliased
+# ============================================================================
+# It named a single foreground `timeout` budget the script no longer has; a
+# stale value carried into either new knob would set a meaningless budget.
+# Setting it is a hard exit 2 naming the replacements, never a silent no-op.
+echo "Test: dispatch-code-review rejects the retired DISPATCH_CODE_REVIEW_TIMEOUT"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "unreachable" >"$STUB_DIR/cr-fake-output"
+
+OUT_DIR_9B="$CR_REPO/tmp/cr-out-9b"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_TIMEOUT=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_9B" 2>"$TMPDIR_TEST/cr-9c.err"
+) || rc=$?
+retired_calls=0
+[[ -f "$STUB_DIR/cr-fake-calls.log" ]] && retired_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case9b: exit 2" "2" "$rc"
+assert_eq "case9b: the fake was never invoked" "0" "$retired_calls"
+assert_eq "case9b: stderr names --await-seconds" "1" \
+  "$(grep -c 'await-seconds' "$TMPDIR_TEST/cr-9c.err" || true)"
+assert_eq "case9b: stderr names --deadline-seconds" "1" \
+  "$(grep -c 'deadline-seconds' "$TMPDIR_TEST/cr-9c.err" || true)"
 
 # ============================================================================
 # Test 10: --target must be a rev-range, never a bare commit-ish
@@ -427,6 +509,366 @@ assert_eq "case16: exit 2" "2" "$rc"
 assert_eq "case16: fake never invoked" "0" "$inrepo_calls"
 assert_eq "case16: stderr explains the location requirement" "1" \
   "$(grep -c 'inside the reviewed worktree' "$TMPDIR_TEST/cr-16.err" || true)"
+
+# ============================================================================
+# Test 17: a fast (sleep 0) run leaves no .run record behind
+# ============================================================================
+# The core regression guard for the always-detached rewrite: at the speed the
+# stub runs (and at real `low` effort, per the header), the run finishes
+# inside the first await window, so nothing resembling an in-flight record
+# should survive to be found under CACHE_DIR.
+echo "Test: dispatch-code-review leaves no .run record after a fast completion"
+cr_reset_stubs
+printf '%s\n' "Fast, no findings of note." >"$STUB_DIR/cr-fake-output"
+
+OUT_DIR_17="$CR_REPO/tmp/cr-out-17"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_17" 2>"$TMPDIR_TEST/cr-17.err"
+) || rc=$?
+assert_eq "case17: exit 0" "0" "$rc"
+assert_eq "case17: status=ok" "1" "$(grep -c '^status=ok$' <<<"$out")"
+fast_run_left=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | wc -l | tr -d '[:space:]')
+assert_eq "case17: no .run record left behind" "0" "$fast_run_left"
+
+# ============================================================================
+# Test 18: default effort is high, model is pinned to opus
+# ============================================================================
+echo "Test: dispatch-code-review defaults to --effort high with --model opus"
+cr_reset_stubs
+printf '%s\n' "Default effort/model probe." >"$STUB_DIR/cr-fake-output"
+
+OUT_DIR_18="$CR_REPO/tmp/cr-out-18"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_18" 2>"$TMPDIR_TEST/cr-18.err"
+) || rc=$?
+assert_eq "case18: exit 0" "0" "$rc"
+assert_eq "case18: argv carries the high-effort prompt" "1" \
+  "$(grep -c -F -- '/code-review high --fix --comment HEAD~1..HEAD' "$STUB_DIR/cr-fake-argv.log" || true)"
+assert_eq "case18: argv pins --model opus" "1" \
+  "$(grep -A1 -x -- '--model' "$STUB_DIR/cr-fake-argv.log" | tail -1 | grep -c '^opus$' || true)"
+assert_eq "case18: summary records effort=high" "1" "$(grep -c '^effort=high$' <<<"$out")"
+assert_eq "case18: summary records model=opus" "1" "$(grep -c '^model=opus$' <<<"$out")"
+
+# ============================================================================
+# Test 19: --model overrides opus, and a model change re-runs (never replays)
+# ============================================================================
+echo "Test: --model overrides the opus default, and a model change re-runs rather than replaying"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Model-override probe." >"$STUB_DIR/cr-fake-output"
+
+OUT_DIR_19="$CR_REPO/tmp/cr-out-19"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_19" 2>"$TMPDIR_TEST/cr-19a.err"
+) || rc=$?
+assert_eq "case19: opus-default run exit 0" "0" "$rc"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --model sonnet --out-dir "$OUT_DIR_19" 2>"$TMPDIR_TEST/cr-19b.err"
+) || rc=$?
+model_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case19: sonnet-override run exit 0" "0" "$rc"
+assert_eq "case19: built-in ran again for the model change (cache_is_current fails on model=)" \
+  "2" "$model_calls"
+assert_eq "case19: summary records the model it ran at" "1" "$(grep -c '^model=sonnet$' <<<"$out")"
+assert_eq "case19: argv on the second call carries --model sonnet" "1" \
+  "$(grep -A1 -x -- '--model' "$STUB_DIR/cr-fake-argv.log" | tail -1 | grep -c '^sonnet$' || true)"
+
+# ============================================================================
+# Test 20: await expiry (exit 5) then resume (exit 0) — ONE invocation total
+# ============================================================================
+# The core test for the detached-run rewrite: the second call must RESUME the
+# first call's launched run rather than paying for a second one.
+echo "Test: dispatch-code-review await expiry resumes as exactly ONE invocation"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings after a slow run." >"$STUB_DIR/cr-fake-output"
+echo "6" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_20="$CR_REPO/tmp/cr-out-20"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_20" \
+       --await-seconds 1 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-20a.err"
+) || rc=$?
+assert_eq "case20: first call still in flight, exit 5" "5" "$rc"
+first_line=$(head -1 <<<"$out")
+assert_eq "case20: stdout's first line is status=running" "status=running" "$first_line"
+run_count=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | wc -l | tr -d '[:space:]')
+assert_eq "case20: a .run record exists after the first call" "1" "$run_count"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_20" \
+       --await-seconds 30 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-20b.err"
+) || rc=$?
+resume_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case20: second call exits 0" "0" "$rc"
+assert_eq "case20: status=ok on resume" "1" "$(grep -c '^status=ok$' <<<"$out")"
+assert_eq "case20: the fake was invoked exactly once (resumed, not relaunched)" "1" "$resume_calls"
+
+# ============================================================================
+# Test 21: an in-flight .run record does not satisfy the completed-summary cache
+# ============================================================================
+echo "Test: an in-flight .run record does not satisfy cache_is_current's completed-summary replay"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings, in-flight only." >"$STUB_DIR/cr-fake-output"
+echo "3" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_21="$CR_REPO/tmp/cr-out-21"
+# CACHE_DIR accumulates one *.summary file per out-dir for the whole suite's
+# run (that persistence is the resume cache's entire point), so a bare count
+# across CACHE_DIR would already be nonzero from every earlier case's
+# completed run. Compute THIS out-dir's own cache key exactly as the script
+# does (sha256 of the out-dir's canonicalized absolute path) and check only
+# that one file.
+mkdir -p "$OUT_DIR_21"
+OUT_DIR_21_ABS="$(cd "$OUT_DIR_21" && pwd)"
+CACHE_KEY_21="$(printf '%s' "$OUT_DIR_21_ABS" | sha256sum | cut -d' ' -f1)"
+CACHE_FILE_21="$DISPATCH_CODE_REVIEW_CACHE_DIR/$CACHE_KEY_21.summary"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_21" \
+       --await-seconds 1 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-21a.err"
+) || rc=$?
+assert_eq "case21: first call exits 5" "5" "$rc"
+assert_eq "case21: no completed-summary cache file exists yet for this out-dir" "0" \
+  "$([[ -f "$CACHE_FILE_21" ]] && echo 1 || echo 0)"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_21" \
+       --await-seconds 30 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-21b.err"
+) || rc=$?
+inflight_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case21: second call completes for real, exit 0" "0" "$rc"
+assert_eq "case21: exactly one invocation (resumed, never replayed from a bogus cache)" \
+  "1" "$inflight_calls"
+assert_eq "case21: a completed-summary cache file now exists for this out-dir" "1" \
+  "$([[ -f "$CACHE_FILE_21" ]] && echo 1 || echo 0)"
+
+# ============================================================================
+# Test 22: run-state artifacts live under CACHE_DIR, never under --out-dir
+# ============================================================================
+# `.rc` cannot be caught at rest under CACHE_DIR by a black-box probe: it is
+# written only in the instant between the child exiting and this script's own
+# discard_run_record cleanup, which is not a window an external poll can land
+# in deterministically. What IS checked here, deterministically: `.run` and
+# `.output` exist under CACHE_DIR while the run is in flight, and no run-state
+# filename pattern EVER appears under --out-dir — mid-flight or after — which
+# is the actual security property (an attacker-writable --out-dir must never
+# carry the resume/completion markers). `.rc`'s placement at
+# $CACHE_DIR/$CACHE_KEY.rc, never $OUT_DIR, is confirmed by direct reading of
+# dispatch-code-review's own source (RUN_RC="$CACHE_DIR/$CACHE_KEY.rc").
+echo "Test: dispatch-code-review run-state artifacts live under CACHE_DIR, never under --out-dir"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings for placement check." >"$STUB_DIR/cr-fake-output"
+echo "3" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_22="$CR_REPO/tmp/cr-out-22"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_22" \
+       --await-seconds 1 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-22a.err"
+) || rc=$?
+assert_eq "case22: mid-flight call exits 5" "5" "$rc"
+
+run_hits=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | wc -l | tr -d '[:space:]')
+output_hits=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.output' | wc -l | tr -d '[:space:]')
+assert_eq "case22: .run lands under CACHE_DIR while in flight" "1" "$run_hits"
+assert_eq "case22: .output lands under CACHE_DIR while in flight" "1" "$output_hits"
+outdir_run_state=$(find "$OUT_DIR_22" \
+  \( -name '*.run' -o -name '*.rc' -o -name '*.pid' -o -name '*.lock' -o -name '*.untracked-before' \) \
+  2>/dev/null | wc -l | tr -d '[:space:]')
+assert_eq "case22: no run-state file under --out-dir while in flight" "0" "$outdir_run_state"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_22" \
+       --await-seconds 30 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-22b.err"
+) || rc=$?
+assert_eq "case22: resumed call completes" "0" "$rc"
+outdir_run_state_after=$(find "$OUT_DIR_22" \
+  \( -name '*.run' -o -name '*.rc' -o -name '*.pid' -o -name '*.lock' -o -name '*.untracked-before' \) \
+  2>/dev/null | wc -l | tr -d '[:space:]')
+assert_eq "case22: still no run-state file under --out-dir after completion" "0" "$outdir_run_state_after"
+cache_run_state_after=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 \
+  \( -name '*.run' -o -name '*.rc' -o -name '*.pid' \) | wc -l | tr -d '[:space:]')
+assert_eq "case22: run-state discarded from CACHE_DIR after completion" "0" "$cache_run_state_after"
+
+# ============================================================================
+# Test 23: an in-flight run superseded by a new HEAD is discarded and relaunched
+# ============================================================================
+echo "Test: dispatch-code-review discards a superseded in-flight run when HEAD advances mid-run"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the superseded run." >"$STUB_DIR/cr-fake-output"
+echo "20" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_23="$CR_REPO/tmp/cr-out-23"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_23" \
+       --await-seconds 1 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-23a.err"
+) || rc=$?
+assert_eq "case23: first call still in flight, exit 5" "5" "$rc"
+
+run_file=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | head -1)
+old_pid=""
+[[ -n "$run_file" ]] && old_pid=$(sed -n 's/^pid=//p' "$run_file" | head -1)
+assert_eq "case23: old pid recorded and alive before HEAD moves" "1" \
+  "$([[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null && echo 1 || echo 0)"
+
+# Advance HEAD — the in-flight run is now reviewing a superseded diff.
+( cd "$CR_REPO" && echo "moved" >>tracked.ts && git add tracked.ts && git commit -q -m "advance head mid-run" )
+echo "0" >"$STUB_DIR/cr-fake-sleep"
+
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_23" \
+       --await-seconds 30 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-23b.err"
+) || rc=$?
+assert_eq "case23: second call (new HEAD) exits 0" "0" "$rc"
+sleep 0.5
+assert_eq "case23: the superseded run's old pid is dead" "0" \
+  "$([[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null && echo 1 || echo 0)"
+idchange_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case23: exactly two invocations (superseded + relaunch)" "2" "$idchange_calls"
+
+# ============================================================================
+# Test 24: a crash that writes no exit-code marker is exit 1, not a hang
+# ============================================================================
+echo "Test: dispatch-code-review reports exit 1 on a crash that writes no exit-code marker"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+: >"$STUB_DIR/cr-fake-crash"
+
+OUT_DIR_24="$CR_REPO/tmp/cr-out-24"
+rc=0
+out=$(
+  cd "$CR_REPO" \
+  && DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+     DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+     "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_24" \
+       --await-seconds 10 --deadline-seconds 60 2>"$TMPDIR_TEST/cr-24.err"
+) || rc=$?
+assert_eq "case24: exit 1, not a hang" "1" "$rc"
+crash_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case24: the stub was actually invoked" "1" "$crash_calls"
+run_left=$(find "$DISPATCH_CODE_REVIEW_CACHE_DIR" -maxdepth 1 -name '*.run' | wc -l | tr -d '[:space:]')
+assert_eq "case24: no leftover .run record after the crash is detected" "0" "$run_left"
+
+# ============================================================================
+# Test 25: concurrent double-invocation launches once AND both callers exit 0
+# ============================================================================
+# Two properties, on two different mechanisms:
+#
+#   1. the launch mutex (Step 2c) dedupes concurrent launches to ONE — the
+#      `cr-fake-calls.log` line count;
+#   2. BOTH awaiters of that one run report the completed review — both exit 0.
+#
+# (2) used to fail. The two invocations await the same run, and whichever poll
+# saw `.rc` first called collect_output then discard_run_record, deleting
+# `.rc`/`.output`/`.run`; the other poll landed in that window, saw a dead pid
+# and no `.rc`, and reported the successful run as a crash (exit 1). The launch
+# mutex never covered it — it guards the launch decision and is released before
+# the await loop starts. The script's await loop now resolves that ambiguity
+# with a bounded retry that also accepts a current completed-summary cache
+# entry as proof of completion, so the losing awaiter replays it and exits 0.
+#
+# Determinism: the stub sleeps 5 s and both invocations get --await-seconds 30
+# / --deadline-seconds 60, so neither can expire its window before the run
+# finishes; and the retry poll's ~29.5 s budget vastly outlasts the winner's
+# Steps 5-7 on this throwaway repo (milliseconds). Only a real regression can
+# turn either exit code non-zero here.
+#
+# `rc=0; cmd || rc=$?` (not `cmd && ... ` inside the backgrounded subshell) is
+# required so a non-zero exit from either invocation cannot abort the subshell
+# under this script's own `set -e` before it records its exit code;
+# `wait ... || true` guards the same hazard at the top level.
+echo "Test: dispatch-code-review concurrent double-invocation launches once and both callers exit 0"
+cr_reset_stubs
+: >"$STUB_DIR/cr-fake-calls.log"
+printf '%s\n' "Findings from the concurrent race." >"$STUB_DIR/cr-fake-output"
+echo "5" >"$STUB_DIR/cr-fake-sleep"
+
+OUT_DIR_25="$CR_REPO/tmp/cr-out-25"
+rc1_file="$TMPDIR_TEST/cr-25-rc1"
+rc2_file="$TMPDIR_TEST/cr-25-rc2"
+(
+  cd "$CR_REPO" || exit 1
+  rc=0
+  DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+    DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+    "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_25" \
+      --await-seconds 30 --deadline-seconds 60 >"$TMPDIR_TEST/cr-25-1.out" 2>"$TMPDIR_TEST/cr-25-1.err" \
+    || rc=$?
+  echo "$rc" >"$rc1_file"
+) &
+conc_pid1=$!
+(
+  cd "$CR_REPO" || exit 1
+  rc=0
+  DISPATCH_CODE_REVIEW_CLAUDE_CMD="$TMPDIR_TEST/fake-claude-code-review" \
+    DISPATCH_CODE_REVIEW_POLL_INTERVAL_S=1 \
+    "$SCRIPT_DIR/dispatch-code-review" --target HEAD~1..HEAD --out-dir "$OUT_DIR_25" \
+      --await-seconds 30 --deadline-seconds 60 >"$TMPDIR_TEST/cr-25-2.out" 2>"$TMPDIR_TEST/cr-25-2.err" \
+    || rc=$?
+  echo "$rc" >"$rc2_file"
+) &
+conc_pid2=$!
+wait "$conc_pid1" "$conc_pid2" || true
+
+conc_rc1=$(cat "$rc1_file" 2>/dev/null || echo "?")
+conc_rc2=$(cat "$rc2_file" 2>/dev/null || echo "?")
+conc_calls=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
+assert_eq "case25: the built-in was invoked exactly once" "1" "$conc_calls"
+assert_eq "case25: both concurrent awaiters exit 0" "0 0" "$conc_rc1 $conc_rc2"
+assert_eq "case25: first invocation reports status=ok" "1" \
+  "$(grep -c '^status=ok$' "$TMPDIR_TEST/cr-25-1.out" || true)"
+assert_eq "case25: second invocation reports status=ok" "1" \
+  "$(grep -c '^status=ok$' "$TMPDIR_TEST/cr-25-2.out" || true)"
+assert_eq "case25: both invocations report the same summary" \
+  "$(cat "$TMPDIR_TEST/cr-25-1.out")" "$(cat "$TMPDIR_TEST/cr-25-2.out")"
 
 teardown
 
