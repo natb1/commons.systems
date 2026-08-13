@@ -15,12 +15,35 @@ import type { PageData, Payload, PlanRow, Provenance } from "./model.js";
  * clone read to go stale, only a build that has a date. The guard's INTENT is
  * ported; the guard itself is not.
  */
-export function readProvenance(repoDir: string, ref = "origin/main"): Provenance {
+/**
+ * The paths the build actually reads. `clean` is scoped to these rather than to
+ * the whole working tree.
+ *
+ * Two reasons, and the first is the substantive one: `clean` exists to answer
+ * "does the page describe the commit it names?", and an edit somewhere the
+ * build never reads cannot make it describe anything else. A whole-tree check
+ * answers a different question and reads as a false alarm on the page.
+ *
+ * The second is mechanical: Claude Code's sandbox bind-mounts `/dev/null` over
+ * several `.claude/**` paths inside every worktree, leaving character-device
+ * nodes that `git status` reports as untracked and that git cannot stage. A
+ * whole-tree check is permanently dirty under the sandbox, which would make the
+ * stamp meaningless by always firing.
+ */
+const BUILD_INPUTS = ["intentions", "artifacts/plan-view", "packages/ds"];
+
+export function readProvenance(repoDir: string, refOverride?: string): Provenance {
   const git = (args: string[]): string =>
     execFileSync("git", args, { cwd: repoDir, encoding: "utf8" }).trim();
 
   const sha = git(["rev-parse", "HEAD"]);
-  const status = git(["status", "--porcelain"]);
+  // The ref is READ, never assumed to be origin/main. A page built on a branch
+  // that stamps itself "origin/main" is worse than one carrying no ref at all:
+  // it asserts a provenance it does not have, which is exactly the mistake the
+  // stamp exists to prevent. `--abbrev-ref` reports `HEAD` when detached, which
+  // is itself the honest answer.
+  const ref = refOverride ?? git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const status = git(["status", "--porcelain", "--", ...BUILD_INPUTS]);
   return {
     sha,
     shaShort: sha.slice(0, 8),
