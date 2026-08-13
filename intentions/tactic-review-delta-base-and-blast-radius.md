@@ -4,7 +4,7 @@ kind: tactic
 statement: Scope a re-review to the changes since the last review, and keep
   detection whole with a mechanical blast-radius reading list
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced by the 2026-08-13 /align round on review token usage, from
   an incident traced end-to-end that same session:
@@ -25,8 +25,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: tactic-review-delta-base-and-blast-radius
+  pr: 3087
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -114,3 +123,62 @@ Both belong in the first unit as probes.
 - This node ships **before** `tactic-review-plan-preflight-skill` and must not
   be planned as one PR with it — clarification 54's decoupling exists so this
   node's saving can be measured on its own.
+
+## Resolved (2026-08-13) — PR #3087, merged e612e50c
+
+Shipped all three required parts. Clarification 50 states that the narrowed base
+without them **is** the detection reduction the quality-preservation condition
+forbids, so none of them was optional:
+
+1. `dispatch-review-base` — the `<worktrees-root>/<basename>.review-base`
+   sidecar and the fail-closed `REVIEW_BASE` binding in `/review-fix` Step 1.
+   `MERGE_BASE` stays bound and unchanged, per the mechanism note in
+   clarification 50.
+2. `dispatch-blast-radius` — the mechanical out-of-diff reading list, a pure
+   stdin-to-stdout classifier on the same seam as `dispatch-changed-files`,
+   `dispatch-security-surface` and `dispatch-api-call-site`, exactly as
+   clarification 54's divergence directed.
+3. Prior-finding carry-forward, extending the existing prior-comment resume
+   channel rather than adding a second source of truth.
+
+This PR **bypassed the dispatch ladder deliberately**: it changes the review lane
+itself, so routing it through that lane would have had it reviewed by the code it
+was changing. It was reviewed with the pre-change lane and merged at author
+authorization. `execution.markers` is therefore empty — no ladder phase ran.
+
+### The two owed probes — answers
+
+Clarification 51 accepted these as **owed, not assumed**. Both are now answered.
+
+**(a) Do `.claude/worktrees/<id>.*` sidecars survive every worktree-sweep path?
+Yes.** Every removal path is `git worktree remove <worktrees-root>/<id>` —
+`.claude/hooks/worktree-remove.sh:103`, `lib-session-reap.sh:374`, and the
+`dispatch-sweep` / `dispatch-node-reap` arms that route through it. That removes
+the *directory* at that path; the sidecar is the **sibling file**
+`<root>/<id>.<suffix>` and is never targeted. Corroborated live: the
+`.claude/worktrees/` listing holds many `.scope-fingerprint` files whose worktree
+directories are long gone.
+
+The answer is load-bearing in an unobvious direction, and it **added a guard the
+ruling did not anticipate**. Because sidecars *outlive* the worktree, a
+`.review-base` written for a node's previous, already-merged PR is still on disk
+when the next PR starts — and its sha, now an ancestor of the new merge base, is
+still **reachable from HEAD**. Clarification 51's stated fail-closed test
+(absent, unreadable, or "naming a sha not reachable from HEAD") would therefore
+have **accepted** it and skipped the entire new PR. The implementation adds a
+`not-ahead-of-merge-base` condition requiring the recorded sha to be a
+*descendant* of the merge base, with its own test row.
+
+**(b) The PR lane's key: the reviewed worktree's own basename.** Not the node id
+(the PR lane has none) and not the PR number. `tmp/code-review-$N` was the
+candidate named at ruling time and is **rejected**, on the argument
+`dispatch-code-review` already makes about its own resume cache (header lines
+60-78): `tmp/` is *inside the reviewed worktree*, so the PR whose content is under
+review can write it — and a planted `.review-base` naming HEAD would narrow the
+next review to nothing. Basename-keying reuses the settled
+`<worktrees-root>/<name>.<suffix>` convention (`.scope-fingerprint`, `.ladder`,
+`.code-review-lock`) and needs no lane split at all: on the node lane the
+basename *is* the node id; on the PR lane it is the issue-branch worktree's name,
+stable for that PR's whole life. Outside a `.claude/worktrees` root there is no
+sidecar home, so resolve falls back and record refuses — the same explicit
+path-shape condition `dispatch-code-review:399-413` uses for its node lock.

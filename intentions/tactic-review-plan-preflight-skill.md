@@ -4,7 +4,7 @@ kind: tactic
 statement: Add a /review-plan pre-pass that sets /code-review's effort and gates
   the owned finders from an analysis of the diff
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: Surfaced by the 2026-08-13 /align round on review token usage.
   Carries clarifications 49 (the per-input effort carve-out from the
@@ -22,8 +22,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: tactic-review-delta-base-and-blast-radius
+  pr: 3087
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-review-delta-base-and-blast-radius
@@ -118,3 +127,48 @@ No run of any of this exists. The analysis ordering and the raise/lower
 asymmetry are design judgment, not readings. Until the yield lens lands, this
 node is an unmeasured throughput bet — the same honest state clarification 46
 recorded for the `high` raise.
+
+## Resolved (2026-08-13) — PR #3087, merged e612e50c
+
+Shipped `/review-plan` (`.claude/skills/review-plan/SKILL.md`), `/review-fix`
+Step 1a, and the mechanically-enforced gate in `.claude/workflows/review-fix.js`
+(the `review plan gate` sentinel region: `reviewPlanEffort`,
+`reviewPlanFinderSet`, `reviewPlanDeadline`), covered by
+`test-review-plan-gate.sh` (47 rows).
+
+### It shipped ALONGSIDE its blocker, not after it
+
+Clarification 54's sequencing consequence said this tactic "must not be planned as
+one PR with" `tactic-review-delta-base-and-blast-radius`, so its value could be
+measured against the delta-only baseline. **The author overrode that**, and both
+landed in PR #3087. See the dated amendment appended to clarification 54 on
+`strategy-token-economy` for the ruling and its measurement consequence: the
+delta-only baseline was never established, so the two savings cannot be separated
+retrospectively, and clarification 49's requirement (3) now carries that weight
+alone.
+
+That is why `recorded` is enforced mechanically rather than left to convention:
+`reviewPlanEffort` and `reviewPlanFinderSet` each return a rationale, the
+`/review-fix` call site `log()`s both, and the gate suite asserts every verdict
+carries a non-empty one.
+
+### A hazard found in implementation that the clarifications did not name
+
+Clarification 49 admitted `max` to the band on the ground that clarification 45
+retired the synchronous kill regime. Reading `dispatch-code-review` while wiring
+the seam showed the kill is **not** retired — it is *bounded*: the script kills a
+run that exceeds its deadline (`:1225-1226`), default 5400 s. And `claude -p`
+buffers all output until completion, so a killed run is still a **total loss, not
+a partial result**.
+
+So `xhigh` and `max` on today's 5400 s deadline would have reproduced exactly the
+zero-bytes outcome clarification 49 reasoned was behind us — every time, by
+construction. `REVIEW_PLAN_DEADLINES` therefore scales `--deadline-seconds` *and*
+Step 1b's poll cap with the effort level, and every row is an exact multiple of
+the script's 540 s await window so `/review-fix`'s `cap × 540 == deadline`
+equality holds at every band level rather than only at `high`. That equality is
+what makes the script's exit-4 path reachable, and that path is the only thing
+that releases the reviewed worktree's `flock`.
+
+The band itself is unchanged and remains author-set; this constrains the *cost of
+reaching* its upper half, not the band.

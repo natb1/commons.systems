@@ -1479,7 +1479,29 @@ clarifications:
       review instrument rather than reducing it — the pre-pass orchestrates
       /code-review more finely rather than displacing it — recorded here to stay
       visible per virtue-alignment-of-attachments' every-import-raises-exit-cost
-      clause."
+      clause. AMENDMENT (2026-08-13, author-directed; recorded at implementation
+      time, after the ruling above). THE AUTHOR COLLAPSED THE SEQUENCING RULED
+      HERE. Both tactics shipped in ONE PR (#3087) rather than the pre-pass
+      following the delta-scoping as a separate second step. This is an author
+      ruling, not a defect and not a lane deviation. MEASUREMENT CONSEQUENCE,
+      stated plainly because the record must not imply a baseline that does not
+      exist: the delta-only baseline was NEVER established, so the
+      delta-scoping's saving and the pre-pass's saving landed together and
+      CANNOT be separated retrospectively. The \"must earn its own cost
+      honestly\" demand above — the steelman's real demand, granted at ruling
+      time — is therefore not satisfiable by the measurement route this
+      clarification designed. What carries it instead is clarification 49's
+      requirement (3), the RECORDED effort, finder set and rationale on every
+      pass: it is now the ONLY thing keeping the two savings distinguishable,
+      and is correspondingly more load-bearing than when it was written. It is
+      enforced mechanically rather than by convention — reviewPlanEffort and
+      reviewPlanFinderSet each return a rationale, /review-fix's call site logs
+      both, and test-review-plan-gate.sh asserts every verdict carries a
+      non-empty one. The DECOUPLING this clarification directed was still
+      performed and still holds: blast radius shipped as its own stdin-to-stdout
+      classifier (dispatch-blast-radius) rather than inside the pre-pass, so
+      tactic-review-delta-base-and-blast-radius is complete and safe on its own.
+      Only the SHIPPING SEQUENCE was overridden, not the decoupling."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
