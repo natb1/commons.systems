@@ -90,15 +90,35 @@ clarifications:
       and the last override VALUE (tactic-transition-node-stamp-landed-body).
       blocked_by: [tactic-attention-namespaced-rank] is unchanged and becomes
       genuinely load-bearing -- this node's migration now writes values INTO a
-      map shape that node lands, rather than landing the shape itself."
+      map shape that node lands, rather than landing the shape itself.
+      (Amended 2026-08-14, author-directed stopgap.) THE blocked_by EDGE IS
+      REMOVED. It had become a deadlock rather than a dependency:
+      tactic-attention-namespaced-rank merged 2026-08-13 (PR #3075) but sits at
+      phase main-qa, and blockersComplete
+      (packages/intentionsutil/src/router.ts:239-244) clears a blocker only on
+      phase done or absence from the store -- while that node's own main-qa
+      needs-main residue awaits THIS node landing, so neither side could move.
+      The loop was invisible to validateGraph because it closes across two
+      mechanisms: a structural blocked_by edge here and a prose awaited-event in
+      that node's needs-main residue section; no validator reads both. The
+      edge's SUBSTANCE is already satisfied by merge rather than by phase --
+      the sparse per-tier boosts map, both legacy boost:/override: compat parse
+      branches, and their removal-owner comments naming this node are all on
+      origin/main (schema.ts:195, 435, 444 measured 2026-08-14), so the map
+      shape this node writes values into exists today. The sequencing
+      obligation survives as prose, not as a gate: confirm that shape is on
+      main before starting. Three sibling nodes were released by the same
+      removal being unnecessary for them -- tactic-attention-delegation-scoring,
+      tactic-attention-unified-relation-cycle-rule and
+      tactic-rsi-audit-prioritization-writer keep their edges and stay blocked
+      until tactic-attention-namespaced-rank reaches done."
 tooling_goals: []
 success_signal: null
 attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-attention-namespaced-rank
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
