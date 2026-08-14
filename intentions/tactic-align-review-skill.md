@@ -27,7 +27,61 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Author ratification owed on the proposed clarification 'How does
+    graph-commit tell an /align round's write apart from every other caller's,
+    now that the gate is scoped to /align's own output only?'. The 2026-08-14
+    scoping ruling (recorded on strategy-discovered-requirements'
+    draft-review-gate condition, and restated in this node's own body as 'the
+    --review receipt floor must not make graph-commit refuse every caller's
+    write') is contradicted by the mechanism this node's item 3 specifies: a
+    gate predicate 'read off the commit's diff' — 'creates or modifies any
+    strategy-* field other than phase/execution/office_hours/reading/attention,
+    or creates any new node file'. Verified against origin/main d5770f6e, that
+    predicate fires on every explicitly scoped-out caller: /align-tactics mints
+    tactic node files and writes the strategy's clarifications and rounds
+    (.claude/workflows/align-tactics.js:154,807;
+    .claude/skills/align-tactics/SKILL.md:365-378), and qa-fix finding nodes,
+    dispatch-diagnose-main's tactic-main-red-<sha> node, dispatch-eval-finding
+    ledger entries and /context-chunks drafts all create new node files. And
+    item 3's own third enumerated case — a draft-tactic-only /align round — is
+    diff-shaped identically to an /align-tactics decomposition, so no refinement
+    of a diff-derived predicate separates them. The only discriminator present
+    today is the invocation site (/align calls graph-commit directly,
+    align/SKILL.md:573-588; /align-tactics lands through land-align-round,
+    align-tactics/SKILL.md:371-378), which makes the receipt caller-declared and
+    opt-out-by-omission rather than the mechanical floor the condition
+    describes. The author must choose (a) a caller-declared seam, accepting an
+    opt-in floor; (b) narrowing the predicate to substance fields only /align
+    writes, accepting that draft-tactic-only and mint-only /align rounds go
+    ungated; or (c) re-widening the scope. Item 3 is a whole unit and items 4
+    and 9 inherit the ambiguity, so no clean-session plan can be authored for
+    this node until it is ratified. Note the incompleteness is in the SERVING
+    STRATEGY's record (the condition scopes the gate but records no
+    discrimination mechanism); a per-node session cannot write the strategy, so
+    the ratified answer must land there in a subsequent /align round. Two
+    non-blocking findings from this round, recorded here (a tactic-target
+    session may not write the serving strategy): (i) attributes.align_round
+    (item 9) needs no strategyFingerprint exemption — the fingerprint is an
+    allowlist (statement, clarifications, attributes.conditions, serves,
+    success_signal, tooling_goals) and every other attributes key is already
+    freeze-inert by construction. (ii) graph-commit today has only
+    --base/--expect manifest-argument plumbing — no --review flag and no
+    commit-trailer machinery exist anywhere in the script (the -m message is a
+    single flat string). Model the refuse-before-mutation, dedicated-exit-code
+    contract on park-node's --base pin (park-node:75-114 header, :202-236
+    resolution, :360-362 refusal — already duplicated verbatim in clear-park),
+    NOT on graph-commit's own --base, which auto-merges a stale blob via
+    check_base_freshness/run_merge_node rather than refusing, and never exits 3
+    despite the script's own header claiming otherwise at :169/:1952 (that stale
+    header line should be corrected in the same change). Recommend: the author
+    ratifies option (a), (b), or (c) above via a /align round on
+    strategy-discovered-requirements — the discrimination-mechanism gap is in
+    the serving strategy's own record, not this tactic's — then re-run
+    /align-tactics tactic-align-review-skill to author the clean-session plan."
+  since: 2026-08-14
+  recommendation: null
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
