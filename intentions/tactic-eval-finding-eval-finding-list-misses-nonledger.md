@@ -62,43 +62,104 @@ attributes:
       window: 2026-08-13 fix-phase eval
       sensor: rsi
       measured: 2026-08-13
-    - metric: recurrence_count
+    - metric: duplicate_finding_nodes_same_defect
       value: 2
+      unit: nodes
+      window: stale-main-checkout selection gate defect, origin/main 2026-08-13
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: finding_nodes_outside_ledger_namespace
+      value: 1
+      unit: nodes
+      window: all commits with subject matching 'finding ledger entry', origin/main
+        039bbe11
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: finding_nodes_without_recurrence_metric
+      value: 3
+      unit: nodes
+      window: origin/main 039bbe11, 2026-08-13
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: ledger_invisible_fraction
+      value: 0.158
+      unit: fraction
+      window: origin/main 039bbe11, 2026-08-13 re-evaluation
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: recurrence_count
+      value: 3
       unit: occurrences
       window: all-time
       sensor: rsi
-      measured: 2026-08-13
+      measured: 2026-08-14
 ---
-## Second occurrence — hit directly while running the prescribed similarity judgment
+## Third occurrence — the predicted duplicate actually materialized, outside the id namespace
 
-Observed 2026-08-13 evaluating the `fix` phase of
-`tactic-attention-namespaced-rank`.
+Observed 2026-08-13 re-evaluating the four findings this ledger received from the
+`qa` phase of `tactic-attention-namespaced-rank`. The first two occurrences were
+about entries that carry the `tactic-eval-finding-` id prefix but not
+`attributes.ledger_entry`. This one is worse in two independent ways: the finding
+node is outside the id prefix as well, and the duplicate the statement predicted
+in the abstract now exists concretely.
 
-`dispatch-eval-finding --list` returned **8** entries. `ls intentions/ | grep
-tactic-eval-finding` returns **11** files. The three the ledger does not show:
+### The duplicate pair
 
-- `tactic-eval-finding-ledger.md` (the family root — correctly absent)
-- `tactic-eval-finding-lock-wait.md` — a real finding, `phase: done`, PR 3074
-- `tactic-eval-finding-utc-bounds-local-newermt.md` — a real finding, and the
-  *superseding* entry named in the body of `conflict-lane-registered-phantom`,
-  which `--list` **does** show
+| Node | Minted | Recorded by | `attributes` | In `--list`? |
+|---|---|---|---|---|
+| `tactic-eval-finding-ladder-gate-stale-main-checkout-halt` | 2026-08-13 14:32Z (commit `66ed7f35`) | `dispatch-eval-finding` | `ledger_entry: true`, `first_seen`, `measured_impact` | yes |
+| `tactic-provision-revalidation-reads-stale-main-checkout` | 2026-08-13 14:42Z (commit `0cd4f1da`) | a direct graph write | `{}` | **no** |
 
-That last one is the sharp edge. `--list` shows an entry whose own statement
-says "Superseded by … `tactic-eval-finding-utc-bounds-local-newermt`", while
-hiding the successor it points at. An evaluator following the documented
-procedure — the SKILL calls the similarity judgment "the load-bearing step" —
-reads a pointer to an entry the instrument will not show it.
+Ten minutes apart, same defect: `provision-node-worktree` re-validates a node
+selection against `--dir "$PROJECT_ROOT/intentions"` — the main checkout's
+working tree — after a bare `git fetch`, which moves refs and not the tree, so a
+correct selection reads as `stale-selection` (exit 12). Both nodes cite the same
+evidence: the same six refusals at 14:22:35Z–14:23:07Z on the same run.
 
-This occurrence was only caught because this evaluator independently ran
-`ls intentions/` while checking for pre-existing owners of two unrelated
-candidate findings. Nothing in the prescribed procedure would have surfaced it.
+`0cd4f1da`'s own commit subject is `graph: record finding ledger entry
+provision-revalidation-reads-stale-main-checkout` — the writer believed it was
+adding a ledger entry. The node it wrote is invisible to `--list` (no
+`ledger_entry`), invisible to the `ls intentions/ | grep tactic-eval-finding`
+fallback the second occurrence used (no prefix), and carries no
+`recurrence_count` record at all, so no occurrence of that defect can ever be
+counted against it.
 
-Two of the ten real entries — 20 % of the ledger — are invisible to the tool the
-SKILL designates as the sole input to the mint-or-reuse decision.
+### What the split cost
+
+The fix landed as `43d13914` (#3079) on 2026-08-13, and its message says
+`Fixes the defect recorded on the graph as
+tactic-provision-revalidation-reads-stale-main-checkout` — the invisible
+duplicate. The ledger entry that *is* visible, and that carries the two measured
+impact figures and `recurrence_count: 2`, is named nowhere in the fix and remains
+`open` with its fix already shipped. The recurrence metric and the remediation
+came to rest on two different nodes, which is exactly the outcome the ledger's
+merge discipline exists to prevent.
+
+### Census at `origin/main` (039bbe11, 2026-08-13)
+
+- 19 files match `intentions/tactic-eval-finding-*`; one (`-ledger`) is the
+  doctrine root, so **18** are finding nodes.
+- `dispatch-eval-finding --list` returns **16**.
+- Invisible in-namespace: `tactic-eval-finding-lock-wait` (`attributes: {}`,
+  `phase: done`, PR 3074) and `tactic-eval-finding-utc-bounds-local-newermt`
+  (`attributes: {}`).
+- Invisible out-of-namespace: `tactic-provision-revalidation-reads-stale-main-checkout`.
+- So **19** finding nodes exist and **3** (15.8 %) are invisible to the
+  instrument the SKILL designates as the sole input to the mint-or-reuse
+  decision. All three carry `attributes: {}` — none of them can hold a
+  recurrence count.
+
+A sweep of every commit whose subject contains `finding ledger entry` finds
+exactly one that wrote outside the prefix — `0cd4f1da` — so the out-of-namespace
+case is currently a single instance, not a pattern. It is recorded here because a
+single instance was enough to split a finding from its own fix.
 
 ### What would have to change
 
-`--list`'s filter on `attributes.ledger_entry` excludes entries that predate the
-attribute or were minted by another path. Either backfill the attribute on the
-existing `tactic-eval-finding-*` nodes, or widen `--list` to key on the id prefix
-it already owns. The author's call which.
+The prefix and the attribute are two spellings of one membership, and `--list`
+honors only the attribute. Either the id prefix becomes the membership test (so
+a hand-written node in the namespace is at worst missing metrics rather than
+missing entirely), or `--list` reports the disagreement instead of silently
+filtering it — a node matching the prefix without the attribute, or carrying the
+attribute without the prefix, is a defect the instrument can see and its reader
+cannot. Neither is applied here; this is a record, not a change.
