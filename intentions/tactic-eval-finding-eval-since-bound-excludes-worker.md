@@ -176,6 +176,7 @@ attributes:
       window: all-time
       sensor: rsi
       measured: 2026-08-13
+  resolved_by: 1092a403e0000e4a4ce8ff106b892bfb32d4cdb7
 ---
 # Occurrence — tactic-attention-namespaced-rank / review / `--since 1786661088`
 
