@@ -28,13 +28,26 @@
 #   --poll-s <n>    seconds between reads while waiting (default 15).
 #
 # Stdout, exactly one line:
-#   <status> <node> <step> <phase> <disposition>
+#   <status> <node> <step> <phase> <disposition> <terminus>
 # where <status> is one of:
 #   complete   the driver finished the ladder (exit 0).
 #   halted     the driver stopped and wrote why.
 #   running    the driver is alive and working.
 #   orphaned   state.json says running but the unit is not active — the driver
 #              died without writing a terminal state.
+# and <terminus> is set only once a run has halted — it classifies whether
+# stopping there was legitimate, a question the exit code never answers on its
+# own (see dispatch-ladder-run's classify_terminus). It is one of:
+#   done             the node reached phase `done`.
+#   excused-parked   the node is parked (`office_hours` set).
+#   excused-blocked  the node is `blocked_by` another node.
+#   pruned           the node is absent from origin/main — a landed prune.
+#   violation        none of the above, every read definitive: the run
+#                     stopped on live work with no excuse — surface this, do
+#                     not report the halt as an ordinary stopping point.
+#   not-a-node       the run was launched against an id that is not in the
+#                     graph at all — also surface this as such.
+#   unknown          a read needed to classify could not answer either way.
 # Absent fields print as `-`.
 #
 # Exit codes:
@@ -130,7 +143,7 @@ read_once() {
     VERDICT_RC=1
     return
   fi
-  local status step phase disposition
+  local status step phase disposition terminus
   # A half-written state.json is not possible (the driver writes via mktemp +
   # mv in the same directory), so a jq failure here is a real corruption — say
   # so rather than inventing a status.
@@ -144,6 +157,7 @@ read_once() {
   step=$(jq -r '.step // "-"' "$STATE_FILE")
   phase=$(jq -r '.phase // "-"' "$STATE_FILE")
   disposition=$(jq -r '.disposition // "-"' "$STATE_FILE")
+  terminus=$(jq -r '.terminus // "-"' "$STATE_FILE")
 
   case "$status" in
     complete|halted)
@@ -161,7 +175,7 @@ read_once() {
       echo "dispatch-ladder-status: unrecognized status '$status' in $STATE_FILE" >&2
       VERDICT_RC=1; WAITABLE=0 ;;
   esac
-  LINE="$status $NODE_ID $step $phase $disposition"
+  LINE="$status $NODE_ID $step $phase $disposition $terminus"
 }
 
 emit() {
