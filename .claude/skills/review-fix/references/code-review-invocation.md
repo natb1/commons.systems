@@ -223,8 +223,7 @@ Two consequences for Unit 2:
 
 ### 3.1 What actually needs the sandbox off
 
-Measured on this host (Linux/WSL2 — note `.claude/rules/sandbox.md`'s `## gh CLI`
-section describes a **macOS** TLS failure that does not reproduce here):
+Measured on this host (Linux/WSL2):
 
 | sandboxed call | result |
 |---|---|

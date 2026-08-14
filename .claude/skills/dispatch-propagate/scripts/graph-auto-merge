@@ -115,8 +115,7 @@
 # demotes.
 #
 # Doctrine: run from a main-based checkout. Sandbox: the CALLER wraps every
-# invocation with dangerouslyDisableSandbox — gh needs network + TLS, and
-# node --import tsx/esm needs the npm cache (see .claude/rules/sandbox.md). This
+# invocation with dangerouslyDisableSandbox — gh needs network + TLS. This
 # script sets NOTHING sandbox-related; that is the caller's responsibility.
 #
 # Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged,

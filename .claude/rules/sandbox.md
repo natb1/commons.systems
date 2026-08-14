@@ -77,23 +77,6 @@ and `.claude/skills/dispatch-propagate/scripts/remove-worktree` for removal
 (fresh fetch, content safety gate, no `--force`, partial-delete recovery,
 verified post-state).
 
-## gh CLI (GitHub API)
-
-`gh` can fail sandboxed with `tls: failed to verify certificate: x509: OSStatus
--26276` — but that's the macOS Security framework rejecting the sandbox's TLS
-interception, so it's **macOS-specific**. On this Linux/WSL host `gh` runs fine
-sandboxed (measured; see
-`.claude/skills/review-fix/references/code-review-invocation.md` §3.1). Don't
-set the override pre-emptively for `gh` — if the TLS error shows up, retry with
-it, per the general principle above.
-
-## npm cache writes
-
-`npx` was documented as unable to write `~/.npm/_cacache/` under the sandbox
-(`EROFS`). **Not reproducible on this Linux/WSL host**: sandboxed, a cold
-`npx --yes cowsay@1.6.0`, an `npm pack` registry download with its cache write,
-and `npx tsx --version` all succeed. Retry on `EROFS`, don't pre-empt.
-
 ## Network namespace isolation
 
 Sandboxed Bash calls run in an isolated network namespace. Servers started with

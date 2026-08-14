@@ -57,8 +57,7 @@
 #
 # Doctrine: run from a main-based checkout (the sweep writes state-only commits
 # on main). Sandbox: the CALLER wraps every invocation with
-# dangerouslyDisableSandbox — gh needs network + TLS, and node --import tsx/esm
-# needs the npm cache (see .claude/rules/sandbox.md).
+# dangerouslyDisableSandbox — gh needs network + TLS, and graph-commit pushes.
 #
 # Usage: reconcile-graph-merged [--node <id>]
 #
