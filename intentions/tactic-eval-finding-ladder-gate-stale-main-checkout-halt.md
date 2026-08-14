@@ -80,6 +80,7 @@ attributes:
       window: all-time
       sensor: rsi
       measured: 2026-08-13
+  resolved_by: 43d13914717716f756ca957991e1bcaed262563f
 ---
 ## Merge note — this entry absorbed a duplicate node
 
