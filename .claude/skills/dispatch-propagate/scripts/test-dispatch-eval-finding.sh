@@ -208,6 +208,9 @@ cat > "$BIN/stub-graph-commit" <<'STUB'
 #                  origin/main ref. With it unset the stub exits 0 having landed
 #                  NOTHING — the silent-PASS shape verification exists to catch.
 echo "graph-commit $*" >> "$STUB_LOG/graph-commit.log"
+# Which WRITER the SUT asked graph-commit for. The env var, not an argument, is
+# the whole interface, so the stub records it out of band (case 18).
+printf 'GRAPH_COMMIT_WRITER=%s\n' "${GRAPH_COMMIT_WRITER:-<unset>}" >> "$STUB_LOG/graph-commit-env.log"
 repo=""
 while [[ $# -gt 0 ]]; do
   case "$1" in -C) repo="$2"; shift 2 ;; *) shift ;; esac
@@ -881,6 +884,27 @@ assert_eq "(17) it retires NOTHING — the actor stays a person" "" "$(log_lines
 
 run_ef -- --list-retirable --slug "$SLUG"
 assert_eq "(17) --list-retirable takes no other arguments" "64" "$RC"
+
+# --- (18) the ledger writes through graph-commit's PLUMBING writer -----------
+# tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt: graph-commit's
+# default writer refuses on ANY unrelated dirty tracked file in the checkout,
+# which failed every ledger write for a file no ledger write reads — silently,
+# because this script's caller is fire-and-forget with a discarded transcript.
+# The plumbing writer builds against a throwaway index and has no such refusal.
+# The var is the entire interface, so assert the SUT actually sets it.
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug writer-opt-in --statement 'the ledger writes through the plumbing writer' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(18) the write lands" "0" "$RC"
+assert_contains "(18) graph-commit is invoked with GRAPH_COMMIT_WRITER=plumbing" \
+  "GRAPH_COMMIT_WRITER=plumbing" "$(log_lines graph-commit-env.log)"
+# Scoped to the invocation, not exported process-wide: the writer default stays
+# `worktree` for every OTHER graph-commit caller, and flipping those is a
+# separate decision with a separate blast radius.
+assert_contains "(18) the opt-in is per-invocation, not a global export" \
+  'GRAPH_COMMIT_WRITER=plumbing "${GRAPH_COMMIT_CMD[@]}"' "$(cat "$SUT")"
+assert_not_contains "(18) never a process-wide export" \
+  'export GRAPH_COMMIT_WRITER' "$(cat "$SUT")"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

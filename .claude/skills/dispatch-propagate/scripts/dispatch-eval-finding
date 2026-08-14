@@ -745,10 +745,38 @@ splice_body() {
   mv "$tmp" "$NODE_FILE"
 }
 
+# GRAPH_COMMIT_WRITER=plumbing — the ledger's writes go through graph-commit's
+# no-working-tree writer, not its default one.
+#
+# The default (`worktree`) commits by staging into the checkout's own index and
+# then rebasing, so it must refuse up front whenever ANY tracked file in the
+# checkout is dirty — its `git pull --rebase origin main` would refuse anyway,
+# and the tree-updating steps around it would silently discard the dirt. That
+# refusal is unconditional and blind to relevance: a modified flake.lock in the
+# main checkout, a file no ledger write ever reads, failed EVERY write this
+# script makes. And this script's caller (/rsi, spawned fire-and-forget at each
+# phase boundary with its transcript discarded) has no one to report that to, so
+# a whole ladder's evaluation was lost with no trace — twice on 2026-08-13, both
+# times on the same unrelated flake.lock
+# (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt). Worse, the
+# obvious workaround re-arms the trap: every evaluator that stashes to unblock
+# itself leaves a stash behind for someone else to trip over.
+#
+# The plumbing writer builds the identical tree with git's plumbing against a
+# throwaway index and a base of origin/main, touching neither the checkout nor
+# its .git/index, so it has no reason to care what else in the tree is dirty and
+# does not refuse. Concurrency is not traded away: a peer's edit to the SAME node
+# is detected by comparing the node's blob between bases and routed through the
+# same field-level merge the rebase path uses, parking when it cannot resolve.
+#
+# Exported per invocation rather than set globally: the writer default stays
+# `worktree` for every other graph-commit caller (see GRAPH_COMMIT_WRITER in
+# packages/intentionsutil/scripts/graph-commit), and flipping those is a separate
+# decision with a separate blast radius.
 run_graph_commit() {
   local attempt=1
   while :; do
-    if "${GRAPH_COMMIT_CMD[@]}" -C "$REPO_ROOT" "$@" 1>&2 9>&-; then
+    if GRAPH_COMMIT_WRITER=plumbing "${GRAPH_COMMIT_CMD[@]}" -C "$REPO_ROOT" "$@" 1>&2 9>&-; then
       return 0
     fi
     if (( attempt >= RETRIES )); then

@@ -256,11 +256,12 @@
 #      which would deny land-align-round its park marker for a park that IS on
 #      main. origin/main must not move.
 #
-# Cases 60-69 cover build_commit_plumbing() — the no-working-tree writer behind
-# GRAPH_COMMIT_WRITER. Unlike every case above they do NOT drive the CLI end to
-# end: the function is not wired into try_land() yet (see GRAPH_COMMIT_WRITER in
-# graph-commit), so they source graph-commit (which defines its functions and
-# runs nothing) and call the builder directly against a real throwaway repo.
+# Cases 60-69 cover build_commit_plumbing() — the commit builder behind
+# GRAPH_COMMIT_WRITER=plumbing — as a UNIT. Unlike every case above they do not
+# drive the CLI end to end: they source graph-commit (which defines its
+# functions and runs nothing) and call the builder directly against a real
+# throwaway repo, which is how the tree-SHA equivalence claim below is made
+# precisely. Cases 70-73 then drive the wired-in writer through the CLI.
 #
 # The central assertion is TREE-SHA EQUIVALENCE: for identical inputs, the
 # plumbing writer and the working-tree writer (git add + git commit) must
@@ -282,16 +283,49 @@
 #  66. the builder touches neither the working tree nor the repo's own
 #      .git/index: both are byte-identical after a build, and the built commit
 #      is reachable from no ref (HEAD has not moved)
-#  67. GRAPH_COMMIT_WRITER default/opt-in gating: unset lands exactly as today,
-#      an explicit `worktree` lands identically, `plumbing` is REFUSED (not
-#      silently downgraded to the worktree writer) and an unknown value is
-#      refused — in both refusals origin/main must not move
+#  67. GRAPH_COMMIT_WRITER gating: unset lands exactly as today, an explicit
+#      `worktree` lands identically, `plumbing` LANDS THE SAME CONTENT while
+#      leaving the checkout's HEAD exactly where it was (no local commit is ever
+#      made on that path), and an unknown value is refused with origin/main
+#      unmoved
 #  68. base-commit fidelity: the builder builds against the BASE COMMIT it is
 #      handed, not against HEAD or the index — a commit built on an older base
 #      carries that base's content for paths it does not name
 #  69. a --prune id naming a path the base commit does not carry is REFUSED —
 #      `update-index --force-remove` would silently succeed there, so the
 #      builder dies instead of emitting a commit that pruned nothing
+#
+# Cases 70-75 drive GRAPH_COMMIT_WRITER=plumbing through the CLI end to end —
+# the wiring itself, not the builder.
+#  70. UNRELATED DIRTY TRACKED FILE. The finding this wiring dissolves
+#      (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt): a
+#      modified file the write never reads must NOT block a plumbing landing,
+#      must still block a worktree landing (that writer's rebase genuinely
+#      cannot run on it), and must SURVIVE the plumbing landing — a writer that
+#      tolerates dirt by destroying it is not tolerating it
+#  71. SAME-NODE CONCURRENT EDIT, disjoint fields: with no rebase to conflict,
+#      the divergence is caught by comparing the node's blob between bases and
+#      routed through the SAME field-level merge layer 2 uses, so BOTH writers'
+#      edits survive on main — never a blind overwrite of the peer's landed edit
+#  72. SAME-NODE CONCURRENT EDIT the merge CANNOT resolve: parks exactly as the
+#      worktree writer's unresolvable rebase conflict does (exit 1, the peer's
+#      content stands on main, office_hours landed, the loser's content kept in
+#      the snapshot dir) — the return-10 → land()-12 → park_and_exit() path is
+#      preserved, not re-derived
+#  73. the park in case 72 leaves the checkout's UNRELATED dirt intact:
+#      park_and_exit()'s whole-tree `git reset --hard` is a path-scoped sync for
+#      this writer, so the park cannot destroy what the pre-flight refusal was
+#      dropped for
+#  74. NO-OP FIDELITY. A clean checkout merely BEHIND origin/main whose content
+#      is already there must still short-circuit: the "HEAD == origin/main" test
+#      is the wrong question for a writer that builds from disk onto
+#      origin/main, and without the widened arm the run would push an empty
+#      commit whose tree equals its parent's
+#  75. COMPOSITION WITH --base. dispatch-eval-finding, the one caller that opts
+#      into this writer, passes --base on every update, so the layer-3
+#      stale-base reconciliation (which merges on disk) and the plumbing
+#      rebuild (which then reconciles and builds) must compose — both edits
+#      reach main
 #
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
@@ -372,7 +406,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-kill-lockwait t-kill-stamp t-kill-busy \
           t-verdict-happy t-verdict-park t-park-retry \
           t-orphan t-live-pending \
-          t-plumb-cli; do
+          t-plumb-cli t-plumb-dirty t-plumb-race t-plumb-race-conflict \
+          t-plumb-noop t-plumb-base; do
   seed_node "$id"
 done
 
@@ -2742,7 +2777,7 @@ else
   no "idempotent park retry (rc_b=$rc59b rc=$rc59 sha_moved=$([[ "$sha_after_retry" == "$sha_after_park" ]] && echo no || echo yes))"; printf '%s\n' "$out59"
 fi
 
-# --- Cases 60-68: build_commit_plumbing() (GRAPH_COMMIT_WRITER) ----------------
+# --- Cases 60-69: build_commit_plumbing() as a unit (GRAPH_COMMIT_WRITER) ------
 # A dedicated clone whose base commit is LOCAL ONLY (never pushed), so these
 # cases neither depend on nor disturb origin/main, and every other case's
 # fixtures are untouched. The clone carries the whole seed tree — every other
@@ -2938,16 +2973,19 @@ else
 fi
 
 sync_clone "$A"
-edit_line "$A" t-plumb-cli 3 plumbing-refused
-before="$(origin_sha)"
+edit_line "$A" t-plumb-cli 3 plumbing-writer
+head_before="$(git -C "$A" rev-parse HEAD)"
 export GRAPH_COMMIT_WRITER=plumbing
 out="$(run_gc "$A" -m 'test: writer plumbing' t-plumb-cli 2>&1)"; rc=$?
 unset GRAPH_COMMIT_WRITER
-if [[ $rc -ne 0 ]] && grep -q 'not wired into the landing loop yet' <<<"$out" \
-   && [[ "$(origin_sha)" == "$before" ]]; then
-  ok "GRAPH_COMMIT_WRITER=plumbing is refused up front, never silently downgraded to the worktree writer; origin/main untouched"
+# HEAD unmoved is the load-bearing half: the plumbing writer makes NO local
+# commit, so the checkout it was pointed at is exactly where it started even
+# though the content reached main.
+if [[ $rc -eq 0 ]] && origin_show t-plumb-cli | grep -q 'line3: plumbing-writer' \
+   && [[ "$(git -C "$A" rev-parse HEAD)" == "$head_before" ]]; then
+  ok "GRAPH_COMMIT_WRITER=plumbing lands the same content and never moves the checkout's HEAD"
 else
-  no "GRAPH_COMMIT_WRITER=plumbing refusal (rc=$rc)"; printf '%s\n' "$out"
+  no "GRAPH_COMMIT_WRITER=plumbing landing (rc=$rc head $head_before -> $(git -C "$A" rev-parse HEAD))"; printf '%s\n' "$out"
 fi
 
 before="$(origin_sha)"
@@ -3020,6 +3058,155 @@ else
   no "plumbing writer absent-prune refusal (rc=$rc sha=$absent_sha)"; cat "$WORK/plumb-absent.err"
 fi
 plumb_reset
+
+# ---------------------------------------------------------------------------
+# Cases 70-75: GRAPH_COMMIT_WRITER=plumbing driven through the CLI
+# ---------------------------------------------------------------------------
+
+# --- Case 70: an unrelated dirty tracked file blocks worktree, not plumbing ----
+# The finding this wiring dissolves. Case 24 above already pins the worktree
+# writer's refusal on its own fixture; the first half here re-states it on the
+# SAME dirty checkout the second half then lands from, so the two answers are
+# about one state rather than two.
+set_mode green
+WPD="$WORK/wplumbdirty"
+make_clone "$WPD" writer-plumb-dirty
+edit_line "$WPD" t-plumb-dirty 1 plumbing-with-dirt
+echo "unrelated local change" >>"$WPD/packages/intentionsutil/src/store.js"
+
+before="$(origin_sha)"
+out="$(run_gc "$WPD" -m 'test: dirty tree, worktree writer' t-plumb-dirty 2>&1)"; rc=$?
+if [[ $rc -ne 0 ]] && grep -q 'unrelated dirty tracked file' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]]; then
+  ok "unrelated dirty tracked file still refuses the WORKTREE writer (its rebase cannot run on it); origin/main untouched"
+else
+  no "worktree writer dirty-tree refusal (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$WPD" -m 'test: dirty tree, plumbing writer' t-plumb-dirty 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+dirt_survived=0
+grep -q 'unrelated local change' "$WPD/packages/intentionsutil/src/store.js" && dirt_survived=1
+if [[ $rc -eq 0 ]] && origin_show t-plumb-dirty | grep -q 'line1: plumbing-with-dirt' \
+   && [[ "$dirt_survived" -eq 1 ]]; then
+  ok "the SAME unrelated dirty tracked file does NOT block the plumbing writer, and the dirt survives the landing untouched"
+else
+  no "plumbing writer over a dirty tree (rc=$rc dirt_survived=$dirt_survived)"; printf '%s\n' "$out"
+fi
+
+# --- Case 71: same-node concurrent edit, disjoint fields -> layer-2 merge -------
+# There is no rebase here to produce a conflict, so a blind rebuild would stamp
+# this writer's on-disk content over the peer's landed edit and exit 0. The blob
+# comparison between bases is what catches it, and run_merge_node is what
+# reconciles it — the same primitive the rebase path calls.
+set_mode green
+sync_clone "$A"                       # B stays stale at the pre-edit commit
+sync_clone "$B"
+edit_line "$A" t-plumb-race 1 A-top
+run_gc "$A" -m 'test: plumb race, peer lands first' t-plumb-race >/dev/null 2>&1; rcA=$?
+edit_line "$B" t-plumb-race 12 B-bottom
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumb race, plumbing writer' t-plumb-race 2>&1)"; rcB=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-race)"
+if [[ $rcA -eq 0 && $rcB -eq 0 ]] \
+   && grep -q 'line1: A-top' <<<"$content" \
+   && grep -q 'line12: B-bottom' <<<"$content"; then
+  ok "plumbing writer: a same-node concurrent edit is field-merged, not overwritten — both writers' edits are on main"
+else
+  no "plumbing same-node auto-merge (rcA=$rcA rcB=$rcB)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Cases 72-73: same-node concurrent edit the merge CANNOT resolve -----------
+# Overlapping edits to the SAME field. The plumbing path must reach the same
+# fail-closed park the worktree path reaches through a rebase conflict — and,
+# unlike that path, must do so without resetting the whole tree out from under
+# the caller's unrelated dirt.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-plumb-race-conflict 1 A-wins
+run_gc "$A" -m 'test: plumb conflict, peer lands first' t-plumb-race-conflict >/dev/null 2>&1
+edit_line "$B" t-plumb-race-conflict 1 B-loses
+echo "unrelated local change during a park" >>"$B/packages/intentionsutil/src/store.js"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumb conflict, plumbing writer' t-plumb-race-conflict 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-race-conflict)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
+   && grep -q 'line1: A-wins' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && [[ -n "$snap" && -f "$snap/t-plumb-race-conflict.md" ]] \
+   && grep -q 'B-loses' "$snap/t-plumb-race-conflict.md"; then
+  ok "plumbing writer: an unresolvable same-node concurrent edit parks — peer's content stands on main, office_hours landed, loser's content preserved"
+else
+  no "plumbing unresolvable same-node park (rc=$rc snap='$snap')"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+if grep -q 'unrelated local change during a park' "$B/packages/intentionsutil/src/store.js"; then
+  ok "the park path's re-sync is path-scoped for the plumbing writer: the checkout's unrelated dirt survived the park"
+else
+  no "plumbing park destroyed the checkout's unrelated dirty file"
+fi
+git -C "$B" checkout -- packages/intentionsutil/src/store.js
+sync_clone "$B"
+
+# --- Case 74: a clean checkout merely BEHIND origin/main is still a no-op ------
+# The no-op short-circuit's HEAD == origin/main test is the wrong question for
+# this writer — it builds from the ON-DISK content onto origin/main, so what
+# decides whether anything can land is whether that content is already there.
+# Without the widened arm this run would build a commit whose tree equals its
+# parent's and push that empty no-op onto main.
+set_mode green
+sync_clone "$B"
+sync_clone "$A"
+edit_line "$A" t-plumb-cli 4 advance-main-past-B
+run_gc "$A" -m 'test: advance main past B' t-plumb-cli >/dev/null 2>&1
+before="$(origin_sha)"
+calls_before="$(gh_calls)"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumbing no-op behind main' t-plumb-noop 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+if [[ $rc -eq 0 ]] && grep -q 'no new changes to stage' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]] \
+   && [[ "$(gh_calls)" == "$calls_before" ]]; then
+  ok "plumbing writer: a clean checkout BEHIND origin/main whose content already matches is a no-op — no empty commit pushed, no stamp cycle bought"
+else
+  no "plumbing no-op behind main (rc=$rc origin moved: $before -> $(origin_sha))"; printf '%s\n' "$out"
+fi
+sync_clone "$B"
+
+# --- Case 75: plumbing + a STALE --base (the ledger's own update shape) --------
+# dispatch-eval-finding — the one caller that opts into this writer — passes
+# --base on every update, so the layer-3 stale-base reconciliation and the
+# plumbing rebuild must compose. Layer 3 merges the writer's edit against
+# origin/main ON DISK; the plumbing writer then reconciles that same node
+# against its own base and builds. Both edits must reach main.
+set_mode green
+WPB="$WORK/wplumbbase"
+make_clone "$WPB" writer-plumb-base
+pb_stale_sha="$(git -C "$WPB" hash-object intentions/t-plumb-base.md)"
+OTHERPB="$WORK/other-plumb-base"
+make_clone "$OTHERPB" other-plumb-base
+echo "line16: concurrent edit" >>"$OTHERPB/intentions/t-plumb-base.md"
+git -C "$OTHERPB" commit -qam 'concurrent edit to t-plumb-base'
+git -C "$OTHERPB" push -q origin main
+echo "line15: plumbing writer edit (based on a stale read)" >>"$WPB/intentions/t-plumb-base.md"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$WPB" -m 'test: plumbing + stale base' --base "t-plumb-base=$pb_stale_sha" t-plumb-base 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-base 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line15: plumbing writer edit (based on a stale read)' <<<"$content" \
+   && grep -q 'line16: concurrent edit' <<<"$content"; then
+  ok "plumbing writer composes with a stale --base: layer 3 reconciles on disk, the rebuild lands both edits"
+else
+  no "plumbing + stale --base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then
