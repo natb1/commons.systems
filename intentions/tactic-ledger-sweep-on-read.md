@@ -12,9 +12,12 @@ rationale: "Greenfield end-state (migration step iv) retained as a draft
   self-reconciling so no call site can forget to sweep — the defect class the
   cross-mode-validity clarification identifies. Blocked on the parity fixes and
   reap-on-exit landing first; finalize via /align-tactics then. Draft (no
-  phase): retained context, not selectable work."
+  phase): undecomposed work whose next step is an /align-tactics session. Not
+  selectable TODAY only because its blockers are open — draft status alone does
+  not prevent selection, the router emits drafts at the align-tactics rung
+  (corrected 2026-08-14 per
+  tactic-align-skill-draft-selectability-stale-prose)."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -73,6 +76,11 @@ Make the ledger **self-reconciling**:
 - Whether pure-observability count reads that must **not** mutate get a
   non-sweeping variant.
 
-**Status:** draft (no phase) — retained context, not selectable work.
+**Status:** draft (no phase) — undecomposed work whose next step is an
+`/align-tactics` session. It is not selectable *today* only because its blockers
+are open: draft status alone does not prevent selection, since the router emits
+drafts at the `align-tactics` rung (corrected 2026-08-14 per
+tactic-align-skill-draft-selectability-stale-prose — the earlier wording here
+attributed the non-selectability to draft status, which is the false rule).
 `blocked_by` the two parity fixes and #2922; finalize via `/align-tactics` once
 those have landed.

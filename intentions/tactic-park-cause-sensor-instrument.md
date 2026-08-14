@@ -1,9 +1,10 @@
 ---
 id: tactic-park-cause-sensor-instrument
 kind: tactic
-statement: Implement and register the park-cause sensor named in
-  strategy-graph-native-dispatch's success_signal, so read-sensors can produce a
-  reading for it instead of leaving it in the unregistered pool
+statement: Migrate the park-cause signal clause from
+  strategy-graph-native-dispatch to strategy-discovered-requirements and
+  implement the sensor that reads it, in one PR that changes the node,
+  read-sensors.ts's LIFECYCLE_SENSOR_NAME and its test guard together
 owner: ai
 status: raw
 parent: null
@@ -28,10 +29,27 @@ rationale: "Retained from the 2026-08-12 /align interview that recorded the
   note for the planning session: decide deliberately whether to register under
   the existing long prose string or to shorten success_signal.sensor to a stable
   short name, which is a rewording of registered-sensor prose and therefore
-  carries the de-registration hazard in its own right."
+  carries the de-registration hazard in its own right. RE-POINTED AND WIDENED
+  2026-08-14 by the round that closed out the 2026-08-13 re-homing. serves moves
+  from strategy-graph-native-dispatch to strategy-discovered-requirements,
+  because the signal this tactic instruments now lives there: the 2026-08-13
+  /align round carried the /align recording-round charter, and with it the
+  park-cause observable and threshold, onto strategy-discovered-requirements,
+  whose success_signal.sensor records itself as UNINSTRUMENTED and names this
+  tactic as the one that would implement it. Scope widens from 'implement a
+  sensor' to 'perform the migration', because the clause is NOT merely
+  uninstrumented — it is still physically embedded in
+  strategy-graph-native-dispatch's success_signal.sensor and threshold, so the
+  same signal is now recorded in two places and read in neither. That is the
+  residue the 2026-08-13 round could not land: graph-commit is intentions/-only,
+  and the sensor string is mirrored character-for-character by read-sensors.ts's
+  LIFECYCLE_SENSOR_NAME (packages/intentionsutil/scripts/read-sensors.ts:475)
+  under a test guard, so removing the clause from the node without the paired
+  code change breaks the guard. This tactic is the PR-lane carrier for that
+  pair."
 reading: null
 serves:
-  - strategy-graph-native-dispatch
+  - strategy-discovered-requirements
 recovers: []
 clarifications: []
 tooling_goals: []
@@ -46,4 +64,91 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Implement and register the park-cause sensor named in strategy-graph-native-dispatch's success_signal, so read-sensors can produce a reading for it instead of leaving it in the unregistered pool
+# Migrate the park-cause signal clause from strategy-graph-native-dispatch to strategy-discovered-requirements and implement the sensor that reads it, in one PR that changes the node, read-sensors.ts's LIFECYCLE_SENSOR_NAME and its test guard together
+
+## Why this is one PR and not two
+
+The park-cause clause is recorded in **two** places today and read in
+**neither**. Splitting the work would leave one of those states standing:
+
+- `strategy-graph-native-dispatch.success_signal.sensor` still carries the
+  clause "a park-cause reading over `office_hours.reason` across parked nodes
+  counts `/align-tactics` parks attributable to an upstream recording round's
+  own record gap", and its `threshold` still carries the matching "parks
+  attributable to an upstream recording round's own record gap trend to zero".
+- `strategy-discovered-requirements.success_signal` carries the same observable
+  and the same threshold, with its `sensor` field stating in prose that it is
+  UNINSTRUMENTED and that migrating the clause "needs a paired code change
+  outside `intentions/` and is owed".
+
+The 2026-08-13 round that re-homed the `/align` charter deliberately left the
+clause behind, because `graph-commit` lands `intentions/` only — it would have
+pushed the node edit and silently dropped the code half. That is the same
+mechanism recorded on
+tactic-align-skill-draft-selectability-stale-prose, which cost a
+false "done" and a reverted phase. This tactic is the PR-lane carrier that lets
+the pair land together.
+
+## The coupling that forces the code change
+
+`packages/intentionsutil/scripts/read-sensors.ts:475` defines
+`LIFECYCLE_SENSOR_NAME` as a string literal mirroring
+`strategy-graph-native-dispatch`'s `success_signal.sensor`
+**character-for-character**, including the curly apostrophe in "round's" and the
+parenthetical "(the reading that surfaced three such parks on 2026-08-12)".
+`read-sensors` matches the ENTIRE `success_signal.sensor` string against
+registered `Sensor` names by exact full-string equality, so any edit to the node
+string de-registers the lifecycle sensor unless the constant changes in the same
+commit. `packages/intentionsutil/test/lifecycle-sensor.test.ts` guards the
+equality, so an unpaired edit fails CI rather than silently de-registering — the
+guard is working as intended and must not be weakened to let a partial change
+through.
+
+## Scope
+
+1. Remove the park-cause clause from
+   `strategy-graph-native-dispatch.success_signal.sensor` and the matching
+   trend-to-zero clause from its `threshold`, leaving the lifecycle sensor
+   describing only what it actually reads (the census population and the
+   selection log).
+2. Update `LIFECYCLE_SENSOR_NAME` to the new exact string, and update the test
+   guard's expectation to match.
+3. Give `strategy-discovered-requirements.success_signal.sensor` a real
+   registered sensor name in place of its UNINSTRUMENTED prose, and register a
+   `Sensor` under exactly that name.
+4. Implement the reading: a park-cause count over `office_hours.reason` across
+   parked nodes, counting `/align-tactics` parks attributable to an upstream
+   recording round's own record gap. The 2026-08-12 reading that surfaced three
+   such parks is the worked example to reproduce.
+
+**Naming decision reserved for the planning session** (carried over from this
+node's original scope note, and now sharper because the target strategy is
+changing anyway): register under a stable SHORT name rather than a long prose
+string. The long-prose-as-name convention is what left this signal unregistered
+in the first place — 45 of 53 sensor-naming strategies were unregistered for
+exactly this reason. Since step 3 is writing a new `sensor` value regardless,
+the usual "rewording carries a de-registration hazard" objection does not apply
+to `strategy-discovered-requirements`; it applies only to step 1's edit of
+`strategy-graph-native-dispatch`, which step 2 pairs.
+
+## Out of scope
+
+Any change to what the threshold *means*, to the backlog band, or to the other
+two clauses of the lifecycle sensor. Also out of scope: re-registering the other
+44 unregistered sensor strings — that is the general problem this instance is a
+member of, not this tactic's job.
+
+## Verification
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+The lifecycle-sensor guard must be green (there is **no** `intentionsutil`
+vitest project — `--project intentionsutil` errors with "No projects matched";
+this package runs its own `vitest run` via its `test` script). Then `npx tsx packages/intentionsutil/scripts/read-sensors.ts`
+producing a non-null reading for the new sensor name and the lifecycle sensor
+still producing its reading. Confirm with
+`npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+that the registered-sensor counter increases by one and nothing else
+de-registers.

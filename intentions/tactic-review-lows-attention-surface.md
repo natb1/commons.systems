@@ -6,13 +6,16 @@ statement: "2026-07-05 review lows: office-hours surface + project-signals
 owner: ai
 status: raw
 parent: null
-rationale: Retained draft context, not selectable work. Split 2026-07-06 out of
+rationale: Retained draft context — undecomposed work whose next step is an
+  /align-tactics session, not executable phase work. (The router DOES select a
+  draft, at the align-tactics rung; the original 'not selectable work' wording
+  was the stale claim corrected 2026-08-14 per
+  tactic-align-skill-draft-selectability-stale-prose.) Split 2026-07-06 out of
   the deleted mixed sweep tactic-review-low-severity-sweep per the placement
   doctrine (strategy-graph-native-dispatch), so this strategy's /align-tactics
   rounds find their own residue. Findings are from the 2026-07-05 code review,
   each verified with an anchor.
 reading: null
-gap: null
 serves:
   - strategy-attention-surface
 recovers: []
@@ -33,7 +36,11 @@ attributes: {}
 
 ## Context
 
-Retained draft context, not selectable work. Split 2026-07-06 out of the
+Retained draft context — undecomposed work whose next step is an
+`/align-tactics` session, not executable phase work. (The router **does**
+select a draft, emitting it at the `align-tactics` rung; the original "not
+selectable work" wording here was the stale claim corrected 2026-08-14 per
+tactic-align-skill-draft-selectability-stale-prose.) Split 2026-07-06 out of the
 deleted mixed sweep `tactic-review-low-severity-sweep` per the placement
 doctrine on `strategy-graph-native-dispatch`. Each line is a confirmed
 finding from the 2026-07-05 review with an anchor. A later `/align-tactics`

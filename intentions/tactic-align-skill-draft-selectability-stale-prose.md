@@ -64,11 +64,63 @@ clarifications:
       it also resets away on exit. Land the non-graph half on its own branch and
       verify it against origin/main separately; do not infer it from
       graph-commit's verdict."
+  - question: Did the fix actually land on origin/main, and was the sweep for the
+      same stale claim finally complete?
+    answer: "(Recorded 2026-08-14 by the closing round; phase moves to done in this
+      same commit.) VERIFIED LANDED. PR 3081 merged 2026-08-13T19:35:58Z as
+      merge commit d5bba8b6d2627e01f59d0ec18395a217170a5f2b, confirmed an
+      ancestor of origin/main by git merge-base --is-ancestor. Site 1
+      (.claude/skills/align/SKILL.md Step 4) is therefore on main, closing the
+      gap the entry above recorded when graph-commit silently excluded the
+      non-intentions half of the work from 405bdae8. The verdict was checked
+      against main's content, not inferred from the PR being marked merged.
+      VERIFICATION DISCHARGED as this node's own Verification section specifies:
+      the corrected Step 4 prose names three gates — office_hours null, blockers
+      complete, and not another tactic's parent — and all three exist in
+      router.ts's frozen-tactic candidate loop (the office_hours and
+      blockersComplete guards head the loop; the subtreeParentIds guard is the
+      first branch inside isDraft). No gate present in the code is omitted from
+      the prose, and claim 2 survives intact and correctly attributed. BUT THE
+      SWEEP WAS STILL INCOMPLETE, a third time, and in exactly the direction the
+      entry above warned about. The 2026-08-13 graph sweep searched for the
+      claim's ORIGINAL WORDING and so found only tactic-graph-native-dispatch.
+      Grepping the paraphrase 'retained context, not selectable work' across
+      intentions/ finds three further nodes asserting the same falsehood about
+      themselves: tactic-review-lows-finance and
+      tactic-review-lows-attention-surface (each in BOTH rationale and body),
+      and tactic-ledger-sweep-on-read (in rationale and body). The first two are
+      LIVE align-tactics candidates in select-targets' output at the time of
+      writing, while their own text says they are not selectable work. The third
+      is genuinely unselectable today, but because its three blockers are open —
+      not because it is a draft — so its prose teaches the same false rule while
+      happening to state a true conclusion. All five residual sites are
+      corrected in this same commit, which is why this node closes with a clean
+      sweep rather than a deferred residue. SHARPENED GENERAL LESSON,
+      superseding the one above: sweep for the CLAIM, not the SENTENCE. A stale
+      doctrinal assertion propagates by paraphrase, and the wording carried by
+      the node that owns the correction is not necessarily the most common
+      phrasing of it — here the paraphrase outnumbered the original three sites
+      to two. Grep the load-bearing predicate ('selectable', 'never selects')
+      rather than a remembered sentence, and confirm the result against the
+      selector's actual candidate list, which settles selectability as a fact
+      instead of an inference."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: fix-align-draft-selectability-prose
+  pr: 3081
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T19:35:58Z
+    mergeCommitSha: d5bba8b6d2627e01f59d0ec18395a217170a5f2b
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
