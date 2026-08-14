@@ -81,6 +81,9 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
+# primitive, extracted from THIS script so its siblings stop re-deriving it.
+source "$SCRIPT_DIR/lib-graph-rollback.sh"
 
 # ---- Argument parsing -------------------------------------------------------
 NODE_FILTER=""
@@ -253,103 +256,14 @@ validate_node_id() {
   }
 }
 
-# Roll the apply run's disk mutations back to the checkout's CURRENT HEAD — not
-# to a captured blob. Restoring captured bytes is wrong on graph-commit's park
-# path: park_and_exit() does `git reset --hard FETCH_HEAD`, lands an office_hours
-# park, and exits non-zero, so HEAD has MOVED. Writing pre-park bytes back would
-# leave the tree dirty with stale, park-erased content — the shared-checkout
-# residue that bricks graph-commit's assert_clean_outside_ids guard for every
-# other writer, and that re-erases the very park this node exists to protect.
-# It also closes a latent residue bug — when this checkout sits behind
-# origin/main, the old restore wrote origin/main bytes over files whose HEAD
-# version differed, leaving them dirty. Precedent: resolve-hold's
-# clean_node_file(), same guard, same reason.
-#
-# But `checkout --` is NOT a universal rollback, because HEAD moving does not
-# always mean the write landed. graph-commit runs commit_files() BEFORE land()
-# (graph-commit:770-777) and, on rc 11 — landing lock never acquired, scratch
-# push failed, required checks never green, or main advanced through every
-# MAX_PUSH_ATTEMPTS — exits 1 with no reset (graph-commit:1954-1957). HEAD then
-# carries this sweep's un-landed, un-CAS-checked mutation, and `checkout --`
-# would restore each node file to that MUTATED content: a no-op dressed up as a
-# rollback. Worse, graph-commit pushes HEAD rather than just the named node, so
-# the next unrelated graph-commit from this shared checkout would rebase and push
-# the stranded commit to main — a write that never passed check_base_freshness.
-#
-# So classify HEAD before restoring, and never report a rollback that did not
-# happen:
-#   - HEAD unmoved                 → checkout -- (the ordinary rollback).
-#   - HEAD moved, nothing unpushed → graph-commit landed what it moved to (its
-#                                    pushed park path); checkout -- is a no-op
-#                                    that preserves it.
-#   - HEAD moved, unpushed commits that are all graph-commit PARK commits
-#                                  → keep them (an unpushed park is a record a
-#                                    human still needs) and say so loudly.
-#   - HEAD moved, any unpushed NON-park commit → that is the escaped write.
-#                                    Discard it by resetting to HEAD_AT_ARM when
-#                                    that is safe, else refuse loudly.
+# The rollback itself lives in lib-graph-rollback.sh — see that file's header
+# for WHY it restores to HEAD rather than to a captured blob, and how it tells
+# an ordinary rollback from graph-commit having moved HEAD (a landed park vs. an
+# un-landed, stranded commit). This wrapper only supplies the ids: every id this
+# sweep pinned in Step 2 is exactly an id its apply run mutated.
 restore_node_files() {
-  local sid head_now
-  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null)" || {
-    echo "reconcile-graph-merged: cannot read HEAD — the apply run's node writes were NOT rolled back; inspect intentions/ by hand" >&2
-    return
-  }
-  if [[ -n "$HEAD_AT_ARM" && "$head_now" != "$HEAD_AT_ARM" ]]; then
-    local rl_out
-    if ! rl_out="$(git -C "$REPO_ROOT" rev-list origin/main..HEAD 2>&1)"; then
-      echo "reconcile-graph-merged: HEAD moved to ${head_now:0:8} during the write and origin/main is unreadable ($rl_out) — the apply run's node writes were NOT rolled back; inspect by hand before any other graph-commit runs from this checkout" >&2
-      return
-    fi
-    local -a unpushed=() nonpark=()
-    [[ -n "$rl_out" ]] && mapfile -t unpushed <<<"$rl_out"
-    local sha
-    for sha in "${unpushed[@]}"; do
-      # park_and_exit()'s commit subject is `graph: park <ids> (...)`; anything
-      # else on top of origin/main is this sweep's own un-landed content commit.
-      [[ "$(git -C "$REPO_ROOT" log -1 --format=%s "$sha")" == 'graph: park '* ]] || nonpark+=("$sha")
-    done
-    if [[ "${#nonpark[@]}" -gt 0 ]]; then
-      # Either the stranded commit is dropped (the tree is back at HEAD_AT_ARM,
-      # nothing left to check out) or the refusal was reported — either way the
-      # `checkout --` rollback below must not run and must not be claimed.
-      discard_stranded_commits "${nonpark[@]}"
-      return
-    fi
-    if [[ "${#unpushed[@]}" -gt 0 ]]; then
-      echo "reconcile-graph-merged: graph-commit's park commit ${unpushed[0]:0:8} is not on the local origin/main ref — treat the park as possibly unpushed; the node files are restored to HEAD, which KEEPS it" >&2
-    fi
-  fi
-  for sid in "${!BASE_BLOB[@]}"; do
-    git -C "$REPO_ROOT" checkout -- "intentions/$sid.md" ||
-      echo "reconcile-graph-merged: rollback could not restore intentions/$sid.md to HEAD" >&2
-  done
-  echo "reconcile-graph-merged: rolled the apply run's node writes back to HEAD ${head_now:0:8}" >&2
-}
-
-# Drop the un-landed commit(s) graph-commit left on HEAD, restoring the checkout
-# to the state the sweep found. Only safe when HEAD still descends from
-# HEAD_AT_ARM and every stranded commit is a single-parent, intentions/-only
-# commit — i.e. unmistakably this sweep's own write and not some other process's
-# work in the shared checkout. When it is not safe, refuse loudly: leaving the
-# commit with a warning that names it beats both silently stranding it and
-# destroying someone else's commit.
-discard_stranded_commits() { # <sha>...
-  local -a stranded=("$@")
-  local unsafe=0 sha parents files
-  git -C "$REPO_ROOT" merge-base --is-ancestor "$HEAD_AT_ARM" HEAD || unsafe=1
-  for sha in "${stranded[@]}"; do
-    parents="$(git -C "$REPO_ROOT" log -1 --format=%P "$sha" | wc -w)"
-    [[ "$parents" -eq 1 ]] || unsafe=1
-    files="$(git -C "$REPO_ROOT" show --name-only --format= "$sha")"
-    [[ -n "$files" ]] || unsafe=1
-    grep -qv '^intentions/' <<<"$files" && unsafe=1
-  done
-  if [[ "$unsafe" -eq 0 ]] && git -C "$REPO_ROOT" reset -q --hard "$HEAD_AT_ARM"; then
-    echo "reconcile-graph-merged: graph-commit committed but never landed ${#stranded[@]} commit(s) (${stranded[0]:0:8}) — discarded by resetting to ${HEAD_AT_ARM:0:8}; NOTHING was written to main" >&2
-    return 0
-  fi
-  echo "reconcile-graph-merged: graph-commit left un-landed commit(s) on HEAD (${stranded[0]}) that never passed check_base_freshness, and they are NOT safely discardable — the write was NOT rolled back. Drop them by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
-  return 1
+  graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" reconcile-graph-merged \
+    "${!BASE_BLOB[@]}"
 }
 # Single EXIT trap (bash traps REPLACE on a signal, not stack): always drop the
 # temp file, and roll the write back when a post-pin step armed the flag.

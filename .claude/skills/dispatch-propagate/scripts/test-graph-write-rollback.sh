@@ -63,6 +63,16 @@
 #       sweep's sibling. --node narrows to the named node and leaves an
 #       otherwise-equally-eligible sibling untouched; an unknown id acts on
 #       nothing; the unflagged sweep still acts on every eligible candidate.
+#   11. graph-select-target's interrupt gates roll their on-disk write back when
+#       the land fails — the writer that ACTUALLY leaked in production
+#       (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).
+#       11b re-runs the same fixture with the rollback neutered and asserts it
+#       DOES leak, so 11 cannot pass vacuously.
+#
+# Cases 1, 3, 4, 8, 9, 10 and 11 all exercise the ONE shared rollback primitive,
+# lib-graph-rollback.sh's graph_rollback_node_writes — extracted from
+# reconcile-graph-merged, where it was correct, precisely because its siblings
+# had re-derived it and drifted.
 #
 # Cases 6 and 7 are both verified to go RED when Unit 1's `--base` threading is
 # reverted. Case 7 needed care to avoid being vacuous: if the checkout is left
@@ -82,7 +92,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
+for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -135,6 +145,8 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/apply-fix-state.ts" "$dst/packages/intentionsutil/scripts/apply-fix-state.ts"
   chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
+  # The shared rollback primitive every graph writer under test sources.
+  cp "$HARNESS_DIR/lib-graph-rollback.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-rollback.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
   chmod +x "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
 }
@@ -1109,7 +1121,7 @@ if [[ $rc -ne 0 ]] \
    && [[ -z "$status9" ]] \
    && [[ "$node9_after" == "$node9_before" ]] \
    && grep -q 'discarded by resetting to' <<<"$out" \
-   && ! grep -q 'rolled the apply run.s node writes back' <<<"$out"; then
+   && ! grep -q 'rolled the node write' <<<"$out"; then
   ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
 else
   no "reconcile-graph-merged busy-main rollback (rc=$rc, head moved: $([[ "$head9_after" == "$head9_before" ]] && echo no || echo yes))"
@@ -1355,6 +1367,207 @@ if [[ $rc_usage -eq 2 && $rc_bogus -eq 2 ]]; then
   ok "reconcile-graph-review-stall: --node without an id, and an unknown flag, are usage errors (exit 2)"
 else
   no "reconcile-graph-review-stall usage errors (--node rc=$rc_usage, --bogus rc=$rc_bogus)"
+fi
+
+# ===========================================================================
+# Case 11: graph-select-target's interrupt gates roll their write back when the
+# land fails (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).
+#
+# THE production leak this node records. Every interrupt gate in
+# graph-select-target mutates intentions/<id>.md through apply-fix-state /
+# apply-conflict-state and lands it with a SEPARATE graph-commit; when that
+# commit did not land, nothing rolled the mutation back. Measured 2026-08-13
+# 18:24:57Z: the `--clear-fix` arm of _gate_fix_active left
+# intentions/tactic-attention-namespaced-rank.md dirty (`fix: null` + the
+# `reviewed` marker stripped — precisely what --clear-fix writes) because its
+# graph-commit had been refused by a pre-existing dirty flake.lock. The residue
+# then re-refused every subsequent graph-commit from the main checkout — the
+# next tick's gate leaked again on top of it, one leaked write per tick, until a
+# human cleared the file.
+#
+# The fixture reproduces that arm exactly: a `fix`-phase candidate whose CI
+# reads green, a REAL apply-fix-state --clear-fix write, and a graph-commit that
+# fails. Assert the tree is left CLEAN and the node file is byte-identical to
+# HEAD — the `reviewed` marker and the fix block both still there, because
+# nothing landed.
+#
+# Fixture shape follows test-graph-select-target.sh (the script derives
+# REPO_ROOT from its own on-disk location, so it and every sourced lib*.sh must
+# be physically copied) plus this harness's real node_modules symlink, since
+# apply-fix-state.ts must genuinely run.
+# ===========================================================================
+T11="$WORK/t11-seed"
+build_seed_repo "$T11"
+cp "$HARNESS_DIR"/graph-select-target "$HARNESS_DIR"/lib-*.sh \
+   "$T11/.claude/skills/dispatch-propagate/scripts/"
+chmod +x "$T11/.claude/skills/dispatch-propagate/scripts/graph-select-target"
+# A tactic carrying an active fix interrupt plus the `reviewed` marker.
+# The STORED phase stays at the ladder phase (`review`) — `fix` is a
+# router-EMITTED phase, not a member of PHASES (schema.ts:59, DISPATCH_PHASE_NAMES
+# at :105), so a node file carrying `phase: fix` fails validateNode and every
+# write below would no-op. It is `execution.fix != null` that makes the router
+# emit `fix`, which is what the canned selector output below reports.
+# --clear-fix's resolution path writes fix: null AND strips the `reviewed`
+# marker, so both halves of the production diff are reproduced.
+cat >"$T11/intentions/t-gst.md" <<'NODE'
+---
+id: t-gst
+kind: tactic
+statement: harness node for the graph-select-target fix-clear rollback test
+owner: ai
+status: codified
+phase: review
+serves: []
+execution:
+  branch: t-gst
+  pr: 777
+  attempts: {}
+  markers:
+    - planned
+    - reviewed
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-01
+    attempt: 1
+    # Hex WITH letters on purpose: an all-digit sha parses as a YAML number and
+    # validateFixState rejects it ("Expected string or null for
+    # execution.fix.pushed_sha, got number"), which would make every write below
+    # a silent no-op and this case vacuous.
+    pushed_sha: aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111
+  conflict: null
+  completion: null
+office_hours: null
+---
+# harness node for the graph-select-target fix-clear rollback test
+NODE
+new_origin t11
+init_and_push "$T11"
+
+C11="$WORK/t11-clone"
+clone_with_node_modules "$C11"
+fail_graph_commit "$C11"
+BIN11="$WORK/t11-bin"; FIX11="$WORK/t11-fixtures"
+mkdir -p "$BIN11" "$FIX11"
+
+# The canned selector output. Only `npx tsx …/select-targets.ts` is intercepted;
+# every other `npx tsx <script>` runs for real through `node --import tsx/esm`,
+# which is how apply-fix-state.ts performs the genuine --clear-fix write.
+cat >"$FIX11/selection.json" <<'JSON'
+{"candidates":[{"id":"t-gst","kind":"tactic","phase":"fix","pr":777,"pace_exempt":false,
+  "fix":{"since":"2026-08-01","pushed_sha":"aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"}}],
+ "events":[]}
+JSON
+cat >"$BIN11/npx" <<SH
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    *select-targets.ts) cat "$FIX11/selection.json"; exit 0 ;;
+  esac
+done
+args=("\$@")
+[[ "\${args[0]}" == "tsx" ]] && args=("\${args[@]:1}")
+exec node --import tsx/esm "\${args[@]}"
+SH
+chmod +x "$BIN11/npx"
+
+# gh: an OPEN, MERGEABLE PR. The CI verdict is supplied through
+# DISPATCH_CI_VERDICT_CACHE below rather than a check-runs fixture, so this stub
+# only has to serve gh_pr_view_rest.
+cat >"$BIN11/gh" <<'SH'
+#!/usr/bin/env bash
+path=""
+for a in "$@"; do
+  case "$a" in */pulls/*) path="$a" ;; esac
+done
+case "$path" in
+  */pulls/*)
+    jq -n '{
+      number: 777, title: "harness pr", body: "",
+      state: "open", merged_at: null, merge_commit_sha: null,
+      mergeable: true, mergeable_state: "clean",
+      head: {ref: "t-gst", sha: "2222222222222222222222222222222222222222"},
+      labels: []
+    }' ;;
+  *) echo "gh stub: unhandled invocation: $*" >&2; exit 1 ;;
+esac
+SH
+chmod +x "$BIN11/gh"
+# `claude agents --json` reports no live sessions, corroborated as definite by
+# the daemon-visible probe (see test-graph-select-target.sh's note) — so the
+# claimed-set gate lets the candidate through to sensor_gate.
+printf '%s' '[]' >"$FIX11/claude-payload.json"
+cat >"$BIN11/claude" <<SH
+#!/usr/bin/env bash
+cat "$FIX11/claude-payload.json"
+SH
+chmod +x "$BIN11/claude"
+cat >"$BIN11/pgrep-daemon-visible" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$BIN11/pgrep-daemon-visible"
+# Green CI for the PR head, without a check-runs round trip.
+mkdir -p "$WORK/t11-ci-cache"
+printf 'passing\n' >"$WORK/t11-ci-cache/2222222222222222222222222222222222222222"
+
+node11_before="$(cat "$C11/intentions/t-gst.md")"
+out="$(
+  cd "$C11" || exit 99
+  export PATH="$BIN11:$PATH"
+  export CLAUDE_AGENTS_CMD="$BIN11/claude" CLAUDE_AGENTS_PGREP_CMD="$BIN11/pgrep-daemon-visible"
+  export DISPATCH_RESERVATION_DIR="$WORK/t11-reservations"
+  export DISPATCH_SELECTION_LOG_DIR="$WORK/t11-seldir"
+  export DISPATCH_DECISION_LOG_DIR="$WORK/t11-seldir"
+  export DISPATCH_CI_VERDICT_CACHE="$WORK/t11-ci-cache"
+  bash .claude/skills/dispatch-propagate/scripts/graph-select-target 2>&1
+)"; rc=$?
+status11="$(git -C "$C11" status --porcelain intentions/)"
+node11_after="$(cat "$C11/intentions/t-gst.md")"
+
+if [[ $rc -eq 0 ]] \
+   && [[ -z "$status11" ]] \
+   && [[ "$node11_after" == "$node11_before" ]] \
+   && grep -q 'rolled the node write(s) back to HEAD' <<<"$out"; then
+  ok "graph-select-target fix-clear rollback: a graph-commit failure after the REAL --clear-fix write leaves a clean tree (node file byte-identical to HEAD: reviewed marker and fix block intact)"
+else
+  no "graph-select-target fix-clear rollback (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status11"
+  printf 'node diff:\n%s\n' "$(diff <(printf '%s' "$node11_before") <(printf '%s' "$node11_after") || true)"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 11b: the guard has teeth. Neutering the rollback call must make 11 red —
+# otherwise the case would pass on a script that never rolls anything back.
+# Same fixture, one substitution: _rollback_node_write becomes a no-op.
+# ---------------------------------------------------------------------------
+C11B="$WORK/t11b-clone"
+clone_with_node_modules "$C11B"
+fail_graph_commit "$C11B"
+GST11B="$C11B/.claude/skills/dispatch-propagate/scripts/graph-select-target"
+awk '{ print } /^_rollback_node_write\(\) \{$/ { print "  return 0" }' \
+  "$GST11B" >"$GST11B.neutered"
+mv "$GST11B.neutered" "$GST11B"
+chmod +x "$GST11B"
+grep -q '^  return 0$' "$GST11B" \
+  || { echo "error: case 11b could not neuter _rollback_node_write (renamed?)" >&2; exit 1; }
+
+out11b="$(
+  cd "$C11B" || exit 99
+  export PATH="$BIN11:$PATH"
+  export CLAUDE_AGENTS_CMD="$BIN11/claude" CLAUDE_AGENTS_PGREP_CMD="$BIN11/pgrep-daemon-visible"
+  export DISPATCH_RESERVATION_DIR="$WORK/t11b-reservations"
+  export DISPATCH_SELECTION_LOG_DIR="$WORK/t11b-seldir"
+  export DISPATCH_DECISION_LOG_DIR="$WORK/t11b-seldir"
+  export DISPATCH_CI_VERDICT_CACHE="$WORK/t11-ci-cache"
+  bash .claude/skills/dispatch-propagate/scripts/graph-select-target 2>&1
+)"
+status11b="$(git -C "$C11B" status --porcelain intentions/)"
+if [[ -n "$status11b" ]]; then
+  ok "graph-select-target fix-clear rollback has teeth: with the rollback neutered the same fixture DOES leak a dirty node file ($status11b)"
+else
+  no "graph-select-target fix-clear rollback teeth (neutered run left a clean tree — case 11 may be vacuous)"
+  printf '%s\n' "$out11b"
 fi
 
 echo

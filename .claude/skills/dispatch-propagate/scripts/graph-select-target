@@ -202,6 +202,8 @@ source "$SCRIPT_DIR/lib-reservation-ledger.sh"
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-graph-rollback.sh"
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -522,6 +524,46 @@ _graph_commit_fix() {
     && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
 }
 
+# --- The write/land rollback -------------------------------------------------
+# EVERY interrupt gate below mutates intentions/<id>.md on disk (apply-fix-state
+# / apply-conflict-state) and lands it with a SEPARATE graph-commit. When that
+# commit does not land, the mutated file is left dirty in the MAIN checkout —
+# and graph-commit's assert_clean_outside_ids then refuses to START for every
+# other graph writer in that checkout, whatever node it targets, until a human
+# clears the file. One gate's failed write becomes a checkout-wide graph-write
+# outage.
+#
+# That is not hypothetical: on 2026-08-13 the `--clear-fix` arm of
+# _gate_fix_active left intentions/tactic-attention-namespaced-rank.md dirty
+# (`fix: null` + the `reviewed` marker stripped — exactly what --clear-fix
+# writes) when its graph-commit was itself refused by a pre-existing dirty
+# flake.lock. The residue then re-refused every subsequent graph-commit from the
+# main checkout, including this script's own on later ticks — a self-sustaining
+# outage, one leaked write per tick.
+#
+# So: pin HEAD BEFORE the write, and restore to it on any failure. The restore
+# is the shared graph_rollback_node_writes (lib-graph-rollback.sh), the same
+# primitive reconcile-graph-merged and reconcile-graph-review-stall use — see
+# that file's header for why it restores to HEAD rather than to a captured blob,
+# and how it tells an ordinary rollback from graph-commit having moved HEAD.
+
+# _arm_node_rollback — echo HEAD, to be captured before a gate's on-disk write.
+# Echoes the empty string when HEAD is unreadable; the rollback then skips its
+# moved-HEAD classification and does the plain restore, which is still strictly
+# better than leaving the write behind.
+_arm_node_rollback() {
+  git -C "$NATIVE_ROOT" rev-parse HEAD 2>/dev/null || true
+}
+
+# _rollback_node_write <head-at-arm> <id> — undo a gate's on-disk write after
+# its land failed. Best-effort by contract: the gate's own rc/skip-reason is
+# unchanged by whether the rollback succeeded, but the rollback ALWAYS reports
+# what it did on stderr (never on stdout — sensor_gate's stdout is captured
+# whole as the emitted phase).
+_rollback_node_write() {
+  graph_rollback_node_writes "$NATIVE_ROOT" "$1" graph-select-target "$2" || true
+}
+
 # --- Merge-conflict interrupt helpers (tactic-graph-router-conflict-routing) --
 # Structural siblings of _apply_fix/_graph_commit_fix above, for the orthogonal
 # `execution.conflict` interrupt entered on a reviewed awaiting-merge node whose
@@ -775,10 +817,13 @@ _gate_maybe_interrupt() {
 
   # CONCLUDED-RED at an interruptible phase, fix null (guaranteed: the router
   # would have emitted phase `fix` otherwise). Enter the interrupt this tick.
+  local head_at_arm
+  head_at_arm=$(_arm_node_rollback)
   if _apply_fix "$id" --set-fix >/dev/null 2>&1 \
      && _graph_commit_fix "graph: enter fix-interrupt on $id" "$id"; then
     return 0
   fi
+  _rollback_node_write "$head_at_arm" "$id"
   echo "fix-write-failed"
   return 3
 }
@@ -803,7 +848,7 @@ _gate_maybe_interrupt() {
 # `tactic-graph-router-conflict-routing`'s `execution.conflict` state — neither
 # of which this PR introduces.
 _gate_fix_active() {
-  local id="$1" pr="$2" pushed_sha="$3" fix_since="$4" out phase
+  local id="$1" pr="$2" pushed_sha="$3" fix_since="$4" out phase head_at_arm
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
@@ -811,8 +856,15 @@ _gate_fix_active() {
     passing)
       # Resolution: clear the interrupt (+ the re-review reset when past review),
       # disarm any live auto-merge arm, and emit the resolved ladder phase.
-      out=$(_apply_fix "$id" --clear-fix 2>/dev/null) || { echo "fix-clear-failed"; return 1; }
+      head_at_arm=$(_arm_node_rollback)
+      out=$(_apply_fix "$id" --clear-fix 2>/dev/null) || {
+        _rollback_node_write "$head_at_arm" "$id"
+        echo "fix-clear-failed"; return 1
+      }
       if ! _graph_commit_fix "graph: resolve fix-interrupt on $id" "$id"; then
+        # THE observed leak (see the rollback helpers above): --clear-fix has
+        # already written `fix: null` + the stripped `reviewed` marker to disk.
+        _rollback_node_write "$head_at_arm" "$id"
         echo "fix-clear-commit-failed"; return 1
       fi
       gh pr ready --undo "$pr" >/dev/null 2>&1 || true
@@ -877,7 +929,7 @@ _park_conflict_cap() {
 #          or an unreadable `.mergeable`); a reason token is on stdout and the
 #          caller skips the node.
 _gate_pending_merge() {
-  local id="$1" pr="$2"
+  local id="$1" pr="$2" head_at_arm
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   # A merge landed out of band — the merged-tactic reconciler's job, not this
@@ -893,10 +945,12 @@ _gate_pending_merge() {
       # --head-sha records the head the completed review examined. It is the
       # evidence the self-heal below is gated on: a clear that preserves the
       # `reviewed` marker is only safe while the PR still points at THIS tree.
+      head_at_arm=$(_arm_node_rollback)
       if _apply_conflict "$id" --set-conflict --head-sha "$_CI_HEAD" >/dev/null 2>&1 \
          && _graph_commit_conflict "graph: enter conflict-interrupt on $id" "$id"; then
         return 0
       fi
+      _rollback_node_write "$head_at_arm" "$id"
       echo "conflict-write-failed"; return 3 ;;
     MERGEABLE)
       # Clean: dispatch-auto-merge (a separate tick-wide reconciler) lands it.
@@ -922,7 +976,7 @@ _gate_pending_merge() {
 #          phase).
 #   rc 3 — a due write could not be made; reason token on stdout.
 _gate_conflict_active() {
-  local id="$1" pr="$2" out capped attempt
+  local id="$1" pr="$2" out capped attempt head_at_arm
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
@@ -951,10 +1005,12 @@ _gate_conflict_active() {
       if _conflict_budget_exhausted; then
         echo "conflict-commit-budget-spent"; return 1
       fi
+      head_at_arm=$(_arm_node_rollback)
       if _apply_conflict "$id" --spend-attempt >/dev/null 2>&1 \
          && _graph_commit_conflict "graph: spend conflict-interrupt attempt on $id" "$id"; then
         return 0
       fi
+      _rollback_node_write "$head_at_arm" "$id"
       echo "conflict-spend-failed"; return 3 ;;
     MERGEABLE)
       # BACKSTOP for an undeclared resolution — never the normal exit from the
@@ -996,6 +1052,7 @@ _gate_conflict_active() {
         echo "conflict-commit-budget-spent"; return 1
       fi
       gh pr ready --undo "$pr" >/dev/null 2>&1 || true
+      head_at_arm=$(_arm_node_rollback)
       if out=$(_apply_conflict "$id" --clear-conflict-guarded --head-sha "$_CI_HEAD" 2>/dev/null) \
          && _graph_commit_conflict "graph: guarded-clear undeclared conflict-interrupt on $id" "$id"; then
         if [[ "$(jq -r '.reset' <<<"$out" 2>/dev/null)" == "false" ]]; then
@@ -1008,6 +1065,7 @@ _gate_conflict_active() {
         # the review lane picks it up on a later tick.
         echo "conflict-cleared-rereview"; return 1
       fi
+      _rollback_node_write "$head_at_arm" "$id"
       echo "conflict-clear-failed"; return 3 ;;
     UNKNOWN|"")
       echo "mergeable-unknown"; return 1 ;;
