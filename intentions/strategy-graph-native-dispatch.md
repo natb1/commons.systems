@@ -5423,6 +5423,105 @@ clarifications:
       (the find-before-minting step in each producer's skill). The observable
       that says this holds lives on strategy-recursive-self-improvement, where
       /rsi — the instrument that reads it — lives.
+  - question: Must a /dispatch-ladder run carry its node all the way to a terminal
+      state, or may it stop once the PR merges?
+    answer: >-
+      (Recorded 2026-08-14 /align interview.) Standing requirement: a
+      /dispatch-ladder run may not report a terminal disposition until its
+      node's work is TERMINAL — phase `done`, or legitimately excused. Merge is
+      not a terminus. Exactly two excuses count: the work is parked to
+      office-hours (`office_hours` non-null), or it is blocked on an awaited
+      event it cannot yet observe. Nothing else — a halt, a drained budget, a
+      reconciler error, or a phase left mid-flight is a violation, not a stop.
+
+
+      WHY THIS IS NOT ALREADY SATISFIED BY THE RECORDED DESIGN. The code already
+      intends it: `dispatch-ladder-run`'s exit-0 contract is "the node reached
+      phase `done` at origin/main, or was pruned", and
+      `dispatch-ladder-advance:239-245` describes the loop's job as "follow this
+      node to main-qa". What the record ALSO says is that `review`'s clean
+      completion arms auto-merge and the FLEET-WIDE reconciler sweep — not the
+      ladder — writes the post-merge phase
+      (packages/intentionsutil/src/transitions.ts:75-78). That split is the
+      defect surface: the ladder's terminus depends on an actor it does not
+      control. Live case, tactic-attention-namespaced-rank: PR #3075 merged
+      2026-08-13T23:27:31Z; the ladder's own reconcile pass hard-errored at
+      23:38:10Z (exit 11, `reconcile-graph-merged hard-errored (rc=1)`, itself
+      the unrelated-dirty-main-checkout refusal recorded as
+      tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt); the node
+      reached `main-qa` only when the fleet sweep ran ~2.5h later (commit
+      1817ac7f) and has sat there since. The ladder reported a halt; the merge
+      looked like success; nothing carried the node on.
+
+
+      THE DIVERGENCE THIS RESTS ON — STATE VERSUS LIVENESS. The strongest rival
+      conception was put and DIVERGED from: it argues that this strategy's core
+      claim is that orchestration state lives in the GRAPH, so terminal
+      responsibility belongs to the reconciler reading origin/main, and an
+      ephemeral driver that owns completion re-centralises control in exactly
+      the place the strategy moved it away from — making #3075's stall a
+      reconciler-availability bug, not a ladder-ownership bug. Diverged because
+      STATE and LIVENESS are separable properties. The graph remains the sole
+      home of orchestration state; the ladder owns only the guarantee that
+      SOMEONE drives a node to terminal. A driver holding liveness reads no
+      state the graph does not already hold and writes none the graph does not
+      already own, so it does not re-centralise state. The rival is right that
+      reconciler availability is also a defect — it is recorded separately — but
+      availability of one absorbing actor is not a substitute for a run being
+      answerable for its own node.
+
+
+      PAUSE IS ORTHOGONAL, NOT AN EXCEPTION. (Author ruling, this interview,
+      correcting the interviewer's framing.) The dispatch pause sentinel gates
+      SCHEDULED dispatch ticks only. It does not gate /dispatch-ladder.
+      /dispatch-ladder picks up wherever its target node stands — whether left
+      mid-flight by scheduled dispatch, by a failed earlier ladder run, or by
+      anything else — so a paused fleet neither excuses nor blocks this
+      requirement. It is not an exception because it is not in scope. Corollary:
+      a node stranded post-merge while the fleet is paused is recoverable by
+      invoking /dispatch-ladder on it directly, and the five nodes counted below
+      are recoverable that way today.
+
+
+      THE REQUIREMENT FOLLOWS THE WORK, NOT THE NODE. The 2026-07-28
+      clarification on this strategy adopted a greenfield in which the source
+      tactic goes review -> done directly — "no main-qa phase on the source, no
+      residue body append" — and post-merge work instead lives on standalone
+      tactic-mainqa-* nodes carrying their own routing. Under that shape a
+      source's ladder legitimately never touches main-qa, which would hollow
+      this requirement out if it bound the node. It binds the WORK: a run may
+      not report complete until the main-qa work it spawned is itself terminal
+      or excused, whether that work sits on the source's own phase or on a
+      standalone tactic-mainqa-* node it created. This is a real scope increase
+      — it makes a run answerable across a node boundary, which no ladder code
+      does today — and is the substance of the implementing tactic.
+
+
+      MEASUREMENT. Observable: the merged-but-not-terminal count — a census over
+      intentions/ at origin/main of nodes whose `execution.completion.mergedAt`
+      is set but whose `phase` is not `done` and which carry neither
+      `office_hours` nor a non-empty `blocked_by`. Sensor: graph census (the
+      predicate is exactly the two recorded excuses, so this is a direct count,
+      not a proxy). Threshold: 0. Measured 2026-08-14 at origin/main 206a6994:
+      29 merged-not-done, 24 excused, 5 VIOLATIONS —
+      tactic-align-tactics-mark-terminal-skipped (#3047),
+      tactic-attention-namespaced-rank (#3075),
+      tactic-dependency-justification-audit (#2875),
+      tactic-graph-commit-landing-signal-unreliable (#3050),
+      tactic-pause-disables-merge-lane (#3068). That 24 of 29 classify as
+      excused is the evidence the two-excuse predicate discriminates rather than
+      merely passing everything.
+
+
+      KNOWN GAP IN THE PREDICATE, CARRIED INTO THE TACTIC. The second excuse is
+      not machine-readable today. tactic-attention-namespaced-rank's own
+      needs-main residue records "Verifiability: WAIT — awaited event:
+      tactic-attention-per-tier-boost-migration lands", which IS an awaited
+      event under this requirement — but it lives as prose in a body section,
+      not as a `blocked_by` edge, so the census scores it a violation. Either
+      such waits gain a structural edge or the sensor stays approximate;
+      resolving that is in scope for the implementing tactic and must not be
+      closed by loosening the census to accept prose.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5803,6 +5902,10 @@ attributes:
       and recovery is the author's by restart — signalled by the fleet's
       daemon-degraded alarm, which carries the list of nodes and ladder runs the
       outage stalled (Recorded 2026-08-13)"
+    - /dispatch-ladder remains invocable independently of the scheduled dispatch
+      tick and its pause sentinel — the recovery path for a node stranded
+      post-merge is invoking /dispatch-ladder directly on it, so a paused fleet
+      must never be the only actor that can carry a merged node to terminal
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
