@@ -7,17 +7,17 @@ statement: "/align Step 6 gains a self-consistency walk over the round's own
 owner: ai
 status: raw
 parent: null
-rationale: Retained (retain-not-refine) from the 2026-08-12 /align interview
-  that recorded the self-consistency condition on
-  strategy-graph-native-dispatch, arising from a /dispatch-ladder closing
-  acceleration review. The artifact this touches is the /align skill itself,
-  which strategy-graph-native-dispatch owns, so serves names that strategy
-  rather than the nearest-fit one. This is the doctrine limb of the three
-  mechanisms retained that round; the mechanical backstop is
-  tactic-validate-graph-ordering-inversion-lint and the cheap-refusal limb is
-  tactic-align-tactics-premise-preflight.
+rationale: Recorded in the 2026-08-11 /align interview that codified the
+  draft-review gate. A round can author an edge that contradicts a scope the
+  same round authors — the inverted blocked_by of 8249f664 is the recorded
+  instance — and no gate catches it, because /align's Step 6 walks requirement
+  coverage, not the round's own internal consistency. The artifact this touches
+  is the /align skill itself, whose charter strategy-discovered-requirements
+  owns (re-homed 2026-08-13); the self-consistency condition it implements is
+  recorded on strategy-graph-native-dispatch, so serves names both.
 reading: null
 serves:
+  - strategy-discovered-requirements
   - strategy-graph-native-dispatch
 recovers: []
 clarifications: []

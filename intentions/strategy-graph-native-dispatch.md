@@ -5522,6 +5522,40 @@ clarifications:
       such waits gain a structural edge or the sensor stays approximate;
       resolving that is in scope for the implementing tactic and must not be
       closed by loosening the census to accept prose.
+  - question: Where does /align's own charter live after 2026-08-13, and what did
+      that re-homing change here?
+    answer: "The /align interview's charter — elicitation, capture-completeness, and
+      the adversarial draft review — moved to a new child of
+      strategy-explicit-intent, strategy-discovered-requirements, whose
+      clarifications carry the boundary rule and the reasoning. This strategy
+      keeps /align-tactics: it turns recorded intent into dispatchable work, so
+      it is a dispatch phase worker and its defects are this strategy's
+      machinery defects. Four things are recorded here rather than left to be
+      re-derived. (1) serves membership is unchanged for
+      tactic-align-review-skill and tactic-align-round-self-consistency-walk:
+      both now name strategy-discovered-requirements FIRST and this strategy
+      second, honestly, because both touch artifacts of both (graph-commit's
+      --review flag here, the /align skill there) and because this strategy
+      still holds the doctrine they implement — the draft-review gate condition
+      and the self-consistency condition — which a node-assigned session
+      receives only through its serves chain. So this node's backlog ratio does
+      not move, and no signal reading is disturbed. (2) This node's
+      success_signal is deliberately NOT edited. Its sensor string is the
+      registry key that read-sensors.ts's LIFECYCLE_SENSOR_NAME mirrors
+      character-for-character, guarded by
+      packages/intentionsutil/test/lifecycle-sensor.test.ts; the round's first
+      draft moved the sensor's park-cause clause to the new strategy and would
+      have de-registered the lifecycle sensor and turned main red. Migrating
+      that clause is owed and requires a paired code change landing outside
+      intentions/, which graph-commit cannot carry. (3) The park-cause clause
+      and its unimplemented instrument (tactic-park-cause-sensor-instrument)
+      therefore stay here for now, even though they measure
+      capture-completeness, which is the new strategy's charter. (4) Amending
+      this node's clarifications changes its substance fingerprint, which
+      soft-freezes exactly one stamped open child,
+      tactic-strategy-fingerprint-stamp-coverage at phase qa; the freeze is
+      benign — nothing in this amendment bears on that node's plan — and it
+      clears on the next restamp. (Recorded 2026-08-13)"
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
