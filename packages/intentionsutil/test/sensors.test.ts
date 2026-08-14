@@ -9,6 +9,7 @@ import {
   findCodificationDrift,
   surfaceCandidates,
   confirmPushDowns,
+  validateRegisteredSensorNames,
   type Sensor,
 } from "../src/sensors.js";
 
@@ -94,6 +95,49 @@ describe("readNodeSignal", () => {
     const n = node({ id: "n1", success_signal: null });
     expect(() => readNodeSignal(n, registry)).toThrow(IntentionSchemaError);
     expect(() => readNodeSignal(n, registry)).toThrow(/no success_signal/);
+  });
+});
+
+describe("validateRegisteredSensorNames", () => {
+  const RECORDED = "the intention store and the router's selection log";
+
+  it("passes when every registered name is recorded verbatim by a node", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "main-health", threshold: "t" }) }),
+    ];
+    expect(() =>
+      validateRegisteredSensorNames(nodes, [RECORDED, "main-health"])
+    ).not.toThrow();
+  });
+
+  it("throws when a node's sensor prose drifted from the registered name", () => {
+    // The 2026-08-12 shape: an /align round appends a clause to the recorded
+    // sensor, so the registered name resolves to nothing.
+    const nodes = [
+      node({
+        id: "strategy-a",
+        success_signal: signal({ sensor: `${RECORDED}; and a park-cause reading`, threshold: "t" }),
+      }),
+    ];
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(IntentionSchemaError);
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(/not recorded by any node/);
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(new RegExp(RECORDED));
+  });
+
+  it("does not assert the reverse: an unregistered node sensor is fine", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "owner judgment", threshold: "t" }) }),
+      node({ id: "strategy-c", success_signal: null }),
+    ];
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).not.toThrow();
+  });
+
+  it("exempts a declared node-agnostic name that no node records", () => {
+    const nodes = [node({ id: "strategy-a", success_signal: null })];
+    expect(() => validateRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest", "git"])).not.toThrow();
+    expect(() => validateRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest"])).toThrow(/"git"/);
   });
 });
 

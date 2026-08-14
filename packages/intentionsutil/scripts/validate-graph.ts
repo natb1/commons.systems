@@ -1,4 +1,4 @@
-// Validates the intention-graph state directory in two passes:
+// Validates the intention-graph state directory in three passes:
 //
 //  1. `validateGraph` — structural referential integrity of the graph edges
 //     (kind/parent/serves/recovers/blocked_by/validates, cycles, layer rules).
@@ -10,6 +10,12 @@
 //     2026-07-18 incident class: a node's prose named a sibling id that did not
 //     yet exist on main (the sibling's own graph-commit lost a push race) and
 //     CI stayed green because nothing checked prose.
+//  3. `validateRegisteredSensorNames` — SENSOR registration integrity: every
+//     name the default sensor registry registers must still be some node's
+//     verbatim `success_signal.sensor`. This catches the 2026-08-12 incident
+//     class: an /align round appended a clause to a recorded sensor, whose
+//     exact-match registration then resolved to nothing and read null in
+//     silence. (`lintTacticBodies` also runs, on tactic plan bodies.)
 //
 // Used as the guard step of the graph/** CI fast path — an intentions/-only
 // push validates its own state in seconds, rather than waiting on the full PR
@@ -34,7 +40,9 @@ import { fileURLToPath } from "node:url";
 import { listNodesStrict, readNodeBody } from "../src/store.js";
 import { validateGraph, validateGraphProseRefs } from "../src/schema.js";
 import { lintTacticBodies, loadPlanBodyBaseline } from "../src/planlint.js";
+import { validateRegisteredSensorNames } from "../src/sensors.js";
 import { deletedNodeIds } from "./lib-deleted-node-ids.js";
+import { UNBOUND_SENSOR_NAMES, registeredSensorNames } from "./read-sensors.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const baselinePath = join(scriptDir, "..", "prose-ref-baseline.json");
@@ -75,6 +83,15 @@ function main(): void {
   // below).
   lintTacticBodies(intentionsDir, nodes, loadPlanBodyBaseline());
 
+  // Sensor registration integrity: a sensor resolves by exact string match, so
+  // a reworded `success_signal.sensor` de-registers the sensor reading it — a
+  // failure that is invisible everywhere else (the reading just stays null).
+  // Forward direction only: every registered name must still be some node's
+  // recorded sensor. The reverse is NOT asserted — most recorded sensors in the
+  // store are deliberately unimplemented prose.
+  const registered = registeredSensorNames();
+  validateRegisteredSensorNames(nodes, registered, UNBOUND_SENSOR_NAMES);
+
   const bodies = new Map<string, string>();
   for (const node of nodes) {
     bodies.set(node.id, readNodeBody(intentionsDir, node.id));
@@ -86,6 +103,10 @@ function main(): void {
   process.stdout.write(`ok — ${nodes.length} nodes\n`);
   process.stdout.write(
     `ok — prose refs: 0 unresolved (${baseline.size} grandfathered by baseline)\n`,
+  );
+  process.stdout.write(
+    `ok — sensors: ${registered.size} registered, ` +
+      `${UNBOUND_SENSOR_NAMES.size} node-agnostic, rest recorded verbatim\n`,
   );
 }
 

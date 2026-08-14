@@ -86,8 +86,10 @@ const execOpts = {
  * as last committed", rather than running the full suite once per node. Reports
  * a simple status string; QA (#2372) verifies the concrete signal.
  */
+const VITEST_SENSOR_NAME = "vitest";
+
 const vitestSensor: Sensor = {
-  name: "vitest",
+  name: VITEST_SENSOR_NAME,
   read(): string {
     try {
       execFileSync("git", ["diff", "--quiet", "HEAD"], execOpts);
@@ -103,8 +105,10 @@ const vitestSensor: Sensor = {
  * working tree is clean. A clean tree is the author's own-execution evidence
  * that committed work is the live state.
  */
+const GIT_SENSOR_NAME = "git";
+
 const gitSensor: Sensor = {
-  name: "git",
+  name: GIT_SENSOR_NAME,
   read(): string {
     try {
       const out = execFileSync("git", ["status", "--porcelain"], execOpts);
@@ -458,22 +462,26 @@ const tokenEconomySensor: Sensor = {
  * The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch.
  * Load-bearing: this string is the registry key the anti-drift test
  * (lifecycle-sensor.test.ts) compares character-for-character against the
- * node's live `success_signal.sensor` frontmatter. Any edit to that field
- * (including via /align) must be mirrored here in the same round — while the
- * two differ the sensor is de-registered by name and reads nothing at all.
+ * node's live `success_signal.sensor` frontmatter, and the same match is
+ * asserted for every registered sensor by validate-graph's registered-sensor
+ * rule (validateRegisteredSensorNames in src/sensors.ts), which runs on the
+ * graph write path. Any edit to that field (including via /align) must be
+ * mirrored here in the same round — while the two differ the sensor is
+ * de-registered by name and reads nothing at all.
  *
- * The trailing clause below — "a park-cause reading over office_hours.reason
- * across parked nodes counts /align-tactics parks attributable to an upstream
- * recording round's own record gap" — was appended to the recorded sensor by
- * the 2026-08-12 /align round (56039748), which is exactly how the sensor went
- * silent until this constant matched it again. Re-registering restores the
- * three readings below; the park-cause reading the clause names is NOT
- * implemented here yet — that is a known, separate gap with its own recorded
- * finding, and this constant only keeps the registry name in sync with the
- * node text. Do not drop the clause to make the two match.
+ * The 2026-08-12 /align round (56039748) appended a fourth clause to the
+ * recorded sensor — "a park-cause reading over office_hours.reason across
+ * parked nodes counts /align-tactics parks attributable to an upstream
+ * recording round's own record gap" — naming a reading this file does not
+ * produce, which is exactly how the sensor went silent. That clause was
+ * dropped from the node in the same change that wrote this comment: the
+ * recorded sensor names the three readings below and nothing more, and the
+ * park-cause observable belongs to its own node
+ * (`tactic-park-cause-sensor-instrument`). Restore the clause here only if
+ * this file grows the reading it names.
  */
 export const LIFECYCLE_SENSOR_NAME =
-  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions; and a park-cause reading over office_hours.reason across parked nodes counts /align-tactics parks attributable to an upstream recording round’s own record gap (the reading that surfaced three such parks on 2026-08-12)";
+  "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions";
 
 /** The band the recorded threshold declares ("at or below 35%"). */
 export const BACKLOG_BAND_PCT = 35;
@@ -1519,6 +1527,23 @@ export function buildDefaultRegistry(): SensorRegistry {
 export function registeredSensorNames(): ReadonlySet<string> {
   return buildDefaultRegistry().names();
 }
+
+/**
+ * The registered names that are deliberately NODE-AGNOSTIC: short generic
+ * adapters any node may adopt by naming them, which no node names today. They
+ * are exempt from validate-graph's registered-sensor rule
+ * (`validateRegisteredSensorNames`), which otherwise requires every registered
+ * name to be some node's recorded `success_signal.sensor`.
+ *
+ * Every other registered sensor is node-bound: its name is a verbatim copy of
+ * one node's recorded sensor prose, so a reword on either side de-registers it.
+ * Do not park a node-bound name here to quiet the rule — that is the drift the
+ * rule exists to catch.
+ */
+export const UNBOUND_SENSOR_NAMES: ReadonlySet<string> = new Set([
+  VITEST_SENSOR_NAME,
+  GIT_SENSOR_NAME,
+]);
 
 // --- Core driver -----------------------------------------------------------
 
