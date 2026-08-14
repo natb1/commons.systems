@@ -56,8 +56,8 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.06
-  override: null
+  boosts:
+    "1": 0.06
   rationale: >-
     Author-directed 2026-07-31: top-of-band boost so the generic lane-instrument
     substitution guard is picked first. /code-review ships with
@@ -84,7 +84,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: main-qa
 execution:
   branch: tactic-lane-instrument-substitution-guard

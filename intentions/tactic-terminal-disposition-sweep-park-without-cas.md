@@ -54,8 +54,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.03
-  override: null
+  boosts:
+    "1": 0.03
   rationale: >-
     Bug-ledger tracking node under the standing priority order (token-efficiency
     first, bug-ledger second). Boost 12 matches the other bug-ledger nodes in
@@ -73,7 +73,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: main-qa
 execution:
   branch: tactic-terminal-disposition-sweep-park-without-cas

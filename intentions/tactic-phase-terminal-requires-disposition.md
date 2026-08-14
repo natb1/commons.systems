@@ -57,8 +57,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.05
-  override: null
+  boosts:
+    "1": 0.05
   rationale: >-
     Bootstrap re-scale 2026-07-31: Wave A of the three-band interim scale (50 /
     20 / 10) that puts write-path and pipeline-integrity work above ordinary
@@ -82,7 +82,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: main-qa
 execution:
   branch: tactic-phase-terminal-requires-disposition

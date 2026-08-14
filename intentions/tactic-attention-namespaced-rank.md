@@ -223,7 +223,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-attention-namespaced-rank
   pr: 3075
@@ -235,7 +235,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-13T23:27:31Z
+    mergeCommitSha: 6e804ce5753096e94b5fc7bd82a2d203a204b8bf
+    graphCommitSha: null
   lane_pass: null
 validates: []
 blocked_by: []

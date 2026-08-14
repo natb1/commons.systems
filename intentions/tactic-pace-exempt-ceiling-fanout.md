@@ -41,8 +41,8 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.03
-  override: null
+  boosts:
+    "1": 0.03
   rationale: >-
     Author-directed 2026-08-03: prioritize bug-ledger fixes directly BELOW the
     token-efficiency cluster. Boost 12 resolves to 17.33 because an inbound
@@ -61,7 +61,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: main-qa
 execution:
   branch: tactic-pace-exempt-ceiling-fanout

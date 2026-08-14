@@ -26,8 +26,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.02
-  override: null
+  boosts:
+    "1": 0.02
   rationale: >-
     Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90 band to
     10. These are ordinary improvements, not integrity defects; at 85-90 they
@@ -46,7 +46,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: main-qa
 execution:
   branch: tactic-manual-path-reservation-sweep
