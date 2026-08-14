@@ -52,6 +52,15 @@
 #        the `skipped-locked` disposition, but the log line must state the loss
 #        outright (not counted, nothing will re-invoke) rather than the sibling's
 #        benign "re-invoke to record it".
+#   (15) --list membership is the id prefix, not attributes.ledger_entry alone:
+#        a node under the prefix with no attribute, and (symmetrically) a node
+#        carrying the attribute outside the prefix, are both listed with
+#        "unregistered": true and recurrence_count forced to 0 rather than
+#        silently dropped from the similarity judgment's input — and the
+#        doctrine root tactic-eval-finding-ledger stays excluded. This exercises
+#        the REAL default list_entries() path (the node/store.js one-liner),
+#        not the LIST_CMD stub the rest of this suite uses, so it invokes the
+#        real, uncopied SUT directly.
 #
 # Run under bash -c, never zsh.
 
@@ -517,6 +526,184 @@ assert_contains "(14) and names the checkout that repairs the local copy" \
 # The local file stays absent: refusing is not a rollback, so nothing is dirty.
 assert_eq "(14) no local node file was created" "0" "$([[ -e "$LANDED_MD" ]] && echo 1 || echo 0)"
 git -C "$FR" checkout -q origin/main -- "intentions/$ID.md"
+
+# --- (15) --list membership: id prefix vs attributes.ledger_entry -----------
+# The default list_entries() path (LIST_CMD unset) needs the REAL store.js, so
+# this section calls the real SUT directly at $SUT — never the FR fixture
+# copy, whose SCRIPT_DIR/../../../.. math resolves to the miniature repo where
+# packages/intentionsutil/src/store.js does not exist — against an isolated
+# intentions/ directory of full, schema-valid node bodies (each field copied
+# from the shape of a real landed ledger entry, so validateNode accepts it).
+LIST_DIR="$WORK/list-intentions"
+mkdir -p "$LIST_DIR"
+
+# (a) properly registered: id prefix AND attributes.ledger_entry both true —
+# listed normally, unflagged, with its real recurrence_count.
+cat > "$LIST_DIR/tactic-eval-finding-registered-example.md" <<'MD'
+---
+id: tactic-eval-finding-registered-example
+kind: tactic
+statement: A properly registered ledger entry for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: true
+rounds: null
+attributes:
+  ledger_entry: true
+  first_seen: 2026-08-01
+  measured_impact:
+    - metric: recurrence_count
+      value: 4
+      unit: occurrences
+      window: all-time
+      sensor: fixture-sensor
+      measured: 2026-08-10
+---
+# fixture body
+MD
+
+# (b) id-prefix match, NO attribute — the lock-wait / utc-bounds-local-newermt
+# shape: a hand-authored tactic landed under the prefix with attributes: {}.
+cat > "$LIST_DIR/tactic-eval-finding-unregistered-example.md" <<'MD'
+---
+id: tactic-eval-finding-unregistered-example
+kind: tactic
+statement: An unregistered ledger-shaped node for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# fixture body
+MD
+
+# (c) attribute true, id OUTSIDE the prefix — the reverse disagreement.
+cat > "$LIST_DIR/tactic-not-under-the-ledger-prefix.md" <<'MD'
+---
+id: tactic-not-under-the-ledger-prefix
+kind: tactic
+statement: A node carrying ledger_entry outside the id prefix, for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: true
+rounds: null
+attributes:
+  ledger_entry: true
+  first_seen: 2026-08-01
+  measured_impact:
+    - metric: recurrence_count
+      value: 9
+      unit: occurrences
+      window: all-time
+      sensor: fixture-sensor
+      measured: 2026-08-11
+---
+# fixture body
+MD
+
+# (d) the doctrine root itself — id starts with the prefix and carries no
+# attribute either, but must stay EXCLUDED from its own membership test.
+cat > "$LIST_DIR/tactic-eval-finding-ledger.md" <<'MD'
+---
+id: tactic-eval-finding-ledger
+kind: tactic
+statement: The ledger's own doctrine root, excluded from its own membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# fixture body
+MD
+
+LIST_RC=0
+LIST_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list) || LIST_RC=$?
+assert_eq "(15) --list against the real store.js exits 0" "0" "$LIST_RC"
+assert_eq "(15) exactly the three prefix-or-attribute rows are listed" "3" \
+  "$(jq 'length' <<<"$LIST_OUT")"
+assert_eq "(15) the doctrine root is excluded" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")] | length' <<<"$LIST_OUT")"
+
+assert_eq "(15a) the registered entry is NOT flagged unregistered" "false" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0] | has("unregistered")' <<<"$LIST_OUT")"
+assert_eq "(15a) and keeps its real recurrence_count" "4" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].recurrence_count' <<<"$LIST_OUT")"
+
+assert_eq "(15b) prefix without attribute is flagged unregistered" "true" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].unregistered' <<<"$LIST_OUT")"
+assert_eq "(15b) its recurrence_count is forced to 0" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15b) its slug is still derived from the prefix" "unregistered-example" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].slug' <<<"$LIST_OUT")"
+
+assert_eq "(15c) attribute without prefix is flagged unregistered too" "true" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].unregistered' <<<"$LIST_OUT")"
+assert_eq "(15c) its recurrence_count is forced to 0, not its real 9" "0" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15c) it has no slug (outside the prefix)" "null" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].slug' <<<"$LIST_OUT")"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

@@ -311,6 +311,20 @@ fi
 # The similarity judgment's input (divergence 1). Pure read, no mutex, and it
 # lists RETIRED entries alongside open ones so a recurrence after retirement is
 # addressed to the existing slug instead of minting a near-duplicate.
+#
+# MEMBERSHIP IS THE ID PREFIX, NOT THE ATTRIBUTE. The id prefix
+# (tactic-eval-finding-<slug>, minted by this script) and attributes.ledger_entry
+# are two spellings of one membership; a node can carry either without the
+# other (a hand-authored node landed under the prefix with no attribute, or —
+# in principle — the attribute set on a node outside the prefix). Filtering on
+# the attribute alone made such a node invisible to the similarity judgment
+# above, which is exactly how a real duplicate slug got minted. So membership
+# here is prefix-OR-attribute, and a node where the two disagree is emitted
+# anyway with "unregistered": true and recurrence_count forced to 0 — the
+# judgment must see it, and the zeroed count marks it as not a script-managed
+# figure so a caller can tell a script-managed entry from a hand-written one.
+# The doctrine root tactic-eval-finding-ledger is excluded from the prefix
+# side of the test: it is the ledger's own planning node, not an entry in it.
 list_entries() {
   if [[ ${#LIST_CMD[@]} -gt 0 ]]; then
     "${LIST_CMD[@]}" "$INTENTIONS_DIR"
@@ -319,26 +333,44 @@ list_entries() {
   (cd "$REPO_ROOT" && node --import tsx/esm -e '
     const { listNodes } = await import("./packages/intentionsutil/src/store.js");
     const prefix = "tactic-eval-finding-";
+    const doctrineRootId = "tactic-eval-finding-ledger";
     const rows = listNodes(process.argv[1])
-      .filter((n) => n.kind === "tactic" && n.attributes?.ledger_entry === true)
       .map((n) => {
-        const impact = Array.isArray(n.attributes.measured_impact)
+        const hasPrefix =
+          n.kind === "tactic" && n.id.startsWith(prefix) && n.id !== doctrineRootId;
+        const hasAttr = n.kind === "tactic" && n.attributes?.ledger_entry === true;
+        if (!hasPrefix && !hasAttr) {
+          return null;
+        }
+        // The two membership tests disagree: a defect the caller must see, not
+        // silently paper over. Force recurrence_count/last_seen to 0/null
+        // rather than trusting measured_impact on a node this script never
+        // wrote through its normal recurrence path.
+        const unregistered = hasPrefix !== hasAttr;
+        const impact = Array.isArray(n.attributes?.measured_impact)
           ? n.attributes.measured_impact
           : [];
-        const rec = impact.find(
-          (m) => m !== null && typeof m === "object" && m.metric === "recurrence_count",
-        );
-        return {
+        const rec = unregistered
+          ? undefined
+          : impact.find(
+              (m) => m !== null && typeof m === "object" && m.metric === "recurrence_count",
+            );
+        const row = {
           id: n.id,
-          slug: n.id.startsWith(prefix) ? n.id.slice(prefix.length) : null,
+          slug: hasPrefix ? n.id.slice(prefix.length) : null,
           state: n.phase === "done" ? "retired" : "open",
           statement: n.statement,
-          first_seen: n.attributes.first_seen ?? null,
+          first_seen: n.attributes?.first_seen ?? null,
           recurrence_count: rec === undefined ? 0 : rec.value,
           last_seen: rec === undefined ? null : rec.measured,
           in_flight: n.execution !== null,
         };
+        if (unregistered) {
+          row.unregistered = true;
+        }
+        return row;
       })
+      .filter((row) => row !== null)
       .sort((a, b) => b.recurrence_count - a.recurrence_count || a.id.localeCompare(b.id));
     process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
   ' "$INTENTIONS_DIR")
