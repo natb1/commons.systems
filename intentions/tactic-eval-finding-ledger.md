@@ -1,23 +1,27 @@
 ---
 id: tactic-eval-finding-ledger
 kind: tactic
-statement: Build the finding ledger — similar evaluation findings merge into ONE
-  node with summary recurrence and impact metrics, never a node per occurrence,
-  and ledger entries are exempt from unreferenced-pruning
+statement: Retire the finding ledger as a distinct graph primitive — drop
+  attributes.ledger_entry as a class marker, re-key the prune exemption to any
+  node carrying attributes.measured_impact, and widen the mint-or-reuse search
+  from the tactic-eval-finding-* namespace to the whole open tactic set
 owner: ai
 status: raw
 parent: null
-rationale: "Drafted 2026-08-12 /align round, carrying the author's mid-interview
-  ruling that the graph acts as a ledger tracking and prioritizing harness
-  optimizations, and the merge-not-accumulate confirmation of the same session.
-  Follows dispatch-fleet-alarm's find-or-create shape but diverges knowingly on
-  the key: fleet-alarm's eight alarm kinds are a closed mechanical enum, which
-  cannot work for an open-ended finding space, so target selection is a
-  similarity judgment against the open ledger."
+rationale: Rewritten 2026-08-14 by the /align round that dissolved the ledger
+  primitive on author ruling. This node previously planned the ledger's
+  construction; the construction landed, and what is now owed is retiring the
+  part of it that made rsi findings a privileged class. Reused rather than
+  superseded by a fresh node, which is the merge discipline this round records,
+  practised on itself. The general rule it serves lives on
+  strategy-graph-native-dispatch; the rsi-specific retirement lives on
+  strategy-recursive-self-improvement.
 reading: null
 serves:
   - strategy-recursive-self-improvement
   - strategy-rsi-delegated-prioritization
+  - strategy-graph-native-dispatch
+  - strategy-graph-self-description
 recovers: []
 clarifications: []
 tooling_goals: []
@@ -32,65 +36,90 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Build the finding ledger — similar evaluation findings merge into ONE node with summary recurrence and impact metrics, never a node per occurrence, and ledger entries are exempt from unreferenced-pruning
 
-Drafted by the 2026-08-12 `/align` round, carrying the author's mid-interview
-ruling that the graph acts as a **ledger** tracking and prioritizing harness
-optimizations, and the merge-not-accumulate confirmation of the same session.
-Read the "What is the graph's role for harness optimizations" clarification on
-`strategy-recursive-self-improvement` for the four requirements this executes.
+# Retire the finding ledger as a distinct graph primitive
 
-## The shape
+Rewritten 2026-08-14 by the `/align` round that dissolved the ledger primitive.
+This node previously planned the ledger's *construction*; the construction
+landed, and the author's ruling of this date retires the part of it that made
+rsi findings a privileged class. The id is deliberately unchanged — an id is
+addressing, not membership, and it is cited in node bodies, commit subjects and
+at least one shipped fix message. Reusing this node rather than minting a
+successor is also the discipline this round records, practised on itself.
 
-One node per distinct finding. **Similar findings merge into one node** — there
-is explicitly no node per occurrence. A recurrence refreshes the entry's body
-and updates its **summary metrics** on `attributes.measured_impact`
-(`tactic-measured-impact-schema`): occurrence count, first-seen, last-seen,
-cumulative and per-occurrence impact. No per-occurrence array is kept — a ledger
-prioritizes on aggregates, and summary shape bounds both node growth and the
-re-measurement write surface.
+Read the amended "What is the graph's role for harness optimizations"
+clarification on `strategy-recursive-self-improvement` for which of the four
+original requirements survive, and the "How is a finding recorded on the graph"
+clarification on `strategy-graph-native-dispatch` for the general rule that
+replaces them.
 
-## Precedent followed, and where it is deliberately broken
+## What is retired
 
-Model on `.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm` — the
-find-or-create node, body refreshed on re-detection, `attention: null` because
-rank is never machine-injected, `serves` for band inheritance, `pace_exempt`.
+1. **`attributes.ledger_entry` as a class marker.** `isLedgerEntry`
+   (`packages/intentionsutil/src/schema.ts:529`) and its one live call site
+   (`packages/intentionsutil/scripts/graph-census-debt.ts:143`) go with it.
+2. **The `tactic-eval-finding-*` id namespace as a membership test.** The
+   anchored id regex in `dispatch-eval-finding:371` and the
+   `attributes.ledger_entry` filter behind `--list` (`:323`) both scope the
+   mint-or-reuse decision to a namespace, which is precisely how a duplicate
+   escapes it.
+3. **A writer private to one strategy.** `dispatch-eval-finding` becomes the
+   find-or-recur write surface every finding producer calls, or is replaced by
+   one.
 
-Two deliberate divergences:
+## What survives, generalized
 
-1. **The key is not a closed enum.** Fleet-alarm's eight `KINDS` are a fixed
-   fault taxonomy; a finding space is open-ended. Target selection is therefore
-   a **similarity judgment against the open ledger** — the evaluator reads the
-   open entries and decides whether this finding *is* one of them — with the
-   slug remaining only the addressing mechanism. This is the one place a model
-   judgment is load-bearing, and it is where the merge discipline will fail
-   first if it fails.
-2. **Closed entries are not minted over.** Fleet-alarm treats a `closed` node as
-   "a since-resolved condition that has recurred: mint over it rather than
-   reopening" (`dispatch-fleet-alarm:645`). Inheriting that would reset the
-   occurrence count to 1 on every recurrence after a retirement — silently
-   understating the exact metric the ledger exists to carry.
+- **Merge, not accumulate.** One node per distinct finding; a recurrence
+  updates `attributes.measured_impact` and mints nothing.
+- **Summary metrics, not an occurrence array.** Unchanged — `measured_impact`
+  is already documented on `intentions/kind-tactic.md` as a general tactic
+  attribute, validated for any tactic by `validateGraph` rule 21. Nothing about
+  it was ever rsi-specific.
+- **Merge is a judgment.** Unchanged in kind, widened in scope: the search set
+  becomes the whole open tactic population rather than one namespace.
+- **Durability, re-keyed.** The prune exemption moves from
+  `attributes.ledger_entry` to *carrying* `attributes.measured_impact` — never
+  prune a node that holds measurements, whoever wrote it. This is the one place
+  the class marker was actually load-bearing, and the replacement is a general
+  rule rather than a class exemption.
 
-## Durability
+## Scope
 
-Ledger entries are **exempt from unreferenced-pruning**. `graph-commit --prune`
-deletes the node file outright, so an unexempted entry loses its summary
-metrics to git history where no ranking read will find them. Retirement means
-phase `done` with the summary intact, so a later recurrence **resumes** the
-count.
+- `packages/intentionsutil/src/schema.ts` — remove `isLedgerEntry`, or narrow it
+  to a `hasMeasurements` predicate keyed on `attributes.measured_impact`.
+- `packages/intentionsutil/scripts/graph-census-debt.ts:143` — the owed-prune
+  census exempts on measurements rather than on class.
+- `intentions/kind-tactic.md` — rewrite the `ledger_entry` section as retired
+  and fold its surviving content into the `measured_impact` section. **Also fix
+  a stale reference found in this round:** that section names `rsi.ts` §6 as a
+  second `isLedgerEntry` consumer, and grep finds no such call site — the
+  reference did not survive the rsi-plan render retirement.
+- `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding` — drop the
+  anchored id regex and the `ledger_entry` write and filter; `--list` reports
+  the whole candidate set.
+- The 18 existing `tactic-eval-finding-*` nodes keep their ids by author ruling;
+  `attributes.ledger_entry` is dropped from each opportunistically as it is
+  touched, the same deprecated-legacy shape the bare-string
+  `strategy_fingerprint` form is being retired under. `pace_exempt: true` is not
+  retired — recording a finding is not paced work for any producer, so it
+  generalizes with the rest rather than going away.
 
-Where the exemption is enforced is a planning decision:
-`prune-unreferenced`'s candidate query, a node attribute the pruner honors, or
-`validate-graph`. Whichever is chosen, the exemption must be mechanical — a
-convention the pruner does not read is not an exemption.
+## Out of scope
+
+- The find-before-minting step inside each producer's skill — that is
+  `tactic-finding-search-all-producers`.
+- Building the duplicate-findings sensor — that is
+  `tactic-duplicate-finding-sensor`.
 
 ## Done-when
 
-- A second occurrence of the same finding updates an existing entry's summary
-  metrics and mints **no** node.
-- A retired (`done`) entry survives a prune sweep, and a recurrence after
-  retirement resumes its count rather than restarting at 1.
-- **Measured:** open ledger-entry count does not grow faster than entries
-  retire, across at least two evaluation windows. This is the bound adopted
-  from the steelman on `strategy-recursive-self-improvement`, and it is
-  currently a design expectation, not a measurement.
+- No code path reads `attributes.ledger_entry`, and the owed-prune census
+  exempts a `phase: done` node because it carries `attributes.measured_impact`.
+- A finding node written by any producer, in any id namespace, is returned by
+  the mint-or-reuse search.
+- A retired finding tactic survives a `graph-commit --prune` sweep and a
+  recurrence resumes its count rather than restarting at 1 — the behaviour the
+  original ledger design owed, now owed generally.
+- `intentions/kind-tactic.md` and the code agree, which
+  `strategy-graph-self-description` requires and which the stale `rsi.ts` §6
+  reference currently violates.

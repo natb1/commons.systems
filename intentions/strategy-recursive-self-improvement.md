@@ -3,8 +3,9 @@ id: strategy-recursive-self-improvement
 kind: strategy
 statement: Harness self-improvement is measurement, not a second orchestrator —
   /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures
-  token economy at any scope, and both land findings as merged ledger entries
-  the dispatch queue executes
+  token economy at any scope, and both record findings as ordinary draft tactics
+  on the graph, merging a recurrence onto the existing node exactly as every
+  other finding producer does
 owner: human
 status: refining
 parent: strategy-autonomous-execution
@@ -821,7 +822,8 @@ clarifications:
       and tactic-eval-finding-ledger owes the measurement."
   - question: What is the graph's role for harness optimizations, and what does that
       require of a finding record?
-    answer: "(Recorded 2026-08-12 by author ruling, mid-interview; merge semantics
+    answer: >-
+      (Recorded 2026-08-12 by author ruling, mid-interview; merge semantics
       confirmed by the author in the same session.) The graph is the LEDGER that
       tracks and prioritizes harness optimizations — not merely a work queue
       whose length is itself a problem. Four requirements follow. ONE, ENTRY
@@ -854,7 +856,29 @@ clarifications:
       recurrence — inheriting that behavior unmodified would silently understate
       exactly the recurrence metric the ledger exists to carry.
       tactic-eval-finding-ledger carries the exemption and owes it as a
-      done-when."
+      done-when.
+
+
+
+      (Amended 2026-08-14 by author ruling in the /align round that dissolved
+      the finding ledger as a distinct graph primitive.) Requirements ONE (entry
+      identity by merge, not by occurrence), TWO (summary metrics on
+      attributes.measured_impact, never an occurrence array) and THREE (merge is
+      a judgment, not a hash) all SURVIVE, and are widened from this strategy's
+      findings to EVERY finding on the graph whoever produced it. Requirement
+      FOUR survives in substance and changes carrier: durability is no longer
+      keyed on attributes.ledger_entry but on the node CARRYING
+      attributes.measured_impact — never prune a node that holds measurements —
+      which is a general rule rather than a class exemption. What is retired is
+      the privilege, not the practice: attributes.ledger_entry as a class
+      marker, the tactic-eval-finding-* id namespace as a membership test, and
+      dispatch-eval-finding as a writer private to this strategy. The general
+      rule now lives on strategy-graph-native-dispatch, extending its
+      sole-issue-tracker condition, because a rule saying findings are not an
+      rsi thing must not itself live in the rsi namespace; this strategy keeps
+      only the rsi-specific retirement. Carrier: tactic-eval-finding-ledger,
+      whose statement and body are rewritten in this same round to the
+      retirement rather than the build.
   - question: What survives the 2026-08-12 collapse, and which conditions were
       retired outright?
     answer: >-
@@ -1205,12 +1229,63 @@ clarifications:
       validate-graph after the deletion commit, not assumed. Rewriting those
       bodies would churn tacticScopeFingerprint on live nodes for no integrity
       gain, the same reasoning that left the historical skill names standing.
+  - question: "Steelman — attributes.ledger_entry was never an rsi privilege but the
+      LEDGER/QUEUE seam: a measurement record is not a work item, and a tracker
+      that conflates them can no longer say what its backlog is. Does dissolving
+      the marker make measurements look like tasks?"
+    answer: "(Adopted in part, diverged on the conclusion, 2026-08-14; reasons
+      recorded.) The rival's premise is granted in full, and it is this record's
+      own words: the 2026-08-12 clarification calls the graph a LEDGER that
+      tracks and prioritizes harness optimizations \"not merely a work queue
+      whose length is itself a problem\", and intentions/kind-tactic.md states
+      the consequence plainly — \"an entry is a record, not a task\". The seam
+      is real and is KEPT. What is refused is the inference that the seam needs
+      an rsi-scoped carrier. A /review-fix deferred finding and a /qa-main
+      cannot-verify residue are equally observations-not-yet-work, so a carrier
+      only this strategy's subset can hold does not draw the seam — it draws a
+      namespace, and a namespace is exactly what let one defect land on two
+      nodes. The graph already has a general carrier: phase null (draft) IS the
+      observation state, and the router emits drafts at the align-tactics rung,
+      where a decomposition session decides whether the observation is work.
+      Measured rather than asserted: of the 26 ledger-and-adjacent finding nodes
+      at origin/main 1fe2dd85, all but two are already phase null — so
+      draft-phase is carrying the seam today, and attributes.ledger_entry is
+      carrying only the pruning exemption and the id namespace on top of it.
+      Honest limit owned at record time: that draft-phase is a SUFFICIENT
+      carrier for the record/queue seam is an inference from that census, not a
+      claim the prior record makes."
+  - question: What observable says uniform finding recording actually holds, given
+      the 2026-08-12 entry-count bound is admittedly a design expectation and
+      not a measurement?
+    answer: "(Recorded 2026-08-14 /align round.) The observable is the count of
+      distinct tactics recording the SAME root-cause defect; the sensor is a
+      graph read over tactics carrying attributes.measured_impact; the threshold
+      is no new duplicate pair per evaluation window. The baseline is already on
+      the graph, measured 2026-08-13 on
+      tactic-eval-finding-eval-finding-list-misses-nonledger:
+      duplicate_finding_nodes_same_defect 2,
+      finding_nodes_outside_ledger_namespace 1,
+      finding_nodes_without_recurrence_metric 3, ledger_invisible_fraction
+      0.158. The metric gets STRICTER under this change rather than looser —
+      today a duplicate minted outside the tactic-eval-finding-* namespace is
+      structurally invisible to dispatch-eval-finding --list, so the figure
+      cannot be read honestly at all. It joins THIS strategy's success_signal
+      rather than strategy-graph-native-dispatch's because the instrument that
+      reads it is /rsi and a sensor lives with its instrument; the RULE it
+      measures lives on strategy-graph-native-dispatch, per the same round's
+      split-by-owner ruling. Carrier: tactic-duplicate-finding-sensor. Limit
+      owned at record time: \"the same root-cause defect\" is a similarity
+      judgment, so this sensor is model-read, not mechanical — the same
+      delegated judgment merge-on-similarity already rests on, and it is
+      therefore admissible ranking input only under strategy-token-economy's
+      sensor-attribution condition."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation, every
     ladder phase boundary is evaluated, and each /rsi-audit pass reports a
     per-workflow spend fold that holds its review thresholds — with the
-    opportunities it ranks landing in the graph rather than in a report
+    opportunities it ranks landing in the graph rather than in a report, and
+    with no two tactics recording the same root-cause defect
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
     count, held-session/worktree census, pause state), plus per-workflow token
@@ -1223,8 +1298,8 @@ success_signal:
     non-increasing across them
   is_proxy: true
 attention:
-  boost: 6
-  override: null
+  boosts:
+    "1": 6
   rationale: "Author-directed 2026-08-11: rerank the rsi strategy to the top of
     tier 1, above strategy-graph-native-dispatch (authored boost 5) — supersedes
     the same-day rationale that placed rsi just below the router migration. The
@@ -1233,7 +1308,6 @@ attention:
     including strategy-graph-native-dispatch (boost 5),
     strategy-graph-review-curriculum (boost 3.5), and strategy-attention-surface
     (boost 3)."
-  tier: 1
 phase: null
 execution: null
 validates: []
@@ -1280,7 +1354,13 @@ attributes:
       session budget and the serialization were the throttle. Both of those
       throttles are retired with rsi execution; what survives is the narrower
       and more defensible claim that measuring the queue must not compete with
-      the queue.)"
+      the queue.) (Amended 2026-08-14: the exemption follows the
+      finding-recording WRITE, not the rsi namespace. dispatch-eval-finding is
+      being retired as a writer private to this strategy, and whatever
+      generalized find-or-recur write surface replaces it carries the same
+      exemption for every producer — recording a finding is recording work
+      whoever records it. The condition's substance is unchanged; only the named
+      mechanism moves.)"
     - 'the split is by write surface, not by attendance: /rsi runs UNATTENDED
       and auto-spawned by dispatch-ladder-run at every phase boundary, and is
       therefore bound to record-only — no fix, no skill or script edit, no phase
@@ -1568,4 +1648,4 @@ attributes:
           unclaimed-hold 2026-08-10, busy-stall 2026-08-09, watch-unknown
           2026-08-09, heal-fired 2026-08-08."
 ---
-# Harness self-improvement is measurement, not a second orchestrator — /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures token economy at any scope, and both land findings as merged ledger entries the dispatch queue executes
+# Harness self-improvement is measurement, not a second orchestrator — /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures token economy at any scope, and both record findings as ordinary draft tactics on the graph, merging a recurrence onto the existing node exactly as every other finding producer does

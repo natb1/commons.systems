@@ -5379,6 +5379,50 @@ clarifications:
       reading — an alarm that cannot clear stops being a signal in the other
       direction, and a latched alarm degrades the very channel this
       clarification makes load-bearing."
+  - question: How is a finding recorded on the graph, and does the producer change
+      the answer?
+    answer: >-
+      (Recorded 2026-08-14 /align round, widening this node's sole-issue-tracker
+      condition from "the graph is the only place findings live" to "findings
+      live there the same way".) No — the producer never changes the answer. A
+      finding is an ordinary DRAFT TACTIC: phase null, serving the strategy that
+      owns the artifact it touches, whoever produced it — an /align Step 4
+      interview byproduct, a /review-fix follow-up, a /qa-main bug record, a
+      /rsi phase evaluation, an /rsi-audit ranked opportunity. Three rules bind
+      every producer equally. ONE, FIND BEFORE MINTING: search the open tactic
+      set for the same root-cause defect and, on a match, record the recurrence
+      on that existing node — a recurrence updates attributes.measured_impact
+      and mints nothing. TWO, THE SEARCH SET IS THE WHOLE GRAPH, NEVER A
+      NAMESPACE: no producer may scope the mint-or-reuse decision to an id
+      prefix or to a class attribute of its own, because a duplicate minted
+      outside that scope is structurally invisible to the search that is
+      supposed to catch it. THREE, MEASUREMENTS ARE NOT PRUNED: a node carrying
+      attributes.measured_impact is exempt from unreferenced-pruning regardless
+      of who wrote it, because pruning it destroys the measurement, and a
+      recurrence after retirement RESUMES the count rather than restarting at 1.
+
+
+      This retires the evaluation-finding ledger as a distinct graph primitive —
+      attributes.ledger_entry as a class marker, the tactic-eval-finding-*
+      namespace as a membership test, and a per-producer private writer all go.
+      It is not a theoretical tidy-up. The split it repairs is recorded with
+      evidence on tactic-eval-finding-eval-finding-list-misses-nonledger: two
+      nodes minted ten minutes apart for one defect, the shipped fix citing the
+      node OUTSIDE the namespace while the recurrence count stayed stranded on
+      the one inside it — an outcome a namespace-scoped search structurally
+      could not have caught, and the exact outcome the merge discipline exists
+      to prevent.
+
+
+      The seam the class marker is often thought to carry — a record is not a
+      task — is kept, not dissolved: phase null (draft) is the observation
+      state, and the router emits drafts at the align-tactics rung where a
+      decomposition session decides whether the observation is work. Carriers:
+      tactic-eval-finding-ledger (retire the marker, re-key the prune exemption
+      to attributes.measured_impact) and tactic-finding-search-all-producers
+      (the find-before-minting step in each producer's skill). The observable
+      that says this holds lives on strategy-recursive-self-improvement, where
+      /rsi — the instrument that reads it — lives.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -5421,13 +5465,12 @@ success_signal:
     zero
   is_proxy: true
 attention:
-  boost: 5
-  override: null
+  boosts:
+    "1": 5
   rationale: "Author-directed 2026-07-06: the graph-native dispatch router
     migration is the current focus — lift this strategy and its tactic subtree
     above derived-only ranks (derived terms cap at 2) so router selection works
     the migration first."
-  tier: 1
 phase: null
 execution: null
 validates: []

@@ -36,8 +36,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
     20 / 10) - dispatch-containment and evidence-custody work that follows the
@@ -56,7 +56,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: qa
 execution:
   branch: tactic-strategy-fingerprint-stamp-coverage
@@ -66,8 +65,8 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: a55adfc1845e1942d773aafc1cf5226ccd5694454dad03d24e97e746f4482f2d
-      sha: f3e0a63256a6de4640d51633a58e76ded522822c
+      hash: 8f41c1f80f30fb7dcf3efaf9586fc812ecf0032e69eba44750fd09d7be461bb9
+      sha: 1fe2dd854d6611da50e94dc89291b7b9e22e9559
   fix:
     since: 2026-08-03
     attempt: 1
