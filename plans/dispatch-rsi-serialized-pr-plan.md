@@ -35,6 +35,138 @@ this analysis can execute it from the section text alone.
 
 ---
 
+---
+
+# Revision 2 — regrouped for ad-hoc supervised execution
+
+**Added 2026-08-14, after confirming these PRs bypass the ladder entirely and
+scheduled dispatch is paused.** The fourteen sections below remain the
+authoritative **unit-level specs** — every anchor, scope boundary and
+verification step still applies. What changes is the **bundling and the order**.
+
+## The pause does not mean what the grouping assumed
+
+Verified on this host: the sentinel is present at
+`/home/n8/.local/share/commons-dispatch/paused` (set 2026-08-10), so autonomous
+scheduling is genuinely off. But `dispatch-tick`'s own header says it plainly:
+
+> A paused tick is **NOT inert** … the branch below reaps the reservation
+> ledger, runs the four other sweeps, and **DRAINS THE NODE LANE** — a reviewed,
+> green, unparked node-lane PR is still squash-merged to `main` by
+> `graph-auto-merge` and absorbed by `reconcile-graph-merged`. The sentinel
+> gates worker **SPAWNING** and scheduling; it does not gate ledger bookkeeping,
+> and **it does not freeze `main`**.
+
+Read from the paused branch itself, this still runs on **every** tick:
+
+1. `reservation_sweep` — `lib-reservation-ledger.sh`
+2. `standdown_recheck_sweep` — `lib-standdown-recheck.sh`
+3. `stale_hold_recheck_sweep`
+4. `frozen_session_sweep`
+5. `terminal_without_disposition_sweep`
+6. the node-lane drain — `graph-auto-merge` then `reconcile-graph-merged`
+
+### Two consequences, both actionable
+
+**`main` is not frozen.** Any of the ~30 open PRs that reaches reviewed + green
++ unparked will squash-merge to `main` during this window, on a paused tick,
+with no worker involved. If the intent is a real freeze, the sentinel is not
+enough — per the same comment, **an `office_hours` park is the one thing
+`graph-auto-merge` will not merge past.** Park the open node-lane nodes, or
+expect main to move under these PRs.
+
+**Three "cold" units are actually hot.** `standdown_recheck_sweep` (PR9 Unit 2),
+`terminal_without_disposition_sweep` (PR2 Unit 6) and `reconcile-graph-merged`
+(PR5) are all on the paused-tick path. A bug in them breaks things *during* the
+window, not at resumption.
+
+## What is genuinely cold
+
+Nothing spawns a worker, so nothing reaches: the whole ladder driver
+(`dispatch-ladder-*`), `dispatch-code-review`, the `/review-fix` orchestration,
+`dispatch-target-workers` (the paused branch exits before `dispatch-select-tick`),
+`provision-node-worktree`, and `dispatch-eval-finding` (only `/rsi` calls it,
+and `/rsi` spawns from the ladder).
+
+**This is where the merging headroom is.** The original rejection of a single PR
+rested on three arguments; under ad-hoc supervised execution only one survives
+intact:
+
+| Original argument | Status now |
+|---|---|
+| The machinery under repair lands the repair | **Collapses** for everything cold — nothing runs it. Survives only for the tick-path items and for `graph-commit`, which every ad-hoc session still uses to close nodes. |
+| Verification harnesses are per-surface | **Weakened.** It was about attributing a regression automatically; a supervised author can run all 15 suites and read the output. |
+| PR13 renames what the others edit | **Intact.** Unaffected by who drives. |
+
+## Regrouped: 14 → 6 PRs (+1 deferred)
+
+| # | Bundle | Was | Nodes | Risk |
+|---|---|---|---|---|
+| **1** | **Graph write path** | PR1 | 4 | HOT — *silent* failure |
+| **2** | **Tick-path reconcilers and sweeps** | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT — runs every tick |
+| **3** | **Dispatch runtime (cold)** | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD — realized at resumption |
+| **4** | **Instrument + finding surface** | PR3 + PR4 | 15 | COLD |
+| **5** | **RSI chain** | PR10 + PR11 + PR12 + PR14 | 10 | COLD |
+| **6** | **Skill rename** | PR13 | 1 | last, alone |
+| — | *deferred* | PR8 U3 | 1 | see below |
+| | *pre-PR sessions* | | 6 | no diff |
+| | **total** | | **72** | |
+
+**Bundle 1 stays alone and small even though it is only 4 nodes.** Its failure
+mode is a *silently dropped* node edit when local `main` is ahead — and
+supervision does not catch silent failures. Every other bundle's closing
+bookkeeping runs through it, so it lands first and gets verified by reading
+`git show origin/main:` rather than by trusting a verdict line.
+
+**Bundle 3 is deliberately large (25 nodes).** Nothing invokes any of it while
+paused, so the cost of bundling is not a broken window — it is that the first
+fleet start after resumption becomes a single pass/fail boolean. Mitigate that
+with a **staged resumption** rather than by splitting: remove the sentinel with
+`max_concurrent_workers: 1`, walk one node through the full ladder, and only
+then restore normal concurrency. That converts the boolean into a diagnosable
+test and is worth more than any split.
+
+## The order changes — in the opposite direction from what you would expect
+
+Knowing the ladder is not a blocker does **not** simply demote everything. It
+redistributes:
+
+- **PR2 (ladder driver) drops sharply.** It was second because everything ran
+  through it. Nothing runs through it now. Only its Unit 6 is urgent, and that
+  moves to Bundle 2.
+- **PR5 (reconciler tick cost) rises.** It reads as pure efficiency work for a
+  paused system, but `reconcile-graph-merged` is in the drain on every tick, and
+  PR5's base-pin unit prevents a **concurrently landed write being clobbered** —
+  a live risk precisely because main is still moving.
+- **PR9 Unit 8 stays first overall.** The 36,973-byte deferred diff exists only
+  in an ephemeral job scratch dir. It is the one item with a deadline, and it is
+  independent of everything. Do it before anything else.
+- **PR8 Unit 1 rises** — the pace-curve config is untracked and unrecoverable.
+- **PR8 Unit 3 is deferred outright.** It replaces the pause sentinel with a
+  config field — i.e. it rewrites the mechanism currently enforcing the freeze,
+  while the freeze depends on it. Land it during a deliberate, attended
+  un-pause, never mid-window.
+
+### Recommended order
+
+```
+0.  PR9 Unit 8         recover the ephemeral deferred diff   (deadline)
+0b. park open node-lane nodes  if main is meant to be frozen (see above)
+1.  Bundle 1           graph write path                      (HOT, silent)
+2.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
+3.  Bundle 4           instrument + finding surface          (unblocks 5)
+4.  Bundle 3           dispatch runtime                      (COLD, big)
+5.  Bundle 5           RSI chain
+6.  Bundle 6           skill rename                          (last, alone)
+--  staged resumption: sentinel off at max_concurrent_workers: 1, one node
+--  deferred: PR8 Unit 3, during an attended un-pause
+```
+
+Bundles 3 and 4 can swap or overlap — they share no files. Bundle 4 before 3
+only because Bundle 5 depends on it.
+
+---
+
 ## Read this before planning any of it: four nodes are already shipped
 
 The graph says these are open. The code says otherwise. **Verify before
