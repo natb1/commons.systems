@@ -5,7 +5,7 @@ statement: "The author's requirement is discovered under interview and recorded
   completely enough that the record alone carries it — /align's charter:
   elicitation, capture-completeness, and independent challenge of the draft"
 owner: human
-status: refining
+status: codified
 parent: strategy-explicit-intent
 rationale: "The /align interview is the only place an author's requirement
   enters the graph, and no node owned that practice. Its tactics sat on
@@ -66,7 +66,14 @@ clarifications:
       while citing a direction no record corroborated and the sitting later
       classified it a scope over-read; the direction here is corroborated by the
       session transcript that landed this commit, and the ratification is still
-      owed rather than assumed. (Recorded 2026-08-13)"
+      owed rather than assumed. (Recorded 2026-08-13) (Amended 2026-08-14: the
+      owed round RAN. The author was present, dispositioned every item in the
+      park recommendation plus three the round itself raised, and ratified the
+      statement and both conditions below as written; the park is cleared and
+      status is codified. Everything before this clause describes the
+      pre-ratification state and is kept as history, not as current fact. See
+      the \"What did the ratifying round settle\" clarification for what was
+      decided.)"
   - question: Which /align-family tactics serve this strategy, and which stay on
       strategy-graph-native-dispatch?
     answer: "The line is the skill boundary: /align records intent, so its tactics
@@ -100,7 +107,21 @@ clarifications:
       not a discovery one. tactic-align-audit-legacy-review is already achieved
       with a prune owed. tactic-park-cause-sensor-instrument stays with the
       signal clause it instruments — see the signal clarification below.
-      (Recorded 2026-08-13)"
+      (Recorded 2026-08-13) (Amended 2026-08-14 by the ratifying round: the
+      dual-serve rationale above gave TWO reasons, and one of them has
+      dissolved. The doctrine-ancestry reason — that dropping the second serves
+      edge would strip the draft-review gate and self-consistency conditions
+      from those tactics' ancestry projection — no longer holds, because both
+      conditions now live on THIS node, which both tactics serve first.
+      Re-applying the artifact-owner rule to what remains:
+      tactic-align-round-self-consistency-walk drops to serves:
+      [strategy-discovered-requirements] alone, since its own rationale named
+      the condition's location as the whole of its second edge and the artifact
+      it touches is only the /align skill. tactic-align-review-skill KEEPS the
+      dual serve on artifact grounds that survive independently — it builds
+      graph-commit --review and the assemble-review-pack script, and
+      graph-commit is dispatch tooling that strategy-graph-native-dispatch
+      owns.)"
   - question: Why a child of strategy-explicit-intent rather than of
       strategy-graph-native-dispatch, whose own statement names the align skill
       family?
@@ -139,7 +160,14 @@ clarifications:
       several children. This round is the migration path's first step, not the
       greenfield; carving out /align leaves 272. The greenfield is recorded here
       per .claude/rules/design-proposals.md and is owed its own round. (Recorded
-      2026-08-13)"
+      2026-08-13) (Amended 2026-08-14: two corrections to alternative (c). The
+      arithmetic was wrong — carving out /align did NOT leave 272. Measured this
+      round, strategy-graph-native-dispatch is served by 275 tactics, because
+      the /align family kept its second serves edge to that node rather than
+      moving outright, so the carve-out removed almost nothing from the count.
+      And the greenfield is no longer merely \"owed its own round\": this round
+      minted tactic-review-dispatch-charter-split, born-parked, to carry it to
+      an office-hours sitting.)"
   - question: Why does the record-gap signal clause stay on
       strategy-graph-native-dispatch when it measures this strategy's charter?
     answer: "Because moving it breaks a registered sensor and turns main red, and
@@ -162,7 +190,7 @@ clarifications:
       times — and the greenfield fix is to key sensors on a stable id carried on
       the node rather than on the sensor's own wording. (Recorded 2026-08-13)"
   - question: Was the id confusable with strategy-verified-requirements, and why keep it?
-    answer: Considered and kept, with the risk recorded.
+    answer: "Considered and kept, with the risk recorded.
       strategy-discovered-requirements and strategy-verified-requirements differ
       by one word and both concern requirements, so mis-serving between them is
       a live routing risk; strategy-requirement-discovery and
@@ -174,8 +202,139 @@ clarifications:
       the other. If a round is ever observed serving the wrong one, this
       disposition is the thing to revisit, and the rename is cheap while both
       nodes are young. The author has not weighed in on the name; it is part of
-      what the owed ratifying round settles. (Recorded 2026-08-13)
-tooling_goals: []
+      what the owed ratifying round settles. (Recorded 2026-08-13) (Amended
+      2026-08-14: the author HAS now weighed in and KEPT the id.
+      strategy-faithful-record and strategy-requirement-discovery were both put
+      as concrete alternatives and declined — the first because it loses the
+      deliberate pairing with strategy-verified-requirements that makes the
+      two-node boundary self-explaining, the second because it narrows the
+      apparent scope to elicitation and understates the capture-completeness
+      half the statement carries. The disposition to revisit on an observed
+      mis-serving stands.)"
+  - question: Is this strategy's charter really DISCOVERY, or is it formation under
+      supervision? (Steelman challenge, dialectic step 5)
+    answer: "Diverged, with the divergence recorded rather than papered over
+      (Recorded 2026-08-14). The rival conception put to the author:
+      tradition-plato's adopted list sources the align interview shape from
+      \"Socratic elenchus (Apology, Meno)\", and both cited dialogues presuppose
+      the knowledge is ALREADY IN the interlocutor — elenchus refutes false
+      confidence, anamnesis draws out what is latent. \"Discovered
+      requirements\" is exactly that picture. But /align's own type-a rules say
+      the model is \"unrecorded OR NOT YET FORMED\" and that Claude \"proposes
+      viable seams and explores their consequences to author feedback\" — which
+      is not recollection but Claude supplying content the author accepts or
+      refuses. On that reading the charter would be formation under supervision,
+      \"discovered\" would be a flattering misdescription, and the primary
+      hazard would not be incomplete capture but delegatee-authored intent
+      laundered as the author's own. RESOLUTION: the strategy ADOPTS elenchus
+      for its type-b limb, where the record is authoritative and the author is
+      being turned toward what is already recorded, and DIVERGES from strict
+      anamnesis for its type-a limb, where the requirement is genuinely formed
+      in the interview rather than recovered from the author. The divergence is
+      not free, and what it costs is named here so a later round does not have
+      to rediscover it: type-a rounds create a real hazard of Claude-authored
+      intent being ratified as the author's own. What bounds that hazard is
+      three things already recorded — the non-delegable-interview condition (a
+      person is present and can refuse), the adversarial draft review (a second
+      reader placed against Claude-drafted records), and the author's refusal
+      being a live exit rather than a formality. The author endorsed this
+      resolution rather than holding it on trust. The part that remains
+      unevidenced, and is stated plainly rather than assumed: nothing in the
+      record MEASURES whether those three controls are adequate to the hazard,
+      and this node's own success_signal does not measure it either. This node
+      is itself the worked example of the hazard — its substance was
+      Claude-drafted on 2026-08-13 and ratified by the author on this date."
+  - question: What did the ratifying round settle, and what changed as a result?
+    answer: "The round the born-park existed to force, run 2026-08-14 against
+      origin/main b1ebf766 (Recorded 2026-08-14). All four items in the park
+      recommendation were dispositioned, plus three the round itself raised, and
+      the author endorsed every one — no deferral was taken, so no held-on-trust
+      review item is owed and delegation-philosophical-articulation's scope is
+      untouched. (1) The id is KEPT: the near-collision with
+      strategy-verified-requirements is also what makes the boundary decidable
+      from the names alone — discovery of what the author meant versus
+      verification that a recorded requirement stays true.
+      strategy-faithful-record and strategy-requirement-discovery were the
+      alternatives put; both break the deliberate pairing. (2) The doctrine
+      migration was RULED ON and executed: the /align actuator tooling_goal and
+      both conditions moved here, and the gate was scoped to /align's output on
+      the way. A third option the born-park had not considered was raised and
+      declined — moving them UP to strategy-explicit-intent, the common ancestor
+      of this node and strategy-graph-native-dispatch (via
+      strategy-graph-drives-dispatch), which would have suited a gate binding
+      every graph writer; the author's answer that the gate is about /align's
+      output made the sideways move the right one instead. (3) The boost of 8
+      was CONFIRMED against a fresh measurement, and the rationale around it
+      corrected — see the boost clarification below. (4) The greenfield split of
+      strategy-graph-native-dispatch was judged worth its own round and given a
+      carrier, tactic-review-dispatch-charter-split, born-parked in this same
+      commit. Also settled: the steelman divergence above, the success_signal
+      left as recorded with its migration still owed, and the status moved
+      refining → codified, which kind-strategy defines as \"the author has
+      personally settled this strategy against present conditions\". RATIFIED
+      EXPLICITLY, after the adversarial review flagged that clearing the park on
+      their implicit acceptance was this round's weakest link: the STATEMENT as
+      written, and both conditions drafted 2026-08-13 — the
+      non-delegable-interview condition and the record-as-sole-carrier
+      condition. That mattered beyond bookkeeping, because the steelman
+      resolution above leans on exactly those two as controls bounding the
+      type-a hazard, so ratifying them implicitly would have left the controls
+      Claude-drafted and never examined. The author ratified all three
+      unchanged. HONEST STATUS OF ITEM (3): the park recommendation asked that
+      the boost be confirmed against the then-current rsi band AND the parked
+      8.5 cohort. The rsi half is confirmed by fresh measurement. The 8.5 half
+      was NOT confirmable as recorded — the figure was wrong twice over, first
+      in the 2026-08-13 rationale's mechanism and then in this round's own
+      correction of it — and what the boost is now confirmed against is the
+      re-measured field: four nodes at band 8.5, of which one is parked and
+      three are in flight at phase implement. The boost of 8 does not clear
+      those four, and never did; it clears the rsi cluster, which is what was
+      asked for. That distinction is now recorded rather than blurred. FREEZE
+      COST of this round's edit to THIS node, measured with readNode +
+      isFingerprintStale rather than a grep: zero. Its three serving tactics are
+      all phase-null and unstamped, so no child freezes on the fingerprint
+      change this round causes."
+  - question: What was wrong with the recorded attention rationale, and what replaced it?
+    answer: "The mechanism was wrong, not the count — and this round's FIRST attempt
+      at the correction was wrong in the opposite direction, which is the part
+      worth recording (Recorded 2026-08-14). The 2026-08-13 rationale claimed
+      \"the tactic-attention-surface-* cohort resolves to band 8.5 and is
+      invisible to the router only because those nodes are office-hours parked,
+      so an unpark restores four nodes above this cohort\". The ratifying round
+      first \"corrected\" this to say exactly one node bands at 8.5 and the
+      cohort bands at 3.17 — asserting, at maximum confidence and in a
+      clarification whose stated job was auditability, a figure generalized from
+      a single sampled node. The adversarial draft review refuted it by
+      measuring all nine, and the measurement is: FOUR nodes band 8.5 —
+      tactic-attention-surface-goals-page, tactic-attention-surface-graph-read,
+      tactic-attention-surface-signal-types and
+      tactic-attention-surface-status-page — one bands 5.33
+      (tactic-attention-surface-instrument), and four band 3.17. So the original
+      count of four was RIGHT. What was actually wrong in it are two things. (a)
+      The mechanism: only graph-read is office-hours parked; the other three sit
+      at phase implement, so they are outside the selectable field because they
+      are in flight, not because they are held — \"invisible only because
+      parked\" is true of one node in four. (b) The description of the cohort as
+      resolving to one band, when it is heterogeneous across three bands. The
+      8.5 itself comes from no authored boost anywhere: goals-page carries
+      attention: null and compounds to 8.5 over its lineage, then hands that
+      band to graph-read under the reverse-blocked_by limb of the parent
+      relation. That is the mechanism the boost condition now names as its
+      second staleness path. Recorded at this length, and with this round's own
+      error left visible rather than quietly overwritten, because two
+      consecutive rounds invented a measurement in the same rationale — the
+      second while explicitly criticizing the first. A reader auditing the boost
+      of 8 should treat every figure in this node as re-measurable and
+      re-measure it, not trust the prose."
+tooling_goals:
+  - kind: actuator
+    statement: "/align — the single interactive entry point to the persistent layer:
+      with a prompt, the recording interview (superseding /file-issue
+      requirements definition; records or amends virtues, strategies,
+      traditions, and delegations, retaining draft-tactic byproducts); with no
+      prompt, onboarding — orientation, scripted deployment validation, and a
+      walk to crafting the prompt, which the session then executes. Consolidates
+      the former /align-strategy and /align-init"
 success_signal:
   observable: "a recording round's output carries downstream work with no author
     re-consultation: an /align-tactics session plans from the landed record
@@ -207,10 +366,18 @@ attention:
     child bands on its parent's resolved score, so the rsi cluster's best band
     is 7.5 and an authored 8 clears it by 0.5. Two limits of that figure are
     recorded rather than left to be rediscovered. FIRST, 7.5 is the top of the
-    SELECTABLE tier-1 field, not of tier 1: the tactic-attention-surface-*
-    cohort resolves to band 8.5 and is invisible to the router only because
-    those nodes are office-hours parked, so an unpark restores four nodes above
-    this cohort. SECOND, this node's own band is 0, since
+    SELECTABLE tier-1 field, not of tier 1: FOUR nodes resolve to band 8.5 —
+    tactic-attention-surface-goals-page, tactic-attention-surface-graph-read,
+    tactic-attention-surface-signal-types and
+    tactic-attention-surface-status-page — and each of them outranks this
+    cohort. Only ONE of the four, graph-read, is office-hours parked; the other
+    three sit at phase implement, so they are outside the selectable field
+    because they are in flight, not because they are held. None of the four
+    takes its 8.5 from an authored boost: goals-page carries attention: null and
+    reaches 8.5 by lineage compounding, then hands that band to graph-read by
+    being blocked_by it. (Corrected 2026-08-14 by the ratifying round's
+    adversarial review, which refuted this round's own first correction — see
+    the dedicated clarification below.) SECOND, this node's own band is 0, since
     strategy-explicit-intent carries no boost — so its own /align-tactics
     decomposition round ranks far below the rsi cluster even though its children
     outrank it. That is accepted: /align tactics are minted by interview rather
@@ -228,34 +395,17 @@ attention:
     strategy-rsi-delegated-prioritization, where a same-round recovers edge
     silently added 0.5. This lifts tier 1 only; a bug_fix, security or
     strategy-main-health node still preempts on the tier axis, which is
-    intended."
+    intended. Re-measured 2026-08-14 by the ratifying round at origin/main
+    b1ebf766: strategy-recursive-self-improvement still 6,
+    strategy-rsi-delegated-prioritization still +1 on top of it for a resolved
+    7.5, so the authored 8 still clears the rsi cluster by 0.5 and the three
+    /align tactics hold band 8 at ranks 2-4. The author confirmed the figure
+    rather than holding it on trust."
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: Born-parked at creation 2026-08-13. This node's substance — statement,
-    conditions, success_signal and the authored boost of 8 — is Claude-drafted
-    from a design conversation and directed by the author with "execute
-    recommendation", but it has NOT been through an /align interview, and
-    strategy-explicit-intent reserves strategy substance for the author with
-    agent assistance as drafting, never derivation. The park keeps the
-    autonomous lane from decomposing unratified author-reserved substance into
-    planned work; it does NOT hold up the round's purpose, since the tactics
-    serving this node are unparked and already carry the intended band of 8.
-  since: 2026-08-13
-  recommendation: "Run /align against strategy-discovered-requirements to ratify
-    or rework its statement, conditions, signal and boost, then clear the park.
-    Four things are specifically owed at that sitting: (1) ratify or rework the
-    id, weighed against the confusable sibling strategy-verified-requirements;
-    (2) rule on whether the /align actuator tooling_goal and the
-    draft-review-gate and self-consistency conditions should migrate here from
-    strategy-graph-native-dispatch, which is the half of the re-homing this
-    round deliberately did not do; (3) confirm the boost of 8 against the
-    then-current rsi band and the parked 8.5 cohort; (4) decide whether the
-    greenfield recorded in clarification 3 — splitting
-    strategy-graph-native-dispatch by charter — is worth its own round."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
@@ -273,12 +423,62 @@ attributes:
     - "the authored boost of 8 encodes a RELATION the scalar cannot hold —
       'ranks above the rsi cluster's band' — not an absolute worth. The
       mechanism stores only a number, so this condition is where the invariant
-      lives: if strategy-recursive-self-improvement or
-      strategy-rsi-delegated-prioritization is reranked such that their band
-      reaches 8 or above, this figure is stale and must be re-derived rather
-      than defended. A single +1 on the rsi parent is enough to invert it
-      silently, and that node's boost already moved 4 to 6 inside one month
-      (Recorded 2026-08-13)"
+      lives: if the rsi cluster's band reaches 8 or above, this figure is stale
+      and must be re-derived rather than defended. TWO staleness paths, not one.
+      The first is an authored rerank: a single +1 on
+      strategy-recursive-self-improvement is enough to invert it silently, and
+      that node's boost already moved 4 to 6 inside one month. The second was
+      found by the 2026-08-14 ratifying round and is quieter, because no author
+      acts in it at all: band derives from a parent's RESOLVED score, the parent
+      relation includes reverse-blocked_by, and score compounds over lineage —
+      so a node can drift above 8 purely by accumulating blocked_by edges. The
+      worked instance is tactic-attention-surface-goals-page, which carries
+      attention: null and still resolves to 8.5, and hands that band to
+      tactic-attention-surface-graph-read by being blocked_by it. Re-derivation
+      is therefore owed on edge churn, not only on rerank events (Recorded
+      2026-08-13; second path added 2026-08-14)"
+    - "every /align round's own output passes the adversarial draft review gate
+      before it lands: the strategy-* substance the round writes (any field
+      other than the router-owned phase, execution, office_hours, reading and
+      attention stamps) and any new node file the round mints, draft tactics and
+      born-parked review items included. Review before commit; MATERIAL findings
+      dispositioned by the author through the question mechanics; MINOR
+      restricted to format-only fixes (anything changing what the record says is
+      MATERIAL by construction); re-review on design-shape change capped at two
+      rounds per bundle; and the commit carries a content-bound review receipt —
+      graph-commit refuses the write without --review (a report naming the
+      reviewed node ids and matching the digest of the staged write-node inputs)
+      or an explicit --ack flag. The gate reads not-yet-armed until
+      tactic-align-review-skill lands the skill, pack script and receipt flag —
+      the interim discharge is the inline-pack bootstrap subagent, expiring when
+      that tactic merges; a skipped, silently-failed, or
+      silently-folded-material review is a defect of the round. SCOPE is
+      /align's own output only: a /align-tactics decomposition, a qa-fix finding
+      node and a router transition are out of scope, because /align output is
+      the case with no downstream reader — strategy-graph-native-dispatch's
+      clarification 2, and its later clarification \"Is the interview still the
+      audit once the draft review gate exists?\" which stayed on that node as
+      the gate's supporting rationale, hold that for /align 'the interview IS
+      the audit', there being no downstream PR review that checks the
+      requirement was captured correctly, whereas an /align-tactics subtree is
+      read again at plan, implement, PR review and QA. This scoping binds
+      tactic-align-review-skill's --review design: the receipt floor must not
+      refuse every caller's write (Recorded 2026-08-11 on
+      strategy-graph-native-dispatch; re-homed here and scoped to /align
+      2026-08-14 by the author's ratifying round, which held that the gate is
+      about /align's output)"
+    - "a recording round is answerable for the internal consistency of its own
+      output — no edge a round authors may contradict a scope the same round
+      authors, checked before the round lands; this binds consistency ONLY and
+      never plannability, which stays /align-tactics’ sole judgment, so a park
+      on genuine requirement ambiguity remains correct (Recorded 2026-08-12: the
+      inverted blocked_by authored in 8249f664 cost a ~13-minute autonomous
+      /align-tactics session and an author park at 2184103c) (Re-homed here from
+      strategy-graph-native-dispatch 2026-08-14: the author held that this
+      condition is about /align's output, and its own text corroborates that by
+      reserving plannability to /align-tactics as a separate judgment.
+      tactic-align-round-self-consistency-walk implements it and serves this
+      strategy alone as of this round)"
 ---
 # The author's requirement is discovered under interview and recorded completely enough that the record alone carries it
 
@@ -307,9 +507,10 @@ skill.
 6. **Completeness discharge** (Step 6) — the requirement-clause coverage walk
    that discharges the record-completeness contract.
 7. **Adversarial draft review** — the independent second reader placed against
-   the draft before it lands. Doctrine home is the gate condition on
-   `strategy-graph-native-dispatch` (2026-08-11); the implementation is
-   `tactic-align-review-skill`, which serves this strategy.
+   the draft before it lands. The doctrine home is the gate condition in this
+   node's own `attributes.conditions`, re-homed here from
+   `strategy-graph-native-dispatch` on 2026-08-14 and scoped to `/align`'s own
+   output at the same time; the implementation is `tactic-align-review-skill`.
 
 Roles 2, 6 and 7 carry the charter: discovery, completeness, and independent
 challenge. Roles 1, 3, 4 and 5 are the mechanics that serve them.
@@ -328,14 +529,26 @@ subtrees — is a dispatch phase worker and stays on
 `strategy-graph-native-dispatch`. The boundary rule and the node-by-node
 disposition are the second clarification in frontmatter.
 
-The half of the re-homing this round deliberately did **not** do: the `/align`
-actuator `tooling_goal`, the draft-review-gate condition, and the
-self-consistency condition all still live on `strategy-graph-native-dispatch`.
-Moving doctrine is a bigger claim than moving tactics and belongs to the author's
-ratifying round, not to a background session — it is item (2) in this node's
-park recommendation. Until then the two tactics that implement that doctrine
-carry a second `serves` edge to `strategy-graph-native-dispatch` so their
-ancestry projection still delivers it.
+The half of the re-homing the 2026-08-13 round deliberately did not do is **now
+done**. The author's ratifying round of 2026-08-14 held that the draft-review
+gate and the self-consistency condition are about `/align`'s output, so both
+moved here, and the `/align` actuator `tooling_goal` followed them. The gate was
+**scoped** on the way rather than merely relocated: it covers an `/align` round's
+own output only, and a `/align-tactics` decomposition, a `qa-fix` finding node
+and a router transition are out of scope — binding input to
+`tactic-align-review-skill`'s `--review` receipt design, settled while that
+tactic is still unplanned.
+
+What stays on `strategy-graph-native-dispatch` is `/align`'s role as the thing
+that replaced GitHub issues — the condition that no new work enters via `gh`
+once `/align` is live is a dispatch property and is untouched.
+
+One `serves` edge changed as a consequence.
+`tactic-align-round-self-consistency-walk` now serves this strategy **alone**:
+its second edge existed only because the condition it implements was recorded
+elsewhere, and that reason dissolved. `tactic-align-review-skill` keeps its
+second edge on grounds that survive independently — it builds
+`graph-commit --review` and `assemble-review-pack`, which are dispatch tooling.
 
 `/align-audit` is an integrity instrument and stays on
 `strategy-graph-integrity`: it never interviews and never rewrites strategy

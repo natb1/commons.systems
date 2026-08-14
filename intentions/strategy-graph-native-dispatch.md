@@ -5555,16 +5555,59 @@ clarifications:
       soft-freezes exactly one stamped open child,
       tactic-strategy-fingerprint-stamp-coverage at phase qa; the freeze is
       benign — nothing in this amendment bears on that node's plan — and it
-      clears on the next restamp. (Recorded 2026-08-13)"
+      clears on the next restamp. (Recorded 2026-08-13) (Amended 2026-08-14 by
+      the author's ratifying round, which falsified three statements above.
+      FIRST, this strategy no longer holds the doctrine those tactics implement:
+      the draft-review gate and the self-consistency condition both moved to
+      strategy-discovered-requirements, and the /align actuator tooling_goal
+      moved with them. SECOND, serves membership did NOT stay unchanged —
+      tactic-align-round-self-consistency-walk dropped its second edge to this
+      node, because that edge existed only to deliver the condition that has now
+      moved; tactic-align-review-skill keeps both edges, on the independent
+      artifact ground that it builds graph-commit --review. THIRD, the backlog
+      ratio therefore DID move, slightly: measured post-write with
+      strategyBacklogBand, 58/275 (0.2109) against 58/276 (0.2101) before — the
+      backlog count is unchanged because the dropped node classifies as a draft,
+      and only the denominator falls by one. The reasoning recorded above was
+      sound for the 2026-08-13 round it describes; it is superseded rather than
+      wrong, and is kept as the history of how the re-homing was staged.)"
+  - question: Where did the /align actuator goal, the draft-review gate and the
+      self-consistency condition go, and why did they leave this node?
+    answer: "Re-homed to strategy-discovered-requirements by the author's ratifying
+      /align round (Recorded 2026-08-14). The author was asked directly what the
+      draft-review gate and the self-consistency condition are about and
+      answered: /align's output. That settles a placement this node had held
+      since 2026-08-11 and 2026-08-12 respectively, and the record corroborates
+      the answer rather than merely permitting it — the self-consistency
+      condition's own text binds consistency \"ONLY and never plannability,
+      which stays /align-tactics' sole judgment\", distinguishing the recording
+      round from /align-tactics, and its cited incident is an inverted
+      blocked_by authored by a recording round that then cost a downstream
+      /align-tactics session ~13 minutes. The /align actuator tooling_goal
+      followed them: a tooling_goal claims what a strategy builds, and this node
+      would otherwise declare it builds /align while owning none of the tactics
+      that improve it. What this node keeps is /align's role as the
+      gh-replacement entry point — the condition that no new work enters via gh
+      once /align is live is unchanged and still lives here; what moved is
+      /align's charter and the quality of its interview. The /align-tactics and
+      router-tick actuator goals are untouched, as is the lifecycle sensor goal.
+      The gate was also SCOPED on the way over, not merely moved: it now covers
+      an /align round's own output only, and a /align-tactics decomposition, a
+      qa-fix finding node and a router transition are explicitly out of scope —
+      so the receipt floor tactic-align-review-skill builds must not make
+      graph-commit refuse every caller's write. That scoping is binding input to
+      that tactic, decided while it is still unplanned. Freeze cost of this edit
+      measured before it landed with readNode + isFingerprintStale rather than a
+      grep over strategy_fingerprint: one open child,
+      tactic-strategy-fingerprint-stamp-coverage, which was already stale from
+      the 2026-08-13 round and is left stale. It was the only one of this node's
+      46 open children carrying a non-null stamp at all — a fact that is itself
+      the argument for that tactic. Also verified before landing, because the
+      2026-08-13 round's first draft was caught de-registering a sensor this
+      way: no code mirrors this node's conditions or tooling_goals verbatim. The
+      only prose coupling is read-sensors.ts's LIFECYCLE_SENSOR_NAME to
+      success_signal.sensor, which this round does not touch."
 tooling_goals:
-  - kind: actuator
-    statement: "/align — the single interactive entry point to the persistent layer:
-      with a prompt, the recording interview (superseding /file-issue
-      requirements definition; records or amends virtues, strategies,
-      traditions, and delegations, retaining draft-tactic byproducts); with no
-      prompt, onboarding — orientation, scripted deployment validation, and a
-      walk to crafting the prompt, which the session then executes. Consolidates
-      the former /align-strategy and /align-init"
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
       nodes with clean-session plans, superseding /file-issue epic structuring
@@ -5884,22 +5927,6 @@ attributes:
       alongside per-call bytes. This is a FLOOR, not a ceiling — ad-hoc shell
       stays available for genuinely novel graph questions, so the recovery path
       virtue-progressive-detachment protects stays open (Recorded 2026-08-11)"
-    - "every graph-commit that creates or modifies any strategy-* node field
-      other than the router-owned ones (phase, execution, office_hours, reading,
-      attention stamps), or creates any new node file, passes the adversarial
-      draft review gate: review before commit, MATERIAL findings dispositioned
-      by the author through the question mechanics, MINOR restricted to
-      format-only fixes (anything changing what the record says is MATERIAL by
-      construction), re-review on design-shape change capped at two rounds per
-      bundle, and the commit carries a content-bound review receipt —
-      graph-commit refuses the write without --review (a report naming the
-      reviewed node ids and matching the digest of the staged write-node inputs)
-      or an explicit --ack flag; the gate as a whole reads not-yet-armed until
-      tactic-align-review-skill lands the skill, pack script, and receipt flag —
-      the interim discharge is the inline-pack bootstrap subagent, expiring when
-      that tactic merges; a skipped, silently-failed, or
-      silently-folded-material review is a defect of the round (Recorded
-      2026-08-11)"
     - /dispatch-ladder's driver decides nothing — it may SEQUENCE the phase
       ladder, never gate it. Every rule about when a node may run stays in
       graph-select-target, and any such rule appearing in the driver or in its
@@ -5921,13 +5948,6 @@ attributes:
       reintroduces one (a re-invoke, a poll the model must perform, a branch the
       model must judge) is a regression against this requirement, not an
       implementation detail.
-    - "a recording round is answerable for the internal consistency of its own
-      output — no edge a round authors may contradict a scope the same round
-      authors, checked before the round lands; this binds consistency ONLY and
-      never plannability, which stays /align-tactics’ sole judgment, so a park
-      on genuine requirement ambiguity remains correct (Recorded 2026-08-12: the
-      inverted blocked_by authored in 8249f664 cost a ~13-minute autonomous
-      /align-tactics session and an author park at 2184103c)"
     - "an environmental failure — the managed dispatch daemon dying, restarting,
       or rolling to a new version — is never an invalid state: its orphaned
       sessions are not routed to the invalid-state lane by any surface (neither

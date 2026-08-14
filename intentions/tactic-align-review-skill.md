@@ -35,10 +35,30 @@ attributes: {}
 # Build the /align-review skill, the assemble-review-pack script, and the graph-commit --review receipt floor; insert the draft-review gate into /align's flow
 ## Draft context (2026-08-11 /align interview, v3 — two review rounds run on this round's own draft, the bootstrap precedent)
 
-Authoritative doctrine: the draft-review gate clarification and condition
-on strategy-graph-native-dispatch (2026-08-11). This body carries the
+Authoritative doctrine: the draft-review gate **condition on
+`strategy-discovered-requirements`** — re-homed there from
+`strategy-graph-native-dispatch` on 2026-08-14 by the author's ratifying
+round, and scoped to `/align` at the same time. Its supporting rationale
+stayed behind as the clarification "Is the interview still the audit once
+the draft review gate exists?" on `strategy-graph-native-dispatch`
+(2026-08-11), which is still worth reading. This body carries the
 implementation decomposition only — cite the strategy record, do not
 restate its rationale.
+
+**Binding scope ruling (2026-08-14), which changes what this tactic must
+build.** The gate covers an `/align` round's own output ONLY: the
+`strategy-*` substance the round writes, and any new node file it mints
+(draft tactics, born-parked review items). A `/align-tactics`
+decomposition, a `qa-fix` finding node, and a router transition are OUT of
+scope. So the `--review` receipt floor must **not** make `graph-commit`
+refuse every caller's write — refusing unconditionally would impose an
+adversarial review round on every autonomous decomposition and every
+finding-node write, which the author explicitly ruled out. The reason the
+scope is asymmetric: `/align` output is the case with no downstream reader
+("the interview IS the audit"), whereas an `/align-tactics` subtree is read
+again at plan, implement, PR review and QA. This ruling was made while this
+tactic was still unplanned, precisely so the receipt design starts from it
+rather than being reworked into it.
 
 1. New `.claude/skills/align-review/SKILL.md` — executed by an independent
    subagent launched with an explicit `model: opus` launch parameter (not
