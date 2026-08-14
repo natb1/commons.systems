@@ -23,7 +23,6 @@ rationale: Byproduct of the 2026-07-18 office-hours-concurrency interview.
   touching the pure TS selector (finalized this round; see node body for the
   full plan).
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -31,8 +30,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
-  override: null
+  boosts:
+    "1": 85
   rationale: "Author-directed 2026-07-25: the queue-serialization work
     (dispatch-queue claim integrity, office-hours drain claiming, and the
     cross-queue landing path) is the current focus. Own boost 85 composes with
@@ -52,10 +51,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T18:21:29Z
     mergeCommitSha: 68845d04dae5c425303f017937f5534b5673fe57
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

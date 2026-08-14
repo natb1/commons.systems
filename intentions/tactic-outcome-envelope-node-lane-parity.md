@@ -77,26 +77,13 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.01
-  rationale: >-
-    Author-directed 2026-08-03: prioritize progression of token-efficiency work
-    ahead of bug-fix work and ahead of the undecomposed baseline. Matches the
-    boost 20 already carried by the review-phase token-cost cluster
-    (tactic-review-skill-body-decomposition and its siblings). Simulated over
-    the live store before writing: 0 tier changes, 0 value drift onto non-target
-    nodes, resolves to 20.00.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.01 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    "1": 20
+  rationale: "Author-directed 2026-08-03: prioritize progression of
+    token-efficiency work ahead of bug-fix work and ahead of the undecomposed
+    baseline. Matches the boost 20 already carried by the review-phase
+    token-cost cluster (tactic-review-skill-body-decomposition and its
+    siblings). Simulated over the live store before writing: 0 tier changes, 0
+    value drift onto non-target nodes, resolves to 20.00."
 phase: main-qa
 execution:
   branch: tactic-outcome-envelope-node-lane-parity
@@ -136,8 +123,7 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 20
+attributes: {}
 ---
 # Outcome envelope node-lane parity
 

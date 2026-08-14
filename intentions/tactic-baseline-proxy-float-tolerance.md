@@ -23,7 +23,6 @@ rationale: "test-aggregate-usage.sh:505-506 asserts
   interview as the concrete instance of the graph-native flake-tracking-parity
   design (see strategy-graph-native-dispatch)."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -31,15 +30,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Author-directed 2026-08-03: prioritize progression of
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
-  tier: 1
 phase: done
 execution: null
 validates: []

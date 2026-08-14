@@ -86,7 +86,6 @@ rationale: "Byproduct of the 2026-07-29 /align-strategy dispatch-containment
   from any spawn cwd, plus a doctrine-ratchet test and required CI wiring. See
   body for the full plan, reuse citations, and verification."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -94,8 +93,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Promoted into Wave A after the defect recurred live
@@ -124,10 +123,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T15:46:11Z
     mergeCommitSha: be86cd497cfb7eb3f0eff8d2b0fa9a988ebf82f3
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

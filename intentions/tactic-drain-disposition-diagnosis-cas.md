@@ -22,7 +22,6 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review.
   the opposite resolution and cleared the park, so a real design question was
   settled by push timing rather than by the author's answer."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -30,8 +29,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
-  override: null
+  boosts:
+    "1": 85
   rationale: "Author-directed 2026-07-25: the queue-serialization work
     (dispatch-queue claim integrity, office-hours drain claiming, and the
     cross-queue landing path) is the current focus. Own boost 85 composes with
@@ -50,10 +49,12 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-26T05:06:48Z
     mergeCommitSha: be70f133fdfbccb1bc5ac037d8bd3e2c275952d9
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -109,6 +110,7 @@ office_hours:
 
     Full spec: intentions/tactic-drain-disposition-diagnosis-cas.md, "Unit 3 —
     clear-park --base" section.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

@@ -14,7 +14,6 @@ rationale: "Surfaced by the 2026-07-31 review-fix token audit interview and
   so the built-in never ran and the finder hand-rolled a review in its place.
   See clarifications 22 and 24 on strategy-token-economy."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
   - strategy-graph-native-dispatch
@@ -23,22 +22,27 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 55
-  override: null
-  rationale: "Author-directed 2026-07-31: top-of-band boost so the /code-review
-    invocation fix is picked immediately after
-    tactic-lane-instrument-substitution-guard (56). The built-in has never run
-    in dispatch — all 18 Skill(code-review, 'max --fix') calls across
-    07-27..07-31 were rejected with disable-model-invocation and the finder
-    hand-rolled a review reported as the built-in's, so every review-phase
-    quality claim since 07-27 rests on an agent reviewing itself. Ranked one
-    below the generic guard by this node's own stated ordering, and without a
-    blocked_by edge so a guard stall cannot deadlock it. Top-of-band, not
-    maximum: trunk-health work still outranks it (strategy-main-health = 101).
-    Part of the interim 50/20/10 scale's inventory — convert to a tier/bug_fix
-    mark when tactic-attention-tier-ranking and tactic-attention-boost-scripts
-    retire the interim scale; do not orphan this boost."
-  tier: 1
+  boosts:
+    "1": 50
+  rationale: >-
+    Author-directed 2026-07-31: top-of-band boost so the /code-review invocation
+    fix is picked immediately after tactic-lane-instrument-substitution-guard
+    (56). The built-in has never run in dispatch — all 18 Skill(code-review,
+    'max --fix') calls across 07-27..07-31 were rejected with
+    disable-model-invocation and the finder hand-rolled a review reported as the
+    built-in's, so every review-phase quality claim since 07-27 rests on an
+    agent reviewing itself. Ranked one below the generic guard by this node's
+    own stated ordering, and without a blocked_by edge so a guard stall cannot
+    deadlock it. Top-of-band, not maximum: trunk-health work still outranks it
+    (strategy-main-health = 101). Part of the interim 50/20/10 scale's inventory
+    — convert to a tier/bug_fix mark when tactic-attention-tier-ranking and
+    tactic-attention-boost-scripts retire the interim scale; do not orphan this
+    boost.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 55 to the closed level
+    vocabulary value 50 (high) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-review-code-review-invocation-contract
@@ -55,6 +59,7 @@ execution:
     mergedAt: 2026-08-03T03:00:25Z
     mergeCommitSha: 7c7728296e47420017e4e9949dffc26fba7d3e62
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

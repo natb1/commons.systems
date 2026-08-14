@@ -40,7 +40,6 @@ rationale: "Filed 2026-08-09 at the office-hours sitting that ratified
   reference test moved to `test-lib-reservation-ledger.sh` — a sweep should
   catch prose references to both, not only the fenced ones."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -48,8 +47,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Band 1 of the bootstrap three-band interim scale (50/20/10),
     author-directed at the 2026-08-09 office-hours sitting ('file it and boost
     it') so this sweep outranks the individual casualties it prevents. Band 1 is
@@ -59,7 +58,6 @@ attention:
     single node discharges once. It is also strictly upstream of those nodes'
     own progress, so leaving it at baseline would let the casualties it prevents
     outrank their own remedy."
-  tier: 1
 phase: done
 execution:
   branch: tactic-node-verify-fence-dead-test-path-sweep
@@ -79,6 +77,7 @@ execution:
     mergedAt: 2026-08-10T05:15:35Z
     mergeCommitSha: 9054327f536f539c613e3a8aaf0de7ea9f934382
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

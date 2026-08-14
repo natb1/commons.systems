@@ -1610,15 +1610,21 @@ success_signal:
   is_proxy: true
 attention:
   boosts:
-    "1": 6
-  rationale: "Author-directed 2026-08-11: rerank the rsi strategy to the top of
-    tier 1, above strategy-graph-native-dispatch (authored boost 5) — supersedes
-    the same-day rationale that placed rsi just below the router migration. The
+    "1": 5
+  rationale: >-
+    Author-directed 2026-08-11: rerank the rsi strategy to the top of tier 1,
+    above strategy-graph-native-dispatch (authored boost 5) — supersedes the
+    same-day rationale that placed rsi just below the router migration. The
     recursive-self-improvement loop that maintains rsi-plan.md and shortcuts
     critical-path harness work now outranks every other tier-1 strategy,
     including strategy-graph-native-dispatch (boost 5),
     strategy-graph-review-curriculum (boost 3.5), and strategy-attention-surface
-    (boost 3)."
+    (boost 3).
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 6 to the closed level
+    vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: null
 execution: null
 validates: []

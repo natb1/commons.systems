@@ -53,7 +53,6 @@ rationale: "(Recorded 2026-07-28 /align-strategy round.) Diagnosed live from the
   the plan surfaced are recorded in this node's own clarifications array below
   (a tactic-target session may not edit the serving strategy's frontmatter)."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -145,8 +144,8 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path integrity work above ordinary feature
     work. This band holds the silent graph-write-corruption defects plus the two
@@ -165,10 +164,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T14:31:12Z
     mergeCommitSha: 10f9e91aee7560b9feaca9f0d2509b962720a989
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

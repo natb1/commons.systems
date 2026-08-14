@@ -15,7 +15,6 @@ rationale: "Surfaced by the 2026-07-23 office-hours drain round: the dominant
   from scratch and re-parked — silently overriding a decision the author had
   already made."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -23,11 +22,17 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 3
-  override: null
-  rationale: "Author-directed 2026-07-23 /align-strategy round: the top-3 systemic
-    gaps (PR custody, scripted census, playwright retry) rank ahead of the
-    low-urgency tracked gaps once finalized."
+  boosts:
+    "1": 5
+  rationale: >-
+    Author-directed 2026-07-23 /align-strategy round: the top-3 systemic gaps
+    (PR custody, scripted census, playwright retry) rank ahead of the
+    low-urgency tracked gaps once finalized.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 3 to the closed level
+    vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-office-hours-pr-custody
@@ -37,10 +42,12 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T17:29:00Z
     mergeCommitSha: 46221307083f40ce812e1b7880c0c8e07f59fc5e
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

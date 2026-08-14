@@ -60,7 +60,6 @@ rationale: "Measured 2026-08-09 by running the live-host manual procedure
   blocker (the strategy's sole recorded condition and every clarification remain
   intact) and authored the full plan below, preferring the log-the-skip limb."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -68,15 +67,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 10
-  override: null
+  boosts:
+    "1": 10
   rationale: Band 3 of the bootstrap three-band interim scale (50/20/10). It
     stalls nothing and the guard it audits works correctly; its cost is operator
     confidence and one unsatisfiable step in a manual procedure, not a broken
     fleet. Filed as the residual of an otherwise-passing live-host experiment so
     the observation is not lost when tactic-ensure-units-respect-manual-disable
     closes.
-  tier: 1
 phase: done
 execution:
   branch: tactic-unit-disable-skip-silent-in-steady-state
@@ -93,6 +91,7 @@ execution:
     mergedAt: 2026-08-10T07:44:35Z
     mergeCommitSha: e65b487e12ec6867b8d01c7500ad02055c5186b2
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:

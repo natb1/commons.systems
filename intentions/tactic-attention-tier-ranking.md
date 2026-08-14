@@ -29,27 +29,14 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.02
-  rationale: >-
-    Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale (50 / 20
-    / 10) that puts write-path integrity work above ordinary feature work. This
-    band holds the silent graph-write-corruption defects plus the two paths the
-    bootstrap arms or depends on. Interim scaffolding only -
+    "1": 50
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
-    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.02 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: main-qa
 execution:
   branch: tactic-attention-tier-ranking
@@ -97,8 +84,7 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes:
-  pre_namespacing_boost: 50
+attributes: {}
 ---
 # Implement the three-tier ranking floor: bug_fix/security/tier marks resolve to an outer tier in resolveAttention, the selector sorts by (tier, rank), blocking lifts the lexicographic (tier, rank) pair, and strategy-main-health migrates from boost 100 to tier 3
 

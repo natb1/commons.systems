@@ -58,30 +58,17 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.05
-  rationale: >-
-    Bootstrap re-scale 2026-07-31: Wave A of the three-band interim scale (50 /
-    20 / 10) that puts write-path and pipeline-integrity work above ordinary
-    feature work. Belongs in this band on the band's own criterion — it burns a
-    full autonomous phase pass per iteration on a node that cannot advance, and
-    it held two Wave A nodes simultaneously on 2026-07-31, contributing directly
-    to the measured zero-productive-worker state. Finalized 2026-07-31
-    (/align-tactics tactic-mode round): status is now codified and phase
-    implement, with a full plan in the body; blocked_by names
+    "1": 50
+  rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
+    scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
+    ordinary feature work. Belongs in this band on the band's own criterion — it
+    burns a full autonomous phase pass per iteration on a node that cannot
+    advance, and it held two Wave A nodes simultaneously on 2026-07-31,
+    contributing directly to the measured zero-productive-worker state.
+    Finalized 2026-07-31 (/align-tactics tactic-mode round): status is now
+    codified and phase implement, with a full plan in the body; blocked_by names
     tactic-denied-command-parks-node, so the router will not select this node
-    for implementation until that PR lands lib-frozen-session-park.sh.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    for implementation until that PR lands lib-frozen-session-park.sh."
 phase: main-qa
 execution:
   branch: tactic-phase-terminal-requires-disposition
@@ -141,8 +128,7 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes:
-  pre_namespacing_boost: 50
+attributes: {}
 ---
 # A phase skill that terminates on a needs-human judgment item must land an office_hours park before exiting — ending a phase with the node still at its entry phase and office_hours null is indistinguishable from work never started, so releasing the node re-selects it into an identical pass that reaches an identical dead end, a churn loop that never converges
 

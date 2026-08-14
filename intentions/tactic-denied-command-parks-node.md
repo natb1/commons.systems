@@ -49,7 +49,6 @@ rationale: "Observed live 2026-07-31T00:42:30Z during the dispatch-pipeline
   these boosts to tier/bug_fix marks. blocked_by is empty, so this Wave A
   promotion lifts no blocker and cannot compound."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -57,8 +56,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -80,10 +79,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T17:15:22Z
     mergeCommitSha: 03a156232a4b3b38ccd6072da03c073bf64c558d
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

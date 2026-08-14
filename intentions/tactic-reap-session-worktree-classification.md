@@ -35,27 +35,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.05
-  override: null
-  rationale: >-
-    Filed at the 2026-08-10 office-hours sitting above the 20-band its parent
-    and siblings sit in, because unlike them it is not blocked on any author
-    question and it is causing measured, ongoing waste today (a node declining
-    every ~15 minutes). The author's instruction at that sitting was to split it
-    out precisely so it would not wait behind the claim-anchor ratification.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
-  tier: 1
+  boosts:
+    "1": 50
+  rationale: Filed at the 2026-08-10 office-hours sitting above the 20-band its
+    parent and siblings sit in, because unlike them it is not blocked on any
+    author question and it is causing measured, ongoing waste today (a node
+    declining every ~15 minutes). The author's instruction at that sitting was
+    to split it out precisely so it would not wait behind the claim-anchor
+    ratification.
 phase: null
 execution: null
 validates: []
@@ -63,8 +50,7 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 50
+attributes: {}
 ---
 
 # Classify reap candidates by worktree class before resolving a worktree path

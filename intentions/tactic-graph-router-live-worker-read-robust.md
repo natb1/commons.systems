@@ -35,7 +35,6 @@ rationale: "Surfaced 2026-07-21: a manual dispatch tick launched a SECOND
   2026-07-21: filed as a new dependent tactic (not folded into the mid-QA
   router-visibility node) and boosted to top rank."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -43,14 +42,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 10
-  override: null
+  boosts:
+    "1": 10
   rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
     band to 10. These are ordinary improvements, not integrity defects; at 85-90
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
-  tier: 1
 phase: done
 execution:
   branch: tactic-graph-router-live-worker-read-robust
@@ -62,10 +60,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T22:01:11Z
     mergeCommitSha: dd56eb369aa6cfad23cc2219686ea1e747383c5f
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-router-live-worker-visibility

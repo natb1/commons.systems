@@ -22,7 +22,6 @@ rationale: "Retained review residue from PR #2919 (tactic-graph-main-self-heal):
   tactic-main-red-<8-hex-shortsha> shape; the plan below adds an explicit
   regression case (f) for it."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -30,8 +29,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap promotion 2026-07-30: Wave A of the three-band interim
     scale (50 / 20 / 10). Promoted from attention: null (rank 5.33, dead last
     behind twelve Wave A nodes, so never selectable in practice) after
@@ -64,10 +63,12 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-30T20:07:01Z
     mergeCommitSha: eeefa235f45439a11e5d19a39277787a084f3fcf
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

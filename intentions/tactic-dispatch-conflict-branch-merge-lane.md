@@ -39,7 +39,6 @@ rationale: "Recorded from the 2026-07-25 office-hours drain sweep (10 parked
   under the self-modification doctrine's fallback lane rather than refusing up
   front), so the draft is finalized to a full plan."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -47,20 +46,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 96
-  override: null
-  rationale: "Author-directed 2026-07-26: boost to top rank, to unblock the
-    provision exit-11 class that stalled the fleet on 2026-07-25/26 (28 exit-11
-    events since 07-15, 9 on 07-25 alone; five of the drain sweep's top-ranked
-    parks were this one hold, four of which needed no author judgment at all).
-    Sized at 96 -- the graph's top AUTHORED band, matching the two other
-    2026-07-26 top-rank directives -- so that composed with the +5 authored term
-    it clears the 90/95 bands. Strict composed #1 is 387.33
+  boosts:
+    "1": 85
+  rationale: >-
+    Author-directed 2026-07-26: boost to top rank, to unblock the provision
+    exit-11 class that stalled the fleet on 2026-07-25/26 (28 exit-11 events
+    since 07-15, 9 on 07-25 alone; five of the drain sweep's top-ranked parks
+    were this one hold, four of which needed no author judgment at all). Sized
+    at 96 -- the graph's top AUTHORED band, matching the two other 2026-07-26
+    top-rank directives -- so that composed with the +5 authored term it clears
+    the 90/95 bands. Strict composed #1 is 387.33
     (tactic-scope-fingerprint-plan-substance), but that figure is a blocked_by
     compounding artifact of a four-node serialized chain rather than an authored
     rank, and matching it would need a raw boost of ~383, which schema rule 18
     rejects without the literal ACK string. That ACK was not sought, so the
-    boost is capped at the authored band. Recorded 2026-07-27."
+    boost is capped at the authored band. Recorded 2026-07-27.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 96 to the closed level
+    vocabulary value 85 (urgent) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-dispatch-conflict-branch-merge-lane
@@ -72,10 +77,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-28T20:05:18Z
     mergeCommitSha: e5d674003acc7a3ee2f74b9e3ab8c41ae7570ebc
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -71,25 +71,11 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
-  rationale: >-
-    Bootstrap band 2 (50/20/10 interim scale): a containment defect that strands
-    worker slots and manufactures duplicate-session invalid states by accretion
-    -- same band as the other dispatch-containment fixes.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
-  tier: 1
+  boosts:
+    "1": 20
+  rationale: "Bootstrap band 2 (50/20/10 interim scale): a containment defect that
+    strands worker slots and manufactures duplicate-session invalid states by
+    accretion -- same band as the other dispatch-containment fixes."
 phase: null
 execution: null
 validates: []
@@ -97,8 +83,7 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 20
+attributes: {}
 ---
 # Durable, graph-anchored claim/release written once per selection tick
 
