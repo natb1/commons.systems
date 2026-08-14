@@ -57,104 +57,98 @@ attributes:
       window: tactic-attention-namespaced-rank/review@1786661088
       sensor: rsi
       measured: 2026-08-13
-    - metric: recurrence_count
+    - metric: blocked_ledger_writes
       value: 1
+      unit: writes
+      window: 2026-08-13 re-evaluation of the tactic-attention-namespaced-rank qa
+        findings
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: wasted_graph_commit_attempts
+      value: 3
+      unit: attempts
+      window: 2026-08-13 re-evaluation of the tactic-attention-namespaced-rank qa
+        findings
+      sensor: dispatch-eval-finding
+      measured: 2026-08-13
+    - metric: evaluator_stashes_on_main_stack
+      value: 2
+      unit: stashes
+      window: main checkout stash stack, 2026-08-13 20:39 EDT
+      sensor: rsi
+      measured: 2026-08-13
+    - metric: recurrence_count
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
-      measured: 2026-08-13
+      measured: 2026-08-14
 ---
-# First sighting — tactic-attention-namespaced-rank / review / `--since 1786661088`
+## Second occurrence — the same file, re-armed three minutes before the write
 
-## Observed
-
-`dispatch-ladder-run` spawns each per-phase evaluator with `--cwd <main-root>`,
-and `/rsi` states plainly: *"Runs in the main checkout."* Its **entire write
-surface is `dispatch-eval-finding`**.
-
-The main checkout carried one unrelated modified tracked file — the user's own
-in-progress nix input bump, `M flake.lock` (9 insertions, 9 deletions), present
-before this ladder run began. Every `dispatch-eval-finding` call failed:
+Observed 2026-08-13 while re-evaluating the findings recorded from the `qa` phase
+of `tactic-attention-namespaced-rank`. The first `dispatch-eval-finding` call of
+the pass failed identically to the occurrence that minted this entry, on the same
+file:
 
 ```
-wrote tactic-eval-finding-eval-since-bound-excludes-worker → .../intentions/...
-error: graph-commit: refusing to start — unrelated dirty tracked file(s)
-       outside this call's node set:
+wrote tactic-eval-finding-eval-finding-list-misses-nonledger → intentions/...md
+error: graph-commit: refusing to start — unrelated dirty tracked file(s) outside this call's node set:
  M flake.lock
-       stash or commit these first (e.g. 'git stash -u'), then re-run
+       stash or commit these first (e.g. 'git stash -u'), then re-run graph-commit
 dispatch-eval-finding: graph-commit failed after 3 attempt(s)
-dispatch-eval-finding: recording a recurrence ... failed; the write was rolled back
+dispatch-eval-finding: recording a recurrence of ... failed; the write was rolled back to origin/main
 ```
 
-Three graph-commit retries, all refused on the same file. Exit 1, node file
-correctly rolled back (not the exit-70 dirty-node case).
+`flake.lock` carries a 9-line-pair nix input update. It is unrelated to
+`intentions/` by construction: the refusal names it as "outside this call's node
+set" and then refuses anyway.
 
-## Why this is worse than a failed write
+### What is new relative to occurrence 1 — the workaround re-arms the trap
 
-The evaluator is spawned **fire-and-forget**. `/rsi` is explicit that "nothing
-this job does can delay, gate, or change the ladder's disposition", and that
-"findings that stay in this job's transcript do not exist: the graph is the sole
-tracker, and this job's transcript is discarded."
-
-So the failure mode is total and silent:
-
-- every finding of every per-phase evaluator is voided,
-- the driver never learns (it does not wait, and would not act if it did),
-- the transcript that holds the analysis is then discarded,
-- and the cause is a file that has nothing to do with the graph, left by anyone
-  who touched the repo — a `nix flake update`, an interrupted edit, a stray
-  `npm install` rewriting a lockfile.
-
-A six-hour ladder can therefore run its full evaluation program and record
-nothing, for the entire duration that one unrelated file stays dirty. The
-per-phase design exists precisely because *"a run that halts used to record
-nothing at all, making the most defect-rich runs the ones that produced no
-review."* An unrelated dirty file reintroduces exactly that hole, and does it
-across every phase at once rather than one.
-
-It also violates the evaluator's own bounds to fix: clearing the blocker means
-`git stash` on a shared checkout that a **live** ladder driver is operating in
-(`state.json: pid 2993618, status running, step review-stall`) — a tree-updating
-write on someone else's working files, which is outside the declared write
-surface and races the driver.
-
-## Workaround used this run (report only — not a fix)
-
-`dispatch-eval-finding` resolves `REPO_ROOT` from its **own script location**
-(`SCRIPT_DIR/../../../..`, line 179), not from cwd. So the main checkout's copy
-always targets the dirty checkout no matter where it is invoked from. Invoking a
-*different checkout's* copy by absolute path retargets it:
+The main checkout's stash stack, read at the moment of the failure:
 
 ```
-<clean-worktree>/.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding --slug ...
+stash@{0}: WIP on main: 039bbe11 ...                      (this pass's own)
+stash@{1}: On main: rsi-eval fix-phase: parked stale db9e7f2c node revert
+                    + pre-existing flake.lock to unblock ledger writes
 ```
 
-All four findings from this phase landed that way, off a fresh worktree, without
-touching `flake.lock` or the driver's checkout.
+`stash@{1}` is an **earlier evaluator's** workaround for this same finding: it
+stashed `flake.lock` to get its ledger writes through. `flake.lock`'s mtime at
+the time of this failure was 20:36:36 EDT — three minutes before the write
+attempt — so the file was restored to the tree shortly before this pass ran.
+Earlier ledger writes in this same pass, made while the tree was clean, had
+landed without incident.
 
-This is a workaround, not the fix. It costs a worktree per evaluator, and it only
-works because the evaluator noticed — an evaluator that took the exit-1 at face
-value and reported "graph write failed" would have discarded its findings exactly
-as designed.
+So the failure is not a static condition an operator forgot to clear. It
+oscillates: each evaluator that stashes to unblock itself leaves a stash that
+someone (or something) later pops, which re-arms the blocker for the next
+evaluator. The workaround and the fault are the same action seen from two ends,
+and the stack accumulates one entry per evaluator that hits it.
 
-## What would have to change
+**The retry policy cannot help.** The script retried 3 times against an unchanged
+precondition, then rolled back. Retries only pay off against transient
+conditions; this one can only be cleared by an actor outside the evaluator.
 
-The author's call. The observation is that graph-commit's whole-checkout dirty
-guard is correct for a *writer that might be mid-edit*, but the evaluator writes
-exactly one node it just created and stages exactly `intentions/<id>.md`. Making
-the recorder immune to unrelated dirt — a scratch checkout it owns, or a guard
-scoped to the node set the call already declares (the error message literally
-names the concept: *"outside this call's node set"*) — would remove a
-silent-total-loss mode from the one component whose entire purpose is not to lose
-observations.
+**The rollback is clean, and that is the trap.** `intentions/` was left exactly at
+`origin/main` — `git status --porcelain intentions/` is empty afterwards. An
+attended session sees the stderr and can act; the fire-and-forget evaluator this
+surface exists for sees nothing, writes nothing, and leaves no trace that a
+finding was ever measured. The blast radius is every finding of every phase in
+the window, not one write.
 
-## Evidence a later session cannot rediscover
+### How this pass got past it
 
-- `git status --porcelain` in `/home/n8/natb1/commons.systems` at 2026-08-13:
-  `M flake.lock` plus untracked `.claude/agents`, `dispatch.config/`, `ww.zip`
-  (untracked does not trip the guard; the tracked modification does).
-- `dispatch-eval-finding` `REPO_ROOT` resolution:
-  `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding:177-179`.
-- Landing worktree used:
-  `.claude/worktrees/rsi-eval-namespaced-rank-review`.
-- Retries before giving up: 3 (`DISPATCH_EVAL_FINDING_RETRIES` default).
+`git stash push -- flake.lock`, both writes, then restore — the same move
+`stash@{1}` records, and it leaves the same residue for whoever runs next.
+
+### What would have to change
+
+The gate's reason for existing is that `graph-commit` commits the working tree,
+so an unrelated dirty file would ride along. A node-scoped commit does not need
+the whole tree clean — it needs the paths it commits to be the paths it intends.
+`039bbe11` ("graph-commit: add a working-tree-free commit builder, default off")
+landed a builder that appears to be exactly that mechanism, still default-off;
+whether enabling it dissolves this finding is the thing to check before designing
+anything new. Not applied here; this is a record.
