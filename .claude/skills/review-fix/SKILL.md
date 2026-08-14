@@ -918,7 +918,7 @@ Step 2's Workflow-invocation prose). The current Workflow (`review-fix.js`)
 does not read this field yet — it is additive here, consumed once the
 Workflow is rewired.
 
-**Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
+**Invoke the Workflow tool on the registered `review-fix` workflow**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
 The Workflow runs in the background and returns one compact disposition summary:
 
