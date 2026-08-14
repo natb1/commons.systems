@@ -19,6 +19,14 @@ Every step runs unchanged except these re-keyed seams:
   .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
   ```
 
+  **The Step 7 lint gate precedes this call, exactly as it precedes the issue
+  lane's `dispatch:reviewed` apply** — `run-lint.sh` must come back green before
+  `transition-node` writes the `reviewed` marker, and a gate still red after its
+  two fix attempts skips this call and escalates instead (see
+  `terminal-actions.md`, "Gate on the local lint bundle"). The marker is what
+  `graph-auto-merge` keys on, so writing it over a red bundle arms the merge of a
+  branch this pass itself broke.
+
   The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
   the skill hands it the node id and never writes the graph directly. Merging is
   deferred entirely to the tick's `graph-auto-merge` reconciler, which runs every

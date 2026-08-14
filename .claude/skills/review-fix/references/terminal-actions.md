@@ -40,6 +40,65 @@ if [[ "$AHEAD" -ne 0 ]]; then
 fi
 ```
 
+## Gate on the local lint bundle
+
+**Then, before anything that marks this review complete, run the local lint
+bundle over the branch as this pass left it.** Green is the precondition for the
+`dispatch:reviewed` apply below (and, on the node lane, for the `reviewed`
+marker `transition-node` writes). **Red means fix and re-run — never mark.**
+
+```bash
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
+
+Run it **sandboxed**. If it fails in a sandbox-shaped way — `EROFS`,
+`Read-only file system`, a TLS or network error from `ensure_deps`' `npm ci` —
+that is the harness failing, not the gate going red: retry the same command once
+with `dangerouslyDisableSandbox: true`. Read only a real non-zero exit from a
+completed run (the `Failed suites: …` line) as red. Never read a run that could
+not complete as green.
+
+**Why a local gate and not a CI wait.** `/review-fix` is the terminal phase: it
+fans out fixes, commits them, and marks the PR reviewed in one pass, with no
+verdict on its own commit. When a review-fix commit itself introduces a
+regression, the mark goes on anyway and the ladder discovers it a whole fix
+phase and a CI-wait later. The bundle here is the same one CI runs (see
+`run-lint.sh`) and takes seconds — a full round trip to CI inside the phase
+window would cost more than the whole review. This is a lint gate on this
+pass's own output, not a substitute for CI: real CI still runs on the PR and
+still owns the merge predicate.
+
+**Scope: this pass's own fix commits are already in it.** Step 3's
+`/commit-merge-push` committed the Lane-A and Lane-B fix edits before this step,
+and `run-lint.sh` derives its targets from `git diff --name-only
+origin/main...HEAD` — so those commits are inside the diff it checks. Do not
+narrow it to a hand-built file list: its unconditional checks (verify-fence
+paths, the type-safety escape-hatch check) resolve their own baselines and are
+exactly the ones a hand-narrowed invocation would drop.
+
+**On red.** Fix the violation the bundle named, commit and push the fix with one
+`/commit-merge-push`, and re-run the bundle. Bound this at **two** fix attempts.
+Never disable, skip, or narrow a check to get past it
+(`.claude/rules/test-integrity.md`), and never mark on the strength of a red or
+un-run bundle.
+
+**If it is still red after the second attempt, park — do not mark.** Take the
+deviation branch below (skip the phase-completed marker, run the in-session
+recommend step, call `dispatch-mark-deviation`) with a reason naming the failed
+suites, and **also skip the `dispatch:reviewed` apply / node-lane
+`transition-node` call entirely.** This is the one way this step's ordinary
+"the label is applied unconditionally" rule bends: a deviation over an unfixed
+*finding* still marks the review done, because the review itself ran; a red lint
+gate means this pass's own commit is broken, and marking it reviewed hands the
+router a PR the review lane knowingly broke. The terminal flush above already
+pushed every commit, so the park strands nothing.
+
+**Skip on re-entry** (Steps 1–6 skipped, `result` absent) — same gating as the
+phase-log write and the outcome envelope. On that path the mark is already
+written, so there is nothing left for the gate to protect, and a red bundle from
+some earlier pass would only deadlock the re-entry that exists to flush stranded
+commits.
+
 ## Write the handoff note (phase-log)
 
 **Then write the handoff note, before the terminal `dispatch:reviewed` apply —
@@ -99,7 +158,8 @@ covered by the behavioral test
 
 ## Apply the terminal label
 
-Then apply the `dispatch:reviewed` label via `dispatch-complete-phase` (use
+Then — **only once the lint gate above came back green** — apply the
+`dispatch:reviewed` label via `dispatch-complete-phase` (use
 `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
 ```bash
@@ -115,6 +175,9 @@ re-confirm the mismatch.
 This skill **owns** its `dispatch:reviewed` label — the dispatch chain does not
 apply the label after this skill returns. The label is applied regardless of
 whether any fixes were made, so a no-findings run still advances the workflow.
+Its one precondition is the lint gate: a gate that stayed red after its two fix
+attempts skips this apply and parks instead (see "Gate on the local lint
+bundle").
 
 This skill does **not** ready the PR. Promotion to ready is owned by the router's
 `dispatch-reconcile-ready`, which reconciles the draft↔ready bit to
@@ -132,7 +195,9 @@ criterion as not met and write the marker.
 
 **Deviation criterion:** `result.deviation` is `true` — any `Required` + `Upheld`
 finding with `Confidence` `high` remained unresolved after the Workflow's fix
-pipeline.
+pipeline — **or** the lint gate above stayed red after its two fix attempts.
+The two share this branch but differ in one place: the finding case still
+applies `dispatch:reviewed`, the red-gate case skips it.
 
 **Deviation fires** (`result.deviation === true`) — skip the phase-completed
 marker. This is a deliberate office-hours park: before the
@@ -185,7 +250,17 @@ Call `dispatch-mark-deviation` instead of the completion marker:
 **Then emit the outcome envelope** (the contract is
 `.claude/docs/outcome-envelope.md`). This call runs **sandboxed** —
 `dispatch-emit-outcome` is pure (no gh/git/network), so do **not** pass
-`dangerouslyDisableSandbox`. It must fire **before** the session stops below;
+`dangerouslyDisableSandbox`.
+
+**Tool-denial accounting.** Both emit call sites below carry `tool_denials` and
+`denied_commands`, always present, defaulting to `0` / `[]`. Neither is an
+argument this skill computes: `dispatch-emit-outcome` derives them from this
+session's own transcript (`toolDenialKind == "user-rejected"`), so a review pass
+that lost a tool call to a permission denial mid-flight cannot report a clean
+record with the gap invisible. Pass `--tool-denials` / `--denied-command` **only**
+to correct a derived value you know is wrong.
+
+The emit must fire **before** the session stops below;
 order relative to `dispatch-mark-deviation` does not matter. The deviation path
 only runs when the Workflow ran this session, so `result` is in scope. Pass
 `--disposition escalated` and `--terminated-reason` set to the **same string**
@@ -203,6 +278,8 @@ if [[ "$TARGET_KIND" == node ]]; then
 else
   id_arg=(--issue "$N")
 fi
+# tool_denials / denied_commands are always in the record and are DERIVED by the
+# script from this session's transcript — pass no flag for them.
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
   --phase review --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
   --findings-surfaced <result.findings_surfaced> \
@@ -248,6 +325,8 @@ if [[ "$TARGET_KIND" == node ]]; then
 else
   id_arg=(--issue "$N")
 fi
+# tool_denials / denied_commands are always in the record and are DERIVED by the
+# script from this session's transcript — pass no flag for them.
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
   --phase review --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" --base-sha "$MERGE_BASE" \
   --findings-surfaced <result.findings_surfaced> \
@@ -280,8 +359,9 @@ legitimately leave the session for the Stop hook's office-hours disposition.
 chain propagation deterministically — the chain no longer depends on a second
 Stop hook firing (which the harness does not reliably emit after a
 background-task wait). A stray second Stop firing afterward is harmless: every
-finalize step is idempotent. Applying `dispatch:reviewed` is unconditional; only
-the marker is skipped when the deviation criterion fires. Promotion to ready is
+finalize step is idempotent. Applying `dispatch:reviewed` is unconditional apart
+from the lint gate; when the deviation criterion fires on an unresolved finding
+only the marker is skipped. Promotion to ready is
 never this skill's job — the router's `dispatch-reconcile-ready` owns it,
 reconciling the draft↔ready bit on every tick once CI is passing and
 `mergeable == MERGEABLE`.

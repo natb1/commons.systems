@@ -1342,6 +1342,55 @@ assert_eq "case31: stderr names the killed run's head_sha" "2" \
 calls_31=$(wc -l <"$STUB_DIR/cr-fake-calls.log" | tr -d '[:space:]')
 assert_eq "case31: no second review was launched" "1" "$calls_31"
 
+# ============================================================================
+# Test 32: Step 7 gates on the local lint bundle BEFORE it marks reviewed
+# ============================================================================
+# The review phase used to fan out fixes, commit them, and apply
+# `dispatch:reviewed` in one pass with no verdict on its own commit: a
+# review-fix commit that introduced a regression was marked reviewed anyway and
+# the ladder burned a whole fix phase plus a CI wait rediscovering it. The gate
+# is local (run-lint.sh, seconds) rather than a CI wait, and it is prose in the
+# SKILL — so these assertions pin the ordering and the never-mark-on-red rule,
+# the only place a reverted edit would otherwise show up is a live review phase.
+echo "Test: review-fix Step 7 gates on run-lint.sh before marking reviewed"
+RF_REF_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)/skills/review-fix/references"
+RF_TERMINAL="$RF_REF_DIR/terminal-actions.md"
+RF_NODE_LANE="$RF_REF_DIR/node-lane.md"
+assert_eq "terminal-actions.md: readable" "1" \
+  "$([[ -r "$RF_TERMINAL" ]] && echo 1 || echo 0)"
+assert_eq "node-lane.md: readable" "1" \
+  "$([[ -r "$RF_NODE_LANE" ]] && echo 1 || echo 0)"
+
+# The gate runs the SHARED bundle by its full path — not a hand-narrowed
+# invocation, which would drop exactly the unconditional checks (verify-fence
+# paths, type-safety escapes) that catch what this gate exists to catch.
+assert_eq "SKILL.md: Step 7 names the shared lint bundle" "1" \
+  "$(grep -c -F -- '.claude/skills/dispatch-propagate/scripts/run-lint.sh' "$RF_SKILL" || true)"
+assert_eq "SKILL.md: red never marks" "1" \
+  "$(grep -c -F -- 'Red means fix and re-run; never mark.' "$RF_SKILL" || true)"
+
+# Ordering is the whole point: the gate must precede the label apply.
+gate_line=$(grep -n -F -- 'scripts/run-lint.sh' "$RF_SKILL" | head -1 | cut -d: -f1)
+mark_line=$(grep -n -F -- 'dispatch-complete-phase "$PR_NUM" review' "$RF_SKILL" | head -1 | cut -d: -f1)
+assert_eq "SKILL.md: lint gate precedes the dispatch:reviewed apply" "1" \
+  "$([[ -n "$gate_line" && -n "$mark_line" && "$gate_line" -lt "$mark_line" ]] && echo 1 || echo 0)"
+
+# Same ordering in the reference detail, and the red path routes to the park.
+assert_eq "terminal-actions.md: gate section present" "1" \
+  "$(grep -c -F -- '## Gate on the local lint bundle' "$RF_TERMINAL" || true)"
+ref_gate_line=$(grep -n -F -- '## Gate on the local lint bundle' "$RF_TERMINAL" | head -1 | cut -d: -f1)
+ref_label_line=$(grep -n -F -- '## Apply the terminal label' "$RF_TERMINAL" | head -1 | cut -d: -f1)
+assert_eq "terminal-actions.md: gate section precedes the label section" "1" \
+  "$([[ -n "$ref_gate_line" && -n "$ref_label_line" && "$ref_gate_line" -lt "$ref_label_line" ]] && echo 1 || echo 0)"
+assert_eq "terminal-actions.md: a red gate parks instead of marking" "1" \
+  "$(grep -c -F -- 'the lint gate above stayed red' "$RF_TERMINAL" || true)"
+
+# The node lane marks via transition-node's execution.markers, not a label, so
+# the gate has to be pinned on that path too — the reviewed marker is what
+# graph-auto-merge keys on.
+assert_eq "node-lane.md: gate precedes the reviewed marker write" "1" \
+  "$(grep -c -F -- 'must come back green before' "$RF_NODE_LANE" || true)"
+
 teardown
 
 report_results
