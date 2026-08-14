@@ -60,8 +60,9 @@
 #                                  → keep them (an unpushed park is a record a
 #                                    human still needs) and say so loudly.
 #   - HEAD moved, any unpushed NON-park commit → that is the escaped write.
-#                                    Discard it by resetting to <head-at-arm>
-#                                    when that is safe, else refuse loudly.
+#                                    Discard it by rewinding to <head-at-arm>
+#                                    and restoring the paths it touched when
+#                                    that is safe, else refuse loudly.
 #
 # graph_rollback_node_writes <repo-root> <head-at-arm> <label> <id>...
 #   <head-at-arm> is HEAD as of the moment the rollback was armed — the exact
@@ -122,12 +123,25 @@ graph_rollback_node_writes() {
 # commit with a warning that names it beats both silently stranding it and
 # destroying someone else's commit.
 #
+# The gate's subject and the discard's subject are NOT the same thing, and
+# conflating them is how this destroyed unrelated work. The gate proves the
+# stranded COMMITS are safe to drop; it says nothing about the rest of the
+# checkout. `git reset --hard` acts on the whole working tree, so a stray
+# uncommitted `M flake.lock` in the shared main checkout — the very residue the
+# writers were taught to tolerate rather than destroy — was wiped with no
+# warning and no record. So the discard is scoped to the PATHS the gate has
+# already proved: HEAD and the index move back to <head-at-arm> (`--mixed`,
+# which never touches the working tree), and only the intentions/ paths those
+# commits touched are brought back to <head-at-arm>'s content. Every other file
+# in the checkout is left exactly as found.
+#
 # _graph_discard_stranded_commits <repo-root> <head-at-arm> <label> <sha>...
 _graph_discard_stranded_commits() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
   local -a stranded=("$@")
-  local unsafe=0 sha parents files
+  local unsafe=0 sha parents files path p seen
+  local -a touched=()
   git -C "$repo_root" merge-base --is-ancestor "$head_at_arm" HEAD || unsafe=1
   for sha in "${stranded[@]}"; do
     parents="$(git -C "$repo_root" log -1 --format=%P "$sha" | wc -w)"
@@ -135,11 +149,50 @@ _graph_discard_stranded_commits() {
     files="$(git -C "$repo_root" show --name-only --format= "$sha")"
     [[ -n "$files" ]] || unsafe=1
     grep -qv '^intentions/' <<<"$files" && unsafe=1
+    # Collect exactly what the gate just inspected: the discard restores these
+    # paths and nothing else. Deduplicated — two stranded commits may touch the
+    # same node, and the count is reported to the operator below.
+    while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
+      seen=0
+      for p in "${touched[@]}"; do
+        [[ "$p" == "$path" ]] && { seen=1; break; }
+      done
+      [[ "$seen" -eq 1 ]] || touched+=("$path")
+    done <<<"$files"
   done
-  if [[ "$unsafe" -eq 0 ]] && git -C "$repo_root" reset -q --hard "$head_at_arm"; then
-    echo "$label: graph-commit committed but never landed ${#stranded[@]} commit(s) (${stranded[0]:0:8}) — discarded by resetting to ${head_at_arm:0:8}; NOTHING was written to main" >&2
+  if [[ "$unsafe" -eq 0 ]] && _graph_restore_paths_to_rev "$repo_root" "$head_at_arm" "${touched[@]}"; then
+    echo "$label: graph-commit committed but never landed ${#stranded[@]} commit(s) (${stranded[0]:0:8}) — discarded by moving HEAD back to ${head_at_arm:0:8} and restoring only the ${#touched[@]} intentions/ path(s) they touched; NOTHING was written to main, and no unrelated working-tree file was touched" >&2
     return 0
   fi
   echo "$label: graph-commit left un-landed commit(s) on HEAD (${stranded[0]}) that never passed check_base_freshness, and they are NOT safely discardable — the write was NOT rolled back. Drop them by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
   return 1
+}
+
+# Move the recorded state back to <rev> and bring exactly <path>... to <rev>'s
+# content, leaving every other working-tree file exactly as found.
+#
+# `--mixed` rather than `--hard`: it rewinds HEAD and the index and stops there,
+# so no file outside <path>... is read or written. The per-path restore then
+# comes off that index, which now IS <rev>. A path <rev> does not have (the
+# discarded commit created it) is removed rather than checked out, which is what
+# the reset would have done and what leaves the tree clean. Same discipline as
+# graph-commit's sync_ids_to_rev
+# (packages/intentionsutil/scripts/graph-commit:1686) and dispatch-eval-finding's
+# restore_from_blob.
+#
+# _graph_restore_paths_to_rev <repo-root> <rev> <path>...
+_graph_restore_paths_to_rev() {
+  local repo_root="$1" rev="$2"
+  shift 2
+  local path
+  git -C "$repo_root" reset -q --mixed "$rev" || return 1
+  for path in "$@"; do
+    if git -C "$repo_root" cat-file -e "$rev:$path" 2>/dev/null; then
+      git -C "$repo_root" checkout -q -- "$path" || return 1
+    else
+      rm -f -- "$repo_root/$path" || return 1
+    fi
+  done
+  return 0
 }

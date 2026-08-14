@@ -58,6 +58,9 @@
 #      that never happened, stranding a commit the next graph-commit from this
 #      shared checkout would push. The un-landed commit must be discarded (HEAD
 #      back where the sweep found it) and the false claim must not be emitted.
+#      9a: that discard is scoped to the paths its safety gate proved — an
+#      unrelated modified tracked file (flake.lock) elsewhere in the checkout
+#      survives it intact, where the old whole-tree `reset --hard` destroyed it.
 #   10. `reconcile-graph-review-stall --node <id>` (tactic-dispatch-ladder-skill
 #       Unit 6b): the same selection filter as case 6b, mirrored onto this
 #       sweep's sibling. --node narrows to the named node and leaves an
@@ -1120,7 +1123,7 @@ if [[ $rc -ne 0 ]] \
    && [[ "$head9_after" == "$head9_before" ]] \
    && [[ -z "$status9" ]] \
    && [[ "$node9_after" == "$node9_before" ]] \
-   && grep -q 'discarded by resetting to' <<<"$out" \
+   && grep -q 'discarded by moving HEAD back to' <<<"$out" \
    && ! grep -q 'rolled the node write' <<<"$out"; then
   ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
 else
@@ -1128,6 +1131,95 @@ else
   printf '%s\n' "$out"
   printf 'status: %s\n' "$status9"
   printf 'node:\n%s\n' "$node9_after"
+fi
+
+# ===========================================================================
+# Case 9a: the discard is scoped to the paths the safety gate proved, not to the
+# whole working tree (tactic-eval-finding-ledger Unit A).
+#
+# Same busy-main shape as case 9, plus the thing production actually had sitting
+# in the shared main checkout: an unrelated MODIFIED tracked file (flake.lock).
+# The gate at _graph_discard_stranded_commits' top proves the stranded COMMITS
+# are intentions/-only and safe to drop — it proves nothing about the rest of the
+# checkout, so a whole-tree `git reset --hard` destroyed that edit with no
+# warning. The discard must rewind HEAD/index and restore only the intentions/
+# paths those commits touched, leaving flake.lock modified exactly as found.
+#
+# Not vacuous: with `git reset -q --hard "$head_at_arm"` restored in
+# lib-graph-rollback.sh this case's flake.lock assertion goes red (the file comes
+# back byte-identical to the seed and `git status` reports it clean), while every
+# other assertion here still passes.
+# ===========================================================================
+T9B="$WORK/t9b-seed"
+build_seed_repo "$T9B"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9B/intentions/t-strand.md" t-strand 909
+# A tracked non-intentions/ file, so the clone can carry a real `M` against it.
+printf '%s\n' 'seeded lockfile — the landed content' >"$T9B/flake.lock"
+new_origin t9b
+init_and_push "$T9B"
+
+C9B="$WORK/t9b-clone"
+clone_with_node_modules "$C9B"
+BIN9B="$WORK/t9b-bin"; FIX9B="$WORK/t9b-fixtures"
+reconcile_gh_stub "$BIN9B" "$FIX9B"
+# The same rc-11 busy-main stub as case 9, written fresh rather than copied out
+# of $C9: graph-commit is a TRACKED file in these fixtures, so case 9's stub is
+# itself an unrelated dirty tracked file that its own `--hard` discard used to
+# destroy — copying from there would make this case's outcome depend on the very
+# bug it tests.
+cat >"$C9B/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+git commit -qm "graph: reconcile terminal tactics (record completion)"
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9B/packages/intentionsutil/scripts/graph-commit"
+
+# The unrelated dirt the discard must preserve.
+STRAY9B='locally edited lockfile — unrelated to any graph write'
+printf '%s\n' "$STRAY9B" >"$C9B/flake.lock"
+
+head9b_before="$(git -C "$C9B" rev-parse HEAD)"
+node9b_before="$(cat "$C9B/intentions/t-strand.md")"
+out="$(
+  cd "$C9B" || exit 99
+  export PATH="$BIN9B:$PATH" GC_FIXTURE_DIR="$FIX9B"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9b_after="$(git -C "$C9B" rev-parse HEAD)"
+status9b="$(git -C "$C9B" status --porcelain intentions/)"
+node9b_after="$(cat "$C9B/intentions/t-strand.md")"
+stray9b_status="$(git -C "$C9B" status --porcelain -- flake.lock)"
+stray9b_after="$(cat "$C9B/flake.lock")"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9b_after" == "$head9b_before" ]] \
+   && [[ -z "$status9b" ]] \
+   && [[ "$node9b_after" == "$node9b_before" ]] \
+   && grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && [[ "$stray9b_status" == ' M flake.lock' ]] \
+   && [[ "$stray9b_after" == "$STRAY9B" ]]; then
+  ok "reconcile-graph-merged busy-main rollback: the stranded-commit discard is path-scoped — an unrelated modified flake.lock in the checkout survives intact"
+else
+  no "reconcile-graph-merged path-scoped discard (rc=$rc, flake.lock status='$stray9b_status')"
+  printf '%s\n' "$out"
+  printf 'intentions status: %s\n' "$status9b"
+  printf 'flake.lock content: %s\n' "$stray9b_after"
 fi
 
 # ===========================================================================
