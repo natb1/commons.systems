@@ -138,9 +138,9 @@ redistributes:
   paused system, but `reconcile-graph-merged` is in the drain on every tick, and
   PR5's base-pin unit prevents a **concurrently landed write being clobbered** —
   a live risk precisely because main is still moving.
-- **PR9 Unit 8 stays first overall.** The 36,973-byte deferred diff exists only
-  in an ephemeral job scratch dir. It is the one item with a deadline, and it is
-  independent of everything. Do it before anything else.
+- ~~**PR9 Unit 8 stays first overall.**~~ **Superseded by R1: the diff is
+  confirmed lost.** It no longer has a deadline and no longer leads the order.
+  Re-implement Unit 4 from the scope text as ordinary work inside Bundle 3.
 - **PR8 Unit 1 rises** — the pace-curve config is untracked and unrecoverable.
 - **PR8 Unit 3 is deferred outright.** It replaces the pause sentinel with a
   config field — i.e. it rewrites the mechanism currently enforcing the freeze,
@@ -150,8 +150,7 @@ redistributes:
 ### Recommended order
 
 ```
-0.  PR9 Unit 8         recover the ephemeral deferred diff   (deadline)
-0b. park open node-lane nodes  if main is meant to be frozen (see above)
+0.  park open node-lane nodes  if main is meant to be frozen (see above)
 1.  Bundle 1           graph write path                      (HOT, silent)
 2.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
 3.  Bundle 4           instrument + finding surface          (unblocks 5)
@@ -184,16 +183,17 @@ Genuinely absent, confirmed by zero matches in the instrument:
 - `review_effort` / `effort_yield` → `tactic-audit-review-effort-yield-lens` is real work.
 - `rsi_lane` → `tactic-rsi-lane-token-attribution` is real work.
 
-**A second stale-reference class:** six node bodies name
+**A second stale-reference class:** node bodies name
 `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh`. That skill
 **does not exist on `main`** — it was folded into `rsi-audit`. The live path is
-`.claude/skills/rsi-audit/scripts/aggregate-usage.sh`. Fix the prose in PR3.
+`.claude/skills/rsi-audit/scripts/aggregate-usage.sh`. Measured repo-wide at
+**27 files**, not the six visible from this plan's node set — see R3.
 
-**A third:** four node bodies cite
+**A third:** node bodies cite
 `packages/intentionsutil/scripts/render-rsi-plan.ts`, which was built in #3065
-and **deleted in #3074**. Its owning node `tactic-rsi-plan-skill` is
-`phase: done`, so the graph shows a completed node whose deliverable a later
-consolidation removed. Handled in PR14 Unit 2.
+and **deleted in #3074** — deliberately, under its own retirement node. Measured
+at **13 files**, and one of them is a scope hole in an open node rather than
+stale prose. See R4; it supersedes the reading that the graph is inconsistent.
 
 **The general lesson for whoever executes this plan:** two skill consolidations
 (#3074, and the `dispatch-token-audit` → `rsi-audit` fold) moved or deleted
@@ -201,6 +201,172 @@ surfaces that ~10 open node bodies still address, and several lens nodes were
 satisfied without their nodes being closed. **Re-verify every anchor and every
 "missing" claim against the working tree before implementing it.** Roughly a
 third of the apparent work in this scope may already be done.
+
+---
+
+# Revision 3 — resolutions for the pre-flight flags
+
+Five items were flagged before execution. Each is resolved below, with the
+verification that was actually run. **Two findings changed materially once
+checked**: the ephemeral diff is confirmed unrecoverable, and the
+`render-rsi-plan.ts` drift is both larger than reported and, in one node, a
+scope hole rather than a prose nit.
+
+## R1 — The ephemeral Unit 4 diff: write it off, do not plan recovery
+
+**Status: confirmed lost.** This was the deadline item; the deadline passed.
+
+Verified, in order:
+
+| Check | Result |
+|---|---|
+| `/home/n8/.claude/jobs/09888b78/tmp/` | **Gone** — job dir deleted |
+| `find` for `*unit4*` / `*deferred*.patch` under `~/.claude`, `/tmp/claude-1000` | no matches |
+| `git stash list` | empty |
+| Branches matching `*unit4*` / `*deferred*` | none |
+| `origin/tactic-attention-per-tier-boost-migration` history | 6 commits, **no Unit 4 commit and no revert** — the work was reverted from the working tree, never committed |
+| `git fsck --dangling` blobs grepped for `BOOST_LEVEL_VALUES` / `legacyTierKey` | 6 dangling blobs, **0 hits** |
+
+The 36,973-byte patch does not exist anywhere. Do not spend a session hunting
+for it.
+
+**What survives, and it is more than it sounds.** The finding node
+`tactic-eval-finding-deferred-unit-diff-only-in-ephemeral-jobdir` records the
+Unit 4 *scope* precisely: validateGraph rule 22, the two legacy compat-branch
+deletions in `validateAttention`, the now-unused `legacyTierKey`, and the
+`kind-kind.md` field-doctrine prose. What was lost is the implementation labor
+and the verification against a synthetic post-migration store — not the
+knowledge of what to build. Re-implementation from the scope text is tractable.
+
+**Resolution:**
+
+1. Re-implement Unit 4 from the scope text as a normal unit of Bundle 3. It is
+   not recovery work; it is ordinary work with an unusually good spec.
+2. Amend the finding node to record the loss as realized rather than
+   prospective — its body currently says "this is a live opportunity to preserve
+   it, not a post-mortem", which is no longer true. Set
+   `attributes.measured_impact` to reflect a realized loss so the ledger does
+   not keep advertising a recovery route that does not exist.
+3. Adopt the node's own option 1 as the standing fix, because it needs no new
+   mechanism: **a deferred-but-finished unit is committed to its branch and then
+   reverted**, so git history carries the diff permanently at zero cost. Option
+   3 in the node body — fail the escalation loudly when its recommendation cites
+   a path under `$CLAUDE_JOB_DIR` — is the enforcement half, and is cheap: it is
+   a string check on the recommendation text at the point the park is written.
+
+Both halves belong in Bundle 3 alongside the escalation path they guard.
+
+## R2 — Four shipped audit nodes: verify-and-close, and fix the read path
+
+**Status: stands as flagged.** Confirmed against the working tree.
+
+**Resolution — run this as Bundle 4's *first* unit, before any implementation.**
+For each of `tactic-audit-instrument-scoping`,
+`tactic-audit-permission-friction`, `tactic-audit-cache-efficiency-lens`, and
+`tactic-rsi-round-trips-lens-carrier`: read the node's success criteria against
+the cited anchor, then close with `phase: done` and `execution.resolved_by` set
+to the commit that actually shipped it — recoverable with `git log -S` on the
+lens key rather than guessed.
+
+Two residuals to **check rather than assume**, because they are the plausible
+reason these nodes were never closed:
+
+- `tactic-audit-permission-friction` has a `/fewer-permission-prompts` closing
+  step that may be genuinely outstanding even though the lens ships.
+- Whether every fleet-denominator lens carries the `fleet-only` tag; the
+  vocabulary exists at `aggregate-usage.sh:1164,1463`.
+
+Only `review_effort` / `effort_yield` and `rsi_lane` need code.
+
+**Root-cause fix, and it is already in scope.** These nodes stayed open because
+the ledger read path cannot see the write path — recorded as
+`tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land`.
+Prioritize that unit inside Bundle 4; without it, the next four lenses will
+drift open the same way.
+
+## R3 — The `dispatch-token-audit` fold: 27 files, not 6
+
+**Status: larger than flagged.** The count of six was scoped to this plan's node
+set. Repo-wide, **27 files** cite the folded skill.
+
+The skill does not exist; `.claude/skills/rsi-audit/` is the live home.
+
+**Resolution:** a single mechanical sweep, one commit, folded into Bundle 4 so
+the prose and the instrument anchors land together. Rewrite each occurrence to
+`.claude/skills/rsi-audit/scripts/aggregate-usage.sh`, then confirm
+`validate-graph.ts` still reports zero unresolved prose refs.
+
+One caveat that prevents a blind `sed`: some citations are legitimately
+historical — `tactic-rsi-audit-skill-rename` is `phase: done` and is *about* the
+fold, so its mentions are correct as written. Rewrite citations that present the
+path as **live**; leave citations that narrate the rename as history.
+
+## R4 — `render-rsi-plan.ts`: 13 files, and one is a scope hole
+
+**Status: materially changed on inspection.** Two corrections to the flag.
+
+**First: the graph is not inconsistent.** `tactic-rsi-plan-skill` is `phase:
+done` and its deliverable was deleted — but the deletion has its own node,
+`tactic-rsi-plan-render-retire`, also `phase: done`, whose statement is "Delete
+rsi-plan.md, render-rsi-plan.ts and the render half of rsi.ts". The graph
+records a built-then-deliberately-retired deliverable, which is a correct
+history, not a bookkeeping error. **Do not reopen `tactic-rsi-plan-skill`** — my
+earlier suggestion to annotate it is unnecessary. The explanation is already
+there, one node away.
+
+**Second, and this is the finding that matters:** of the 13 citing files, one
+uses the deleted script to justify *not doing work*.
+`tactic-rsi-lane-token-attribution.md:127` is `phase: null` — open, planned into
+Bundle 5 — and its **Reuse** section reads:
+
+> `render-rsi-plan.ts` already renders the workflow split; it needs no change
+> once the buckets are populated.
+
+An implementer following that plan would populate the `rsi_lane` buckets and
+discover nothing renders them. That is a scope hole in an open node's plan, not
+stale prose — the node is under-scoped by exactly one renderer. **Fix the node's
+Scope, not just its citation**, and do it before Bundle 5 is planned.
+
+The rest classify cleanly, and only the stale group needs edits:
+
+| Class | Files | Action |
+|---|---|---|
+| Correctly historical — says "retired", or narrates the deletion | `.claude/skills/rsi-audit/SKILL.md:256`, `tactic-rsi-plan-render-retire`, `tactic-rsi-plan-skill`, `tactic-ladder-await-phase-only-completion-test:24`, `strategy-recursive-self-improvement:1181,1224` | **none** |
+| Stale — presents the script as live | `strategy-recursive-self-improvement:165,186,381,409,549,1013,1079`, `tactic-attention-namespaced-rank:822,826`, `tactic-graph-read-at-ref-cli:16`, `tactic-rsi-audit-workflow-attribution:59`, `tactic-rsi-external-acceptance-gate:108`, `tactic-rsi-research-skill:59`, `tactic-rsi-skill:39` | rewrite past-tense or repoint |
+| **Scope hole** | `tactic-rsi-lane-token-attribution:127` | **re-scope the node** |
+
+`tactic-rsi-reprioritization-outcome-audit` is split: `:43` already notes the
+deletion, but `:88` still says "All work is in
+`packages/intentionsutil/scripts/render-rsi-plan.ts`". Pick a new home for the
+reprioritization-outcome derivation — `/rsi-audit` absorbed the rest of
+`/rsi-plan`, so it is the natural host — and implement it there as PR14 Unit 2.
+
+**The generalizable defect, worth its own tactic:** a consolidation PR deleted a
+script that four open nodes' plans depended on, and nothing forced a re-check of
+the nodes citing it. Candidate rule: a PR that deletes a file must re-check open
+nodes whose bodies cite that path. This is mechanically checkable — the same
+prose-ref index `validate-graph.ts` already maintains would catch it.
+
+## R5 — PR6 stays gated on its office-hours sitting
+
+**Status: stands, and the gate is load-bearing.**
+
+Keep the gate; do not let Bundle 3's code-review units start first. The sitting
+`/office-hours tactic-review-sitting-code-review-lock-design` must resolve a
+specific contradiction rather than merely bless the design: the flock shipped in
+#3078, yet `tactic-eval-finding-detached-code-review-dies-with-launcher` shows
+the detached child dies with its launcher anyway despite `setsid`. That
+falsifies the lock's premise — **a lock held by a process that dies with its
+launcher is not a lock**, and the current design is held on trust.
+
+**Resolution:** sequence the units so detachment is fixed and *demonstrated*
+before the lock is trusted. Fix detachment (Unit 1), show a detached review
+surviving its launcher's exit, and only then build on the lock (Unit 2).
+
+A useful framing to hand the sitting: ask whether the lock should be held by the
+detached child at all, or by a supervisor that outlives both. If the answer is
+the supervisor, Unit 2 changes shape entirely — which is exactly why the sitting
+must precede the code.
 
 ---
 
@@ -1136,17 +1302,27 @@ bodies — re-locate)*. The RATE source greps exactly two literals —
 wait out in-flight CI up to the reservation TTL instead of skipping, leaving the
 autonomous and `--manual` paths unchanged.
 
-**Unit 8 — recover the stranded deferred diff.** The implement phase deferred a
-fully-implemented, verified Unit 4 and left the **36,973-byte diff only at
-`$CLAUDE_JOB_DIR/tmp/unit4-deferred.patch`** — a job scratch directory the
-harness deletes with the job. Check whether job `09888b78` still exists; if the
-patch survives, commit it somewhere durable, and if it does not, mark the node
-as lost work and record what was in it. **Do this unit first — it is the only
-one in this plan with a deadline.**
+**Unit 8 — re-implement the lost deferred unit, and close the hole that lost
+it.** ~~Recover the stranded diff.~~ **The diff is gone — see R1 for the six
+checks that established it** (job dir deleted, no stash, no branch, no Unit 4
+commit or revert in `origin/tactic-attention-per-tier-boost-migration`, and zero
+hits across all 6 dangling blobs). Do not hunt for it.
+
+Three parts, none time-critical:
+
+1. Re-implement Unit 4 from the scope preserved on
+   `tactic-eval-finding-deferred-unit-diff-only-in-ephemeral-jobdir`:
+   validateGraph rule 22, the two legacy compat-branch deletions in
+   `validateAttention`, the now-unused `legacyTierKey`, and the `kind-kind.md`
+   field-doctrine prose.
+2. Make deferred-but-finished work durable by default: commit it to the branch,
+   then revert it, so git history carries the diff permanently. No new mechanism.
+3. Reject an escalation whose recommendation cites a path under
+   `$CLAUDE_JOB_DIR` — a string check where the park is written.
 
 ### Dependencies
 
-PR1. Unit 8 is time-critical and independent of everything.
+PR1.
 
 ### Reuse
 
