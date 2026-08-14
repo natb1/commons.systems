@@ -21,11 +21,11 @@ rationale: "Observed on 2026-08-13 in the /rsi post-hoc evaluation
   first user message is stamped 2026-08-13T03:46:48.315Z (the launch instant)
   and whose last write is 03:59:00Z, plus a session directory, a session-env
   entry and two security-state files -- and the lane had SUCCEEDED, resolving
-  five merge conflicts and pushing 855a060e. The search failed because
-  `find -newermt` parses a bare timestamp in the local zone: on this host (EDT,
-  -0400) `-newermt '2026-08-13 03:46:48'` means 07:46:48Z, roughly four hours in
-  the future, so it could not match any file that existed. Reproduced directly:
-  the UTC-bound find returns nothing while the same instant expressed locally
+  five merge conflicts and pushing 855a060e. The search failed because `find
+  -newermt` parses a bare timestamp in the local zone: on this host (EDT, -0400)
+  `-newermt '2026-08-13 03:46:48'` means 07:46:48Z, roughly four hours in the
+  future, so it could not match any file that existed. Reproduced directly: the
+  UTC-bound find returns nothing while the same instant expressed locally
   ('2026-08-12 23:46:48') returns the transcript immediately. The false finding
   landed on origin/main as 1f97dbe5
   (tactic-eval-finding-conflict-lane-registered-phantom) and had to be corrected
@@ -45,7 +45,16 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  ledger_entry: true
+  first_seen: 2026-08-14
+  measured_impact:
+    - metric: recurrence_count
+      value: 1
+      unit: occurrences
+      window: all-time
+      sensor: rsi
+      measured: 2026-08-14
 ---
 ## The mechanism
 
