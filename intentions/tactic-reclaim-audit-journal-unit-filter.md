@@ -46,7 +46,6 @@ rationale: "Found 2026-07-31 while machine-verifying the needs-main residue on
   with lexicographic (tier, rank) and max-lifting, and
   tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -54,8 +53,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -77,10 +76,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T18:30:44Z
     mergeCommitSha: a7b9ddccde086c970f4c10eb3f789b4e059c1806
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

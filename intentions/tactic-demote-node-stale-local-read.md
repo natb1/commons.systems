@@ -97,10 +97,9 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.05
-  override: null
-  rationale: >-
-    Bootstrap re-scale 2026-07-30: the SOLE attention anchor for the
+  boosts:
+    "1": 50
+  rationale: "Bootstrap re-scale 2026-07-30: the SOLE attention anchor for the
     fingerprint-custody chain. The 2026-07-30 re-serialization (d2b161a3) turned
     the cluster from a tree into a linear chain -
     tactic-demote-node-stale-local-read ->
@@ -117,20 +116,7 @@ attention:
     chain is linear. Note validate-graph rule 18 does NOT catch this - it checks
     the authored boost (50), not the resolved rank. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
-    numeric scheme.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
-  tier: 1
+    numeric scheme."
 phase: null
 execution: null
 validates: []
@@ -139,8 +125,7 @@ blocked_by:
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 50
+attributes: {}
 ---
 # demote-node-to-implement writes from a stale local read and lands without a CAS, so a demotion silently discards content that landed on origin/main
 

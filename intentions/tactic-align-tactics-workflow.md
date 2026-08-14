@@ -23,7 +23,6 @@ rationale: "Surfaced in the 2026-07-18 /align-strategy interview
   tactic-align-family-opus-default so the Workflow replaces #2886's ad-hoc calls
   rather than churning the same Step-3 region twice."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -31,15 +30,16 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 75
-  override: null
-  rationale: "Boosted to top of the discretionary frontier by author direction
-    (re-boosted 2026-07-18 from the earlier 58). Rearchitecting /align-tactics
-    into a structural Workflow makes the Opus-decision / Sonnet-orchestrator
-    model tiering unbreakable, closing the #2886 regression surface —
-    high-leverage graph-native-dispatch infrastructure the author elevated above
-    its ordinary implement-phase backlog rank. The boost is sized against the
-    composed selector rank, not the raw-boost column: this node has no inbound
+  boosts:
+    "1": 85
+  rationale: >-
+    Boosted to top of the discretionary frontier by author direction (re-boosted
+    2026-07-18 from the earlier 58). Rearchitecting /align-tactics into a
+    structural Workflow makes the Opus-decision / Sonnet-orchestrator model
+    tiering unbreakable, closing the #2886 regression surface — high-leverage
+    graph-native-dispatch infrastructure the author elevated above its ordinary
+    implement-phase backlog rank. The boost is sized against the composed
+    selector rank, not the raw-boost column: this node has no inbound
     compounding and is off the signal/capture path, so its derived terms are
     zero and its rank equals its boost exactly (verified via select-targets —
     boost 75 → rank 75). That tops the current discretionary max of 69.33 on
@@ -51,7 +51,12 @@ attention:
     flows undecayed to the one node this tactic is blocked_by
     (tactic-align-family-opus-default, PR #2886, now reviewed and in
     merge-ready-hold), the intended critical-path prioritization (the blocker
-    must merge first to unblock this node); no unrelated node is distorted."
+    must merge first to unblock this node); no unrelated node is distorted.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 75 to the closed level
+    vocabulary value 85 (urgent) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-align-tactics-workflow
@@ -61,10 +66,12 @@ execution:
     - planned
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T18:20:09Z
     mergeCommitSha: bc3eed343c6bacc9915c37aba1b9872d704b40f0
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

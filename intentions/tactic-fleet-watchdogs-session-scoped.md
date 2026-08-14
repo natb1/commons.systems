@@ -89,7 +89,6 @@ rationale: "Filed 2026-07-31 as the owed tracking node for bug-ledger rows O and
   and tactic-attention-boost-scripts converts these boosts to tier/bug_fix
   marks."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -97,8 +96,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -110,7 +109,6 @@ attention:
     running. blocked_by is empty, so this promotion lifts no blocker and cannot
     compound; the one candidate blocker, tactic-sweep-timer-unit-dir-leak, is
     already phase done and therefore takes no inflow from this edge."
-  tier: 1
 phase: done
 execution:
   branch: tactic-fleet-watchdogs-session-scoped
@@ -122,10 +120,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-01T01:15:38Z
     mergeCommitSha: 2643b5cd41637650ae1daaa4c0c3a32ac07c0e53
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

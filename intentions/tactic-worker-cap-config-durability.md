@@ -55,7 +55,6 @@ rationale: >-
   effective-value resolution, and select-tick logging) are fully plannable with
   no further author input; the gather phase already located every reuse site.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -108,14 +107,19 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 12
-  override: null
-  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
-    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
-    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing: 0
-    tier changes, 0 value drift onto non-target nodes."
-  tier: 1
+  boosts:
+    "1": 10
+  rationale: >-
+    Author-directed 2026-08-03: prioritize bug-ledger fixes directly BELOW the
+    token-efficiency cluster. Boost 12 resolves to 17.33 because an inbound
+    distributor adds 5.33 — under that cluster's 20.00 and above the 5.33
+    undecomposed baseline. Simulated over the live store before writing: 0 tier
+    changes, 0 value drift onto non-target nodes.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 12 to the closed level
+    vocabulary value 10 (low) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-worker-cap-config-durability
@@ -132,6 +136,7 @@ execution:
     mergedAt: 2026-08-10T06:52:04Z
     mergeCommitSha: 3fb01db157c13a06ca5b75c4b6f23ac450ae68f1
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

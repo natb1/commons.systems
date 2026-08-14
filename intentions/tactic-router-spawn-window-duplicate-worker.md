@@ -76,7 +76,6 @@ rationale: "Observed live 2026-07-30 during the dispatch-pipeline bootstrap: two
   2026-07-31) covers what happens after a duplicate — the loser stands down, the
   winner dies before pushing, and the loser waits forever on a dead session."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -84,8 +83,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -107,10 +106,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T11:31:10Z
     mergeCommitSha: 3ddf7858666638885a68a6f92b7069db4567fe0d
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

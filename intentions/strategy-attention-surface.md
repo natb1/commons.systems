@@ -529,15 +529,19 @@ success_signal:
     Firestore owner tier is retired — all owner data local-first
   is_proxy: false
 attention:
-  boost: 3
-  override: null
-  rationale: "Author-directed 2026-07-07: the office-hours script improvements —
-    the snapshot producer/reader wire-contract fixes and the surface rebuild
-    subtree — are the second priority, sequenced after
-    strategy-graph-native-dispatch (boost 5): boost 3 ranks this strategy and
-    its tactics above all derived-only ranks (cap 2) and below the dispatch
-    migration."
-  tier: 1
+  boosts:
+    "1": 5
+  rationale: >-
+    Author-directed 2026-07-07: the office-hours script improvements — the
+    snapshot producer/reader wire-contract fixes and the surface rebuild subtree
+    — are the second priority, sequenced after strategy-graph-native-dispatch
+    (boost 5): boost 3 ranks this strategy and its tactics above all
+    derived-only ranks (cap 2) and below the dispatch migration.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 3 to the closed level
+    vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: null
 execution: null
 validates: []

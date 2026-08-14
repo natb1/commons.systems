@@ -10,7 +10,6 @@ status: codified
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -18,14 +17,13 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
     scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
     follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
     numeric scheme."
-  tier: 1
 phase: done
 execution:
   branch: tactic-phase-entry-selection-gate
@@ -37,10 +35,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-03T15:01:11Z
     mergeCommitSha: bd133fd96387dabbd82c4019c4affe6721850a1e
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

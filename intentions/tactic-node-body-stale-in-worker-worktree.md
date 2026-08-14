@@ -61,7 +61,6 @@ rationale: "Found 2026-07-31 by direct observation, and caught before it landed.
   (tier, rank) and max-lifting, and tactic-attention-boost-scripts converts
   these boosts to tier/bug_fix marks."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -69,8 +68,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -81,7 +80,6 @@ attention:
     leaves a plan built on superseded intent, with the node reading as
     successfully planned. blocked_by is empty, so this promotion lifts no
     blocker and cannot compound."
-  tier: 1
 phase: done
 execution:
   branch: tactic-node-body-stale-in-worker-worktree
@@ -98,6 +96,7 @@ execution:
     mergedAt: 2026-07-31T23:17:19Z
     mergeCommitSha: 881a64948e606a97b0b88a86715e7af6b9f07891
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

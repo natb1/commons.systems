@@ -68,7 +68,6 @@ rationale: "The bootstrap plan recorded this as an open seam with no owning
   (tier, rank) and max-lifting, and tactic-attention-boost-scripts converts
   these boosts to tier/bug_fix marks."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -76,8 +75,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-31: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -89,7 +88,6 @@ attention:
     codified and phase implement, carrying a full clean-session plan (Units 1-3)
     in the body; the boost value is preserved unchanged from the bootstrap
     re-scale."
-  tier: 1
 phase: done
 execution:
   branch: tactic-qa-main-verifiability-sort-criterion
@@ -101,10 +99,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-01T03:17:01Z
     mergeCommitSha: df0c436a655decfddadba7631388bdbfc36667a3
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

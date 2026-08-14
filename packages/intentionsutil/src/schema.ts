@@ -380,6 +380,31 @@ function validateToolingGoals(value: unknown, field: string): ToolingGoal[] {
 const TIER_KEYS: readonly string[] = TIERS.map((t) => String(t));
 
 /**
+ * The closed vocabulary of authorable boost LEVELS.
+ *
+ * A boost is a LEVEL, not a free magnitude: it names a fixed degree of claim,
+ * so the same value means the same thing in every band and every tier
+ * (`strategy-graph-drives-dispatch`, the level-vocabulary clarification,
+ * 2026-08-12). That absoluteness is what makes band collision harmless and
+ * what retires the rejected per-band `attention.scope` stamp.
+ *
+ * The NAMES and VALUES are the one judgment call here and are cheap to revise;
+ * what is decided is that the vocabulary is CLOSED and ABSOLUTE, not that it
+ * has exactly these five entries. Enforced on the write path by validateGraph
+ * rule 22.
+ */
+export const BOOST_LEVELS = {
+  background: 5,
+  low: 10,
+  normal: 20,
+  high: 50,
+  urgent: 85,
+} as const;
+
+/** The legal authored boost values, ascending. */
+export const BOOST_LEVEL_VALUES: readonly number[] = Object.values(BOOST_LEVELS);
+
+/**
  * Read a legacy `tier:` namespace tag, defaulting to `"1"` when absent — every
  * boost authored before the tier axis existed was chosen on the tier-1 scale.
  * Accepts the number or the string form (YAML scalar keys/values arrive as

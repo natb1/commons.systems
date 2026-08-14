@@ -355,9 +355,10 @@ success_signal:
   is_proxy: true
 attention:
   boosts:
-    "1": 8
-  rationale: "Author-directed 2026-08-13: rank /align's own improvement above the
-    rsi cluster without lifting strategy-graph-native-dispatch's other open
+    "1": 10
+  rationale: >-
+    Author-directed 2026-08-13: rank /align's own improvement above the rsi
+    cluster without lifting strategy-graph-native-dispatch's other open
     children. Measured at origin/main 33d6f779 —
     strategy-recursive-self-improvement authored 6 (resolved score 6),
     strategy-rsi-delegated-prioritization authored 1 on top of it (resolved
@@ -400,7 +401,12 @@ attention:
     strategy-rsi-delegated-prioritization still +1 on top of it for a resolved
     7.5, so the authored 8 still clears the rsi cluster by 0.5 and the three
     /align tactics hold band 8 at ranks 2-4. The author confirmed the figure
-    rather than holding it on trust."
+    rather than holding it on trust.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 8 to the closed level
+    vocabulary value 10 (low) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: null
 execution: null
 validates: []

@@ -57,7 +57,7 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.06
+    "1": 50
   rationale: >-
     Author-directed 2026-07-31: top-of-band boost so the generic lane-instrument
     substitution guard is picked first. /code-review ships with
@@ -74,16 +74,9 @@ attention:
     boost.
 
 
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 56 to 0.06 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 56 to the closed level
+    vocabulary value 50 (high) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: main-qa
 execution:
   branch: tactic-lane-instrument-substitution-guard
@@ -208,8 +201,7 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes:
-  pre_namespacing_boost: 56
+attributes: {}
 ---
 
 # Fail a dispatch lane that cannot invoke its named instrument, instead of letting the agent substitute itself and report under the instrument's name

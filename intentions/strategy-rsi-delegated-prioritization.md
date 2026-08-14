@@ -291,20 +291,21 @@ success_signal:
     one that buys throughput by inverting the author's strategies"
   is_proxy: true
 attention:
-  boost: 1
-  override: null
-  rationale: "Author-directed 2026-08-11: +1 over the parent's AUTHORED 6 gives
-    this child an authored 7, and the authored term is what distributes to its
-    tactics — second within the strategy-recursive-self-improvement subtree,
-    behind the rsi-plan surface child's authored 8 and ahead of tactics left
-    directly on the parent at 6. Chosen relative to the parent, not on an
-    absolute scale: the value means 'one band above the parent'. The ordering
-    between the two children is the author's: the surface that makes harness
-    state readable ranks ahead of the machinery that reorders within it, because
-    the author cannot audit the reordering without first being able to read the
-    plan. CORRECTED 2026-08-11 after adversarial review, two ways. (1) This
-    node's RESOLVED rank is 8.5, not 7: the signal term adds 1 and the capture
-    term adds 0.5. Resolved figures are derived and must not be restated as if
+  boosts:
+    "1": 5
+  rationale: >-
+    Author-directed 2026-08-11: +1 over the parent's AUTHORED 6 gives this child
+    an authored 7, and the authored term is what distributes to its tactics —
+    second within the strategy-recursive-self-improvement subtree, behind the
+    rsi-plan surface child's authored 8 and ahead of tactics left directly on
+    the parent at 6. Chosen relative to the parent, not on an absolute scale:
+    the value means 'one band above the parent'. The ordering between the two
+    children is the author's: the surface that makes harness state readable
+    ranks ahead of the machinery that reorders within it, because the author
+    cannot audit the reordering without first being able to read the plan.
+    CORRECTED 2026-08-11 after adversarial review, two ways. (1) This node's
+    RESOLVED rank is 8.5, not 7: the signal term adds 1 and the capture term
+    adds 0.5. Resolved figures are derived and must not be restated as if
     authored; the durable claim is the authored 7 and its relation to the
     parent. (2) The 0.5 is not incidental — it is the price of the recovers edge
     added to delegation-anthropic-claude in the same round. captureScore for
@@ -317,8 +318,12 @@ attention:
     than compensated by raising the boost, because inflating an authored value
     to cancel a derived term would make the authored number mean two things at
     once — but it is recorded here so a future rerank starts from the real
-    figure."
-  tier: 1
+    figure.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 1 to the closed level
+    vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: null
 execution: null
 validates: []

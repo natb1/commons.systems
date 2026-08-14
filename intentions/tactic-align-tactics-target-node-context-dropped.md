@@ -44,7 +44,6 @@ rationale: "Discovered 2026-07-31 during a tactic-target /align-tactics round on
   lands as a tactic, never a side channel) rather than folded into the unrelated
   tactic whose round discovered it."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -52,8 +51,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Wave B of the bootstrap three-band interim scale (50/20/10): a real,
     verified pipeline-quality gap in /align-tactics' own tactic-mode plan
     authoring, but not a hard block — an args-assembling session can (and, for
@@ -67,7 +66,6 @@ attention:
     the Workflow. Finalized 2026-07-31 via a tactic-target /align-tactics round:
     status is now codified and phase implement, carrying a full clean-session
     plan (Units 1-2) in the body."
-  tier: 1
 phase: done
 execution:
   branch: tactic-align-tactics-target-node-context-dropped
@@ -84,6 +82,7 @@ execution:
     mergedAt: 2026-08-03T05:46:04Z
     mergeCommitSha: 64ec89dce3e81cfe562c478b16cfcbc569bbd285
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

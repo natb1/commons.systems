@@ -31,7 +31,6 @@ rationale: Surfaced 2026-07-28 debugging dispatch-sweep-periodic.service failing
   the leak also fires when the suite runs inside a Claude job whose TMPDIR is
   the job directory. Promoted to Wave A by that bootstrap.
 reading: null
-gap: null
 serves:
   - strategy-autonomous-execution
   - strategy-exercise-recovery-paths
@@ -40,8 +39,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Promoted into Wave A after the defect recurred live
@@ -65,10 +64,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T12:16:10Z
     mergeCommitSha: 954c662ff986613e6bf8e26d6e432634d6ecf0d7
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-dispatch-test-monolith-split

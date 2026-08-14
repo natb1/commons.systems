@@ -49,7 +49,6 @@ rationale: "Surfaced 2026-07-28 at an office-hours drain sitting, while
   reported citation and substance gaps were applied before landing. A later
   /align-tactics round should treat this body as unreviewed by the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -57,8 +56,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path integrity work above ordinary feature
     work. This band holds the silent graph-write-corruption defects plus the two
@@ -77,10 +76,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-30T21:18:15Z
     mergeCommitSha: b466a6640dac94cf713519a07475c41976c9a9db
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

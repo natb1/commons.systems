@@ -21,7 +21,6 @@ rationale: "Surfaced 2026-07-19 /align-strategy interview (reap-scope-narrowing
   in the interim — see blocked_by) and a dispatch-sweep summary log line
   consuming it."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -29,8 +28,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
     scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
     follows the Wave-A write-path fixes. Interim scaffolding only;
@@ -47,10 +46,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T12:45:34Z
     mergeCommitSha: 0f55a784bf7efc60ad11fb6489750daa87ea3a9a
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-node-session-reap

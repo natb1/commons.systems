@@ -30,29 +30,15 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.05
-  override: null
-  rationale: >-
-    Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale (50 / 20
-    / 10) that puts write-path integrity work above ordinary feature work. This
-    band holds the silent graph-write-corruption defects plus the two paths the
-    bootstrap arms or depends on. Interim scaffolding only -
+  boosts:
+    "1": 50
+  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
+    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
+    work. This band holds the silent graph-write-corruption defects plus the two
+    paths the bootstrap arms or depends on. Interim scaffolding only -
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
-    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.05 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
-  tier: 1
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
 phase: done
 execution:
   branch: dispatch-ladder-e2e-unblock
@@ -66,14 +52,14 @@ execution:
     mergedAt: 2026-08-13T00:21:45Z
     mergeCommitSha: 3fea9f35f7aeaf5ae48623c87cbf0724c9f5f819
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-tick-node-lane-auto-merge
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 50
+attributes: {}
 ---
 # graph-auto-merge merges only a PR whose branch is current with origin/main and whose passing checks ran on that current base; when BEHIND the tick scripts gh api update-branch and defers the merge to a later green tick
 

@@ -57,7 +57,6 @@ rationale: "Surfaced 2026-07-28 while auditing residual risk after re-planning
   landing. A later /align-tactics round should treat this body as unreviewed by
   the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -86,8 +85,8 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path integrity work above ordinary feature
     work. This band holds the silent graph-write-corruption defects plus the two
@@ -95,7 +94,6 @@ attention:
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
     tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-  tier: 1
 phase: done
 execution:
   branch: tactic-graph-commit-rebuild-snapshot-stale-revert
@@ -112,6 +110,7 @@ execution:
     mergedAt: 2026-08-05T21:47:35Z
     mergeCommitSha: 156ce3a18929dd0c85f80db6be4f35c32ad45a7d
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-commit-intentions-base-stale-restore

@@ -18,7 +18,6 @@ rationale: Surfaced 2026-07-18 align-strategy interview recording the drain-lane
   tactic-phase-standup-audit-lens). A dedicated primitive makes the terminal
   disposition atomic and unskippable.
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -26,8 +25,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 85
-  override: null
+  boosts:
+    "1": 85
   rationale: "Author-directed 2026-07-25: the queue-serialization work
     (dispatch-queue claim integrity, office-hours drain claiming, and the
     cross-queue landing path) is the current focus. Own boost 85 composes with
@@ -47,10 +46,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T18:21:49Z
     mergeCommitSha: dee357ae4d77018525a3a6a07a0adf0c71fa3cca
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

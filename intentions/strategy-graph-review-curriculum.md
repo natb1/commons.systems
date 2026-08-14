@@ -36,7 +36,6 @@ rationale: "Records the 2026-07-09 requirement: just as strategy-graph-integrity
   inheritance rule (kind-strategy): no virtue claim beyond parent
   strategy-explicit-intent."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -268,20 +267,26 @@ success_signal:
     content
   is_proxy: true
 attention:
-  boost: 3.5
-  override: null
-  rationale: "Author-directed 2026-08-11: re-rank the curriculum-frontier /
-    graph-review-coverage machinery to sit after the rsi strategy (boost 4)
-    and before strategy-attention-surface (boost 3) — supersedes the 2026-07-09
+  boosts:
+    "1": 5
+  rationale: >-
+    Author-directed 2026-08-11: re-rank the curriculum-frontier /
+    graph-review-coverage machinery to sit after the rsi strategy (boost 4) and
+    before strategy-attention-surface (boost 3) — supersedes the 2026-07-09
     rationale that elevated this strategy to authored 7. Boosting the strategy
     carries the tier to its whole subtree by inheritance: the three tactics
     serving it (tactic-review-curriculum-coverage-sensor,
     tactic-align-curriculum-maintenance,
     tactic-review-sitting-skill-generalization) inherit authored 3.5 with no
-    per-node boost. Scope is unchanged: the frontier-maintenance machinery,
-    not the curriculum's per-class review mechanisms/entries (reading chunks,
-    deferral items, delegation review windows, the conditions sweep) which
-    stay unboosted."
+    per-node boost. Scope is unchanged: the frontier-maintenance machinery, not
+    the curriculum's per-class review mechanisms/entries (reading chunks,
+    deferral items, delegation review windows, the conditions sweep) which stay
+    unboosted.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 3.5 to the closed
+    level vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: null
 execution: null
 validates: []

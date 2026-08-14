@@ -15,7 +15,6 @@ rationale: "Pause-independent reaper (migration step ii) for the 2026-07-23
   spawning, never bookkeeping: the heartbeat must reap before honoring the
   pause. Boosted top-of-normal + finalized this round per author direction."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -23,14 +22,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 90
-  override: null
-  rationale: "Author-directed 2026-07-23 /align-strategy round: the
-    reservation-ledger cross-mode-validity fix ranks at the top of normal
-    (non-main-health) work — below the strategy-main-health emergency ceiling
-    (boost 100), which the 2026-07-13 write-path guard keeps dominant. Own-boost
-    90 composes below 100, tripping no guard, while topping the ~11-max normal
-    field."
+  boosts:
+    "1": 85
+  rationale: >-
+    Author-directed 2026-07-23 /align-strategy round: the reservation-ledger
+    cross-mode-validity fix ranks at the top of normal (non-main-health) work —
+    below the strategy-main-health emergency ceiling (boost 100), which the
+    2026-07-13 write-path guard keeps dominant. Own-boost 90 composes below 100,
+    tripping no guard, while topping the ~11-max normal field.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 90 to the closed level
+    vocabulary value 85 (urgent) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-heartbeat-sweep-before-pause
@@ -42,10 +46,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T18:22:30Z
     mergeCommitSha: 35f6e3f54d8aeff373138bd32b039cd61fd25a76
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

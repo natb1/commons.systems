@@ -41,7 +41,6 @@ rationale: "Surfaced in the 2026-07-19 /align-strategy interview (strategy
   section for the un-narrowed reasoning, retained verbatim from the original
   interview."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -92,14 +91,19 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 12
-  override: null
-  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
-    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
-    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing: 0
-    tier changes, 0 value drift onto non-target nodes."
-  tier: 1
+  boosts:
+    "1": 10
+  rationale: >-
+    Author-directed 2026-08-03: prioritize bug-ledger fixes directly BELOW the
+    token-efficiency cluster. Boost 12 resolves to 17.33 because an inbound
+    distributor adds 5.33 — under that cluster's 20.00 and above the 5.33
+    undecomposed baseline. Simulated over the live store before writing: 0 tier
+    changes, 0 value drift onto non-target nodes.
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 12 to the closed level
+    vocabulary value 10 (low) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-graph-router-conflict-routing
@@ -116,6 +120,7 @@ execution:
     mergedAt: 2026-08-06T02:30:42Z
     mergeCommitSha: fa9c43386d00268005d874fd4f96f896cc7f7cb3
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-dispatch-conflict-branch-merge-lane

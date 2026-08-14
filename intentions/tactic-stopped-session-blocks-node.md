@@ -38,7 +38,6 @@ rationale: "AUTHOR-STATED REQUIREMENT (2026-07-30, dispatch-pipeline bootstrap):
   reservation_sweep's dead-router reclaim and flipping it would let done rows
   immortalize reservation markers and stall the fleet."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -46,8 +45,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of the three-band interim
     scale (50 / 20 / 10) that puts write-path and pipeline-integrity work above
     ordinary feature work. Belongs in this band on the band's own criterion — it
@@ -69,10 +68,12 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T12:45:39Z
     mergeCommitSha: a9df9d3891b332e8f29eeb85598755c8b54f5bbb
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

@@ -13,7 +13,6 @@ rationale: Surfaced by the 2026-07-31 review-fix token audit interview.
   $614 phase-tagged against $754 true. See clarification 23 on
   strategy-token-economy.
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -21,15 +20,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Author-directed 2026-08-03: prioritize progression of
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
-  tier: 1
 phase: done
 execution:
   branch: tactic-token-audit-whole-session-phase-attribution
@@ -41,10 +39,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-08-04T04:03:29Z
     mergeCommitSha: 371c3b1e0b6d4e09f016512e7468f8a2c87f94e3
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

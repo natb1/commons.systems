@@ -23,7 +23,6 @@ rationale: "Strategy clarification 32 (2026-07-06): the repeated re-refinement
   (2026-07-18 re-plan, see clarifications) because enforcing it exposed a
   doctrine-vs-corpus mismatch only the author can resolve."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -72,15 +71,21 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 3
-  override: null
-  rationale: "Author-directed 2026-07-08 (refined): tactics that directly edit
+  boosts:
+    "1": 5
+  rationale: >-
+    Author-directed 2026-07-08 (refined): tactics that directly edit
     .claude/skills/align-strategy/SKILL.md or
     .claude/skills/align-tactics/SKILL.md content rank above the rest of
     strategy-graph-native-dispatch's subtree (boost 3, added on top of the
     strategy's own boost 5, authored 8) — above curriculum-execution tooling
     (boost 7) and above every other tactic in this strategy's subtree (inherited
-    5, unboosted)."
+    5, unboosted).
+
+
+    LEVEL MIGRATION 2026-08-14: tier 1 boost snapped from 3 to the closed level
+    vocabulary value 5 (background) per strategy-graph-drives-dispatch's
+    level-vocabulary clarification; ordering intent unchanged.
 phase: done
 execution:
   branch: tactic-align-tactics-mechanical-floor
@@ -91,10 +96,12 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-25T19:05:21Z
     mergeCommitSha: 3e33aeb00434c19a0238ad11979623c398dc3236
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

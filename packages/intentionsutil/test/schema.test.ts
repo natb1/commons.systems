@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
-import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
+import {
+  BOOST_LEVEL_VALUES,
+  BOOST_LEVELS,
+  validateGraph,
+  validateGraphProseRefs,
+  validateNode,
+} from "../src/schema.js";
 import { readNode, writeNode } from "../src/store.js";
 
 describe("validateNode", () => {
@@ -2335,5 +2341,33 @@ describe("attention store round-trip", () => {
       attention,
     });
     expect(readNode(dir, "strategy-round-trip").attention).toEqual(attention);
+  });
+});
+
+describe("BOOST_LEVEL_VALUES", () => {
+  it("is non-empty", () => {
+    expect(BOOST_LEVEL_VALUES.length).toBeGreaterThan(0);
+  });
+
+  it("is strictly ascending", () => {
+    for (let i = 1; i < BOOST_LEVEL_VALUES.length; i++) {
+      expect(BOOST_LEVEL_VALUES[i]).toBeGreaterThan(BOOST_LEVEL_VALUES[i - 1]);
+    }
+  });
+
+  it("contains only finite values", () => {
+    for (const value of BOOST_LEVEL_VALUES) {
+      expect(Number.isFinite(value)).toBe(true);
+    }
+  });
+
+  it("contains only positive values", () => {
+    for (const value of BOOST_LEVEL_VALUES) {
+      expect(value).toBeGreaterThan(0);
+    }
+  });
+
+  it("matches Object.values(BOOST_LEVELS) exactly", () => {
+    expect([...BOOST_LEVEL_VALUES]).toEqual(Object.values(BOOST_LEVELS));
   });
 });

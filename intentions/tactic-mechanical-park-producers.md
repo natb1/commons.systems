@@ -28,7 +28,6 @@ rationale: "Byproduct of the 2026-07-25 concurrency/serialization review,
   tracked hold) rather than duplicating that design; Unit 3's comments record
   the convergence so the strike/hold branch is deleted when that tactic lands."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -93,14 +92,13 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 10
-  override: null
+  boosts:
+    "1": 10
   rationale: "Bootstrap re-scale 2026-07-30: demoted from the pre-bootstrap 85-90
     band to 10. These are ordinary improvements, not integrity defects; at 85-90
     they outranked strategy-main-health (101 resolved) and flooded the selector
     hot band. Interim scaffolding only; tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire this numeric scheme."
-  tier: 1
 phase: done
 execution:
   branch: tactic-mechanical-park-producers
@@ -116,6 +114,7 @@ execution:
     mergedAt: 2026-07-26T05:07:00Z
     mergeCommitSha: 3e3bcca64eace2931d8fc69d4c293abfaa9ba4de
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

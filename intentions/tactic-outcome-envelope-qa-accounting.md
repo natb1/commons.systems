@@ -11,7 +11,6 @@ rationale: "Finalized from the 2026-07-04 interview draft by /align-tactics
   qa-fix's fix lane already maintains a landed-fix tally, so the defect is
   metric shape, not missing accounting."
 reading: null
-gap: null
 serves:
   - strategy-token-economy
 recovers: []
@@ -19,15 +18,14 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
+  boosts:
+    "1": 20
   rationale: "Author-directed 2026-08-03: prioritize progression of
     token-efficiency work ahead of bug-fix work and ahead of the undecomposed
     baseline. Matches the boost 20 already carried by the review-phase
     token-cost cluster (tactic-review-skill-body-decomposition and its
     siblings). Simulated over the live store before writing: 0 tier changes, 0
     value drift onto non-target nodes, resolves to 20.00."
-  tier: 1
 phase: done
 execution:
   branch: tactic-outcome-envelope-qa-accounting
@@ -39,10 +37,12 @@ execution:
     - reviewed
   strategy_fingerprint: 157bc07dd1dbc4a1c7a5095f7c3094ee88accf5879271bc6d2c4cd4794029848
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-10T16:52:57Z
     mergeCommitSha: eda7afa2a2192d0abcb2b5eadffa9afd43e1cd63
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

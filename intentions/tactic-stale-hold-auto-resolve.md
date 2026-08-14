@@ -53,29 +53,16 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.04
-  rationale: >-
-    Bootstrap re-scale 2026-07-31: Wave B of the three-band interim scale (50 /
-    20 / 10) — dispatch-containment work that follows the Wave A write-path
-    fixes. Wave B rather than Wave A because the resolve primitive already
-    exists and a human can run it in seconds once the stale hold is noticed, so
-    the defect costs latency and attention rather than correctness. blocked_by
-    is empty, so this promotion lifts no blocker and cannot compound. Finalized
-    2026-07-31 (/align-tactics) to phase: implement with the boost left
-    unchanged at 20; blocked_by remains empty so this promotion still lifts no
-    blocker and cannot compound.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    "1": 20
+  rationale: "Bootstrap re-scale 2026-07-31: Wave B of the three-band interim
+    scale (50 / 20 / 10) — dispatch-containment work that follows the Wave A
+    write-path fixes. Wave B rather than Wave A because the resolve primitive
+    already exists and a human can run it in seconds once the stale hold is
+    noticed, so the defect costs latency and attention rather than correctness.
+    blocked_by is empty, so this promotion lifts no blocker and cannot compound.
+    Finalized 2026-07-31 (/align-tactics) to phase: implement with the boost
+    left unchanged at 20; blocked_by remains empty so this promotion still lifts
+    no blocker and cannot compound."
 phase: main-qa
 execution:
   branch: tactic-stale-hold-auto-resolve
@@ -143,8 +130,7 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes:
-  pre_namespacing_boost: 20
+attributes: {}
 ---
 
 # tactic-stale-hold-auto-resolve

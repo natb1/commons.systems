@@ -18,7 +18,6 @@ rationale: "Planned 2026-07-30 by the dispatch-pipeline bootstrap through a
   reported citation and substance gaps were applied before landing. A later
   /align-tactics round should treat this body as unreviewed by the normal path."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -26,8 +25,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
+  boosts:
+    "1": 50
   rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
     (50 / 20 / 10) that puts write-path integrity work above ordinary feature
     work. This band holds the silent graph-write-corruption defects plus the two
@@ -46,10 +45,12 @@ execution:
     - reviewed
   strategy_fingerprint: null
   fix: null
+  conflict: null
   completion:
     mergedAt: 2026-07-31T03:45:50Z
     mergeCommitSha: 78d576ec8dfa756a9e9882dc636a01775c086079
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

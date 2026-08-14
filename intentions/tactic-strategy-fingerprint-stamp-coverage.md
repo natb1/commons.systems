@@ -37,25 +37,12 @@ tooling_goals: []
 success_signal: null
 attention:
   boosts:
-    "1": 0.04
-  rationale: >-
-    Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
-    20 / 10) - dispatch-containment and evidence-custody work that follows the
-    Wave-A write-path fixes. Interim scaffolding only;
+    "1": 20
+  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
+    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
+    follows the Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
-    numeric scheme.
-
-
-    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
-    boost can no longer lift the node out of its parent strategy's band. The
-    bound - a tactic boost is namespaced to its strategy's rank and must never
-    cause the tactic to outrank a tactic of a higher-ranked strategy - is
-    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
-    enforced by the resolver; tactic-attention-namespaced-rank makes it
-    structural. Until then the flat additive sum defeats it, so the magnitudes
-    are compressed by hand onto a 0.01-per-level ladder that preserves the
-    original ordering WITHIN the band. Original magnitude preserved at
-    attributes.pre_namespacing_boost for restoration.
+    numeric scheme."
 phase: qa
 execution:
   branch: tactic-strategy-fingerprint-stamp-coverage
@@ -79,8 +66,7 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  pre_namespacing_boost: 20
+attributes: {}
 ---
 # The strategy soft-freeze is inert: no open tactic serving strategy-graph-native-dispatch carries a `strategy_fingerprint` entry for it, because no production code path has ever written one — wire the live-router stamp
 
