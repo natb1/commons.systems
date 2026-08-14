@@ -1803,7 +1803,21 @@ clarifications:
       2026-08-12 incident, when the same break was silent and surfaced days
       later on an unrelated PR. And the honest consequence for THIS record:
       until that PR lands, the three readings are specified and unread, so the
-      success_signal's new threshold clauses are not yet measurable."
+      success_signal's new threshold clauses are not yet measurable. DISCHARGED
+      2026-08-14 by the pull request this clarification asked for: the appended
+      sensor prose and the matching RSI_SENSOR_NAME constant land in ONE commit
+      on a non-graph branch, which is the only atomic path. Two things the
+      discharge changed about the plan recorded above. The string appended is
+      the FINAL intended one, naming all three instruments even though none is
+      built yet — writing it once means each instrument can land later without
+      re-breaking the registry coupling, which is the defect itself. And the
+      PR's own CI does NOT exercise the validator: graph-fast-path.yml triggers
+      only on graph/** pushes, so validate-graph was run locally against the
+      merged state instead, the same blind spot
+      tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes
+      recorded the same day. The three instruments themselves remain owed by
+      tactic-rsi-intervention-special-cases; until they land the three threshold
+      clauses are registered and unread."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation; every
@@ -1822,14 +1836,23 @@ success_signal:
     sessions-per-node-per-day if that instrument cannot express an episode); and
     no session performs a remediation outside its declared list (read by the
     per-session decision log against each lane's declared frontmatter list) —
-    these three instruments are deliberately NOT added to the sensor field this
-    round; see the sensor-registry clarification of 2026-08-14
+    these three instruments are named in the sensor field and registered, but
+    are NOT YET IMPLEMENTED, so the three readings stay declared and unproduced
+    until each instrument lands; see the sensor-registry clarification of
+    2026-08-14
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
     count, held-session/worktree census, pause state), plus per-workflow token
     attribution across dispatch, office-hours, and rsi reported by /rsi-audit;
     plus the research lane's weekly dated readings on this strategy
-    (research-cycle landings)
+    (research-cycle landings); plus three instruments for the evaluation-core
+    readings recorded 2026-08-14 — a write-path lint counting the scripts that
+    implement a mint-or-reuse follow-up write (find-or-recur surface count),
+    aggregate-usage.sh at node scope for sessions per invalid-state episode
+    (degrading to sessions-per-node-per-day if that instrument cannot express an
+    episode), and the per-session decision log checked against each lane's
+    declared frontmatter remediation list (remediation acts outside a declared
+    list)
   threshold: dispatch runs unpaused, strategy-graph-native-dispatch's own 35%
     non-increasing band holds, consecutive /rsi-audit windows keep dispatch
     dominating the per-workflow fold, the parked critical-path count is
