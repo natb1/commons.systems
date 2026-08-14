@@ -283,8 +283,17 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    complete-and-failed — so this returns immediately with a per-check summary:
    name, conclusion, and a failure-log excerpt for each failing check.
 
+   Count the failing check names in this summary as `$FAILED_CHECK_COUNT` — this
+   pass's outcome-envelope emit (Step 9, and the needs-human escalation inside
+   Step 4) reuses it for `--findings-surfaced` / `--findings-actionable`, so it
+   need not be recomputed later.
+
 4. **Reproduce locally and classify.** Launch a `sonnet` subagent with the failing
-   check name and failure excerpt. The subagent maps the check to a local reproduce
+   check name and failure excerpt. This is the pass's first subagent launch —
+   start a running count `$SKILL_SUBAGENTS=1` here; the outcome-envelope emit
+   (Step 9, and the needs-human escalation below) reports it as
+   `--subagents-launched`, incremented below wherever a later step launches
+   another. The subagent maps the check to a local reproduce
    command and runs it (use `dangerouslyDisableSandbox: true` when network or npm
    cache is needed):
 
@@ -337,15 +346,52 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
      3. **Write `office-hours-reason`** via `dispatch-mark-deviation`. This is a
         deliberate office-hours park: before the call, perform the in-session
         recommend step — see
-        `.claude/skills/dispatch-propagate/escalation-recommend.md`.
+        `.claude/skills/dispatch-propagate/escalation-recommend.md`. Name the
+        branch in the reason string — `needs-human` — so the outcome-envelope
+        emit below can reuse the identical string as `--terminated-reason` and an
+        escalation this way is never indistinguishable from a session that
+        simply vanished mid-pass:
 
         ```bash
         .claude/skills/dispatch-propagate/scripts/dispatch-mark-deviation \
-          "/fix-checks: <required_action>"
+          "/fix-checks: needs-human — <required_action>"
         ```
 
-     4. **Do NOT write the `phase=fix-checks` marker** (do not run Step 9).
-     5. **Stop.** With the marker absent and `office-hours-reason` present, the Stop
+     4. **Emit the outcome envelope** (contract:
+        `.claude/docs/outcome-envelope.md`). This is the needs-human branch's
+        only emit — it is terminal here, so no separate Step 9 emit follows (the
+        next sub-step skips Step 9 entirely). This call runs **sandboxed** —
+        `dispatch-emit-outcome` is pure, so do **not** pass
+        `dangerouslyDisableSandbox`. Pass `--disposition escalated` and
+        `--terminated-reason` set to the **same** string passed to
+        `dispatch-mark-deviation` just above. Derive `repo` from the local
+        remote (read-only git, sandbox-safe). On the node lane
+        (`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue`; on the
+        legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"` and omit
+        `--node-id`:
+
+        ```bash
+        REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+        if [[ "$TARGET_KIND" == node ]]; then
+          id_arg=(--node-id "$N")
+        else
+          id_arg=(--issue "$N")
+        fi
+        # tool_denials / denied_commands are always in the record and are DERIVED by
+        # the script from this session's transcript — pass no flag for them.
+        .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+          --phase fix-checks --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
+          --findings-surfaced "$FAILED_CHECK_COUNT" \
+          --findings-actionable "$FAILED_CHECK_COUNT" \
+          --fixes-applied 0 \
+          --followups-filed 0 \
+          --subagents-launched "$SKILL_SUBAGENTS" \
+          --disposition escalated \
+          --terminated-reason "/fix-checks: needs-human — <required_action>"
+        ```
+
+     5. **Do NOT write the `phase=fix-checks` marker** (do not run Step 9).
+     6. **Stop.** With the marker absent and `office-hours-reason` present, the Stop
         hook (`.claude/hooks/dispatch-stop.sh`) takes **Branch A** and parks the issue
         on `dispatch:office-hours` on the **first** fix-checks run — no fix-checks-attempt
         cycling, no re-diagnosis. This is the same skip-marker + `office-hours-reason`
@@ -460,6 +506,13 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         `TARGET_KIND`-agnostic and unchanged for both lanes. From here, sub-steps 3
         and 4 branch on `TARGET_KIND`.
 
+        Whichever disposition the guard (or, on the `NONE` path, the filing
+        itself) returns, record it as `$FLAKE_DISP` — the outcome-envelope emit
+        (Step 9) reads it to compute `--followups-filed`: `1` only when
+        `$FLAKE_DISP` is `CREATED` (a tracking record was actually minted this
+        run), `0` for `EXISTING`, `REOPENED`, `STALE`, or `STALE-HEAD-SUPPRESSED`
+        (nothing new was filed).
+
         **Legacy lane (`TARGET_KIND=issue`):** In this thread
         (`dangerouslyDisableSandbox: true` — the script calls `gh`):
         1. Write the recurrence body to `tmp/flake-recurrence.md` (git-ignored
@@ -478,19 +531,20 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         3. Branch on the disposition:
            - **`EXISTING <N>`** — a same-fingerprint issue is already open and the
              guard appended this recurrence as a comment. Do **not** file. Flake
-             issue = `#<N>`, disposition `EXISTING`.
+             issue = `#<N>`, disposition `EXISTING`. Set `$FLAKE_DISP=EXISTING`.
            - **`REOPENED <N>`** — a same-fingerprint issue was closed-as-fixed but
              the flake fired again; the guard reopened it and appended this
              recurrence (the "closed-as-fixed but still firing" signal a human
              should see on one issue, not N dups). Do **not** file. Flake issue =
-             `#<N>`, disposition `REOPENED`.
+             `#<N>`, disposition `REOPENED`. Set `$FLAKE_DISP=REOPENED`.
            - **`STALE <N>`** — a same-fingerprint issue was closed-as-fixed and
              the guard determined this triggering run's head does **not** contain
              the closing fix commit (ancestry shows `behind`/`diverged`): the PR
              branch is stale and is still emitting the pre-fix
              signature. The guard fired no comment and no reopen — suppressing the
              oscillation is the point. Do **not** file. Do **not** reopen. Flake
-             issue = `#<N>`, disposition `STALE`. **Skip sub-step 4 (block the
+             issue = `#<N>`, disposition `STALE`. Set `$FLAKE_DISP=STALE`.
+             **Skip sub-step 4 (block the
              PR's tracked issue)** — wiring a `blocked_by` dependency here is
              deferred by design: the STALE disposition stops the reopen oscillation
              only; a stale PR branch that keeps emitting the pre-fix signature is
@@ -501,7 +555,9 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
            - **`NONE`** — no same-fingerprint issue exists; file one via
              `/file-issue` as before. Launch a subagent (`subagent_type:
              general-purpose`, `model: sonnet`) that invokes `/file-issue` via the
-             Skill tool, building its `$INPUT` with a leading `--follow-up` token
+             Skill tool — this is a second subagent launch this pass; increment
+             `$SKILL_SUBAGENTS` to `2` (Step 4's diagnosis subagent was the
+             first) — building its `$INPUT` with a leading `--follow-up` token
              first, then a title hint `Flaky CI: <fingerprint>` on the next line,
              then a body containing the fingerprint, the reproduce command, and the
              failure excerpt. (The `--follow-up` token is a classification no-op
@@ -524,11 +580,12 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
                source .claude/skills/dispatch-propagate/scripts/lib.sh
                gh_issue_edit_rest <N> --title "Flaky CI: <fingerprint>"
                ```
-               Flake issue = `#<N>`, disposition `CREATED`.
+               Flake issue = `#<N>`, disposition `CREATED`. Set `$FLAKE_DISP=CREATED`.
              - **`EXISTING <M>`** — `/file-issue`'s fuzzy dedup matched a
                pre-existing (possibly human-filed, differently-titled) issue. Do
                **NOT** reassert its title — re-titling an unrelated issue would
-               corrupt it. Flake issue = `#<M>`, disposition `EXISTING`.
+               corrupt it. Flake issue = `#<M>`, disposition `EXISTING`. Set
+               `$FLAKE_DISP=EXISTING`.
 
         **Node lane (`TARGET_KIND=node`):** GitHub Issues are disabled repo-wide
         on the node lane, so this sub-step never calls `gh issue` or `/file-issue`
@@ -577,6 +634,7 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
                accumulator's flake-tracking-id bullet) and note in the accumulator
                that the remedy is to merge `origin/main` into the PR branch and
                re-run CI — the head is simply missing a fix that already landed.
+               Set `$FLAKE_DISP=STALE-HEAD-SUPPRESSED`.
              - **`CURRENT`** — proceed with the node write below, unchanged.
 
              **Near-miss advisory check (`CURRENT` only, never blocks).**
@@ -655,7 +713,8 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
              ```bash
              packages/intentionsutil/scripts/graph-commit <new-tactic-id>
              ```
-             Flake tactic = `<new-tactic-id>`, disposition `CREATED`.
+             Flake tactic = `<new-tactic-id>`, disposition `CREATED`. Set
+             `$FLAKE_DISP=CREATED`.
            - **`EXISTING <tactic-id>` / `REOPENED <tactic-id>`** — a matching
              flake tactic already exists. First dump a `--base` manifest for it
              (pre-existing node — same optimistic-concurrency guard
@@ -681,11 +740,11 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
              packages/intentionsutil/scripts/graph-commit --base "$BASE" <tactic-id>
              ```
              Flake tactic = `<tactic-id>`, disposition `EXISTING` or `REOPENED`
-             per the guard's line.
+             per the guard's line. Set `$FLAKE_DISP` to that same value.
            - **`STALE <tactic-id>`** — mirrors the legacy lane's STALE
              suppression exactly: do **nothing** — no create, no body append, no
              reopen, no frontmatter change. Flake tactic = `<tactic-id>`,
-             disposition `STALE`. Skip the node-lane sub-step 4 below entirely
+             disposition `STALE`. Set `$FLAKE_DISP=STALE`. Skip the node-lane sub-step 4 below entirely
              (the same exception the legacy lane's `STALE` branch carves out).
              Record the accumulator note (sub-step 5) marking this recurrence as
              suppressed-stale — the `<tactic-id> (STALE-SUPPRESSED)` entry — then
@@ -804,7 +863,9 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    `/implement-unit` via the Skill tool — pass `model` (chosen per
    `/implement-unit`'s heuristic), `scope` (the fix), `context` (the failing check and
    reproduce command), and `commit_intent`. `/implement-unit` builds the fix, commits,
-   merges, and pushes it. For the no-repro outcomes that reached this step
+   merges, and pushes it. This invocation is a subagent launch in its own right —
+   increment `$SKILL_SUBAGENTS` (the outcome-envelope emit in Step 9 reports the
+   running total as `--subagents-launched`). For the no-repro outcomes that reached this step
    (generic, main-fixed, flake), the push disposition was already set by the Step 4
    classification — generic and flake push nothing, main-fixed pushed the merge
    commit — so there is nothing more to do here.
@@ -855,6 +916,50 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
    (`.claude/hooks/dispatch-stop.sh`) that the pass *ended*: `Stop` fires on
    every turn yield, not only on terminal exit, so without the marker the hook
    leaves the job alive rather than reaping it mid-flight.
+
+   **Emit the outcome envelope** (contract: `.claude/docs/outcome-envelope.md`),
+   before the stop below — every outcome that reaches Step 9 (`fixed`,
+   `generic-no-repro`, `main-fixed`, `flake`) emits exactly one record here; the
+   needs-human branch already emitted its own in Step 4 and never reaches Step 9.
+   This call runs **sandboxed** — `dispatch-emit-outcome` is pure, so do **not**
+   pass `dangerouslyDisableSandbox`. Map the outcome recorded in the accumulator
+   (Step 7) to `--disposition` and `--fixes-applied`:
+
+   | Outcome | `--disposition` | `--fixes-applied` |
+   |---|---|---|
+   | `fixed` | `completed_with_fixes` | `1` |
+   | `generic-no-repro` | `completed` | `0` |
+   | `main-fixed` | `completed` | `0` |
+   | `flake` | `completed` | `0` |
+
+   `--followups-filed` is `1` only when this run's flake sub-path set
+   `$FLAKE_DISP=CREATED` (a tracking record was actually minted this run), else
+   `0` — that covers every non-`flake` outcome as well as a `flake` outcome whose
+   disposition was `EXISTING`, `REOPENED`, `STALE`, or `STALE-HEAD-SUPPRESSED`.
+   Omit `--terminated-reason` — every outcome reaching Step 9 is non-escalated.
+   Derive `repo` from the local remote (read-only git, sandbox-safe). On the node
+   lane (`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue`; on the
+   legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"` and omit
+   `--node-id`:
+
+   ```bash
+   REPO=$(git remote get-url origin | sed -E 's#.*github.com[:/]##; s#\.git$##')
+   if [[ "$TARGET_KIND" == node ]]; then
+     id_arg=(--node-id "$N")
+   else
+     id_arg=(--issue "$N")
+   fi
+   # tool_denials / denied_commands are always in the record and are DERIVED by
+   # the script from this session's transcript — pass no flag for them.
+   .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
+     --phase fix-checks --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
+     --findings-surfaced "$FAILED_CHECK_COUNT" \
+     --findings-actionable "$FAILED_CHECK_COUNT" \
+     --fixes-applied <1 if outcome is `fixed`, else 0> \
+     --followups-filed <1 only if $FLAKE_DISP=CREATED this run, else 0> \
+     --subagents-launched "$SKILL_SUBAGENTS" \
+     --disposition <completed_with_fixes if outcome is `fixed`, else completed>
+   ```
 
    Then **stop**. The `/dispatch-propagate` background-job chain drives the
    next iteration — the selector observes the pushed sha's CI verdict on a later

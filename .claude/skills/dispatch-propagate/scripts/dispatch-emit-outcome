@@ -31,8 +31,8 @@
 #   (dispatch-stamp-session:15-19). Both or neither given is a validation
 #   error (exit 2).
 #
-# --phase: one of the ALLOWED_PHASES set (review, qa). Extensible: update
-#   ALLOWED_PHASES below to add future phases.
+# --phase: one of the ALLOWED_PHASES set (review, qa, fix-checks). Extensible:
+#   update ALLOWED_PHASES below to add future phases.
 # --disposition: one of the ALLOWED_DISPOSITIONS set
 #   (completed, completed_with_fixes, escalated).
 # --terminated-reason: required-non-null when disposition == escalated;
@@ -87,7 +87,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Allowed enum values — edit these to extend the enum sets.
 # ---------------------------------------------------------------------------
-ALLOWED_PHASES=("review" "qa")
+ALLOWED_PHASES=("review" "qa" "fix-checks")
 ALLOWED_DISPOSITIONS=("completed" "completed_with_fixes" "escalated")
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ usage: dispatch-emit-outcome \
          --disposition <disposition> \
          [--terminated-reason <reason>]
 
-  --phase        one of: review qa
+  --phase        one of: review qa fix-checks
   --issue        legacy gh-issue lane target (positive integer)
   --node-id      graph-native lane target (lowercase node-id slug);
                  exactly one of --issue / --node-id is required

@@ -41,7 +41,7 @@ envelope.
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
 | `schema` | string | no | const `"dispatch.outcome.v1"` |
-| `phase` | string | no | enum `{review, qa}`, extensible to future phases |
+| `phase` | string | no | enum `{review, qa, fix-checks}`, extensible to future phases |
 | `repo` | string | no | e.g. `natb1/commons.systems` |
 | `issue` | integer | yes | the dispatch issue number on the issue lane, or `null` on the node lane |
 | `node_id` | string | yes | the intention-graph node id on the node lane, or `null` on the issue lane |
@@ -79,6 +79,9 @@ Path → value mapping:
 | qa-fix | clean pass | `completed` |
 | qa-fix | auto-fix applied | `completed_with_fixes` |
 | qa-fix | escalate | `escalated` |
+| fix-checks | Step 9, outcome `fixed` | `completed_with_fixes` |
+| fix-checks | Step 9, outcome `generic-no-repro` / `main-fixed` / `flake` | `completed` |
+| fix-checks | Step 4, needs-human | `escalated` |
 
 ## `terminated_reason`
 

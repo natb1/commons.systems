@@ -141,6 +141,11 @@ assert_eq "phase review exits 0" "0" "$RC"
 run_sut --disposition completed --phase qa
 assert_eq "phase qa exits 0" "0" "$RC"
 
+run_sut --disposition completed --phase fix-checks
+assert_eq "phase fix-checks exits 0" "0" "$RC"
+PHASE_VAL=$(printf '%s\n' "$OUT" | sed -n '/^```json$/,/^```$/p' | sed '1d;$d' | jq -r '.phase')
+assert_eq "phase fix-checks serialized" "fix-checks" "$PHASE_VAL"
+
 echo ""
 echo "--- every valid disposition exits 0 ---"
 
@@ -158,7 +163,7 @@ echo "--- unknown phase rejected with full set listed ---"
 
 run_sut --disposition completed --phase bogus
 assert_eq "unknown phase exits 2" "2" "$RC"
-assert_contains "unknown phase stderr lists review qa" "review qa" "$OUT"
+assert_contains "unknown phase stderr lists review qa fix-checks" "review qa fix-checks" "$OUT"
 
 echo ""
 echo "--- unknown disposition rejected with full set listed ---"
