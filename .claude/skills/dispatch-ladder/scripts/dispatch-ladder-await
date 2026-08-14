@@ -71,6 +71,39 @@
 # treated as "still running" and keeps polling — never as "finished", which
 # would send the loop on to the next phase while a worker is live.
 #
+# THE GRAPH IS ASKED WHILE THE WORKER IS STILL LIVE. The signal reported here —
+# a phase moved, a marker landed, a stamp appeared at origin/main — is
+# independent of the registry: it is public the moment the worker pushes, which
+# can be many minutes before the session row is reaped. Branching on session
+# state alone therefore bounded detection below by REAP LAG rather than by when
+# the completion became public. Measured on a review phase: the `reviewed`
+# marker was public at origin/main at 17:15:05Z and this wait did not notice
+# until 17:56:18Z — 2473s of await carrying a provable floor of 1201s of pure
+# lag, 20.1% of that phase's elapsed 12326s.
+#
+# So stage 2 asks the graph on its own cadence, whatever the session says, and
+# reports the first TERMINAL verdict it sees. `unchanged` and `unknown` are not
+# terminal: a graph that cannot be read mid-phase keeps the poll going and never
+# becomes the exit-14 throw that only a STOPPED worker earns. This ADDS a path —
+# the `absent` and `done-held` arms are untouched and still answer first.
+#
+# THROTTLED, BECAUSE THE FIRST PROBE FETCHES. `graph_verdict`'s first
+# verify-landed call fetches origin (every later call within one verdict passes
+# --no-fetch), so a graph read per poll is a git fetch per poll — 240 an hour at
+# the default 15s cadence. `--graph-poll-every` asks on every Nth poll instead,
+# defaulting to 4: one fetch a minute at the default cadence, with detection
+# latency capped at N × --poll-s instead of left unbounded on reap lag.
+#
+# A TERMINAL VERDICT AGAINST A LIVE ROW SHIFTS TIMING, NOT THE ANSWER. Every
+# verdict this path can report is one the old code reported too, once the row
+# went — the probe order inside `graph_verdict` is unchanged, so the same facts
+# still produce the same word. The one arm worth naming: `blocked` can appear
+# mid-pass (a worker files a blocked_by follow-up and keeps working) and it
+# outranks every probe but absence, so it halted the run at session end before
+# and halts it sooner now. Whenever a verdict is reported against a session that
+# is still registered, stderr says so — a row that lingers holds a worker slot
+# and keeps the node unselectable (worktree_has_live_session is name-keyed).
+#
 # A LANE THAT COMPLETES WITHOUT MOVING THE PHASE. Two lanes finish a pass by
 # pushing to the node's branch and writing job-dir markers, never by touching
 # `.phase`: dispatch-conflict's Lane 3 (an origin/main conflict resolved on the
@@ -107,7 +140,7 @@
 #
 # Usage: dispatch-ladder-await <node-id> <from-phase>
 #                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
-#                  [--since <epoch>]
+#                  [--graph-poll-every <n>] [--since <epoch>]
 #
 #   <from-phase>       the phase dispatch-ladder-advance printed. The
 #                      transition check asks whether the node has moved off
@@ -121,6 +154,13 @@
 #   --poll-s <n>       seconds between daemon reads (default 15).
 #   --boot-grace-s <n> how long to wait for the worker to REGISTER before
 #                      concluding none exists (default 90 — see BOOT GRACE).
+#   --graph-poll-every <n>
+#                      ask origin/main on every nth stage-2 poll even while the
+#                      worker is live (default 4 — see THE GRAPH IS ASKED WHILE
+#                      THE WORKER IS STILL LIVE). 1 asks on every poll, which
+#                      also means a fetch per poll. The bound it buys is
+#                      n × --poll-s of detection latency; without it the bound
+#                      is registry reap lag, which nothing here controls.
 #   --since <epoch>    unix epoch of THIS launch. Only with it is
 #                      `execution.lane_pass` consulted at all, and only a stamp
 #                      dated at or after it counts — see A LANE THAT COMPLETES
@@ -190,6 +230,9 @@ source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
 TIMEOUT_S=540
 POLL_S=15
 BOOT_GRACE_S=90
+# Every nth stage-2 poll asks origin/main regardless of session state. 4 × the
+# 15s default poll is one fetch a minute and a 60s ceiling on detection latency.
+GRAPH_POLL_EVERY=4
 NODE_ID=""
 FROM_PHASE=""
 # Empty means "no launch window was asserted", which is NOT a window of zero:
@@ -198,7 +241,7 @@ SINCE_EPOCH=""
 SINCE_ISO=""
 
 usage() {
-  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>] [--since <epoch>]" >&2
+  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>] [--graph-poll-every <n>] [--since <epoch>]" >&2
   exit 2
 }
 
@@ -207,6 +250,7 @@ while [[ $# -gt 0 ]]; do
     --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
     --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
     --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
+    --graph-poll-every) [[ $# -ge 2 ]] || usage; GRAPH_POLL_EVERY="$2"; shift 2 ;;
     --since)        [[ $# -ge 2 ]] || usage; SINCE_EPOCH="$2"; shift 2 ;;
     --*)            echo "dispatch-ladder-await: unknown flag $1" >&2; usage ;;
     *)
@@ -223,6 +267,11 @@ done
   echo "dispatch-ladder-await: invalid node id '$NODE_ID'" >&2; exit 2; }
 [[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
   echo "dispatch-ladder-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+# Positive, not merely an integer: 0 would make the `% GRAPH_POLL_EVERY` below a
+# division by zero, and there is no reading of "ask every 0th poll" worth
+# guessing at (.claude/rules/code-style.md).
+[[ "$GRAPH_POLL_EVERY" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-await: --graph-poll-every must be a positive integer, got '$GRAPH_POLL_EVERY'" >&2; exit 2; }
 
 # Converted ONCE, here, into the same fixed-width UTC form the lanes stamp, so
 # the probe below is a plain lexicographic compare. A `date` that cannot do this
@@ -454,8 +503,14 @@ if (( SAW_SESSION == 0 )); then
 fi
 
 # --- Stage 2: wait for it to finish ----------------------------------------
+# POLLS counts stage-2 iterations, and the graph is asked on every
+# GRAPH_POLL_EVERY-th of them — see THE GRAPH IS ASKED WHILE THE WORKER IS STILL
+# LIVE. It starts at 0 and is incremented BEFORE the modulo, so with
+# --graph-poll-every 1 the very first poll asks.
+POLLS=0
 while (( SECONDS < DEADLINE )); do
-  case "$(session_state)" in
+  STATE="$(session_state)"
+  case "$STATE" in
     absent)
       report_graph_verdict "session reaped after declaring terminal"
       ;;
@@ -484,6 +539,28 @@ while (( SECONDS < DEADLINE )); do
       exit 21
       ;;
   esac
+
+  # THE LIVE POLL. The session is `working`, or the registry could not be read
+  # at all — either way the graph is asked on the throttled cadence, because the
+  # completion is public at origin/main the moment the worker pushes and waiting
+  # for the row to go bounds detection on reap lag instead.
+  #
+  # ONLY A TERMINAL VERDICT ENDS THE WAIT. `unchanged` is the ordinary answer
+  # for a phase still in flight, and `unknown` here is a transient unreadable
+  # graph, NOT the exit-14 throw — that answer belongs to a worker that has
+  # already stopped, where nothing further will change. Both keep polling.
+  POLLS=$(( POLLS + 1 ))
+  if (( POLLS % GRAPH_POLL_EVERY == 0 )); then
+    LIVE_VERDICT=$(graph_verdict)
+    case "$LIVE_VERDICT" in
+      unchanged|unknown) ;;
+      *)
+        echo "dispatch-ladder-await: $NODE_ID reached '$LIVE_VERDICT' at origin/main while its session was still registered (state '$STATE') — reported now rather than waiting for the registry to reap it." >&2
+        echo "dispatch-ladder-await: the row may still be there. A row that lingers holds a worker slot and keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed), so the caller's next step may need it swept or released." >&2
+        report_graph_verdict "the worker was still registered ($STATE) when the change became public at origin/main" "$LIVE_VERDICT"
+        ;;
+    esac
+  fi
   sleep "$POLL_S"
 done
 

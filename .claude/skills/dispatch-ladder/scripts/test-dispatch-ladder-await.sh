@@ -30,6 +30,12 @@
 #      at or after that launch — a presence-only read would repeat the
 #      accumulation trap the `reviewed` gate exists for. Both halves are pinned,
 #      and so is the halt this must not break: no stamp is still `stalled`.
+#   6. THE LIVE GRAPH POLL. The completion is public at origin/main before the
+#      registry reaps the row, so the graph is asked on a throttled cadence even
+#      while the session says `working`. Pinned: a terminal verdict ends the wait
+#      then and there; `unchanged` and an unreadable graph do NOT (mid-phase they
+#      are transients, not the exit-14 a stopped worker earns); and the throttle
+#      is real, so the default cadence skips short windows.
 #
 # The Claude registry and verify-landed are both stubbed — no daemon, no
 # network, no gh. Polling is driven at --poll-s 1 so the suite runs in seconds.
@@ -308,6 +314,69 @@ run_await 21 "held-observing $NODE" "a held session with a fresh stamp is still 
 session_rows "$WORKING"
 set_graph 4 4 4 4
 run_await 20 "running $NODE qa" "a working session at the timeout is exit 20 (call again)" --timeout-s 2
+
+# --- The live graph poll ---------------------------------------------------
+# The change this script reports is public at origin/main the moment the worker
+# pushes it, which can be many minutes before the registry reaps the session
+# row. Branching on session state alone bounded detection by that reap lag: the
+# measured case had the `reviewed` marker public 1201s before the wait noticed.
+# So stage 2 asks the graph on its own cadence even while the row says
+# `working`, and reports the first TERMINAL verdict.
+session_rows "$WORKING"
+
+set_graph 4 4 4 0
+run_await 0 "advanced $NODE qa" "a phase change is reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 5
+
+# THE MEASURED CASE. A clean review writes the marker and then the session sits
+# in the registry until it is reaped; the marker is the answer, and waiting for
+# the row to go adds nothing but latency.
+FROM=review
+set_graph 4 4 4 4 0
+run_await 0 "reviewed $NODE review -> pending-merge" "a reviewed marker is reported without waiting for the reap" \
+  --graph-poll-every 1 --timeout-s 5
+FROM=qa
+
+set_graph 4 0 4 4
+run_await 11 "throw $NODE parked" "a park is reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 5
+
+set_graph 4 4 4 4 4 0
+run_await 0 "lane-complete $NODE qa" "a fresh lane_pass stamp is reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 5 --since "$SINCE"
+
+# ONLY A TERMINAL VERDICT ENDS THE WAIT. `unchanged` is what a phase in flight
+# looks like every single poll; reading it as a verdict would call every running
+# phase stalled.
+set_graph 4 4 4 4
+run_await 20 "running $NODE qa" "a live worker with nothing public at origin/main keeps running" \
+  --graph-poll-every 1 --timeout-s 2
+
+# AND AN UNREADABLE GRAPH IS NOT ONE EITHER. Exit 14 is the answer for a worker
+# that has already STOPPED, where nothing more will change. Mid-phase it is a
+# transient, and turning it into a throw would abort a live phase on a failed
+# fetch. The `set_graph 4 4 4 1` here is what makes the case bite.
+set_graph 4 4 4 1
+run_await 20 "running $NODE qa" "an unreadable graph mid-phase keeps polling, it is not exit 14" \
+  --graph-poll-every 1 --timeout-s 2
+
+# THE THROTTLE IS REAL. The first probe in a verdict fetches, so the graph is
+# asked every nth poll, not every poll. At the default 4 with --poll-s 1 and a
+# 2s window, no poll reaches the cadence — so a graph that says `advanced` is
+# NOT reported inside this window. That is the cost being bought: latency capped
+# at n × --poll-s instead of bounded by reap lag.
+set_graph 4 4 4 0
+run_await 20 "running $NODE qa" "the default cadence does not ask the graph on every poll" --timeout-s 2
+
+"$AWAIT" "$NODE" qa --graph-poll-every 0 >/dev/null 2>&1
+[[ $? == 2 ]] && ok "--graph-poll-every 0 is rejected (it would divide by zero) (exit 2)" \
+  || fail "--graph-poll-every 0 should exit 2"
+
+"$AWAIT" "$NODE" qa --graph-poll-every x >/dev/null 2>&1
+[[ $? == 2 ]] && ok "a non-integer --graph-poll-every is rejected (exit 2)" \
+  || fail "non-integer --graph-poll-every should exit 2"
+
+set_graph 4 4 4 4
 
 # --- UNKNOWN liveness is not 'finished', and not a verdict either ----------
 # A registry read that cannot be answered must keep waiting. Treating it as
