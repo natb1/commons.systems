@@ -34,9 +34,13 @@
  *     blast_radius_truncated?:bool, // the reading list hit its cap; say so
  *     prior_findings?:[...],      // unresolved + deferred findings from the
  *       // previous pass, carried forward so re-scoping cannot silently drop one
- *     review_plan?:{ effort, finder_set:[...], reasons:{...} }, // /review-plan's
+ *     review_plan?:{ effort, finder_set:[...], reasons:{...},
+ *       focus?:{ question:string, finders?:[...] } }, // /review-plan's
  *       // verdict (SKILL.md Step 1a). Absent/failed/unparseable ⇒ today's
  *       // defaults: effort `high`, FULL finder roster. Fails OPEN, always.
+ *       // `focus` is a SCOPE, not an intensity: a question added to the brief
+ *       // of the named already-launched lenses (all of them when unnamed). It
+ *       // changes no effort and no roster.
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
  *     implementing_issues:[N,...], run_started_at:string (ISO8601, captured by
@@ -655,7 +659,10 @@ function agentFinderSet(surface, app_or_rules, api_call_site) {
 //
 //   ASYMMETRIC. Raising is ANY-OF; cheapening requires ALL signals to agree.
 //   Unanimous to go cheap, one hit to go deep. Enforced by reviewPlanEffort
-//   below: a cheapen is refused outright if any raise signal is present.
+//   below: a cheapen is refused outright if any raise signal is present. This
+//   rule is NOT relaxed by the `focus` field added below — a scope-shaped
+//   concern belongs in `focus`, and putting it in `raise` still pins global
+//   depth, correctly.
 //
 //   RECORDED. Effort, finder set and rationale are written out. With both
 //   tactics landing in one PR at author direction (overriding clarification
@@ -840,6 +847,107 @@ function reviewPlanFinderSet(base, plan) {
     reason += `; ${rejected.length} unknown finder name(s) REJECTED (${rejected.join(', ')}) — not in the known agent roster`;
   }
   return { set: floor.concat(added), reason };
+}
+
+// reviewPlanFocus(plan, roster) -> { question, finders, reason }
+//
+// THE DIMENSION THE VERDICT WAS MISSING. Before this field a verdict had one
+// intensity dial (`effort`) and one roster, so a SCOPE-shaped analysis had
+// nowhere to go but `raise` — and `raise` is ANY-OF, so it pinned GLOBAL depth.
+// Measured: one legitimate narrow concern ("verify this lane-authored sensor
+// suppression is not laundering a type error") held effort at `high` against
+// six independent cheapen signals, and a 1-file +2/-2 comment-only delta cost
+// $76.09, 248 turns and 13 subagents to return 10 findings and 0 actionable.
+//
+// A focus is a QUESTION, not an intensity. A verdict can now say "low effort,
+// this one lens, this one question" — the analysis-7 case — and the cheapen it
+// otherwise earned survives.
+//
+// WHAT IT DELIBERATELY IS NOT:
+//
+//   NOT a relaxation of the asymmetry. `reviewPlanEffort` is untouched: one
+//   raise signal still refuses a cheapen. The fix is that a scope-shaped
+//   concern belongs in `focus` and NOT in `raise` — answering a scope question
+//   with an intensity dial was the defect, and widening the dial's tolerance
+//   would have been the same mistake in the other direction.
+//
+//   NOT a roster gate. `focus.finders` names which of the ALREADY-CONSTRAINED
+//   lenses carry the question in their brief. It adds no lens and removes none
+//   — every lens `reviewPlanFinderSet` returned still launches, still runs its
+//   whole brief. This is the "semantic narrowing lives in the BRIEF, never in
+//   the roster" rule above, and it is why a name outside the launched roster is
+//   IGNORED here rather than added.
+//
+//   NOT a licence to shorten a lens. The brief clause says so in as many words,
+//   because a focus that could shorten coverage is a detection cut wearing a
+//   question's clothes.
+//
+// The question text is derived from the diff under review, so it is capped to
+// one line and to REVIEW_PLAN_FOCUS_MAX_CHARS before it reaches a prompt.
+const REVIEW_PLAN_FOCUS_MAX_CHARS = 400;
+
+function reviewPlanFocus(plan, roster) {
+  const none = (reason) => ({ question: '', finders: [], reason });
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    return none('no focus: no usable /review-plan verdict');
+  }
+  const focus = plan.focus;
+  if (!focus || typeof focus !== 'object' || Array.isArray(focus)) {
+    return none('no focus: the verdict named none');
+  }
+  // A finder subset with no question would narrow nothing and say nothing —
+  // there is no brief to attach. Refuse it rather than half-apply it.
+  if (typeof focus.question !== 'string' || !focus.question.trim()) {
+    return none('no focus: the verdict named a focus with no question');
+  }
+  const question = focus.question
+    .replace(/[\r\n]+/g, ' ')
+    .trim()
+    .slice(0, REVIEW_PLAN_FOCUS_MAX_CHARS);
+
+  const launched = Array.isArray(roster) ? roster : [];
+  const finders = [];
+  const ignored = [];
+  if (Array.isArray(focus.finders)) {
+    for (const name of focus.finders) {
+      if (typeof name !== 'string' || !name) continue;
+      if (finders.indexOf(name) !== -1) continue;
+      if (launched.indexOf(name) === -1) {
+        if (ignored.indexOf(name) === -1) ignored.push(name);
+        continue;
+      }
+      finders.push(name);
+    }
+  }
+  // An empty `finders` — named none, or named only lenses that are not
+  // launched — means EVERY launched lens carries the question. That is the
+  // broader direction, which is the safe one: a focus may never end up
+  // narrowing coverage because its subset was junk.
+  let reason = finders.length
+    ? `focused on ${finders.join(', ')}: ${question}`
+    : `focused on every launched lens: ${question}`;
+  if (ignored.length) {
+    reason += `; ${ignored.length} focus finder(s) not in the constrained roster and IGNORED (${ignored.join(', ')}) — a focus never adds or removes a lens`;
+  }
+  return { question, finders, reason };
+}
+
+// reviewPlanFocusBrief(focus, name) -> string ('' when this lens has no focus)
+// `focus` is the CONSTRAINED object reviewPlanFocus returned, never the raw
+// verdict's field. An empty string means the lens's prompt is byte-identical to
+// what it was before this field existed — which is what every verdict carrying
+// no focus gets.
+function reviewPlanFocusBrief(focus, name) {
+  if (!focus || typeof focus !== 'object' || Array.isArray(focus)) return '';
+  if (typeof focus.question !== 'string' || !focus.question) return '';
+  const subset = Array.isArray(focus.finders) ? focus.finders : [];
+  if (subset.length && subset.indexOf(name) === -1) return '';
+  return [
+    `FOCUS (set by the /review-plan pre-pass): ${focus.question}`,
+    'Answer it IN ADDITION to your normal brief above. It does not replace any section, and it is',
+    'never a reason to shorten one — a focus narrows what this review is CURIOUS about, never what',
+    'it covers. Report the answer as a finding only if the answer is a problem.',
+  ].join('\n');
 }
 // <<< review plan gate <<<
 
@@ -1319,8 +1427,13 @@ function instrumentClause(spec) {
   ].join('\n');
 }
 
-function finderPrompt(name, args) {
+// `focus` is the CONSTRAINED /review-plan focus (reviewPlanFocus's return), or
+// nothing at all. It contributes one extra clause to the lenses it names and
+// NOTHING to the rest — every `.filter(Boolean)` below is what keeps an absent
+// focus byte-identical to the pre-focus prompt.
+function finderPrompt(name, args, focus) {
   const ctx = diffContext(args);
+  const focusClause = reviewPlanFocusBrief(focus, name);
   // NOTE: there is deliberately no `code-review` branch here. code-review is not
   // an agent finder in this Workflow at all — see agentFinderSet's comment and
   // the INSTRUMENTS scope note. It runs as the SKILL.md Step-1b `claude -p`
@@ -1339,9 +1452,12 @@ function finderPrompt(name, args) {
       '`exploit_scenario` (the concrete attack scenario from the report), `recommended_fix` (the',
       'concrete remediation from the report).',
       'Return `{ fixed: [], residue: [...] }` — `fixed` is always empty for this source.',
+      focusClause,
       instrumentClause(INSTRUMENTS['security-review']),
       LANE_A_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   // The merged API lens: ONE agent, TWO finding sources ("firebase" security-
   // classified, "cost" advisory). See agentFinderSet's comment for the fold.
@@ -1381,8 +1497,11 @@ function finderPrompt(name, args) {
       'those sections.',
       'Fill OWASP and STRIDE on every "firebase" finding (they are security findings); leave BOTH',
       'as "" on every "cost" finding (cost findings are advisory and are never security-classified).',
+      focusClause,
       SCHEMA_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   if (name === 'domain-sweep') {
     return [
@@ -1401,8 +1520,11 @@ function finderPrompt(name, args) {
         .map((d) => `"${d}"`)
         .join(', ')}. Never invent a combined source name and never use a source that is`,
       'not one of those sections. Fill OWASP and STRIDE for every finding.',
+      focusClause,
       SCHEMA_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   // input-validation | red-team
   // (`firebase` is no longer an agent name — it is only a Source, reached through
@@ -1411,8 +1533,11 @@ function finderPrompt(name, args) {
     `You are a findings-only security reviewer. Domain: ${DOMAIN_PROMPTS[name]}`,
     ctx,
     `Set Source "${name}" on every finding. Fill OWASP and STRIDE for each finding.`,
+    focusClause,
     SCHEMA_BLURB,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 // =============================================================================
@@ -1486,8 +1611,13 @@ const finderNames = finderPlan.set;
 // and effortPlan.reason below are the only things that keep the delta-scoping's
 // saving and the depth-selection's saving distinguishable in measurement.
 const effortPlan = reviewPlanEffort(_a.review_plan);
+// The verdict's SCOPE dimension. Constrained against the roster that actually
+// launches, so a focus can never name a lens that is not running. With no
+// `focus` in the verdict this is `{ question: '', finders: [] }` and every
+// finder prompt below is byte-identical to what it was before the field existed.
+const focusPlan = reviewPlanFocus(_a.review_plan, finderNames);
 log(
-  `review-plan: effort=${effortPlan.effort} (${effortPlan.reason}); finders=${finderNames.length} (${finderPlan.reason})`
+  `review-plan: effort=${effortPlan.effort} (${effortPlan.reason}); finders=${finderNames.length} (${finderPlan.reason}); focus: ${focusPlan.reason}`
 );
 // Probe-wave throttle short-circuit: `security-review` is real review work that
 // runs whenever there are ANY agent finders at all (it is added by agentFinderSet
@@ -1519,7 +1649,7 @@ log(
 // Lane-A-aware (finderPrompt branches on the name). Lane-B finders (everything else)
 // keep the FINDINGS_SCHEMA findings-list shape.
 const launchFinder = (name) => () =>
-  agent(finderPrompt(name, _a), {
+  agent(finderPrompt(name, _a, focusPlan), {
     model: 'opus',
     agentType: 'general-purpose',
     schema: LANE_A.has(name) ? LANE_A_SCHEMA : FINDINGS_SCHEMA,

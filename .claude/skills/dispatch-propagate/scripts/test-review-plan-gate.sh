@@ -154,6 +154,86 @@ assert_eq "prototype-shaped names are rejected" \
   '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
   "$(fc '.finders_proto_name.set')"
 
+# --- THE FOCUS: A SCOPE, NOT AN INTENSITY ------------------------------------
+# Why this field exists, measured: the verdict used to be one intensity dial
+# plus a roster, so a SCOPE-shaped analysis had nowhere to go but `raise` — and
+# `raise` is ANY-OF. One legitimate narrow concern ("verify this lane-authored
+# sensor suppression is not laundering a type error") therefore pinned effort at
+# `high` against six independent cheapen signals, and a 1-file +2/-2
+# comment-only delta cost $76.09, 248 turns and 13 subagents for 0 actionable
+# findings. The fix is a new dimension, NOT a looser unanimity rule — the rows
+# below are what keep it from quietly becoming one.
+
+# FIELD-ABSENT — the backwards-compatible case. Every verdict written before
+# this field must behave exactly as it did.
+assert_eq "verdict with no focus → empty question" "" "$(f '.focus_absent.question')"
+assert_eq "verdict with no focus → empty finder subset" '[]' "$(fc '.focus_absent.finders')"
+assert_eq "verdict with no focus → the reason says so" "no focus: the verdict named none" \
+  "$(f '.focus_absent.reason')"
+assert_eq "no verdict at all → no focus" "" "$(f '.focus_no_verdict.question')"
+assert_eq "verdict that is an array → no focus" "" "$(f '.focus_verdict_is_array.question')"
+assert_eq "focus that is a bare string → no focus" "" "$(f '.focus_is_string.question')"
+assert_eq "focus that is an array → no focus" "" "$(f '.focus_is_array.question')"
+
+# A finder subset with no question narrows nothing and says nothing — there is
+# no brief to attach, so it is refused rather than half-applied.
+assert_eq "focus with finders but no question is refused" "" "$(f '.focus_no_question.question')"
+assert_eq "focus with a blank question is refused" "" "$(f '.focus_blank_question.question')"
+
+# The case the field is FOR: "low effort, one finder, this question".
+assert_eq "a focus names its one lens" '["red-team"]' "$(fc '.focus_subset.finders')"
+assert_eq "a focus carries its question" \
+  "verify this lane-authored sensor suppression is not laundering a type error" \
+  "$(f '.focus_subset.question')"
+# An unnamed subset means EVERY launched lens carries the question — broader,
+# which is the safe direction for a field that must never cut coverage.
+assert_eq "focus naming no lenses applies to every launched lens" '[]' "$(fc '.focus_all.finders')"
+assert_eq "focus naming no lenses records that it is global" "true" \
+  "$(printf '%s' "$out" | jq '.focus_all.reason | test("every launched lens")')"
+
+# A FOCUS IS NOT A ROSTER GATE, in either direction. It may not add a lens the
+# constrained roster does not already launch, and it may not remove one.
+assert_eq "a focus name outside the launched roster is ignored" '["red-team"]' \
+  "$(fc '.focus_unlaunched_name.finders')"
+assert_eq "ignored focus names are RECORDED, not silently dropped" "true" \
+  "$(printf '%s' "$out" | jq '.focus_unlaunched_name.reason | test("IGNORED") and test("erosion") and test("__proto__")')"
+assert_eq "a focus whose every name is ignored falls back to ALL lenses, not none" '[]' \
+  "$(fc '.focus_all_names_ignored.finders')"
+assert_eq "duplicate focus names are deduped" '["red-team"]' "$(fc '.focus_dedup.finders')"
+assert_eq "a non-array roster ignores every named lens rather than throwing" '[]' \
+  "$(fc '.focus_bad_roster.finders')"
+
+# The question reaches a PROMPT and is derived from text the diff can influence.
+assert_eq "a multi-line question is flattened to one line" "a b c" "$(f '.focus_multiline.question')"
+assert_eq "a long question is capped at REVIEW_PLAN_FOCUS_MAX_CHARS" \
+  "$(f '.focus_max_chars')" "$(printf '%s' "$out" | jq '.focus_long.question | length')"
+
+# THE TWO ROWS THE UNIT IS FOR. A focus must move NEITHER dial: the unanimous
+# cheapen it rides in with still stands (the scope-shaped concern is no longer
+# spent as a raise signal), and the roster is untouched.
+assert_eq "a focus does not block the cheapen it rides in with" "low" \
+  "$(f '.focus_does_not_block_cheapen.effort')"
+assert_eq "a focus does not gate the roster" \
+  '["input-validation","domain-sweep","red-team","security-review","api-cost"]' \
+  "$(fc '.focus_does_not_gate_roster.set')"
+
+# The brief clause is the ONLY thing a focus produces. Semantic narrowing lives
+# in the brief and never in the roster — and the clause itself must forbid
+# shortening coverage, or a focus becomes a detection cut wearing a question's
+# clothes.
+assert_eq "the named lens gets the focus clause" "true" \
+  "$(printf '%s' "$out" | jq '.brief_targeted | test("FOCUS \\(set by the /review-plan pre-pass\\)")')"
+assert_eq "the focus clause forbids shortening the normal brief" "true" \
+  "$(printf '%s' "$out" | jq '.brief_targeted | test("IN ADDITION") and test("never a reason to shorten")')"
+assert_eq "an unnamed lens gets NO clause" "" "$(f '.brief_untargeted')"
+assert_eq "with no subset named, every lens gets the clause" "true" \
+  "$(printf '%s' "$out" | jq '.brief_all_lenses | length > 0')"
+# The backwards-compatibility guarantee, at the prompt: no focus → empty clause
+# → the finder prompt is byte-identical to the pre-focus one.
+assert_eq "no focus → empty clause, so the prompt is unchanged" "" "$(f '.brief_no_focus')"
+assert_eq "an absent focus object → empty clause" "" "$(f '.brief_undefined')"
+assert_eq "a junk-shaped focus → empty clause" "" "$(f '.brief_junk')"
+
 # --- DEADLINE SCALING --------------------------------------------------------
 # Raising effort above `high` without also raising --deadline-seconds AND Step
 # 1b's poll cap converts an expensive review into a TOTAL LOSS:

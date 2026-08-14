@@ -2,8 +2,9 @@
 // review-fix-review-plan-probe.mjs (tactic-review-plan-preflight-skill)
 //
 // CI-vector probe for the /review-plan gate in .claude/workflows/review-fix.js:
-// reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline, REVIEW_PLAN_BAND,
-// REVIEW_PLAN_DEADLINES.
+// reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline, reviewPlanFocus,
+// reviewPlanFocusBrief, REVIEW_PLAN_BAND, REVIEW_PLAN_DEADLINES,
+// REVIEW_PLAN_FOCUS_MAX_CHARS.
 //
 // run-unit-tests.sh has no mapping for .claude/workflows/*, so a PR touching
 // only review-fix.js triggers no vitest suite, and its test-*.sh glob is not a
@@ -78,13 +79,16 @@ const {
   REVIEW_PLAN_DEADLINES,
   REVIEW_PLAN_AWAIT_S,
   REVIEW_PLAN_KNOWN_FINDERS,
+  REVIEW_PLAN_FOCUS_MAX_CHARS,
   reviewPlanEffort,
   reviewPlanFinderSet,
   reviewPlanDeadline,
+  reviewPlanFocus,
+  reviewPlanFocusBrief,
 } = (function () {
   // eslint-disable-next-line no-eval -- the slice has several top-level statements, not a single expression, so `new Function('return ' + src)()` cannot wrap it // type-safety-ok: eval is required here
   return eval(
-    `(function () { ${gateSlice}\nreturn { REVIEW_PLAN_BAND, REVIEW_PLAN_DEFAULT_EFFORT, REVIEW_PLAN_DEADLINES, REVIEW_PLAN_AWAIT_S, REVIEW_PLAN_KNOWN_FINDERS, reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline }; })()`
+    `(function () { ${gateSlice}\nreturn { REVIEW_PLAN_BAND, REVIEW_PLAN_DEFAULT_EFFORT, REVIEW_PLAN_DEADLINES, REVIEW_PLAN_AWAIT_S, REVIEW_PLAN_KNOWN_FINDERS, REVIEW_PLAN_FOCUS_MAX_CHARS, reviewPlanEffort, reviewPlanFinderSet, reviewPlanDeadline, reviewPlanFocus, reviewPlanFocusBrief }; })()`
   );
 })();
 
@@ -194,5 +198,79 @@ results.finders_proto_name = reviewPlanFinderSet(FLOOR, {
   finder_set: FLOOR.concat(['__proto__', 'constructor', 'toString']),
 });
 results.known_finders = REVIEW_PLAN_KNOWN_FINDERS;
+
+// --- the focus (scope, not intensity) ----------------------------------------
+// The measured defect this field fixes: a scope-shaped analysis had nowhere to
+// go but `raise`, which is ANY-OF, so one narrow question pinned GLOBAL depth.
+results.focus_max_chars = REVIEW_PLAN_FOCUS_MAX_CHARS;
+
+// FIELD-ABSENT — the backwards-compatible case. A verdict with no `focus` must
+// behave exactly as it did before the field existed.
+results.focus_absent = reviewPlanFocus({ effort: 'low', raise: [], cheapen: ['small'] }, FLOOR);
+results.focus_no_verdict = reviewPlanFocus(undefined, FLOOR);
+results.focus_verdict_is_array = reviewPlanFocus(['focus'], FLOOR);
+results.focus_is_string = reviewPlanFocus({ focus: 'check the sensor' }, FLOOR);
+results.focus_is_array = reviewPlanFocus({ focus: ['check the sensor'] }, FLOOR);
+// A subset with no question narrows nothing and says nothing — refused.
+results.focus_no_question = reviewPlanFocus({ focus: { finders: ['red-team'] } }, FLOOR);
+results.focus_blank_question = reviewPlanFocus({ focus: { question: '   ' } }, FLOOR);
+
+const SENSOR_Q =
+  'verify this lane-authored sensor suppression is not laundering a type error';
+
+// The whole point: "low effort, one finder, this question".
+results.focus_subset = reviewPlanFocus(
+  { focus: { question: SENSOR_Q, finders: ['red-team'] } },
+  FLOOR
+);
+// No subset named → every launched lens carries the question.
+results.focus_all = reviewPlanFocus({ focus: { question: SENSOR_Q } }, FLOOR);
+// A name outside the CONSTRAINED roster is ignored, not added — a focus is not
+// a roster gate in either direction.
+results.focus_unlaunched_name = reviewPlanFocus(
+  { focus: { question: SENSOR_Q, finders: ['red-team', 'erosion', '__proto__', null, 42, ''] } },
+  FLOOR
+);
+// Every named lens ignored → falls back to every launched lens (broader, which
+// is the safe direction) rather than to nobody.
+results.focus_all_names_ignored = reviewPlanFocus(
+  { focus: { question: SENSOR_Q, finders: ['erosion'] } },
+  FLOOR
+);
+results.focus_dedup = reviewPlanFocus(
+  { focus: { question: SENSOR_Q, finders: ['red-team', 'red-team'] } },
+  FLOOR
+);
+// The question reaches a PROMPT and is derived from the diff: one line, capped.
+results.focus_multiline = reviewPlanFocus({ focus: { question: 'a\nb\r\nc' } }, FLOOR);
+results.focus_long = reviewPlanFocus({ focus: { question: 'x'.repeat(4000) } }, FLOOR);
+results.focus_bad_roster = reviewPlanFocus(
+  { focus: { question: SENSOR_Q, finders: ['red-team'] } },
+  undefined
+);
+
+// A focus changes NEITHER dial: the cheapen it rode in with still stands, and
+// the roster is untouched. This is the pair of rows the whole unit is for.
+results.focus_does_not_block_cheapen = reviewPlanEffort({
+  effort: 'low',
+  raise: [],
+  cheapen: ['test-only', 'mechanical', 'small', 'no-contract-delta', 'docs', 'zero-executable-tokens'],
+  focus: { question: SENSOR_Q, finders: ['red-team'] },
+});
+results.focus_does_not_gate_roster = reviewPlanFinderSet(FLOOR, {
+  focus: { question: SENSOR_Q, finders: ['red-team'] },
+});
+
+// --- the brief clause ---------------------------------------------------------
+const focusSubset = results.focus_subset;
+const focusAll = results.focus_all;
+const focusNone = results.focus_absent;
+results.brief_targeted = reviewPlanFocusBrief(focusSubset, 'red-team');
+results.brief_untargeted = reviewPlanFocusBrief(focusSubset, 'api-cost');
+results.brief_all_lenses = reviewPlanFocusBrief(focusAll, 'api-cost');
+// No focus → EMPTY clause → the prompt is byte-identical to the pre-focus one.
+results.brief_no_focus = reviewPlanFocusBrief(focusNone, 'red-team');
+results.brief_undefined = reviewPlanFocusBrief(undefined, 'red-team');
+results.brief_junk = reviewPlanFocusBrief({ question: 42, finders: [] }, 'red-team');
 
 process.stdout.write(JSON.stringify(results) + '\n');

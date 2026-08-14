@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: Review-depth pre-pass — reads the review delta ONCE plus the mechanical classifier outputs, and returns a small structured verdict setting /code-review's effort within the author-set low..max band and gating the owned finder roster on the semantics of the diff. Fails open to effort `high` and the full roster on any error, timeout, or unparseable output. Never edits, never commits, never reviews.
+description: Review-depth pre-pass — reads the review delta ONCE plus the mechanical classifier outputs, and returns a small structured verdict setting /code-review's effort within the author-set low..max band, gating the owned finder roster on the semantics of the diff, and optionally focusing named lenses on one specific question. Fails open to effort `high` and the full roster on any error, timeout, or unparseable output. Never edits, never commits, never reviews.
 ---
 
 # Review Plan
@@ -40,6 +40,10 @@ answer is an unparseable verdict and takes the fail-open path.
   "raise": ["<signal>", "..."],
   "cheapen": ["<signal>", "..."],
   "finder_set": ["input-validation", "domain-sweep", "red-team", "security-review", "api-cost"],
+  "focus": {
+    "question": "<one line>",
+    "finders": ["<lens>", "..."]
+  },
   "reasons": {
     "effort": "<one line>",
     "<lens>": "<one line, per lens you added>"
@@ -56,10 +60,54 @@ answer is an unparseable verdict and takes the fail-open path.
   field to have honoured it.
 - `finder_set` may **add** lenses. Omitting one does not remove it — see
   "Gating authority" below.
+- `focus` is **optional** and is a **scope, not an intensity** — see "The focus"
+  below. Omit it entirely when the delta raises no single specific question; a
+  verdict without it behaves exactly as verdicts did before the field existed.
+
+## The focus — a scope-shaped concern is not a raise signal
+
+Before this field the verdict had one intensity dial (`effort`) and one roster,
+so an analysis whose content was *"there is one specific thing worth checking
+here"* had nowhere to go but `raise` — and raising is **any-of**, so it pinned
+**global** depth. Measured: one legitimate narrow concern (*"verify this
+lane-authored sensor suppression is not laundering a type error"*, analysis 7)
+held effort at `high` against six independent cheapen signals including
+zero-executable-tokens, and a 1-file +2/−2 comment-only delta cost **$76.09,
+248 turns and 13 subagents** to return 10 findings and 0 actionable.
+
+So when an analysis produces a *question* rather than an *intensity*, put it in
+`focus` and keep it out of `raise`:
+
+- `focus.question` — one line, the specific thing to check. It is appended to
+  the brief of the lenses below, in addition to their normal brief.
+- `focus.finders` — **optional**. The lenses that should carry the question.
+  Omit it (or leave it empty) and every launched lens carries it.
+
+A verdict can now say *low effort, one lens, this question*.
+
+**What the focus does not do**, mechanically enforced in `reviewPlanFocus`:
+
+- **It does not change the effort.** `reviewPlanEffort` never reads it. A
+  concern parked in `focus` no longer costs you the cheapen — which is the whole
+  point — and a concern that genuinely warrants more depth still belongs in
+  `raise`, where it still refuses the cheapen. The **Asymmetric** rule is
+  unchanged: this field is a second dimension, not a looser dial.
+- **It does not gate the roster.** `focus.finders` selects among the lenses the
+  constrained roster **already launches**; naming one it does not launch is
+  ignored and recorded, and every launched lens still runs its whole brief.
+- **It does not shorten a lens.** The brief clause says so outright. A focus
+  narrows what the review is *curious* about, never what it *covers* — a focus
+  that could shorten coverage would be a detection cut wearing a question's
+  clothes.
+
+The question is flattened to one line and truncated
+(`REVIEW_PLAN_FOCUS_MAX_CHARS`) before it reaches a prompt, because it is
+derived from text the diff under review can influence.
 
 The caller does not trust this object's arithmetic. Every rule below is
-re-enforced mechanically in `reviewPlanEffort` / `reviewPlanFinderSet`
-(`.claude/workflows/review-fix.js`, the `review plan gate` sentinel region),
+re-enforced mechanically in `reviewPlanEffort` / `reviewPlanFinderSet` /
+`reviewPlanFocus` (`.claude/workflows/review-fix.js`, the `review plan gate`
+sentinel region),
 because a verdict is derived from text the diff under review can influence.
 State the verdict honestly anyway — the gate constrains it, it does not compute
 it for you.
@@ -78,7 +126,7 @@ is handed its output.
 | 4 | Change-class mix | **Opus** | mechanical / test-only / docs / config / new-logic / control-flow / concurrency / error-handling / data-schema — the **primary effort driver and primary finder gate** |
 | 5 | Prior-finding recurrence | mech | the delta touches previously-flagged lines ⇒ **raise**, and pass the prior finding into the brief |
 | 6 | Test-coverage delta | mech | production logic changed with no test change ⇒ **raise**; test-only ⇒ lower |
-| 7 | Delta provenance | mech | authored by `/fix-checks`, `/qa-fix`, `/code-review --fix`, or a human — lane-authored CI repairs **raise**, and `/code-review --fix`'s own edits are the ones no reviewer has ever seen |
+| 7 | Delta provenance | mech | authored by `/fix-checks`, `/qa-fix`, `/code-review --fix`, or a human — lane-authored CI repairs **raise**, and `/code-review --fix`'s own edits are the ones no reviewer has ever seen. When the concern is one specific question about one specific edit, it is a `focus`, **not** a `raise` — see "The focus" |
 | 8 | Size and dispersion | mech | **tie-breaker only**, deliberately demoted — a one-line auth-predicate change outranks a 900-line rename |
 
 Analysis 8's demotion is the whole point of the ordering. Size is the signal it
@@ -130,9 +178,11 @@ is the binding precedent and it is unambiguous: `api-cost` was retained at a
 Concretely: today's `agentFinderSet` output is the **floor** for `surface=code`.
 Your `finder_set` may add to it; omitting an entry does not remove it, and the
 caller records the attempt. Semantic narrowing therefore belongs in the
-per-lens `reasons` you return — which shapes what a launched lens is told to
-emphasise — never in the roster, because once a removal reaches the roster it is
-indistinguishable from a removal for cost.
+per-lens `reasons` you return and in `focus` — both of which shape what a
+launched lens is told to emphasise — never in the roster, because once a removal
+reaches the roster it is indistinguishable from a removal for cost. `focus` is
+subject to the same rule: it selects among the lenses that already launch and
+shortens none of them.
 
 ## What this skill never does
 
