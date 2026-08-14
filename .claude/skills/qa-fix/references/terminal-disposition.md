@@ -75,6 +75,16 @@ unset = interactive run; the script no-ops with a clear diagnostic.
 `dispatch-emit-outcome` is pure, so do **not** pass
 `dangerouslyDisableSandbox`. Pass `--disposition completed`, `--fixes-applied 0`,
 and **omit** `--terminated-reason` (forbidden on a non-escalated disposition).
+
+**Tool-denial accounting** (applies to every emit call site in this file and in
+`auto-fix-lane.md`): `tool_denials` and `denied_commands` are always in the
+record, defaulting to `0` / `[]`. Neither is a count this skill computes —
+`dispatch-emit-outcome` derives them from this session's own transcript
+(`toolDenialKind == "user-rejected"`), so a QA pass that lost a tool call to a
+permission denial mid-flight cannot report a clean record with the gap invisible.
+Pass `--tool-denials` / `--denied-command` **only** to correct a derived value
+you know is wrong.
+
 Source the counts by whether Step 3.5 ran this pass:
 
 - **Step 3.5 ran** (clean pass via only-`needs-main` or only-`already-satisfied`
@@ -103,6 +113,8 @@ if [[ "$TARGET_KIND" == node ]]; then
 else
   id_arg=(--issue "$N")
 fi
+# tool_denials / denied_commands are always in the record and are DERIVED by the
+# script from this session's transcript — pass no flag for them.
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
   --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
   --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 was skipped> \
@@ -226,6 +238,8 @@ if [[ "$TARGET_KIND" == node ]]; then
 else
   id_arg=(--issue "$N")
 fi
+# tool_denials / denied_commands are always in the record and are DERIVED by the
+# script from this session's transcript — pass no flag for them.
 .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
   --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
   --findings-surfaced <result.findings_surfaced, or 0 if Step 3.5 did not run> \

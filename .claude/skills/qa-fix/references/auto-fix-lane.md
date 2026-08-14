@@ -155,6 +155,11 @@ Otherwise (opus-fixable items present), choose exactly one path:
    - `--followups-filed` = the count of `needs-main` follow-ups Step 3.6 actually
      filed this pass (newly-filed only, not already-tracked); `0` if Step 3.6 did
      not run.
+   - `--tool-denials` / `--denied-command`: **omit both**. The script derives
+     `tool_denials` and `denied_commands` from this session's transcript
+     (`toolDenialKind == "user-rejected"`) and always emits them, defaulting to
+     `0` / `[]` — see the tool-denial accounting note in
+     `terminal-disposition.md`.
    - `--subagents-launched` = `SKILL_SUBAGENTS + result.subagents_launched`.
      `result` is always in scope on the fix finalize path (it runs after Step
      3.5), so add the Workflow's own fan-out (`result.subagents_launched`) to the
@@ -175,6 +180,8 @@ Otherwise (opus-fixable items present), choose exactly one path:
    else
      id_arg=(--issue "$N")
    fi
+   # tool_denials / denied_commands are always in the record and are DERIVED by
+   # the script from this session's transcript — pass no flag for them.
    .claude/skills/dispatch-propagate/scripts/dispatch-emit-outcome \
      --phase qa --repo "$REPO" "${id_arg[@]}" --pr "$PR_NUM" \
      --findings-surfaced <result.findings_surfaced> \
