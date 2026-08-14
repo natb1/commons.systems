@@ -92,3 +92,31 @@ mechanical read over one session — a Sonnet or Haiku candidate — but the cos
 of N evaluations per ladder against the freshness they buy is **unmeasured**,
 and rsi condition 14's "no extra budget cost" clause was retired on that
 expectation. Measuring it is part of this unit's acceptance.
+
+## Superseded in part — 2026-08-14 `/align` round
+
+This node's statement says the driver evaluates at **every** phase boundary.
+That is no longer the doctrine. The 2026-08-14 round amended the every-run
+evaluation condition on `strategy-recursive-self-improvement` twice over:
+
+1. **Both drivers, not just the ladder.** The trigger is keyed on the *session*
+   (a sweep over ended sessions' `dispatch-stamp` sidecars), not on a driver's
+   control flow, so it covers tick-spawned phase and unattended-intervention
+   sessions too. Carrier: `tactic-rsi-session-sweep-trigger`.
+2. **Threshold-gated, not automatic.** Four trigger families — outcome
+   (unconditional), relative cost-per-unit-of-change, an absolute ceiling, and a
+   sampling floor. Carrier: `tactic-rsi-trigger-threshold-gate`.
+
+What survives unchanged: the fire-and-forget spawn that never blocks the driver,
+the narrowed closing cross-phase synthesis, the record-only bounds, and — now
+explicitly protected against the gate — the halt clause.
+
+The "Open question for planning" above is partly answered: the cost of N
+evaluations per ladder is what the gate exists to bound, and the 2026-08-13
+measurement recorded on the strategy ($37.47 of $76.09 outside a review that
+returned 0 actionable findings) is the first datapoint. The model/effort
+question is still open.
+
+Note also that "condition 14" as cited throughout this body is an ordinal that
+no longer resolves — the conditions array now has 16 entries and the one meant
+is index 7. The general defect is tracked by `tactic-clarification-citation-ids`.

@@ -2,10 +2,12 @@
 id: strategy-recursive-self-improvement
 kind: strategy
 statement: Harness self-improvement is measurement, not a second orchestrator —
-  /rsi evaluates each finished dispatch-ladder phase and /rsi-audit measures
-  token economy at any scope, and both record findings as ordinary draft tactics
-  on the graph, merging a recurrence onto the existing node exactly as every
-  other finding producer does
+  /rsi evaluates finished phase and unattended-intervention sessions on BOTH
+  dispatch drivers, fired by a lane-agnostic trigger that is unconditional on
+  failure signals and threshold-gated on cost, and /rsi-audit measures token
+  economy at any scope; both record findings as ordinary draft tactics on the
+  graph, merging a recurrence onto the existing node exactly as every other
+  finding producer does
 owner: human
 status: refining
 parent: strategy-autonomous-execution
@@ -16,12 +18,14 @@ rationale: >-
   queue, and shortcut critical-path work the harness could not reach. (Retired
   2026-08-12 by author ruling.) What replaces it is smaller and mechanical: the
   harness measures itself continuously and records what it finds, and the
-  ordinary dispatch queue executes the repairs. /rsi is now the per-phase
-  evaluator the ladder driver spawns fire-and-forget at every phase boundary;
-  /rsi-audit is the token-economy instrument at fleet or single-node scope; both
-  write findings into one merged ledger, one node per distinct finding carrying
-  a recurrence count and summary impact metrics. Neither judges, routes,
-  executes, pauses, or escalates.
+  ordinary dispatch queue executes the repairs. /rsi is now the evaluator of
+  finished phase and unattended-intervention sessions on BOTH dispatch drivers —
+  the ladder and the scheduled tick — spawned fire-and-forget and fired by a
+  lane-agnostic trigger (amended 2026-08-14; the every-ladder-phase-boundary
+  rule it replaces held from 2026-08-12); /rsi-audit is the token-economy
+  instrument at fleet or single-node scope; both write findings into one merged
+  ledger, one node per distinct finding carrying a recurrence count and summary
+  impact metrics. Neither judges, routes, executes, pauses, or escalates.
 
 
   The evaluation scope is unchanged in intent — implementation bugs inconsistent
@@ -35,6 +39,22 @@ rationale: >-
   for ongoing harness optimization, is what remains, and it is now a measurement
   loop feeding the ordinary queue. The research lane recorded 2026-08-10 remains
   specified and unbuilt.
+
+
+  (Amended 2026-08-14.) The trigger is gated because coverage and yield came
+  apart. Evaluating every phase boundary on the ladder was affordable; extending
+  the same rule to the scheduled tick would multiply it across every node in
+  flight, and the 2026-08-13 measurement recorded on this node the day before —
+  830 of 1026 seconds and $37.47 of $76.09 spent outside a review that returned
+  0 actionable findings — shows the spend is not evenly informative. The gate is
+  an EFFICIENCY lever and efficiency is a throughput lever, which is
+  strategy-token-economy's own recorded position, not a divergence from it: the
+  same allowance converts into more closed tactics when evaluation is spent
+  where the evidence is. It is neither 'spend less' (which
+  strategy-token-economy refuses) nor 'record less' (which the 2026-08-12 ledger
+  clarification refuses). Coverage is preserved where it carries information:
+  failure signals fire the evaluator unconditionally, and every skipped session
+  is COUNTED so recurrence stays readable as a rate.
 reading: "pause: paused; backlog: 58/236 = 24.6% (band ≤35%); parked: 156 (21
   blocking); worktrees: 54; tokens 7d: dispatch 91% / office-hours 0% / rsi 0% /
   other 9%"
@@ -1336,12 +1356,244 @@ clarifications:
       subagent-to-Skill nesting only. Carriers:
       tactic-rsi-lens-catalog-decomposition and
       tactic-rsi-round-trips-lens-carrier."
+  - question: Is gating the evaluator on cost a contradiction with
+      strategy-token-economy's 'the economy is throughput, not savings'?
+    answer: "(Recorded 2026-08-14 /align round; author ruling, correcting the
+      interview's own framing.) No, and the framing that made it look like one
+      is withdrawn. The interview opened by putting the gate to the author as a
+      fork — token savings versus yield selection — on the reading that
+      strategy-token-economy's sunk-cost doctrine ('the marginal token is sunk
+      cost, so the economy is throughput, not savings', with its own reading at
+      utilization 27% weekly) makes reduced evaluation spend not a good. The
+      author ruled the fork false: BETTER EFFICIENCY IS MORE THROUGHPUT, and
+      this must not be recorded as a contradiction. That ruling is the record's
+      own, not a new position — strategy-token-economy's rationale already
+      states it: 'Efficiency mechanisms — per-phase model and effort routing,
+      context discipline, error hygiene — ARE THROUGHPUT LEVERS: an Opus token
+      draws the weekly allowance several times faster than a Sonnet token, so
+      routing and context discipline convert the same allowance into more closed
+      tactics.' The allowance is rate-limited, so allowance drawn evaluating a
+      healthy phase is allowance not drawn closing a tactic. The gate is
+      therefore an efficiency lever recorded on efficiency's own terms,
+      requiring no amendment to strategy-token-economy and no divergence from
+      it. It is also neither of the two things the record already refuses: not
+      'spend less' (strategy-token-economy) and not 'record less' (the
+      2026-08-12 ledger clarification, which adopted the rival's bound and
+      refused its conclusion). One consequence worth naming:
+      cost-per-unit-of-delivered-change, the metric the gate uses, is
+      strategy-token-economy's own success signal — allowance converted into
+      closed work — read at phase granularity."
+  - question: Which trigger surface fires /rsi, given the ladder has a phase
+      boundary and the scheduled tick has none?
+    answer: "(Recorded 2026-08-14 /align round.) A lane-agnostic sweep over ended
+      sessions' dispatch-stamp sidecars, scoped to the exact session id. The two
+      drivers are not symmetric and the asymmetry is structural, not an
+      oversight: dispatch-ladder-run's spawn_phase_eval fires /rsi at each
+      `awaited` event, whereas the tick spawns a worker through
+      dispatch-graph-execute and exits, so nothing in the tick corresponds to 'a
+      phase just finished' — only the FOLLOWING tick observes a changed node
+      phase. Keying the trigger on a driver's control flow therefore forces two
+      detectors that will drift. What both drivers do produce is a
+      <stem>.dispatch-stamp.json sidecar per session, written at birth by the
+      SessionStart hook and carrying node_id; sweeping ended sessions that have
+      a sidecar and no evaluation record is one detector for both. Three
+      alternatives were put and declined: two independent detectors (lower blast
+      radius on a working driver, but guaranteed drift and the ladder keeps its
+      approximate scope); the gate inside /rsi itself (trivial, but pays a full
+      session boot per phase to decide not to work — precisely the init overhead
+      the audit's baseline lens measures); and leaving the tick out entirely. A
+      bonus the sweep buys rather than costs: /rsi's SKILL currently records
+      'there is no per-phase session id, and inventing one is not this job's
+      business' and approximates scope as --node plus --since. A sidecar sweep
+      yields the real session id, so /rsi can take --session <sid> exactly —
+      which is also the fix for eval-since-bound-excludes-worker, the finding
+      ledger's highest-recurrence entry. Carrier:
+      tactic-rsi-session-sweep-trigger."
+  - question: What does the threshold compare against, and who pays for computing
+      the distribution?
+    answer: "(Recorded 2026-08-14 /align round.) /rsi-audit writes a per-phase-kind
+      threshold table into config on its regular fleet pass; the gate does a
+      cheap read-and-compare. Any percentile or median needs a reference
+      distribution and computing one is not free — aggregate-usage.sh is a
+      ~1000-line jq program over multi-megabyte transcripts, so computing it at
+      every session boundary to decide whether to spend a model turn would cost
+      more than the model turn. The fleet-scope instrument was going to read
+      this data anyway, so the expensive work amortizes into it rather than
+      being paid N times. Static author-set constants were put as the
+      alternative and declined as the steady state — fully predictable, but they
+      go stale silently and cannot express 'unusual for THIS phase kind' — while
+      being ADOPTED as the bootstrap: the config carries hand-set numbers until
+      the first audit pass overwrites them, so the gate is shippable before the
+      table exists. Honest limit owned at record time: that /rsi-audit can be
+      made to WRITE a config file was not checked against its own record-only
+      bounds during this interview. If that bound forbids it, the writer moves
+      rather than the design. Carrier: tactic-rsi-audit-threshold-table."
+  - question: Which trigger families does the gate carry, and what is each one blind to?
+    answer: "(Recorded 2026-08-14 /align round; the self-normalization limit is
+      disclosed against this round's own recommendation, not only against the
+      rejected one.) Four families — outcome, relative, absolute, and a sampling
+      floor — specified in the four-family condition recorded this round. The
+      reasoning that produced four rather than one: the requirement as prompted
+      proposed a 95th percentile of phase session token usage, configurable. A
+      percentile is SELF-NORMALIZING — by construction ~5% of phases trip it
+      however good or bad the harness becomes, so it can never report that
+      things are fine now, nor that everything is bad. It is a fixed-rate budget
+      allocator, not an anomaly detector, and it should be adopted only if
+      spending a fixed fraction of phases on evaluation is what is wanted. The
+      interview then had to own that the ratio-to-trailing-median it recommended
+      INSTEAD carries exactly the same defect: if every phase degrades
+      uniformly, the median degrades with it and nothing fires. That disclosure
+      is what produced the absolute family — an author-set ceiling that fires
+      independently of any distribution — and the long (28-day) relative window,
+      so the reference does not chase a recent regression into normality. The
+      sampling floor answers a different blindness: a purely threshold-gated
+      evaluator only ever observes sessions that already tripped a gate, so its
+      own reference distribution degrades and 'what normal looks like' stops
+      being observable. Dropping the floor was put as an option and declined for
+      that reason. Carrier: tactic-rsi-trigger-threshold-gate."
+  - question: Steelman — verification-first workflows mean coverage is not
+      conditional on suspicion. Should the evaluator's coverage stay
+      unconditional?
+    answer: "(Adopted in part, diverged on the conclusion, 2026-08-14; reasons
+      recorded.) The rival is sourced from a tradition this strategy already
+      adopts: tradition-agentic-engineering's `adopted` list names
+      'verification-first workflows' as the harness's design idiom,
+      'load-bearing across strategy-graph-native-dispatch and
+      strategy-recursive-self-improvement'. On that reading you verify every
+      unit and do not sample the tail to infer the body, so the
+      every-phase-boundary rule is the tradition-faithful one and a threshold
+      gate is a regression from verification back to INSPECTION — with Deming's
+      'cease dependence on inspection' making the same objection from the other
+      side. ADOPTED: the rival's bar binds absolutely for FAILURES, which is why
+      the outcome family fires unconditionally and why condition 7's halt clause
+      is explicitly protected against the gate rather than merely surviving it.
+      DIVERGED, on two grounds. First, verification-first binds the PRODUCT
+      pipeline — every change gets tests, review and qa, which the ladder does —
+      and /rsi verifies nothing; it is a measurement instrument reading spend
+      and error signatures, and a measurement instrument is not the unit under
+      verification. Second, Deming's own argument cuts the other way for
+      instruments: reacting to common-cause variation is TAMPERING, and an
+      evaluator that fires on every phase and mints a finding from ordinary
+      variation is tampering, not verification. A rival framing was also put and
+      declined — keep unconditional coverage but move the threshold to the
+      LEDGER WRITE, evaluating everything and minting only what clears a
+      materiality bar. It is faithful to the tradition and it controls the
+      variable clarification 32 actually named, but it pays a full session boot
+      plus model turn per phase on both drivers, which on the tick multiplies
+      across every node in flight. Honest limit owned at record time: the Deming
+      reading is Claude-internal knowledge the author has not verified, and this
+      graph has no reading chunk for either tradition —
+      tactic-review-tradition-agentic-engineering is born-parked and not yet
+      held. The author took plain acceptance rather than the offered deferral
+      after that boldness was disclosed."
+  - question: How does a threshold skip avoid violating condition 9's rule that an
+      occurrence is never silently dropped?
+    answer: "(Recorded 2026-08-14 /align round; this is the edge case the gate would
+      otherwise have created.) By counting the skips. Condition 9 was recorded
+      against graph-write-lock contention, but its reason generalizes exactly:
+      the ledger exists to carry a recurrence count, and an occurrence that
+      never happens because the session was never evaluated is dropped just as
+      surely as one that fails to take the lock. Worse, a gate corrupts the
+      figure in a way lock contention does not — it changes the DENOMINATOR
+      silently, so 'this finding recurred three times' stops being interpretable
+      at all ('three in a hundred phases' and 'three in five evaluated phases'
+      are different findings, and after gating you cannot tell which you have).
+      The rule recorded is therefore that the sweep records the skipped
+      population, making recurrence readable as a rate against a known
+      denominator, and that the sampling floor gives the unbiased estimator for
+      the skipped body. This is the strongest single reason the sampling floor
+      is not optional. Note the scope: it also affects recurrence figures
+      recorded BEFORE the gate ships, since they were measured against full
+      coverage — a comparison across the change must account for that break."
+  - question: Can the tick-side half of this change be validated while dispatch is
+      paused?
+    answer: "(Recorded 2026-08-14 /align round.) No, and the record binds that
+      rather than leaving it implicit. Dispatch is paused by author directive
+      since 2026-08-10, and this node's own attributes.pause records that
+      criterion 1 is not autonomously satisfiable while the pause holds; the
+      dispatch-ladder exists precisely as the manual escape for nodes the tick
+      structurally cannot reach. So the tick half of the widened trigger — the
+      whole motivation for widening it — lands into a driver that is not
+      currently running. The ruling: build both halves in ONE lane-agnostic
+      change (the lane-agnostic design is what makes the tick half nearly free,
+      so splitting it would mean writing the sweep twice), validate the ladder
+      path immediately, and carry an explicit 'unvalidated until the pause
+      lifts' mark on the tick path that the implementing tactic's qa-main must
+      discharge when it does. The alternative put and declined was ladder-only
+      now with the tick half as a draft blocked on the pause lifting."
+  - question: Does this round's cost-per-unit-of-change metric duplicate the
+      round-trips lens carrier recorded the same day?
+    answer: "(Recorded 2026-08-14 /align round, reconciling against clarification 46
+      which landed during this interview.) No, and the interview's own claim
+      that orchestration overhead had NO sensor was wrong and is corrected here.
+      The interview put to the author that '95th percentile of orchestration vs
+      real-work token ratio' was unmeasurable, having read aggregate-usage.sh's
+      session-type and attribution-skill folds and found neither separates
+      plumbing from work. It missed
+      lenses.phase_standup.<phase>.boot_preamble.scriptable_round_trips, which
+      computes exactly that class and which clarification 46 of this same date
+      rules must be re-tagged any-scope so /rsi can read it (carrier:
+      tactic-rsi-round-trips-lens-carrier). No orchestration-ratio sensor tactic
+      is minted by this round; that carrier already exists and minting a second
+      would be the duplicate-finding defect this strategy's own success_signal
+      measures. The two metrics sit at different layers and both are kept:
+      scriptable_round_trips is a LENS, read INSIDE an evaluation to explain
+      where a session's spend went; cost-per-unit-of-delivered-change is a
+      TRIGGER, read OUTSIDE to decide whether to evaluate at all. The author's
+      ruling on the metric is unchanged by the correction, since only the
+      bookkeeping moved. The 2026-08-13 figures clarification 46 records — 830
+      of 1026 seconds and $37.47 of $76.09 outside the review, the orchestrator
+      outspending all five review lenses 2.7 to 1, 7 of 12 subagents reviewing
+      nothing, 0 actionable findings — are the evidence for BOTH, and are the
+      single measured datapoint validating cost-per-unit-of-delivered-change as
+      a trigger."
+  - question: Who may write the gate's threshold parameters?
+    answer: "(Recorded 2026-08-14 /align round, from the step-3 delegation sweep;
+      applying an existing ruling rather than making a new one.) The author
+      only. The delegation sweep matched delegation-anthropic-claude, whose
+      attributes.delegated was extended by this strategy's own 2026-08-11 round
+      to cover 'tactical prioritization of dispatch-delegated work' and whose
+      divergence.level is moderate. No `recovers` edge is warranted — this round
+      does not unwind vendor reliance, and the evaluation judgment stays
+      delegated. What it does surface is a capture risk with a sharper shape
+      than the prioritization case: a self-evaluator that can tune its own
+      trigger is one that can decide not to look at itself, and unlike a
+      mis-prioritization that is visible in the queue, a raised threshold is
+      invisible precisely because it produces no findings. So condition 10's
+      already-ratified recommend/write split is applied to this new actuator
+      verbatim: the model may recommend a parameter change with measured
+      justification, and never writes one. This was decided in-round rather than
+      put as a question, because it applies a ratified split to a new actuator
+      rather than deciding anything new."
+  - question: Which interventions does the widened trigger cover, and why is
+      /office-hours excluded?
+    answer: "(Recorded 2026-08-14 /align round.) The six unattended lanes —
+      dispatch-invalid-state, dispatch-conflict, fix-checks, qa-main,
+      diagnose-main, jit-reminder — are treated exactly as phases, same four
+      trigger families. Attended /office-hours sittings are out of scope
+      entirely. The reason is that an attended sitting differs in kind rather
+      than in degree: its scarce resource is the author's time, not allowance
+      draw, so cost-per-unit-of-delivered-change is undefined for it and the
+      relative and absolute families have nothing to read. It is also already
+      the author's own surface, which makes an unattended evaluator recording
+      findings about how a sitting was spent a different proposition from one
+      evaluating a worker. Two alternatives were put and declined: office-hours
+      on outcome triggers only (evaluate a sitting when a park did not clear, an
+      exit-11 fired, or a disposition had to be redone — attractive, and the
+      nearest thing to a future amendment if sitting quality ever needs
+      measuring), and uniform coverage, which would require deciding what
+      cost-per-unit-of-delivered-change means when the unit is a human decision,
+      for which this interview had no answer."
 tooling_goals: []
 success_signal:
-  observable: graph-native dispatch reaches stable autonomous operation, every
-    ladder phase boundary is evaluated, and each /rsi-audit pass reports a
-    per-workflow spend fold that holds its review thresholds — with the
-    opportunities it ranks landing in the graph rather than in a report, and
+  observable: graph-native dispatch reaches stable autonomous operation; every
+    phase and unattended-intervention session on BOTH dispatch drivers is either
+    evaluated or recorded as a counted skip, so recurrence stays readable as a
+    rate; every outcome-triggered session is evaluated unconditionally; the eval
+    lane's share of the per-workflow spend fold falls without the ledger's
+    distinct-finding discovery rate falling with it; and each /rsi-audit pass
+    reports a per-workflow spend fold that holds its review thresholds — with
+    the opportunities it ranks landing in the graph rather than in a report, and
     with no two tactics recording the same root-cause defect
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
@@ -1351,8 +1603,10 @@ success_signal:
     (research-cycle landings)
   threshold: dispatch runs unpaused, strategy-graph-native-dispatch's own 35%
     non-increasing band holds, consecutive /rsi-audit windows keep dispatch
-    dominating the per-workflow fold, and the parked critical-path count is
-    non-increasing across them
+    dominating the per-workflow fold, the parked critical-path count is
+    non-increasing across them, and evaluated-plus-counted-skips equals the
+    eligible session population in every window (a silent drop fails the signal
+    outright)
   is_proxy: true
 attention:
   boosts:
@@ -1555,7 +1809,25 @@ attributes:
       evaluator to skip the field that would have caught the defect. Tag by what
       the median is a median OF, never by the word 'median'. This does not
       disturb the three things /rsi-audit still owes that a single run
-      structurally cannot produce; it corrects only the boundary between them.)"
+      structurally cannot produce; it corrects only the boundary between them.)
+      (Amended 2026-08-14 /align round, on author ruling. TWO changes, and one
+      thing deliberately unchanged. FIRST, the binding surface widens from the
+      dispatch-ladder to BOTH DRIVERS: a phase or unattended-intervention
+      session is evaluated whether the ladder drove it or the scheduled tick
+      spawned it. The tick has no phase-boundary event to hook — it spawns a
+      worker and exits, and only the next tick observes a changed phase — so the
+      trigger is keyed on the SESSION rather than on a driver's control flow
+      (see the trigger-surface clarification of this date). SECOND, 'every'
+      becomes conditional on a trigger firing rather than automatic: the
+      per-session evaluation is now threshold-gated, per the four-family trigger
+      condition recorded this same round. UNCHANGED, and explicitly protected
+      against the gate: the halt clause. A run that halts (exit 10/11/12/13/21)
+      still owes a review of the phases it completed, and it owes it
+      UNCONDITIONALLY — the cheapest halts (exit 10 idle, exit 13 claimed) burn
+      almost nothing, so a cost threshold would systematically skip exactly the
+      most defect-rich runs this clause was recorded to catch. The seven lenses
+      every evaluation must cover are unchanged in substance; their carriers are
+      being restructured by the lens-catalog ruling of this same date.)"
     - "the finding ledger's recurrence count is the figure the ledger exists to
       carry, so an occurrence must never be silently dropped: a writer that
       cannot take the graph-write lock must not skip-and-warn when its caller is
@@ -1616,6 +1888,83 @@ attributes:
       third round). Amended 2026-08-13: 'the model' in this condition is
       /rsi-audit, the one delegated actuator; the classification acts it may
       perform and the rank algebra that bounds them are unchanged"
+    - "the evaluator's trigger is uniform across drivers and keyed on the
+      SESSION, never on a driver's control flow: /rsi fires for a finished phase
+      or unattended-intervention session whether the dispatch-ladder drove it or
+      the scheduled tick spawned it, detected by a lane-agnostic sweep over
+      ended sessions' <stem>.dispatch-stamp.json sidecars (written at session
+      birth by the SessionStart hook, carrying node_id — the same sidecar
+      aggregate-usage.sh --node already matches on), and scoped to the EXACT
+      session id rather than approximated by node plus a --since time bound. The
+      tick cannot carry a boundary hook: dispatch-graph-execute spawns a worker
+      and exits, and only the following tick observes a changed node phase. Two
+      consequences the design deliberately takes: one detector rather than two
+      that would drift, and the removal of /rsi's recorded scope approximation
+      ('there is no per-phase session id') — a sidecar sweep yields the real
+      session id, which also closes the ledger's highest-recurrence finding
+      eval-since-bound-excludes-worker. The gate is NOT implemented inside /rsi
+      itself: a session that boots in order to decide not to work pays the full
+      init overhead the audit's own baseline lens measures. IN SCOPE: the
+      unattended lanes — dispatch-invalid-state, dispatch-conflict, fix-checks,
+      qa-main, diagnose-main, jit-reminder — treated exactly as phases. OUT OF
+      SCOPE: attended /office-hours sittings, whose scarce resource is the
+      author's time rather than allowance draw, and for which
+      cost-per-unit-of-delivered-change is undefined. (Recorded 2026-08-14
+      /align round.)"
+    - "the trigger is FOUR families and three of them are cost-independent,
+      because no single family is sound alone. (1) OUTCOME — a halt (exit
+      10/11/12/13/21), rework (execution.fix.attempt incremented, a conflict
+      attempt, a demotion back to implement, scope-fingerprint custody churn), a
+      new tool-error signature, a permission denial, or a park — fires
+      UNCONDITIONALLY, no threshold consulted. (2) RELATIVE —
+      cost-per-unit-of-delivered-change (phase price proxy over lines changed or
+      units planned/implemented) above k times the trailing 28-day median for
+      that phase kind — fires on the expensive tail; the window is long
+      deliberately so the threshold does not chase a recent regression into
+      normality. (3) ABSOLUTE — an author-set cost-per-unit ceiling — fires
+      regardless of the distribution, and exists because EVERY relative
+      threshold is structurally blind to a uniform regression: if every phase
+      gets three times worse the median moves with it and nothing fires. That
+      defect is why a raw 95th percentile was rejected and it applies equally to
+      the ratio-to-median that replaced it; the absolute family is the answer to
+      it, not an afterthought. (4) SAMPLING FLOOR — one in N of everything else
+      — keeps the reference distribution calibrated and the healthy path
+      observable, without which the distribution only ever sees sessions that
+      already tripped a gate and degrades. k, the ceiling and N are all
+      configurable. Cost-per-unit-of-delivered-change is preferred over raw
+      token magnitude on measured evidence: the 2026-08-13 review phase that
+      spent 830 of 1026 seconds outside the review was CHEAP in absolute terms,
+      so a magnitude gate would have missed it while flagging a large implement
+      phase that was expensive only because the work was big. (Recorded
+      2026-08-14 /align round.)"
+    - "a skipped session is COUNTED, never silently dropped: condition 9's rule
+      that an occurrence must never be silently dropped extends from
+      graph-write-lock contention to threshold skips, because the failure is the
+      same one — an unreadable recurrence figure. The sweep records the skipped
+      population, so recurrence_count stays interpretable as a RATE against a
+      known denominator rather than as a bare count against an unknown one
+      ('three times in a hundred phases' and 'three times in five evaluated
+      phases' are not the same finding), and the sampling floor supplies the
+      unbiased estimator for the skipped body. A gate that reduces evaluations
+      without recording the denominator makes every recurrence figure on the
+      ledger uninterpretable, including the ones recorded before it shipped.
+      (Recorded 2026-08-14 /align round.)"
+    - "the reference distribution is computed by /rsi-audit and never by the
+      gate, and the gate's parameters are author-owned. On the distribution: the
+      fleet-scope instrument already reads this data on its regular pass, so it
+      writes per-phase-kind cut points into config and the gate does a cheap
+      read-and-compare; aggregate-usage.sh is a ~1000-line jq program over
+      multi-megabyte transcripts, and running it at every session boundary to
+      decide whether to spend a model turn would cost more than the model turn
+      it gates. Hand-set constants in the same config are the bootstrap until
+      the first audit pass overwrites them. On the parameters: k, the absolute
+      ceiling and N are written by the AUTHOR only — the model may recommend a
+      change with measured justification and never write one. This applies
+      condition 10's already-ratified recommend/write split to a new actuator,
+      and the reason is sharper here than for prioritization: a self-evaluator
+      that can tune its own trigger is one that can decide not to look at
+      itself, and delegation-anthropic-claude's divergence is already moderate.
+      (Recorded 2026-08-14 /align round, from the step-3 delegation sweep.)"
   pause:
     state: paused
     since: 2026-08-10
