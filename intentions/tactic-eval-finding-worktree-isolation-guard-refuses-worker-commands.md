@@ -62,14 +62,38 @@ attributes:
         2026-08-14T15:11:58Z
       sensor: aggregate-usage.sh
       measured: 2026-08-14
-    - metric: recurrence_count
+    - metric: automode_denials
       value: 1
+      unit: events
+      window: tactic-attention-per-tier-boost-migration/implement 2026-08-14T17:12:06Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-14
+    - metric: retry_price_proxy_usd
+      value: 0.35
+      unit: usd
+      window: tactic-attention-per-tier-boost-migration/implement 2026-08-14T17:12:06Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-14
+    - metric: sandbox_overrides
+      value: 29
+      unit: events
+      window: tactic-attention-per-tier-boost-migration/implement 2026-08-14T17:12:06Z
+      sensor: aggregate-usage.sh
+      measured: 2026-08-14
+    - metric: gates_blocking_cd_prefixed_compound
+      value: 2
+      unit: distinct gates
+      window: tactic-attention-per-tier-boost-migration 2026-08-14 ladder
+      sensor: rsi
+      measured: 2026-08-14
+    - metric: recurrence_count
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
       measured: 2026-08-14
 ---
-# Observed on `tactic-attention-per-tier-boost-migration`, `align-tactics` phase, 2026-08-14
+# Occurrence 1 — `tactic-attention-per-tier-boost-migration`, `align-tactics` phase, 2026-08-14
 
 The largest tool-error class in this phase is Claude Code's built-in
 worktree-isolation guard refusing commands the workers wrote, and it is a
@@ -119,15 +143,61 @@ treatment of this guard is scattered and partial:
 Neither the isolation guard's two refusal variants nor its remedy (one plain
 command per call, or `Write` a script and run it) has a heading of its own.
 
-## What would have to change
+# Occurrence 2 — same node, `implement` phase, 2026-08-14T17:12:06Z
 
-Give the worktree-isolation guard its own section in `.claude/rules/sandbox.md`,
-stating both refusal variants (`-C` redirect; "too complex to verify" for
-compound commands, loops, and redirects) and the two remedies, and cross-link it
-from the `cd && command` entry. Recorded for the author.
+**The same rule gap, enforced by a different gate.** This occurrence widens the
+entry: the defect is not specific to the worktree-isolation guard.
+
+The `implement` worker session `09888b78-be81-4597-bb3d-55b3cfa00d63` issued, at
+2026-08-14T17:41:57Z:
+
+```
+cd /home/n8/natb1/commons.systems/.claude/worktrees/tactic-attention-per-tier-boost-migration
+bash .claude/skills/dispatch-propagate/scripts/run-lint.sh 2>&1 | tail -40
+```
+
+with `dangerouslyDisableSandbox: true`. It was **denied by the Claude Code auto
+mode classifier** — "Blocked by classifier. If you have other tasks that don't
+depend on this action, continue working on those." Not the isolation guard, and
+not a user rejection: this phase's `permission_friction` reads
+`automode_denials: 1`, `policy_blocks: 0`, `user_rejections: 0`, with
+`retry_price_proxy_usd: 0.35`. The worker recovered on its next turn by
+re-issuing the same lint run without the `cd` prefix, which succeeded.
+
+So the `cd <dir>`-prefixed compound is now measured being blocked by **two
+independent gates** in two consecutive phases of one ladder run. Occurrence 1's
+closing note that `automode_denials` were 0 was scoped to that phase's data, not
+a claim that the classifier never fires on this pattern — it does.
+
+This makes the sandbox.md defect sharper than occurrence 1 stated it. The rule
+frames `cd <dir> && command` purely as a *prefix-matching / permission-prompt*
+cost. In an unattended auto-mode worker there is no prompt to pay: the call is
+denied outright, by whichever gate reaches it first. A worker following the rule
+as written has no way to know that.
+
+Note also that the phase's total `sandbox_overrides` is **29 across 5 sessions**
+(20 in the worker alone) — `.claude/rules/sandbox.md`'s own doctrine is that an
+always-on override carries no signal, and at that density it carries none.
+Recorded as context for the same section rewrite, not as a separate ask.
+
+# What would have to change
+
+Give the guard family its own section in `.claude/rules/sandbox.md`, stating:
+
+1. Both worktree-isolation refusal variants (`-C` redirect; "too complex to
+   verify" for compound commands, loops, and redirects).
+2. That the auto-mode classifier independently denies `cd`-prefixed compounds,
+   especially when combined with `dangerouslyDisableSandbox: true`.
+3. That in an unattended worker every one of these is a **hard denial**, never a
+   prompt — the current "Avoid `cd && command`" framing is wrong for the
+   unattended case, which is the majority case in dispatch.
+4. The remedies: one plain command per call, a directory flag (`--prefix`,
+   `--root`, `-C` where permitted), or `Write` a script and run it by path.
+
+Cross-link it from the `cd && command` entry. Recorded for the author; this
+evaluator applies nothing.
 
 Distinct from `tactic-eval-finding-unattended-worker-tool-use-rejected-midflight`:
 that entry is the *permission gate* asking a non-existent human for approval
-mid-flight (`user_rejections`). This one is the isolation guard's own hard
-refusal, which never reaches the permission gate — `automode_denials` and
-`user_rejections` are both 0 here.
+mid-flight (`user_rejections`), which killed a phase. Neither occurrence here
+asked for a human — both were refused outright and both were recoverable.
