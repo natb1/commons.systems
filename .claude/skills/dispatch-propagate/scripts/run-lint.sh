@@ -159,6 +159,26 @@ else
   FAILURES+=(verify-fence-paths)
 fi
 
+# Run type-safety escape-hatch check — UNCONDITIONALLY, on every PR.
+#
+# Not gated on RUN_PROSE or any app-dir flag: this diffs origin/main...HEAD
+# over TS/JS files itself and is a fast self-noop when that diff is empty, so
+# there is no changed-files flag worth adding just to skip it. See
+# .claude/rules/type-safety-suppression-marker.md for the marker that
+# suppresses a flagged line.
+#
+# Invoked by an absolute path under $REPO_ROOT (not $SCRIPTS-relative) so the
+# script's own git-diff baseline resolves against the worktree under test, not
+# against wherever run-lint.sh's copy happens to live — same reasoning as the
+# verify-fence-paths --repo-root flag above.
+echo "=== type-safety escape-hatch check ==="
+if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh"; then
+  echo "PASS: type-safety escapes"
+else
+  echo "FAIL: type-safety escapes" >&2
+  FAILURES+=(type-safety-escapes)
+fi
+
 # The changed-files-scoped checks may all have been skipped; say so. This is no
 # longer an early exit — the unconditional check above always runs, so its
 # result must still reach the FAILURES tally below.
