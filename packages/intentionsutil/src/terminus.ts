@@ -11,6 +11,7 @@
 // callback so it stays testable without disk.
 
 import type { IntentionNode } from "./schema.js";
+import { blockersComplete } from "./router.js";
 
 export type TerminusClassification =
   | "not-merged"
@@ -32,17 +33,35 @@ export type TerminusClassification =
  *    only binds work whose PR has landed.
  * 2. `done` — the work reached its terminal phase. No excuse needed.
  * 3. `excused-parked` — office-hours holds it (`office_hours` non-null).
- * 4. `excused-blocked` — a `blocked_by` edge holds it (non-empty).
+ * 4. `excused-blocked` — a `blocked_by` edge holds it on an INCOMPLETE
+ *    blocker, per `blockersComplete` (router.ts): a blocker is complete
+ *    (so does NOT excuse) when it is absent from the store (prune-on-done
+ *    makes absence completion) or present with `phase: "done"`. Only a
+ *    present, not-done blocker counts as excused.
  * 5. `violation` — merged, not done, and neither excuse applies. This is
  *    exactly the failure the requirement exists to catch: a halt, a drained
  *    budget, a reconciler error, or a phase left mid-flight while the merge
  *    already looks like success.
+ *
+ * `byId` is required, not optional: `classifyTerminus` shares
+ * `blockersComplete` with the router, but the two callers fail open in
+ * OPPOSITE directions on an absent/dropped blocker file, and that asymmetry
+ * is why sharing is safe rather than a loophole. In the router, an absent
+ * blocker OPENS a dispatch gate, so `blockersComplete` there must be fed a
+ * STRICTLY-enumerated `byId` (see its doc comment) — a dropped file would
+ * wrongly unblock a dependent. Here, an absent blocker means "not excused":
+ * a dropped file makes this function OVER-report a `violation` rather than
+ * hiding one, so the tolerant-enumerating census sensor can call this
+ * predicate without adopting the router's strict-enumeration precondition.
  */
-export function classifyTerminus(node: IntentionNode): TerminusClassification {
+export function classifyTerminus(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+): TerminusClassification {
   if (node.execution?.completion?.mergedAt == null) return "not-merged";
   if (node.phase === "done") return "done";
   if (node.office_hours != null) return "excused-parked";
-  if (node.blocked_by.length > 0) return "excused-blocked";
+  if (!blockersComplete(node, byId)) return "excused-blocked";
   return "violation";
 }
 
@@ -86,12 +105,13 @@ export interface LadderTerminusCensus {
  * `LadderTerminusCensus.rows`), sorted by id for a stable report.
  */
 export function ladderTerminusCensus(nodes: IntentionNode[]): LadderTerminusCensus {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const rows: TerminusRow[] = [];
   let excused = 0;
   let violations = 0;
 
   for (const n of nodes) {
-    const classification = classifyTerminus(n);
+    const classification = classifyTerminus(n, byId);
     if (classification === "not-merged" || classification === "done") continue;
     rows.push({ id: n.id, phase: n.phase, pr: n.execution?.pr ?? null, classification });
     if (classification === "excused-parked" || classification === "excused-blocked") excused++;

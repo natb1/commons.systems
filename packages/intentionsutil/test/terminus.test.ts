@@ -55,9 +55,14 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
   };
 }
 
+/** A real, present, not-done blocker node — completes `blockersComplete: false`. */
+function openBlocker(id: string): IntentionNode {
+  return node({ id, phase: "implement" });
+}
+
 describe("classifyTerminus", () => {
   it("no execution.completion.mergedAt -> not-merged", () => {
-    expect(classifyTerminus(node({ id: "t", phase: "main-qa" }))).toBe("not-merged");
+    expect(classifyTerminus(node({ id: "t", phase: "main-qa" }), new Map())).toBe("not-merged");
   });
 
   it("execution present but completion null -> not-merged", () => {
@@ -66,12 +71,12 @@ describe("classifyTerminus", () => {
       phase: "main-qa",
       execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
     });
-    expect(classifyTerminus(n)).toBe("not-merged");
+    expect(classifyTerminus(n, new Map())).toBe("not-merged");
   });
 
   it("merged + phase:done -> done", () => {
     expect(
-      classifyTerminus(node({ id: "t", phase: "done", execution: mergedExecution() })),
+      classifyTerminus(node({ id: "t", phase: "done", execution: mergedExecution() }), new Map()),
     ).toBe("done");
   });
 
@@ -82,25 +87,56 @@ describe("classifyTerminus", () => {
       execution: mergedExecution(),
       office_hours: parked("waiting"),
     });
-    expect(classifyTerminus(n)).toBe("excused-parked");
+    expect(classifyTerminus(n, new Map())).toBe("excused-parked");
   });
 
-  it("merged + not done + blocked_by -> excused-blocked", () => {
+  it("merged + not done + blocked_by on a present, not-done blocker -> excused-blocked", () => {
+    const blocker = openBlocker("tactic-other");
     const n = node({
       id: "t",
       phase: "main-qa",
       execution: mergedExecution(),
       blocked_by: ["tactic-other"],
     });
-    expect(classifyTerminus(n)).toBe("excused-blocked");
+    const byId = new Map([
+      [n.id, n],
+      [blocker.id, blocker],
+    ]);
+    expect(classifyTerminus(n, byId)).toBe("excused-blocked");
+  });
+
+  it("merged + not done + blocked_by on a DONE blocker -> violation (excuse self-clears)", () => {
+    const blocker = node({ id: "tactic-other", phase: "done", execution: mergedExecution() });
+    const n = node({
+      id: "t",
+      phase: "main-qa",
+      execution: mergedExecution(),
+      blocked_by: ["tactic-other"],
+    });
+    const byId = new Map([
+      [n.id, n],
+      [blocker.id, blocker],
+    ]);
+    expect(classifyTerminus(n, byId)).toBe("violation");
+  });
+
+  it("merged + not done + blocked_by on an ABSENT blocker -> violation", () => {
+    const n = node({
+      id: "t",
+      phase: "main-qa",
+      execution: mergedExecution(),
+      blocked_by: ["tactic-vanished"],
+    });
+    expect(classifyTerminus(n, new Map([[n.id, n]]))).toBe("violation");
   });
 
   it("merged + not done + no excuse -> violation", () => {
     const n = node({ id: "t", phase: "main-qa", execution: mergedExecution() });
-    expect(classifyTerminus(n)).toBe("violation");
+    expect(classifyTerminus(n, new Map())).toBe("violation");
   });
 
   it("precedence: both parked AND blocked -> excused-parked", () => {
+    const blocker = openBlocker("tactic-other");
     const n = node({
       id: "t",
       phase: "main-qa",
@@ -108,7 +144,11 @@ describe("classifyTerminus", () => {
       office_hours: parked("waiting"),
       blocked_by: ["tactic-other"],
     });
-    expect(classifyTerminus(n)).toBe("excused-parked");
+    const byId = new Map([
+      [n.id, n],
+      [blocker.id, blocker],
+    ]);
+    expect(classifyTerminus(n, byId)).toBe("excused-parked");
   });
 
   it("precedence: done node that is also parked -> done, not excused-parked", () => {
@@ -118,7 +158,7 @@ describe("classifyTerminus", () => {
       execution: mergedExecution(),
       office_hours: parked("stale park never cleared"),
     });
-    expect(classifyTerminus(n)).toBe("done");
+    expect(classifyTerminus(n, new Map())).toBe("done");
   });
 });
 
@@ -158,6 +198,7 @@ describe("ladderTerminusCensus", () => {
         execution: mergedExecution(),
         blocked_by: ["tactic-other"],
       }),
+      openBlocker("tactic-other"),
       node({ id: "t-violation-a", phase: "main-qa", execution: mergedExecution() }),
       node({ id: "t-done", phase: "done", execution: mergedExecution() }),
     ];
@@ -208,7 +249,7 @@ describe("findUnstructuredWaits", () => {
     });
     const body = "- Verifiability: WAIT — awaited event: something lands\n";
     expect(findUnstructuredWaits([n], () => body)).toHaveLength(1);
-    expect(classifyTerminus(n)).toBe("violation");
+    expect(classifyTerminus(n, new Map([[n.id, n]]))).toBe("violation");
   });
 
   it("does not report a main-qa node whose wait is carried by blocked_by", () => {

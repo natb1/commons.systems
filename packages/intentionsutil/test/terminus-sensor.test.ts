@@ -100,8 +100,20 @@ describe("makeLadderTerminusSensor", () => {
         },
       }),
     );
-    // excused-blocked: merged, not done, blocked_by non-empty.
+    // excused-blocked: merged, not done, blocked_by names a real, present,
+    // not-done blocker (tactic-other below) — an absent or done blocker no
+    // longer excuses, so the blocker must exist in the store and stay open.
     writeNode(dir, mergedTactic("tactic-blocked", { blockedBy: ["tactic-other"] }));
+    // The open blocker itself: present, not done, no completion — so it
+    // classifies not-merged and never enters the census population.
+    writeNode(dir, {
+      id: "tactic-other",
+      kind: "tactic",
+      statement: "blocker for tactic-blocked",
+      owner: "ai",
+      status: "codified",
+      phase: "implement",
+    });
     // violation: merged, not done, no excuse.
     writeNode(dir, mergedTactic("tactic-violation"));
     // done: merged AND done — excluded from the census population entirely.
