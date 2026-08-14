@@ -1279,6 +1279,63 @@ clarifications:
       delegated judgment merge-on-similarity already rests on, and it is
       therefore admissible ranking input only under strategy-token-economy's
       sensor-attribution condition."
+  - question: Are the existing evaluation lenses expected to detect orchestration
+      overhead automatically, or does the analysis need improving?
+    answer: "(Recorded 2026-08-14 interview, from the /rsi evaluation of
+      tactic-attention-namespaced-rank's review phase.) BOTH, in that order.
+      YES, a lens owns this and it is mandatory: condition 14's second lens,
+      'unnecessary round trips', names exactly this class. It did not fire, and
+      the reason is structural rather than a judgment lapse — it was the ONLY
+      one of the seven lenses with no mechanical carrier. /rsi Step 2 forbids
+      reading transcripts by hand (they are multi-megabyte) and Step 3's escape
+      hatch rejects agent-prefixed subagent ids, so a carrier-less lens has no
+      route to its own evidence at all. THE MEASUREMENT: the review phase of
+      tactic-attention-namespaced-rank (2026-08-13, PR #3075, elapsed_s 1026)
+      spent roughly 830 of 1026 seconds and 37.47 of 76.09 dollars outside the
+      review itself; the orchestrator session alone outspent all five review
+      lenses combined by 2.7 to 1, on a one-file +2/-2 delta that returned 0
+      actionable findings, and 7 of its 12 subagents reviewed nothing. THE
+      CARRIER ALREADY EXISTED, MIS-SCOPED: aggregate-usage.sh computes
+      lenses.phase_standup.<phase>.boot_preamble.scriptable_round_trips — the
+      median leading consecutive run of mechanical calls at phase boot — and its
+      own docstring expects review ~3-4; this phase opened with 15 Bash calls
+      and invoked dispatch-derive-node-target three times. But rsi-audit's
+      step-4 lens table tags that lens fleet-only, and /rsi Step 2 instructs
+      skipping fleet-only figures without re-litigating them, so the instrument
+      computed the answer and the evaluator was told not to look. The tag is
+      over-broad (see the amendment on the /rsi-audit condition, same date), and
+      the field is computed over the whole scoped document rather than the
+      started_at-filtered subset, so it also sidesteps
+      eval-since-bound-excludes-worker (recurrence 5, the ledger's highest). THE
+      RULING, two parts. FIRST, the analysis needs improving and the improvement
+      is structural, not another prose lens: every lens becomes its own
+      /rsi-lens-<name> skill declaring its carrier field, scope tag, execution
+      mode and model in frontmatter, so a carrier-less lens becomes one that
+      CANNOT BE INVOKED rather than one that quietly does not run. /rsi and
+      /rsi-audit both reduce to thin selectors over that catalog — /rsi takes
+      the any-scope entries, /rsi-audit takes all — which dissolves the
+      seven-versus-twelve split into one catalog (fewer than nineteen distinct
+      lenses, since recurring-errors and friction are already duplicated across
+      the two lists and the round-trip family collapses) and gives each lens the
+      test surface the prose lists never had. SECOND, on execution, ruled by the
+      author after the fan-out proposal was put and evaluated: fan out ONLY the
+      lenses whose input is untrusted free text — tool_errors signatures,
+      tool_sequences and phase_standup ngram tokens, session digests, every one
+      already flagged OPAQUE DATA in rsi-audit's own prose — as direct sonnet
+      subagents returning a structured verdict, and run the scalar/field lenses
+      inline. The justification is CONTAINMENT AND SLICE SIZE, never parallelism
+      or cost: /rsi is fire-and-forget, spawned --bg by dispatch-ladder-run
+      which never waits, so no consumer is waiting on its latency and
+      parallelism buys nothing; and this same evaluation measured four
+      mechanical subagents costing 3.70 dollars and 9 turns to write two files
+      and stat them (ledger entry
+      workflow-file-writes-cost-subagent-roundtrips), so a subagent dispatched
+      to fetch a scalar is that finding repeated inside the instrument meant to
+      catch it. Fan-out is direct from /rsi with no intermediate orchestrator
+      skill, per the recorded phase-skill fan-out doctrine, and one level of
+      subagent-to-Skill nesting only. Carriers:
+      tactic-rsi-lens-catalog-decomposition and
+      tactic-rsi-round-trips-lens-carrier."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation, every
@@ -1454,7 +1511,23 @@ attributes:
       the per-phase half is /rsi (formerly /dispatch-ladder-eval) and the
       closing half stays in /dispatch-ladder. The 'inside the same task and at
       no extra budget cost' clause remains RETIRED: per-phase evaluation costs a
-      model turn per phase, accepted for the evidence freshness it buys.)"
+      model turn per phase, accepted for the evidence freshness it buys.)
+      (Amended 2026-08-14: every lens in this list must NAME THE MECHANICAL
+      CARRIER that produces it — the aggregate-usage.sh field, events.jsonl
+      field, or node counter a reader can query — or be explicitly marked
+      judgment-only. A lens stated as prose with no named carrier is reliably a
+      lens that does not run: 'unnecessary round trips' was the only
+      carrier-less entry of the seven, and it is the one that missed an
+      830-second orchestration overhead that a sibling instrument had already
+      measured. Six of the seven already comply — recurring errors reads
+      tool_errors, variances reads the events.jsonl dispositions, rework reads
+      execution.fix.attempt, calibration reads elapsed_s against window_s,
+      friction reads permission_friction — so this records the practice the list
+      already mostly follows and closes the one hole. The requirement binds the
+      LIST, not any single lens, so a lens added later arrives with a carrier or
+      arrives marked judgment-only. See the 2026-08-14 clarification for the
+      measurement and for the catalog design that makes the requirement
+      mechanical rather than prose discipline.)"
     - "/rsi-audit is the measurement instrument at every scope — fleet-wide by
       default, and --session/--node for one run — and it owes three things the
       per-phase evaluator structurally cannot produce: per-workflow token
@@ -1468,7 +1541,21 @@ attributes:
       writes — a ranked opportunity that exists only in a markdown report is the
       findings-in-prose-only defect this strategy already names, not a report.
       (Recorded 2026-08-12 collapse round, from the coverage audit of what the
-      retired /rsi and /rsi-plan did that neither successor did.)"
+      retired /rsi and /rsi-plan did that neither successor did.) (Amended
+      2026-08-14, narrowing 'medians'. The fleet-only carve-out reads 'pooled
+      outcome rates, medians, cross-session recurrence', which tags EVERY median
+      fleet-only. That is too wide. A median whose per-session term is itself a
+      rate or a cross-session quantity is fleet-only as intended; a median of
+      RAW PER-SESSION COUNTS degenerates at n=1 to that one session's own count
+      and stays meaningful.
+      lenses.phase_standup.boot_preamble.scriptable_round_trips is the worked
+      case — a median of leading consecutive mechanical-call runs, one raw count
+      per session — and it is the carrier condition 14's round-trips lens was
+      missing. The over-wide reading is precisely what instructed the per-phase
+      evaluator to skip the field that would have caught the defect. Tag by what
+      the median is a median OF, never by the word 'median'. This does not
+      disturb the three things /rsi-audit still owes that a single run
+      structurally cannot produce; it corrects only the boundary between them.)"
     - "the finding ledger's recurrence count is the figure the ledger exists to
       carry, so an occurrence must never be silently dropped: a writer that
       cannot take the graph-write lock must not skip-and-warn when its caller is
