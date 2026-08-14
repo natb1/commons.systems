@@ -693,7 +693,13 @@ echo "Test: a busy selection lock is a soft retry, not a halt"
 reset_seqs
 set_seq advance '10|idle tactic-fixture-node not-selectable'
 set_seq lock    '0|busy' '0|busy' '0|acquired'
-set_seq landed  '4|' '4|' '4|' '0|'
+# The last two lines are classify_terminus's own reads at the halt: `4` = the
+# node is PRESENT at origin/main, then `0` = it is done. Spelled out rather than
+# left to the fake's repeat-the-last-line fallback, which would answer "absent"
+# to the --blob read and send the classification down the git-history probe —
+# two more git calls, in a case whose whole subject is which git calls a busy
+# pass makes.
+set_seq landed  '4|' '4|' '4|' '0|' '4|' '0|'
 set_seq merge   '0|merged #8 (tactic-fixture-node)'
 set_seq reconcile '0|reconciled tactic-fixture-node -> done'
 run_ladder
@@ -1217,16 +1223,20 @@ printf '%s\n' "$FROZEN_LIB_GOOD" >"$FROZEN_LIB"
 # abandoned mid-flight (a violation of the requirement in
 # intentions/tactic-ladder-terminus-owns-main-qa.md).
 #
-# All six classifications are driven through the SAME verify-landed sequence
-# fake the landing signal already uses — classify_terminus reads the node at
-# origin/main through the very same script, so its answers are just more lines
-# of `landed.script`. The reads it makes, in order:
+# The classifications reached through verify-landed are driven through the SAME
+# sequence fake the landing signal already uses — classify_terminus reads the
+# node at origin/main through the very same script, so its answers are just more
+# lines of `landed.script`. The reads it makes, in order:
 #
-#   1. --blob absent            0 -> pruned, 1 -> unknown, 4 -> keep asking
+#   1. --blob absent            0 -> absent (see below), 1 -> unknown,
+#                               4 -> keep asking
 #   2. --jq .phase == "done"                 0 -> done
 #   3. --jq .office_hours != null            0 -> excused-parked
 #   4. --jq (.blocked_by | length) > 0       0 -> excused-blocked
 #   otherwise: violation, or unknown if any read answered 1.
+#
+# An ABSENT node is then split by git history rather than by verify-landed, so
+# those cases drive the `git` fake instead — see terminus_absent_case below.
 #
 # Every case below halts on await's exit 12, which reaches halt() WITHOUT the
 # driver having asked phase_is_done first — so line 1 of the sequence is
@@ -1303,14 +1313,72 @@ terminus_case unknown-mid unknown '4|' '4|' '1|' '4|'
 # rc=2 is verify-landed's usage error — not an answer either, so not a verdict.
 terminus_case unknown-usage unknown '2|'
 
-echo "Test: a node ABSENT from origin/main classifies 'pruned', not 'violation'"
-# The trap this closes: in --jq mode an absent node is not an error. verify-landed
-# feeds jq the literal `null`, every predicate evaluates false on it, and all
-# three reads answer 4 — so a landed prune would be reported as a violation.
-# Measured against the real script: `--jq` on an absent node exits 4 while
-# `--blob absent` exits 0. Hence the separate --blob read, first.
-terminus_case pruned pruned '0|'
-assert_eq "terminus pruned: the cheap --blob read settled it alone" "1" "$(calls landed)"
+# --- an absent node: pruned, or never a node at all -------------------------
+# The first trap this closes: in --jq mode an absent node is not an error.
+# verify-landed feeds jq the literal `null`, every predicate evaluates false on
+# it, and all three reads answer 4 — so a landed prune would be reported as a
+# violation. Measured against the real script: `--jq` on an absent node exits 4
+# while `--blob absent` exits 0. Hence the separate --blob read, first.
+#
+# The second: `--blob absent` answers "not at origin/main NOW" and nothing more.
+# A typo'd id and a node whose graph-commit never pushed are equally absent, so
+# answering `pruned` off that read alone would record work that never started as
+# a LEGITIMATE terminus. History settles it, through the `git` fake:
+#
+#   log -1 … -- intentions/<id>.md   sha    -> pruned
+#                                    rc!=0  -> unknown
+#                                    empty  -> ask the shallow guard
+#   rev-parse --is-shallow-repository false -> not-a-node
+#                                    else   -> unknown
+#
+# terminus_absent_case <label> <expected> <git-line>...
+# Every case here halts on await's exit 12 out of a LAUNCHING pass, which never
+# reaches the reconcile pass's checkout sync — so the probe is the run's first
+# git call and the sequence lines below map one-to-one onto the reads above.
+terminus_absent_case() {
+  local label="$1" want="$2"; shift 2
+  reset_seqs
+  set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+  set_seq await   '12|stalled tactic-fixture-node implement'
+  set_seq landed  '0|'
+  set_seq git     "$@"
+  run_ladder
+  assert_eq "terminus $label: the halt's exit code is unchanged (12)" "12" "$RC"
+  assert_eq "terminus $label: state.json records it" "$want" "$(state_terminus)"
+  assert_eq "terminus $label: the halt event records it" "$want" "$(halt_event_terminus)"
+  # The disambiguation is pure git plumbing: the --blob read is still the only
+  # verify-landed call an absent node costs.
+  assert_eq "terminus $label: no second verify-landed read" "1" "$(calls landed)"
+}
+
+echo "Test: an absent node whose file HAS history classifies 'pruned'"
+terminus_absent_case pruned pruned '0|4bd3ae0f9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f'
+assert_eq "terminus pruned: absence is settled against origin/main's history" \
+  "-C $PROJECT log -1 --format=%H origin/main -- intentions/$NODE.md" \
+  "$(sed -n 1p "$SEQ_DIR/git.argv")"
+assert_eq "terminus pruned: and the shallow guard is not paid on that path" \
+  "1" "$(calls git)"
+
+echo "Test: an absent node with NO history classifies 'not-a-node', not 'pruned'"
+# The id was never in the graph — a typo, or a node whose graph-commit never
+# pushed. Work that never started is not a legitimate terminus.
+terminus_absent_case not-a-node not-a-node '0|' '0|false'
+assert_eq "terminus not-a-node: empty history is only believed once shallowness is ruled out" \
+  "-C $PROJECT rev-parse --is-shallow-repository" "$(sed -n 2p "$SEQ_DIR/git.argv")"
+
+echo "Test: empty history in a SHALLOW clone classifies 'unknown', never 'not-a-node'"
+# A shallow clone's `git log` exits 0 and prints nothing for a node pruned
+# before the graft point (lib-deleted-node-ids.ts:39-63), so its silence is
+# evidence of nothing. Same reasoning as that helper's throw, mapped to a token
+# because classify_terminus may never throw.
+terminus_absent_case shallow unknown '0|' '0|true'
+
+echo "Test: a git failure behind an absent node classifies 'unknown'"
+# rc!=0 is not an answer, so it is not a verdict — the same rule the 0/4/1
+# verify-landed split enforces for the reads above.
+terminus_absent_case history-unreadable unknown '128|'
+assert_eq "terminus history-unreadable: an unreadable history stops the questioning" \
+  "1" "$(calls git)"
 
 echo "Test: the terminus never changes the exit code — on ANY halting code"
 # One halt() edit covers them all, exactly as the owed evaluation does. Each row

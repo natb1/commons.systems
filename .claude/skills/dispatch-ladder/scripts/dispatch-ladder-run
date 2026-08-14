@@ -304,11 +304,17 @@
 #   done            .phase == "done"
 #   excused-parked  .office_hours != null
 #   excused-blocked (.blocked_by | length) > 0
-#   pruned          absent from origin/main — a landed prune, which is exit 0's
-#                   second contract and never a violation
+#   pruned          absent from origin/main AND its history shows the file was
+#                   once there — a landed prune, which is exit 0's second
+#                   contract and never a violation
+#   not-a-node      absent from origin/main and NEVER there: the ladder ran
+#                   against an id that is not in the graph (a typo, or a node
+#                   whose graph-commit never pushed). NOT legitimate — no work
+#                   was done, and none could have been
 #   violation       none of the above, every read definitive: the run stopped on
 #                   work that is neither terminal nor excused
-#   unknown         verify-landed answered `unknown` for a read, so nothing is
+#   unknown         verify-landed answered `unknown` for a read, or the history
+#                   behind an absent node could not be read, so nothing is
 #                   claimed either way
 #
 # It NEVER changes the exit code, and it is NOT a gate — for the same reason the
@@ -688,7 +694,7 @@ halt() {
   # the fallbacks below exist for the ways a shell can still surprise us.
   TERMINUS=$(classify_terminus 2>/dev/null) || TERMINUS=""
   case "$TERMINUS" in
-    done|excused-parked|excused-blocked|violation|unknown|pruned) ;;
+    done|excused-parked|excused-blocked|violation|unknown|pruned|not-a-node) ;;
     *) TERMINUS=unknown ;;
   esac
   write_state
@@ -797,9 +803,13 @@ phase_is_done() {
 #   done             .phase == "done"
 #   excused-parked   .office_hours != null
 #   excused-blocked  (.blocked_by | length) > 0
-#   pruned           the node is ABSENT from origin/main (a landed prune)
+#   pruned           ABSENT from origin/main, and its history says it was once
+#                    there (a landed prune)
+#   not-a-node       ABSENT from origin/main and never there — the id is not in
+#                    the graph
 #   violation        none of the above, and every read answered definitively
-#   unknown          verify-landed answered `unknown` for a read
+#   unknown          verify-landed answered `unknown` for a read, or the history
+#                    behind an absent node could not be read
 #
 # The exit code says why the driver stopped; this says whether stopping there
 # was legitimate. Only `done`, the two excuses and `pruned` are — see THE EXIT
@@ -827,7 +837,9 @@ phase_is_done() {
 # the `--blob` mode written for exactly this question (verify-landed:32). It is
 # also the cheap read — pure git plumbing, no tsx start-up — and it is disjoint
 # from the three predicates rather than jumping the queue: an absent node
-# satisfies none of them.
+# satisfies none of them. What it does NOT settle is which KIND of absence this
+# is — classify_absent_node below splits a landed prune from an id that was
+# never in the graph at all.
 #
 # The three predicates are then evaluated in the documented order, so the
 # classification is deterministic when more than one holds. An `unknown` from
@@ -855,6 +867,49 @@ terminus_probe() { # <jq-filter> — 0 true, 4 definitely false, anything else u
     >/dev/null 2>&1
 }
 
+# classify_absent_node — the absent branch of classify_terminus. Prints exactly
+# one of `pruned`, `not-a-node` or `unknown`, and returns 0, always.
+#
+# WHY ABSENCE ALONE IS NOT A PRUNE. `--blob absent` answers "not present at
+# origin/main RIGHT NOW" and nothing more — it has no history awareness. A
+# typo'd node id, and a node whose graph-commit never pushed, are equally
+# absent, so answering `pruned` off that read alone records work that never
+# started as a LEGITIMATE terminus. verify-landed is right to call absence
+# landed (its `absent-and-expected-absent` contract, test-verify-landed.sh:118),
+# so the disambiguation belongs here, in the caller. This is the same split
+# dispatch-sweep:294-304 already makes, with the same git call — a node that
+# once existed and was pruned has a commit touching its file; one that never
+# existed has none.
+#
+# THE SHALLOW GUARD, and why it runs ONLY when the history came back empty. A
+# shallow clone's `git log` still exits 0 and still prints nothing for a node
+# pruned before the graft point (lib-deleted-node-ids.ts:39-63), so "no history"
+# from a truncated repo is evidence of nothing. That helper throws there; this
+# one may never throw (see classify_terminus above), so it maps the same
+# reasoning to `unknown`. Anything but a definite `false` — a `true`, a failed
+# read, an unexpected word — is `unknown`, never `not-a-node`: accusing a run of
+# working an id that is not in the graph needs a read that actually said so.
+# Ordering the guard after the log keeps the common path at ONE extra git call.
+#
+# Both reads are bounded by `timeout` for the reason the verify-landed reads
+# are: this runs inside halt() before write_state, so an unbounded read here
+# wedges the terminal path.
+classify_absent_node() {
+  local hist shallow rc
+  hist=$(timeout "$TERMINUS_READ_TIMEOUT_S" \
+    git -C "$PROJECT_ROOT" log -1 --format=%H origin/main -- "intentions/$NODE_ID.md" 2>/dev/null)
+  rc=$?
+  if (( rc != 0 )); then printf 'unknown\n'; return 0; fi
+  if [[ -n "$hist" ]]; then printf 'pruned\n'; return 0; fi
+
+  shallow=$(timeout "$TERMINUS_READ_TIMEOUT_S" \
+    git -C "$PROJECT_ROOT" rev-parse --is-shallow-repository 2>/dev/null)
+  rc=$?
+  if (( rc != 0 )) || [[ "$shallow" != "false" ]]; then printf 'unknown\n'; return 0; fi
+  printf 'not-a-node\n'
+  return 0
+}
+
 classify_terminus() {
   local rc unknown=0
 
@@ -862,7 +917,7 @@ classify_terminus() {
     "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
   rc=$?
   case "$rc" in
-    0) printf 'pruned\n'; return 0 ;;
+    0) classify_absent_node; return 0 ;;   # absent — history says which kind
     4) ;;   # present at origin/main — ask the three questions
     *) printf 'unknown\n'; return 0 ;;
   esac
