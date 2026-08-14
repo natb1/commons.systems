@@ -69,14 +69,41 @@ attributes:
       window: tactic-attention-namespaced-rank all sessions
       sensor: aggregate-usage.sh
       measured: 2026-08-13
-    - metric: recurrence_count
+    - metric: distinct_observations
       value: 1
       unit: occurrences
       window: all-time
       sensor: rsi
+      measured: 2026-08-14
+    - metric: setsid_present_in_version_that_ran
+      value: 1
+      unit: boolean
+      window: dispatch-code-review at base_sha 2614faf3, 2026-08-13T21:48:35Z
+      sensor: git-show
+      measured: 2026-08-14
+    - metric: child_survived_parent_interrupt
+      value: 0
+      unit: boolean
+      window: tactic-attention-namespaced-rank review 2026-08-13T21:49:38Z
+      sensor: session-transcript-mtime
       measured: 2026-08-13
+    - metric: recurrence_count
+      value: 2
+      unit: occurrences
+      window: all-time
+      sensor: rsi
+      measured: 2026-08-14
 ---
 # The "detached" code-review dies with the Bash call that launched it
+
+> **Recurrence 2 is a body correction, not a second observation.** There has
+> been exactly **one** occurrence of this finding (2026-08-13). The count moved
+> to 2 on 2026-08-14 only because `dispatch-eval-finding` has no amend mode —
+> the sole path that refreshes a body increments the count, and the alternative
+> (`--resolved-by`) would have asserted a fix that does not exist. Read
+> `distinct_observations` in `measured_impact`, not `recurrence_count`. What
+> changed is the diagnosis: the original body blamed process-group inheritance
+> and prescribed `setsid`. That is **falsified** — see "Corrected diagnosis".
 
 ## What was observed
 
@@ -119,6 +146,34 @@ Every session in the tree stopped writing at the same instant:
 mid-work — `a79a2c3` was spawning its own nested "Angle A line-by-line scan"
 agent, `a34ac99` was still reading `diff.patch`. `pid=2790475` is gone.
 
+## Corrected diagnosis (2026-08-14)
+
+The original body asserted that "the child is evidently in the launching Bash
+call's process group" and prescribed `setsid` or a double-fork. **Both are
+wrong: the script already does this, and it did not help.**
+
+Verified against the exact version that ran — `dispatch-code-review` at
+`base_sha 2614faf3`, the sha recorded in the code-review lock, unchanged
+between then and `origin/main` today:
+
+- line 1089/1099 — `LAUNCH_CMD=( setsid bash -c … )` / `LAUNCH_CMD=( setsid "${CHILD_CMD[@]}" )`
+- line 1102/1103 — `"${LAUNCH_CMD[@]}" </dev/null >/dev/null 2>&1 &` then `disown`
+- line 369/370 — the script **hard-refuses to run** if `setsid` is absent:
+  "it is the measured detached-launch mechanism … and there is no synchronous
+  fallback"
+
+So the child was already a session leader in its own process group, with stdin
+and both output streams detached from the caller, and disowned by the calling
+shell — and it still died 3 ms after the parent's interrupt, taking two
+in-flight subagents with it.
+
+This makes the finding **stronger, not weaker**. A pgid- or session-scoped kill
+cannot explain the death; the reaper must be walking the descendant tree (or
+tearing down a container/cgroup/namespace that encloses the whole worker),
+against which `setsid` offers no protection. The kill also arrives from
+Claude Code's own tool-interrupt path, not from the ladder — the ladder's halt
+came 2m20s *later*, at `21:51:58Z`.
+
 ## Why it matters
 
 `dispatch-code-review` is built specifically so the child outlives the caller:
@@ -126,9 +181,8 @@ its header documents the child running under `flock -w 1 <sidecar>` with the
 kernel holding the node lock "for exactly the child's lifetime", a
 `--deadline-seconds` backstop (16200 s here) instead of a foreground timeout,
 and a sidecar body it explicitly warns is stale text a crashed run "leaves
-behind forever". None of that survives contact with a tool-use interrupt: the
-child is evidently in the launching Bash call's process group, so killing the
-call reaps the whole tree.
+behind forever". Every one of those assumptions is false in practice, and the
+one mechanism the script relies on to make them true is already in place.
 
 The consequence is that the entire review phase hangs off the survival of one
 foreground tool call. When that call was interrupted, a `max`-effort Opus
@@ -136,7 +190,7 @@ review with a 4.5-hour budget — already past plan-gating, already fanned out �
 was destroyed 63 seconds after it started, and the ladder saw only "the worker
 stopped with no graph change".
 
-## Measured cost of this one occurrence
+## Measured cost of the one occurrence
 
 - Phase price proxy **$37.75** (cost $9.25) for **zero** graph change.
 - Of that, **$6.99** was the detached review's own already-spawned angle
@@ -150,15 +204,25 @@ stopped with no graph change".
 
 ## What would have to change
 
-The detached child must survive an interrupt of the tool call that launched
-it — i.e. `dispatch-code-review` should place the child in its own process
-group / session (`setsid`, or a double-fork) rather than inheriting the Bash
-call's, so that reaping the caller does not reap the review. The sidecar,
-`--deadline-seconds`, and the stale-body warning already assume this property;
-today the assumption is false.
+`setsid` is already spent, so the fix has to defeat a descendant-tree reap:
+
+1. **Establish the reaper first.** Reproduce by interrupting the launching Bash
+   call and watching whether `pid=<sidecar pid>` survives. If it does not
+   despite `setsid`, the killer is walking children or tearing down an
+   enclosing cgroup — identify which before choosing a remedy, because the two
+   need different fixes.
+2. **Re-parent out of the tree**, e.g. hand the launch to a supervisor that is
+   not a descendant of the tool call (a systemd user unit / transient scope, or
+   an existing daemon), so there is no ancestry chain to walk.
+3. **Failing that, make the loss recoverable** rather than silent: the phase
+   currently discards a fanned-out max-effort review with no record that it ran
+   at all. The sidecar already holds `pid`, `head_sha`, `effort` and
+   `deadline_s`; nothing reads them back after a kill.
 
 Verifiable afterwards: interrupt the launching Bash call and confirm
 `pid=<sidecar pid>` is still alive and the child transcript keeps growing.
 
-Related: the interrupt that triggered this is recorded separately as
-`unattended-worker-tool-use-rejected-midflight`.
+Related: the interrupt that triggered this was recorded separately as
+`unattended-worker-tool-use-rejected-midflight`, which has since been resolved
+by `1092a403` and retired. That retirement addressed the *interrupt*; it did
+not address this entry's defect, which is that the review does not survive one.
