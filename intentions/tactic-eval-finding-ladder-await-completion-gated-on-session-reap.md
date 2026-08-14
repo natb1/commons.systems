@@ -57,91 +57,110 @@ attributes:
       window: tactic-attention-namespaced-rank review 2026-08-13
       sensor: events.jsonl + git reflog
       measured: 2026-08-13
+    - metric: reap_wait_seconds
+      value: 4288
+      unit: seconds
+      window: tactic-attention-per-tier-boost-migration/align-tactics
+        2026-08-14T15:11:58Z
+      sensor: events.jsonl
+      measured: 2026-08-14
+    - metric: reap_wait_share_of_phase_elapsed
+      value: 0.698
+      unit: fraction
+      window: tactic-attention-per-tier-boost-migration/align-tactics
+        2026-08-14T15:11:58Z
+      sensor: events.jsonl
+      measured: 2026-08-14
+    - metric: phase_elapsed_seconds
+      value: 6140
+      unit: seconds
+      window: tactic-attention-per-tier-boost-migration/align-tactics
+        2026-08-14T15:11:58Z
+      sensor: events.jsonl
+      measured: 2026-08-14
+    - metric: reported_reap_lag_s_understatement_factor
+      value: 3.73
+      unit: ratio
+      window: tactic-attention-per-tier-boost-migration/align-tactics
+        2026-08-14T15:11:58Z
+      sensor: events.jsonl
+      measured: 2026-08-14
     - metric: recurrence_count
-      value: 1
+      value: 2
       unit: occurrences
       window: all-time
       sensor: rsi
-      measured: 2026-08-13
+      measured: 2026-08-14
   resolved_by: 1092a403e0000e4a4ce8ff106b892bfb32d4cdb7
 ---
-## What was observed
+# Recurrence 2 — `tactic-attention-per-tier-boost-migration`, `align-tactics` phase, run started 2026-08-14T15:11:58Z
 
-`tactic-attention-namespaced-rank`, ladder phase `review`, run started
-2026-08-13T14:29:51Z. The phase's completion was public at `origin/main` for
-**41 minutes** before the ladder noticed it.
+The first sighting was the review phase waiting 41 minutes on a finished review.
+This is the same defect on `align-tactics`, and it is worse: **69.8% of the
+phase's measured wall clock was spent waiting for a session-registry reap of a
+worker whose result was already public at `origin/main`.**
 
-Timeline (all UTC):
+## The measurement
 
-| time | event | source |
+From `.claude/worktrees/tactic-attention-per-tier-boost-migration.ladder/events.jsonl`
+and the run's journal (`journalctl --user -u
+dispatch-ladder-tactic-attention-per-tier-boost-migration`, 2026-08-14 11:11–12:54
+local / 15:11–16:54Z):
+
+| moment | UTC | source |
 | --- | --- | --- |
-| 14:30:52 | `launched` review, `skill=/review-fix` | `events.jsonl` |
-| 17:13:58 | commit `f3e0a632` adds `reviewed` to `execution.markers` | `git show f3e0a632` |
-| 17:15:05 | `f3e0a632` reaches `origin/main` (`update by push`) | `git reflog show origin/main` |
-| 17:16:03 | review worker `40c253c4`'s transcript stops (last write) | transcript mtime |
-| 17:35:06 | `await-repoll` reports `running`, `elapsed_s=11054` | `events.jsonl` |
-| 17:56:18 | `awaited` / `reviewed`, `elapsed_s=12326` | `events.jsonl` |
+| phase launched | 15:12:03 | `events.jsonl` `launched` |
+| `advanced` already public at `origin/main` | **≤ 15:42:53** | journal: `dispatch-ladder-await: … reached 'advanced' at origin/main while its session was still registered (state 'working')` |
+| session row finally reaped | 16:54:21 | journal: `… session row is gone 1148s after 'advanced' became public` |
+| `awaited align-tactics advanced` | 16:54:23 | `events.jsonl`, `elapsed_s=6140 await_repolls=2 window_s=1800` |
 
-The `await-repoll` at 17:35:06 fired **20 minutes after** the `reviewed` marker
-was already visible at `origin/main`.
+- Real phase work: **≤ 1850 s (~31 min)** — launch to first observation that
+  `advanced` was public.
+- Wait on the reap: **4288 s (71.5 min)** — 15:42:53Z → 16:54:21Z.
+- That is **69.8 % of the recorded `elapsed_s=6140`**, and 3.4× the configured
+  `window_s=1800`.
 
-## The mechanism
+## Two things this run adds beyond the first sighting
 
-`dispatch-ladder-await`'s Stage 2 loop (lines 456–488) polls **session liveness
-only**:
+**1. The reported `reap_lag_s` understates the true wait by 3.7×.** The verdict
+line reported `reap_lag_s=1148`, measured from the *last* `dispatch-ladder-await`
+invocation's own first observation (15:35:13Z→16:54:21Z local-clock 12:35:13→12:54:21).
+The driver spawns a fresh `await` process on every re-poll, so each one measures
+only its own slice. The true interval from first-public to reap was **4288 s**.
+Anything reading `reap_lag_s` off the event line — including this evaluator's
+lens 6, and the closing cross-phase synthesis — sees 27% of the real figure.
+
+**2. The blocker here was a missing node-terminal marker, not ordinary reap
+latency.** The journal names it explicitly, three times:
 
 ```
-while (( SECONDS < DEADLINE )); do
-  case "$(session_state)" in
-    absent)    report_graph_verdict ... ;;
-    done-held) ... ;;
-  esac
-  sleep "$POLL_S"
-done
+dispatch-ladder-await: the session named tactic-attention-per-tier-boost-migration
+has state 'done' but was NOT reaped — it stopped without writing a node-terminal
+marker, so dispatch-stop.sh is holding the job alive, and
+tactic-attention-per-tier-boost-migration carries no office_hours park at origin/main.
 ```
 
-`graph_verdict` — which already knows how to see this exact completion signal,
-via the `reviewed`-marker carve-out at lines 307–333 — is called **only** on a
-session-state change. While `session_state` returns `working`, the graph is
-never asked. So the await's detection latency is bounded below by how long the
-session registry keeps reporting the worker as live, not by when the completion
-became visible at `origin/main`.
+`lib-frozen-session-park` observed it for the full 300 s grace, logged five
+`held-sweep` events (60→300 s of a 420 s budget), then at 16:34:25Z routed the
+node to the invalid-state lane — *deferred, not resolved*. The reap did not
+arrive until 20 minutes after that routing.
 
-Two mechanisms compound, and this occurrence cannot separate their shares:
+So the wait had two stacked causes: `dispatch-ladder-await` Stage 2 will not
+accept `origin/main` as authoritative while the row is registered (the original
+finding), and the row stayed registered because `/align-tactics` exited without
+a node-terminal marker (`.claude/worktrees/…-per-tier-boost-migration.invalid-state-attempts`
+now reads `2`).
 
-1. **The gate.** Stage 2 does not ask `origin/main` while the session reads
-   `working`, so a completion that lands before the session is reaped waits.
-2. **Reap lag.** The registry reported the worker as `working` at 17:35:06,
-   19 minutes after its transcript's last write at 17:16:03. Whatever that lag
-   is, mechanism 1 converts it directly into ladder wall clock.
+## Recommended default (lens 6 owes a number; recorded, not applied)
 
-Only mechanism 1 is local to this script. Mechanism 2 was not diagnosed here.
-
-## Bounded, defensible figures
-
-- **≥1,201 s (20 min)** in which the completion was provably public at
-  `origin/main` (17:15:05) while Stage 2 provably never asked (the 17:35:06
-  repoll is exit 20 — the deadline expired without `session_state` ever leaving
-  `working`). This is the floor and does not depend on any reap-lag estimate.
-- **2,473 s (41 min 13 s)** total from public-at-`origin/main` (17:15:05) to
-  detection (17:56:18).
-- **20.1%** of the phase's measured `elapsed_s=12326` was spent after the
-  phase had finished.
-- **11.4%** of the run's `max_run_s=21600` budget.
-
-## What would have to change
-
-The decision belongs to `dispatch-ladder-await`, which owns the await contract.
-The shape of the gap is that `graph_verdict` is reachable only from a
-session-state transition, while the signal it reads is independent of session
-state. Whether the answer is asking the graph on every poll, asking it once per
-window before returning exit 20, or fixing the reap lag instead is the author's
-call — this entry records the cost, not the rule.
-
-## Positive control
-
-This is not an absence claim, but the searches were controlled anyway: the
-`--node`-scoped `aggregate-usage.sh` document returned 39 non-empty session rows
-for the window, `jq 'select(.phase == "review")'` returned 10 ledger lines, and
-`git log -S'reviewed' -- intentions/tactic-attention-namespaced-rank.md`
-returned the marker commit. Every instrument used here demonstrated it can see.
+- `--timeout-s`: the phase's real work was ~1850 s against a 1800 s window, so
+  the two `await-repoll`s were pure overhead on a phase that had essentially
+  finished. **2400 s** for `align-tactics` covers the observed work with headroom
+  and removes both repolls.
+- The load-bearing change is not a timeout: it is that **`advanced` public at
+  `origin/main` is already the authoritative completion signal.** A cap on the
+  post-`advanced`-public reap wait — **300 s**, matching `lib-frozen-session-park`'s
+  own grace — would have returned 4000 s of this run's 6140 s. Recorded for the
+  author; this evaluator does not write orchestration rules.
+- Separately: report `reap_lag_s` as first-public→reap, not per-`await`-process
+  slice, or the figure cannot be used for calibration at all.
