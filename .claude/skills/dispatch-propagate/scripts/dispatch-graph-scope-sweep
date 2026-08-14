@@ -12,7 +12,9 @@
 # unit-tested list-scope-stale-tactics.ts (the Unit-1 enumerator behind a thin
 # CLI); this script owns the LIVENESS gathering and the LANDING half (invoking
 # the existing demote-node-to-implement primitive per stale id), mirroring the
-# decision/land split of dispatch-graph-census and reconcile-graph-merged.
+# decision/land split of reconcile-graph-merged and (before its retirement)
+# dispatch-graph-census, whose own decision/land split now lives in
+# dispatch-census-tick + census-tick.ts.
 #
 # Claimed set (must match graph-select-target's exactly — reservation OR live):
 # a node the selector will NOT touch must also be one this sweep will NOT demote,
@@ -53,11 +55,12 @@
 # Stdout protocol (one line per demoted node, caller prefixes with `scope-sweep: `):
 #   scope-stale <id>   — the tactic was demoted to implement and landed on main.
 #
-# Best-effort: mirrors dispatch-graph-census's doctrine — a failure here must not
-# abort the tick. A failed demote of one node logs a diagnostic to stderr and
-# continues to the next; the sweep itself always exits 0. Exit is non-zero ONLY
-# for a hard config/environment error that makes the sweep unable to run at all
-# (e.g. an unresolvable REPO_ROOT).
+# Best-effort: mirrors the same best-effort doctrine the retired
+# dispatch-graph-census followed (now dispatch-census-tick's) — a failure here
+# must not abort the tick. A failed demote of one node logs a diagnostic to
+# stderr and continues to the next; the sweep itself always exits 0. Exit is
+# non-zero ONLY for a hard config/environment error that makes the sweep
+# unable to run at all (e.g. an unresolvable REPO_ROOT).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,9 +1,24 @@
 // graph-census-debt — compute the graph's owed reconciliation debt and decide
 // whether to birth a recurring census tactic (tactic-graph-census-recurrence
-// Unit 2). This is the network-free, testable DECISION half of the standing
-// per-tick reconciliation duty; the bash caller (dispatch-graph-census) owns
-// the LANDING half (write-node.ts + graph-commit), mirroring the decision/land
-// split between reconcile-graph.ts and reconcile-graph-merged.
+// Unit 2). This was originally the network-free, testable DECISION half of the
+// standing per-tick reconciliation duty, with a bash caller,
+// dispatch-graph-census, owning the LANDING half (write-node.ts +
+// graph-commit) — mirroring the decision/land split between
+// reconcile-graph.ts and reconcile-graph-merged. dispatch-graph-census was
+// retired (tactic-census-scripted-tick) in favour of the scripted census tick
+// step: dispatch-census-tick (the bash wrapper) + census-tick.ts (the
+// mutation half), which now owns the same split for the done-present
+// prune/defect-mint half of this module's debt.
+//
+// NO PRODUCTION CALLER: with dispatch-graph-census gone, nothing in the
+// dispatch chain invokes this module's CLI (`main()` below) or `decideCensus`.
+// It survives as an operator-run CLI for the orphans / mergedUnabsorbed debt
+// report — the two debt components census-tick.ts deliberately does NOT
+// cover, since it only handles done-but-present pruning and defect minting —
+// plus its unit test (packages/intentionsutil/test/graph-census-debt.test.ts).
+// The born-census-node body generator (`decideCensus` / `buildCensusNode`) is
+// retained only to support that operator-run CLI path; it is not reachable
+// from any scripted or production caller.
 //
 // Debt has three components:
 //   - owed prunes    — done-but-present nodes (phase === "done", still in the
@@ -233,8 +248,10 @@ function buildCensusNode(id: string, now: string, debt: CensusDebt) {
   const body =
     `# census: drain reconciliation debt (${now})\n\n` +
     `## Context\n\n` +
-    `The standing per-tick reconciliation duty (dispatch-graph-census) found ` +
-    `accumulated reconciliation debt of ${debt.total}, at or above the birth ` +
+    `This CLI (packages/intentionsutil/scripts/graph-census-debt.ts, run by an ` +
+    `operator — the retired dispatch-graph-census, replaced by ` +
+    `dispatch-census-tick, is no longer the caller) found accumulated ` +
+    `reconciliation debt of ${debt.total}, at or above the birth ` +
     `threshold. This born-parked census carries the batch to drain. It is the ` +
     `recurrence latch: no second census is born while this one stays open ` +
     `(phase !== done). Drain the batch, then resolve this node to clear the latch.\n\n` +

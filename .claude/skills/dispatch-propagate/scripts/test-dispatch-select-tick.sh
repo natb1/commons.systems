@@ -137,16 +137,19 @@ FAKE
   # standing census duty, the Calendar JIT importer, and the statements scan).
   # Each emits SEL_<NAME>_OUT (default empty) so a wiring test can drive its
   # prefixed passthrough line; silent by default so every other tick test is
-  # byte-identical.
+  # byte-identical. Each also records its argv in logs/<name>-args.log (one line
+  # per invocation, empty when called with no args) so a wiring test can assert
+  # what the tick forwarded — e.g. the census step's `--skip <id>` args.
   for _hs in dispatch-reconcile-merged:SEL_RECONCILE_MERGED_OUT \
              reconcile-graph-merged:SEL_RECONCILE_GRAPH_OUT \
              reconcile-graph-review-stall:SEL_REVIEW_STALL_OUT \
-             dispatch-graph-census:SEL_CENSUS_OUT \
+             dispatch-census-tick:SEL_CENSUS_OUT \
              dispatch-jit-calendar-import:SEL_CALENDAR_OUT \
              dispatch-statements-scan:SEL_STATEMENTS_OUT; do
     _hname="${_hs%%:*}"; _hvar="${_hs#*:}"
     cat > "$TMPDIR_TEST/$_hname" <<FAKE
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$TMPDIR_TEST/logs/$_hname-args.log"
 [[ -n "\${$_hvar:-}" ]] && printf '%s\n' "\${$_hvar}"
 exit 0
 FAKE
@@ -902,6 +905,37 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: no 'review-stall:' line when the sweep is silent"
   echo "    actual stdout: '$out'"
 fi
+sel_tick_teardown
+
+# --- Census skips the ids this tick's reconciler just moved to done ----------
+# reconcile-graph-merged writes `phase: done` for a merged PR, and the census
+# step a few lines later would otherwise verify and DELETE that node in the same
+# tick, seconds after the transition. The tick bounds that race by forwarding one
+# `--skip <id>` per `reconciled <id> -> done` line to dispatch-census-tick. Only
+# `-> done` targets: a `-> main-qa` transition is not done, and a `deferred` line
+# names no transition at all.
+echo "Test: select-tick forwards same-tick done ids to census as --skip"
+sel_tick_setup
+export SEL_RECONCILE_GRAPH_OUT="reconciled tactic-done-a -> done
+reconciled tactic-mainqa-b -> main-qa
+deferred tactic-deferred-c (pr still open)
+reconciled tactic-done-d -> done"
+out=$(run_sel_tick) || true
+assert_eq "census skip: both done ids forwarded, in order" \
+  "--skip tactic-done-a --skip tactic-done-d" \
+  "$(cat "$TMPDIR_TEST/logs/dispatch-census-tick-args.log")"
+assert_eq "census skip: main-qa target not forwarded" "0" \
+  "$(grep -c 'tactic-mainqa-b' "$TMPDIR_TEST/logs/dispatch-census-tick-args.log" || true)"
+assert_eq "census skip: deferred id not forwarded" "0" \
+  "$(grep -c 'tactic-deferred-c' "$TMPDIR_TEST/logs/dispatch-census-tick-args.log" || true)"
+sel_tick_teardown
+
+# A silent reconciler (the default) forwards nothing: census runs unrestricted.
+echo "Test: select-tick census gets no --skip when the reconciler was silent"
+sel_tick_setup
+out=$(run_sel_tick) || true
+assert_eq "census skip: no args when nothing was reconciled" "" \
+  "$(cat "$TMPDIR_TEST/logs/dispatch-census-tick-args.log")"
 sel_tick_teardown
 
 # --- #1495: dirty main → sync-failed, reseed armed, counter bumped -----------
