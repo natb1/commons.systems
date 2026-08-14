@@ -77,6 +77,10 @@ assert_eq "path-shaped sid exits 2" "2" "$DSD_RC"
 assert_eq "path-shaped sid emits no stdout" "" "$DSD_OUT"
 run_dsd --session 'has spaces'
 assert_eq "spaced sid exits 2" "2" "$DSD_RC"
+# The widened `(agent-)?` prefix must stay bounded: a typo'd or path-shaped
+# id after the prefix still fails, same as an unprefixed one would.
+run_dsd --session 'agent-../../etc'
+assert_eq "path-shaped agent- sid still exits 2" "2" "$DSD_RC"
 dsd_teardown
 
 # --- Test 3: usage errors → exit 2 -------------------------------------------
@@ -268,6 +272,35 @@ assert_eq "an ordinary digest is not marked truncated" "false" \
   "$(printf '%s' "$DSD_OUT" | jq -r '.truncated')"
 assert_eq "an ordinary digest is comfortably under the 64 KB cap" "yes" \
   "$( [ "${#DSD_OUT}" -lt 65536 ] && printf 'yes' || printf 'no')"
+dsd_teardown
+
+# --- Test 14: agent-prefixed subagent ids pass the shape check --------------
+# A fan-out phase's session rows are ~95% subagents, whose ids carry an
+# `agent-` prefix (e.g. `agent-abeb8e443ad63b2eb`). Before the widened
+# pattern, every one of those ids failed the shape check and could never
+# resolve via the store lookup.
+echo "Test: agent-prefixed session ids resolve via the store lookup"
+dsd_setup
+printf '%s\n' "$USER_TURN" "$ASSIST_TURN" > "$DSD_PROJ/agent-abeb8e443ad63b2eb.jsonl"
+run_dsd --session agent-abeb8e443ad63b2eb
+assert_eq "agent-prefixed sid resolves via store lookup" "0" "$DSD_RC"
+assert_eq "session_id is echoed back verbatim" "agent-abeb8e443ad63b2eb" \
+  "$(printf '%s' "$DSD_OUT" | jq -r '.session_id')"
+dsd_teardown
+
+# --- Test 15: --transcript bypasses the --session shape check entirely -----
+# `--transcript` is the documented escape hatch, so it must work even when
+# `--session` fails the shape check outright: once --transcript is given,
+# $TRANSCRIPT is the authority and $SESSION is only an echoed label (see the
+# `session_id` field in the emitted object), never a lookup key.
+echo "Test: --transcript bypasses the --session shape check"
+dsd_setup
+printf '%s\n' "$USER_TURN" "$ASSIST_TURN" > "$DSD_ROOT/subagent.jsonl"
+run_dsd --session 'agent-not/hex-shaped!' --transcript "$DSD_ROOT/subagent.jsonl"
+assert_eq "shape-failing sid with --transcript still exits 0" "0" "$DSD_RC"
+assert_eq "session_id is echoed back even though it fails the shape check" \
+  "agent-not/hex-shaped!" \
+  "$(printf '%s' "$DSD_OUT" | jq -r '.session_id')"
 dsd_teardown
 
 report_results
