@@ -45,7 +45,80 @@ reading: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Can the blocking-premise check legally run before the drift review, as
+      this tactic's statement assumes — the UNVERIFIED PREMISE flagged at record
+      time?
+    answer: "Largely answered by reading on 2026-08-14, in the 'reduces to a smaller
+      saving' direction the flag anticipated; the residue is narrower than the
+      original question. Three facts, established against
+      .claude/workflows/align-tactics.js at that date. ONE — there is no
+      separate blocking-premise check to reorder. Premise detection IS Side B of
+      the drift review (buildDriftPrompt, align-tactics.js:699); the two-sided
+      review is one agent call, so 'run the premise check before the drift
+      review' asks to move a step ahead of the step it is part of, and is not a
+      coherent reordering. TWO — the drift review already runs early. The phase
+      order is gather (:1047), drift (:1124), decompose (:1168), plan (:1202),
+      assemble (:1262). A Side B park sets proceed=false, so decompose and plan
+      — the Opus-heavy phases — never ran in either observed instance. The
+      statement's saving ('parks cheaply instead of after a full-length
+      session') therefore assumes a cost that was not being paid. THREE — the
+      real ordering dependency is on gather, not on decompose or plan.
+      buildDriftPrompt takes gather as an argument (called at :1126) and
+      instructs the agent to reason over 'the gather-phase evidence'.
+      Concretely, candidate_premises is a REQUIRED field of CORPUS_SCHEMA (:122,
+      item type :137), emitted by the gather corpus agent (:670), collected at
+      :1110 and bundled into gather at :1120 — it is literally the candidate
+      premise list Side B sweeps. Gather is unconditional and first (:1049-1092:
+      up to three reuse hunts, one corpus scan, one clause-coverage agent, all
+      model sonnet, agentType general-purpose, run under parallel()), so every
+      park pays gather in full and nothing can park ahead of it. Consequence for
+      this tactic: the available saving is skipping GATHER, not reordering
+      against the drift review, and its size is bounded by gather's share of a
+      parking run rather than by the whole session. A planning round should
+      re-scope the statement to that seam before decomposing it. What remains
+      open is not the ordering — that is settled — but whether Side B can still
+      reach a correct park with gather's evidence withheld; see the sibling
+      clarification recording the experiment that would settle it."
+  - question: What would settle the remaining question — whether Side B can park
+      correctly without gather's evidence — and what does that experiment
+      involve?
+    answer: "Recorded 2026-08-14. Three components, one of them decisive and cheap.
+      DECISIVE REPLAY: re-run buildDriftPrompt
+      (.claude/workflows/align-tactics.js:699) on the two observed parking
+      instances — tactic-align-review-skill (parked 4e7131f1, cleared fe3ad88c)
+      and tactic-attention-namespaced-rank (parked 2184103c) — under two
+      conditions each: gather populated as the real run produced it, versus
+      gather stubbed empty ({reuse: [], corpus: {existing_children,
+      candidate_premises: [], corpus_hits: []}, clause: {reuse_candidates: [],
+      notes: ''}}). Then check whether Side B still emits the same material
+      unrecorded premise and the same requirement-ambiguity park. This is
+      offline and costs four Opus agents: buildDriftPrompt is a pure function,
+      and both nodes plus their serving strategy are readable at known commits
+      (the tactic-align-review-skill park text pins its own verification base at
+      origin/main d5770f6e). READING: if the park still fires with gather empty,
+      the check is gather-independent and a pre-gather refusal is real —
+      re-scope the tactic to that seam. If it does not fire, gather is a
+      prerequisite of premise detection and this tactic 'reduces to a smaller
+      saving or to nothing', exactly as the record-time flag allowed; prune it.
+      MISSING MEASUREMENT: a per-phase cost split (gather versus drift) for a
+      parking run, which is what sizes the saving even on a positive result. NOT
+      recoverable for the 2026-08-14 instance — no Workflow journal.jsonl and no
+      wf_* transcript directory survives for that window under /home/n8/.claude,
+      searched 2026-08-14 — so this needs a fresh instrumented run or retained
+      Workflow journals. RESIDUAL RISK, to weigh even if the replay is positive:
+      Side B's own discriminator is plan_depends ('does a plan actually depend
+      on it'), but no plans exist at drift time either, so the agent is ALREADY
+      anticipating. A pre-gather check inherits that same anticipation problem
+      with strictly less evidence, and whether it can hold the
+      material/immaterial line without corpus evidence is the substantive design
+      question a plan must answer. PRIOR: this session expects the replay to
+      come back gather-dependent. The tactic-align-review-skill park did not
+      merely assert a contradiction — it CONFIRMED one by verifying the item-3
+      predicate against five caller implementations across the codebase, which
+      is precisely the evidence gather's reuse hunts and corpus scan exist to
+      produce. That is an expectation from one instance, not a result, and it
+      does not substitute for running the replay."
 tooling_goals: []
 success_signal: null
 attention: null
