@@ -57,10 +57,25 @@
 #        carrying the attribute outside the prefix, are both listed with
 #        "unregistered": true and recurrence_count forced to 0 rather than
 #        silently dropped from the similarity judgment's input — and the
-#        doctrine root tactic-eval-finding-ledger stays excluded. This exercises
-#        the REAL default list_entries() path (the node/store.js one-liner),
-#        not the LIST_CMD stub the rest of this suite uses, so it invokes the
-#        real, uncopied SUT directly.
+#        doctrine root tactic-eval-finding-ledger stays excluded, and every row
+#        surfaces `resolved_by` so the similarity judgment can see a stated
+#        resolution. This exercises the REAL default list_entries() path (the
+#        node/store.js one-liner), not the LIST_CMD stub the rest of this suite
+#        uses, so it invokes the real, uncopied SUT directly.
+#   (16) --resolved-by states a FACT without counting an occurrence: it writes
+#        attributes.resolved_by and leaves recurrence_count, its `measured`
+#        stamp, first_seen and phase exactly as they were. Reference forms are
+#        normalized at write time (bare number -> '#N', sha lowercased,
+#        abbreviated sha expanded to 40), an ambiguous all-digit reference and an
+#        unresolvable abbreviation are refused, and the in-flight guard applies
+#        only to the --body-file refresh — naming an in-flight PR as the
+#        resolution is the whole point of the flag.
+#   (17) --list-retirable is the close-path TRIGGER: open entries whose
+#        resolved_by names a change that is an ancestor of origin/main, resolved
+#        offline (sha by merge-base, PR by the merge subject on origin/main).
+#        An entry whose fix has not landed, whose reference cannot be resolved,
+#        or whose id cannot be addressed by --retire --slug is named on stderr
+#        and left out — never silently skipped.
 #
 # Run under bash -c, never zsh.
 
@@ -566,6 +581,7 @@ rounds: null
 attributes:
   ledger_entry: true
   first_seen: 2026-08-01
+  resolved_by: '#4242'
   measured_impact:
     - metric: recurrence_count
       value: 4
@@ -690,6 +706,8 @@ assert_eq "(15a) the registered entry is NOT flagged unregistered" "false" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0] | has("unregistered")' <<<"$LIST_OUT")"
 assert_eq "(15a) and keeps its real recurrence_count" "4" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15a) and surfaces its stated resolution to the judgment" "#4242" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].resolved_by' <<<"$LIST_OUT")"
 
 assert_eq "(15b) prefix without attribute is flagged unregistered" "true" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].unregistered' <<<"$LIST_OUT")"
@@ -697,6 +715,8 @@ assert_eq "(15b) its recurrence_count is forced to 0" "0" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].recurrence_count' <<<"$LIST_OUT")"
 assert_eq "(15b) its slug is still derived from the prefix" "unregistered-example" \
   "$(jq -r '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].slug' <<<"$LIST_OUT")"
+assert_eq "(15b) an entry with no stated resolution reports null" "null" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].resolved_by' <<<"$LIST_OUT")"
 
 assert_eq "(15c) attribute without prefix is flagged unregistered too" "true" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].unregistered' <<<"$LIST_OUT")"
@@ -704,6 +724,163 @@ assert_eq "(15c) its recurrence_count is forced to 0, not its real 9" "0" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].recurrence_count' <<<"$LIST_OUT")"
 assert_eq "(15c) it has no slug (outside the prefix)" "null" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].slug' <<<"$LIST_OUT")"
+
+# --- (16) --resolved-by states a fact, and never counts an occurrence --------
+# The gap this closes: the only update path was the recurrence path, so a
+# re-evaluation that had established a landed PR resolved an entry could not
+# write that down without ALSO recording a fresh occurrence of the finding it
+# had just seen fixed.
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by 3079
+assert_eq "(16) --resolved-by exits 0" "0" "$RC"
+assert_eq "(16) stdout says landed" "landed" "$SOUT"
+assert_eq "(16) a bare PR number is stored as #N" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) recurrence_count is NOT incremented" "1" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
+assert_eq "(16) and its measured stamp is NOT refreshed" "2026-08-01" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .measured')"
+assert_eq "(16) first_seen untouched" "2026-08-01" "$(written '.attributes.first_seen')"
+assert_eq "(16) phase untouched — retirement is a separate judgment" "null" "$(written '.phase')"
+GC16="$(log_lines graph-commit.log)"
+assert_contains "(16) it is a CAS update of the existing node" "--base" "$GC16"
+assert_contains "(16) and the commit message names the resolution" "resolved by #3079" "$GC16"
+
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
+assert_eq "(16) the '#N' form is stored unchanged" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) --body-file refreshes the body" \
+  "The finding.
+Second line." "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_MD")"
+
+FULL_SHA=$(git -C "$FR" rev-parse HEAD)
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by "${FULL_SHA^^}"
+assert_eq "(16) a 40-character sha is stored lowercased, no lookup needed" \
+  "$FULL_SHA" "$(written '.attributes.resolved_by')"
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by "${FULL_SHA:0:8}"
+assert_eq "(16) an abbreviated sha is EXPANDED to 40 characters" \
+  "$FULL_SHA" "$(written '.attributes.resolved_by')"
+
+run_ef -- --slug "$SLUG" --resolved-by 1234567
+assert_eq "(16) an all-digit reference of 7+ characters is refused as ambiguous" "64" "$RC"
+assert_contains "(16) and says how to disambiguate it" "Write a PR as '#1234567'" "$OUT"
+assert_eq "(16) and never reaches the graph" "" "$(log_lines classify.log)"
+
+run_ef -- --slug "$SLUG" --resolved-by deadbee
+assert_eq "(16) an abbreviated sha this checkout cannot resolve is refused" "64" "$RC"
+assert_contains "(16) rather than storing a prefix nothing can resolve later" \
+  "does not resolve in" "$OUT"
+
+run_ef -- --slug "$SLUG" --resolved-by 'not-a-ref'
+assert_eq "(16) a reference of neither shape is refused" "64" "$RC"
+assert_contains "(16) and names both accepted shapes" "invalid --resolved-by" "$OUT"
+
+run_ef -- --slug "$SLUG" --resolved-by '#3079' --sensor s
+assert_eq "(16) --resolved-by records no measurement, so --sensor is refused" "64" "$RC"
+run_ef -- --retire --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) --retire and --resolved-by may not be combined" "64" "$RC"
+assert_contains "(16) because one states a fact and the other makes a call" \
+  "separate acts" "$OUT"
+
+RESOLVED_JSON=$(jq -c . <<'JSON'
+{"id":"tactic-eval-finding-stop-hook-hold-loop","phase":null,"execution":null,
+ "statement":"s",
+ "attributes":{"ledger_entry":true,"first_seen":"2026-08-01","resolved_by":"#3079",
+   "measured_impact":[{"metric":"recurrence_count","value":1,"unit":"occurrences",
+     "window":"all-time","sensor":"dispatch-phase-eval","measured":"2026-08-01"}]}}
+JSON
+)
+run_ef STUB_STATE=open STUB_NODE_JSON="$RESOLVED_JSON" -- --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) re-stating the same resolution exits 0" "0" "$RC"
+assert_eq "(16) stdout says noop — no empty commit" "noop" "$SOUT"
+assert_eq "(16) and nothing was written" "" "$(log_lines graph-commit.log)"
+
+run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
+assert_eq "(16) an in-flight entry refuses the BODY refresh" "0" "$RC"
+assert_eq "(16) with a noop disposition" "noop" "$SOUT"
+assert_eq "(16) and no graph write" "" "$(log_lines graph-commit.log)"
+assert_contains "(16) and says nothing was recorded" "NOTHING WAS RECORDED" "$OUT"
+
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$INFLIGHT_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) but an attributes-only write IS allowed while a PR is in flight" "0" "$RC"
+assert_eq "(16) and lands — the in-flight PR is exactly what a caller names" "landed" "$SOUT"
+assert_eq "(16) the resolution was recorded" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) and the execution the PR owns is untouched" "123" "$(written '.execution.pr')"
+
+run_ef STUB_STATE=absent -- --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) --resolved-by against a nonexistent entry is an error, not a no-op" "1" "$RC"
+assert_contains "(16) and says the entry must exist first" "EXISTING entry" "$OUT"
+assert_eq "(16) and nothing was written" "" "$(log_lines graph-commit.log)"
+
+# --- (17) --list-retirable: the close-path trigger ---------------------------
+# Entries someone has said are resolved, whose named change is an ancestor of
+# origin/main. Resolution is entirely offline: a sha by merge-base, a PR by the
+# merge subject on origin/main's own history.
+git -C "$FR" commit -q --allow-empty -m 'fixture: a plain landed fix'
+ANC_SHA=$(git -C "$FR" rev-parse HEAD)
+git -C "$FR" commit -q --allow-empty -m 'fixture: the squash-merged fix (#4242)'
+PR_SHA=$(git -C "$FR" rev-parse HEAD)
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+LANDED_DATE=$(git -C "$FR" log -1 --format=%cs HEAD)
+# A real commit object that is NOT an ancestor of origin/main (a fix on a branch
+# that has not merged) — distinct from a sha this checkout cannot resolve at all.
+SIDE_SHA=$(git -C "$FR" commit-tree "HEAD^{tree}" -p HEAD -m 'fixture: an unlanded fix')
+UNKNOWN_SHA=0123456789abcdef0123456789abcdef01234567
+
+RETIRABLE_LIST=$(jq -c -n --arg anc "$ANC_SHA" --arg side "$SIDE_SHA" --arg unknown "$UNKNOWN_SHA" '[
+  {id:"tactic-eval-finding-squash-merged",slug:"squash-merged",state:"open",
+   statement:"a fix merged by squash",recurrence_count:5,last_seen:"2026-08-01",resolved_by:"#4242"},
+  {id:"tactic-eval-finding-plain-sha",slug:"plain-sha",state:"open",
+   statement:"a fix named by sha",recurrence_count:3,last_seen:"2026-08-02",resolved_by:$anc},
+  {id:"tactic-eval-finding-not-landed",slug:"not-landed",state:"open",
+   statement:"a fix that has not merged",recurrence_count:2,resolved_by:$side},
+  {id:"tactic-eval-finding-unknown-sha",slug:"unknown-sha",state:"open",
+   statement:"a reference nothing can resolve",recurrence_count:2,resolved_by:$unknown},
+  {id:"tactic-eval-finding-unmerged-pr",slug:"unmerged-pr",state:"open",
+   statement:"a PR that has not merged",recurrence_count:1,resolved_by:"#999999"},
+  {id:"tactic-eval-finding-no-resolution",slug:"no-resolution",state:"open",
+   statement:"nobody has said this is fixed",recurrence_count:9,resolved_by:null},
+  {id:"tactic-eval-finding-already-retired",slug:"already-retired",state:"retired",
+   statement:"closed already",recurrence_count:4,resolved_by:"#4242"},
+  {id:"tactic-outside-the-prefix",slug:null,state:"open",
+   statement:"carries the attribute, not the id",recurrence_count:0,resolved_by:"#4242",unregistered:true}
+]')
+run_ef STUB_LIST_JSON="$RETIRABLE_LIST" -- --list-retirable
+assert_eq "(17) --list-retirable exits 0" "0" "$RC"
+assert_eq "(17) only the entries whose fix LANDED are listed" "2" "$(jq 'length' <<<"$SOUT")"
+assert_eq "(17) a PR reference resolves to its squash-merge commit" "$PR_SHA" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .resolved_commit' <<<"$SOUT")"
+assert_eq "(17) and carries the day it landed" "$LANDED_DATE" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .resolved_commit_date' <<<"$SOUT")"
+assert_eq "(17) a landed sha resolves to itself" "$ANC_SHA" \
+  "$(jq -r '.[] | select(.slug == "plain-sha") | .resolved_commit' <<<"$SOUT")"
+assert_eq "(17) each row keeps its --list fields for the judgment" "5" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .recurrence_count' <<<"$SOUT")"
+
+assert_eq "(17) a fix that has not merged is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "not-landed")] | length' <<<"$SOUT")"
+assert_contains "(17) and the reason is stated" "NOT an ancestor of origin/main" "$OUT"
+assert_eq "(17) an unresolvable sha is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "unknown-sha")] | length' <<<"$SOUT")"
+assert_contains "(17) and is NAMED, never silently skipped" \
+  "tactic-eval-finding-unknown-sha: resolved_by $UNKNOWN_SHA cannot be resolved" "$OUT"
+assert_eq "(17) an unmerged PR reference is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "unmerged-pr")] | length' <<<"$SOUT")"
+assert_contains "(17) and it too is named" "tactic-eval-finding-unmerged-pr" "$OUT"
+assert_eq "(17) an entry nobody has resolved is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "no-resolution")] | length' <<<"$SOUT")"
+assert_eq "(17) an already-retired entry is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "already-retired")] | length' <<<"$SOUT")"
+assert_eq "(17) a row --retire --slug cannot address is excluded" "0" \
+  "$(jq '[.[] | select(.id == "tactic-outside-the-prefix")] | length' <<<"$SOUT")"
+assert_contains "(17) and says why" "--retire --slug cannot address it" "$OUT"
+assert_eq "(17) it retires NOTHING — the actor stays a person" "" "$(log_lines graph-commit.log)"
+
+run_ef -- --list-retirable --slug "$SLUG"
+assert_eq "(17) --list-retirable takes no other arguments" "64" "$RC"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

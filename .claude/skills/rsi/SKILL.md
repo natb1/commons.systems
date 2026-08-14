@@ -214,8 +214,8 @@ never one node per occurrence.
 ```
 
 It prints open **and retired** entries as JSON (`id`, `slug`, `state`,
-`statement`, `first_seen`, `recurrence_count`, `last_seen`, `in_flight`). Decide
-whether the finding in hand **is** one of them:
+`statement`, `first_seen`, `recurrence_count`, `last_seen`, `in_flight`,
+`resolved_by`). Decide whether the finding in hand **is** one of them:
 
 - It is the same finding → reuse that entry's `slug`. The script increments
   `recurrence_count` — that figure is the whole point of the ledger, and a
@@ -263,6 +263,22 @@ rather than working around it.
 
 Never call `--retire`. Retirement is a judgment about a landed fix, not about
 one phase's observation.
+
+You **may** call `--resolved-by` when this phase's evidence establishes that a
+named change addresses an entry — it states that fact and nothing more, leaving
+the recurrence count and phase untouched:
+
+```bash
+.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding \
+  --slug <slug> --resolved-by '#3079'
+```
+
+It takes a commit sha or a PR reference (`#3079`, or a bare `3079`; an all-digit
+reference of 7+ characters is refused as ambiguous with an abbreviated sha).
+Omit `--body-file` while a PR owns the entry — an attributes-only write is safe
+in flight, a body refresh is not. The fact you record is what makes the entry
+show up in `--list-retirable` once the change lands, which is where the human
+retirement judgment starts.
 
 ## Step 7 — Report, then stop
 
