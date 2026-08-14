@@ -5669,6 +5669,148 @@ clarifications:
       by it rather than contradicted: the shared ladder and the shared core are
       the same 'written once' discipline applied at two layers. Carrier:
       tactic-rsi-intervention-special-cases."
+  - question: A modified flake.lock — or unrelated dirt in any checkout — must not
+      be able to cause graph integrity errors. What is the standing invariant,
+      and does tactic-graph-ref-split discharge it?
+    answer: >-
+      (Recorded 2026-08-14 /align interview.) Two properties, stated
+
+      mechanism-neutrally so any writer/reader design can be tested against them
+
+      rather than one mechanism being mandated:
+
+
+      (1) WRITE INDEPENDENCE — no working tree a human may have touched may
+      affect
+
+      whether a graph write succeeds, or what content lands in it.
+
+
+      (2) READ COHERENCE — no reader may observe graph state older than a write
+      it
+
+      has already been told succeeded.
+
+
+      Both were violated live on 2026-08-13/14, in opposite directions, by one
+
+      partial migration. (1): graph-commit's assert_clean_outside_ids refused
+      every
+
+      write while the author's own modified flake.lock sat in the main checkout,
+      so
+
+      dispatch-eval-finding — the per-phase evaluator's ENTIRE write surface —
+      lost
+
+      every finding of every phase silently, the evaluator being fire-and-forget
+      with
+
+      a discarded transcript
+      (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt,
+
+      since phase done). It was self-sustaining: graph-select-target --clear-fix
+      leaked
+
+      another dirty node file per tick on top, one leak per ~70s until a human
+      cleared
+
+      it (fixed at e6421e6c by lib-graph-rollback.sh). (2): PR #3090 gave
+
+      dispatch-eval-finding a working-tree-free write via
+      GRAPH_COMMIT_WRITER=plumbing
+
+      but left its --list read on the checkout working tree, which the plumbing
+      writer
+
+      never moves — 7 stale rows, 28 lands without a HEAD move, duplicate slugs
+      minted
+
+      (tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land,
+      open).
+
+
+      Does tactic-graph-ref-split discharge the invariant? For (1) YES, and it
+      remains
+
+      the ratified greenfield (clarification 80's limb (a)): Unit 2's landing
+      loop is
+
+      pure plumbing — scratch GIT_INDEX_FILE against the worktree's own .git,
+      read-tree
+
+      from origin/graph-main, write-tree, commit-tree, plain fast-forward push
+      as CAS —
+
+      and it deletes ensure_intentions_only_base explicitly because the
+      far-ahead-worktree
+
+      rebuild hazard it exists for is structurally impossible once landing never
+      touches a
+
+      worktree's checkout; Unit 8 removes intentions/ from main altogether. For
+      (2) NO —
+
+      verified this round by reading all 1040 lines of that plan: its read side
+      is a symlink
+
+      to one shared long-lived GRAPH_WT refreshed by fetch + reset --hard at
+
+      worktree-provisioning time and in the hooks (Unit 3, four call sites), and
+      NO unit
+
+      refreshes GRAPH_WT after a land. A session that lands and then reads
+      through the
+
+      symlink sees its own write missing — the 2026-08-14 regression surviving
+      the cutover
+
+      intact. That is a gap to fill in a sound plan, not grounds to reject the
+      symlink: a
+
+      materialized tree is a cache, and the defect is cache coherence, not the
+      existence of
+
+      a cache. Carried as tactic-graph-refsplit-read-coherence.
+
+
+      Sequencing consequence, and the reason this is recorded now rather than
+      deferred to
+
+      ref-split: ref-split does not gate the fix. assert_clean_outside_ids sits
+      in land(),
+
+      not try_land(), and is already conditional on GRAPH_COMMIT_WRITER ==
+      worktree
+
+      (graph-commit:3502), so flipping that default makes it inert across every
+      writer —
+
+      one flag, no cutover, none of ref-split's 37 blockers (23 still open this
+      round).
+
+      ref-split stays the greenfield; it is not the critical path for this
+      invariant.
+
+      Carried as tactic-graph-commit-plumbing-default.
+
+
+      Boldness recorded: the two violations, the guard call site and its gating,
+      the absence
+
+      of any post-land refresh in ref-split, and the blocker phase counts are
+      all verified
+
+      in-session against origin/main. The reading that ref-split's 37 blockers
+      encode a
+
+      quiescence wish rather than real dependencies is INFERENCE from the
+      breadth of the
+
+      list — the blockers were not read individually — and is carried as the
+      open question
+
+      tactic-graph-refsplit-blocker-audit, not as a settled finding.
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -5678,7 +5820,9 @@ tooling_goals:
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics in owned deterministic code, executes the tick as a thin
       workflow fan-out (one agent per selected node), transitions persisted
-      phase via direct-push rebase-retry writes
+      phase via direct-push writes — rebase-retry under the worktree writer,
+      plumbing CAS with no rebase under GRAPH_COMMIT_WRITER=plumbing
+      (2026-08-13), and CAS against graph-main once tactic-graph-ref-split lands
   - kind: sensor
     statement: lifecycle telemetry from the store itself — phase transition history
       and round counts readable from node state
