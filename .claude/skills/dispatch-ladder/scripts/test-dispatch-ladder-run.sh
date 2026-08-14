@@ -991,6 +991,52 @@ else
   echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
 fi
 
+echo "Test: the evaluator's --since predates a slow launch, not just the phase boundary"
+# dispatch-ladder-advance blocks on verify_launch before it returns, so
+# LAUNCH_EPOCH (stamped right after advance returns, dispatch-ladder-run:1116)
+# is measurably later than the worker session it is meant to bound. Make the
+# fake advance itself slow — standing in for that blocking wait — so a
+# regression back to LAUNCH_EPOCH is distinguishable from the fix (PASS_SINCE,
+# captured before advance is called, dispatch-ladder-run:1082/1120) rather than
+# both landing in the same instant.
+reset_seqs
+cat >"$LADDER/dispatch-ladder-advance" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SEQ_DIR/advance.argv"
+n=\$(cat "$SEQ_DIR/advance.count"); echo \$((n + 1)) >"$SEQ_DIR/advance.count"
+if [[ "\$n" -eq 0 ]]; then
+  # The blocking verify_launch, stood in for by a sleep the assertion can see.
+  sleep 2
+  printf 'launched %s tactic implement /implement\n' "$NODE"
+  exit 0
+fi
+# Every later call ENDS THE RUN, the same way the sequence-driven fake's last
+# line does everywhere else in this suite. A stub that only ever launches makes
+# the driver relaunch forever: nothing here bounds the loop but the advance
+# answer, so the case hangs the whole suite rather than failing it.
+printf 'idle %s not-selectable\n' "$NODE"
+exit 10
+STUB
+chmod +x "$LADDER/dispatch-ladder-advance"
+set_seq await '0|advanced tactic-fixture-node implement -> origin/main'
+set_seq landed '0|'
+T_BEFORE=$(date +%s)
+run_ladder
+make_seq_fake "$LADDER/dispatch-ladder-advance" advance
+assert_eq "since-skew: exit 0" "0" "$RC"
+SINCE=$(sed -n '1p' "$SEQ_DIR/spawnjob.argv" | sed -E 's/.*--since ([0-9]+)$/\1/')
+TOTAL=$((TOTAL + 1))
+# A regression to LAUNCH_EPOCH would land at T_BEFORE+2 or later (the sleep);
+# the fix lands within a whisker of T_BEFORE (before the sleep). Bound the pass
+# case generously (< +2s) to absorb process-startup jitter without accepting
+# the regression.
+if [[ "$SINCE" -ge "$T_BEFORE" && "$SINCE" -lt "$((T_BEFORE + 2))" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: since-skew: --since is PASS_SINCE (pre-launch), not LAUNCH_EPOCH (post-launch)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: since-skew: --since is PASS_SINCE (pre-launch), not LAUNCH_EPOCH (post-launch)"
+  echo "    T_BEFORE=$T_BEFORE SINCE=$SINCE"
+fi
+
 echo "Test: halt() spawns the evaluation a mid-run halt still owes"
 # Exit 12: the worker stopped with no graph change — the phase never reached its
 # boundary, so nothing spawned there. Under the old terminus-only rule this run,
