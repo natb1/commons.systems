@@ -253,13 +253,16 @@ Then record the occurrence:
   occurrence. Never write a `recurrence_count` record — the script owns that
   metric and refuses a caller-supplied one (exit 64).
 
-Exit codes: `0` landed / `noop` / `skipped-locked`, `1` the graph write failed
-and was rolled back, `64` usage, `69` environment, `70` the rollback left a
-dirty node file (escalate; the log line names the `git checkout --` that clears
-it). **A `noop` with a loud warning means the entry's `execution` is non-null —
-it is being worked by a PR, so rewriting its body would stale the scope stamp
-and mis-park that session.** The occurrence is uncounted; say so in the report
-rather than working around it.
+Exit codes: `0` landed / `noop` / `skipped-locked` / `skipped-in-flight`, `1`
+the graph write failed and was rolled back, `64` usage, `69` environment, `70`
+the rollback left a dirty node file (escalate; the log line names the
+`git checkout --` that clears it). **`skipped-in-flight` (not `noop`) means the
+entry's `execution` is non-null — it is being worked by a PR, so rewriting its
+body would stale the scope stamp and mis-park that session; NOTHING WAS
+RECORDED.** The occurrence is uncounted; say so in the report rather than
+working around it. Do not re-run with the same arguments in this job — nothing
+about the in-flight condition changes within one phase's run; re-record it in a
+later phase once that work lands.
 
 Never call `--retire`. Retirement is a judgment about a landed fix, not about
 one phase's observation.
@@ -284,8 +287,8 @@ retirement judgment starts.
 
 One short report: the node and phase evaluated, the measured figures per lens,
 and every ledger entry touched with its slug and the script's one-word answer
-(`landed` / `noop` / `skipped-locked`). Name the lenses that had nothing to
-report.
+(`landed` / `noop` / `skipped-locked` / `skipped-in-flight`). Name the lenses
+that had nothing to report.
 
 Then stop. There is no next step in this job — no fix, no follow-up spawn, no
 message to the driver, which has already moved on.

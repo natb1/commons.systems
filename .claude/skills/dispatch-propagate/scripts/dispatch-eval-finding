@@ -135,7 +135,8 @@
 # An entry whose `execution` is non-null is being WORKED — a PR owns its
 # lifecycle, and `tacticScopeFingerprint` hashes (statement, body), so
 # rewriting the body would make the node's scope stamp stale and mis-park the
-# session working it. Such a pass records nothing and exits 0 `noop`, with a
+# session working it. Such a pass records nothing and exits 0 `skipped-in-flight`
+# (NOT `noop` — the caller's intent was refused, not already satisfied), with a
 # loud stderr line naming the uncounted occurrence: an evaluator must not fail
 # its phase over a ledger write, but a dropped occurrence must never be silent.
 #
@@ -193,19 +194,32 @@
 #        both are reported on stderr with the entry named, and the entry is left
 #        out of the list.
 #
-# Exit codes: as dispatch-fleet-alarm — 0 landed/no-op/skipped-locked, 1 the
-# graph write failed (rolled back), 64 usage, 69 environment, 70 the write
-# failed AND the rollback left a dirty intentions/<id>.md (escalate, never
-# retry; the log line names the exact `git checkout --` that clears it).
+# Exit codes: as dispatch-fleet-alarm — 0 landed/no-op/skipped-locked/
+# skipped-in-flight, 1 the graph write failed (rolled back), 64 usage,
+# 69 environment, 70 the write failed AND the rollback left a dirty
+# intentions/<id>.md (escalate, never retry; the log line names the exact
+# `git checkout --` that clears it).
 #
 # Stdout protocol — exactly one word on a successful exit (except --list and
 # --list-retirable, which print a JSON array):
-#   landed          a commit was made AND verified on origin/main.
-#   noop            nothing needed writing.
-#   skipped-locked  another graph writer STILL held this checkout's mutex after
-#                   the bounded wait below. Unlike the sibling's non-blocking
-#                   skip, this is a LOST occurrence, not a deferred one — see
-#                   "Graph-write mutex" further down.
+#   landed              a commit was made AND verified on origin/main.
+#   noop                the caller's intent was already satisfied — nothing
+#                       needed writing.
+#   skipped-locked      another graph writer STILL held this checkout's mutex
+#                       after the bounded wait below. Unlike the sibling's
+#                       non-blocking skip, this is a LOST occurrence, not a
+#                       deferred one — see "Graph-write mutex" further down.
+#   skipped-in-flight   the in-flight guard refused: the node's `execution` is
+#                       non-null, an in-flight fix owns its lifecycle, and
+#                       NOTHING WAS RECORDED — not the same as `noop`, which
+#                       means the intent was already satisfied. Like
+#                       skipped-locked, this is a LOST occurrence (an
+#                       uncounted recurrence, an unrecorded retirement, or an
+#                       unrefreshed body), not a deferred one. Re-run after the
+#                       in-flight work lands, or — for a --resolved-by call —
+#                       re-run without --body-file to record resolved_by alone,
+#                       which is safe while a PR is in flight (see "THE
+#                       IN-FLIGHT GUARD" above).
 #
 # --list and --list-retirable take NO mutex: both are pure reads with no write
 # to serialize, and a caller that cannot get the list cannot make the similarity
@@ -281,8 +295,9 @@ is an ancestor of origin/main — the candidate list a human acts on.
 WITH its metrics intact; a later occurrence of the same slug resumes the count
 rather than restarting at 1.
 
-exit: 0 landed / no-op, 1 graph write failed (rolled back), 64 usage,
-      69 environment, 70 write failed and the rollback left a dirty node file.
+exit: 0 landed / no-op / skipped-locked / skipped-in-flight, 1 graph write
+      failed (rolled back), 64 usage, 69 environment, 70 write failed and the
+      rollback left a dirty node file.
 USAGE
 }
 
@@ -919,8 +934,8 @@ if [[ "$RETIRE" == "1" ]]; then
   }
 
   if ! jq -e '.execution == null' "$TMP_DIR/$ID.json" >/dev/null 2>&1; then
-    log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — refusing to complete it mechanically"
-    printf 'noop\n'
+    log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — refusing to complete it mechanically; NOTHING WAS RECORDED, this retirement is LOST, not deferred: nothing re-invokes this call, so re-run --retire by hand once the in-flight work lands"
+    printf 'skipped-in-flight\n'
     exit 0
   fi
 
@@ -988,7 +1003,7 @@ if [[ -n "$RESOLVED_BY" ]]; then
   # the gap this flag closes.
   if [[ -n "$BODY_FILE" ]] && ! jq -e '.execution == null' "$TMP_DIR/base/$ID.json" >/dev/null 2>&1; then
     log "$ID has a non-null execution (an in-flight fix owns its lifecycle) and --body-file would rewrite its body, staling that session's scope stamp — NOTHING WAS RECORDED; re-run without --body-file to record resolved_by alone, which is safe while a PR is in flight"
-    printf 'noop\n'
+    printf 'skipped-in-flight\n'
     exit 0
   fi
 
@@ -1150,7 +1165,7 @@ case "$STATE" in
     # occurrence is dropped instead — loudly, never silently.
     if ! jq -e '.execution == null' "$TMP_DIR/base/$ID.json" >/dev/null 2>&1; then
       log "$ID has a non-null execution (an in-flight fix owns its lifecycle) — THIS OCCURRENCE WAS NOT COUNTED; re-record it after that work lands"
-      printf 'noop\n'
+      printf 'skipped-in-flight\n'
       exit 0
     fi
 

@@ -2163,27 +2163,54 @@ _emit_verdict_line() {
 }
 
 # print_orphan_recovery_line — on a terminal verdict that did NOT put this
-# invocation's content on origin/main, say whether a local commit was
-# nonetheless left behind, and how to recover it. Printed as its own line
-# immediately after the verdict line rather than appended to it: the verdict
-# line is the parsed caller contract and several paths (die(), park_and_exit())
-# have already emitted it by the time this runs, so there is no single line
-# still open to append to.
+# invocation's content on origin/main, say whether a commit was nonetheless
+# left behind, and how to recover it. Printed as its own line immediately
+# after the verdict line rather than appended to it: the verdict line is the
+# parsed caller contract and several paths (die(), park_and_exit()) have
+# already emitted it by the time this runs, so there is no single line still
+# open to append to.
 #
 # Scoped to `not-landed` / `unknown` — the two statuses that leave the question
 # open. `landed` / `landed-equivalent` / `parked` all mean origin/main carries
 # the intent, and `refused` means no commit was ever made.
 #
+# WORKTREE WRITER: the question is "did HEAD move ahead of origin/main and stay
+# there" — answered by counting commits and reading the sha off HEAD.
+#
+# PLUMBING WRITER: that writer never moves HEAD (build_commit_plumbing() builds
+# a commit reachable from no ref — see the ORPHAN-WINDOW comment above
+# try_land()), so a HEAD-vs-origin/main commit count answers nothing here: it
+# would be silent on a genuine stranded commit (HEAD never moved, so the count
+# is always 0) and would misattribute an unrelated local commit the user made
+# to graph-commit if HEAD happened to be ahead for some other reason. The
+# question this writer needs answered is instead "did prepare_plumbing_sha()
+# build and push a commit that a terminal not-landed/unknown verdict never
+# confirmed reached origin/main" — answered by PUSHED_SHA (set immediately
+# before the push to main, per the comment at its assignment site), not HEAD.
+# By the time this runs, cleanup() has deleted the scratch branch
+# ($SCRATCH_BRANCH) that was the commit's only ref, so a non-empty PUSHED_SHA
+# here names a commit reachable from no ref at all.
+#
 # Silent when the far-ahead rebuild is in play (RESTORE_HEAD=1): cleanup() is
 # about to `git reset --hard "$ORIG_HEAD"`, so the commit that is currently
 # ahead of origin/main will not survive this process and calling it an orphan
-# left on disk would be false.
+# left on disk would be false. Vacuous under the plumbing writer — RESTORE_HEAD
+# is set only inside ensure_intentions_only_base(), which main() calls only
+# when GRAPH_COMMIT_WRITER=worktree — but checked unconditionally so this stays
+# correct if that ever changes.
 print_orphan_recovery_line() {
   case "$LAST_VERDICT" in
     not-landed|unknown) ;;
     *) return 0 ;;
   esac
   [[ "$RESTORE_HEAD" -eq 1 ]] && return 0
+
+  if [[ "$GRAPH_COMMIT_WRITER" == "plumbing" ]]; then
+    [[ -n "$PUSHED_SHA" ]] || return 0
+    echo "graph-commit: orphan=$PUSHED_SHA — a commit was built but is reachable from no ref (this writer never moves HEAD) and is NOT on origin/main. Recovery: re-run this same graph-commit invocation from $REPO_ROOT; it rebuilds the commit from the on-disk node files against the fresh origin/main tip and lands it. NEVER git push this commit to main by hand — it bypasses the rebase/layer-2 merge ladder and can clobber a concurrent landing." >&2
+    return 0
+  fi
+
   local base count sha
   base="$(git rev-parse FETCH_HEAD 2>/dev/null || true)"
   [[ -n "$base" ]] || base="$MAIN_SHA"

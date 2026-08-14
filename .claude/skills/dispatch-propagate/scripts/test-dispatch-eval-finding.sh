@@ -32,7 +32,9 @@
 #        record is preserved and incremented.
 #   (7)  --retire completes to phase done with measured_impact INTACT.
 #   (8)  the in-flight guard: a non-null execution records nothing, exits 0
-#        noop, and says the occurrence was NOT COUNTED.
+#        skipped-in-flight (NOT noop — see unit D2's contract change below),
+#        and says the occurrence was NOT COUNTED. (8b) the same guard also
+#        blocks --retire, with the same token.
 #   (9)  usage refusals: missing --sensor, a malformed --impact-file, and an
 #        --impact-file carrying a recurrence_count record (the metric the script
 #        owns) are all exit 64 with no graph write.
@@ -69,7 +71,11 @@
 #        abbreviated sha expanded to 40), an ambiguous all-digit reference and an
 #        unresolvable abbreviation are refused, and the in-flight guard applies
 #        only to the --body-file refresh — naming an in-flight PR as the
-#        resolution is the whole point of the flag.
+#        resolution is the whole point of the flag. That refusal reports
+#        skipped-in-flight, not noop (the token re-stating an ALREADY-recorded
+#        resolution still gets, since nothing there was refused) — a fire-
+#        and-forget caller cannot tell "already satisfied" from "refused,
+#        recorded nothing" any other way.
 #   (17) --list-retirable is the close-path TRIGGER: open entries whose
 #        resolved_by names a change that is an ancestor of origin/main, resolved
 #        offline (sha by merge-base, PR by the merge subject on origin/main).
@@ -416,11 +422,32 @@ JSON
 run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
   --slug "$SLUG" --statement 's' --body-file "$BODY" --sensor dispatch-phase-eval
 assert_eq "(8) in-flight entry exits 0" "0" "$RC"
-assert_eq "(8) stdout says noop" "noop" "$SOUT"
+# CONTRACT CHANGE (tactic-eval-finding-ledger-fixes, unit D2): this used to
+# assert "noop", which conflated "nothing needed writing" with "refused and
+# recorded nothing" — a fire-and-forget caller cannot tell the two apart from
+# stdout alone, and the second one is a silently lost occurrence. The in-flight
+# guard now reports its own token so a caller can act on it.
+assert_eq "(8) stdout says skipped-in-flight, not noop (a lost occurrence, not a satisfied no-op)" \
+  "skipped-in-flight" "$SOUT"
 assert_eq "(8) no write-node" "" "$(log_lines write-node.log)"
 assert_eq "(8) no graph-commit" "" "$(log_lines graph-commit.log)"
 assert_contains "(8) the dropped occurrence is announced, never silent" \
   "NOT COUNTED" "$OUT"
+
+# --- (8b) the in-flight guard also blocks --retire ---------------------------
+# Sibling of D2's --resolved-by fix: --retire on an open entry whose execution
+# is non-null refuses to complete it mechanically and records nothing. This is
+# the same "refused, recorded nothing" shape as (8) and the --resolved-by
+# body-refresh case in (16), so it gets the same skipped-in-flight token rather
+# than noop (which case (7) and a not-open --retire both still use, correctly,
+# for a genuinely satisfied or genuinely nothing-to-do call).
+run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- --retire --slug "$SLUG"
+assert_eq "(8b) --retire on an in-flight entry exits 0" "0" "$RC"
+assert_eq "(8b) stdout says skipped-in-flight, not noop" "skipped-in-flight" "$SOUT"
+assert_eq "(8b) no write-node" "" "$(log_lines write-node.log)"
+assert_eq "(8b) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_contains "(8b) refuses to complete it mechanically" \
+  "refusing to complete it mechanically" "$OUT"
 
 # --- (9) usage refusals ------------------------------------------------------
 run_ef -- --slug "$SLUG" --statement s --body-file "$BODY"
@@ -815,13 +842,23 @@ JSON
 )
 run_ef STUB_STATE=open STUB_NODE_JSON="$RESOLVED_JSON" -- --slug "$SLUG" --resolved-by '#3079'
 assert_eq "(16) re-stating the same resolution exits 0" "0" "$RC"
+# Genuinely satisfied: the entry already records this exact resolved_by and
+# there is no body to refresh, so noop is the correct (unchanged) token here —
+# contrast with the in-flight BODY-refresh refusal just below, which records
+# nothing and must NOT claim the caller's intent was already met.
 assert_eq "(16) stdout says noop — no empty commit" "noop" "$SOUT"
 assert_eq "(16) and nothing was written" "" "$(log_lines graph-commit.log)"
 
 run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
   --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
 assert_eq "(16) an in-flight entry refuses the BODY refresh" "0" "$RC"
-assert_eq "(16) with a noop disposition" "noop" "$SOUT"
+# CONTRACT CHANGE (tactic-eval-finding-ledger-fixes, unit D2): this used to
+# assert "noop", the same token the genuinely-satisfied case above prints. A
+# fire-and-forget caller (/rsi) cannot tell "resolved_by was already recorded"
+# from "the in-flight guard refused and recorded nothing" from stdout alone —
+# the second one is a silently lost resolution. The refusal now gets its own
+# token.
+assert_eq "(16) with a skipped-in-flight disposition, not noop" "skipped-in-flight" "$SOUT"
 assert_eq "(16) and no graph write" "" "$(log_lines graph-commit.log)"
 assert_contains "(16) and says nothing was recorded" "NOTHING WAS RECORDED" "$OUT"
 
