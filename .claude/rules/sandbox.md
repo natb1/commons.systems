@@ -43,7 +43,10 @@ A command that fails loudly under the sandbox — TLS error, `EROFS`,
 always-on override carries no signal. The sections below are the known
 exceptions — read them first, since a few must be pre-emptive because the first
 sandboxed attempt already does damage (`git worktree remove`) or fails silently
-with nothing to retry on (`claude agents --json`).
+with nothing to retry on (`claude agents --json`). Two former entries — `gh`
+TLS failure and npm-cache `EROFS` — were deleted as **refuted on this host**
+(measured); prose elsewhere still citing either as a reason to pre-empt the
+override is stale.
 
 ## Tree-updating git ops touching read-only paths
 
@@ -76,23 +79,6 @@ header carries the requirement (`dispatch-select-tick` is its canonical caller),
 and `.claude/skills/dispatch-propagate/scripts/remove-worktree` for removal
 (fresh fetch, content safety gate, no `--force`, partial-delete recovery,
 verified post-state).
-
-## gh CLI (GitHub API)
-
-`gh` can fail sandboxed with `tls: failed to verify certificate: x509: OSStatus
--26276` — but that's the macOS Security framework rejecting the sandbox's TLS
-interception, so it's **macOS-specific**. On this Linux/WSL host `gh` runs fine
-sandboxed (measured; see
-`.claude/skills/review-fix/references/code-review-invocation.md` §3.1). Don't
-set the override pre-emptively for `gh` — if the TLS error shows up, retry with
-it, per the general principle above.
-
-## npm cache writes
-
-`npx` was documented as unable to write `~/.npm/_cacache/` under the sandbox
-(`EROFS`). **Not reproducible on this Linux/WSL host**: sandboxed, a cold
-`npx --yes cowsay@1.6.0`, an `npm pack` registry download with its cache write,
-and `npx tsx --version` all succeed. Retry on `EROFS`, don't pre-empt.
 
 ## Network namespace isolation
 
@@ -142,115 +128,65 @@ break prefix matching cause permission prompts. Avoid these patterns:
 ### Avoid `cd && command` for write/execute commands
 
 As of Claude Code 2.1.111, read-only commands starting with `cd <project-dir> &&`
-are auto-approved (e.g. `cd print && ls`, `cd print && git status`).
+are auto-approved; write/execute commands are not — `cd /path && command` still
+misses rules like `Bash(npx vitest:*)`. Use a directory flag instead:
+`npm run build --prefix print`.
 
-For commands that execute code or modify files, `cd /path && command` still
-doesn't match rules like `Bash(npx vitest:*)`. Use flags that accept a directory
-instead:
-- `npm run build --prefix print` (npm `--prefix` flag)
-- `npm ci --prefix print`
-- For tests, deploys, QA: use the wrapper scripts which handle directory context
-
-For app vitest suites, do **not** root at the app directory (`--root print`):
-that scopes vite's `server.fs.allow` to `print/`, so root-hoisted `?url` asset
-imports (e.g. `pdfjs-dist`'s worker, hoisted to the worktree-root `node_modules`
-by npm workspaces) are denied and correct changes false-fail. Instead root at the
-worktree/repo root and select the app with `--project`:
-
-- Generic form: `npx vitest run --project <app> --root <repo_root>`
-- From a worktree root: `npx vitest run --project print --root .`
-
-Rooting at the repo root keeps `server.fs.allow` covering the hoisted-to-root
-`node_modules`, so those `?url` asset imports resolve. This is also what CI's
-`run-unit-tests.sh` runs (`npx vitest run --project <app> --root "$REPO_ROOT"`),
-and it is the form plan-verification (```verify```) blocks for app test suites
-should use. The `Bash(npx vitest:*)` wildcard already matches it.
+For app vitest suites, root at the worktree/repo root and select the app with
+`--project`: `npx vitest run --project <app> --root <repo_root>`, or from a
+worktree root `npx vitest run --project print --root .`. Rooting at the app dir
+(`--root print`) scopes vite's `server.fs.allow` to `print/`, so root-hoisted
+`?url` asset imports (`pdfjs-dist`'s worker, hoisted to the root `node_modules`
+by npm workspaces) are denied and correct changes false-fail. The repo-root form
+is what CI's `run-unit-tests.sh` runs, is what plan-verification (```verify```)
+blocks should use, and `Bash(npx vitest:*)` already matches it.
 
 ### `git -C /path` is auto-approved for worktrees
 
-Only outside a worktree-isolated session. There, the PreToolUse hook approves
-`git -C <path>` when the path is under the worktrees root and the subcommand is
-permitted by `settings.json`; paths outside it are rejected.
-
-From a **worktree-isolated session, every `git -C` to a path other than its own
-worktree is refused** — including a sanctioned sibling under `.claude/worktrees/`:
+Only outside a worktree-isolated session, where the PreToolUse hook approves it
+— and there only for paths under the worktrees root, and only for subcommands
+`settings.json` permits. From a
+**worktree-isolated session every `git -C` to a path other than its own worktree
+is refused** — including a sanctioned sibling under `.claude/worktrees/`:
 
 ```
 This session is isolated in the worktree .../<A>, but this command redirects
 git to the shared checkout via -C. Refusing to run it
 ```
 
-That is a Claude Code built-in, a separate and earlier gate than the PreToolUse
-hook, so the hook's approval never reaches it. It keys on the **`-C` flag**, not
-on where the flag points — relocating a scratch checkout under `.claude/worktrees/`
-changes nothing, and the message says "the shared checkout" even when the target is
-a sibling worktree. A second variant refuses compound commands as too complex to
-verify that they stay inside the worktree; break those into plain separate commands.
+That is a Claude Code built-in, an earlier gate than the PreToolUse hook, so the
+hook's approval never reaches it. It keys on the **`-C` flag**, not on where the
+flag points — relocating a scratch checkout under `.claude/worktrees/` changes
+nothing, and it says "the shared checkout" even for a sibling worktree. A second
+variant refuses compound commands as too complex to verify; break those into
+plain separate commands.
 
-Alternatives that do work from an isolated session:
+What works instead: `git worktree list` / `git worktree remove <abs path>` (path
+argument, not a redirect); `git show origin/main:<path>` for committed state;
+`cmp`, `git hash-object <abs path>`, `grep` against a foreign checkout; a target
+worktree's own scripts by absolute path (`dump-node.ts`, `write-node.ts` resolve
+`REPO_ROOT` from `import.meta.url`).
 
-- `git worktree list` and `git worktree remove <abs path>` are not blocked — they
-  take a path argument rather than redirecting git.
-- Read committed state from your own worktree: `git show origin/main:<path>`.
-- Compare a foreign checkout's content with path-based tools: `cmp`,
-  `git hash-object <abs path>`, `grep`.
-- Let the target worktree's own scripts manage its repo — invoke its copy by
-  absolute path; `dump-node.ts` and `write-node.ts` resolve `REPO_ROOT` from
-  the script's own location (`import.meta.url`).
-- `graph-commit` is the exception: it resolves the repo root from `-C`/`--repo`
-  (else **cwd**), never from its own location
-  (`packages/intentionsutil/scripts/graph-commit:38`). Always pass an explicit
-  `-C <path>`. Without it you commit your own cwd's checkout — and if that one
-  holds the node unchanged it exits 0 as "a 'landed' that landed nothing".
+**`graph-commit` is the exception to that list**: it is not `git`, so it is not
+refused — and it *requires* the `-C`. It resolves the repo root from `-C`/`--repo`
+(else **cwd**), never from its own location
+(`packages/intentionsutil/scripts/graph-commit:38`). Always pass an explicit
+`-C <path>` — without it you commit your own cwd's checkout, and if that one holds
+the node unchanged it exits 0 as "a 'landed' that landed nothing".
 
 ### Avoid inline env var prefixes
 
-`VAR=value command` breaks prefix matching.
-
-```bash
-# Bad — breaks allowedTools matching
-VITE_GITHUB_BRANCH="75-prototype-print-viewer" npm run build --prefix print
-
-# Good — use wrapper scripts that set env vars internally
-.claude/skills/dispatch-propagate/scripts/run-qa-server.sh print
-.claude/skills/dispatch-propagate/scripts/run-preview-deploy.sh print pr-146
-.claude/skills/dispatch-propagate/scripts/run-acceptance-tests.sh print
-```
+`VAR=value command` breaks prefix matching. Use wrapper scripts that set the env
+vars internally, e.g.
+`.claude/skills/dispatch-propagate/scripts/run-qa-server.sh print`.
 
 ### Avoid double quotes spanning newlines in heredoc commit messages
 
-The `allowedTools` glob matcher does naive quote-tracking on command strings.
-When a heredoc body contains a balanced `"..."` pair followed by another `"`
-that opens on one line and closes on the next, the matcher misreads the inner
-closing `"` as ending the outer command delimiter — causing the rest of the
-command to fall outside the pattern match and triggering a permission prompt.
-
-```bash
-# Bad — "irrelevant" balances the matcher's quote state, then "contains
-# opens on this line and closes on the next, confusing the matcher
-git commit -m "$(cat <<'EOF'
-Fix "irrelevant" to "contains
-  no metacharacters"
-EOF
-)"
-```
-
-Workaround: avoid double quotes in commit message heredocs. Use single quotes
-or rephrase to keep quoted text on a single line.
-
-```bash
-# Good — single quotes avoid the matcher bug
-git commit -m "$(cat <<'EOF'
-Fix 'irrelevant' to 'contains no metacharacters'
-EOF
-)"
-
-# Good — quoted text stays on one line
-git commit -m "$(cat <<'EOF'
-Fix "irrelevant" to "contains no metacharacters"
-EOF
-)"
-```
+The `allowedTools` glob matcher does naive quote-tracking: in a heredoc commit
+body, a balanced `"..."` pair followed by another `"` that opens on one line and
+closes on the next makes it misread that closing `"` as ending the command
+delimiter, so the rest falls outside the pattern and prompts. Use single quotes,
+or keep any double-quoted text on one line.
 
 ### CI polling
 

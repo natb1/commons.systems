@@ -12,8 +12,8 @@ gate already confirms the diff touches `package.json` / `package-lock.json`, so
 produce the differential audit directly. `dispatch-review-npm-audit` does the
 whole thing — its own temp dir, the HEAD audit, the `git show`-materialized
 `MERGE_BASE` baseline, and the differential — and emits ONLY the normalized
-result (use `dangerouslyDisableSandbox: true` — `npm` writes the npm cache, see
-`.claude/rules/sandbox.md`):
+result (use `dangerouslyDisableSandbox: true` — `npm audit` reaches the
+registry over the network, see `dispatch-review-npm-audit`'s header):
 
 ```bash
 # MERGE_BASE is already set above — reuse it here.
