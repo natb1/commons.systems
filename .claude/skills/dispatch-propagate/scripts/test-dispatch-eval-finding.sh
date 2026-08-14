@@ -221,6 +221,25 @@ if [[ "${STUB_GC_LAND:-0}" == "1" ]]; then
   git -C "$repo" commit -q -m 'fixture land' >/dev/null 2>&1
   git -C "$repo" update-ref refs/remotes/origin/main HEAD
 fi
+# STUB_GC_PLUMB=1 — land the way the PLUMBING writer really does, which
+# STUB_GC_LAND does NOT: build the commit from the on-disk content through a
+# throwaway index and move origin/main to it, while leaving HEAD, the real
+# index and the working tree exactly as they were. The residue that leaves
+# behind in the checkout is the whole subject of case 19, and STUB_GC_LAND
+# cannot express it — its `commit` moves HEAD, which is the worktree writer's
+# behaviour and is precisely what makes the tree come out clean.
+if [[ "${STUB_GC_PLUMB:-0}" == "1" ]]; then
+  idx="$repo/.git/stub-plumb-index"
+  rm -f "$idx"
+  export GIT_INDEX_FILE="$idx"
+  git -C "$repo" read-tree HEAD
+  git -C "$repo" add -A intentions >/dev/null 2>&1
+  tree=$(git -C "$repo" write-tree)
+  sha=$(git -C "$repo" commit-tree "$tree" -p HEAD -m 'fixture plumbing land')
+  unset GIT_INDEX_FILE
+  rm -f "$idx"
+  git -C "$repo" update-ref refs/remotes/origin/main "$sha"
+fi
 exit 0
 STUB
 
@@ -905,6 +924,69 @@ assert_contains "(18) the opt-in is per-invocation, not a global export" \
   'GRAPH_COMMIT_WRITER=plumbing "${GRAPH_COMMIT_CMD[@]}"' "$(cat "$SUT")"
 assert_not_contains "(18) never a process-wide export" \
   'export GRAPH_COMMIT_WRITER' "$(cat "$SUT")"
+
+# --- (19) a landed write leaves the checkout CLEAN ---------------------------
+# The counterpart to case 18, and the reason it is not enough to opt in and stop
+# there. The plumbing writer pushes straight to origin/main and never moves this
+# checkout's HEAD, index or tree — so unless the SUT clears it, every successful
+# write leaves intentions/<id>.md modified (or, on the mint path, untracked)
+# indefinitely. That residue is the exact unrelated-dirt condition that fails
+# the DEFAULT writer's pre-flight guard for every later graph-commit in the
+# checkout whatever node it targets, and makes an --ff-only sync refuse. Left
+# unasserted, this script would close
+# tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt by reproducing
+# it from its own successes.
+PSLUG=plumb-residue
+PID="tactic-eval-finding-$PSLUG"
+
+# (a) the mint path — a net-new node, untracked in this checkout.
+run_ef STUB_STATE=absent STUB_GC_PLUMB=1 -- \
+  --slug "$PSLUG" --statement 'a landed write leaves no residue' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(19a) the mint lands" "0" "$RC"
+assert_eq "(19a) stdout says landed" "landed" "$SOUT"
+assert_eq "(19a) the content IS on origin/main" "0" \
+  "$(git -C "$FR" cat-file -e "refs/remotes/origin/main:intentions/$PID.md" 2>/dev/null; echo $?)"
+assert_eq "(19a) HEAD did NOT move — the writer touched no tree" "" \
+  "$(git -C "$FR" cat-file -e "HEAD:intentions/$PID.md" 2>/dev/null && echo 'at HEAD')"
+assert_eq "(19a) no untracked node file is left behind" "" \
+  "$(git -C "$FR" status --porcelain -- "intentions/$PID.md")"
+
+# (b) the update path — a tracked node, so the residue is a MODIFIED file.
+# A slug of its own, not (a)'s: (a) put its node on origin/main, and `absent`
+# never mints over a landed entry (case 14). Committed to HEAD first with
+# STUB_GC_LAND — the worktree-writer shape — so the update has something to be
+# dirty against.
+#
+# --retire is the update chosen deliberately: it moves `phase` to done, so the
+# on-disk file provably DIFFERS from HEAD's. A same-body recurrence does not —
+# the stub writer's frontmatter is identical across those two writes, so the
+# file never goes dirty and the assertion below would pass against a writer that
+# clears nothing at all.
+BSLUG=plumb-residue-update
+BID="tactic-eval-finding-$BSLUG"
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug "$BSLUG" --statement 'a landed update leaves no residue' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(19b) the setup mint lands" "0" "$RC"
+assert_eq "(19b) setup leaves the node at HEAD" "0" \
+  "$(git -C "$FR" cat-file -e "HEAD:intentions/$BID.md" 2>/dev/null; echo $?)"
+HEAD_BLOB_B="$(git -C "$FR" rev-parse "HEAD:intentions/$BID.md")"
+PLUMB_OPEN_JSON=$(jq -c --arg id "$BID" '.id = $id' <<<"$OPEN_JSON")
+run_ef STUB_STATE=open STUB_GC_PLUMB=1 STUB_NODE_JSON="$PLUMB_OPEN_JSON" -- \
+  --retire --slug "$BSLUG"
+assert_eq "(19b) the retirement lands" "0" "$RC"
+assert_eq "(19b) stdout says landed" "landed" "$SOUT"
+# The write really did change the file — without this the cleanliness assertion
+# below is satisfied by a file that was never dirty.
+assert_eq "(19b) the landed content DIFFERS from HEAD's" "done" \
+  "$(git -C "$FR" show "refs/remotes/origin/main:intentions/$BID.md" | sed -n 's/^phase: //p')"
+assert_eq "(19b) the node file is NOT left dirty in the checkout" "" \
+  "$(git -C "$FR" status --porcelain -- "intentions/$BID.md")"
+# Clean means returned to HEAD, not merely unstaged: the worktree blob has to
+# equal HEAD's, or the next graph write in this checkout still refuses.
+assert_eq "(19b) the working copy equals HEAD's blob" \
+  "$HEAD_BLOB_B" "$(git -C "$FR" hash-object -- "$FR/intentions/$BID.md")"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

@@ -1642,23 +1642,6 @@ reconcile_plumbing_base() { # <prev-base> <new-base>
   [[ "$unresolved" -eq 0 ]]
 }
 
-# prepare_plumbing_sha — produce this attempt's landing SHA for the plumbing
-# writer, and set ATTEMPT_SHA to it.
-#
-# Rebuild-on-fresh-base, in place of the worktree writer's commit + rebase:
-#   1. fetch origin/main and take its tip as the base;
-#   2. reconcile the on-disk content against it (see above) — this is where a
-#      same-node concurrent edit is caught;
-#   3. build the commit on that base with the tree plumbing.
-# Because the parent IS origin/main as of step 1, the eventual `git push origin
-# <sha>:main` is a fast-forward by construction. When it is rejected anyway
-# (main advanced between the fetch and the push, or during the check-stamp
-# window), the next attempt simply repeats all three steps against the newer
-# tip — there is no commit to replay and so nothing to conflict.
-#
-# Returns 0 with ATTEMPT_SHA set, or 10 when the reconciliation found a
-# concurrent edit it could not merge (the caller parks). Dies on a broken
-# environment (a failed fetch, an unbuildable commit) rather than falling back.
 # id_files_differ_from_rev <rev> — the plumbing writer's "is there anything to
 # land?" discriminator, and the counterpart to id_files_dirty().
 #
@@ -1713,6 +1696,23 @@ sync_ids_to_rev() { # <rev>
   done
 }
 
+# prepare_plumbing_sha — produce this attempt's landing SHA for the plumbing
+# writer, and set ATTEMPT_SHA to it.
+#
+# Rebuild-on-fresh-base, in place of the worktree writer's commit + rebase:
+#   1. fetch origin/main and take its tip as the base;
+#   2. reconcile the on-disk content against it (reconcile_plumbing_base above)
+#      — this is where a same-node concurrent edit is caught;
+#   3. build the commit on that base with the tree plumbing.
+# Because the parent IS origin/main as of step 1, the eventual `git push origin
+# <sha>:main` is a fast-forward by construction. When it is rejected anyway
+# (main advanced between the fetch and the push, or during the check-stamp
+# window), the next attempt simply repeats all three steps against the newer
+# tip — there is no commit to replay and so nothing to conflict.
+#
+# Returns 0 with ATTEMPT_SHA set, or 10 when the reconciliation found a
+# concurrent edit it could not merge (the caller parks). Dies on a broken
+# environment (a failed fetch, an unbuildable commit) rather than falling back.
 prepare_plumbing_sha() {
   local new_base
   ATTEMPT_SHA=""

@@ -806,6 +806,59 @@ verify_landed() {
   return 1
 }
 
+# clear_node_residue — return $NODE_REL to this checkout's OWN HEAD content,
+# after a write this pass has already verified on origin/main.
+#
+# The plumbing writer (see run_graph_commit) builds its commit from the on-disk
+# file through a throwaway index and pushes the result straight to origin/main.
+# It never moves this checkout's HEAD and never touches its index or tree — that
+# is precisely the property that lets it ignore an unrelated dirty flake.lock.
+# The cost is that a SUCCESSFUL land leaves $NODE_REL modified against HEAD (or,
+# on the mint path, untracked) for as long as the checkout goes unsynced. The
+# worktree writer never had this residue: its commit IS the checkout's HEAD.
+#
+# That residue is not cosmetic. A dirty tracked file in the main checkout is the
+# exact condition that fails the DEFAULT writer's pre-flight guard for every
+# later graph-commit there, whatever node it targets, and an untracked one makes
+# sync_main_checkout's `--ff-only` merge refuse. Left in place it would recreate,
+# from this script's own successes, the outage this writer was wired in to
+# dissolve (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt) — a
+# ledger write that fixes the finding by reproducing it.
+#
+# HEAD, not origin/main: HEAD is what `git status` and every dirty-tree guard
+# compare against, and this checkout's HEAD may legitimately lag origin/main.
+# The landed content is public on origin/main and arrives here whenever the
+# checkout next syncs; the checkout is not the writer's state.
+#
+# Worktree only, never the index — the same discipline as restore_from_blob().
+# `git checkout HEAD -- <path>` would stage the path and mutate the caller's
+# .git/index; writing the blob out leaves index == HEAD untouched, which is what
+# makes the result clean rather than merely reverted.
+#
+# Runs only AFTER verify_landed has confirmed the content is on origin/main —
+# never before, and never on a failure path, where restore_from_blob owns the
+# rollback. A failure to clear is logged loudly and does not change the verdict:
+# the write did land, and saying otherwise would be a lie the caller acts on.
+clear_node_residue() {
+  if git -C "$REPO_ROOT" cat-file -e "HEAD:$NODE_REL" 2>/dev/null; then
+    local tmp="$NODE_FILE.tmp"
+    if ! git -C "$REPO_ROOT" show "HEAD:$NODE_REL" > "$tmp"; then
+      rm -f "$tmp"
+      log "$NODE_REL LANDED but could not be returned to HEAD content — it is left MODIFIED in $REPO_ROOT, which blocks every later default-writer graph-commit in this checkout and makes an --ff-only sync refuse; clear it with git -C $REPO_ROOT checkout -- $NODE_REL"
+      return 1
+    fi
+    mv "$tmp" "$NODE_FILE"
+    return 0
+  fi
+  # Not at HEAD: the mint path's net-new node. Its content is on origin/main, so
+  # the local file is a leftover, and an untracked leftover is what an --ff-only
+  # sync collides with.
+  if ! rm -f "$NODE_FILE"; then
+    log "$NODE_REL LANDED but the local untracked copy could not be removed from $REPO_ROOT, where it will collide with the next --ff-only sync; remove it by hand"
+    return 1
+  fi
+}
+
 # --- Graph-write mutex --------------------------------------------------------
 # Taken BEFORE the first graph read, so the classification this pass acts on and
 # the write it derives from that classification cannot be split by another
@@ -898,6 +951,7 @@ if [[ "$RETIRE" == "1" ]]; then
     log "retirement of $ID could not be verified on origin/main"
     exit 1
   fi
+  clear_node_residue
   log "retired $ID (phase: done, metrics intact)"
   printf 'landed\n'
   exit 0
@@ -969,6 +1023,7 @@ if [[ -n "$RESOLVED_BY" ]]; then
     log "the resolution of $ID could not be verified on origin/main"
     exit 1
   fi
+  clear_node_residue
   log "recorded resolved_by $RESOLVED_BY on $ID (recurrence count untouched)"
   printf 'landed\n'
   exit 0
@@ -1072,6 +1127,7 @@ case "$STATE" in
       log "minting $ID could not be verified on origin/main"
       exit 1
     fi
+    clear_node_residue
     log "landed new ledger entry $ID (recurrence 1)"
     printf 'landed\n'
     exit 0
@@ -1161,6 +1217,7 @@ case "$STATE" in
       log "the recurrence of $ID could not be verified on origin/main"
       exit 1
     fi
+    clear_node_residue
     log "recorded a recurrence of $ID (was $STATE)"
     printf 'landed\n'
     exit 0
