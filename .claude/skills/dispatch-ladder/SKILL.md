@@ -247,10 +247,18 @@ the exit 10 halt.
 .claude/skills/dispatch-ladder/scripts/dispatch-ladder-status <node-id> --wait
 ```
 
-Prints one line, `<status> <node> <step> <phase> <disposition>`, absent fields
-as `-`. Exit **20** means still running — the expected answer for a long
-ladder; call again with identical arguments. Exit **0** is terminal. Exit **1**
-means no state file yet (or a corrupt one); exit **2** is usage.
+Prints one line, `<status> <node> <step> <phase> <disposition> <terminus>`,
+absent fields as `-`. Exit **20** means still running — the expected answer
+for a long ladder; call again with identical arguments. Exit **0** is
+terminal. Exit **1** means no state file yet (or a corrupt one); exit **2** is
+usage.
+
+`<terminus>` is set only once the run has halted — it classifies whether
+stopping there was legitimate (`done`, `excused-parked`, `excused-blocked`,
+`pruned`), or not (`violation`, `not-a-node`, `unknown`). It is orthogonal to
+the exit code below: the exit code says why the driver stopped, `<terminus>`
+says whether stopping there was legitimate, and no terminus ever changes an
+exit code.
 
 `--wait` polls for up to `--timeout-s` (default 540, under the Bash tool's 600s
 ceiling) then returns exit 20 rather than being killed mid-poll. Poll from this
@@ -408,6 +416,13 @@ State:
 
 - the node, and the phases it traversed this run;
 - the terminal disposition and which script produced it;
+- the terminus (`dispatch-ladder-status`'s sixth field) and what it means for
+  this run. State it plainly even when it is `done`, `excused-parked`,
+  `excused-blocked`, or `pruned`. When it is `violation` or `not-a-node`, say
+  so explicitly and do not describe the halt as an ordinary stopping point —
+  the run stopped on live work with no excuse, or was launched against an id
+  that is not in the graph at all. The exit code and the terminus are
+  orthogonal: a terminus never changes the halt's exit code, so report both.
 - what landed at `origin/main` (commits, PR, the merge and absorb);
 - what a next invocation would pick up;
 - the cross-phase synthesis's findings and the ledger entries they landed as;

@@ -53,13 +53,14 @@ export DISPATCH_LADDER_STATUS_SYSTEMCTL_CMD="$TMPDIR_TEST/systemctl"
 unit_active()   { echo 0 >"$ACTIVE_FLAG"; }
 unit_inactive() { echo 3 >"$ACTIVE_FLAG"; }
 
-write_state() { # <status> <step> <phase-or-null> <disposition-or-null>
-  jq -n --arg status "$1" --arg step "$2" --arg phase "$3" --arg disposition "$4" \
+write_state() { # <status> <step> <phase-or-null> <disposition-or-null> [terminus-or-null]
+  jq -n --arg status "$1" --arg step "$2" --arg phase "$3" --arg disposition "$4" --arg terminus "${5:-}" \
     '{node: "tactic-fixture-node", unit: "dispatch-ladder-tactic-fixture-node",
       pid: 123, started_at: "2026-08-12T00:00:00Z", updated_at: "2026-08-12T00:01:00Z",
       status: $status, step: $step,
       phase: (if $phase == "" then null else $phase end),
       disposition: (if $disposition == "" then null else $disposition end),
+      terminus: (if $terminus == "" then null else $terminus end),
       detail: null, exit_code: null}' >"$STATE_FILE"
 }
 
@@ -93,20 +94,33 @@ write_state complete await main-qa complete
 unit_inactive
 run_status
 assert_eq "complete: exits 0" "0" "$RC"
-assert_eq "complete: the status line" "complete $NODE await main-qa complete" "$OUT"
+assert_eq "complete: the status line" "complete $NODE await main-qa complete -" "$OUT"
 
 write_state halted merge review throw
 unit_active     # a terminal state wins even while the unit lingers
 run_status
 assert_eq "halted: exits 0" "0" "$RC"
-assert_eq "halted: the status line" "halted $NODE merge review throw" "$OUT"
+assert_eq "halted: the status line" "halted $NODE merge review throw -" "$OUT"
 
 echo "Test: absent fields print as '-'"
 write_state halted advance "" ""
 unit_inactive
 run_status
 assert_eq "nulls: exits 0" "0" "$RC"
-assert_eq "nulls: null phase and disposition print as '-'" "halted $NODE advance - -" "$OUT"
+assert_eq "nulls: null phase, disposition and terminus print as '-'" "halted $NODE advance - - -" "$OUT"
+
+echo "Test: a non-null terminus is surfaced as the sixth field"
+write_state halted advance implement violation violation
+unit_inactive
+run_status
+assert_eq "terminus: exits 0" "0" "$RC"
+assert_eq "terminus: the status line carries the classification" "halted $NODE advance implement violation violation" "$OUT"
+
+write_state halted usage "" not-a-node not-a-node
+unit_inactive
+run_status
+assert_eq "terminus not-a-node: exits 0" "0" "$RC"
+assert_eq "terminus not-a-node: the status line carries the classification" "halted $NODE usage - not-a-node not-a-node" "$OUT"
 
 # --- Running vs orphaned -----------------------------------------------------
 echo "Test: a running driver with a live unit is exit 20 ('call again')"
@@ -114,7 +128,7 @@ write_state running await implement ""
 unit_active
 run_status
 assert_eq "running: exits 20" "20" "$RC"
-assert_eq "running: the status line" "running $NODE await implement -" "$OUT"
+assert_eq "running: the status line" "running $NODE await implement - -" "$OUT"
 
 echo "Test: a running state with a dead unit is 'orphaned' and TERMINAL"
 # The failure this guards: reporting it as `running` would make a --wait caller
@@ -123,7 +137,7 @@ write_state running await implement ""
 unit_inactive
 run_status
 assert_eq "orphaned: exits 0 (terminal)" "0" "$RC"
-assert_eq "orphaned: the status line names the orphan" "orphaned $NODE await implement -" "$OUT"
+assert_eq "orphaned: the status line names the orphan" "orphaned $NODE await implement - -" "$OUT"
 
 # --- Corruption --------------------------------------------------------------
 echo "Test: an unreadable or unrecognized state file is an error, not a guess"
@@ -158,14 +172,14 @@ FLIPPER=$!
 run_status --wait --timeout-s 20 --poll-s 1
 wait "$FLIPPER" || true
 assert_eq "wait: exits 0 once the driver completes" "0" "$RC"
-assert_eq "wait: the terminal status line" "complete $NODE await main-qa complete" "$OUT"
+assert_eq "wait: the terminal status line" "complete $NODE await main-qa complete -" "$OUT"
 
 echo "Test: --wait that runs out of window is exit 20, not a failure"
 write_state running await implement ""
 unit_active
 run_status --wait --timeout-s 2 --poll-s 1
 assert_eq "wait-timeout: exits 20" "20" "$RC"
-assert_eq "wait-timeout: the last line read is still reported" "running $NODE await implement -" "$OUT"
+assert_eq "wait-timeout: the last line read is still reported" "running $NODE await implement - -" "$OUT"
 
 echo "Test: --wait picks up a state file that appears after the spawn"
 rm -f "$STATE_FILE"
@@ -175,7 +189,7 @@ FLIPPER=$!
 run_status --wait --timeout-s 6 --poll-s 1
 wait "$FLIPPER" || true
 assert_eq "wait-appear: exits 20 once the driver's first state lands" "20" "$RC"
-assert_eq "wait-appear: the status line" "running $NODE advance - -" "$OUT"
+assert_eq "wait-appear: the status line" "running $NODE advance - - -" "$OUT"
 
 echo "Test: --wait with a state file that never appears is exit 1"
 rm -f "$STATE_FILE"

@@ -57,6 +57,7 @@ import { attributeSpend, spendBucketsFrom } from "../src/spend.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { computeDependencyAudit } from "./dependency-audit.js";
+import { ladderTerminusCensus } from "../src/terminus.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -1172,6 +1173,62 @@ export function makeDelegationRecordsSensor(
   };
 }
 
+// --- ladder-terminus census sensor -------------------------------------------
+// Measures the ladder-terminus predicate (tactic-ladder-terminus-owns-main-qa,
+// `../src/terminus.ts`) over the whole store: how many merged-but-not-done
+// nodes exist, split into legitimately excused (parked or blocked) and
+// violation. STORE-WIDE like `makeIntentionStoreSensor` and
+// `makeDelegationRecordsSensor` above — it counts over every node in the
+// store, not one node's own fields — so it is built the same way, as a
+// factory taking an injected `loadNodes` rather than a plain `Sensor`
+// constant.
+//
+// Error discipline follows `dependencyAuditSensor` above, not the silent
+// `"unknown"` degrade `makeIntentionStoreSensor` uses: `ladderTerminusCensus`
+// itself is a pure function over an already-loaded node array and cannot
+// throw, but the injected `loadNodes` call (a real store read in production)
+// can — a missing/corrupt intentions dir, or a node `listNodes` cannot parse.
+// That failure is caught here and degrades to a fixed status token; the
+// caught error goes to stderr ONLY, never into the returned reading, because
+// readings are committed to a public repo and an error string can carry a
+// local filesystem path or stack trace.
+
+/**
+ * The verbatim `success_signal.sensor` string this sensor is registered
+ * under. A later, separate step places this exact string as
+ * `success_signal.sensor` on the tactic node that measures
+ * tactic-ladder-terminus-owns-main-qa — not this file's job to edit that
+ * node. Registry resolution is a verbatim string match
+ * (`SensorRegistry.resolve` in `../src/sensors.ts`), so any drift — even
+ * whitespace — silently de-registers this sensor.
+ */
+export const LADDER_TERMINUS_SENSOR_NAME =
+  "ladder-terminus census over the intention store (merged-but-not-terminal count)";
+
+/**
+ * Build the ladder-terminus census sensor. `loadNodes` is injected — the same
+ * pattern `makeDelegationRecordsSensor`/`makeIntentionStoreSensor` use — so
+ * unit tests supply fixture arrays without touching the live store.
+ */
+export function makeLadderTerminusSensor(loadNodes: () => IntentionNode[]): Sensor {
+  return {
+    name: LADDER_TERMINUS_SENSOR_NAME,
+    read(): string {
+      try {
+        const census = ladderTerminusCensus(loadNodes());
+        return (
+          `ladder terminus: ${census.mergedNotDone} merged-not-done, ` +
+          `${census.excused} excused, ${census.violations} violations`
+        );
+      } catch (err) {
+        // stderr only — not persisted into the node, so it may carry detail.
+        console.error(`ladder terminus sensor: read error — ${String(err)}`);
+        return "ladder terminus: unknown";
+      }
+    },
+  };
+}
+
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
 // declares, and the store's self-measuring sensor: it counts how many open
@@ -1491,6 +1548,7 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(dependencyAuditSensor);
   registry.register(rsiSensor);
   registry.register(makeDelegationRecordsSensor(() => listNodes(intentionsDir)));
+  registry.register(makeLadderTerminusSensor(() => listNodes(intentionsDir)));
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs

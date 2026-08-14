@@ -693,7 +693,13 @@ echo "Test: a busy selection lock is a soft retry, not a halt"
 reset_seqs
 set_seq advance '10|idle tactic-fixture-node not-selectable'
 set_seq lock    '0|busy' '0|busy' '0|acquired'
-set_seq landed  '4|' '4|' '4|' '0|'
+# The last two lines are classify_terminus's own reads at the halt: `4` = the
+# node is PRESENT at origin/main, then `0` = it is done. Spelled out rather than
+# left to the fake's repeat-the-last-line fallback, which would answer "absent"
+# to the --blob read and send the classification down the git-history probe —
+# two more git calls, in a case whose whole subject is which git calls a busy
+# pass makes.
+set_seq landed  '4|' '4|' '4|' '0|' '4|' '0|'
 set_seq merge   '0|merged #8 (tactic-fixture-node)'
 set_seq reconcile '0|reconciled tactic-fixture-node -> done'
 run_ladder
@@ -1209,6 +1215,249 @@ else
   echo "    stderr: $ERR"
 fi
 printf '%s\n' "$FROZEN_LIB_GOOD" >"$FROZEN_LIB"
+
+# --- the terminus classification (classify_terminus) ------------------------
+# The exit code says WHY the driver stopped; `terminus` says whether stopping
+# there was legitimate. Both are recorded, and they are ORTHOGONAL — the whole
+# point is that a halt reads the same whether the node was parked (fine) or
+# abandoned mid-flight (a violation of the requirement in
+# intentions/tactic-ladder-terminus-owns-main-qa.md).
+#
+# The classifications reached through verify-landed are driven through the SAME
+# sequence fake the landing signal already uses — classify_terminus reads the
+# node at origin/main through the very same script, so its answers are just more
+# lines of `landed.script`. The reads it makes, in order:
+#
+#   1. --blob absent            0 -> absent (see below), 1 -> unknown,
+#                               4 -> keep asking
+#   2. --jq .phase == "done"                 0 -> done
+#   3. --jq .office_hours != null            0 -> excused-parked
+#   4. --jq (.blocked_by | length) > 0       0 -> excused-blocked
+#   otherwise: violation, or unknown if any read answered 1.
+#
+# An ABSENT node is then split by git history rather than by verify-landed, so
+# those cases drive the `git` fake instead — see terminus_absent_case below.
+#
+# Every case below halts on await's exit 12, which reaches halt() WITHOUT the
+# driver having asked phase_is_done first — so line 1 of the sequence is
+# classify_terminus's own first read and the mapping stays legible.
+
+# The terminus as each of its two required sinks reports it. `// "<absent>"`
+# rather than jq's bare null so a MISSING field is distinguishable from a null
+# one — a missing field is the failure mode the guard in halt() exists to
+# prevent.
+state_terminus() {
+  jq -r 'if has("terminus") then (.terminus // "<null>") else "<absent>" end' \
+    "$STATE_DIR/state.json" 2>/dev/null
+}
+halt_event_terminus() {
+  jq -r 'select(.event == "halt")
+         | if has("terminus") then (.terminus // "<null>") else "<absent>" end' \
+    "$STATE_DIR/events.jsonl" 2>/dev/null
+}
+
+# terminus_case <label> <expected> <landed-sequence-line>...
+terminus_case() {
+  local label="$1" want="$2"; shift 2
+  reset_seqs
+  set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+  set_seq await   '12|stalled tactic-fixture-node implement'
+  set_seq landed "$@"
+  run_ladder
+  # THE CLASSIFICATION IS A DIAGNOSTIC, so it may not rewrite the disposition it
+  # describes: exit 12 stays exit 12 whatever the terminus turns out to be.
+  assert_eq "terminus $label: the halt's exit code is unchanged (12)" "12" "$RC"
+  assert_eq "terminus $label: state.json records it" "$want" "$(state_terminus)"
+  assert_eq "terminus $label: the halt event records it" "$want" "$(halt_event_terminus)"
+}
+
+echo "Test: a node at phase 'done' on origin/main classifies 'done'"
+terminus_case done done '4|' '0|'
+# It stops at the first YES: `done` outranks every excuse, so the two remaining
+# predicates are never asked. That is what makes the classification
+# deterministic when more than one condition holds.
+assert_eq "terminus done: the later predicates were never asked" "2" "$(calls landed)"
+
+echo "Test: a node parked to office-hours classifies 'excused-parked'"
+terminus_case excused-parked excused-parked '4|' '4|' '0|'
+
+echo "Test: a node with a non-empty blocked_by classifies 'excused-blocked'"
+terminus_case excused-blocked excused-blocked '4|' '4|' '4|' '0|'
+
+echo "Test: neither done nor excused, every read definitive, is a 'violation'"
+terminus_case violation violation '4|'
+# The predicates themselves, pinned in order — the classification IS these four
+# questions, so a drifted filter would silently change what "violation" means.
+assert_eq "terminus violation: 1. absence is asked in --blob mode" \
+  "-C $PROJECT --node $NODE --blob absent" "$(sed -n 1p "$SEQ_DIR/landed.argv")"
+assert_eq "terminus violation: 2. the done predicate" \
+  "-C $PROJECT --no-fetch --node $NODE --jq .phase == \"done\"" \
+  "$(sed -n 2p "$SEQ_DIR/landed.argv")"
+assert_eq "terminus violation: 3. the office-hours excuse" \
+  "-C $PROJECT --no-fetch --node $NODE --jq .office_hours != null" \
+  "$(sed -n 3p "$SEQ_DIR/landed.argv")"
+assert_eq "terminus violation: 4. the awaited-event excuse, as a STRUCTURAL edge" \
+  "-C $PROJECT --no-fetch --node $NODE --jq (.blocked_by | length) > 0" \
+  "$(sed -n 4p "$SEQ_DIR/landed.argv")"
+
+echo "Test: verify-landed's 'unknown' (rc=1) classifies 'unknown', NEVER 'violation'"
+# The 0/4/1 split is the whole reason these reads go through verify-landed:
+# collapsing "could not tell" into a verdict is the defect it exists to end, and
+# here that verdict would be an accusation against a node nobody could read.
+terminus_case unknown-first unknown '1|'
+assert_eq "terminus unknown-first: an unreadable origin/main stops the questioning" \
+  "1" "$(calls landed)"
+# And an unknown from a LATER read is just as fatal to a verdict, even though
+# the reads around it answered definitively.
+terminus_case unknown-mid unknown '4|' '4|' '1|' '4|'
+# rc=2 is verify-landed's usage error — not an answer either, so not a verdict.
+terminus_case unknown-usage unknown '2|'
+
+# --- an absent node: pruned, or never a node at all -------------------------
+# The first trap this closes: in --jq mode an absent node is not an error.
+# verify-landed feeds jq the literal `null`, every predicate evaluates false on
+# it, and all three reads answer 4 — so a landed prune would be reported as a
+# violation. Measured against the real script: `--jq` on an absent node exits 4
+# while `--blob absent` exits 0. Hence the separate --blob read, first.
+#
+# The second: `--blob absent` answers "not at origin/main NOW" and nothing more.
+# A typo'd id and a node whose graph-commit never pushed are equally absent, so
+# answering `pruned` off that read alone would record work that never started as
+# a LEGITIMATE terminus. History settles it, through the `git` fake:
+#
+#   log -1 … -- intentions/<id>.md   sha    -> pruned
+#                                    rc!=0  -> unknown
+#                                    empty  -> ask the shallow guard
+#   rev-parse --is-shallow-repository false -> not-a-node
+#                                    else   -> unknown
+#
+# terminus_absent_case <label> <expected> <git-line>...
+# Every case here halts on await's exit 12 out of a LAUNCHING pass, which never
+# reaches the reconcile pass's checkout sync — so the probe is the run's first
+# git call and the sequence lines below map one-to-one onto the reads above.
+terminus_absent_case() {
+  local label="$1" want="$2"; shift 2
+  reset_seqs
+  set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+  set_seq await   '12|stalled tactic-fixture-node implement'
+  set_seq landed  '0|'
+  set_seq git     "$@"
+  run_ladder
+  assert_eq "terminus $label: the halt's exit code is unchanged (12)" "12" "$RC"
+  assert_eq "terminus $label: state.json records it" "$want" "$(state_terminus)"
+  assert_eq "terminus $label: the halt event records it" "$want" "$(halt_event_terminus)"
+  # The disambiguation is pure git plumbing: the --blob read is still the only
+  # verify-landed call an absent node costs.
+  assert_eq "terminus $label: no second verify-landed read" "1" "$(calls landed)"
+}
+
+echo "Test: an absent node whose file HAS history classifies 'pruned'"
+terminus_absent_case pruned pruned '0|4bd3ae0f9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f'
+assert_eq "terminus pruned: absence is settled against origin/main's history" \
+  "-C $PROJECT log -1 --format=%H origin/main -- intentions/$NODE.md" \
+  "$(sed -n 1p "$SEQ_DIR/git.argv")"
+assert_eq "terminus pruned: and the shallow guard is not paid on that path" \
+  "1" "$(calls git)"
+
+echo "Test: an absent node with NO history classifies 'not-a-node', not 'pruned'"
+# The id was never in the graph — a typo, or a node whose graph-commit never
+# pushed. Work that never started is not a legitimate terminus.
+terminus_absent_case not-a-node not-a-node '0|' '0|false'
+assert_eq "terminus not-a-node: empty history is only believed once shallowness is ruled out" \
+  "-C $PROJECT rev-parse --is-shallow-repository" "$(sed -n 2p "$SEQ_DIR/git.argv")"
+
+echo "Test: empty history in a SHALLOW clone classifies 'unknown', never 'not-a-node'"
+# A shallow clone's `git log` exits 0 and prints nothing for a node pruned
+# before the graft point (lib-deleted-node-ids.ts:39-63), so its silence is
+# evidence of nothing. Same reasoning as that helper's throw, mapped to a token
+# because classify_terminus may never throw.
+terminus_absent_case shallow unknown '0|' '0|true'
+
+echo "Test: a git failure behind an absent node classifies 'unknown'"
+# rc!=0 is not an answer, so it is not a verdict — the same rule the 0/4/1
+# verify-landed split enforces for the reads above.
+terminus_absent_case history-unreadable unknown '128|'
+assert_eq "terminus history-unreadable: an unreadable history stops the questioning" \
+  "1" "$(calls git)"
+
+echo "Test: the terminus never changes the exit code — on ANY halting code"
+# One halt() edit covers them all, exactly as the owed evaluation does. Each row
+# leaves the node at a violation terminus and must still exit with its own code.
+for pair in "11|throw tactic-fixture-node parked" \
+            "12|stalled tactic-fixture-node qa" \
+            "14|throw tactic-fixture-node unknown-graph-read"; do
+  want_rc="${pair%%|*}"
+  reset_seqs
+  set_seq advance '0|launched tactic-fixture-node tactic qa /qa-fix'
+  set_seq await "$pair"
+  set_seq landed '4|'
+  run_ladder
+  assert_eq "terminus on exit $want_rc: the exit code is untouched" "$want_rc" "$RC"
+  assert_eq "terminus on exit $want_rc: and the violation is on the record" \
+    "violation" "$(state_terminus)"
+done
+
+echo "Test: a completing run records its terminus too, and a disagreement never gates"
+# exit 0 is the ONE path that already read origin/main (phase_is_done), so line 1
+# of the sequence is consumed there and the classification starts at line 2. The
+# sequence below then answers 'not done, not excused, present' — a terminus that
+# CONTRADICTS the exit code. The run must still exit 0: the classification is a
+# diagnostic, not a gate, and the driver sequences rather than gating.
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|' '4|'
+run_ladder
+assert_eq "terminus complete: exit 0, unchanged by a contradicting terminus" "0" "$RC"
+assert_eq "terminus complete: state.json still reports complete" "complete" \
+  "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "terminus complete: the disagreement is recorded rather than acted on" \
+  "violation" "$(state_terminus)"
+
+echo "Test: a completing run whose node really is done classifies 'done'"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+set_seq landed  '0|' '4|' '0|'
+run_ladder
+assert_eq "terminus complete-done: exit 0" "0" "$RC"
+assert_eq "terminus complete-done: state.json" "done" "$(state_terminus)"
+assert_eq "terminus complete-done: the halt event" "done" "$(halt_event_terminus)"
+
+echo "Test: the operator-facing halt line names the terminus"
+# The third sink. A person reading the journal must not have to open state.json
+# to learn whether the halt they are looking at was legitimate.
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+set_seq await   '12|stalled tactic-fixture-node implement'
+set_seq landed  '4|'
+rc=0
+ERR=$("$RUN" "$NODE" --poll-s 1 --timeout-s 3 --ci-wait-s 5 2>&1 >/dev/null) || rc=$?
+assert_eq "terminus stderr: exit 12" "12" "$rc"
+TOTAL=$((TOTAL + 1))
+if grep -q 'terminus violation' <<<"$ERR"; then
+  PASS=$((PASS + 1)); echo "  PASS: terminus stderr: the halt line names the terminus"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: terminus stderr: the halt line names the terminus"
+  echo "    stderr: $ERR"
+fi
+
+echo "Test: before it halts, a run renders terminus as null — never an empty string"
+# Only a halt has a terminus to classify, so every earlier state write must
+# render the field the way `phase`/`disposition`/`detail` render theirs: PRESENT
+# and null, not "" and not absent. Read mid-flight, while the driver sleeps out
+# a ci-waiting poll: --poll-s 3 against --max-run-s 2 means one advance, one
+# 3-second sleep, then a timeout halt — a 3s window to read a state.json that is
+# always complete on disk (write_state renames it into place atomically).
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node ci-waiting'
+"$RUN" "$NODE" --poll-s 3 --max-run-s 2 >/dev/null 2>&1 &
+LADDER_PID=$!
+sleep 1
+MID_TERMINUS=$(state_terminus) || MID_TERMINUS="<unreadable>"
+MID_STATUS=$(jq -r .status "$STATE_DIR/state.json" 2>/dev/null) || MID_STATUS="<unreadable>"
+wait "$LADDER_PID" || true
+assert_eq "mid-run: the run had not halted yet" "running" "$MID_STATUS"
+assert_eq "mid-run: terminus is present and null" "<null>" "$MID_TERMINUS"
+assert_eq "mid-run: and the timeout halt then classified one" "violation" "$(state_terminus)"
 
 # --- advance's stderr diagnosis reaching events.jsonl ------------------------
 echo "Test: advance's stderr reason on a stale-selection requeue reaches events.jsonl"

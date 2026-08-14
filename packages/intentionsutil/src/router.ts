@@ -222,8 +222,19 @@ export function readingDate(reading: string): string | null {
  * (`listNodesStrict`, never the tolerant `listNodes`). Absence is read as
  * completion here, so a blocker file the tolerant reader silently drops (0-byte,
  * truncated, conflict-markered, schema-invalid) would unblock its dependent and
- * let the selector dispatch it — a fail-open gate. Every caller of this function
- * and of `selectGraphTargets` therefore enumerates strictly.
+ * let the selector dispatch it — a fail-open gate. Every gate and selection
+ * caller of this function, and every caller of `selectGraphTargets`, therefore
+ * enumerates strictly.
+ *
+ * The one exception is the report caller, `ladderTerminusCensus`
+ * (`terminus.ts`), which may run over a tolerant enumeration (the sensor path
+ * feeds it `listNodes`). That is safe there because the polarity is inverted:
+ * here an absent blocker OPENS a dispatch gate (fail-open), so strict
+ * enumeration is load-bearing; there `!blockersComplete(...)` gates an EXCUSE
+ * from a `violation` classification, so an absent blocker means "not excused"
+ * and a dropped file makes the census OVER-report a violation rather than
+ * hiding one — fail-safe in that direction. See `classifyTerminus`'s doc
+ * comment in `terminus.ts` for the full argument.
  */
 export function blockersComplete(tactic: IntentionNode, byId: Map<string, IntentionNode>): boolean {
   for (const blockerId of tactic.blocked_by) {

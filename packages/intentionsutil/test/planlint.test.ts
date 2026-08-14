@@ -111,18 +111,21 @@ describe("lintTacticBodies", () => {
     expect(() => lintTacticBodies(dir, listNodes(dir))).not.toThrow();
   });
 
-  it("exempts tactic-mainqa-* from the recommended-model check only", () => {
+  it("requires the recommended-model line on a tactic-mainqa-* node like any other tactic", () => {
     const dir = tempDir();
-    // Has Context + Verification but no recommended-model line: passes because
-    // the id is tactic-mainqa-*.
+    // The old id-prefix exemption is gone: tactic-mainqa-* nodes at a planned
+    // phase with Context + Verification but no recommended-model line now
+    // throw, same as any other tactic.
     const body = `## Context\n\nc\n\n## Verification\n\nv\n`;
     writeRawNode(dir, { id: "tactic-mainqa-foo", phase: "qa", body });
-    expect(() => lintTacticBodies(dir, listNodes(dir))).not.toThrow();
+    expect(() => lintTacticBodies(dir, listNodes(dir))).toThrow(
+      /tactic-mainqa-foo.*Recommended model/,
+    );
   });
 
   it("still requires Context/Verification on a tactic-mainqa-* node", () => {
     const dir = tempDir();
-    // Missing Context: the mainqa exemption covers recommended-model only.
+    // Missing Context: no marker is exempt for tactic-mainqa-* nodes anymore.
     const body = `Recommended model: sonnet\n\n## Verification\n\nv\n`;
     writeRawNode(dir, { id: "tactic-mainqa-foo", phase: "qa", body });
     expect(() => lintTacticBodies(dir, listNodes(dir))).toThrow(/tactic-mainqa-foo.*Context/);
