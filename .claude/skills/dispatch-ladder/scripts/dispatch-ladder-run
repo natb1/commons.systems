@@ -246,11 +246,13 @@
 #   reconcile-graph-merged refuses to absorb a merge younger than
 #   GRAPH_RECONCILE_GRACE (600s) by `continue`-ing its candidate loop — a
 #   SILENT skip, printing nothing (reconcile-graph-merged:177). Its `deferred`
-#   lines come from reconcile-graph.ts's plan and today carry exactly one
-#   reason (`main-qa phase not yet in schema`). So both are re-polled, and the
-#   silence is read as the grace window only once a merge has happened this
-#   run: without a merge of our own, no output means there is genuinely nothing
-#   to absorb and the wait is on CI instead.
+#   lines would come from reconcile-graph.ts's plan, but that plan currently
+#   has no producer of `deferred` entries at all (its one schema-migration
+#   guard landed and was removed as dead code) — the field is kept in the JSON
+#   shape but always empty. So both cases are re-polled, and the silence is
+#   read as the grace window only once a merge has happened this run: without a
+#   merge of our own, no output means there is genuinely nothing to absorb and
+#   the wait is on CI instead.
 #
 #   This script POLLS THROUGH the grace window rather than overriding
 #   GRAPH_RECONCILE_GRACE. Overriding it would be the driver setting policy,
@@ -291,12 +293,38 @@
 #   1   internal      this script's own error (an unmapped exit code from a
 #                     driven script, an unwritable state dir).
 #
+# THE EXIT CODE AND THE TERMINUS ARE ORTHOGONAL, deliberately. Every code above
+# says WHY THE DRIVER STOPPED. None of them says WHETHER STOPPING THERE WAS
+# LEGITIMATE — a halt reads the same whether the node was parked (fine) or
+# abandoned mid-flight (a violation of the standing requirement in
+# intentions/tactic-ladder-terminus-owns-main-qa.md). `terminus` is that second
+# question, classified by classify_terminus off the node at origin/main and
+# recorded on state.json, on the halt event and on the halt's stderr line:
+#
+#   done            .phase == "done"
+#   excused-parked  .office_hours != null
+#   excused-blocked (.blocked_by | length) > 0
+#   pruned          absent from origin/main — a landed prune, which is exit 0's
+#                   second contract and never a violation
+#   violation       none of the above, every read definitive: the run stopped on
+#                   work that is neither terminal nor excused
+#   unknown         verify-landed answered `unknown` for a read, so nothing is
+#                   claimed either way
+#
+# It NEVER changes the exit code, and it is NOT a gate — for the same reason the
+# owed evaluation cannot be (A HALT OWES THE EVALUATION TOO, below): a
+# diagnostic that rewrites the disposition it describes is not a diagnostic.
+# Every existing exit code keeps its exact meaning; callers are unaffected.
+#
 # STATE, at <main-root>/.claude/worktrees/<id>.ladder/ — a sibling of the
 # existing `<id>.scope-fingerprint` convention, and untracked (the repo's
 # top-level `worktrees/` ignore rule covers `.claude/worktrees/`):
 #
 #   state.json    one object, rewritten atomically (mktemp in the same dir +
-#                 mv), for `dispatch-ladder-status` to read.
+#                 mv), for `dispatch-ladder-status` to read. Its `terminus` field
+#                 carries the classification above, and is null — as `phase`,
+#                 `disposition` and `detail` are — until the run halts, since
+#                 only a halt has a terminus to classify.
 #   events.jsonl  append-only. This is the evidence the evaluation needs and
 #                 cannot rediscover later: phase wall-clock against the await
 #                 window, launches that produced no code change, and re-poll
@@ -474,6 +502,9 @@ PHASE=""
 DISPOSITION=""
 DETAIL=""
 EXIT_CODE=""
+# Set once, by halt(), from classify_terminus. Empty until then — a run still
+# walking the ladder has no terminus, and rendering one would be a claim.
+TERMINUS=""
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 now_epoch() { date -u +%s; }
@@ -490,14 +521,15 @@ write_state() {
       --arg started_at "$STARTED_AT" --arg updated_at "$(now_iso)" \
       --arg status "$STATUS" --arg step "$STEP" --arg phase "$PHASE" \
       --arg disposition "$DISPOSITION" --arg detail "$DETAIL" \
-      --arg exit_code "$EXIT_CODE" \
+      --arg exit_code "$EXIT_CODE" --arg terminus "$TERMINUS" \
       '{node: $node, unit: $unit, pid: $pid,
         started_at: $started_at, updated_at: $updated_at,
         status: $status, step: $step,
         phase: (if $phase == "" then null else $phase end),
         disposition: (if $disposition == "" then null else $disposition end),
         detail: (if $detail == "" then null else $detail end),
-        exit_code: (if $exit_code == "" then null else ($exit_code | tonumber) end)}' \
+        exit_code: (if $exit_code == "" then null else ($exit_code | tonumber) end),
+        terminus: (if $terminus == "" then null else $terminus end)}' \
       >"$tmp"; then
     rm -f "$tmp"
     echo "dispatch-ladder-run: could not render state.json" >&2
@@ -631,15 +663,44 @@ spawn_phase_eval() {
 # all without touching a single call site. The spawn runs AFTER the state write
 # and the halt event, so the halt is recorded whatever the spawn does, and its
 # result can never change the exit code below it.
+#
+# AND IT IS WHERE THE TERMINUS IS CLASSIFIED, for the same "one terminal path"
+# reason. The classification answers a question the exit code cannot (see THE
+# EXIT CODE AND THE TERMINUS ARE ORTHOGONAL above) and reaches all three sinks:
+# state.json, the halt event's own fields, and the operator-facing stderr line.
+#
+# ORDER AND GUARDS. classify_terminus is a NETWORK read, so it is slow and it
+# can fail — but it runs BEFORE write_state because all three sinks must carry
+# the same value, and it is wrapped so nothing it does can prevent any of them:
+# it never exits, never halts (it is called from HERE, so halting inside it
+# would recurse), and its answer is normalized against the closed vocabulary. A
+# classification that cannot be obtained is the token `unknown` — never a
+# missing field, never a crash, and never a different exit code.
 halt() {
   EXIT_CODE="$1"; DISPOSITION="$2"; DETAIL="$3"
   if [[ "$1" == "0" ]]; then STATUS=complete; else STATUS=halted; fi
+  # A plain assignment (not `local`), so the command substitution's own status
+  # is this statement's status and the `||` can see it — `local x=$(…)` would
+  # mask it behind `local`'s always-0. classify_terminus returns 0 by contract;
+  # the fallbacks below exist for the ways a shell can still surprise us.
+  TERMINUS=$(classify_terminus 2>/dev/null) || TERMINUS=""
+  case "$TERMINUS" in
+    done|excused-parked|excused-blocked|violation|unknown|pruned) ;;
+    *) TERMINUS=unknown ;;
+  esac
   write_state
-  log_event halt "$PHASE" "$DISPOSITION" "$DETAIL"
+  # The optional fifth argument is the carrier for structured fields (see
+  # log_event's header): an evaluator reads `.terminus` off the halt record
+  # rather than regexing `detail`.
+  local fields
+  fields=$(jq -nc --arg terminus "$TERMINUS" '{terminus: $terminus}' 2>/dev/null) \
+    || fields="{\"terminus\":\"unknown\"}"
+  log_event halt "$PHASE" "$DISPOSITION" "$DETAIL" "$fields"
   # Guarded twice inside spawn_phase_eval: on a phase having launched at all,
   # and on that phase not already having been evaluated at its own boundary.
   spawn_phase_eval "$EVAL_LAUNCH_PHASE" "$EVAL_LAUNCH_EPOCH" || true
-  printf 'dispatch-ladder-run: %s %s (exit %s) — %s\n' "$STATUS" "$NODE_ID" "$1" "$3" >&2
+  printf 'dispatch-ladder-run: %s %s (exit %s, terminus %s) — %s\n' \
+    "$STATUS" "$NODE_ID" "$1" "$TERMINUS" "$3" >&2
   exit "$1"
 }
 
@@ -725,6 +786,80 @@ phase_is_done() {
     4) return 1 ;;
     *) halt 14 unknown-graph-read "verify-landed could not read $NODE_ID at origin/main (rc=$rc); nothing is claimed either way" ;;
   esac
+}
+
+# --- Was stopping HERE legitimate? -----------------------------------------
+# classify_terminus — prints exactly ONE token and returns 0, always:
+#
+#   done             .phase == "done"
+#   excused-parked   .office_hours != null
+#   excused-blocked  (.blocked_by | length) > 0
+#   pruned           the node is ABSENT from origin/main (a landed prune)
+#   violation        none of the above, and every read answered definitively
+#   unknown          verify-landed answered `unknown` for a read
+#
+# The exit code says why the driver stopped; this says whether stopping there
+# was legitimate. Only `done`, the two excuses and `pruned` are — see THE EXIT
+# CODE AND THE TERMINUS ARE ORTHOGONAL at the top, and the standing requirement
+# in intentions/tactic-ladder-terminus-owns-main-qa.md.
+#
+# IT NEVER HALTS AND NEVER EXITS, unlike phase_is_done just above (which halts
+# 14 on rc=1). It is called FROM halt(), so a halt inside it would recurse; and
+# a classification is a diagnostic, which may not change the disposition it
+# describes. Every failure path prints a token instead.
+#
+# THE 0/4/1 CONTRACT IS PRESERVED, which is the whole point of routing these
+# reads through verify-landed (read its header, :13-24): 0 landed, 4
+# definitively not-landed, 1 unknown. rc=1 classifies `unknown`, NEVER
+# `violation` — collapsing "could not tell" into a verdict is the precise defect
+# verify-landed exists to end, and here it would be an accusation.
+#
+# WHY `--blob absent` COMES FIRST. A pruned node is absent from origin/main, and
+# in `--jq` mode absence is NOT an error: readNodeAtRef returns null for it
+# (lib-store-at-ref.ts:100-123), verify-landed feeds jq the literal `null`
+# (:243), and every predicate below evaluates false on null — so all three
+# answer 4, `not-landed`, and a landed prune would be reported as a VIOLATION.
+# Measured, not assumed: `--node <absent> --jq '.phase == "done"'` exits 4,
+# `--node <absent> --blob absent` exits 0. So absence is asked separately, in
+# the `--blob` mode written for exactly this question (verify-landed:32). It is
+# also the cheap read — pure git plumbing, no tsx start-up — and it is disjoint
+# from the three predicates rather than jumping the queue: an absent node
+# satisfies none of them.
+#
+# The three predicates are then evaluated in the documented order, so the
+# classification is deterministic when more than one holds. An `unknown` from
+# one read does NOT abandon the rest: a later read that answers a definite YES
+# is still an answer, and only the absence of any YES falls back to `unknown`.
+# `--no-fetch` on those three: the `--blob` read above already fetched, so they
+# reuse that same origin/main — cheaper, and all four answers then describe ONE
+# snapshot rather than four successive ones.
+terminus_probe() { # <jq-filter> — 0 true, 4 definitely false, anything else unknown
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" --jq "$1" \
+    >/dev/null 2>&1
+}
+
+classify_terminus() {
+  local rc unknown=0
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'pruned\n'; return 0 ;;
+    4) ;;   # present at origin/main — ask the three questions
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  terminus_probe '.phase == "done"'; rc=$?
+  case "$rc" in 0) printf 'done\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  terminus_probe '.office_hours != null'; rc=$?
+  case "$rc" in 0) printf 'excused-parked\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  terminus_probe '(.blocked_by | length) > 0'; rc=$?
+  case "$rc" in 0) printf 'excused-blocked\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  if (( unknown )); then printf 'unknown\n'; else printf 'violation\n'; fi
+  return 0
 }
 
 # --- Advisory main-conflict prediction --------------------------------------
