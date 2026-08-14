@@ -116,10 +116,98 @@ tooling_goals: []
 success_signal: null
 attention: null
 phase: implement
-execution: null
+execution:
+  branch: tactic-attention-per-tier-boost-migration
+  pr: 3093
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "/implement: implementation deviated from the persisted plan — Unit 4
+    (validateGraph rule 22 + legacy `boost:`/`override:` compat-branch deletion
+    + kind-kind.md doctrine prose) is deferred to a follow-up PR rather than
+    landing atomically with Unit 3 as the plan directed."
+  since: 2026-08-14
+  recommendation: >-
+    # Recommendation: tactic-attention-per-tier-boost-migration
+
+
+    Draft PR #3093 ships Units 1-3 of the plan (the boost-level vocabulary, the
+
+    idempotent migration script, and the 91-node data migration itself) and is
+
+    fully green locally: typecheck, lint, validate-graph, and the full
+
+    packages/intentionsutil vitest suite (1040 tests, including the real-repo
+
+    office-hours-select CLI suite) all pass.
+
+
+    Unit 4 (validateGraph rule 22 rejecting an off-vocabulary boost, deletion of
+
+    the legacy `boost:`/`override:` compat parse branches in
+    `validateAttention`,
+
+    and the kind-kind.md field-doctrine prose fix) was implemented and verified
+
+    against a synthetic post-migration store, but was deliberately NOT included
+    in
+
+    this PR. Reason: `packages/intentionsutil/test/office-hours.test.ts`'s
+
+    `describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)")`
+
+    block reads `intentions/` at the literal `origin/main` git ref (not this
+
+    branch) via `listNodesStrict`, using THIS branch's code. Until this PR
+    merges,
+
+    `origin/main` still carries 69 node files on the legacy spelling. Landing
+
+    Unit 4 here makes this branch's code reject `origin/main`'s live data, so
+    that
+
+    CI suite goes red — and CI runs with fetch-depth: 0, so `origin/main`
+    resolves
+
+    in GitHub Actions too, not just locally. That's a permanent, self-resolving-
+
+    only-on-merge red check: a genuine chicken-and-egg, not a defect. An opus
+
+    subagent investigated for ~15 minutes and confirmed no legitimate code fix
+
+    exists that preserves both the test's real-origin/main guarantee and the
+
+    legacy-branch deletion (full findings in the implement session transcript).
+
+
+    Recommended next steps:
+
+    1. Merge PR #3093 (Units 1-3) once reviewed — this alone fully retires the
+       0.01 namespacing ladder and the override value, and gets every live node
+       onto the closed level vocabulary. It leaves the legacy compat branches in
+       schema.ts as dead-but-harmless code (no node file uses them anymore after
+       merge) and leaves validateGraph without rule 22.
+    2. After #3093 merges (so origin/main's intentions/ is canonical), open a
+       small follow-up PR/tactic node carrying exactly the reverted Unit 4 diff:
+       rule 22, the two legacy-branch deletions in validateAttention (+ the now-
+       unused legacyTierKey), and the kind-kind.md field-doctrine rewrite. The
+       full diff is saved for reuse in this job's tmp/unit4-deferred.patch (in the
+       session that authored it — recover from that session's job dir if needed,
+       or just re-run /implement-unit with the same Unit 4 scope text from this
+       node's plan body, since the target state is well-specified and small).
+    3. This node (tactic-attention-per-tier-boost-migration) itself: once #3093
+       merges, either (a) reopen/continue this same node for the Unit 4 follow-up,
+       or (b) close it as substantially complete and mint a small new tactic node
+       for the Unit 4 residue, referencing this node's plan body for the exact
+       scope. Either is reasonable; it's a judgment call for whoever picks this up.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
