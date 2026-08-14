@@ -26,7 +26,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-eval-finding-ladder-worker-unstamped-audit-blind
 office_hours: null
 pace_exempt: true
 rounds: null

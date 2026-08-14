@@ -28,7 +28,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-rsi-trigger-threshold-gate
 office_hours: null
 pace_exempt: false
 rounds: null

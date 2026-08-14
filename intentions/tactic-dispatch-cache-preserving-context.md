@@ -40,7 +40,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-audit-cache-efficiency-lens
 office_hours: null
 pace_exempt: false
 rounds: null
