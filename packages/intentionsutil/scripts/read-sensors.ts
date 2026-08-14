@@ -1362,11 +1362,22 @@ export function makeIntentionStoreSensor(
 // dated reading the measurement of record rather than a side system, and it
 // drops the graph's standing unregistered-sensor count by one.
 //
-// Reading format (stable and parseable), one segment per source the declared
-// sensor names, plus the token attribution the fitness function needs:
+// Reading format (stable and parseable), one segment per IMPLEMENTED source the
+// declared sensor names, plus the token attribution the fitness function needs:
 //   `pause: <state>; backlog: <B>/<T> = <P>% (band ≤35%); parked: <N> (<M> blocked); worktrees: <W>; tokens <window>: dispatch <x>% / office-hours <y>% / rsi <z>%`
 // Every segment degrades independently to `unknown` and never throws (the
 // total-sensor contract at the top of this file).
+//
+// The declared name also carries three instruments that are NOT implemented and
+// so contribute no segment: the find-or-recur write-surface lint, the
+// sessions-per-invalid-state-episode reading, and the declared-remediation-list
+// check. They are named in the constant deliberately — writing the final string
+// once means each instrument can land later as a pure `read()` change, without
+// re-touching the node prose and re-opening the de-registration window this
+// file's RSI_SENSOR_NAME docstring describes. Until they land, the three
+// matching `success_signal.threshold` clauses on
+// `strategy-recursive-self-improvement` are registered and unread; the work is
+// owed by `tactic-rsi-intervention-special-cases`.
 
 /**
  * The verbatim `success_signal.sensor` name strategy-recursive-self-improvement
@@ -1380,24 +1391,49 @@ export function makeIntentionStoreSensor(
  * the trailing clause below is that amendment. Re-read the node's sensor field
  * before trusting a null reading here.
  *
- * THE LOCKSTEP IS SPLIT ACROSS TWO COMMITS, BY CONSTRUCTION. This constant lands
- * in an ordinary code commit; the matching node prose lands separately through
- * `graph-commit`, which owns every write under `intentions/`. So there is a
- * KNOWN WINDOW between the two landings in which the two strings differ and this
- * sensor is de-registered. That is expected, not a defect — but it must be
- * closed, and the check for it is read-sensors' UNREGISTERED-SENSOR COUNT (the
- * `skipped (unregistered sensor)` figure and its named tail), not the readings
- * count. The readings count moves for unrelated reasons on every run and will
- * not show this at all; the unregistered count rises by exactly one while the
- * window is open and falls back when the node prose lands.
+ * LAND BOTH HALVES IN ONE COMMIT. An earlier version of this docstring said the
+ * lockstep was "split across two commits, by construction" — this constant in a
+ * code commit, the node prose separately through `graph-commit` — and called the
+ * window between them expected rather than a defect. That was written before
+ * `validateRegisteredSensorNames` existed. It is now wrong, and following it is
+ * how the repo lost 54 minutes of graph writes on 2026-08-14: the validator runs
+ * in the `guard` job of `graph-fast-path.yml`, every other required context in
+ * that workflow carries `needs: guard`, so ONE unbound registered name leaves
+ * four required checks non-success and `graph-commit` refuses to land — for
+ * every writer in the repo, on content that has nothing to do with sensors. See
+ * `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`.
+ *
+ * Both orderings break: prose-first leaves a registered name no node records,
+ * constant-first leaves a node whose sensor matches nothing. `graph-commit`
+ * cannot land the pair — it rebuilds on an `intentions/`-only base and strips
+ * non-intentions changes. An ordinary PR touching both files can, and is the
+ * only atomic path.
+ *
+ * Mind the blind spot when you do it: `graph-fast-path.yml` triggers only on
+ * `graph/**` pushes, so a PR that edits this constant does NOT run the validator
+ * in its own CI. Run it locally against the merged state:
+ * `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`.
+ *
+ * If a window is ever open anyway, the check for it is read-sensors'
+ * UNREGISTERED-SENSOR COUNT (the `skipped (unregistered sensor)` figure and its
+ * named tail), never the readings count — a de-registered sensor keeps its last
+ * written reading forever, and the readings count moves for unrelated reasons on
+ * every run.
  */
 export const RSI_SENSOR_NAME =
-  "sensors registered in the graph's existing success_signal/readings machinery " +
-  "on their owning strategies (backlog band, parked critical-path count, " +
-  "held-session/worktree census, pause state), plus per-workflow token " +
+  "sensors registered in the graph's existing success_signal/readings " +
+  "machinery on their owning strategies (backlog band, parked critical-path " +
+  "count, held-session/worktree census, pause state), plus per-workflow token " +
   "attribution across dispatch, office-hours, and rsi reported by /rsi-audit; " +
   "plus the research lane's weekly dated readings on this strategy " +
-  "(research-cycle landings)";
+  "(research-cycle landings); plus three instruments for the evaluation-core " +
+  "readings recorded 2026-08-14 — a write-path lint counting the scripts that " +
+  "implement a mint-or-reuse follow-up write (find-or-recur surface count), " +
+  "aggregate-usage.sh at node scope for sessions per invalid-state episode " +
+  "(degrading to sessions-per-node-per-day if that instrument cannot express " +
+  "an episode), and the per-session decision log checked against each lane's " +
+  "declared frontmatter remediation list (remediation acts outside a declared " +
+  "list)";
 
 /**
  * Dispatch pause state, delegated to the canonical shell helper
