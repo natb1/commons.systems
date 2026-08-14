@@ -673,9 +673,12 @@ spawn_phase_eval() {
 # can fail — but it runs BEFORE write_state because all three sinks must carry
 # the same value, and it is wrapped so nothing it does can prevent any of them:
 # it never exits, never halts (it is called from HERE, so halting inside it
-# would recurse), and its answer is normalized against the closed vocabulary. A
-# classification that cannot be obtained is the token `unknown` — never a
-# missing field, never a crash, and never a different exit code.
+# would recurse), every read it makes is bounded by `timeout`
+# (TERMINUS_READ_TIMEOUT_S, so a hung fetch cannot wedge the terminal path
+# before state.json is written), and its answer is normalized against the
+# closed vocabulary. A classification that cannot be obtained is the token
+# `unknown` — never a missing field, never a crash, never a hang, and never a
+# different exit code.
 halt() {
   EXIT_CODE="$1"; DISPOSITION="$2"; DETAIL="$3"
   if [[ "$1" == "0" ]]; then STATUS=complete; else STATUS=halted; fi
@@ -833,15 +836,30 @@ phase_is_done() {
 # `--no-fetch` on those three: the `--blob` read above already fetched, so they
 # reuse that same origin/main — cheaper, and all four answers then describe ONE
 # snapshot rather than four successive ones.
+#
+# EVERY READ IS BOUNDED BY `timeout`. classify_terminus runs INSIDE halt(),
+# BEFORE write_state and the halt event, so an unbounded read here is not
+# merely slow: a `git fetch` that hangs (a credential helper waiting on a
+# prompt, a stalled TLS connection) would leave state.json saying `running`
+# and no halt event on disk FOREVER, with `dispatch-ladder-status --wait`
+# answering 20 about a wedged process and --max-run-s unable to help — the
+# timeout path routes through halt() too. `timeout` expiry exits 124, which is
+# neither 0 nor 4 and therefore classifies `unknown`, exactly as any other
+# unreadable answer does. Overridable for tests; the default is generous
+# enough that only a genuine hang trips it.
+TERMINUS_READ_TIMEOUT_S="${TERMINUS_READ_TIMEOUT_S:-120}"
+
 terminus_probe() { # <jq-filter> — 0 true, 4 definitely false, anything else unknown
-  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" --jq "$1" \
+  timeout "$TERMINUS_READ_TIMEOUT_S" \
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" --jq "$1" \
     >/dev/null 2>&1
 }
 
 classify_terminus() {
   local rc unknown=0
 
-  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
+  timeout "$TERMINUS_READ_TIMEOUT_S" \
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
   rc=$?
   case "$rc" in
     0) printf 'pruned\n'; return 0 ;;

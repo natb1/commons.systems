@@ -50,7 +50,15 @@ function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--intentions") {
-      intentionsDir = argv[++i];
+      // A missing value must be the same cheap exit 2 an unknown flag gets —
+      // `argv[++i]` would otherwise hand `undefined` straight to
+      // listNodesStrict and surface as an ERR_INVALID_ARG_TYPE stack trace.
+      const value = argv[++i];
+      if (value === undefined) {
+        process.stderr.write("ladder-terminus-census: --intentions requires a directory\n");
+        process.exit(2);
+      }
+      intentionsDir = value;
     } else if (a === "--lint") {
       lint = true;
     } else if (a === "--strict") {
@@ -90,9 +98,19 @@ function main(): void {
     `\nmerged-not-done=${census.mergedNotDone} excused=${census.excused} violations=${census.violations}\n`,
   );
 
+  // Computed for `--strict` as well as `--lint`: `--strict` is documented above
+  // as failing on violations OR unstructured waits, and leaving `waits` empty
+  // unless `--lint` was also passed would silently drop half of that. The two
+  // sets are NOT the same — a main-qa node carrying a prose "awaited event:"
+  // line but no merged completion classifies `not-merged` (no violation) while
+  // still being an unstructured wait — so a `--strict`-only gate would pass on
+  // exactly the gap the wait detector exists to catch. `--lint` controls only
+  // whether the list is PRINTED.
   let waits: ReturnType<typeof findUnstructuredWaits> = [];
-  if (lint) {
+  if (lint || strict) {
     waits = findUnstructuredWaits(nodes, (id) => readNodeBody(intentionsDir, id));
+  }
+  if (lint) {
     process.stdout.write(`\nunstructured waits (${waits.length}):\n`);
     for (const w of waits) {
       process.stdout.write(`${w.id}\t${w.awaited}\n`);
