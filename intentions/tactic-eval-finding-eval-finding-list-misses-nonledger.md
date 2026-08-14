@@ -93,6 +93,7 @@ attributes:
       window: all-time
       sensor: rsi
       measured: 2026-08-14
+  resolved_by: 1092a403e0000e4a4ce8ff106b892bfb32d4cdb7
 ---
 ## Third occurrence — the predicted duplicate actually materialized, outside the id namespace
 
