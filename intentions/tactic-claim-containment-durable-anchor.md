@@ -29,8 +29,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
     20 / 10) - dispatch-containment and evidence-custody work that follows the
@@ -49,7 +49,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: null
 execution: null
 validates: []
@@ -59,6 +58,21 @@ pace_exempt: false
 rounds: null
 attributes:
   pre_namespacing_boost: 20
+  first_seen: 2026-07-29
+  measured_impact:
+    - metric: worktree_destroyed_under_live_session
+      value: 2
+      unit: occurrences
+      window: single /align session, 2026-08-14
+      sensor: align
+      measured: 2026-08-14
+    - metric: recurrence_count
+      value: 1
+      unit: occurrences
+      window: all-time (first OBSERVED occurrence; node drafted 2026-07-29 from
+        reasoning)
+      sensor: align
+      measured: 2026-08-14
 ---
 # Anchor a claimed node's freeze in durable state rather than the daemon-backed session registry, so a registry loss cannot silently free an undeclared pass without firing the fuse
 
@@ -126,3 +140,67 @@ This node and `tactic-session-reap-authorization-durability` now share one
 design. That node was rescoped in the same sitting onto the surviving
 claim/release deliverable, so the two must be planned together or merged by
 the next `/align-tactics` round rather than each planning the same write.
+
+## First observed occurrence — 2026-08-14, an `/align` session's worktree destroyed under it, twice
+
+Recorded 2026-08-14 as a **recurrence on this existing node** rather than a new
+finding, under the merge discipline landed the same day
+(`strategy-graph-native-dispatch`, "How is a finding recorded on the graph").
+The root cause is the one this node already names: `worktree_has_live_session`
+reads the daemon-backed session registry, and a live session that stops reading
+as live has its claim silently freed.
+
+This node's rationale closed with "frequency of registry loss is reasoned about,
+not measured — worth quantifying during planning." This is the first
+**measurement**, and it is worse than the reasoned-about case in one respect.
+
+### What happened
+
+A single `/align` round, mid-interview, working in
+`.claude/worktrees/strategy-recursive-self-improvement`:
+
+1. Worktree provisioned and verified fresh against `origin/main`. Interview ran;
+   graph reads succeeded.
+2. Mid-session the checkout was **emptied and deregistered** — `ls` returned
+   nothing, the directory shell survived, and `git worktree list` no longer
+   named it. `git status` from the emptied path walked up and reported the
+   **shared main checkout**, so the next write would have landed there.
+3. The worktree was recreated from `origin/main` and re-verified fresh. The
+   interview continued.
+4. It was destroyed a **second time**, at the same point in the lifecycle.
+5. Recreating it under a name outside the node-id namespace
+   (`align-finding-uniformity`) survived to completion.
+
+### Why this is stronger evidence than the reasoned-about case
+
+The rationale above anticipates the node becoming *selectable* with no
+declaration made — a lost claim. Observed here is the harder failure: the
+**checkout itself was deleted while a session was actively writing in it**. The
+loss is not confined to selection state. Two further consequences the
+containment argument does not currently cover:
+
+- **Silent redirection to the shared checkout.** With the worktree gone, plain
+  `git` from the dead cwd resolves to the repo root. A session that does not
+  notice the deletion writes to the user's main checkout — the exact Step-0
+  violation worktree isolation exists to prevent.
+- **The node-id name is what draws the sweep.** A worktree named for a node with
+  `phase: null` reads as unclaimed. A strategy node is *always* `phase: null`,
+  so every `/align` round is structurally exposed: the round's own target node
+  can never look claimed to a phase-keyed sweep.
+
+### Measurements
+
+Recorded on `attributes.measured_impact`. `worktree_destroyed_under_live_session`
+is 2 for the single session; `recurrence_count` is 1 because this is the first
+**observed** occurrence — the node was drafted 2026-07-29 from reasoning, not
+from an observation, so counting the draft as occurrence 1 would overstate it.
+
+### What this adds to the fix direction
+
+The durable anchor this node already proposes would have prevented the lost
+claim. It does not by itself prevent the **destructive** sweep, so planning
+should also settle:
+
+- whether a sweep may delete a checkout at all, versus only releasing the claim;
+- how an `/align` round claims a `phase: null` strategy node, given no
+  phase-keyed liveness test can ever read it as claimed.
