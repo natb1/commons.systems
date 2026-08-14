@@ -48,7 +48,6 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodesStrict, readNode, readNodeBody, writeNode } from "../src/store.js";
-import { PHASES } from "../src/schema.js";
 import { servingStrategyIds } from "../src/router.js";
 import {
   hasNeedsMainResidue,
@@ -102,6 +101,12 @@ function parseArgs(argv: string[]): Args {
 
 interface Plan {
   edit: string[];
+  // No pass in this file pushes to `deferred` anymore — the only producer was
+  // a schema-migration guard for main-qa, which has since landed (main-qa is a
+  // real PHASES member; see the header note above). The field itself stays:
+  // the output shape is documented as byte-for-byte stable (see the header),
+  // and the bash wrapper / dispatch-ladder-run's `deferred` handling both read
+  // this key, so removing it would be a silent contract break for no gain.
   deferred: { id: string; reason: string }[];
   reconciled: { id: string; target: string }[];
 }
@@ -171,10 +176,6 @@ export function reconcileGraph(args: Args): Plan {
     const residue = hasNeedsMainResidue(readNodeBody(args.dir, id));
     const target = entry.state === "merged" ? reconcileMergedPhase(residue) : reconcileClosedPhase();
     if (target === "main-qa") {
-      if (!PHASES.includes("main-qa" as (typeof PHASES)[number])) {
-        plan.deferred.push({ id, reason: "main-qa phase not yet in schema (tactic-main-qa-phase)" });
-        continue;
-      }
       mainQaTargets.push({ id, entry });
     } else {
       doneSet.set(id, entry);
