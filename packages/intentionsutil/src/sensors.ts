@@ -76,6 +76,53 @@ export function readNodeSignal(node: IntentionNode, registry: SensorRegistry): s
   return registry.resolve(node.success_signal.sensor).read(node);
 }
 
+/**
+ * Assert that every registered sensor name is still recorded, character for
+ * character, as some node's `success_signal.sensor`.
+ *
+ * `resolve` above matches by exact string, so a node whose sensor prose is
+ * reworded — an /align round appending a clause, say — silently de-registers
+ * its sensor: the node's new prose resolves to nothing, and the registered name
+ * measures nothing. Nothing on the graph write path noticed, so this is the
+ * check that does; `validate-graph.ts` runs it on every `intentions/` push.
+ *
+ * Forward direction ONLY. A registered name must have a node; a node's sensor
+ * name need NOT be registered — most recorded sensors in the store are
+ * deliberately unimplemented prose, and asserting the reverse would fail on all
+ * of them.
+ *
+ * `unboundNames` declares the registered names that name no node — generic
+ * adapters (`vitest`, `git`) any node may adopt but none currently does. Add a
+ * name there only when the sensor is genuinely node-agnostic; a node-bound
+ * sensor that lands there stops being guarded.
+ *
+ * Throws `IntentionSchemaError` naming every orphaned registration.
+ */
+export function validateRegisteredSensorNames(
+  nodes: IntentionNode[],
+  registeredNames: Iterable<string>,
+  unboundNames: Iterable<string> = []
+): void {
+  const recorded = new Set(
+    nodes
+      .map((node) => node.success_signal?.sensor)
+      .filter((sensor): sensor is string => sensor !== undefined)
+  );
+  const unbound = new Set(unboundNames);
+  const orphaned = [...registeredNames]
+    .filter((name) => !unbound.has(name) && !recorded.has(name))
+    .sort();
+  if (orphaned.length > 0) {
+    const list = orphaned.map((name) => `  - "${name}"`).join("\n");
+    throw new IntentionSchemaError(
+      `Registered sensor name(s) not recorded by any node's success_signal.sensor:\n${list}\n` +
+        `A sensor resolves by exact string match, so a reworded node sensor de-registers it ` +
+        `and the reading goes silent. Re-sync the node prose and the registered constant in the ` +
+        `same change, or declare the name unbound if no node is meant to name it.`
+    );
+  }
+}
+
 // --- Mechanical gap derivation ---------------------------------------------
 
 /**

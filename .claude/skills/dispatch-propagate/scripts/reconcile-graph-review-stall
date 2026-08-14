@@ -61,11 +61,12 @@
 # one-liner itself erroring).
 #
 # Rollback: every `--set-fix` write is staged on disk before it is landed, so
-# each node is snapshotted from origin/main first and any failure restores it
-# (RESTORE_ON_FAILURE / restore_snapshot, as in reconcile-graph-merged). The
-# sweep never exits leaving intentions/ dirty — a leaked write would trip
-# graph-commit's assert_clean_outside_ids for EVERY graph writer in this
-# checkout, not just this one.
+# HEAD is pinned first and any failure restores every staged write back to it
+# (RESTORE_ON_FAILURE / restore_staged_writes, over the shared
+# graph_rollback_node_writes reconcile-graph-merged uses). The sweep never exits
+# leaving intentions/ dirty — a leaked write would trip graph-commit's
+# assert_clean_outside_ids for EVERY graph writer in this checkout, not just
+# this one.
 #
 # Lock budget: the caller (dispatch-select-tick) holds the dispatch lock across
 # this sweep, and dispatch-acquire-lock reclaims a holder whose heartbeat is
@@ -88,6 +89,9 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
+# primitive this sweep shares with reconcile-graph-merged.
+source "$SCRIPT_DIR/lib-graph-rollback.sh"
 
 # ---- Argument parsing -------------------------------------------------------
 NODE_FILTER=""
@@ -131,21 +135,28 @@ refresh_lock() {
 # graph-commit's assert_clean_outside_ids refuses to start whenever a tracked
 # file outside the call's own node set is dirty, so one leaked write blocks
 # every other graph writer in this checkout until a human runs `git checkout
-# --`. So each node is snapshotted from origin/main before it is written and
-# every failure path restores it, exactly as reconcile-graph-merged does
-# (RESTORE_ON_FAILURE / restore_snapshot).
-declare -A SNAPSHOT=()
+# --`. So the rollback restores every staged write on every failure path.
+#
+# It restores to HEAD, via the shared graph_rollback_node_writes — NOT to a blob
+# captured from origin/main before the write. This sweep used to do the latter,
+# and it is wrong in two ways that both leave the tree dirty rather than clean:
+# origin/main is a LOCAL tracking ref that can lag HEAD (the restore then writes
+# stale bytes over a newer HEAD version), and graph-commit's park path moves HEAD
+# under the writer (the restore then re-erases the park it just landed). See
+# lib-graph-rollback.sh's header for the full classification.
+WRITTEN_IDS=()
 RESTORE_ON_FAILURE=0
-restore_snapshot() {
-  local sid blob
-  for sid in "${!SNAPSHOT[@]}"; do
-    blob="${SNAPSHOT[$sid]}"
-    git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$sid.md"
-  done
+# HEAD as of the moment the rollback is armed — the commit the staged writes sit
+# on top of, and the only commit `git checkout --` can be trusted to restore to.
+HEAD_AT_ARM=""
+restore_staged_writes() {
+  [[ "${#WRITTEN_IDS[@]}" -gt 0 ]] || return 0
+  graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" reconcile-graph-review-stall \
+    "${WRITTEN_IDS[@]}"
 }
 # EXIT trap: roll the staged writes back when a failure armed the flag, so this
 # sweep never exits leaving intentions/ dirty.
-trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_snapshot; exit $rc' EXIT
+trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_staged_writes; exit $rc' EXIT
 
 # --- Enumerate stranded review+reviewed tactics ------------------------------
 # One node pass: print `<id>\t<pr>` for every tactic at phase:review carrying
@@ -256,20 +267,27 @@ while IFS=$'\t' read -r id pr; do
 
   case "$ROUTE" in
     fix)
-      # Snapshot the node's origin/main blob BEFORE staging the write, so any
-      # later failure (this write, or the batched land below) restores a clean
-      # tree. A candidate with no origin/main blob has no rollback path — skip
-      # it rather than stage a write nothing can revert.
-      blob=$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$id.md" 2>/dev/null) || {
-        echo "reconcile-graph-review-stall: cannot snapshot $id from origin/main (no rollback path)" >&2
+      # Arm the rollback BEFORE staging the write, so any later failure (this
+      # write, or the batched land below) restores a clean tree. HEAD is pinned
+      # once, at the first write: every staged write in this sweep sits on that
+      # same commit, and nothing between here and the land moves it. A candidate
+      # whose file is not tracked at HEAD has nothing to `checkout --` back to —
+      # skip it rather than stage a write nothing can revert.
+      if [[ -z "$HEAD_AT_ARM" ]]; then
+        HEAD_AT_ARM=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || {
+          echo "reconcile-graph-review-stall: cannot read HEAD (no rollback reference point) — aborting the sweep" >&2
+          exit 1
+        }
+      fi
+      git -C "$REPO_ROOT" cat-file -e "HEAD:intentions/$id.md" 2>/dev/null || {
+        echo "reconcile-graph-review-stall: intentions/$id.md is not tracked at HEAD (no rollback path) — skipping $id" >&2
         continue
       }
-      SNAPSHOT[$id]="$blob"
+      WRITTEN_IDS+=("$id")
       RESTORE_ON_FAILURE=1
       if ! node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --set-fix --dir "$REPO_ROOT/intentions" >/dev/null; then
         echo "reconcile-graph-review-stall: apply-fix-state --set-fix failed for $id (write rolled back)" >&2
-        git -C "$REPO_ROOT" show "$blob" > "$REPO_ROOT/intentions/$id.md"
-        unset "SNAPSHOT[$id]"
+        git -C "$REPO_ROOT" checkout -- "intentions/$id.md" || true
         continue
       fi
       RECOVERED_IDS+=("$id")

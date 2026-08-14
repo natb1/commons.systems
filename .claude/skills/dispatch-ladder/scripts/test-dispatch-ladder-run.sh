@@ -374,6 +374,52 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: complete: events.jsonl is valid JSON lines"
 fi
 
+# --- the await's optional reap_lag_s field -----------------------------------
+# dispatch-ladder-await appends ` reap_lag_s=<n>` to its verdict line when the
+# completion was public at origin/main before the registry reaped the worker —
+# the only place both timestamps exist in one process. Three things must hold:
+# the trailing field is INERT for the disposition parse (`awk '{print $1;
+# exit}'`), it reaches the awaited event as a structured number as well as in
+# the human-readable detail, and its ABSENCE omits the key rather than reporting
+# 0 — "not measured" and "measured, no lag" are different facts.
+echo "Test: an await verdict's trailing reap_lag_s reaches the awaited event"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|advanced tactic-fixture-node implement -> origin/main reap_lag_s=137'
+set_seq landed  '0|'
+run_ladder
+assert_eq "reap-lag: exit 0" "0" "$RC"
+assert_eq "reap-lag: the trailing field did not disturb the disposition parse" "1" \
+  "$(events_have awaited advanced)"
+TOTAL=$((TOTAL + 1))
+if jq -e 'select(.event == "awaited")
+          | (.reap_lag_s == 137) and (.detail | test("reap_lag_s=137"))' \
+     "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: reap-lag: the awaited event carries reap_lag_s as a number and in detail"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reap-lag: the awaited event carries reap_lag_s as a number and in detail"
+  echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
+echo "Test: an await verdict with no reap_lag_s omits the key entirely (never 0)"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|advanced tactic-fixture-node implement -> origin/main'
+set_seq landed  '0|'
+run_ladder
+assert_eq "no-reap-lag: exit 0" "0" "$RC"
+TOTAL=$((TOTAL + 1))
+if jq -e 'select(.event == "awaited")
+          | (has("reap_lag_s") | not) and (.detail | test("reap_lag_s") | not)' \
+     "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: no-reap-lag: the key is absent, not zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-reap-lag: the key is absent, not zero"
+  echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
 # --- pruned → 0 --------------------------------------------------------------
 echo "Test: an awaited 'pruned' completes the run without asking the graph again"
 reset_seqs
@@ -995,6 +1041,52 @@ if jq -e 'select(.event == "awaited")
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: eval: the awaited event carries structured numeric timing fields"
   echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
+echo "Test: the evaluator's --since predates a slow launch, not just the phase boundary"
+# dispatch-ladder-advance blocks on verify_launch before it returns, so
+# LAUNCH_EPOCH (stamped right after advance returns, dispatch-ladder-run:1116)
+# is measurably later than the worker session it is meant to bound. Make the
+# fake advance itself slow — standing in for that blocking wait — so a
+# regression back to LAUNCH_EPOCH is distinguishable from the fix (PASS_SINCE,
+# captured before advance is called, dispatch-ladder-run:1082/1120) rather than
+# both landing in the same instant.
+reset_seqs
+cat >"$LADDER/dispatch-ladder-advance" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SEQ_DIR/advance.argv"
+n=\$(cat "$SEQ_DIR/advance.count"); echo \$((n + 1)) >"$SEQ_DIR/advance.count"
+if [[ "\$n" -eq 0 ]]; then
+  # The blocking verify_launch, stood in for by a sleep the assertion can see.
+  sleep 2
+  printf 'launched %s tactic implement /implement\n' "$NODE"
+  exit 0
+fi
+# Every later call ENDS THE RUN, the same way the sequence-driven fake's last
+# line does everywhere else in this suite. A stub that only ever launches makes
+# the driver relaunch forever: nothing here bounds the loop but the advance
+# answer, so the case hangs the whole suite rather than failing it.
+printf 'idle %s not-selectable\n' "$NODE"
+exit 10
+STUB
+chmod +x "$LADDER/dispatch-ladder-advance"
+set_seq await '0|advanced tactic-fixture-node implement -> origin/main'
+set_seq landed '0|'
+T_BEFORE=$(date +%s)
+run_ladder
+make_seq_fake "$LADDER/dispatch-ladder-advance" advance
+assert_eq "since-skew: exit 0" "0" "$RC"
+SINCE=$(sed -n '1p' "$SEQ_DIR/spawnjob.argv" | sed -E 's/.*--since ([0-9]+)$/\1/')
+TOTAL=$((TOTAL + 1))
+# A regression to LAUNCH_EPOCH would land at T_BEFORE+2 or later (the sleep);
+# the fix lands within a whisker of T_BEFORE (before the sleep). Bound the pass
+# case generously (< +2s) to absorb process-startup jitter without accepting
+# the regression.
+if [[ "$SINCE" -ge "$T_BEFORE" && "$SINCE" -lt "$((T_BEFORE + 2))" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: since-skew: --since is PASS_SINCE (pre-launch), not LAUNCH_EPOCH (post-launch)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: since-skew: --since is PASS_SINCE (pre-launch), not LAUNCH_EPOCH (post-launch)"
+  echo "    T_BEFORE=$T_BEFORE SINCE=$SINCE"
 fi
 
 echo "Test: halt() spawns the evaluation a mid-run halt still owes"

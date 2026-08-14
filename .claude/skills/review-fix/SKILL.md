@@ -191,7 +191,9 @@ On the node lane every step runs unchanged except three re-keyed seams:
   `reviewed` marker in `execution.markers` as one state-only graph-commit; it does
   **not** arm or perform any merge), **not** `dispatch-complete-phase` /
   `dispatch-mark-complete` / `dispatch-finalize-phase`. Merging is deferred to the
-  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker.
+  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker. Step 7's
+  local lint gate precedes this call the same way it precedes the issue lane's
+  label apply — never write the marker over a red bundle.
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
@@ -918,7 +920,7 @@ Step 2's Workflow-invocation prose). The current Workflow (`review-fix.js`)
 does not read this field yet — it is additive here, consumed once the
 Workflow is rewired.
 
-**Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
+**Invoke the Workflow tool on the registered `review-fix` workflow**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
 The Workflow runs in the background and returns one compact disposition summary:
 
@@ -1244,7 +1246,7 @@ use in the phase-log entry, so the parent never has to read `result.json` for it
 per-bucket body organization, the partial-coverage line, and the create/edit
 flush commands.
 
-### 7. Apply the terminal label, then write the marker (or park on deviation)
+### 7. Gate on local lint, apply the terminal label, then write the marker (or park on deviation)
 
 The terminal actions run in this order (the mechanical bookend of the phase):
 
@@ -1254,14 +1256,22 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    sandboxed (origin is HTTPS to an allowlisted host — no
    `dangerouslyDisableSandbox`). Without it the PR stays `CONFLICTING` and the
    router can never promote it.
-2. **Write the handoff note (phase-log)** — only when the Workflow ran this
+2. **Gate on the local lint bundle — before anything marks this review
+   complete.** Run `.claude/skills/dispatch-propagate/scripts/run-lint.sh` in
+   the worktree, over the branch as this pass left it (this review's own fix
+   commits included — Step 3 already committed them). Green is the precondition
+   for items 4 and 6. **Red means fix and re-run; never mark.** Only when the
+   Workflow ran this session — skip on re-entry, where the mark is already
+   written.
+3. **Write the handoff note (phase-log)** — only when the Workflow ran this
    session; it must PRECEDE the `dispatch:reviewed` apply. On re-entry call the
    writer with `--reentry true </dev/null` (preserves the prior entry verbatim).
-3. **Apply `dispatch:reviewed`** via `dispatch-complete-phase "$PR_NUM" review`
-   (use `dangerouslyDisableSandbox: true`). This skill owns the label; it is
-   applied regardless of whether any fixes were made. This skill does **not**
-   ready the PR — the router's `dispatch-reconcile-ready` owns promotion.
-4. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`
+4. **Apply `dispatch:reviewed`** via `dispatch-complete-phase "$PR_NUM" review`
+   (use `dangerouslyDisableSandbox: true`), **only once item 2 is green**. This
+   skill owns the label; it is applied regardless of whether any fixes were
+   made. This skill does **not** ready the PR — the router's
+   `dispatch-reconcile-ready` owns promotion.
+5. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`
    with **`dangerouslyDisableSandbox: true`**. This is what lets the NEXT pass
    review only the delta. It sits here, beside the `reviewed` marker, because the
    two mean the same thing: this review is complete and covered up to that sha.
@@ -1280,8 +1290,9 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    sibling.
 
    **Run this only when the Workflow ran this session** — same gating as the
-   phase-log write (item 2) and the outcome envelope (item 6), and for a
-   stronger reason. `REVIEWED_HEAD` is bound in Step 1, and the re-entry path
+   lint gate (item 2), the phase-log write (item 3), and the outcome envelope
+   (item 7), and for a stronger reason. `REVIEWED_HEAD` is bound in Step 1, and
+   the re-entry path
    documented in the preamble **skips Steps 1–6 entirely**, so on re-entry the
    variable does not exist. Recording the current HEAD instead is exactly the
    silent permanent hole warned about just below: at re-entry, HEAD carries the
@@ -1295,13 +1306,13 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    the next pass's base and exclude them from review **forever** — a silent,
    permanent hole in exactly the code the review lane itself wrote.
 
-5. **Write the phase-completed marker, or park on deviation.** Deviation fires
+6. **Write the phase-completed marker, or park on deviation.** Deviation fires
    when `result.deviation === true` (a high-confidence Required+Upheld finding
    left unresolved): skip the marker, run the in-session recommend step, and call
    `dispatch-mark-deviation`. No deviation: call `dispatch-mark-complete`.
-6. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
+7. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
    the Workflow ran this session; skip on re-entry.
-7. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
+8. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
    (no-deviation success path only) — it self-closes the session, so all prior
    steps must complete first.
 

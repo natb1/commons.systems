@@ -569,25 +569,45 @@ log_event() {
   printf '%s %s %s | %s\n' "$1" "${2:--}" "${3:--}" "${4:--}"
 }
 
-# timing_fields <elapsed_s> <await_repolls> <window_s> — the structured half of
-# a phase event. All three are integers by construction (two counters and a
-# validated flag), so --argjson is safe.
+# timing_fields <elapsed_s> <await_repolls> <window_s> [<reap_lag_s>] — the
+# structured half of a phase event. The first three are integers by construction
+# (two counters and a validated flag), so --argjson is safe.
+#
+# THE FOURTH IS OPTIONAL AND IS OMITTED, NOT ZEROED. `reap_lag_s` is
+# dispatch-ladder-await's measurement of how long the registry took to reap a
+# worker whose completion was ALREADY public at origin/main. It is present only
+# when the await made an early sighting; absent, the key is left out entirely,
+# because a 0 would read as "measured, and there was no lag" — a different claim
+# from "not measured". The value reaches here only via a `[0-9]+` match on the
+# await's stdout line, so --argjson is safe for it too.
 timing_fields() {
+  local lag="${4:-}"
+  if [[ -n "$lag" ]]; then
+    jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
+       --argjson lag "$lag" \
+       '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window, reap_lag_s: $lag}'
+    return
+  fi
   jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
      '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window}'
 }
 
 # --- The per-phase evaluation ----------------------------------------------
-# spawn_phase_eval <phase> <launch-epoch> — fire-and-forget, ALWAYS returns 0.
+# spawn_phase_eval <phase> <since-epoch> — fire-and-forget, ALWAYS returns 0.
 #
 # Never gates, never halts, never calls halt(). Three globals track what is
 # owed, so the boundary spawn and the halt spawn cannot double-evaluate one
 # phase and cannot lose one either:
 #
 #   EVAL_LAUNCH_PHASE / EVAL_LAUNCH_EPOCH  the phase this driver most recently
-#                                          launched, and when. Empty until the
-#                                          first launch — which is what makes a
-#                                          `usage`/`refused` halt spawn nothing.
+#                                          launched, and the --since bound to
+#                                          hand its evaluator (PASS_SINCE, the
+#                                          epoch taken just before advance
+#                                          launched it — NOT LAUNCH_EPOCH; see
+#                                          the assignment site for why). Empty
+#                                          until the first launch — which is
+#                                          what makes a `usage`/`refused` halt
+#                                          spawn nothing.
 #   EVAL_SPAWNED_KEY                       the <phase>@<epoch> already handed to
 #                                          an evaluator. dispatch-spawn-job's
 #                                          own name dedup only covers a still-
@@ -1281,12 +1301,17 @@ while :; do
   # subshell, so PIPESTATUS is invisible out here and the assignment's status
   # would be `head`'s, silently discarding every exit code this loop branches
   # on. Take the first line afterwards instead.
-  # The launch window the await's lane-pass probe compares stamps against, taken
-  # HERE rather than beside LAUNCH_EPOCH below. dispatch-ladder-advance blocks on
-  # verify_launch before it returns, so LAUNCH_EPOCH is already later than the
-  # spawn — a lane that stamped inside that window would be read as older than
-  # the launch, i.e. as a stall. LAUNCH_EPOCH itself is left alone: it is also
-  # the evaluator's aggregate-usage.sh window and means something else.
+  # The launch window the await's lane-pass probe compares stamps against, AND
+  # (via EVAL_LAUNCH_EPOCH below) the --since bound handed to the phase
+  # evaluator — both taken HERE rather than beside LAUNCH_EPOCH below.
+  # dispatch-ladder-advance blocks on verify_launch before it returns, so
+  # LAUNCH_EPOCH is already later than the spawn: a lane that stamped inside
+  # that window would be read as older than the launch (a false stall for the
+  # probe), and an evaluator's `started_at >= since` filter seeded from it would
+  # drop the phase worker's own session — 12-13s of measured skew, stable —
+  # scoring only its subagents. LAUNCH_EPOCH itself is left alone: it is also
+  # elapsed_s's origin and means something else (how long the phase ran, not
+  # what window to search).
   PASS_SINCE=$(now_epoch)
   # dispatch-ladder-advance's one diagnostic line for a stale-selection /
   # scope-stale-demoted case (e.g. "selected review but node is now qa") goes
@@ -1324,8 +1349,23 @@ while :; do
       LAUNCH_EPOCH=$(now_epoch)
       # What the halt path evaluates if this phase does not reach its boundary,
       # and the time bound the evaluator scopes `aggregate-usage.sh --node` with.
+      #
+      # EVAL_LAUNCH_EPOCH is seeded from PASS_SINCE, NOT from LAUNCH_EPOCH just
+      # above. LAUNCH_EPOCH is stamped after "$ADVANCE" returns, and advance
+      # blocks on verify_launch before returning — so LAUNCH_EPOCH lands 12-13s
+      # after the phase worker session actually starts (measured, stable). A
+      # `--since` bound taken from LAUNCH_EPOCH would open after the worker's own
+      # `started_at`, so the evaluator's `started_at >= since` filter drops the
+      # worker session itself and scores only its subagents: on a phase like
+      # review-fix that's 94.9% of spend and the entire `dispatch.outcome.v1`
+      # object excluded from every evaluation. PASS_SINCE is captured at :1082,
+      # immediately before "$ADVANCE" is called, so it predates the worker's
+      # `started_at` and the filter keeps it. LAUNCH_EPOCH itself is left
+      # unchanged here and below — it is also elapsed_s's origin (see ELAPSED_S)
+      # and answers a different question ("how long did the phase run"), not
+      # "what window should the evaluator search".
       EVAL_LAUNCH_PHASE="$PHASE"
-      EVAL_LAUNCH_EPOCH="$LAUNCH_EPOCH"
+      EVAL_LAUNCH_EPOCH="$PASS_SINCE"
       REPOLLS=0
       HELD_S=0
       log_event launched "$PHASE" launched "kind=${KIND:-?} skill=${SKILL:-?}"
@@ -1340,16 +1380,42 @@ while :; do
         AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S" --since "$PASS_SINCE"); aw_rc=$?
         AW_OUT=$(head -n1 <<<"$AW_OUT")
         AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
+        # OPTIONAL TRAILING FIELD. dispatch-ladder-await appends
+        # ` reap_lag_s=<n>` to its verdict line when the completion was public at
+        # origin/main before the registry reaped the worker — the interval
+        # between those two events, which only that process can see both ends of.
+        # Read positionally-insensitively, and left EMPTY when the field is
+        # absent so the event omits the key rather than claiming a zero lag. The
+        # disposition parse above is unaffected: it takes field 1 and stops.
+        AW_REAP_LAG=""
+        [[ "$AW_OUT" =~ reap_lag_s=([0-9]+) ]] && AW_REAP_LAG="${BASH_REMATCH[1]}"
         case "$aw_rc" in
           0)
             ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
             log_event awaited "$PHASE" "$AW_DISP" \
-              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S" \
-              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S")"
+              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S${AW_REAP_LAG:+ reap_lag_s=$AW_REAP_LAG}" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S" "$AW_REAP_LAG")"
             # THE PHASE BOUNDARY. The phase that just finished is evaluated
             # here, while its transcript is small and warm, and the driver takes
             # its next ladder step without waiting on the evaluation.
-            spawn_phase_eval "$PHASE" "$LAUNCH_EPOCH"
+            #
+            # PASS_SINCE, not LAUNCH_EPOCH — see the comment beside
+            # EVAL_LAUNCH_EPOCH above for why: LAUNCH_EPOCH is stamped after
+            # advance's verify_launch already blocked, so it lands after the
+            # worker's own started_at and the evaluator's `>= since` filter
+            # would drop the worker session itself.
+            #
+            # THE BOUNDARY IS A REAPED WORKER AGAIN, and nothing here had to
+            # change for that. dispatch-ladder-await reports a PROGRESS verdict
+            # (advanced / reviewed / lane-complete) only after the session row is
+            # gone — see its header — so on every path that CONTINUES the ladder,
+            # this line runs against a finished worker and aggregate-usage.sh at
+            # node scope sees the whole phase. `pruned` is the one verdict that
+            # can reach here against a still-registered row; the run halts on it
+            # immediately below, so it is the last evaluation of the run either
+            # way, and the alternative — deferring it — would lose the boundary
+            # spawn rather than improve it.
+            spawn_phase_eval "$PHASE" "$PASS_SINCE"
             if [[ "$AW_DISP" == "pruned" ]]; then
               halt 0 pruned "$NODE_ID is absent from origin/main — it completed and was pruned"
             fi

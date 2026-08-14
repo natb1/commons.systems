@@ -66,7 +66,7 @@ call. Reuse them — issue **no** extra `dispatch-context-pack` call here.
 
 ## Invoke the Workflow and consume its result
 
-**Invoke the Workflow tool on `.claude/workflows/qa-fix.js`**, passing `args`.
+**Invoke the Workflow tool on the registered `qa-fix` workflow**, passing `args`.
 This skill is a sanctioned caller of that Workflow — no `ultracode` keyword
 needed. The Workflow runs in the background and returns one compact result:
 

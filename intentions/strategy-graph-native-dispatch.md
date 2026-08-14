@@ -5628,10 +5628,7 @@ success_signal:
     tactics serving this strategy"
   sensor: the intention store and the router's selection log —
     align-tactics-census.ts enumerates the open machinery-defect population
-    serving this strategy; the selection log carries lifecycle completions; and
-    a park-cause reading over office_hours.reason across parked nodes counts
-    /align-tactics parks attributable to an upstream recording round’s own
-    record gap (the reading that surfaced three such parks on 2026-08-12)
+    serving this strategy; the selection log carries lifecycle completions
   threshold: the owned path carries tactics through the full lifecycle
     continuously, and the machinery's own open defect backlog — open (phase set,
     not done) plus born-parked tactics serving this strategy — stays at or below

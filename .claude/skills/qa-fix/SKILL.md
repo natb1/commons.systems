@@ -336,8 +336,8 @@ each fork site.
    Run this step only when the in-memory residue list is **non-empty**; if empty,
    skip it and proceed to Step 4 with no dispositions.
 
-   **Build `args`** and **invoke the Workflow tool on
-   `.claude/workflows/qa-fix.js`** (a sanctioned caller — no `ultracode` keyword).
+   **Build `args`** and **invoke the Workflow tool on the registered `qa-fix`
+   workflow** (a sanctioned caller — no `ultracode` keyword).
    It runs in the background and returns one compact `result`. `args` carries
    `pr_num`, `issue_num`, `app_dir`, `browser_available`, `firestore_caveat`, the
    `residue` list, `plan_fix` (`ATTEMPT_N < CAP` — the read-only pre-gate: false at

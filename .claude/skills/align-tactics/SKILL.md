@@ -274,7 +274,7 @@ tactic (in-flight or completed-but-unpruned) sitting on the strategy's signal
 path never blocks a per-node finalize; that run's drift review judges Side A /
 Side B against the one target node and parks the tactic, never the strategy.
 
-**Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
+**Invoke the Workflow tool on the registered `align-tactics` workflow**, passing
 `args`. This skill is a sanctioned caller of that Workflow — no `ultracode`
 keyword needed. The Workflow runs in the background and returns one structured
 result:

@@ -32,7 +32,9 @@
 #        record is preserved and incremented.
 #   (7)  --retire completes to phase done with measured_impact INTACT.
 #   (8)  the in-flight guard: a non-null execution records nothing, exits 0
-#        noop, and says the occurrence was NOT COUNTED.
+#        skipped-in-flight (NOT noop — see unit D2's contract change below),
+#        and says the occurrence was NOT COUNTED. (8b) the same guard also
+#        blocks --retire, with the same token.
 #   (9)  usage refusals: missing --sensor, a malformed --impact-file, and an
 #        --impact-file carrying a recurrence_count record (the metric the script
 #        owns) are all exit 64 with no graph write.
@@ -52,6 +54,34 @@
 #        the `skipped-locked` disposition, but the log line must state the loss
 #        outright (not counted, nothing will re-invoke) rather than the sibling's
 #        benign "re-invoke to record it".
+#   (15) --list membership is the id prefix, not attributes.ledger_entry alone:
+#        a node under the prefix with no attribute, and (symmetrically) a node
+#        carrying the attribute outside the prefix, are both listed with
+#        "unregistered": true and recurrence_count forced to 0 rather than
+#        silently dropped from the similarity judgment's input — and the
+#        doctrine root tactic-eval-finding-ledger stays excluded, and every row
+#        surfaces `resolved_by` so the similarity judgment can see a stated
+#        resolution. This exercises the REAL default list_entries() path (the
+#        node/store.js one-liner), not the LIST_CMD stub the rest of this suite
+#        uses, so it invokes the real, uncopied SUT directly.
+#   (16) --resolved-by states a FACT without counting an occurrence: it writes
+#        attributes.resolved_by and leaves recurrence_count, its `measured`
+#        stamp, first_seen and phase exactly as they were. Reference forms are
+#        normalized at write time (bare number -> '#N', sha lowercased,
+#        abbreviated sha expanded to 40), an ambiguous all-digit reference and an
+#        unresolvable abbreviation are refused, and the in-flight guard applies
+#        only to the --body-file refresh — naming an in-flight PR as the
+#        resolution is the whole point of the flag. That refusal reports
+#        skipped-in-flight, not noop (the token re-stating an ALREADY-recorded
+#        resolution still gets, since nothing there was refused) — a fire-
+#        and-forget caller cannot tell "already satisfied" from "refused,
+#        recorded nothing" any other way.
+#   (17) --list-retirable is the close-path TRIGGER: open entries whose
+#        resolved_by names a change that is an ancestor of origin/main, resolved
+#        offline (sha by merge-base, PR by the merge subject on origin/main).
+#        An entry whose fix has not landed, whose reference cannot be resolved,
+#        or whose id cannot be addressed by --retire --slug is named on stderr
+#        and left out — never silently skipped.
 #
 # Run under bash -c, never zsh.
 
@@ -184,6 +214,9 @@ cat > "$BIN/stub-graph-commit" <<'STUB'
 #                  origin/main ref. With it unset the stub exits 0 having landed
 #                  NOTHING — the silent-PASS shape verification exists to catch.
 echo "graph-commit $*" >> "$STUB_LOG/graph-commit.log"
+# Which WRITER the SUT asked graph-commit for. The env var, not an argument, is
+# the whole interface, so the stub records it out of band (case 18).
+printf 'GRAPH_COMMIT_WRITER=%s\n' "${GRAPH_COMMIT_WRITER:-<unset>}" >> "$STUB_LOG/graph-commit-env.log"
 repo=""
 while [[ $# -gt 0 ]]; do
   case "$1" in -C) repo="$2"; shift 2 ;; *) shift ;; esac
@@ -193,6 +226,25 @@ if [[ "${STUB_GC_LAND:-0}" == "1" ]]; then
   git -C "$repo" add -A intentions >/dev/null 2>&1
   git -C "$repo" commit -q -m 'fixture land' >/dev/null 2>&1
   git -C "$repo" update-ref refs/remotes/origin/main HEAD
+fi
+# STUB_GC_PLUMB=1 — land the way the PLUMBING writer really does, which
+# STUB_GC_LAND does NOT: build the commit from the on-disk content through a
+# throwaway index and move origin/main to it, while leaving HEAD, the real
+# index and the working tree exactly as they were. The residue that leaves
+# behind in the checkout is the whole subject of case 19, and STUB_GC_LAND
+# cannot express it — its `commit` moves HEAD, which is the worktree writer's
+# behaviour and is precisely what makes the tree come out clean.
+if [[ "${STUB_GC_PLUMB:-0}" == "1" ]]; then
+  idx="$repo/.git/stub-plumb-index"
+  rm -f "$idx"
+  export GIT_INDEX_FILE="$idx"
+  git -C "$repo" read-tree HEAD
+  git -C "$repo" add -A intentions >/dev/null 2>&1
+  tree=$(git -C "$repo" write-tree)
+  sha=$(git -C "$repo" commit-tree "$tree" -p HEAD -m 'fixture plumbing land')
+  unset GIT_INDEX_FILE
+  rm -f "$idx"
+  git -C "$repo" update-ref refs/remotes/origin/main "$sha"
 fi
 exit 0
 STUB
@@ -370,11 +422,32 @@ JSON
 run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
   --slug "$SLUG" --statement 's' --body-file "$BODY" --sensor dispatch-phase-eval
 assert_eq "(8) in-flight entry exits 0" "0" "$RC"
-assert_eq "(8) stdout says noop" "noop" "$SOUT"
+# CONTRACT CHANGE (tactic-eval-finding-ledger-fixes, unit D2): this used to
+# assert "noop", which conflated "nothing needed writing" with "refused and
+# recorded nothing" — a fire-and-forget caller cannot tell the two apart from
+# stdout alone, and the second one is a silently lost occurrence. The in-flight
+# guard now reports its own token so a caller can act on it.
+assert_eq "(8) stdout says skipped-in-flight, not noop (a lost occurrence, not a satisfied no-op)" \
+  "skipped-in-flight" "$SOUT"
 assert_eq "(8) no write-node" "" "$(log_lines write-node.log)"
 assert_eq "(8) no graph-commit" "" "$(log_lines graph-commit.log)"
 assert_contains "(8) the dropped occurrence is announced, never silent" \
   "NOT COUNTED" "$OUT"
+
+# --- (8b) the in-flight guard also blocks --retire ---------------------------
+# Sibling of D2's --resolved-by fix: --retire on an open entry whose execution
+# is non-null refuses to complete it mechanically and records nothing. This is
+# the same "refused, recorded nothing" shape as (8) and the --resolved-by
+# body-refresh case in (16), so it gets the same skipped-in-flight token rather
+# than noop (which case (7) and a not-open --retire both still use, correctly,
+# for a genuinely satisfied or genuinely nothing-to-do call).
+run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- --retire --slug "$SLUG"
+assert_eq "(8b) --retire on an in-flight entry exits 0" "0" "$RC"
+assert_eq "(8b) stdout says skipped-in-flight, not noop" "skipped-in-flight" "$SOUT"
+assert_eq "(8b) no write-node" "" "$(log_lines write-node.log)"
+assert_eq "(8b) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_contains "(8b) refuses to complete it mechanically" \
+  "refusing to complete it mechanically" "$OUT"
 
 # --- (9) usage refusals ------------------------------------------------------
 run_ef -- --slug "$SLUG" --statement s --body-file "$BODY"
@@ -517,6 +590,440 @@ assert_contains "(14) and names the checkout that repairs the local copy" \
 # The local file stays absent: refusing is not a rollback, so nothing is dirty.
 assert_eq "(14) no local node file was created" "0" "$([[ -e "$LANDED_MD" ]] && echo 1 || echo 0)"
 git -C "$FR" checkout -q origin/main -- "intentions/$ID.md"
+
+# --- (15) --list membership: id prefix vs attributes.ledger_entry -----------
+# The default list_entries() path (LIST_CMD unset) needs the REAL store.js, so
+# this section calls the real SUT directly at $SUT — never the FR fixture
+# copy, whose SCRIPT_DIR/../../../.. math resolves to the miniature repo where
+# packages/intentionsutil/src/store.js does not exist — against an isolated
+# intentions/ directory of full, schema-valid node bodies (each field copied
+# from the shape of a real landed ledger entry, so validateNode accepts it).
+LIST_DIR="$WORK/list-intentions"
+mkdir -p "$LIST_DIR"
+
+# (a) properly registered: id prefix AND attributes.ledger_entry both true —
+# listed normally, unflagged, with its real recurrence_count.
+cat > "$LIST_DIR/tactic-eval-finding-registered-example.md" <<'MD'
+---
+id: tactic-eval-finding-registered-example
+kind: tactic
+statement: A properly registered ledger entry for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: true
+rounds: null
+attributes:
+  ledger_entry: true
+  first_seen: 2026-08-01
+  resolved_by: '#4242'
+  measured_impact:
+    - metric: recurrence_count
+      value: 4
+      unit: occurrences
+      window: all-time
+      sensor: fixture-sensor
+      measured: 2026-08-10
+---
+# fixture body
+MD
+
+# (b) id-prefix match, NO attribute — the lock-wait / utc-bounds-local-newermt
+# shape: a hand-authored tactic landed under the prefix with attributes: {}.
+cat > "$LIST_DIR/tactic-eval-finding-unregistered-example.md" <<'MD'
+---
+id: tactic-eval-finding-unregistered-example
+kind: tactic
+statement: An unregistered ledger-shaped node for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# fixture body
+MD
+
+# (c) attribute true, id OUTSIDE the prefix — the reverse disagreement.
+cat > "$LIST_DIR/tactic-not-under-the-ledger-prefix.md" <<'MD'
+---
+id: tactic-not-under-the-ledger-prefix
+kind: tactic
+statement: A node carrying ledger_entry outside the id prefix, for the --list membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: true
+rounds: null
+attributes:
+  ledger_entry: true
+  first_seen: 2026-08-01
+  measured_impact:
+    - metric: recurrence_count
+      value: 9
+      unit: occurrences
+      window: all-time
+      sensor: fixture-sensor
+      measured: 2026-08-11
+---
+# fixture body
+MD
+
+# (d) the doctrine root itself — id starts with the prefix and carries no
+# attribute either, but must stay EXCLUDED from its own membership test.
+cat > "$LIST_DIR/tactic-eval-finding-ledger.md" <<'MD'
+---
+id: tactic-eval-finding-ledger
+kind: tactic
+statement: The ledger's own doctrine root, excluded from its own membership test.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# fixture body
+MD
+
+LIST_RC=0
+LIST_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list) || LIST_RC=$?
+assert_eq "(15) --list against the real store.js exits 0" "0" "$LIST_RC"
+assert_eq "(15) exactly the three prefix-or-attribute rows are listed" "3" \
+  "$(jq 'length' <<<"$LIST_OUT")"
+assert_eq "(15) the doctrine root is excluded" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")] | length' <<<"$LIST_OUT")"
+
+assert_eq "(15a) the registered entry is NOT flagged unregistered" "false" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0] | has("unregistered")' <<<"$LIST_OUT")"
+assert_eq "(15a) and keeps its real recurrence_count" "4" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15a) and surfaces its stated resolution to the judgment" "#4242" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].resolved_by' <<<"$LIST_OUT")"
+
+assert_eq "(15b) prefix without attribute is flagged unregistered" "true" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].unregistered' <<<"$LIST_OUT")"
+assert_eq "(15b) its recurrence_count is forced to 0" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15b) its slug is still derived from the prefix" "unregistered-example" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].slug' <<<"$LIST_OUT")"
+assert_eq "(15b) an entry with no stated resolution reports null" "null" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].resolved_by' <<<"$LIST_OUT")"
+
+assert_eq "(15c) attribute without prefix is flagged unregistered too" "true" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].unregistered' <<<"$LIST_OUT")"
+assert_eq "(15c) its recurrence_count is forced to 0, not its real 9" "0" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15c) it has no slug (outside the prefix)" "null" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].slug' <<<"$LIST_OUT")"
+
+# --- (16) --resolved-by states a fact, and never counts an occurrence --------
+# The gap this closes: the only update path was the recurrence path, so a
+# re-evaluation that had established a landed PR resolved an entry could not
+# write that down without ALSO recording a fresh occurrence of the finding it
+# had just seen fixed.
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by 3079
+assert_eq "(16) --resolved-by exits 0" "0" "$RC"
+assert_eq "(16) stdout says landed" "landed" "$SOUT"
+assert_eq "(16) a bare PR number is stored as #N" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) recurrence_count is NOT incremented" "1" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
+assert_eq "(16) and its measured stamp is NOT refreshed" "2026-08-01" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .measured')"
+assert_eq "(16) first_seen untouched" "2026-08-01" "$(written '.attributes.first_seen')"
+assert_eq "(16) phase untouched — retirement is a separate judgment" "null" "$(written '.phase')"
+GC16="$(log_lines graph-commit.log)"
+assert_contains "(16) it is a CAS update of the existing node" "--base" "$GC16"
+assert_contains "(16) and the commit message names the resolution" "resolved by #3079" "$GC16"
+
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
+assert_eq "(16) the '#N' form is stored unchanged" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) --body-file refreshes the body" \
+  "The finding.
+Second line." "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_MD")"
+
+FULL_SHA=$(git -C "$FR" rev-parse HEAD)
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by "${FULL_SHA^^}"
+assert_eq "(16) a 40-character sha is stored lowercased, no lookup needed" \
+  "$FULL_SHA" "$(written '.attributes.resolved_by')"
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
+  --slug "$SLUG" --resolved-by "${FULL_SHA:0:8}"
+assert_eq "(16) an abbreviated sha is EXPANDED to 40 characters" \
+  "$FULL_SHA" "$(written '.attributes.resolved_by')"
+
+run_ef -- --slug "$SLUG" --resolved-by 1234567
+assert_eq "(16) an all-digit reference of 7+ characters is refused as ambiguous" "64" "$RC"
+assert_contains "(16) and says how to disambiguate it" "Write a PR as '#1234567'" "$OUT"
+assert_eq "(16) and never reaches the graph" "" "$(log_lines classify.log)"
+
+run_ef -- --slug "$SLUG" --resolved-by deadbee
+assert_eq "(16) an abbreviated sha this checkout cannot resolve is refused" "64" "$RC"
+assert_contains "(16) rather than storing a prefix nothing can resolve later" \
+  "does not resolve in" "$OUT"
+
+run_ef -- --slug "$SLUG" --resolved-by 'not-a-ref'
+assert_eq "(16) a reference of neither shape is refused" "64" "$RC"
+assert_contains "(16) and names both accepted shapes" "invalid --resolved-by" "$OUT"
+
+run_ef -- --slug "$SLUG" --resolved-by '#3079' --sensor s
+assert_eq "(16) --resolved-by records no measurement, so --sensor is refused" "64" "$RC"
+run_ef -- --retire --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) --retire and --resolved-by may not be combined" "64" "$RC"
+assert_contains "(16) because one states a fact and the other makes a call" \
+  "separate acts" "$OUT"
+
+RESOLVED_JSON=$(jq -c . <<'JSON'
+{"id":"tactic-eval-finding-stop-hook-hold-loop","phase":null,"execution":null,
+ "statement":"s",
+ "attributes":{"ledger_entry":true,"first_seen":"2026-08-01","resolved_by":"#3079",
+   "measured_impact":[{"metric":"recurrence_count","value":1,"unit":"occurrences",
+     "window":"all-time","sensor":"dispatch-phase-eval","measured":"2026-08-01"}]}}
+JSON
+)
+run_ef STUB_STATE=open STUB_NODE_JSON="$RESOLVED_JSON" -- --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) re-stating the same resolution exits 0" "0" "$RC"
+# Genuinely satisfied: the entry already records this exact resolved_by and
+# there is no body to refresh, so noop is the correct (unchanged) token here —
+# contrast with the in-flight BODY-refresh refusal just below, which records
+# nothing and must NOT claim the caller's intent was already met.
+assert_eq "(16) stdout says noop — no empty commit" "noop" "$SOUT"
+assert_eq "(16) and nothing was written" "" "$(log_lines graph-commit.log)"
+
+run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
+assert_eq "(16) an in-flight entry refuses the BODY refresh" "0" "$RC"
+# CONTRACT CHANGE (tactic-eval-finding-ledger-fixes, unit D2): this used to
+# assert "noop", the same token the genuinely-satisfied case above prints. A
+# fire-and-forget caller (/rsi) cannot tell "resolved_by was already recorded"
+# from "the in-flight guard refused and recorded nothing" from stdout alone —
+# the second one is a silently lost resolution. The refusal now gets its own
+# token.
+assert_eq "(16) with a skipped-in-flight disposition, not noop" "skipped-in-flight" "$SOUT"
+assert_eq "(16) and no graph write" "" "$(log_lines graph-commit.log)"
+assert_contains "(16) and says nothing was recorded" "NOTHING WAS RECORDED" "$OUT"
+
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$INFLIGHT_JSON" -- \
+  --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) but an attributes-only write IS allowed while a PR is in flight" "0" "$RC"
+assert_eq "(16) and lands — the in-flight PR is exactly what a caller names" "landed" "$SOUT"
+assert_eq "(16) the resolution was recorded" "#3079" "$(written '.attributes.resolved_by')"
+assert_eq "(16) and the execution the PR owns is untouched" "123" "$(written '.execution.pr')"
+
+run_ef STUB_STATE=absent -- --slug "$SLUG" --resolved-by '#3079'
+assert_eq "(16) --resolved-by against a nonexistent entry is an error, not a no-op" "1" "$RC"
+assert_contains "(16) and says the entry must exist first" "EXISTING entry" "$OUT"
+assert_eq "(16) and nothing was written" "" "$(log_lines graph-commit.log)"
+
+# --- (17) --list-retirable: the close-path trigger ---------------------------
+# Entries someone has said are resolved, whose named change is an ancestor of
+# origin/main. Resolution is entirely offline: a sha by merge-base, a PR by the
+# merge subject on origin/main's own history.
+git -C "$FR" commit -q --allow-empty -m 'fixture: a plain landed fix'
+ANC_SHA=$(git -C "$FR" rev-parse HEAD)
+git -C "$FR" commit -q --allow-empty -m 'fixture: the squash-merged fix (#4242)'
+PR_SHA=$(git -C "$FR" rev-parse HEAD)
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+LANDED_DATE=$(git -C "$FR" log -1 --format=%cs HEAD)
+# A real commit object that is NOT an ancestor of origin/main (a fix on a branch
+# that has not merged) — distinct from a sha this checkout cannot resolve at all.
+SIDE_SHA=$(git -C "$FR" commit-tree "HEAD^{tree}" -p HEAD -m 'fixture: an unlanded fix')
+UNKNOWN_SHA=0123456789abcdef0123456789abcdef01234567
+
+RETIRABLE_LIST=$(jq -c -n --arg anc "$ANC_SHA" --arg side "$SIDE_SHA" --arg unknown "$UNKNOWN_SHA" '[
+  {id:"tactic-eval-finding-squash-merged",slug:"squash-merged",state:"open",
+   statement:"a fix merged by squash",recurrence_count:5,last_seen:"2026-08-01",resolved_by:"#4242"},
+  {id:"tactic-eval-finding-plain-sha",slug:"plain-sha",state:"open",
+   statement:"a fix named by sha",recurrence_count:3,last_seen:"2026-08-02",resolved_by:$anc},
+  {id:"tactic-eval-finding-not-landed",slug:"not-landed",state:"open",
+   statement:"a fix that has not merged",recurrence_count:2,resolved_by:$side},
+  {id:"tactic-eval-finding-unknown-sha",slug:"unknown-sha",state:"open",
+   statement:"a reference nothing can resolve",recurrence_count:2,resolved_by:$unknown},
+  {id:"tactic-eval-finding-unmerged-pr",slug:"unmerged-pr",state:"open",
+   statement:"a PR that has not merged",recurrence_count:1,resolved_by:"#999999"},
+  {id:"tactic-eval-finding-no-resolution",slug:"no-resolution",state:"open",
+   statement:"nobody has said this is fixed",recurrence_count:9,resolved_by:null},
+  {id:"tactic-eval-finding-already-retired",slug:"already-retired",state:"retired",
+   statement:"closed already",recurrence_count:4,resolved_by:"#4242"},
+  {id:"tactic-outside-the-prefix",slug:null,state:"open",
+   statement:"carries the attribute, not the id",recurrence_count:0,resolved_by:"#4242",unregistered:true}
+]')
+run_ef STUB_LIST_JSON="$RETIRABLE_LIST" -- --list-retirable
+assert_eq "(17) --list-retirable exits 0" "0" "$RC"
+assert_eq "(17) only the entries whose fix LANDED are listed" "2" "$(jq 'length' <<<"$SOUT")"
+assert_eq "(17) a PR reference resolves to its squash-merge commit" "$PR_SHA" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .resolved_commit' <<<"$SOUT")"
+assert_eq "(17) and carries the day it landed" "$LANDED_DATE" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .resolved_commit_date' <<<"$SOUT")"
+assert_eq "(17) a landed sha resolves to itself" "$ANC_SHA" \
+  "$(jq -r '.[] | select(.slug == "plain-sha") | .resolved_commit' <<<"$SOUT")"
+assert_eq "(17) each row keeps its --list fields for the judgment" "5" \
+  "$(jq -r '.[] | select(.slug == "squash-merged") | .recurrence_count' <<<"$SOUT")"
+
+assert_eq "(17) a fix that has not merged is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "not-landed")] | length' <<<"$SOUT")"
+assert_contains "(17) and the reason is stated" "NOT an ancestor of origin/main" "$OUT"
+assert_eq "(17) an unresolvable sha is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "unknown-sha")] | length' <<<"$SOUT")"
+assert_contains "(17) and is NAMED, never silently skipped" \
+  "tactic-eval-finding-unknown-sha: resolved_by $UNKNOWN_SHA cannot be resolved" "$OUT"
+assert_eq "(17) an unmerged PR reference is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "unmerged-pr")] | length' <<<"$SOUT")"
+assert_contains "(17) and it too is named" "tactic-eval-finding-unmerged-pr" "$OUT"
+assert_eq "(17) an entry nobody has resolved is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "no-resolution")] | length' <<<"$SOUT")"
+assert_eq "(17) an already-retired entry is not a candidate" "0" \
+  "$(jq '[.[] | select(.slug == "already-retired")] | length' <<<"$SOUT")"
+assert_eq "(17) a row --retire --slug cannot address is excluded" "0" \
+  "$(jq '[.[] | select(.id == "tactic-outside-the-prefix")] | length' <<<"$SOUT")"
+assert_contains "(17) and says why" "--retire --slug cannot address it" "$OUT"
+assert_eq "(17) it retires NOTHING — the actor stays a person" "" "$(log_lines graph-commit.log)"
+
+run_ef -- --list-retirable --slug "$SLUG"
+assert_eq "(17) --list-retirable takes no other arguments" "64" "$RC"
+
+# --- (18) the ledger writes through graph-commit's PLUMBING writer -----------
+# tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt: graph-commit's
+# default writer refuses on ANY unrelated dirty tracked file in the checkout,
+# which failed every ledger write for a file no ledger write reads — silently,
+# because this script's caller is fire-and-forget with a discarded transcript.
+# The plumbing writer builds against a throwaway index and has no such refusal.
+# The var is the entire interface, so assert the SUT actually sets it.
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug writer-opt-in --statement 'the ledger writes through the plumbing writer' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(18) the write lands" "0" "$RC"
+assert_contains "(18) graph-commit is invoked with GRAPH_COMMIT_WRITER=plumbing" \
+  "GRAPH_COMMIT_WRITER=plumbing" "$(log_lines graph-commit-env.log)"
+# Scoped to the invocation, not exported process-wide: the writer default stays
+# `worktree` for every OTHER graph-commit caller, and flipping those is a
+# separate decision with a separate blast radius.
+assert_contains "(18) the opt-in is per-invocation, not a global export" \
+  'GRAPH_COMMIT_WRITER=plumbing "${GRAPH_COMMIT_CMD[@]}"' "$(cat "$SUT")"
+assert_not_contains "(18) never a process-wide export" \
+  'export GRAPH_COMMIT_WRITER' "$(cat "$SUT")"
+
+# --- (19) a landed write leaves the checkout CLEAN ---------------------------
+# The counterpart to case 18, and the reason it is not enough to opt in and stop
+# there. The plumbing writer pushes straight to origin/main and never moves this
+# checkout's HEAD, index or tree — so unless the SUT clears it, every successful
+# write leaves intentions/<id>.md modified (or, on the mint path, untracked)
+# indefinitely. That residue is the exact unrelated-dirt condition that fails
+# the DEFAULT writer's pre-flight guard for every later graph-commit in the
+# checkout whatever node it targets, and makes an --ff-only sync refuse. Left
+# unasserted, this script would close
+# tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt by reproducing
+# it from its own successes.
+PSLUG=plumb-residue
+PID="tactic-eval-finding-$PSLUG"
+
+# (a) the mint path — a net-new node, untracked in this checkout.
+run_ef STUB_STATE=absent STUB_GC_PLUMB=1 -- \
+  --slug "$PSLUG" --statement 'a landed write leaves no residue' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(19a) the mint lands" "0" "$RC"
+assert_eq "(19a) stdout says landed" "landed" "$SOUT"
+assert_eq "(19a) the content IS on origin/main" "0" \
+  "$(git -C "$FR" cat-file -e "refs/remotes/origin/main:intentions/$PID.md" 2>/dev/null; echo $?)"
+assert_eq "(19a) HEAD did NOT move — the writer touched no tree" "" \
+  "$(git -C "$FR" cat-file -e "HEAD:intentions/$PID.md" 2>/dev/null && echo 'at HEAD')"
+assert_eq "(19a) no untracked node file is left behind" "" \
+  "$(git -C "$FR" status --porcelain -- "intentions/$PID.md")"
+
+# (b) the update path — a tracked node, so the residue is a MODIFIED file.
+# A slug of its own, not (a)'s: (a) put its node on origin/main, and `absent`
+# never mints over a landed entry (case 14). Committed to HEAD first with
+# STUB_GC_LAND — the worktree-writer shape — so the update has something to be
+# dirty against.
+#
+# --retire is the update chosen deliberately: it moves `phase` to done, so the
+# on-disk file provably DIFFERS from HEAD's. A same-body recurrence does not —
+# the stub writer's frontmatter is identical across those two writes, so the
+# file never goes dirty and the assertion below would pass against a writer that
+# clears nothing at all.
+BSLUG=plumb-residue-update
+BID="tactic-eval-finding-$BSLUG"
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug "$BSLUG" --statement 'a landed update leaves no residue' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(19b) the setup mint lands" "0" "$RC"
+assert_eq "(19b) setup leaves the node at HEAD" "0" \
+  "$(git -C "$FR" cat-file -e "HEAD:intentions/$BID.md" 2>/dev/null; echo $?)"
+HEAD_BLOB_B="$(git -C "$FR" rev-parse "HEAD:intentions/$BID.md")"
+PLUMB_OPEN_JSON=$(jq -c --arg id "$BID" '.id = $id' <<<"$OPEN_JSON")
+run_ef STUB_STATE=open STUB_GC_PLUMB=1 STUB_NODE_JSON="$PLUMB_OPEN_JSON" -- \
+  --retire --slug "$BSLUG"
+assert_eq "(19b) the retirement lands" "0" "$RC"
+assert_eq "(19b) stdout says landed" "landed" "$SOUT"
+# The write really did change the file — without this the cleanliness assertion
+# below is satisfied by a file that was never dirty.
+assert_eq "(19b) the landed content DIFFERS from HEAD's" "done" \
+  "$(git -C "$FR" show "refs/remotes/origin/main:intentions/$BID.md" | sed -n 's/^phase: //p')"
+assert_eq "(19b) the node file is NOT left dirty in the checkout" "" \
+  "$(git -C "$FR" status --porcelain -- "intentions/$BID.md")"
+# Clean means returned to HEAD, not merely unstaged: the worktree blob has to
+# equal HEAD's, or the next graph write in this checkout still refuses.
+assert_eq "(19b) the working copy equals HEAD's blob" \
+  "$HEAD_BLOB_B" "$(git -C "$FR" hash-object -- "$FR/intentions/$BID.md")"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite
