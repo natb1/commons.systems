@@ -19,7 +19,15 @@ serves:
 recovers: []
 clarifications: []
 tooling_goals: []
-success_signal: null
+success_signal:
+  observable: "the merged-but-not-terminal count: nodes at origin/main whose
+    execution.completion.mergedAt is set but whose phase is not done and which
+    carry neither office_hours nor a non-empty blocked_by"
+  sensor: ladder-terminus census over the intention store (merged-but-not-terminal
+    count)
+  threshold: "0 violations. Baseline 2026-08-14 at origin/main 206a6994: 29
+    merged-not-done, 24 excused, 5 violations."
+  is_proxy: true
 attention: null
 phase: null
 execution: null
