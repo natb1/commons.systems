@@ -36,6 +36,7 @@ attributes:
       window: all-time
       sensor: vitest
       measured: 2026-08-12
+  resolved_by: 1092a403e0000e4a4ce8ff106b892bfb32d4cdb7
 ---
 # A sensor's registry key is a code constant duplicating interview-editable node prose, and nothing on the graph write path checks the two still match — an `/align` reword silently de-registers the sensor
 
