@@ -16,6 +16,7 @@ rationale: "Surfaced in the 2026-08-11 /align interview codifying the
   condition."
 reading: null
 serves:
+  - strategy-discovered-requirements
   - strategy-graph-native-dispatch
 recovers: []
 clarifications: []
