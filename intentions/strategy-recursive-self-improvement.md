@@ -1,13 +1,16 @@
 ---
 id: strategy-recursive-self-improvement
 kind: strategy
-statement: Harness self-improvement is measurement, not a second orchestrator —
-  /rsi evaluates finished phase and unattended-intervention sessions on BOTH
-  dispatch drivers, fired by a lane-agnostic trigger that is unconditional on
-  failure signals and threshold-gated on cost, and /rsi-audit measures token
-  economy at any scope; both record findings as ordinary draft tactics on the
-  graph, merging a recurrence onto the existing node exactly as every other
-  finding producer does
+statement: "Harness self-improvement is measurement, not a second orchestrator —
+  one shared evaluation core (session review, the lens catalog, and a single
+  find-or-recur follow-up write surface) serves every session that reviews
+  finished harness work, fired by a lane-agnostic trigger that is unconditional
+  on failure signals and threshold-gated on cost: /rsi is the degenerate case
+  with an empty remediation list, the four invalid-state lanes are special cases
+  adding a variance-debugging lens and a closed, frontmatter-declared list of
+  permitted remediations, and /rsi-audit measures token economy at any scope;
+  every producer records findings through that one write surface, merging a
+  recurrence onto the existing node"
 owner: human
 status: refining
 parent: strategy-autonomous-execution
@@ -1584,6 +1587,223 @@ clarifications:
       measuring), and uniform coverage, which would require deciding what
       cost-per-unit-of-delivered-change means when the unit is a human decision,
       for which this interview had no answer."
+  - question: Are intervention sessions a separate lane from /rsi, or special cases
+      of it — and what happens to the 'records; never executes' bound?
+    answer: "(Recorded 2026-08-14 /align round, on author ruling.) Special cases,
+      and the bound is RELOCATED rather than broken. The ruling: the recorded
+      collisions stand for the CORE rsi logic, which is re-used by both
+      intervention and nominal-session review; where the session is an
+      intervention, it evaluates through an additional lens — debugging the
+      variance — and is additionally permitted to make remediations, each
+      intervention explicitly listing the ones it may make. The consequence
+      worth naming is that 'records; never executes' was written as a property
+      of A SKILL and becomes a property of THE CORE, which is the better-shaped
+      claim: the core is a library, a session is core + lenses + a declared
+      remediation list, and /rsi is not a separate thing but the DEGENERATE case
+      whose list is empty. Two consequences the record now carries rather than
+      leaving implicit. FIRST, the session contract forks and the fork is not
+      cosmetic: nominal /rsi is fire-and-forget, unattended, claims nothing and
+      gates nothing, while an intervention special case is router-spawned,
+      CLAIMS the node (--name <node-id>), owes exactly one mark-node-terminal
+      disposition or it freezes the node it was sent to unfreeze, and its EXIT
+      CODE routes the router (0 handled / 4 keep / 10 escalate). Same core,
+      opposite session contracts. SECOND, the core's object generalizes: for
+      dispatch-invalid-state the thing reviewed is a dead session, for
+      fix-checks it is failing CI with no corpse at all — so the core reviews a
+      completed unit of harness work PLUS ITS OUTCOME EVIDENCE, which is what
+      the requirement's 'including invalid state result if any' already says."
+  - question: Which lanes become special cases, and why are qa-main and jit-reminder
+      excluded when the trigger condition lists six?
+    answer: "(Recorded 2026-08-14 /align round; author took the recommendation.) The
+      FOUR invalid-state lanes: dispatch-invalid-state (all five kinds),
+      dispatch-conflict, fix-checks, and diagnose-main. The discriminator is the
+      one the requirement names — a node or the trunk reaching an INVALID STATE
+      — and each of these four exists only because of one; each already reviews
+      evidence and files a find-or-create follow-up, so each is an
+      /rsi-with-remediations today, written four separate times. qa-main and
+      jit-reminder are NOMINAL lanes with no preceding invalid state; they keep
+      the post-hoc sweep and gain no remediation-list contract, because they
+      have no invalid state to justify one. Two alternatives were put and
+      declined: all six unattended lanes (one boundary instead of two, but it
+      makes 'invalid state' stop being the trigger), and only the two the prompt
+      named (lowest blast radius, but dispatch-conflict and diagnose-main keep
+      private review-and-file logic and a later round redoes the same merge).
+      Boldness disclosed before the ruling: the six-lane list is the record's
+      own, and the four skill bodies were read, but the judgment that
+      diagnose-main belongs — its trigger is red origin/main rather than a node
+      reaching an invalid state — is Claude's, and it enters with an EMPTY
+      remediation list, which is the worked case showing the model degrades
+      gracefully instead of forcing an exception."
+  - question: Steelman — the strategy's intent could be 'keep the assurance function
+      independent of the operating function' rather than 'make harness
+      self-improvement cheap and DRY'. On that reading, merging the actor and
+      the evaluator is wrong whatever it saves.
+    answer: "(Adopted in part, diverged on the conclusion, 2026-08-14; reasons
+      recorded.) The rival is sourced from a named candidate tradition Claude
+      can defend — the audit/assurance tradition, which holds that the party
+      that remediates cannot be the party that assures — and its teeth come from
+      THIS record rather than from outside it: the research-lane condition
+      already carries the measured 2026-08-11 dry run in which, across 35
+      self-improvement runs, every run self-reported a passing score while 43%
+      actually scored below random baseline, 'the exact failure shape of a lane
+      that drafts from external findings and then judges its own output'.
+      ADOPTED: the independence bar binds absolutely, and it is now a recorded
+      condition rather than an inference. DIVERGED on the conclusion that the
+      sessions must therefore stay separate, on two grounds. First, the merged
+      session never evaluates ITSELF — it evaluates a prior dead session or a CI
+      outcome and then remediates; the collapse the dry run measured was
+      self-SCORING of one's own output. Second, and this is what decides it,
+      keeping the sessions separate today buys NO independence at all: the two
+      sessions review the SAME dead session twice, so the intervention's review
+      is not independent of the sweep's, it is REDUNDANT with it. Independence
+      is instead preserved mechanically — the intervention session's own sidecar
+      is swept like any other and evaluated later by an independent nominal
+      evaluation. Honest limit owned at record time: the audit-independence
+      tradition is Claude-internal knowledge with NO tradition record in this
+      graph — the same gap disclosed on this date for the Deming reading — and
+      the claim that a later sweep restores independence is Claude's inference,
+      not something the prior record states. The author took plain acceptance
+      rather than the offered deferral after that boldness was disclosed."
+  - question: What is actually saved by merging the two sessions, given the
+      intervention session will itself still be evaluated?
+    answer: "(Recorded 2026-08-14 /align round; this is the edge case the merge
+      would otherwise have left unstated.) One review of the corpse instead of
+      two, and one writer instead of two — not one session instead of two in
+      perpetuity. Today, when node N is stranded by a terminal undeclared worker
+      C: /dispatch-invalid-state digests C's transcript and files a cause-keyed
+      follow-up, AND the lane-agnostic sweep independently evaluates C as an
+      ended session that halted (an outcome-family trigger, so unconditional). C
+      is therefore reviewed twice, by two instruments, through two private
+      writers, with no shared lens catalog and no shared search set. After the
+      merge, C is reviewed ONCE, by the core, with the variance-debugging lens
+      added, recording through the one write surface — and the intervention
+      session itself is swept later, which is a review of a DIFFERENT object
+      (its own conduct) and is what preserves assurance independence. Naming
+      this precisely matters because the naive reading — 'two sessions become
+      one' — is wrong and would make the sessions-per-episode reading in this
+      strategy's success_signal look falsified when it is being met."
+  - question: Where does each intervention's list of permitted remediations live, so
+      'explicitly lists permitted remediations' is enforceable rather than
+      prose?
+    answer: "(Recorded 2026-08-14 /align round; author took the recommendation.)
+      Declared in the intervention skill's own FRONTMATTER, as a closed list; a
+      lane with no declared list cannot act, only record. This reuses the
+      mechanism ruled on this same date for lenses
+      (tactic-rsi-lens-catalog-decomposition: a lens with no declared carrier
+      becomes one that CANNOT BE INVOKED rather than one that quietly does not
+      run) — the same failure mode and the same fix, one idiom rather than two.
+      It is machine-readable, unit-testable like every other mechanical seam
+      here, and it sits in the file the acting session has already loaded. Two
+      alternatives were put and declined: the list as an attribute on each
+      lane's own intention node (faithful to graph-as-authority, but it puts an
+      enforcement-critical list one fetch away from the session that must obey
+      it, with nothing binding skill to node — the exact drift class that put a
+      lens's scope tag in the wrong skill), and a table in the shared core keyed
+      by lane (easiest to read whole, but it inverts the dependency so that
+      adding a lane edits the core, which is what a thin-selector design exists
+      to avoid). Boldness disclosed before the ruling: the mechanism is the
+      record's own, ruled the same day, but extending it from lenses to
+      remediations is Claude's inference and inherits the lens ruling's weakness
+      — frontmatter is not enforced by anything until a test exists to enforce
+      it. See the author-owned-list condition recorded this round for who may
+      write it."
+  - question: Does 'all skills that track follow-ups must use merged common logic'
+      restate tactic-finding-search-all-producers, drafted earlier the same day?
+    answer: "(Recorded 2026-08-14 /align round, answering an explicit author request
+      for a recommendation; the author's stated goal was DRY/parsimony.) No — it
+      SUBSUMES and STRENGTHENS it, and the difference is exactly the goal. That
+      carrier installs find-before-minting as PROSE IN EACH producer's skill;
+      its own rationale says 'the find-before-minting step in each producer's
+      skill'. Measured at record time: seven skills call five distinct private
+      writers (dispatch-eval-finding, dispatch-invalid-state-followup,
+      dispatch-security-followup with dispatch-followup-exists,
+      dispatch-qa-needs-main-followup, dispatch-fleet-alarm), and the retired
+      /file-issue is still cited as a caller. Copying ONE INSTRUCTION into six
+      skill bodies is the same DRY defect as five scripts, so by the author's
+      own parsimony goal the drafted carrier was itself the thing to fix. THE
+      RECORDING DECISION, and it is the parsimonious one:
+      tactic-finding-search-all-producers is REWRITTEN IN PLACE — it is phase
+      null, a draft — from 'each producer's skill states the discipline' to 'one
+      shared find-or-recur write surface that every producer calls', with
+      per-skill prose reduced to naming the call. Its sibling
+      tactic-eval-finding-ledger keeps the namespace and class-marker retirement
+      unchanged. ZERO new nodes for this half. Rewriting rather than superseding
+      is this record's own merge discipline practised on itself, exactly as
+      tactic-eval-finding-ledger was rewritten earlier the same day. Honest
+      limit owned at record time: that a single writer can serve the
+      GitHub-issue-keyed producers (dispatch-security-followup,
+      dispatch-qa-needs-main-followup, dispatch-followup-exists) and the
+      graph-keyed ones alike was NOT verified — those three may simply be legacy
+      removals, since GitHub Issues are disabled repo-wide, and the carrier is
+      told to settle that before designing around it."
+  - question: Which dedup key survives the merge — the invalid-state lane's
+      deterministic cause hash, or the ledger's model similarity judgment?
+    answer: "(Recorded 2026-08-14 /align round; author took the recommendation.)
+      Both, layered. A caller with a stable machine key passes it and is
+      addressed by it; the whole-graph similarity search runs in every case
+      regardless; and a disagreement between the two is RECORDED AS A FINDING
+      rather than silently resolved. The two mechanisms exist for different
+      reasons and dropping either loses something measured. Dropping the
+      deterministic key loses what dispatch-invalid-state-followup's header
+      argues for explicitly — the dedup key is the CAUSE, not the node, so one
+      lane defect stranding three nodes converges on one follow-up carrying
+      three occurrences rather than three near-identical nodes nobody triages —
+      and replaces a sha256 with a fallible model call. Dropping the whole-graph
+      search reintroduces the namespace blindness today's find-before-minting
+      ruling forbids, whose measured instance is on
+      tactic-eval-finding-eval-finding-list-misses-nonledger: two nodes minted
+      ten minutes apart for one defect, the shipped fix citing the node OUTSIDE
+      the namespace while the recurrence count stayed stranded on the one inside
+      it. Honest limit owned at record time: that a key/search disagreement is a
+      useful finding rather than noise is untested — it could fire constantly
+      and be ignored, and the carrier should measure its rate before treating it
+      as a signal."
+  - question: What was this round's own freeze blast radius, and how was it measured?
+    answer: "(Recorded 2026-08-14 /align round.) One child, classified orthogonal
+      and re-stamped in this round's own graph-commit. Measured with the
+      authoritative predicate — readNode plus strategyFingerprint and
+      isFingerprintStale — never a grep over strategy_fingerprint, per this
+      skill's own rule that a grep counts the key line and cannot tell a
+      null-valued stamp from a real one. Result:
+      strategy-recursive-self-improvement has ZERO stamped open children, so its
+      edit freezes nothing; strategy-graph-native-dispatch has exactly one,
+      tactic-strategy-fingerprint-stamp-coverage at phase qa, carrying an
+      object-form stamp. That child is ORTHOGONAL — it wires the router's stamp
+      WRITE through transition-node, and nothing in its plan depends on how
+      findings are recorded or on how intervention lanes relate to /rsi — so its
+      entry is re-stamped rather than left stale. Worth naming for the next
+      reader: that child exists precisely because the strategy soft-freeze is
+      inert (no production code path has ever written a stamp), so this
+      measurement is also a live datapoint for it — a second strategy edit whose
+      radius is one hand-written stamp."
+  - question: Why do this round's three new readings name their instruments in the
+      observable rather than in success_signal.sensor?
+    answer: "(Recorded 2026-08-14 /align round, from a defect this round hit live
+      rather than a hypothetical.) Because success_signal.sensor on this node is
+      a REGISTRY KEY, not prose. read-sensors.ts matches the entire string
+      against its registered Sensor names, and this node's is RSI_SENSOR_NAME
+      (packages/intentionsutil/scripts/read-sensors.ts). Appending the three
+      instruments to the field de-registered the rsi sensor immediately:
+      validate-graph.ts refused with 'Registered sensor name(s) not recorded by
+      any node's success_signal.sensor'. The two halves cannot be landed
+      atomically by this skill — graph-commit rebuilds on an intentions/-only
+      base and strips non-intentions changes, so the node prose and the code
+      constant land in separate pushes — and BOTH orderings fail
+      graph-fast-path.yml, which runs validate-graph on the graph write path:
+      prose-first leaves a registered name no node records, constant-first
+      leaves a node whose sensor matches nothing. So the field is LEFT STANDING
+      and the instruments are named in the observable, which is not a registry
+      key. What is owed, and owed to the carrier rather than to a later /align
+      round: land the sensor prose and the RSI_SENSOR_NAME constant in ONE pull
+      request, the only path that is atomic. Two things worth naming for the
+      next reader. This is the class defect already on the graph as
+      tactic-eval-finding-sensor-registry-key-prose-drift — a code constant
+      coupled to interview-editable prose — and this round is a fresh occurrence
+      of it, caught only because validate-graph gained a sensor rule since the
+      2026-08-12 incident, when the same break was silent and surfaced days
+      later on an unrelated PR. And the honest consequence for THIS record:
+      until that PR lands, the three readings are specified and unread, so the
+      success_signal's new threshold clauses are not yet measurable."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation; every
@@ -1594,7 +1814,16 @@ success_signal:
     distinct-finding discovery rate falling with it; and each /rsi-audit pass
     reports a per-workflow spend fold that holds its review thresholds — with
     the opportunities it ranks landing in the graph rather than in a report, and
-    with no two tactics recording the same root-cause defect
+    with no two tactics recording the same root-cause defect; the repo carries
+    exactly one find-or-recur write surface (read by a lint counting scripts
+    that implement a mint-or-reuse write path); an invalid-state episode costs
+    one session rather than an intervention session plus a separate evaluation
+    of the same corpse (read by aggregate-usage.sh at node scope, degrading to
+    sessions-per-node-per-day if that instrument cannot express an episode); and
+    no session performs a remediation outside its declared list (read by the
+    per-session decision log against each lane's declared frontmatter list) —
+    these three instruments are deliberately NOT added to the sensor field this
+    round; see the sensor-registry clarification of 2026-08-14
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
     count, held-session/worktree census, pause state), plus per-workflow token
@@ -1606,7 +1835,9 @@ success_signal:
     dominating the per-workflow fold, the parked critical-path count is
     non-increasing across them, and evaluated-plus-counted-skips equals the
     eligible session population in every window (a silent drop fails the signal
-    outright)
+    outright), distinct find-or-recur write surfaces equals 1, remediation acts
+    outside a declared list equals 0, and an invalid-state episode costs one
+    session
   is_proxy: true
 attention:
   boosts:
@@ -1672,19 +1903,32 @@ attributes:
       exemption for every producer — recording a finding is recording work
       whoever records it. The condition's substance is unchanged; only the named
       mechanism moves.)"
-    - 'the split is by write surface, not by attendance: /rsi runs UNATTENDED
+    - "the split is by write surface, not by attendance: /rsi runs UNATTENDED
       and auto-spawned by dispatch-ladder-run at every phase boundary, and is
       therefore bound to record-only — no fix, no skill or script edit, no phase
       transition, no merge, no label, and never /fewer-permission-prompts or any
       other write to .claude/settings.json. /rsi-audit is author-invoked and may
       hold the attended-only remediation steps that need a sandbox override.
       (Amended 2026-08-12 collapse round, INVERTING the prior condition. That
-      condition read "/rsi is an attended, author-invoked loop — never scheduled
-      or cron-driven", which was true of the judgment loop and is false of its
-      replacement. The safety the old wording bought — that nothing recursive
-      runs without the author present — is now bought mechanically instead: the
-      unattended half cannot execute anything, so its running unsupervised costs
-      a model turn and nothing else.)'
+      condition read \"/rsi is an attended, author-invoked loop — never
+      scheduled or cron-driven\", which was true of the judgment loop and is
+      false of its replacement. The safety the old wording bought — that nothing
+      recursive runs without the author present — is now bought mechanically
+      instead: the unattended half cannot execute anything, so its running
+      unsupervised costs a model turn and nothing else.) (Amended 2026-08-14,
+      second round of this date: the bound follows the DECLARED REMEDIATION
+      LIST, not attendance and not the /rsi namespace. Record-only remains the
+      default and remains what /rsi itself is — its declared list is empty — but
+      'unattended therefore record-only' is no longer the derivation, because
+      the four invalid-state special cases run unattended and DO act. What
+      replaces it: a session may perform exactly the acts its own skill
+      frontmatter declares and nothing else, and a lane with no declared list
+      may only record. The safety the old wording bought is unchanged in
+      substance and stronger in form — it was 'the unattended half cannot
+      execute anything', it is now 'the unattended half can execute only what
+      the author enumerated for it in advance'. The /fewer-permission-prompts
+      and .claude/settings.json prohibitions are unaffected: no lane's list may
+      name them.)"
     - "the research lane is sensor-only: a scheduled /rsi-research run writes
       only inert output — one dated reading on this strategy, born-parked
       candidate curriculum chunks, and draft tactics — and never grounding
@@ -1910,7 +2154,18 @@ attributes:
       SCOPE: attended /office-hours sittings, whose scarce resource is the
       author's time rather than allowance draw, and for which
       cost-per-unit-of-delivered-change is undefined. (Recorded 2026-08-14
-      /align round.)"
+      /align round.) (Amended 2026-08-14, second round of this date. The
+      six-lane IN SCOPE list is unchanged as the SWEEP's scope, but four of
+      those lanes — dispatch-invalid-state, dispatch-conflict, fix-checks,
+      diagnose-main — are no longer only swept: they are special cases of the
+      evaluation core, and for them the invalid state ITSELF is the trigger,
+      fired router-side and unconditionally, since an invalid state is an
+      outcome-family signal and no threshold is consulted for those. The sweep
+      is NOT withdrawn from them: an intervention session's own ended session
+      carries a sidecar and is swept exactly like any other, which is precisely
+      what keeps the actor from evaluating its own act. qa-main and jit-reminder
+      are nominal lanes with no preceding invalid state and remain swept-only,
+      unchanged.)"
     - "the trigger is FOUR families and three of them are cost-independent,
       because no single family is sound alone. (1) OUTCOME — a halt (exit
       10/11/12/13/21), rework (execution.fix.attempt incremented, a conflict
@@ -1965,6 +2220,75 @@ attributes:
       that can tune its own trigger is one that can decide not to look at
       itself, and delegation-anthropic-claude's divergence is already moderate.
       (Recorded 2026-08-14 /align round, from the step-3 delegation sweep.)"
+    - "the evaluation core is ONE shared body reused by every session that
+      reviews finished harness work, and what a session may DO is fixed by a
+      closed list it declares in its own skill frontmatter, never by which lane
+      it is. The core reviews a completed unit of harness work plus its outcome
+      evidence — a finished session's telemetry, an invalid-state result, or
+      both — runs the lens catalog, and records findings through the one
+      find-or-recur write surface; the core itself never acts. A SESSION is then
+      core + lenses + a declared remediation list. /rsi is the degenerate case
+      with an EMPTY list (record-only, exactly as before). Each invalid-state
+      special case adds the variance-debugging lens and its own enumerated
+      remediations: dispatch-invalid-state — complete a verified missed
+      disposition, reap, park; dispatch-conflict — resolve the conflict on its
+      own lane; fix-checks — fix the failing checks; diagnose-main — NONE,
+      record-only, which is the worked case showing the model degrades to /rsi
+      rather than special-casing it. An act outside the declared list is a
+      defect, not a judgment call. This is why 'not a second orchestrator' still
+      holds unamended: a closed list of repairs to the ONE node whose invalid
+      state fired the trigger is BOUNDED REPAIR, and it decides nothing about
+      what work happens next — deciding that is what the 2026-08-12 collapse
+      retired when it took pause authority and critical-path shortcutting away
+      from rsi. (Recorded 2026-08-14 /align round, on author ruling.)"
+    - "a special case NEVER evaluates its own session. The object it reviews is
+      a PRIOR completed unit — a dead session, a failing CI run — and its own
+      conduct is reviewed later by an independent nominal evaluation, because
+      the lane-agnostic sweep is session-keyed and an intervention session's own
+      dispatch-stamp sidecar is swept exactly like any other. The actor never
+      grades its own act. This is a mechanism, not a hope, and it is what
+      discharges the assurance-independence bar this strategy adopts: if the
+      sweep ever stops covering intervention sessions, the bar is broken and the
+      session merge must be RE-DERIVED rather than defended. (Recorded
+      2026-08-14 /align round, from the steelman on assurance independence.)"
+    - "each lane's permitted-remediation list is AUTHOR-OWNED: the model may
+      recommend an addition with measured justification and never writes one.
+      This applies the already-ratified recommend/write split to a third
+      actuator, and the reason is sharper here than for prioritization or for
+      the trigger threshold — a self-evaluator that can widen its own
+      permitted-remediation list is one that can grant itself execution
+      authority. Unlike a mis-prioritization (visible in the queue) or a raised
+      threshold (invisible because it produces no findings), a widened list is
+      invisible because it produces only MORE ACTS THAT LOOK SANCTIONED. Honest
+      limit owned at record time: the enforcement mechanism is unresolved. A
+      remediation list living in skill frontmatter sits in a file ordinary
+      dispatch implement phases edit routinely, so 'author-owned' needs a gate —
+      a lint, a review rule, or a hook — that this round specifies as OWED
+      rather than builds; the carrier owes it. (Recorded 2026-08-14 /align
+      round, from the step-3 delegation sweep against
+      delegation-anthropic-claude, divergence moderate.)"
+    - "there is exactly ONE find-or-recur write surface in the repo and every
+      finding producer calls it — /rsi, /rsi-audit, the four invalid-state
+      special cases, /review-fix, /qa-fix, /qa-main and /align Step 4 alike.
+      Measured at record time: FIVE private writers existed
+      (dispatch-eval-finding, dispatch-invalid-state-followup,
+      dispatch-security-followup with dispatch-followup-exists,
+      dispatch-qa-needs-main-followup, dispatch-fleet-alarm), called from seven
+      skills, with the retired /file-issue still cited as a caller. The surface
+      takes an OPTIONAL deterministic key — an invalid-state cause slug, a CI
+      failure signature, a CodeQL rule id, an npm advisory id — and addresses by
+      it where the caller has one; the whole-graph similarity search ALSO runs
+      in every case, and a disagreement between key and search (the key says
+      new, the search says this already exists elsewhere) is recorded as a
+      finding rather than silently resolved. Neither mechanism is dropped: the
+      deterministic key is what the invalid-state lane deliberately built so one
+      lane defect on three nodes converges on one follow-up, and the whole-graph
+      search is what strategy-graph-native-dispatch's find-before-minting rule
+      requires so a duplicate minted under another key is not structurally
+      invisible. Restating the doctrine in each producer's PROSE is not
+      compliance: six copies of one instruction is the same defect as five
+      scripts. (Recorded 2026-08-14 /align round, on author ruling; goal stated
+      as DRY/parsimony.)"
   pause:
     state: paused
     since: 2026-08-10

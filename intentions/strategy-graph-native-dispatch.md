@@ -5607,6 +5607,68 @@ clarifications:
       way: no code mirrors this node's conditions or tooling_goals verbatim. The
       only prose coupling is read-sensors.ts's LIFECYCLE_SENSOR_NAME to
       success_signal.sensor, which this round does not touch."
+  - question: Is the find-before-minting rule discharged by each producer's skill
+      stating it, or by one shared write surface every producer calls?
+    answer: "(Recorded 2026-08-14 /align round, second round of this date, on author
+      ruling; amending the same-day 'How is a finding recorded on the graph'
+      ruling, which this strengthens rather than reverses.) By ONE SHARED WRITE
+      SURFACE. That ruling named its carriers as tactic-eval-finding-ledger
+      (retire the rsi-private marker and namespace) and
+      tactic-finding-search-all-producers, described as 'the find-before-minting
+      step in each producer's skill' — a rule installed as PROSE IN EACH of six
+      producer skills. The author raised the bar to merged common logic, stating
+      the goal as DRY/parsimony, and the reason it is the right bar is that six
+      copies of one instruction is the same defect class as five scripts: it is
+      precisely how the repo arrived at five private writers. MEASURED at record
+      time: seven skills call five distinct private writers —
+      dispatch-eval-finding, dispatch-invalid-state-followup (its own
+      tactic-invalid-state-rc-<sha256> namespace, exactly the namespace-scoped
+      search this ruling forbids), dispatch-security-followup with
+      dispatch-followup-exists, dispatch-qa-needs-main-followup, and
+      dispatch-fleet-alarm — and the RETIRED /file-issue is still cited as a
+      caller. The three rules recorded earlier today are unchanged in substance;
+      what changes is where they live: in the surface, not in six restatements
+      of it. The surface takes an OPTIONAL deterministic key where a caller has
+      a stable one (an invalid-state cause slug, a CI failure signature, a
+      CodeQL rule id, an npm advisory id), runs the whole-graph similarity
+      search in every case regardless, and records a key/search disagreement as
+      a finding rather than resolving it silently — so neither the determinism
+      the invalid-state lane deliberately built nor the whole-graph search set
+      this ruling requires is dropped. CARRIER:
+      tactic-finding-search-all-producers is REWRITTEN IN PLACE rather than
+      superseded (it is phase null, a draft), which is this ruling's own merge
+      discipline practised on itself, exactly as tactic-eval-finding-ledger was
+      rewritten earlier today. Zero new nodes for this half. The contract that
+      binds every producer lives on this strategy; the evaluator-side reasoning
+      and the observable that reads it live on
+      strategy-recursive-self-improvement, per the same-day split-by-owner
+      ruling."
+  - question: The four invalid-state intervention lanes become special cases of the
+      evaluation core. What does that change on this strategy's surface?
+    answer: "(Recorded 2026-08-14 /align round, second round of this date, on author
+      ruling; the doctrine is recorded on strategy-recursive-self-improvement
+      and this records only what this strategy owns.) The intervention SKILLS
+      are dispatch-surface artifacts owned here —
+      .claude/skills/dispatch-invalid-state, dispatch-conflict, fix-checks and
+      dispatch-diagnose-main — and each becomes a thin selector over the shared
+      evaluation core plus a closed remediation list declared in its own
+      frontmatter. Three properties this strategy already fixes are UNCHANGED by
+      the merge and must survive it: a lane session spawned with --name
+      <node-id> is a graph-node worker in the Stop hook's eyes and owes exactly
+      one mark-node-terminal disposition on every terminal path or it freezes
+      the node it was sent to unfreeze; dispatch-invalid-state-route's exit-code
+      contract (0 handled, 4 keep, 10 escalate, 1 router failure treated as
+      escalate, 2 usage) and its per-node attempt cap stay the ROUTER's and are
+      neither read nor written by the lane; and the kind table fixing
+      terminal-session and frozen-session to the human class stays
+      authoritative. So the merge changes what a lane's BODY is made of, never
+      its session contract with the router.
+      tactic-invalid-state-skill-per-kind's ruling — each invalid-state kind
+      carries its own skill body while the shared three-tier ladder stays
+      written down exactly once — is the same shape as this one and is subsumed
+      by it rather than contradicted: the shared ladder and the shared core are
+      the same 'written once' discipline applied at two layers. Carrier:
+      tactic-rsi-intervention-special-cases."
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
