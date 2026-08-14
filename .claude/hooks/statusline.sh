@@ -2,7 +2,8 @@
 # Project-level Claude Code status line.
 # Side effect: writes ~/.local/share/commons-dispatch/rate_limits.json so the
 # dispatch concurrency budgeter has telemetry to read.
-# Visible output: identical to the user's global statusLine (model | cwd | tokens).
+# Visible output: model | tokens, plus a dispatch-phase segment when applicable.
+# No longer mirrors the user's global statusLine, which still shows cwd.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
@@ -14,19 +15,18 @@ printf '%s' "$input" \
   | "$CLAUDE_PROJECT_DIR/.claude/skills/dispatch-propagate/scripts/update-rate-limits.sh" \
   >/dev/null 2>&1 || true
 
-# Visible status line — matches ~/.claude/settings.json statusLine.command.
+# Visible status line — model and token usage (no cwd; see header note above).
 model=$(echo "$input" | jq -r '.model.display_name')
 cwd_raw=$(echo "$input" | jq -r '.workspace.current_dir')
-cwd=$(printf '%s' "$cwd_raw" | sed "s|^$HOME|~|")
 usage=$(echo "$input" | jq '.context_window.current_usage')
 ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size')
 if [ "$usage" != "null" ]; then
   current=$(echo "$usage" | jq '.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens')
   pct=$((current * 100 / ctx_size))
-  printf "\033[36m%s\033[0m | \033[33m%s\033[0m | \033[35m%dk/%dk tokens (%d%%)\033[0m" \
-    "$model" "$cwd" "$((current/1000))" "$((ctx_size/1000))" "$pct"
+  printf "\033[36m%s\033[0m | \033[35m%dk/%dk tokens (%d%%)\033[0m" \
+    "$model" "$((current/1000))" "$((ctx_size/1000))" "$pct"
 else
-  printf "\033[36m%s\033[0m | \033[33m%s\033[0m" "$model" "$cwd"
+  printf "\033[36m%s\033[0m" "$model"
 fi
 
 # Dispatch-phase segment — the worktree's persisted graph phase, read directly
