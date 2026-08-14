@@ -327,6 +327,12 @@
 #      rebuild (which then reconciles and builds) must compose — both edits
 #      reach main
 #
+# Cases 76-77 return to the builder as a unit, to pin its commit-date behavior:
+#  76. same base, same content, same message -> the SAME commit SHA (the
+#      GIT_AUTHOR_DATE/GIT_COMMITTER_DATE pin, not the wall clock)
+#  77. a different base -> a different commit SHA regardless, since the base
+#      is the built commit's parent
+#
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
@@ -3207,6 +3213,81 @@ if [[ $rc -eq 0 ]] \
 else
   no "plumbing + stale --base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
+
+# --- Case 76: rebuilding against the SAME base, content and message yields ----
+# the SAME commit SHA ----------------------------------------------------------
+# The date-pinning fix under test: build_commit_plumbing() now pins
+# GIT_AUTHOR_DATE/GIT_COMMITTER_DATE to the base commit's own committer date
+# instead of letting git stamp the wall clock. With no pin, two builds a
+# moment apart would mint two different commit SHAs even though base, tree
+# and message are byte-identical — which is what turns a checks-timeout retry
+# into a full CI restart instead of a re-push of the already-running commit.
+# Two builder calls back to back, same base/content/message, must collapse to
+# one SHA.
+plumb_reset
+echo "line3: plumb-stable" >>"$P/intentions/t-plumb-a.md"
+stable_sha_1="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc1=$?
+stable_sha_2="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc2=$?
+if [[ $rc1 -eq 0 && $rc2 -eq 0 && -n "$stable_sha_1" ]] \
+   && [[ "$stable_sha_1" == "$stable_sha_2" ]]; then
+  ok "plumbing writer: rebuilding against the same base with the same content and message yields the same commit SHA ($stable_sha_1) — a checks-timeout retry re-pushes the identical commit instead of restarting CI"
+else
+  no "plumbing writer SHA stability (rc1=$rc1 rc2=$rc2 sha1=$stable_sha_1 sha2=$stable_sha_2)"
+fi
+plumb_reset
+
+# --- Case 77: rebuilding against a DIFFERENT base yields a DIFFERENT SHA ------
+# even with identical content and message. The base commit is the built
+# commit's parent, so it is always part of the commit object regardless of
+# date pinning — the pin collapses only SAME-base rebuilds, not every rebuild.
+echo "line3: plumb-diffbase" >>"$P/intentions/t-plumb-a.md"
+diffbase_sha_1="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc1=$?
+# A second, distinct base: PBASE plus one unrelated committed change (the
+# on-disk edit from just above, committed here rather than left staged).
+git -C "$P" commit -qam 'plumbing fixture: a second distinct base'
+second_base="$(git -C "$P" rev-parse HEAD)"
+diffbase_sha_2="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$second_base"
+)"; rc2=$?
+if [[ $rc1 -eq 0 && $rc2 -eq 0 && -n "$diffbase_sha_1" && -n "$diffbase_sha_2" ]] \
+   && [[ "$diffbase_sha_1" != "$diffbase_sha_2" ]] \
+   && [[ "$(git -C "$P" rev-parse "$diffbase_sha_1^")" == "$PBASE" ]] \
+   && [[ "$(git -C "$P" rev-parse "$diffbase_sha_2^")" == "$second_base" ]]; then
+  ok "plumbing writer: rebuilding against a different base yields a different commit SHA, even with identical content and message"
+else
+  no "plumbing writer base-sensitivity (rc1=$rc1 rc2=$rc2 sha1=$diffbase_sha_1 sha2=$diffbase_sha_2 base2=$second_base)"
+fi
+plumb_reset
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then

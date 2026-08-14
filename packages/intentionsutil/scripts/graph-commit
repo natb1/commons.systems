@@ -1479,7 +1479,7 @@ plumb_die() { # <msg…>
 # GRAPH_COMMIT_WRITER=plumbing, always with the fresh origin/main tip as the
 # base — which is what makes the eventual push to main a fast-forward.
 build_commit_plumbing() { # <base-commit>
-  local base="$1" base_sha id path blob mode tree sha idx
+  local base="$1" base_sha base_date id path blob mode tree sha idx
   [[ -n "$base" ]] || die "build_commit_plumbing: no base commit given"
   base_sha="$(git rev-parse --verify "$base^{commit}" 2>/dev/null)" \
     || die "build_commit_plumbing: '$base' does not resolve to a commit in this repo"
@@ -1536,7 +1536,22 @@ build_commit_plumbing() { # <base-commit>
 
   tree="$(GIT_INDEX_FILE="$idx" git write-tree)" \
     || plumb_die "build_commit_plumbing: could not write the tree from the throwaway index"
-  sha="$(git commit-tree "$tree" -p "$base_sha" -m "$CURRENT_MSG")" \
+
+  # Pin author/committer date to the base commit's own committer date, set
+  # for this one commit-tree invocation only (not exported process-wide).
+  # With no date pinned git stamps the wall clock, so rebuilding against an
+  # UNCHANGED base mints a new SHA every time and a checks-timeout retry
+  # restarts CI from zero instead of reusing the prior run. Pinning to the
+  # base's date makes the built commit a pure function of (base, tree,
+  # message): the SAME base with the same content and message yields the
+  # SAME SHA (so a retry re-pushes the identical commit), while a DIFFERENT
+  # base yields a different SHA regardless, since the parent is itself part
+  # of the commit object. Trade-off, taken deliberately: landed graph
+  # commits' dates track their base's committer date, not the wall clock at
+  # land time.
+  base_date="$(git log -1 --format=%cI "$base_sha")" \
+    || plumb_die "build_commit_plumbing: could not read $base_sha's committer date"
+  sha="$(GIT_AUTHOR_DATE="$base_date" GIT_COMMITTER_DATE="$base_date" git commit-tree "$tree" -p "$base_sha" -m "$CURRENT_MSG")" \
     || plumb_die "build_commit_plumbing: could not commit-tree $tree onto $base_sha"
 
   rm -rf "$TMP_INDEX_DIR"
