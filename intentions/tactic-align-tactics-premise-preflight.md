@@ -1,9 +1,11 @@
 ---
 id: tactic-align-tactics-premise-preflight
 kind: tactic
-statement: /align-tactics runs its blocking-premise check before the drift
-  review and decomposition, so a node that cannot be planned parks cheaply
-  instead of after a full-length session
+statement: The cost of an /align-tactics run that parks on an unratified premise
+  is reduced upstream at record time — by the align round's self-consistency
+  walk and the ordering-inversion lint — not by reordering /align-tactics, whose
+  premise refusal is Side B of the drift review and cannot precede the gather
+  evidence all three of its reasoning phases consume
 owner: ai
 status: raw
 parent: null
@@ -119,6 +121,65 @@ clarifications:
       is precisely the evidence gather's reuse hunts and corpus scan exist to
       produce. That is an expectation from one instance, not a result, and it
       does not substitute for running the replay."
+  - question: The verification experiment is expensive relative to what it decides.
+      Can the design be settled without running it, and what does that
+      settlement leave standing?
+    answer: "Settled 2026-08-14 without running the replay; the reordering mechanism
+      this node originally proposed is WITHDRAWN, and the node is retained as
+      the cost evidence redirecting that mechanism upstream. The withdrawn
+      statement was: '/align-tactics runs its blocking-premise check before the
+      drift review and decomposition, so a node that cannot be planned parks
+      cheaply instead of after a full-length session'. STRUCTURAL GROUNDS, which
+      hold whichever way the replay would have gone. ONE — there is nothing to
+      reorder against. gather is not the drift review's input, it is the RUN's
+      input: buildDecomposePrompt(strategy, drafts, gather, drift) at
+      .claude/workflows/align-tactics.js:837 (called :1170) and
+      buildPlanPrompt(strategy, tactic, gather, mode) at :928 (called :1225)
+      consume it alongside buildDriftPrompt at :699 (called :1126). A shared
+      prerequisite of all three reasoning phases cannot be made conditional on a
+      park that only Side B is positioned to declare, so any premise check
+      placed ahead of it is an ADDITIVE agent call on every run, not a
+      reordering of calls already made. TWO — the expected value is marginal on
+      those terms. A preflight paid on every run to save gather on the minority
+      that park is net-positive only if its cost is below the parking rate times
+      gather's cost, and gather is five parallel sonnet agents (:1049-1092), not
+      the run's dominant expense. THREE — the error costs are asymmetric in the
+      wrong direction. A false negative is free: the run falls through to the
+      real Side B. A false positive parks a node Side B would have cleared,
+      costing a full park cycle plus author attention at office hours — strictly
+      more than the gather it saved. A pre-gather check sees strictly less
+      evidence than Side B, so it inflates precisely the false-positive rate
+      that carries the asymmetric cost. PREDICTION for the declined replay,
+      recorded so a later round can see what was expected rather than assume the
+      question was ducked: Side B with gather stubbed empty does NOT reproduce
+      either park, i.e. the check is gather-dependent. Basis: the
+      tactic-align-review-skill park did not merely assert its contradiction, it
+      CONFIRMED it by verifying the item-3 predicate against five caller
+      implementations (its park text records 'Verified against origin/main
+      d5770f6e'), which is gather's corpus-and-reuse territory; a pre-gather
+      agent holds the node text and the strategy text and nothing else. This
+      prediction is a tiebreaker, not the ground — grounds ONE through THREE
+      settle the design either way, which is why the experiment was declined
+      rather than merely deferred. If a future round has cause to reopen this,
+      the sibling clarification records the replay design in full and it remains
+      runnable at four Opus agents. WHAT THE SETTLEMENT LEAVES STANDING. The
+      measured cost is real and unaddressed: 1744s of autonomous Opus across two
+      instances for zero ladder rungs. Both parked on a premise that was ALREADY
+      UNRATIFIED WHEN THE SESSION STARTED — upstream of any /align-tactics
+      scheduling — so an upstream mechanism avoids the whole of that spend
+      rather than gather's fraction of it. The mechanisms already exist as draft
+      siblings retained by the same 2026-08-12 clarification on
+      strategy-graph-native-dispatch: tactic-align-round-self-consistency-walk
+      (the record-time walk) and tactic-validate-graph-ordering-inversion-lint
+      (the mechanical backstop). This node's measured_impact is the cost
+      evidence that prioritizes those two, and its own mechanism claim is
+      withdrawn in their favour. SCOPE LIMIT PRESERVED: this does not reopen the
+      ratified /align versus /align-tactics boundary. Both observed parks turned
+      on the node's own item contradicting its serving strategy's ruling — an
+      INTERNAL CONSISTENCY defect, inside what an align round already owes for
+      its own output — not the plannability judgment the 2026-08-12 SCOPE LIMIT
+      declined to assign it. The redirect is to a duty /align already holds, not
+      a new one."
 tooling_goals: []
 success_signal: null
 attention: null
