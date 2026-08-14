@@ -241,3 +241,72 @@ rather than being reworked into it.
    recorded: Step 5 makes Mode B enrollment implicit and forbids a
    per-node review schedule or side list, so an audit trail for it would
    contradict the doctrine it audits.
+
+## Author ratification, 2026-08-14 — the discriminator is the CALLER
+
+The 2026-08-14 `/align-tactics` round parked this node because item 3's
+mechanism contradicted the same day's scope ruling: a gate predicate "read
+off the commit's diff" fires on every explicitly scoped-out caller. The
+author ratified **option (a), the caller-declared seam**, in the
+`/dispatch-ladder` session of the same date. This section is that
+ratification and the park reason's surviving content; the park itself was
+cleared immediately after it landed.
+
+**The ruling.** The scope boundary is *defined by caller* — "an `/align`
+round's own output ONLY". A diff-read predicate tries to infer caller
+identity from diff shape, and that inference is impossible: item 3's own
+third case, a draft-tactic-only `/align` round, is diff-shaped identically
+to an `/align-tactics` decomposition. When the boundary is the caller, the
+discriminator must be the caller. So `--review` is a flag the CALLER
+passes, and `graph-commit` refuses only a write that is *declared* under
+review without a valid receipt. It never inspects the diff to decide
+whether a receipt was owed.
+
+**Accepted cost, stated plainly.** This is an opt-in floor, not the
+mechanical one the condition's wording implies: a caller that omits the
+flag is ungated by omission. That is the price of a caller-defined scope
+and the author took it knowingly. Two mitigations belong in this tactic's
+scope — `/align`'s call site is the only site that may pass `--review`,
+and a lint asserts it always does.
+
+**Verified counter-evidence for the rejected predicate.** The proposed
+diff predicate would have refused `dispatch-eval-finding`'s own ledger
+write, exercised live during the ratifying session (it creates a new node
+file). `/align-tactics` minting tactic node files
+(`.claude/workflows/align-tactics.js:154,807`), `qa-fix` finding nodes,
+`dispatch-diagnose-main`'s `tactic-main-red-<sha>` node and
+`/context-chunks` drafts all trip it the same way.
+
+**Still owed by the SERVING STRATEGY, not by this node.** The
+draft-review-gate condition on `strategy-discovered-requirements` scopes
+the gate but records no discrimination mechanism. Ratifying it here does
+not write it there, and a per-node session may not. An `/align` round on
+that strategy must land the caller-declared seam as condition text; until
+it does, the strategy's record remains the incomplete half.
+
+### Two non-blocking findings from the 2026-08-14 round
+
+Preserved here because the round that made them had no legal destination
+for them (a tactic-target session may not write the serving strategy) and
+would otherwise have lost them when the park cleared — the gap tracked by
+`tactic-align-tactics-per-node-clarifications`.
+
+i.  `attributes.align_round` (item 9) needs **no** `strategyFingerprint`
+    exemption. The fingerprint is an allowlist — `statement`,
+    `clarifications`, `attributes.conditions`, `serves`,
+    `success_signal`, `tooling_goals` — so every other `attributes` key is
+    already freeze-inert by construction. Item 9's closing sentence
+    claiming the exemption is needed is wrong and should be dropped when
+    item 9 is implemented.
+
+ii. `graph-commit` today has only `--base`/`--expect` manifest-argument
+    plumbing: no `--review` flag and no commit-trailer machinery exist
+    anywhere in the script (the `-m` message is a single flat string).
+    Model the refuse-before-mutation, dedicated-exit-code contract on
+    **`park-node`'s `--base` pin** (`park-node:75-114` header, `:202-236`
+    resolution, `:360-362` refusal — already duplicated verbatim in
+    `clear-park`), NOT on `graph-commit`'s own `--base`, which auto-merges
+    a stale blob via `check_base_freshness`/`run_merge_node` rather than
+    refusing, and never exits 3 despite the script's own header claiming
+    so at `:169`/`:1952`. Correct that stale header line in the same
+    change.
