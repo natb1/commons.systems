@@ -43,7 +43,10 @@ A command that fails loudly under the sandbox — TLS error, `EROFS`,
 always-on override carries no signal. The sections below are the known
 exceptions — read them first, since a few must be pre-emptive because the first
 sandboxed attempt already does damage (`git worktree remove`) or fails silently
-with nothing to retry on (`claude agents --json`).
+with nothing to retry on (`claude agents --json`). Two former entries — `gh`
+TLS failure and npm-cache `EROFS` — were deleted as **refuted on this host**
+(measured); prose elsewhere still citing either as a reason to pre-empt the
+override is stale.
 
 ## Tree-updating git ops touching read-only paths
 
@@ -140,8 +143,9 @@ blocks should use, and `Bash(npx vitest:*)` already matches it.
 
 ### `git -C /path` is auto-approved for worktrees
 
-Only outside a worktree-isolated session, only for paths under the worktrees
-root, and only for subcommands `settings.json` permits. From a
+Only outside a worktree-isolated session, where the PreToolUse hook approves it
+— and there only for paths under the worktrees root, and only for subcommands
+`settings.json` permits. From a
 **worktree-isolated session every `git -C` to a path other than its own worktree
 is refused** — including a sanctioned sibling under `.claude/worktrees/`:
 
@@ -163,7 +167,8 @@ argument, not a redirect); `git show origin/main:<path>` for committed state;
 worktree's own scripts by absolute path (`dump-node.ts`, `write-node.ts` resolve
 `REPO_ROOT` from `import.meta.url`).
 
-**`graph-commit` is the exception**: it resolves the repo root from `-C`/`--repo`
+**`graph-commit` is the exception to that list**: it is not `git`, so it is not
+refused — and it *requires* the `-C`. It resolves the repo root from `-C`/`--repo`
 (else **cwd**), never from its own location
 (`packages/intentionsutil/scripts/graph-commit:38`). Always pass an explicit
 `-C <path>` — without it you commit your own cwd's checkout, and if that one holds

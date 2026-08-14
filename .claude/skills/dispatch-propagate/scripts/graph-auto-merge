@@ -115,7 +115,11 @@
 # demotes.
 #
 # Doctrine: run from a main-based checkout. Sandbox: the CALLER wraps every
-# invocation with dangerouslyDisableSandbox — gh needs network + TLS. This
+# invocation with dangerouslyDisableSandbox, as its blanket convention. This
+# script itself asks for nothing sandbox-specific — it makes no graph-commit
+# call and no tree-updating git op, and `gh` reaches the allowlisted
+# api.github.com fine sandboxed on this host (measured; see
+# .claude/skills/review-fix/references/code-review-invocation.md §3.1). This
 # script sets NOTHING sandbox-related; that is the caller's responsibility.
 #
 # Stdout protocol: exactly `merged #<pr> (<id>)` per PR merged,

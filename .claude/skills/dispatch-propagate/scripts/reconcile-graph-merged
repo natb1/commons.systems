@@ -57,7 +57,9 @@
 #
 # Doctrine: run from a main-based checkout (the sweep writes state-only commits
 # on main). Sandbox: the CALLER wraps every invocation with
-# dangerouslyDisableSandbox — gh needs network + TLS, and graph-commit pushes.
+# dangerouslyDisableSandbox — graph-commit's `git reset --hard` is a
+# tree-updating op that half-applies over the read-only `.claude/**` carve-outs
+# (see .claude/rules/sandbox.md and graph-commit's own NOTE (deployment)).
 #
 # Usage: reconcile-graph-merged [--node <id>]
 #
