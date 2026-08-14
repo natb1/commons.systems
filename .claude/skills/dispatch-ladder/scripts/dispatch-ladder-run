@@ -531,10 +531,25 @@ log_event() {
   printf '%s %s %s | %s\n' "$1" "${2:--}" "${3:--}" "${4:--}"
 }
 
-# timing_fields <elapsed_s> <await_repolls> <window_s> — the structured half of
-# a phase event. All three are integers by construction (two counters and a
-# validated flag), so --argjson is safe.
+# timing_fields <elapsed_s> <await_repolls> <window_s> [<reap_lag_s>] — the
+# structured half of a phase event. The first three are integers by construction
+# (two counters and a validated flag), so --argjson is safe.
+#
+# THE FOURTH IS OPTIONAL AND IS OMITTED, NOT ZEROED. `reap_lag_s` is
+# dispatch-ladder-await's measurement of how long the registry took to reap a
+# worker whose completion was ALREADY public at origin/main. It is present only
+# when the await made an early sighting; absent, the key is left out entirely,
+# because a 0 would read as "measured, and there was no lag" — a different claim
+# from "not measured". The value reaches here only via a `[0-9]+` match on the
+# await's stdout line, so --argjson is safe for it too.
 timing_fields() {
+  local lag="${4:-}"
+  if [[ -n "$lag" ]]; then
+    jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
+       --argjson lag "$lag" \
+       '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window, reap_lag_s: $lag}'
+    return
+  fi
   jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
      '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window}'
 }
@@ -1157,12 +1172,21 @@ while :; do
         AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S" --since "$PASS_SINCE"); aw_rc=$?
         AW_OUT=$(head -n1 <<<"$AW_OUT")
         AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
+        # OPTIONAL TRAILING FIELD. dispatch-ladder-await appends
+        # ` reap_lag_s=<n>` to its verdict line when the completion was public at
+        # origin/main before the registry reaped the worker — the interval
+        # between those two events, which only that process can see both ends of.
+        # Read positionally-insensitively, and left EMPTY when the field is
+        # absent so the event omits the key rather than claiming a zero lag. The
+        # disposition parse above is unaffected: it takes field 1 and stops.
+        AW_REAP_LAG=""
+        [[ "$AW_OUT" =~ reap_lag_s=([0-9]+) ]] && AW_REAP_LAG="${BASH_REMATCH[1]}"
         case "$aw_rc" in
           0)
             ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
             log_event awaited "$PHASE" "$AW_DISP" \
-              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S" \
-              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S")"
+              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S${AW_REAP_LAG:+ reap_lag_s=$AW_REAP_LAG}" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S" "$AW_REAP_LAG")"
             # THE PHASE BOUNDARY. The phase that just finished is evaluated
             # here, while its transcript is small and warm, and the driver takes
             # its next ladder step without waiting on the evaluation.
@@ -1172,6 +1196,17 @@ while :; do
             # advance's verify_launch already blocked, so it lands after the
             # worker's own started_at and the evaluator's `>= since` filter
             # would drop the worker session itself.
+            #
+            # THE BOUNDARY IS A REAPED WORKER AGAIN, and nothing here had to
+            # change for that. dispatch-ladder-await reports a PROGRESS verdict
+            # (advanced / reviewed / lane-complete) only after the session row is
+            # gone — see its header — so on every path that CONTINUES the ladder,
+            # this line runs against a finished worker and aggregate-usage.sh at
+            # node scope sees the whole phase. `pruned` is the one verdict that
+            # can reach here against a still-registered row; the run halts on it
+            # immediately below, so it is the last evaluation of the run either
+            # way, and the alternative — deferring it — would lose the boundary
+            # spawn rather than improve it.
             spawn_phase_eval "$PHASE" "$PASS_SINCE"
             if [[ "$AW_DISP" == "pruned" ]]; then
               halt 0 pruned "$NODE_ID is absent from origin/main — it completed and was pruned"

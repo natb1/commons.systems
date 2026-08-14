@@ -30,12 +30,18 @@
 #      at or after that launch — a presence-only read would repeat the
 #      accumulation trap the `reviewed` gate exists for. Both halves are pinned,
 #      and so is the halt this must not break: no stamp is still `stalled`.
-#   6. THE LIVE GRAPH POLL. The completion is public at origin/main before the
-#      registry reaps the row, so the graph is asked on a throttled cadence even
-#      while the session says `working`. Pinned: a terminal verdict ends the wait
-#      then and there; `unchanged` and an unreadable graph do NOT (mid-phase they
-#      are transients, not the exit-14 a stopped worker earns); and the throttle
-#      is real, so the default cadence skips short windows.
+#   6. THE LIVE GRAPH POLL, SPLIT BY VERDICT CLASS. The completion is public at
+#      origin/main before the registry reaps the row, so the graph is asked on a
+#      throttled cadence even while the session says `working` — but only the
+#      three RUN-ENDING verdicts (pruned / parked / blocked) may be reported
+#      against a live row. The three PROGRESS verdicts (advanced / reviewed /
+#      lane-complete) send the caller straight into dispatch-ladder-advance's
+#      exit-13 live-session refusal, so they are recorded and the poll continues
+#      until the reap. Pinned: both halves of that split, the `reap_lag_s` field
+#      the sighting makes measurable (present after a sighting, ABSENT without
+#      one — never 0), that `unchanged` and an unreadable graph end nothing
+#      (mid-phase they are transients, not the exit-14 a stopped worker earns),
+#      and that the throttle is real, so the default cadence skips short windows.
 #
 # The Claude registry and verify-landed are both stubbed — no daemon, no
 # network, no gh. Polling is driven at --poll-s 1 so the suite runs in seconds.
@@ -321,29 +327,52 @@ run_await 20 "running $NODE qa" "a working session at the timeout is exit 20 (ca
 # row. Branching on session state alone bounded detection by that reap lag: the
 # measured case had the `reviewed` marker public 1201s before the wait noticed.
 # So stage 2 asks the graph on its own cadence even while the row says
-# `working`, and reports the first TERMINAL verdict.
+# `working` — and then splits on WHAT THE CALLER DOES NEXT with the answer.
+#
+# THE CONTRACT CHANGED HERE, DELIBERATELY. The three cases below that assert a
+# PROGRESS verdict (advanced / reviewed / lane-complete) previously asserted the
+# opposite — that it is reported against a live row. That was a regression:
+# dispatch-ladder-run logs `awaited`, breaks, and calls dispatch-ladder-advance
+# with nothing in between, and advance refuses on a registered session before it
+# does anything else (exit 13, dispatch-ladder-advance:199), which the run maps
+# to `halt 13 claimed`. Reap lag is minutes and that gap is milliseconds, so
+# reporting early ended the run instead of saving the wait. The gate is correct
+# — the old worker still owns the node's worktree until it exits — so the fix is
+# on this side: record the sighting, keep polling, report at the reap.
 session_rows "$WORKING"
 
 set_graph 4 4 4 0
-run_await 0 "advanced $NODE qa" "a phase change is reported while the worker is still registered" \
-  --graph-poll-every 1 --timeout-s 5
+run_await 20 "running $NODE qa" "a phase change is NOT reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 3
 
-# THE MEASURED CASE. A clean review writes the marker and then the session sits
-# in the registry until it is reaped; the marker is the answer, and waiting for
-# the row to go adds nothing but latency.
+# THE MEASURED CASE, now answered differently. The `reviewed` marker really is
+# public before the reap — that part of the measurement stands — but the next
+# ladder step cannot start against the live row, so the wait continues.
 FROM=review
 set_graph 4 4 4 4 0
-run_await 0 "reviewed $NODE review -> pending-merge" "a reviewed marker is reported without waiting for the reap" \
-  --graph-poll-every 1 --timeout-s 5
+run_await 20 "running $NODE review" "a reviewed marker does not end the wait while the row is live" \
+  --graph-poll-every 1 --timeout-s 3
 FROM=qa
 
+set_graph 4 4 4 4 4 0
+run_await 20 "running $NODE qa" "a fresh lane_pass stamp does not end the wait while the row is live" \
+  --graph-poll-every 1 --timeout-s 3 --since "$SINCE"
+
+# THE OTHER HALF OF THE SPLIT. A run-ending verdict IS reported against a live
+# row, exactly as before: the run halts on it (exit 0 / exit 11) and never calls
+# advance again, so the lingering row cannot bite and the whole reap lag is
+# saved. This is where the measured 1201s is genuinely collectable.
 set_graph 4 0 4 4
 run_await 11 "throw $NODE parked" "a park is reported while the worker is still registered" \
   --graph-poll-every 1 --timeout-s 5
 
-set_graph 4 4 4 4 4 0
-run_await 0 "lane-complete $NODE qa" "a fresh lane_pass stamp is reported while the worker is still registered" \
-  --graph-poll-every 1 --timeout-s 5 --since "$SINCE"
+set_graph 4 4 0 4
+run_await 11 "throw $NODE blocked-by" "a blocked_by edge is reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 5
+
+set_graph 0 4 4 4
+run_await 0 "pruned $NODE" "a pruned node is reported while the worker is still registered" \
+  --graph-poll-every 1 --timeout-s 5
 
 # ONLY A TERMINAL VERDICT ENDS THE WAIT. `unchanged` is what a phase in flight
 # looks like every single poll; reading it as a verdict would call every running
@@ -362,11 +391,74 @@ run_await 20 "running $NODE qa" "an unreadable graph mid-phase keeps polling, it
 
 # THE THROTTLE IS REAL. The first probe in a verdict fetches, so the graph is
 # asked every nth poll, not every poll. At the default 4 with --poll-s 1 and a
-# 2s window, no poll reaches the cadence — so a graph that says `advanced` is
-# NOT reported inside this window. That is the cost being bought: latency capped
-# at n × --poll-s instead of bounded by reap lag.
-set_graph 4 4 4 0
+# 2s window, no poll reaches the cadence — so a graph that says `parked` is NOT
+# reported inside this window. That is the cost being bought: latency capped at
+# n × --poll-s instead of bounded by reap lag.
+#
+# `parked` and not `advanced`: since the split above, a live `advanced` produces
+# `running` whether or not the graph is asked, so this case would pass without
+# the throttle doing anything. A run-ending verdict is the only kind that still
+# makes it bite.
+set_graph 4 0 4 4
 run_await 20 "running $NODE qa" "the default cadence does not ask the graph on every poll" --timeout-s 2
+
+# --- The sighting, the reap, and reap_lag_s --------------------------------
+# A progress verdict sighted against a live row is not discarded — it is
+# RECORDED, and reported through the `absent` arm once the registry reaps the
+# row. The registry stub answers `working` for the first <n> reads and then
+# empty, which is exactly the production sequence: the worker pushes, the graph
+# goes public, the row lingers, the row goes.
+SEQ_COUNTER="$TMP/seq-counter"
+session_seq() { # <live-reads-before-the-reap>
+  echo 0 >"$SEQ_COUNTER"
+  cat >"$CLAUDE_STUB" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_COUNTER"); echo \$((n + 1)) > "$SEQ_COUNTER"
+if (( n < $1 )); then cat "$AGENTS_JSON"; else echo '[]'; fi
+STUB
+  chmod +x "$CLAUDE_STUB"
+}
+session_rows "$WORKING"
+
+# Read 1 is stage 1 (the worker registers), read 2 is the one stage-2 poll that
+# sights `advanced` at origin/main, read 3 is the reap. The verdict is reported
+# then — and carries the interval between the sighting and the reap.
+session_seq 2
+set_graph 4 4 4 0
+OUT=$("$AWAIT" "$NODE" qa --poll-s 1 --boot-grace-s 3 --graph-poll-every 1 --timeout-s 10 2>/dev/null); RC=$?
+if [[ "$RC" == 0 && "$OUT" == "advanced $NODE qa -> origin/main reap_lag_s="* ]]; then
+  ok "a sighted progress verdict is reported at the reap, with reap_lag_s ('$OUT')"
+else
+  fail "sighted-then-reaped should exit 0 'advanced ... reap_lag_s=<n>', got exit $RC / '$OUT'"
+fi
+
+# NO SIGHTING, NO FIELD. Same session sequence, but the default cadence means no
+# stage-2 poll ever asks the graph, so the verdict is first read at the reap and
+# nothing was measured. The field is OMITTED — a 0 would say "measured, and the
+# lag was zero", which is a different claim.
+session_seq 2
+set_graph 4 4 4 0
+OUT=$("$AWAIT" "$NODE" qa --poll-s 1 --boot-grace-s 3 --timeout-s 10 2>/dev/null); RC=$?
+if [[ "$RC" == 0 && "$OUT" == "advanced $NODE qa -> origin/main" ]]; then
+  ok "no early sighting means no reap_lag_s field at all"
+else
+  fail "unsighted-then-reaped should exit 0 'advanced $NODE qa -> origin/main' with no trailing field, got exit $RC / '$OUT'"
+fi
+
+# THE FIELD IS TRAILING, SO EXISTING PARSING IS INERT. dispatch-ladder-run reads
+# the disposition with `awk '{print $1; exit}'` (dispatch-ladder-run:1159); the
+# extra field lands after every word that call site or any halt message reads.
+DISP=$(awk '{print $1; exit}' <<<"advanced $NODE qa -> origin/main reap_lag_s=42")
+[[ "$DISP" == advanced ]] && ok "a trailing reap_lag_s field does not disturb the leading-token disposition parse" \
+  || fail "awk '{print \$1; exit}' returned '$DISP' on a line carrying reap_lag_s"
+
+# Restore the plain registry stub for the sections below.
+cat >"$CLAUDE_STUB" <<STUB
+#!/usr/bin/env bash
+cat "$AGENTS_JSON"
+STUB
+chmod +x "$CLAUDE_STUB"
+session_rows "$WORKING"
 
 "$AWAIT" "$NODE" qa --graph-poll-every 0 >/dev/null 2>&1
 [[ $? == 2 ]] && ok "--graph-poll-every 0 is rejected (it would divide by zero) (exit 2)" \

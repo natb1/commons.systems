@@ -374,6 +374,52 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: complete: events.jsonl is valid JSON lines"
 fi
 
+# --- the await's optional reap_lag_s field -----------------------------------
+# dispatch-ladder-await appends ` reap_lag_s=<n>` to its verdict line when the
+# completion was public at origin/main before the registry reaped the worker —
+# the only place both timestamps exist in one process. Three things must hold:
+# the trailing field is INERT for the disposition parse (`awk '{print $1;
+# exit}'`), it reaches the awaited event as a structured number as well as in
+# the human-readable detail, and its ABSENCE omits the key rather than reporting
+# 0 — "not measured" and "measured, no lag" are different facts.
+echo "Test: an await verdict's trailing reap_lag_s reaches the awaited event"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|advanced tactic-fixture-node implement -> origin/main reap_lag_s=137'
+set_seq landed  '0|'
+run_ladder
+assert_eq "reap-lag: exit 0" "0" "$RC"
+assert_eq "reap-lag: the trailing field did not disturb the disposition parse" "1" \
+  "$(events_have awaited advanced)"
+TOTAL=$((TOTAL + 1))
+if jq -e 'select(.event == "awaited")
+          | (.reap_lag_s == 137) and (.detail | test("reap_lag_s=137"))' \
+     "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: reap-lag: the awaited event carries reap_lag_s as a number and in detail"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: reap-lag: the awaited event carries reap_lag_s as a number and in detail"
+  echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
+echo "Test: an await verdict with no reap_lag_s omits the key entirely (never 0)"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement' \
+                '10|idle tactic-fixture-node not-selectable'
+set_seq await   '0|advanced tactic-fixture-node implement -> origin/main'
+set_seq landed  '0|'
+run_ladder
+assert_eq "no-reap-lag: exit 0" "0" "$RC"
+TOTAL=$((TOTAL + 1))
+if jq -e 'select(.event == "awaited")
+          | (has("reap_lag_s") | not) and (.detail | test("reap_lag_s") | not)' \
+     "$STATE_DIR/events.jsonl" >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo "  PASS: no-reap-lag: the key is absent, not zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-reap-lag: the key is absent, not zero"
+  echo "    line: $(jq -c 'select(.event == "awaited")' "$STATE_DIR/events.jsonl")"
+fi
+
 # --- pruned → 0 --------------------------------------------------------------
 echo "Test: an awaited 'pruned' completes the run without asking the graph again"
 reset_seqs
