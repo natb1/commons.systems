@@ -165,9 +165,9 @@ function legacyFileKeys(dir: string, id: string): string[] {
   const raw = readFileSync(join(dir, `${id}.md`), "utf8");
   const frontmatter: unknown = parse(extractFrontmatter(raw, id));
   if (typeof frontmatter !== "object" || frontmatter === null) return [];
-  const attention: unknown = (frontmatter as Record<string, unknown>).attention;
+  const attention: unknown = (frontmatter as Record<string, unknown>).attention; // type-safety-ok: raw YAML frontmatter has no static type; the object/null guard above narrows it enough to read a known key
   if (typeof attention !== "object" || attention === null) return [];
-  return LEGACY_ATTENTION_KEYS.filter((k) => k in (attention as Record<string, unknown>));
+  return LEGACY_ATTENTION_KEYS.filter((k) => k in (attention as Record<string, unknown>)); // type-safety-ok: same untyped-YAML boundary as above
 }
 
 /**
