@@ -432,6 +432,108 @@ while the verdict reads `landed context=noop`. Verify each write by reading
 
 ---
 
+# Revision 5 — both pre-PR items were wrong; the real one is data expiry
+
+**Added 2026-08-14, after the author challenged S1 and S2–S4.** Both challenges
+land. Measured rather than argued, the pre-first-PR list is neither "park the
+node lane" nor "take three baselines".
+
+## S1 is withdrawn — the drain has nothing to drain
+
+`graph-auto-merge` says in its own header that it is **the only code that merges
+a node-lane PR**, and its candidate set is: a graph-native tactic at
+`phase: review`, carrying `execution.pr`, carrying the `reviewed` marker in
+`execution.markers`, with no in-flight `execution.conflict` and `office_hours`
+null.
+
+Counted against `origin/main` on 2026-08-14:
+
+| State | Count |
+|---|---|
+| `phase: review` with a PR, **mergeable now** | **0** |
+| parked (`office_hours` set — held) | 2 |
+| review-in-progress / conflicted (no `reviewed` marker) | 2 |
+
+And there is no path from that state to a merge while the sentinel holds. The
+`reviewed` marker is written by a review session; review sessions run only from
+a spawned worker; the sentinel gates spawning. Ad-hoc PRs do not enter the
+review phase, do not alter checks on existing PRs, and do not unpark nodes.
+
+The one route worth checking was the pre-PR office-hours sittings themselves,
+since clearing a park is exactly what they do — but **neither parked node
+carries the `reviewed` marker** (`tactic-clarification-citation-ids`,
+`tactic-office-hours-snapshot-wire-contract`). Unparking either returns it to
+review-in-progress, which still needs a worker.
+
+Revision 2's statement that the drain runs on every paused tick remains true.
+What was wrong is the inference from it: the mechanism is live, the inventory is
+empty. **Replace the parking session with a standing check** — re-run the
+candidate count before each bundle, and park only if it is ever non-zero.
+
+The residual is real but minor: sweeps and reconcilers still write node
+*metadata* to `main`. That surfaces as a `graph-commit` CAS refusal (exit 1,
+visible, re-runnable), not as unreviewed code landing under a PR.
+
+## S2–S4 are withdrawn as scheduled, and replaced by an archive
+
+The argument for moving them forward — "PR3 rewrites the instrument, so measure
+while it is stable" — is weak. `aggregate-usage.sh` is versioned in git and
+takes `--since` / `--until`, so any historical window can be recomputed later
+with **any** instrument version: `git show <sha>:.claude/skills/rsi-audit/
+scripts/aggregate-usage.sh` into a temp file, and point it at the data with
+`DISPATCH_AUDIT_PROJECTS_ROOT` (the override its own test fixture uses,
+`aggregate-usage.sh:49,187`). Replaying the pre-PR3 instrument against
+post-resumption data is the apples-to-apples pair, and it is available at any
+time.
+
+The author's objection also stands on its own: the *after* reading needs
+post-resumption fleet activity, so it cannot exist until well after resumption
+no matter when the *before* reading is taken. Nothing about running the audits
+early fixes that.
+
+**The constraint that is real, and that neither of us had named, is retention.**
+`aggregate-usage.sh` reads `$HOME/.claude/projects/**/*.jsonl` and selects its
+window by **file mtime** (`find -newermt "$SINCE" ! -newermt "$UNTIL"`,
+`:1459`). No `cleanupPeriodDays` is configured in either settings file, so
+Claude Code's default retention applies — and the disk agrees: on 2026-08-14 the
+oldest surviving transcript is dated **2026-07-14**, exactly 31 days back, with
+nothing older. Pre-pause fleet history is being deleted at a day per day.
+
+That inverts the urgency. The baselines are not perishable; **the raw data is.**
+6,209 pre-pause transcripts survive today; on current behavior none survive 30
+days from now, and a serialized window plus a 21-day post-resumption measurement
+window will comfortably exceed that.
+
+### The pre-first-PR action, corrected
+
+One step, and it is not a session:
+
+1. Raise `cleanupPeriodDays` past the expected end of the window plus the
+   post-resumption measurement window.
+2. Snapshot `$HOME/.claude/projects` (2.4 GB; 300 GB free) with mtimes
+   preserved — `cp -a` or `tar`, never a plain copy, since mtime *is* the
+   window key. Include the 1,682 `*.dispatch-stamp.json` companions; they are
+   not `.jsonl` and a jsonl-only copy silently drops them.
+
+Take it as a snapshot rather than relying on the setting alone: resuming an old
+session appends to its transcript and updates its mtime, migrating that session
+out of the historical window it belongs to.
+
+With the archive in hand, all three measurement sessions leave the pre-PR list
+entirely and run whenever the post-resumption data exists, against the archive.
+
+## Net effect on the pre-first-PR list
+
+| Was | Now |
+|---|---|
+| S1 park the node lane | **withdrawn** — 0 mergeable, no path to non-zero while paused; keep as a pre-bundle check |
+| S2–S4 `/rsi-audit` baselines | **withdrawn as scheduled** — recomputable later from durable data |
+| — | **archive the transcripts + raise retention** (the only genuinely time-critical item) |
+
+Nothing else blocks Bundle 1.
+
+---
+
 ## Why not one PR
 
 The author asked whether a single PR is feasible. It is not, for three reasons
