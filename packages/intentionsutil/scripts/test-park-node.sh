@@ -572,7 +572,34 @@ else
   echo "npx shim: set office_hours on $id (since=$since) recommendation='$recommendation'" >&2
 fi
 SH
-chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
+# node shim. graph-commit no longer spawns the field-level merge tool through
+# `npx tsx`; it spawns `node --import tsx/esm <...>/merge-node.ts ...`, because
+# the tsx CLI opens an IPC unix socket a sandboxed caller cannot create. The
+# three-way-merge emulation still lives in the npx shim above, so translate
+# that ONE spawn back into the npx shim's `tsx <script> ...` convention and
+# hand it over.
+#
+# Deliberately narrow: it matches merge-node.ts and nothing else, so
+# graph-commit's own office_hours writer and verify-landed's readNodeAtRef --
+# which use the same loader form -- keep reaching the REAL node exactly as they
+# did before, and this shim's blast radius is only the call the spawn change
+# moved. Without it those merge invocations reach real node, which cannot
+# resolve tsx from a clone (and, in CI, cannot find merge-node.ts at all, since
+# the harness never copies it into the seed), exit 1, and graph-commit rightly
+# reads exit 1 as a broken execution environment and dies. Every merge case
+# then fails for an environment reason instead of exercising the merge -- and
+# before U7 the same breakage was invisible, because the old code treated a
+# merge tool that could not start as an ordinary content divergence and parked.
+REAL_NODE="$(command -v node)"
+cat >"$WORK/bin/node" <<SH
+#!/usr/bin/env bash
+if [[ "\$1" == "--import" && "\$2" == "tsx/esm" && "\$3" == *merge-node.ts ]]; then
+  shift 2
+  exec "\$(dirname "\$0")/npx" tsx "\$@"
+fi
+exec "$REAL_NODE" "\$@"
+SH
+chmod +x "$WORK/bin/gh" "$WORK/bin/npx" "$WORK/bin/node"
 
 FIXTURE_DIR="$WORK/fixtures"
 origin_show() { git -C "$ORIGIN" show "main:intentions/$1.md"; }
