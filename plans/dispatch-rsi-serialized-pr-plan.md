@@ -370,6 +370,68 @@ must precede the code.
 
 ---
 
+# Revision 4 — what must run before the *first* PR
+
+**Added 2026-08-14.** The "Pre-PR sessions" table above lists each no-diff
+session against the PR it gates. Asked directly which of them gate the **first**
+PR, the answer is: **none of them.** Bundle 1 is PR1, whose Dependencies section
+reads "None. This is the root PR." The earliest-gated PR in the table is PR6,
+which sits inside Bundle 3 — fourth in the recommended order.
+
+That is the literal answer, and it is incomplete. Four sessions should run
+before Bundle 1 anyway — one because the freeze depends on it, three because the
+table schedules them too late to be comparable.
+
+## S1 — Park the open node-lane nodes (required, if the freeze is real)
+
+Not in the table because it closes no node. It is the only thing standing
+between "scheduled dispatch is paused" and "`main` does not move under these
+PRs". Per Revision 2, the sentinel gates worker spawning; an `office_hours`
+park is the one state `graph-auto-merge` will not merge past.
+
+## S2–S4 — The three `/rsi-audit` baselines, moved forward
+
+The table gates these on PR7 and PR11. Both come **after** Bundle 4 in the
+recommended order (Bundle 4 is 3rd; PR7 is inside Bundle 3, 4th; PR11 is inside
+Bundle 5, 5th). Bundle 4 contains PR3, which rewrites
+`.claude/skills/rsi-audit/scripts/aggregate-usage.sh` — the instrument all three
+baselines read. A baseline taken after PR3 and compared against a later
+measurement is measuring the instrument as much as the system.
+
+Take all three now, while the instrument is stable. They produce no diff, so
+they cost nothing but session time, and this is the only window in which the
+before-and-after readings share a definition.
+
+**Correct the window while moving them.** The table says `7d` and `14d`. The
+sentinel was set 2026-08-10 11:51; as of 2026-08-14 a `7d` window is 4 of 7 days
+paused, so the fleet denominators are diluted by a period with almost no worker
+activity. Use a window reaching back before 2026-08-10 — `21d` for the two
+filed as `7d` — and state the window on the node alongside the number.
+
+## Revised pre-first-PR list
+
+| # | Session | Why before PR1 |
+|---|---|---|
+| S1 | park open node-lane nodes | the sentinel does not freeze `main` |
+| S2 | `/rsi-audit` — masking baseline | PR3 rewrites the instrument |
+| S3 | `/rsi-audit` — `hit_ratio` baseline | PR3 rewrites the instrument |
+| S4 | `/rsi-audit` — fan-out and model routing | PR3 rewrites the instrument |
+
+The two `/office-hours` sittings measure nothing and stay where the table puts
+them: `review-sitting-code-review-lock-design` before PR6 (Bundle 3), and
+`review-band-derivation-ratification` / `review-tradition-agentic-engineering`
+before PR10 / PR11 (Bundle 5).
+
+## Caveat for every node write in S1–S4
+
+All four sessions write graph nodes, and they run **before** PR1 fixes the write
+path. They are therefore exposed to the exact bug PR1 Unit 1 closes: with any
+unpushed local commit on `main`, an edit to an existing node can be dropped
+while the verdict reads `landed context=noop`. Verify each write by reading
+`git show origin/main:intentions/<id>.md`, never by trusting the verdict line.
+
+---
+
 ## Why not one PR
 
 The author asked whether a single PR is feasible. It is not, for three reasons
