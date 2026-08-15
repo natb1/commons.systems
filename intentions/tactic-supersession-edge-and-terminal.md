@@ -126,20 +126,29 @@ hand-walk over 700 files.
   retire a strategy. Retiring a strategy is a doctrine act. Recommendation, not a
   ruling: require attendance there. Enrolled on the same review node.
 
-## A node is already waiting on this instrument
+## A node has already been mis-closed for want of this instrument
 
-`tactic-align-tactics-per-node-clarifications` is parked, its park condition
-**discharged**, and closeable on nothing but this node landing — it carries a
-`blocked_by` edge here as of 2026-08-15. It is the first concrete case, and it
-demonstrates the gap better than the abstract argument does: it cannot be closed
-via `phase: done` (that launders abandoned work as completed, the failure R8
-ruled against, and would satisfy `blockersComplete` for its dependents), and it
-cannot be closed via `graph-commit --prune` (seven references name it by id,
-five of them dated clarifications on `strategy-graph-native-dispatch` that are
-historical records and must not be repointed). `validate-graph` would pass a
-prune, since prose refs to a pruned node do not break it — so the damage would
-be silent, which is the strongest argument for shipping the terminal rather than
-improvising a close.
+`tactic-align-tactics-per-node-clarifications` was force-closed 2026-08-15 on
+author instruction, with `phase: done`, because this node had not shipped. It
+was **abandoned, not completed** — its doctrine was overturned and its work
+moved to `tactic-align-tactics-immaterial-drift-redirect`. That is precisely the
+laundering ruling R8 ruled against, done knowingly and disclosed in that node's
+own body, which now opens with a section saying its `phase` is a lie.
+
+**This node owes that restamp.** When the terminal ships, set
+`tactic-align-tactics-per-node-clarifications` to `status: superseded` with a
+supersession edge to `tactic-align-tactics-immaterial-drift-redirect`, and
+revert its `phase` to `null`.
+
+The case is worth carrying because it priced both wrong instruments concretely.
+`--prune` was rejected: seven references name that node by id, five of them
+dated clarifications on `strategy-graph-native-dispatch` that are historical
+records and must not be repointed — and `validate-graph` passes a prune anyway,
+since prose refs to a pruned node do not break it, so the damage would have been
+silent. `phase: done` was chosen only as the lesser harm, because it keeps every
+citation resolvable and contradicts itself at the point of reading. Neither is
+acceptable as a standing practice, which is the argument for shipping this node
+rather than improvising the next one.
 
 Worth carrying into this node's own review: the prune path being *silently*
 non-breaking suggests the terminal should also give `validate-graph` something

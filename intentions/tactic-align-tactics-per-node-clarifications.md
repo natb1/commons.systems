@@ -55,68 +55,65 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates: []
-blocked_by:
-  - tactic-supersession-edge-and-terminal
-office_hours:
-  reason: >-
-    Parked 2026-08-15 by the /align node-creation-surface correction round, on
-    author ruling. This node implements a doctrine ruling that the same round
-    OVERTURNED. Its unit A widens a per-node session's authority to append
-    clarifications to the serving strategy; its unit B hardens
-    DRIFT_SCHEMA.clarifications_to_add. The 2026-08-15 ruling removes that write
-    authority entirely — the immaterial drift path now mints a born-parked
-    observation node instead — and deletes the field unit B would harden. So
-    unit A is doomed as written and unit B's target is being removed. Found by
-    the pre-commit adversarial review, on the correction round's own output,
-    which is the exact failure class that round exists to close.
-
-
-    PARK CONDITION DISCHARGED 2026-08-15 (later the same day). The
-    recommendation below required confirming that
-    tactic-align-tactics-immaterial-drift-redirect carries unit B's surviving
-    finding before closing this node. It does, at three places in its body: the
-    DRIFT_SCHEMA {answer}-only vs Clarification {question, answer} mismatch is
-    recorded there as owed by that node. So the substantive precondition for
-    closing is met.
-
-
-    BLOCKED ON THE INSTRUMENT, NOT ON A DECISION. The close could not be
-    executed, because no correct terminal exists yet and all three available
-    instruments are wrong. (a) phase: done launders abandoned work as completed
-    — the precise failure R8 of this round ruled against — and would
-    additionally make blockersComplete treat this node as satisfied for anything
-    blocked_by it. (b) graph-commit --prune deletes the file, but this node is
-    cited by id in FIVE dated clarifications on strategy-graph-native-dispatch
-    (at its 2026-07-28 and 2026-07-31 rounds and the 2026-08-15 correction) plus
-    the bodies of tactic-align-review-skill and
-    tactic-align-tactics-immaterial-drift-redirect. Those clarifications are
-    historical records of what past interviews decided; repointing them would
-    falsify dated records, and leaving them would point seven references at a
-    node that no longer exists. Validation would pass — prose refs to a pruned
-    node do not break validate-graph — which is exactly why the damage would be
-    silent. (c) Staying parked with a stale recommendation misreports the state
-    as awaiting an author decision when no decision is outstanding.
-
-
-    So the blocked_by edge below is the honest state: this node is closeable the
-    moment tactic-supersession-edge-and-terminal ships status: superseded plus
-    the supersession edge, and not before. It is also the first concrete
-    instance of the gap that node exists to fill, which is worth its weight when
-    that node is prioritized.
-  since: 2026-08-15
-  recommendation: "Close as superseded by
-    tactic-align-tactics-immaterial-drift-redirect as soon as
-    tactic-supersession-edge-and-terminal lands — no further author judgment is
-    needed, only the instrument. Unit A is dropped (its doctrine was
-    overturned). Unit B's finding is already carried by the redirect node and
-    must not be re-homed here. Do NOT close via phase: done or via --prune; the
-    reason field records why each corrupts the record."
-  session_type: other
+blocked_by: []
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # A per-node /align-tactics <tactic-id> session has no legal destination for the drift phase's immaterial observations: write-path.md tells it to land them as strategy clarifications, tactic-target.md forbids any strategy write, the park escape is closed by the autonomy contract's three conditions, and DRIFT_SCHEMA emits {answer} with no question so the instruction is not mechanically executable anyway
+
+## CLOSED 2026-08-15 — abandoned, not completed. `phase: done` here is a lie.
+
+**Read this before trusting this node's `phase`.** This node was **not**
+completed. Its doctrine was overturned and its work moved elsewhere. It carries
+`phase: done` because the author directed a close on 2026-08-15 and no correct
+terminal existed to record one — `status: superseded` and the supersession edge
+are still unbuilt, drafted on `tactic-supersession-edge-and-terminal`.
+
+This is exactly the laundering that ruling R8 of the 2026-08-15 correction round
+identified and ruled against, committed knowingly, on the author's explicit
+instruction, and recorded here rather than left for a later reader to discover
+from a `done` stamp that means the opposite of what it says.
+
+**Restamp owed.** When `tactic-supersession-edge-and-terminal` ships, set this
+node to `status: superseded` with a supersession edge to
+`tactic-align-tactics-immaterial-drift-redirect`, and revert `phase` to `null`.
+
+### Why it was abandoned
+
+Parked 2026-08-15 by the `/align` node-creation-surface correction round. This
+node implements a doctrine ruling that the same round overturned. Its unit A
+widens a per-node session's authority to append clarifications to the serving
+strategy; its unit B hardens `DRIFT_SCHEMA.clarifications_to_add`. The
+2026-08-15 ruling removes that write authority entirely — the immaterial drift
+path now mints a born-parked observation node instead — and deletes the field
+unit B would harden. So unit A is doomed as written and unit B's target is being
+removed. Found by the pre-commit adversarial review, on the correction round's
+own output, which is the exact failure class that round exists to close.
+
+### Park condition, discharged
+
+The park required confirming that
+`tactic-align-tactics-immaterial-drift-redirect` carries unit B's surviving
+finding before closing. It does, at three places in its body: the `DRIFT_SCHEMA`
+`{answer}`-only versus `Clarification` `{question, answer}` mismatch is recorded
+there as owed by that node. Unit B must **not** be re-homed here.
+
+### Why the other instrument was rejected
+
+`graph-commit --prune` would have deleted this file. Seven references name this
+node by id — five of them dated `clarifications` on
+`strategy-graph-native-dispatch` from the 2026-07-28, 2026-07-31 and 2026-08-15
+rounds, plus the bodies of `tactic-align-review-skill` and
+`tactic-align-tactics-immaterial-drift-redirect`. Those clarifications are
+historical records of what past interviews decided and must not be repointed.
+`validate-graph` passes a prune — prose refs to a pruned node do not break it —
+so the damage would have been silent. A visible lie that contradicts itself in
+its own body was judged the lesser harm over silent unreachability.
+
+Nothing lists this node in its own `blocked_by`, verified at close time, so the
+`blockersComplete` half of the R8 objection has no dependents to mislead here.
