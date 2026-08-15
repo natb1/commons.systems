@@ -13,7 +13,6 @@ status: raw
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -25,7 +24,91 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Cannot author a plan: the node's core premise was overtaken by a later
+    author decision, and the replacement contract is unrecorded. Verified
+    against fresh origin/main (HEAD 1f839db7 == origin/main). (1) The behavior
+    this node calls a defect — check_base_freshness() copying the merge output
+    over SNAP_DIR/<id>.md on a resolved merge (graph-commit:809-810), and the
+    same pattern in replay_snapshot_onto_base() (:1203-1208) — is a deliberate
+    contract landed by PR #2989 AFTER this draft was filed by that PR's own
+    review-fix pass. graph-commit:794-808 rebuts this node's failure scenario
+    verbatim: the refresh is done 'deliberately' so that park_and_exit()'s
+    'preserved at $SNAP_DIR' message points at the RECONCILED content, 'the best
+    available starting point for the manual merge — rather than at a stale
+    pre-merge copy'. The same contract is asserted independently at :919-935
+    (snapshot() header: 'SNAP_DIR is NOT a frozen pre-merge copy') and
+    :2091-2098 (print_verdict reads SNAP_DIR as ground truth for what the run
+    intended to land), and is pinned by regression tests:
+    test-graph-commit.sh:2246-2287 is a self-described 'Unit 1 regression guard'
+    proving the refresh stops the far-ahead rebuild from reverting a concurrent
+    writer's landed edit, cases 49-51 guard Unit 2, and case 22 (:1551-1581)
+    pins the unresolved half. The node's 'Recommended fix' (freeze SNAP_DIR;
+    merges go to <id>.merged.md) directly reverses that decision and cannot be
+    built without breaking cases 48-51 — weakening them is forbidden by
+    .claude/rules/test-integrity.md. (2) The node's factual claim is also partly
+    overstated and needs the author's re-validation, which the node itself asks
+    for ('re-validating this provenance against what actually merged'):
+    run_merge_node() is a three-way merge whose resolved output still carries
+    the writer's own delta, so the writer's INTENT is not lost — only the exact
+    pre-merge byte image — and the blend is not 'already-landed' content, since
+    the batch fails closed and lands nothing. (3) Author ratification is needed
+    on the clarification proposed by this round: which of three contracts binds
+    SNAP_DIR on the park path — (a) PR #2989's reconciled intended-to-land
+    content, (b) this node's frozen writer original beside a separate merged
+    copy, or (c) neither, because the strategy's recorded condition that 'a park
+    whose context lives only in the parking session is a defect' is violated by
+    ANY machine-local pointer (park_write's own text at :2944-2952 concedes
+    'this machine only — may not survive past this session'), which would
+    re-scope this node toward carrying the losing writer's content in the node's
+    office_hours record. The ruling also decides whether the third, unnamed
+    clobber site in build_commit_plumbing() (:1650-1652, structurally identical
+    and feeding the same park_write text) is in scope, and whether this node is
+    plannable at all or should be dismissed as answered by #2989. Best next
+    step: an author sitting rules (a)/(b)/(c); on (a) dismiss this node, on (b)
+    or (c) re-plan its scope and rewrite the stale line citations in its body
+    (535/811/629-635/1987-1996/1590 have all moved to
+    793-811/1203-1208/919-935/1157-1211/2944-2952). Recording note: per the
+    tactic-target contract this per-node round wrote nothing onto
+    strategy-graph-native-dispatch — the proposed clarification above is NOT
+    landed on the strategy and exists only in this round's transcript and in
+    this park; a future /align interview or strategy-target /align-tactics round
+    must land it."
+  since: 2026-08-15
+  recommendation: "Author sitting rules (a), (b) or (c) below; on (a) DISMISS this
+    node, on (b) or (c) re-plan its scope and rewrite the stale line citations
+    in its body (535 / 811 / 629-635 / 1987-1996 / 1590 have all moved to
+    793-811 / 1203-1208 / 919-935 / 1157-1211 / 2944-2952). Then re-run
+    /align-tactics on this node. PROPOSED CLARIFICATION FOR RATIFICATION:
+    (Recorded 2026-08-14 /align-tactics tactic-mode drift review.) On
+    graph-commit's fail-closed park path, what must SNAP_DIR/<id>.md hold for an
+    id whose layer-3 merge RESOLVED earlier in the same multi-id invocation?
+    Three candidate contracts are live and the strategy records none of them:
+    (a) the reconciled intended-to-land blend — PR #2989's landed answer,
+    defended in code at graph-commit:794-808, 919-935 and 2091-2098 and pinned
+    by test-graph-commit.sh cases 48-51, and required by
+    ensure_intentions_only_base()'s re-materialization from SNAP_DIR; (b) the
+    writer's frozen pre-merge original beside a separate merged copy — the
+    'Recommended fix' in tactic-graph-commit-snap-dir-merge-clobbers-original,
+    which reverses (a); (c) neither — the writer's unlanded content belongs in
+    the node's own office_hours record rather than behind a machine-local tmpdir
+    pointer, per the recorded condition that 'a park whose context lives only in
+    the parking session is a defect', which park_write's own text ('this machine
+    only — may not survive past this session', graph-commit:2944-2952) fails.
+    The author rules which contract binds; the answer also decides whether the
+    third, unnamed clobber site in build_commit_plumbing()
+    (graph-commit:1650-1652) is in scope and whether this node is plannable at
+    all or should be dismissed. CONSEQUENCE FOR PR1: the serialized PR plan's
+    PR1 carried this node as Unit 6 (freeze SNAP_DIR, merges to <id>.merged.md).
+    That unit is DROPPED from PR1 and this node does NOT close with it — the
+    prescribed fix cannot be built without breaking test-graph-commit.sh cases
+    48-51, and .claude/rules/test-integrity.md forbids weakening a preserved
+    regression guard. See plans/pr1-graph-write-path-brief.md. NOTE: per the
+    tactic-target contract this per-node round wrote nothing onto
+    strategy-graph-native-dispatch, so the proposed clarification above is NOT
+    landed on the strategy; a future /align interview or strategy-target
+    /align-tactics round must land it."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
