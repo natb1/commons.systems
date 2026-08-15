@@ -5811,6 +5811,142 @@ clarifications:
       open question
 
       tactic-graph-refsplit-blocker-audit, not as a settled finding.
+  - question: What are the sanctioned ways a node enters the graph, and does the
+      answer depend on the node's kind?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, on author
+      ruling; generalizing the same-day 'How is a finding recorded on the graph'
+      and 'one shared write surface' rulings from findings to ALL node
+      creation.) EXACTLY TWO WRITE SURFACES, AND THE SEAM IS BY KIND. Surface
+      one is the /align interview record, and it is the only way a
+      PERSISTENT-LAYER node — virtue, strategy, delegation, tradition — enters
+      the graph; this generalizes strategy-discovered-requirements' existing
+      claim that the /align interview is the only place an author's requirement
+      enters. Surface two is the find-or-recur write surface
+      (tactic-finding-search-all-producers), and it is the only way a TACTIC
+      enters, whoever the caller is: /align Step 4 interview byproducts,
+      /align-tactics decomposition, /review-fix, /qa-main, /rsi, /rsi-audit, the
+      four invalid-state lanes and fleet sweeps all mint through it. The caller
+      list needs no enumeration and is closed by nothing, because the rule binds
+      the WRITE and not the caller — which is the whole point of the same-day
+      one-shared-write-surface ruling. THE AUTHOR'S RULING NAMED /align-tactics
+      EXPLICITLY: a decomposition that creates nodes does so USING the follow-up
+      surface, so it is a CALLER and not a third surface. That is what makes
+      'two' a fact about the design rather than a definitional collapse — the
+      alternative framing put to the author, which counted /align-tactics as a
+      third creation surface, was declined on exactly this ground. TWO CLAIMS
+      THAT ARE OFTEN CONFLATED AND BOTH HOLD: graph-commit remains the only
+      sanctioned write PATH — the mechanism that lands a commit, recorded across
+      many nodes — while these two surfaces are the only sanctioned
+      node-CREATION processes, which is a claim about what may author a node in
+      the first place. Neither implies the other. BOLDNESS DISCLOSED BEFORE THE
+      RULING: the by-kind seam follows directly from the author's own
+      /align-tactics ruling and is lint-testable, which is what makes it worth
+      recording; what was NOT verified at record time is whether any of the five
+      extant private writers legitimately mints a non-tactic. None was found,
+      but no exhaustive audit of their code paths was run. The carrier is told
+      to establish that before designing around the seam. BOTH SURFACES RUN THE
+      SAME COMMON ANALYSIS — see the shared-analysis clarification recorded this
+      same round, which is the reason the seam is worth recording at all."
+  - question: What common analysis do both node-creation surfaces run, and what does
+      its supersession half do?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, on author
+      ruling.) TWO CHECKS, ONE SEARCH PASS, IN THE SHARED SURFACE — never
+      restated as prose in each caller, per this strategy's same-day
+      one-shared-write-surface ruling. CHECK ONE, DUPLICATE AND MERGE, is
+      unchanged in substance from the find-before-minting rules recorded earlier
+      today: an optional deterministic key where the caller has a stable one, a
+      whole-graph similarity search in every case regardless, a match recording
+      the recurrence on the existing node and minting nothing, and a key/search
+      disagreement recorded as a finding rather than resolved silently. CHECK
+      TWO, SUPERSESSION, IS NEW. The node being created is tested as a potential
+      SUPERSEDER of existing nodes, so the graph does not implement one strategy
+      or tactic and later attempt the one it supersedes. It is a CREATION-TIME
+      check keyed on the NEW node, not a corpus sweep, which bounds its blast
+      radius to one search per creation and is what makes it affordable in the
+      shared surface. It absorbs the greenfield-relevance gate (clarification
+      26), which until now ran only at /align-tactics finalization; see the
+      stale-surface correction recorded this same round for why that was its
+      only remaining carrier. DISPOSITION ORDER — REWRITE FIRST, CLOSE AS
+      BACKSTOP. When the analysis finds an existing node the new one supersedes,
+      the FIRST disposition offered is REWRITE-IN-PLACE: merge the new intent
+      into the existing node and mint nothing. This is not a new discipline; it
+      is the one this record practised on itself twice on 2026-08-14, when
+      tactic-eval-finding-ledger and tactic-finding-search-all-producers were
+      each rewritten rather than superseded. CLOSE-AS-SUPERSEDED is the backstop
+      for what rewrite cannot reach: the existing node is non-draft
+      (clarification 26's 'a raw draft never obsoletes live work' read in the
+      other direction — a non-draft node carries live commitments a rewrite
+      would silently discard), it is in flight, or its intent genuinely DIES
+      rather than evolves. The rival framing — that a superseded node existing
+      at all IS the defect, so a close disposition is cleanup for a discipline
+      failure rather than a design — was put to the author and PARTLY ADOPTED:
+      it wins on PRIORITY (rewrite is tried first), and is DIVERGED FROM on
+      completeness, because a strategy superseded by a better strategy is not a
+      duplicate and merging the two would produce an incoherent node. CLOSE
+      AUTHORITY IS NOT THE PRODUCER'S. Closing a node terminates recorded work,
+      so under strategy-recursive-self-improvement's declared-remediation-list
+      condition a record-only producer may not do it, and a model similarity
+      judgment must not sit on the destructive side — the record already
+      documents that judgment being wrong, on
+      tactic-eval-finding-eval-finding-list-misses-nonledger. So the unattended
+      surface RECORDS: an edge naming the superseding node, on both nodes, plus
+      an office_hours PARK on the superseded node whose recommendation is to
+      close. The close itself is a DECLARED REMEDIATION, executed at an
+      office-hours sitting or by a lane that declares it. PARK COLLISION, RULED
+      BY THE AUTHOR: office_hours is single-valued, so an already-parked node is
+      NEVER CLOBBERED — the park reason is UPDATED to carry BOTH the
+      supersession AND the original reason, so the sitting reads why the node
+      was parked twice rather than losing the first reason to an overwrite. TWO
+      SUB-POINTS THE AUTHOR DID NOT RULE ON, derived here from rules already
+      recorded and flagged plainly as Claude-derived rather than author-ruled.
+      ONE: a node whose execution is non-null gets the edge but NO park —
+      extending the skipped-in-flight refusal
+      tactic-finding-search-all-producers already records for the dedup half,
+      rather than inventing a second in-flight rule; the live-PR exposure this
+      leaves open is the interim-live-risk exception clarification 26 already
+      permits. TWO: only a FULLY superseded node is parked, with partial
+      supersession keeping clarification 26's existing per-unit doomed-drop
+      unchanged. A born-parked review item,
+      tactic-review-supersession-derived-subpoints, enrolls both for
+      ratification. OWNERSHIP SPLIT, per the same-day split-by-owner ruling: the
+      binding contract is this strategy's; the observable that reads whether it
+      holds lives on strategy-recursive-self-improvement, where the instrument
+      lives. CARRIER: tactic-finding-search-all-producers is REWRITTEN IN PLACE
+      again — it is phase null, a draft — which is this ruling's own merge
+      discipline practised on itself for the third time on this date. Zero new
+      nodes for the carrier half."
+  - question: Clarification 26 binds the greenfield-relevance gate to
+      '/align-tactics finalization and every /align-strategy improvement pass'.
+      Does that second surface still exist?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, correcting
+      a stale cross-reference this round's evidence sweep found in this node's
+      own body.) NO — it has not existed since 2026-08-04, and the loss was
+      DELIBERATE rather than accidental, which is worth recording because the
+      surviving prose reads as though the surface were live.
+      tactic-align-entrypoint-consolidation Unit 2 deleted the whole no-prompt
+      improvement pass — naming 'the greenfield-relevance-gate corpus sweep
+      (strategy clarification 26)' in its own scope — and replaced it with the
+      onboarding funnel; the 2026-07-23 office-hours sitting with the author
+      present had already ruled both retained engines retire wholesale
+      (tactic-align-audit-legacy-review). /align's own coverage matrix records
+      the consequence plainly: 'Relevance — Retired with the improvement pass —
+      no longer covered by this skill'. The doctrine-encoding carrier
+      tactic-align-skills-greenfield-gate shipped as #2789 and was pruned as
+      done on 2026-07-07. SO SINCE 2026-08-04 THE GATE HAS HAD EXACTLY ONE
+      CARRIER: prose at .claude/skills/align-tactics/SKILL.md:322. That is
+      precisely the instruction-copied-into-skill-bodies shape this strategy's
+      same-day one-shared-write-surface ruling condemns, arrived at from the
+      other direction — by attrition down to one copy rather than by copying up
+      to six — and it is why the gate ran at decomposition time only and never
+      at node creation. This node's body is corrected to name /align-tactics
+      finalization alone, and the gate's substance moves into the shared surface
+      per the shared-analysis clarification recorded this round, after which the
+      surviving align-tactics prose reduces to naming the call. Worth naming for
+      the next reader: tactic-align-audit-legacy-review's own clarification (b)
+      already records the gate being SKIPPED in a round that was supposed to run
+      it. A gate whose only carrier is prose in one skill is a gate that gets
+      skipped; that is the argument for moving it into the shared surface,
+      independent of the creation-time requirement."
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -7080,13 +7216,37 @@ auto-applied.
 The greenfield-relevance gate checks each tactic against superseding non-draft
 nodes at finalization (Recorded 2026-07-06 interview, entry 26). To keep work off
 code the critical path deletes, a gate binds the align family: at /align-tactics
-finalization and in every /align-strategy improvement pass, each candidate and open
+finalization, each candidate and open
 tactic's subject is checked against non-draft nodes that delete or supersede it (a
 raw draft never obsoletes live work). The check is per-unit — doomed units are
 dropped from the plan body naming the superseding node, and only a fully-superseded
 tactic demotes to draft; a tactic on doomed surface may stay selectable only as an
 explicit interim-live-risk exception naming its expiry event (e.g. the gh-queue
 drain).
+
+**Amended 2026-08-14 (third /align round of that date), twice.** First, a
+correction: this paragraph until now also bound the gate to "every
+/align-strategy improvement pass". That surface has not existed since
+2026-08-04, when `tactic-align-entrypoint-consolidation` Unit 2 deleted the
+no-prompt improvement pass outright — naming this very gate in its own scope —
+per the 2026-07-23 office-hours ruling that both retained engines retire
+wholesale. The clause is struck rather than rewritten because there is nothing
+to point it at. See the stale-surface clarification in frontmatter for the full
+history and for why a gate whose only carrier is prose in one skill is a gate
+that gets skipped.
+
+Second, and consequently: the gate's substance **moves into the shared
+find-or-recur write surface** (`tactic-finding-search-all-producers`), where it
+runs at **node-creation time** on every creation rather than only at
+`/align-tactics` finalization, and where its disposition order is
+rewrite-in-place first and close-as-superseded as the backstop. The mechanics
+above — per-unit doomed drops, "a raw draft never obsoletes live work", the
+fully-superseded demotion, and the interim-live-risk exception — are preserved
+by that move, not replaced. What is added there is the terminal disposition this
+paragraph never had: an edge naming the superseding node, plus an `office_hours`
+park recommending the close, with the close itself reserved as a declared
+remediation. The surviving `/align-tactics` prose reduces to naming the call.
+See the two-surfaces and shared-analysis clarifications recorded the same round.
 
 Self-modifying tactics are detected at decomposition and born-parked (Recorded
 2026-07-07 interview, entry 41). Scope touching agent-behavior config

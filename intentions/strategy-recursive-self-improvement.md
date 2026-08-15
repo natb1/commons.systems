@@ -1818,6 +1818,34 @@ clarifications:
       recorded the same day. The three instruments themselves remain owed by
       tactic-rsi-intervention-special-cases; until they land the three threshold
       clauses are registered and unread."
+  - question: The find-or-recur surface gains a supersession check. What reads
+      whether that half works, and why is it not in the sensor field?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, on author
+      ruling; the binding contract is recorded on strategy-graph-native-dispatch
+      and this records only the observable this strategy owns, per the same-day
+      split-by-owner ruling.) THE OBSERVABLE: no node carrying an inbound
+      supersession edge advances to phase implement or beyond after that edge
+      was recorded. It reads the exact failure the author named — the graph
+      implements one strategy or tactic and later attempts the one it supersedes
+      — and it is checkable from graph state alone, so unlike this node's three
+      2026-08-14 evaluation-core readings it needs NO new instrument and is not
+      declared-and-unread. It sits beside the existing 'distinct find-or-recur
+      write surfaces equals 1' reading, which measures the same surface's other
+      half. HONEST LIMIT: it measures precision, not recall. A supersession the
+      surface never found is invisible to it, and nothing recorded here measures
+      how often that happens. A second candidate observable was put to the
+      author and NOT taken — that supersession-parked nodes get dispositioned at
+      sittings rather than accumulating, the bounded-unread-pool shape this
+      node's research-lane condition already uses — so the park-storm risk stays
+      unmeasured and is named here rather than dropped. WHY IT IS IN observable
+      AND NOT sensor: success_signal.sensor on this node is a REGISTRY KEY
+      matched in full by read-sensors.ts against RSI_SENSOR_NAME, not prose.
+      Appending to it de-registers the sensor and reds validate-graph — the
+      defect this node's own 2026-08-14 sensor-registry clarification records
+      hitting live, and the class defect on the graph as
+      tactic-eval-finding-sensor-registry-key-prose-drift. This round did not
+      touch the field, and needs no atomic code-plus-prose pull request as a
+      result."
 tooling_goals: []
 success_signal:
   observable: graph-native dispatch reaches stable autonomous operation; every
@@ -1839,7 +1867,12 @@ success_signal:
     these three instruments are named in the sensor field and registered, but
     are NOT YET IMPLEMENTED, so the three readings stay declared and unproduced
     until each instrument lands; see the sensor-registry clarification of
-    2026-08-14
+    2026-08-14; and no node carrying an inbound supersession edge advances to
+    phase implement or beyond after that edge was recorded (read from graph
+    state directly, no new instrument required; honest limit owned at record
+    time — it reads only the supersessions the shared find-or-recur surface
+    actually FOUND, so a missed supersession is invisible to it and nothing here
+    measures recall)
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
     count, held-session/worktree census, pause state), plus per-workflow token
