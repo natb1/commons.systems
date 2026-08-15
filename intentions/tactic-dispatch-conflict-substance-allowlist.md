@@ -92,6 +92,26 @@ autonomous.
   Under the negative form a field added to the schema tomorrow defaults to
   substance, which is the fail-safe direction, and there is no second list to
   keep in sync.
+
+  **Open question the implementer must see, from the 2026-08-15 per-site sweep
+  (`tactic-finding-search-all-producers`).** `attributes` is the negative form's
+  largest fallthrough, and three measured sites already write `attributes`
+  sub-keys that are plainly *state*, not intent:
+  `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding:1025`
+  (`resolved_by`) and `:1220` (`ledger_entry`, `first_seen`,
+  `measured_impact`) — both **autonomous** — plus
+  `.claude/skills/reading-review/SKILL.md:525`
+  (`irreversibility.last_exercised`, attended). Under
+  `!STATE_FIELDS.has(field)` all three are EDIT-SUBSTANCE.
+
+  Nothing breaks on landing: this node's gate is scoped to `/dispatch-conflict`,
+  and none of the three runs there. But `STATE_FIELDS` is exported from
+  `schema.ts` precisely so other gates can key on it, and the first one that
+  does will refuse those two autonomous writers. So decide, in this node's
+  review rather than after the fact, which is true: they are two further
+  violators to be re-homed onto state fields, or `STATE_FIELDS` needs sub-key
+  granularity beneath `attributes`. Do **not** resolve it by widening the
+  positive form back out — that is the failure this correction fixed.
 - **Refuse before mutation, with a dedicated exit code.** Model this on
   `park-node`'s `--base` pin, whose header/resolution/refusal shape is already
   duplicated verbatim in `clear-park`. Do **not** model it on `graph-commit`'s

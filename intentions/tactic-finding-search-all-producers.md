@@ -444,6 +444,11 @@ varies and is the load-bearing column.
    `dispatch-graph-census:133-140`, which was described as the *only* such site.
    That description was too narrow.
 
+   Owned as of 2026-08-15 by
+   `tactic-autonomous-body-write-wholesale-replace`, minted on author ruling to
+   carry both writers as one defect class. This node keeps the roster; that one
+   keeps the defect.
+
 ## Owed by this node, from the 2026-08-15 review
 
 1. *(Discharged 2026-08-15 — see the classification above.)*
