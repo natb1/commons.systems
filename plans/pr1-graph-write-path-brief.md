@@ -369,7 +369,9 @@ belongs in the node's own `office_hours` record rather than behind any
 machine-local tmpdir pointer, since `park_write` concedes the tmpdir is *"this
 machine only — may not survive past this session"* (`:2944-2952`) — was not
 adopted. Its premise is sound and it complements (b) rather than replacing it.
-**File it as its own tactic; it is out of scope for PR1** (see §7).
+**Already filed** as `tactic-graph-commit-park-content-durability` (`origin/main`
+`e23fea43`), `blocked_by` U6's and U1's nodes. **Out of scope for PR1** beyond
+the seam U6 is told to leave (see §7).
 
 ### F7 — a transient `npx` failure becomes a fleet-wide park storm (U7)
 
@@ -617,7 +619,8 @@ per lane after that lane's units finish.
 `graph-commit`'s multi-bundle stash behaviour; the landing lock
 (`refs/graph/landing-lock`); the `noop` short-circuit widening (skip-item 1);
 candidate (c) of clarification 241 (moving park content into the node's
-`office_hours` record — a separate tactic, see §7);
+`office_hours` record — filed as
+`tactic-graph-commit-park-content-durability`, see §7);
 `demote-node-to-implement` and `transition-node` (clarifications 242/243);
 `park-node`'s `--base` extraction; and anything ref-split would delete beyond
 the U1/U5 surfaces named here.
@@ -655,7 +658,16 @@ the U1/U5 surfaces named here.
     session's own original and which is graph-commit's partial merge.
   - Update the defending comments at `:794-808` and `:1205-1206`, which
     currently justify the clobber.
-- **Out of scope.** The tmpdir's durability (candidate (c)); the merge algorithm
+- **Leave the seam.** `park_write` composes two recommendations — the ordinary
+  lost-writer branch (`:2944-2952`) and the delete/modify branch
+  (`:2925-2943`) — and both name the preserved-content path. Keep the decision
+  of *which content, and where the human finds it* in **one** place rather than
+  duplicating the new two-path wording across the two branches. This costs
+  nothing here and is what makes the follow-up
+  `tactic-graph-commit-park-content-durability` a localized change instead of a
+  second sweep through the same function. Do not implement that follow-up.
+- **Out of scope.** The tmpdir's durability — candidate (c), filed as
+  `tactic-graph-commit-park-content-durability` (§7); the merge algorithm
   itself; anything in U1/U5/U7's regions.
 - **Reuse.** `test-graph-commit.sh`'s existing harness; extend it with a case
   asserting that on a **resolved** merge `SNAP_DIR/<id>.md` still hashes to the
@@ -815,7 +827,8 @@ against an existing fixture builder.
    making the rebuild replay, `print_verdict` and `park_write` prefer
    `<id>.merged.md` reverts resolved merges and turns case 48 red. Both halves
    or neither. And do **not** take on candidate (c) — the tmpdir-durability
-   question is a separate tactic (§7).
+   question is already filed as `tactic-graph-commit-park-content-durability`
+   (§7). U6 leaves it a seam; it does not implement it.
 7. Keep the out-of-scope readers out of U8, and **do no work on
    `demote-node-to-implement`** (F8, F9).
 8. Drop `noop-verdict` remedy #1 and U2's tree-resolution half — retired by U8 /
@@ -896,7 +909,7 @@ The PR body should record:
 - that **U6 implements ruling (b)** of strategy clarification **241**, fixing
   **all three** clobber sites including `:1652`, which neither the master plan
   nor the node names — and that candidate (c) was **not** adopted and is filed
-  as its own tactic (§7);
+  as `tactic-graph-commit-park-content-durability`, blocked on this PR (§7);
 - that **U8 implements shape (a)** of clarification **242** over exactly four
   files, and that `clear-park` is **in** scope while
   `demote-node-to-implement` is **out**, reversing the master plan;
@@ -940,20 +953,27 @@ After the fix pass:
 **Do not merge with unaddressed findings.** A finding is addressed when it is
 fixed, or when a posted recommendation explains why it is not.
 
-### Follow-up nodes to file (not work for this PR)
-
-Two are already known before review starts — file them so they are not lost:
+### Follow-up nodes
 
 1. **Park context durability** — candidate **(c)** of clarification 241, not
-   adopted by U6. `park_write` points the human at a tmpdir it concedes is
-   *"this machine only — may not survive past this session"*
-   (`graph-commit:2944-2952`), against the strategy's recorded condition that a
-   park whose context lives only in the parking session is a defect. The
-   question is whether the losing writer's content belongs in the node's own
-   `office_hours` record. It **complements** U6 rather than replacing it.
+   adopted by U6. **Already filed** as
+   `tactic-graph-commit-park-content-durability`, landed on `origin/main` at
+   `e23fea43`. Nothing to do here; it is listed so the PR body can point at it
+   rather than re-derive it.
+
+   It is `blocked_by` **both** `tactic-graph-commit-snap-dir-merge-clobbers-original`
+   and `tactic-eval-finding-noop-verdict-hides-dropped-node-edit` — i.e. by U6
+   and U1 — so it becomes workable only when this PR merges and those two close.
+   That is deliberate: it would collide with both. It rewrites the same
+   recommendation text U6 rewrites, and its likely shape (carrying the writer's
+   content in `office_hours.recommendation`) makes the parked block
+   writer-dependent, which changes the byte-identical idempotent-retry arm
+   (`graph-commit:2138-2144`, documented at `:150-161`) that U1 is rewriting.
+   U6 is instructed to leave the seam for it; see U6's scope.
+
 2. **U4's "direction 1"** — the planning-time rule that a data migration and a
    tightening that rejects its pre-migration spelling cannot share a PR. That
-   is `/align-tactics` doctrine, not this PR's code.
+   is `/align-tactics` doctrine, not this PR's code. **Still to file.**
 
 ---
 
@@ -1064,7 +1084,8 @@ case the shipped fix differs from what the node's own text prescribes:
 - **`tactic-graph-commit-snap-dir-merge-clobbers-original`** — record that it
   shipped under clarification **241** as ruling (b), that all **three** clobber
   sites were fixed (including `:1652`, which the node never named), and that
-  candidate (c) was not adopted and is filed separately (§7).
+  candidate (c) was not adopted and is filed as
+  `tactic-graph-commit-park-content-durability` (§7).
 - **`tactic-explicit-ref-graph-reads`** — record that it shipped under
   clarification **242** as shape (a), covering four files, and that
   `demote-node-to-implement` was deliberately excluded and remains open on
