@@ -125,3 +125,23 @@ hand-walk over 700 files.
   unrestricted — so on the letter of the invariant an autonomous lane could
   retire a strategy. Retiring a strategy is a doctrine act. Recommendation, not a
   ruling: require attendance there. Enrolled on the same review node.
+
+## A node is already waiting on this instrument
+
+`tactic-align-tactics-per-node-clarifications` is parked, its park condition
+**discharged**, and closeable on nothing but this node landing — it carries a
+`blocked_by` edge here as of 2026-08-15. It is the first concrete case, and it
+demonstrates the gap better than the abstract argument does: it cannot be closed
+via `phase: done` (that launders abandoned work as completed, the failure R8
+ruled against, and would satisfy `blockersComplete` for its dependents), and it
+cannot be closed via `graph-commit --prune` (seven references name it by id,
+five of them dated clarifications on `strategy-graph-native-dispatch` that are
+historical records and must not be repointed). `validate-graph` would pass a
+prune, since prose refs to a pruned node do not break it — so the damage would
+be silent, which is the strongest argument for shipping the terminal rather than
+improvising a close.
+
+Worth carrying into this node's own review: the prune path being *silently*
+non-breaking suggests the terminal should also give `validate-graph` something
+to check, so a superseded node's inbound citations are visibly redirected rather
+than left dangling.

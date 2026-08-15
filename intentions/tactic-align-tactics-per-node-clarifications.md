@@ -48,7 +48,6 @@ rationale: "Surfaced 2026-07-28 /align-strategy interview from the 2026-07-27
   fields populated and nothing else on that strategy touched; validate-graph
   rule 17 (date presence) still passes on the landed entry."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -59,26 +58,62 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-supersession-edge-and-terminal
 office_hours:
-  reason: "Parked 2026-08-15 by the /align node-creation-surface correction
-    round, on author ruling. This node implements a doctrine ruling that the
-    same round OVERTURNED. Its unit A widens a per-node session's authority to
-    append clarifications to the serving strategy; its unit B hardens
+  reason: >-
+    Parked 2026-08-15 by the /align node-creation-surface correction round, on
+    author ruling. This node implements a doctrine ruling that the same round
+    OVERTURNED. Its unit A widens a per-node session's authority to append
+    clarifications to the serving strategy; its unit B hardens
     DRIFT_SCHEMA.clarifications_to_add. The 2026-08-15 ruling removes that write
     authority entirely — the immaterial drift path now mints a born-parked
     observation node instead — and deletes the field unit B would harden. So
     unit A is doomed as written and unit B's target is being removed. Found by
     the pre-commit adversarial review, on the correction round's own output,
-    which is the exact failure class that round exists to close."
+    which is the exact failure class that round exists to close.
+
+
+    PARK CONDITION DISCHARGED 2026-08-15 (later the same day). The
+    recommendation below required confirming that
+    tactic-align-tactics-immaterial-drift-redirect carries unit B's surviving
+    finding before closing this node. It does, at three places in its body: the
+    DRIFT_SCHEMA {answer}-only vs Clarification {question, answer} mismatch is
+    recorded there as owed by that node. So the substantive precondition for
+    closing is met.
+
+
+    BLOCKED ON THE INSTRUMENT, NOT ON A DECISION. The close could not be
+    executed, because no correct terminal exists yet and all three available
+    instruments are wrong. (a) phase: done launders abandoned work as completed
+    — the precise failure R8 of this round ruled against — and would
+    additionally make blockersComplete treat this node as satisfied for anything
+    blocked_by it. (b) graph-commit --prune deletes the file, but this node is
+    cited by id in FIVE dated clarifications on strategy-graph-native-dispatch
+    (at its 2026-07-28 and 2026-07-31 rounds and the 2026-08-15 correction) plus
+    the bodies of tactic-align-review-skill and
+    tactic-align-tactics-immaterial-drift-redirect. Those clarifications are
+    historical records of what past interviews decided; repointing them would
+    falsify dated records, and leaving them would point seven references at a
+    node that no longer exists. Validation would pass — prose refs to a pruned
+    node do not break validate-graph — which is exactly why the damage would be
+    silent. (c) Staying parked with a stale recommendation misreports the state
+    as awaiting an author decision when no decision is outstanding.
+
+
+    So the blocked_by edge below is the honest state: this node is closeable the
+    moment tactic-supersession-edge-and-terminal ships status: superseded plus
+    the supersession edge, and not before. It is also the first concrete
+    instance of the gap that node exists to fill, which is worth its weight when
+    that node is prioritized.
   since: 2026-08-15
-  recommendation: Re-scope or close. Unit A should be dropped. Unit B's finding
-    SURVIVES the overturn and is still owed — DRIFT_SCHEMA declares its items as
-    {answer} only with additionalProperties false while the Clarification
-    interface requires {question, answer} — but its home is now
-    tactic-align-tactics-immaterial-drift-redirect, which must not repeat the
-    mismatch in the replacement observation-node schema. Confirm that node
-    carries it before closing this one.
+  recommendation: "Close as superseded by
+    tactic-align-tactics-immaterial-drift-redirect as soon as
+    tactic-supersession-edge-and-terminal lands — no further author judgment is
+    needed, only the instrument. Unit A is dropped (its doctrine was
+    overturned). Unit B's finding is already carried by the redirect node and
+    must not be re-homed here. Do NOT close via phase: done or via --prune; the
+    reason field records why each corrupts the record."
   session_type: other
 pace_exempt: false
 rounds: null
