@@ -499,38 +499,63 @@ Claude Code's default retention applies — and the disk agrees: on 2026-08-14 t
 oldest surviving transcript is dated **2026-07-14**, exactly 31 days back, with
 nothing older. Pre-pause fleet history is being deleted at a day per day.
 
-That inverts the urgency. The baselines are not perishable; **the raw data is.**
 6,209 pre-pause transcripts survive today; on current behavior none survive 30
 days from now, and a serialized window plus a 21-day post-resumption measurement
-window will comfortably exceed that.
+window will comfortably exceed that. That looked like it inverted the urgency —
+the baselines are not perishable, the raw data is — and it prompted a proposal
+to archive the tree. **That proposal is withdrawn in the subsection below**: the
+expiring data is a record of a broken ladder, so preserving it buys nothing.
 
-### The pre-first-PR action, corrected
+### The archive was proposed and is also withdrawn: the baseline is forward
 
-One step, and it is not a session:
+Preserving the pre-pause transcripts only matters if a pre-pause measurement is
+worth having, and it is not. **The ladder was not working during that period** —
+these PRs close roughly seventy findings observed in exactly that window, in
+combinations that varied day to day. A comparison between a broken before and a
+fixed after is confounded past the point of use, so no amount of retained data
+buys a usable baseline.
 
-1. Raise `cleanupPeriodDays` past the expected end of the window plus the
-   post-resumption measurement window.
-2. Snapshot `$HOME/.claude/projects` (2.4 GB; 300 GB free) with mtimes
-   preserved — `cp -a` or `tar`, never a plain copy, since mtime *is* the
-   window key. Include the 1,682 `*.dispatch-stamp.json` companions; they are
-   not `.jsonl` and a jsonl-only copy silently drops them.
+The right baseline is **forward**, and the plan already specifies where it comes
+from: the staged resumption (sentinel off at `max_concurrent_workers: 1`, one
+node through the full ladder). That is the first trustworthy fleet data this
+repo will have, and it does not exist yet, so nothing about a working ladder can
+be measured before the window.
 
-Take it as a snapshot rather than relying on the setting alone: resuming an old
-session appends to its transcript and updates its mtime, migrating that session
-out of the historical window it belongs to.
+Two of the three nodes do not need fleet data at all, which moves them rather
+than blocking them:
 
-With the archive in hand, all three measurement sessions leave the pre-PR list
-entirely and run whenever the post-resumption data exists, against the archive.
+| Node | Needs a working fleet? | When |
+|---|---|---|
+| `tactic-dispatch-cache-preserving-context` (`hit_ratio`) | no — a property of how sessions are constructed | during the window, on the ad-hoc sessions themselves |
+| `tactic-rsi-measure-fanout-and-model-routing` | no — a property of this harness's routing | during the window, on the ad-hoc sessions themselves |
+| `tactic-dispatch-observation-masking` | yes — fleet-shaped | at the staged resumption |
+
+The residual value of old transcripts is forensic rather than statistical, and
+it is small: across the whole graph, 30 nodes cite a session UUID as evidence,
+covering 23 distinct sessions. Three of those transcripts are already gone
+(`tactic-plan-view-hot-lineage-panel`, `tactic-plan-view-table`,
+`tactic-test-decision-log-prod-leak`) and **none of the three is in this plan's
+scope**. So the ongoing expiry is not currently destroying evidence this work
+depends on.
+
+**Conclusion: no archive, no history older than the default retention, and no
+measurement session before Bundle 1.**
+
+The one retention change still worth making points forward, not back: raise
+`cleanupPeriodDays` past the window plus the post-resumption measurement period,
+so that the ad-hoc sessions' own transcripts and the staged-resumption data
+survive until PR7 and PR11 read them. If the window runs longer than the default
+retention, the data those PRs actually need expires before they measure it.
 
 ## Net effect on the pre-first-PR list
 
 | Was | Now |
 |---|---|
 | S1 park the node lane | **withdrawn** — 0 mergeable, no path to non-zero while paused; keep as a pre-bundle check |
-| S2–S4 `/rsi-audit` baselines | **withdrawn as scheduled** — recomputable later from durable data |
-| — | **archive the transcripts + raise retention** (the only genuinely time-critical item) |
+| S2–S4 `/rsi-audit` baselines | **withdrawn** — no pre-pause baseline is usable; two move into the window, one moves to the staged resumption |
+| — | raise `cleanupPeriodDays` so *forward* data survives until PR7/PR11 read it |
 
-Nothing else blocks Bundle 1.
+**Nothing blocks Bundle 1.** The pre-first-PR list is empty.
 
 ---
 
