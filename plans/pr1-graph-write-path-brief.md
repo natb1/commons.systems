@@ -6,26 +6,39 @@ need to open `plans/dispatch-rsi-serialized-pr-plan.md`; where that document is
 wrong, this brief says so and gives the correction — see the Appendix, which is
 long, because the master plan's PR1 section carries several stale anchors.
 
-Every `path:line` anchor below was verified against `origin/main` on 2026-08-14.
+Every `path:line` anchor below was verified against `origin/main` on
+2026-08-14, and the ruling-dependent parts re-verified on 2026-08-15.
 
-The work: implement **7 units** across 4 files, open an ad-hoc PR, stop for
+The work: implement **8 units** across 4 files, open an ad-hoc PR, stop for
 author review, absorb the review residuals, merge, QA `main`, then close **8**
 graph nodes.
 
-> **Read this first — the shape changed on 2026-08-14.** The master plan
-> describes PR1 as 8 units closing 9 nodes. Three `/align-tactics` rounds were
-> run to finalize the three under-specified nodes. **Two of the three parked**,
-> and one of those parks retires a unit outright:
+> **Read this first — the shape changed twice.** The master plan describes PR1
+> as 8 units closing 9 nodes. Three `/align-tactics` rounds were run on
+> 2026-08-14 to finalize the three under-specified nodes; **two parked**. An
+> author sitting on **2026-08-15 ruled both parks and cleared them**, and the
+> rulings are landed as strategy clarifications **241, 242 and 243** on
+> `strategy-graph-native-dispatch`.
 >
-> | Node | Round outcome | Effect on PR1 |
+> | Node | Outcome | Effect on PR1 |
 > |---|---|---|
-> | `tactic-graph-commit-snap-dir-merge-clobbers-original` | **parked** — requirement-ambiguity | **U6 is dropped.** The node does **not** close here |
-> | `tactic-explicit-ref-graph-reads` | **parked** — requirement-ambiguity | **U8 proceeds** (hand-authored below); node closes after its park is cleared |
+> | `tactic-graph-commit-snap-dir-merge-clobbers-original` | parked, then **ruled (b)** — clarification 241 | **U6 is restored** to Lane A; the node closes here |
+> | `tactic-explicit-ref-graph-reads` | parked, then **ruled shape (a)** — clarification 242 | **U8 proceeds**, but **loses `demote-node-to-implement`**; node closes here |
 > | `tactic-graph-commit-merge-npx-park-storm` | **finalized** — `phase: implement`, full plan body | **U7's plan lives on the node** and is authoritative — see §0 |
 >
-> All three outcomes are landed on `origin/main` (verified at `2d2e77d4`). Both
-> parks carry full recoverable context and a recommendation. Read all three
-> before starting: `git show origin/main:intentions/<id>.md`.
+> **Net against the master plan: 8 units, but only 8 nodes.**
+> `tactic-demote-node-stale-local-read` is **no longer absorbed into U8** and
+> does **not** close here — clarification 242 gives it sole ownership of
+> `demote-node-to-implement`, and it is blocked anyway. See F9.
+>
+> All outcomes are landed on `origin/main` (verified at `42884460`). Neither
+> node carries a park any more — `office_hours` is `null` on both. Read the
+> three nodes and the three clarifications before starting:
+>
+> ```bash
+> git show origin/main:intentions/<id>.md
+> git show origin/main:intentions/strategy-graph-native-dispatch.md   # 241-243
+> ```
 
 ---
 
@@ -141,13 +154,13 @@ path can report a vacuous pass against the wrong tree.
 | 3 | `tactic-eval-finding-eval-finding-forward-crossref-fails-ci` | U3 | yes |
 | 4 | `tactic-eval-finding-origin-main-data-test-blocks-atomic-schema-tightening` | U4 | yes |
 | 5 | `tactic-graph-commit-orphan-refusal-misattributed-content-failure` | U5 | yes |
-| 6 | `tactic-graph-commit-snap-dir-merge-clobbers-original` | ~~U6~~ | **NO — parked** |
+| 6 | `tactic-graph-commit-snap-dir-merge-clobbers-original` | U6 | yes — ruled (b), clarification 241 |
 | 7 | `tactic-graph-commit-merge-npx-park-storm` | U7 | yes (see §0) |
-| 8 | `tactic-explicit-ref-graph-reads` | U8 | yes — clear its park first |
-| 9 | `tactic-demote-node-stale-local-read` | absorbed by U8 | yes — as **superseded** |
+| 8 | `tactic-explicit-ref-graph-reads` | U8 | yes — ruled shape (a), clarification 242 |
+| — | `tactic-demote-node-stale-local-read` | **none** | **NO** — out of scope, stays blocked (F9) |
 
-`packages/intentionsutil/scripts/graph-commit` is **3715 lines**. Three of the
-seven units live in it, which is why §3 groups by file rather than by node.
+`packages/intentionsutil/scripts/graph-commit` is **3715 lines**. Four of the
+eight units live in it, which is why §3 groups by file rather than by node.
 
 ### F1 — a far-ahead rebuild drops an edit and reports success (U1)
 
@@ -172,13 +185,15 @@ never report `landed`. A `noop` verdict on an invocation that passed `--base`
 for an already-existing node deserves particular suspicion: the caller
 demonstrably believed it was changing something.
 
-> **`SNAP_DIR` is the right comparison source, and U1 does *not* depend on the
-> dropped U6.** `SNAP_DIR` is deliberately maintained as *"the content THIS RUN
-> INTENDS TO LAND"* — refreshed with the merge output when a merge resolves —
-> and `print_verdict` already reads it as ground truth for exactly that at
-> `:2091-2098`. Intent-to-land is precisely what U1 needs to compare. (U6 would
-> have changed `SNAP_DIR` to hold the writer's *pre-merge bytes* instead; that
-> is a different question, now parked. U1 is unaffected either way.)
+> **`SNAP_DIR` is the right comparison source — but read U6 first, because U6
+> changes what it holds.** U1 compares *what this run intended to land* against
+> what landed. Today `SNAP_DIR/<id>.md` is that intent (refreshed with the merge
+> output when a merge resolves; `print_verdict` reads it as ground truth at
+> `:2091-2098`). **After U6, the intent-to-land copy is `<id>.merged.md` when it
+> exists, and `<id>.md` is the writer's frozen pre-merge original.** U1 must
+> compare against the *preferred* path, not blindly against `<id>.md` — that is
+> why U6 runs first in Lane A. U1's logic is unchanged; only the path it reads
+> is.
 
 > **Anchor correction.** The master plan and the node body both cite
 > `graph-commit:3261` for the false-`landed` die. That is stale. The die is at
@@ -303,49 +318,58 @@ therefore required, not optional.
 Out of scope: the populated-conclusion-behind-stale-status desync — a third
 case, already handled.
 
-### F6 — `SNAP_DIR` on the park path: **U6 is dropped, node parked**
+### F6 — `SNAP_DIR` on the park path (U6) — **ruled (b), U6 restored**
 
-The master plan's U6 asked to freeze `SNAP_DIR/<id>.md` as the writer's
-immutable pre-merge content and route merge output to `<id>.merged.md`. **Do not
-implement it.** The 2026-08-14 align round parked the node, with this evidence:
+**The defect.** A multi-id batch fails closed as a unit. When id A's layer-3
+merge *resolved* and id B's did not, `park_and_exit()` parks both, and
+`park_write()`'s recovery text points the human at `SNAP_DIR/A.md` claiming it
+holds *their* unlanded content. It does not: `check_base_freshness()` and
+`replay_snapshot_onto_base()` have overwritten it with graph-commit's own merge
+output — the losing writer's edit blended with a concurrent writer's landed
+one. Because the concurrent writer chooses which field to touch, they choose
+which of the losing writer's ids lose their evidence.
 
-1. **The behaviour is a deliberate, documented contract**, not a defect. PR
-   #2989 landed it *after* the node was drafted. `graph-commit:794-808` rebuts
-   the node's failure scenario verbatim — the refresh is done *"deliberately"*
-   so `park_and_exit()`'s "preserved at `$SNAP_DIR`" message points at the
-   **reconciled** content, *"the best available starting point for the manual
-   merge — rather than at a stale pre-merge copy."* The same contract is
-   asserted independently at `:919-935` (`snapshot()`'s header: *"SNAP_DIR is
-   NOT a frozen pre-merge copy"*) and `:2091-2098`.
-2. **Preserved regression tests pin it.** `test-graph-commit.sh:2247` is a
-   self-described *"Unit 1 regression guard"* proving the refresh stops the
-   far-ahead rebuild from reverting a concurrent writer's landed edit; cases
-   49–51 guard Unit 2; case 22 pins the unresolved half (`SNAP_DIR` **does**
-   retain the writer's original when the merge does **not** resolve). The
-   node's prescribed fix cannot be built without breaking cases 48–51, and
-   `.claude/rules/test-integrity.md` forbids weakening a preserved test to make
-   a change land.
-3. **The node's factual claim is partly overstated.** `run_merge_node()` is a
-   three-way merge whose resolved output still carries the writer's own delta,
-   so the writer's *intent* is not lost — only the exact pre-merge byte image.
-   And the blend is not "already-landed" content: the batch fails closed and
-   lands nothing.
+**The ruling — strategy clarification 241, 2026-08-15.** Keep the writer's
+original immutable and put the merged content *beside* it:
 
-The park asks the author to rule which of three contracts binds `SNAP_DIR` on
-the park path: **(a)** PR #2989's reconciled intended-to-land content (dismiss
-the node); **(b)** the node's frozen original beside a separate merged copy;
-**(c)** neither — because the strategy's own recorded condition that *"a park
-whose context lives only in the parking session is a defect"* is arguably
-violated by **any** machine-local pointer, and `park_write`'s own text concedes
-*"this machine only — may not survive past this session"* (`:2944-2952`). That
-would re-scope the node toward carrying the losing writer's content in the
-node's `office_hours` record.
+- `snapshot()` writes `$SNAP_DIR/<id>.md` and **never rewrites it**.
+- The merge paths write `$SNAP_DIR/<id>.merged.md`.
+- Every reader that means *"what this run intended to land"* prefers
+  `.merged.md` when present — `ensure_intentions_only_base()`'s replay and
+  `print_verdict` (`:2091-2098`).
+- `park_write()` names **both** paths and labels which is the session's own
+  original and which is graph-commit's partial merge.
 
-> **New finding, not in the master plan: there is a *third* clobber site.** The
-> plan names two `cp -- "$out_f" "$SNAP_DIR/$id.md"` sites (`:810` in
-> `check_base_freshness()`, `:1207` in `replay_snapshot_onto_base()`). A third,
-> structurally identical one is at **`:1652`**, feeding the same `park_write`
-> text. Whichever way the author rules, all three are in scope — not two.
+> **The 2026-08-14 align round parked this node claiming the fix "cannot be
+> built without breaking `test-graph-commit.sh` cases 48–51". That claim was
+> wrong and is withdrawn** — it under-weighted the second half of the node's own
+> fix, that the rebuild replays `.merged.md`. Case 48 (*"far-ahead + stale
+> `--base`: layer-3 merge survives the far-ahead rebuild, both fields land"*)
+> passes unchanged, because `.merged.md` carries exactly the merged content
+> `SNAP_DIR` carries today. Case 22 (`:1551-1581`, `SNAP_DIR` retains the
+> original on an **unresolved** merge) is preserved by construction. Only a
+> naive freeze *without* the replay preference breaks them — which is the
+> failure mode the master plan's own work-to-skip list warns against.
+> **`.claude/rules/test-integrity.md` is not engaged.**
+
+**All three clobber sites are in scope.** The master plan names two
+(`:810` in `check_base_freshness()`, `:1207` in `replay_snapshot_onto_base()`).
+A third, structurally identical one is at **`:1652`** in
+`build_commit_plumbing()`, feeding the same `park_write` text. It is named by
+neither the master plan nor the node.
+
+One claim in the node's own text is still overstated and should not be repeated
+in the PR body: `run_merge_node()` is a three-way merge whose resolved output
+still carries the writer's delta, so the writer's *intent* survives — what is
+lost is the exact pre-merge byte image and the ability to tell the two apart.
+The blend is also not "already-landed" content; the batch lands nothing.
+
+**Not adopted, still open.** Candidate (c) — that the losing writer's content
+belongs in the node's own `office_hours` record rather than behind any
+machine-local tmpdir pointer, since `park_write` concedes the tmpdir is *"this
+machine only — may not survive past this session"* (`:2944-2952`) — was not
+adopted. Its premise is sound and it complements (b) rather than replacing it.
+**File it as its own tactic; it is out of scope for PR1** (see §7).
 
 ### F7 — a transient `npx` failure becomes a fleet-wide park storm (U7)
 
@@ -415,10 +439,10 @@ can report a **vacuous pass** against a directory that is not the graph:
 
 | Reader | Roots from | Anchor |
 |---|---|---|
-| `validate-graph.ts` | **cwd**, defaulting to the literal `"intentions"` | `:73` |
-| `dump-node.ts` | script location (`import.meta.url`) | `:35-40` |
-| `write-node.ts` | script location (`import.meta.url`) | `:18-22` |
-| `demote-node-to-implement` | script location (`SCRIPT_DIR/../../..`) | `:53` |
+| `packages/intentionsutil/scripts/validate-graph.ts` | **cwd**, defaulting to the literal `"intentions"` | `:73` |
+| `packages/intentionsutil/scripts/dump-node.ts` | script location (`import.meta.url`) | `:38-40` |
+| `packages/intentionsutil/scripts/write-node.ts` | script location (`import.meta.url`) | `:18-22` |
+| `packages/intentionsutil/scripts/clear-park` | script location (`SCRIPT_DIR/../../..`) | `:99-100` |
 
 This is adopted doctrine, not a proposal: `strategy-graph-native-dispatch`
 clarification **194** (ruled 2026-08-05, *"ADOPTED as stated"*) requires reads to
@@ -433,35 +457,43 @@ with `transition-node:161,182,186` as the acquiring wrapper — the
 "wrapper acquires provenance, pure function consumes it" precedent to follow.
 
 **Fix.** Make the tree an explicit **required** argument on the four files above
-— no cwd default, no script-location default. Additionally give
-`demote-node-to-implement` an `origin/main` refresh before it reads: it already
-fetches at `:69` but then reads its own checkout via `REPO_ROOT` at `:53`.
+— no cwd default, no script-location default.
 
-> **U8's node is parked — and U8 proceeds anyway.** The align round could not
-> author the plan because three open nodes claim overlapping files with no
-> recorded partition: this node, `tactic-demote-node-stale-local-read`, and
-> **`tactic-graph-read-at-ref-cli`** — a node the master plan never mentions,
-> which exposes `storeAtRef` as a CLI. The park asks the author to rule the
-> partition. The unit below **is** that partition, hand-authored; the park
-> exists so the ruling gets recorded as a clarification rather than living only
-> in this file. **Clear the park before closing the node in §9.**
+> **The partition is ruled — strategy clarification 242, 2026-08-15.** The
+> 2026-08-14 align round parked this node because three open nodes claimed
+> overlapping files with no recorded partition: this node,
+> `tactic-demote-node-stale-local-read`, and **`tactic-graph-read-at-ref-cli`**
+> — a node the master plan never mentions, which exposes `storeAtRef` as a CLI.
+> Shape **(a)** was ruled and the park is **cleared**:
 >
-> `tactic-graph-read-at-ref-cli` adds a **new CLI** rather than editing these
-> four readers, so it is separable — but it is the reason U8 must **not** build
-> a read CLI of its own. Change the four signatures; do not invent `storeAtRef`
-> CLI surface.
+> - **This node** owns the required-explicit-argument **contract** plus the four
+>   files tabled above.
+> - **`tactic-demote-node-stale-local-read`** owns
+>   `demote-node-to-implement` **alone**. U8 does **not** touch it — see F9.
+> - **`tactic-graph-read-at-ref-cli`** adds a **new CLI** rather than editing
+>   these readers, so it is separable under any shape. It is the reason U8 must
+>   **not** build a read CLI of its own: change the four signatures, do not
+>   invent `storeAtRef` CLI surface.
+>
+> The node's own body now carries this scope table — `git show
+> origin/main:intentions/tactic-explicit-ref-graph-reads.md`.
 
-> **U8's surface is exactly those four files.** These are owned elsewhere and
-> must **not** be touched:
+> **Note the swap against the master plan.** `clear-park` was previously listed
+> as deferred to another PR and `demote-node-to-implement` as in scope.
+> Clarification 242 reverses both: **`clear-park` is in, `demote` is out.**
+>
+> Still owned elsewhere and **not** to be touched:
 > - **`check-node-selection.ts`** — already converted, and owned by
 >   `tactic-graph-execute-fresh-main-read` (`phase: qa`). Clarification **213**
 >   settles it: that node is *"an instance with a cross-reference, not absorbed
 >   into or superseding the broader node."*
+> - **`compute-freshness.ts`** — already converted (explicit
+>   `--snapshot`/`--stamp`).
 > - **`transition-node`** — claimed by `tactic-graph-ref-split` (`phase: implement`).
-> - **`park-node` / `clear-park`** — a separate planned PR extracts their
->   `--base` helper. Note `clear-park:99-100` still roots from
->   `${BASH_SOURCE[0]}` and **is** named by clarification 194; it is
->   deliberately deferred, not overlooked. Say so in the PR body.
+> - **`park-node`** — a separate planned PR extracts its `--base` helper.
+>   (`clear-park`'s `--base` extraction is that PR's; *this* unit changes only
+>   how `clear-park` resolves its tree. Keep the two apart and say so in the PR
+>   body.)
 > - **`graph-commit`** — a **writer**, not a reader. Its `-C`/cwd resolution is
 >   already a ratified standing invariant (clarification **86**); making `-C`
 >   mandatory would change every caller.
@@ -479,28 +511,47 @@ fetches at `:69` but then reads its own checkout via `REPO_ROOT` at `:53`.
 > Re-confirm before editing:
 > `grep -rn "validate-graph" --exclude-dir=node_modules --exclude-dir=.git .`
 
-### F9 — `demote-node-to-implement` writes from a stale read (absorbed into U8)
+### F9 — `demote-node-to-implement`: **out of PR1 entirely**
 
-`tactic-demote-node-stale-local-read` describes the same defect class as F8, one
-naming the specific readers. **It gets no round, no unit, and no separate plan.**
-It is `blocked_by: tactic-phase-evidence-fingerprint-bound` (open), so it is not
-selectable; its body is already plan-complete; and its first greenfield item
-contradicts the adopted remedy.
+The master plan folds `tactic-demote-node-stale-local-read` into U8 as an
+absorbed node, closing with it and contributing one bullet. **Clarification 242
+reverses that: the node owns `demote-node-to-implement` alone, U8 does not touch
+that file, and the node does not close in PR1.** Do no work on it here. Three
+independent reasons, each verified on 2026-08-15:
 
-U8 lifts **exactly one** thing from it — `## Greenfield shape` item 3: the
-`--base` compare-and-swap on `demote-node-to-implement`, so a demotion cannot
-silently discard content that landed on `origin/main` between read and write.
-Today it lands via `graph-commit` with **no `--base` token**, making the write a
-lost update rather than a detected conflict. Its item 2 (fetch, then read from
-`origin/main`) is compatible and folds in.
+1. **Its one contributed bullet is already implemented.** The master plan has U8
+   lift `## Greenfield shape` item 3 — the `--base` compare-and-swap — and calls
+   the current code a lost update with "no `--base` token". That is stale.
+   Commit **`156ce3a1`** gave the script both halves:
 
-> **Item 1 is deliberately discarded.** It says resolve the repo root **from the
-> caller's cwd** — directly contradicting clarification 194, which requires an
-> explicit tree argument with **no cwd default**. Implementing both yields
-> incoherent readers. The adopted node wins. Record this in the PR body.
+   ```bash
+   # demote-node-to-implement:217  — item 2, the fresh origin/main read
+   git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$INTENTIONS_DIR/$NODE_ID.md"
+   # demote-node-to-implement:254  — item 3, the CAS
+   "$SCRIPT_DIR/graph-commit" -C "$REPO_ROOT" --base "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB" ...
+   ```
 
-The existing `FRESH_BLOB` rollback trap keeps working unchanged; it becomes the
-failure path for a rejected CAS rather than the only safety net.
+   Implementing it again would be a no-op at best and a regression at worst.
+
+2. **Its remaining defect is not what U8 would fix anyway.** Only item 1
+   survives — `REPO_ROOT` from `SCRIPT_DIR` (`:52-53`) — plus item 2's
+   consequence, the scope-fingerprint stamp path inheriting that root (`:75`).
+   The node's line citations (`:36`, `:46`, `:115`, `:126-127`) have all moved;
+   any future plan for it must be re-derived from the current file.
+
+3. **Its prescribed remedy does not work.** Item 1 says resolve the root **from
+   the caller's cwd**. But `transition-node` invokes this script *from inside
+   the worker's worktree*, so cwd resolves to the worktree — the same wrong
+   answer script-location gives — while the demotion must act on the main
+   checkout. **Clarification 243** rules the correct shape: a **required
+   explicit tree argument** (clarification 194's reader shape), with
+   `transition-node` updated to pass it. `resolve_project_root` would also
+   resolve correctly but leaves the tree implicit, which is what 194 exists to
+   end. That work belongs to this node, not to U8, and it is **blocked** by
+   `tactic-phase-evidence-fingerprint-bound` regardless.
+
+The node stays `raw`, blocked, and open. Record in the PR body that PR1
+deliberately leaves it alone.
 
 ### Why we implement U1 and U5 anyway — a recorded, accepted cost
 
@@ -534,13 +585,13 @@ directory. PR1 proceeds under either disposition.
 
 ## 3. Lanes and units
 
-Seven units land on four files. Grouping by **node** would put three subagents
+Eight units land on four files. Grouping by **node** would put four subagents
 in one 3715-line bash file; grouping by **file** removes the contention.
 
 | Lane | Model | File(s) | Units, in order |
 |---|---|---|---|
-| **A** | opus | `packages/intentionsutil/scripts/graph-commit` | **U1 → U7 → U5** |
-| **B** | opus | `src/sensors.ts`, `scripts/validate-graph.ts`, `.github/workflows/graph-fast-path.yml`, `scripts/dump-node.ts`, `scripts/write-node.ts`, `scripts/demote-node-to-implement` | **U2 → U8** |
+| **A** | opus | `packages/intentionsutil/scripts/graph-commit` | **U6 → U1 → U7 → U5** |
+| **B** | opus | `src/sensors.ts`, `scripts/validate-graph.ts`, `.github/workflows/graph-fast-path.yml`, `scripts/dump-node.ts`, `scripts/write-node.ts`, `scripts/clear-park`, `.claude/skills/align/scripts/validate-deployment.sh` | **U2 → U8** |
 | **C** | opus | `packages/intentionsutil/src/schema.ts` | **U3** |
 | **D** | sonnet | `packages/intentionsutil/test/office-hours.test.ts` | **U4** |
 
@@ -565,15 +616,55 @@ per lane after that lane's units finish.
 
 `graph-commit`'s multi-bundle stash behaviour; the landing lock
 (`refs/graph/landing-lock`); the `noop` short-circuit widening (skip-item 1);
-`SNAP_DIR`'s park-path contract (F6, parked); and anything ref-split would
-delete beyond the U1/U5 surfaces named here.
+candidate (c) of clarification 241 (moving park content into the node's
+`office_hours` record — a separate tactic, see §7);
+`demote-node-to-implement` and `transition-node` (clarifications 242/243);
+`park-node`'s `--base` extraction; and anything ref-split would delete beyond
+the U1/U5 surfaces named here.
 
 ### Lane A — `packages/intentionsutil/scripts/graph-commit` (opus)
 
-> **U6 is dropped — see F6.** The master plan ordered this lane U6 → U1 → U7 →
-> U5 because U1 needed U6's immutable snapshot. That dependency does not exist:
-> U1 compares *intent to land*, which is exactly what `SNAP_DIR` already holds.
-> The lane starts at U1.
+> **Lane order is forced.** U6 precedes U1 because U1's guard needs a faithful
+> record of what the writer intended to land, and U6 is what makes
+> `SNAP_DIR/<id>.md` that record rather than a merge blend. U7 follows U6
+> because both touch the `run_merge_node` call sites. U5 is a disjoint region
+> (`:1830-1900`) and goes last.
+
+**U6 — keep the writer's original immutable; merged content goes beside it.**
+
+- **Recommended model: opus.** Cross-cutting contract change in a 3715-line
+  bash file, with three writer sites and three readers that must stay
+  consistent, pinned by regression tests that must keep passing.
+- **Context.** See F6. Ruled by strategy clarification **241** (2026-08-15).
+  The park that previously blocked this unit is cleared.
+- **Scope — writers (all three, do not stop at two):**
+  - `check_base_freshness()` — the `cp -- "$out_f" "$SNAP_DIR/$id.md"` at
+    **`:810`** writes `$SNAP_DIR/$id.merged.md` instead.
+  - `replay_snapshot_onto_base()` — same change at **`:1207`**.
+  - `build_commit_plumbing()` — same change at **`:1652`**. *Named by neither
+    the master plan nor the node; it is in scope.*
+  - `snapshot()` (`:936`/`:939`) writes `$SNAP_DIR/<id>.md` once and is never
+    rewritten. Update its header comment at `:919-935`, which currently asserts
+    the opposite (*"SNAP_DIR is NOT a frozen pre-merge copy"*).
+- **Scope — readers (a freeze without these is the failure mode to avoid):**
+  - `ensure_intentions_only_base()`'s replay prefers `<id>.merged.md` when it
+    exists, else `<id>.md`. **This is what keeps case 48 green.**
+  - `print_verdict` (`:2091-2098`) reads the same preferred path for
+    "what this run intended to land".
+  - `park_write()` (`:2944-2952`) names **both** paths and labels which is the
+    session's own original and which is graph-commit's partial merge.
+  - Update the defending comments at `:794-808` and `:1205-1206`, which
+    currently justify the clobber.
+- **Out of scope.** The tmpdir's durability (candidate (c)); the merge algorithm
+  itself; anything in U1/U5/U7's regions.
+- **Reuse.** `test-graph-commit.sh`'s existing harness; extend it with a case
+  asserting that on a **resolved** merge `SNAP_DIR/<id>.md` still hashes to the
+  writer's pre-merge content while `<id>.merged.md` holds the blend.
+- **Verification.** `test-graph-commit.sh` must pass **unchanged** — in
+  particular case 48 (*"far-ahead + stale `--base`: layer-3 merge survives the
+  far-ahead rebuild, both fields land"*) and case 22 (`:1551-1581`). If either
+  goes red, the replay-preference half is wrong or missing. **Do not weaken
+  either test** (`.claude/rules/test-integrity.md`).
 
 **U1 — assert intent against outcome before `noop`.**
 *Scope:* before `emit_verdict_and_exit noop` (`:3659`), for each id compare
@@ -654,21 +745,25 @@ names to `UNBOUND_SENSOR_NAMES` to quiet the rule. The four stub jobs'
 repo-wide write denial; getting the blast radius right is the whole unit.
 
 **U8 — make the tree an explicit required argument on four readers.**
-*Scope:* exactly four files — `validate-graph.ts` (`:73`, drop the cwd-relative
-`"intentions"` default), `dump-node.ts` (`:35-40`), `write-node.ts` (`:18-22`),
-`demote-node-to-implement` (`:53`; it already fetches at `:69` — make it read
-`origin/main`, and add the `--base` CAS on its `graph-commit` call). Update
-`.claude/skills/align/scripts/validate-deployment.sh:53`, the one executable
-caller that passes no directory, and correct the SKILL.md prose listed in F8.
-*Out of scope, explicitly:* `check-node-selection.ts` (already converted),
-`transition-node`, `park-node`, `clear-park`, `graph-commit`. Building a
-`storeAtRef` CLI (owned by `tactic-graph-read-at-ref-cli`). The absorbed node's
-greenfield item 1 (cwd-based root resolution) — deliberately discarded.
+*Scope:* exactly four files, per clarification **242** —
+`packages/intentionsutil/scripts/validate-graph.ts` (`:73`, drop the
+cwd-relative `"intentions"` default), `dump-node.ts` (`:38-40`, drop the
+`import.meta.url` root), `write-node.ts` (`:18-22`, same), and
+`packages/intentionsutil/scripts/clear-park` (`:99-100`, `REPO_ROOT` from
+`SCRIPT_DIR`). Update `.claude/skills/align/scripts/validate-deployment.sh:53`,
+the one executable caller that passes no directory, and correct the SKILL.md
+prose listed in F8.
+*Out of scope, explicitly:* **`demote-node-to-implement`** — owned solely by
+`tactic-demote-node-stale-local-read` (clarification 242); its CAS is already
+implemented and its correct shape is ruled separately (clarification 243). See
+F9. Also out: `check-node-selection.ts` and `compute-freshness.ts` (already
+converted), `transition-node`, `park-node`, `graph-commit`, and `clear-park`'s
+`--base` extraction (that is the other PR's; change only how it resolves its
+tree). Building a `storeAtRef` CLI (owned by `tactic-graph-read-at-ref-cli`).
 *Reuse:* `lib-store-at-ref.ts` / `storeAtRef` as a library (not a new CLI);
 `compute-freshness.ts` + `transition-node:161,182,186` as the
-wrapper-acquires/function-consumes precedent;
-`packages/intentionsutil/scripts/test-demote-node-to-implement.sh` and
-`test-park-node.sh` for harness shape.
+wrapper-acquires/function-consumes precedent; `test-park-node.sh` for harness
+shape.
 *Dependencies:* **U2**. *Recommended model:* **opus** — a cross-cutting
 signature change across four files plus every caller; a missed caller is a
 runtime break.
@@ -716,11 +811,16 @@ against an existing fixture builder.
 3. Drop U3's caller half (Lane C).
 4. Drop U4's "direction 1" (Lane D).
 5. Reduce U1's second guard to its residual (pre-flight (c)).
-6. **Do not touch `SNAP_DIR`'s park-path contract at all** (F6 — parked).
-7. Keep the out-of-scope readers out of U8 (F8).
+6. **Do not freeze `SNAP_DIR` naively** (F6). Freezing the copy without also
+   making the rebuild replay, `print_verdict` and `park_write` prefer
+   `<id>.merged.md` reverts resolved merges and turns case 48 red. Both halves
+   or neither. And do **not** take on candidate (c) — the tmpdir-durability
+   question is a separate tactic (§7).
+7. Keep the out-of-scope readers out of U8, and **do no work on
+   `demote-node-to-implement`** (F8, F9).
 8. Drop `noop-verdict` remedy #1 and U2's tree-resolution half — retired by U8 /
    PR #3050.
-9. **One verification pass, not seven** — §4.
+9. **One verification pass, not eight** — §4.
 
 ---
 
@@ -763,6 +863,13 @@ vitest's `--project` flag is apps-only.
   Unit-test the rc mapping directly: assert a concluded non-success and an
   orphaned suite produce **different** return codes, and that the orphaned path
   attempts a bounded re-push.
+- **U6** — the probe that matters is the one the node was filed about, and no
+  suite covers it. Drive a **multi-id** batch where id A's layer-3 merge
+  *resolves* and id B's does not, so the batch fails closed and parks both.
+  Then assert three things: `SNAP_DIR/A.md` still hashes to A's **pre-merge**
+  content; `SNAP_DIR/A.merged.md` holds the blend; and `park_write`'s recovery
+  text names both and says which is which. Before the fix, the first assertion
+  fails — that is the defect.
 - **U7** — force the failure with `PATH` stripped of `npx`, or
   `MERGE_NODE_SCRIPT` pointed at a nonexistent file, on a divergent node.
   Confirm the run dies with an environment error and that **no** `office_hours`
@@ -785,14 +892,17 @@ gh pr create --title "pr1: graph write-path integrity" --body-file <file>
 
 The PR body should record:
 
-- the seven units and which node each closes;
-- that **U6 was dropped** and `tactic-graph-commit-snap-dir-merge-clobbers-original`
-  stays parked pending an author ruling (F6), including the third clobber site
-  at `:1652`;
-- that `tactic-demote-node-stale-local-read` closes as **superseded**, with its
-  item 1 deliberately discarded (F9);
-- that `clear-park` is named by clarification 194 but deliberately deferred to
-  the node-mutation PR (F8);
+- the **eight** units and which node each closes;
+- that **U6 implements ruling (b)** of strategy clarification **241**, fixing
+  **all three** clobber sites including `:1652`, which neither the master plan
+  nor the node names — and that candidate (c) was **not** adopted and is filed
+  as its own tactic (§7);
+- that **U8 implements shape (a)** of clarification **242** over exactly four
+  files, and that `clear-park` is **in** scope while
+  `demote-node-to-implement` is **out**, reversing the master plan;
+- that `tactic-demote-node-stale-local-read` is deliberately **untouched and
+  not closed** — its `--base` CAS already shipped in `156ce3a1`, its remaining
+  defect is ruled separately (clarification **243**), and it stays blocked (F9);
 - that the no-op short-circuit widening is deliberately not here (skip-item 1);
 - U4's "direction 1" recommended as a follow-up node.
 
@@ -830,6 +940,21 @@ After the fix pass:
 **Do not merge with unaddressed findings.** A finding is addressed when it is
 fixed, or when a posted recommendation explains why it is not.
 
+### Follow-up nodes to file (not work for this PR)
+
+Two are already known before review starts — file them so they are not lost:
+
+1. **Park context durability** — candidate **(c)** of clarification 241, not
+   adopted by U6. `park_write` points the human at a tmpdir it concedes is
+   *"this machine only — may not survive past this session"*
+   (`graph-commit:2944-2952`), against the strategy's recorded condition that a
+   park whose context lives only in the parking session is a defect. The
+   question is whether the losing writer's content belongs in the node's own
+   `office_hours` record. It **complements** U6 rather than replacing it.
+2. **U4's "direction 1"** — the planning-time rule that a data migration and a
+   tightening that rejects its pre-migration spelling cannot share a PR. That
+   is `/align-tactics` doctrine, not this PR's code.
+
 ---
 
 ## 8. Merge, then QA of `main`
@@ -862,20 +987,20 @@ Re-run pre-flight (a) first — `git rev-list --left-right --count
 origin/main...main` must print `0	0`. A single unpushed local commit re-arms the
 U1 drop on the very batch that closes U1's node.
 
-### First: clear `tactic-explicit-ref-graph-reads`'s park
+### No park to clear — both were cleared on 2026-08-15
 
-It cannot close while parked. The park exists to get the U8 scope partition
-recorded as a clarification; this PR **is** that ruling.
+Earlier drafts of this brief told you to `clear-park` the U8 node first. **That
+step is done.** The author sitting that ruled clarifications 241/242/243 also
+cleared both parks; `office_hours` is `null` on both nodes as of `origin/main`
+`42884460`. Confirm rather than assume — if either is non-null, someone
+re-parked it and you should stop and read the reason:
 
 ```bash
-packages/intentionsutil/scripts/clear-park -C <worktree> tactic-explicit-ref-graph-reads
+git show origin/main:intentions/tactic-explicit-ref-graph-reads.md | grep '^office_hours'
+git show origin/main:intentions/tactic-graph-commit-snap-dir-merge-clobbers-original.md | grep '^office_hours'
 ```
 
-Pass `-C` explicitly — without it `clear-park` resolves its own root from script
-location (`:99-100`) and can report a false "landed". Verify with
-`git show origin/main:intentions/tactic-explicit-ref-graph-reads.md`.
-
-### Then close eight ids in one call
+### Close eight ids in one call
 
 ```bash
 D="$CLAUDE_JOB_DIR/tmp/close-pr1"; mkdir -p "$D"
@@ -885,9 +1010,9 @@ npx tsx <worktree>/packages/intentionsutil/scripts/dump-node.ts --out-dir "$D" \
   tactic-eval-finding-eval-finding-forward-crossref-fails-ci \
   tactic-eval-finding-origin-main-data-test-blocks-atomic-schema-tightening \
   tactic-graph-commit-orphan-refusal-misattributed-content-failure \
+  tactic-graph-commit-snap-dir-merge-clobbers-original \
   tactic-graph-commit-merge-npx-park-storm \
-  tactic-explicit-ref-graph-reads \
-  tactic-demote-node-stale-local-read
+  tactic-explicit-ref-graph-reads
 # prints the base-manifest path -> $BASE
 # 2. jq each node's JSON: phase -> "done", and set execution.completion
 # 3. write-node.ts each edited JSON  (run the WORKTREE's own copy)
@@ -896,8 +1021,10 @@ npx tsx <worktree>/packages/intentionsutil/scripts/dump-node.ts --out-dir "$D" \
 # 6. verify-landed --blob, AND git show origin/main:intentions/<id>.md
 ```
 
-**`tactic-graph-commit-snap-dir-merge-clobbers-original` is deliberately absent**
-— U6 was dropped and it stays parked (F6). Do not close it.
+**`tactic-demote-node-stale-local-read` is deliberately absent.** The master
+plan closes it here as absorbed into U8. Clarification 242 removed it from U8's
+scope, so PR1 does no work on it and it must **not** be closed — closing it
+would claim a fix that was never made. It stays `raw` and blocked. See F9.
 
 ### Set `execution.completion`, **not** `execution.resolved_by`
 
@@ -924,24 +1051,28 @@ npx tsx <worktree>/packages/intentionsutil/scripts/dump-node.ts --out-dir "$D" \
 > census step flags. **This correction applies to every PR in the serialized
 > plan, not just PR1.**
 
-### Seven close as implemented. One closes as superseded.
+### All eight close as implemented
 
-`tactic-demote-node-stale-local-read` had no unit and no plan of its own — U8
-absorbed it. It must close in the **same batch** as
-`tactic-explicit-ref-graph-reads`; closing one alone leaves a duplicate open
-against a fixed defect. Append this to its body:
+Every id in the batch above has a unit in this PR and closes on its own work.
+There is no superseded close and no absorbed node — the master plan's
+"8 implemented + 1 superseded" (and this brief's earlier "7 + 1") are both
+obsolete, retired by clarification 242.
 
-> Closed as **superseded by `tactic-explicit-ref-graph-reads`**, implemented as
-> PR1 Unit 8 in PR #\<N\>. The stale-read defect this node reported is fixed by
-> the general explicit-tree change; its `## Greenfield shape` item 3 (`--base`
-> CAS on `demote-node-to-implement`) was implemented as part of that unit. Item
-> 1 (resolve the repo root from the caller's cwd) was **not** implemented and is
-> deliberately discarded — it contradicts the adopted remedy in
-> `tactic-explicit-ref-graph-reads`, which requires an explicit tree argument
-> with no cwd default.
+Two nodes need a note appended to their bodies before closing, because in each
+case the shipped fix differs from what the node's own text prescribes:
 
-Do **not** set `execution.pr` or a branch on that node — it never had one.
-`execution.completion` carries the same merge sha as the others.
+- **`tactic-graph-commit-snap-dir-merge-clobbers-original`** — record that it
+  shipped under clarification **241** as ruling (b), that all **three** clobber
+  sites were fixed (including `:1652`, which the node never named), and that
+  candidate (c) was not adopted and is filed separately (§7).
+- **`tactic-explicit-ref-graph-reads`** — record that it shipped under
+  clarification **242** as shape (a), covering four files, and that
+  `demote-node-to-implement` was deliberately excluded and remains open on
+  `tactic-demote-node-stale-local-read`.
+
+Both nodes already carry the ruling in their bodies from the 2026-08-15
+sitting; you are adding the *implementation* record (PR number, merge sha) on
+top, not restating the ruling.
 
 ### Five hazards on this batch
 
@@ -978,8 +1109,8 @@ git show origin/main:intentions/<id>.md | grep -A3 '^execution:'
 gh pr list --head <id> --state open
 ```
 
-All nine were `execution: null` with no open PR carrying their branch names when
-this brief was written, so this is expected to be a **no-op** — but verify.
+All eight were `execution: null` with no open PR carrying their branch names
+when this brief was written, so this is expected to be a **no-op** — but verify.
 
 If one **is** found, do not `gh pr merge` it:
 
@@ -1003,42 +1134,46 @@ Carried here so this brief is usable without opening that document.
 | `demote-node-to-implement` (path unstated) | `packages/intentionsutil/scripts/demote-node-to-implement`, **not** under `.claude/skills/` |
 | `validate-graph.ts` has exactly one call site | one **CI** call site (`graph-fast-path.yml:32`, which already passes `intentions` and will not break). A second executable caller passes **no** directory: `.claude/skills/align/scripts/validate-deployment.sh:53`. Plus ~90 doc-prose hits |
 | `run-unit-tests.sh --pr-scripts` reaches the `graph-commit`/`verify-landed`/`demote` suites | it does **not** — it iterates only `.claude/skills/dispatch-propagate/scripts/test-*.sh`. Run those three directly by path; CI does (`unit-tests.yml:264-268`) |
-| U6's node says "Not addressed by PR #2989" | #2989 is **merged** (`a6a07ced`) and introduced the behaviour **deliberately**, defended at `graph-commit:794-808`, `:919-935`, `:2091-2098` and pinned by `test-graph-commit.sh` cases 48–51. **U6 is dropped; the node is parked** |
+| U6's node says "Not addressed by PR #2989" | #2989 is **merged** (`a6a07ced`) and introduced the behaviour **deliberately**, defended at `graph-commit:794-808`, `:919-935`, `:2091-2098`. The node's provenance line is wrong, but the defect it reports is real: **U6 ships** under clarification 241 (F6) |
 | U6 has two `SNAP_DIR` clobber sites | **three** — `:810`, `:1207`, and `:1652` |
 | U7's `run_merge_node` has two call sites | **four** — `:793`, `:1203`, `:1650`, `:2298` |
 | U8 must convert `check-node-selection.ts` | already converted — it takes a required `--dir` (`:14-15`). So has `compute-freshness.ts` |
-| PR1 is 8 units closing 9 nodes | **7 units closing 8 nodes** — see the banner at the top |
+| U8 converts `demote-node-to-implement`, and lifts its `--base` CAS | **both wrong.** The CAS and the `origin/main` fresh read already shipped in `156ce3a1` (`:217`, `:254`), and clarification 242 removes the file from U8's scope entirely. `clear-park` takes its place (F8, F9) |
+| `tactic-demote-node-stale-local-read` closes as absorbed | it does **not** close in PR1 at all — no unit touches it and it stays blocked (F9) |
+| U8's fourth file is `demote-node-to-implement`; `clear-park` is deferred | reversed by clarification 242 — `clear-park` is **in** (`:99-100`), `demote` is **out** |
+| PR1 is 8 units closing 9 nodes | **8 units closing 8 nodes** — see the banner at the top |
 
 **Confirmed correct** in the master plan: `graph-commit:793` and `:1203-1206`
 (two of U6's three sites), `:995` (U7's npx call), `office-hours.test.ts:853-891`
 (U4's block), `schema.ts:244` (`attributes` is `Record<string, unknown>`), and
 the `needs: guard` structure of `graph-fast-path.yml`'s four required contexts.
 
-## Appendix — what the three align rounds produced
+## Appendix — the three align rounds, and the sitting that resolved them
 
-Run 2026-08-14 against `origin/main` `da1c3c7f`, in `mode: "tactic"`.
+Rounds run 2026-08-14 against `origin/main` `da1c3c7f` in `mode: "tactic"`;
+outcomes verified landed at `2d2e77d4`. Both parks were **ruled and cleared** by
+an author sitting on 2026-08-15, landed at `42884460`.
 
-Run 2026-08-14 against `origin/main` `da1c3c7f`, in `mode: "tactic"`. All three
-outcomes verified landed at `origin/main` `2d2e77d4`.
-
-| Node | Outcome | Where the detail lives |
+| Node | Round outcome | Resolution |
 |---|---|---|
-| `tactic-graph-commit-snap-dir-merge-clobbers-original` | **parked**, requirement-ambiguity — premise overtaken by PR #2989; the prescribed fix would break preserved regression guards | `office_hours.reason` + `recommendation` on the node |
-| `tactic-explicit-ref-graph-reads` | **parked**, requirement-ambiguity — scope partition unrecorded across three co-extensive siblings | `office_hours.reason` + `recommendation` on the node |
-| `tactic-graph-commit-merge-npx-park-storm` | **finalized** — `status: codified`, `phase: implement`, ~24KB plan body, 3 units | the node body (§0) |
+| `tactic-graph-commit-snap-dir-merge-clobbers-original` | **parked** — premise overtaken by PR #2989 | **ruled (b)**, clarification **241**. Park cleared. U6 restored |
+| `tactic-explicit-ref-graph-reads` | **parked** — scope partition unrecorded across three siblings | **ruled shape (a)**, clarification **242**. Park cleared. U8 keeps four files, loses `demote` |
+| `tactic-graph-commit-merge-npx-park-storm` | **finalized** — `status: codified`, `phase: implement`, ~24KB plan body, 3 units | unchanged; the node body is authoritative (§0) |
 
-Both parks note that, per the tactic-target contract, a per-node round writes
-**nothing** onto the serving strategy — so the clarifications they propose are
-**not** landed on `strategy-graph-native-dispatch`. A future `/align` interview
-or strategy-target `/align-tactics` round must land them. The two proposed
-clarifications worth landing:
+Per the tactic-target contract a per-node round writes **nothing** onto the
+serving strategy, so both rounds left their proposed clarifications unlanded.
+The 2026-08-15 sitting landed them, plus a third the rounds did not anticipate:
 
-1. **What must `SNAP_DIR/<id>.md` hold on the park path** for an id whose
-   layer-3 merge resolved earlier in the same multi-id invocation — contract
-   (a), (b) or (c) in F6.
-2. **How the R3 read-path scope is partitioned** across
-   `tactic-explicit-ref-graph-reads`, `tactic-demote-node-stale-local-read` and
-   `tactic-graph-read-at-ref-cli` — F8. This brief's U8 is the de-facto ruling.
+| # | Subject |
+|---|---|
+| **241** | What `SNAP_DIR/<id>.md` must hold on the park path — ruled **(b)**, frozen original beside `<id>.merged.md`, all three clobber sites in scope |
+| **242** | How the R3 read-path scope is partitioned across the three siblings — ruled shape **(a)** |
+| **243** | Which ratified shape binds `demote-node-to-implement`, which is both reader and writer — ruled clarification 194's **required explicit argument** |
+
+> **One round finding was withdrawn.** The snap-dir park claimed the fix "cannot
+> be built without breaking cases 48–51". It can: the node's own fix has the
+> rebuild replay `<id>.merged.md`, so case 48 passes unchanged. The park
+> under-weighted that half. See F6.
 
 ### A related decision landed the same day
 
