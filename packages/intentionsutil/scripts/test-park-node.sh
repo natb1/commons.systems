@@ -159,10 +159,12 @@
 #  25. clear-park's `-C <repo-root>` is REQUIRED (strategy-graph-native-dispatch
 #      clarification 194/242): the script no longer derives its target checkout
 #      from its own on-disk location. Omitting -C, passing it with no value,
-#      pointing it at a non-directory, and pointing it at a directory with no
-#      intentions/ must each be a usage error (exit 2) that mutates NOTHING —
-#      not a fallback to the script's own tree. The companion positive arm is
-#      case 20, which drives script location and -C target apart deliberately.
+#      pointing it at a non-directory, pointing it at a directory with no
+#      intentions/, and pointing it at a nested directory that HAS an
+#      intentions/ but is not the git toplevel must each be a usage error
+#      (exit 2) that mutates NOTHING — not a fallback to the script's own tree.
+#      The companion positive arm is case 20, which drives script location and
+#      -C target apart deliberately.
 #
 # No network needed. Cases 1-3, 6-15, and 22-24 need only bash + git + jq (the
 # gh and npx PATH shims stand in for the GitHub API and the tsx writers).
@@ -1452,19 +1454,36 @@ out_noval="$(run_cp_raw -C 2>&1)"; rc_noval=$?
 out_notdir="$(run_cp_raw -C "$R_REQ/intentions/t-require-c.md" t-require-c 2>&1)"; rc_notdir=$?
 NOSTORE="$WORK/req-c-nostore"; mkdir -p "$NOSTORE"
 out_nostore="$(run_cp_raw -C "$NOSTORE" t-require-c 2>&1)"; rc_nostore=$?
+# Fifth arm: a NESTED directory that does hold its own intentions/, so both the
+# is-a-directory and has-a-store checks pass, but which is not the git
+# toplevel. git resolves `origin/main:intentions/<id>.md` from the toplevel and
+# the write/hash from -C, so accepting this would read the OUTER store and
+# write the INNER one. Must be the same usage error as the other four.
+# Seeded literally rather than copied from the clone: the arm must hold even
+# when the clone's own fixture node is absent, or the byte-comparison below
+# silently degrades to comparing two empty strings.
+NESTED="$R_REQ/nested-store"; mkdir -p "$NESTED/intentions"
+printf -- '---\nid: t-require-c\n---\nnested sentinel, must not be rewritten\n' \
+  > "$NESTED/intentions/t-require-c.md"
+nested_before="$(git hash-object "$NESTED/intentions/t-require-c.md")"
+out_nottop="$(run_cp_raw -C "$NESTED" t-require-c 2>&1)"; rc_nottop=$?
+nested_after="$(git hash-object "$NESTED/intentions/t-require-c.md")"
 
 after_sha_c="$(origin_sha)"
 porcelain_c="$(git -C "$R_REQ" status --porcelain -- intentions/)"
 
-if [[ $rc_missing -eq 2 && $rc_noval -eq 2 && $rc_notdir -eq 2 && $rc_nostore -eq 2 ]] \
+if [[ $rc_missing -eq 2 && $rc_noval -eq 2 && $rc_notdir -eq 2 && $rc_nostore -eq 2 && $rc_nottop -eq 2 ]] \
    && grep -q -- '-C <repo-root> is required' <<<"$out_missing" \
    && grep -q 'no intentions/ directory' <<<"$out_nostore" \
+   && grep -q 'is not the git toplevel' <<<"$out_nottop" \
+   && [[ "$nested_after" == "$nested_before" ]] \
    && [[ "$after_sha_c" == "$before_sha_c" ]] && [[ -z "$porcelain_c" ]]; then
-  ok "clear-park requires -C: omitted / valueless / non-directory / storeless all exit 2 with nothing written"
+  ok "clear-park requires -C: omitted / valueless / non-directory / storeless / not-a-toplevel all exit 2 with nothing written"
 else
-  no "clear-park -C requirement (rc_missing=$rc_missing rc_noval=$rc_noval rc_notdir=$rc_notdir rc_nostore=$rc_nostore porcelain='$porcelain_c' before=$before_sha_c after=$after_sha_c)"
+  no "clear-park -C requirement (rc_missing=$rc_missing rc_noval=$rc_noval rc_notdir=$rc_notdir rc_nostore=$rc_nostore rc_nottop=$rc_nottop porcelain='$porcelain_c' before=$before_sha_c after=$after_sha_c nested_before=$nested_before nested_after=$nested_after)"
   printf 'missing: %s\n' "$out_missing"
   printf 'nostore: %s\n' "$out_nostore"
+  printf 'nottop: %s\n' "$out_nottop"
 fi
 
 echo

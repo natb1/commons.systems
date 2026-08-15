@@ -47,8 +47,13 @@ function hasOriginMain(): boolean {
   }
 }
 
+/** Spawns via the tsx ESM *loader*, not the `tsx` CLI. The CLI opens an IPC
+ * unix socket, which this project's sandboxed test runner refuses with
+ * `EPERM ... /tmp/.../tsx-*.pipe` — the same reason graph-commit's two spawns
+ * moved to this form. The loader needs no npm resolution and opens no socket.
+ * `reader-required-dir.test.ts` spawns the same way. */
 function runSelect(args: string[]): string {
-  return execFileSync("npx", ["tsx", selectScript, ...args], {
+  return execFileSync(process.execPath, ["--import", "tsx/esm", selectScript, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
   });

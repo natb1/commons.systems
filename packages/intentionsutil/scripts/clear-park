@@ -191,6 +191,27 @@ if [[ ! -d "$INTENTIONS_DIR" ]]; then
   echo "clear-park: -C '$REPO_ARG' has no intentions/ directory ($INTENTIONS_DIR) -- that is not an intention-graph checkout" >&2
   exit 2
 fi
+# -C must be the git TOPLEVEL, not merely some directory that happens to hold an
+# intentions/. This script spells the same node file two ways: arg-relative
+# ("$INTENTIONS_DIR/$NODE_ID.md", written below, and the `hash-object --` that
+# produces EXPECT_BLOB) and repo-root-relative (the `origin/main:intentions/...`
+# that `rev-parse` and `show` read, which git resolves from the toplevel and NOT
+# from -C). Those two spellings name the same file only when -C IS the toplevel.
+# Given a nested -C holding its own intentions/, every check above passes, the
+# refresh reads the OUTER store, the write and hash target the INNER one, and
+# graph-commit -- which resolves its own toplevel -- stages the outer. --expect
+# still fails that closed, but late and confusingly. Reject it here as the usage
+# error it is, which is the residue clarification 242's required-`-C` contract
+# exists to close.
+if ! GIT_TOPLEVEL="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+  echo "clear-park: -C '$REPO_ARG' is not inside a git repository -- the store must be committable" >&2
+  exit 2
+fi
+GIT_TOPLEVEL="$(cd "$GIT_TOPLEVEL" && pwd)"
+if [[ "$GIT_TOPLEVEL" != "$REPO_ROOT" ]]; then
+  echo "clear-park: -C '$REPO_ARG' is not the git toplevel (that is '$GIT_TOPLEVEL') -- pass the checkout root, or this script and graph-commit resolve the same intentions/<id>.md to two different files" >&2
+  exit 2
+fi
 
 NODE_ID="${ARGS[0]:-}"
 # Optional 2nd arg: free-text note folded into the commit message.

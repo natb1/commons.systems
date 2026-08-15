@@ -162,11 +162,25 @@ function main(): void {
   // none of them about sensors
   // (tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes).
   //
-  // The signal is not lost, it moves to where the change that breaks it is
-  // made: `validateRegisteredSensorNames` (same rule, fatal) runs against the
-  // live store in packages/intentionsutil/test/lifecycle-sensor.test.ts, and
-  // that suite is in the PR CI of any branch touching packages/intentionsutil —
-  // the home of both the registered constants and this rule.
+  // For a REGISTRY edit the signal is not lost, it moves to where the change
+  // that breaks it is made: `validateRegisteredSensorNames` (same rule, fatal)
+  // runs against the live store in
+  // packages/intentionsutil/test/lifecycle-sensor.test.ts, and that suite is in
+  // the PR CI of any branch touching packages/intentionsutil — the home of both
+  // the registered constants and this rule.
+  //
+  // For a NODE PROSE reword the signal IS lost, and saying so is the point of
+  // this paragraph. An `/align` round that rewrites a node's
+  // `success_signal.sensor` lands through a `graph/**` push;
+  // .github/workflows/unit-tests.yml declares
+  // `branches-ignore: [main, 'graph/**']`, so neither that suite nor its
+  // `graph-validate` job (which runs THIS script, and so cannot go red on this
+  // condition anyway) ever runs for such a write. The stderr line below is all
+  // that fires. Restoring a failing gate on that half needs a ruling on its
+  // shape — node-scoped fatal here, versus a post-merge check on `main` — and
+  // is deferred rather than guessed at, because the careless version re-arms
+  // exactly the repo-wide denial described above. See read-sensors.ts's
+  // UNBOUND_SENSOR_NAMES docstring, which carries the same warning.
   const registered = registeredSensorNames();
   const unboundRegistered = findUnboundRegisteredSensorNames(
     nodes,

@@ -1411,13 +1411,25 @@ export function makeIntentionStoreSensor(
  * non-intentions changes. An ordinary PR touching both files can, and is the
  * only atomic path.
  *
- * Where an open window is now caught: `validate-graph.ts` REPORTS an unbound
- * registered name and exits 0, so the graph write path is no longer denied over
- * it. The fatal copy of the same rule lives in the unit suite
- * (`test/lifecycle-sensor.test.ts`, against the live store), and
- * `.github/workflows/unit-tests.yml`'s `graph-validate` job also runs
- * `validate-graph.ts` on any branch touching `packages/intentionsutil` or
- * `intentions/` — so the PR that edits this constant is the one that goes red.
+ * Where an open window is now caught — and, just as important, where it is NOT.
+ * `validate-graph.ts` REPORTS an unbound registered name and exits 0, so the
+ * graph write path is no longer denied over it; it follows that the
+ * `graph-validate` job, which runs that same script, can never go red on this
+ * condition either. The ONE fatal gate is the unit suite
+ * `test/lifecycle-sensor.test.ts` (against the live store), in the `unit-tests`
+ * job. So the half of the pairing caught is a CONSTANT edit: a PR touching
+ * `packages/intentionsutil` runs that suite and goes red.
+ *
+ * The other half is NOT caught. A node PROSE reword — an `/align` round
+ * rewriting some node's `success_signal.sensor` — lands through a `graph/**`
+ * push, and `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, so
+ * neither the unit suite nor `graph-validate` ever runs for it. The reword
+ * lands, CI is green, and the sensor reads `null` from then on with only a
+ * stderr line in the fast path's `guard` log. Restoring a failing gate on that
+ * half is deliberately deferred, not overlooked: the shape has to be ruled
+ * (node-scoped fatal in `guard`, vs a post-merge check on `main`), and a
+ * careless answer re-arms the repo-wide denial described above. Until it is
+ * ruled, the UNREGISTERED-SENSOR COUNT below is the backstop for this half.
  * Locally, against the merged state:
  * `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`.
  *
