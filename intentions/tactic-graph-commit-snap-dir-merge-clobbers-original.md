@@ -151,3 +151,23 @@ tmpdir is *"this machine only — may not survive past this session"*, which
 fails the strategy's recorded condition that a park whose context lives only in
 the parking session is a defect. (b) and (c) are complements, not substitutes.
 File (c) as its own tactic; it is not part of this node's scope.
+
+## Implementation record
+
+Shipped in PR #3095, squash-merged to `main` as `fe0b1c4d`, under
+`strategy-graph-native-dispatch` clarification **241**, ruling **(b)**:
+`SNAP_DIR/<id>.md` is frozen as the writer's pre-merge original, and every merge
+output is written beside it as `SNAP_DIR/<id>.merged.md`.
+
+All **three** clobber sites were redirected — including `build_commit_plumbing()`
+at `:1650-1652`, which neither this node nor
+`plans/dispatch-rsi-serialized-pr-plan.md` names. The readers that mean *"what
+this run intended to land"* (the far-ahead rebuild's replay, `print_verdict`,
+and `park_write`) now resolve through `snap_intended_file`, and `park_write`
+names both paths and labels which is the writer's own original and which is
+graph-commit's partial merge.
+
+Candidate **(c)** was not adopted, as ruled, and is filed as
+`tactic-graph-commit-park-content-durability`. That node is `blocked_by` both
+this one and `tactic-eval-finding-noop-verdict-hides-dropped-node-edit`, so it
+becomes workable once the two of them close.
