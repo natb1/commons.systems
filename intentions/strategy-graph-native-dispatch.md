@@ -5947,6 +5947,180 @@ clarifications:
       it. A gate whose only carrier is prose in one skill is a gate that gets
       skipped; that is the argument for moving it into the shared surface,
       independent of the creation-time requirement."
+  - question: On graph-commit’s fail-closed park path, what must SNAP_DIR/<id>.md
+      hold for an id whose layer-3 merge RESOLVED earlier in the same multi-id
+      invocation?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, resolving the park on
+      tactic-graph-commit-snap-dir-merge-clobbers-original.) Ruling (b): the
+      writer's FROZEN pre-merge original, with the merged content beside it
+      rather than over it. snapshot() writes $SNAP_DIR/<id>.md and never
+      rewrites it; the merge paths write $SNAP_DIR/<id>.merged.md; every
+      SNAP_DIR reader that wants "what this run intended to land" —
+      ensure_intentions_only_base()'s replay and print_verdict — prefers
+      .merged.md when it exists; park_write() names BOTH paths and labels which
+      is the session's own original content and which is graph-commit's partial
+      merge.
+
+
+      This reverses the narrower contract PR #2989 landed, under which SNAP_DIR
+      is authoritative for the reconciled intended-to-land content (defended in
+      code at graph-commit:794-808, 919-935 and 2091-2098). The defect that
+      forces the reversal: a multi-id batch fails closed as a unit, so when id
+      A's layer-3 merge RESOLVED and id B's did not, park_write's recovery text
+      points the human at SNAP_DIR/A.md claiming it holds their unlanded content
+      when it actually holds graph-commit's blend of their edit with a
+      concurrent writer's landed one. Because the concurrent writer chooses
+      which field to touch, they choose which of the losing writer's ids lose
+      their evidence — an accidental loss in the normal case, a targeted one if
+      that writer is adversarial.
+
+
+      BUILDABILITY WAS VERIFIED BEFORE RULING, correcting a contrary claim made
+      in the park record itself. The fix does NOT require weakening any
+      preserved regression guard, and .claude/rules/test-integrity.md is not
+      engaged. test-graph-commit.sh case 48 — the self-described Unit 1
+      regression guard, "far-ahead + stale --base: layer-3 merge survives the
+      far-ahead rebuild, both fields land" — passes unchanged, because the
+      far-ahead rebuild replays .merged.md, which carries exactly the merged
+      content SNAP_DIR carries today. Case 22 (:1551-1581), which asserts
+      SNAP_DIR retains the writer's original for an UNRESOLVED merge, is
+      preserved by construction. Only a naive freeze WITHOUT the
+      replay-preference half breaks them — the failure mode
+      plans/dispatch-rsi-serialized-pr-plan.md already warns against in its
+      work-to-skip list.
+
+
+      ALL THREE clobber sites are in scope, including the third in
+      build_commit_plumbing() (graph-commit:1650-1652), which is structurally
+      identical, feeds the same park_write text, and is named by neither the
+      node nor the serialized PR plan.
+
+
+      REJECTED ALTERNATIVES. (a) Keep #2989's contract and dismiss the node —
+      rejected: it accepts a park record that misattributes a concurrent
+      writer's content to the losing writer, which is a correctness defect in
+      the record, not merely a usability one. (c) Carry the losing writer's
+      content into the node's own office_hours record instead of any
+      machine-local pointer — NOT adopted here, but the concern behind it is
+      real and stays open as a separate question: park_write's own text concedes
+      the tmpdir is "this machine only — may not survive past this session"
+      (graph-commit:2944-2952), which fails this strategy's recorded condition
+      that a park whose context lives only in the parking session is a defect.
+      (b) and (c) are complements, not substitutes; (c) should be filed as its
+      own tactic rather than folded in.
+  - question: How is the explicit-ref read-path scope partitioned across
+      tactic-explicit-ref-graph-reads, tactic-demote-node-stale-local-read and
+      tactic-graph-read-at-ref-cli, none of which clarification 194 enumerated?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, resolving the park on
+      tactic-explicit-ref-graph-reads.) Shape (a). Clarification 194 (R3,
+      2026-08-05) adopted the general contract but recorded that its scope "was
+      NOT enumerated in this sitting"; three co-extensive raw nodes then claimed
+      overlapping files with no partition between them. The partition:
+
+
+      - tactic-explicit-ref-graph-reads owns the required-explicit-argument
+      CONTRACT plus exactly four files: validate-graph.ts, write-node.ts,
+      dump-node.ts, clear-park. Its one bare executable caller,
+      .claude/skills/align/scripts/validate-deployment.sh:53, invokes
+      validate-graph.ts with no directory and MUST be updated in the same
+      change; .github/workflows/graph-fast-path.yml:32 already passes intentions
+      explicitly and needs no change.
+
+      - tactic-demote-node-stale-local-read narrows to demote-node-to-implement
+      alone. That script is therefore NOT in tactic-explicit-ref-graph-reads'
+      scope and does NOT close with it.
+
+      - tactic-graph-read-at-ref-cli adds a NEW CLI (storeAtRef) rather than
+      editing these readers, so it is separable under any shape — recorded
+      explicitly here rather than left implicit.
+
+      - Out of scope under any shape: transition-node (claimed by
+      tactic-graph-ref-split, phase implement) and graph-commit (a writer; its
+      -C/cwd resolution is already the ratified correct shape, clarification
+      86).
+
+
+      Already converted, and not to be re-done: check-node-selection.ts:14-15
+      (required --dir) and compute-freshness.ts (explicit --snapshot/--stamp,
+      with transition-node as the acquiring wrapper). Still unconverted as of
+      this sitting: validate-graph.ts:73, write-node.ts:18-22,
+      dump-node.ts:35-40, clear-park:99-100.
+
+
+      REJECTED. (b) tactic-demote-node-stale-local-read absorbing the whole
+      root-resolution class under its own Ruling 27, with this node pruned as a
+      duplicate — rejected because that node is blocked_by
+      tactic-phase-evidence-fingerprint-bound, so absorbing the class would
+      stall every reader in it behind an unrelated blocker. (c) the reverse
+      split — no evidence favoured it.
+
+
+      TWO CORRECTIONS TO THE RECORD, both verified against origin/main this
+      sitting, neither previously noted:
+
+
+      (1) tactic-demote-node-stale-local-read's defect 3 ("stale read,
+      un-guarded write") is ALREADY FIXED. Commit 156ce3a1 gave
+      demote-node-to-implement both the fresh origin/main read (it refreshes the
+      node file from origin/main before computing the new one) and the --base
+      compare-and-swap (graph-commit -C "$REPO_ROOT" --base
+      "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB"). That node's body
+      still describes both as missing, and its line citations (:36, :46, :115,
+      :126-127) have all moved. Only defect 1 (script-location REPO_ROOT) and
+      its consequence defect 2 (the scope-fingerprint stamp path inheriting that
+      root) remain live. Any plan for that node must be re-derived from the
+      current file, not from its body as written.
+
+
+      (2) Consequently the serialized PR plan's instruction that PR1's Unit 8
+      lift "exactly one bullet" from that node — its Greenfield item 3, the
+      --base CAS — is void: that bullet is already implemented. Unit 8 must not
+      re-implement it, and under this ruling Unit 8 does not touch
+      demote-node-to-implement at all.
+  - question: demote-node-to-implement both reads a node and writes one, so
+      clarification 86’s writer shape and clarification 194’s reader shape both
+      claim it. Which binds?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, alongside clarification 242.)
+      Clarification 194's READER shape binds: demote-node-to-implement takes the
+      tree as a REQUIRED explicit argument, with no cwd default and no
+      script-location default. Its caller transition-node — which today invokes
+      it positionally and reads only its exit code — is updated in the same
+      change to pass the tree.
+
+
+      The collision is real because demote-node-to-implement is both: it reads
+      the node it demotes and writes the demotion. Clarification 86 ratifies
+      -C-or-cwd, never-script-location, for graph-commit; clarification 194
+      requires an explicit argument on every graph read.
+
+
+      Rationale for preferring the reader shape here: the cwd fallback is not
+      merely weaker in this case, it is WRONG. transition-node runs inside the
+      worker's worktree and invokes demote-node-to-implement from there, so the
+      caller's cwd resolves to the worktree — the same wrong answer the script's
+      own location gives today — while the demotion must act on the main
+      checkout. This also means the remedy tactic-demote-node-stale-local-read
+      prescribes for its defect 1, "resolve the repo root from the caller's
+      cwd", does not fix its own defect; that node's Greenfield item 1 must be
+      rewritten. resolve_project_root (parent of the git common dir, lib.sh)
+      WOULD resolve correctly and is the shape transition-node itself uses, but
+      it leaves the tree implicit, which is the property R3 was adopted to end —
+      so it is rejected as the standing answer even though it would work.
+
+
+      Clarification 86 is NOT narrowed by this: it continues to bind
+      graph-commit, a pure writer for which -C-or-cwd is correct, and the
+      general rule stands that a script's own on-disk location never determines
+      the tree it acts on.
+
+
+      Ownership: this work belongs to tactic-demote-node-stale-local-read per
+      clarification 242, not to tactic-explicit-ref-graph-reads. It is blocked
+      until tactic-phase-evidence-fingerprint-bound clears, and it is not part
+      of PR1.
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic

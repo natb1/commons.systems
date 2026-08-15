@@ -36,58 +36,43 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Scope partition unrecorded across three co-extensive raw siblings. The
-    2026-08-14 /align-tactics tactic-mode drift review could not author this
-    plan because three open nodes serving strategy-graph-native-dispatch claim
-    overlapping files with no recorded partition between them: this node (R3 /
-    strategy clarification 194 — validate-graph.ts, write-node.ts, dump-node.ts,
-    clear-park), tactic-demote-node-stale-local-read (whose own statement claims
-    the same general contract — make graph-script repo-root resolution uniform
-    and explicit — over demote-node-to-implement, dump-node.ts,
-    validate-graph.ts and graph-commit), and tactic-graph-read-at-ref-cli (the
-    storeAtRef-CLI half of the same read path). Clarification 213 rules the
-    adjacency for tactic-graph-execute-fresh-main-read (an instance with a
-    cross-reference) and clarification 237 for tactic-graph-ref-split, but rules
-    on neither of these two — and R3 itself records that its scope was NOT
-    enumerated at interview time. Planning this node independently mints
-    duplicate work on the same files and lets two dispatched nodes edit them
-    concurrently. Verified in the tree 2026-08-14: validate-graph.ts:73,
-    write-node.ts:18-22, dump-node.ts:35-40 and clear-park:99-100 are all still
-    unconverted, so no sibling has already discharged the work."
-  since: 2026-08-15
-  recommendation: "Rule which node owns which files, then re-run /align-tactics
-    tactic-explicit-ref-graph-reads. Candidate shapes: (a) this node owns the
-    required-explicit-argument contract plus validate-graph.ts / write-node.ts /
-    dump-node.ts / clear-park, and tactic-demote-node-stale-local-read narrows
-    to demote-node-to-implement own three defects (script-location REPO_ROOT,
-    missing origin/main fetch, missing --base CAS) plus the
-    library-invoked-executable test-harness contract, with a cross-reference
-    each way; (b) tactic-demote-node-stale-local-read absorbs the whole
-    root-resolution class under its own Ruling 27 (root-resolution defects widen
-    this node rather than minting siblings) and this node is pruned as a
-    duplicate; (c) the reverse. tactic-graph-read-at-ref-cli adds a NEW CLI
-    rather than editing these readers, so it is separable under any shape, but
-    should be recorded as such rather than left implicit. Fixed regardless of
-    the choice: transition-node stays out of scope (claimed by
-    tactic-graph-ref-split, phase implement) and graph-commit stays out of scope
-    (its -C/cwd resolution is already the ratified correct shape, clarification
-    86). NOTE: the authored plan in plans/pr1-graph-write-path-brief.md (PR1
-    Unit 8) proceeds under shape (a) as a hand-authored unit; that brief is the
-    de-facto ruling and this park exists to have it recorded as a clarification
-    rather than living only in a plans/ file. Clear this park before closing the
-    node. Verified this round: Two executable call sites of validate-graph.ts
-    exist: .github/workflows/graph-fast-path.yml:32 already passes intentions
-    explicitly and would NOT break if the argument became required;
-    .claude/skills/align/scripts/validate-deployment.sh:53 invokes it bare and
-    MUST be updated in the same PR. Roughly ninety further hits are
-    documentation prose. Already CONVERTED to explicit-ref:
-    check-node-selection.ts:14-15 (required --dir) and compute-freshness.ts
-    (explicit --snapshot/--stamp, with transition-node:161,182,186 as the
-    acquiring wrapper)."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # graph reads resolve their tree from cwd or from script location rather than from an explicit ref, so a stale checkout or the wrong script copy silently produces a wrong answer -- make the tree/ref a required argument on every read
+
+## Scope — ruled 2026-08-15
+
+Clarification 242 partitions this node against its two co-extensive
+siblings, closing the gap clarification 194 (R3) left when it adopted the
+contract without enumerating its scope. This node owns the
+required-explicit-argument **contract** plus exactly four files:
+
+| File | Current defect |
+|---|---|
+| `packages/intentionsutil/scripts/validate-graph.ts` | `:73` — `process.argv[2] ?? "intentions"` defaults the dir cwd-relative |
+| `packages/intentionsutil/scripts/write-node.ts` | `:18-22` — resolves the store from `import.meta.url` |
+| `packages/intentionsutil/scripts/dump-node.ts` | `:38-40` — same `import.meta.url` resolution |
+| `packages/intentionsutil/scripts/clear-park` | `:99-100` — `REPO_ROOT` from `SCRIPT_DIR` |
+
+One caller changes with them:
+`.claude/skills/align/scripts/validate-deployment.sh:53` invokes
+`validate-graph.ts` with **no directory argument** and breaks the moment the
+argument becomes required. `.github/workflows/graph-fast-path.yml:32` already
+passes `intentions` explicitly and needs no change.
+
+**Out of scope**, each owned elsewhere:
+
+- `packages/intentionsutil/scripts/demote-node-to-implement` — owned by
+  `tactic-demote-node-stale-local-read`. It does **not** close with this node.
+  Note that node's own defect 3 is already fixed (commit `156ce3a1` gave the
+  script both the `origin/main` fresh read and the `--base` CAS), so only its
+  script-location `REPO_ROOT` and the stamp path inheriting it remain live —
+  and its prescribed cwd remedy does not fix them (clarification 243).
+- `transition-node` — claimed by `tactic-graph-ref-split`.
+- `graph-commit` — a *writer*; its `-C`/cwd shape is already the ratified
+  correct one (clarification 86).
+- `check-node-selection.ts` (required `--dir`) and `compute-freshness.ts`
+  (explicit `--snapshot`/`--stamp`) — already converted; do not re-do.
