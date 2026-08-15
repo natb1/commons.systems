@@ -2007,7 +2007,21 @@ clarifications:
       session never touches the serving strategy's frontmatter (rounds,
       clarifications, or otherwise) and routes any strategy-record need to a
       park instead. Which binds?"
-    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
+    answer: "OVERTURNED 2026-08-15 — this ruling NO LONGER BINDS. A per-node
+      /align-tactics session may no longer write clarifications to the serving
+      strategy at all; the immaterial path mints a born-parked observation node
+      instead. See the sibling clarification 'Which lanes violate the
+      autonomous-substance invariant today', violation V1, which supersedes this
+      entry and quotes it. WHY THE REASONING BELOW NO LONGER HOLDS: its decisive
+      argument was that the doctrine left immaterial observations with NO LEGAL
+      DESTINATION AT ALL, forcing a choice between dropping them and writing the
+      strategy. The born-parked observation node is a legal destination, so the
+      forced choice dissolves and the concession it justified is no longer
+      needed. The SECOND finding below — that DRIFT_SCHEMA emits {answer} while
+      the Clarification interface requires {question, answer}, so the
+      instruction was never mechanically executable — is UNAFFECTED and still
+      owed. The original ruling, preserved verbatim for provenance, follows.
+      (Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
       a per-node tactic-target session MAY append clarifications entries to the
       serving strategy, and may touch NOTHING else on it — never
       rounds/count/last_completed/last_aligned, never statement, rationale,
@@ -6121,6 +6135,367 @@ clarifications:
       clarification 242, not to tactic-explicit-ref-graph-reads. It is blocked
       until tactic-phase-evidence-fingerprint-bound clears, and it is not part
       of PR1.
+  - question: The 2026-08-14 clarification recording 'exactly two node-creation
+      surfaces' asserted a by-kind seam and cited a five-writer census. An
+      adversarial draft review and a measured census both refuted it. What is
+      the corrected doctrine?
+    answer: "(Corrected 2026-08-14, third round of this date, after the adversarial
+      draft review that round skipped.) TWO THINGS WERE WRONG. (i) The by-kind
+      seam claimed the /align interview is the only way a persistent-layer node
+      enters the graph. kind-tradition.md's own creation rule refutes it — a
+      tradition record is created only at the office-hours sitting that examines
+      the candidate, i.e. /reading-review — and in the other direction /align
+      cannot mint a virtue, a delegation or a kind-* node at all, so the claim
+      asserted a creation path where there is a hole. (ii) The five-writer
+      census was stale: a measured sweep found roughly twenty write sites across
+      sixteen skill files and four scripts, including hold-node, resolve-hold,
+      dispatch-diagnose-main, reading-review, context-chunks, qa-main,
+      review-fix, fix-checks, dispatch-conflict and budget. THE CORRECTED FRAME:
+      the DRY seam is not WHO writes but WHAT KIND OF WRITE it is. Three
+      operations. CREATE mints a new node file — the duplicate and supersession
+      checks bind to this operation and to no other. EDIT-SUBSTANCE changes what
+      a node says. IT IS DEFINED NEGATIVELY, IN CODE, NOT BY ENUMERATION IN
+      PROSE: schema.ts exports STATE_FIELDS — the router- and sensor-owned set
+      (phase, execution, office_hours, reading, attention, rounds, status,
+      blocked_by) — and EDIT-SUBSTANCE is EVERY field not in it. The enumerated
+      form was drafted first and REPLACED on the author's ruling of 2026-08-15,
+      after the adversarial draft review showed it fails OPEN: a positive list
+      of substance fields silently exempts every field nobody thought to list,
+      and the measured fallthrough was large — rationale, parent, recovers,
+      validates, owner, pace_exempt, kind, and all of attributes except
+      conditions. Three of those are load-bearing. rationale is named FIRST in
+      the ratified doctrine that /dispatch-conflict reconciles against
+      (virtue/strategy/tradition/delegation statement, rationale, clarification
+      text), so a positive allowlist built from strategyFingerprint's six fields
+      leaves unprotected the very field the guard exists for. attributes is
+      graph-semantics-bearing — validateGraph rules key on attributes.goal_layer,
+      attributes.status_vocabulary and attributes.tier — and is written onto
+      durable nodes today by /grounding-research. owner and pace_exempt are
+      authority fields, so an unrestricted EDIT-STATE reading would let an
+      autonomous lane flip owner from human to ai unopposed. Under the negative
+      definition a field added to the schema tomorrow defaults to SUBSTANCE,
+      which is the fail-safe direction. The two fingerprints remain NARROWER
+      readings layered on top: strategyFingerprint's six-field allowlist
+      (packages/intentionsutil/src/router.ts:102-112) is what freezes CHILDREN,
+      and tacticScopeFingerprint's pair, statement plus markdown body
+      (router.ts:131-133), is what the chain-of-custody gate reads, because the
+      body is the plan a worker executes. FREEZE COVERAGE IS THEREFORE NARROWER
+      THAN SUBSTANCE, deliberately: a rationale edit is a substance write that
+      no child freeze detects. The earlier draft claimed the freeze and re-stamp
+      machinery exists for this operation and no other; that is FALSE and is
+      corrected here — dispatch-graph-census overwrites a census tactic's
+      markdown body wholesale on every autonomous run and contains no
+      scope_fingerprint restamp at all, which is a recurring autonomous
+      EDIT-SUBSTANCE with no freeze machinery attached. EDIT-STATE is a write
+      confined to STATE_FIELDS: mechanical, freeze-inert, unrestricted on
+      tactics. THE TAXONOMY IS DESCRIPTIVE, NOT INVENTED — the substance/state
+      line is already drawn independently three times in existing code:
+      strategyFingerprint's allowlist, tacticScopeFingerprint's pair, and
+      node-merge.ts's LIST_FIELDS/SCALAR_FIELDS split. It names a boundary the
+      code had but had not named. TWO ATTENDANCE CLASSES carry mint authority,
+      and this is where the author's 'exactly two' becomes true of a real axis
+      rather than by definitional fiat. ATTENDED means a human rules on the
+      write at the moment it happens: /align, /reading-review, /budget, and the
+      human's own write-node plus graph-commit following an office-hours
+      disposition. An attended entry point may CREATE any kind and may
+      EDIT-SUBSTANCE. NOTE, corrected 2026-08-15 by the adversarial review: the
+      office-hours SKILL is read-only by its own contract — it produces words
+      for a human and changes no state, it takes no chain or label action of its
+      own, and it never un-parks. The earlier draft listed the skill itself as
+      an attended CREATE surface, which named a non-writer as a write surface;
+      the attended surface in that lane is the human's subsequent write.
+      AUTONOMOUS means no human rules on it: /align-tactics,
+      qa-fix, review-fix, fix-checks, dispatch-diagnose-main, dispatch-conflict,
+      dispatch-eval-finding, dispatch-graph-census, hold-node, resolve-hold,
+      resolve-park, hold-node-decide, qa-main, context-chunks,
+      /grounding-research, transition-node, reconcile-graph and the tick sweeps.
+      An autonomous entry point may CREATE
+      tactics only, may EDIT-STATE freely, and may NOT EDIT-SUBSTANCE a
+      durable-layer node (virtue, strategy, delegation, kind, tradition). The
+      weaker reading of 'attended' — that a human merely typed the command — was
+      considered and REJECTED by the author: under it nearly every lane counts
+      as attended, including lanes where no human ever reads the resulting text,
+      which is the opposite of what the rule is for. THE INVARIANT WAS AUDITED
+      BEFORE BEING RECORDED, on the author's explicit ruling, precisely so this
+      round would not repeat the previous round's defect of recording an
+      unmeasured control. IT DOES NOT HOLD TODAY. Four violations, recorded
+      here rather than papered over, each with its ruled disposition — see the
+      sibling clarification 'Which lanes violate the autonomous-substance
+      invariant today'. TWO HONEST LIMITS ON THIS CENSUS, both from the
+      2026-08-15 review. First, the author's ruling was to classify EVERY
+      write-node call site as CREATE / EDIT-SUBSTANCE / EDIT-STATE; the sites
+      are named above and the four violators are classified, but a
+      per-site classification of all of them is NOT recorded here and is owed.
+      Second, a prose census decays the day it lands — that is precisely the
+      weakness that made the previous round's five-writer count wrong, and
+      re-recording it as a longer prose list does not fix it. The durable form
+      is a machine-readable roster mapping each write site to its operations and
+      attendance class, linted against the actual write-node caller set so a new
+      caller cannot be added silently. Both are carried as owed work on
+      tactic-finding-search-all-producers rather than claimed as done."
+  - question: Which lanes violate the autonomous-substance invariant today, and what
+      is the disposition of each?
+    answer: "(Measured and ruled 2026-08-14; extended to four 2026-08-15 after the
+      pre-commit adversarial review.) FOUR. V1 — /align-tactics lands dated
+      clarifications on strategy nodes autonomously, by design. Its two-sided
+      drift review routes MATERIAL drift to a park for author ratification
+      (correct, unchanged), but routes IMMATERIAL drift — an observation the
+      plans do not depend on — to a direct clarifications write, instructed
+      verbatim as 'land it as a dated clarification WITHOUT interrupting; do not
+      park for it' (.claude/workflows/align-tactics.js Side-B block;
+      .claude/skills/align-tactics/references/write-path.md, the
+      immaterial-observation path). clarifications is allowlist member two, so
+      this mutates strategyFingerprint and soft-freezes every open child of that
+      strategy for an observation defined as gating nothing. Two further harms:
+      it is a second requirement-entry surface, which
+      strategy-discovered-requirements reserves to the /align interview; and a
+      model-authored dated clarification is byte-indistinguishable from an
+      author-ruled one, so provenance collapses irreversibly in the field that
+      carries doctrine. AUTHOR RULING: redirect, do not carve out. The
+      immaterial path mints ONE born-parked observation node serving the
+      strategy — the same shape /align already mints for a deferral — instead of
+      writing clarifications_to_add. proceed stays true and the round runs on
+      uninterrupted, because non-interruption was only ever achieved by not
+      parking the STRATEGY and never required writing TO it. A human promotes
+      the worthwhile ones into clarifications at office hours through the
+      attended surface. THIS RULING OVERTURNS A STANDING AUTHOR RULING ON THIS
+      SAME NODE, and says so rather than leaving two live contradictory
+      clarifications — see the 2026-07-28 /align-strategy clarification 'Standing
+      requirement: a per-node tactic-target session MAY append clarifications
+      entries to the serving strategy', now amended in place with an OVERTURNED
+      prefix pointing here. That earlier ruling was correct on its own premises.
+      Its DECISIVE ARGUMENT was that the current doctrine leaves immaterial
+      observations with NO LEGAL DESTINATION AT ALL — write-path.md says write
+      them to the strategy, tactic-target.md forbids any strategy write, and the
+      autonomy contract closes the park escape because an immaterial observation
+      is none of its three park conditions. Faced with a forced choice between
+      dropping the observation and writing the strategy, it chose writing. WHAT
+      CHANGED IS THE PREMISE, NOT THE REASONING: the born-parked observation node
+      IS a legal destination, so the forced choice dissolves. The redirect
+      therefore SATISFIES the 2026-07-28 concern — nothing is dropped, the
+      sole-carrier condition still holds — while removing the strategy write it
+      had to concede. The earlier ruling's second, independent finding stands
+      unaffected and is still owed: DRIFT_SCHEMA.clarifications_to_add declares
+      items as {answer} only with additionalProperties:false, while the
+      Clarification interface requires {question, answer}, so the instruction was
+      never mechanically executable. The implementing node
+      tactic-align-tactics-per-node-clarifications is PARKED by this round: its
+      unit A widens the write authority this ruling removes and its unit B
+      hardens a field this ruling deletes, so it is doomed work as written — the
+      exact failure class this round exists to close, found on this round's own
+      output. Carried by tactic-align-tactics-immaterial-drift-redirect. V2 — /dispatch-conflict's
+      reconciliation lane builds an unconstrained jq filter from an opus
+      subagent's output and sets whatever fields diverged, on any node kind; the
+      skill explicitly names virtue/strategy/tradition/delegation doctrine
+      fields as in scope. The only thing preventing a rewrite of a virtue's
+      statement is a sentence in a prompt telling the subagent not to synthesize
+      substance — no code refuses an allowlist field on a durable-layer id.
+      AUTHOR RULING: replace the prompt-level guard with a MECHANICAL field
+      check — refuse any write to a NON-STATE field when the target id is
+      durable-layer, and park for a human instead. Ruled 2026-08-14 as a
+      six-field allowlist and CORRECTED 2026-08-15 to the negative form after
+      the adversarial review showed the six-field version misses rationale,
+      which is the field the ratified reconciliation doctrine names FIRST, and
+      also misses attributes, owner and parent. The check is
+      not STATE_FIELDS.has(field), which is total by construction and needs no
+      second list kept in sync. Carried by
+      tactic-dispatch-conflict-substance-allowlist. Not measured: whether this
+      has ever actually fired on a durable node; git history was not searched,
+      so it is not known whether any landed doctrine text was model-reconciled
+      without review. V3 — graph-commit's own layer-2 auto-merge unions
+      clarifications and three-way merges statement on whatever ids are in the
+      commit, inheriting the caller's lane, and on scalar divergence silently
+      prefers theirs (packages/intentionsutil/src/node-merge.ts). It does not
+      AUTHOR substance — it reconciles two already-authored values — so it is
+      recorded as a known structural exception rather than assigned a fix. ALSO
+      MEASURED, and not a violation: /budget writes only reading on its
+      strategy, a STATE_FIELDS member and therefore EDIT-STATE. That case is
+      what reframed the whole taxonomy from who-writes to what-kind-of-write:
+      /budget EDITS a durable node without minting anything, so a surfaces-based
+      seam could not classify it. V4 — /review-fix, ADDED 2026-08-15 by the
+      adversarial review, correcting this round's own draft. The 2026-08-14
+      draft excused it on the ground that it is mechanically fenced by a
+      post-hoc porcelain guard reverting any modification to a pre-existing
+      node. IT IS NOT: that guard exists only as prose in
+      .claude/skills/review-fix/SKILL.md — a repository-wide search for its
+      step5-baseline and step5-new markers finds that one file and no script, no
+      hook, no workflow. This round condemned V2 forty lines earlier with the
+      words a prompt is not a gate, then suspended that same standard for
+      review-fix, and the suspension was the only thing keeping it off this
+      list. Nothing mechanically confines review-fix to newly created nodes or
+      to tactics; that confinement is an unverified property of a prompt.
+      AUTHOR RULING: classify it as a violator pending a real guard, and promote
+      the Step-5 porcelain checklist into a script — it is trivially scriptable,
+      the SKILL.md already writes it as shell. Carried by
+      tactic-review-fix-porcelain-guard-script. ONE FURTHER MEASURED FINDING,
+      legal under the invariant but unmonitored: dispatch-graph-census
+      overwrites a census tactic's markdown body wholesale on every autonomous
+      run and carries no scope_fingerprint restamp. It is legal only because
+      census nodes are tactics, which is luck rather than design, and it
+      falsifies the draft claim that freeze machinery attaches to every
+      EDIT-SUBSTANCE."
+  - question: The same 2026-08-14 round argued the greenfield-relevance gate's only
+      carrier is prose in one skill, and moved it into the shared creation
+      surface. Is that argument sound?
+    answer: "(Refuted and corrected 2026-08-14 by the adversarial draft review.) NO
+      — the premise is false and the migration it justified was backwards. The
+      gate's real carrier is code: .claude/workflows/align-tactics.js makes
+      greenfield_drops a schema-REQUIRED member of the decomposer's output,
+      typed additionalProperties:false with required target, superseded_by and
+      reason. BE PRECISE ABOUT WHAT THAT ENFORCES — corrected 2026-08-15, because
+      the 2026-08-14 draft answered an overstatement with an overstatement of its
+      own. What is machine-enforced is the output SHAPE: the key is in
+      DECOMPOSE_SCHEMA's required list, and each entry that appears must carry
+      all three sub-fields. The JUDGMENT — check each unit's subject against
+      non-draft nodes elsewhere that delete or supersede it — is prose in the
+      prompt string, structurally the same kind of carrier the previous round was
+      condemned for citing. greenfield_drops [] satisfies the schema on every
+      run, so an empty result is INDISTINGUISHABLE from a search that never ran.
+      The honest comparison is therefore that the gate has a typed output where
+      the proposed replacement had none, not that it is enforced where the other
+      is prose. The prose at align-tactics/SKILL.md is
+      not a copy of the gate but a POINTER to clarification 26 — the shape the
+      one-shared-write-surface ruling wants, not the shape it condemns. So the
+      previous round moved a machine-enforced check into a prose-specified,
+      unbuilt surface and justified it by calling the enforced carrier prose.
+      THE REAL DEFECT IS DIFFERENT AND SMALLER: the validated supersession
+      judgment is DISCARDED. align-tactics/references/write-path.md directs that
+      greenfield_drops be recorded in the round's report; nothing lands on the
+      graph. A model makes the judgment, a JSON schema validates it, and it dies
+      with the session. AUTHOR RULING: PERSIST, do not relocate. On each drop,
+      write superseded_by onto the named node in the round's existing
+      graph-commit — greenfield_drops.superseded_by is already a validated
+      supersession edge in flight. Keep the creation-time check as a SUPPLEMENT
+      for the callers the workflow never sees: strategies, and every create site
+      that is not an /align-tactics decomposition. This is a strict superset of
+      the previous round's design and enforcement never drops. TWO ADDITIONS
+      RULED 2026-08-15 after the adversarial review. (a) ONE EVALUATOR, TWO
+      TRIGGERS. Persisting the gate where it is and adding a creation-time
+      supplement leaves the same judgment — is X superseded by Y — implemented
+      twice, once as workflow prompt prose and once in the create surface, with
+      nothing keeping them agreeing. The author asked in terms for a parsimonious
+      list of surfaces that is DRY, so the judgment is extracted ONCE as a pure
+      function in packages/intentionsutil/src — supersedes(candidate, corpus)
+      returning target, superseded_by and reason — and the two triggers CALL it:
+      the decomposer per unit, the create surface per mint. The gate stays
+      exactly where this ruling put it; it stops being a second specification
+      asserted to agree with the first. (b) MAKE AN EMPTY RESULT DISTINGUISHABLE
+      FROM AN ABSENT SEARCH. The decomposer emits, alongside the drops, a record
+      of what was searched — corpus size and method — so greenfield_drops [] can
+      be told apart from a judgment that never ran. This is the same principle
+      the create surface already carries, where a disagreement between the two
+      checks is itself a finding. Carried by tactic-persist-greenfield-drops."
+  - question: The supersession doctrine names an edge to record and a close to
+      recommend. Can the schema and the lifecycle express either?
+    answer: "(Verified and ruled 2026-08-14.) NEITHER, as recorded. IntentionNode
+      carries exactly five edge fields — parent, serves, recovers, validates,
+      blocked_by — and no supersession edge; and validateNode DROPS UNKNOWN
+      KEYS, stated verbatim in write-node.ts. So a superseded_by written today
+      vanishes silently on write: the same defect class as the gap field that
+      hundreds of nodes carry and that nothing reads. The observable recorded on
+      strategy-recursive-self-improvement therefore reads an edge that cannot
+      exist, and its claim that no new instrument is required is false — a limit
+      the recording round disclosed for recall but not for representability.
+      Separately the lifecycle admits ONE terminal, phase done, so executing the
+      recommended close would record abandoned work as FINISHED — destroying
+      exactly the distinction the requirement exists to preserve. AUTHOR RULING:
+      add a first-class superseded_by to the schema, stored on the SUPERSEDED
+      node; validate that the target resolves, as blocked_by is validated; and
+      add a cycle check modelled on validateGraph RULE 15, the blocked_by cycle
+      rule. THE TERMINAL IS CARRIED ON status, NOT ON phase. Ruled 2026-08-14 as
+      a non-pruning superseded PHASE and CORRECTED 2026-08-15 after the
+      pre-commit adversarial review falsified the reasoning behind it, on three
+      independently verified counts. FIRST, THE PRUNING PREMISE IS RETIRED. The
+      2026-08-14 draft argued that done launders abandoned work as finished
+      because the node is pruned and absence reads as completion. Nothing prunes
+      any more: reconcile-graph.ts states LEAVE the node present, no prune, and
+      Nothing is pruned anymore. Done nodes are retained. The prose the ruling
+      leaned on survives only as stale comments in router.ts and terminus.ts,
+      both still asserting prune-on-done makes absence completion. The harm is
+      real but its cause is the WORD done, not a deletion. SECOND, A NEW PHASE
+      WOULD DEADLOCK THE LADDER. Thirty predicates across fourteen files spell
+      terminal as phase equals done. The worst is blockersComplete, which counts
+      a blocker complete only when it is ABSENT from the store or present at
+      phase done; a non-pruning superseded node is neither, so every tactic
+      blocked_by a superseded node would be blocked FOREVER and classifyTerminus
+      would drain its dependents as excused-blocked, silently. THIRD, A PHASE
+      CANNOT MARK A SUPERSEDED STRATEGY. validateGraph rule 10 confines phase,
+      execution, blocked_by and validates to kind tactic, while the originating
+      requirement said in terms that the graph must not implement one
+      STRATEGY-or-tactic then later attempt the one it supersedes. A phase
+      covers half the requirement. status has none of these problems: its
+      vocabulary is already per-kind and already validated by rule 16, so it
+      reaches every kind with no rule-10 exemption; no code branches on it, so
+      the thirty predicates and blockersComplete are untouched. THE COST, STATED:
+      a superseded node still sits at whatever phase it reached, so wherever the
+      ladder currently reads phase alone to mean eligible it must also consult
+      status — one predicate to add, against thirty to migrate. Carried by
+      tactic-supersession-edge-and-terminal; until it lands, the RSI observable
+      is NOT readable and says so on its own node. EDGE CASES: direction is
+      ruled (store on the superseded node; derive the reverse by scanning, the
+      way inbound blocked_by edges are found today — note that inboundBlockers
+      is a prune-repair scan and not a maintained reverse index, so no index
+      pattern is being reused here). Cycles are ruled (checked, per rule 15).
+      ONE EDGE CASE IS OPENED BY THIS CORRECTION AND LEFT UNRULED: status is a
+      STATE_FIELDS member, and EDIT-STATE is unrestricted, so on the letter of
+      the invariant an autonomous lane could mark a STRATEGY superseded without
+      a human. Retiring a strategy is a doctrine act. Recommendation, not a
+      ruling: require attendance for a superseded status on a durable-layer
+      node, the same way this round requires it for any other durable substance
+      write. Enrolled on tactic-review-supersession-derived-subpoints alongside
+      the partial-supersession question. PARTIAL supersession remains UNRULED — the
+      existing workflow gate already handles it better than this doctrine does,
+      dropping individual units and demoting to draft only when a tactic is
+      FULLY superseded, whereas the creation-time check is whole-node. It stays
+      enrolled on tactic-review-supersession-derived-subpoints."
+  - question: A creation-time supersession check keyed on the new node cannot find
+      supersessions that already happened. What closes that half?
+    answer: "(Ruled 2026-08-14; the MECHANISM corrected 2026-08-15 after the
+      pre-commit adversarial review.) A RETIREMENT-TIME SWEEP, paired with the
+      creation-time check, because the creation-time check is structurally
+      incapable of this class: keyed on the new node, it only finds cases where
+      the NEW node is the superseder. THE SWEEP IS A WIDENING OF AN INSTRUMENT
+      THAT ALREADY SHIPS, NOT A NEW ONE. The 2026-08-14 draft specified a fresh
+      sweep fired by deletion events, and recorded that its live proof case was
+      found by an adversarial reviewer rather than by any instrument. That is
+      FALSE and is corrected here.
+      .claude/skills/dispatch-propagate/scripts/lint-verify-fence-paths.sh
+      exists and run-lint.sh calls it UNCONDITIONALLY, so it is already in CI on
+      every commit. Its contract is to fail at the commit that orphans a
+      fence-named path: for every non-done node it extracts the verify blocks
+      and asserts that every path-like token in them still exists. It already
+      has the trigger, the CI wiring, the done-node exclusion, a token rule
+      tuned against false positives, and a test suite. IT MISSED THE PROOF CASE
+      FOR ONE NARROW REASON, measured: the dead reference in
+      tactic-node-ancestry-context is in a prose Scope bullet, while that node's
+      verify fences begin hundreds of lines later, and the lint's scan window is
+      fence-scoped rather than body-scoped. So the accurate finding is that the
+      shipped guard's window is too narrow, not that no guard exists. AUTHOR
+      RULING: widen it — add a second pass over non-fence body prose restricted
+      to backticked path tokens under .claude and packages, and add a park lane
+      so a match on an OPEN node parks it rather than only reddening CI. This
+      also removes an undeclared dependency the fresh-sweep design carried:
+      nothing in this repository emits a deletion event, and the shipped guard
+      sidesteps that by running on every commit instead. LIVE PROOF IT IS
+      NEEDED:
+      tactic-node-ancestry-context sat at phase implement, status codified, with
+      a plan whose unit B inserts a step into
+      .claude/skills/align-strategy/SKILL.md — a skill deleted 2026-08-04. A
+      worker selecting it could not have executed it. It was invisible to the
+      observable this doctrine recorded, because that observable reads an edge
+      no sweep ever wrote. This round parks it. Carried by
+      tactic-supersession-retirement-sweep. Related residue the same sweep would
+      catch, left standing and now visible:
+      tactic-align-strategy-new-steps-revision, at phase null, is scoped
+      entirely to editing the deleted skill. A second candidate,
+      tactic-align-tactics-mechanical-floor, was named in the 2026-08-14 draft
+      and is WITHDRAWN here: it is at phase done, and both the shipped lint and
+      this sweep exclude done nodes by design, because done bodies are
+      historical archives that may legitimately name paths that no longer exist.
+      Naming it as evidence that the sweep is needed cited a case the sweep is
+      built not to touch. If stale references inside done bodies are a problem
+      worth solving, that is a different instrument with a different rationale
+      and it is not ruled here."
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic

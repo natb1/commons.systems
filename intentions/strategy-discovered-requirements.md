@@ -326,6 +326,23 @@ clarifications:
       second while explicitly criticizing the first. A reader auditing the boost
       of 8 should treat every figure in this node as re-measurable and
       re-measure it, not trust the prose."
+  - question: Did the 2026-08-14 node-creation-surface round discharge this
+      strategy's draft-review gate condition?
+    answer: (Recorded 2026-08-14, self-reported.) NO. The review ran AFTER
+      graph-commit, not before, so the round landed unreviewed and the gate's
+      own wording makes that 'a defect of the round' rather than a discharge.
+      The review then found ten material defects in what had already landed,
+      including two false claims about existing controls, an observable keyed on
+      an edge the schema cannot represent, and a live doomed node at phase
+      implement — none of which a pre-commit review would have let land. The
+      deviation was initially recorded only in a session scratch directory,
+      which is precisely the side channel this strategy's sole-carrier condition
+      forbids; it is moved onto the graph here. This correction round ran its
+      review BEFORE its own commit, as the condition requires. The interim
+      discharge remains the inline-pack bootstrap subagent — an independent
+      reviewer launched with an explicit opus model parameter and no
+      drafting-session context, working only from on-disk artifacts — and it
+      expires when tactic-align-review-skill merges.
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -466,7 +483,34 @@ attributes:
       refuse every caller's write (Recorded 2026-08-11 on
       strategy-graph-native-dispatch; re-homed here and scoped to /align
       2026-08-14 by the author's ratifying round, which held that the gate is
-      about /align's output)"
+      about /align's output) The DISCRIMINATION MECHANISM, owed to this
+      condition since 2026-08-14 and recorded here now: the scope boundary is
+      defined by CALLER, so the discriminator must be the caller. --review is a
+      flag the CALLER passes, and graph-commit refuses only a write DECLARED
+      under review without a valid receipt; it never inspects the diff to decide
+      whether a receipt was owed. A diff-read predicate was ratified against and
+      rejected, because caller identity cannot be inferred from diff shape — a
+      draft-tactic-only /align round is diff-shaped identically to an
+      /align-tactics decomposition, and the predicate would have refused
+      dispatch-eval-finding, /align-tactics tactic mints, qa-fix finding nodes,
+      dispatch-diagnose-main's main-red node and /context-chunks drafts alike.
+      NOT YET BUILT as of 2026-08-15 — the --review flag, the receipt floor and
+      the asserting lint ALL land with tactic-align-review-skill. graph-commit
+      accepts no --review flag today and no lint mentions one. The mechanism
+      described here is the ratified DESIGN, not current behaviour; until that
+      tactic lands, the interim discharge is an inline-pack bootstrap subagent
+      run before graph-commit. ACCEPTED COST, taken knowingly: this is an opt-in
+      floor, not a mechanical one — a caller that omits the flag is ungated by
+      omission. The mitigation is a lint asserting that /align's call site always
+      passes --review; only that addresses omission. A second mitigation was
+      recorded 2026-08-14 — that /align's call site is the only site that MAY
+      pass --review — and is WITHDRAWN 2026-08-15 as a non-sequitur: restricting
+      who may pass the flag constrains opt-IN, and the disclosed hole is
+      omission. It remains a true scope narrowing; it is simply not a mitigation
+      of this cost. (Ratified in the
+      /dispatch-ladder session 2026-08-14 against tactic-align-review-skill,
+      which recorded that the serving strategy still owed the mechanism; this
+      entry discharges that debt.)"
     - "a recording round is answerable for the internal consistency of its own
       output — no edge a round authors may contradict a scope the same round
       authors, checked before the round lands; this binds consistency ONLY and
@@ -500,8 +544,21 @@ skill.
 3. **Delegation-capture advice** (Step 3) — what the round's subject delegates,
    and whether that delegation is being deepened or unwound.
 4. **Byproduct retention** (Step 4) — tactical byproducts retained as draft
-   tactic nodes rather than lost with the session, deduped against the open
-   tactic set before minting.
+   tactic nodes rather than lost with the session, ~~deduped against the open
+   tactic set before minting~~ — **struck 2026-08-14: that control does not
+   exist.** `/align`'s Step 4 contains no dedup instruction, and the skill's only
+   duplicate check (Step 1.2) greps *strategy* statements and never reaches the
+   tactic set. So Step 4 mints byproducts unchecked, as do `/align`'s own
+   born-parked review items. This role recorded a control the skill never
+   implemented; the correction is recorded here rather than only in the carrier,
+   because a false claim that lives only in a third node's body is invisible to
+   anyone reading the node that is wrong. The dedup becomes real when
+   `tactic-finding-search-all-producers` lands the shared CREATE surface, and
+   **restoring this line to point at that surface is in that node's scope** —
+   recorded there, not only here. (Added 2026-08-15: as first written this
+   paragraph left a future-work instruction with no owner, living only as prose
+   in a third node's body — which is the side channel this same condition
+   forbids.)
 5. **Recording** (Step 5) — the landing itself: freeze classification, the
    delegation-sweep disposition, round provenance, and `graph-commit`.
 6. **Completeness discharge** (Step 6) — the requirement-clause coverage walk

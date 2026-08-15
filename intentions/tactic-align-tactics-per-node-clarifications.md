@@ -60,7 +60,26 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Parked 2026-08-15 by the /align node-creation-surface correction
+    round, on author ruling. This node implements a doctrine ruling that the
+    same round OVERTURNED. Its unit A widens a per-node session's authority to
+    append clarifications to the serving strategy; its unit B hardens
+    DRIFT_SCHEMA.clarifications_to_add. The 2026-08-15 ruling removes that write
+    authority entirely — the immaterial drift path now mints a born-parked
+    observation node instead — and deletes the field unit B would harden. So
+    unit A is doomed as written and unit B's target is being removed. Found by
+    the pre-commit adversarial review, on the correction round's own output,
+    which is the exact failure class that round exists to close."
+  since: 2026-08-15
+  recommendation: Re-scope or close. Unit A should be dropped. Unit B's finding
+    SURVIVES the overturn and is still owed — DRIFT_SCHEMA declares its items as
+    {answer} only with additionalProperties false while the Clarification
+    interface requires {question, answer} — but its home is now
+    tactic-align-tactics-immaterial-drift-redirect, which must not repeat the
+    mismatch in the replacement observation-node schema. Confirm that node
+    carries it before closing this one.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

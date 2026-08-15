@@ -1846,9 +1846,27 @@ clarifications:
       tactic-eval-finding-sensor-registry-key-prose-drift. This round did not
       touch the field, and needs no atomic code-plus-prose pull request as a
       result."
+  - question: The supersession observable added earlier today claims it needs no new
+      instrument. Does it?
+    answer: "(Corrected 2026-08-14.) It does — the claim was false and is struck in
+      the observable text itself. The observable reads 'no node carrying an
+      inbound supersession edge advances to phase implement or beyond after that
+      edge was recorded'. There is no supersession edge in the schema, and
+      validateNode drops unknown keys, so nothing can carry one. The recording
+      round disclosed the RECALL limit — the observable sees only supersessions
+      the search actually found — but did not disclose the REPRESENTABILITY
+      limit, which is the one that makes it unreadable today rather than merely
+      incomplete. It becomes readable, as a one-line selector query rather than
+      a hand-walk over seven hundred files, once
+      tactic-supersession-edge-and-terminal lands the first-class field. Until
+      then this clause sits alongside the three the node already labels
+      declared-and-unproduced; the difference is that this one now says so. The
+      dispatch/RSI split ruled earlier stands unchanged:
+      strategy-graph-native-dispatch owns the RULE, this node owns the
+      OBSERVABLE."
 tooling_goals: []
 success_signal:
-  observable: graph-native dispatch reaches stable autonomous operation; every
+  observable: "graph-native dispatch reaches stable autonomous operation; every
     phase and unattended-intervention session on BOTH dispatch drivers is either
     evaluated or recorded as a counted skip, so recurrence stays readable as a
     rate; every outcome-triggered session is evaluated unconditionally; the eval
@@ -1872,7 +1890,11 @@ success_signal:
     state directly, no new instrument required; honest limit owned at record
     time — it reads only the supersessions the shared find-or-recur surface
     actually FOUND, so a missed supersession is invisible to it and nothing here
-    measures recall)
+    measures recall) — NOT YET READABLE as of 2026-08-14: blocked on
+    tactic-supersession-edge-and-terminal. The schema carries no supersession
+    edge and validateNode drops unknown keys, so no such edge exists to read and
+    the 'no new instrument required' clause above is false as written. Corrected
+    by the adversarial draft review the recording round skipped"
   sensor: sensors registered in the graph's existing success_signal/readings
     machinery on their owning strategies (backlog band, parked critical-path
     count, held-session/worktree census, pause state), plus per-workflow token

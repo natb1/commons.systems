@@ -1,12 +1,12 @@
 ---
 id: tactic-finding-search-all-producers
 kind: tactic
-statement: "Merge the five private follow-up writers into ONE find-or-recur
-  write surface that every node creator calls — running BOTH shared checks on
-  one search pass: duplicate/merge (optional deterministic key plus a
-  whole-graph similarity search) and supersession (the new node tested as a
-  superseder, rewrite-in-place preferred, close-as-superseded recorded and
-  parked, never executed unattended)"
+statement: "Merge the roughly twenty measured private node-creation sites into
+  ONE find-or-recur write surface that every CREATE caller uses — running BOTH
+  shared checks on one search pass: duplicate/merge (optional deterministic key
+  plus a whole-graph similarity search) and supersession, the latter via a
+  single shared supersedes() evaluator the /align-tactics decomposer calls too,
+  with a superseded node RECORDED and PARKED, never closed unattended"
 owner: ai
 status: raw
 parent: null
@@ -14,14 +14,19 @@ rationale: "REWRITTEN 2026-08-14 by the THIRD /align round of that date, on
   author ruling, widening this node from the finding-producer population to ALL
   node creation and adding the supersession check. Two same-day rewrites precede
   this one (per-skill discipline -> merged common logic; then this). What
-  changed this round: the author ruled that exactly TWO write surfaces create
-  nodes and the seam is by KIND — the /align interview record for
-  persistent-layer nodes, this surface for every tactic — and named
-  /align-tactics explicitly as a CALLER of this surface rather than a third
-  surface. That makes this node's caller set larger than the seven skills
-  measured in the previous rewrite: /align Step 4 and /align-tactics
-  decomposition join it, and neither is among the five private writers, so
-  neither is served by the merge as previously scoped. The author further ruled
+  changed this round: /align-tactics was named explicitly as a CALLER of this
+  surface rather than a second surface, which makes this node's caller set
+  larger than the seven skills measured in the previous rewrite — /align Step 4
+  and /align-tactics decomposition join it, and neither is among the five
+  private writers, so neither is served by the merge as previously scoped.
+  CORRECTED 2026-08-15 by the pre-commit adversarial review: the 2026-08-14
+  rewrite recorded that the author had ruled exactly TWO write surfaces create
+  nodes with the seam drawn by KIND. That claim is REFUTED and no longer binds.
+  kind-tradition's own creation rule puts tradition records at the office-hours
+  sitting, not the /align interview, and /align cannot mint a virtue, delegation
+  or kind node at all. The corrected seam is by OPERATION and ATTENDANCE, not by
+  kind or by surface count — see strategy-graph-native-dispatch's operation-
+  taxonomy clarification, which is the doctrine home. The author further ruled
   that the supersession analysis belongs on this same surface rather than a
   second one, on the same DRY/parsimony ground as the first merge, and that a
   superseded node is RECORDED and PARKED with a close recommendation, never
@@ -44,7 +49,8 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-supersession-edge-and-terminal
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -77,26 +83,75 @@ evaluator-side reasoning and the observables that read the outcome live on
 no-superseded-node-advances reading added to its `success_signal.observable` in
 the third round).
 
-## The two surfaces, and why this one has more callers than measured below
+## The create surfaces, by attendance class
 
-The author ruled 2026-08-14 that exactly **two** write surfaces create nodes, and
-that the seam is **by kind**:
+**This section previously stated that the author had ruled exactly two write
+surfaces create nodes, with the seam drawn by KIND. That was refuted on
+2026-08-15 by the pre-commit adversarial review and is rewritten here rather
+than annotated, because a correction placed *below* a refuted claim leaves the
+refuted claim readable on its own.** What refuted it: `intentions/kind-tradition.md`
+puts tradition-record creation at the office-hours sitting that examines the
+candidate, not at the `/align` interview; and `/align` cannot mint a virtue, a
+delegation or a `kind-*` node at all. The by-kind seam therefore asserted a
+creation path where there is a hole, in both directions.
 
-1. **The `/align` interview record** — the only way a *persistent-layer* node
-   (virtue, strategy, delegation, tradition) enters the graph.
-2. **This surface** — the only way a *tactic* enters, whoever the caller is.
+The corrected seam is by **operation** and **attendance**, and its doctrine home
+is `strategy-graph-native-dispatch`'s operation-taxonomy clarification — cite it,
+do not restate it. What binds *this* node:
 
-`/align-tactics` was named explicitly by the author as a **caller** of this
-surface, not a third surface: a decomposition that creates nodes creates them
-through here. So the caller set is strictly larger than the table below measured:
-**`/align` Step 4** (interview byproducts) and **`/align-tactics` decomposition**
-both join it, and *neither is among the five private writers*, so neither is
-served by the merge as previously scoped. Both currently call `write-node.ts`
-directly with no find-before-minting step at all — `.claude/skills/align/SKILL.md`
-Step 4 contains no dedup instruction, and `/align`'s only duplicate check
-(Step 1.2) greps **strategy statements** and never reaches the tactic set.
+- The duplicate and supersession checks bind to the **CREATE** operation and to
+  no other. A census of "who writes the graph" is the wrong denominator; the
+  right one is **who mints**.
+- **ATTENDED** create surfaces (a human rules on the write as it happens):
+  `/align`, `/reading-review`, `/budget`, and the human's own write following an
+  office-hours disposition. These may create any kind.
+- **AUTONOMOUS** create surfaces may create **tactics only**. That is the larger
+  population and the one this surface exists for.
+
+`/align-tactics` is a **caller** of this surface, not a surface of its own: a
+decomposition that creates nodes creates them through here. So the caller set is
+strictly larger than the table below measured — **`/align` Step 4** (interview
+byproducts) and **`/align-tactics` decomposition** both join it, and *neither is
+among the five private writers*, so neither is served by the merge as previously
+scoped. Both currently call `write-node.ts` directly with no find-before-minting
+step at all: `.claude/skills/align/SKILL.md` Step 4 contains no dedup
+instruction, and `/align`'s only duplicate check (Step 1.2) greps **strategy
+statements** and never reaches the tactic set.
 
 ## Measured state at record time
+
+> **CORRECTED 2026-08-14 (third round of this date).** The table below is the
+> *finding-writer* census and is accurate as far as it goes, but the round that
+> widened this node's scope from "finding producers" to "every node creator" did
+> **not** re-measure — so "five writers" was carried forward as if it were the
+> whole population. It is not. A measured sweep found roughly **twenty** graph
+> write sites across **sixteen skill files and four scripts**. Missing from the
+> table below: `hold-node` and `resolve-hold`, `/dispatch-diagnose-main`
+> (`tactic-main-red-<shortsha>`, an id-prefix find-or-create — the exact shape
+> this node condemns), `/reading-review`, `/context-chunks`, `/grounding-research`,
+> `/qa-main`'s node lane, `/review-fix`'s node lane, `/fix-checks`,
+> `/dispatch-conflict`, `dispatch-graph-census` and `/budget`.
+>
+> Two of those mint with **weaker** dedup than the writers they replaced:
+> `/review-fix`'s node lane removed the `dispatch-followup-exists` check the
+> issue lane had and replaced it with nothing, and `/qa-main` checks only whether
+> `intentions/<bug-id>.md` already exists. **Five create sites have no duplicate
+> check at all**: `/context-chunks`, `/review-fix`'s node lane, `/align` Step 4
+> byproducts, `/align`'s born-parked review items, and `/grounding-research`
+> candidate chunks.
+>
+> **The reference pattern to copy is already in the tree.**
+> `dispatch-flake-dedup-node` is the only create-site guard in the whole graph
+> that searches whole-graph on **content** — it greps every tactic body for the
+> flake fingerprint, spanning open *and* done state, returning
+> `NONE`/`EXISTING`/`REOPENED`/`STALE`/`CURRENT`. Every other dedup in the census
+> is scoped to an id shape or a filename. Build check one in its image.
+>
+> **Scope correction from the same round:** the duplicate and supersession checks
+> bind to the **CREATE** operation only — not to EDIT-SUBSTANCE, not to
+> EDIT-STATE. See `strategy-graph-native-dispatch`'s operation-taxonomy
+> clarification. A census of "who writes the graph" is therefore the wrong
+> denominator for this node; the right one is "who **mints**".
 
 Seven skills call **five** distinct private writers, all under
 `.claude/skills/dispatch-propagate/scripts/`:
@@ -142,11 +197,22 @@ search meant to catch it.
    the *write*, not the rsi namespace.
 5. **Per-skill prose reduces to naming the call.** No producer restates the
    discipline. A restatement is not compliance. This now includes
-   `.claude/skills/align/SKILL.md` Step 4, `.claude/skills/align-tactics/SKILL.md`
-   (whose greenfield-relevance-gate prose at `:322` is the *only* surviving copy
-   of the supersession check), and `strategy-discovered-requirements`' body role 4
-   ("deduped against the open tactic set before minting"), which becomes a
-   pointer at this surface rather than a free-standing instruction.
+   `.claude/skills/align/SKILL.md` Step 4 and `strategy-discovered-requirements`'
+   body role 4 ("deduped against the open tactic set before minting"), which
+   becomes a pointer at this surface rather than a free-standing instruction.
+
+   **Correction 2026-08-15:** this item previously also named
+   `.claude/skills/align-tactics/SKILL.md`, calling its greenfield-relevance-gate
+   prose "the *only* surviving copy of the supersession check". That was wrong in
+   both parts — the gate's carrier is `.claude/workflows/align-tactics.js`, and
+   the SKILL.md prose is a *pointer* to it, which is already the shape this item
+   asks for. Nothing to reduce there.
+
+   **Also owed here (2026-08-15):** `strategy-discovered-requirements`' body role
+   4 currently carries a struck line and an instruction that it "should be
+   restored pointing at that surface" once this node lands. That restore is part
+   of **this** node's scope — recorded here so the obligation has an owner,
+   rather than living only as prose in a third node's body.
 
 ## The supersession half — check two
 
@@ -157,9 +223,62 @@ later attempt the one it supersedes. This is a **creation-time** check keyed on
 the **new** node — not a corpus sweep — which bounds the blast radius to one
 search per creation and is what makes it affordable here.
 
-6. **Absorb the greenfield-relevance gate.** The gate
-   (`strategy-graph-native-dispatch` clarification 26, body §Other Settled
-   Mechanism) moves here from `/align-tactics` finalization. Its mechanics are
+> **CORRECTED 2026-08-14, same date, by the adversarial draft review.** Item 6
+> below says the greenfield-relevance gate **moves here**, on the argument that
+> its only carrier was prose in one skill. Both halves were wrong.
+> `.claude/workflows/align-tactics.js` makes `greenfield_drops` a
+> **schema-required** decomposer output (`additionalProperties: false`,
+> `required: ['target','superseded_by','reason']`), so the gate has a **typed
+> output** where this surface had none — though be precise: what is enforced is
+> the output *shape*, not the judgment. `greenfield_drops: []` satisfies the
+> schema on every run, so an empty result is indistinguishable from a search that
+> never ran. (That overstatement — "machine-enforced, a decomposer run fails
+> validation without it" — was itself corrected 2026-08-15.) The prose
+> at `align-tactics/SKILL.md` is a *pointer* to clarification 26, not a copy of
+> it. Moving an enforced check into this unbuilt surface would have **reduced**
+> enforcement.
+>
+> The real defect is smaller and different: `write-path.md` **discards**
+> `greenfield_drops` into the round's transient report, so the validated
+> supersession judgment never reaches the graph. **Author ruling: persist, do not
+> relocate** — carried by `tactic-persist-greenfield-drops`. The gate stays where
+> it is and starts landing its edges; **this surface's check two is a
+> SUPPLEMENT**, covering the creators the workflow never sees (strategies, and
+> every create site that is not an `/align-tactics` decomposition). Item 6 below
+> has been rewritten accordingly.
+>
+> **ONE EVALUATOR, TWO TRIGGERS (ruled 2026-08-15).** Keeping the gate where it
+> is *and* adding check two here leaves the same judgment — "is X superseded by
+> Y?" — implemented twice, once as workflow prompt prose and once here, with
+> nothing keeping them agreeing. The author asked in terms for a parsimonious,
+> DRY list of surfaces. So the judgment is extracted **once**, as a pure function
+> `supersedes(candidate, corpus) → {target, superseded_by, reason}[]` in
+> `packages/intentionsutil/src/`, and **this node authors it**. Two thin triggers
+> call it: the `/align-tactics` decomposer per unit
+> (`tactic-persist-greenfield-drops`, which is `blocked_by` this node for exactly
+> that reason), and check two here per mint. One judgment, one home, two entry
+> points.
+>
+> Also corrected: check two writes an edge (`superseded_by`) that **the schema
+> cannot hold today** — `IntentionNode` has five edge fields, none of them
+> supersession, and `validateNode` drops unknown keys. Blocked on
+> `tactic-supersession-edge-and-terminal`. And the "close" this check recommends
+> has no representation either: the only terminal is `done`, which reads as
+> *completed*. A `superseded` **status** value lands with the same tactic —
+> **status, not a new phase**; see that node for the three measured reasons the
+> phase design was withdrawn on 2026-08-15.
+
+6. **Supplement the greenfield-relevance gate — do not absorb it.** *(Rewritten
+   2026-08-15. This item previously read "Absorb the greenfield-relevance gate…
+   moves here from `/align-tactics` finalization", which the author's persist-not-
+   relocate ruling reversed. It is rewritten rather than annotated, because a
+   directive that still says "moves here" is what an implementer executes.)* The
+   gate (`strategy-graph-native-dispatch` clarification 26, body §Other Settled
+   Mechanism) **stays in `/align-tactics` finalization** and starts persisting its
+   drops as `superseded_by` edges — that is `tactic-persist-greenfield-drops`.
+   This surface's check two **supplements** it, covering the creators the workflow
+   never sees: strategies, and every create site that is not an `/align-tactics`
+   decomposition. Its mechanics are
    **preserved, not replaced**: per-unit doomed drops naming the superseding node;
    "a raw draft never obsoletes live work"; only a *fully* superseded node treated
    as terminal; and doomed-surface keeps allowed only as an explicit
@@ -218,6 +337,25 @@ callers to serve, not six.
 
 `dispatch-retriage-orphaned-followups` is a *scanner*, not a writer, and is out
 of scope here.
+
+## Owed by this node, from the 2026-08-15 review
+
+Two obligations the doctrine round could not discharge in prose, recorded here so
+they have an owner rather than decaying silently.
+
+1. **Per-site classification.** The author's ruling was to sweep every
+   `write-node` call site and classify each as CREATE / EDIT-SUBSTANCE /
+   EDIT-STATE. The sites are *named* on the strategy and the four violators are
+   classified, but a per-site classification of all ~20 is **not** recorded. It
+   is owed here, because this node is the one that needs to know which sites are
+   CREATE callers.
+2. **A machine-readable roster, replacing the prose census.** A prose list of
+   write sites decays the day it lands — that is exactly what made the previous
+   round's "five writers" wrong, and re-recording it as a *longer* prose list
+   does not fix it. The durable form is a roster mapping each write site to its
+   operations and attendance class, with a lint asserting that every
+   `write-node.ts` caller in the tree appears in it. Then "every site" is
+   checkable rather than a snapshot, and a new caller cannot be added silently.
 
 ## Sibling
 

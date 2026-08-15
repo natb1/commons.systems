@@ -20,8 +20,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.01
-  override: null
+  boosts:
+    "1": 0.01
   rationale: >-
     Author-directed 2026-07-08 (refined): curriculum-maintenance/execution
     tooling (this skill, sibling tactic-sync-reader-skill) ranks below tactics
@@ -44,7 +44,6 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
 phase: implement
 execution:
   branch: tactic-sync-reader-skill
@@ -53,14 +52,15 @@ execution:
   markers: []
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 909b0876657fb73a185833bf748ff8a24686e17ca64b701b24d30b24839bf10c
-      sha: bad3e0742eb941e3c52a2739f4f7dcdfa38a34ae
+      hash: 16df2a3310d03257cf23d4b44daf39e992c78b57187614d601e4ec350e9238eb
+      sha: e23fea437e9c1e1f6872d54f717c49da818116c8
   fix:
     since: 2026-07-22
     attempt: 1
     pushed_sha: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
