@@ -84,6 +84,15 @@ dies with the session.
   agree with the create surface's. The evaluator itself is authored by
   `tactic-finding-search-all-producers`, which owns the create surface — hence
   the added dependency below.
+
+  This repo already applies exactly this rule elsewhere, and the precedent is
+  worth citing because it states the failure mode precisely:
+  `packages/intentionsutil/scripts/attribute-spend.ts:6-11` keeps itself a thin
+  CLI and delegates the fold to `../src/spend.ts`, on the grounds that
+  re-deriving the shares locally "would give the fitness function two
+  denominators that could disagree, which is exactly the failure the single
+  module exists to prevent." Two prose specifications of `supersedes()` are two
+  denominators.
 - **Make an empty result distinguishable from an absent search.** Emit, alongside
   the drops, a record of what was searched — corpus size and method — so
   `greenfield_drops: []` can be told apart from a judgment that never ran. Same

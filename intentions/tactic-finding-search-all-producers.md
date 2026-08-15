@@ -338,17 +338,115 @@ callers to serve, not six.
 `dispatch-retriage-orphaned-followups` is a *scanner*, not a writer, and is out
 of scope here.
 
+## Per-site write-site classification (measured 2026-08-15)
+
+Discharges obligation 1 below. Every site was read, not inferred from the grep
+hit. Classes are the three-operation taxonomy; EDIT-SUBSTANCE is the negative
+`STATE_FIELDS` definition ruled this round (`phase`, `execution`,
+`office_hours`, `reading`, `attention`, `rounds`, `status`, `blocked_by` are
+state; everything else, including the body, is substance).
+
+**On the counts.** This node's `statement` says "roughly twenty measured private
+node-creation sites". That holds: **16 CREATE sites** measured, which is what
+the statement is about. The wider surface it sits in is larger — **47 write
+calls across 27 distinct callers**, in the four layers below — and only a third
+of those are creates. The census's "five writers" was wrong about both.
+
+### Layer 1 — the gate itself (not call sites)
+
+`packages/intentionsutil/src/store.ts:52` (`writeNode`, the single serializer)
+and `packages/intentionsutil/scripts/write-node.ts:34,59` (the JSON gate).
+`packages/intentionsutil/scripts/merge-node.ts:86` mirrors the serialization for
+graph-commit's three-way merge and is not a semantic write site.
+
+### Layer 2 — TS scripts calling `writeNode` directly (18 calls, 9 scripts)
+
+All **autonomous**, all **EDIT-STATE**:
+
+- `apply-node-transition.ts:201` — `phase`/markers/attempts/pr. Reached by
+  `transition-node:216` and `demote-node-to-implement`.
+- `apply-conflict-state.ts:336,366,414,444` — `execution.conflict` (`:444` also
+  sets `phase: review` and drops the `reviewed` marker).
+- `apply-fix-state.ts:215,241,259,317,334` — `execution.fix`.
+- `apply-lane-pass.ts:213` — `execution.lane_pass`.
+- `read-sensors.ts:1707` — `reading`. This is why `reading` is in
+  `STATE_FIELDS`: a sensor writes it on every run with no human present.
+- `reconcile-graph.ts:200` — `phase: main-qa` + `execution.completion`;
+  `:232` — `phase: done` + completion; `:255` — a serving strategy's `rounds`
+  stamp. The only site in this layer that writes a **strategy**.
+- `park-node:387`, `clear-park:293`, `resolve-park:163` — `office_hours`
+  (± `phase`).
+
+### Layer 3 — shell scripts invoking the CLI (13 calls, 7 scripts)
+
+All **autonomous**.
+
+- **CREATE:** `dispatch-eval-finding:1125` (mint a finding ledger entry),
+  `dispatch-fleet-alarm:705` (mint an alarm node),
+  `dispatch-invalid-state-followup:378` (mint a follow-up),
+  `dispatch-graph-census:129` (first run only), `hold-node:243` on `NONE`.
+- **EDIT-STATE:** `dispatch-graph-main-red-sync:177` (`phase: done`),
+  `dispatch-eval-finding:955` (`phase: done`), `dispatch-fleet-alarm:620`
+  (`phase: done`), `hold-node:243` on `REOPENED`, `hold-node:295` and
+  `resolve-hold:459` (`blocked_by` edge add/remove), `resolve-hold:412`
+  (`office_hours`/`phase`).
+- **EDIT-SUBSTANCE:** `dispatch-graph-census:129` after first run (wholesale
+  body overwrite at `:133-140`), and the two `dispatch-eval-finding` sites in
+  the finding below.
+
+### Layer 4 — skill-prose sites (~16 calls, 11 skills)
+
+A session runs the command by hand under the skill's procedure, so attendance
+varies and is the load-bearing column.
+
+- **CREATE, attended:** `align/SKILL.md:494` (draft tactic byproduct), `:570`
+  (the strategy record — CREATE or EDIT-SUBSTANCE), `:308`/`:738` (born-parked
+  review item); `context-chunks/SKILL.md:125` (reading chunks);
+  `grounding-research/SKILL.md:116` (candidate/chunk nodes);
+  `reading-review/SKILL.md:252` (capstone tactic).
+- **CREATE, autonomous:** `align-tactics/references/write-path.md:143` (tactic
+  plan, strategy mode — CREATE or EDIT-SUBSTANCE);
+  `fix-checks/SKILL.md:703`; `review-fix/references/followup-filing.md:40`
+  (V4); `qa-main/SKILL.md:318`; `dispatch-diagnose-main/SKILL.md:180`.
+- **EDIT-SUBSTANCE, autonomous:** `dispatch-conflict/SKILL.md:637` (arbitrary
+  reconciled fields, V1/V2) and `:719` (appended `clarifications`).
+- **EDIT-SUBSTANCE, attended:** `reading-review/SKILL.md:525` —
+  `attributes.irreversibility.last_exercised` on a `delegation-*` node.
+- **EDIT-STATE, autonomous:** `fix-checks/SKILL.md:794` (`blocked_by` on the
+  source tactic); `budget/SKILL.md:289` (`reading` only).
+- **Not a call site:** `office-hours/SKILL.md:526` names un-parking as a human
+  edit the skill itself never performs — the office-hours SKILL is read-only,
+  as this round already recorded.
+
+### Two findings the per-site sweep produced
+
+1. **`attributes` is the negative definition's largest fallthrough, and it is
+   already being written autonomously.** Three measured sites write `attributes`
+   sub-keys that are plainly *state*, not intent:
+   `dispatch-eval-finding:1025` (`resolved_by`), `:1220`
+   (`ledger_entry`, `first_seen`, `measured_impact`), and
+   `reading-review/SKILL.md:525` (`irreversibility.last_exercised`). The first
+   two are autonomous. Under `!STATE_FIELDS.has(field)` all three are
+   EDIT-SUBSTANCE. Either they are two further violators, or `STATE_FIELDS`
+   needs sub-key granularity beneath `attributes`. The fail-safe direction is
+   right — over-capturing restricts autonomous writes rather than permitting
+   them — and nothing breaks today, because
+   `tactic-dispatch-conflict-substance-allowlist` scopes its gate to
+   `/dispatch-conflict`. But the definition does not yet survive contact with
+   the measured sites, and that is owed before the gate widens.
+2. **`dispatch-eval-finding` is a second wholesale-body-overwrite site, and it
+   overwrites on EDIT paths.** `splice_body`
+   (`.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding:743-761`)
+   keeps the frontmatter and replaces the entire body with `$BODY_FILE`. It runs
+   at the mint (`:1127`, legitimate — a create authors its body) but also on the
+   recurrence path (`:1223`) and the resolved path (`:1027`), where the node
+   already exists. This is the same defect class this round recorded for
+   `dispatch-graph-census:133-140`, which was described as the *only* such site.
+   That description was too narrow.
+
 ## Owed by this node, from the 2026-08-15 review
 
-Two obligations the doctrine round could not discharge in prose, recorded here so
-they have an owner rather than decaying silently.
-
-1. **Per-site classification.** The author's ruling was to sweep every
-   `write-node` call site and classify each as CREATE / EDIT-SUBSTANCE /
-   EDIT-STATE. The sites are *named* on the strategy and the four violators are
-   classified, but a per-site classification of all ~20 is **not** recorded. It
-   is owed here, because this node is the one that needs to know which sites are
-   CREATE callers.
+1. *(Discharged 2026-08-15 — see the classification above.)*
 2. **A machine-readable roster, replacing the prose census.** A prose list of
    write sites decays the day it lands — that is exactly what made the previous
    round's "five writers" wrong, and re-recording it as a *longer* prose list
