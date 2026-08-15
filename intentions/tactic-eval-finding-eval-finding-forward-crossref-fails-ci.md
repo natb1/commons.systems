@@ -139,3 +139,28 @@ Either of these, recorded for the author:
 Option 2 is the greenfield answer — the ordering requirement is an artifact of
 one-node-per-invocation writes, not something the author should have to hold in
 mind. Option 1 is the one-line stopgap.
+
+## Implementation record — closed on the validator half only
+
+Shipped in PR #3095, squash-merged to `main` as `fe0b1c4d`.
+`validateGraphProseRefs` now resolves a prose reference against the batch under
+write plus `origin/main`, and the exemption is covered by `test/schema.test.ts`.
+
+**The caller half did not ship, and this node closes without it.** The brief's
+skip-list dropped it deliberately, on the reasoning that the validator
+resolving against the batch makes it unnecessary. Post-merge review established
+that reasoning is only half right, and the record should say so rather than
+imply the recorded failure is gone:
+
+- `graph-commit` already stages every id of a single invocation, so
+  **within-invocation** cross-references already resolved before this change.
+- The failure this node was filed about is **cross-invocation** — `/rsi` calls
+  `dispatch-eval-finding` once per finding, so a sibling minted by a different
+  invocation is not in any batch the validator can see.
+- `batchIds` therefore has no production caller: `validate-graph.ts` still
+  invokes `validateGraphProseRefs` with four arguments, and the new fifth
+  parameter defaults to an empty set.
+
+Wiring it needs a `--batch <ids>` flag on `validate-graph.ts` plus something in
+`graph-fast-path.yml` that knows the in-flight batch. That is a design decision
+and belongs to its own node; it was not made here.

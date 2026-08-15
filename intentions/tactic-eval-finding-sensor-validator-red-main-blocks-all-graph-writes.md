@@ -173,3 +173,38 @@ Note the `unboundNames` escape hatch is **not** the remedy here. Its docstring i
 explicit: it is for genuinely node-agnostic adapters, and "a node-bound sensor
 that lands there stops being guarded." Silencing this case that way would have
 turned a 54-minute outage into a permanently unguarded sensor.
+
+## Implementation record
+
+Shipped in PR #3095, squash-merged to `main` as `fe0b1c4d`. The repo-wide
+denial is gone: `validate-graph.ts` REPORTS an unbound registered sensor name
+on stderr and exits 0, so one registry/store pairing defect can no longer leave
+every writer in the repo with four non-success required checks. The detector is
+split from the throwing validator, and the fatal copy of the rule runs against
+the live store in `test/lifecycle-sensor.test.ts`, in the PR CI of any branch
+touching `packages/intentionsutil`.
+
+### Residual — the node-prose half now has no failing gate
+
+Recorded because post-merge review found it and it is a real narrowing of what
+this node's rule used to catch. The escalation was scoped, but scoped further
+than "node-scoped failure": it became a warning.
+
+The half that IS caught is a **constant** edit — a PR touching
+`packages/intentionsutil` runs the unit suite and goes red. The half that is
+**not** caught is a node **prose reword**: an `/align` round rewriting a node's
+`success_signal.sensor` lands through a `graph/**` push, and
+`.github/workflows/unit-tests.yml` declares
+`branches-ignore: [main, 'graph/**']` — so neither that suite nor its
+`graph-validate` job (which runs `validate-graph.ts`, and so cannot go red on
+this condition in any case) ever runs for such a write. The reword lands, CI is
+green everywhere, and the sensor reads `null` from then on.
+
+Restoring a gate on that half needs a ruling on its shape — node-scoped fatal
+in the fast path's `guard` (fail only when the name was bound at `origin/main`
+and is unbound after this write), versus a post-merge check on `main` (cannot
+deny a write, so cannot re-arm the outage, but detects after the fact). It was
+deferred rather than guessed at, because the careless version re-arms the
+2026-08-14 outage this node exists to prevent. Both code comments
+(`validate-graph.ts`, `read-sensors.ts`) now state the gap plainly instead of
+implying coverage.
