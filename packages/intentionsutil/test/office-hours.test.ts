@@ -22,6 +22,8 @@ import {
   resolveSessionCwd,
 } from "../scripts/office-hours-select.js";
 import { extractFrontmatter } from "../src/frontmatter.js";
+import { writeNode } from "../src/store.js";
+import { listNodesAtRef } from "../scripts/lib-store-at-ref.js";
 
 // This test file lives at packages/intentionsutil/test/, so repo root is
 // three dirname() calls up from this file's own location — same pattern as
@@ -850,29 +852,98 @@ describe("formatDisposition", () => {
   });
 });
 
-// These tests exercise the real CLI against THIS repo's actual `origin/main`
-// state, not in-memory fixtures — the direct regression test for the
-// main-authority invariant office-hours-select.ts now guarantees (every queued
-// node is genuinely parked on `origin/main`, not just in the local worktree).
-// They skip cleanly when no `origin/main` ref is resolvable (e.g. a stripped
-// checkout with no `origin` remote), matching the defensive posture of
-// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
-describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
-  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
-    const out = runSelect(["--list"]);
-    const lines = out.split("\n").filter((l) => l.length > 0);
-    for (const line of lines) {
-      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
-    }
-  }, 15000);
+// --- office-hours-select CLI: fixture-backed regression coverage ----------
+//
+// These cases used to spawn the real `office-hours-select.ts` CLI as a
+// subprocess against THIS repo's actual `origin/main` graph. That has two
+// problems, not one:
+//
+//  1. `office-hours-select.ts` resolves its OWN repo root from
+//     `import.meta.url` (see that file's "Paths" section), never from the
+//     subprocess's `cwd` — so a subprocess spawned from this test file can
+//     never be pointed at a fixture repo. It always reads THIS checkout's
+//     real `origin/main`. Any PR that both migrates `intentions/` node data
+//     and tightens the schema code reading it is then red by construction
+//     until merge (the F4 defect these tests were rewritten to stop
+//     causing) — every assertion below sidesteps that by never touching
+//     this repo's real graph.
+//  2. Spawning `npx tsx <script>` as a subprocess is heavier than these
+//     cases need and, empirically, less portable: under this project's
+//     sandboxed test runner the `tsx` subprocess's own IPC pipe listener
+//     fails with `EPERM`, so the old CLI-subprocess tests could only run
+//     with the sandbox disabled. `listNodesAtRef` (imported directly below)
+//     shells out to plain `git` only, which has no such issue.
+//
+// `buildGitFixture` commits a small `intentions/` tree to a throwaway repo
+// so `listNodesAtRef` — the git-archive-at-a-ref read path this whole block
+// exists to guard — is exercised for real, just against fixture content
+// instead of this repo's live graph. Every assertion the original block made
+// is still made below; see the per-case comment for where each one moved.
+function buildGitFixture(nodes: IntentionNode[]): string {
+  const root = mkdtempSync(join(tmpdir(), "oh-fixture-"));
+  const intentionsDir = join(root, "intentions");
+  for (const node of nodes) writeNode(intentionsDir, node);
+  execFileSync("git", ["-C", root, "init", "-q"]);
+  execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+  execFileSync("git", ["-C", root, "config", "user.name", "Fixture Builder"]);
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "commit", "-q", "-m", "fixture"]);
+  return root;
+}
 
-  it("main-authority invariant: every listed node is parked on origin/main", () => {
-    const out = runSelect(["--list"]);
-    const lines = out.split("\n").filter((l) => l.length > 0);
-    // Column 2 (0-indexed) is the node id — see formatQueueRow's column contract.
-    const nodeIds = lines.map((line) => line.split("\t")[2]);
+describe("office-hours-select CLI (fixture repo)", () => {
+  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
+    // Was: the real CLI's `--list` against this repo's live `origin/main`
+    // graph. Now: the same production formatter (`formatQueueRow`) over an
+    // `officeHoursQueue` computed from fixture nodes — the column-shape
+    // contract is pinned against real computed scores/ids without depending
+    // on this repo's real graph content.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-list-a", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-list-b",
+        kind: "tactic",
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+    const rows = officeHoursQueue(nodes).map(formatQueueRow);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
+    }
+  });
+
+  it("main-authority invariant: every listed node is parked in the COMMITTED tree at the ref, not in a dirty working tree", () => {
+    // Was: `git show origin/main:intentions/<id>.md` against this repo's
+    // real checkout. Now: the identical re-read-independently-of-the-parser
+    // mechanic (raw `git show` + `extractFrontmatter` + `parse`) against a
+    // fixture repo — AND with a working-tree mutation left uncommitted, so
+    // this also proves `listNodesAtRef` answers from the COMMIT, never from
+    // a dirty checkout. That is the exact distinction "genuinely parked on
+    // origin/main, not just in the local worktree" was guarding.
+    const parkedNode = anode({
+      id: "tactic-committed-park",
+      kind: "tactic",
+      office_hours: parked(),
+    });
+    const unparkedNode = anode({ id: "tactic-committed-open", kind: "tactic" });
+    const root = buildGitFixture([...kinds(), parkedNode, unparkedNode]);
+
+    // Dirty the working tree AFTER the commit, without committing: clear the
+    // parked node's office_hours on disk. A read that consulted the working
+    // tree instead of the ref would now see it as unparked.
+    writeNode(join(root, "intentions"), { ...parkedNode, office_hours: null });
+
+    const nodesAtRef = listNodesAtRef(root, "HEAD");
+    const queued = officeHoursQueue(nodesAtRef);
+    const nodeIds = queued.map((m) => m.nodeId);
+
+    expect(nodeIds).toContain("tactic-committed-park");
+    expect(nodeIds).not.toContain("tactic-committed-open");
+
     for (const id of nodeIds) {
-      const raw = execFileSync("git", ["-C", repoRoot, "show", `origin/main:intentions/${id}.md`], {
+      const raw = execFileSync("git", ["-C", root, "show", `HEAD:intentions/${id}.md`], {
         encoding: "utf8",
       });
       const frontmatter = extractFrontmatter(raw, id);
@@ -880,16 +951,44 @@ describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
       expect(parsed).toBeTruthy();
       expect((parsed as { office_hours?: unknown }).office_hours).not.toBeNull();
     }
-  }, 15000);
+  });
 
+  it("--ref plumbing: the CLI's default ref is the literal string \"origin/main\", matching an explicit --ref origin/main", () => {
+    // Was: two real CLI-subprocess invocations against this repo's live
+    // `origin/main`, compared for equal output. `office-hours-select.ts`
+    // resolves its own repo root (see the block comment above), so a
+    // subprocess can't be redirected at a fixture — but `parseSelectorArgs`
+    // (pure, already imported above) is the single place the default is
+    // set (`ref = DEFAULT_REF` when `--ref` is omitted; see
+    // office-hours-select.ts around its `parseSelectorArgs` body). Asserting
+    // the two parses agree pins the same fact the subprocess comparison was
+    // checking — the default and the explicit flag resolve identically —
+    // without needing a live repo or a subprocess.
+    const withoutFlag = parseSelectorArgs([]);
+    const withExplicitFlag = parseSelectorArgs(["--ref", "origin/main"]);
+    if (withoutFlag.kind !== "ok" || withExplicitFlag.kind !== "ok") {
+      throw new Error("expected both parses to succeed");
+    }
+    expect(withoutFlag.ref).toBe("origin/main");
+    expect(withExplicitFlag.ref).toBe(withoutFlag.ref);
+  });
+});
+
+// The one deliberately-LIVE case: exercises the real CLI subprocess against
+// THIS repo's actual `origin/main`, catching a real end-to-end wiring
+// regression (subprocess spawn, the actual script file, its own repo-root
+// resolution, a real `git archive` read against a real ref) that no fixture
+// can reach, since `office-hours-select.ts` always reads ITS OWN checkout's
+// `origin/main` (see the fixture block's comment above). Kept minimal and
+// content-independent — "does this fabricated id exist" is true regardless
+// of what the real graph currently holds, so this stays robust to graph
+// churn while every other original assertion moved to the fixture block
+// above. Skips cleanly when no `origin/main` ref is resolvable (e.g. a
+// stripped checkout with no `origin` remote) — same defensive posture as
+// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
+describe.skipIf(!hasOriginMain())("office-hours-select CLI (live smoke, real repo)", () => {
   it("targeted not-parked: a fabricated node id reports not-parked", () => {
     const out = runSelect(["absent-node-id-xyz"]);
     expect(out).toBe("empty not-parked absent-node-id-xyz\n");
-  }, 15000);
-
-  it("--ref plumbing: --ref origin/main matches the no-flag default", () => {
-    const withRef = runSelect(["--ref", "origin/main", "--list"]);
-    const withoutRef = runSelect(["--list"]);
-    expect(withRef).toBe(withoutRef);
   }, 15000);
 });

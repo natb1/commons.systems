@@ -375,7 +375,8 @@ case "$STATE" in
 
     printf '%s\n' "$NODE_JSON" > "$WORK_DIR/$NODE_ID.json"
     ( cd "$REPO_ROOT" \
-      && npx tsx packages/intentionsutil/scripts/write-node.ts --file "$WORK_DIR/$NODE_ID.json" ) \
+      && npx tsx packages/intentionsutil/scripts/write-node.ts \
+           --dir "$REPO_ROOT/intentions" --file "$WORK_DIR/$NODE_ID.json" ) \
       >/dev/null || {
         echo "dispatch-invalid-state-followup: write-node.ts refused $NODE_ID" >&2
         exit 1
@@ -446,7 +447,7 @@ case "$STATE" in
 
     MANIFEST=$( (cd "$REPO_ROOT" \
       && npx tsx packages/intentionsutil/scripts/dump-node.ts \
-           --out-dir "$WORK_DIR/base" "$NODE_ID") ) || {
+           --dir "$REPO_ROOT/intentions" --out-dir "$WORK_DIR/base" "$NODE_ID") ) || {
         echo "dispatch-invalid-state-followup: dump-node.ts failed for $NODE_ID" >&2
         exit 1
       }

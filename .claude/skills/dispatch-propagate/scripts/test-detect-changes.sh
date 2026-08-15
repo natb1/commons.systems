@@ -118,6 +118,15 @@ assert_eq "detect-changes: rules=true for package.json"            "true"  "$(dc
 assert_eq "detect-changes: rules absent for unrelated path"        "false" "$(dc_run rules 'README.md')"
 dc_teardown
 
+# --- graph ---
+dc_setup
+assert_eq "detect-changes: graph=true for packages/intentionsutil path"  "true"  "$(dc_run graph 'packages/intentionsutil/src/sensors.ts')"
+assert_eq "detect-changes: graph=true for validate-graph.ts"             "true"  "$(dc_run graph 'packages/intentionsutil/scripts/validate-graph.ts')"
+assert_eq "detect-changes: graph=true for an intentions/ node"           "true"  "$(dc_run graph 'intentions/tactic-x.md')"
+assert_eq "detect-changes: graph absent for unrelated path"              "false" "$(dc_run graph 'README.md')"
+assert_eq "detect-changes: graph absent for another package"             "false" "$(dc_run graph 'packages/ds/src/x.ts')"
+dc_teardown
+
 # --- go (the core of #749: regex must cover every discovered module root) ---
 dc_setup
 assert_eq "detect-changes: go=true for budget-etl module"           "true"  "$(dc_run go 'budget-etl/main.go')"
@@ -132,11 +141,12 @@ assert_eq "detect-changes: combined diff sets nix=true" "true" "$(dc_run nix 'fl
 assert_eq "detect-changes: combined diff sets go=true"  "true" "$(dc_run go  'flake.nix' 'budget-etl/main.go')"
 dc_teardown
 
-# --- empty diff sets none of the four keys ---
+# --- empty diff sets none of the keys ---
 dc_setup
 assert_eq "detect-changes: empty diff leaves nix unset"        "false" "$(dc_run nix)"
 assert_eq "detect-changes: empty diff leaves playwright unset" "false" "$(dc_run playwright)"
 assert_eq "detect-changes: empty diff leaves rules unset"      "false" "$(dc_run rules)"
+assert_eq "detect-changes: empty diff leaves graph unset"      "false" "$(dc_run graph)"
 assert_eq "detect-changes: empty diff leaves go unset"         "false" "$(dc_run go)"
 dc_teardown
 

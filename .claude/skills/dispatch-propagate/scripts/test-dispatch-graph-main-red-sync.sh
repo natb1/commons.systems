@@ -91,10 +91,14 @@ shift
 script="$1"; shift
 case "$script" in
   *dump-node.ts)
+    # `--dir <intentions-dir>` is a REQUIRED flag on the real dump-node.ts
+    # (clarification 194/242); consume it here so its VALUE is not mistaken for
+    # the node id by the positional catch-all below.
     outdir=""; id=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --out-dir) outdir="$2"; shift 2 ;;
+        --dir) shift 2 ;;
         *) id="$1"; shift ;;
       esac
     done

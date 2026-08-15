@@ -614,7 +614,8 @@ path's dump further down — one out-dir per `graph-commit`:
 git checkout origin/main -- "intentions/$NODE_ID.md"
 SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-resolved-$NODE_ID"
 mkdir -p "$SCRATCH"
-npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
+npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+  --out-dir "$SCRATCH" "$NODE_ID"
 ```
 
 Apply the subagent's reconciled value(s) and clear the park. For **each**
@@ -634,7 +635,8 @@ then land it with a **normal-edit** `graph-commit` call, **deliberately without
 `--base`** (`dangerouslyDisableSandbox: true` — npm cache + network):
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --file "$SCRATCH/$NODE_ID.reconciled.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+  --file "$SCRATCH/$NODE_ID.reconciled.json"
 if packages/intentionsutil/scripts/graph-commit \
      -m "graph: reconcile mechanical-unresolved conflict on $NODE_ID" "$NODE_ID"; then
   .claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase fix-conflicts
@@ -712,11 +714,13 @@ the two never share an out-dir:
 git checkout origin/main -- "intentions/$NODE_ID.md"
 SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-note-$NODE_ID"
 mkdir -p "$SCRATCH"
-npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$SCRATCH" "$NODE_ID"
+npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+  --out-dir "$SCRATCH" "$NODE_ID"
 jq --arg extra "$NEXT_STEP" \
   '.office_hours.recommendation = (.office_hours.recommendation + "\n\n" + $extra)' \
   "$SCRATCH/$NODE_ID.json" > "$SCRATCH/$NODE_ID.appended.json"
-npx tsx packages/intentionsutil/scripts/write-node.ts --file "$SCRATCH/$NODE_ID.appended.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+  --file "$SCRATCH/$NODE_ID.appended.json"
 packages/intentionsutil/scripts/graph-commit \
   -m "graph: note next step on parked $NODE_ID" "$NODE_ID"
 ```

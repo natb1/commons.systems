@@ -254,7 +254,7 @@ strategy node so its `reading` stays current. Do this once per successful
 
    ```bash
    node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts \
-     --out-dir "$TMPDIR" strategy-recover-finance
+     --dir intentions --out-dir "$TMPDIR" strategy-recover-finance
    ```
 
    This writes `$TMPDIR/strategy-recover-finance.json` (the shape `write-node.ts`
@@ -287,7 +287,7 @@ strategy node so its `reading` stays current. Do this once per successful
 
    ```bash
    node --import tsx/esm packages/intentionsutil/scripts/write-node.ts \
-     --file "$TMPDIR/strategy-recover-finance.json"
+     --dir intentions --file "$TMPDIR/strategy-recover-finance.json"
    packages/intentionsutil/scripts/graph-commit \
      --base "$TMPDIR/base-manifest.txt" strategy-recover-finance
    ```

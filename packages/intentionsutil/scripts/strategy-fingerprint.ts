@@ -9,7 +9,10 @@
 // there is exactly one place that computes it from the command line.
 //
 // The intentions/ directory defaults to the one resolved from
-// `import.meta.url`, not cwd, matching dump-node.ts / compute-freshness.ts.
+// `import.meta.url`, not cwd, overridable by `--dir`. (dump-node.ts no longer
+// has such a default — clarification 194/242 made its --dir required — and
+// compute-freshness.ts takes explicit --snapshot/--stamp. This script is out of
+// that clarification's scope.)
 //
 // Usage:
 //   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <strategy-id> [--dir <path>]

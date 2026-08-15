@@ -1,6 +1,6 @@
 // Dumps one or more intention nodes as JSON into a target directory AND writes a
 // base manifest recording, per id, the blob sha of the node file actually read
-// (`git hash-object intentions/<id>.md`). The manifest is the compare-and-swap
+// (`git hash-object <intentions-dir>/<id>.md`). The manifest is the compare-and-swap
 // token `graph-commit --base <manifest>` checks against origin/main before it
 // lands a write, so a stale read fails mechanically rather than by rebase luck
 // (the 2026-07-06 near-miss: a stale dump of a live node avoided a textual
@@ -9,11 +9,22 @@
 // This replaces the ad-hoc per-session `readNode` dump one-liners the align
 // skills used before capturing base state was uniform.
 //
-// The intentions/ directory is resolved from import.meta.url, not cwd, so the
-// store read is always the repo-canonical one — matching write-node.ts.
-//
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir <dir> <id> [<id> ...]
+//   npx tsx packages/intentionsutil/scripts/dump-node.ts --dir <intentions-dir> \
+//     --out-dir <dir> <id> [<id> ...]
+//
+// `--dir <intentions-dir>` is REQUIRED and has no default
+// (strategy-graph-native-dispatch clarification 194, ADOPTED; clarification 242
+// scopes the conversion to validate-graph.ts / write-node.ts / dump-node.ts /
+// clear-park). It used to resolve `<repoRoot>/intentions` from
+// `import.meta.url`, which made the tree READ a property of WHICH COPY of this
+// script ran rather than of what the caller asked for — and a base manifest is
+// worse than useless when it pins blobs from the wrong checkout: `graph-commit
+// --base` would then compare-and-swap against content the session never read.
+// The repo root the blob shas are taken in is derived from --dir with
+// `git rev-parse --show-toplevel`, so it is the tree that actually holds the
+// store, and a --dir outside any repository is a clear error rather than a
+// silent mis-hash (.claude/rules/code-style.md).
 //
 // For each <id> it writes `<dir>/<id>.json` (the shape `readNode` returns, ready
 // to pipe back into write-node.ts after reconciliation) and merges a
@@ -27,20 +38,12 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { readNode } from "../src/store.js";
 
-// --- Paths -----------------------------------------------------------------
-// The script lives at `packages/intentionsutil/scripts/dump-node.ts`, so the
-// repo root is three directories up. Resolve from this file's own location,
-// never from cwd.
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = dirname(dirname(dirname(scriptDir)));
-const intentionsDir = join(repoRoot, "intentions");
-
 const USAGE =
-  "usage: dump-node.ts --out-dir <dir> <id> [<id> ...]\n" +
+  "usage: dump-node.ts --dir <intentions-dir> --out-dir <dir> <id> [<id> ...]\n" +
   "  Writes <dir>/<id>.json for each node and a <dir>/base-manifest.txt of\n" +
   "  <id>=<blobsha> lines; prints the manifest path for `graph-commit --base`.\n" +
   "  The manifest is merged by id, so a repeat dump into the same --out-dir\n" +
@@ -49,13 +52,26 @@ const USAGE =
 // --- Core helper (exported for tests) --------------------------------------
 
 /**
+ * The node file's path RELATIVE to `repoRoot` — the form `git hash-object`
+ * wants, and the form the stale-entry warning quotes. Computed from the
+ * caller-supplied `intentionsDir` rather than hard-coded as `intentions/<id>.md`
+ * so a store passed under any name or nesting still hashes the file that was
+ * actually read.
+ */
+function nodeRelPath(repoRoot: string, intentionsDir: string, id: string): string {
+  return relative(resolve(repoRoot), resolve(intentionsDir, `${id}.md`));
+}
+
+/**
  * Blob sha of the on-disk node file. `git hash-object` is content-only (no side
  * effects, no index touch), so it is safe from any worktree.
  */
-function hashNodeFile(repoRoot: string, id: string): string {
-  return execFileSync("git", ["-C", repoRoot, "hash-object", `intentions/${id}.md`], {
-    encoding: "utf8",
-  }).trim();
+function hashNodeFile(repoRoot: string, intentionsDir: string, id: string): string {
+  return execFileSync(
+    "git",
+    ["-C", repoRoot, "hash-object", "--", nodeRelPath(repoRoot, intentionsDir, id)],
+    { encoding: "utf8" },
+  ).trim();
 }
 
 /**
@@ -64,12 +80,17 @@ function hashNodeFile(repoRoot: string, id: string): string {
  * outcome here rather than a broken environment — report it as "absent" so the
  * caller can drop the entry and say why.
  */
-function hashNodeFileIfPresent(repoRoot: string, id: string): string | null {
+function hashNodeFileIfPresent(
+  repoRoot: string,
+  intentionsDir: string,
+  id: string,
+): string | null {
   try {
-    return execFileSync("git", ["-C", repoRoot, "hash-object", `intentions/${id}.md`], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    return execFileSync(
+      "git",
+      ["-C", repoRoot, "hash-object", "--", nodeRelPath(repoRoot, intentionsDir, id)],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
   } catch {
     return null;
   }
@@ -141,14 +162,14 @@ export function dumpNodes(intentionsDir: string, repoRoot: string, outDir: strin
         merged.set(id, "");
         continue;
       }
-      const current = hashNodeFileIfPresent(repoRoot, id);
+      const current = hashNodeFileIfPresent(repoRoot, intentionsDir, id);
       if (current === blob) {
         merged.set(id, blob);
         continue;
       }
       process.stderr.write(
         `dump-node: dropping stale manifest entry '${id}' from ${manifestPath} — ` +
-          `intentions/${id}.md no longer matches the recorded base blob ${blob} ` +
+          `${nodeRelPath(repoRoot, intentionsDir, id)} no longer matches the recorded base blob ${blob} ` +
           `(now ${current ?? "absent"}). Its compare-and-swap guard is NOT in this manifest. ` +
           "Capture every id a single graph-commit lands in one dump-node.ts call, " +
           "and give unrelated writes their own --out-dir.\n",
@@ -159,7 +180,7 @@ export function dumpNodes(intentionsDir: string, repoRoot: string, outDir: strin
   for (const id of ids) {
     const node = readNode(intentionsDir, id);
     writeFileSync(join(outDir, `${id}.json`), `${JSON.stringify(node, null, 2)}\n`);
-    merged.set(id, hashNodeFile(repoRoot, id));
+    merged.set(id, hashNodeFile(repoRoot, intentionsDir, id));
   }
 
   const lines = [...merged].map(([id, blob]) => `${id}=${blob}`);
@@ -169,6 +190,80 @@ export function dumpNodes(intentionsDir: string, repoRoot: string, outDir: strin
 
 // --- Main ------------------------------------------------------------------
 
+/**
+ * The git toplevel that owns `intentionsDir`. The base manifest's blob shas are
+ * `git hash-object` output, so they are only meaningful inside the repository
+ * that actually holds the store. Deriving the root from --dir (rather than from
+ * this script's own location, or from cwd) is what keeps a manifest pinned to
+ * the tree that was read. A --dir outside any repository is a clear error.
+ */
+function repoRootOf(intentionsDir: string): string {
+  try {
+    return execFileSync("git", ["-C", intentionsDir, "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    process.stderr.write(
+      `dump-node: could not resolve a git repository for --dir '${intentionsDir}' ` +
+        `(resolved: ${resolve(intentionsDir)}). The base manifest records ` +
+        "`git hash-object` blob shas, which are only meaningful inside the checkout that " +
+        "holds the store, so there is nothing safe to fall back to.\n",
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * `--dir` / `--out-dir` are both required flags; everything else positional is a
+ * node id. Parsed by scanning rather than by index arithmetic so a flag VALUE
+ * can never be mistaken for an id (the old parser filtered on `startsWith("-")`,
+ * which would have swallowed `--dir <path>`'s path as an id).
+ */
+function parseArgs(args: string[]): { intentionsDir: string; outDir: string; ids: string[] } {
+  let intentionsDir: string | null = null;
+  let outDir: string | null = null;
+  const ids: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--dir" || arg === "--out-dir") {
+      const value = args[++i];
+      if (value === undefined || value === "") {
+        process.stderr.write(`dump-node: ${arg} requires a directory argument\n` + USAGE);
+        process.exit(1);
+      }
+      if (arg === "--dir") intentionsDir = value;
+      else outDir = value;
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      process.stderr.write(`dump-node: unknown option '${arg}'\n` + USAGE);
+      process.exit(1);
+    }
+    ids.push(arg);
+  }
+
+  if (intentionsDir === null) {
+    process.stderr.write(
+      "dump-node: --dir <intentions-dir> is required and has no default — name the store to " +
+        "read (e.g. `intentions`, or an absolute path into the checkout whose base blobs you " +
+        "want pinned). This script no longer infers the store from its own file location.\n" +
+        USAGE,
+    );
+    process.exit(1);
+  }
+  if (outDir === null) {
+    process.stderr.write("dump-node: --out-dir <dir> is required\n" + USAGE);
+    process.exit(1);
+  }
+  if (ids.length === 0) {
+    process.stderr.write("dump-node: at least one node id is required\n" + USAGE);
+    process.exit(1);
+  }
+  return { intentionsDir, outDir, ids };
+}
+
 function main(): void {
   const args = process.argv.slice(2);
 
@@ -177,19 +272,8 @@ function main(): void {
     return;
   }
 
-  const outIdx = args.indexOf("--out-dir");
-  if (outIdx === -1 || !args[outIdx + 1]) {
-    process.stderr.write("dump-node: --out-dir <dir> is required\n" + USAGE);
-    process.exit(1);
-  }
-  const outDir = args[outIdx + 1];
-  const ids = args.filter((a, i) => i !== outIdx && i !== outIdx + 1 && !a.startsWith("-"));
-  if (ids.length === 0) {
-    process.stderr.write("dump-node: at least one node id is required\n" + USAGE);
-    process.exit(1);
-  }
-
-  const manifestPath = dumpNodes(intentionsDir, repoRoot, outDir, ids);
+  const { intentionsDir, outDir, ids } = parseArgs(args);
+  const manifestPath = dumpNodes(intentionsDir, repoRootOf(intentionsDir), outDir, ids);
   process.stdout.write(`${manifestPath}\n`);
 }
 

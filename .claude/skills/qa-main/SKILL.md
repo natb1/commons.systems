@@ -315,7 +315,8 @@ unclear, route there.
   the compose rule above. Build the bug
   node with the worktree's own `packages/intentionsutil/scripts/write-node.ts` +
   `packages/intentionsutil/scripts/graph-commit` (`dangerouslyDisableSandbox:
-  true` — `node --import tsx/esm write-node.ts`, then `graph-commit`; the
+  true` — `node --import tsx/esm write-node.ts --dir intentions --file <json>`
+  (the `--dir` is required, clarification 194/242), then `graph-commit`; the
   graph-tick worker applies the reset-dance a PR-branch worktree needs):
   - `kind: tactic`, `phase: implement`, `status: raw`, `owner: ai`, and
     `serves` the same strategy the source tactic serves (read the `serves`

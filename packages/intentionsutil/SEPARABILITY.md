@@ -26,10 +26,12 @@ proportion:
   and `listNodes(dir)` (`src/store.ts:40,110,137`) take the store directory as
   an explicit argument — the library imposes no location on the graph. An
   adopter who calls the library directly can put `intentions/` anywhere.
-- **`validate-graph.ts` is already parameterized.** It reads its directory from
-  `process.argv[2]`, defaulting to `intentions` relative to cwd
-  (`scripts/validate-graph.ts:18`). A standalone adopter can point it at any
-  directory today.
+- **`validate-graph.ts` takes its directory as a required argument.** It reads
+  it from `process.argv[2]` with no default (`scripts/validate-graph.ts`,
+  `parseIntentionsDir`); the former cwd-relative `intentions` default was
+  removed by strategy-graph-native-dispatch clarification 194/242, because a
+  wrong cwd validated an empty node set and reported a clean graph. A standalone
+  adopter can point it at any directory today, and must.
 
 The graph data structure — node schema, referential-integrity rules, the
 round-trip guarantee — is genuinely separable. The gaps below are in the
@@ -55,10 +57,11 @@ nonexistent) directory, with no override flag.
   logic.)
 - Same 3-up pattern, same hardcoded `intentions/` join with no override,
   repeated in `scripts/review-coverage.ts:28-29`,
-  `scripts/detect-rung.ts:25-26`, `scripts/dump-node.ts:34-35`,
-  `scripts/frontier-view.ts:26-27`, `scripts/office-hours-select.ts:37-38`,
-  and `scripts/read-sensors.ts:43-44`.
-- Two peers already carry the fix this gap recommends:
+  `scripts/detect-rung.ts:25-26`, `scripts/frontier-view.ts:26-27`,
+  `scripts/office-hours-select.ts:37-38`, and `scripts/read-sensors.ts:43-44`.
+  (`scripts/dump-node.ts` and `scripts/write-node.ts` were in this list until
+  clarification 194/242 converted them to a required `--dir`.)
+- Several peers already carry the fix this gap recommends:
   `scripts/select-targets.ts:31-45` and
   `scripts/check-node-selection.ts:196-212` compute the identical
   repo-relative default but accept a `--dir <intentions-dir>` flag that
@@ -71,9 +74,10 @@ the tooling against it." The library honors this; six of the eight CLI
 wrappers surveyed do not.
 
 **Severity: DEGRADE, not blocker.** The library API (`store.ts`) is fully
-layout-agnostic, `validate-graph.ts` already accepts a directory argument, and
-two of the wrapper scripts (`select-targets.ts`, `check-node-selection.ts`)
-already implement a `--dir` override. That in-repo precedent is direct
+layout-agnostic, `validate-graph.ts` requires a directory argument, and four of
+the wrapper scripts (`select-targets.ts`, `check-node-selection.ts`,
+`dump-node.ts`, `write-node.ts`) already implement a `--dir` override — the last
+two as a REQUIRED flag. That in-repo precedent is direct
 evidence the fix (thread the same `--dir`/`INTENTIONS_DIR` override through
 the remaining CLI entrypoints) is small and additive, not speculative.
 

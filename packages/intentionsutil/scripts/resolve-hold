@@ -312,7 +312,7 @@ NODE_JSON=""
 read_node_json() {
   local id="$1" tag="$2"
   NODE_JSON=""
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/$tag" "$id") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --dir "$INTENTIONS_DIR" --out-dir "$TMPD/$tag" "$id") >/dev/null; then
     echo "resolve-hold: dump-node failed for $id" >&2
     exit 1
   fi
@@ -409,7 +409,7 @@ if [[ "$HOLD_RESOLVED" == "no" ]]; then
     echo "resolve-hold: could not compose the resolution edit for $HOLD_ID" >&2
     exit 1
   fi
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/hold-resolved.json") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/hold-resolved.json") >/dev/null; then
     echo "resolve-hold: write-node failed for $HOLD_ID (office_hours/phase resolution)" >&2
     exit 1
   fi
@@ -456,7 +456,7 @@ if [[ "$SOURCE_HAS_EDGE" == "yes" ]]; then
   # Re-arm the source's rollback: clean_node_file above disarmed it, and the
   # write below dirties the file again.
   MUTATED["$SOURCE_ID"]=1
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/src-edge.json") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/src-edge.json") >/dev/null; then
     echo "resolve-hold: write-node failed for $SOURCE_ID (blocked_by removal)" >&2
     exit 1
   fi

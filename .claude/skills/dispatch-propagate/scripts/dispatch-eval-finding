@@ -230,8 +230,8 @@
 # real git remote). Each holds a command line, split on whitespace:
 #   DISPATCH_EVAL_FINDING_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
 #   DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
-#   DISPATCH_EVAL_FINDING_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts
-#   DISPATCH_EVAL_FINDING_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts
+#   DISPATCH_EVAL_FINDING_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
+#   DISPATCH_EVAL_FINDING_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
 #   DISPATCH_EVAL_FINDING_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
 #   DISPATCH_EVAL_FINDING_LIST_CMD          default: the node --import tsx/esm listNodes one-liner below
 #   DISPATCH_EVAL_FINDING_INTENTIONS_DIR    default: <repo>/intentions
@@ -370,18 +370,22 @@ if [[ -n "${DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD:-}" ]]; then
 else
   VERIFY_LANDED_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/verify-landed")
 fi
-# write-node.ts / dump-node.ts resolve intentions/ from import.meta.url, NOT
-# cwd — so the copies invoked must be the ones inside the checkout being
-# mutated. Hence the absolute $REPO_ROOT-anchored paths.
+# write-node.ts / dump-node.ts take the store as a REQUIRED --dir (clarification
+# 194/242); they no longer infer it from import.meta.url or from cwd. Both the
+# script copy invoked AND the --dir it is handed are anchored at $REPO_ROOT, so
+# the checkout read and the checkout mutated are the one being committed.
+# The --dir is baked into the DEFAULT command only: an override supplied through
+# the env var below is a caller-authored command line (the test stubs), and it
+# owns its own arguments.
 if [[ -n "${DISPATCH_EVAL_FINDING_WRITE_NODE_CMD:-}" ]]; then
   read -r -a WRITE_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_WRITE_NODE_CMD"
 else
-  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts")
+  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_EVAL_FINDING_DUMP_NODE_CMD:-}" ]]; then
   read -r -a DUMP_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_DUMP_NODE_CMD"
 else
-  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts")
+  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_EVAL_FINDING_CLASSIFY_CMD:-}" ]]; then
   read -r -a CLASSIFY_CMD <<<"$DISPATCH_EVAL_FINDING_CLASSIFY_CMD"
@@ -696,6 +700,10 @@ NODE_FILE="$INTENTIONS_DIR/$ID.md"
 # to the repo it resolves, so origin/main lookups always use that spelling.
 NODE_REL="intentions/$ID.md"
 
+# The blob of $NODE_FILE as THIS SCRIPT wrote it, captured by run_graph_commit()
+# immediately before the handoff and read by verify_landed(). Empty until then.
+INTENDED_BLOB=""
+
 # --- Helpers -----------------------------------------------------------------
 
 # classify <id> -> prints absent | open | retired
@@ -789,6 +797,18 @@ splice_body() {
 # packages/intentionsutil/scripts/graph-commit), and flipping those is a separate
 # decision with a separate blast radius.
 run_graph_commit() {
+  # Capture what this script is handing off, BEFORE graph-commit can touch it.
+  # This blob — the node file exactly as write-node/splice_body just wrote it —
+  # is verify_landed()'s subject, and capturing it here is the whole reason that
+  # check has any signal: graph-commit is explicitly entitled to leave the
+  # working-tree copy on a different base (the far-ahead rebuild resets the tree,
+  # the park path re-syncs the node's path from origin/main), so hashing the
+  # local path AFTERWARDS answers a question about the checkout rather than about
+  # this write. Failing here refuses the write instead of making it unverifiable.
+  if ! INTENDED_BLOB=$(git -C "$REPO_ROOT" hash-object -- "$NODE_FILE"); then
+    log "could not hash $NODE_FILE before handing it to graph-commit — refusing to make a write this pass could not verify"
+    return 1
+  fi
   local attempt=1
   while :; do
     if GRAPH_COMMIT_WRITER=plumbing "${GRAPH_COMMIT_CMD[@]}" -C "$REPO_ROOT" "$@" 1>&2 9>&-; then
@@ -803,17 +823,39 @@ run_graph_commit() {
   done
 }
 
+# verify_landed — assert that the content THIS SCRIPT WROTE is on origin/main.
+#
+# The subject is $INTENDED_BLOB, captured by run_graph_commit() before the
+# handoff, NOT a hash of the local path taken afterwards. Hashing the local path
+# is what made this check worthless: graph-commit may leave the working-tree
+# copy on a different base entirely, so on 2026-08-14 it failed with
+# `fatal: could not open …/intentions/<slug>.md` on all FOUR successful mints
+# and said nothing about the one write that was genuinely lost — having cried
+# wolf four times, it carried no signal for the fifth
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit, remedy 1).
+#
+# Hashing `origin/main:<node>` instead — the other reading of that remedy — would
+# be VACUOUS: asking verify-landed whether origin/main's own blob is at
+# origin/main is true by construction, turning a false negative into a
+# guaranteed pass. The comparison only means anything when one side comes from
+# this script's intent and the other from origin/main.
+#
+# One honest limitation: if graph-commit auto-merged this write with a
+# concurrent landing to the same node (its layer-2/3 reconciliation), what
+# landed is that merge's output and not this blob, so this reports a failure for
+# a write that did land — read graph-commit's own verdict line, which names the
+# reconciliation. Ledger writes are serialized by DISPATCH_GRAPH_WRITE_LOCK_FILE,
+# so that needs a writer outside this lane touching the same finding node.
 verify_landed() {
   if ! git -C "$REPO_ROOT" fetch --quiet origin main 2>/dev/null 9>&-; then
     log "could not fetch origin/main before verification; comparing against the local remote-tracking ref"
   fi
-  local local_blob
-  if ! local_blob=$(git -C "$REPO_ROOT" hash-object -- "$NODE_FILE"); then
-    log "could not hash $NODE_FILE for post-write verification"
+  if [[ -z "$INTENDED_BLOB" ]]; then
+    log "verify_landed was reached with no captured intent for $NODE_REL — run_graph_commit did not run, so there is nothing to verify"
     return 1
   fi
   local vl_out vl_rc=0
-  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" --node "$ID" --blob "$local_blob" 2>&1 9>&-) || vl_rc=$?
+  vl_out=$("${VERIFY_LANDED_CMD[@]}" --no-fetch -C "$REPO_ROOT" --node "$ID" --blob "$INTENDED_BLOB" 2>&1 9>&-) || vl_rc=$?
   if (( vl_rc == 0 )); then
     return 0
   fi

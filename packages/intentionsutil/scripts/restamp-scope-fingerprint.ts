@@ -52,7 +52,10 @@ import { extractBody } from "../src/frontmatter.js";
 // --- Paths -------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/restamp-scope-fingerprint.ts`,
 // so the repo root is three directories up. Resolve from this file's own
-// location, never from cwd — matching dump-node.ts.
+// location, never from cwd. (dump-node.ts and write-node.ts used to share this
+// shape; clarification 194/242 converted them to a required --dir. This script
+// keeps a script-relative DEFAULT, overridable by --repo-root, and is out of
+// that clarification's scope.)
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = dirname(dirname(dirname(scriptDir)));
 

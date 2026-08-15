@@ -2296,6 +2296,64 @@ describe("validateGraphProseRefs", () => {
     expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
   });
 
+  // --- batch-under-write resolution (forward cross-references) ---------------
+  //
+  // A write batch whose members land one graph-commit at a time cannot name a
+  // sibling of the same batch unless the members are hand-ordered: at the moment
+  // the first member is validated the sibling is in neither the store nor the
+  // deleted set. `batchIds` lets the writer declare the ids it is minting so the
+  // reference resolves; the tests below pin BOTH halves — the forward reference
+  // is accepted, and a genuinely dangling reference is still rejected.
+
+  it("passes a forward cross-reference to a sibling in the SAME batch under write", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Cross-links `tactic-sibling`." }),
+    ];
+    const batch = new Set(["tactic-a", "tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).not.toThrow();
+  });
+
+  it("passes a forward cross-reference from a node BODY to a sibling in the batch", () => {
+    const nodes = [realTactic, pnode({ id: "tactic-a", kind: "tactic" })];
+    const bodies = new Map([["tactic-a", "# heading\n\nSee `tactic-sibling` for the pair.\n"]]);
+    const batch = new Set(["tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, bodies, [], new Set(), batch)).not.toThrow();
+  });
+
+  it("STILL throws on a ref in neither the batch nor the store — a batch is not a blanket pass", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Names `tactic-nowhere`." }),
+    ];
+    // A non-empty batch is declared and simply does not contain the reference.
+    const batch = new Set(["tactic-a", "tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).toThrow(
+      /tactic-a: prose reference `tactic-nowhere` does not resolve to a node/,
+    );
+  });
+
+  it("matches batch ids EXACTLY — a longer compound is not covered by a batch member", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Names `tactic-sibling-v2`." }),
+    ];
+    const batch = new Set(["tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).toThrow(
+      /tactic-a: prose reference `tactic-sibling-v2` does not resolve to a node/,
+    );
+  });
+
+  it("is exactly as strict as before when no batch is declared", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Cross-links `tactic-sibling`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-sibling` does not resolve to a node/,
+    );
+  });
+
   it("lists ALL prose-ref violations in one throw", () => {
     const nodes = [
       realTactic,

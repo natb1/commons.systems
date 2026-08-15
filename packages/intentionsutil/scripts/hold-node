@@ -240,7 +240,7 @@ if [[ "$DISPOSITION" != "EXISTING" ]]; then
   # NONE and REOPENED both carry a full node object; write-node.ts is the single
   # validation gate (frontmatter only).
   jq -c '.node' <<<"$DECISION" > "$TMPDIR_HOLD/node.json"
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPDIR_HOLD/node.json") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPDIR_HOLD/node.json") >/dev/null; then
     echo "hold-node: write-node failed for $HOLD_ID" >&2
     exit 1
   fi
@@ -283,7 +283,7 @@ if [[ "$SOURCE_EDGE_NEEDED" == "true" ]]; then
   # dump-node.ts reads the node through readNode (post-reset, so a
   # --reset-fix-attempt write above is preserved, not clobbered) and emits the
   # exact JSON shape write-node.ts consumes.
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPDIR_HOLD/src" "$SOURCE_ID") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --dir "$INTENTIONS_DIR" --out-dir "$TMPDIR_HOLD/src" "$SOURCE_ID") >/dev/null; then
     echo "hold-node: dump-node failed for $SOURCE_ID" >&2
     exit 1
   fi
@@ -292,7 +292,7 @@ if [[ "$SOURCE_EDGE_NEEDED" == "true" ]]; then
     echo "hold-node: could not compose the blocked_by edit for $SOURCE_ID" >&2
     exit 1
   fi
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPDIR_HOLD/src-edge.json") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPDIR_HOLD/src-edge.json") >/dev/null; then
     echo "hold-node: write-node failed for $SOURCE_ID (blocked_by edge)" >&2
     exit 1
   fi

@@ -64,7 +64,7 @@ else
     insec && /^## / { insec = 0 }
     insec { buf = buf $0 "\n" }
     END {
-      wn = index(buf, "write-node.ts --file")
+      wn = index(buf, "write-node.ts --dir")
       anf = index(buf, "assert-node-fresh")
       ed = index(buf, "Plan body via `Edit`")
       if (wn == 0 || anf == 0 || ed == 0) {
