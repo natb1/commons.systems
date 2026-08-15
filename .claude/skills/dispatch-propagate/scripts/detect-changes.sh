@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Detect changed file categories for CI conditional tool installation.
-# Outputs "nix=true", "playwright=true", "rules=true", and/or "go=true" to
-# $GITHUB_OUTPUT when relevant files changed on the branch relative to
-# origin/main.
+# Outputs "nix=true", "playwright=true", "rules=true", "graph=true", and/or
+# "go=true" to $GITHUB_OUTPUT when relevant files changed on the branch relative
+# to origin/main.
 
 # Try origin/main first; fall back to HEAD~1 when origin/main is unavailable
 # (e.g., shallow clones or direct pushes to non-feature branches).
@@ -42,6 +42,16 @@ fi
 # orphan code elsewhere, so trigger on any such change across the repo.
 if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs)$|^knip\.(json|jsonc|ts)$'; then
   echo "deadcode=true" >> "$GITHUB_OUTPUT"
+fi
+# graph-validate runs validate-graph.ts, the rule set the graph write path's
+# `guard` job runs. graph-fast-path.yml only triggers on graph/** pushes, so a
+# change to the validator (or to the graph state it reads) is NOT exercised by
+# the CI of the PR that makes it -- it first executes on the next unrelated
+# writer's scratch branch, where a failure denies every graph write in the repo
+# (the 2026-08-14 outage). Trigger on the package that owns the validator and on
+# the graph state itself.
+if echo "$CHANGED" | grep -qE '^(packages/intentionsutil/|intentions/)'; then
+  echo "graph=true" >> "$GITHUB_OUTPUT"
 fi
 # go-tests needs the Go toolchain. Set go=true when a changed file is under a
 # discovered Go module. list-go-modules.sh discovers module roots from go.mod

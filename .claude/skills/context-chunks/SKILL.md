@@ -122,7 +122,8 @@ file-naming key, distinct from the read-order semantics above.
   `--file`), then **one** `graph-commit` bundling all chunks from this run:
 
   ```bash
-  node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/chunk.json"
+  node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
+    --file "$TMPDIR/chunk.json"
   packages/intentionsutil/scripts/graph-commit <chunk-id> [<chunk-id> ...]
   ```
 
@@ -150,5 +151,5 @@ landing**: confirm each drafted chunk carries passages + questions only (no
 conclusions or summaries), `attributes.curriculum` has `distance ≥ 1` and
 `deepens` naming `tradition-plato`, `priority` lands after the current queue
 max, and the node JSON passes
-`node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts`.
+`node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions`.
 Confirm the skill preamble pins Opus and the drafts invoke no `gh`.

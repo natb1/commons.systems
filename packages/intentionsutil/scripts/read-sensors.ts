@@ -464,9 +464,10 @@ const tokenEconomySensor: Sensor = {
  * Load-bearing: this string is the registry key the anti-drift test
  * (lifecycle-sensor.test.ts) compares character-for-character against the
  * node's live `success_signal.sensor` frontmatter, and the same match is
- * asserted for every registered sensor by validate-graph's registered-sensor
- * rule (validateRegisteredSensorNames in src/sensors.ts), which runs on the
- * graph write path. Any edit to that field (including via /align) must be
+ * asserted for every registered sensor by the registered-sensor rule
+ * (validateRegisteredSensorNames in src/sensors.ts) — fatally in that unit
+ * suite, and reported non-fatally by validate-graph.ts on the graph write
+ * path, which must not be denied over a registry defect. Any edit to that field (including via /align) must be
  * mirrored here in the same round — while the two differ the sensor is
  * de-registered by name and reads nothing at all.
  *
@@ -1396,11 +1397,12 @@ export function makeIntentionStoreSensor(
  * code commit, the node prose separately through `graph-commit` — and called the
  * window between them expected rather than a defect. That was written before
  * `validateRegisteredSensorNames` existed. It is now wrong, and following it is
- * how the repo lost 54 minutes of graph writes on 2026-08-14: the validator runs
- * in the `guard` job of `graph-fast-path.yml`, every other required context in
- * that workflow carries `needs: guard`, so ONE unbound registered name leaves
- * four required checks non-success and `graph-commit` refuses to land — for
- * every writer in the repo, on content that has nothing to do with sensors. See
+ * how the repo lost 54 minutes of graph writes on 2026-08-14: the rule then ran
+ * FATALLY in the `guard` job of `graph-fast-path.yml`, every other required
+ * context in that workflow carries `needs: guard`, so ONE unbound registered
+ * name left four required checks non-success and `graph-commit` refused to land
+ * — for every writer in the repo, on content that had nothing to do with
+ * sensors. See
  * `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`.
  *
  * Both orderings break: prose-first leaves a registered name no node records,
@@ -1409,9 +1411,26 @@ export function makeIntentionStoreSensor(
  * non-intentions changes. An ordinary PR touching both files can, and is the
  * only atomic path.
  *
- * Mind the blind spot when you do it: `graph-fast-path.yml` triggers only on
- * `graph/**` pushes, so a PR that edits this constant does NOT run the validator
- * in its own CI. Run it locally against the merged state:
+ * Where an open window is now caught — and, just as important, where it is NOT.
+ * `validate-graph.ts` REPORTS an unbound registered name and exits 0, so the
+ * graph write path is no longer denied over it; it follows that the
+ * `graph-validate` job, which runs that same script, can never go red on this
+ * condition either. The ONE fatal gate is the unit suite
+ * `test/lifecycle-sensor.test.ts` (against the live store), in the `unit-tests`
+ * job. So the half of the pairing caught is a CONSTANT edit: a PR touching
+ * `packages/intentionsutil` runs that suite and goes red.
+ *
+ * The other half is NOT caught. A node PROSE reword — an `/align` round
+ * rewriting some node's `success_signal.sensor` — lands through a `graph/**`
+ * push, and `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, so
+ * neither the unit suite nor `graph-validate` ever runs for it. The reword
+ * lands, CI is green, and the sensor reads `null` from then on with only a
+ * stderr line in the fast path's `guard` log. Restoring a failing gate on that
+ * half is deliberately deferred, not overlooked: the shape has to be ruled
+ * (node-scoped fatal in `guard`, vs a post-merge check on `main`), and a
+ * careless answer re-arms the repo-wide denial described above. Until it is
+ * ruled, the UNREGISTERED-SENSOR COUNT below is the backstop for this half.
+ * Locally, against the merged state:
  * `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`.
  *
  * If a window is ever open anyway, the check for it is read-sensors'

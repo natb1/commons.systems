@@ -52,7 +52,7 @@ manifest only guards the ids it holds, and the rest land with no
 compare-and-swap at all.
 
 ```bash
-BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir "$TMPDIR/dump" <pre-existing-id> [<pre-existing-id> ...])
 ```
 
@@ -60,7 +60,7 @@ For a single-node tactic-target session (finalize/re-plan of one
 `tactic-<slug>`), the manifest and commit name exactly one id:
 
 ```bash
-BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir "$TMPDIR/dump" <tactic-id>)
 packages/intentionsutil/scripts/land-align-round --terminal <tactic-id> \
   --base "$BASE" -m 'graph: finalize <tactic-id>' <tactic-id>
@@ -140,7 +140,8 @@ author) instead of assigning ownership by proximity.
    field vanishes. Pipe or `--file` the JSON into `write-node.ts`:
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic.json"
+   npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+     --file "$TMPDIR/tactic.json"
    ```
 
 2. **Freshness assertion before the body write.** The body write is a
@@ -315,7 +316,8 @@ nothing to mint; record the drop in the round's report.
 
 ## Validate and report
 
-After landing, run `npx tsx packages/intentionsutil/scripts/validate-graph.ts`
+After landing, run `npx tsx packages/intentionsutil/scripts/validate-graph.ts
+intentions` (the store directory is a required argument, clarification 194/242)
 and report the round: the tactics landed (with their minted ids), parks
 written, prunes/greenfield drops, and the Workflow's `disposition`.
 

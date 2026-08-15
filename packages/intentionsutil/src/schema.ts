@@ -1608,6 +1608,20 @@ export function mentionsRef(
  * form `"<ref>|<referencedBy>"`) so the CI check does not retroactively break
  * main; it should not grow going forward.
  *
+ * `batchIds` is the set of node ids the write batch currently in flight is
+ * committed to creating but has not landed yet. A batch that writes its members
+ * one graph-commit at a time (the evaluation ledger writer is the motivating
+ * case) cannot land a member naming a sibling of the same batch unless the
+ * members are hand-ordered: when the first member is validated the sibling sits
+ * in neither the store nor the deleted set, so it classifies `missing`.
+ * Resolving against the batch as well as the store removes that ordering
+ * constraint.
+ *
+ * `batchIds` is matched by EXACT id membership only — never by shape, prefix, or
+ * family — so declaring a batch can never admit an id the batch does not
+ * actually contain, and the default empty set leaves this check exactly as
+ * strict as it was.
+ *
  * Throws a single IntentionSchemaError listing ALL problems found, matching
  * `validateGraph`'s collect-then-throw contract.
  */
@@ -1616,15 +1630,22 @@ export function validateGraphProseRefs(
   bodies: Map<string, string>,
   deletedIds: string[],
   baseline: Set<string>,
+  batchIds: ReadonlySet<string> = new Set<string>(),
 ): void {
   const storeIds = new Set(nodes.map((n) => n.id));
   const deleted = new Set(deletedIds);
   // Vocabulary and kind prefixes are built the SAME way the digest's
   // tableDanglingRefs builds them (current store ids ∪ deleted ids; prefixes
-  // derived from the vocabulary, never a hardcoded kind list).
-  const vocab = new Set<string>([...storeIds, ...deleted]);
+  // derived from the vocabulary, never a hardcoded kind list), plus the ids the
+  // in-flight batch declares, which are known ids that simply have not landed
+  // yet. Adding them to the vocabulary only ever makes the extractor recognize
+  // MORE tokens as references; the exemption below is what makes them resolve.
+  const vocab = new Set<string>([...storeIds, ...deleted, ...batchIds]);
   const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
   const matchers = buildIdRefMatchers(prefixes);
+  // Named in the violation message only when a batch was actually declared, so
+  // an undeclared run does not report a clause that could not have applied.
+  const batchClause = batchIds.size > 0 ? ", not minted by the batch under write" : "";
 
   const problems: string[] = [];
   for (const node of nodes) {
@@ -1644,11 +1665,12 @@ export function validateGraphProseRefs(
     }
     for (const ref of refs) {
       if (classifyRef(ref, storeIds, deleted) !== "missing") continue;
+      if (batchIds.has(ref)) continue; // minted by the batch under write
       if (mentionsRef(nodes, bodies, ref, node.id)) continue; // planned forward reference
       if (baseline.has(`${ref}|${node.id}`)) continue; // grandfathered
       problems.push(
         `${node.id}: prose reference \`${ref}\` does not resolve to a node ` +
-          `(not planned by any open tactic, not baselined)`,
+          `(not planned by any open tactic${batchClause}, not baselined)`,
       );
     }
   }

@@ -218,9 +218,12 @@ echo "graph-commit $*" >> "$STUB_LOG/graph-commit.log"
 # the whole interface, so the stub records it out of band (case 18).
 printf 'GRAPH_COMMIT_WRITER=%s\n' "${GRAPH_COMMIT_WRITER:-<unset>}" >> "$STUB_LOG/graph-commit-env.log"
 repo=""
+last=""
 while [[ $# -gt 0 ]]; do
-  case "$1" in -C) repo="$2"; shift 2 ;; *) shift ;; esac
+  case "$1" in -C) repo="$2"; shift 2 ;; *) last="$1"; shift ;; esac
 done
+# The trailing positional is the node id (graph-commit's argv shape), which
+# STUB_GC_DROP_LOCAL below needs.
 [[ "${STUB_GC_EXIT:-0}" == "0" ]] || exit "${STUB_GC_EXIT}"
 if [[ "${STUB_GC_LAND:-0}" == "1" ]]; then
   git -C "$repo" add -A intentions >/dev/null 2>&1
@@ -245,6 +248,15 @@ if [[ "${STUB_GC_PLUMB:-0}" == "1" ]]; then
   unset GIT_INDEX_FILE
   rm -f "$idx"
   git -C "$repo" update-ref refs/remotes/origin/main "$sha"
+fi
+# STUB_GC_DROP_LOCAL=1 — after landing, leave the checkout's copy of the node
+# somewhere OTHER than where the write left it. The real graph-commit is
+# entitled to do exactly this: its far-ahead rebuild resets the tree, and its
+# park path re-syncs the node's path from origin/main. Deleting it is the
+# sharpest form, and it is what the 2026-08-14 incident actually produced
+# (`fatal: could not open …/intentions/<slug>.md` on four successful mints).
+if [[ "${STUB_GC_DROP_LOCAL:-0}" == "1" && -n "$last" ]]; then
+  rm -f "$repo/intentions/$last.md"
 fi
 exit 0
 STUB
@@ -1024,6 +1036,31 @@ assert_eq "(19b) the node file is NOT left dirty in the checkout" "" \
 # equal HEAD's, or the next graph write in this checkout still refuses.
 assert_eq "(19b) the working copy equals HEAD's blob" \
   "$HEAD_BLOB_B" "$(git -C "$FR" hash-object -- "$FR/intentions/$BID.md")"
+
+# --- (20) verification answers about THE WRITE, not about the checkout -------
+# verify_landed() used to hash the LOCAL PATH after graph-commit ran, which is a
+# question about the checkout, not about this write. graph-commit is entitled to
+# leave that path on a different base (STUB_GC_DROP_LOCAL models the sharpest
+# form: it is gone), and on 2026-08-14 that produced
+# `fatal: could not open …/intentions/<slug>.md` on all FOUR successful mints —
+# false alarms that left the check with no credibility for the fifth write,
+# which was genuinely lost. The subject is now the blob this script wrote,
+# captured before the handoff, so a landed write verifies whatever the checkout
+# looks like afterwards
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit, remedy 1 residual).
+VSLUG=verify-intent
+VID="tactic-eval-finding-$VSLUG"
+run_ef STUB_STATE=absent STUB_GC_PLUMB=1 STUB_GC_DROP_LOCAL=1 -- \
+  --slug "$VSLUG" --statement 'verification hashes the content this pass wrote' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-13
+assert_eq "(20) the mint lands even though the local copy is gone" "0" "$RC"
+assert_eq "(20) stdout says landed" "landed" "$SOUT"
+assert_eq "(20) the content IS on origin/main" "0" \
+  "$(git -C "$FR" cat-file -e "refs/remotes/origin/main:intentions/$VID.md" 2>/dev/null; echo $?)"
+assert_not_contains "(20) no false post-write verification failure" \
+  "post-write verification failed" "$OUT"
+assert_not_contains "(20) the vanished local path is never hashed" \
+  "could not hash" "$OUT"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

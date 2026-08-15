@@ -73,6 +73,12 @@
 #  22. layer 3 leaves a stale-`--base` SAME-field divergence
 #      mechanical-unresolved: exit 1, office_hours.reason carries
 #      "mechanical-unresolved", both values are named in the recommendation
+# 22b. the SNAP_DIR frozen-original contract on a MULTI-ID batch where id A's
+#      layer-3 merge resolves and id B's does not (so the batch fails closed
+#      and both park): SNAP_DIR/A.md still hashes to A's PRE-merge content,
+#      graph-commit's blend of it with the concurrent writer's landed edit sits
+#      beside it at SNAP_DIR/A.merged.md, and the park recommendation names
+#      both paths and says which is which
 #  23. a --prune id racing a concurrent edit to the same node is excluded from
 #      the layer-2 merge attempt entirely (a deletion has nothing to
 #      structurally merge against) — no false "auto-resolved" claim, parks
@@ -333,6 +339,27 @@
 #  77. a different base -> a different commit SHA regardless, since the base
 #      is the built commit's parent
 #
+# Cases 78-79 pin the no-op integrity guard (assert_noop_matches_intent): the
+# invariant that `noop` is never reported for a run whose INTENDED content is
+# not what origin/main carries
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit — the incident
+# printed `verdict: landed ids=… pushed=none context=noop` while origin/main
+# still held the pre-edit body):
+#  78. END TO END: a far-ahead worktree (an unpushed non-intentions commit on
+#      HEAD) editing an EXISTING node whose content differs from origin/main
+#      lands that edit and never reports `verdict: landed … context=noop`. The
+#      far-ahead rebuild's `git reset --hard` makes HEAD and origin/main equal
+#      for every id, so every repository-vs-repository guard on the no-op path
+#      is satisfied by construction and none of them can see a dropped edit.
+#  79. THE GUARD AS A UNIT (sourced, in the cases 60-69 idiom), because no CLI
+#      path currently reaches a mismatch — that is what an assertion is for.
+#      Four arms: intent equal to origin/main proceeds silently; intent
+#      differing dies naming the id, the preserved snapshot dir and the --base
+#      entry, reporting `verdict: not-landed` and never `landed`; a resolved
+#      merge's <id>.merged.md matching origin/main proceeds (case 48's shape,
+#      proving the comparison reads snap_intended_file()); and the mirror —
+#      frozen original matching while the merge output does not — still dies
+#
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
@@ -413,7 +440,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-verdict-happy t-verdict-park t-park-retry \
           t-orphan t-live-pending \
           t-plumb-cli t-plumb-dirty t-plumb-race t-plumb-race-conflict \
-          t-plumb-noop t-plumb-base; do
+          t-plumb-noop t-plumb-base \
+          t-noop-guard t-noop-unit t-merge-npx-guard; do
   seed_node "$id"
 done
 
@@ -423,8 +451,8 @@ done
 # lines, for the layer-2/3 field-merge cases (17-21) below. Unlike seed_node's
 # bare line-based format (kept untouched for cases 1-16, which only exercise
 # textual rebase mechanics), this is real enough for a human reader to
-# recognize as node content, though the npx merge-node.ts shim below never
-# actually parses it as YAML — it only greps `key: value` lines.
+# recognize as node content, though the node shim's merge-node.ts branch
+# below never actually parses it as YAML — it only greps `key: value` lines.
 seed_field_node() { # <id> <extra-yaml-lines...>
   local id="$1"; shift
   {
@@ -450,6 +478,15 @@ seed_field_node t-farahead-race-conflict "sentinel: base"
 seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
 seed_field_node t-base-bystander-conflict "sentinel: base"
 seed_field_node t-field-delete-edit "fieldA: base"
+seed_field_node t-multi-snap-a "fieldA: base" "fieldB: base"
+seed_field_node t-multi-snap-b "sentinel: base"
+# Dedicated to the merge-npx-park-storm regression cases (Unit 3 of
+# tactic-graph-commit-merge-npx-park-storm): a launch-failure of the merge
+# tool must die with no park, while a genuine same-field divergence on an
+# otherwise-identical fixture must still park.
+seed_field_node t-merge-unrunnable-base "sentinel: base"
+seed_field_node t-merge-unrunnable-farahead "sentinel: base"
+seed_field_node t-merge-real-divergence "sentinel: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -671,8 +708,8 @@ fixture="$GC_FIXTURE_DIR/$mode.json"
 jq -r "$jq_program" "$fixture"
 SH
 
-cat >"$WORK/bin/npx" <<'SH'
-#!/usr/bin/env bash
+printf '#!/usr/bin/env bash\nREAL_NODE=%q\n' "$(command -v node)" >"$WORK/bin/node"
+cat >>"$WORK/bin/node" <<'SH'
 # npx shim: dispatches on the script path passed right after `tsx` (argv[2] to
 # this shim) so it can emulate TWO distinct real tsx invocations without node:
 #
@@ -689,12 +726,25 @@ cat >"$WORK/bin/npx" <<'SH'
 #     only one side touched it), that value wins; if both sides changed it
 #     away from base to DIFFERENT values (or there is no base to compare
 #     against and the two sides disagree), it is an unresolved conflict. A
-#     missing --ours file exits 1 with no JSON, mirroring the real CLI's crash
-#     contract (merge-node.ts:14-16) instead of silently resolving from theirs
-#     alone.
+#     missing --ours file exits 3 with no JSON, mirroring the real CLI's
+#     "ran and failed on its inputs" contract (see merge-node.ts's output
+#     contract header) instead of silently resolving from theirs alone. The code
+#     must be 3, not 1: graph-commit's run_merge_node() reads 3 as a content
+#     outcome that parks, and every OTHER non-zero status as "the merge tool
+#     could not be executed", which dies without writing any office_hours.
 #   anything else (park_write's throwaway tsx module) — emulates `npx tsx
 #     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
 #     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
+#
+# GC_MERGE_NODE_UNRUNNABLE, when set, short-circuits BEFORE the case
+# statement below: it models a merge tool that never started (a module
+# resolution failure, e.g. ERR_MODULE_NOT_FOUND) rather than one that ran and
+# reached a verdict. Deliberately exits 1, not 127: run_merge_node() must
+# route "the tool could not be executed" to die() on ANY non-3, non-parsable
+# outcome, not merely a recognizable "missing binary" code — a naive
+# rc==127-only check would misclassify a real ERR_MODULE_NOT_FOUND (which
+# also exits 1) as a content divergence and park it. See
+# tactic-graph-commit-merge-npx-park-storm.
 #     shape: verify every id is readable first, then write all. Composes
 #     office_hours.recommendation additively like the real helper: a per-id BASE
 #     recovery string distinguishing a pruned id (no snapshot) from an ordinary
@@ -703,7 +753,17 @@ cat >"$WORK/bin/npx" <<'SH'
 #     text — see graph-commit's park_write) when it is set, so tests can assert
 #     on both the prune-vs-edit distinction and the field detail reaching the
 #     landed node.
-[[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
+if [[ "$1" == "--import" && "$2" == "tsx/esm" ]]; then
+  shift 2
+  set -- tsx "$@"          # re-shape argv to what the body below already parses
+else
+  exec "$REAL_NODE" "$@"   # any other node invocation runs for real
+fi
+
+if [[ -n "${GC_MERGE_NODE_UNRUNNABLE:-}" ]]; then
+  echo "node: ERR_MODULE_NOT_FOUND: Cannot find package 'tsx'" >&2
+  exit 1
+fi
 
 case "$(basename "$2")" in
   merge-node.ts)
@@ -719,15 +779,19 @@ case "$(basename "$2")" in
       esac
     done
 
-    # Mirror the real CLI's crash contract (merge-node.ts:14-16: "A tool crash
-    # ... exits non-zero with an error on stderr and NO JSON on stdout") for a
-    # missing --ours file. Without this guard the shim below silently treats a
-    # nonexistent --ours as an empty OURS_V map and resolves from theirs alone
-    # — diverging from the real merge-node.ts, which throws ENOENT reading a
-    # missing --ours path.
+    # Mirror the real CLI's "ran and failed ON ITS INPUTS" contract (see the
+    # output-contract header of merge-node.ts: exit 3, an error on stderr, NO
+    # JSON on stdout) for a missing --ours file. Without this guard the shim
+    # below silently treats a nonexistent --ours as an empty OURS_V map and
+    # resolves from theirs alone — diverging from the real merge-node.ts, which
+    # throws ENOENT reading a missing --ours path and exits 3 from its catch.
+    # The 3 is load-bearing, not cosmetic: run_merge_node() routes exit 3 to a
+    # park (Case 47 depends on that) and every other non-zero status to a die
+    # with no office_hours written. Exiting 1 here would model a merge tool that
+    # never started, which is a different test.
     if [[ -n "$ours" && ! -f "$ours" ]]; then
       echo "merge-node shim: --ours file does not exist: $ours" >&2
-      exit 1
+      exit 3
     fi
 
     # theirs genuinely absent (the id no longer exists on the landed side).
@@ -815,6 +879,28 @@ case "$(basename "$2")" in
   *)
     shift 3   # tsx, helper script path, store module path
     dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
+    # SNAP_DIR path contract, mirroring the real helper's snapIntended() /
+    # preservedContent() (graph-commit's park_write) and the shell-side
+    # snap_intended_file(): <id>.md is the writer's FROZEN pre-merge original,
+    # and <id>.merged.md — present only when a layer-2/3 merge resolved for that
+    # id — is graph-commit's own merge output. Which content a human is pointed
+    # at, and how the two are labelled, is decided in ONE place here, as it is
+    # in the real helper.
+    snap_intended() {
+      if [[ -f "$snap_dir/$1.merged.md" ]]; then
+        printf '%s' "$snap_dir/$1.merged.md"
+      else
+        printf '%s' "$snap_dir/$1.md"
+      fi
+    }
+    preserved_content() {
+      local orig="$snap_dir/$1.md" merged="$snap_dir/$1.merged.md"
+      if [[ -f "$merged" ]]; then
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy); graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged, which is neither this session's content nor anything that landed"
+      else
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)"
+      fi
+    }
     # Delete/modify divergence: a non-prune id whose target file is absent but
     # whose snapshot exists was deleted by another writer's already-landed
     # change while this session's edit was in flight; re-materialize it from the
@@ -826,7 +912,7 @@ case "$(basename "$2")" in
         continue
       fi
       if [[ ",$prune_csv," != *",$id,"* && -f "$snap_dir/$id.md" ]]; then
-        cp "$snap_dir/$id.md" "$dir/$id.md"
+        cp "$(snap_intended "$id")" "$dir/$id.md"
         deleted_csv="$deleted_csv,$id"
         continue
       fi
@@ -855,13 +941,13 @@ case "$(basename "$2")" in
       if [[ ",$prune_csv," == *",$id,"* ]]; then
         rec="prune, no content snapshot, mailbox discipline"
       elif [[ ",$deleted_csv," == *",$id,"* ]]; then
-        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; the landed deletion WINS and this record is LOCAL ONLY. Re-materialized from ${snap_dir}/${id}.md with authored body preserved, untracked.
+        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; the landed deletion WINS and this record is LOCAL ONLY. Re-materialized from $(snap_intended "$id") with authored body preserved, untracked; $(preserved_content "$id").
 Recommended: a human picks ONE of two intents.
 (1) OVERRIDE the deletion: review the file, drop office_hours, re-run graph-commit ${id}.
 (2) CONFIRM the other writer's deletion: rm ${dir}/${id}.md.
 Mailbox discipline."
       else
-        rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
+        rec="$(preserved_content "$id"); mailbox discipline"
       fi
       [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
       # SET, not append. The real helper does `node.office_hours = {...}` and
@@ -879,7 +965,14 @@ Mailbox discipline."
     ;;
 esac
 SH
-chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
+
+printf '#!/usr/bin/env bash\nNPX_CALL_LOG=%q\n' "$WORK/npx-calls.log" >"$WORK/bin/npx"
+cat >>"$WORK/bin/npx" <<'SH'
+printf '%s\n' "$*" >>"$NPX_CALL_LOG"
+echo "npx shim: npx must not be invoked by graph-commit (see tactic-graph-commit-merge-npx-park-storm)" >&2
+exit 127
+SH
+chmod +x "$WORK/bin/gh" "$WORK/bin/npx" "$WORK/bin/node"
 
 # --- Helpers ------------------------------------------------------------------
 set_mode() { printf '%s' "$1" >"$MODE_FILE"; : >"$CALL_LOG"; : >"$SUITE_CALL_LOG"; }
@@ -899,6 +992,7 @@ lock_ref_exists() { git -C "$ORIGIN" show-ref --verify --quiet refs/graph/landin
 
 run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMPTS
            # GC_LOCK_TTL GC_LOCK_POLL GC_LOCK_WAIT GC_SENTINEL
+           # GC_MERGE_NODE_UNRUNNABLE
   local clone="$1"; shift
   (
     cd "$clone" || exit 99
@@ -912,6 +1006,7 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     export GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}"
     export GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}"
     export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
+    export GC_MERGE_NODE_UNRUNNABLE="${GC_MERGE_NODE_UNRUNNABLE:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
 }
@@ -1165,35 +1260,49 @@ else
 fi
 sync_clone "$A"
 
-# --- Case 8b: ORPHANED required row — hard refusal at the first poll ------------
+# --- Case 8b: ORPHANED required row — bounded re-stamp, then a GitHub-side die --
 # The complement of case 8's #2457 desync: `preview-and-smoke` has NO conclusion
 # at all, and its parent check suite has already reported completed. A suite
 # cannot conclude while one of its own jobs is still running, so the row will
 # never report and `gh run rerun` refuses it. Pre-fix, graph-commit read it as
 # pending and burned the whole green-wait budget (five 180s attempts) before
 # exiting busy-exhausted with an orphan local commit — with the graph store's
-# only write path shut for the duration. It must instead refuse AT ONCE: exit
-# non-zero after ONE poll, no retries, nothing landed, and a diagnostic naming
-# the check and its suite so the operator sees a GitHub orphan rather than a
-# real red check.
+# only write path shut for the duration.
+#
+# An orphan is a GitHub artifact, not a statement about the commit, so the run
+# must neither wait for it nor accuse the content. It re-stamps: delete the
+# graph/** scratch ref and push the SHA again for a fresh stamping run, on its
+# OWN cap (MAX_ORPHAN_RESTAMPS, default 2) that is separate from the landing
+# budget. This fixture mode replays the orphan on every poll, so the cap is
+# always exhausted here: exactly ONE poll per stamp (initial + 2 re-stamps = 3
+# polls, 3 suite lookups — no green-wait is ever entered, which is what keeps
+# the store open), no landing attempt consumed, nothing landed, and a terminal
+# message naming the GitHub-side cause instead of the old content accusation.
 set_mode orphan-pending
 sync_clone "$A"
 edit_line "$A" t-orphan 1 never-lands
 out="$(export GC_POLL=1 GC_TIMEOUT=5 GC_ATTEMPTS=5; run_gc "$A" t-orphan 2>&1)"; rc=$?
 calls="$(gh_calls)"; scalls="$(gh_suite_calls)"
-if [[ $rc -eq 1 && "$calls" -eq 1 && "$scalls" -eq 1 ]] \
-   && grep -q 'not retrying' <<<"$out" \
+if [[ $rc -eq 1 && "$calls" -eq 3 && "$scalls" -eq 3 ]] \
+   && grep -q 're-stamp 1/2' <<<"$out" \
+   && grep -q 're-stamp 2/2' <<<"$out" \
+   && grep -q 'still ORPHANED after 2 re-stamp' <<<"$out" \
    && ! grep -q 'attempt 2/' <<<"$out" \
    && ! origin_show t-orphan | grep -q 'never-lands'; then
-  ok "orphaned required row refuses at once (1 poll, 1 suite lookup, no retries, nothing landed)"
+  ok "orphaned required row re-stamps under its own cap then fails closed (3 polls, 3 suite lookups, no landing attempt burned, nothing landed)"
 else
-  no "orphaned required row refusal (rc=$rc gh_calls=$calls suite_calls=$scalls)"; printf '%s\n' "$out"
+  no "orphaned required row re-stamp cap (rc=$rc gh_calls=$calls suite_calls=$scalls)"; printf '%s\n' "$out"
 fi
 # The diagnostic must be specific enough to distinguish a GitHub orphan from a
-# genuinely failing check — the required check's name AND its suite id.
+# genuinely failing check — the required check's name AND its suite id — and the
+# terminal message must not accuse the commit content, which is the thing an
+# orphan is NOT evidence of.
 if grep -q 'preview-and-smoke=orphaned' <<<"$out" \
-   && grep -q '85480333626 already concluded' <<<"$out"; then
-  ok "orphaned required row: diagnostic names the check and its concluded suite"
+   && grep -q '85480333626 already concluded' <<<"$out" \
+   && grep -q 'GitHub-side condition, NOT broken commit content' <<<"$out" \
+   && grep -q 'nothing was pushed to main' <<<"$out" \
+   && ! grep -q 'the commit content fails CI' <<<"$out"; then
+  ok "orphaned required row: diagnostic names the check and its concluded suite, and blames GitHub rather than the content"
 else
   no "orphaned required row diagnostic"; printf '%s\n' "$out"
 fi
@@ -1578,6 +1687,68 @@ if [[ $rc -eq 1 ]] \
   ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop), and SNAP_DIR retains the writer's original node content"
 else
   no "layer 3 base conflict (rc=$rc calls=$calls)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 22b: the frozen-original SNAP_DIR contract, on the shape this defect was
+# filed about — a MULTI-ID batch in which id A's layer-3 merge RESOLVES and id
+# B's does not. The batch fails closed as a unit, so both park; A's resolved
+# merge must not have eaten A's evidence on the way. Assert all three halves:
+#   (1) SNAP_DIR/A.md still hashes to A's PRE-merge content — byte-identical to
+#       what the writer had on disk before graph-commit ran;
+#   (2) SNAP_DIR/A.merged.md holds the blend (this writer's fieldA edit plus the
+#       concurrent writer's landed fieldB edit);
+#   (3) the park recommendation names BOTH paths and says which is which.
+# Before the fix the merge output was copied OVER SNAP_DIR/A.md, so the losing
+# writer's only surviving copy of its own edit was a blend it never wrote and
+# that never landed — and the concurrent writer, by choosing which field to
+# touch, chose which of the losing writer's ids kept their evidence.
+#
+# NOTE on (3): the recovery text asserted here is the node SHIM's, which mirrors
+# the real park helper's wording (the harness shims `node`, so the real tsx
+# heredoc in park_write never executes). What this pins end to end is that
+# park_write is handed a SNAP_DIR carrying both files, that they hold the right
+# content, and that the recommendation reaching origin/main distinguishes them.
+set_mode green
+W22B="$WORK/w22b"
+make_clone "$W22B" writer-22b
+msa_sha="$(git -C "$W22B" hash-object intentions/t-multi-snap-a.md)"
+msb_sha="$(git -C "$W22B" hash-object intentions/t-multi-snap-b.md)"
+edit_field "$W22B" t-multi-snap-a fieldA a-writer-edit
+edit_field "$W22B" t-multi-snap-b sentinel b-writer-value
+# The writer's pre-merge content for A, captured before graph-commit sees it.
+msa_pre="$(git -C "$W22B" hash-object intentions/t-multi-snap-a.md)"
+
+OTHER22B="$WORK/other22b"
+make_clone "$OTHER22B" other22b
+# A's landed edit touches a DIFFERENT field (A's layer-3 merge resolves); B's
+# touches the SAME field (B's does not, so the whole batch parks).
+edit_field "$OTHER22B" t-multi-snap-a fieldB concurrent-edit
+edit_field "$OTHER22B" t-multi-snap-b sentinel concurrent-value
+git -C "$OTHER22B" commit -qam 'concurrent edits racing a multi-id batch'
+git -C "$OTHER22B" push -q origin main
+
+out="$(run_gc "$W22B" -m 'test: multi-id partial resolve' \
+       --base "t-multi-snap-a=$msa_sha" --base "t-multi-snap-b=$msb_sha" \
+       t-multi-snap-a t-multi-snap-b 2>&1)"; rc=$?
+content="$(origin_show t-multi-snap-a 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+snap_a_sha=""
+[[ -n "$snap" && -f "$snap/t-multi-snap-a.md" ]] \
+  && snap_a_sha="$(git -C "$W22B" hash-object "$snap/t-multi-snap-a.md")"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && [[ -n "$snap_a_sha" && "$snap_a_sha" == "$msa_pre" ]] \
+   && [[ -f "$snap/t-multi-snap-a.merged.md" ]] \
+   && grep -q 'fieldA: a-writer-edit' "$snap/t-multi-snap-a.merged.md" \
+   && grep -q 'fieldB: concurrent-edit' "$snap/t-multi-snap-a.merged.md" \
+   && ! grep -q 'fieldB: concurrent-edit' "$snap/t-multi-snap-a.md" \
+   && grep -qF "$snap/t-multi-snap-a.md" <<<"$content" \
+   && grep -qF "$snap/t-multi-snap-a.merged.md" <<<"$content" \
+   && grep -q 'PARTIAL MERGE' <<<"$content"; then
+  ok "multi-id partial resolve: SNAP_DIR keeps the resolved id's frozen pre-merge original, the merge lands beside it as <id>.merged.md, and the park names both"
+else
+  no "multi-id partial resolve (rc=$rc snap='$snap' snap_a_sha=$snap_a_sha msa_pre=$msa_pre)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # Case 23: a --prune id racing a concurrent edit to the same node is excluded
@@ -2151,7 +2322,7 @@ if [[ $rc -eq 1 ]] \
    && [[ -n "$content" ]] \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'prune base moved' <<<"$content" \
-   && ! grep -q 'could not attempt structural merge' <<<"$content" \
+   && ! grep -q 'ran and rejected these inputs' <<<"$content" \
    && ! grep -q 'layer 2/3 auto-resolved' <<<"$out"; then
   ok "prune stale base: refuses to land, parks with a prune-specific reason, no resurrection"
 else
@@ -3288,6 +3459,265 @@ else
   no "plumbing writer base-sensitivity (rc1=$rc1 rc2=$rc2 sha1=$diffbase_sha_1 sha2=$diffbase_sha_2 base2=$second_base)"
 fi
 plumb_reset
+
+# --- Cases 78-79: the no-op integrity guard (assert_noop_matches_intent) ------
+# The invariant: `noop` is never reported for a run whose INTENDED content is
+# not what origin/main carries
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit).
+
+# --- Case 78: far-ahead + an edit to an existing node is never a `noop` -------
+# The shape the incident was filed on, end to end. A far-ahead worktree's
+# rebuild runs `git reset --hard "$MAIN_SHA"`, after which HEAD and origin/main
+# hold the SAME blob for every id — so every repository-vs-repository guard on
+# the no-op path (the nothing-staged wrong-repo die, the HEAD == origin/main
+# short-circuit) is satisfied by construction and cannot notice a dropped edit.
+# This pins the outcome that must never regress: the edit LANDS, and in no case
+# does the run report `verdict: landed … context=noop`.
+set_mode green
+W78="$WORK/w78"
+make_clone "$W78" writer-78
+mkdir -p "$W78/src"
+echo "console.log('pr feature code, no-op guard')" >"$W78/src/noop-guard-feature.js"
+git -C "$W78" add src/noop-guard-feature.js
+git -C "$W78" commit -qm 'pr: non-intentions code change (no-op guard)'
+n78_tip="$(git -C "$W78" rev-parse HEAD)"
+edit_line "$W78" t-noop-guard 1 noop-guard-edit
+out="$(run_gc "$W78" -m 'test: far-ahead edit is not a no-op' t-noop-guard 2>&1)"; rc=$?
+landed78="$(origin_show t-noop-guard 2>/dev/null || true)"
+restored78="$(git -C "$W78" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line1: noop-guard-edit' <<<"$landed78" \
+   && ! grep -q 'verdict: landed.*context=noop' <<<"$out" \
+   && [[ "$restored78" == "$n78_tip" ]]; then
+  ok "far-ahead + an edit to an existing node lands and is never reported as a no-op"
+else
+  no "far-ahead no-op guard, end to end (rc=$rc restored78=$restored78 tip=$n78_tip)"; printf '%s\n' "$out"; printf '%s\n' "$landed78"
+fi
+
+# --- Case 79: the guard as a unit --------------------------------------------
+# Sourced and called directly, in the idiom cases 60-69 use, because no CLI path
+# currently REACHES a mismatch: the far-ahead replay re-materializes every id
+# from SNAP_DIR before the no-op test runs, so intent and origin/main agree
+# whenever the tree reads clean. That is what an assertion is for — the case
+# pins the behavior for the day some path stops maintaining the invariant, which
+# is precisely how the incident happened.
+#
+# Four arms, because the guard has to be right in both directions:
+#   (a) intent byte-identical to origin/main → proceeds silently (a genuine
+#       no-op must not be turned into a failure);
+#   (b) intent differing → dies, naming the id, the preserved snapshot dir and
+#       the --base entry, and reports `verdict: not-landed` — never `landed`;
+#   (c) a RESOLVED merge's <id>.merged.md matching origin/main → proceeds, even
+#       though the frozen pre-merge original differs. This is case 48's shape (a
+#       merge concluding this writer's whole delta is already on main) and
+#       proves the comparison reads snap_intended_file();
+#   (d) the mirror of (c) — frozen original matching while the merge output does
+#       NOT — still dies, so the preference is "the merge output wins", not
+#       "either file will do".
+W79="$WORK/w79"
+make_clone "$W79" writer-79
+GUARD_ID=t-noop-unit
+guard_main_content="$(git -C "$W79" show "origin/main:intentions/$GUARD_ID.md")"
+guard_base_sha="$(git -C "$W79" rev-parse "origin/main:intentions/$GUARD_ID.md")"
+GUARD_RC=0; GUARD_OUT=""
+run_guard() { # <snap-dir> [--base sha] — plant SNAP_DIR, call the guard
+  GUARD_RC=0
+  GUARD_OUT="$(
+    (
+      cd "$W79" || exit 99
+      # shellcheck source=/dev/null
+      source "$GC_SCRIPT"
+      IDS=("$GUARD_ID"); PRUNE_IDS=(); RESURRECTED_IDS=(); ALL_IDS=("$GUARD_ID")
+      SNAP_DIR="$1"
+      # print_verdict()'s "was a write attempted" boundary: set, so die() reports
+      # the real content-compared verdict instead of the cheap `refused`.
+      SNAPSHOT_TAKEN=1
+      MAIN_SHA="$(git rev-parse origin/main)"
+      if [[ -n "${2:-}" ]]; then BASE["$GUARD_ID"]="$2"; fi
+      assert_noop_matches_intent
+    ) 2>&1
+  )" || GUARD_RC=$?
+}
+guard_snap() { # <name> <id.md content> [<id.merged.md content>]
+  local d="$WORK/snap-$1"
+  mkdir -p "$d"
+  printf '%s\n' "$2" >"$d/$GUARD_ID.md"
+  [[ $# -ge 3 ]] && printf '%s\n' "$3" >"$d/$GUARD_ID.merged.md"
+  printf '%s' "$d"
+}
+guard_equal="$(guard_snap equal "$guard_main_content")"
+guard_diff="$(guard_snap diff "$guard_main_content"$'\n'"line13: dropped-edit")"
+guard_merged="$(guard_snap merged "$guard_main_content"$'\n'"line13: pre-merge" "$guard_main_content")"
+guard_merged_bad="$(guard_snap mergedbad "$guard_main_content" "$guard_main_content"$'\n'"line13: unlanded-merge")"
+
+run_guard "$guard_equal"; a_rc=$GUARD_RC; a_out="$GUARD_OUT"
+run_guard "$guard_diff" "$guard_base_sha"; b_rc=$GUARD_RC; b_out="$GUARD_OUT"
+run_guard "$guard_merged"; c_rc=$GUARD_RC; c_out="$GUARD_OUT"
+run_guard "$guard_merged_bad"; d_rc=$GUARD_RC; d_out="$GUARD_OUT"
+if [[ $a_rc -eq 0 && -z "$a_out" ]] \
+   && [[ $b_rc -ne 0 ]] \
+   && grep -q "intentions/$GUARD_ID.md" <<<"$b_out" \
+   && grep -q "Refusing to emit a false 'landed'" <<<"$b_out" \
+   && grep -q "preserved at $guard_diff" <<<"$b_out" \
+   && grep -q -- "--base $GUARD_ID=$guard_base_sha" <<<"$b_out" \
+   && grep -q 'verdict: not-landed' <<<"$b_out" \
+   && ! grep -q 'verdict: landed' <<<"$b_out" \
+   && [[ $c_rc -eq 0 ]] \
+   && [[ $d_rc -ne 0 ]]; then
+  ok "no-op integrity guard: equal intent proceeds, differing intent dies not-landed naming the snapshot and --base, and the comparison reads the merged file"
+else
+  no "no-op integrity guard as a unit (a_rc=$a_rc b_rc=$b_rc c_rc=$c_rc d_rc=$d_rc)"; printf 'A: %s\nB: %s\nC: %s\nD: %s\n' "$a_out" "$b_out" "$c_out" "$d_out"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 80-83: tactic-graph-commit-merge-npx-park-storm, Unit 3 — regression
+# coverage for run_merge_node()'s launch-failure discriminator (Unit 2). The
+# property under test: an UNRUNNABLE merge tool must die with no park and no
+# push, while a REAL content divergence must still park exactly as before —
+# the anti-overcorrection guard. GC_MERGE_NODE_UNRUNNABLE (see the node shim
+# above) models the tool never starting: stderr only, no stdout, exit 1 (not
+# 127 — the real-world ERR_MODULE_NOT_FOUND rc, deliberately not a
+# recognizable "missing binary" code, so a naive rc==127 check could not have
+# caught the bug this guards).
+# ---------------------------------------------------------------------------
+
+# --- Case 80: layer-3 stale --base, merge tool unrunnable -> die, no park ----
+# check_base_freshness() call site. A concurrent writer lands a same-field
+# edit after W80 read its --base blob, so check_base_freshness() would
+# normally hand the divergence to run_merge_node(). With the tool unrunnable,
+# the run must die with a clear environment error and write NOTHING to
+# origin/main — not even an office_hours park.
+set_mode green
+W80="$WORK/w80"
+make_clone "$W80" writer-80
+base80_sha="$(git -C "$W80" hash-object intentions/t-merge-unrunnable-base.md)"
+edit_field "$W80" t-merge-unrunnable-base sentinel writer80-value
+
+OTHER80="$WORK/other80"
+make_clone "$OTHER80" other80
+edit_field "$OTHER80" t-merge-unrunnable-base sentinel concurrent80-value
+git -C "$OTHER80" commit -qam 'concurrent same-field edit (unrunnable merge tool, layer 3)'
+git -C "$OTHER80" push -q origin main
+
+before80="$(origin_sha)"
+out="$(export GC_MERGE_NODE_UNRUNNABLE=1
+       run_gc "$W80" -m 'test: layer-3 unrunnable merge tool' \
+         --base "t-merge-unrunnable-base=$base80_sha" t-merge-unrunnable-base 2>&1)"; rc=$?
+content="$(origin_show t-merge-unrunnable-base 2>/dev/null)"
+after80="$(origin_sha)"
+if [[ $rc -eq 1 ]] \
+   && grep -q "could not be executed for 't-merge-unrunnable-base'" <<<"$out" \
+   && grep -q 'NO office_hours park was written and NOTHING was pushed' <<<"$out" \
+   && grep -q "ERR_MODULE_NOT_FOUND" <<<"$out" \
+   && [[ "$after80" == "$before80" ]] \
+   && ! grep -q 'office_hours' <<<"$content" \
+   && grep -q 'sentinel: concurrent80-value' <<<"$content"; then
+  ok "layer-3 stale --base, merge tool unrunnable: dies with a clear environment error, no office_hours park, origin/main untouched"
+else
+  no "layer-3 unrunnable merge tool (rc=$rc before80=$before80 after80=$after80)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 81: far-ahead rebuild, merge tool unrunnable -> die, HEAD restored, snapshot kept ---
+# replay_snapshot_onto_base() call site (via ensure_intentions_only_base()).
+# W81 is far-ahead (a non-intentions commit on HEAD, like case 48/50) racing a
+# concurrent same-field landing, so the far-ahead rebuild's three-way replay
+# would normally call run_merge_node(). With the tool unrunnable: die, no
+# park, cleanup()'s RESTORE_HEAD still returns the checkout to its PR tip, and
+# the writer's only surviving copy of its edit — SNAP_DIR, named in the die
+# message — must survive the exit (KEEP_SNAP=1).
+set_mode green
+W81="$WORK/w81"
+make_clone "$W81" writer-81
+mkdir -p "$W81/src"
+echo "console.log('pr feature code, far-ahead unrunnable merge tool')" >"$W81/src/farahead-unrunnable-feature.js"
+git -C "$W81" add src/farahead-unrunnable-feature.js
+git -C "$W81" commit -qm 'pr: non-intentions code change (far-ahead, unrunnable merge tool)'
+fu_tip="$(git -C "$W81" rev-parse HEAD)"
+edit_field "$W81" t-merge-unrunnable-farahead sentinel writer81-value
+
+OTHER81="$WORK/other81"
+make_clone "$OTHER81" other81
+edit_field "$OTHER81" t-merge-unrunnable-farahead sentinel concurrent81-value
+git -C "$OTHER81" commit -qam 'concurrent same-field edit (far-ahead, unrunnable merge tool)'
+git -C "$OTHER81" push -q origin main
+
+before81="$(origin_sha)"
+out="$(export GC_MERGE_NODE_UNRUNNABLE=1
+       run_gc "$W81" -m 'test: far-ahead unrunnable merge tool' t-merge-unrunnable-farahead 2>&1)"; rc=$?
+content="$(origin_show t-merge-unrunnable-farahead 2>/dev/null)"
+after81="$(origin_sha)"
+restored81="$(git -C "$W81" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \([^ ]*\)\..*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q "could not be executed for 't-merge-unrunnable-farahead'" <<<"$out" \
+   && grep -q 'NO office_hours park was written and NOTHING was pushed' <<<"$out" \
+   && [[ "$after81" == "$before81" ]] \
+   && ! grep -q 'office_hours' <<<"$content" \
+   && grep -q 'sentinel: concurrent81-value' <<<"$content" \
+   && [[ "$restored81" == "$fu_tip" ]] \
+   && [[ -n "$snap" && -f "$snap/t-merge-unrunnable-farahead.md" ]] \
+   && grep -q 'writer81-value' "$snap/t-merge-unrunnable-farahead.md"; then
+  ok "far-ahead rebuild, merge tool unrunnable: dies, no park, HEAD restored to the PR tip, writer's snapshot survives at SNAP_DIR"
+else
+  no "far-ahead unrunnable merge tool (rc=$rc restored81=$restored81 fu_tip=$fu_tip snap=$snap)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 82: a REAL divergence still parks (no overcorrection) --------------
+# Same shape as case 80 — layer-3 stale --base, same-field concurrent edit —
+# but with GC_MERGE_NODE_UNRUNNABLE unset, so the harness's real merge-node.ts
+# emulation runs and genuinely cannot resolve the conflict. This must still
+# park exactly as it did before Unit 2: the anti-overcorrection guard against
+# "fixed the storm by never parking anything."
+set_mode green
+W82="$WORK/w82"
+make_clone "$W82" writer-82
+base82_sha="$(git -C "$W82" hash-object intentions/t-merge-real-divergence.md)"
+edit_field "$W82" t-merge-real-divergence sentinel writer82-value
+
+OTHER82="$WORK/other82"
+make_clone "$OTHER82" other82
+edit_field "$OTHER82" t-merge-real-divergence sentinel concurrent82-value
+git -C "$OTHER82" commit -qam 'concurrent same-field edit (real divergence, layer 3)'
+git -C "$OTHER82" push -q origin main
+
+out="$(run_gc "$W82" -m 'test: layer-3 real divergence still parks' \
+        --base "t-merge-real-divergence=$base82_sha" t-merge-real-divergence 2>&1)"; rc=$?
+content="$(origin_show t-merge-real-divergence 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer82-value' <<<"$content" \
+   && grep -q 'concurrent82-value' <<<"$content"; then
+  ok "real divergence still parks: a genuine same-field conflict is unaffected by the unrunnable-tool die path"
+else
+  no "real divergence regression check (rc=$rc)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 83: npx is never on the write path ---------------------------------
+# A full happy-path run through run_gc must never reach the hard-failing npx
+# shim (Unit 1) — proving graph-commit's write path no longer spawns npx at
+# all, in a way a silent regression back to `npx tsx` would fail loudly rather
+# than only be catchable by grepping the source.
+set_mode green
+sync_clone "$A"
+edit_line "$A" t-merge-npx-guard 1 A-edit-npx-guard
+out="$(run_gc "$A" t-merge-npx-guard 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && [[ ! -s "$WORK/npx-calls.log" ]]; then
+  ok "npx is never invoked on the write path (happy path proven via an empty call log, not just a source grep)"
+else
+  no "npx-never-invoked guard (rc=$rc)"; printf '%s
+' "$out"; printf 'npx-calls.log: %s
+' "$(cat "$WORK/npx-calls.log" 2>/dev/null || true)"
+fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then

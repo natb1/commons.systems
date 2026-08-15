@@ -361,10 +361,12 @@ fleet_latch_mint() {
                      recommendation: ("Resolve the failing precondition on the primary checkout, then delete the sidecar .claude/worktrees/.invalid-state-fleet-" + $slug + " so the observation counter restarts.")},
       pace_exempt: false, rounds: null, attributes: {}}' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
 
-  # write-node.ts resolves intentions/ from the SCRIPT's own location, not cwd —
-  # invoke the copy under this project root. Both paths are the provenance-checked
-  # variables from above, never a freshly-composed string.
-  ( cd "$PROJECT_ROOT" && npx tsx "$write_node_exe" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  # write-node.ts takes the store as a REQUIRED --dir (clarification 194/242); it
+  # no longer infers one from the SCRIPT's own location. Name this project root's
+  # store explicitly, and invoke the copy of the script under the same root. Both
+  # paths are the provenance-checked variables from above, never a freshly-composed
+  # string.
+  ( cd "$PROJECT_ROOT" && npx tsx "$write_node_exe" --dir "$PROJECT_ROOT/intentions" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
   rm -f "$tmp"
   ( cd "$PROJECT_ROOT" && "$commit_exe" -m "graph: latch fleet invalid state $slug" "$id" ) >/dev/null 2>&1 || return 1
   printf 'dispatch-invalid-state-route: minted fleet latch %s\n' "$id" >&2

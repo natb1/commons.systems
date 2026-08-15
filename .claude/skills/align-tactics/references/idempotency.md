@@ -10,7 +10,9 @@ the strategy's existing child tactics.
 npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
 ```
 
-`intentionsDir` defaults to `intentions`, matching `validate-graph.ts`. It
+`intentionsDir` defaults to `intentions`. (`validate-graph.ts` no longer has
+that default — its directory is a required argument, clarification 194/242 — so
+this census script's default is now its own, not a shared convention.) It
 first emits one serving-strategy block:
 
 ```

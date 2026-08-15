@@ -134,8 +134,8 @@
 # must not contain spaces:
 #   DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
 #   DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
-#   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts
-#   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts
+#   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
+#   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
 #   DISPATCH_FLEET_ALARM_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
 #   DISPATCH_FLEET_ALARM_INTENTIONS_DIR    default: <repo>/intentions
 #   DISPATCH_FLEET_ALARM_RETRIES           default: 3   (graph-commit attempts)
@@ -294,18 +294,22 @@ if [[ -n "${DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD:-}" ]]; then
 else
   VERIFY_LANDED_CMD=("$REPO_ROOT/packages/intentionsutil/scripts/verify-landed")
 fi
-# write-node.ts / dump-node.ts resolve intentions/ from import.meta.url, NOT
-# cwd — so the copies invoked must be the ones inside the checkout being
-# mutated. Hence the absolute $REPO_ROOT-anchored paths.
+# write-node.ts / dump-node.ts take the store as a REQUIRED --dir (clarification
+# 194/242); they no longer infer it from import.meta.url or from cwd. Both the
+# script copy invoked AND the --dir it is handed are anchored at $REPO_ROOT, so
+# the checkout read and the checkout mutated are the one being committed.
+# The --dir is baked into the DEFAULT command only: an override supplied through
+# the env var below is a caller-authored command line (the test stubs), and it
+# owns its own arguments.
 if [[ -n "${DISPATCH_FLEET_ALARM_WRITE_NODE_CMD:-}" ]]; then
   read -r -a WRITE_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_WRITE_NODE_CMD"
 else
-  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts")
+  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_FLEET_ALARM_DUMP_NODE_CMD:-}" ]]; then
   read -r -a DUMP_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_DUMP_NODE_CMD"
 else
-  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts")
+  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_FLEET_ALARM_CLASSIFY_CMD:-}" ]]; then
   read -r -a CLASSIFY_CMD <<<"$DISPATCH_FLEET_ALARM_CLASSIFY_CMD"

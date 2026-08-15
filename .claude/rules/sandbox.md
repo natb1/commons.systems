@@ -164,8 +164,12 @@ plain separate commands.
 What works instead: `git worktree list` / `git worktree remove <abs path>` (path
 argument, not a redirect); `git show origin/main:<path>` for committed state;
 `cmp`, `git hash-object <abs path>`, `grep` against a foreign checkout; a target
-worktree's own scripts by absolute path (`dump-node.ts`, `write-node.ts` resolve
-`REPO_ROOT` from `import.meta.url`).
+worktree's own scripts by absolute path — but those scripts no longer infer the
+tree from their own location. `dump-node.ts` and `write-node.ts` require
+`--dir <abs intentions path>`, `validate-graph.ts` requires the store as a
+positional argument, and `clear-park` requires `-C <abs repo root>`; each exits
+non-zero with a usage error when the argument is omitted. Invoking one by
+absolute path alone no longer targets that worktree — pass the path explicitly.
 
 **`graph-commit` is the exception to that list**: it is not `git`, so it is not
 refused — and it *requires* the `-C`. It resolves the repo root from `-C`/`--repo`

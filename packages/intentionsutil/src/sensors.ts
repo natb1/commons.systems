@@ -77,14 +77,63 @@ export function readNodeSignal(node: IntentionNode, registry: SensorRegistry): s
 }
 
 /**
- * Assert that every registered sensor name is still recorded, character for
+ * One registered sensor name that no node records verbatim, plus the nodes the
+ * orphan is plausibly attributable to.
+ *
+ * `candidateNodeIds` is a NODE-SCOPED attribution, not a proof: the nodes whose
+ * own recorded sensor is a reword of `name` (one string is a case-insensitive
+ * prefix of the other, which is the shape of the 2026-08-12 drift — an /align
+ * round appending a clause to the recorded sensor). It is empty when the orphan
+ * is attributable to no node at all — a registered constant nobody ever bound,
+ * which is a defect in the REGISTRY rather than in any node, and so says
+ * nothing about whatever write is in flight.
+ */
+export interface UnboundSensorName {
+  name: string;
+  candidateNodeIds: string[];
+}
+
+/**
+ * The nodes whose recorded sensor looks like a reworded copy of `name`.
+ *
+ * A node already recording some OTHER registered name verbatim is bound to that
+ * sensor and is not a candidate. Prefix (not substring) matching keeps this
+ * selective: it matches the append/trim reword shape and little else.
+ */
+function rewordCandidates(
+  name: string,
+  nodes: IntentionNode[],
+  registeredNames: ReadonlySet<string>
+): string[] {
+  const key = name.trim().toLowerCase();
+  if (key === "") {
+    return [];
+  }
+  return nodes
+    .filter((node) => {
+      const sensor = node.success_signal?.sensor;
+      if (sensor === undefined || registeredNames.has(sensor)) {
+        return false;
+      }
+      const recorded = sensor.trim().toLowerCase();
+      if (recorded === "") {
+        return false;
+      }
+      return recorded.startsWith(key) || key.startsWith(recorded);
+    })
+    .map((node) => node.id)
+    .sort();
+}
+
+/**
+ * Find every registered sensor name that is NOT still recorded, character for
  * character, as some node's `success_signal.sensor`.
  *
  * `resolve` above matches by exact string, so a node whose sensor prose is
  * reworded — an /align round appending a clause, say — silently de-registers
  * its sensor: the node's new prose resolves to nothing, and the registered name
- * measures nothing. Nothing on the graph write path noticed, so this is the
- * check that does; `validate-graph.ts` runs it on every `intentions/` push.
+ * measures nothing. Nothing else on the graph write path notices, so this is
+ * the check that does.
  *
  * Forward direction ONLY. A registered name must have a node; a node's sensor
  * name need NOT be registered — most recorded sensors in the store are
@@ -96,30 +145,77 @@ export function readNodeSignal(node: IntentionNode, registry: SensorRegistry): s
  * name there only when the sensor is genuinely node-agnostic; a node-bound
  * sensor that lands there stops being guarded.
  *
- * Throws `IntentionSchemaError` naming every orphaned registration.
+ * Returns a DIAGNOSTIC, sorted by name, and throws nothing — the caller picks
+ * the severity. That split exists because the severity is not the same in every
+ * context: an unbound registered name is a defect in the registry, which the CI
+ * of the change that registered it must fail on
+ * (`validateRegisteredSensorNames` below), but which must NOT deny an unrelated
+ * writer the graph write path (`scripts/validate-graph.ts`, which reports it).
  */
-export function validateRegisteredSensorNames(
+export function findUnboundRegisteredSensorNames(
   nodes: IntentionNode[],
   registeredNames: Iterable<string>,
   unboundNames: Iterable<string> = []
-): void {
+): UnboundSensorName[] {
+  const registered = new Set(registeredNames);
   const recorded = new Set(
     nodes
       .map((node) => node.success_signal?.sensor)
       .filter((sensor): sensor is string => sensor !== undefined)
   );
   const unbound = new Set(unboundNames);
-  const orphaned = [...registeredNames]
+  return [...registered]
     .filter((name) => !unbound.has(name) && !recorded.has(name))
-    .sort();
+    .sort()
+    .map((name) => ({
+      name,
+      candidateNodeIds: rewordCandidates(name, nodes, registered),
+    }));
+}
+
+/**
+ * Render `findUnboundRegisteredSensorNames`'s diagnostic as an operator-facing
+ * message, so the fatal and the reporting call sites say the same thing.
+ */
+export function formatUnboundSensorNames(unbound: UnboundSensorName[]): string {
+  const list = unbound
+    .map(({ name, candidateNodeIds }) => {
+      const attribution =
+        candidateNodeIds.length === 0
+          ? " — attributable to no node; the registered constant was never bound"
+          : ` — possibly reworded on: ${candidateNodeIds.join(", ")}`;
+      return `  - "${name}"${attribution}`;
+    })
+    .join("\n");
+  return (
+    `Registered sensor name(s) not recorded by any node's success_signal.sensor:\n${list}\n` +
+    `A sensor resolves by exact string match, so a reworded node sensor de-registers it ` +
+    `and the reading goes silent. Re-sync the node prose and the registered constant in the ` +
+    `same change, or declare the name unbound if no node is meant to name it.`
+  );
+}
+
+/**
+ * Assert that every registered sensor name is still recorded verbatim by some
+ * node — `findUnboundRegisteredSensorNames` at fatal severity.
+ *
+ * Throws `IntentionSchemaError` naming every orphaned registration.
+ *
+ * Use this where the CHANGE that can orphan a name is in scope: the unit suite
+ * runs it against the live store (`test/lifecycle-sensor.test.ts`), so a PR
+ * touching `packages/intentionsutil` — the home of both the registered
+ * constants and this rule — fails on its own branch. Do NOT use it on the graph
+ * write path, which must not be denied over a defect in the registry: see
+ * `findUnboundRegisteredSensorNames`.
+ */
+export function validateRegisteredSensorNames(
+  nodes: IntentionNode[],
+  registeredNames: Iterable<string>,
+  unboundNames: Iterable<string> = []
+): void {
+  const orphaned = findUnboundRegisteredSensorNames(nodes, registeredNames, unboundNames);
   if (orphaned.length > 0) {
-    const list = orphaned.map((name) => `  - "${name}"`).join("\n");
-    throw new IntentionSchemaError(
-      `Registered sensor name(s) not recorded by any node's success_signal.sensor:\n${list}\n` +
-        `A sensor resolves by exact string match, so a reworded node sensor de-registers it ` +
-        `and the reading goes silent. Re-sync the node prose and the registered constant in the ` +
-        `same change, or declare the name unbound if no node is meant to name it.`
-    );
+    throw new IntentionSchemaError(formatUnboundSensorNames(orphaned));
   }
 }
 

@@ -700,7 +700,8 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
              follow existing tactic-id naming in `intentions/`). No `--base` is
              needed (brand-new node):
              ```bash
-             npx tsx packages/intentionsutil/scripts/write-node.ts --file <json>
+             npx tsx packages/intentionsutil/scripts/write-node.ts \
+               --dir intentions --file <json>
              ```
              Then `Edit` the new node's body (everything after the closing `---`
              frontmatter fence — `write-node.ts` does not touch it) to carry the
@@ -725,6 +726,7 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
              meant to guard:
              ```bash
              BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+               --dir intentions \
                --out-dir /tmp/claude-<uid>/dump-flake-tactic <tactic-id>)
              ```
              `Edit` the existing tactic's body to **append** the recurrence
@@ -789,9 +791,10 @@ atomic tempfile+`mv` write) so the park records `execution.pr`
         sub-step 3's `dump-flake-tactic` directory, whose entry the flake
         `graph-commit` has already consumed and landed:
         ```bash
-        BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+        BASE_N=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
           --out-dir /tmp/claude-<uid>/dump-source-tactic "$N")
-        npx tsx packages/intentionsutil/scripts/write-node.ts --file <updated-N.json>
+        npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+          --file <updated-N.json>
         packages/intentionsutil/scripts/graph-commit --base "$BASE_N" "$N"
         ```
         **This must go through `write-node.ts` + `graph-commit`, not

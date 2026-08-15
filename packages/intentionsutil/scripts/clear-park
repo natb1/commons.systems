@@ -85,7 +85,21 @@
 # graph-commit's ever CLEARS a park, so clear-park has nothing to gain from
 # the coarse form.)
 #
-# Usage: clear-park [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> [note]
+# Repo targeting (strategy-graph-native-dispatch clarification 194, ADOPTED;
+# clarification 242 scopes the conversion to validate-graph.ts / write-node.ts /
+# dump-node.ts / clear-park): `-C <repo-root>` is REQUIRED and has no default.
+# This script used to derive the checkout it read and wrote from SCRIPT_DIR --
+# its own on-disk location -- so the tree it touched was a property of WHICH
+# COPY of the script ran rather than of what the caller asked for. Callers
+# routinely invoke the main checkout's copy by absolute path from inside a
+# worktree, and under the old shape that silently retargeted the whole
+# read-modify-write at the main checkout. Naming the repo explicitly is the same
+# contract graph-commit already carries (clarification 86), and it is the value
+# passed straight through to graph-commit's own `-C` below, so the two can no
+# longer disagree. SCRIPT_DIR still resolves this script's SIBLINGS (graph-commit,
+# verify-landed, src/store.js) -- that is script co-location, not tree targeting.
+#
+# Usage: clear-park -C <repo-root> [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> [note]
 #
 # Exit codes: 0 cleared and landed on main, per verify-landed's blob-pinned
 # check (or already-clear no-op); 1 the write or the origin/main refresh failed
@@ -97,16 +111,17 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-INTENTIONS_DIR="$REPO_ROOT/intentions"
-STORE_MODULE="$REPO_ROOT/packages/intentionsutil/src/store.js"
+# The store implementation this script executes travels WITH the script (a
+# sibling of graph-commit and verify-landed, resolved the same way). The tree it
+# operates ON comes from the required `-C` below -- see the header note.
+STORE_MODULE="$SCRIPT_DIR/../src/store.js"
 
-USAGE="usage: clear-park [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> [note]"
+USAGE="usage: clear-park -C <repo-root> [--base <blobsha>|<id>=<blobsha>|<manifest-file>] <node-id> [note]"
 
-# Leading-flags-only parse: consume flags while the current arg starts with
-# `--`; the first non-flag argument ends flag parsing and every remaining
-# argument is positional VERBATIM (no re-scan for flags — <node-id> and
-# <note> are free text that may start with `-`).
+# Leading-flags-only parse: consume the recognized flags (`-C`/`--repo`,
+# `--base`) while they lead; the first non-flag argument ends flag parsing and
+# every remaining argument is positional VERBATIM (no re-scan for flags —
+# <node-id> and <note> are free text that may start with `-`).
 BASE_ARG=""
 # Flag PRESENCE is tracked separately from the flag's VALUE: an explicitly
 # supplied but empty base (`--base ''` / `--base=`) must be a usage error, not
@@ -115,9 +130,26 @@ BASE_ARG=""
 # the flag, quietly dropping the compare-and-swap guarantee the caller asked
 # for (.claude/skills/ref-diagnosis-time-cas/SKILL.md).
 BASE_SUPPLIED=0
+# The repo root is a REQUIRED flag with no fallback (header note). Tracked as a
+# raw string here and resolved to an absolute path after the loop, so a
+# non-existent path is a usage error rather than a silently-empty REPO_ROOT.
+REPO_ARG=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -C|--repo)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      REPO_ARG="$1"
+      shift
+      ;;
+    --repo=*)
+      REPO_ARG="${1#--repo=}"
+      shift
+      ;;
     --base)
       shift
       if [[ $# -eq 0 ]]; then
@@ -144,6 +176,42 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$REPO_ARG" ]]; then
+  echo "clear-park: -C <repo-root> is required and has no default -- name the checkout whose intentions/ store is to be read, mutated and committed. It is passed straight through to graph-commit's own -C, so this script and graph-commit can never target different trees." >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
+if ! REPO_ROOT="$(cd "$REPO_ARG" 2>/dev/null && pwd)"; then
+  echo "clear-park: -C '$REPO_ARG' is not a directory" >&2
+  exit 2
+fi
+INTENTIONS_DIR="$REPO_ROOT/intentions"
+if [[ ! -d "$INTENTIONS_DIR" ]]; then
+  echo "clear-park: -C '$REPO_ARG' has no intentions/ directory ($INTENTIONS_DIR) -- that is not an intention-graph checkout" >&2
+  exit 2
+fi
+# -C must be the git TOPLEVEL, not merely some directory that happens to hold an
+# intentions/. This script spells the same node file two ways: arg-relative
+# ("$INTENTIONS_DIR/$NODE_ID.md", written below, and the `hash-object --` that
+# produces EXPECT_BLOB) and repo-root-relative (the `origin/main:intentions/...`
+# that `rev-parse` and `show` read, which git resolves from the toplevel and NOT
+# from -C). Those two spellings name the same file only when -C IS the toplevel.
+# Given a nested -C holding its own intentions/, every check above passes, the
+# refresh reads the OUTER store, the write and hash target the INNER one, and
+# graph-commit -- which resolves its own toplevel -- stages the outer. --expect
+# still fails that closed, but late and confusingly. Reject it here as the usage
+# error it is, which is the residue clarification 242's required-`-C` contract
+# exists to close.
+if ! GIT_TOPLEVEL="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+  echo "clear-park: -C '$REPO_ARG' is not inside a git repository -- the store must be committable" >&2
+  exit 2
+fi
+GIT_TOPLEVEL="$(cd "$GIT_TOPLEVEL" && pwd)"
+if [[ "$GIT_TOPLEVEL" != "$REPO_ROOT" ]]; then
+  echo "clear-park: -C '$REPO_ARG' is not the git toplevel (that is '$GIT_TOPLEVEL') -- pass the checkout root, or this script and graph-commit resolve the same intentions/<id>.md to two different files" >&2
+  exit 2
+fi
 
 NODE_ID="${ARGS[0]:-}"
 # Optional 2nd arg: free-text note folded into the commit message.
@@ -328,18 +396,18 @@ else
   MESSAGE="graph: clear office_hours park on $NODE_ID"
 fi
 
-# -C "$REPO_ROOT" is mandatory, not cosmetic. This script's REPO_ROOT is derived
-# from SCRIPT_DIR (its own on-disk location), and every write above -- the
-# origin/main refresh and the office_hours clear -- targets "$INTENTIONS_DIR"
-# under THAT repo. graph-commit, by contrast, resolves its repo from -C if
-# given, else from cwd. Callers routinely invoke the main checkout's copy of
-# this script by absolute path from inside a worktree, so without -C the two
-# resolve to DIFFERENT checkouts: the edit is written to the script's repo
-# while graph-commit inspects the caller's cwd repo, finds nothing staged for
-# the id and its HEAD blob equal to origin/main, takes the benign "no new
-# changes to stage" branch, and prints "landed ... on main" / exits 0 having
-# committed nothing -- leaving the real edit dirty and unpushed in the other
-# checkout. Mirrors park-node, which already passes -C for the same reason.
+# -C "$REPO_ROOT" is mandatory, not cosmetic. REPO_ROOT is this script's own
+# required -C argument (header note), and every write above -- the origin/main
+# refresh and the office_hours clear -- targets "$INTENTIONS_DIR" under THAT
+# repo. graph-commit resolves its repo from -C if given, else from cwd, so
+# forwarding the same value is what keeps the two from ever disagreeing: without
+# it the edit is written to the named repo while graph-commit inspects the
+# caller's cwd repo, finds nothing staged for the id and its HEAD blob equal to
+# origin/main, takes the benign "no new changes to stage" branch, and prints
+# "landed ... on main" / exits 0 having committed nothing -- leaving the real
+# edit dirty and unpushed in the other checkout. Mirrors park-node, which already
+# passes -C for the same reason (park-node still derives its own root from
+# SCRIPT_DIR; clarification 242 scopes this conversion to clear-park).
 #
 # --expect does NOT add a second, independent check on -C from this call site:
 # EXPECT_BLOB is hashed under the same "$REPO_ROOT" that is passed as -C, so

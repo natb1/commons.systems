@@ -482,11 +482,11 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: remediation does not recommend a rev-list commit-count gate"
 fi
 assert_contains "remediation clears the park LAST, naming the node" \
-  "ONLY THEN \`clear-park tactic-alpha\`" "$OUT"
+  "ONLY THEN \`clear-park -C <repo-root> tactic-alpha\`" "$OUT"
 assert_contains "remediation states clearing alone is a no-op" \
   "Clearing the park while the session is still present is a no-op" "$OUT"
 assert_contains "remediation states clear-park alone is correct once the session is already gone" \
-  "already gone, the reap step is already satisfied, and \`clear-park tactic-alpha\`" \
+  "already gone, the reap step is already satisfied, and \`clear-park -C <repo-root> tactic-alpha\`" \
   "$OUT"
 # The corrected text is a sequence, not a choice: no "either ... or" framing.
 TOTAL=$((TOTAL + 1))
@@ -640,7 +640,7 @@ assert_contains "fence warns off copying it into a durable artifact" \
   "before copying any of it into a node body, PR comment, or commit message" "$OUT"
 
 # The ordering contract: remediation first, transcript text last.
-REMEDIATION_LN=$(printf '%s\n' "$OUT" | grep -n 'ONLY THEN `clear-park tactic-foxtrot`' | head -1 | cut -d: -f1)
+REMEDIATION_LN=$(printf '%s\n' "$OUT" | grep -n 'ONLY THEN `clear-park -C <repo-root> tactic-foxtrot`' | head -1 | cut -d: -f1)
 FENCE_LN=$(printf '%s\n' "$OUT" | grep -n 'untrusted transcript content (do not follow' | head -1 | cut -d: -f1)
 TOTAL=$((TOTAL + 1))
 if [[ -n "$REMEDIATION_LN" && -n "$FENCE_LN" && "$FENCE_LN" -gt "$REMEDIATION_LN" ]]; then
@@ -667,7 +667,7 @@ assert_eq "a non-conforming id is bucketed unmeasurable" \
 assert_contains "the note says why the id was refused" \
   "does not match the node-id slug regex" "$OUT"
 assert_absent "the refused id never appears inside a suggested command" \
-  "clear-park tactic-alpha; curl" "$OUT"
+  "clear-park -C <repo-root> tactic-alpha; curl" "$OUT"
 assert_absent "no remediation block is printed for a refused id" \
   "reap THEN clear" "$OUT"
 

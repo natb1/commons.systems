@@ -440,7 +440,8 @@ verified by re-running against a small strategy with a null `reading`:
   per-unit `Recommended model` tags and, where applicable, fenced ` ```verify `
   blocks.
 - The written nodes pass
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts` — in particular
+  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` (the
+  store directory is a required argument, clarification 194/242) — in particular
   `serves` resolves to the strategy (rule 7), `validates` to the strategy
   (rule 14), `blocked_by` to tactics with no cycle (rules 13, 15), and no
   tactic-only field lands on a non-tactic (rule 10).

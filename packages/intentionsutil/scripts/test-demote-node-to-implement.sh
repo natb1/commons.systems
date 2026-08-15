@@ -190,170 +190,15 @@ SH
 #       office_hours line carrying graph-commit's park reason to each node.
 cat >"$WORK/bin/npx" <<'SH'
 #!/usr/bin/env bash
-[[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
-if [[ "$2" == *merge-node.ts ]]; then
-  shift 2
-  m_base=""; m_ours=""; m_theirs=""; m_out=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --base) m_base="$2"; shift 2 ;;
-      --ours) m_ours="$2"; shift 2 ;;
-      --theirs) m_theirs="$2"; shift 2 ;;
-      --out) m_out="$2"; shift 2 ;;
-      *) shift ;;
-    esac
-  done
+# graph-commit (and transition-node / demote-node-to-implement) now spawn tsx
+# exclusively via `node --import tsx/esm` -- see
+# tactic-graph-commit-merge-npx-park-storm. The merge-node.ts and park_write
+# helper emulation this shim used to carry has moved to the `node` shim's
+# *merge-node.ts) and *.mts) arms. npx must never be invoked; a hard failure
+# here catches a silent regression back to it.
+echo "npx shim: npx must not be invoked (tsx now runs via node --import tsx/esm)" >&2
+exit 127
 
-  # theirs genuinely absent (the id no longer exists on the landed side): ours is
-  # the only content, so ours wins outright (mirrors merge-node.ts's real
-  # documented behavior for an empty --theirs).
-  if [[ -z "$m_theirs" ]]; then
-    [[ -n "$m_out" && -n "$m_ours" ]] && cp -- "$m_ours" "$m_out"
-    printf '{"resolved":true,"conflicts":[]}\n'
-    exit 0
-  fi
-
-  # parse_node <file> — split one node markdown file into
-  #   PK    ordered frontmatter keys
-  #   PV    key -> RAW block (the `key:` line plus every following indented
-  #         continuation line, joined by newlines; emitted verbatim on output)
-  #   PBODY everything after the closing `---` fence, verbatim
-  # `---` fences and blank frontmatter lines are structure, not keys.
-  PK=(); declare -A PV=(); PBODY=""
-  parse_node() {
-    local f="$1" line cur="" curblock="" state=start
-    local -a bodylines=()
-    PK=(); PV=(); PBODY=""
-    while IFS= read -r line || [[ -n "$line" ]]; do
-      case "$state" in
-        start)
-          if [[ "$line" == "---" ]]; then state=fm; else state=body; bodylines+=("$line"); fi
-          ;;
-        fm)
-          if [[ "$line" == "---" ]]; then
-            if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; cur=""; curblock=""; fi
-            state=body
-          elif [[ -n "$line" && "$line" == [[:space:]]* && -n "$cur" ]]; then
-            curblock+=$'\n'"$line"
-          elif [[ "$line" == *:* ]]; then
-            if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
-            cur="${line%%:*}"; curblock="$line"
-            PK+=("$cur")
-          fi
-          ;;
-        body)
-          bodylines+=("$line")
-          ;;
-      esac
-    done <"$f"
-    if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
-    if [[ ${#bodylines[@]} -gt 0 ]]; then PBODY="$(printf '%s\n' "${bodylines[@]}")"; fi
-  }
-
-  declare -A M_BASE_V=() M_OURS_V=() M_THEIRS_V=()
-  declare -a M_ALL_KEYS=()
-  m_base_body=""; m_ours_body=""; m_theirs_body=""
-  m_have_base=0; m_have_ours=0; m_have_theirs=0
-  if [[ -n "$m_base" && -f "$m_base" ]]; then
-    m_have_base=1; parse_node "$m_base"
-    for k in ${PK[@]+"${PK[@]}"}; do M_BASE_V["$k"]="${PV[$k]}"; done
-    m_base_body="$PBODY"
-  fi
-  if [[ -n "$m_ours" && -f "$m_ours" ]]; then
-    m_have_ours=1; parse_node "$m_ours"
-    for k in ${PK[@]+"${PK[@]}"}; do
-      if [[ -z "${M_OURS_V[$k]+x}" ]]; then M_OURS_V["$k"]="${PV[$k]}"; M_ALL_KEYS+=("$k"); fi
-    done
-    m_ours_body="$PBODY"
-  fi
-  if [[ -f "$m_theirs" ]]; then
-    m_have_theirs=1; parse_node "$m_theirs"
-    for k in ${PK[@]+"${PK[@]}"}; do
-      if [[ -z "${M_THEIRS_V[$k]+x}" ]]; then
-        M_THEIRS_V["$k"]="${PV[$k]}"
-        m_seen=0
-        for m_existing in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
-          [[ "$m_existing" == "$k" ]] && { m_seen=1; break; }
-        done
-        [[ $m_seen -eq 1 ]] || M_ALL_KEYS+=("$k")
-      fi
-    done
-    m_theirs_body="$PBODY"
-  fi
-
-  # Standard three-way scalar rule, applied to whole raw blocks:
-  #   ours == theirs                -> take it
-  #   ours == base (theirs moved)   -> take theirs
-  #   theirs == base (ours moved)   -> take ours
-  #   only one side has it          -> take that side
-  #   otherwise                     -> conflict
-  m_conflicts_json="[]"
-  m_resolved=true
-  m_merged_blocks=()
-  m_resolve3() { # <have_b> <have_o> <have_t> <bv> <ov> <tv> — prints the winner
-    local hb="$1" ho="$2" ht="$3" bv="$4" ov="$5" tv="$6"
-    if [[ $ho -eq 1 && $ht -eq 1 && "$ov" == "$tv" ]]; then printf '%s' "$ov"; return 0
-    elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$ov" == "$bv" ]]; then printf '%s' "$tv"; return 0
-    elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$tv" == "$bv" ]]; then printf '%s' "$ov"; return 0
-    elif [[ $ho -eq 1 && $ht -eq 0 ]]; then printf '%s' "$ov"; return 0
-    elif [[ $ht -eq 1 && $ho -eq 0 ]]; then printf '%s' "$tv"; return 0
-    fi
-    return 1
-  }
-  for k in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
-    have_b=0; [[ -n "${M_BASE_V[$k]+x}" ]] && have_b=1
-    have_o=0; [[ -n "${M_OURS_V[$k]+x}" ]] && have_o=1
-    have_t=0; [[ -n "${M_THEIRS_V[$k]+x}" ]] && have_t=1
-    bv="${M_BASE_V[$k]-}"; ov="${M_OURS_V[$k]-}"; tv="${M_THEIRS_V[$k]-}"
-    if final="$(m_resolve3 "$have_b" "$have_o" "$have_t" "$bv" "$ov" "$tv")"; then
-      m_merged_blocks+=("$final")
-    else
-      m_resolved=false
-      m_conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
-        '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
-    fi
-  done
-
-  # The markdown body is merged as one unit under the pseudo-field "body".
-  m_merged_body=""
-  if m_merged_body="$(m_resolve3 "$m_have_base" "$m_have_ours" "$m_have_theirs" \
-                                 "$m_base_body" "$m_ours_body" "$m_theirs_body")"; then
-    :
-  else
-    m_resolved=false
-    m_conflicts_json="$(jq -c --arg field body --arg ours "$m_ours_body" --arg theirs "$m_theirs_body" \
-      '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
-  fi
-
-  if [[ "$m_resolved" == true ]]; then
-    if [[ -n "$m_out" ]]; then
-      : >"$m_out"
-      if [[ ${#m_merged_blocks[@]} -gt 0 ]]; then
-        printf -- '---\n' >>"$m_out"
-        printf '%s\n' "${m_merged_blocks[@]}" >>"$m_out"
-        printf -- '---\n' >>"$m_out"
-      fi
-      [[ -n "$m_merged_body" ]] && printf '%s\n' "$m_merged_body" >>"$m_out"
-    fi
-    printf '{"resolved":true,"conflicts":[]}\n'
-  else
-    printf '{"resolved":false,"conflicts":%s}\n' "$m_conflicts_json"
-  fi
-  exit 0
-fi
-shift 3   # tsx, helper script path, store module path
-dir="$1"; since="$2"; reason="$3"
-if [[ $# -eq 5 ]]; then
-  ids=("$5")
-else
-  shift 5   # dir, since, reason, snapDir, pruneCsv
-  ids=("$@")
-fi
-for id in "${ids[@]}"; do
-  [[ -f "$dir/$id.md" ]] || { echo "npx shim: unreadable node $id" >&2; exit 1; }
-  printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
-  echo "npx shim: set office_hours on $id (since=$since)" >&2
-done
 SH
 
 # node shim: stands in for demote-node-to-implement's two `node --import
@@ -390,6 +235,186 @@ case "${1:-}" in
     # execution.pr, which no seeded node carries — print an empty string so
     # the `gh pr comment` block is skipped.
     printf ''
+    ;;
+  *merge-node.ts)
+    # graph-commit's run_merge_node() now spawns merge-node.ts via
+    # `node --import tsx/esm` (previously `npx tsx`) -- this used to be the
+    # npx shim's job; moved here verbatim (only the leading-arg shift count
+    # changed, since this shim already stripped `--import tsx/esm`, not
+    # `tsx`). Real three-way frontmatter/body merge -- not an always-conflict
+    # stub -- because case 1 needs a genuinely DISJOINT merge (local `phase`
+    # change vs. a landed `blocked_by` addition) to reconcile cleanly, and
+    # case 2 needs a genuine SAME-FIELD three-way conflict to park.
+    shift   # drop the script path
+    m_base=""; m_ours=""; m_theirs=""; m_out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --base) m_base="$2"; shift 2 ;;
+        --ours) m_ours="$2"; shift 2 ;;
+        --theirs) m_theirs="$2"; shift 2 ;;
+        --out) m_out="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+
+    # theirs genuinely absent (the id no longer exists on the landed side): ours is
+    # the only content, so ours wins outright (mirrors merge-node.ts's real
+    # documented behavior for an empty --theirs).
+    if [[ -z "$m_theirs" ]]; then
+      [[ -n "$m_out" && -n "$m_ours" ]] && cp -- "$m_ours" "$m_out"
+      printf '{"resolved":true,"conflicts":[]}\n'
+      exit 0
+    fi
+
+    # parse_node <file> — split one node markdown file into
+    #   PK    ordered frontmatter keys
+    #   PV    key -> RAW block (the `key:` line plus every following indented
+    #         continuation line, joined by newlines; emitted verbatim on output)
+    #   PBODY everything after the closing `---` fence, verbatim
+    # `---` fences and blank frontmatter lines are structure, not keys.
+    PK=(); declare -A PV=(); PBODY=""
+    parse_node() {
+      local f="$1" line cur="" curblock="" state=start
+      local -a bodylines=()
+      PK=(); PV=(); PBODY=""
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$state" in
+          start)
+            if [[ "$line" == "---" ]]; then state=fm; else state=body; bodylines+=("$line"); fi
+            ;;
+          fm)
+            if [[ "$line" == "---" ]]; then
+              if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; cur=""; curblock=""; fi
+              state=body
+            elif [[ -n "$line" && "$line" == [[:space:]]* && -n "$cur" ]]; then
+              curblock+=$'\n'"$line"
+            elif [[ "$line" == *:* ]]; then
+              if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
+              cur="${line%%:*}"; curblock="$line"
+              PK+=("$cur")
+            fi
+            ;;
+          body)
+            bodylines+=("$line")
+            ;;
+        esac
+      done <"$f"
+      if [[ -n "$cur" ]]; then PV["$cur"]="$curblock"; fi
+      if [[ ${#bodylines[@]} -gt 0 ]]; then PBODY="$(printf '%s\n' "${bodylines[@]}")"; fi
+    }
+
+    declare -A M_BASE_V=() M_OURS_V=() M_THEIRS_V=()
+    declare -a M_ALL_KEYS=()
+    m_base_body=""; m_ours_body=""; m_theirs_body=""
+    m_have_base=0; m_have_ours=0; m_have_theirs=0
+    if [[ -n "$m_base" && -f "$m_base" ]]; then
+      m_have_base=1; parse_node "$m_base"
+      for k in ${PK[@]+"${PK[@]}"}; do M_BASE_V["$k"]="${PV[$k]}"; done
+      m_base_body="$PBODY"
+    fi
+    if [[ -n "$m_ours" && -f "$m_ours" ]]; then
+      m_have_ours=1; parse_node "$m_ours"
+      for k in ${PK[@]+"${PK[@]}"}; do
+        if [[ -z "${M_OURS_V[$k]+x}" ]]; then M_OURS_V["$k"]="${PV[$k]}"; M_ALL_KEYS+=("$k"); fi
+      done
+      m_ours_body="$PBODY"
+    fi
+    if [[ -f "$m_theirs" ]]; then
+      m_have_theirs=1; parse_node "$m_theirs"
+      for k in ${PK[@]+"${PK[@]}"}; do
+        if [[ -z "${M_THEIRS_V[$k]+x}" ]]; then
+          M_THEIRS_V["$k"]="${PV[$k]}"
+          m_seen=0
+          for m_existing in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
+            [[ "$m_existing" == "$k" ]] && { m_seen=1; break; }
+          done
+          [[ $m_seen -eq 1 ]] || M_ALL_KEYS+=("$k")
+        fi
+      done
+      m_theirs_body="$PBODY"
+    fi
+
+    # Standard three-way scalar rule, applied to whole raw blocks:
+    #   ours == theirs                -> take it
+    #   ours == base (theirs moved)   -> take theirs
+    #   theirs == base (ours moved)   -> take ours
+    #   only one side has it          -> take that side
+    #   otherwise                     -> conflict
+    m_conflicts_json="[]"
+    m_resolved=true
+    m_merged_blocks=()
+    m_resolve3() { # <have_b> <have_o> <have_t> <bv> <ov> <tv> — prints the winner
+      local hb="$1" ho="$2" ht="$3" bv="$4" ov="$5" tv="$6"
+      if [[ $ho -eq 1 && $ht -eq 1 && "$ov" == "$tv" ]]; then printf '%s' "$ov"; return 0
+      elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$ov" == "$bv" ]]; then printf '%s' "$tv"; return 0
+      elif [[ $hb -eq 1 && $ho -eq 1 && $ht -eq 1 && "$tv" == "$bv" ]]; then printf '%s' "$ov"; return 0
+      elif [[ $ho -eq 1 && $ht -eq 0 ]]; then printf '%s' "$ov"; return 0
+      elif [[ $ht -eq 1 && $ho -eq 0 ]]; then printf '%s' "$tv"; return 0
+      fi
+      return 1
+    }
+    for k in ${M_ALL_KEYS[@]+"${M_ALL_KEYS[@]}"}; do
+      have_b=0; [[ -n "${M_BASE_V[$k]+x}" ]] && have_b=1
+      have_o=0; [[ -n "${M_OURS_V[$k]+x}" ]] && have_o=1
+      have_t=0; [[ -n "${M_THEIRS_V[$k]+x}" ]] && have_t=1
+      bv="${M_BASE_V[$k]-}"; ov="${M_OURS_V[$k]-}"; tv="${M_THEIRS_V[$k]-}"
+      if final="$(m_resolve3 "$have_b" "$have_o" "$have_t" "$bv" "$ov" "$tv")"; then
+        m_merged_blocks+=("$final")
+      else
+        m_resolved=false
+        m_conflicts_json="$(jq -c --arg field "$k" --arg ours "$ov" --arg theirs "$tv" \
+          '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+      fi
+    done
+
+    # The markdown body is merged as one unit under the pseudo-field "body".
+    m_merged_body=""
+    if m_merged_body="$(m_resolve3 "$m_have_base" "$m_have_ours" "$m_have_theirs" \
+                                   "$m_base_body" "$m_ours_body" "$m_theirs_body")"; then
+      :
+    else
+      m_resolved=false
+      m_conflicts_json="$(jq -c --arg field body --arg ours "$m_ours_body" --arg theirs "$m_theirs_body" \
+        '. + [{field:$field, ours:$ours, theirs:$theirs}]' <<<"$m_conflicts_json")"
+    fi
+
+    if [[ "$m_resolved" == true ]]; then
+      if [[ -n "$m_out" ]]; then
+        : >"$m_out"
+        if [[ ${#m_merged_blocks[@]} -gt 0 ]]; then
+          printf -- '---\n' >>"$m_out"
+          printf '%s\n' "${m_merged_blocks[@]}" >>"$m_out"
+          printf -- '---\n' >>"$m_out"
+        fi
+        [[ -n "$m_merged_body" ]] && printf '%s\n' "$m_merged_body" >>"$m_out"
+      fi
+      printf '{"resolved":true,"conflicts":[]}\n'
+    else
+      printf '{"resolved":false,"conflicts":%s}\n' "$m_conflicts_json"
+    fi
+    exit 0
+    ;;
+  *.mts)
+    # park_write()'s throwaway store-write helper -- graph-commit mktemp's a
+    # `--suffix=.mts` module and invokes it as `node --import tsx/esm <helper>
+    # <storeModule> <dir> <since> <reason> <snapDir> <pruneCsv> <id...>`. This
+    # used to be the npx shim's catch-all branch (shift 3 for tsx/script/store
+    # module); moved here with shift 2, since this shim already stripped
+    # `--import tsx/esm` rather than `tsx`. Appends an office_hours line
+    # carrying graph-commit's park reason to each id.
+    shift 2   # helper script path, store module path
+    dir="$1"; since="$2"; reason="$3"
+    if [[ $# -eq 5 ]]; then
+      ids=("$5")
+    else
+      shift 5   # dir, since, reason, snapDir, pruneCsv
+      ids=("$@")
+    fi
+    for id in "${ids[@]}"; do
+      [[ -f "$dir/$id.md" ]] || { echo "node shim: unreadable node $id" >&2; exit 1; }
+      printf 'office_hours: {reason: "%s", since: %s}\n' "$reason" "$since" >>"$dir/$id.md"
+      echo "node shim: set office_hours on $id (since=$since)" >&2
+    done
     ;;
   *)
     echo "node shim: unexpected invocation: $*" >&2

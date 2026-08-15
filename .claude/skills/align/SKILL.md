@@ -174,10 +174,13 @@ actually works, then walk them to a prompt and run the interview on it.
      On failure (tests fail, or `npx tsx` cannot resolve) the workspace is
      not installed: the script says to run `npm ci` at the repo root and
      rerun.
-   - **Graph clean** — `npx tsx packages/intentionsutil/scripts/validate-graph.ts`
-     (dangling refs, cycles, schema). On failure — a missing or unreadable
-     `intentions/` directory, or a schema violation — the script reports the
-     exact error. Do **not** proceed to the funnel's remaining steps over a
+   - **Graph clean** — `npx tsx packages/intentionsutil/scripts/validate-graph.ts
+     intentions` (dangling refs, cycles, schema). The store directory is a
+     REQUIRED argument with no default (strategy-graph-native-dispatch
+     clarification 194/242) — that is what makes a missing or unreadable
+     `intentions/` a loud failure rather than an empty node list reported as a
+     clean graph. On failure — a missing or unreadable `intentions/` directory,
+     or a schema violation — the script reports the exact error. Do **not** proceed to the funnel's remaining steps over a
      broken store.
    - **Router heartbeat** — `systemctl --user is-active
      dispatch-claude-daemon.service` (Linux deployments; the daemon hosts
@@ -491,7 +494,8 @@ For each such byproduct, write a draft tactic node:
 cat > "$TMPDIR/tactic-draft.json" <<'JSON'
 {"id":"tactic-<slug>","kind":"tactic","statement":"<one-line>","owner":"ai","status":"raw","parent":null,"serves":["<strategy-id>"],"rationale":"<why this surfaced, from the interview>"}
 JSON
-npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/tactic-draft.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+  --file "$TMPDIR/tactic-draft.json"
 ```
 
 No `phase` field (equivalently `phase: draft`) marks it as **undecomposed
@@ -545,7 +549,7 @@ frontmatter:
   which records no base):
 
   ```bash
-  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
     --out-dir "$TMPDIR/dump" <strategy-id>)
   # reconcile from "$TMPDIR/dump/<strategy-id>.json"; pass "$BASE" to graph-commit below
   ```
@@ -567,7 +571,8 @@ frontmatter:
   to `write-node.ts`. Never transcribe frontmatter by hand.
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/strategy.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+  --file "$TMPDIR/strategy.json"
 ```
 
 Then land it — `graph-commit` is the **only** write path, never a
@@ -787,7 +792,7 @@ Prose only — this is an interactive-dialectic skill with no automated
 test surface, so no ```verify block:
 
 - Dry-run on a toy requirement in an interactive session. Confirm:
-  - the written node passes `npx tsx packages/intentionsutil/scripts/validate-graph.ts`;
+  - the written node passes `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`;
   - it landed via `graph-commit` (visible on `origin/main`, not just
     locally committed);
   - any draft tactics from step 4 landed in the same commit and read back
