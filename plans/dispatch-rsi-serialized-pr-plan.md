@@ -1,9 +1,16 @@
 # Dispatch + RSI serialized PR plan
 
 **Written** 2026-08-14 · **Graph base** `da1c3c7f` (702 nodes)
-**Covers** all 72 open (`phase: null`) tactics in the dispatch-ladder / RSI /
-evaluation-machinery scope: defects, integrity issues, token-efficiency
-findings, ledger entries, and the feature/design nodes that resolve them.
+**Covers** all 94 open (`phase: null`) tactics in the dispatch-ladder / RSI /
+evaluation-machinery / **graph-plumbing** scope: defects, integrity issues,
+token-efficiency findings, ledger entries, and the feature/design nodes that
+resolve them.
+
+> **Revision 6 widened the scope** from 72 to 94. The original enumeration was
+> ledger-driven and caught every open `tactic-eval-finding-*` node, but missed
+> 32 graph read/write nodes that never produced a ledger entry — including
+> `tactic-graph-ref-split`, which is `phase: implement` and **replaces the write
+> path PR1 hardens**. Read Revision 6 before executing anything.
 
 ---
 
@@ -100,23 +107,36 @@ intact:
 
 ## Regrouped: 14 → 6 PRs (+1 deferred)
 
+*(Revision 6 revised this table: Bundle 1 grew, Bundle 1b and Bundle 7 are new.)*
+
 | # | Bundle | Was | Nodes | Risk |
 |---|---|---|---|---|
-| **1** | **Graph write path** | PR1 | 4 | HOT — *silent* failure |
+| **0** | **`graph-ref-split` decision** *(R6)* | — | 0 | no diff — settles Bundle 1's shape |
+| **1** | **Graph read/write path** | PR1 | 9 | HOT — *silent* failure |
+| **1b** | **Graph plumbing** *(R6)* | PR15 + PR16 | 11 | HOT — the closure toolchain |
 | **2** | **Tick-path reconcilers and sweeps** | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT — runs every tick |
 | **3** | **Dispatch runtime (cold)** | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD — realized at resumption |
 | **4** | **Instrument + finding surface** | PR3 + PR4 | 15 | COLD |
 | **5** | **RSI chain** | PR10 + PR11 + PR12 + PR14 | 10 | COLD |
 | **6** | **Skill rename** | PR13 | 1 | last, alone |
+| **7** | **Merge queue + scan cadence** *(R6)* | PR17 | 6 | COLD — before the sentinel comes off |
 | — | *deferred* | PR8 U3 | 1 | see below |
 | | *pre-PR sessions* | | 6 | no diff |
-| | **total** | | **72** | |
+| | **total** | | **94** | + 10 documented-not-assigned *(R6)* |
 
-**Bundle 1 stays alone and small even though it is only 4 nodes.** Its failure
-mode is a *silently dropped* node edit when local `main` is ahead — and
-supervision does not catch silent failures. Every other bundle's closing
-bookkeeping runs through it, so it lands first and gets verified by reading
-`git show origin/main:` rather than by trusting a verdict line.
+**Bundle 1 stays alone even at 9 nodes.** Its failure mode is *silent*: a
+dropped node edit when local `main` is ahead, a destroyed snapshot, an abandoned
+write reported as a content failure — and supervision does not catch silent
+failures. Every other bundle's closing bookkeeping runs through it, so it lands
+first and gets verified by reading `git show origin/main:` rather than by
+trusting a verdict line.
+
+**Bundle 1b is separate from Bundle 1 on purpose.** Both touch `graph-commit`,
+but Bundle 1 is correctness and Bundle 1b is simplification. Landing them
+together means a regression in the writer cannot be bisected against a known-good
+one — the same argument that keeps Bundle 1 alone. Bundle 1b is also the work
+most exposed to the Bundle 0 decision: if `graph-ref-split` lands, PR15 Units
+1–2 are subsumed rather than merely stale.
 
 **Bundle 3 is deliberately large (25 nodes).** Nothing invokes any of it while
 paused, so the cost of bundling is not a broken window — it is that the first
@@ -149,20 +169,36 @@ redistributes:
 
 ### Recommended order
 
+*(Revised by Revision 6. Step 0 is withdrawn — Revision 5 measured 0 mergeable
+node-lane PRs — and replaced by the `graph-ref-split` decision.)*
+
 ```
-0.  park open node-lane nodes  if main is meant to be frozen (see above)
-1.  Bundle 1           graph write path                      (HOT, silent)
-2.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
-3.  Bundle 4           instrument + finding surface          (unblocks 5)
-4.  Bundle 3           dispatch runtime                      (COLD, big)
-5.  Bundle 5           RSI chain
-6.  Bundle 6           skill rename                          (last, alone)
+0.  Bundle 0           graph-ref-split decision              (no diff, gates 1)
+1.  Bundle 1           graph read/write path                 (HOT, silent)
+2.  Bundle 1b          graph plumbing                        (HOT, toolchain)
+3.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
+4.  Bundle 4           instrument + finding surface          (unblocks 5)
+5.  Bundle 3           dispatch runtime                      (COLD, big)
+6.  Bundle 5           RSI chain
+7.  Bundle 6           skill rename                          (last, alone)
+8.  Bundle 7           merge queue + scan cadence            (COLD, pre-resume)
 --  staged resumption: sentinel off at max_concurrent_workers: 1, one node
 --  deferred: PR8 Unit 3, during an attended un-pause
 ```
 
 Bundles 3 and 4 can swap or overlap — they share no files. Bundle 4 before 3
 only because Bundle 5 depends on it.
+
+**Bundle 1b may be deferred but not skipped.** If the Bundle 0 decision defers
+`graph-ref-split`, PR16 (the closure toolchain) is worth landing at position 2 as
+shown; PR15 can slide later without cost since it is simplification, not
+correctness. If the decision is to land ref-split, re-scope both before starting.
+
+**Bundle 7 sits last deliberately, after the skill rename.** Everything in it is
+dormant while the sentinel holds, and it must be in place before the staged
+resumption — otherwise that resumption measures an unbounded scan cadence and a
+silent merge veto instead of measuring the fleet. It is the only bundle whose
+position is set by the resumption rather than by dependencies.
 
 ---
 
@@ -557,6 +593,136 @@ retention, the data those PRs actually need expires before they measure it.
 
 **Nothing blocks Bundle 1.** The pre-first-PR list is empty.
 
+*(Superseded on one item by Revision 6 below — the `graph-ref-split` decision
+returns to this list.)*
+
+---
+
+# Revision 6 — the graph-plumbing gap
+
+Triggered by the question *"are there any nodes that address graph reading or
+writing integrity or efficiency that are not part of this plan?"* There are 32.
+
+## What the enumeration missed, and why
+
+The sweep that produced this plan was **ledger-driven**: it enumerated dispatch
+and RSI findings, which in this graph means `tactic-eval-finding-*` nodes plus
+the design nodes that resolve them. Measured against the graph, that sweep was
+complete on its own terms — **every open `tactic-eval-finding-*` node is in this
+plan; zero were missed.**
+
+But the boundary it drew is narrower than the subsystem. Counting open
+(`phase: null`) nodes serving a graph strategy (`strategy-graph-native-dispatch`,
+`strategy-graph-integrity`, `strategy-graph-drives-dispatch`,
+`strategy-graph-self-description`):
+
+| | Count |
+|---|---|
+| In this plan | 38 |
+| **Not in this plan** | **149** |
+
+Most of that 149 is unrelated feature work. Filtering to nodes whose
+**statement** names a graph read or write path — `graph-commit`, `dump-node.ts`,
+`write-node.ts`, `validate-graph.ts`, `read-sensors.ts`, `park-node`,
+`clear-park`, `transition-node`, `graph-auto-merge`, `store.ts`, `schema.ts` —
+leaves **32**, none of them in the plan.
+
+These are not new. Creation dates span **2026-07-12 to 2026-08-14**, so this is
+a coverage gap, not a timing artifact of nodes written after the plan.
+
+It matters because PR1's own Context is the argument for it: *"Every other PR in
+this plan writes graph nodes to close its own tactics."* That sentence justifies
+PR1 existing. It justifies these 32 equally — they sit on the same path, and
+three of them lose data on it.
+
+## The discriminator: hot during the window, cold until resumption
+
+Revision 2 established that a paused fleet makes most ladder machinery cold. The
+same test sorts these, and it is the right test here because **the ad-hoc window
+drives every graph write by hand through exactly the hot set**:
+
+- **Hot** — the path an ad-hoc supervised session uses to close its own nodes:
+  `graph-commit`, the graph reads, the node-mutation scripts. All ~94 node
+  closures this plan prescribes run through it.
+- **Cold** — the path only an autonomous fleet uses: `graph-auto-merge`'s merge
+  queue, `dispatch-fleet-watch`'s alert cadence, `/qa-main`'s node lane. Dormant
+  while the sentinel holds.
+
+Hot defects are load-bearing for this window. Cold defects are load-bearing for
+the staged resumption.
+
+## One item returns to the pre-first-PR list
+
+Revision 5 concluded the pre-first-PR list is empty. That was correct on the
+evidence then available. It is now wrong on one item.
+
+**`tactic-graph-ref-split`** — `status: codified`, **`phase: implement`**, 37
+blockers — is the only in-flight node in the set, and appears nowhere in this
+plan:
+
+> Greenfield: the intention graph lands on a dedicated graph-main branch
+> validated by the write path alone (no CI stamp) — graph-commit becomes
+> plumbing-based CAS push against origin/graph-main, replacing the
+> CI-stamp/scratch-branch mechanic and the busy-main exhaustion it causes.
+
+**It replaces the write path PR1 hardens.** PR1's Units 1–4 and PR15 below all
+repair the CI-stamp/scratch-branch mechanic that ref-split deletes.
+
+Its companion node was created **2026-08-14** and asks exactly the question a
+freeze forces:
+
+> `tactic-graph-refsplit-blocker-audit` — Determine whether
+> tactic-graph-ref-split's 37 blockers encode real dependencies or a quiescence
+> requirement that never converges — and if the latter, what makes its cutover
+> incremental instead of one-sitting.
+
+**A development freeze is precisely such a quiescence.** This window is the most
+favorable condition ref-split will ever get, and simultaneously the window whose
+PRs it would invalidate. Decide before Bundle 1, not during it:
+
+| Decision | Consequence for this plan |
+|---|---|
+| **Ref-split lands first** | PR1 Units 1–4 and PR15 are largely moot; re-scope both against the CAS-push write path before writing code |
+| **Ref-split deferred past the window** | Plan proceeds as written; `tactic-graph-refsplit-read-coherence` stays parked with it |
+| **The 37 blockers are not real** | The audit's own finding — likely the largest single simplification available, and it reorders the bundles |
+
+This is a **decision session, not an implementation session**. Note that
+`/office-hours <node-id>` runs the graph-native lane over a *parked* node, and
+`tactic-graph-refsplit-blocker-audit` carries `office_hours: null` — park it with
+`park-node` first to use that lane, or run it as a plain ad-hoc analysis session.
+The prompt is in `plans/dispatch-rsi-pre-pr-sessions.md` as session 0.
+
+## New coverage
+
+22 of the 32 are assigned to PRs; 10 are documented and deliberately unassigned.
+
+| Where | Nodes | Why there |
+|---|---|---|
+| **PR1** (4 → 9) | +5 | data loss, abandoned writes, false parks, and the read-path root cause — hot, and every other PR depends on it |
+| **PR15** (new) | 4 | `graph-commit` structural simplification — hot but not correctness; gated on the ref-split decision |
+| **PR16** (new) | 7 | node-mutation scripts and schema validation — hot; the scripts every node closure runs |
+| **PR17** (new) | 6 | merge queue and scan cadence — **cold**; run before the staged resumption, not during the window |
+| deferred | 5 | the ref-split cluster (3) and scope-custody features (2) |
+| adjacent, not claimed | 5 | see below |
+
+**Deferred, with reasons:**
+
+- `tactic-graph-ref-split` — the decision above; not an implementation item here.
+- `tactic-graph-refsplit-blocker-audit` — *is* the decision session; no diff.
+- `tactic-graph-refsplit-read-coherence` — conditional on ref-split landing;
+  meaningless otherwise.
+- `tactic-node-scope-files-overlap-gate` — a selector feature gating co-dispatch;
+  needs a running fleet to exercise. Resumption work.
+- `tactic-scope-stamp-in-graph` — `office_hours`-parked. Unpark before planning.
+
+**Adjacent, surveyed and deliberately not claimed:**
+`tactic-qa-main-node-terminal-declaration`, `tactic-invalid-state-rc-f1c843b1`,
+`tactic-invalid-state-rc-fa3075ec` — all three are `/qa-main` node-lane paths
+that write job-dir markers instead of graph state. Genuine write-integrity
+defects, but `/qa-main` does not run while the sentinel holds, and they overlap
+PR12's four-lane surface. Also `tactic-session-reap-authorization-durability` and
+`tactic-park-cause-sensor-instrument` — both need a running fleet.
+
 ---
 
 ## Why not one PR
@@ -584,7 +750,12 @@ that are specific to this repo rather than general PR-size preference:
 ## Dependency order
 
 ```
-PR1  graph write-path integrity        ── unblocks everything (all node writes)
+DECISION  graph-ref-split: land, defer, or dissolve the 37 blockers   (R6)
+ │        ── settles the SHAPE of PR1 and PR15; no code
+ ▼
+PR1  graph read/write integrity (9)    ── unblocks everything (all node writes)
+ ├── PR15 graph-commit simplification  ── same file as PR1; after it
+ ├── PR16 node-mutation scripts        ── needs PR1 U4 + U8
  ├── PR2  ladder driver
  ├── PR3  audit instrument ───────────┐
  ├── PR4  finding write surface ──────┤
@@ -598,11 +769,21 @@ PR1  graph write-path integrity        ── unblocks everything (all node writ
         PR11 lens catalog       ◄─────┘ (needs PR3)
         PR12 intervention core  ◄─────── (needs PR11 + PR4)
         PR14 rsi prioritization + research lane
+        PR17 merge queue + scan cadence ── COLD; before the sentinel comes off
         PR13 dispatch skill rename ── LAST, alone
 ```
 
 PR2 and PR5–PR9 are mutually independent and may run in any order or in
 parallel once PR1 lands. PR1 is the only universal prerequisite.
+
+**The three PRs Revision 6 added** slot in as follows. **PR15** edits the same
+file as PR1 and must follow it, and is the PR most exposed to the ref-split
+decision — do not start it before that decision. **PR16** repairs the scripts
+every node closure in this plan runs, so it is worth landing early despite
+depending on two PR1 units. **PR17 is cold**: nothing in it fires while the
+sentinel holds, so it belongs immediately **before the staged resumption**, not
+in the window — a resumption run against an unbounded scan cadence and a silent
+merge veto measures the defects rather than the fleet.
 
 The four `blocked_by` edges landed in `da1c3c7f` are honored:
 `audit-threshold-table → trigger-threshold-gate → session-sweep-trigger →
@@ -616,11 +797,18 @@ align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
 
 ## Pre-PR sessions (no diff)
 
-Six in-scope nodes produce no code. Each is listed against the PR it gates,
-with the prompt that starts it. **Run these before opening the PR they gate.**
+Seven sessions produce no code. Each is listed against the PR it gates, with the
+prompt that starts it. **Run these before opening the PR they gate.** The full
+prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
+
+> Six of these sessions' nodes are counted in the 94. Session 0's node,
+> `tactic-graph-refsplit-blocker-audit`, is counted instead among Revision 6's
+> 10 documented-not-assigned, because it is the ref-split cluster's decision
+> step rather than in-scope work of its own.
 
 | Run before | Node | Session prompt |
 |---|---|---|
+| **PR1** *(R6)* | `tactic-graph-refsplit-blocker-audit` | ad-hoc decision session — land, defer, or dissolve `tactic-graph-ref-split`'s 37 blockers. See `plans/dispatch-rsi-pre-pr-sessions.md` §0 |
 | PR6 | `tactic-review-sitting-code-review-lock-design` | `/office-hours tactic-review-sitting-code-review-lock-design` |
 | PR7 | `tactic-dispatch-observation-masking` | `/rsi-audit 7d` then record the masking measurement on the node |
 | PR7 | `tactic-dispatch-cache-preserving-context` | `/rsi-audit 7d` — read `hit_ratio` (shipped, `aggregate-usage.sh:1211`) and record the baseline before changing prompt-prefix handling |
@@ -647,17 +835,29 @@ verification path; the failure mode is silent data loss.
 
 ### Context
 
-Every other PR in this plan writes graph nodes to close its own tactics. Four
-open findings say that write path can silently lose an edit, can be blocked
-repo-wide by an unrelated node, and cannot express a forward reference. Fixing
+Every other PR in this plan writes graph nodes to close its own tactics. Nine
+open findings say that write path can silently lose an edit, can destroy the
+writer's own content, can abandon a write on a GitHub reporting artifact, can
+turn a transient `npx` failure into a fleet-wide park storm, can be blocked
+repo-wide by an unrelated node, and cannot express a forward reference — and
+that the **read** path can report a vacuous pass against the wrong tree. Fixing
 them first makes every subsequent PR's bookkeeping trustworthy.
 
-### Nodes closed (4)
+> **Gated on the ref-split decision** (Revision 6). If
+> `tactic-graph-ref-split` lands first, Units 1–4 target a mechanic it deletes.
+> Settle that before writing code here.
+
+### Nodes closed (9)
 
 - `tactic-eval-finding-noop-verdict-hides-dropped-node-edit`
 - `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`
 - `tactic-eval-finding-eval-finding-forward-crossref-fails-ci`
 - `tactic-eval-finding-origin-main-data-test-blocks-atomic-schema-tightening`
+- `tactic-graph-commit-orphan-refusal-misattributed-content-failure` *(R6)*
+- `tactic-graph-commit-snap-dir-merge-clobbers-original` *(R6)*
+- `tactic-graph-commit-merge-npx-park-storm` *(R6)*
+- `tactic-explicit-ref-graph-reads` *(R6)*
+- `tactic-demote-node-stale-local-read` *(R6)*
 
 ### Scope
 
@@ -702,15 +902,103 @@ explicitly-marked smoke assertion against live `origin/main`.
 > dropping `attributes.ledger_entry` from 40 nodes tightens nothing. Unit 4 is
 > worth doing on its own merits, not as a PR4 prerequisite.
 
+**Unit 5 — an ORPHANED check row is misreported as a content failure, and the
+write is abandoned.** `packages/intentionsutil/scripts/graph-commit:1830-1837`
+(verified). `await_checks()` returns rc `2` for two different situations that
+its own header comment already distinguishes: a required check that **concluded
+non-success** (deterministic — the content fails CI, do not retry) and a
+required check that is **ORPHANED** — no conclusion, parent check suite already
+finished, so no verdict will ever arrive. Collapsing them means a GitHub
+reporting artifact reaches the operator as *"the commit content fails CI; not
+retrying (fix the content and re-run)"* — the one remedy that cannot work —
+while the remedy that does work (re-push, which mints a fresh check suite) is
+never attempted and **the graph write is abandoned**.
+
+Fix: split rc `2` into content-failure and orphaned-suite, and route the
+orphaned case to a bounded re-push rather than a refusal. The two conditions are
+already kept separate at the query layer (`:1888`, the `.check_suite.id` fourth
+field resolved via `check_suite_concluded()`); only the return code collapses
+them. Out of scope: the #2457 populated-conclusion-behind-stale-status desync,
+which is a third case and already handled.
+
+**Unit 6 — the merge path destroys the writer's own pre-merge content.**
+`packages/intentionsutil/scripts/graph-commit:793` (in `check_base_freshness()`)
+and `:1203-1206` (in `replay_snapshot_onto_base()`) (verified). Both write
+`run_merge_node`'s output over `SNAP_DIR/<id>.md`, which held the writer's
+original unlanded content. On a later park for a **different** id in the same
+multi-id batch, `park_write()`'s recovery text points the human at
+`SNAP_DIR/<id>.md` claiming it holds their unlanded content, when it now holds
+graph-commit's own already-landed merge result.
+
+Fix: write merge output to a distinct path and leave `SNAP_DIR/<id>.md`
+immutable for the life of the run, so the park recovery text stays true. This is
+the highest-severity item in the PR: it is silent, it destroys author content,
+and the recovery instructions actively mislead.
+
+**Unit 7 — a transient `npx` failure becomes a fleet-wide park storm.**
+`packages/intentionsutil/scripts/graph-commit:995` (verified) — `run_merge_node()`
+shells out to `npx tsx "$MERGE_NODE_SCRIPT"`, and far-ahead replay now routes
+**every** divergent node through it. When `npx` cannot run at all (sandbox
+`EROFS`, cold cache, registry outage) the crash is indistinguishable from an
+unresolvable divergence, so each node is pushed to `main` as an `office_hours`
+park instead of failing with a clear environment error.
+
+Fix: distinguish "the merger ran and could not resolve" from "the merger could
+not start". Only the former is a park; the latter is an environment error that
+dies loudly (`.claude/rules/code-style.md` — clear errors over defensive
+fallbacks). Note the same doomed-spawn shape is already called out in a comment
+at `:764`.
+
+**Unit 8 — graph reads resolve their tree from cwd or script location, so a
+wrong-directory invocation reports a vacuous pass.** Four readers disagree,
+all verified:
+
+| Reader | Roots from | Anchor |
+|---|---|---|
+| `dump-node.ts` | script location (`import.meta.url`) | `:38` |
+| `write-node.ts` | script location (`import.meta.url`) | `:21` |
+| `validate-graph.ts` | **cwd**, defaulting to `"intentions"` | `:73` |
+| `demote-node-to-implement` | script location (`SCRIPT_DIR/../../..`) | `:53` |
+| `graph-commit` | `-C` flag, else **cwd** | `:406` region |
+
+So a read or verify invoked from the wrong directory silently targets the wrong
+tree, and `validate-graph.ts` in particular can report a **vacuous pass** —
+against a directory that does not exist or is not the graph. This is the general
+form of the read-path defect this plan already carries one symptom of
+(`tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land`, PR4).
+
+Fix: make the tree/ref an **explicit required argument** on every read, with no
+cwd or script-location default. Additionally give `demote-node-to-implement` an
+`origin/main` refresh before it reads (it already fetches at `:69` but reads its
+own checkout). Out of scope: changing what any reader does once it has the right
+tree.
+
+> Both nodes here — `tactic-explicit-ref-graph-reads` and
+> `tactic-demote-node-stale-local-read` — describe this same defect, one in
+> general terms and one naming the specific readers. They are closed together by
+> one unit deliberately; do not plan them as two.
+
 ### Dependencies
 
-None. This is the root PR.
+None in code — this is the root PR.
+
+**One decision precedes it:** the `tactic-graph-ref-split` question in Revision
+6. Units 1–4 repair the CI-stamp/scratch-branch write mechanic that ref-split
+replaces with a CAS push against `origin/graph-main`. Units 5–8 survive either
+way (Unit 5's check handling, Unit 6's snapshot immutability, Unit 7's merger
+error class, and Unit 8's read-path explicitness are all independent of which
+ref the graph lands on).
 
 ### Reuse
 
 - `isPlainObject`, `validateNode` — `packages/intentionsutil/src/schema.ts`.
 - Existing fixture-graph builders in `packages/intentionsutil/test/` (`anode()`
   at `office-hours.test.ts:54` builds a full `IntentionNode` fixture).
+- `check_suite_concluded()` — `graph-commit`, already resolves the orphaned-suite
+  condition Unit 5 needs; the information is present, only the return code
+  collapses it.
+- `test-park-node.sh` and the other `packages/intentionsutil/test/test-*.sh`
+  shell harnesses — the pattern for Units 5–8's script-level coverage.
 
 ### Verification
 
@@ -723,15 +1011,35 @@ npm test --prefix packages/intentionsutil
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
-Manual: with a deliberately unpushed local commit on `main`, run a
-`graph-commit` that edits an existing node and confirm the verdict is not
-`landed context=noop` and the edit is present at `origin/main`.
+Manual, one per unit — none of these is covered by the suites above:
+
+- **Unit 1** — with a deliberately unpushed local commit on `main`, run a
+  `graph-commit` that edits an existing node; confirm the verdict is not
+  `landed context=noop` and the edit is present at `origin/main`.
+- **Unit 5** — cannot be provoked on demand (it needs GitHub to orphan a check
+  row). Verify by unit-testing the rc mapping directly: assert that a concluded
+  non-success and an orphaned suite produce **different** return codes, and that
+  the orphaned path attempts a re-push.
+- **Unit 6** — run a multi-id batch where one id merges cleanly and a second
+  parks. Confirm `SNAP_DIR/<first-id>.md` still holds the writer's pre-merge
+  content, byte-for-byte, after the run, and that the park recovery text names a
+  file whose contents match what the writer intended to land.
+- **Unit 7** — force the failure with `PATH` stripped of `npx` (or
+  `MERGE_NODE_SCRIPT` pointed at a nonexistent file) on a divergent node.
+  Confirm the run dies with an environment error and that **no** `office_hours`
+  park reaches `origin/main`.
+- **Unit 8** — run `validate-graph.ts` from a directory with no `intentions/`
+  and confirm it now fails with a clear error instead of passing vacuously.
 
 ### Closing the nodes
 
-After merge, for each of the 4 ids set `phase: done` and
+After merge, for each of the 9 ids set `phase: done` and
 `execution.resolved_by: <merge sha>` via `dump-node.ts` → jq → `write-node.ts`
 → `graph-commit -C <path>`.
+
+> Close `tactic-explicit-ref-graph-reads` and
+> `tactic-demote-node-stale-local-read` in the **same** batch — Unit 8 satisfies
+> both, and closing one alone leaves a duplicate open against a fixed defect.
 
 ---
 
@@ -1871,6 +2179,361 @@ anti-thrash check refuses a second boost inside the same window.
 
 ---
 
+# PR15 — `graph-commit` structural simplification *(added by R6)*
+
+**Recommended model: opus** — restructures the writer whose failure mode is
+silent data loss, on the same file PR1 edits.
+
+### Context
+
+PR1 fixes what `graph-commit` gets *wrong*. This PR removes machinery it does
+not need: a `worktree` writer default that lets unrelated dirt in any checkout
+block a graph write, a rebase that exists only to manufacture a conflict for a
+merger that is already git-independent, a no-op short-circuit too narrow to fire
+when it should, and an invocation shape the auto-mode classifier false-denies.
+
+None of these is a correctness defect, so none is in PR1. All four are on the
+**hot** path — the writer every node closure in this plan runs.
+
+> **Gated on the ref-split decision** (Revision 6), harder than PR1 is. If
+> `tactic-graph-ref-split` lands, `graph-commit` becomes a plumbing-based CAS
+> push and Units 1–2 here are subsumed by that work rather than merely stale.
+> **Do not start this PR before that decision.**
+
+### Nodes closed (4)
+
+- `tactic-graph-commit-plumbing-default`
+- `tactic-graph-commit-direct-three-way-merge`
+- `tactic-graph-commit-invocation-classifier-bypass`
+- `tactic-graph-commit-noop-shortcircuit-head-behind`
+
+### Scope
+
+**Unit 1 — flip the writer default to plumbing.**
+`packages/intentionsutil/scripts/graph-commit:406` (verified) —
+`GRAPH_COMMIT_WRITER="${GRAPH_COMMIT_WRITER:-worktree}"`. Flip the default to
+`plumbing` for every caller and delete the then-inert dirty-tree pre-flight
+guard, so unrelated dirt in any checkout can neither block nor corrupt a graph
+write. A comment at `:875` already notes the guard is "a no-op whenever
+`GRAPH_COMMIT_WRITER` is left at its `worktree` default" — that dependency
+inverts once this lands, so read it before deleting.
+
+**Unit 2 — replace the rebase with a direct three-way merge.** The rebase exists
+**only to produce a conflict** that layer 2 then unwinds in order to call
+`merge-node.ts` — a merger that already takes `--base`/`--ours`/`--theirs` as
+plain paths and is git-independent (`run_merge_node()`, `graph-commit:989-995`,
+verified). Call the merger directly and delete the conflict-production path.
+
+Sequencing is fixed by the node's own rationale: this is *"the remaining
+structural simplification once the plumbing default lands"*. **Unit 1 before
+Unit 2, in this PR.**
+
+**Unit 3 — shape the invocation to the `allowedTools` matcher.** Give
+`graph-commit` a form the matcher can prefix-match (a `-C` flag, no `cd`
+compound) and add it to `permissions.allow`, so the auto-mode classifier never
+false-denies the sole main-landing graph-write path. See
+`.claude/rules/sandbox.md` — "Command pattern matching" — for the matcher's
+known failure shapes; `graph-commit` is already called out there as the
+exception that *requires* `-C`.
+
+**Unit 4 — widen the no-op short-circuit.**
+`packages/intentionsutil/scripts/graph-commit:2077` and `:3643-3659` (verified).
+The short-circuit fires only on strict `HEAD == origin/main` SHA equality, so a
+checkout strictly **behind** `origin/main` with nothing staged still runs the
+full landing cycle — holding the landing lock for no benefit even though content
+parity is already proven. Fix: short-circuit on proven content parity, not SHA
+identity. The `:2066` comment records that the current scoping is deliberate;
+preserve the reason it gives while widening the condition.
+
+### Dependencies
+
+**PR1** — same file, and PR1's units are correctness fixes that should land
+first so a regression here is bisectable against a known-good writer.
+
+Plus the ref-split decision, above.
+
+### Reuse
+
+- `run_merge_node()` — `graph-commit:989`. Unit 2 calls it directly rather than
+  through a manufactured conflict.
+- `.claude/rules/sandbox.md` "Command pattern matching" — the matcher rules Unit
+  3 must satisfy.
+
+### Verification
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+```verify
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
+
+Manual: with a deliberately dirty unrelated file in the checkout, run a
+`graph-commit` and confirm it lands (Unit 1). From a checkout reset one commit
+behind `origin/main` with nothing staged, confirm the run short-circuits without
+taking the landing lock (Unit 4). Confirm the `graph-commit` invocation is
+auto-approved rather than prompting (Unit 3).
+
+### Closing the nodes
+
+After merge, for each of the 4 ids set `phase: done` and
+`execution.resolved_by: <merge sha>`.
+
+---
+
+# PR16 — Node-mutation scripts and schema validation *(added by R6)*
+
+**Recommended model: sonnet** — mostly mechanical: one extraction, one ordering
+fix, two test-harness improvements, one arg-parser, one schema tightening. Unit
+6's data backfill is the only part needing care.
+
+### Context
+
+These are the scripts an ad-hoc session runs to close a node: `park-node`,
+`clear-park`, `transition-node`, `read-sensors.ts`, and the validator behind
+them. One of them silently discards an uncommitted body edit; one pair carries
+duplicated `--base` logic that has already drifted once; one accepts any
+argument and then writes unconditionally.
+
+**Hot** — this PR repairs the tools this plan's own bookkeeping depends on.
+
+### Nodes closed (7)
+
+- `tactic-transition-node-needs-main-residue-clobbered`
+- `tactic-park-node-clear-park-base-pin-dedup`
+- `tactic-read-sensors-arg-rejection-check-mode`
+- `tactic-attributes-phase-squatter-retire`
+- `tactic-orphaned-delegation-records-reading`
+- `tactic-transition-node-scope-stale-test-coverage`
+- `tactic-test-park-node-deps-precondition-guard`
+
+### Scope
+
+**Unit 1 — `transition-node` clobbers an uncommitted body edit before reading
+it.** `transition-node`'s unconditional `origin/main` refresh of
+`intentions/<id>.md` overwrites a working-tree body edit before it is ever read,
+so `/qa-fix`'s `## needs-main residue` append never reaches `origin/main` and the
+`review → main-qa` routing it exists to drive never fires. Fix: read the working
+tree first, or refuse to refresh over an uncommitted edit rather than discarding
+it (`.claude/rules/code-style.md` — clear errors over silent fallbacks).
+
+*(Anchor from node body — re-locate. `demote-node-to-implement:217` shows the
+same `git show origin/main:… > file` shape and is the closest verified analogue.)*
+
+**Unit 2 — extract the duplicated `--base` pin resolution.** `park-node` and
+`clear-park` carry byte-identical `--base` pin-resolution blocks — manifest-file
+branch, `<id>=<sha>` pair branch, bare-sha branch, 40-hex validation, and the
+`BASE_SUPPLIED` empty-value guard. They have already drifted once in spirit: the
+guard had to be hand-applied to both call sites. Extract one sourced helper both
+scripts call.
+
+> **`lib.sh` constraint** — `.claude/skills/dispatch-propagate/scripts/lib.sh`
+> must stay copyable standalone; adding a new `source` to it turns ~17 CI
+> fixtures red while staying green locally. Put the helper in a **new** file the
+> two scripts source directly, not in `lib.sh`.
+
+**Unit 3 — `read-sensors.ts` accepts any argument, then writes.**
+`packages/intentionsutil/scripts/read-sensors.ts:1719` (verified) — `main()`
+parses only `process.argv.includes("--report")` and silently drops every other
+argument, then runs an **unconditional write pass** against the `intentions/` of
+whichever checkout the script file lives in. Fix: reject unrecognized arguments,
+and add a no-write `--check` mode.
+
+> This compounds with PR1 Unit 8: the script both ignores what you asked for and
+> resolves its own tree. Land PR1 first so the tree half is already explicit.
+
+**Unit 4 — retire the `attributes.phase` squatter.** Backfill the 6 remaining
+`phase: null` + `attributes.phase: main-qa` nodes to first-class `phase`, delete
+the squatter fallback readers, and make `validate-graph` **reject** any
+`attributes.phase` key so the misroute class cannot recur.
+
+> `attributes` is `Record<string, unknown>` (`schema.ts:244`), so this is a real
+> schema tightening — unlike PR4's ledger retirement. It therefore **does** trip
+> the origin/main data test, which is exactly what **PR1 Unit 4** fixes. PR1
+> before this unit, not optional.
+
+**Unit 5 — decide the fate of `readDelegationRecordsReading`.**
+`read-sensors.ts`'s `readDelegationRecordsReading` is unreachable from production
+code (superseded by two per-strategy reading functions landed on
+`tactic-first-sensor-pass`), but it is **the only code implementing a doctrine
+rule** — excluding declined delegation records from unexercised counts for
+`strategy-exercise-recovery-paths`. Deleting it silently drops the rule.
+
+This unit needs an **author decision** before code: does the rule still govern
+the new readings? If yes, port it and delete the dead function. If no, record
+that on the node and delete. Do not delete without deciding — that is the
+failure mode the node exists to prevent.
+
+**Unit 6 — `transition-node` scope-stale test coverage.** Add shell-level
+coverage for two behaviors: (a) a scope-stale `main-qa` node transitions to
+`done` rather than being demoted to `implement`; (b) the scope-fingerprint stamp
+is read and refreshed at the **main-checkout root**, not the invoking PR-branch
+worktree, when `transition-node` runs with cwd inside a nested
+`.claude/worktrees/<id>`.
+
+**Unit 7 — `test-park-node.sh` precondition guard.** Fail fast with a clear
+"install dependencies first" error when the harness root has no `node_modules`,
+instead of dangling a symlink into every clone and surfacing the missing
+precondition as an opaque `tsx ERR_MODULE_NOT_FOUND` inside one unrelated-looking
+case.
+
+### Dependencies
+
+**PR1** — Unit 4 here is red-by-construction until PR1 Unit 4 lands, and Unit 3
+assumes PR1 Unit 8's explicit-tree reads.
+
+### Reuse
+
+- `dump-node.ts` → jq → `write-node.ts` → `graph-commit` — the closure pipeline
+  Unit 4's backfill uses (`plans` §"Closing nodes after each merge").
+- `packages/intentionsutil/test/test-*.sh` — the existing shell harness pattern
+  for Units 6 and 7.
+
+### Verification
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+```verify
+npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+```verify
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
+
+> The `validate-graph.ts` fence passes an **explicit** `intentions` argument.
+> Before PR1 Unit 8 that is merely good practice; after it, it is required.
+
+Manual: run `read-sensors.ts --nonsense` and confirm it exits non-zero without
+writing (Unit 3). Confirm `grep -rn 'attributes\.phase' intentions/` returns zero
+hits after the backfill (Unit 4). Run `test-park-node.sh` in a clone with no
+`node_modules` and confirm the error names the missing precondition (Unit 7).
+
+### Closing the nodes
+
+After merge, for each of the 7 ids set `phase: done` and
+`execution.resolved_by: <merge sha>`. Unit 5's node closes with the author's
+decision recorded in its body **whichever way the decision goes**.
+
+---
+
+# PR17 — Merge queue and scan cadence *(added by R6)*
+
+**Recommended model: sonnet** — bounded, independent efficiency and
+observability fixes; no shared state between units.
+
+### Context
+
+These six are **cold**: they sit on the autonomous-fleet path —
+`graph-auto-merge`'s merge queue, `dispatch-fleet-watch`'s alert cadence, the
+scratch-ref cleanup a killed writer skips. None of them fires while the pause
+sentinel holds, so none is load-bearing for the ad-hoc window.
+
+They **are** load-bearing for the staged resumption, which is where this plan's
+first trustworthy fleet data comes from. A resumption run against an unbounded
+scan cadence and a silent merge veto produces measurements of the defects rather
+than of the fleet.
+
+**Run this PR after the window's hot work and before the sentinel comes off.**
+
+### Nodes closed (6)
+
+- `tactic-graph-auto-merge-office-hours-hold-observability`
+- `tactic-graph-auto-merge-behind-arm-out-of-band`
+- `tactic-hold-alerts-unbounded-scan-cadence`
+- `tactic-hold-alerts-uncapped-alert-rows`
+- `tactic-graph-scratch-ref-leak`
+- `tactic-graph-digest-quality-followups`
+
+### Scope
+
+**Unit 1 — the `office_hours` hold is a silent, unbounded merge veto.**
+`graph-auto-merge` declines to merge any node carrying `office_hours`, and
+reports nothing. Surface held-for-office-hours counts to the tick's alarm/health
+signal and escalate a node held across many consecutive ticks, so a mass or stuck
+park cannot silently drain the node-lane merge queue.
+
+This is the node-lane analogue of a finding this plan already accepts: Revision
+5 measured the queue at **0 mergeable, 2 parked** — a state that is currently
+invisible unless someone queries it by hand.
+
+**Unit 2 — decide what `behind` means.** A PR head that is already an ancestor of
+`main` — commits landed out of band — is currently routed into the sync arm,
+where the update-branch call is an empty-diff no-op that the mergeable gate then
+silently declines. Decide the correct disposition (most likely: recognize it as
+already-landed and close the PR) and implement it.
+
+**Unit 3 — cap the hold-alert scan cadence.**
+`packages/intentionsutil/scripts/list-unclaimed-hold-alerts.ts` (`:113`, calling
+`listUnclaimedHoldAlerts` from `src/hold-alerts.ts:91` — both verified). Its
+full-graph `resolveAttention` scan runs on `dispatch-fleet-watch`'s **5-minute**
+timer even though the predicate's own threshold is a **24-hour** age bound —
+~288 redundant full-store scans/day, growing with the graph. Fix: run it on a
+cadence proportional to its own threshold.
+
+**Unit 4 — cap the alert rows.** `listUnclaimedHoldAlerts` has no cap on rows
+returned, so a backlog of unclaimed manual holds against a few high-attention
+sources scales both the per-pass claim-probe count and the pushed alarm-node body
+size without limit. A `topK` parameter already exists at the call site
+(`list-unclaimed-hold-alerts.ts:113`) — make it binding rather than advisory, and
+report what was dropped rather than truncating silently.
+
+**Unit 5 — stop leaking scratch refs.** Sweep origin's orphaned
+`refs/heads/graph/*` scratch branches, and close the reason writers keep leaking
+them: cleanup is a best-effort `EXIT`-trap step that a killed or hard-failing
+writer never reaches. A trap is the wrong mechanism for a guarantee — move the
+sweep to the next writer's startup, where it runs unconditionally.
+
+**Unit 6 — `graph-digest.ts` quality follow-ups.** Deferred from the
+`tactic-graph-digest-tooling` review (#2865): bound NEAR-DUP and CLOSURE below
+O(n²), add stop-word filtering to near-dup tokens, tie STORED-DEFAULTS to schema
+defaults, factor the repeated table render/truncation shape, and validate that
+`DigestInput` bodies/rawTexts are keyed 1:1 with nodes.
+
+At 702 nodes the O(n²) passes are the binding cost; do that sub-unit first and
+measure before deciding how much of the rest is worth doing.
+
+### Dependencies
+
+**PR1** — for trustworthy node closure, as with every PR here. Nothing else;
+Units 1–6 are mutually independent and may be split if the PR runs large.
+
+Unit 1 overlaps PR5's reconciler surface only conceptually, not in code.
+
+### Reuse
+
+- `listUnclaimedHoldAlerts`'s existing `topK` option
+  (`src/hold-alerts.ts:91`) — Unit 4 makes it binding rather than adding a
+  parameter.
+- The tick alarm/health signal PR2 touches — Unit 1 emits into it.
+
+### Verification
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+```verify
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
+
+Manual: park a node in the node lane and confirm the hold now appears in the
+tick's health output rather than silently vetoing the merge (Unit 1). Time
+`graph-digest.ts` against the full 702-node graph before and after Unit 6 and
+record both numbers on the node — this PR's only measurable claim.
+
+### Closing the nodes
+
+After merge, for each of the 6 ids set `phase: done` and
+`execution.resolved_by: <merge sha>`.
+
+---
+
 ## Closing nodes after each merge
 
 Because these PRs bypass the ladder, **no transition happens automatically.**
@@ -1902,11 +2565,11 @@ Five hazards on this path, each of which has bitten before:
 
 ## Coverage
 
-All **72** in-scope open tactics are assigned; none appears twice.
+All **94** in-scope open tactics are assigned; none appears twice.
 
 | PR | Nodes | Surface |
 |---|---|---|
-| PR1 | 4 | `graph-commit`, `schema.ts`, `sensors.ts`, `office-hours.test.ts` |
+| PR1 | 9 | `graph-commit`, `schema.ts`, `sensors.ts`, `office-hours.test.ts`, `dump-node.ts`, `validate-graph.ts` |
 | PR2 | 9 | `dispatch-ladder-{run,advance,await}` |
 | PR3 | 9 | `aggregate-usage.sh`, `stamp-dispatch-session.sh` |
 | PR4 | 6 | `dispatch-eval-finding`, `schema.ts`, `graph-census-debt.ts` |
@@ -1920,5 +2583,18 @@ All **72** in-scope open tactics are assigned; none appears twice.
 | PR12 | 1 | four invalid-state lanes |
 | PR13 | 1 | repo-wide rename |
 | PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
+| PR15 *(R6)* | 4 | `graph-commit` — writer default, merge path, invocation, short-circuit |
+| PR16 *(R6)* | 7 | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph` |
+| PR17 *(R6)* | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
 | pre-PR sessions | 6 | no diff |
-| **total** | **72** | |
+| deferred *(R6)* | 5 | ref-split cluster (3) + scope-custody features (2) |
+| adjacent, unclaimed *(R6)* | 5 | `/qa-main` node lane (3) + fleet-dependent (2) |
+| **total** | **94** | + 10 documented-not-assigned |
+
+**Revision 6 delta:** +22 assigned (5 into PR1, plus PR15/PR16/PR17), +10
+documented but deliberately unassigned. The 32 nodes it surveyed were all open
+and none was in the plan before; creation dates span 2026-07-12 to 2026-08-14.
+
+Of the 94, **26 are on the graph read/write path** (PR1's 9, PR15's 4, PR16's 7,
+PR17's 6) — the largest single surface in the plan, and the one every other PR's
+bookkeeping runs through.
