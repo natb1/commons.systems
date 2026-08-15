@@ -32,8 +32,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: pr1-graph-write-path
+  pr: 3095
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-15T15:45:21Z
+    mergeCommitSha: fe0b1c4d27973922957f4a173c9a44042a31b8f8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -76,3 +88,32 @@ passes `intentions` explicitly and needs no change.
   correct one (clarification 86).
 - `check-node-selection.ts` (required `--dir`) and `compute-freshness.ts`
   (explicit `--snapshot`/`--stamp`) — already converted; do not re-do.
+
+## Implementation record
+
+Shipped in PR #3095, squash-merged to `main` as `fe0b1c4d`, under
+`strategy-graph-native-dispatch` clarification **242**, shape **(a)**: the tree
+is a required explicit argument, never inferred from cwd or from the script's
+own on-disk location.
+
+Four files, as scoped — `validate-graph.ts` (store as a required positional),
+`dump-node.ts` and `write-node.ts` (`--dir <intentions-dir>`), and `clear-park`
+(`-C <repo-root>`). Every executable caller was converted with them, and
+`packages/intentionsutil/test/reader-required-dir.test.ts` pins the four
+refusals by spawning the real CLIs.
+
+`demote-node-to-implement` was deliberately **excluded**. Clarification 242
+removed it from this node's scope and clarification 243 rules its correct shape
+separately, so it remains open on `tactic-demote-node-stale-local-read`, which
+stays `raw` and blocked. Nothing here should be read as having fixed it.
+
+### Residual, found in post-merge QA and not fixed here
+
+The vacuous-pass hole is closed for the two cwd-driven cases that caused it: a
+missing store argument and a path that does not exist both exit 2. It is **not**
+closed for a directory that exists but holds no nodes — that still prints
+`ok — 0 nodes` and exits 0. `validate-graph.ts`'s own docstring (`:111`,
+*"Validating \"nothing\" is never a pass"*) therefore overstates what landed;
+`main()` guards the path with an existence/is-a-directory check only, and there
+is no zero-node guard. A follow-up should either add that guard or narrow the
+docstring to the contract the code actually keeps.
