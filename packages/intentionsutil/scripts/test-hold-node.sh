@@ -79,6 +79,13 @@ mkdir -p "$SEED/intentions" \
 for f in hold-node hold-node-decide.ts write-node.ts dump-node.ts; do
   cp "$HARNESS_DIR/$f" "$SEED/packages/intentionsutil/scripts/$f"
 done
+# Sibling script-level libraries the copied scripts import relatively — e.g.
+# write-node.ts → ./lib-strategy-stamp.js, the one implementation of the
+# --strategy-fingerprint/--strategy-sha flags and the stamp merge. Copy the
+# whole `lib-*.ts` glob rather than cherry-picking names: a missing sibling
+# surfaces only as an ERR_MODULE_NOT_FOUND deep inside a case, which reads as a
+# behavior failure rather than a fixture gap.
+cp "$HARNESS_DIR"/lib-*.ts "$SEED/packages/intentionsutil/scripts/"
 chmod +x "$SEED/packages/intentionsutil/scripts/hold-node"
 # The real store/schema: every file under src/ is a same-package relative
 # import (only the npm "yaml" package is external, resolved via the
