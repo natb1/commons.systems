@@ -2,7 +2,9 @@
 
 **Written** 2026-08-14 · **Revised** 2026-08-15 (**Revision 8**) · **Graph
 base** `063b3df2`
-**Covers** all 112 open (`phase: null`) tactics in the dispatch-ladder / RSI /
+**Covers** all 117 open (`phase: null`) tactics — 112 enumerated through
+Revision 7, plus PR1's five residuals filed as `920492be` *(R8)* — in the
+dispatch-ladder / RSI /
 evaluation-machinery / **graph-plumbing** / **`/align`-charter** scope: defects,
 integrity issues, token-efficiency findings, ledger entries, and the
 feature/design nodes that resolve them.
@@ -1270,8 +1272,9 @@ Merged as **`fe0b1c4d` — "pr1: graph write-path integrity (#3095)"**,
 `1192d6f8` and `063b3df2`; two implementation-record notes landed in
 `063b3df2`. The full plan text was removed once the merge was verified — this
 index remains because later sections cite these units by number. Errata:
-Revision 7 → "PR1 errata". Residuals (four items, none yet filed as nodes):
-Revision 8.
+Revision 7 → "PR1 errata". Residuals: Revision 8 — five items, **all now filed
+as nodes** on `main` as `920492be`, routed to PR4 Unit 8, PR16 Units 9–11 and
+PR20 Unit 8.
 
 | Unit | What shipped |
 |---|---|
@@ -1552,7 +1555,7 @@ and five writers collapsing into one.
 explicit `## What is retired` / `## Out of scope` split — read it first; it is
 authoritative and this section summarizes it.
 
-### Nodes closed (6)
+### Nodes closed (7)
 
 - `tactic-eval-finding-ledger` *(doctrine + migration; do first)*
 - `tactic-finding-search-all-producers`
@@ -1560,6 +1563,12 @@ authoritative and this section summarizes it.
 - `tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land`
 - `tactic-eval-finding-skipped-locked-exit-zero-chained-caller-proceeds`
 - `tactic-duplicate-finding-sensor` *(blocked_by the first — do last)*
+- `tactic-graph-prose-ref-batch-wiring` *(Unit 8 — PR1 residual, R8)*
+
+> **Unit 8's node was filed after the fact** *(R8)*. PR1's closing batch could
+> not carry a `create` (see the `--base` hazard in §"Closing nodes after each
+> merge"), so it landed separately on `main` as `920492be`. It is `owner: ai`,
+> `status: raw`, unparked and unblocked.
 
 ### Scope
 
@@ -3318,7 +3327,7 @@ one case with **no downstream reader**. "The interview is the audit." An
 `/align-tactics` subtree gets read again at plan, implement, PR review and QA; a
 strategy record does not.
 
-### Nodes closed (7)
+### Nodes closed (8)
 
 - `tactic-align-review-skill`
 - `tactic-align-strategy-new-steps-revision`
@@ -3327,6 +3336,8 @@ strategy record does not.
 - `tactic-align-tactics-immaterial-drift-redirect`
 - `tactic-validate-graph-ordering-inversion-lint`
 - `tactic-align-tactics-premise-preflight`
+- `tactic-align-tactics-migration-tightening-split` *(Unit 8 — PR1 residual, R8;
+  filed after the fact, landed on `main` as `920492be`)*
 
 ### Scope
 
