@@ -1057,18 +1057,25 @@ visible until a PR actually ran the steps.
 
 | Residual | What shipped | What did not | Now |
 |---|---|---|---|
-| **`batchIds` has no caller** | the library resolves prose refs against the batch under write | nothing passes it; the parameter takes its empty default on every real invocation | **PR4 Unit 8** |
-| **sensor de-registration has no failing gate** | validator no longer blocks all graph writes | a node reword still unbinds a sensor with nothing going red | **PR16 Unit 10** + a gating sitting |
-| **`validate-graph` empty-store pass** | missing directory exits 2 | an *existing* directory with zero nodes still exits 0 `ok — 0 nodes` | **PR16 Unit 9** |
-| **`verify-landed` exit-1 arm** | the exit-4 absent-node arm is covered | the exit-1 "unknown" arm is unreachable read-only and was never driven | **PR16 Unit 11** |
+| **`batchIds` has no caller** | the library resolves prose refs against the batch under write | nothing passes it; the parameter takes its empty default on every real invocation | **PR4 Unit 8** — `tactic-graph-prose-ref-batch-wiring` |
+| **sensor de-registration has no failing gate** | validator no longer blocks all graph writes | a node reword still unbinds a sensor with nothing going red | **PR16 Unit 10** + a gating sitting — `tactic-sensor-deregistration-gate` |
+| **`validate-graph` empty-store pass** | missing directory exits 2 | an *existing* directory with zero nodes still exits 0 `ok — 0 nodes` | **PR16 Unit 9** — `tactic-validate-graph-empty-store-pass` |
+| **`verify-landed` exit-1 arm** | the exit-4 absent-node arm is covered | the exit-1 "unknown" arm is unreachable read-only and was never driven | **PR16 Unit 11** — `tactic-verify-landed-unknown-arm-untested` |
 
-**None of these four has a node.** PR1's closing batch could not carry a
-`create` — the `--base` compare-and-swap manifest pins a pre-image per id, and
-an id with no pre-image corrupts the batch — so they were filed nowhere. Two of
-the affected nodes closed carrying an implementation-record note saying which
-half landed, so the *record* is honest; the *remaining work* is invisible to
-every graph query, attention ranking and census until the nodes exist. **File
-them before starting PR4 and PR16.**
+**All four are now filed** — landed on `main` as `920492be`, together with the
+"direction 1" node below. They did not exist when this revision was first
+written: PR1's closing batch could not carry a `create`, because the `--base`
+compare-and-swap manifest pins a pre-image per id and an id with no pre-image
+corrupts the batch, so the residuals were recorded here and filed nowhere.
+Two of the affected nodes closed carrying an implementation-record note saying
+which half landed, so the *record* was honest while the *remaining work* was
+invisible to every graph query, attention ranking and census. That gap is
+closed; the ids above are the graph's copy, and this document is no longer the
+only place the work exists.
+
+All five are `status: raw` — filed, not planned. Each body records the
+evidence, the anchors, and the open design question; none of them fabricates an
+implementation plan. `/align-tactics` is what turns them into one.
 
 ## A fifth residual, from PR1's own brief: "direction 1"
 
@@ -1076,7 +1083,8 @@ PR1 Unit 4's node carried a planning-time rule the brief deliberately put out of
 scope: **a data migration and the schema tightening that rejects its
 pre-migration spelling cannot share a PR.** It is `/align-tactics` doctrine, not
 graph-write code, so PR1 correctly declined it and recommended a follow-up node.
-That node was never filed either.
+That node went unfiled for two revisions; it is now
+`tactic-align-tactics-migration-tightening-split`.
 
 It is now **PR20 Unit 8**, which owns the `/align` + `/align-tactics` SKILL
 text. It is worth filing rather than dropping, because **this document violates
@@ -1121,11 +1129,11 @@ things to know before starting any remaining PR.
 
 ## What this revision does *not* change
 
-No node moves between PRs, no PR is added or removed, and the 112-node coverage
-total is unchanged — the four residuals are **new work discovered by execution**,
-not re-scoping. They add units to PR4 and PR16 and, once filed, will raise the
-assigned count by four (five with "direction 1"). The dependency order is
-untouched: **PR18 is still next, and nothing gates it.**
+No node moves between PRs and no PR is added or removed. The coverage total
+does move, 112 → 117, but not by re-scoping: the five residuals are **new work
+discovered by executing PR1**, filed into the graph after the fact, and they add
+units to PR4, PR16 and PR20 rather than redistributing anything. The dependency
+order is untouched: **PR18 is still next, and nothing gates it.**
 
 ---
 
@@ -1235,7 +1243,7 @@ prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
 | PR11 | `tactic-rsi-measure-fanout-and-model-routing` | `/rsi-audit 14d` — measure this harness's own fan-out and model routing before the catalog fixes a per-lens `model:` |
 | **PR19** *(R7)* | `tactic-review-supersession-derived-subpoints` | `/office-hours tactic-review-supersession-derived-subpoints` — ratify or overturn two Claude-derived sub-points of the supersession analysis |
 | **PR20** *(R7)* | `tactic-align-audit-legacy-review` | `/office-hours tactic-align-audit-legacy-review` — decide `/align-audit`'s inclusion of the two engines the `/align` consolidation retired |
-| **PR16** *(R8)* | *sensor de-registration gate — **node not yet filed**, see R8* | `/office-hours <id>` — rule between **(1)** a node-scoped fatal inside `guard` and **(2)** a post-merge check on `main`. Blocks PR16 Unit 10 only. Shape (1) puts a new `origin/main` read inside the job whose failure mode is repo-wide write denial — the 2026-08-14 outage — so this is a real risk decision, not a preference |
+| **PR16** *(R8)* | `tactic-sensor-deregistration-gate` | `/office-hours tactic-sensor-deregistration-gate` — rule between **(1)** a node-scoped fatal inside `guard` and **(2)** a post-merge check on `main`. Blocks PR16 Unit 10 only. Shape (1) puts a new `origin/main` read inside the job whose failure mode is repo-wide write denial — the 2026-08-14 outage — so this is a real risk decision, not a preference |
 | *(none — advisory)* *(R7)* | `tactic-review-dispatch-charter-split` | `/office-hours tactic-review-dispatch-charter-split` — partly discharged already; see Revision 7 |
 
 Three of these are load-bearing, not ceremonial:
@@ -2612,12 +2620,20 @@ argument and then writes unconditionally.
 - `tactic-test-park-node-deps-precondition-guard`
 - `tactic-fingerprint-stamp-sha-provenance` *(R7)*
 
-> **Units 9–11 have no nodes yet** *(R8)*. They are PR1 residuals; PR1's closing
+> **Units 9–11 are PR1 residuals, filed after the fact** *(R8)*. PR1's closing
 > batch could not carry a `create` (see the `--base` hazard in §"Closing nodes
-> after each merge"), so they were never filed. **File all three before starting
-> this PR** — otherwise the work is real, planned, and invisible to every graph
-> query, attention ranking, and census this repo runs. Unit 10's node should
-> record the (1)/(2) choice as an open question, not pick one.
+> after each merge"), so they were filed separately, landing on `main` as
+> `920492be`:
+>
+> - Unit 9 — `tactic-validate-graph-empty-store-pass`
+> - Unit 10 — `tactic-sensor-deregistration-gate` *(born parked; see below)*
+> - Unit 11 — `tactic-verify-landed-unknown-arm-untested`
+>
+> **Unit 10's node is parked and `owner: human`.** Its `office_hours` record
+> carries the (1)/(2) gate-shape question as an open decision rather than a
+> chosen design — deliberately, because shape (1) re-arms the 2026-08-14
+> repo-wide write outage if its `origin/main` read fails closed. Clear the park
+> before implementing Unit 10; Units 9 and 11 are `owner: ai` and unblocked.
 
 ### Scope
 
@@ -3412,9 +3428,12 @@ dependency. Land it here because this PR already owns the `/align` +
 > the same PR. Both are currently survivable only because PR1 Unit 4 fixed that
 > data test — which is precisely the crutch this rule says not to lean on.
 
-> **The node is not filed.** See R8; file it before starting this PR. This unit
-> is doctrine text, not a code change — if the node is never filed, the rule is
-> lost, because PR1's node closed `done` and its body is a historical archive.
+> **The node is `tactic-align-tactics-migration-tightening-split`**, filed after
+> R8 was first written and landed on `main` as `920492be`. This unit is doctrine
+> text, not a code change; filing it is what keeps the rule from being lost,
+> since PR1's own node closed `done` and its body is now a historical archive.
+> The node's scope covers both halves — the SKILL text *and* reconciling the two
+> units that violate the rule today.
 
 ### Dependencies
 
@@ -3549,14 +3568,14 @@ Seven hazards on this path, each of which has bitten before:
 
 ## Coverage
 
-All **112** in-scope tactics are assigned; none appears twice.
+All **117** in-scope tactics are assigned; none appears twice.
 
 | PR | Nodes | Surface |
 |---|---|---|
 | ✅ PR1 | 8 | **SHIPPED `fe0b1c4d`** — `graph-commit`, `schema.ts`, `sensors.ts`, `office-hours.test.ts`, `dump-node.ts`, `validate-graph.ts` |
 | PR2 | 9 | `dispatch-ladder-{run,advance,await}` |
 | PR3 | 9 | `aggregate-usage.sh`, `stamp-dispatch-session.sh` |
-| PR4 | 6 *(+1 unit, R8)* | `dispatch-eval-finding`, `schema.ts`, `graph-census-debt.ts`, `validate-graph.ts` |
+| PR4 | 7 *(+1, R8)* | `dispatch-eval-finding`, `schema.ts`, `graph-census-debt.ts`, `validate-graph.ts` |
 | PR5 | 7 | `reconcile-graph-review-stall`, `reconcile-graph.ts`, `store.ts` |
 | PR6 | 4 | `dispatch-code-review` |
 | PR7 | 5 | `review-fix.js`, `review-fix/SKILL.md`, `dispatch-write-phase-log` |
@@ -3568,15 +3587,15 @@ All **112** in-scope tactics are assigned; none appears twice.
 | PR13 | 1 | repo-wide rename |
 | PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
 | PR15 *(R6)* | 4 | `graph-commit` — writer default, merge path, invocation, short-circuit · **HOLD** |
-| PR16 *(R6, +1 R7)* | 8 *(+3 units, R8)* | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
+| PR16 *(R6, +1 R7)* | 11 *(+3, R8)* | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
 | PR17 *(R6)* | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
 | **PR18** *(R7)* | 5 | `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`, `/review-fix`, `router.ts`, `graph-commit` park path |
 | **PR19** *(R7)* | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
-| **PR20** *(R7)* | 7 *(+1 unit, R8)* | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
+| **PR20** *(R7)* | 8 *(+1, R8)* | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
 | pre-PR sessions | 9 | no diff *(+2 R7 gating, +1 advisory)* |
 | deferred | 6 | ref-split cluster (3) + scope-custody (2) + `demote-node-stale-local-read` *(R7)* |
 | adjacent, unclaimed *(R6)* | 5 | `/qa-main` node lane (3) + fleet-dependent (2) |
-| **total** | **112** | + 11 documented-not-assigned |
+| **total** | **117** | + 11 documented-not-assigned |
 
 **Revision 6 delta:** +22 assigned (5 into PR1, plus PR15/PR16/PR17), +10
 documented but deliberately unassigned. The 32 nodes it surveyed were all open
@@ -3595,10 +3614,9 @@ and the one every other PR's bookkeeping runs through.
 **Revision 8 delta:** no node reassignment. Two plan-wide corrections applied in
 place (the `execution.completion` field name in 9 sections; 6 broken `verify`
 fences), 4 PR1 residuals folded as units into PR4 and PR16, 1 doctrine residual folded
-as PR20 Unit 8, and 1 gating sitting added for PR16 Unit 10. **Five nodes remain
-to be filed** — they are planned work with no graph representation, which is the
-one thing this plan is supposed to prevent.
+as PR20 Unit 8, and 1 gating sitting added for PR16 Unit 10. **All five residual
+nodes are filed**, landed on `main` as `920492be` — the coverage total moves 112 → 117.
 
-**What is now done:** PR1 (8 nodes) and the ref-split decision. **What is next:**
-PR18. Nothing gates it — its one `blocked_by` edge cleared when PR1's nodes
-closed. Before PR4 or PR16, file the five residual nodes.
+**What is now done:** PR1 (8 nodes), the ref-split decision, and the five
+residual nodes. **What is next:** PR18. Nothing gates it — its one `blocked_by`
+edge cleared when PR1's nodes closed.
