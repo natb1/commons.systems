@@ -1,6 +1,7 @@
 # Dispatch + RSI serialized PR plan
 
-**Written** 2026-08-14 · **Revised** 2026-08-15 · **Graph base** `063b3df2`
+**Written** 2026-08-14 · **Revised** 2026-08-15 (**Revision 8**) · **Graph
+base** `063b3df2`
 **Covers** all 112 open (`phase: null`) tactics in the dispatch-ladder / RSI /
 evaluation-machinery / **graph-plumbing** / **`/align`-charter** scope: defects,
 integrity issues, token-efficiency findings, ledger entries, and the
@@ -17,7 +18,14 @@ feature/design nodes that resolve them.
 > ledger-driven and missed 32 graph read/write nodes that never produced a
 > ledger entry.
 >
-> **Revision 7 widened it again, 94 → 112**, and is the one to read first. Three
+> **Revision 8 is the one to read first if you are about to execute anything.**
+> It folds PR1's *residuals* — what the shipped PR left undone, and what
+> executing it proved wrong about this document. It makes two corrections that
+> affect **every remaining PR**: the node-closing field name was wrong in all
+> nine places it appeared, and six `verify` fences have been broken since PR1
+> merged.
+>
+> **Revision 7 widened it again, 94 → 112**. Three
 > author rulings landed on 2026-08-14/15 that **correct this document by name**,
 > the `graph-ref-split` decision Revision 6 opened has been **answered (DEFER)**,
 > PR1 shipped against those rulings, and a new strategy —
@@ -342,9 +350,10 @@ Both halves belong in Bundle 3 alongside the escalation path they guard.
 For each of `tactic-audit-instrument-scoping`,
 `tactic-audit-permission-friction`, `tactic-audit-cache-efficiency-lens`, and
 `tactic-rsi-round-trips-lens-carrier`: read the node's success criteria against
-the cited anchor, then close with `phase: done` and `execution.resolved_by` set
+the cited anchor, then close with `phase: done` and `execution.completion` set
 to the commit that actually shipped it — recoverable with `git log -S` on the
-lens key rather than guessed.
+lens key rather than guessed. *(R8: was `execution.resolved_by`, which is not a
+schema field.)*
 
 Two residuals to **check rather than assume**, because they are the plausible
 reason these nodes were never closed:
@@ -981,6 +990,142 @@ written *by* that surface, so PR19 is genuinely downstream, not merely adjacent.
   `tactic-phase-evidence-fingerprint-bound` (`phase: qa`). Re-derive its plan from
   the current file, not its body.
 
+
+---
+
+# Revision 8 — PR1's residuals, and two corrections that affect every remaining PR
+
+**Written 2026-08-15 · graph base `063b3df2` · after PR1 merged as `fe0b1c4d`
+(#3095).**
+
+Revision 7 was written *around* PR1's merge and recorded its **errata** — the
+three rulings that reached it in time. This revision records the other half:
+its **residuals**. Two kinds, and the second kind is the urgent one.
+
+- **What PR1 left undone.** Four items, each now folded into a specific later
+  PR as a numbered unit rather than left in a PR comment.
+- **What executing PR1 proved wrong about this document.** Two corrections that
+  break every remaining PR's bookkeeping if not applied. Both are applied
+  in place throughout this file; they are described here so the change is
+  auditable rather than silent.
+
+## The two plan-wide corrections
+
+### C1 — every "Closing the nodes" section named a field that does not exist
+
+Nine sections told the executor to close nodes by setting
+`execution.resolved_by: <merge sha>`. **`resolved_by` is not in the schema.**
+`write-node.ts` drops unknown keys without complaint, so the write appears to
+succeed, `validate-graph` stays green, `graph-commit` reports
+`context=push-reported-success`, and the node ends up `phase: done` **with no
+completion record at all**. Every gate reports success and the record is empty.
+
+The real field is `execution.completion`, the `Completion` interface —
+`packages/intentionsutil/src/schema.ts:659`, reachable as `execution.completion`
+at `:685` — carrying `mergedAt`, `mergeCommitSha`, `graphCommitSha`. There is no
+`resolved_by` anywhere in `schema.ts`.
+
+All nine sites now say `completion`, and §"Closing nodes after each merge"
+carries the JSON shape. PR1 closed its own eight nodes correctly only because
+the execution brief overrode this document by name.
+
+> One `resolved_by` was deliberately **left alone**: PR4 Unit 6's
+> `--resolved-by` flag on `dispatch-eval-finding` is a different thing — a
+> ledger-entry CLI flag, not the execution field.
+
+### C2 — six `verify` fences have been broken since PR1 merged
+
+PR1 Unit 8 made `<intentionsDir>` a **required** argument to
+`validate-graph.ts`. Six fences in this document invoked it with no argument.
+Measured on `063b3df2`: bare invocation **exits 2**; with `intentions`, exit 0.
+Those six fences would have failed on every PR that ran them, for a reason
+having nothing to do with the change under test.
+
+The same fences used `npx tsx`, the spawn form PR1 Unit 7 **removed** from
+`graph-commit`: the `tsx` CLI opens an IPC unix socket this repo's sandboxed
+runner refuses with `EPERM … /tmp/…/tsx-*.pipe`. All executable steps now use
+`node --import tsx/esm`, which needs no npm resolution and opens no socket.
+
+Both corrections are mechanical, but neither is cosmetic: C1 silently produces
+an empty record, and C2 fails loudly for the wrong reason. Together they are the
+strongest argument in this document for the rule that **a plan is only as good
+as its last execution** — both defects existed from Revision 1 and neither was
+visible until a PR actually ran the steps.
+
+## The four residuals, and where each now lives
+
+| Residual | What shipped | What did not | Now |
+|---|---|---|---|
+| **`batchIds` has no caller** | the library resolves prose refs against the batch under write | nothing passes it; the parameter takes its empty default on every real invocation | **PR4 Unit 8** |
+| **sensor de-registration has no failing gate** | validator no longer blocks all graph writes | a node reword still unbinds a sensor with nothing going red | **PR16 Unit 10** + a gating sitting |
+| **`validate-graph` empty-store pass** | missing directory exits 2 | an *existing* directory with zero nodes still exits 0 `ok — 0 nodes` | **PR16 Unit 9** |
+| **`verify-landed` exit-1 arm** | the exit-4 absent-node arm is covered | the exit-1 "unknown" arm is unreachable read-only and was never driven | **PR16 Unit 11** |
+
+**None of these four has a node.** PR1's closing batch could not carry a
+`create` — the `--base` compare-and-swap manifest pins a pre-image per id, and
+an id with no pre-image corrupts the batch — so they were filed nowhere. Two of
+the affected nodes closed carrying an implementation-record note saying which
+half landed, so the *record* is honest; the *remaining work* is invisible to
+every graph query, attention ranking and census until the nodes exist. **File
+them before starting PR4 and PR16.**
+
+## A fifth residual, from PR1's own brief: "direction 1"
+
+PR1 Unit 4's node carried a planning-time rule the brief deliberately put out of
+scope: **a data migration and the schema tightening that rejects its
+pre-migration spelling cannot share a PR.** It is `/align-tactics` doctrine, not
+graph-write code, so PR1 correctly declined it and recommended a follow-up node.
+That node was never filed either.
+
+It is now **PR20 Unit 8**, which owns the `/align` + `/align-tactics` SKILL
+text. It is worth filing rather than dropping, because **this document violates
+the rule in two places right now**:
+
+- **PR16 Unit 4** backfills 6 nodes off `attributes.phase` *and* makes
+  `validate-graph` reject the key — in one unit. The section already notes it
+  "**does** trip the origin/main data test".
+- **PR4 Unit 1** strips `attributes.ledger_entry` from 40 nodes *and* removes the
+  reader in the same PR.
+
+Both are currently *safe* only because PR1 Unit 4 fixed the origin/main data
+test. That is the rule's point: it says do not rely on that.
+
+## Execution hazards PR1 discovered
+
+These cost real time in PR1 and will recur. They are not node work; they are
+things to know before starting any remaining PR.
+
+1. **`/code-review --fix` may write nothing.** In PR1 all six findings came back
+   unapplied — "parent bg session hasn't isolated yet". The pass still *reports*
+   as if it ran. Check that fixes actually landed in the tree before trusting a
+   `--fix` run, and be ready to apply them by hand.
+2. **`origin/main...main` = `0 0` is often unreachable, and usually does not
+   matter.** Only the left number (unpushed local commits) is hazardous.
+   `sync_main_checkout` uses `git -C`, which a worktree-isolated session
+   **refuses** toward the primary checkout — so an isolated session cannot
+   fast-forward `main` at all. Run closing batches from a fresh worktree cut at
+   `origin/main` and verify *that* checkout is 0 ahead.
+3. **An identical local test result is not evidence CI will pass.** PR1's review
+   dismissed nine `test-park-node.sh` failures as pre-existing; measured against
+   an `origin/main` scratch worktree the count was indeed identical — and
+   `hook-tests` still went red in CI, for a different reason entirely. The two
+   environments fail differently.
+4. **`assert_absent` pins go vacuous when the literal they assert changes.**
+   PR1 changed emitted `clear-park` text; a pin asserting the *old* string would
+   have kept passing while asserting nothing. Re-pin `assert_absent` sites
+   whenever you change emitted text — PR16 and PR18 both change emitted text.
+5. **Four test harnesses emulate the merge inside a `PATH` shim.** See the
+   warning added to PR15 Unit 2 — that unit changes the spawn site and will
+   orphan all four.
+
+## What this revision does *not* change
+
+No node moves between PRs, no PR is added or removed, and the 112-node coverage
+total is unchanged — the four residuals are **new work discovered by execution**,
+not re-scoping. They add units to PR4 and PR16 and, once filed, will raise the
+assigned count by four (five with "direction 1"). The dependency order is
+untouched: **PR18 is still next, and nothing gates it.**
+
 ---
 
 ## Why not one PR
@@ -1089,6 +1234,7 @@ prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
 | PR11 | `tactic-rsi-measure-fanout-and-model-routing` | `/rsi-audit 14d` — measure this harness's own fan-out and model routing before the catalog fixes a per-lens `model:` |
 | **PR19** *(R7)* | `tactic-review-supersession-derived-subpoints` | `/office-hours tactic-review-supersession-derived-subpoints` — ratify or overturn two Claude-derived sub-points of the supersession analysis |
 | **PR20** *(R7)* | `tactic-align-audit-legacy-review` | `/office-hours tactic-align-audit-legacy-review` — decide `/align-audit`'s inclusion of the two engines the `/align` consolidation retired |
+| **PR16** *(R8)* | *sensor de-registration gate — **node not yet filed**, see R8* | `/office-hours <id>` — rule between **(1)** a node-scoped fatal inside `guard` and **(2)** a post-merge check on `main`. Blocks PR16 Unit 10 only. Shape (1) puts a new `origin/main` read inside the job whose failure mode is repo-wide write denial — the 2026-08-14 outage — so this is a real risk decision, not a preference |
 | *(none — advisory)* *(R7)* | `tactic-review-dispatch-charter-split` | `/office-hours tactic-review-dispatch-charter-split` — partly discharged already; see Revision 7 |
 
 Three of these are load-bearing, not ceremonial:
@@ -1138,7 +1284,7 @@ them first makes every subsequent PR's bookkeeping trustworthy.
 > `tactic-graph-ref-split` lands first, Units 1–4 target a mechanic it deletes.
 > Settle that before writing code here.
 
-### Nodes closed (9)
+### Nodes closed (8)
 
 - `tactic-eval-finding-noop-verdict-hides-dropped-node-edit`
 - `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`
@@ -1148,7 +1294,7 @@ them first makes every subsequent PR's bookkeeping trustworthy.
 - `tactic-graph-commit-snap-dir-merge-clobbers-original` *(R6)*
 - `tactic-graph-commit-merge-npx-park-storm` *(R6)*
 - `tactic-explicit-ref-graph-reads` *(R6)*
-- `tactic-demote-node-stale-local-read` *(R6)*
+- ~~`tactic-demote-node-stale-local-read`~~ — **removed by Ruling 3; NOT closed by PR1.** Still `phase: null`, deferred behind `tactic-phase-evidence-fingerprint-bound`.
 
 ### Scope
 
@@ -1324,13 +1470,19 @@ Manual, one per unit — none of these is covered by the suites above:
 
 ### Closing the nodes
 
-After merge, for each of the 9 ids set `phase: done` and
-`execution.resolved_by: <merge sha>` via `dump-node.ts` → jq → `write-node.ts`
-→ `graph-commit -C <path>`.
+**What actually happened** *(record, corrected by R8):* **8** ids — not 9 — were
+closed in one batch as `1192d6f8`, each with `phase: done` and an
+`execution.completion` object, via `dump-node.ts` → jq → `write-node.ts` →
+`graph-commit -C <path>`. Two further implementation-record notes landed as
+`063b3df2`. Every id was verified twice: blob comparison against
+`git show origin/main:intentions/<id>.md`, and `verify-landed --blob`.
 
-> Close `tactic-explicit-ref-graph-reads` and
-> `tactic-demote-node-stale-local-read` in the **same** batch — Unit 8 satisfies
-> both, and closing one alone leaves a duplicate open against a fixed defect.
+> The instruction that stood here — close `tactic-explicit-ref-graph-reads` and
+> `tactic-demote-node-stale-local-read` in the **same** batch — was **voided by
+> Ruling 3** before the PR was written, and the shipped PR did not follow it.
+> `tactic-demote-node-stale-local-read` was left untouched (`status: raw`,
+> `phase: null`, `execution: null`) and is deferred behind
+> `tactic-phase-evidence-fingerprint-bound`. Do not close it against `fe0b1c4d`.
 
 ---
 
@@ -1571,7 +1723,7 @@ PR1. Units 6 → 7 internally.
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual: run `aggregate-usage.sh --node <a node with a completed ladder run>` and
@@ -1669,9 +1821,43 @@ attributed to `/rsi`. **Must come after Unit 1** — the node's own
 `## Dependencies` section says the namespace must stop being the membership test
 before the count is meaningful.
 
+**Unit 8 — wire `batchIds` to a real caller** *(PR1 residual, added by R8)*.
+PR1 Unit 3 taught `validateGraphProseRefs` to resolve a prose ref against the
+ids of the batch under write, so a node may cite a sibling the same batch is
+minting. **The library half landed; no caller passes it.** Verified on
+`063b3df2`: `batchIds` appears only inside
+`packages/intentionsutil/src/schema.ts` (declared `:1633` with the default
+`new Set<string>()`, read at `:1643`/`:1648`/`:1668`), and the sole production
+caller — `packages/intentionsutil/scripts/validate-graph.ts:206` — passes four
+arguments, so the parameter takes its empty default on every real invocation.
+
+The failure this leaves open is **cross-invocation**, and it is on this PR's own
+surface: `/rsi` calls `dispatch-eval-finding` **once per finding**, so each
+minted node is written by a separate `graph-commit`, and a node citing a sibling
+minted moments earlier by a different invocation still fails to resolve. PR1
+closed against the within-invocation case only — `graph-commit` already stages
+every id of a single invocation, which is why that half was already working
+before PR1 touched it.
+
+Scope: give `validate-graph.ts` a `--batch <id[,id…]>` flag that feeds the fifth
+argument, and have the write path declare the ids in flight when it invokes the
+validator. Land it here because Unit 3 collapses the five private follow-up
+writers into **one** surface every producer calls — that surface is the only
+place that knows the whole set of ids a producer run intends to mint, and
+therefore the only place a `--batch` declaration can be honest. Wiring it before
+Unit 3 would mean teaching five writers the same thing and then deleting four.
+
+> **File the node first.** This residual has no node: it was found during PR1's
+> review, and PR1's closing batch could not carry a `create` (see the
+> `--base` hazard in §"Closing nodes after each merge"). The affected node,
+> `tactic-eval-finding-eval-finding-forward-crossref-fails-ci`, closed with an
+> implementation-record note stating the library half landed and the caller half
+> did not — so the record is honest, but the remaining work is **unrepresented
+> in the graph** until this node is filed.
+
 ### Dependencies
 
-PR1. Units 1 → 2 → 7 internally.
+PR1. Units 1 → 2 → 7 internally. Unit 8 after Unit 3.
 
 ### Reuse
 
@@ -1688,7 +1874,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
@@ -2285,7 +2471,7 @@ do not exist.
 ### Verification
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
@@ -2343,7 +2529,7 @@ Building this before either means writing against interfaces that do not exist.
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual: drive one invalid state per lane and confirm each produces the same
@@ -2394,7 +2580,7 @@ Nothing — this is a rename.
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual: grep the whole repo for each old name and confirm zero hits outside
@@ -2529,6 +2715,26 @@ Sequencing is fixed by the node's own rationale: this is *"the remaining
 structural simplification once the plumbing default lands"*. **Unit 1 before
 Unit 2, in this PR.**
 
+> **This unit will break four test harnesses, and they fail in a way that does
+> not reproduce locally** *(added by R8, learned the expensive way in PR1)*.
+> Four suites emulate the three-way merge inside a **`PATH` shim**, keyed on the
+> exact command `graph-commit` spawns:
+> `packages/intentionsutil/scripts/test-{graph-commit,park-node,transition-node,demote-node-to-implement}.sh`.
+> PR1 Unit 7 changed that spawn from `npx tsx merge-node.ts` to
+> `node --import tsx/esm merge-node.ts` and orphaned the emulation in three of
+> them; each was found separately, and the third only after CI went red on a
+> job that had not run on the previous commit. **Changing the call site — which
+> is exactly what this unit does — orphans all four again.**
+>
+> Two properties make this trap expensive. First, the failure is **CI-only**:
+> those suites already fail locally for an unrelated host reason, so an
+> identical local pass/fail count against `origin/main` is *not* evidence the
+> change is safe. Second, the pre-PR1 code treated a merge tool that could not
+> start as an ordinary content divergence and **parked**, so the emulation
+> breaking used to look like a passing test. Update all four shims in the same
+> commit as the call-site change, and confirm `hook-tests` is green — not just
+> `unit-tests`.
+
 **Unit 3 — shape the invocation to the `allowedTools` matcher.** Give
 `graph-commit` a form the matcher can prefix-match (a `-C` flag, no `cd`
 compound) and add it to `permissions.allow`, so the auto-mode classifier never
@@ -2579,7 +2785,7 @@ auto-approved rather than prompting (Unit 3).
 ### Closing the nodes
 
 After merge, for each of the 4 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`.
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
 
@@ -2609,6 +2815,13 @@ argument and then writes unconditionally.
 - `tactic-transition-node-scope-stale-test-coverage`
 - `tactic-test-park-node-deps-precondition-guard`
 - `tactic-fingerprint-stamp-sha-provenance` *(R7)*
+
+> **Units 9–11 have no nodes yet** *(R8)*. They are PR1 residuals; PR1's closing
+> batch could not carry a `create` (see the `--base` hazard in §"Closing nodes
+> after each merge"), so they were never filed. **File all three before starting
+> this PR** — otherwise the work is real, planned, and invisible to every graph
+> query, attention ranking, and census this repo runs. Unit 10's node should
+> record the (1)/(2) choice as an open question, not pick one.
 
 ### Scope
 
@@ -2698,6 +2911,76 @@ and Unit 6's test coverage is where this behavior gets pinned.
 > 8**; if it has not, this unit has no write site to fix yet and should be split
 > out rather than blocking the other seven.
 
+**Unit 9 — `validate-graph` still passes on an empty store** *(PR1 residual,
+added by R8)*. PR1 Unit 8 made `<intentionsDir>` required and made a
+**missing** directory exit 2. It did not close the neighbouring case: a
+directory that **exists and contains no nodes** still exits **0** and prints
+`ok — 0 nodes`. Measured on merged `main` at `063b3df2`:
+
+```
+$ node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts <empty dir>
+ok — prose refs: 0 unresolved (10 grandfathered by baseline)
+ok — sensors: 10 registered, …
+rc=0
+```
+
+That contradicts the file's own stated contract three lines above the guard —
+`validate-graph.ts:111`, *"Validating 'nothing' is never a pass"* — which is
+written as though the required-argument change had already settled it. The
+comment is the specification; the code is one `statSync` short of meeting it.
+Fix: after enumeration, exit non-zero when the store resolved to zero nodes,
+with a message that names the resolved absolute path. Keep it distinct from the
+exit 2 usage errors so a caller can tell "you pointed me nowhere" from "you
+pointed me at the wrong place".
+
+> Low severity on its own, high severity in combination: this is the exact
+> shape of vacuous pass PR1 Unit 8 existed to eliminate, and every `verify`
+> fence in this plan now runs `validate-graph.ts intentions` from a repo root.
+> A run from the wrong cwd reports a clean graph.
+
+**Unit 10 — a node prose reword still de-registers a sensor with nothing going
+red** *(PR1 residual, added by R8 — gated on the sitting below)*. PR1 Unit 2
+narrowed the validator so a red sensor-registration check can no longer block
+every graph write. What it did not do is give the **de-registration** case any
+failing gate at all. The sensor name is coupled to node prose by exact string
+match, so rewording a node silently unbinds it, and:
+
+- `graph-validate` runs `validate-graph.ts`, which PR1 made **non-fatal** on
+  precisely this condition — so it can never go red on it;
+- `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, and
+  `graph-validate` lives in that same workflow — so for a write that lands via
+  a `graph/**` push, **neither job runs at all**.
+
+The result is a reword that lands green while the sensor reads `null`, with
+only a stderr line in the guard log. The brief scoped this to a *node-scoped
+failure*; what shipped is a warning. This is an under-delivery against the
+unit's own scope, not a reviewer preference.
+
+**This unit needs a ruling before code** — the two candidate shapes are
+materially different and one of them is dangerous:
+
+1. **Node-scoped fatal in `guard`** — fail only when the name was bound at
+   `origin/main` and is unbound after this write. This is the literal wording,
+   and it gates at write time. But it puts a **new `origin/main` read inside the
+   one job whose failure mode is repo-wide write denial** — which is the
+   2026-08-14 outage (54 minutes, three blocked writes, none about sensors) that
+   PR1 Unit 2 exists to prevent. Getting it wrong re-arms exactly that.
+2. **Post-merge check on `main`** — cannot deny any write, so it cannot re-arm
+   the outage, but it detects after the fact and needs a **new workflow**:
+   nothing currently runs on `main` push outside path-scoped deploys.
+
+Recommendation carried from PR1's review: **(2) first** for the detection floor,
+**(1) later** as the real gate. Do not implement either without the sitting.
+
+**Unit 11 — `verify-landed`'s unknown-node arm is untested** *(PR1 residual,
+added by R8)*. PR1's post-merge QA exercised `verify-landed` at 0/4/4/2 and
+confirmed the absent-node path returns **exit 4** rather than a false "landed".
+The **exit 1** "unknown" arm was never reached — it is not reachable read-only,
+so the QA pass could not cover it. This is the script every closure in this plan
+uses as its second, independent verification, and an untested arm in it is an
+untested arm in the bookkeeping of ~100 remaining node closures. Add shell-level
+coverage that drives it deliberately.
+
 ### Dependencies
 
 **PR1** — Unit 4 here is red-by-construction until PR1 Unit 4 lands, and Unit 3
@@ -2705,6 +2988,9 @@ assumes PR1 Unit 8's explicit-tree reads.
 
 **`tactic-strategy-fingerprint-stamp-coverage`** (`phase: qa`, outside this plan)
 — Unit 8 only. See the note above.
+
+**The sensor-gate sitting** — Unit 10 only, and blocking for that unit. Units
+9 and 11 are independent and can land without it.
 
 ### Reuse
 
@@ -2720,7 +3006,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
@@ -2739,7 +3025,7 @@ hits after the backfill (Unit 4). Run `test-park-node.sh` in a clone with no
 ### Closing the nodes
 
 After merge, for each of the 8 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`. Unit 5's node closes with the author's
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 5's node closes with the author's
 decision recorded in its body **whichever way the decision goes**.
 
 ---
@@ -2853,7 +3139,7 @@ record both numbers on the node — this PR's only measurable claim.
 ### Closing the nodes
 
 After merge, for each of the 6 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`.
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
 
@@ -3032,7 +3318,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual, and each of these is the actual claim:
@@ -3051,7 +3337,7 @@ Manual, and each of these is the actual claim:
 ### Closing the nodes
 
 After merge, for each of the 5 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`. Unit 4's node closes with the (a)/(b)
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 4's node closes with the (a)/(b)
 decision recorded in its body. If Unit 5 addresses only the ordinary branch,
 record the delete/modify residue on its node before closing.
 
@@ -3162,7 +3448,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
@@ -3179,7 +3465,7 @@ confirm the sweep fails at that commit (Unit 3).
 ### Closing the nodes
 
 After merge, for each of the 3 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`.
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
 
@@ -3307,6 +3593,33 @@ reorder mechanism and redirects the measured cost upstream to Units 3 and 6 —
 precede the evidence its three reasoning phases consume. Verify Units 3 and 6
 landed, record that on the node, and close it. **No code.**
 
+**Unit 8 — record the "one PR per migration step" rule** *(PR1 residual, added
+by R8)*. PR1 Unit 4's node carried a planning-time rule that PR1 deliberately
+left out of scope as `/align-tactics` doctrine rather than graph-write code, and
+recommended as a follow-up node: **a data migration and the schema tightening
+that rejects its pre-migration spelling cannot share a PR.** The tightening
+rejects the old spelling; the migration is what removes the old spelling; put
+them in one PR and the PR is red against `origin/main` data from its first
+commit until its last.
+
+Scope: write the rule into `.claude/skills/align-tactics/SKILL.md` as a
+decomposition constraint — when a unit both migrates data and tightens the
+schema that validates it, split it into two units with an explicit ordering
+dependency. Land it here because this PR already owns the `/align` +
+`/align-tactics` SKILL text.
+
+> **This plan violates the rule in two places today, and both should be split
+> when their PR is executed.** **PR16 Unit 4** backfills 6 nodes off
+> `attributes.phase` *and* makes `validate-graph` reject the key in one unit —
+> its own text concedes it "**does** trip the origin/main data test". **PR4 Unit
+> 1** strips `attributes.ledger_entry` from 40 nodes *and* removes the reader in
+> the same PR. Both are currently survivable only because PR1 Unit 4 fixed that
+> data test — which is precisely the crutch this rule says not to lean on.
+
+> **The node is not filed.** See R8; file it before starting this PR. This unit
+> is doctrine text, not a code change — if the node is never filed, the rule is
+> lost, because PR1's node closed `done` and its body is a historical archive.
+
 ### Dependencies
 
 **PR18** — Unit 5 here is the policy half of the invariant PR18 enforces
@@ -3339,7 +3652,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
@@ -3361,7 +3674,7 @@ Manual, and the first two are the ones that matter:
 ### Closing the nodes
 
 After merge, for each of the 7 ids set `phase: done` and
-`execution.resolved_by: <merge sha>`. Unit 7's node closes on the recorded
+the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 7's node closes on the recorded
 outcome, not on a diff.
 
 ---
@@ -3371,27 +3684,70 @@ outcome, not on a diff.
 Because these PRs bypass the ladder, **no transition happens automatically.**
 After each merge, for every node the PR closed:
 
-1. `npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir <dir> <id>…`
-2. jq-merge `phase: "done"` and `execution.resolved_by: "<merge sha>"`
-3. `npx tsx packages/intentionsutil/scripts/write-node.ts --file <dir>/<id>.json`
+1. `node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --out-dir <dir> <id>…`
+2. jq-merge `phase: "done"` and the `execution.completion` object (see below)
+3. `node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --file <dir>/<id>.json`
    — the single validation gate
-4. `npx tsx packages/intentionsutil/scripts/validate-graph.ts`
+4. `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions`
 5. `packages/intentionsutil/scripts/graph-commit -C <repo path> --base <manifest> -m <msg> <id>…`
 
-Five hazards on this path, each of which has bitten before:
+> **Both of those forms changed with PR1, and the old ones now fail.** Step 4
+> without the `intentions` argument **exits 2** — PR1 Unit 8 made the store an
+> explicit required argument (`validate-graph.ts`, `requirePositional`), so every
+> argument-less invocation this plan used to carry is now a usage error rather
+> than a pass. And `npx tsx` is the spawn form PR1 Unit 7 removed from
+> `graph-commit`: the `tsx` CLI opens an IPC unix socket that this repo's
+> sandboxed runner refuses with `EPERM … /tmp/…/tsx-*.pipe`. The
+> `node --import tsx/esm` loader form needs no npm resolution and opens no
+> socket. Measured on `063b3df2`: bare invocation `rc=2`, explicit-argument
+> invocation `rc=0`.
+
+**The field is `execution.completion`, not `execution.resolved_by`.** Every
+"Closing the nodes" section in this document said `resolved_by` until Revision 8,
+and **that field does not exist in the schema.** `write-node.ts` drops unknown
+keys silently, so writing it produces a node that reads `phase: done` with **no
+completion record at all**, and every gate reports success. The real shape is the
+`Completion` interface (`packages/intentionsutil/src/schema.ts:659`, reachable as
+`execution.completion` at `:685`):
+
+```json
+"execution": { "completion": { "mergedAt": "<ISO8601Z>", "mergeCommitSha": "<merge sha>", "graphCommitSha": "<the graph-commit sha>" } }
+```
+
+`execution` also requires `branch`, `pr`, `attempts`, `markers`, and
+`strategy_fingerprint` — dump the node first and merge into what is already
+there rather than composing an `execution` object from scratch.
+
+Seven hazards on this path, each of which has bitten before:
 
 - **`graph-commit` requires an explicit `-C`.** It resolves the repo root from
   `-C`/`--repo`, else **cwd** — never from its own location. Without it you
   commit the wrong checkout and it exits 0 as a landing that landed nothing.
 - **`pushed=none context=noop` is a failure signature**, not a success. A
   successful land reads `context=push-reported-success`.
-- **Local `main` ahead of `origin/main` silently drops node edits** — this is
-  exactly PR1 Unit 1. Until PR1 lands, fetch and confirm `HEAD...origin/main` is
-  `0 0` before every `graph-commit`.
+- **Local `main` ahead of `origin/main` silently drops node edits** — this was
+  PR1 Unit 1, and it **is fixed**: the far-ahead case now rebuilds the edit on an
+  intentions-only base and reports `context=push-reported-success`. Verified live
+  against merged `main`. The fetch-and-check step below is still worth running,
+  but it is no longer the only thing standing between you and a silent drop.
+- **`origin/main...main` = `0 0` may be unreachable, and that is not a blocker.**
+  The two counts are not symmetric. Unpushed **local** commits (the left number)
+  are the hazardous direction; being merely *behind* is harmless. The sanctioned
+  fix, `sync_main_checkout`, uses `git -C`, which a **worktree-isolated session
+  refuses toward the primary checkout** — so an isolated session cannot
+  fast-forward the user's `main` at all. What works: run the closing batch from a
+  **fresh worktree cut at `origin/main`** and verify *that* checkout is 0 ahead.
+  PR1's own closing batch ran this way.
+- **A node *create* must not ride in a `--base` batch of *edits*.** The
+  compare-and-swap manifest pins pre-images per id; an id with no pre-image
+  corrupts the batch. File new nodes in a separate `graph-commit` call. This is
+  why PR1's two follow-up nodes were filed after the closing batch, not in it.
 - **`write-node.ts` drops unknown keys**, and re-dumping a node after editing it
-  wipes the edit. Dump once, edit, write.
+  wipes the edit. Dump once, edit, write. This is the same mechanism that makes
+  `execution.resolved_by` vanish without complaint.
 - **Verify by reading `git show origin/main:intentions/<id>.md`**, not by
-  trusting the verdict line.
+  trusting the verdict line. `verify-landed --blob` is the second, independent
+  check; PR1 used both.
 
 ---
 
@@ -3404,7 +3760,7 @@ All **112** in-scope tactics are assigned; none appears twice.
 | ✅ PR1 | 8 | **SHIPPED `fe0b1c4d`** — `graph-commit`, `schema.ts`, `sensors.ts`, `office-hours.test.ts`, `dump-node.ts`, `validate-graph.ts` |
 | PR2 | 9 | `dispatch-ladder-{run,advance,await}` |
 | PR3 | 9 | `aggregate-usage.sh`, `stamp-dispatch-session.sh` |
-| PR4 | 6 | `dispatch-eval-finding`, `schema.ts`, `graph-census-debt.ts` |
+| PR4 | 6 *(+1 unit, R8)* | `dispatch-eval-finding`, `schema.ts`, `graph-census-debt.ts`, `validate-graph.ts` |
 | PR5 | 7 | `reconcile-graph-review-stall`, `reconcile-graph.ts`, `store.ts` |
 | PR6 | 4 | `dispatch-code-review` |
 | PR7 | 5 | `review-fix.js`, `review-fix/SKILL.md`, `dispatch-write-phase-log` |
@@ -3416,11 +3772,11 @@ All **112** in-scope tactics are assigned; none appears twice.
 | PR13 | 1 | repo-wide rename |
 | PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
 | PR15 *(R6)* | 4 | `graph-commit` — writer default, merge path, invocation, short-circuit · **HOLD** |
-| PR16 *(R6, +1 R7)* | 8 | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph` |
+| PR16 *(R6, +1 R7)* | 8 *(+3 units, R8)* | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
 | PR17 *(R6)* | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
 | **PR18** *(R7)* | 5 | `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`, `/review-fix`, `router.ts`, `graph-commit` park path |
 | **PR19** *(R7)* | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
-| **PR20** *(R7)* | 7 | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
+| **PR20** *(R7)* | 7 *(+1 unit, R8)* | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
 | pre-PR sessions | 9 | no diff *(+2 R7 gating, +1 advisory)* |
 | deferred | 6 | ref-split cluster (3) + scope-custody (2) + `demote-node-stale-local-read` *(R7)* |
 | adjacent, unclaimed *(R6)* | 5 | `/qa-main` node lane (3) + fleet-dependent (2) |
@@ -3440,6 +3796,13 @@ Of the 112, **34 are on the graph read/write path** — PR1's 8, PR15's 4, PR16'
 receipt gate to that same writer. It is the largest single surface in the plan,
 and the one every other PR's bookkeeping runs through.
 
+**Revision 8 delta:** no node reassignment. Two plan-wide corrections applied in
+place (the `execution.completion` field name in 9 sections; 6 broken `verify`
+fences), 4 PR1 residuals folded as units into PR4 and PR16, 1 doctrine residual folded
+as PR20 Unit 8, and 1 gating sitting added for PR16 Unit 10. **Five nodes remain
+to be filed** — they are planned work with no graph representation, which is the
+one thing this plan is supposed to prevent.
+
 **What is now done:** PR1 (8 nodes) and the ref-split decision. **What is next:**
 PR18. Nothing gates it — its one `blocked_by` edge cleared when PR1's nodes
-closed.
+closed. Before PR4 or PR16, file the five residual nodes.
