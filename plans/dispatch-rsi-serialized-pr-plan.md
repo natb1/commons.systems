@@ -11,8 +11,9 @@ feature/design nodes that resolve them.
 >
 > **`fe0b1c4d` — "pr1: graph write-path integrity (#3095)"**, merged 2026-08-15,
 > all eight units. Its eight nodes were closed to `phase: done` in `1192d6f8`
-> and `063b3df2`. The PR1 section below is **retained as a record, not as
-> work.** Start at **Bundle 1c / PR18**.
+> and `063b3df2`. The PR1 plan text has been **removed** — only a unit index
+> remains, because later sections cite its units by number. Its errata are in
+> Revision 7 and its residuals in Revision 8. Start at **Bundle 1c / PR18**.
 
 > **Revision 6 widened the scope** from 72 to 94 — the original enumeration was
 > ledger-driven and missed 32 graph read/write nodes that never produced a
@@ -1254,235 +1255,30 @@ Three of these are load-bearing, not ceremonial:
 
 ---
 
-# PR1 — Graph write-path integrity
+# PR1 — Graph write-path integrity ✅ SHIPPED (record only)
 
-> ## ✅ SHIPPED — record only, do not execute
->
-> Merged as **`fe0b1c4d` — "pr1: graph write-path integrity (#3095)"**,
-> 2026-08-15, all eight units. Its **eight** nodes closed to `phase: done` in
-> `1192d6f8` and `063b3df2`. The section below is preserved unchanged as the
-> record of what was planned; the three corrections that landed between the plan
-> and the merge — and which the shipped PR honored — are in **Revision 7 → "PR1
-> errata"**. The ninth id listed under "Nodes closed" below,
-> `tactic-demote-node-stale-local-read`, was **removed from PR1's scope by
-> clarification 243** and did not ship; it is deferred.
+Merged as **`fe0b1c4d` — "pr1: graph write-path integrity (#3095)"**,
+2026-08-15, all eight units. Its eight nodes closed to `phase: done` in
+`1192d6f8` and `063b3df2`; two implementation-record notes landed in
+`063b3df2`. The full plan text was removed once the merge was verified — this
+index remains because later sections cite these units by number. Errata:
+Revision 7 → "PR1 errata". Residuals (four items, none yet filed as nodes):
+Revision 8.
 
-**Recommended model: opus** — concurrency semantics and a false-negative
-verification path; the failure mode is silent data loss.
+| Unit | What shipped |
+|---|---|
+| 1 | `graph-commit` far-ahead rebuild no longer drops an edit to an existing node under a `landed context=noop` verdict; the false-landed guard compares the pre-reset blob |
+| 2 | one unbound sensor name no longer denies every graph write repo-wide; the validator runs on the introducing push and the guard failure is node-scoped |
+| 3 | `validateGraphProseRefs` resolves prose refs against the batch under write plus `origin/main` (but `batchIds` still has no caller — R8 residual, now PR4 Unit 8) |
+| 4 | the `office-hours.test.ts` data assertions run against a fixture graph, so a PR may migrate node data and tighten the schema reading it |
+| 5 | an ORPHANED check row is no longer misreported as a content failure; the orphaned case routes to a bounded re-push instead of abandoning the write |
+| 6 | the merge path writes merge output to a distinct path, leaving `SNAP_DIR/<id>.md` immutable so park recovery text stays true |
+| 7 | a merger that cannot *start* (`npx`/sandbox failure) dies as an environment error instead of parking every node; the `npx tsx` spawn was removed |
+| 8 | graph reads take an explicit tree/ref — `validate-graph.ts` requires `<intentionsDir>`, `dump-node.ts`/`write-node.ts` require `--dir` — so a wrong-directory read can no longer pass vacuously |
 
-### Context
-
-Every other PR in this plan writes graph nodes to close its own tactics. Nine
-open findings say that write path can silently lose an edit, can destroy the
-writer's own content, can abandon a write on a GitHub reporting artifact, can
-turn a transient `npx` failure into a fleet-wide park storm, can be blocked
-repo-wide by an unrelated node, and cannot express a forward reference — and
-that the **read** path can report a vacuous pass against the wrong tree. Fixing
-them first makes every subsequent PR's bookkeeping trustworthy.
-
-> **Gated on the ref-split decision** (Revision 6). If
-> `tactic-graph-ref-split` lands first, Units 1–4 target a mechanic it deletes.
-> Settle that before writing code here.
-
-### Nodes closed (8)
-
-- `tactic-eval-finding-noop-verdict-hides-dropped-node-edit`
-- `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`
-- `tactic-eval-finding-eval-finding-forward-crossref-fails-ci`
-- `tactic-eval-finding-origin-main-data-test-blocks-atomic-schema-tightening`
-- `tactic-graph-commit-orphan-refusal-misattributed-content-failure` *(R6)*
-- `tactic-graph-commit-snap-dir-merge-clobbers-original` *(R6)*
-- `tactic-graph-commit-merge-npx-park-storm` *(R6)*
-- `tactic-explicit-ref-graph-reads` *(R6)*
-- ~~`tactic-demote-node-stale-local-read`~~ — **removed by Ruling 3; NOT closed by PR1.** Still `phase: null`, deferred behind `tactic-phase-evidence-fingerprint-bound`.
-
-### Scope
-
-**Unit 1 — `graph-commit` far-ahead rebuild drops edits.**
-`packages/intentionsutil/scripts/graph-commit:3261` *(from node body —
-re-locate)*. When local `main` carries any unpushed commit, the far-ahead
-rebuild resets the tree to `origin/main`; the false-landed guard then compares
-two blobs equal by construction, so an **edit to an existing node** is dropped
-while the verdict reads `landed context=noop`. The caller's own post-write
-verification cannot catch it because it hashes the local working-tree path
-`graph-commit` is entitled to leave on a different base.
-
-Fix: the guard must compare against the **pre-reset** blob, and `noop` must
-stop being reachable on a path that reset the tree. Out of scope: the
-multi-bundle stash behavior and the landing lock.
-
-**Unit 2 — one unbound sensor name denies every graph write repo-wide.**
-`packages/intentionsutil/src/sensors.ts:78-125`,
-`packages/intentionsutil/scripts/read-sensors.ts:1184-1215` *(from node body —
-re-locate)*. `validateRegisteredSensorNames` throws inside the graph-fast-path
-guard whose four required contexts all declare `needs: guard`, so one unbound
-name blocks all writes — and the validator never runs on the main push that
-introduces it. Fix: run the validator on the introducing push, and downgrade
-the guard failure from repo-wide denial to a node-scoped one.
-
-**Unit 3 — forward cross-references fail CI.**
-`packages/intentionsutil/src/schema.ts:1656` *(from node body — re-locate)*.
-`validateGraphProseRefs` rejects an entry naming a sibling the same batch has
-not landed yet, so a batch write fails after 3 attempts and rolls back. Fix:
-resolve prose refs against **the batch under write** plus `origin/main`, not
-`origin/main` alone.
-
-**Unit 4 — origin/main data test blocks atomic schema tightening.**
-`packages/intentionsutil/test/office-hours.test.ts:853-891` (verified — the
-CLI tests run against this repo's real `origin/main`). Any PR that both
-migrates node data and tightens the schema reading it is red-by-construction
-until merge. Fix: run those assertions against a **fixture** graph, keeping one
-explicitly-marked smoke assertion against live `origin/main`.
-
-> Verified during planning: this trap does **not** catch PR4's ledger
-> retirement. `attributes` is `Record<string, unknown>` (`schema.ts:244`), so
-> dropping `attributes.ledger_entry` from 40 nodes tightens nothing. Unit 4 is
-> worth doing on its own merits, not as a PR4 prerequisite.
-
-**Unit 5 — an ORPHANED check row is misreported as a content failure, and the
-write is abandoned.** `packages/intentionsutil/scripts/graph-commit:1830-1837`
-(verified). `await_checks()` returns rc `2` for two different situations that
-its own header comment already distinguishes: a required check that **concluded
-non-success** (deterministic — the content fails CI, do not retry) and a
-required check that is **ORPHANED** — no conclusion, parent check suite already
-finished, so no verdict will ever arrive. Collapsing them means a GitHub
-reporting artifact reaches the operator as *"the commit content fails CI; not
-retrying (fix the content and re-run)"* — the one remedy that cannot work —
-while the remedy that does work (re-push, which mints a fresh check suite) is
-never attempted and **the graph write is abandoned**.
-
-Fix: split rc `2` into content-failure and orphaned-suite, and route the
-orphaned case to a bounded re-push rather than a refusal. The two conditions are
-already kept separate at the query layer (`:1888`, the `.check_suite.id` fourth
-field resolved via `check_suite_concluded()`); only the return code collapses
-them. Out of scope: the #2457 populated-conclusion-behind-stale-status desync,
-which is a third case and already handled.
-
-**Unit 6 — the merge path destroys the writer's own pre-merge content.**
-`packages/intentionsutil/scripts/graph-commit:793` (in `check_base_freshness()`)
-and `:1203-1206` (in `replay_snapshot_onto_base()`) (verified). Both write
-`run_merge_node`'s output over `SNAP_DIR/<id>.md`, which held the writer's
-original unlanded content. On a later park for a **different** id in the same
-multi-id batch, `park_write()`'s recovery text points the human at
-`SNAP_DIR/<id>.md` claiming it holds their unlanded content, when it now holds
-graph-commit's own already-landed merge result.
-
-Fix: write merge output to a distinct path and leave `SNAP_DIR/<id>.md`
-immutable for the life of the run, so the park recovery text stays true. This is
-the highest-severity item in the PR: it is silent, it destroys author content,
-and the recovery instructions actively mislead.
-
-**Unit 7 — a transient `npx` failure becomes a fleet-wide park storm.**
-`packages/intentionsutil/scripts/graph-commit:995` (verified) — `run_merge_node()`
-shells out to `npx tsx "$MERGE_NODE_SCRIPT"`, and far-ahead replay now routes
-**every** divergent node through it. When `npx` cannot run at all (sandbox
-`EROFS`, cold cache, registry outage) the crash is indistinguishable from an
-unresolvable divergence, so each node is pushed to `main` as an `office_hours`
-park instead of failing with a clear environment error.
-
-Fix: distinguish "the merger ran and could not resolve" from "the merger could
-not start". Only the former is a park; the latter is an environment error that
-dies loudly (`.claude/rules/code-style.md` — clear errors over defensive
-fallbacks). Note the same doomed-spawn shape is already called out in a comment
-at `:764`.
-
-**Unit 8 — graph reads resolve their tree from cwd or script location, so a
-wrong-directory invocation reports a vacuous pass.** Four readers disagree,
-all verified:
-
-| Reader | Roots from | Anchor |
-|---|---|---|
-| `dump-node.ts` | script location (`import.meta.url`) | `:38` |
-| `write-node.ts` | script location (`import.meta.url`) | `:21` |
-| `validate-graph.ts` | **cwd**, defaulting to `"intentions"` | `:73` |
-| `demote-node-to-implement` | script location (`SCRIPT_DIR/../../..`) | `:53` |
-| `graph-commit` | `-C` flag, else **cwd** | `:406` region |
-
-So a read or verify invoked from the wrong directory silently targets the wrong
-tree, and `validate-graph.ts` in particular can report a **vacuous pass** —
-against a directory that does not exist or is not the graph. This is the general
-form of the read-path defect this plan already carries one symptom of
-(`tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land`, PR4).
-
-Fix: make the tree/ref an **explicit required argument** on every read, with no
-cwd or script-location default. Additionally give `demote-node-to-implement` an
-`origin/main` refresh before it reads (it already fetches at `:69` but reads its
-own checkout). Out of scope: changing what any reader does once it has the right
-tree.
-
-> Both nodes here — `tactic-explicit-ref-graph-reads` and
-> `tactic-demote-node-stale-local-read` — describe this same defect, one in
-> general terms and one naming the specific readers. They are closed together by
-> one unit deliberately; do not plan them as two.
-
-### Dependencies
-
-None in code — this is the root PR.
-
-**One decision precedes it:** the `tactic-graph-ref-split` question in Revision
-6. Units 1–4 repair the CI-stamp/scratch-branch write mechanic that ref-split
-replaces with a CAS push against `origin/graph-main`. Units 5–8 survive either
-way (Unit 5's check handling, Unit 6's snapshot immutability, Unit 7's merger
-error class, and Unit 8's read-path explicitness are all independent of which
-ref the graph lands on).
-
-### Reuse
-
-- `isPlainObject`, `validateNode` — `packages/intentionsutil/src/schema.ts`.
-- Existing fixture-graph builders in `packages/intentionsutil/test/` (`anode()`
-  at `office-hours.test.ts:54` builds a full `IntentionNode` fixture).
-- `check_suite_concluded()` — `graph-commit`, already resolves the orphaned-suite
-  condition Unit 5 needs; the information is present, only the return code
-  collapses it.
-- `test-park-node.sh` and the other `packages/intentionsutil/test/test-*.sh`
-  shell harnesses — the pattern for Units 5–8's script-level coverage.
-
-### Verification
-
-```verify
-npm test --prefix packages/intentionsutil
-```
-
-```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
-.claude/skills/dispatch-propagate/scripts/run-lint.sh
-```
-
-Manual, one per unit — none of these is covered by the suites above:
-
-- **Unit 1** — with a deliberately unpushed local commit on `main`, run a
-  `graph-commit` that edits an existing node; confirm the verdict is not
-  `landed context=noop` and the edit is present at `origin/main`.
-- **Unit 5** — cannot be provoked on demand (it needs GitHub to orphan a check
-  row). Verify by unit-testing the rc mapping directly: assert that a concluded
-  non-success and an orphaned suite produce **different** return codes, and that
-  the orphaned path attempts a re-push.
-- **Unit 6** — run a multi-id batch where one id merges cleanly and a second
-  parks. Confirm `SNAP_DIR/<first-id>.md` still holds the writer's pre-merge
-  content, byte-for-byte, after the run, and that the park recovery text names a
-  file whose contents match what the writer intended to land.
-- **Unit 7** — force the failure with `PATH` stripped of `npx` (or
-  `MERGE_NODE_SCRIPT` pointed at a nonexistent file) on a divergent node.
-  Confirm the run dies with an environment error and that **no** `office_hours`
-  park reaches `origin/main`.
-- **Unit 8** — run `validate-graph.ts` from a directory with no `intentions/`
-  and confirm it now fails with a clear error instead of passing vacuously.
-
-### Closing the nodes
-
-**What actually happened** *(record, corrected by R8):* **8** ids — not 9 — were
-closed in one batch as `1192d6f8`, each with `phase: done` and an
-`execution.completion` object, via `dump-node.ts` → jq → `write-node.ts` →
-`graph-commit -C <path>`. Two further implementation-record notes landed as
-`063b3df2`. Every id was verified twice: blob comparison against
-`git show origin/main:intentions/<id>.md`, and `verify-landed --blob`.
-
-> The instruction that stood here — close `tactic-explicit-ref-graph-reads` and
-> `tactic-demote-node-stale-local-read` in the **same** batch — was **voided by
-> Ruling 3** before the PR was written, and the shipped PR did not follow it.
-> `tactic-demote-node-stale-local-read` was left untouched (`status: raw`,
-> `phase: null`, `execution: null`) and is deferred behind
-> `tactic-phase-evidence-fingerprint-bound`. Do not close it against `fe0b1c4d`.
+`tactic-demote-node-stale-local-read` was removed from PR1's scope by
+clarification 243, did **not** ship, and remains `phase: null`, deferred behind
+`tactic-phase-evidence-fingerprint-bound`. Do not close it against `fe0b1c4d`.
 
 ---
 
