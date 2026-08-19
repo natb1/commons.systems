@@ -239,3 +239,73 @@ appends `## needs-main residue` to the source body and still advances `qa -> rev
 with the residue draining later via `review -> main-qa`
 (`.claude/skills/qa-fix/SKILL.md:358-379`). The problem this node exists to solve
 is real and unfixed.
+
+## 2026-08-19 author rulings (park cleared)
+
+The office-hours park the round above opened is **cleared** (`clear-park`, landed
+`5f8dbc0a`). The author ruled all four open questions in an interactive sitting the
+same day. These rulings are **binding on the plan** and must not be re-litigated by
+a later round; a round that disagrees parks rather than overrides.
+
+**Ruling 1 — WAIT is a hold on the machine-verifiable node, not a third
+destination.** The at-most-two-nodes-per-source cap stands unamended and `owner`
+stays the sort mark. A WAIT-classed item lands on the `owner: ai` machine-verifiable
+`tactic-mainqa-*` node, and that node carries `blocked_by: [tactic-wait-<id>]`
+pointing at the hold minted by `arm-wait`. This is the shape
+`tactic-wait-calendar-release` already codified — `attributes.wait_for` names the
+source, `source.blocked_by` names the WAIT
+(`intentions/tactic-wait-calendar-release.md:160-200`) — so the "source" under the
+new routing is simply the machine-verifiable destination node. Candidate (a) from
+the park reason, a genuine third destination node, is **rejected**: it would require
+amending the recorded cap and inventing a sort mark `owner`'s enum cannot express.
+No strategy clarification amendment is owed by this ruling.
+
+**Ruling 2 — Unit 1 blocks on `tactic-wait-calendar-release`.** Unit 1 deletes the
+interim park path, so landing it before `arm-wait` exists would leave a WAIT item
+with nowhere to go. This node therefore carries
+`blocked_by: [tactic-wait-calendar-release]`.
+
+> **Write-ordering trap, load-bearing.** That edge must be written **in the same
+> commit as the finalize**, never before it. `/align-tactics`' Step-0 gate
+> (`assert-node-selection` → `frozenTacticSelectable`) exits **12** on incomplete
+> blockers, so a node that carries the edge while `tactic-wait-calendar-release` is
+> still at `phase: review` cannot be selected for planning at all. Adding the edge
+> first would make this node unplannable until #3051 merges.
+
+**Ruling 3 — the live `Verifiability: WAIT` marks migrate in Unit 1's PR.** Measured
+at `origin/main` on 2026-08-19: **45 marks across 26 nodes** (up from the 44/25 the
+round above recorded a day earlier — the count drifts, so re-measure rather than
+citing either figure). They are rewritten into the new standalone-node shape as part
+of Unit 1 rather than draining in place. Consequence to carry into the plan: the
+interim `Verifiability:` sub-line then **does** retire on the schedule
+`.claude/skills/qa-fix/references/needs-main-followups.md:70-77` already states, so
+that retirement note needs no amendment — but Unit 1's diff is correspondingly
+larger, and the Migration section's "no bulk rewrite" sentence applies only to
+residue-carrying nodes' *phase drain*, not to these marks.
+
+**Ruling 4 — scope is Units 1+2; Units 3, 4 and 5 are named follow-ups.** The
+`/qa-fix` writer and the `/qa-main` reader land together (the Migration section's
+existing constraint). Unit 3 reuses the already-built shared hold primitive from
+`tactic-mechanical-park-producers` (`phase: done`) and is otherwise sibling scope;
+Unit 4 waits on both a long drain tail and the absent generator
+`tactic-phase-routing-table-generated` (`status: raw`); Unit 5 is a measurement.
+Each is named in the plan as an explicit out-of-scope follow-up, not silently
+dropped. This node does **not** split — a split would contradict units 1+2 landing
+together.
+
+**Checked and rejected: folding #3051 into PR2 of the RSI serialized PR plan.** The
+author asked whether `tactic-wait-calendar-release` (PR #3051) could be folded into
+PR2 as described in `plans/dispatch-rsi-serialized-pr-plan.md`. It cannot. PR2 is
+the ladder driver (`dispatch-ladder-{advance,await,run,status,spawn}` plus the
+`terminus.ts` census, 7 nodes); #3051 touches `waits.ts`, `wait-sweep.ts`,
+validate-graph Rule 21, the `router.ts` draft-candidate exclusion,
+`arm-wait`/`release-wait`, `lib-wait-recheck.sh` and `dispatch-tick` — no file
+overlap. #3051 is already code-complete and carries `planned` / `qa-done` /
+`reviewed` markers with only CI red (`dispatch:fix-checks-attempt-1`), so folding it
+into an unstarted bundle would discard a finished review and **delay** the machinery
+Ruling 2 depends on. PR2's remainder also sits in Bundle 3 (COLD, position 6 of 10),
+whereas a `wait_until` tick sweep belongs topically to Bundle 2. The plan's single
+mention of this node's sibling (line 924) is a *rejection* — `wait_until` does not
+fit `tactic-pause-disables-merge-lane`'s episode wait. No edit was made to that plan
+file. One line in it is now stale and is a known residual: its line 898 calls this
+node "itself raw and unplanned".
