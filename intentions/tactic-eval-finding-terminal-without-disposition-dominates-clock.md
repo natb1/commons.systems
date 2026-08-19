@@ -26,7 +26,111 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: >-
+    Requirement ambiguity — the remediation shape for this ledger entry is
+    undetermined and the node's own body reserves the choice to the author ("##
+    Not applied": the two obvious candidates "are the author's call, not this
+    evaluator's"). Both candidates are blocked on an author ruling that the
+    graph does not record.
+
+
+    CANDIDATE (b) — let dispatch-ladder-advance proceed against a
+    registered-but-terminal session — is refused BY DESIGN, and the code says so
+    in the comment guarding the gate
+    (.claude/skills/dispatch-ladder/scripts/dispatch-ladder-advance:165-203):
+    "halting 13 on a terminal holder is deliberate: auto-releasing another
+    session's claim is a policy act, and this driver may sequence, never gate".
+    This exit-13 refusal is the only gate in the codebase against launching a
+    phase against a registered session, and per the gather sweep nothing else
+    reads WORKTREE_OCCUPANCY_STATE's terminal case. Relaxing it is exactly the
+    policy act the driver declines to take on its own, so it is not a design an
+    evaluator-lane round may choose unilaterally.
+
+
+    CANDIDATE (a) — have each node-lane phase skill declare its own
+    node-terminal marker on the success path — is already decomposed as a
+    per-skill family under the SIBLING strategy strategy-graph-native-dispatch:
+    tactic-align-tactics-mark-terminal-skipped (done, PR #3047,
+    land-align-round), tactic-qa-fix-node-terminal-declaration and
+    tactic-qa-main-node-terminal-declaration (both raw). Planning (a) here would
+    record the same root-cause defect on a second tactic, which
+    strategy-recursive-self-improvement's own success_signal forbids in terms
+    ("no two tactics recording the same root-cause defect"), and would place an
+    orchestration repair under a strategy whose statement is "measurement, not a
+    second orchestrator".
+
+
+    PROPOSED CLARIFICATION FOR AUTHOR RATIFICATION: when a /rsi ledger entry
+    explicitly abstains from proposing an orchestration rule, who owns the
+    remediation shape and where does it land — (i) ratify relaxing
+    dispatch-ladder-advance's terminal-holder refusal (naming who may release
+    another session's claim and on what evidence), (ii) route the fix to the
+    existing per-skill declaration family under strategy-graph-native-dispatch
+    and reduce this node to the cross-phase measurement it already carries, or
+    (iii) a third shape such as making the ladder driver run
+    terminal_without_disposition_sweep on its own cadence after a halt. Note the
+    align-tactics half is NOT a missing-instruction gap (land-align-round
+    --terminal landed 2026-08-05 and SKILL.md:353-380 already mandates it), so
+    the investigation of which write path the 2026-08-14 round took is owed
+    regardless of which shape is ratified.
+
+
+    TWO FURTHER DRIFT-REVIEW FINDINGS, recorded here because a per-node
+    /align-tactics session never edits the serving strategy's record
+    (.claude/skills/align-tactics/references/tactic-target.md).
+
+
+    (1) Tuning the existing grace/cadence knobs cannot recover the measured
+    cost, so DISPATCH_TERMINAL_DISPOSITION_GRACE_S (lib-frozen-session-park.sh)
+    and HELD_GRACE_S / run_owed_sweeps (dispatch-ladder-run:1226-1260,1428-1456)
+    are not a remediation path for this node. The node's own measurement says
+    the 300s grace floor "was not even the dominant term": 3092s of the 4290s
+    align-tactics block elapsed with the phase finished and no actor at all
+    before the sweep routed the node, and the invalid-state lane then spent a
+    further 1196s on a node whose work was already at origin/main. The dominant
+    term is the sweep's INVOCATION CADENCE once the driver had halted (falling
+    back to the fleet tick's ~15-minute heartbeat) plus the invalid-state hop —
+    not the grace window.
+
+
+    (2) The two strategy-graph-native-dispatch siblings at phase main-qa do NOT
+    resolve this finding and must not be read as an in-flight fix for it.
+    tactic-phase-terminal-requires-disposition IS
+    terminal_without_disposition_sweep itself — merged as PR #3004 on
+    2026-07-31, two weeks BEFORE the run this finding measures — and it is
+    office_hours-parked since 2026-08-05 waiting only on a real daemon outage to
+    exercise its design-4-daemon-unknown item. It is the healer whose latency
+    this finding measures, not a pending repair of it;
+    tactic-terminal-disposition-sweep-park-without-cas is the same sweep's CAS
+    residual. Verified by reading both nodes' frontmatter and body at HEAD.
+  since: 2026-08-19
+  recommendation: >-
+    Hold an office-hours sitting on this node to rule the three-way fork in the
+    park reason: (i) relax dispatch-ladder-advance's exit-13 terminal-holder
+    refusal, naming who may release another session's claim and on what
+    evidence; (ii) keep the gate and route the repair to the existing per-skill
+    declaration family under strategy-graph-native-dispatch, reducing this node
+    to the cross-phase measurement it already carries; or (iii) a third shape
+    such as having the ladder driver run terminal_without_disposition_sweep on
+    its own cadence after a halt.
+
+
+    Whichever is ratified, one investigation is owed independently and is the
+    cheapest next step: establish which write path the 2026-08-14 align-tactics
+    round actually took. land-align-round --terminal had already shipped
+    2026-08-05 and .claude/skills/align-tactics/SKILL.md:353-380 already
+    mandated it, so the candidates are an exit-12 no-claim path, a graph-commit
+    park whose own push failed (documented as writing no marker BY DESIGN), a
+    batch/strategy-mode land, or a session that died before reaching the land at
+    all.
+
+
+    The ruling itself belongs in an author /align round on
+    strategy-recursive-self-improvement: the record-completeness gap is that
+    none of its 21 conditions says who chooses the repair design for a ledger
+    entry the evaluator deliberately left unproposed.
+  session_type: requirement-discovery
 pace_exempt: true
 rounds: null
 attributes:
