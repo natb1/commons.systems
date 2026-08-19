@@ -50,7 +50,36 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: 'Invalid-state intervention (kind frozen-session). The /align-tactics
+    pass holding this node stopped mid-run on 2026-08-19 at an account
+    session-usage limit and latched registry state "blocked". "blocked" is not a
+    member of the shared terminal-state enumeration in lib-claude-agents.sh, so
+    worktree_occupancy_state reports the node as a LIVE claim indefinitely, the
+    terminal-without-disposition sweep and dispatch-node-reap are both out of
+    contract for the row, and the frozen-session router consumed all three of
+    its per-node intervention attempts without any mechanical act ever being
+    available. Nothing was lost: the dead pass had zero durable claims, phase is
+    still null on origin/main, there is no PR, the branch is 0 commits ahead of
+    origin/main, and the worktree is clean. Root cause filed as
+    tactic-invalid-state-rc-433b1e17. Dead session
+    bdeaf31c-e7cb-41e8-a2c4-55bb0c47f66f, job id bdeaf31c.'
+  since: 2026-08-19
+  recommendation: "Release the dead session, then unpark. Session attach or resume
+    is not a recovery path. Run: claude rm bdeaf31c-e7cb-41e8-a2c4-55bb0c47f66f
+    && packages/intentionsutil/scripts/clear-park -C
+    /home/n8/natb1/commons.systems tactic-rsi-measure-fanout-and-model-routing .
+    The worktree
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-rsi-measure-fanout-\
+    and-model-routing is clean and 0 commits ahead, so it needs no removal;
+    remove it with git worktree remove
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-rsi-measure-fanout-\
+    and-model-routing (dangerouslyDisableSandbox) only if a fresh checkout is
+    wanted. Also clear the exhausted attempt sidecar
+    .claude/worktrees/tactic-rsi-measure-fanout-and-model-routing.invalid-state\
+    -attempts so a genuinely new occurrence starts fresh. Once released, the
+    router re-selects the node and /align-tactics redoes the pass from scratch."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:
