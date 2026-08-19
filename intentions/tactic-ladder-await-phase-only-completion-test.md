@@ -9,7 +9,7 @@ statement: Teach dispatch-ladder-await/-run the completion signals that are not
   untouched, so the ladder reports successful work as `stalled` (exit 12, "the
   worker stopped and NOTHING happened") and halts
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Observed live twice in succession on 2026-08-13, on node
   tactic-attention-namespaced-rank at phase qa (PR #3075), during the
@@ -46,147 +46,54 @@ reading: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: "This tactic's entire recorded scope shipped and is green at
+      origin/main, yet the node read status: raw / phase: null / execution:
+      null. What lifecycle action does it take, and what must survive it?"
+    answer: "(Ruled by the author in a 2026-08-19 /office-hours sitting over the PR2
+      park cohort; the park's own recommendation reserved the done-versus-prune
+      choice to the author.) DONE, not prune. The node is transitioned to phase:
+      done, status: codified, with execution credited to PR #3077 (merge commit
+      7410e07f, merged 2026-08-13T13:24:02Z) — the same landing whose absence
+      made this node read as unstarted work. Re-verified at origin/main before
+      the ruling: execution.lane_pass and the LanePass {at, lane, phase, sha}
+      interface in schema.ts, apply-lane-pass.ts as an orthogonal writer,
+      dispatch-ladder-await's --since window and lane_pass probe (8 references),
+      and dispatch-ladder-run's PASS_SINCE threading — all present. The '-test'
+      half is satisfied too: test-dispatch-ladder-await.sh carries seven
+      lane_pass cases and apply-lane-pass.test.ts 17. Prune was declined because
+      the body's '## Resolved' section is the only record of a design point a
+      future reader is explicitly warned not to undo — the lane_pass stamp is
+      compared against a LAUNCH WINDOW (--since, seeded from PASS_SINCE captured
+      before the advance), never read as mere presence, because a merely-present
+      stamp would mask a genuine stall at a later pass on the same phase. That
+      section must survive verbatim. The interrupt-rung half of the residual
+      stays where dispatch-conflict/SKILL.md:1305-1312 assigns it, on
+      tactic-ladder-await-interrupt-rung-vacuous-advanced; it is NOT folded in
+      here. Note for a later reader:
+      intentions/tactic-dispatch-ladder-exit-code-space.md lists this node under
+      'await test coverage gaps' — that cross-reference is stale relative to the
+      shipped coverage and is not an outstanding obligation."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: ladder-unwedge-followup
+  pr: 3077
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T13:24:02Z
+    mergeCommitSha: 7410e07f73066a8f779ab3017d1cc798924a2558
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: >-
-    Nothing left to plan: this tactic's entire recorded scope already shipped
-    and is verified green at origin/main, so any plan body would schedule a
-    vacuous implement -> qa -> review -> main-qa run. The node needs a lifecycle
-    action this run may not author, not a decomposition.
-
-
-    VERIFIED AT origin/main (826e9da7; the node's own blob 512b1f64 is unmoved
-    since this round's diagnosis), all four limbs of the fix the node's own '##
-    Resolved' section describes: (1) schema — Execution.lane_pass, the LanePass
-    {at, lane, phase, sha} interface, validateLanePass, LANE_PASS_LANES and
-    DISPATCH_PHASE_NAMES in packages/intentionsutil/src/schema.ts; (2) writer —
-    packages/intentionsutil/scripts/apply-lane-pass.ts, the orthogonal primitive
-    deliberately NOT built on apply-fix-state/apply-conflict-state; (3) reader —
-    .claude/skills/dispatch-ladder/scripts/dispatch-ladder-await carries --since
-    (SINCE_EPOCH/SINCE_ISO parsing at :292-339), the execution.lane_pass probe
-    inserted AFTER the .phase != FROM_PHASE arm (:456-461), and the
-    lane-complete verdict at exit 0 (:523-525); (4) driver — dispatch-ladder-run
-    captures PASS_SINCE immediately before the advance (:1315), passes --since
-    PASS_SINCE to every await call (:1380), and seeds EVAL_LAUNCH_EPOCH from it
-    (:1368). Both producing lanes stamp: dispatch-conflict/SKILL.md Step 7b
-    (:1301) and qa-fix/references/auto-fix-lane.md item 6 (:208), each
-    push-first-stamp-second with a failed stamp WARNing rather than
-    hard-stopping.
-
-
-    REGRESSION COVERAGE EXISTS AND IS GREEN (run in this round's worktree): bash
-    .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh -> 48
-    passed, 0 failed, including seven lane_pass cases (a stamp is never
-    consulted without --since; a stamp at or after the launch is lane-complete
-    exit 0; no stamp or a stamp older than the launch is still stalled exit 12;
-    an unreadable stamp is exit 14 unknown, never completion; a phase change, a
-    park and a prune each outrank a fresh stamp; a held session with a fresh
-    stamp is still held-observing) plus --since usage-error cases. npx vitest
-    run --root . packages/intentionsutil/test/apply-lane-pass.test.ts -> 17
-    passed. test-dispatch-ladder-run.sh asserts the driver threads a --since
-    launch window on both the complete and routed paths and that it is
-    PASS_SINCE (pre-launch), not LAUNCH_EPOCH (post-launch). So the '-test' in
-    this node's id is satisfied too — the coverage landed with the fix.
-
-
-    THE ONE RESIDUAL IS OWNED ELSEWHERE. dispatch-conflict/SKILL.md:1305-1312
-    records a deliberate KNOWN GAP: on the router's conflict-interrupt entry the
-    selector's awaited rung is 'conflict', but the stamp there passes the node's
-    persisted phase, so the reader's phase equality cannot match. It costs
-    nothing today because the reader's phase probe fires first and returns
-    'advanced' on any rung that is not a real Phase member. That masking defect
-    is tactic-ladder-await-interrupt-rung-vacuous-advanced (still status: raw,
-    phase: null), and both the SKILL comment ('Whoever fixes that must make this
-    call pass conflict on the interrupt path') and this node's own '## Related'
-    section assign the producer-side half there. Folding it in here would
-    duplicate that node's scope and couple the two PRs.
-
-
-    STALE CROSS-REFERENCE FOUND:
-    intentions/tactic-dispatch-ladder-exit-code-space.md:340-342 lists this node
-    under 'await test coverage gaps' in its adjacent-siblings section. That note
-    is stale relative to the shipped coverage and must not be read as an
-    outstanding obligation on this node.
-
-
-    ONE IMMATERIAL DRIFT OBSERVATION HAS NO LEGAL DESTINATION FROM THIS RUN, so
-    it is recorded here rather than dropped (a per-node /align-tactics session
-    never writes the serving strategy; the born-parked observation-node redirect
-    is still only a draft, tactic-align-tactics-immaterial-drift-redirect). The
-    observation: strategy-graph-native-dispatch records the ladder's halt
-    discipline (conditions 25-28) but no COMPLETION-SIGNAL contract, so nothing
-    at strategy level says a completion signal must live in graph state rather
-    than in the driver's launch identity. Proposed clarification text, for an
-    author /align round to accept or discard: 'The /dispatch-ladder completion
-    contract has three classes, not two. A phase change and the review lane's
-    reviewed marker were the original pair; PR #3077 added execution.lane_pass —
-    {at, lane, phase, sha}, lanes limited to LANE_PASS_LANES (conflict, qa-fix,
-    fix-checks), at pinned to fixed-width YYYY-MM-DDTHH:MM:SSZ so lexicographic
-    order equals chronological order — written by apply-lane-pass.ts and read by
-    dispatch-ladder-await lane-complete arm at exit 0. Two design points are
-    load-bearing and should not be undone: the stamp is an ORTHOGONAL field,
-    deliberately not folded into execution.fix or execution.conflict, because
-    those are live routing interrupts the selector re-dispatches on and a
-    completion record must not double as a dispatch instruction; and the probe
-    compares against a LAUNCH WINDOW (--since, seeded from dispatch-ladder-run
-    PASS_SINCE captured before the advance), not mere presence, because a
-    merely-present stamp would mask a genuine stall at a later pass on the same
-    phase. This extends condition 25 rather than qualifying it: the completion
-    knowledge stayed in the graph, so the driver still sequences without gating,
-    and a genuine unchanged with no in-window stamp still halts unconditionally
-    at exit 12.' It is immaterial (plan_depends=false): no plan depended on
-    ratifying it, and it corroborates rather than contradicts condition 25.
-  since: 2026-08-19
-  recommendation: >-
-    Do NOT dispatch an implementation session on this node.
-
-
-    (1) Re-verify in about a minute, from a fresh worktree: `git show
-    origin/main:.claude/skills/dispatch-ladder/scripts/dispatch-ladder-await |
-    grep -n lane_pass`; `git show
-    origin/main:packages/intentionsutil/scripts/apply-lane-pass.ts | head`; then
-    `bash .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh`
-    and `npx vitest run --root .
-    packages/intentionsutil/test/apply-lane-pass.test.ts`.
-
-
-    (2) Then take the lifecycle action a per-node /align-tactics run may not
-    author: correct the stale frontmatter (status: raw, phase: null, execution:
-    null) so it records the delivered state — set phase: done (the lifecycle's
-    only terminal, per clarification 247) or prune, per whichever the
-    prune/retention policy prefers for a shipped node that carries no
-    attributes.measured_impact. Clearing this park is what an attended commit
-    touching the node does anyway; the point of the park is that the choice
-    between done and prune is yours, not this lane's.
-
-
-    (3) KEEP THE BODY'S '## Resolved' SECTION VERBATIM if the node is retained.
-    It is the only record of the design decision a future reader is explicitly
-    warned not to undo — the lane_pass stamp is compared against a launch window
-    (--since), never read as mere presence, because a merely-present stamp would
-    mask a genuine stall at a later pass on the same phase. This round
-    deliberately wrote no body at all, precisely so that section survives.
-
-
-    (4) Leave tactic-ladder-await-interrupt-rung-vacuous-advanced open — it is
-    the correct home for the interrupt-rung half of the residual, and
-    dispatch-conflict/SKILL.md:1305-1312 already assigns it there.
-
-
-    (5) Two byproducts worth a moment while you are here: the stale 'await test
-    coverage gaps' cross-reference at
-    intentions/tactic-dispatch-ladder-exit-code-space.md:340-342, and the
-    immaterial drift observation quoted in full in this park's reason (a
-    proposed completion-contract clarification for
-    strategy-graph-native-dispatch, which only an author /align round may land).
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

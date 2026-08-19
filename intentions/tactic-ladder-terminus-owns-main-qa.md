@@ -5,7 +5,7 @@ statement: A /dispatch-ladder run drives its node to a terminal state —
   including the main-qa work it spawned — instead of ending at merge and leaving
   the post-merge write to a fleet-wide reconciler sweep it does not control
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced in the 2026-08-14 /align interview that recorded the
   ladder-terminus requirement on strategy-graph-native-dispatch. The requirement
@@ -67,6 +67,71 @@ clarifications:
       halt:708-731) mirrors the same classification order and preserves
       verify-landed's 0/4/1 contract, mapping an unknown read to 'unknown' and
       never to 'violation'."
+  - question: "The code half merged out-of-band as PR #3091 while this node still
+      read status: raw / phase: null / execution: null. Is the node complete as
+      shipped, or is its residual scope item 2 tracked here?"
+    answer: "(Ruled by the author in a 2026-08-19 /office-hours sitting over the PR2
+      park cohort.) COMPLETE AS SHIPPED. The node transitions to phase: done,
+      status: codified, with execution credited to PR #3091 (merge commit
+      de347430, merged 2026-08-14T15:00:49Z) — the stamp whose absence made this
+      node invisible to its own sensor, which is the very blind spot the
+      preceding clarification records. Delivered and credited here: scope item 1
+      and the MEASUREMENT half of scope item 3 — terminus.ts (classifyTerminus,
+      ladderTerminusCensus, findUnstructuredWaits), ladder-terminus-census.ts,
+      the ladder-terminus sensor in read-sensors.ts, and dispatch-ladder-run's
+      classify_terminus / classify_absent_node / halt wiring with 48 new shell
+      assertions. Scope item 2 — 'the requirement follows the work, not the
+      node', a run answerable for spawned main-qa work ACROSS a node boundary —
+      is RE-HOMED onto the fresh sibling tactic
+      tactic-ladder-run-answerable-across-node-boundary, blocked_by
+      tactic-mainqa-record-time-routing, rather than tracked here. The
+      alternative (keep this node open holding only item 2) was declined because
+      it leaves a merged implementation sitting under a raw node, which is
+      precisely the dishonest record this tactic exists to eliminate. The
+      enforcement half of scope item 3 is NOT delivered and is not claimed:
+      --strict is deliberately unwired in ladder-terminus-census.ts, and this
+      node's own success_signal threshold of 0 violations was NOT met at done
+      (census re-measured 2026-08-19 at origin/main cfd3b4f0:
+      merged-not-done=29, excused=24, violations=5, unstructured waits=2). What
+      shipped is the INSTRUMENT, not the enforced invariant; see the following
+      clarification for where enforcement went."
+  - question: "The 0-violations threshold collides with clarification 210's
+      no-backfill ruling for pre-existing prose 'Verifiability: WAIT' marks.
+      Which of clarification 232's two outcomes is taken, and who executes it?"
+    answer: "(Ruled by the author in a 2026-08-19 /office-hours sitting over the PR2
+      park cohort.) NEITHER outcome is ruled on this node; the resolution is
+      FOLDED INTO PR2 of the serialized RSI PR plan and executed AD HOC. The
+      author's standing decision for that PR: it will NOT be implemented via
+      /dispatch-ladder — no ladder invocation is to be used to drive any of it,
+      including the stranded-node recovery below — and the terminus resolution
+      rides in the same PR if it fits in one. Standing facts for whoever
+      executes it, re-measured 2026-08-19 at origin/main cfd3b4f0. The census
+      reports 5 violations: three are PLAIN STRANDED NODES with no wait involved
+      — tactic-align-tactics-mark-terminal-skipped (#3047),
+      tactic-dependency-justification-audit (#2875),
+      tactic-graph-commit-landing-signal-unreliable (#3050), all sitting at
+      phase main-qa — and recovering them by hand moves the observable from 5 to
+      2, leaving only the two prose waits and sharpening the remaining question
+      considerably. Of those two: tactic-attention-namespaced-rank's wait names
+      a real node (tactic-attention-per-tier-boost-migration) and IS expressible
+      as a blocked_by edge today with no new machinery;
+      tactic-pause-disables-merge-lane's awaits an EPISODE — a heartbeat tick
+      with the pause sentinel present and a reviewed green node-lane PR pending
+      merge — which is neither a node nor a calendar deadline, so neither
+      blocked_by nor tactic-wait-calendar-release's wait_until shape fits it,
+      and inventing a shape for it deserves its own tactic rather than a unit.
+      Clarification 232's escape ('the sensor stays approximate and says so')
+      therefore remains live for that second wait, and taking it means having
+      ladder-terminus-census.ts state the approximation in its own output rather
+      than leaving readers to infer it. Wiring ladder-terminus-census.ts
+      --strict into CI is gated on that answer; it is wired into nothing today
+      by the script's own deliberate choice. Two invariants from the preceding
+      clarification bound every option: findUnstructuredWaits must never feed
+      back into classifyTerminus to reclassify a prose wait as excused, and
+      closing the wait gap means converting prose to real blocked_by edges,
+      never loosening the predicate. Re-measure with 'npx tsx
+      packages/intentionsutil/scripts/ladder-terminus-census.ts intentions
+      --lint' before and after rather than citing any stored figure."
 tooling_goals: []
 success_signal:
   observable: "the merged-but-not-terminal count: nodes at origin/main whose
@@ -78,114 +143,23 @@ success_signal:
     merged-not-done, 24 excused, 5 violations."
   is_proxy: true
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: align-ladder-mainqa-terminus
+  pr: 3091
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-14T15:00:49Z
+    mergeCommitSha: de347430a326f56d519baaa1d69648853e982482
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: >-
-    Two premises need author ratification before this node can be planned.
-
-
-    (1) RESIDUAL SCOPE AND NODE RECORD. The code half of this tactic already
-    merged out-of-band as PR #3091 / commit de347430 (2026-08-14), an ad-hoc PR
-    whose own body says it implements this node and deliberately bypasses the
-    dispatch ladder. It landed scope item 1 and the measurement half of scope
-    item 3: packages/intentionsutil/src/terminus.ts (classifyTerminus,
-    ladderTerminusCensus, findUnstructuredWaits),
-    packages/intentionsutil/scripts/ladder-terminus-census.ts (report-only;
-    --strict deliberately unwired), the ladder-terminus sensor in
-    read-sensors.ts, and dispatch-ladder-run's classify_terminus /
-    classify_absent_node / halt wiring with 48 new shell assertions. Its 'Not in
-    this PR' section defers scope item 2 behind a real blocked_by on
-    tactic-mainqa-record-time-routing, under the rule 'No cross-node machinery
-    is built while no caller can exercise it'. The promised follow-on graph
-    edits never landed: re-verified at origin/main dcf1baa6, this node is still
-    status: raw, phase: null, execution: null, blocked_by: [] — it reads as
-    unstarted while its implementation is merged, and the deferral edge does not
-    exist. The author must rule (a) whether this node's residual scope is scope
-    item 2 alone with items 1 and 3's measurement half recorded as landed, or
-    whether the node is complete as shipped and item 2 re-homed onto a fresh
-    tactic; and (b) whether to plan now behind a blocked_by on
-    tactic-mainqa-record-time-routing — which is itself status: raw / phase:
-    null / unplanned, so no unit of item 2 is implementable or exercisable today
-    — or to leave this node unplanned until that sibling lands. Planning
-    autonomously would either duplicate merged code or author units nothing can
-    exercise.
-
-
-    (2) THRESHOLD VERSUS THE NO-BACKFILL RULING. Scope item 3 and this node's
-    0-violations threshold collide with strategy clarification 210, which rules
-    that pre-existing prose 'Verifiability: WAIT' marks are NOT backfilled by
-    tactic-wait-calendar-release. The two nodes whose prose waits keep --strict
-    unwired are re-verified at dcf1baa6 as still phase: main-qa, blocked_by: [],
-    office_hours: null. tactic-attention-namespaced-rank's wait names a real
-    node (tactic-attention-per-tier-boost-migration) and so IS expressible as a
-    blocked_by edge today; tactic-pause-disables-merge-lane's awaits an episode
-    — a heartbeat tick with the pause sentinel present and a reviewed green
-    node-lane PR pending merge — which is neither a node nor a calendar
-    deadline, so neither blocked_by nor tactic-wait-calendar-release's
-    wait_until shape fits it. The author must rule whether this node owns giving
-    those two structural edges, or whether they drain through the interim park
-    path with --strict wiring gated on that. Note that clarification 232's
-    explicit escape — 'the sensor stays approximate and says so' — is NOT
-    combinable with this node's threshold of 0 violations as recorded; taking
-    the escape requires amending this node's success_signal, which is an author
-    decision, not one this round may make.
-
-
-    ROUND BOOKKEEPING, so the record is accurate. This session landed no edit to
-    strategy-graph-native-dispatch — a tactic-target round never writes the
-    serving strategy's frontmatter. The round's three measured observations are
-    recorded as dated clarifications on THIS node (entries added 2026-08-19),
-    not on the strategy. The two premises above are PROPOSED for author
-    ratification and are recorded as accepted nowhere. No plan body was authored
-    and the node body is unchanged, so it still describes the pre-#3091 world;
-    reconciling it is part of ruling (1), not something this round decided.
-  since: 2026-08-19
-  recommendation: >-
-    Rule the two questions in the park reason — an office-hours sitting on this
-    node is enough; a full /align round on the strategy is not required — then
-    re-run `/align-tactics tactic-ladder-terminus-owns-main-qa`, which will
-    finalize against the ruling.
-
-
-    For question (1), the two live options:
-      (a) RESIDUAL SCOPE IS ITEM 2 ONLY. Record items 1 and 3's measurement half as landed (stamp execution/completion from PR #3091, or say so in the body), and add blocked_by: [tactic-mainqa-record-time-routing] so this node holds until that enabler is real. Because that sibling is an unplanned raw draft, nothing here is implementable until it is decomposed — so run `/align-tactics tactic-mainqa-record-time-routing` FIRST if you take this option.
-      (b) THIS NODE IS COMPLETE AS SHIPPED. Transition it to done crediting PR #3091, and re-home scope item 2 ('the requirement follows the work, not the node' — answerability across a node boundary) onto a fresh tactic serving strategy-graph-native-dispatch, blocked_by tactic-mainqa-record-time-routing. This keeps the graph honest about what merged and stops this node reading as unstarted work.
-    Option (b) is the cleaner record if you agree items 1 and 3's measurement
-    half are genuinely finished, because it stops a merged implementation
-    sitting under a raw node; option (a) is right if you want the residual
-    tracked under the original requirement id.
-
-
-    For question (2), the decision is which of clarification 232's two recorded
-    outcomes this node takes: structural edges for the waits, or an approximate
-    sensor that says so. If structural edges: tactic-attention-namespaced-rank
-    can take blocked_by: [tactic-attention-per-tier-boost-migration] today with
-    no new machinery, but tactic-pause-disables-merge-lane needs a shape that
-    does not exist (its awaited event is an episode with no node and no
-    deadline) — that is a design question worth its own tactic rather than a
-    unit here. If the approximate sensor: amend this node's success_signal
-    threshold off 0, and have ladder-terminus-census.ts state the approximation
-    in its output rather than leaving readers to infer it. Either way, wiring
-    `ladder-terminus-census.ts --strict` into CI is gated on the answer; it is
-    wired into nothing today, by the script's own deliberate choice.
-
-
-    SEPARATELY AND CHEAPLY, whichever way you rule: three of the five violations
-    are plain stranded nodes with no wait involved —
-    tactic-align-tactics-mark-terminal-skipped (#3047),
-    tactic-dependency-justification-audit (#2875),
-    tactic-graph-commit-landing-signal-unreliable (#3050). Per clarification
-    232's own corollary they are recoverable right now by invoking
-    `/dispatch-ladder <id>` on each, since the ladder picks up wherever its
-    target stands. Doing so would move the observable from 5 violations to 2 and
-    leave only the two prose waits, which sharpens question (2) considerably.
-    Re-measure with `npx tsx
-    packages/intentionsutil/scripts/ladder-terminus-census.ts intentions --lint`
-    before and after rather than trusting any stored figure.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
