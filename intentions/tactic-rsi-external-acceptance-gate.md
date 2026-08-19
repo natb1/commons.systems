@@ -43,7 +43,34 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Frozen session: the /align-tactics pass on this node (session 236b964f)
+    halted at the account session-usage limit and is still registered in state
+    blocked, not terminal. Because blocked reads as live,
+    worktree_occupancy_state reports live, claude_agents_list_terminal_workers
+    does not list it, and dispatch-node-reap has no path to it -- so no
+    mechanical tier can release the node's name-keyed claim. Nothing landed:
+    phase null, office_hours null, no origin branch, no PR, zero durable claims
+    in the session digest. The worktree holds one untracked scratch file
+    (build-args.ts) and no commits ahead of origin/main, so a content-gated
+    removal would refuse it as skip-dirty. Root cause recorded as
+    tactic-invalid-state-rc-814f9159 (cause slug
+    session-limit-halt-leaves-blocked-worker); this is the frozen-session kind,
+    which the invalid-state intervention round routes to author-required with no
+    mechanical branch."
+  since: 2026-08-19
+  recommendation: "Release the stale claim, then unpark so the router can
+    re-select the node: (1) claude rm 236b964f ; (2) git worktree remove
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-rsi-external-accept\
+    ance-gate --force (the only uncommitted content is the scratch file
+    build-args.ts, verified to hold no unlanded work) ; (3) rm -f
+    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-rsi-external-accept\
+    ance-gate.invalid-state-attempts to reset the intervention attempt sidecar ;
+    (4) packages/intentionsutil/scripts/clear-park -C
+    /home/n8/natb1/commons.systems tactic-rsi-external-acceptance-gate . The
+    node itself needs no repair -- it is unstarted at phase null and re-enters
+    the ladder from the top."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes:
