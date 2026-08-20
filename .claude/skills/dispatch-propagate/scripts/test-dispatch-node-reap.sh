@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for dispatch-node-reap — the CLI wrapper over `session_reap_node`.
 #
-# The act itself is tested in test-lib-session-reap.sh (118 cases, against a real
+# The act itself is tested in test-lib-session-reap.sh (129 cases, against a real
 # scratch git repo). This file pins only what the CLI adds: argv validation, the
 # SELF-TARGET refusal, and token passthrough.
 #
