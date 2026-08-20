@@ -107,11 +107,12 @@ its candidate set is: a graph-native tactic at `phase: review`, carrying
 in-flight `execution.conflict` and `office_hours` null. Counted against
 `origin/main` on 2026-08-14:
 
-| State | Count 2026-08-14 | Recount 2026-08-20 |
-|---|---|---|
-| `phase: review` with a PR, **mergeable now** | **0** | **0** |
-| parked (`office_hours` set — held) | 2 | 2 |
-| review-in-progress / conflicted (no `reviewed` marker) | 2 | 1 |
+| State | Count 2026-08-14 | Recount 2026-08-20 | After Bundle 0 step 2 |
+|---|---|---|---|
+| `phase: review` with a PR, **mergeable now** | **0** | **0** | **0** |
+| parked (`office_hours` set — held) | 2 | 2 | 2 |
+| review-in-progress / conflicted (no `reviewed` marker) | 2 | 1 | 0 |
+| merged, awaiting reconciler absorption | — | — | 1 |
 
 > **Recount 2026-08-20 — the margin is now one marker wide.** Three nodes sit at
 > `phase: review`, all carrying `execution.pr` and `markers: [planned, qa-done]`,
@@ -123,6 +124,16 @@ in-flight `execution.conflict` and `office_hours` null. Counted against
 > withholds. The standing check below is no longer a formality: run it, and if
 > #3052 is landed by hand per Bundle 0 Step 2, the count returns to two parked
 > nodes and the margin re-widens.
+>
+> **Re-run 2026-08-20 after Bundle 0 step 2 — the margin re-widened, as
+> predicted.** #3052 was squash-merged by hand (`4dfb4648`). Its node is still
+> `phase: review` with `execution.pr: 3052`, `conflict: null`, `office_hours:
+> null` and **no `reviewed` marker** — but its PR is now `MERGED`, so
+> `graph-auto-merge` has nothing left to merge and `reconcile-graph-merged` will
+> absorb it off `review` on the next tick. Standing candidate count: **0
+> mergeable**, 2 parked, 1 merged-awaiting-absorption. Only the two parked nodes
+> remain at `phase: review`, and neither can produce a merge candidate without a
+> worker. **Still no parking session needed.**
 
 There is no path from that state to a merge while the sentinel holds: the
 `reviewed` marker is written by a review session, review sessions run only from
@@ -262,8 +273,10 @@ at `phase: implement`, delete the branch, and add the node to the named PR's
 | **#3018** | `tactic-conflict-lane-exit11-retry-bound` | **PR8** Unit 3, coordinated with PR5's conflict-lane unit | `dispatch-tick:266-300`; same lane, different mechanism — converge the policy once |
 | **#3041** | `tactic-clarification-citation-ids` | **PR19** (+PR4/PR18 `schema.ts`, `router.ts`) | **Node is `office_hours`-parked** and is one of this plan's two named pre-PR sittings. Resolve the sitting first, then absorb — see Step 4 |
 
-**A2 — land first (4).** All `MERGEABLE` today. Each is cheaper to merge than to
-carry, and merging retires its anchor drift permanently.
+**A2 — land first (4). — 3 LANDED 2026-08-20** (`4dfb4648`, `9637479a`,
+`97085e52`); **#2805 remains.** Each was cheaper to merge than to carry, and
+merging retired its anchor drift permanently. See Bundle 0 step 2 for the merge
+record and step 4 for why #2805 did not land.
 
 | PR | Node | Effect on the plan |
 |---|---|---|
@@ -364,6 +377,22 @@ tells you to re-locate; this is why.
 
 Ordered so each step reduces the next one's cost. No step opens a new PR.
 
+> **Status 2026-08-20 — 5 of 7 steps complete.**
+>
+> | Step | State |
+> |---|---|
+> | 1 — settle #3037 | **done** — recommendation *refuted*; #3037 deferred to A3, PR18 Unit 1 narrowed |
+> | 2 — land the A2 PRs | **3 of 4 done** — `4dfb4648`, `9637479a`, `97085e52`; #2805 open |
+> | 3 — sequence `mainqa-record-time-routing` | **done** — now §PR5a, Bundle 2a |
+> | 4 — the two parks | **measured, not cleared** — both alarms stale; one needs an author call |
+> | 5 — close the 12 A1 PRs | **gated, none closed** — the redundancy test is new and unrun |
+> | 6 — fold the class-B nodes | **done** — 12 folded |
+> | 7 — the sentinel | **done** — settled by ground rule 4; nothing to decide |
+>
+> **The two open items both need the author, and neither is mechanical:** whether
+> to accept #2805's Lane-A review-coverage gap (step 4), and whether the step-5
+> redundancy test's verdicts justify discarding ~10,900 lines of drafted work.
+
 1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
    refuted by the reading it ordered.** This step said to read
    `census-tick.ts`'s `spliceBody()` first, then close #3037 and absorb
@@ -401,9 +430,34 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    **The precedent this sets for step 5 is the opposite of the one intended.**
    Verify before closing — see the gate added there.
 
-2. **Land the four A2 PRs** (#3052, #3084, then #2805 and #2879 after their
-   sittings). Cheapest anchor drift on the board, and #3052 re-widens the freeze
-   margin. Re-run §"The freeze"'s standing candidate count afterwards.
+2. **Land the four A2 PRs — 3 of 4 DONE 2026-08-20.** All three were verified
+   `MERGEABLE` / `CLEAN` with a full green check rollup immediately before
+   merging, then squash-merged with the remote branch deleted:
+
+   | PR | Node | Squash commit | Checks at merge |
+   |---|---|---|---|
+   | **#3052** | `tactic-reap-safety-behind-branch-false-positive` | `4dfb4648` | 23/23 SUCCESS |
+   | **#3084** | `artifact-plan-view` | `9637479a` | 24/24 SUCCESS |
+   | **#2879** | `tactic-align-audit-skill` | `97085e52` | 23/23 SUCCESS |
+
+   The standing candidate count was re-run afterwards and is recorded in
+   §"The freeze": **0 mergeable**, the margin re-widened as predicted.
+
+   > **#2879 was not gated on a sitting.** Step 2 originally grouped it with
+   > #2805 as "after their sittings". Its node is `phase: qa`, `office_hours:
+   > null`, `blocked_by: []` — unparked and unblocked. The A2 table said as much
+   > (related to PR20's sitting "by subject, not by a declared edge"); the step's
+   > parenthetical contradicted its own table. It landed with the other two.
+
+   > **Local branch refs survive the merge.** `--delete-branch` deleted each
+   > remote branch but failed on the local ref for #3052 and #3084 — `cannot
+   > delete branch … used by worktree at …`. Harmless, and *not* a partial merge:
+   > both are `MERGED` on GitHub. Clean the stale worktrees with
+   > `.claude/skills/dispatch-propagate/scripts/remove-worktree`, never a bare
+   > `git worktree remove` (`.claude/rules/sandbox.md`).
+
+   **#2805 is the one that did not land**, and its blocker is a judgement, not a
+   mechanism — see step 4.
 
 3. **Sequence `tactic-mainqa-record-time-routing` as its own PR, before PR5. —
    DONE 2026-08-20.** It is now **§PR5a**, listed as Bundle 2a and placed at
