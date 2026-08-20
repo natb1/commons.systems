@@ -303,7 +303,7 @@ rebase — it is purely an edit to a plan section's `### Nodes closed` and
 | Node | Phase | Disposition |
 |---|---|---|
 | `tactic-node-merge-list-removal-loss` | implement, **parked** | **→ PR15.** `graph-commit`'s layer-2 field merge cannot express a REMOVAL: the base-free list union silently restores a deleted `blocked_by`/`serves` entry and reports a clean auto-resolve. **Deterministic, not a race, and `--base` does not protect against it.** This plan runs ~100 node closures through that merge. Highest-value item on this page. Its park is a stale `provision-node-worktree` exit-2 from 2026-07-31 — clear it, do not re-provision |
-| `tactic-mainqa-record-time-routing` | implement | **Own PR, sequenced before PR5** — see the updated collision note in §PR5. Now unblocked in substance (#3051 merged) |
+| `tactic-mainqa-record-time-routing` | implement | **DONE 2026-08-20 — now §PR5a**, Bundle 2a, sequenced before PR5. Unblocked in substance (#3051 merged); its `blocked_by` edge is stale-but-written |
 | `tactic-review-code-review-invocation-contract-main-qa-regression` | implement | **→ PR6.** Corrects the recorded `dispatch-code-review` invocation contract (`--comment` / `--no-comment`, and whether the `/code-review low --fix` pre-stage completes). PR6 owns that script |
 | `tactic-select-tick-main-sync-gated-on-caller-cwd` | implement | **→ PR8.** `dispatch-select-tick` gates its main-checkout sync on the caller's cwd, so one stray dirty file wedges every writer. On the paused-tick path |
 | `tactic-worker-self-close-configurable` | implement | **→ PR8** (`dispatch-config-load`), with the `dispatch-stop.sh` half coordinated with PR12 |
@@ -383,9 +383,13 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    sittings). Cheapest anchor drift on the board, and #3052 re-widens the freeze
    margin. Re-run §"The freeze"'s standing candidate count afterwards.
 
-3. **Sequence `tactic-mainqa-record-time-routing` as its own PR, before PR5.**
-   Unblocked in substance since #3051 merged. Landing it first puts the rebase
-   cost on the smaller of the two diffs.
+3. **Sequence `tactic-mainqa-record-time-routing` as its own PR, before PR5. —
+   DONE 2026-08-20.** It is now **§PR5a**, listed as Bundle 2a and placed at
+   position 3 in §"Recommended order", immediately ahead of Bundle 2. Its plan of
+   record stays in the node body (a finalized seven-unit plan, `fcb792af`); the
+   PR5a section indexes those units and carries the sequencing, the stale
+   `blocked_by` edge, and the PR5 file collision. Landing it first puts the
+   rebase cost on the smaller of the two diffs.
 
 4. **Clear the two parks — they are not "sittings".** *Corrected 2026-08-20 after
    reading both `office_hours` blocks.* This step called them pre-PR sittings and
@@ -516,7 +520,8 @@ deferred to post-plan rose from 3 to **4**. What did not change: 4 PRs to land,
 | # | Bundle | PRs | Nodes | Risk |
 |---|---|---|---|---|
 | ✅ **1** | **Graph read/write path** | PR1 | 8 | **SHIPPED `fe0b1c4d` (#3095)** |
-| **0** | **Retire the in-flight overhang** | no new PR — 4 lands, 13 closes, 1 sequencing | +14 absorbed | **DO FIRST** — clears PR18's and PR5's blockers |
+| **0** | **Retire the in-flight overhang** | no new PR — 4 lands, **0–12** closes (gated), 1 sequencing | **+1 to +13** | **IN PROGRESS 2026-08-20** — steps 1 and 4 executed; step 5 gated |
+| **2a** | **Record-time main-qa routing** | PR5a | 1 | before Bundle 2 — see §PR5a |
 | **1c** | **Durable-layer write fence** | PR18 | 5 | HOT — guards every node write that follows |
 | **1b** | **Graph plumbing** | PR15 + PR16 | 15 | HOT — the closure toolchain |
 | **2** | **Tick-path reconcilers and sweeps** | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT — runs every tick |
@@ -562,10 +567,10 @@ paused, so the cost of bundling is not a broken window — it is that the first
 fleet start after resumption becomes a single pass/fail boolean. Mitigate that
 with a **staged resumption** rather than by splitting: remove the sentinel with
 `max_concurrent_workers: 1`, walk one node through the full ladder, and only
-then restore normal concurrency. That resumption is the *end* of this plan, not
-a midpoint — per ground rule 4 it happens after the last PR here has merged and
-its nodes are closed, so no bundle should be sequenced against it. That converts the boolean into a diagnosable
-test and is worth more than any split.
+then restore normal concurrency. That converts the boolean into a diagnosable
+test and is worth more than any split. Note that the resumption is the *end* of
+this plan, not a midpoint — per ground rule 4 it happens after the last PR here
+has merged and its nodes are closed, so no bundle may be sequenced against it.
 
 **PR8 Unit 3 is deferred outright.** It replaces the pause sentinel with a
 config field — i.e. it rewrites the mechanism currently enforcing the freeze,
@@ -579,14 +584,15 @@ never mid-window.
 0.  Bundle 0           retire the in-flight overhang   ← START HERE (2026-08-20)
 1.  Bundle 1c          durable-layer write fence             (HOT)
 2.  Bundle 1b          graph plumbing                        (HOT, toolchain)
-3.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
-4.  Bundle 4           instrument + finding surface          (unblocks 5, 2b)
-5.  Bundle 2b          supersession representation           (needs PR4)
-6.  Bundle 3           dispatch runtime                      (COLD, big)
-7.  Bundle 5           RSI chain
-8.  Bundle 5b          /align charter + adversarial review   (before rename)
-9.  Bundle 6           skill rename                          (last, alone)
-10. Bundle 7           merge queue + scan cadence            (COLD, pre-resume)
+3.  Bundle 2a          PR5a record-time main-qa routing      (before Bundle 2)
+4.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
+5.  Bundle 4           instrument + finding surface          (unblocks 5, 2b)
+6.  Bundle 2b          supersession representation           (needs PR4)
+7.  Bundle 3           dispatch runtime                      (COLD, big)
+8.  Bundle 5           RSI chain
+9.  Bundle 5b          /align charter + adversarial review   (before rename)
+10. Bundle 6           skill rename                          (last, alone)
+11. Bundle 7           merge queue + scan cadence            (COLD, pre-resume)
 --  staged resumption: sentinel off at max_concurrent_workers: 1, one node
 --  deferred: PR8 Unit 3, during an attended un-pause
 ```
@@ -1283,8 +1289,10 @@ the work, not the node", making a run answerable for spawned main-qa work
 `tactic-mainqa-record-time-routing` — which is **no longer raw**: it was
 finalized to `phase: implement` on 2026-08-20 (`fcb792af`) carrying a
 seven-unit plan in its own node body, and is itself `blocked_by`
-`tactic-wait-calendar-release` (PR #3051, still an open draft). It stays out of
-this plan and lands as its own PR; see the file-collision note under PR5's
+`tactic-wait-calendar-release` — whose PR **#3051 merged 2026-08-20**
+(`38934c61`), so that edge is now stale-but-written rather than live. It is **no
+longer "out of this plan"**: Bundle 0 step 3 sequenced it in as **§PR5a**,
+ahead of PR5. See PR5a's Dependencies, and the file-collision note under PR5's
 Dependencies for the one place its scope touches this plan's. That is the
 governing rule from PR #3091's own "Not in this PR" section: *no cross-node
 machinery is built while no caller can exercise it.*
@@ -1656,6 +1664,93 @@ they must be equal).
 
 ---
 
+# PR5a — Record-time main-qa routing
+
+*Added 2026-08-20 by Bundle 0 step 3. This node was never in the plan's scope —
+it was `phase: implement` on 2026-08-14, so the `phase: null` filter excluded it
+(§"In-flight work outside this plan", class B).*
+
+**Recommended model: opus** — seven units, and the core of it is a correctness
+change to where post-merge verification work is *filed*, not a mechanical edit.
+
+### Context
+
+`/qa-fix` records post-merge verification work as a **residue section appended to
+the source tactic's body**. The routing unit is therefore the source tactic,
+which has exactly one destination — so the record-time triage that
+`needs-main-followups.md` already mandates cannot be expressed at all. The fix
+makes the destination the unit: `/qa-fix` mints standalone `tactic-mainqa-*`
+nodes grouped by destination, and the source goes `review → done` instead of
+carrying residue forward.
+
+### Nodes closed (1)
+
+- `tactic-mainqa-record-time-routing`
+
+### Scope
+
+**The plan of record is the node body**, not this section. It is not a draft: it
+was finalized to `phase: implement` on 2026-08-20 (`fcb792af`) and carries a
+complete seven-unit plan with `Context`, binding author rulings, a target design,
+`Reuse`, and a `Verification` section with auto-runnable fences. Read it at
+`intentions/tactic-mainqa-record-time-routing.md`:
+
+| Unit | Heading in the node body |
+|---|---|
+| 1 | `src/mainqaRouting.ts` — the pure routing decision |
+| 2 | `mint-mainqa-nodes` — the landing half |
+| 3 | `.claude/rules`-conformant prose lint pass on the new script |
+| 4 | the reconciler must not absorb a node already at `main-qa` |
+| 5 | `/qa-fix` Step 3.6 node lane — mint destination nodes instead of appending residue |
+| 6 | `/qa-main` node lane — the target is the verification node |
+| 7 | migrate the live `Verifiability: WAIT` marks (Ruling 3) |
+
+The body also carries an explicit **"Out of scope — named follow-ups (Ruling 4)"**
+section. Honour it: those follow-ups are not this PR's work.
+
+### Dependencies
+
+**PR15 and PR16** (Bundle 1b) land first — this PR runs node writes through the
+closure toolchain, and Unit 4 edits a reconciler. It goes **before PR5**, which
+is the one deliberate ordering choice here.
+
+> **`blocked_by` is still written, and is stale.** The node carries
+> `blocked_by: [tactic-wait-calendar-release]`. That blocker's PR, #3051,
+> **merged 2026-08-20** (`38934c61`), moving it to `phase: main-qa`. The edge
+> clears when the reconciler runs, not by hand — so expect to see the node
+> *edge-blocked on paper and unblocked in substance*. Do not hand-edit the edge;
+> do not wait on it either.
+
+### Reuse
+
+The node body has its own `Reuse` section (line ~702) naming the existing
+helpers. Two facts from outside it that matter, both consequences of #3051's
+merge: `--dir` is now **required** on `write-node.ts` and `dump-node.ts`, and
+`graph-census-debt.ts`, `schema.ts`, `router.ts` and `dispatch-tick` all moved.
+Re-locate every anchor before editing.
+
+### Verification
+
+Use the node body's own `Verification` section — it splits `Auto-runnable`
+(line ~787) from `Manual / observe-in-production` (line ~843). Do not invent a
+replacement.
+
+### Closing the nodes
+
+One node, closed by the standard post-merge write in §"Closing nodes after each
+merge". Sequencing note: it is `phase: implement` today and **is not to be driven
+through the ladder** — ground rule 1 applies to it exactly as to every other node
+in this plan.
+
+> **File collision with PR5 — land this one first.** Unit 4 edits
+> `reconcile-graph.ts` (`:139-141` / `:175`) and
+> `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged` (`:135`),
+> both of which PR5 also touches. The concerns are disjoint — correctness here,
+> tick cost there — so either order works, but the second one rebases. This is
+> the smaller diff, so it goes first. See PR5's Dependencies note.
+
+---
+
 # PR5 — Reconciler tick cost
 
 > **In-flight overhang (2026-08-20) — this PR is the second-most exposed.** Two
@@ -1749,9 +1844,9 @@ PR1. Independent of PR2–PR4.
 > - The **model argument survives intact**: folding a seven-unit opus
 >   correctness change into a five-fix sonnet efficiency PR is still the wrong
 >   trade. Keep it a separate PR — it is now simply an *unblocked* one, so it
->   can be sequenced deliberately rather than waited on. Recommended: land it
->   **before** this PR, so the rebase cost falls on the smaller diff. See
->   §"In-flight work outside this plan", Bundle 0 Step 3.
+>   can be sequenced deliberately rather than waited on. **Done — it is now
+>   §PR5a**, Bundle 2a, immediately ahead of this PR, so the rebase cost falls on
+>   the smaller diff. See §PR5a and Bundle 0 step 3.
 >
 > Also note #3051's merge moved this PR's own anchors: it touched
 > `graph-census-debt.ts`, `schema.ts`, `router.ts` and `dispatch-tick`, and made
