@@ -36,7 +36,7 @@ The work is being **serialized** — other development is frozen — so this pla
 optimizes for **fewer, larger PRs** grouped by shared code surface rather than
 one PR per node.
 
-Three ground rules were set by the author and are assumed throughout:
+Four ground rules were set by the author and are assumed throughout:
 
 1. **No carrier node.** These PRs are implemented **ad-hoc, in ad-hoc sessions
    that bypass the dispatch ladder.** No node carries `execution.pr`, no node is
@@ -49,6 +49,15 @@ Three ground rules were set by the author and are assumed throughout:
 3. **All three large refactors are in scope** (lens-catalog decomposition,
    intervention-core extraction, dispatch skill rename) and are sequenced last,
    because each one rewrites surfaces the earlier PRs edit.
+4. **The freeze is held for this plan, and does not lift until this plan is
+   done.** The pause sentinel is not an outage to be worked around and not a
+   window that might close mid-flight. It is the enabling condition: this
+   document is a **waterfall execution that exploits a dispatch-ladder freeze to
+   accelerate dispatch and alignment work**, doing serially and by hand what the
+   ladder cannot do while it is running through itself. So the sentinel stays
+   set until every PR here has merged and every node here is closed. Any step
+   that reads "before resumption" means before *that* point, not before some
+   externally scheduled restart.
 
 Every PR section is **clean-session-executable**: a session with no memory of
 this analysis can execute it from the section text alone.
@@ -61,6 +70,15 @@ this analysis can execute it from the section text alone.
 ---
 
 ## The freeze: what it stops, and what it does not
+
+> **The freeze is this plan's premise, not its environment.** Per ground rule 4:
+> the sentinel does not lift until every PR in this document has merged and every
+> node in it is closed. The plan exists *because* the ladder is frozen — it is a
+> waterfall execution taking advantage of that freeze to accelerate dispatch and
+> alignment work, rewriting the machinery the ladder itself runs on, which is
+> only safe while nothing is running on it. Read the rest of this section as
+> "what the freeze does and does not stop **while we hold it**", never as a clock
+> counting down to a resumption someone else controls.
 
 Verified on this host: the sentinel is present at
 `/home/n8/.local/share/commons-dispatch/paused` (set 2026-08-10), so autonomous
@@ -198,10 +216,14 @@ They are inert precisely and only because the pause sentinel holds.
 > spawn a ladder worker on it. That produces exactly the ladder-driven PR ground
 > rule 1 forbids, on a node this plan intends to close by hand.
 >
-> **Consequence for §"Retention".** The sentinel must stay set until this plan's
-> node bookkeeping is complete — or the plan's nodes must be parked before it
-> lifts. Do not treat "the sentinel is set" as a durable property; treat it as
-> the single interlock holding both classes still.
+> **This is already settled by ground rule 4.** The sentinel stays set until
+> this plan's PRs have merged and its node bookkeeping is complete, so the
+> collision above never gets a chance to fire. That is the *function* of the
+> freeze, not a concession to it. What this class-B finding adds is the size of
+> the exposure the moment the sentinel does come off: 45 plan nodes plus 19
+> class-B nodes are all tick-selectable at once, so the bookkeeping in
+> §"Closing nodes after each merge" is what makes resumption safe — finish it
+> before lifting, and there is nothing left for the tick to grab wrongly.
 
 ### Class A — the 20 in-charter open PRs, and what to do with each
 
@@ -344,9 +366,14 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    silent-corruption defect in the merge path every closure in this plan runs
    through.
 
-7. **Decide the sentinel interlock.** Before any resumption, either park this
-   plan's 45 `phase: implement` nodes or keep the sentinel set until the
-   bookkeeping is done. Ground rule 1 has no other enforcement.
+7. **Do not lift the sentinel.** There is no decision here to take — ground rule
+   4 settles it: the freeze is held for this plan and lifts only when the plan is
+   complete. Parking this plan's 45 `phase: implement` nodes is not an
+   alternative that buys an earlier resumption; it is at most a redundant second
+   interlock, and it costs 45 node writes through the very merge path
+   `tactic-node-merge-list-removal-loss` says is broken (step 6). Leave the
+   sentinel set, finish the plan, and lift it once §"Closing nodes after each
+   merge" has run for the last PR. Ground rule 1 has no other enforcement.
 
 **After Bundle 0** the plan's node total rises from 117 to **131** (+13 class-A
 absorbed, +1 `mainqa-record-time-routing` sequenced), with 3 class-A PRs and 3
@@ -406,7 +433,9 @@ paused, so the cost of bundling is not a broken window — it is that the first
 fleet start after resumption becomes a single pass/fail boolean. Mitigate that
 with a **staged resumption** rather than by splitting: remove the sentinel with
 `max_concurrent_workers: 1`, walk one node through the full ladder, and only
-then restore normal concurrency. That converts the boolean into a diagnosable
+then restore normal concurrency. That resumption is the *end* of this plan, not
+a midpoint — per ground rule 4 it happens after the last PR here has merged and
+its nodes are closed, so no bundle should be sequenced against it. That converts the boolean into a diagnosable
 test and is worth more than any split.
 
 **PR8 Unit 3 is deferred outright.** It replaces the pause sentinel with a
@@ -435,8 +464,9 @@ never mid-window.
 
 **Bundle 0 is new and displaces Bundle 1c from the front.** It opens no PR: it
 lands four already-mergeable PRs, closes thirteen conflicting drafts whose nodes
-fold into the sections above, sequences one node as its own PR, and settles the
-sentinel interlock. It goes first for one mechanical reason — **#3037 deletes
+fold into the sections above, sequences one node as its own PR, and restates that
+the sentinel is held to the end (ground rule 4). It goes first for one mechanical
+reason — **#3037 deletes
 `dispatch-graph-census`, which is Bundle 1c's Unit 1 target.** Starting 1c
 without settling that means either respecifying the unit mid-flight or landing a
 fix into a file another open PR deletes. Full census and per-item disposition:
