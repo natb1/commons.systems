@@ -38,7 +38,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-wait-calendar-release
   pr: 3051
@@ -53,7 +53,11 @@ execution:
     attempt: 1
     pushed_sha: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-20T16:31:30Z
+    mergeCommitSha: 38934c61ca55eba061e156d27ec4fd64af8e4956
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
