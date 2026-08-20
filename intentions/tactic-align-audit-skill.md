@@ -18,7 +18,6 @@ rationale: "Retained from the 2026-07-09 /align-strategy graph-integrity round
   agent-behavior config — dispatch auto mode denies the commit; park for
   interactive landing if hit."
 reading: null
-gap: null
 serves:
   - strategy-graph-integrity
 recovers: []
@@ -46,7 +45,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-align-audit-skill
   pr: 2879
@@ -55,6 +54,12 @@ execution:
     - planned
   strategy_fingerprint: ba2a6baf40da43d7217194977f7ecd4dbba424a343251236340d524b05479917
   fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-20T18:41:56Z
+    mergeCommitSha: 97085e5218fda26cd41ccc69a47f6f876636feac
+    graphCommitSha: null
+  lane_pass: null
 validates:
   - strategy-graph-integrity
 blocked_by: []

@@ -60,8 +60,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap band 2 (50/20/10 interim scale): a reap-path correctness defect
     that permanently strands a worker slot and freezes its node — the same band
@@ -80,8 +80,7 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
-phase: review
+phase: main-qa
 execution:
   branch: tactic-reap-safety-behind-branch-false-positive
   pr: 3052
@@ -95,7 +94,11 @@ execution:
     attempt: 2
     pushed_sha: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-20T18:41:25Z
+    mergeCommitSha: 4dfb4648b272c8afd6911a4635ae578b9efc2ab4
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-flake-analyze-go
