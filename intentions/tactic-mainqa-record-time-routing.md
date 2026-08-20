@@ -112,7 +112,7 @@ author asked whether `tactic-wait-calendar-release` (PR #3051) could be folded i
 PR2 as described in `plans/dispatch-rsi-serialized-pr-plan.md`. It cannot. PR2 is
 the ladder driver (`dispatch-ladder-{advance,await,run,status,spawn}` plus the
 `terminus.ts` census, 7 nodes); #3051 touches `waits.ts`, `wait-sweep.ts`,
-validate-graph Rule 21, the `router.ts` draft-candidate exclusion,
+validate-graph Rule 22, the `router.ts` draft-candidate exclusion,
 `arm-wait`/`release-wait`, `lib-wait-recheck.sh` and `dispatch-tick` — no file
 overlap. #3051 is already code-complete and carries `planned` / `qa-done` /
 `reviewed` markers with only CI red (`dispatch:fix-checks-attempt-1`), so folding it
@@ -123,6 +123,16 @@ mention of this node's sibling (line 924) is a *rejection* — `wait_until` does
 fit `tactic-pause-disables-merge-lane`'s episode wait. No edit was made to that plan
 file. One line in it is now stale and is a known residual: its line 898 calls this
 node "itself raw and unplanned".
+
+**Update 2026-08-20 — #3051 merged (`38934c61`); this node is unblocked.** The
+"CI red" and `blocked_by` state described above was true when the ruling was
+made and is retained as the record of it. Two corrections to the surface list:
+the WAIT-node check landed as **validate-graph Rule 22**, not 21 — main had
+retired Rule 20 and claimed 21 for `attributes.measured_impact` before #3051
+merged, so the branch's rule was renumbered on the way in (the paragraph above
+has been corrected in place). And the merge also made `--dir` required on
+`write-node.ts` / `dump-node.ts`, which `arm-wait` / `release-wait` now pass.
+The fold ruling itself is unchanged: no file overlap with PR2, so it stood.
 
 ### Target design
 
