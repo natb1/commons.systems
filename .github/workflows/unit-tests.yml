@@ -201,6 +201,32 @@ jobs:
         if: steps.changes.outputs.ds == 'true'
         run: .claude/skills/dispatch-propagate/scripts/run-storybook-smoke.sh
 
+  artifact-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.artifact == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Install dependencies
+        if: steps.changes.outputs.artifact == 'true'
+        run: npm ci
+      - name: Install Playwright chromium
+        if: steps.changes.outputs.artifact == 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Build artifacts, check the contract, render from disk
+        if: steps.changes.outputs.artifact == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/run-artifact-check.sh
+
   typecheck:
     runs-on: ubuntu-latest
     permissions:

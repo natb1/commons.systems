@@ -1,0 +1,12 @@
+{
+  "extends": "@commons-systems/config/tsconfig.app.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // Both halves live here: the build derives the payload in Node, the page
+    // renders it in the browser. `vite/client` is deliberately absent — this
+    // workspace has no vite app build, only esbuild.
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
+}
