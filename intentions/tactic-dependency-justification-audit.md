@@ -37,6 +37,7 @@ execution:
     mergedAt: 2026-08-10T13:48:27Z
     mergeCommitSha: 717742b97063753d23939b7f9778a08f261acba5
     graphCommitSha: null
+  lane_pass: null
 validates:
   - strategy-owned-web-platform
 blocked_by: []

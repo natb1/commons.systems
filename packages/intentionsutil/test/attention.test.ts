@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Attention, IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
-import { resolveAttention } from "../src/attention.js";
+import {
+  compareRankKeyDesc,
+  computeSignalPath,
+  resolveAttention,
+} from "../src/attention.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
 function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): IntentionNode {
@@ -33,28 +37,24 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
 
 /**
  * A strategy fixture whose signal already reads as validated (`reading`
- * non-null, no `gap`) — the default in every describe block below EXCEPT the
- * dedicated "signal-satisfaction term" block, so those tests exercise the
- * `authored` term in isolation, undisturbed by the new `signal` term (which
- * would otherwise treat any strategy with the schema's default
- * `reading: null` as its own unvalidated validates-terminal).
+ * non-null, no `gap`). Signal reachability no longer contributes magnitude to
+ * the rank, but `computeSignalPath` still reads these fields, so the fixtures
+ * keep the distinction explicit.
  */
 function svnode(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
   return anode({ reading: "measured", ...partial, kind: "strategy" });
 }
 
 /**
- * A relative boost injection. `tier` defaults to 1 — the tier every fixture
- * node sits in unless it carries a tier mark (rule 20 requires the tag to match
- * the node's own tier, so a marked node's injection must name its tier).
+ * A per-tier boost injection: `boost({ 1: 3, 2: 5 })` claims 3 on the tier-1
+ * scale and 5 on the tier-2 scale. Sparse by construction — a tier left out of
+ * the object makes no claim in that tier at all, which the resolver reads as a
+ * contribution of 0 in that tier's ranking.
  */
-function boost(amount: number, rationale = "because", tier = 1): Attention {
-  return { boost: amount, override: null, rationale, tier };
-}
-
-/** An absolute branch-capping override injection. */
-function override(amount: number, rationale = "because", tier = 1): Attention {
-  return { boost: null, override: amount, rationale, tier };
+function boost(boosts: Record<number, number>, rationale = "because"): Attention {
+  const out: Record<string, number> = {};
+  for (const [tier, amount] of Object.entries(boosts)) out[String(tier)] = amount;
+  return { boosts: out, rationale };
 }
 
 /**
@@ -88,15 +88,21 @@ describe("resolveAttention eligibility", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "strategy-1", serves: ["virtue-root"], attention: boost(5) }),
+      svnode({ id: "strategy-1", serves: ["virtue-root"], attention: boost({ 1: 5 }) }),
     ];
 
     const result = resolveAttention(nodes);
 
     expect(result.size).toBe(1);
     const s = result.get("strategy-1");
-    expect(s?.value).toBe(5);
+    expect(s?.score).toBe(5);
     expect(s?.sources).toEqual(["strategy-1"]);
+    // The served virtue is a lineage member (depth 1) even though it is
+    // ineligible for a rank entry of its own, and it carries no score — so the
+    // band it defines is 0 and has no source.
+    expect(s?.depth).toBe(1);
+    expect(s?.band).toBe(0);
+    expect(s?.bandSource).toBeNull();
 
     // Virtues and kind nodes are ineligible — no entry at all.
     expect(result.has("virtue-root")).toBe(false);
@@ -106,7 +112,7 @@ describe("resolveAttention eligibility", () => {
     expect(result.has("kind-virtue")).toBe(false);
   });
 
-  it("gives an eligible node with no injection a value-0 entry with empty sources", () => {
+  it("gives an eligible node with no injection a zero entry with empty sources", () => {
     const nodes = [
       ...kinds(),
       svnode({ id: "strategy-quiet" }),
@@ -114,19 +120,21 @@ describe("resolveAttention eligibility", () => {
 
     const result = resolveAttention(nodes);
     const quiet = result.get("strategy-quiet");
-    expect(quiet?.value).toBe(0);
+    expect(quiet?.score).toBe(0);
+    expect(quiet?.band).toBe(0);
+    expect(quiet?.depth).toBe(0);
     expect(quiet?.sources).toEqual([]);
   });
 });
 
-describe("resolveAttention boost (undecayed, undiluted)", () => {
+describe("resolveAttention lineage score (undecayed, deduped)", () => {
   it("ranks a boosted node and all its descendants at the full boost, at any depth", () => {
     // strategy-parent boost 6 has three children (two via parent, one via
     // serves) and one grandchild. None dilutes: every descendant reads 6.
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "strategy-parent", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "strategy-parent", serves: ["virtue-root"], attention: boost({ 1: 6 }) }),
       svnode({ id: "sub-1", parent: "strategy-parent" }),
       svnode({ id: "sub-2", parent: "strategy-parent" }),
       anode({ id: "tactic-1", kind: "tactic", serves: ["strategy-parent"] }),
@@ -135,155 +143,361 @@ describe("resolveAttention boost (undecayed, undiluted)", () => {
 
     const result = resolveAttention(nodes);
     for (const id of ["strategy-parent", "sub-1", "sub-2", "tactic-1", "grand-1"]) {
-      expect(result.get(id)?.value).toBe(6);
+      expect(result.get(id)?.score).toBe(6);
       expect(result.get(id)?.sources).toEqual(["strategy-parent"]);
     }
+    // Direct children band on the boosted parent's score.
+    expect(result.get("sub-1")?.band).toBe(6);
+    expect(result.get("sub-1")?.bandSource).toBe("strategy-parent");
+    expect(result.get("tactic-1")?.band).toBe(6);
+    // Depth grows down the chain: the grandchild's lineage adds sub-1.
+    expect(result.get("sub-1")?.depth).toBe(2); // strategy-parent, virtue-root
+    expect(result.get("grand-1")?.depth).toBe(3); // + sub-1
   });
 
   it("adds two parents' claims on a shared child", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(2) }),
-      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost({ 1: 2 }) }),
+      svnode({ id: "s2", serves: ["virtue-root"], attention: boost({ 1: 6 }) }),
       // child draws from s1 (parent) and s2 (serves).
       svnode({ id: "child", parent: "s1", serves: ["s2"] }),
     ];
 
     const result = resolveAttention(nodes);
     const child = result.get("child");
-    expect(child?.value).toBe(8);
+    expect(child?.score).toBe(8);
     expect(child?.sources).toEqual(["s2", "s1"]); // ordered by contribution desc
+    // Band takes the MAX parent score, not the sum.
+    expect(child?.band).toBe(6);
+    expect(child?.bandSource).toBe("s2");
   });
 
-  it("counts a source reached via two paths (a diamond) exactly once", () => {
+  it("counts an ancestor reached via two paths (a diamond) exactly once in score AND depth", () => {
     // top boost 4 reaches bottom via mid1 (parent chain) AND mid2 (serves
-    // chain). The union dedupes by source id, so bottom reads 4, not 8.
+    // chain). Lineage is a SET, so bottom reads 4, not 8, and counts `top`
+    // once toward depth.
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "top", serves: ["virtue-root"], attention: boost(4) }),
+      svnode({ id: "top", serves: ["virtue-root"], attention: boost({ 1: 4 }) }),
       svnode({ id: "mid1", parent: "top" }),
       svnode({ id: "mid2", serves: ["top"] }),
       svnode({ id: "bottom", parent: "mid1", serves: ["mid2"] }),
     ];
 
     const result = resolveAttention(nodes);
-    expect(result.get("bottom")?.value).toBe(4);
-    expect(result.get("bottom")?.sources).toEqual(["top"]);
+    const bottom = result.get("bottom");
+    expect(bottom?.score).toBe(4);
+    expect(bottom?.sources).toEqual(["top"]);
+    // {mid1, mid2, top, virtue-root} — top and virtue-root appear via both
+    // routes and are counted once each.
+    expect(bottom?.depth).toBe(4);
   });
 
   it("adds a boost on a child of a boosted ancestor (relative boost)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "anc", serves: ["virtue-root"], attention: boost(3) }),
-      svnode({ id: "mid", parent: "anc", attention: boost(2) }),
+      svnode({ id: "anc", serves: ["virtue-root"], attention: boost({ 1: 3 }) }),
+      svnode({ id: "mid", parent: "anc", attention: boost({ 1: 2 }) }),
       svnode({ id: "leaf", parent: "mid" }),
     ];
 
     const result = resolveAttention(nodes);
     // mid carries the ancestor's 3 PLUS its own 2.
-    expect(result.get("mid")?.value).toBe(5);
+    expect(result.get("mid")?.score).toBe(5);
     expect(result.get("mid")?.sources).toEqual(["anc", "mid"]);
     // leaf inherits both, undiluted.
-    expect(result.get("leaf")?.value).toBe(5);
+    expect(result.get("leaf")?.score).toBe(5);
     expect(result.get("leaf")?.sources).toEqual(["anc", "mid"]);
   });
 });
 
-describe("resolveAttention override (branch cap)", () => {
-  it("caps its own branch while a second parent's claim still adds — T reads 8, not 2", () => {
-    // S1 boosts 10; C overrides that branch down to 2 (its own rank). D hangs
-    // only off C, so D reads the capped 2. S2 boosts 6 independently. T draws
-    // from both C (capped 2) and S2 (6), so T reads 8 — the override caps its
-    // branch, it does not silence T's other parent.
-    const nodes = [
+// The `override` field (an absolute branch cap) is gone with the per-tier boost
+// map, and with it the idea that a magic number anywhere can pin a subtree's
+// rank below what its lineage says. This block replaces the old override
+// coverage with the property that subsumes it: lineage flow is uncapped, and
+// the way to correct a branch that is "too hot" is to RESTRUCTURE the lineage —
+// drop the edge that was making the claim reach — not to author a cap.
+describe("resolveAttention has no cap — correction is by restructuring lineage", () => {
+  it("flows a hot ancestor's claim down uncapped, and stops it only when the edge is removed", () => {
+    const withEdge = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(10) }),
-      svnode({ id: "c", parent: "s1", attention: override(2) }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost({ 1: 10 }) }),
+      svnode({ id: "c", parent: "s1", attention: boost({ 1: 2 }) }),
       svnode({ id: "d", parent: "c" }),
-      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
-      svnode({ id: "t", parent: "c", serves: ["s2"] }),
     ];
 
-    const result = resolveAttention(nodes);
-    // Override value is the node's own rank (s1's 10 is discarded, not summed).
-    expect(result.get("c")?.value).toBe(2);
-    expect(result.get("c")?.sources).toEqual(["c"]);
-    // Reachable only through the override branch → capped.
-    expect(result.get("d")?.value).toBe(2);
-    expect(result.get("d")?.sources).toEqual(["c"]);
-    // Two parents, one capped: 2 + 6 = 8.
-    expect(result.get("t")?.value).toBe(8);
-    expect(result.get("t")?.sources).toEqual(["s2", "c"]);
-  });
+    const withEdgeResult = resolveAttention(withEdge);
+    // No cap exists: c reads its own 2 PLUS the inherited 10, and d inherits
+    // the whole 12 in turn.
+    expect(withEdgeResult.get("c")?.score).toBe(12);
+    expect(withEdgeResult.get("d")?.score).toBe(12);
 
-  it("resolves nested overrides — the nearest override wins for the subtree below it", () => {
-    const nodes = [
+    // Correcting a graph that says the wrong thing means changing what reaches
+    // what. Re-root c off s1 and the claim stops arriving — the same effect the
+    // old `override` cap tried to buy with a number.
+    const restructured = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "root", serves: ["virtue-root"], attention: boost(100) }),
-      svnode({ id: "outer", parent: "root", attention: override(5) }),
-      svnode({ id: "between", parent: "outer" }),
-      svnode({ id: "inner", parent: "outer", attention: override(2) }),
-      svnode({ id: "leaf", parent: "inner" }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost({ 1: 10 }) }),
+      svnode({ id: "c", serves: ["virtue-root"], attention: boost({ 1: 2 }) }),
+      svnode({ id: "d", parent: "c" }),
+    ];
+
+    const restructuredResult = resolveAttention(restructured);
+    expect(restructuredResult.get("c")?.score).toBe(2);
+    expect(restructuredResult.get("d")?.score).toBe(2);
+    expect(restructuredResult.get("d")?.sources).toEqual(["c"]);
+  });
+
+  it("a node's own claim adds to what it inherits — it never replaces it", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "root", attention: boost({ 1: 100 }) }),
+      svnode({ id: "mid", parent: "root", attention: boost({ 1: 5 }) }),
+      svnode({ id: "leaf", parent: "mid", attention: boost({ 1: 2 }) }),
     ];
 
     const result = resolveAttention(nodes);
-    expect(result.get("outer")?.value).toBe(5);
-    expect(result.get("between")?.value).toBe(5); // outer's cap
-    expect(result.get("inner")?.value).toBe(2);
-    expect(result.get("leaf")?.value).toBe(2); // nearest (inner) wins
-    expect(result.get("leaf")?.sources).toEqual(["inner"]);
+    expect(result.get("mid")?.score).toBe(105);
+    expect(result.get("leaf")?.score).toBe(107);
+    expect(result.get("leaf")?.sources).toEqual(["root", "mid", "leaf"]);
   });
+});
 
-  it("authored override is unaffected by any derived term", () => {
-    // c overrides down to 2 despite also being on the signal path (it blocks
-    // tactic-terminal, which validates the unvalidated strategy-target) AND
-    // serving a strategy with a high-capture delegation — both derived terms
-    // would otherwise add on top, but the override pins the total absolutely.
+describe("resolveAttention parent relation", () => {
+  it("treats a strategy's recovers edge as a parent edge (delegation joins the lineage)", () => {
     const nodes = [
       ...kinds(),
       anode({
         id: "delegation-x",
         kind: "delegation",
         status: "codified",
-        attributes: {
-          divergence: { level: "high" },
-          irreversibility: { gated: "true — no export path" },
-        },
+        attributes: { divergence: { level: "moderate" } },
       }),
-      anode({ id: "strategy-target", kind: "strategy" }), // reading: null omitted → unvalidated
-      svnode({
-        id: "strategy-captured",
-        recovers: ["delegation-x"],
-      }),
+      svnode({ id: "strategy-x", recovers: ["delegation-x"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("strategy-x")?.depth).toBe(1); // the recovered delegation
+  });
+
+  it("treats reverse blocked_by as a parent edge — a blocked node's boost reaches its blockers", () => {
+    // tactic-hot (boost 5) is blocked by blocker-a; blocker-a is blocked by
+    // blocker-b. Unblocking work is what the blockers are FOR, so the claim
+    // reaches both, transitively and undiluted.
+    const nodes = [
+      ...kinds(),
       anode({
-        id: "c",
+        id: "tactic-hot",
         kind: "tactic",
-        blocked_by: [],
-        serves: ["strategy-captured"],
-        attention: override(2),
+        blocked_by: ["blocker-a"],
+        attention: boost({ 1: 5 }),
       }),
+      anode({ id: "blocker-a", kind: "tactic", blocked_by: ["blocker-b"] }),
+      anode({ id: "blocker-b", kind: "tactic" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-hot")?.score).toBe(5);
+    expect(result.get("blocker-a")?.score).toBe(5);
+    expect(result.get("blocker-a")?.sources).toEqual(["tactic-hot"]);
+    expect(result.get("blocker-b")?.score).toBe(5);
+    expect(result.get("blocker-b")?.depth).toBe(2); // blocker-a, tactic-hot
+  });
+
+  it("carries what a blocker inherits on down into the blocker's own subtree", () => {
+    const nodes = [
+      ...kinds(),
       anode({
-        id: "tactic-terminal",
+        id: "tactic-hot",
         kind: "tactic",
-        blocked_by: ["c"],
-        validates: ["strategy-target"],
+        blocked_by: ["blocker-a"],
+        attention: boost({ 1: 5 }),
+      }),
+      anode({ id: "blocker-a", kind: "tactic" }),
+      anode({ id: "blocker-child", kind: "tactic", parent: "blocker-a" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("blocker-a")?.score).toBe(5);
+    expect(result.get("blocker-child")?.score).toBe(5);
+    expect(result.get("blocker-child")?.sources).toEqual(["tactic-hot"]);
+  });
+
+  it("counts a source reaching a node via two serves paths exactly once", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-hot", attention: boost({ 1: 5 }) }),
+      anode({ id: "blocker", kind: "tactic", serves: ["strategy-hot"] }),
+      anode({ id: "hot", kind: "tactic", serves: ["strategy-hot"], blocked_by: ["blocker"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("blocker")?.score).toBe(5);
+    expect(result.get("blocker")?.sources).toEqual(["strategy-hot"]);
+    expect(result.get("hot")?.score).toBe(5);
+    expect(result.get("hot")?.sources).toEqual(["strategy-hot"]);
+  });
+});
+
+describe("resolveAttention band axis", () => {
+  it("bands a node on its best parent's score, in the CHILD's resolved tier", () => {
+    // strategy-planner sits in tier 1 and claims 10 there, but only 4 on the
+    // tier-2 scale. tactic-bug is a bug fix, so it resolves to tier 2 — and it
+    // must band on the parent's TIER-2 score (4), never on the tier-1 magnitude
+    // (10), which is meaningless on the tier-2 scale.
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-planner", attention: boost({ 1: 10, 2: 4 }) }),
+      anode({
+        id: "tactic-bug",
+        kind: "tactic",
+        serves: ["strategy-planner"],
+        attributes: { bug_fix: true },
+        attention: boost({ 2: 1 }),
       }),
     ];
 
     const result = resolveAttention(nodes);
-    const c = result.get("c");
-    expect(c?.value).toBe(2);
-    expect(c?.terms).toEqual([{ term: "authored", value: 2 }]);
+    expect(result.get("strategy-planner")?.tier).toBe(1);
+    expect(result.get("strategy-planner")?.score).toBe(10); // reported in ITS tier
+
+    const bug = result.get("tactic-bug");
+    expect(bug?.tier).toBe(2);
+    expect(bug?.band).toBe(4); // the parent's tier-2 score, not its tier-1 10
+    expect(bug?.bandSource).toBe("strategy-planner");
+    expect(bug?.score).toBe(5); // own 1 + inherited tier-2 4
+  });
+
+  it("reports band 0 with a null bandSource when a node has no parents", () => {
+    const result = resolveAttention([...kinds(), svnode({ id: "strategy-alone", attention: boost({ 1: 9 }) })]);
+    const alone = result.get("strategy-alone");
+    expect(alone?.score).toBe(9);
+    expect(alone?.band).toBe(0);
+    expect(alone?.bandSource).toBeNull();
+  });
+
+  it("breaks a band tie by ascending parent id", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "p-alpha", attention: boost({ 1: 5 }) }),
+      svnode({ id: "p-beta", attention: boost({ 1: 5 }) }),
+      anode({ id: "tactic-child", kind: "tactic", serves: ["p-beta", "p-alpha"] }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-child")?.band).toBe(5);
+    expect(result.get("tactic-child")?.bandSource).toBe("p-alpha");
   });
 });
 
-describe("resolveAttention cycle guard", () => {
-  it("throws IntentionSchemaError on a parent-edge cycle", () => {
+describe("resolveAttention terminal (done) nodes", () => {
+  it("zeroes a done node's own contribution while staying transparent to its children", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-top", attention: boost({ 1: 5 }) }),
+      anode({
+        id: "tactic-done",
+        kind: "tactic",
+        serves: ["strategy-top"],
+        phase: "done",
+        attention: boost({ 1: 7 }),
+      }),
+      anode({ id: "tactic-live", kind: "tactic", parent: "tactic-done" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    // The done node's own 7 never counts, for itself or anyone.
+    expect(result.get("tactic-done")?.score).toBe(5);
+
+    const live = result.get("tactic-live");
+    // Transparent pass-through: the live child still inherits everything ABOVE
+    // the done parent (5), and never sees the done node's own 7.
+    expect(live?.score).toBe(5);
+    expect(live?.sources).toEqual(["strategy-top"]);
+    // The done node is not a lineage member, so it adds no depth.
+    expect(live?.depth).toBe(1); // strategy-top only
+    // But the edge is NOT severed — banding still runs through the done parent,
+    // which passes its ancestors' score along.
+    expect(live?.band).toBe(5);
+    expect(live?.bandSource).toBe("tactic-done");
+  });
+
+  it("ignores a done node's OWN tier mark but still relays an inherited tier", () => {
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
+      // Own bug_fix mark would be tier 2, but the node is done: it asserts
+      // nothing. The tier 3 it inherits from strategy-prod still flows through.
+      anode({
+        id: "tactic-relay",
+        kind: "tactic",
+        serves: ["strategy-prod"],
+        phase: "done",
+        attributes: { bug_fix: true },
+      }),
+      anode({ id: "tactic-below", kind: "tactic", parent: "tactic-relay" }),
+      // A done node with nothing above it asserts only the default tier.
+      anode({ id: "tactic-solo", kind: "tactic", phase: "done", attributes: { bug_fix: true } }),
+      anode({ id: "tactic-under-solo", kind: "tactic", parent: "tactic-solo" }),
+    ];
+
+    const result = resolveAttention(nodes);
+    expect(result.get("tactic-relay")?.tier).toBe(3);
+    expect(result.get("tactic-below")?.tier).toBe(3);
+    expect(result.get("tactic-solo")?.tier).toBe(1); // own bug_fix mark ignored
+    expect(result.get("tactic-under-solo")?.tier).toBe(1);
+  });
+
+  it("drops a DONE blockee from the relation instead of letting it keep lifting its blocker", () => {
+    // tactic-blocker blocks two nodes: one still live, one finished. Only the
+    // live one may reach it. `blocked_by` edges to a completed node are never
+    // rewritten (blockersComplete treats a done blocker as cleared), so the
+    // stale edge would otherwise pin the blocker at the finished work's urgency
+    // forever — the "a done blocker is cleared" convention openBlockers and the
+    // retired officeHours surfacing lift both applied.
+    const nodes = [
+      ...kinds(),
+      svnode({ id: "strategy-hot", attributes: { tier: 3 }, attention: boost({ 3: 9 }) }),
+      anode({
+        id: "tactic-finished",
+        kind: "tactic",
+        serves: ["strategy-hot"],
+        phase: "done",
+        blocked_by: ["tactic-blocker"],
+      }),
+      anode({ id: "tactic-blocker", kind: "tactic" }),
+    ];
+
+    const blocker = resolveAttention(nodes).get("tactic-blocker");
+    // The done blockee carried score 9 and tier 3; neither reaches the blocker.
+    expect(blocker?.score).toBe(0);
+    expect(blocker?.band).toBe(0);
+    expect(blocker?.bandSource).toBeNull();
+    expect(blocker?.depth).toBe(0);
+    expect(blocker?.tier).toBe(1);
+
+    // Flip the blockee back to live and every axis flows again — the drop is
+    // keyed on `phase: "done"`, not on the edge being absent.
+    const live = nodes.map((n) =>
+      n.id === "tactic-finished" ? ({ ...n, phase: "implement" } as typeof n) : n,
+    );
+    const lifted = resolveAttention(live).get("tactic-blocker");
+    expect(lifted?.tier).toBe(3);
+    expect(lifted?.score).toBe(9);
+    expect(lifted?.band).toBe(9);
+    expect(lifted?.bandSource).toBe("tactic-finished");
+    expect(lifted?.depth).toBe(2); // tactic-finished + strategy-hot
+  });
+});
+
+describe("resolveAttention cycle handling", () => {
+  it("throws IntentionSchemaError on a pure parent-edge cycle", () => {
     const nodes = [
       ...kinds(),
       svnode({ id: "cyc-a", parent: "cyc-b" }),
@@ -293,6 +507,36 @@ describe("resolveAttention cycle guard", () => {
     expect(() => resolveAttention(nodes)).toThrow(IntentionSchemaError);
     expect(() => resolveAttention(nodes)).toThrow(/attention flow cycle/);
   });
+
+  it("converges on a MIXED cycle across the widened relation without throwing or hanging", () => {
+    // cyc-child.parent = cyc-blocker, and cyc-child.blocked_by = [cyc-blocker],
+    // so cyc-blocker's parents include cyc-child (reverse blocked_by) while
+    // cyc-child's parents include cyc-blocker. That is a real cycle in the
+    // unified relation. Rejecting it is the write path's job (see
+    // tactic-attention-unified-relation-cycle-rule); the resolver's obligation
+    // is only to converge — which the bounded set-union fixpoint guarantees.
+    const nodes = [
+      ...kinds(),
+      anode({
+        id: "cyc-child",
+        kind: "tactic",
+        parent: "cyc-blocker",
+        blocked_by: ["cyc-blocker"],
+      }),
+      anode({ id: "cyc-blocker", kind: "tactic", attention: boost({ 1: 3 }) }),
+    ];
+
+    let result!: ReturnType<typeof resolveAttention>; // type-safety-ok: assigned synchronously inside the expect(() => {...}) callback immediately below, before any read
+    expect(() => {
+      result = resolveAttention(nodes);
+    }).not.toThrow();
+
+    // Both members converge on the same lineage set {cyc-child, cyc-blocker},
+    // so the single authored 3 is counted exactly once for each.
+    expect(result.get("cyc-blocker")?.score).toBe(3);
+    expect(result.get("cyc-child")?.score).toBe(3);
+    expect(result.get("cyc-child")?.depth).toBe(2);
+  });
 });
 
 describe("resolveAttention determinism", () => {
@@ -300,11 +544,23 @@ describe("resolveAttention determinism", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      svnode({ id: "s1", serves: ["virtue-root"], attention: boost(2) }),
-      svnode({ id: "s2", serves: ["virtue-root"], attention: boost(6) }),
-      svnode({ id: "c", parent: "s1", attention: override(3) }),
-      svnode({ id: "child", parent: "c", serves: ["s2"] }),
-      anode({ id: "tactic-1", kind: "tactic", serves: ["s2"] }),
+      anode({
+        id: "delegation-d",
+        kind: "delegation",
+        status: "codified",
+        attributes: {
+          divergence: { level: "moderate" },
+          irreversibility: { gated: "partially — vendor holds the record" },
+        },
+      }),
+      svnode({ id: "s1", serves: ["virtue-root"], attention: boost({ 1: 2 }) }),
+      svnode({ id: "s2", serves: ["virtue-root"], attention: boost({ 1: 6, 2: 3 }), recovers: ["delegation-d"] }),
+      svnode({ id: "c", parent: "s1", attention: boost({ 1: 3 }) }),
+      svnode({ id: "child", parent: "c", serves: ["s2"] }), // diamond into virtue-root
+      anode({ id: "tactic-1", kind: "tactic", serves: ["s2"], blocked_by: ["tactic-2"] }),
+      anode({ id: "tactic-2", kind: "tactic", serves: ["s1"] }),
+      anode({ id: "tactic-3", kind: "tactic", parent: "tactic-2", phase: "done" }),
+      anode({ id: "tactic-4", kind: "tactic", parent: "tactic-3", attributes: { bug_fix: true } }),
     ];
     const shuffled = [...nodes].reverse();
 
@@ -317,58 +573,70 @@ describe("resolveAttention determinism", () => {
   });
 });
 
-describe("resolveAttention signal-satisfaction term", () => {
-  it("ranks an on-path node (validates an unvalidated strategy) above an otherwise-identical off-path node", () => {
+// The standalone `signal` rank TERM is gone: signal reachability no longer adds
+// magnitude to any node's score. `computeSignalPath` itself is unchanged and
+// still exported — the graph router's strategy-eligibility gate consumes it —
+// so this block covers the reachability predicate directly, plus the fact that
+// being on-path no longer moves the rank.
+describe("computeSignalPath reachability (no longer a rank term)", () => {
+  it("marks a tactic validating an unvalidated strategy, and everything blocking it, as on-path", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "strategy-target", kind: "strategy" }), // reading: null (default) → unvalidated
-      anode({ id: "tactic-on", kind: "tactic", validates: ["strategy-target"] }),
+      anode({
+        id: "tactic-on",
+        kind: "tactic",
+        validates: ["strategy-target"],
+        blocked_by: ["tactic-blocker"],
+      }),
+      anode({ id: "tactic-blocker", kind: "tactic" }),
       anode({ id: "tactic-off", kind: "tactic", validates: [] }),
     ];
 
-    const result = resolveAttention(nodes);
-    expect(result.get("tactic-on")?.value).toBe(1); // SIGNAL_TERM_WEIGHT
-    expect(result.get("tactic-off")?.value).toBe(0);
+    const onPath = computeSignalPath(nodes);
+    expect(onPath.has("strategy-target")).toBe(true);
+    expect(onPath.has("tactic-on")).toBe(true);
+    expect(onPath.has("tactic-blocker")).toBe(true);
+    expect(onPath.has("tactic-off")).toBe(false);
   });
 
   it("does not treat a tactic validating an already-validated strategy as a terminal", () => {
     const nodes = [
       ...kinds(),
       svnode({ id: "strategy-done", reading: "the signal reads clean" }),
-      anode({ id: "tactic-done", kind: "tactic", validates: ["strategy-done"] }),
+      anode({ id: "tactic-done-validates", kind: "tactic", validates: ["strategy-done"] }),
     ];
 
-    const result = resolveAttention(nodes);
-    expect(result.get("tactic-done")?.value).toBe(0);
-  });
-
-  it("lifts an upstream blocker when a downstream tactic gains a validates edge, with no other change", () => {
-    const strategyTarget = anode({ id: "strategy-target", kind: "strategy" }); // unvalidated
-    const tacticA = anode({ id: "tactic-a", kind: "tactic", blocked_by: [] });
-    const tacticBBefore = anode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"], validates: [] });
-    const tacticBAfter = anode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"], validates: ["strategy-target"] });
-
-    const before = resolveAttention([...kinds(), strategyTarget, tacticA, tacticBBefore]);
-    const after = resolveAttention([...kinds(), strategyTarget, tacticA, tacticBAfter]);
-
-    expect(before.get("tactic-a")?.value).toBe(0);
-    expect(after.get("tactic-a")?.value).toBe(1); // lifted by the new downstream validates edge
+    expect(computeSignalPath(nodes).has("tactic-done-validates")).toBe(false);
   });
 
   it("inherits on-path status down a parent chain", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "strategy-target", kind: "strategy" }), // unvalidated
-      anode({ id: "epic", kind: "tactic", blocked_by: [], validates: ["strategy-target"] }),
+      anode({ id: "epic", kind: "tactic", validates: ["strategy-target"] }),
       anode({ id: "child", kind: "tactic", parent: "epic" }),
     ];
 
+    expect(computeSignalPath(nodes).has("child")).toBe(true);
+  });
+
+  it("adds no score of its own — an on-path node with no boost still ranks 0", () => {
+    const nodes = [
+      ...kinds(),
+      anode({ id: "strategy-target", kind: "strategy" }), // unvalidated
+      anode({ id: "tactic-on", kind: "tactic", validates: ["strategy-target"] }),
+      anode({ id: "tactic-off", kind: "tactic" }),
+    ];
+
     const result = resolveAttention(nodes);
-    expect(result.get("child")?.value).toBe(1);
+    expect(computeSignalPath(nodes).has("tactic-on")).toBe(true);
+    expect(result.get("tactic-on")?.score).toBe(0);
+    expect(result.get("tactic-off")?.score).toBe(0);
   });
 });
 
-describe("resolveAttention capture-resolution term", () => {
+describe("resolveAttention capture-resolution contribution", () => {
   it("orders two strategies by their recovered delegations' divergence/irreversibility axes", () => {
     const nodes = [
       ...kinds(),
@@ -395,13 +663,13 @@ describe("resolveAttention capture-resolution term", () => {
     ];
 
     const result = resolveAttention(nodes);
-    const low = result.get("strategy-low-capture")?.value ?? 0;
-    const high = result.get("strategy-high-capture")?.value ?? 0;
+    const low = result.get("strategy-low-capture")?.score ?? 0;
+    const high = result.get("strategy-high-capture")?.score ?? 0;
     expect(high).toBeGreaterThan(low);
     expect(low).toBeGreaterThan(0);
   });
 
-  it("carries a serving tactic's capture score from its strategy's recovers edge", () => {
+  it("delivers a serving tactic's capture score as ordinary lineage from the recovering strategy", () => {
     const nodes = [
       ...kinds(),
       anode({
@@ -415,13 +683,17 @@ describe("resolveAttention capture-resolution term", () => {
       }),
       svnode({ id: "strategy-x", recovers: ["delegation-x"] }),
       anode({ id: "tactic-x", kind: "tactic", serves: ["strategy-x"] }),
+      // Two hops down: the addend is attributed once, on the owner, and flows
+      // the whole way rather than being re-derived one serves-hop away.
+      anode({ id: "tactic-x-child", kind: "tactic", parent: "tactic-x" }),
     ];
 
     const result = resolveAttention(nodes);
-    const strategyValue = result.get("strategy-x")?.value ?? 0;
-    const tacticValue = result.get("tactic-x")?.value ?? 0;
-    expect(strategyValue).toBeGreaterThan(0);
-    expect(tacticValue).toBe(strategyValue);
+    const strategyScore = result.get("strategy-x")?.score ?? 0;
+    expect(strategyScore).toBeGreaterThan(0);
+    expect(result.get("tactic-x")?.score).toBe(strategyScore);
+    expect(result.get("tactic-x-child")?.score).toBe(strategyScore);
+    expect(result.get("tactic-x")?.sources).toEqual(["strategy-x"]);
   });
 
   // Both capture axes are free text, not a schema-gated enum — the live store
@@ -444,126 +716,27 @@ describe("resolveAttention capture-resolution term", () => {
   it("scores a compound divergence level ('low-moderate') as its more severe component, not 0", () => {
     const result = resolveAttention(withCaptureAxes({ divergence: { level: "low-moderate" } }));
     // moderate (2) / 6 — not 0, and strictly above a plain "low" (1/6).
-    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+    expect(result.get("strategy-under-test")?.score).toBeCloseTo(2 / 6);
   });
 
   it("scores a qualified divergence level ('moderate — would-be') by its recognized token, not 0", () => {
     const result = resolveAttention(withCaptureAxes({ divergence: { level: "moderate — would-be" } }));
-    expect(result.get("strategy-under-test")?.value).toBeCloseTo(2 / 6);
+    expect(result.get("strategy-under-test")?.score).toBeCloseTo(2 / 6);
   });
 
   it("scores 'partially gated' strictly between 'false' and 'true' — never collapsed onto 'false'", () => {
     const falseValue = resolveAttention(
       withCaptureAxes({ irreversibility: { gated: "false" } }),
-    ).get("strategy-under-test")?.value;
+    ).get("strategy-under-test")?.score;
     const partialValue = resolveAttention(
       withCaptureAxes({ irreversibility: { gated: "partially — the authoritative record is the vendor's" } }),
-    ).get("strategy-under-test")?.value;
+    ).get("strategy-under-test")?.score;
     const trueValue = resolveAttention(
       withCaptureAxes({ irreversibility: { gated: "true — no export path" } }),
-    ).get("strategy-under-test")?.value;
+    ).get("strategy-under-test")?.score;
 
     expect(partialValue).toBeGreaterThan(falseValue ?? 0);
     expect(trueValue).toBeGreaterThan(partialValue ?? 0);
-  });
-});
-
-// The authored term flows DOWNWARD ONLY — parent and serves, never backward
-// along blocked_by. This block records that doctrine change: the 2026-07-07
-// backward-distribution doctrine (a boost on a blocked node lifted its whole
-// critical path) is retired. Blocking precedence is the selector's structural
-// concern; an authored value must not make a blocker's rank a function of who
-// happens to be blocked on it. The downward-flow half of the old block (the
-// serves-edge diamond) is unchanged and still holds.
-describe("resolveAttention authored flow is downward-only (no backward blocked_by)", () => {
-  it("does not flow a blocked leaf's boost backward to its blocker or its blocker's blocker", () => {
-    // tactic-hot (boost 5) is blocked by blocker-a; blocker-a is blocked by
-    // blocker-b. Nothing flows backward: both blockers resolve to 0 with no
-    // sources, and only tactic-hot itself carries the authored value.
-    const nodes = [
-      ...kinds(),
-      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
-      anode({ id: "blocker-a", kind: "tactic", blocked_by: ["blocker-b"] }),
-      anode({ id: "blocker-b", kind: "tactic" }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("tactic-hot")?.value).toBe(5);
-    expect(result.get("blocker-a")?.value).toBe(0);
-    expect(result.get("blocker-a")?.sources).toEqual([]);
-    expect(result.get("blocker-b")?.value).toBe(0);
-    expect(result.get("blocker-b")?.sources).toEqual([]);
-  });
-
-  it("leaves a blocker's own subtree untouched — nothing arrives to carry downward", () => {
-    // tactic-hot (boost 5) blocked by blocker-a; blocker-a has a child via
-    // parent. blocker-a receives nothing, so its child inherits nothing either.
-    const nodes = [
-      ...kinds(),
-      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: boost(5) }),
-      anode({ id: "blocker-a", kind: "tactic" }),
-      anode({ id: "blocker-child", kind: "tactic", parent: "blocker-a" }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("blocker-a")?.value).toBe(0);
-    expect(result.get("blocker-a")?.sources).toEqual([]);
-    expect(result.get("blocker-child")?.value).toBe(0);
-    expect(result.get("blocker-child")?.sources).toEqual([]);
-  });
-
-  it("does not flow an override's value backward to blockers either", () => {
-    const nodes = [
-      ...kinds(),
-      anode({ id: "tactic-hot", kind: "tactic", blocked_by: ["blocker-a"], attention: override(5) }),
-      anode({ id: "blocker-a", kind: "tactic" }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("tactic-hot")?.value).toBe(5);
-    expect(result.get("blocker-a")?.value).toBe(0);
-    expect(result.get("blocker-a")?.sources).toEqual([]);
-  });
-
-  it("resolves a mixed parent/blocked_by structure without throwing (no cycle can form)", () => {
-    // outer (boost 4) has a child `inner` via parent, and outer is blocked by
-    // inner. Under the old backward flow this was a genuine mixed cycle needing
-    // fixpoint-convergence reasoning; with blocked_by out of the distributor
-    // relation the structure is just a one-edge parent chain, so no cycle can
-    // form at all. It must still resolve, not throw: inner inherits outer's
-    // boost downward, and the blocked_by edge contributes nothing.
-    const nodes = [
-      ...kinds(),
-      anode({ id: "outer", kind: "tactic", blocked_by: ["inner"], attention: boost(4) }),
-      anode({ id: "inner", kind: "tactic", parent: "outer" }),
-    ];
-
-    let result!: ReturnType<typeof resolveAttention>; // type-safety-ok: assigned synchronously inside the expect(() => {...}) callback immediately below, before any read
-    expect(() => {
-      result = resolveAttention(nodes);
-    }).not.toThrow();
-    expect(result.get("outer")?.value).toBe(4);
-    expect(result.get("inner")?.value).toBe(4);
-    expect(result.get("inner")?.sources).toEqual(["outer"]);
-  });
-
-  it("counts a source reaching a node via two serves paths exactly once (downward flow, unchanged)", () => {
-    // strategy-hot (boost 5) is served by two tactics: blocker and hot. Each
-    // draws strategy-hot's source through its OWN serves edge, undiluted and
-    // deduped by source id — the downward half of the old doctrine, unchanged.
-    // The blocked_by edge from hot to blocker now contributes nothing.
-    const nodes = [
-      ...kinds(),
-      svnode({ id: "strategy-hot", attention: boost(5) }),
-      anode({ id: "blocker", kind: "tactic", serves: ["strategy-hot"] }),
-      anode({ id: "hot", kind: "tactic", serves: ["strategy-hot"], blocked_by: ["blocker"] }),
-    ];
-
-    const result = resolveAttention(nodes);
-    expect(result.get("blocker")?.value).toBe(5);
-    expect(result.get("blocker")?.sources).toEqual(["strategy-hot"]);
-    expect(result.get("hot")?.value).toBe(5);
-    expect(result.get("hot")?.sources).toEqual(["strategy-hot"]);
   });
 });
 
@@ -638,70 +811,57 @@ describe("resolveAttention tier axis", () => {
     expect(result.get("strategy-child")?.tier).toBe(3);
   });
 
-  it("reports the inherited effective tier on an overridden node (an override pins value only)", () => {
+  // Tier isolation is now STRUCTURAL: per-tier boosts mean tier T's ranking
+  // reads only `boosts[T]`, so a claim authored on another tier's scale is
+  // invisible there by construction. The old cross-tier source FILTER is gone —
+  // its net effect is preserved here, without the side effect of also dropping
+  // a tier-2 boost that a tier-1 strategy explicitly authored (see the last
+  // case in this block).
+  it("does not sum a tier-1 claim into a tier-3 receiver's score", () => {
     const result = resolveAttention([
       ...kinds(),
-      svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
-      svnode({
-        id: "strategy-capped",
-        parent: "strategy-prod",
-        attributes: { tier: 3 },
-        attention: override(2, "capped", 3),
-      }),
-    ]);
-    const capped = result.get("strategy-capped");
-    expect(capped?.value).toBe(2); // override pins the value
-    expect(capped?.tier).toBe(3); // tier is a separate axis, still resolved
-  });
-
-  // Author ruling 2026-07-31, design decision (b): tier is an ISOLATION
-  // BOUNDARY — authored authority does not flow across a tier namespace.
-  it("does not sum a lower-tier source's claim into a higher-tier receiver", () => {
-    const result = resolveAttention([
-      ...kinds(),
-      svnode({ id: "strategy-low", attention: boost(10, "ordinary work") }),
+      svnode({ id: "strategy-low", attention: boost({ 1: 10 }, "ordinary work") }),
       svnode({
         id: "strategy-high",
         parent: "strategy-low",
         attributes: { tier: 3 },
-        attention: boost(5, "production health", 3),
+        attention: boost({ 3: 5 }, "production health"),
       }),
     ]);
     const high = result.get("strategy-high");
-    // 5, not 15: the tier-1 parent's claim is filtered out before summing.
-    expect(high?.value).toBe(5);
+    // 5, not 15: the tier-1 parent claims nothing on the tier-3 scale.
+    expect(high?.score).toBe(5);
     expect(high?.tier).toBe(3);
-    // The node's own claim is never dropped — it sits at the node's own tier.
     expect(high?.sources).toEqual(["strategy-high"]);
   });
 
-  it("still sums a SAME-tier source's claim — the filter is by tier, not by distance", () => {
+  it("still sums a SAME-tier claim — isolation is by tier namespace, not by distance", () => {
     const result = resolveAttention([
       ...kinds(),
       svnode({
         id: "strategy-peer",
         attributes: { tier: 3 },
-        attention: boost(10, "production health", 3),
+        attention: boost({ 3: 10 }, "production health"),
       }),
       svnode({
         id: "strategy-heir",
         parent: "strategy-peer",
         attributes: { tier: 3 },
-        attention: boost(5, "production health", 3),
+        attention: boost({ 3: 5 }, "production health"),
       }),
     ]);
     const heir = result.get("strategy-heir");
-    expect(heir?.value).toBe(15);
+    expect(heir?.score).toBe(15);
     expect(heir?.sources).toEqual(["strategy-peer", "strategy-heir"]);
   });
 
-  it("drops a lower-tier source lifted through an intermediate — filtering is on the SOURCE's tier", () => {
-    // strategy-low (tier 1, boost 7) -> tactic-mid (lifted to tier 3 by its
-    // serves edge) -> the receiver. tactic-mid RELAYS the tier-1 claim, and
-    // being lifted to tier 3 itself does not relabel that claim's origin.
+  it("ignores a lower-tier claim relayed through a tier-lifted intermediate", () => {
+    // strategy-low claims 7 on the tier-1 scale only. tactic-mid is lifted to
+    // tier 3 by its serves edge; being lifted does not relabel the tier-1 claim
+    // it relays, and there is no tier-3 claim anywhere, so it scores 0.
     const result = resolveAttention([
       ...kinds(),
-      svnode({ id: "strategy-low", attention: boost(7, "ordinary work") }),
+      svnode({ id: "strategy-low", attention: boost({ 1: 7 }, "ordinary work") }),
       svnode({ id: "strategy-prod", attributes: { tier: 3 } }),
       anode({
         id: "tactic-mid",
@@ -712,39 +872,78 @@ describe("resolveAttention tier axis", () => {
     ]);
     const mid = result.get("tactic-mid");
     expect(mid?.tier).toBe(3);
-    expect(mid?.value).toBe(0); // the tier-1 claim does not cross the boundary
+    expect(mid?.score).toBe(0);
     expect(mid?.sources).toEqual([]);
+  });
+
+  it("honors a tier-2 boost a tier-1 strategy authored — the old isolation filter would have dropped it", () => {
+    // strategy-planner sits in tier 1 but explicitly claims 9 on the tier-2
+    // scale. A bug-fix tactic serving it resolves to tier 2 and DOES see that
+    // claim; the strategy's own tier-1 report is unaffected by it.
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-planner", attention: boost({ 1: 1, 2: 9 }) }),
+      anode({
+        id: "tactic-bugfix",
+        kind: "tactic",
+        serves: ["strategy-planner"],
+        attributes: { bug_fix: true },
+      }),
+    ]);
+    expect(result.get("strategy-planner")?.tier).toBe(1);
+    expect(result.get("strategy-planner")?.score).toBe(1);
+    const bugfix = result.get("tactic-bugfix");
+    expect(bugfix?.tier).toBe(2);
+    expect(bugfix?.score).toBe(9);
+    expect(bugfix?.sources).toEqual(["strategy-planner"]);
   });
 });
 
-describe("resolveAttention term composition is modular", () => {
-  it("leaves an authored-only node's value untouched by a sibling's unrelated signal/capture contributions", () => {
-    const nodes = [
-      ...kinds(),
-      anode({
-        id: "delegation-heavy",
-        kind: "delegation",
-        status: "codified",
-        attributes: {
-          divergence: { level: "high" },
-          irreversibility: { gated: "true" },
-        },
-      }),
-      anode({ id: "virtue-root", kind: "virtue", status: "codified" }),
-      // Sibling with no relation to the boosted node: its own signal/capture
-      // contributions must not leak into strategy-boosted's composition.
-      anode({ id: "strategy-target", kind: "strategy" }), // unvalidated — an on-path terminal
-      svnode({ id: "strategy-captured", recovers: ["delegation-heavy"] }),
-      svnode({ id: "strategy-boosted", serves: ["virtue-root"], attention: boost(7) }),
-    ];
+describe("compareRankKeyDesc", () => {
+  it("orders tier outermost, then band, then score, then depth — all descending", () => {
+    const base = { tier: 1, band: 1, score: 1, depth: 1 };
+    expect(compareRankKeyDesc({ ...base, tier: 2 }, base)).toBeLessThan(0);
+    expect(compareRankKeyDesc({ ...base, band: 2 }, base)).toBeLessThan(0);
+    expect(compareRankKeyDesc({ ...base, score: 2 }, base)).toBeLessThan(0);
+    expect(compareRankKeyDesc({ ...base, depth: 2 }, base)).toBeLessThan(0);
+    expect(compareRankKeyDesc(base, base)).toBe(0);
+    // Tier dominates every inner component.
+    expect(
+      compareRankKeyDesc({ tier: 2, band: 0, score: 0, depth: 0 }, { tier: 1, band: 99, score: 99, depth: 99 }),
+    ).toBeLessThan(0);
+  });
 
-    const result = resolveAttention(nodes);
-    const boosted = result.get("strategy-boosted");
-    expect(boosted?.value).toBe(7);
-    expect(boosted?.terms).toEqual([
-      { term: "authored", value: 7 },
-      { term: "signal", value: 0 },
-      { term: "capture", value: 0 },
+  it("sorts a mixed list highest-first", () => {
+    const keys = [
+      { tier: 1, band: 0, score: 0, depth: 0 },
+      { tier: 1, band: 0, score: 0, depth: 3 },
+      { tier: 2, band: 0, score: 0, depth: 0 },
+      { tier: 1, band: 5, score: 0, depth: 0 },
+    ];
+    expect([...keys].sort(compareRankKeyDesc)).toEqual([
+      { tier: 2, band: 0, score: 0, depth: 0 },
+      { tier: 1, band: 5, score: 0, depth: 0 },
+      { tier: 1, band: 0, score: 0, depth: 3 },
+      { tier: 1, band: 0, score: 0, depth: 0 },
     ]);
+  });
+
+  it("puts a child ahead of its parent on depth when tier, band and score all tie", () => {
+    const result = resolveAttention([
+      ...kinds(),
+      svnode({ id: "strategy-p" }),
+      svnode({ id: "strategy-c", parent: "strategy-p" }),
+    ]);
+    const parent = result.get("strategy-p");
+    const child = result.get("strategy-c");
+    expect(parent).toBeDefined();
+    expect(child).toBeDefined();
+    // Everything ties except depth: the child's lineage holds one more node.
+    expect(child?.tier).toBe(parent?.tier);
+    expect(child?.band).toBe(parent?.band);
+    expect(child?.score).toBe(parent?.score);
+    expect(child?.depth).toBe(1);
+    expect(parent?.depth).toBe(0);
+    expect(compareRankKeyDesc(child!, parent!)).toBeLessThan(0); // type-safety-ok: the toBeDefined() assertions on parent and child above already proved both are non-null; Map.get()'s return type just doesn't narrow across separate expect() statements
   });
 });

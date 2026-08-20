@@ -58,6 +58,24 @@
 #      that never happened, stranding a commit the next graph-commit from this
 #      shared checkout would push. The un-landed commit must be discarded (HEAD
 #      back where the sweep found it) and the false claim must not be emitted.
+#      9a: that discard is scoped to the paths its safety gate proved — an
+#      unrelated modified tracked file (flake.lock) elsewhere in the checkout
+#      survives it intact, where the old whole-tree `reset --hard` destroyed it.
+#   10. `reconcile-graph-review-stall --node <id>` (tactic-dispatch-ladder-skill
+#       Unit 6b): the same selection filter as case 6b, mirrored onto this
+#       sweep's sibling. --node narrows to the named node and leaves an
+#       otherwise-equally-eligible sibling untouched; an unknown id acts on
+#       nothing; the unflagged sweep still acts on every eligible candidate.
+#   11. graph-select-target's interrupt gates roll their on-disk write back when
+#       the land fails — the writer that ACTUALLY leaked in production
+#       (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).
+#       11b re-runs the same fixture with the rollback neutered and asserts it
+#       DOES leak, so 11 cannot pass vacuously.
+#
+# Cases 1, 3, 4, 8, 9, 10 and 11 all exercise the ONE shared rollback primitive,
+# lib-graph-rollback.sh's graph_rollback_node_writes — extracted from
+# reconcile-graph-merged, where it was correct, precisely because its siblings
+# had re-derived it and drifted.
 #
 # Cases 6 and 7 are both verified to go RED when Unit 1's `--base` threading is
 # reverted. Case 7 needed care to avoid being vacuous: if the checkout is left
@@ -77,7 +95,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh dispatch-config-load; do
+for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -125,8 +143,13 @@ build_seed_repo() {
   # pin is stale (case 7's whole point).
   cp "$UTIL_SCRIPTS_SRC/reconcile-graph.ts" "$dst/packages/intentionsutil/scripts/reconcile-graph.ts"
   cp "$UTIL_SCRIPTS_SRC/merge-node.ts" "$dst/packages/intentionsutil/scripts/merge-node.ts"
+  # apply-fix-state.ts is the store-mutation primitive behind
+  # reconcile-graph-review-stall's `fix` route (cases 10a-10c).
+  cp "$UTIL_SCRIPTS_SRC/apply-fix-state.ts" "$dst/packages/intentionsutil/scripts/apply-fix-state.ts"
   chmod +x "$dst/packages/intentionsutil/scripts/graph-commit"
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
+  # The shared rollback primitive every graph writer under test sources.
+  cp "$HARNESS_DIR/lib-graph-rollback.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-rollback.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
   chmod +x "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
 }
@@ -770,6 +793,73 @@ else
 fi
 
 # ===========================================================================
+# Case 6b: `reconcile-graph-merged --node <id>` narrows the sweep to one node
+# (tactic-dispatch-ladder-skill Unit 1).
+#
+# The /dispatch-ladder driver absorbs its OWN merge and must not sweep the whole
+# graph as a side effect — a node-scoped absorb that also reconciled unrelated
+# merged work would race the tick's sweep over nodes the driver knows nothing
+# about. Both seeded nodes are equally reconcilable, so the ONLY thing that can
+# separate them is the filter: exactly one `--base` pin, keyed to the named id,
+# and one `reconciled` line.
+# ===========================================================================
+T6B="$WORK/t6b-seed"
+build_seed_repo "$T6B"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T6B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T6B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T6B/intentions/t-r1.md" t-r1 101
+reconcile_node "$T6B/intentions/t-r2.md" t-r2 102
+new_origin t6b
+init_and_push "$T6B"
+
+C6B="$WORK/t6b-clone"
+clone_with_node_modules "$C6B"
+BIN6B="$WORK/t6b-bin"; FIX6B="$WORK/t6b-fixtures"
+reconcile_gh_stub "$BIN6B" "$FIX6B"
+cat >"$C6B/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t6b-argv.txt"
+exit 0
+SH
+chmod +x "$C6B/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C6B" || exit 99
+  export PATH="$BIN6B:$PATH" GC_FIXTURE_DIR="$FIX6B"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --node t-r1 2>&1
+)"; rc=$?
+argv6b="$(cat "$WORK/t6b-argv.txt" 2>/dev/null || true)"
+base_count_6b="$(grep -c -- '^--base$' <<<"$argv6b" || true)"
+pin_r1_6b="$(grep -o '^t-r1=[0-9a-f]\{40\}$' <<<"$argv6b" || true)"
+pin_r2_6b="$(grep -o '^t-r2=[0-9a-f]\{40\}$' <<<"$argv6b" || true)"
+
+if [[ $rc -eq 0 ]] \
+   && [[ "$base_count_6b" -eq 1 ]] \
+   && [[ -n "$pin_r1_6b" ]] \
+   && [[ -z "$pin_r2_6b" ]] \
+   && grep -q '^reconciled t-r1 ->' <<<"$out" \
+   && ! grep -q 't-r2' <<<"$out"; then
+  ok "reconcile-graph-merged --node: narrows the sweep to the named node (one --base pin, sibling t-r2 untouched)"
+else
+  no "reconcile-graph-merged --node (rc=$rc, --base count=$base_count_6b, pin_r2='$pin_r2_6b')"
+  printf '%s\n' "$out"
+  printf 'argv: %s\n' "$argv6b"
+fi
+
+# Usage errors exit 2 rather than silently sweeping everything — a mistyped flag
+# from the driver must not become a full-graph reconcile.
+rc_usage=0
+( cd "$C6B" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --node >/dev/null 2>&1 ) || rc_usage=$?
+rc_bogus=0
+( cd "$C6B" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged --bogus >/dev/null 2>&1 ) || rc_bogus=$?
+if [[ $rc_usage -eq 2 && $rc_bogus -eq 2 ]]; then
+  ok "reconcile-graph-merged: --node without an id, and an unknown flag, are usage errors (exit 2)"
+else
+  no "reconcile-graph-merged usage errors (--node rc=$rc_usage, --bogus rc=$rc_bogus)"
+fi
+
+# ===========================================================================
 # Case 7: THE RACE — a park landed between the sweep's read and its commit
 # survives the reconcile. This is the case that actually reproduces bug X, and
 # the one that runs the REAL graph-commit (its check_base_freshness is the
@@ -1033,14 +1123,543 @@ if [[ $rc -ne 0 ]] \
    && [[ "$head9_after" == "$head9_before" ]] \
    && [[ -z "$status9" ]] \
    && [[ "$node9_after" == "$node9_before" ]] \
-   && grep -q 'discarded by resetting to' <<<"$out" \
-   && ! grep -q 'rolled the apply run.s node writes back' <<<"$out"; then
+   && grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && ! grep -q 'rolled the node write' <<<"$out"; then
   ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
 else
   no "reconcile-graph-merged busy-main rollback (rc=$rc, head moved: $([[ "$head9_after" == "$head9_before" ]] && echo no || echo yes))"
   printf '%s\n' "$out"
   printf 'status: %s\n' "$status9"
   printf 'node:\n%s\n' "$node9_after"
+fi
+
+# ===========================================================================
+# Case 9a: the discard is scoped to the paths the safety gate proved, not to the
+# whole working tree (tactic-eval-finding-ledger Unit A).
+#
+# Same busy-main shape as case 9, plus the thing production actually had sitting
+# in the shared main checkout: an unrelated MODIFIED tracked file (flake.lock).
+# The gate at _graph_discard_stranded_commits' top proves the stranded COMMITS
+# are intentions/-only and safe to drop — it proves nothing about the rest of the
+# checkout, so a whole-tree `git reset --hard` destroyed that edit with no
+# warning. The discard must rewind HEAD/index and restore only the intentions/
+# paths those commits touched, leaving flake.lock modified exactly as found.
+#
+# Not vacuous: with `git reset -q --hard "$head_at_arm"` restored in
+# lib-graph-rollback.sh this case's flake.lock assertion goes red (the file comes
+# back byte-identical to the seed and `git status` reports it clean), while every
+# other assertion here still passes.
+# ===========================================================================
+T9B="$WORK/t9b-seed"
+build_seed_repo "$T9B"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9B/intentions/t-strand.md" t-strand 909
+# A tracked non-intentions/ file, so the clone can carry a real `M` against it.
+printf '%s\n' 'seeded lockfile — the landed content' >"$T9B/flake.lock"
+new_origin t9b
+init_and_push "$T9B"
+
+C9B="$WORK/t9b-clone"
+clone_with_node_modules "$C9B"
+BIN9B="$WORK/t9b-bin"; FIX9B="$WORK/t9b-fixtures"
+reconcile_gh_stub "$BIN9B" "$FIX9B"
+# The same rc-11 busy-main stub as case 9, written fresh rather than copied out
+# of $C9: graph-commit is a TRACKED file in these fixtures, so case 9's stub is
+# itself an unrelated dirty tracked file that its own `--hard` discard used to
+# destroy — copying from there would make this case's outcome depend on the very
+# bug it tests.
+cat >"$C9B/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+git commit -qm "graph: reconcile terminal tactics (record completion)"
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9B/packages/intentionsutil/scripts/graph-commit"
+
+# The unrelated dirt the discard must preserve.
+STRAY9B='locally edited lockfile — unrelated to any graph write'
+printf '%s\n' "$STRAY9B" >"$C9B/flake.lock"
+
+head9b_before="$(git -C "$C9B" rev-parse HEAD)"
+node9b_before="$(cat "$C9B/intentions/t-strand.md")"
+out="$(
+  cd "$C9B" || exit 99
+  export PATH="$BIN9B:$PATH" GC_FIXTURE_DIR="$FIX9B"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9b_after="$(git -C "$C9B" rev-parse HEAD)"
+status9b="$(git -C "$C9B" status --porcelain intentions/)"
+node9b_after="$(cat "$C9B/intentions/t-strand.md")"
+stray9b_status="$(git -C "$C9B" status --porcelain -- flake.lock)"
+stray9b_after="$(cat "$C9B/flake.lock")"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9b_after" == "$head9b_before" ]] \
+   && [[ -z "$status9b" ]] \
+   && [[ "$node9b_after" == "$node9b_before" ]] \
+   && grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && [[ "$stray9b_status" == ' M flake.lock' ]] \
+   && [[ "$stray9b_after" == "$STRAY9B" ]]; then
+  ok "reconcile-graph-merged busy-main rollback: the stranded-commit discard is path-scoped — an unrelated modified flake.lock in the checkout survives intact"
+else
+  no "reconcile-graph-merged path-scoped discard (rc=$rc, flake.lock status='$stray9b_status')"
+  printf '%s\n' "$out"
+  printf 'intentions status: %s\n' "$status9b"
+  printf 'flake.lock content: %s\n' "$stray9b_after"
+fi
+
+# ===========================================================================
+# Case 10: `reconcile-graph-review-stall --node <id>` narrows the sweep to one
+# node (tactic-dispatch-ladder-skill Unit 6b) — the same selection filter as
+# Unit 1's `reconcile-graph-merged --node` (cases 6b above), added to this
+# sweep's sibling.
+#
+# Both seeded nodes are phase:review + `reviewed` marker + an OPEN, MERGEABLE
+# PR with red CI — equally eligible for the `fix` route. The only thing that
+# can separate them is the filter: exactly one node's execution.fix gets
+# written, exactly one `recovered <id> -> fix` line is printed.
+# ===========================================================================
+
+# review_stall_gh_stub <bin-dir> <fixture-dir> — a `gh` standing in for the two
+# REST surfaces this sweep polls:
+#   - `gh api repos/{owner}/{repo}/pulls/<n>` (gh_pr_view_rest) → an OPEN,
+#     MERGEABLE PR (a per-PR fixture file, defaulted inline when absent).
+#   - `gh api --paginate repos/{owner}/{repo}/commits/<sha>/check-runs`
+#     (dispatch_ci_verdict_rest) → one failing check run, for every sha, so
+#     every candidate resolves to a red CI verdict.
+review_stall_gh_stub() {
+  local bindir="$1" fixdir="$2"
+  mkdir -p "$bindir" "$fixdir"
+  cat >"$fixdir/checkruns-red.json" <<'JSON'
+{"check_runs": [
+  {"name": "unit-tests", "status": "completed", "conclusion": "failure", "id": 1, "app": {"slug": "github-actions"}}
+]}
+JSON
+  cat >"$bindir/gh" <<'SH'
+#!/usr/bin/env bash
+# Args always arrive as: gh api [--paginate] <path>
+path=""
+for a in "$@"; do
+  case "$a" in
+    */pulls/*|*/check-runs) path="$a" ;;
+  esac
+done
+case "$path" in
+  */check-runs)
+    cat "$GC_FIXTURE_DIR/checkruns-red.json" ;;
+  */pulls/*)
+    num="${path##*/}"
+    if [[ -f "$GC_FIXTURE_DIR/pr-$num.json" ]]; then
+      cat "$GC_FIXTURE_DIR/pr-$num.json"
+    else
+      jq -n --argjson n "$num" '{
+        number: $n, title: "harness pr", body: "",
+        state: "open",
+        merged_at: null,
+        merge_commit_sha: null,
+        mergeable: true, mergeable_state: "clean",
+        head: {ref: "harness-branch", sha: ("deadbeef" + ($n | tostring))},
+        labels: []
+      }'
+    fi ;;
+  *)
+    echo "gh stub: unhandled invocation: $*" >&2; exit 1 ;;
+esac
+SH
+  chmod +x "$bindir/gh"
+}
+
+# review_stall_node <file> <id> <pr> — a tactic at phase:review carrying the
+# `reviewed` marker, an OPEN PR, and no active fix interrupt: exactly the
+# enumeration's candidate shape.
+review_stall_node() {
+  cat >"$1" <<NODE
+---
+id: $2
+kind: tactic
+statement: harness node for the review-stall recovery sweep
+owner: ai
+status: codified
+phase: review
+serves: []
+execution:
+  branch: $2
+  pr: $3
+  attempts: {}
+  markers: [reviewed]
+  strategy_fingerprint: null
+  fix: null
+  completion: null
+office_hours: null
+---
+# harness node for the review-stall recovery sweep
+NODE
+}
+
+# ---------------------------------------------------------------------------
+# Case 10a: --node narrows the sweep to the named node; the otherwise-equally-
+# eligible sibling is passed over entirely (no write, no stdout line).
+# ---------------------------------------------------------------------------
+T10A="$WORK/t10a-seed"
+build_seed_repo "$T10A"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10A/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10A/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10A/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10A/intentions/t-rs2.md" t-rs2 202
+new_origin t10a
+init_and_push "$T10A"
+
+C10A="$WORK/t10a-clone"
+clone_with_node_modules "$C10A"
+BIN10A="$WORK/t10a-bin"; FIX10A="$WORK/t10a-fixtures"
+review_stall_gh_stub "$BIN10A" "$FIX10A"
+cat >"$C10A/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10a-argv.txt"
+exit 0
+SH
+chmod +x "$C10A/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C10A" || exit 99
+  export PATH="$BIN10A:$PATH" GC_FIXTURE_DIR="$FIX10A"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall --node t-rs1 2>&1
+)"; rc=$?
+argv10a="$(cat "$WORK/t10a-argv.txt" 2>/dev/null || true)"
+# Node bodies are YAML frontmatter, not JSON — a written `execution.fix` shows
+# up as a `since:` key under it, so grep is enough to tell written from
+# untouched without a YAML parser.
+if [[ $rc -eq 0 ]] \
+   && grep -qE '^\s*since:' "$C10A/intentions/t-rs1.md" \
+   && ! grep -qE '^\s*since:' "$C10A/intentions/t-rs2.md" \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out" \
+   && ! grep -q 't-rs2' <<<"$out" \
+   && grep -q '^t-rs1$' <<<"$argv10a" \
+   && ! grep -q '^t-rs2$' <<<"$argv10a"; then
+  ok "reconcile-graph-review-stall --node: narrows the sweep to the named node (fix interrupt written only for it, sibling t-rs2 untouched)"
+else
+  no "reconcile-graph-review-stall --node narrows the sweep (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'argv: %s\n' "$argv10a"
+  printf 't-rs1:\n%s\n' "$(cat "$C10A/intentions/t-rs1.md")"
+  printf 't-rs2:\n%s\n' "$(cat "$C10A/intentions/t-rs2.md")"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10b: an unknown --node id acts on nothing — the enumeration filters
+# BOTH real candidates out, the sweep hits its empty-candidates exit before
+# ever invoking graph-commit.
+# ---------------------------------------------------------------------------
+T10B="$WORK/t10b-seed"
+build_seed_repo "$T10B"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10B/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10B/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10B/intentions/t-rs2.md" t-rs2 202
+new_origin t10b
+init_and_push "$T10B"
+
+C10B="$WORK/t10b-clone"
+clone_with_node_modules "$C10B"
+BIN10B="$WORK/t10b-bin"; FIX10B="$WORK/t10b-fixtures"
+review_stall_gh_stub "$BIN10B" "$FIX10B"
+cat >"$C10B/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10b-argv.txt"
+exit 0
+SH
+chmod +x "$C10B/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C10B" || exit 99
+  export PATH="$BIN10B:$PATH" GC_FIXTURE_DIR="$FIX10B"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall --node t-nonexistent 2>&1
+)"; rc=$?
+
+if [[ $rc -eq 0 ]] \
+   && [[ -z "$out" ]] \
+   && [[ ! -f "$WORK/t10b-argv.txt" ]] \
+   && ! grep -qE '^\s*since:' "$C10B/intentions/t-rs1.md" \
+   && ! grep -qE '^\s*since:' "$C10B/intentions/t-rs2.md"; then
+  ok "reconcile-graph-review-stall --node: an unknown id acts on nothing (empty output, no graph-commit call, no node written)"
+else
+  no "reconcile-graph-review-stall --node unknown id (rc=$rc)"
+  printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10c: without the flag, existing behavior is unchanged — the plain
+# sweep still acts on every eligible candidate (both nodes), batched into one
+# graph-commit.
+# ---------------------------------------------------------------------------
+T10C="$WORK/t10c-seed"
+build_seed_repo "$T10C"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10C/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10C/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10C/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10C/intentions/t-rs2.md" t-rs2 202
+new_origin t10c
+init_and_push "$T10C"
+
+C10C="$WORK/t10c-clone"
+clone_with_node_modules "$C10C"
+BIN10C="$WORK/t10c-bin"; FIX10C="$WORK/t10c-fixtures"
+review_stall_gh_stub "$BIN10C" "$FIX10C"
+cat >"$C10C/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10c-argv.txt"
+exit 0
+SH
+chmod +x "$C10C/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C10C" || exit 99
+  export PATH="$BIN10C:$PATH" GC_FIXTURE_DIR="$FIX10C"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+argv10c="$(cat "$WORK/t10c-argv.txt" 2>/dev/null || true)"
+
+if [[ $rc -eq 0 ]] \
+   && grep -qE '^\s*since:' "$C10C/intentions/t-rs1.md" \
+   && grep -qE '^\s*since:' "$C10C/intentions/t-rs2.md" \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out" \
+   && grep -q '^recovered t-rs2 -> fix' <<<"$out" \
+   && grep -q '^t-rs1$' <<<"$argv10c" \
+   && grep -q '^t-rs2$' <<<"$argv10c"; then
+  ok "reconcile-graph-review-stall: unflagged sweep behavior is unchanged (both eligible nodes recovered, one batched graph-commit)"
+else
+  no "reconcile-graph-review-stall unflagged sweep (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'argv: %s\n' "$argv10c"
+fi
+
+# Usage errors exit 2 rather than silently sweeping everything — a mistyped
+# flag from the /dispatch-ladder driver must not become a full-graph sweep.
+# Reuses the 10a clone: neither error path reaches the enumeration, so the
+# already-mutated t-rs1 there has no bearing on this check.
+rc_usage=0
+( cd "$C10A" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall --node >/dev/null 2>&1 ) || rc_usage=$?
+rc_bogus=0
+( cd "$C10A" && bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall --bogus >/dev/null 2>&1 ) || rc_bogus=$?
+if [[ $rc_usage -eq 2 && $rc_bogus -eq 2 ]]; then
+  ok "reconcile-graph-review-stall: --node without an id, and an unknown flag, are usage errors (exit 2)"
+else
+  no "reconcile-graph-review-stall usage errors (--node rc=$rc_usage, --bogus rc=$rc_bogus)"
+fi
+
+# ===========================================================================
+# Case 11: graph-select-target's interrupt gates roll their write back when the
+# land fails (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).
+#
+# THE production leak this node records. Every interrupt gate in
+# graph-select-target mutates intentions/<id>.md through apply-fix-state /
+# apply-conflict-state and lands it with a SEPARATE graph-commit; when that
+# commit did not land, nothing rolled the mutation back. Measured 2026-08-13
+# 18:24:57Z: the `--clear-fix` arm of _gate_fix_active left
+# intentions/tactic-attention-namespaced-rank.md dirty (`fix: null` + the
+# `reviewed` marker stripped — precisely what --clear-fix writes) because its
+# graph-commit had been refused by a pre-existing dirty flake.lock. The residue
+# then re-refused every subsequent graph-commit from the main checkout — the
+# next tick's gate leaked again on top of it, one leaked write per tick, until a
+# human cleared the file.
+#
+# The fixture reproduces that arm exactly: a `fix`-phase candidate whose CI
+# reads green, a REAL apply-fix-state --clear-fix write, and a graph-commit that
+# fails. Assert the tree is left CLEAN and the node file is byte-identical to
+# HEAD — the `reviewed` marker and the fix block both still there, because
+# nothing landed.
+#
+# Fixture shape follows test-graph-select-target.sh (the script derives
+# REPO_ROOT from its own on-disk location, so it and every sourced lib*.sh must
+# be physically copied) plus this harness's real node_modules symlink, since
+# apply-fix-state.ts must genuinely run.
+# ===========================================================================
+T11="$WORK/t11-seed"
+build_seed_repo "$T11"
+cp "$HARNESS_DIR"/graph-select-target "$HARNESS_DIR"/lib-*.sh \
+   "$T11/.claude/skills/dispatch-propagate/scripts/"
+chmod +x "$T11/.claude/skills/dispatch-propagate/scripts/graph-select-target"
+# A tactic carrying an active fix interrupt plus the `reviewed` marker.
+# The STORED phase stays at the ladder phase (`review`) — `fix` is a
+# router-EMITTED phase, not a member of PHASES (schema.ts:59, DISPATCH_PHASE_NAMES
+# at :105), so a node file carrying `phase: fix` fails validateNode and every
+# write below would no-op. It is `execution.fix != null` that makes the router
+# emit `fix`, which is what the canned selector output below reports.
+# --clear-fix's resolution path writes fix: null AND strips the `reviewed`
+# marker, so both halves of the production diff are reproduced.
+cat >"$T11/intentions/t-gst.md" <<'NODE'
+---
+id: t-gst
+kind: tactic
+statement: harness node for the graph-select-target fix-clear rollback test
+owner: ai
+status: codified
+phase: review
+serves: []
+execution:
+  branch: t-gst
+  pr: 777
+  attempts: {}
+  markers:
+    - planned
+    - reviewed
+  strategy_fingerprint: null
+  fix:
+    since: 2026-08-01
+    attempt: 1
+    # Hex WITH letters on purpose: an all-digit sha parses as a YAML number and
+    # validateFixState rejects it ("Expected string or null for
+    # execution.fix.pushed_sha, got number"), which would make every write below
+    # a silent no-op and this case vacuous.
+    pushed_sha: aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111
+  conflict: null
+  completion: null
+office_hours: null
+---
+# harness node for the graph-select-target fix-clear rollback test
+NODE
+new_origin t11
+init_and_push "$T11"
+
+C11="$WORK/t11-clone"
+clone_with_node_modules "$C11"
+fail_graph_commit "$C11"
+BIN11="$WORK/t11-bin"; FIX11="$WORK/t11-fixtures"
+mkdir -p "$BIN11" "$FIX11"
+
+# The canned selector output. Only `npx tsx …/select-targets.ts` is intercepted;
+# every other `npx tsx <script>` runs for real through `node --import tsx/esm`,
+# which is how apply-fix-state.ts performs the genuine --clear-fix write.
+cat >"$FIX11/selection.json" <<'JSON'
+{"candidates":[{"id":"t-gst","kind":"tactic","phase":"fix","pr":777,"pace_exempt":false,
+  "fix":{"since":"2026-08-01","pushed_sha":"aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"}}],
+ "events":[]}
+JSON
+cat >"$BIN11/npx" <<SH
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    *select-targets.ts) cat "$FIX11/selection.json"; exit 0 ;;
+  esac
+done
+args=("\$@")
+[[ "\${args[0]}" == "tsx" ]] && args=("\${args[@]:1}")
+exec node --import tsx/esm "\${args[@]}"
+SH
+chmod +x "$BIN11/npx"
+
+# gh: an OPEN, MERGEABLE PR. The CI verdict is supplied through
+# DISPATCH_CI_VERDICT_CACHE below rather than a check-runs fixture, so this stub
+# only has to serve gh_pr_view_rest.
+cat >"$BIN11/gh" <<'SH'
+#!/usr/bin/env bash
+path=""
+for a in "$@"; do
+  case "$a" in */pulls/*) path="$a" ;; esac
+done
+case "$path" in
+  */pulls/*)
+    jq -n '{
+      number: 777, title: "harness pr", body: "",
+      state: "open", merged_at: null, merge_commit_sha: null,
+      mergeable: true, mergeable_state: "clean",
+      head: {ref: "t-gst", sha: "2222222222222222222222222222222222222222"},
+      labels: []
+    }' ;;
+  *) echo "gh stub: unhandled invocation: $*" >&2; exit 1 ;;
+esac
+SH
+chmod +x "$BIN11/gh"
+# `claude agents --json` reports no live sessions, corroborated as definite by
+# the daemon-visible probe (see test-graph-select-target.sh's note) — so the
+# claimed-set gate lets the candidate through to sensor_gate.
+printf '%s' '[]' >"$FIX11/claude-payload.json"
+cat >"$BIN11/claude" <<SH
+#!/usr/bin/env bash
+cat "$FIX11/claude-payload.json"
+SH
+chmod +x "$BIN11/claude"
+cat >"$BIN11/pgrep-daemon-visible" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$BIN11/pgrep-daemon-visible"
+# Green CI for the PR head, without a check-runs round trip.
+mkdir -p "$WORK/t11-ci-cache"
+printf 'passing\n' >"$WORK/t11-ci-cache/2222222222222222222222222222222222222222"
+
+node11_before="$(cat "$C11/intentions/t-gst.md")"
+out="$(
+  cd "$C11" || exit 99
+  export PATH="$BIN11:$PATH"
+  export CLAUDE_AGENTS_CMD="$BIN11/claude" CLAUDE_AGENTS_PGREP_CMD="$BIN11/pgrep-daemon-visible"
+  export DISPATCH_RESERVATION_DIR="$WORK/t11-reservations"
+  export DISPATCH_SELECTION_LOG_DIR="$WORK/t11-seldir"
+  export DISPATCH_DECISION_LOG_DIR="$WORK/t11-seldir"
+  export DISPATCH_CI_VERDICT_CACHE="$WORK/t11-ci-cache"
+  bash .claude/skills/dispatch-propagate/scripts/graph-select-target 2>&1
+)"; rc=$?
+status11="$(git -C "$C11" status --porcelain intentions/)"
+node11_after="$(cat "$C11/intentions/t-gst.md")"
+
+if [[ $rc -eq 0 ]] \
+   && [[ -z "$status11" ]] \
+   && [[ "$node11_after" == "$node11_before" ]] \
+   && grep -q 'rolled the node write(s) back to HEAD' <<<"$out"; then
+  ok "graph-select-target fix-clear rollback: a graph-commit failure after the REAL --clear-fix write leaves a clean tree (node file byte-identical to HEAD: reviewed marker and fix block intact)"
+else
+  no "graph-select-target fix-clear rollback (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status11"
+  printf 'node diff:\n%s\n' "$(diff <(printf '%s' "$node11_before") <(printf '%s' "$node11_after") || true)"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 11b: the guard has teeth. Neutering the rollback call must make 11 red —
+# otherwise the case would pass on a script that never rolls anything back.
+# Same fixture, one substitution: _rollback_node_write becomes a no-op.
+# ---------------------------------------------------------------------------
+C11B="$WORK/t11b-clone"
+clone_with_node_modules "$C11B"
+fail_graph_commit "$C11B"
+GST11B="$C11B/.claude/skills/dispatch-propagate/scripts/graph-select-target"
+awk '{ print } /^_rollback_node_write\(\) \{$/ { print "  return 0" }' \
+  "$GST11B" >"$GST11B.neutered"
+mv "$GST11B.neutered" "$GST11B"
+chmod +x "$GST11B"
+grep -q '^  return 0$' "$GST11B" \
+  || { echo "error: case 11b could not neuter _rollback_node_write (renamed?)" >&2; exit 1; }
+
+out11b="$(
+  cd "$C11B" || exit 99
+  export PATH="$BIN11:$PATH"
+  export CLAUDE_AGENTS_CMD="$BIN11/claude" CLAUDE_AGENTS_PGREP_CMD="$BIN11/pgrep-daemon-visible"
+  export DISPATCH_RESERVATION_DIR="$WORK/t11b-reservations"
+  export DISPATCH_SELECTION_LOG_DIR="$WORK/t11b-seldir"
+  export DISPATCH_DECISION_LOG_DIR="$WORK/t11b-seldir"
+  export DISPATCH_CI_VERDICT_CACHE="$WORK/t11-ci-cache"
+  bash .claude/skills/dispatch-propagate/scripts/graph-select-target 2>&1
+)"
+status11b="$(git -C "$C11B" status --porcelain intentions/)"
+if [[ -n "$status11b" ]]; then
+  ok "graph-select-target fix-clear rollback has teeth: with the rollback neutered the same fixture DOES leak a dirty node file ($status11b)"
+else
+  no "graph-select-target fix-clear rollback teeth (neutered run left a clean tree — case 11 may be vacuous)"
+  printf '%s\n' "$out11b"
 fi
 
 echo

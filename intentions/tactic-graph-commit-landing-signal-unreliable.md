@@ -42,7 +42,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: main-qa
 execution:
   branch: tactic-graph-commit-landing-signal-unreliable
   pr: 3050
@@ -54,7 +54,11 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-10T15:46:50Z
+    mergeCommitSha: 94037673a00a834bf5a3ad044a850e10901eee69
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

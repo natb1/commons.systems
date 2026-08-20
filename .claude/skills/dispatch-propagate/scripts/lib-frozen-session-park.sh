@@ -654,7 +654,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       printf -v reason \
         'worker session froze at a permission/classifier denial — claude agents reports state=blocked and the transcript has had no activity for %ss; the session cannot make progress and cannot park itself (a blocked session never reaches the Stop hook), so the dispatch-tick frozen-session sweep parked this node' \
         "$idle"
-      recommendation="Find the holding job with 'claude agents --all' and attach it ('claude attach <job-id>'), then answer the pending prompt. If the denied command was gratuitous, cancel it and let the worker continue; if it is genuinely needed, run it yourself or add a standing permission rule — do NOT rewrite the command to route around the classifier. If the session is unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the worktree, then run clear-park <node-id> to return the node to the lane. Until that session is gone, office-hours reports this node as 'all-held' rather than launching a review session for it, because the frozen session still holds the node-id session name."
+      recommendation="Find the holding job with 'claude agents --all' and attach it ('claude attach <job-id>'), then answer the pending prompt. If the denied command was gratuitous, cancel it and let the worker continue; if it is genuinely needed, run it yourself or add a standing permission rule — do NOT rewrite the command to route around the classifier. If the session is unrecoverable, stop it ('claude rm <job-id>'), let dispatch-sweep reap the worktree, then run clear-park -C <repo-root> <node-id> to return the node to the lane. Until that session is gone, office-hours reports this node as 'all-held' rather than launching a review session for it, because the frozen session still holds the node-id session name."
 
       # Bounded: `timeout` caps the wall clock this one call may take, and the
       # short GRAPH_COMMIT_LOCK_WAIT_SECONDS makes graph-commit abandon a
@@ -856,7 +856,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
   #   - A session that DID declare but whose `claude rm` reap itself failed
   #     lingers as a terminal row and could be parked spuriously. This is rare;
   #     the grace window and the `phase: done` gate absorb most of it; and a
-  #     spurious park is cheap and recoverable (`clear-park <node-id>`) — the
+  #     spurious park is cheap and recoverable (`clear-park -C <repo-root> <node-id>`) — the
   #     same cost model dispatch-self-close:225-233 already records for parks.
   #   - A node at `phase: null` with a held terminal `/align-tactics` session is
   #     included BY DESIGN: an align pass that ended without a claim and without
@@ -1282,7 +1282,11 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       # `--pr <n>`, which preserves the `execution.pr` custody the deleted
       # Stop-hook backstop provided; it reads a file the session already wrote,
       # so the sweep stays gh-free.
-      local job_dir="" job_owned=0 reason="" recommendation="" pr=""
+      # `authored_escalation` is a PER-CANDIDATE local, declared here with the
+      # rest of the job-dir state so a previous candidate's value can never leak
+      # into this one: it gates the lane pre-tier below, and a stale 1 would
+      # silently skip the lane for a node that never authored anything.
+      local job_dir="" job_owned=0 reason="" recommendation="" pr="" authored_escalation=0
       if [[ -n "$jid" && "$jid" =~ ^[0-9a-fA-F-]+$ ]]; then
         local job_name
         job_name=$(jq -r '.name // empty' "$jobs_root/$jid/state.json" 2>/dev/null) || job_name=""
@@ -1300,6 +1304,13 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       if (( job_owned )); then
         if [[ -s "$job_dir/office-hours-reason" ]]; then
           reason=$(cat "$job_dir/office-hours-reason" 2>/dev/null) || reason=""
+          # The escalation is AUTHORED: this session diagnosed itself and asked
+          # for a park in its own words. Recorded here, at the only site that can
+          # know it, and consumed by the lane pre-tier below. Gated on the text
+          # actually arriving rather than on the `-s` test alone, so an
+          # unreadable marker falls back to the synthesized reason AND to the
+          # synthesized reason's routing.
+          [[ -n "$reason" ]] && authored_escalation=1
           if [[ -s "$job_dir/office-hours-recommendation" ]]; then
             recommendation=$(cat "$job_dir/office-hours-recommendation" 2>/dev/null) || recommendation=""
           fi
@@ -1331,7 +1342,7 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
         # already-reaped exception. dispatch-terminal-gap-audit's
         # print_remediation() prints the same steps in the same order; keep the
         # two copies saying the same thing.
-        recommendation="Reap THEN clear — this order is mandatory, not a choice between two options. (1) Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded; deciding the judgment item the session stopped on is done IN ADDITION to the reap, never instead of it. (2) Reap the terminal session: whenever the terminal session is still present, reap it before clearing the park — that order is mandatory — by stopping it (\`claude stop <job-id>\`) and letting \`dispatch-sweep\` reap the worktree. (3) Only if step (2) does not clear the session (e.g. an unpushed branch whose content is already landed elsewhere), verify the worktree is safe to discard BEFORE the destructive fallback, using the same reap-safety gate \`lib-session-reap.sh\` applies: (a) \`git -C <worktree> status --porcelain --untracked-files=no\` prints nothing (no uncommitted work), (b) \`git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'\` exits 0 (tree content already landed; the \`intentions/\` carve-out is deliberate — graph commits land separately), and (c) no OPEN PR still has that branch as its head; judge by that content diff, never by a commits-ahead count: GitHub squash-merges, so a safe branch routinely reads many commits ahead. If any of (a)-(c) does not pass, do NOT remove the worktree — the work in it is not yet landed. Only once they all pass, fall back to \`git worktree remove\` plus \`claude rm <job-id>\`. (4) ONLY THEN \`clear-park <node-id>\` to return the node to the lane. Exception — if \`claude agents --all\` shows no session for this node, the session is already gone, the reap step is already satisfied, and \`clear-park <node-id>\` alone is the correct and sufficient action. Why the order is mandatory: clearing the park while the session is still present is a no-op — the same sweep re-parks the node on its next pass, because the condition it detects (a terminal, un-reaped session with no recorded disposition) is unchanged by the clear alone. (Observed: a park was cleared with the session left alive, and the same sweep re-parked the node twice.)"
+        recommendation="Reap THEN clear — this order is mandatory, not a choice between two options. (1) Read the session's transcript or attach the held job (\`claude agents --all\`, \`claude attach <job-id>\`) to see what it concluded; deciding the judgment item the session stopped on is done IN ADDITION to the reap, never instead of it. (2) Reap the terminal session: whenever the terminal session is still present, reap it before clearing the park — that order is mandatory — by stopping it (\`claude stop <job-id>\`) and letting \`dispatch-sweep\` reap the worktree. (3) Only if step (2) does not clear the session (e.g. an unpushed branch whose content is already landed elsewhere), verify the worktree is safe to discard BEFORE the destructive fallback, using the same reap-safety gate \`lib-session-reap.sh\` applies: (a) \`git -C <worktree> status --porcelain --untracked-files=no\` prints nothing (no uncommitted work), (b) \`git -C <worktree> diff --quiet origin/main HEAD -- . ':!intentions'\` exits 0 (tree content already landed; the \`intentions/\` carve-out is deliberate — graph commits land separately), and (c) no OPEN PR still has that branch as its head; judge by that content diff, never by a commits-ahead count: GitHub squash-merges, so a safe branch routinely reads many commits ahead. If any of (a)-(c) does not pass, do NOT remove the worktree — the work in it is not yet landed. Only once they all pass, fall back to \`git worktree remove\` plus \`claude rm <job-id>\`. (4) ONLY THEN \`clear-park -C <repo-root> <node-id>\` to return the node to the lane. Exception — if \`claude agents --all\` shows no session for this node, the session is already gone, the reap step is already satisfied, and \`clear-park -C <repo-root> <node-id>\` alone is the correct and sufficient action. Why the order is mandatory: clearing the park while the session is still present is a no-op — the same sweep re-parks the node on its next pass, because the condition it detects (a terminal, un-reaped session with no recorded disposition) is unchanged by the clear alone. (Observed: a park was cleared with the session left alive, and the same sweep re-parked the node twice.)"
       fi
 
       # (11b) INVALID-STATE LANE PRE-TIER. Consulted after every gate above
@@ -1347,8 +1358,28 @@ if [[ -z "${_LIB_FROZEN_SESSION_PARK_LOADED:-}" ]]; then
       #
       # This sweep still owns escalation this round; extracting the
       # park-with-landing-proof block into the router is a declared residual.
+      #
+      # CARVE-OUT — an AUTHORED escalation skips the pre-tier entirely and falls
+      # straight through to the park. The invalid-state lane exists for a node
+      # held by a terminal worker in an UNDIAGNOSED state: there is a dead
+      # session, no declared disposition, and an intervention session has to read
+      # the transcript to work out what happened. A session that left
+      # `office-hours-reason` behind is the opposite case — it diagnosed itself
+      # and asked, in its own words, to be parked. There is nothing for an
+      # intervention to investigate, and routing it strands that text in the job
+      # dir: the router defers without parking and deliberately leaves the
+      # markers, while `dispatch-invalid-state-sweep` disclaims parking on the
+      # grounds that the sweep tier is always the escalation path. Each arm named
+      # the other as the owner and the escalation went nowhere. So the flag set
+      # above decides: authored → park below (the proven
+      # park-with-landing-proof path); synthesized → the lane, exactly as before.
       local lane_rc=0
-      invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      if (( authored_escalation )); then
+        printf 'lib-frozen-session-park: %s carries an authored office-hours escalation; skipping the invalid-state lane pre-tier (nothing to investigate) and parking with the session'"'"'s own text\n' "$name" >&2
+        lane_rc=10
+      else
+        invalid_state_route_gate "$repo_root" "$name" "terminal-session" "$sid" "${jid:-}" || lane_rc=$?
+      fi
       if (( lane_rc == 0 )); then
         routed_count=$(( routed_count + 1 ))
         printf 'lib-frozen-session-park: routed %s to the invalid-state lane (terminal-session; session=%s) — deferred, not parked; markers left intact\n' "$name" "$sid" >&2

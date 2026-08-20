@@ -76,15 +76,27 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
-  rationale: "Author-directed 2026-08-03: prioritize progression of
-    token-efficiency work ahead of bug-fix work and ahead of the undecomposed
-    baseline. Matches the boost 20 already carried by the review-phase
-    token-cost cluster (tactic-review-skill-body-decomposition and its
-    siblings). Simulated over the live store before writing: 0 tier changes, 0
-    value drift onto non-target nodes, resolves to 20.00."
-  tier: 1
+  boosts:
+    "1": 0.01
+  rationale: >-
+    Author-directed 2026-08-03: prioritize progression of token-efficiency work
+    ahead of bug-fix work and ahead of the undecomposed baseline. Matches the
+    boost 20 already carried by the review-phase token-cost cluster
+    (tactic-review-skill-body-decomposition and its siblings). Simulated over
+    the live store before writing: 0 tier changes, 0 value drift onto non-target
+    nodes, resolves to 20.00.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-outcome-envelope-node-lane-parity
@@ -101,6 +113,7 @@ execution:
     mergedAt: 2026-08-04T02:45:28Z
     mergeCommitSha: e05c1e78d1dc81a95cb2a6128f0a5740ac5ec65c
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -123,7 +136,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 # Outcome envelope node-lane parity
 
@@ -302,7 +316,7 @@ Auto-runnable:
 
 ```verify
 bash .claude/skills/dispatch-propagate/scripts/test-emit-outcome.sh
-bash .claude/skills/dispatch-token-audit/scripts/test-aggregate-usage.sh
+bash .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 

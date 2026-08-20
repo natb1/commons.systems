@@ -274,7 +274,7 @@ tactic (in-flight or completed-but-unpruned) sitting on the strategy's signal
 path never blocks a per-node finalize; that run's drift review judges Side A /
 Side B against the one target node and parks the tactic, never the strategy.
 
-**Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
+**Invoke the Workflow tool on the registered `align-tactics` workflow**, passing
 `args`. This skill is a sanctioned caller of that Workflow — no `ultracode`
 keyword needed. The Workflow runs in the background and returns one structured
 result:
@@ -440,7 +440,8 @@ verified by re-running against a small strategy with a null `reading`:
   per-unit `Recommended model` tags and, where applicable, fenced ` ```verify `
   blocks.
 - The written nodes pass
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts` — in particular
+  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` (the
+  store directory is a required argument, clarification 194/242) — in particular
   `serves` resolves to the strategy (rule 7), `validates` to the strategy
   (rule 14), `blocked_by` to tactics with no cycle (rules 13, 15), and no
   tactic-only field lands on a non-tactic (rule 10).

@@ -23,6 +23,19 @@
 #   fix-checks    → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   fix-conflicts → sonnet   (#2042: mechanical patch work; no product-code authoring)
 #   main-qa       → sonnet   (#2274: review-like; no product-code authoring)
+#   ladder-eval   → opus     (the /rsi per-phase evaluation job spawned by
+#                             dispatch-ladder-run at each phase boundary. Not a
+#                             ladder rung — a pseudo-phase, so the job's tier is
+#                             policy here rather than a `--model` literal at the
+#                             spawn site. It authors no product code, but it
+#                             reasons about evidence and its own blindness: a
+#                             sonnet-tier run improvised a `find -newermt` call
+#                             with a UTC bound that `find` silently parsed in
+#                             the host's local zone, searched a window ~4 hours
+#                             in the future, found nothing, and recorded its own
+#                             blindness as proof no artifact existed. That is a
+#                             judgment failure, not a mechanical one, so the
+#                             lane is opus.)
 #   *             → (empty)  unmapped phases inherit the session default
 #
 # Contract:
@@ -55,6 +68,9 @@ PHASE="$1"
 case "$PHASE" in
   qa|review|fix-checks|fix-conflicts|main-qa)
     printf '%s\n' "sonnet"
+    ;;
+  ladder-eval)
+    printf '%s\n' "opus"
     ;;
   *)
     printf '%s\n' ""

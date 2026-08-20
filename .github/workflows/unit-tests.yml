@@ -126,6 +126,41 @@ jobs:
       - name: Run lint
         run: .claude/skills/dispatch-propagate/scripts/run-lint.sh
 
+  # validate-graph.ts is the graph write path's guard job (graph-fast-path.yml),
+  # which triggers ONLY on graph/** pushes — so a change to the validator, to the
+  # sensor registry it reads, or to the graph state itself is not exercised by the
+  # CI of the PR that makes it. It first executes on the next unrelated writer's
+  # scratch branch, where a failure leaves four required contexts non-success and
+  # graph-commit refuses to land for every writer in the repo (the 2026-08-14
+  # 54-minute write outage). Running it here fails the branch that made the
+  # change instead.
+  #
+  # Deliberately NOT a required context: graph/** pushes do not run this workflow
+  # at all, so a fifth required context would deadlock the graph fast path — the
+  # very failure mode this job exists to prevent.
+  graph-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.graph == 'true'
+        with:
+          node-version-file: .node-version
+          cache: 'npm'
+      - name: Install workspace dependencies
+        if: steps.changes.outputs.graph == 'true'
+        run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
+      - name: Validate intention graph
+        if: steps.changes.outputs.graph == 'true'
+        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+
   dead-code:
     runs-on: ubuntu-latest
     permissions:
@@ -218,6 +253,12 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-xlane-dedup.sh
       - name: Run review-fix domain-sweep tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
+      - name: Run review-fix diff-context tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-diff-context.sh
+      - name: Run review-fix /review-plan gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-plan-gate.sh
+      - name: Run dispatch-review-plan-gate tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-review-plan-gate.sh
       - name: Run review-fix skeptic-batching tests
         run: .claude/skills/dispatch-propagate/scripts/test-review-fix-skeptic-batch.sh
       - name: Run dispatch-verify-instrument-invocation tests
@@ -264,6 +305,16 @@ jobs:
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run verify-landed tests
         run: packages/intentionsutil/scripts/test-verify-landed.sh
+      - name: Run dispatch-ladder-advance tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
+      - name: Run dispatch-ladder-await tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh
+      - name: Run dispatch-ladder-run tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
+      - name: Run dispatch-ladder-spawn tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-spawn.sh
+      - name: Run dispatch-ladder-status tests
+        run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh
       - name: Run budget-config-load tests
         run: .claude/skills/budget/scripts/test-budget-config-load.sh
       - name: Run write-phase-log tests

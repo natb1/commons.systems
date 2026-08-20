@@ -156,6 +156,15 @@
 #      landed. park-node must exit non-zero with a message that says the
 #      landing could not be determined — and must NOT claim a rollback
 #      happened, since that would assert knowledge the check couldn't provide.
+#  25. clear-park's `-C <repo-root>` is REQUIRED (strategy-graph-native-dispatch
+#      clarification 194/242): the script no longer derives its target checkout
+#      from its own on-disk location. Omitting -C, passing it with no value,
+#      pointing it at a non-directory, pointing it at a directory with no
+#      intentions/, and pointing it at a nested directory that HAS an
+#      intentions/ but is not the git toplevel must each be a usage error
+#      (exit 2) that mutates NOTHING — not a fallback to the script's own tree.
+#      The companion positive arm is case 20, which drives script location and
+#      -C target apart deliberately.
 #
 # No network needed. Cases 1-3, 6-15, and 22-24 need only bash + git + jq (the
 # gh and npx PATH shims stand in for the GitHub API and the tsx writers).
@@ -563,7 +572,34 @@ else
   echo "npx shim: set office_hours on $id (since=$since) recommendation='$recommendation'" >&2
 fi
 SH
-chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
+# node shim. graph-commit no longer spawns the field-level merge tool through
+# `npx tsx`; it spawns `node --import tsx/esm <...>/merge-node.ts ...`, because
+# the tsx CLI opens an IPC unix socket a sandboxed caller cannot create. The
+# three-way-merge emulation still lives in the npx shim above, so translate
+# that ONE spawn back into the npx shim's `tsx <script> ...` convention and
+# hand it over.
+#
+# Deliberately narrow: it matches merge-node.ts and nothing else, so
+# graph-commit's own office_hours writer and verify-landed's readNodeAtRef --
+# which use the same loader form -- keep reaching the REAL node exactly as they
+# did before, and this shim's blast radius is only the call the spawn change
+# moved. Without it those merge invocations reach real node, which cannot
+# resolve tsx from a clone (and, in CI, cannot find merge-node.ts at all, since
+# the harness never copies it into the seed), exit 1, and graph-commit rightly
+# reads exit 1 as a broken execution environment and dies. Every merge case
+# then fails for an environment reason instead of exercising the merge -- and
+# before U7 the same breakage was invisible, because the old code treated a
+# merge tool that could not start as an ordinary content divergence and parked.
+REAL_NODE="$(command -v node)"
+cat >"$WORK/bin/node" <<SH
+#!/usr/bin/env bash
+if [[ "\$1" == "--import" && "\$2" == "tsx/esm" && "\$3" == *merge-node.ts ]]; then
+  shift 2
+  exec "\$(dirname "\$0")/npx" tsx "\$@"
+fi
+exec "$REAL_NODE" "\$@"
+SH
+chmod +x "$WORK/bin/gh" "$WORK/bin/npx" "$WORK/bin/node"
 
 FIXTURE_DIR="$WORK/fixtures"
 origin_show() { git -C "$ORIGIN" show "main:intentions/$1.md"; }
@@ -609,7 +645,10 @@ run_cp() { # <clone> [clear-park args...]
     export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
     export GRAPH_COMMIT_MAX_ATTEMPTS=5
-    bash packages/intentionsutil/scripts/clear-park "$@"
+    # `-C` is REQUIRED (clarification 194/242): clear-park no longer derives the
+    # target checkout from its own script location. Here script and target are
+    # the same clone; case 20 is the arm that drives them apart.
+    bash packages/intentionsutil/scripts/clear-park -C "$clone" "$@"
   )
 }
 
@@ -1194,14 +1233,15 @@ fi
 # Case 20: clear-park repo targeting — cwd is a DIFFERENT checkout.
 # ---------------------------------------------------------------------------
 # The regression guard this node exists for (mirrors test-graph-commit.sh's
-# case 25 construction). clear-park derives REPO_ROOT from its own script
-# location and performs every write there; graph-commit resolves its repo from
-# `-C` if given, else from CWD. So invoking clone X's clear-park by absolute
-# path from clone Y's cwd (and from a plain non-repo directory) must still land
-# the clear in X and push it to origin/main, leaving Y's intentions/ untouched.
-# Strip the `-C "$REPO_ROOT"` from clear-park's graph-commit call and this goes
-# red: graph-commit inspects Y instead, where nothing is staged for the id, and
-# either silently commits nothing or trips Unit 1's --expect guard.
+# case 25 construction). clear-park takes its target checkout as a REQUIRED
+# `-C <repo-root>` (clarification 194/242) and performs every write there;
+# graph-commit resolves its repo from `-C` if given, else from CWD. So invoking
+# clone X's clear-park by absolute path with `-C X`, from clone Y's cwd (and
+# from a plain non-repo directory), must still land the clear in X and push it
+# to origin/main, leaving Y's intentions/ untouched. Strip the `-C "$REPO_ROOT"`
+# from clear-park's own graph-commit call and this goes red: graph-commit
+# inspects Y instead, where nothing is staged for the id, and either silently
+# commits nothing or trips Unit 1's --expect guard.
 X_CWD="$WORK/x-cwd"; make_clone "$X_CWD" writer-x-cwd
 Y_CWD="$WORK/y-cwd"; make_clone "$Y_CWD" writer-y-cwd
 NOREPO_CWD="$WORK/norepo-cwd"; mkdir -p "$NOREPO_CWD"
@@ -1215,7 +1255,7 @@ run_cp_from() { # <cwd> <script-owning-clone> [clear-park args...]
     export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
     export GRAPH_COMMIT_MAX_ATTEMPTS=5
-    bash "$owner/packages/intentionsutil/scripts/clear-park" "$@"
+    bash "$owner/packages/intentionsutil/scripts/clear-park" -C "$owner" "$@"
   )
 }
 
@@ -1413,6 +1453,64 @@ if [[ $rc -ne 0 ]] \
 else
   no "park-node unknown-verdict (rc=$rc)"
   printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 25: clear-park refuses to run without an explicit -C <repo-root>.
+# ---------------------------------------------------------------------------
+# The required-explicit-argument contract (clarification 194, ADOPTED; scoped by
+# clarification 242). Before it, clear-park resolved REPO_ROOT from SCRIPT_DIR,
+# so an invocation with no -C silently targeted whatever checkout the script
+# copy happened to live in — the exact class of defect this case pins shut. All
+# four refusals must exit 2 and leave both origin/main and the clone untouched.
+R_REQ="$WORK/req-c"; make_clone "$R_REQ" writer-req-c
+run_pn "$R_REQ" t-require-c 'unit-test -C requirement setup' >/dev/null 2>&1
+before_sha_c="$(origin_sha)"
+
+run_cp_raw() { # [clear-park args...] — NO -C injected, unlike run_cp.
+  (
+    cd "$R_REQ" || exit 99
+    export PATH="$WORK/bin:$PATH"
+    export GC_FIXTURE_DIR="$FIXTURE_DIR"
+    bash packages/intentionsutil/scripts/clear-park "$@"
+  )
+}
+
+out_missing="$(run_cp_raw t-require-c 2>&1)"; rc_missing=$?
+out_noval="$(run_cp_raw -C 2>&1)"; rc_noval=$?
+out_notdir="$(run_cp_raw -C "$R_REQ/intentions/t-require-c.md" t-require-c 2>&1)"; rc_notdir=$?
+NOSTORE="$WORK/req-c-nostore"; mkdir -p "$NOSTORE"
+out_nostore="$(run_cp_raw -C "$NOSTORE" t-require-c 2>&1)"; rc_nostore=$?
+# Fifth arm: a NESTED directory that does hold its own intentions/, so both the
+# is-a-directory and has-a-store checks pass, but which is not the git
+# toplevel. git resolves `origin/main:intentions/<id>.md` from the toplevel and
+# the write/hash from -C, so accepting this would read the OUTER store and
+# write the INNER one. Must be the same usage error as the other four.
+# Seeded literally rather than copied from the clone: the arm must hold even
+# when the clone's own fixture node is absent, or the byte-comparison below
+# silently degrades to comparing two empty strings.
+NESTED="$R_REQ/nested-store"; mkdir -p "$NESTED/intentions"
+printf -- '---\nid: t-require-c\n---\nnested sentinel, must not be rewritten\n' \
+  > "$NESTED/intentions/t-require-c.md"
+nested_before="$(git hash-object "$NESTED/intentions/t-require-c.md")"
+out_nottop="$(run_cp_raw -C "$NESTED" t-require-c 2>&1)"; rc_nottop=$?
+nested_after="$(git hash-object "$NESTED/intentions/t-require-c.md")"
+
+after_sha_c="$(origin_sha)"
+porcelain_c="$(git -C "$R_REQ" status --porcelain -- intentions/)"
+
+if [[ $rc_missing -eq 2 && $rc_noval -eq 2 && $rc_notdir -eq 2 && $rc_nostore -eq 2 && $rc_nottop -eq 2 ]] \
+   && grep -q -- '-C <repo-root> is required' <<<"$out_missing" \
+   && grep -q 'no intentions/ directory' <<<"$out_nostore" \
+   && grep -q 'is not the git toplevel' <<<"$out_nottop" \
+   && [[ "$nested_after" == "$nested_before" ]] \
+   && [[ "$after_sha_c" == "$before_sha_c" ]] && [[ -z "$porcelain_c" ]]; then
+  ok "clear-park requires -C: omitted / valueless / non-directory / storeless / not-a-toplevel all exit 2 with nothing written"
+else
+  no "clear-park -C requirement (rc_missing=$rc_missing rc_noval=$rc_noval rc_notdir=$rc_notdir rc_nostore=$rc_nostore rc_nottop=$rc_nottop porcelain='$porcelain_c' before=$before_sha_c after=$after_sha_c nested_before=$nested_before nested_after=$nested_after)"
+  printf 'missing: %s\n' "$out_missing"
+  printf 'nostore: %s\n' "$out_nostore"
+  printf 'nottop: %s\n' "$out_nottop"
 fi
 
 echo

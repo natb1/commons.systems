@@ -14,7 +14,7 @@ export interface TopicUsageDoc {
   byType: Record<string, TopicUsageBucket>;
 }
 
-// Copied exactly from .claude/skills/dispatch-token-audit/scripts/topic-usage-writer.mjs
+// Copied exactly from .claude/skills/rsi-audit/scripts/topic-usage-writer.mjs
 export const TOPIC_BUCKETS = [
   "security",
   "dispatch",

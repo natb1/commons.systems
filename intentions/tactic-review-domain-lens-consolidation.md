@@ -22,13 +22,25 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
-  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-cost
+  boosts:
+    "1": 0.01
+  rationale: >-
+    Author-directed 2026-08-01: prioritize review-phase token/agent-cost
     reduction. Puts this tactic ahead of the undecomposed baseline and on par
     with other tier-2 improvement work, without contending with active
-    reliability fixes (top-of-band ~55-61)."
-  tier: 1
+    reliability fixes (top-of-band ~55-61).
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-review-domain-lens-consolidation
@@ -45,6 +57,7 @@ execution:
     mergedAt: 2026-08-03T18:15:42Z
     mergeCommitSha: 7deaf80b09354c578bb2aeb8462b5110047e1df1
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -68,7 +81,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 # Fold the secrets, auth, and data-exposure review lenses into one Opus sweep agent carrying all three briefs as sections
 

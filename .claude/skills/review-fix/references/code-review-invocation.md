@@ -98,6 +98,7 @@ document):**
    a resume-poll, not synchronously inside one Bash call, or (b) drop the effort
    level for the dispatch lane. Design this deliberately; do not just raise the
    timeout constant.
+   See §9 for the measured detached-launch mechanism this consequence resolves to.
 
 ### 1.3 Real-diff case, `low` effort — the shape a real review returns
 
@@ -222,8 +223,7 @@ Two consequences for Unit 2:
 
 ### 3.1 What actually needs the sandbox off
 
-Measured on this host (Linux/WSL2 — note `.claude/rules/sandbox.md`'s `## gh CLI`
-section describes a **macOS** TLS failure that does not reproduce here):
+Measured on this host (Linux/WSL2):
 
 | sandboxed call | result |
 |---|---|
@@ -365,7 +365,7 @@ dispatch budget.
 **solved** by this entry point — skill and node attribution both work. The
 *magnitude* problem is created by it. Do not adopt `max` for the dispatch lane on
 the strength of this record; treat effort level as an open cost decision, and
-re-measure with `/dispatch-token-audit` after the first real passes.
+re-measure with `/rsi-audit` after the first real passes.
 
 ---
 
@@ -500,3 +500,150 @@ Four things Units 2-4 must absorb before they are implemented:
 4. **`max` costs ~$372 of price proxy per real-diff pass** (§5.4). Attribution is
    fixed by this change; magnitude is created by it. Effort level is an open cost
    decision, not a settled one.
+
+---
+
+## 9. Detached invocation — measured
+
+Unit A gate record, measured **2026-08-13** in this worktree
+(`/home/n8/natb1/commons.systems/.claude/worktrees/strategy-token-economy`,
+branch `review-lane-code-review-high-detached`, cut from `origin/main`). Same
+discipline as the rest of this document: every statement is a measurement or is
+marked **inferred**.
+
+### 9.1 The probe
+
+Question: does a `setsid`-detached child survive (a) the launching Bash call
+returning cleanly, and (b) the launching Bash call being terminated before it
+returns?
+
+Launch, from one Bash call, sandbox off:
+
+```
+setsid bash -c 'echo $$ >PIDFILE; sleep 120' </dev/null >/dev/null 2>&1 &
+disown
+```
+
+That call then returns (or is terminated) without waiting for the `sleep 120`.
+From a later, separate Bash call: `kill -0 "$(cat PIDFILE)"` and
+`ps -p "$(cat PIDFILE)"`.
+
+**Variant A — clean return.** Ran with `dangerouslyDisableSandbox: true`. The
+launch call recorded a real host pid (`3906614`) and returned normally. A
+later, separate sandbox-off call found it alive:
+
+```
+recorded pid: 3906614
+ALIVE
+3906614     337 sleep 120
+```
+
+(`ppid 337` — reparented off the launcher, as expected for a detached session
+leader.)
+
+**Variant B — launcher killed.** The literal recipe — give the Bash tool a
+`timeout` shorter than a foreground `sleep` so the tool call itself is killed
+— does **not** produce a kill on this harness. Measured directly: a launch
+with `timeout: 5000` followed by a foreground `sleep 30` was not killed. The
+tool moved the call to a background task and let it run to completion
+undisturbed — the script's post-sleep `echo` line, which should never print
+if the call were actually terminated, printed in the captured output. This is
+a harness behavior worth recording on its own: **a Bash tool call that
+exceeds its `timeout` is demoted to background, not killed.**
+
+So Variant B was produced directly instead: launched the same detached child,
+then, from a separate Bash call, found the launcher's own process chain (its
+wrapper shell, `bash launch4.sh`, and its foreground `sleep 300`) with `ps`
+and sent all three pids `kill -9`. A third, separate call then checked the
+detached child:
+
+```
+recorded pid: 3912865
+ALIVE
+3912865     337 3912865 sleep 120
+```
+
+(`sid == pid` — its own session, untouched by the SIGKILL that took out the
+launcher's session.) The detached child survives the launcher being killed
+outright, not just a clean return.
+
+**Sandboxed launch does not survive either variant.** The same launch, run
+*without* `dangerouslyDisableSandbox`, recorded a low, namespace-local pid
+(`7` — consistent with a private PID namespace per sandboxed Bash call, not a
+host pid) and was reported dead (`kill -0` failed) from a later, separate
+sandboxed call. Only the clean-return shape was checked under sandbox, since
+it already fails there; the killed-launcher shape was not separately probed
+sandboxed. **The detached-launch mechanism requires
+`dangerouslyDisableSandbox: true` on the launch call and on every later await
+call** — a requirement Unit B must carry, beyond what
+`dangerouslyDisableSandbox: true` was previously known to be needed for
+(§3.1, §3.2).
+
+```
+DETACHED_LAUNCH_MECHANISM: setsid
+```
+
+### 9.2 `flock` and `setsid` availability — measured
+
+```
+$ command -v flock
+/run/current-system/sw/bin/flock
+$ command -v setsid
+/run/current-system/sw/bin/setsid
+$ ls -l /run/current-system/sw/bin/flock /run/current-system/sw/bin/setsid
+lrwxrwxrwx … /run/current-system/sw/bin/flock -> /nix/store/4235prclh3wvcqzri7hxssb47i6d444j-util-linux-2.42.2-bin/bin/flock
+lrwxrwxrwx … /run/current-system/sw/bin/setsid -> /nix/store/4235prclh3wvcqzri7hxssb47i6d444j-util-linux-2.42.2-bin/bin/setsid
+```
+
+Both resolve, both exist at the exact path, both come from the same
+`util-linux` derivation.
+
+### 9.3 `high` effort — inferred, not measured
+
+**Inferred:** `high` is expected to exceed the 600 s Bash tool cap. Nothing
+about `high` itself was run in this unit — the bracket is the two
+measurements already in §1.2 and §7: `medium` did not complete in 300 s, and
+`max` ran 2363 s (39 m 23 s) and was killed with zero bytes of output. `high`
+sits between those two measured points on the same effort scale, with no
+completed run at `high` on either side of it. That is exactly why this unit
+ships the detached harness **before** any `high` run has been measured, not
+after: there is no foreground-call-shaped way to take that measurement safely
+in the first place.
+
+### 9.4 Two deliberate deviations from the carrier's recorded plan
+
+1. **Carrier Unit 1 probe 2 — one real `max` run to completion (~40 min, ~$372
+   price proxy) — dropped.** The shipped level is `high`, not `max`; a
+   completed `max` run would not source any constant this unit needs. The
+   5400 s deadline was fixed independently by the plan's author, not derived
+   from a `max` completion time. Clarification 46 already rules that the
+   **first production `high` runs** record realized wall clock, price proxy,
+   and findings count, asserting no threshold in advance. Running `max` to
+   completion here would spend real money to measure a level nothing
+   downstream uses.
+2. **Carrier Unit 3 — Variant A (`background-notify`) vs. Variant B
+   (`foreground-poll`), gated on a harness/daemon-behavior probe — resolved to
+   Variant B without running that probe.** The carrier's own text calls
+   Variant B known-safe: "A busy foreground Bash call is not `blocked`, so the
+   foreground shape is known safe." A shape already known safe by the plan's
+   own reasoning does not need a probe to select it. Variant A
+   (`background-notify`) is left as a later optimization — an open follow-up,
+   not part of this unit.
+
+### 9.5 Model pin — contract fact
+
+The detached nested session runs `--model opus`, pinned explicitly. A nested
+`claude -p` does **not** inherit the launching session's model — this is a
+same-session author requirement stated for this unit, not re-derived here. At
+`high` effort the model is the dominant cost and quality term (see the
+per-token pricing in §5.4, applied across whatever `high`'s token volume turns
+out to be), so an unpinned run would leave clarification 46's realized-cost
+measurement uninterpretable: a later reader could not tell whether a recorded
+price proxy reflects `opus` or some other default. **Any claim about what the
+unpinned default would have been is `inferred`, not measured** — pinning is
+exactly what makes that question moot going forward.
+
+Because the model is now a fixed part of the invocation rather than an ambient
+default, `model` joins effort level, target, and flags as part of the
+detached run's identity for the resume cache Unit B builds: two runs that
+differ only in model are different runs, not resumable against each other.

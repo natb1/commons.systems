@@ -14,7 +14,6 @@ rationale: "Retained from the 2026-07-08 /align-strategy ancestry-context
   greedily; the decided fix is a bounded ancestry projection injected uniformly,
   mechanism owned in a thin script per the thin-script condition."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -32,9 +31,26 @@ execution:
   fix: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "Parked 2026-08-14 by the /align node-creation-surface correction round.
+    This node is at phase implement with a plan whose unit B inserts a Step 0
+    sub-step into .claude/skills/align-strategy/SKILL.md — a skill DELETED
+    2026-08-04. A worker selecting it cannot execute that unit. Found by the
+    adversarial draft review. It is invisible to the supersession observable,
+    which reads an edge the schema cannot represent, and it also slipped the
+    shipped lint-verify-fence-paths.sh guard — whose scan window is fence-scoped
+    while this node's dead reference sits in a prose Scope bullet. That narrow
+    gap is what tactic-supersession-retirement-sweep now widens; this node is its
+    live proof case."
+  since: 2026-08-14
+  recommendation: Re-plan against the surviving surfaces (/align and
+    /align-tactics) after confirming which of this node's units still have a
+    target, or close it as superseded by the 2026-08-04 entrypoint consolidation
+    if none do. Do not simply resume — unit B has no target to edit.
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}

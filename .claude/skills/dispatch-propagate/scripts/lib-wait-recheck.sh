@@ -147,7 +147,7 @@
 #        never escalated; the thing that ran out of attempts is the WAIT. The
 #        two strings come from the node's own frontmatter
 #        (`attributes.wait_reason` / `attributes.wait_recommendation`, both
-#        required non-empty by validate-graph rule 21) so the author reads the
+#        required non-empty by validate-graph rule 22) so the author reads the
 #        awaited event verbatim in `office_hours.reason`. They are read through
 #        `readNode` under tsx and extracted with `jq <<<` — never `echo | jq`
 #        (.claude/rules/shell-json.md: zsh's builtin echo un-escapes `\t`/`\n`

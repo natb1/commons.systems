@@ -15,13 +15,15 @@ import {
 } from "../src/officeHours.js";
 import type { SessionType } from "../src/schema.js";
 import {
+  formatBandNote,
   formatDisposition,
-  formatLiftNote,
   formatQueueRow,
   parseSelectorArgs,
   resolveSessionCwd,
 } from "../scripts/office-hours-select.js";
 import { extractFrontmatter } from "../src/frontmatter.js";
+import { writeNode } from "../src/store.js";
+import { listNodesAtRef } from "../scripts/lib-store-at-ref.js";
 
 // This test file lives at packages/intentionsutil/test/, so repo root is
 // three dirname() calls up from this file's own location — same pattern as
@@ -45,8 +47,13 @@ function hasOriginMain(): boolean {
   }
 }
 
+/** Spawns via the tsx ESM *loader*, not the `tsx` CLI. The CLI opens an IPC
+ * unix socket, which this project's sandboxed test runner refuses with
+ * `EPERM ... /tmp/.../tsx-*.pipe` — the same reason graph-commit's two spawns
+ * moved to this form. The loader needs no npm resolution and opens no socket.
+ * `reader-required-dir.test.ts` spawns the same way. */
 function runSelect(args: string[]): string {
-  return execFileSync("npx", ["tsx", selectScript, ...args], {
+  return execFileSync(process.execPath, ["--import", "tsx/esm", selectScript, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
   });
@@ -91,7 +98,7 @@ function kinds(): IntentionNode[] {
 }
 
 function boost(amount: number): Attention {
-  return { boost: amount, override: null, rationale: "because", tier: 1 };
+  return { boosts: { "1": amount }, rationale: "because" };
 }
 
 function parked(recommendation: string | null = null): OfficeHours {
@@ -122,8 +129,8 @@ describe("officeHoursQueue", () => {
       "tactic-b",
       "tactic-quiet",
     ]);
-    expect(queue.find((m) => m.nodeId === "tactic-quiet")?.rank).toBe(0);
-    expect(queue.find((m) => m.nodeId === "tactic-a")?.rank).toBe(5);
+    expect(queue.find((m) => m.nodeId === "tactic-quiet")?.score).toBe(0);
+    expect(queue.find((m) => m.nodeId === "tactic-a")?.score).toBe(5);
   });
 
   it("returns an empty queue when nothing is parked", () => {
@@ -157,8 +164,10 @@ describe("officeHoursQueue", () => {
     const queue = officeHoursQueue(nodes);
 
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-other", "tactic-currev", "tactic-reqdisc"]);
-    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(10);
-    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.rank).toBe(10 * SESSION_TYPE_PENALTY);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.score).toBe(10);
+    expect(queue.find((m) => m.nodeId === "tactic-reqdisc")?.score).toBe(
+      10 * SESSION_TYPE_PENALTY,
+    );
   });
 
   it("lets a sufficiently boosted penalized park overtake a lower-boost other park (soft, not a hard floor)", () => {
@@ -183,7 +192,7 @@ describe("officeHoursQueue", () => {
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-reqdisc-high", "tactic-other-low"]);
   });
 
-  it("computes QueueMember.rank as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
+  it("computes QueueMember.score as rawAttention * SESSION_TYPE_PENALTY for a penalized type, and raw for other", () => {
     const nodes = [
       ...kinds(),
       anode({
@@ -202,8 +211,8 @@ describe("officeHoursQueue", () => {
 
     const queue = officeHoursQueue(nodes);
 
-    expect(queue.find((m) => m.nodeId === "tactic-other")?.rank).toBe(8);
-    expect(queue.find((m) => m.nodeId === "tactic-currev")?.rank).toBe(8 * SESSION_TYPE_PENALTY);
+    expect(queue.find((m) => m.nodeId === "tactic-other")?.score).toBe(8);
+    expect(queue.find((m) => m.nodeId === "tactic-currev")?.score).toBe(8 * SESSION_TYPE_PENALTY);
   });
 
   it("puts a tier-2 parked node ahead of a higher-raw-rank tier-1 node (hard outer axis)", () => {
@@ -264,7 +273,10 @@ describe("officeHoursQueue", () => {
     expect(filtered.every((m) => m.sessionType === "requirement-discovery")).toBe(true);
   });
 
-  it("lifts a parked hold to the rank of the live work it blocks", () => {
+  it("bands a parked hold with the live work it blocks, and sums that work's score into its own", () => {
+    // Under the widened attention relation the blocked source is one of the
+    // hold's PARENTS, so the source's score reaches the hold as its `band` (and
+    // its lineage contribution as score) — no separate lift step.
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -287,12 +299,15 @@ describe("officeHoursQueue", () => {
 
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-hold", "tactic-unrelated"]);
     const hold = queue.find((m) => m.nodeId === "tactic-hold");
-    expect(hold?.rank).toBe(60);
-    expect(hold?.ownRank).toBe(0);
-    expect(hold?.liftedFrom).toBe("tactic-source");
+    expect(hold?.band).toBe(60);
+    expect(hold?.score).toBe(60);
+    expect(hold?.ownScore).toBe(60);
+    expect(hold?.bandSource).toBe("tactic-source");
+    // The unbanded park outranks nothing: band is compared before score.
+    expect(queue.find((m) => m.nodeId === "tactic-unrelated")?.band).toBe(0);
   });
 
-  it("lifts the tier when a blocking source is at a higher tier (tier dominates value)", () => {
+  it("inherits a higher tier from a node it blocks, and scores per-tier there (tier is a namespace)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(100), office_hours: parked() }),
@@ -309,13 +324,15 @@ describe("officeHoursQueue", () => {
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
     expect(hold?.tier).toBe(2);
-    expect(hold?.rank).toBe(1);
-    expect(hold?.ownTier).toBe(1);
-    expect(hold?.ownRank).toBe(100);
-    expect(hold?.liftedFrom).toBe("tactic-source");
+    expect(hold?.ownTier).toBe(2);
+    // Both boosts are authored on tier 1, so neither counts in the tier-2
+    // ranking the hold now resolves in — the point of per-tier namespacing.
+    expect(hold?.band).toBe(0);
+    expect(hold?.score).toBe(0);
+    expect(hold?.bandSource).toBeNull();
   });
 
-  it("takes the max over several blocking sources", () => {
+  it("bands with the highest-scoring blocked source and sums every one of them", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -337,11 +354,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(30);
-    expect(hold?.liftedFrom).toBe("tactic-src-high");
+    expect(hold?.band).toBe(30);
+    expect(hold?.bandSource).toBe("tactic-src-high");
+    // Score is the whole deduped lineage's contribution: 5 + 30.
+    expect(hold?.score).toBe(35);
   });
 
-  it("breaks a tie between equal blocking sources by id ascending", () => {
+  it("breaks a band tie between equal blocked sources by id ascending", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", office_hours: parked() }),
@@ -363,11 +382,11 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(9);
-    expect(hold?.liftedFrom).toBe("tactic-src-a");
+    expect(hold?.band).toBe(9);
+    expect(hold?.bandSource).toBe("tactic-src-a");
   });
 
-  it("does not lift from a blocking source already at phase done (cleared blocker)", () => {
+  it("takes no band or score from a blocked source already at phase done (cleared blocker)", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(2), office_hours: parked() }),
@@ -382,12 +401,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(2);
+    expect(hold?.score).toBe(2);
+    expect(hold?.band).toBe(0);
     expect(hold?.tier).toBe(1);
-    expect(hold?.liftedFrom).toBeNull();
+    expect(hold?.bandSource).toBeNull();
   });
 
-  it("keeps its own key when it outranks every blocking source", () => {
+  it("bands with a blocked source that scores below it, its own score still summing both", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-hold", kind: "tactic", attention: boost(20), office_hours: parked() }),
@@ -402,12 +422,13 @@ describe("officeHoursQueue", () => {
 
     const hold = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(20);
-    expect(hold?.ownRank).toBe(20);
-    expect(hold?.liftedFrom).toBeNull();
+    expect(hold?.band).toBe(3);
+    expect(hold?.bandSource).toBe("tactic-source");
+    expect(hold?.score).toBe(23);
+    expect(hold?.ownScore).toBe(23);
   });
 
-  it("applies the session-type penalty to a lifted value without crossing a tier", () => {
+  it("applies the session-type penalty to BOTH band and score, and never to tier", () => {
     const nodes = [
       ...kinds(),
       anode({
@@ -434,14 +455,16 @@ describe("officeHoursQueue", () => {
     const queue = officeHoursQueue(nodes);
     const hold = queue.find((m) => m.nodeId === "tactic-hold");
 
-    expect(hold?.rank).toBe(40 * SESSION_TYPE_PENALTY);
-    expect(hold?.ownRank).toBe(0);
+    expect(hold?.band).toBe(40 * SESSION_TYPE_PENALTY);
+    expect(hold?.score).toBe(40 * SESSION_TYPE_PENALTY);
+    // `ownScore` reports the UN-penalized value.
+    expect(hold?.ownScore).toBe(40);
     expect(hold?.tier).toBe(1);
-    // The penalized lift is huge, but tier is still the hard outer axis.
+    // The penalized band is huge, but tier is still the hard outer axis.
     expect(queue.map((m) => m.nodeId)).toEqual(["tactic-tier2", "tactic-hold"]);
   });
 
-  it("leaves a parked node with no inbound blocked_by edges unchanged", () => {
+  it("leaves a parked node with no inbound blocked_by edges unbanded", () => {
     const nodes = [
       ...kinds(),
       anode({ id: "tactic-alone", kind: "tactic", attention: boost(7), office_hours: parked() }),
@@ -450,10 +473,11 @@ describe("officeHoursQueue", () => {
 
     const alone = officeHoursQueue(nodes).find((m) => m.nodeId === "tactic-alone");
 
-    expect(alone?.liftedFrom).toBeNull();
-    expect(alone?.rank).toBe(alone?.ownRank);
+    expect(alone?.bandSource).toBeNull();
+    expect(alone?.band).toBe(0);
+    expect(alone?.score).toBe(alone?.ownScore);
     expect(alone?.tier).toBe(alone?.ownTier);
-    expect(alone?.rank).toBe(7);
+    expect(alone?.score).toBe(7);
   });
 });
 
@@ -742,11 +766,13 @@ describe("formatQueueRow", () => {
     // here breaks every park lookup and reports a false empty queue.
     const row = formatQueueRow({
       nodeId: "tactic-a",
-      rank: 12.5,
       tier: 1,
+      band: 0,
+      score: 12.5,
+      depth: 0,
       ownTier: 1,
-      ownRank: 12.5,
-      liftedFrom: null,
+      ownScore: 12.5,
+      bandSource: null,
       sessionType: "curriculum-review",
       since: "2026-07-01",
     });
@@ -754,36 +780,40 @@ describe("formatQueueRow", () => {
     expect(row.split("\t")).toEqual(["12.5", "curriculum-review", "tactic-a", "2026-07-01"]);
   });
 
-  it("emits exactly four tab-separated fields, even for a lifted member", () => {
+  it("emits exactly four tab-separated fields, even for a banded member", () => {
     const row = formatQueueRow({
       nodeId: "tactic-b",
-      rank: 30,
       tier: 3,
-      ownTier: 1,
-      ownRank: 5,
-      liftedFrom: "tactic-blocked",
+      band: 30,
+      score: 35,
+      depth: 1,
+      ownTier: 3,
+      ownScore: 35,
+      bandSource: "tactic-blocked",
       sessionType: "other",
       since: "2026-08-01",
     });
     expect(row.split("\t")).toHaveLength(4);
-    expect(row).toBe("30\tother\ttactic-b\t2026-08-01");
+    expect(row).toBe("35\tother\ttactic-b\t2026-08-01");
   });
 });
 
-describe("formatLiftNote", () => {
-  it("renders the advisory naming the lifted-from source and own values", () => {
-    const note = formatLiftNote({
+describe("formatBandNote", () => {
+  it("renders the advisory naming the band source and the member's own score", () => {
+    const note = formatBandNote({
       nodeId: "tactic-b",
-      rank: 30,
       tier: 3,
-      ownTier: 1,
-      ownRank: 5,
-      liftedFrom: "tactic-blocked",
+      band: 30,
+      score: 35,
+      depth: 1,
+      ownTier: 3,
+      ownScore: 35,
+      bandSource: "tactic-blocked",
       sessionType: "other",
       since: "2026-08-01",
     });
     expect(note).toBe(
-      "NOTE — tactic-b ranks at tier 3/30 inherited from blocked source tactic-blocked (own: tier 1/5)",
+      "NOTE — tactic-b ranks at tier 3 band 30 via tactic-blocked (own score 35)",
     );
   });
 });
@@ -827,29 +857,98 @@ describe("formatDisposition", () => {
   });
 });
 
-// These tests exercise the real CLI against THIS repo's actual `origin/main`
-// state, not in-memory fixtures — the direct regression test for the
-// main-authority invariant office-hours-select.ts now guarantees (every queued
-// node is genuinely parked on `origin/main`, not just in the local worktree).
-// They skip cleanly when no `origin/main` ref is resolvable (e.g. a stripped
-// checkout with no `origin` remote), matching the defensive posture of
-// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
-describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
-  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
-    const out = runSelect(["--list"]);
-    const lines = out.split("\n").filter((l) => l.length > 0);
-    for (const line of lines) {
-      expect(line).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
-    }
-  }, 15000);
+// --- office-hours-select CLI: fixture-backed regression coverage ----------
+//
+// These cases used to spawn the real `office-hours-select.ts` CLI as a
+// subprocess against THIS repo's actual `origin/main` graph. That has two
+// problems, not one:
+//
+//  1. `office-hours-select.ts` resolves its OWN repo root from
+//     `import.meta.url` (see that file's "Paths" section), never from the
+//     subprocess's `cwd` — so a subprocess spawned from this test file can
+//     never be pointed at a fixture repo. It always reads THIS checkout's
+//     real `origin/main`. Any PR that both migrates `intentions/` node data
+//     and tightens the schema code reading it is then red by construction
+//     until merge (the F4 defect these tests were rewritten to stop
+//     causing) — every assertion below sidesteps that by never touching
+//     this repo's real graph.
+//  2. Spawning `npx tsx <script>` as a subprocess is heavier than these
+//     cases need and, empirically, less portable: under this project's
+//     sandboxed test runner the `tsx` subprocess's own IPC pipe listener
+//     fails with `EPERM`, so the old CLI-subprocess tests could only run
+//     with the sandbox disabled. `listNodesAtRef` (imported directly below)
+//     shells out to plain `git` only, which has no such issue.
+//
+// `buildGitFixture` commits a small `intentions/` tree to a throwaway repo
+// so `listNodesAtRef` — the git-archive-at-a-ref read path this whole block
+// exists to guard — is exercised for real, just against fixture content
+// instead of this repo's live graph. Every assertion the original block made
+// is still made below; see the per-case comment for where each one moved.
+function buildGitFixture(nodes: IntentionNode[]): string {
+  const root = mkdtempSync(join(tmpdir(), "oh-fixture-"));
+  const intentionsDir = join(root, "intentions");
+  for (const node of nodes) writeNode(intentionsDir, node);
+  execFileSync("git", ["-C", root, "init", "-q"]);
+  execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+  execFileSync("git", ["-C", root, "config", "user.name", "Fixture Builder"]);
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "commit", "-q", "-m", "fixture"]);
+  return root;
+}
 
-  it("main-authority invariant: every listed node is parked on origin/main", () => {
-    const out = runSelect(["--list"]);
-    const lines = out.split("\n").filter((l) => l.length > 0);
-    // Column 2 (0-indexed) is the node id — see formatQueueRow's column contract.
-    const nodeIds = lines.map((line) => line.split("\t")[2]);
+describe("office-hours-select CLI (fixture repo)", () => {
+  it("--list: every line matches rank\\tsessionType\\tnodeId\\tsince", () => {
+    // Was: the real CLI's `--list` against this repo's live `origin/main`
+    // graph. Now: the same production formatter (`formatQueueRow`) over an
+    // `officeHoursQueue` computed from fixture nodes — the column-shape
+    // contract is pinned against real computed scores/ids without depending
+    // on this repo's real graph content.
+    const nodes = [
+      ...kinds(),
+      anode({ id: "tactic-list-a", kind: "tactic", office_hours: parked() }),
+      anode({
+        id: "tactic-list-b",
+        kind: "tactic",
+        office_hours: parkedTyped("curriculum-review"),
+      }),
+    ];
+    const rows = officeHoursQueue(nodes).map(formatQueueRow);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row).toMatch(/^-?\d+(\.\d+)?\t\S+\t\S+\t\S+$/);
+    }
+  });
+
+  it("main-authority invariant: every listed node is parked in the COMMITTED tree at the ref, not in a dirty working tree", () => {
+    // Was: `git show origin/main:intentions/<id>.md` against this repo's
+    // real checkout. Now: the identical re-read-independently-of-the-parser
+    // mechanic (raw `git show` + `extractFrontmatter` + `parse`) against a
+    // fixture repo — AND with a working-tree mutation left uncommitted, so
+    // this also proves `listNodesAtRef` answers from the COMMIT, never from
+    // a dirty checkout. That is the exact distinction "genuinely parked on
+    // origin/main, not just in the local worktree" was guarding.
+    const parkedNode = anode({
+      id: "tactic-committed-park",
+      kind: "tactic",
+      office_hours: parked(),
+    });
+    const unparkedNode = anode({ id: "tactic-committed-open", kind: "tactic" });
+    const root = buildGitFixture([...kinds(), parkedNode, unparkedNode]);
+
+    // Dirty the working tree AFTER the commit, without committing: clear the
+    // parked node's office_hours on disk. A read that consulted the working
+    // tree instead of the ref would now see it as unparked.
+    writeNode(join(root, "intentions"), { ...parkedNode, office_hours: null });
+
+    const nodesAtRef = listNodesAtRef(root, "HEAD");
+    const queued = officeHoursQueue(nodesAtRef);
+    const nodeIds = queued.map((m) => m.nodeId);
+
+    expect(nodeIds).toContain("tactic-committed-park");
+    expect(nodeIds).not.toContain("tactic-committed-open");
+
     for (const id of nodeIds) {
-      const raw = execFileSync("git", ["-C", repoRoot, "show", `origin/main:intentions/${id}.md`], {
+      const raw = execFileSync("git", ["-C", root, "show", `HEAD:intentions/${id}.md`], {
         encoding: "utf8",
       });
       const frontmatter = extractFrontmatter(raw, id);
@@ -857,16 +956,44 @@ describe.skipIf(!hasOriginMain())("office-hours-select CLI (real repo)", () => {
       expect(parsed).toBeTruthy();
       expect((parsed as { office_hours?: unknown }).office_hours).not.toBeNull();
     }
-  }, 15000);
+  });
 
+  it("--ref plumbing: the CLI's default ref is the literal string \"origin/main\", matching an explicit --ref origin/main", () => {
+    // Was: two real CLI-subprocess invocations against this repo's live
+    // `origin/main`, compared for equal output. `office-hours-select.ts`
+    // resolves its own repo root (see the block comment above), so a
+    // subprocess can't be redirected at a fixture — but `parseSelectorArgs`
+    // (pure, already imported above) is the single place the default is
+    // set (`ref = DEFAULT_REF` when `--ref` is omitted; see
+    // office-hours-select.ts around its `parseSelectorArgs` body). Asserting
+    // the two parses agree pins the same fact the subprocess comparison was
+    // checking — the default and the explicit flag resolve identically —
+    // without needing a live repo or a subprocess.
+    const withoutFlag = parseSelectorArgs([]);
+    const withExplicitFlag = parseSelectorArgs(["--ref", "origin/main"]);
+    if (withoutFlag.kind !== "ok" || withExplicitFlag.kind !== "ok") {
+      throw new Error("expected both parses to succeed");
+    }
+    expect(withoutFlag.ref).toBe("origin/main");
+    expect(withExplicitFlag.ref).toBe(withoutFlag.ref);
+  });
+});
+
+// The one deliberately-LIVE case: exercises the real CLI subprocess against
+// THIS repo's actual `origin/main`, catching a real end-to-end wiring
+// regression (subprocess spawn, the actual script file, its own repo-root
+// resolution, a real `git archive` read against a real ref) that no fixture
+// can reach, since `office-hours-select.ts` always reads ITS OWN checkout's
+// `origin/main` (see the fixture block's comment above). Kept minimal and
+// content-independent — "does this fabricated id exist" is true regardless
+// of what the real graph currently holds, so this stays robust to graph
+// churn while every other original assertion moved to the fixture block
+// above. Skips cleanly when no `origin/main` ref is resolvable (e.g. a
+// stripped checkout with no `origin` remote) — same defensive posture as
+// committed-store.test.ts's `describe.skipIf(!existsSync(...))`.
+describe.skipIf(!hasOriginMain())("office-hours-select CLI (live smoke, real repo)", () => {
   it("targeted not-parked: a fabricated node id reports not-parked", () => {
     const out = runSelect(["absent-node-id-xyz"]);
     expect(out).toBe("empty not-parked absent-node-id-xyz\n");
-  }, 15000);
-
-  it("--ref plumbing: --ref origin/main matches the no-flag default", () => {
-    const withRef = runSelect(["--ref", "origin/main", "--list"]);
-    const withoutRef = runSelect(["--list"]);
-    expect(withRef).toBe(withoutRef);
   }, 15000);
 });

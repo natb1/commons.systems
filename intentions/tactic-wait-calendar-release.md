@@ -31,7 +31,6 @@ rationale: "Surfaced by the 2026-07-31 /align-strategy calendar-blocking round
   `attributes.wait_until` presence with a resolvable source, never on a bare
   `tactic-wait-` id prefix — which would collide with this node's own id."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -47,8 +46,12 @@ execution:
   markers:
     - planned
     - qa-done
+    - reviewed
   strategy_fingerprint: null
-  fix: null
+  fix:
+    since: 2026-08-11
+    attempt: 1
+    pushed_sha: null
   conflict: null
   completion: null
 validates: []
@@ -304,13 +307,13 @@ Out of scope: any I/O, the CLI wrapper (U5), the shell sweep (U7).
 
 ---
 
-## Unit 3 — validate-graph Rule 21 and the owed-prune exclusion
+## Unit 3 — validate-graph Rule 22 and the owed-prune exclusion
 
 **Scope.** `packages/intentionsutil/src/schema.ts`,
 `packages/intentionsutil/scripts/graph-census-debt.ts`, and their tests
 (`test/schema.test.ts`, `test/graph-census-debt.test.ts`).
 
-**(a) Rule 21 — WAIT-node shape.** Add `checkWaitNodeShape(node, problems)` next
+**(a) Rule 22 — WAIT-node shape.** Add `checkWaitNodeShape(node, problems)` next
 to `checkTierMarkShape` (`schema.ts:1082-1104`) and call it from `validateGraph`'s
 per-node block alongside the Rule 19/20 calls at `schema.ts:1286-1289`. It fires
 **only** when `node.kind === "tactic"` and `attributes.wait_for` is present, and
@@ -387,7 +390,7 @@ Tests, added to `router.test.ts` alongside the existing `subtreeParentIds` cases
 an armed WAIT node emits **no** candidate; its source emits none either (blocked);
 a released WAIT (`phase: done`) emits none and its source **does** emit its real
 phase candidate; a node with `wait_*` attributes under a non-canonical id is
-**not** excluded (it is not a WAIT — it is an ordinary draft, and Rule 21 will
+**not** excluded (it is not a WAIT — it is an ordinary draft, and Rule 22 will
 have refused it at the write path anyway).
 
 Out of scope: the executable-tactic loop (see U3(a)), the strategy loop, any

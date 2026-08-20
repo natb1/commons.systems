@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode, SuccessSignal } from "../src/schema.js";
 import { PHASES } from "../src/schema.js";
 import {
-  effectivePrecedence,
   frozenTacticSelectable,
   readingDate,
   resolveFrozenDescendant,
   selectGraphTargets,
   strategyAlignSelectable,
   strategyFingerprint,
+  tacticScopeFingerprint,
 } from "../src/router.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
@@ -877,7 +877,7 @@ describe("resolveFrozenDescendant", () => {
         id: "tactic-draft",
         serves: ["strategy-s"],
         phase: "draft",
-        attention: { boost: 5, override: null, rationale: "hot", tier: 1 },
+        attention: { boosts: { "1": 5 }, rationale: "hot" },
       }),
       // A soft-frozen (open, stale-fingerprint) child at lower rank.
       tactic({
@@ -901,7 +901,10 @@ describe("resolveFrozenDescendant", () => {
       tactic({ id: "tactic-leaf", parent: "tactic-root", phase: "draft" }),
     ];
     const resolved = resolveFrozenDescendant(s, nodes);
-    // Both are drafts at rank 0; id ascending picks tactic-leaf first.
+    // Both are drafts with band 0 and score 0, so `depth` — the innermost key
+    // component — decides: tactic-leaf's lineage is {tactic-root, strategy-s}
+    // (depth 2) against tactic-root's {strategy-s} (depth 1), and a deeper
+    // child outranks its parent. (id ascending would pick the same node here.)
     expect(resolved?.id).toBe("tactic-leaf");
   });
 
@@ -963,12 +966,12 @@ describe("ordering", () => {
       tactic({
         id: "tactic-low",
         phase: "review",
-        attention: { boost: 1, override: null, rationale: "low", tier: 1 },
+        attention: { boosts: { "1": 1 }, rationale: "low" },
       }),
       tactic({
         id: "tactic-high",
         phase: "implement",
-        attention: { boost: 5, override: null, rationale: "high", tier: 1 },
+        attention: { boosts: { "1": 5 }, rationale: "high" },
       }),
     ];
     // Higher rank wins even though review is closer to done than implement.
@@ -1013,13 +1016,18 @@ describe("ordering", () => {
       tactic({
         id: "tactic-hot-tier1",
         phase: "implement",
-        attention: { boost: 99, override: null, rationale: "very hot", tier: 1 },
+        attention: { boosts: { "1": 99 }, rationale: "very hot" },
       }),
       tactic({ id: "tactic-bug", phase: "implement", attributes: { bug_fix: true } }),
     ];
     expect(candidateIds(nodes)).toEqual(["tactic-bug", "tactic-hot-tier1"]);
     const sel = selectGraphTargets(nodes);
-    expect(sel.candidates[0]).toMatchObject({ id: "tactic-bug", tier: 2, rank: 0 });
+    // tactic-bug: tier 2 (bug_fix), no parents (band 0, depth 0), and no
+    // tier-2 boost anywhere in its lineage (score 0). It still wins on tier.
+    expect(sel.candidates[0]).toMatchObject({
+      id: "tactic-bug",
+      key: { tier: 2, band: 0, score: 0, depth: 0 },
+    });
   });
 
   it("tier 3 sorts ahead of tier 2", () => {
@@ -1038,19 +1046,23 @@ describe("ordering", () => {
         id: "tactic-t2-low",
         phase: "implement",
         attributes: { bug_fix: true },
-        attention: { boost: 1, override: null, rationale: "low", tier: 2 },
+        attention: { boosts: { "2": 1 }, rationale: "low" },
       }),
       tactic({
         id: "tactic-t2-high",
         phase: "implement",
         attributes: { bug_fix: true },
-        attention: { boost: 5, override: null, rationale: "high", tier: 2 },
+        attention: { boosts: { "2": 5 }, rationale: "high" },
       }),
     ];
     expect(candidateIds(nodes)).toEqual(["tactic-t2-high", "tactic-t2-low"]);
   });
 
-  it("a blocker's precedence lifts to the blocked node's (tier, rank); its OWN tier/rank are untouched", () => {
+  it("a blocker inherits the blocked node's tier structurally — no separate lift", () => {
+    // Under the unified relation a node's BLOCKEES are among its parents, so
+    // the tier-3 urgency of what waits on tactic-blocker reaches it through the
+    // resolver's ordinary tier fixpoint. There is no second reported/lifted
+    // pair: the candidate carries one key, and its tier IS 3.
     const nodes = [
       ...kinds(),
       tactic({
@@ -1059,7 +1071,7 @@ describe("ordering", () => {
         blocked_by: [],
       }),
       // Tier-3 and blocked: itself ineligible, so its urgency reaches selection
-      // only through the lift onto tactic-blocker.
+      // only as tactic-blocker's inherited tier.
       tactic({
         id: "tactic-blocked",
         phase: "implement",
@@ -1072,10 +1084,13 @@ describe("ordering", () => {
     const sel = selectGraphTargets(nodes);
     expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-blocker", "tactic-other"]);
     const blocker = sel.candidates.find((c) => c.id === "tactic-blocker");
-    expect(blocker).toMatchObject({ tier: 1, rank: 0, precedence: { tier: 3, rank: 0 } });
+    // tier 3 inherited from its one parent (tactic-blocked); band 0 because
+    // that parent carries no tier-3 score; score 0 (no boosts anywhere);
+    // depth 1 (lineage = {tactic-blocked}).
+    expect(blocker?.key).toEqual({ tier: 3, band: 0, score: 0, depth: 1 });
   });
 
-  it("the lift is recursive: a blocker of a blocker of a tier-3 node lifts to tier 3", () => {
+  it("tier inheritance is transitive: a blocker of a blocker of a tier-3 node resolves tier 3", () => {
     const nodes = [
       ...kinds(),
       tactic({ id: "tactic-root-blocker", phase: "implement" }),
@@ -1089,13 +1104,11 @@ describe("ordering", () => {
     ];
     const sel = selectGraphTargets(nodes);
     expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-root-blocker"]);
-    expect(sel.candidates[0]).toMatchObject({
-      tier: 1,
-      precedence: { tier: 3, rank: 0 },
-    });
+    // lineage = {tactic-mid, tactic-top} → depth 2; no boosts, so band/score 0.
+    expect(sel.candidates[0]?.key).toEqual({ tier: 3, band: 0, score: 0, depth: 2 });
   });
 
-  it("nothing compounds: blocking TWO tier-3 nodes still lifts to tier 3, not tier 6 or a summed rank", () => {
+  it("blocking TWO tier-3 nodes: tier and band take the MAX, score sums the deduped lineage", () => {
     const nodes = [
       ...kinds(),
       tactic({ id: "tactic-blocker", phase: "implement" }),
@@ -1103,24 +1116,31 @@ describe("ordering", () => {
         id: "tactic-t3-a",
         phase: "implement",
         attributes: { tier: 3 },
-        attention: { boost: 4, override: null, rationale: "a", tier: 3 },
+        attention: { boosts: { "3": 4 }, rationale: "a" },
         blocked_by: ["tactic-blocker"],
       }),
       tactic({
         id: "tactic-t3-b",
         phase: "implement",
         attributes: { tier: 3 },
-        attention: { boost: 6, override: null, rationale: "b", tier: 3 },
+        attention: { boosts: { "3": 6 }, rationale: "b" },
         blocked_by: ["tactic-blocker"],
       }),
     ];
     const sel = selectGraphTargets(nodes);
     const blocker = sel.candidates.find((c) => c.id === "tactic-blocker");
-    // Lexicographic MAX, never a sum: tier 3 (not 6), rank 6 (not 10).
-    expect(blocker?.precedence).toEqual({ tier: 3, rank: 6 });
+    // Both blockees are parents of tactic-blocker.
+    //  - tier: max(1, 3, 3) = 3 — never 6; tier is a namespace, not a magnitude.
+    //  - band: max over parents of their tier-3 score = max(4, 6) = 6.
+    //  - score: the node's own contribution (0) plus its deduped lineage's
+    //    ({tactic-t3-a, tactic-t3-b}) = 4 + 6 = 10. Score IS additive over
+    //    lineage under the unified relation — that is the axis that grows when
+    //    a node holds up more work; band is what stays max-based.
+    //  - depth: |lineage| = 2.
+    expect(blocker?.key).toEqual({ tier: 3, band: 6, score: 10, depth: 2 });
   });
 
-  it("a blocked_by cycle degrades ordering and logs an event, never throwing or looping", () => {
+  it("a blocked_by cycle neither throws nor loops, and costs unrelated nodes nothing", () => {
     const nodes = [
       ...kinds(),
       tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b"] }),
@@ -1128,42 +1148,39 @@ describe("ordering", () => {
       // An unrelated healthy node: the cycle must not cost it its candidacy.
       tactic({ id: "tactic-healthy", phase: "implement" }),
     ];
-
-    const { precedence, events } = effectivePrecedence(nodes);
-    // Both cycle members still get a precedence pair (their own, max-folded).
-    expect(precedence.get("tactic-a")).toEqual({ tier: 1, rank: 0 });
-    expect(precedence.get("tactic-b")).toEqual({ tier: 1, rank: 0 });
-    const cycleEvents = events.filter((e) => e.event === "precedence-cycle");
-    expect(cycleEvents).toHaveLength(1);
-    expect(cycleEvents[0]?.detail).toMatch(/blocked_by cycle: tactic-a -> tactic-b -> tactic-a/);
-
-    // Selection survives: the cycle members are gated out by blockersComplete
-    // (as any blocked node is), but the rest of the store still selects.
+    // The resolver converges a mixed cycle silently (the set-union fixpoint is
+    // bounded), so selection logs NO event for it — rejecting such a cycle on
+    // the write path belongs to tactic-attention-unified-relation-cycle-rule.
     const sel = selectGraphTargets(nodes);
+    // Both cycle members are gated out by blockersComplete (as any blocked node
+    // is), but the rest of the store still selects.
     expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-healthy"]);
-    expect(sel.events.filter((e) => e.event === "precedence-cycle")).toHaveLength(1);
+    expect(sel.events).toEqual([]);
+    // Unrelated node: untouched by the cycle, at the neutral baseline.
+    expect(sel.candidates[0]?.key).toEqual({ tier: 1, band: 0, score: 0, depth: 0 });
   });
 
-  it("a cycle member blocking an out-of-cycle node still lifts it, and terminates", () => {
+  it("a cycle member's tier still reaches an out-of-cycle blocker, and resolution terminates", () => {
     const nodes = [
       ...kinds(),
-      tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b"] }),
+      // tactic-a and tactic-b block each other (the cycle); tactic-outside also
+      // blocks tactic-a, so tactic-a is among tactic-outside's parents.
+      tactic({ id: "tactic-a", phase: "implement", blocked_by: ["tactic-b", "tactic-outside"] }),
       tactic({
         id: "tactic-b",
         phase: "implement",
         attributes: { tier: 3 },
         blocked_by: ["tactic-a"],
       }),
-      // Blocks tactic-a, which sits in the cycle with the tier-3 tactic-b.
-      tactic({ id: "tactic-outside", phase: "implement", attributes: { tier: 1 } }),
-      tactic({ id: "tactic-a2", phase: "implement", blocked_by: ["tactic-outside"] }),
+      tactic({ id: "tactic-outside", phase: "implement" }),
     ];
-    const { precedence } = effectivePrecedence(nodes);
-    // tactic-b's own tier-3 pair still reaches the nodes it blocks.
-    expect(precedence.get("tactic-a")?.tier).toBe(3);
-    expect(precedence.get("tactic-outside")).toEqual({ tier: 1, rank: 0 });
-    // Out-of-cycle candidates are unaffected and selection completes.
-    expect(selectGraphTargets(nodes).candidates.map((c) => c.id)).toEqual(["tactic-outside"]);
+    const sel = selectGraphTargets(nodes);
+    // Only tactic-outside is unblocked.
+    expect(sel.candidates.map((c) => c.id)).toEqual(["tactic-outside"]);
+    // tactic-b's tier 3 propagates b -> a (a's parent) -> outside (a is
+    // outside's parent). lineage(outside) = {tactic-a} ∪ lineage(tactic-a) =
+    // {tactic-a, tactic-b} → depth 2. No boosts anywhere, so band/score 0.
+    expect(sel.candidates[0]?.key).toEqual({ tier: 3, band: 0, score: 0, depth: 2 });
   });
 
   it("the progression ordinal runs over the full PHASES order", () => {
@@ -1194,7 +1211,7 @@ describe("strategyFingerprint", () => {
       strategyFingerprint({ ...base, office_hours: { reason: "r", since: "2026-07-01", recommendation: null, session_type: "other" } }),
     ).toBe(fp);
     expect(
-      strategyFingerprint({ ...base, attention: { boost: 3, override: null, rationale: "r", tier: 1 } }),
+      strategyFingerprint({ ...base, attention: { boosts: { "1": 3 }, rationale: "r" } }),
     ).toBe(fp);
   });
 
@@ -1220,6 +1237,59 @@ describe("strategyFingerprint", () => {
     const base = strategy({ id: "strategy-s", serves: ["virtue-a", "virtue-b"] });
     const reordered = strategy({ id: "strategy-s", serves: ["virtue-b", "virtue-a"] });
     expect(strategyFingerprint(base)).toBe(strategyFingerprint(reordered));
+  });
+
+  /**
+   * `attributes.measured_impact` must stay OUT of the substance set: a ledger
+   * entry is re-measured routinely, and if a re-measurement moved the
+   * fingerprint every open child of the measured node would soft-freeze.
+   *
+   * The exemption is by construction — the substance object is an explicit
+   * allowlist of six fields, with no denylist to add `measured_impact` to — so
+   * this test is the guard: it goes red the moment someone widens the allowlist
+   * to include it. `attributes.conditions` is the control, confirming the test
+   * would notice a substance field that IS hashed.
+   */
+  it("attributes.measured_impact never changes it (re-measuring must not freeze open children)", () => {
+    const base = strategy({ id: "strategy-s", attributes: { conditions: ["c"] } });
+    const fp = strategyFingerprint(base);
+    const measured = strategyFingerprint({
+      ...base,
+      attributes: {
+        ...base.attributes,
+        measured_impact: [
+          {
+            metric: "recurrence_count",
+            value: 4,
+            unit: "occurrences",
+            window: "7d",
+            sensor: "token-economy-sensor",
+            measured: "2026-08-12",
+          },
+        ],
+      },
+    });
+    expect(measured).toBe(fp);
+    // Control: a substance field inside the same `attributes` record does move it.
+    expect(
+      strategyFingerprint({ ...base, attributes: { ...base.attributes, conditions: ["c2"] } }),
+    ).not.toBe(fp);
+  });
+});
+
+describe("tacticScopeFingerprint", () => {
+  /**
+   * The scope stamp hashes `(statement, body)` and NO frontmatter, so
+   * `attributes.measured_impact` cannot reach it even in principle. Asserted
+   * through the public signature — the function takes no node — so this stays
+   * true no matter what the frontmatter carries.
+   */
+  it("is a function of statement and body alone, so no attributes key can move it", () => {
+    const statement = "Ledger the finding.";
+    const body = "# Ledger the finding.\n";
+    const fp = tacticScopeFingerprint(statement, body);
+    expect(tacticScopeFingerprint(statement, body)).toBe(fp);
+    expect(tacticScopeFingerprint(statement, `${body}\nResidue appended.\n`)).not.toBe(fp);
   });
 });
 

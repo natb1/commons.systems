@@ -4,16 +4,33 @@
 // writeNode serialization) or reports the unresolved conflicts. The fs/argv I/O
 // lives here so node-merge.ts stays pure and fs-free.
 //
-// Usage:
-//   npx tsx packages/intentionsutil/scripts/merge-node.ts \
+// Usage (the ESM loader form, never `npx tsx` — the tsx CLI opens an IPC unix
+// socket at start-up that a sandboxed caller cannot open, EPERM):
+//   node --import tsx/esm packages/intentionsutil/scripts/merge-node.ts \
 //     --base <path-or-empty> --ours <path> --theirs <path-or-empty> --out <path>
 //
-// Output contract (stdout, single line of JSON):
-//   resolved==true  → {"resolved":true,"conflicts":[]}   (--out written), exit 0
-//   resolved==false → {"resolved":false,"conflicts":[...]} (--out NOT written), exit 0
-// A tool crash (unparseable frontmatter, missing required arg, etc.) exits
-// non-zero with an error on stderr and NO JSON on stdout, so a bash caller can
-// distinguish "attempted, unresolved" from "could not even attempt".
+// Output contract — THREE outcomes, given three distinct exit statuses so a
+// bash caller can tell a content outcome from a broken environment:
+//
+//   exit 0, one line of JSON on stdout — this tool RAN and reached a verdict:
+//     resolved==true  → {"resolved":true,"conflicts":[]}    (--out written)
+//     resolved==false → {"resolved":false,"conflicts":[...]} (--out NOT written)
+//
+//   exit 3, an error on stderr and NO JSON on stdout — this tool RAN and failed
+//     ON ITS INPUTS (unparseable frontmatter, a missing required arg, an
+//     unreadable path). stderr carries why. This is a content-shaped failure:
+//     the caller may fail closed and park the node.
+//
+//   ANY OTHER exit status — this tool NEVER RAN (module resolution failure,
+//     missing interpreter, a sandbox denial). Nothing here produced it and this
+//     contract says nothing about it. It is an environment failure the caller
+//     must surface as an error — never as a merge outcome, and never as a park.
+//
+// 3 rather than 1, because 1 is not claimable: a loader that cannot resolve
+// `tsx` also exits 1 with ERR_MODULE_NOT_FOUND on stderr and zero bytes on
+// stdout — byte-for-byte indistinguishable from this tool's own caught failure.
+// 3 is emitted only by the catch below, which is reachable only once main() has
+// started, so no start-up failure can forge it.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { parse, stringify } from "yaml";
@@ -101,8 +118,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     main();
   } catch (err) {
-    // A genuine tool failure: non-zero exit, error on stderr, no JSON on stdout.
+    // A genuine failure of this tool ON ITS INPUTS: the reserved exit code 3,
+    // an error on stderr, no JSON on stdout. See the output contract at the top
+    // of this file for why the code is 3 and not 1.
     process.stderr.write(`merge-node: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exit(1);
+    process.exit(3);
   }
 }

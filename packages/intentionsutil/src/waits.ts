@@ -35,7 +35,7 @@ export const WAIT_ATTEMPT_CAP = 4;
  *
  * The horizon closes both: `decideWait` refuses an `--until` beyond it (and
  * refuses an EXTEND that pushes `wait_until` beyond `wait_armed_since` + the
- * horizon), validate-graph rule 21 refuses a hand-landed node that exceeds it,
+ * horizon), validate-graph rule 22 refuses a hand-landed node that exceeds it,
  * and `listWaitCandidates` classifies an over-horizon or too-long-armed WAIT
  * `capped` — which the tick sweep escalates to office-hours — so a hold that
  * outlives the horizon becomes VISIBLE rather than silent.

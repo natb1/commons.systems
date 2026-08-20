@@ -24,6 +24,25 @@ echo "=== dispatch-tick ==="
 tick_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/logs"
+  # tactic-pause-disables-merge-lane: the paused-branch node-lane drain syncs the
+  # main checkout (`git fetch origin main` + `git merge --ff-only origin/main`,
+  # against DISPATCH_TICK_MAIN_WORKTREE) BEFORE it drains, and skips the drain
+  # entirely when that sync fails. DISPATCH_TICK_MAIN_WORKTREE is pinned to
+  # TMPDIR_TEST below, so make TMPDIR_TEST a real checkout on `main` with a local
+  # `origin` the fetch can reach — the same real-git scratch-fixture idiom the
+  # frozen-repo checkout below uses (git init + explicit `main`, because CI has no
+  # init.defaultBranch). Only the empty base commit is tracked, so the ff-merge
+  # never touches the fake scripts or the nested scratch repos in this tree.
+  # A test that wants the sync to FAIL repoints origin at a nonexistent path; a
+  # test that wants a genuine fast-forward calls tick_advance_main_origin.
+  git -C "$TMPDIR_TEST" init -q
+  git -C "$TMPDIR_TEST" symbolic-ref HEAD refs/heads/main
+  git -C "$TMPDIR_TEST" config user.email "test@example.com"
+  git -C "$TMPDIR_TEST" config user.name "Test"
+  git -C "$TMPDIR_TEST" commit -q --allow-empty -m "base"
+  git clone -q --bare "$TMPDIR_TEST" "$TMPDIR_TEST/main-origin.git"
+  git -C "$TMPDIR_TEST" remote add origin "$TMPDIR_TEST/main-origin.git"
+  git -C "$TMPDIR_TEST" fetch -q origin main
   cp "$SCRIPT_DIR/dispatch-tick" "$TMPDIR_TEST/dispatch-tick"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   # Copied (not chmod +x — these are sourced, not executed) so dispatch-tick's
@@ -206,12 +225,68 @@ FAKE
 echo "\$*" >> "$TMPDIR_TEST/logs/converge.log"
 exit \${TICK_CONVERGE_RC:-0}
 FAKE
+  # Fake dispatch-graph-main-red-sync (tactic-pause-disables-merge-lane): prints
+  # TICK_MAIN_RED (default empty = main known-good) and exits TICK_MAIN_RED_RC
+  # (default 0). Used by BOTH the normal path and the paused-branch node-lane
+  # merge chain to compute OPEN_MAIN_RED, so it must be a fake even though tests
+  # here only exercise the paused-branch call site. Logs to its own file (NOT
+  # order.log) — the existing paused-flag test asserts order.log does not exist
+  # at all (proxy for "refresh-rate-limits never ran"), and this fake legitimately
+  # runs on that same paused branch, so it must not perturb that shared file.
+  cat > "$TMPDIR_TEST/dispatch-graph-main-red-sync" <<FAKE
+#!/usr/bin/env bash
+echo called >> "$TMPDIR_TEST/logs/main-red-sync.log"
+printf '%s' "\${TICK_MAIN_RED:-}"
+exit \${TICK_MAIN_RED_RC:-0}
+FAKE
+  # Fake graph-auto-merge (tactic-pause-disables-merge-lane): records that it
+  # ran (argv, to its own log file — see the order.log note above), emits
+  # TICK_GRAPH_MERGE_OUT (default empty) on stdout so ordering tests can assert
+  # a `merge:` line appears, and exits 0.
+  cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+printf '%s' "\${TICK_GRAPH_MERGE_OUT:-}"
+exit 0
+FAKE
+  # Fake reconcile-graph-merged (tactic-pause-disables-merge-lane): records that
+  # it ran (own log file — see the order.log note above) and exits 0. The
+  # paused-branch call site is unconditional (not gated on OPEN_MAIN_RED),
+  # matching dispatch-select-tick's own reconcile-graph-merged call.
+  cat > "$TMPDIR_TEST/reconcile-graph-merged" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/reconcile-graph-merged.log"
+exit 0
+FAKE
+  # Fake dispatch-acquire-lock (tactic-pause-disables-merge-lane): the
+  # paused-branch drain now serializes on the same selection lock
+  # dispatch-select-tick holds, so the tick invokes this script directly.
+  # Records its argv to its own log file (NOT order.log — see the note above),
+  # prints TICK_LOCK_RESULT (default `acquired`) for the `--wait` acquire and
+  # `released` for `--release`, mirroring the real script's stdout protocol. A
+  # test sets TICK_LOCK_RESULT=busy to exercise the contended path. The two
+  # #1068 headless tests below replace this with the REAL dispatch-acquire-lock;
+  # they run non-paused, so the drain's call site is not involved there.
+  cat > "$TMPDIR_TEST/dispatch-acquire-lock" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/acquire-lock.log"
+if [[ "\$*" == *--release* ]]; then
+  echo released
+else
+  echo "\${TICK_LOCK_RESULT:-acquired}"
+fi
+exit 0
+FAKE
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" \
+           "$TMPDIR_TEST/dispatch-acquire-lock" \
            "$TMPDIR_TEST/dispatch-graph-execute" \
            "$TMPDIR_TEST/dispatch-spawn-job" \
            "$TMPDIR_TEST/dispatch-refresh-rate-limits" \
            "$TMPDIR_TEST/dispatch-tick-recover" \
-           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed"
+           "$TMPDIR_TEST/dispatch-schedule-convergence-reseed" \
+           "$TMPDIR_TEST/dispatch-graph-main-red-sync" \
+           "$TMPDIR_TEST/graph-auto-merge" \
+           "$TMPDIR_TEST/reconcile-graph-merged"
 }
 
 tick_teardown() {
@@ -225,8 +300,24 @@ tick_teardown() {
     DISPATCH_FROZEN_SESSION_PROJECTS_ROOT DISPATCH_FROZEN_SESSION_REPO_ROOT \
     DISPATCH_FROZEN_SESSION_PARK_NODE \
     DISPATCH_FROZEN_SESSION_NOW_EPOCH TICK_PARK_NODE_RC \
-    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM
+    DISPATCH_HOLD_RECHECK_REPO_ROOT DISPATCH_HOLD_RECHECK_ENUM \
+    TICK_MAIN_RED TICK_MAIN_RED_RC TICK_GRAPH_MERGE_OUT \
+    TICK_LOCK_RESULT DISPATCH_PAUSED_DRAIN_TIMEOUT_S
   export DISPATCH_DECISION_LOG_DIR="$DISPATCH_TEST_DECISION_LOG_DIR"
+}
+
+# tick_advance_main_origin — push one new commit to the scratch `origin` the main
+# checkout (TMPDIR_TEST) fetches from, WITHOUT touching that checkout, so the
+# paused-branch drain's `git fetch origin main && git merge --ff-only origin/main`
+# has something real to fast-forward to. Prints the new origin/main sha.
+tick_advance_main_origin() {
+  local work="$TMPDIR_TEST/main-pusher"
+  git clone -q "$TMPDIR_TEST/main-origin.git" "$work"
+  git -C "$work" config user.email "test@example.com"
+  git -C "$work" config user.name "Test"
+  git -C "$work" commit -q --allow-empty -m "origin advance"
+  git -C "$work" push -q origin main
+  git -C "$work" rev-parse HEAD
 }
 
 run_tick() { "$TMPDIR_TEST/dispatch-tick" "$@" 2>/dev/null; }
@@ -345,6 +436,303 @@ assert_eq "paused-frozen: select-tick NOT called" "0" \
   "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
 assert_eq "paused-frozen: park-node invoked exactly once" "1" \
   "$(grep -cF "tactic-frozen-paused" "$TMPDIR_TEST/logs/park-node.log" 2>/dev/null || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane: paused branch still drains the node-lane
+# merge chain (graph-auto-merge + reconcile-graph-merged), main known-good ------
+# The pause sentinel gates worker SPAWNING only, never ledger bookkeeping/
+# draining (see the header comment above the sentinel in dispatch-tick), and this
+# exit 0 path is the ONLY autonomous tick path that never reaches
+# dispatch-select-tick's own merge/reconcile calls. Main known-good (the fake
+# dispatch-graph-main-red-sync prints nothing and exits 0, so OPEN_MAIN_RED is
+# empty) → graph-auto-merge runs. reconcile-graph-merged always runs regardless.
+# Still no spawn and no dispatch-select-tick, matching the base paused test.
+echo "Test: dispatch-tick paused, main known-good → drains graph-auto-merge + reconcile-graph-merged, no spawn/select-tick"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-ok: exit 0" "0" "$rc"
+assert_eq "paused-merge-ok: stdout still announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: select-tick NOT called" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/select-tick.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: no spawn-job call" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/spawn-job.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: graph-auto-merge WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-ok: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-graph-auto-merge-main-health-gate: the paused branch no longer owns
+# the main-health gate; graph-auto-merge does ----------------------------------
+# These two cases previously asserted the INVERSE — that a non-empty
+# OPEN_MAIN_RED (main known-broken) and a fail-closed UNKNOWN (main-red-sync exit
+# non-zero) each suppressed the paused branch's graph-auto-merge call. The
+# caller-side `if [[ -z "$OPEN_MAIN_RED" ]]` wrapper that implemented that is
+# deleted, along with this branch's dispatch-graph-main-red-sync call entirely.
+#
+# The safety property is NOT dropped, only relocated to where it is now
+# implemented: test-graph-auto-merge.sh cases (k1)-(k5) exercise the real script
+# directly — empty latch merges; an open latch, the UNKNOWN sentinel, and an
+# unrunnable sync each suppress; and `--node` is gated identically. The fake
+# graph-auto-merge here has no internal gate, so what these cases can still pin,
+# and now do, is that the paused branch calls it unconditionally and never
+# re-grows a caller-side copy of the gate.
+echo "Test: dispatch-tick paused, main known-broken → graph-auto-merge still CALLED (it self-gates), main-red-sync not called"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_MAIN_RED="tactic-main-red-abc1234"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-red: exit 0" "0" "$rc"
+assert_eq "paused-merge-red: graph-auto-merge invoked unconditionally" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-red: paused branch does NOT read the main-red latch itself" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/main-red-sync.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-red: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick paused, a failing main-red-sync no longer affects the drain (the gate is inside graph-auto-merge)"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_MAIN_RED_RC=1
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-unknown: exit 0" "0" "$rc"
+assert_eq "paused-merge-unknown: graph-auto-merge invoked unconditionally" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-merge-unknown: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane (finding 9): the paused banner prints
+# BEFORE the node-lane merge/reconcile drain lines ------------------------------
+# An operator scanning `journalctl --user -u dispatch-tick` must read the pause
+# state first and interpret the following `merge:`/`reconcile-graph:` lines as
+# the paused-branch drain, not as scheduling. Force a non-empty graph-auto-merge
+# stdout line via TICK_GRAPH_MERGE_OUT, then assert the banner's line number in
+# stdout precedes the `merge:` line's.
+echo "Test: dispatch-tick paused → banner line precedes merge/reconcile-graph drain lines"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_GRAPH_MERGE_OUT="merged tactic-example (PR #999)"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-merge-order: exit 0" "0" "$rc"
+assert_eq "paused-merge-order: stdout still announces pause" "1" \
+  "$(printf '%s' "$out" | grep -qi 'paused (sentinel present' && echo 1 || echo 0)"
+banner_line=$(grep -n 'paused (sentinel present' <<< "$out" | head -1 | cut -d: -f1)
+merge_line=$(grep -n '^merge: ' <<< "$out" | head -1 | cut -d: -f1)
+assert_eq "paused-merge-order: banner line precedes merge line" "1" \
+  "$([ -n "$banner_line" ] && [ -n "$merge_line" ] && [ "$banner_line" -lt "$merge_line" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane (review fix 1): the drain runs against a
+# SYNCED main checkout, or not at all -------------------------------------------
+# graph-auto-merge enumerates its candidates from the LOCAL working tree and reads
+# each node's office_hours from it, and the only routine thing that advances that
+# checkout is dispatch-select-tick's Step 1 ff-merge — which the paused branch
+# exits before. So the paused branch syncs the checkout itself first. When the
+# sync fails the whole drain is skipped, loudly: draining a frozen tree would both
+# miss nodes reviewed since the pause began and merge straight past parks landed
+# since the pause began.
+
+echo "Test: dispatch-tick paused, main-checkout sync fails (unreachable origin) → drain skipped loudly, sweeps still run"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+git -C "$TMPDIR_TEST" remote set-url origin "$TMPDIR_TEST/no-such-origin.git"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-sync-fail: exit 0" "0" "$rc"
+assert_eq "paused-sync-fail: loud skip diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'SKIPPING the paused-branch node-lane merge/reconcile drain' && echo 1 || echo 0)"
+assert_eq "paused-sync-fail: graph-auto-merge NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-sync-fail: reconcile-graph-merged NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+assert_eq "paused-sync-fail: main-red-sync NOT invoked (drain skipped before it)" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/main-red-sync.log" ] && echo 1 || echo 0)"
+# The drain skip must not take the paused-branch sweeps down with it.
+assert_eq "paused-sync-fail: paused-branch sweeps still ran" "1" \
+  "$(printf '%s' "$err" | grep -qF 'lib-standdown-recheck: sweep complete' && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick paused, main checkout behind origin → tick fast-forwards it, then drains"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+before_sha=$(git -C "$TMPDIR_TEST" rev-parse HEAD)
+origin_sha=$(tick_advance_main_origin)
+out=$(run_tick) && rc=0 || rc=$?
+after_sha=$(git -C "$TMPDIR_TEST" rev-parse HEAD)
+assert_eq "paused-sync-ff: exit 0" "0" "$rc"
+assert_eq "paused-sync-ff: the checkout actually moved (was stale before the tick)" "0" \
+  "$([ "$before_sha" = "$origin_sha" ] && echo 1 || echo 0)"
+assert_eq "paused-sync-ff: checkout fast-forwarded to origin/main" "$origin_sha" "$after_sha"
+assert_eq "paused-sync-ff: graph-auto-merge WAS invoked (against the fresh tree)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-sync-ff: reconcile-graph-merged WAS invoked" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick paused, main checkout not on branch main → drain skipped loudly"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+git -C "$TMPDIR_TEST" checkout -q -b not-main
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-offmain: exit 0" "0" "$rc"
+assert_eq "paused-offmain: loud skip diagnostic names the branch" "1" \
+  "$(printf '%s' "$err" | grep -qF "is on branch 'not-main', not 'main'" && echo 1 || echo 0)"
+assert_eq "paused-offmain: graph-auto-merge NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-offmain: reconcile-graph-merged NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane (review fix 3): the drain holds the same
+# selection lock dispatch-select-tick holds ------------------------------------
+# dispatch-select-tick wraps these same calls in `dispatch-acquire-lock --wait`
+# (dispatch-select-tick:277) and none of graph-auto-merge / reconcile-graph-merged
+# / dispatch-graph-main-red-sync locks internally, so without this the paused
+# drain could overlap a concurrent `dispatch --manual` on the same worktree.
+
+echo "Test: dispatch-tick paused drain acquires the selection lock and releases it"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-lock: exit 0" "0" "$rc"
+assert_eq "paused-lock: acquire (--wait), heartbeat between the two drain calls, then release, in that order" \
+  "$(printf -- '--wait\n--heartbeat\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+assert_eq "paused-lock: drain ran while the lock was held" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- Unit 6d (finding 5): the paused-branch drain heartbeats the lock BETWEEN
+# its two drain calls, not just somewhere in the run -----------------------------
+# Each drain call runs under its own DISPATCH_PAUSED_DRAIN_TIMEOUT_S budget
+# (default 600s), so the two calls together can hold the lock up to 1200s
+# against the 300s default staleness cap (dispatch-acquire-lock:227) — with no
+# heartbeat in between, a second paused tick's `--wait` would read the first
+# tick's hold as stale and reclaim it mid-drain, letting two graph-commit
+# cycles run in the same worktree at once. The acquire-lock.log assertion above
+# only proves a `--heartbeat` call happened somewhere between `--wait` and
+# `--release`; this test proves it happens strictly BETWEEN the two drain
+# calls, by having graph-auto-merge, dispatch-acquire-lock (on --heartbeat),
+# and reconcile-graph-merged all append to one shared, ordered log.
+echo "Test: dispatch-tick paused drain heartbeats the lock between graph-auto-merge and reconcile-graph-merged"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+echo "graph-auto-merge" >> "$TMPDIR_TEST/logs/drain-order.log"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/graph-auto-merge"
+cat > "$TMPDIR_TEST/reconcile-graph-merged" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/reconcile-graph-merged.log"
+echo "reconcile-graph-merged" >> "$TMPDIR_TEST/logs/drain-order.log"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/reconcile-graph-merged"
+cat > "$TMPDIR_TEST/dispatch-acquire-lock" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/acquire-lock.log"
+if [[ "\$*" == *--heartbeat* ]]; then
+  echo "heartbeat" >> "$TMPDIR_TEST/logs/drain-order.log"
+  echo refreshed
+elif [[ "\$*" == *--release* ]]; then
+  echo released
+else
+  echo "\${TICK_LOCK_RESULT:-acquired}"
+fi
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-acquire-lock"
+out=$(run_tick) && rc=0 || rc=$?
+assert_eq "paused-heartbeat-order: exit 0" "0" "$rc"
+assert_eq "paused-heartbeat-order: heartbeat fires strictly between the two drain calls" \
+  "$(printf 'graph-auto-merge\nheartbeat\nreconcile-graph-merged')" \
+  "$(cat "$TMPDIR_TEST/logs/drain-order.log")"
+tick_teardown
+
+echo "Test: dispatch-tick paused, selection lock busy → drain skipped, no merge/reconcile"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+export TICK_LOCK_RESULT="busy"
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-lock-busy: exit 0" "0" "$rc"
+assert_eq "paused-lock-busy: loud skip diagnostic on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF "paused-branch node-lane drain SKIPPED; dispatch-acquire-lock reported 'busy'" && echo 1 || echo 0)"
+assert_eq "paused-lock-busy: graph-auto-merge NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "paused-lock-busy: reconcile-graph-merged NOT invoked" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+assert_eq "paused-lock-busy: no release issued for a lock we never held" \
+  "--wait" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+tick_teardown
+
+# --- tactic-pause-disables-merge-lane (review fix 4): every drain call is bounded
+# by `timeout` --------------------------------------------------------------------
+# dispatch-heartbeat.service is Type=oneshot, for which systemd disables
+# TimeoutStartSec by default: a drain hung on an unbounded `gh` call leaves the
+# unit `activating` forever and every later timer fire is skipped, silently
+# stopping the reservation reap and the park sweeps for the rest of the pause.
+# The stub `timeout` below is a PATH shim that records <budget> <command> and then
+# execs the real binary, so the assertion sees the budget the tick chose without
+# changing what actually runs.
+
+echo "Test: dispatch-tick paused drain runs each script under timeout with the configured budget"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+mkdir -p "$TMPDIR_TEST/bin"
+real_timeout=$(command -v timeout)
+cat > "$TMPDIR_TEST/bin/timeout" <<FAKE
+#!/usr/bin/env bash
+echo "\$1 \$2" >> "$TMPDIR_TEST/logs/timeout.log"
+exec "$real_timeout" "\$@"
+FAKE
+chmod +x "$TMPDIR_TEST/bin/timeout"
+saved_path="$PATH"
+export PATH="$TMPDIR_TEST/bin:$PATH"
+export DISPATCH_PAUSED_DRAIN_TIMEOUT_S=42
+out=$(run_tick) && rc=0 || rc=$?
+export PATH="$saved_path"
+assert_eq "paused-drain-timeout: exit 0" "0" "$rc"
+# The paused branch no longer invokes dispatch-graph-main-red-sync at all
+# (tactic-graph-auto-merge-main-health-gate moved that read inside
+# graph-auto-merge), so it is no longer one of the drain's bounded calls. Assert
+# its ABSENCE rather than deleting the line: a re-added caller-side main-health
+# read would be a second copy of the gate, which is the defect this node fixed.
+# Counted into a variable rather than inline: the `grep -c ... || echo 0` idiom
+# the sibling assertions use is only correct for a NON-zero expectation. On a
+# genuine zero, `grep -c` prints "0" AND exits 1, so the `|| echo 0` fires too
+# and the substitution yields the two-line string "0\n0".
+mrs_drain_count=$(grep -cF "42 $TMPDIR_TEST/dispatch-graph-main-red-sync" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null) || mrs_drain_count=0
+assert_eq "paused-drain-timeout: main-red-sync is NOT a drain call any more" "0" "$mrs_drain_count"
+assert_eq "paused-drain-timeout: graph-auto-merge ran under the configured budget" "1" \
+  "$(grep -cF "42 $TMPDIR_TEST/graph-auto-merge" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null || echo 0)"
+assert_eq "paused-drain-timeout: reconcile-graph-merged ran under the configured budget" "1" \
+  "$(grep -cF "42 $TMPDIR_TEST/reconcile-graph-merged" "$TMPDIR_TEST/logs/timeout.log" 2>/dev/null || echo 0)"
+tick_teardown
+
+echo "Test: dispatch-tick paused, graph-auto-merge exceeds its budget → warning, reconcile still runs, exit 0"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+# Overwrite the graph-auto-merge fake with one that hangs past the budget below.
+cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+sleep 5
+FAKE
+chmod +x "$TMPDIR_TEST/graph-auto-merge"
+export DISPATCH_PAUSED_DRAIN_TIMEOUT_S=1
+err=$("$TMPDIR_TEST/dispatch-tick" 2>&1 1>/dev/null) && rc=0 || rc=$?
+assert_eq "paused-drain-hang: exit 0 (a timeout is non-fatal to the tick)" "0" "$rc"
+assert_eq "paused-drain-hang: timeout warning on stderr" "1" \
+  "$(printf '%s' "$err" | grep -qF 'graph-auto-merge timed out after 1s' && echo 1 || echo 0)"
+assert_eq "paused-drain-hang: reconcile-graph-merged still ran after the timeout" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+assert_eq "paused-drain-hang: heartbeat still fires after the timed-out step, and lock still released" \
+  "$(printf -- '--wait\n--heartbeat\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
 tick_teardown
 
 # --- pause sentinel: --manual overrides the flag → the tick runs normally ------

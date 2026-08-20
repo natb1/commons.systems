@@ -30,18 +30,22 @@ trap 'exit 0' EXIT
 source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-worktree-in-sync.sh"
 # shellcheck source=../skills/dispatch-propagate/scripts/lib-claude-agents.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-claude-agents.sh"
+# shellcheck source=../skills/dispatch-propagate/scripts/lib-repo-roots.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch-propagate/scripts/lib-repo-roots.sh"
 
 PAYLOAD=$(cat 2>/dev/null) || PAYLOAD=""
 log "raw payload: ${PAYLOAD:-<empty>}"   # first real fire reveals the schema
 
-GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || GIT_COMMON_DIR=""
-[ -n "$GIT_COMMON_DIR" ] || { err "git rev-parse --git-common-dir failed — keeping worktree"; exit 0; }
-PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
-# Must match worktree-create.sh's placement (anchored at the common dir, not
-# nested under any one worktree) — a mismatch here means newly created
-# worktrees fail the safety guard below and are never cleaned up, silently
-# (this hook always exits 0 by contract).
-WORKTREES_ROOT="$GIT_COMMON_DIR/.claude/worktrees"
+PROJECT_ROOT=$(resolve_project_root) || { err "git rev-parse --git-common-dir failed — keeping worktree"; exit 0; }
+# Must match worktree-create.sh's placement (anchored at the repo root, not
+# nested under any one worktree, and not under .git — .git is a normal
+# directory inside the working tree post-de-baring, so PROJECT_ROOT
+# (dirname of --git-common-dir) IS the repo root) — a mismatch here means
+# newly created worktrees fail the safety guard below and are never cleaned
+# up, silently (this hook always exits 0 by contract). The dirname arithmetic
+# is centralised in lib-repo-roots.sh's resolve_project_root; see its header
+# for the full contract.
+WORKTREES_ROOT="$PROJECT_ROOT/.claude/worktrees"
 
 # Relocate the log to a stable place outside any worktree, carrying over.
 mkdir -p "$PROJECT_ROOT/tmp" 2>/dev/null || true

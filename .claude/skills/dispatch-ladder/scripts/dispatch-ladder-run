@@ -1,0 +1,1544 @@
+#!/usr/bin/env bash
+# dispatch-ladder-run — walk ONE node the whole way up the dispatch ladder,
+# with no AI turn in the loop.
+#
+# `/dispatch-emulate` carried this loop in skill prose, so a model turn was
+# spent on every phase step, and — because the Bash tool's 600s ceiling is far
+# under the measured phase durations (implement 14m10s, qa 15m59s, fix ~50m) —
+# the model had to re-call `await` by hand on every exit 20. Two of those
+# re-calls were lost outright when a session compacted. This script is that
+# loop, owned by the shell, launched detached by `dispatch-ladder-spawn` as a
+# transient systemd unit.
+#
+# IT SEQUENCES; IT NEVER GATES. Every admission decision belongs to a script
+# that already owns it:
+#
+#   dispatch-ladder-advance     selection (with every gate applied), claim
+#                               safety, provisioning, the phase-skill mapping,
+#                               the spawn.
+#   dispatch-ladder-await       the wait, and the origin/main verdict.
+#   dispatch-acquire-lock       the mutual exclusion against a concurrent
+#                               dispatch tick, for the whole reconcile pass.
+#   graph-auto-merge --node     the merge, with the config kill-switch, the
+#                               main-health admission gate, the park gate, the
+#                               PR/CI sensing and the fail-closed scope
+#                               fingerprint re-check all inside it.
+#   reconcile-graph-merged --node   the absorb, with its own grace window.
+#   reconcile-graph-review-stall --node   the red-CI route for a node the
+#                               router classifies `pending-merge` (phase
+#                               `review` + the `reviewed` marker). Such a node
+#                               is excluded from selector candidates, so the
+#                               ordinary fix interrupt never runs on it; this
+#                               sweep enters `execution.fix` and the router
+#                               re-surfaces the node as a `fix` candidate.
+#   verify-landed               the one landing signal, read at origin/main.
+#
+# This file branches on those seven scripts' exit codes and their one-line
+# stdout protocols. It makes no graph write, no `gh` call, and no merge
+# decision of its own. If a rule about WHEN something may happen ever appears
+# here, it is in the wrong file.
+#
+# TWO TICK SWEEPS RUN HERE, for the very reason this driver exists. Both are
+# reused verbatim — no wrapper, no variant policy — and both run once before
+# every advance, and again on every `held-observing` await answer (see HELD IS
+# WAITED OUT, ONCE, below):
+#
+#   reservation_sweep                   (lib-reservation-ledger.sh) releases the
+#                                       ledger marker this driver's OWN previous
+#                                       advance wrote.
+#   terminal_without_disposition_sweep  (lib-frozen-session-park.sh) parks the
+#                                       node of a phase session that ESCALATED —
+#                                       an `office-hours-reason` file and,
+#                                       deliberately, no `node-terminal` marker.
+#
+# Both are otherwise called only from dispatch-tick. A detached driver on a host
+# whose heartbeat is stopped — the bootstrap-deadlock case — is the one caller
+# for whom "the next tick will clear it" is false, so it owes both sweeps
+# itself. Neither is a gate: the driver adds no reclaim rule and no park rule of
+# its own, it only makes the tick's own sweeps run on its own cadence.
+#
+# FLEET-WIDE SCOPE, DELIBERATE. terminal_without_disposition_sweep takes no
+# node filter — it walks every escalated session in the fleet, not just
+# NODE_ID's. That is not an oversight this driver should scope away: the sweep
+# exists for the bootstrap-deadlock case where NO heartbeat is running at all,
+# so narrowing it to this driver's own node would silently drop every OTHER
+# node's escalation for as long as the heartbeat stays down — defeating the
+# reason this call exists. A reader watching this driver walk "one node" WILL
+# see it take park actions on unrelated nodes; that is the sweep doing its job,
+# not a bug to file.
+#
+# BUDGET-BOUNDED, NOT POLICY-CHANGED. The tick's defaults size the sweep for a
+# 15-minute tick: park_max=2 x park_timeout=120s + lock_wait=60s is up to 300s,
+# tolerable buried inside a tick period. This driver instead reports progress
+# on --poll-s cadence against a --max-run-s wall clock, so that same 300s can
+# overshoot --max-run-s by minutes on a single pass. The driver exports smaller
+# per-pass caps through the library's existing tunables at the call site below
+# — a bound on how long ONE pass may spend, not a change to what gets parked or
+# when: the sweep runs every pass, so a lower per-pass cap catches up over
+# subsequent passes rather than dropping work. Each cap stays overridable from
+# the environment.
+#
+# THE CI BRANCH IS OBSERVED, NEVER COMPUTED. For every interruptible phase
+# (`implement`, `qa`, `review` before the marker) red CI already routes to
+# `fix` inside the SAME selection pass, so the next `advance` simply answers
+# `launched <id> tactic fix /fix-checks` and this file needs no logic at all.
+# The one phase where that does not happen is `pending-merge`, which the sweep
+# above owns. So the driver's whole CI handling is: run the three reconcilers
+# and read what they printed.
+#
+# DETACHED EXECUTION, ATTENDED JUDGMENT. What is detached is the WAITING, not
+# the judgment. Every halt below is unconditional: no retry, no auto-park, no
+# resume. A halted ladder stays halted until a person reads it and acts. The
+# one place this script loops on a non-terminal answer is where the answer
+# means "not yet, by design" — CI still running, a requeued selection, the
+# reconciler's grace window, a session held while its escalation is swept — and
+# those loops are bounded by --max-run-s.
+#
+# HELD IS WAITED OUT, ONCE, BECAUSE THE HEALER IS NAMED. A phase session that
+# ESCALATES stops without a `node-terminal` marker on purpose, so
+# dispatch-self-close HOLDs its job and dispatch-ladder-await reports
+# `held-observing` (exit 21). The park that resolves it comes from
+# terminal_without_disposition_sweep — which is run RIGHT HERE, and which needs
+# DISPATCH_TERMINAL_DISPOSITION_GRACE_S (300s by default) of idle before it will
+# act. Halting on the first such answer therefore made this driver's own sweep
+# structurally unreachable: the healer could only ever run after the halt.
+#
+# So exit 21 re-runs the sweeps and re-polls, for at most HELD_GRACE_S seconds
+# (default 420 — comfortably clear of the sweep's 300s grace), and then halts 11
+# unconditionally. This is NOT a retry: the phase is never relaunched, one named
+# script is re-run, and the answer is read back off origin/main by the next
+# await. A hold nothing heals still terminates on its own.
+#
+# WHY EXIT 10 IS SPLIT BY REASON. Halting on any `idle` would halt after every
+# implement phase: a freshly opened draft PR with pending CI makes
+# dispatch-ladder-advance print `idle <id> ci-waiting`, which is the loop
+# working, not the loop stuck.
+#
+# THE EVALUATION IS PER PHASE, AND IT IS FIRE-AND-FORGET. At every phase
+# boundary — the `awaited` event — the driver spawns `/rsi` for
+# the phase that just finished (dispatch-spawn-job, `claude --bg`) and does NOT
+# wait on the evaluation. What the driver waits for is the spawn's own
+# registration check, seconds; what it never waits for is a model turn. A
+# blocking evaluation would reintroduce exactly the turn-in-the-loop this
+# detached script exists to remove, and the driver would then be gating on its
+# own review. Required by strategy-recursive-self-improvement condition 14 as
+# amended 2026-08-12 (two-tier: per-phase here, cross-phase synthesis in the
+# session that reads the terminus).
+#
+# The evaluator is scoped by NODE ID PLUS A TIME BOUND, not by session id.
+# dispatch-graph-execute spawns every phase worker with `--name <node-id>` — the
+# same name each phase — and nothing propagates a session id back here, so there
+# is no per-phase session id to hand over. LAUNCH_EPOCH is the discriminator the
+# driver does have, and `aggregate-usage.sh --node <id>` is the instrument that
+# turns it into one phase's measured usage.
+#
+# THE `--name` IS THE DEDUP KEY. dispatch-spawn-job spawns NOTHING and exits 0
+# when another live session under the same --cwd already carries the name. A
+# name keyed on the node id alone would therefore evaluate the first phase of
+# every ladder and silently skip every phase after it, so the name carries the
+# node id, the phase, AND the phase's launch epoch — the last because `fix` and
+# `conflict` are interrupts that recur within one run, and a node+phase name
+# would drop the second visit the same way.
+#
+# A HALT OWES THE EVALUATION TOO. halt() is the ONE terminal path (exits
+# 10/11/12/13/21 all route through it), so the owed spawn lives there and
+# nowhere else. Under the old terminus-only rule a halted run recorded nothing
+# at all, which made the most defect-rich runs exactly the ones that produced no
+# review. The spawn is guarded on a phase having LAUNCHED — a `usage`/`refused`
+# halt that never ran one spawns nothing — and on the phase not already having
+# been evaluated at its own boundary. A spawn failure is a logged warning and
+# never changes the halt's exit code: an evaluation that did not start must not
+# rewrite the disposition the driver is reporting.
+#
+# Usage: dispatch-ladder-run <node-id>
+#          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
+#
+#   --timeout-s <n>   the await window handed to each dispatch-ladder-await
+#                     call (default 1800). This is NOT the 540s default inside
+#                     dispatch-ladder-await — that default exists to sit under
+#                     the Bash tool's 600s ceiling for a Claude-session caller,
+#                     and it stays as-is for those callers. This script is not
+#                     a Claude session and has no such ceiling, so it opens a
+#                     wider window: 1800s is the measured evidence's starting
+#                     point for implement/qa/fix.
+#   --max-run-s <n>   whole-run wall clock (default 21600 = 6h). Exceeded is
+#                     exit 21, never a silent stop.
+#   --poll-s <n>      how long to sleep before re-polling an idle-but-expected
+#                     state — pending CI, a requeue, the reconciler's grace
+#                     window (default 60).
+#   --ci-wait-s <n>   how long the driver is willing to keep re-polling a
+#                     reconcile pass that changed nothing (default 3600 = 1h).
+#                     ONE budget covers both waits that produce silence: the
+#                     reconciler's GRAPH_RECONCILE_GRACE window and a PR whose
+#                     CI is still running. They are logged as DISTINCT
+#                     dispositions (`grace-wait` / `ci-wait`) in events.jsonl
+#                     so the evaluation can tell them apart — neither the
+#                     per-phase evaluator nor the closing synthesis can
+#                     reconstruct which silence it was afterwards.
+#                     This never overrides GRAPH_RECONCILE_GRACE — that is the
+#                     reconciler's policy and the driver may not set policy.
+#                     It bounds how long THIS PROCESS polls, which is the
+#                     driver's own concern. It is also the anti-spin guard for
+#                     the reconcile pass: a node that never becomes selectable
+#                     and never merges exhausts the budget and halts 10.
+#
+# Environment:
+#   HELD_GRACE_S      how long a `held-observing` await answer is waited out,
+#                     re-running the owed sweeps, before halting 11 (default
+#                     420). Sized against the sweep's own
+#                     DISPATCH_TERMINAL_DISPOSITION_GRACE_S (300s) — see HELD IS
+#                     WAITED OUT, ONCE above. Not a flag: it tracks another
+#                     script's constant, not a per-run preference.
+#
+# THE LOOP
+#
+#   advance
+#     0  launched   -> await, repeatedly, until it answers something terminal
+#     10 idle       -> by reason: re-poll, requeue, or run one reconcile pass
+#     11/13/2       -> halt
+#
+#   await
+#     0             -> the phase moved (or the node was pruned); step on
+#     20 running    -> re-call, identical arguments
+#     21 held       -> re-run the owed sweeps and re-poll, up to HELD_GRACE_S,
+#                      then halt 11
+#     11/12/14/2    -> halt
+#
+#   reconcile_pass — ONE non-blocking pass, answering routed|merged|changed|quiet
+#     dispatch-acquire-lock --wait
+#       not `acquired`     -> quiet. A busy lock means a dispatch tick is
+#                             mid-selection; that is transient and the outer
+#                             wait retries. Nothing else happens this pass.
+#     git fetch origin main; git merge --ff-only origin/main (the main checkout)
+#       either fails       -> release the lock, halt 11. Both reconcilers below
+#                             enumerate their candidate set from the LOCAL
+#                             tree, so an unsynced checkout would merge straight
+#                             past a park that landed after this run started.
+#     graph-auto-merge --node <id>
+#       `held <id> (...)`  -> release, halt 11. office-hours, a missing stamp
+#                             and a stale scope are all a person's call; a
+#                             driver that retried them would be making the call.
+#       `merged #N (<id>)` -> merged
+#       `synced #N (<id>)` -> quiet. The up-to-date gate found the PR behind
+#                             origin/main and merged main INTO it instead, which
+#                             re-triggers CI on the fresh base. No merge this
+#                             pass; the outer wait re-polls until CI is green on
+#                             the now-current base (or the --ci-wait-s budget
+#                             runs out and the run halts `idle`).
+#     reconcile-graph-merged --node <id>
+#       `reconciled <id> -> <target>`  -> changed; take another ladder step
+#       `deferred <id> (...)`          -> quiet (the outer wait re-polls)
+#     reconcile-graph-review-stall --node <id>
+#       `recovered <id> -> fix (...)`  -> routed. THE INTERVENTION: the node
+#                             entered `execution.fix`, so the very next advance
+#                             answers `launched <id> tactic fix /fix-checks`.
+#     dispatch-acquire-lock --release
+#
+#   NO SLEEP IS EVER TAKEN INSIDE THE PASS, and therefore never while the
+#   selection lock is held — dispatch-acquire-lock's INVARIANT #2
+#   (dispatch-acquire-lock:96-103): heartbeats fire on a step's COMPLETION,
+#   never inside a poll loop. All the waiting lives in the outer loop, with the
+#   lock released. The heartbeats between the three scripts are there because
+#   any one of them can outlive MAX_HOLD_SECONDS (300s) on a graph-commit that
+#   waits on the landing lock.
+#
+#   THE GRACE WINDOW IS THE NO-OUTPUT CASE, not the `deferred` case.
+#   reconcile-graph-merged refuses to absorb a merge younger than
+#   GRAPH_RECONCILE_GRACE (600s) by `continue`-ing its candidate loop — a
+#   SILENT skip, printing nothing (reconcile-graph-merged:177). Its `deferred`
+#   lines would come from reconcile-graph.ts's plan, but that plan currently
+#   has no producer of `deferred` entries at all (its one schema-migration
+#   guard landed and was removed as dead code) — the field is kept in the JSON
+#   shape but always empty. So both cases are re-polled, and the silence is
+#   read as the grace window only once a merge has happened this run: without a
+#   merge of our own, no output means there is genuinely nothing to absorb and
+#   the wait is on CI instead.
+#
+#   This script POLLS THROUGH the grace window rather than overriding
+#   GRAPH_RECONCILE_GRACE. Overriding it would be the driver setting policy,
+#   which it may not do.
+#
+# THE CI VERDICT CACHE MUST STAY UNSET, load-bearing.
+# dispatch_ci_verdict_rest memoizes per-SHA into $DISPATCH_CI_VERDICT_CACHE with
+# NO TTL and NO invalidation (lib.sh:796-824). A driver that exported a cache
+# dir and then re-polled would read its first `pending` forever and never see CI
+# resolve — the poll loop would run to its budget on a PR that went green
+# minutes in. So this script exports no cache dir and explicitly `unset`s the
+# variable before each reconciler call. See
+# intentions/tactic-review-stall-ci-verdict-cache-miss.md:40.
+#
+# EXIT CODES — deliberately the primitives' codes, so a journald reader sees
+# one vocabulary across the whole ladder:
+#
+#   0   complete      the node reached phase `done` at origin/main, or was
+#                     pruned.
+#   2   usage/refused a bad flag here, or a `refused`/usage answer from a
+#                     script this one drives.
+#   10  idle halt     nothing to launch, and the --ci-wait-s budget for the
+#                     reconcile pass ran out without a merge, an absorb or a
+#                     fix route.
+#   11  throw         needs the attended thread — including a main checkout
+#                     that would not sync, which is never merged past, and a
+#                     session still held un-reaped after HELD_GRACE_S.
+#   12  stalled       a phase ended with no graph change, or the requeue budget
+#                     ran out.
+#   13  claimed       another session holds the node.
+#   14  unknown       origin/main could not be read. Nothing is claimed.
+#   21  timeout       --max-run-s exceeded.
+#                     NOT the same 21 dispatch-ladder-await exits: that one is
+#                     `held-observing`, consumed by the 21) arm of the await
+#                     case below and never propagated out of this script. The
+#                     two codes live in different namespaces — await's rc is an
+#                     input here, this list is what a caller sees.
+#   1   internal      this script's own error (an unmapped exit code from a
+#                     driven script, an unwritable state dir).
+#
+# THE EXIT CODE AND THE TERMINUS ARE ORTHOGONAL, deliberately. Every code above
+# says WHY THE DRIVER STOPPED. None of them says WHETHER STOPPING THERE WAS
+# LEGITIMATE — a halt reads the same whether the node was parked (fine) or
+# abandoned mid-flight (a violation of the standing requirement in
+# intentions/tactic-ladder-terminus-owns-main-qa.md). `terminus` is that second
+# question, classified by classify_terminus off the node at origin/main and
+# recorded on state.json, on the halt event and on the halt's stderr line:
+#
+#   done            .phase == "done"
+#   excused-parked  .office_hours != null
+#   excused-blocked (.blocked_by | length) > 0
+#   pruned          absent from origin/main AND its history shows the file was
+#                   once there — a landed prune, which is exit 0's second
+#                   contract and never a violation
+#   not-a-node      absent from origin/main and NEVER there: the ladder ran
+#                   against an id that is not in the graph (a typo, or a node
+#                   whose graph-commit never pushed). NOT legitimate — no work
+#                   was done, and none could have been
+#   violation       none of the above, every read definitive: the run stopped on
+#                   work that is neither terminal nor excused
+#   unknown         verify-landed answered `unknown` for a read, or the history
+#                   behind an absent node could not be read, so nothing is
+#                   claimed either way
+#
+# It NEVER changes the exit code, and it is NOT a gate — for the same reason the
+# owed evaluation cannot be (A HALT OWES THE EVALUATION TOO, below): a
+# diagnostic that rewrites the disposition it describes is not a diagnostic.
+# Every existing exit code keeps its exact meaning; callers are unaffected.
+#
+# STATE, at <main-root>/.claude/worktrees/<id>.ladder/ — a sibling of the
+# existing `<id>.scope-fingerprint` convention, and untracked (the repo's
+# top-level `worktrees/` ignore rule covers `.claude/worktrees/`):
+#
+#   state.json    one object, rewritten atomically (mktemp in the same dir +
+#                 mv), for `dispatch-ladder-status` to read. Its `terminus` field
+#                 carries the classification above, and is null — as `phase`,
+#                 `disposition` and `detail` are — until the run halts, since
+#                 only a halt has a terminus to classify.
+#   events.jsonl  append-only. This is the evidence the evaluation needs and
+#                 cannot rediscover later: phase wall-clock against the await
+#                 window, launches that produced no code change, and re-poll
+#                 counts. Nothing else records it. `elapsed_s`, `window_s` and
+#                 `await_repolls` are STRUCTURED NUMERIC FIELDS on the phase
+#                 events, not text inside `detail` — an evaluator reads a number
+#                 rather than regexing a free-form string. They are additive:
+#                 the five original keys (ts, event, phase, disposition, detail)
+#                 are unchanged, `detail` still spells the same figures, and the
+#                 file is append-only so older lines keep parsing.
+#
+# Everything written to those files is also written to stdout/stderr, which
+# journald captures for the transient unit.
+#
+# Sandbox: the whole run needs `dangerouslyDisableSandbox` semantics — it
+# drives gh, the Claude daemon socket, git and tsx. Launched via
+# dispatch-ladder-spawn it runs outside Claude's Bash sandbox entirely.
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# .claude/skills/dispatch-ladder/scripts → four levels up is the checkout root.
+#
+# TWO ROOTS, DELIBERATELY SPLIT. This CHECKOUT may itself be a feature worktree
+# (the driver is often started from the branch that is building it), so
+# CHECKOUT_ROOT is used for exactly ONE thing: sourcing lib-graph-worktree.sh,
+# which PROVIDES resolve_main_worktree and therefore necessarily precedes the
+# PROJECT_ROOT it resolves. Everything else — every dispatch-propagate script
+# this file executes, and every other library — resolves from PROJECT_ROOT
+# below. Those scripts compute their own REPO_ROOT from their on-disk location,
+# so a CHECKOUT_ROOT copy run out of a feature worktree would merge and write
+# graph nodes against that worktree's intentions/ on a non-main branch.
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+
+# shellcheck source=/dev/null
+source "$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
+
+TIMEOUT_S=1800
+MAX_RUN_S=21600
+POLL_S=60
+CI_WAIT_S=3600
+# Environment-only, deliberately: unlike the four above it is not a knob a
+# caller tunes per run — it is sized against ANOTHER script's constant (the
+# sweep's DISPATCH_TERMINAL_DISPOSITION_GRACE_S, default 300s), so it moves when
+# that moves and not otherwise. Overridable for tests and for a host that raised
+# the sweep's grace. See HELD IS WAITED OUT, ONCE, above.
+HELD_GRACE_S="${HELD_GRACE_S:-420}"
+NODE_ID=""
+
+usage() {
+  echo "usage: dispatch-ladder-run <node-id> [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]" >&2
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-s) [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
+    --max-run-s) [[ $# -ge 2 ]] || usage; MAX_RUN_S="$2"; shift 2 ;;
+    --poll-s)    [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --ci-wait-s) [[ $# -ge 2 ]] || usage; CI_WAIT_S="$2"; shift 2 ;;
+    --*)         echo "dispatch-ladder-run: unknown flag $1" >&2; usage ;;
+    *)
+      if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
+      else echo "dispatch-ladder-run: unexpected argument $1" >&2; usage
+      fi
+      shift ;;
+  esac
+done
+
+# Input validation at the boundary — a bad flag must be a cheap exit 2 here,
+# never a confusing failure six phases into a detached run.
+[[ -n "$NODE_ID" ]] || usage
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "dispatch-ladder-run: invalid node id '$NODE_ID'" >&2; exit 2; }
+[[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$MAX_RUN_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-run: --timeout-s and --max-run-s must be non-negative integers" >&2; exit 2; }
+[[ "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-run: --poll-s must be a positive integer (0 would spin)" >&2; exit 2; }
+[[ "$CI_WAIT_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-run: --ci-wait-s must be a non-negative integer" >&2; exit 2; }
+[[ "$HELD_GRACE_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-run: HELD_GRACE_S must be a non-negative integer (got '$HELD_GRACE_S')" >&2; exit 2; }
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-ladder-run: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+# Everything below resolves from PROJECT_ROOT — see the two-roots note above.
+PROJECT_SCRIPTS="$PROJECT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# lib.sh          — dispatch_lock_file / headless_sentinel_path, for the
+#                   headless-liveness sentinel below.
+# lib-reservation-ledger.sh   — reservation_sweep, run before every advance.
+# lib-frozen-session-park.sh  — terminal_without_disposition_sweep, likewise run
+#                   before every advance. It resolves its OWN siblings (lib.sh,
+#                   lib-claude-agents.sh, lib-standdown-recheck.sh,
+#                   lib-decision-log.sh) by BASH_SOURCE dirname, so taking IT
+#                   from PROJECT_SCRIPTS takes the main checkout's copy of all
+#                   of them — the same one-version rule as the two above.
+# All are sourced (not executed), so the CHECKOUT_ROOT hazard above does not
+# apply to them directly; they are taken from PROJECT_SCRIPTS anyway so the
+# driver runs ONE version of the ledger, lock and sweep helpers — the main
+# checkout's — rather than a feature branch's in-progress edit of them.
+for lib in lib.sh lib-reservation-ledger.sh lib-frozen-session-park.sh; do
+  [[ -r "$PROJECT_SCRIPTS/$lib" ]] || {
+    echo "dispatch-ladder-run: required library not readable: $PROJECT_SCRIPTS/$lib" >&2; exit 2; }
+  # shellcheck source=/dev/null
+  source "$PROJECT_SCRIPTS/$lib"
+done
+# A LOAD FAILURE IS FATAL HERE, deliberately UNLIKE dispatch-tick, which logs a
+# loud line and ticks on (dispatch-tick:509-519). The tick can afford that: it
+# runs again in a minute, and the sweep it skipped is retried then. This driver
+# is a ONE-SHOT detached process that exists precisely because no heartbeat is
+# running — nothing behind it retries anything. A silently-skipped sweep here is
+# not a delayed sweep, it is the deadlock the sweep prevents. Refuse to start
+# instead (.claude/rules/code-style.md: a clear error, never a quiet fallback).
+# sync_main_checkout is on this list for the same reason as the sweeps, and one
+# sharper: lib.sh is taken from PROJECT_SCRIPTS (the MAIN checkout's copy), so a
+# main checkout that predates the helper — this driver running from a feature
+# branch before that branch merges, or after a revert — leaves it undefined.
+# reconcile_pass calls it as `sync_main_checkout … || SYNC_RC=$?`, which turns
+# bash's 127 "command not found" into SYNC_RC=127, and the `-ne 0` arm then
+# halts 11 claiming "the tree is dirty or diverged — this checkout needs a
+# person" about a perfectly clean tree that was never synced at all.
+for fn in dispatch_lock_file headless_sentinel_path reservation_sweep \
+          terminal_without_disposition_sweep sync_main_checkout; do
+  declare -f "$fn" >/dev/null 2>&1 || {
+    echo "dispatch-ladder-run: $PROJECT_SCRIPTS libraries loaded but '$fn' is undefined; refusing to run without it" >&2
+    exit 2; }
+done
+
+ADVANCE="$SCRIPT_DIR/dispatch-ladder-advance"
+AWAIT="$SCRIPT_DIR/dispatch-ladder-await"
+ACQUIRE_LOCK="$PROJECT_SCRIPTS/dispatch-acquire-lock"
+AUTO_MERGE="$PROJECT_SCRIPTS/graph-auto-merge"
+RECONCILE="$PROJECT_SCRIPTS/reconcile-graph-merged"
+REVIEW_STALL="$PROJECT_SCRIPTS/reconcile-graph-review-stall"
+VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
+for exe in "$ADVANCE" "$AWAIT" "$ACQUIRE_LOCK" "$AUTO_MERGE" "$RECONCILE" \
+           "$REVIEW_STALL" "$VERIFY_LANDED"; do
+  [[ -x "$exe" ]] || { echo "dispatch-ladder-run: required script not found or not executable: $exe" >&2; exit 2; }
+done
+
+# The per-phase evaluation's three scripts, deliberately NOT in the required
+# list above. They are the review path, not the ladder path: a checkout missing
+# them must still be able to drive a node to `done` and say so, with the missing
+# evaluation logged as a skip. The ladder halting because its own review tool is
+# absent would be the review gating the work.
+SPAWN_JOB="$PROJECT_SCRIPTS/dispatch-spawn-job"
+PHASE_MODEL="$PROJECT_SCRIPTS/dispatch-phase-model"
+PHASE_EFFORT="$PROJECT_SCRIPTS/dispatch-phase-effort"
+# The pseudo-phase the model/effort policy is keyed on. Not a ladder rung — it
+# names the evaluation JOB, so that its tier is policy in dispatch-phase-model
+# rather than a `--model sonnet` literal at this call site.
+EVAL_POLICY_PHASE=ladder-eval
+
+# --- State -----------------------------------------------------------------
+STATE_DIR="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.ladder"
+mkdir -p "$STATE_DIR" || {
+  echo "dispatch-ladder-run: cannot create the state directory $STATE_DIR" >&2; exit 1; }
+STATE_FILE="$STATE_DIR/state.json"
+EVENTS_FILE="$STATE_DIR/events.jsonl"
+
+UNIT_NAME="dispatch-ladder-$NODE_ID"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+START_EPOCH="$(date -u +%s)"
+DEADLINE_EPOCH=$(( START_EPOCH + MAX_RUN_S ))
+
+STATUS=running
+STEP=advance
+PHASE=""
+DISPOSITION=""
+DETAIL=""
+EXIT_CODE=""
+# Set once, by halt(), from classify_terminus. Empty until then — a run still
+# walking the ladder has no terminus, and rendering one would be a claim.
+TERMINUS=""
+
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+now_epoch() { date -u +%s; }
+
+# Rewritten whole, atomically: a reader (dispatch-ladder-status) must never see
+# a half-written object, and `mktemp` in the SAME directory keeps the `mv` a
+# same-filesystem rename.
+write_state() {
+  local tmp
+  tmp=$(mktemp "$STATE_DIR/.state.json.XXXXXX") || {
+    echo "dispatch-ladder-run: mktemp failed in $STATE_DIR" >&2; exit 1; }
+  if ! jq -n \
+      --arg node "$NODE_ID" --arg unit "$UNIT_NAME" --argjson pid "$$" \
+      --arg started_at "$STARTED_AT" --arg updated_at "$(now_iso)" \
+      --arg status "$STATUS" --arg step "$STEP" --arg phase "$PHASE" \
+      --arg disposition "$DISPOSITION" --arg detail "$DETAIL" \
+      --arg exit_code "$EXIT_CODE" --arg terminus "$TERMINUS" \
+      '{node: $node, unit: $unit, pid: $pid,
+        started_at: $started_at, updated_at: $updated_at,
+        status: $status, step: $step,
+        phase: (if $phase == "" then null else $phase end),
+        disposition: (if $disposition == "" then null else $disposition end),
+        detail: (if $detail == "" then null else $detail end),
+        exit_code: (if $exit_code == "" then null else ($exit_code | tonumber) end),
+        terminus: (if $terminus == "" then null else $terminus end)}' \
+      >"$tmp"; then
+    rm -f "$tmp"
+    echo "dispatch-ladder-run: could not render state.json" >&2
+    exit 1
+  fi
+  mv -f "$tmp" "$STATE_FILE" || {
+    rm -f "$tmp"; echo "dispatch-ladder-run: could not install $STATE_FILE" >&2; exit 1; }
+}
+
+# log_event <event> <phase> <disposition> <detail> [<fields-json>]
+# Append-only, one JSON object per line, and the same fact on stdout for
+# journald.
+#
+# The OPTIONAL fifth argument is a JSON object merged into the record. It exists
+# so the figures an evaluator ranks on — elapsed_s, window_s, await_repolls —
+# are numeric FIELDS it reads directly rather than key=value text it regexes out
+# of `detail`. The four positional arguments and the five original keys are
+# unchanged, so every existing call site keeps working and the append-only file
+# keeps parsing across the change; `detail` still spells the same figures for a
+# human reading the journal.
+log_event() {
+  local fields="${5:-}"
+  [[ -n "$fields" ]] || fields='{}'
+  jq -nc --arg ts "$(now_iso)" --arg event "$1" --arg phase "$2" \
+     --arg disposition "$3" --arg detail "$4" --argjson fields "$fields" \
+     '{ts: $ts, event: $event,
+       phase: (if $phase == "" then null else $phase end),
+       disposition: (if $disposition == "" then null else $disposition end),
+       detail: (if $detail == "" then null else $detail end)} + $fields' >>"$EVENTS_FILE" \
+    || echo "dispatch-ladder-run: WARNING — could not append to $EVENTS_FILE" >&2
+  printf '%s %s %s | %s\n' "$1" "${2:--}" "${3:--}" "${4:--}"
+}
+
+# timing_fields <elapsed_s> <await_repolls> <window_s> [<reap_lag_s>] — the
+# structured half of a phase event. The first three are integers by construction
+# (two counters and a validated flag), so --argjson is safe.
+#
+# THE FOURTH IS OPTIONAL AND IS OMITTED, NOT ZEROED. `reap_lag_s` is
+# dispatch-ladder-await's measurement of how long the registry took to reap a
+# worker whose completion was ALREADY public at origin/main. It is present only
+# when the await made an early sighting; absent, the key is left out entirely,
+# because a 0 would read as "measured, and there was no lag" — a different claim
+# from "not measured". The value reaches here only via a `[0-9]+` match on the
+# await's stdout line, so --argjson is safe for it too.
+timing_fields() {
+  local lag="${4:-}"
+  if [[ -n "$lag" ]]; then
+    jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
+       --argjson lag "$lag" \
+       '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window, reap_lag_s: $lag}'
+    return
+  fi
+  jq -nc --argjson elapsed "$1" --argjson repolls "$2" --argjson window "$3" \
+     '{elapsed_s: $elapsed, await_repolls: $repolls, window_s: $window}'
+}
+
+# --- The per-phase evaluation ----------------------------------------------
+# spawn_phase_eval <phase> <since-epoch> — fire-and-forget, ALWAYS returns 0.
+#
+# Never gates, never halts, never calls halt(). Three globals track what is
+# owed, so the boundary spawn and the halt spawn cannot double-evaluate one
+# phase and cannot lose one either:
+#
+#   EVAL_LAUNCH_PHASE / EVAL_LAUNCH_EPOCH  the phase this driver most recently
+#                                          launched, and the --since bound to
+#                                          hand its evaluator (PASS_SINCE, the
+#                                          epoch taken just before advance
+#                                          launched it — NOT LAUNCH_EPOCH; see
+#                                          the assignment site for why). Empty
+#                                          until the first launch — which is
+#                                          what makes a `usage`/`refused` halt
+#                                          spawn nothing.
+#   EVAL_SPAWNED_KEY                       the <phase>@<epoch> already handed to
+#                                          an evaluator. dispatch-spawn-job's
+#                                          own name dedup only covers a still-
+#                                          LIVE evaluator, so the driver tracks
+#                                          this itself rather than relying on it.
+#
+# THE KEY IS CLAIMED ON A DISPOSITION, NEVER ON AN ATTEMPT. A boundary spawn
+# that FAILS leaves the phase unevaluated, so the debt halt() exists to pay is
+# still owed and the key stays unclaimed — halt() retries it exactly once, which
+# is the whole retry budget a run has (halt is the one terminal path and runs
+# once). Claiming before the attempt would mark a phase evaluated because a
+# spawn was tried, reopening the "halted runs produce no review" hole this
+# mechanism closes. Every other disposition — spawned, deduped, an unrecognized
+# answer, or no executable spawner at all — DOES claim: those are answers, and
+# for the last one a retry cannot make the binary executable.
+EVAL_LAUNCH_PHASE=""
+EVAL_LAUNCH_EPOCH=""
+EVAL_SPAWNED_KEY=""
+
+spawn_phase_eval() {
+  local phase="${1:-}" since="${2:-}"
+  [[ -n "$phase" && -n "$since" ]] || return 0
+  local key="$phase@$since"
+  [[ "$key" != "$EVAL_SPAWNED_KEY" ]] || return 0
+
+  if [[ ! -x "$SPAWN_JOB" ]]; then
+    EVAL_SPAWNED_KEY="$key"
+    log_event eval "$phase" skipped \
+      "no executable dispatch-spawn-job at $SPAWN_JOB; this phase is unevaluated"
+    return 0
+  fi
+
+  local model="" effort=""
+  [[ -x "$PHASE_MODEL" ]] && model=$("$PHASE_MODEL" "$EVAL_POLICY_PHASE" 2>/dev/null)
+  [[ -x "$PHASE_EFFORT" ]] && effort=$("$PHASE_EFFORT" "$EVAL_POLICY_PHASE" 2>/dev/null)
+
+  # node id AND phase AND launch epoch — see THE `--name` IS THE DEDUP KEY above.
+  local name="rsi-eval-$NODE_ID-$phase-$since"
+  local args=(--name "$name" --cwd "$PROJECT_ROOT")
+  # Both scripts' contract: EMPTY means "omit the flag, inherit the default".
+  [[ -n "$model" ]] && args+=(--model "$model")
+  [[ -n "$effort" ]] && args+=(--effort "$effort")
+  # No --no-verify: this is an unledgered one-off with no reservation-sweep
+  # safety net, so it keeps the default registration check, exactly as the
+  # sibling diagnose-main / jit-reminder spawns do (dispatch-tick).
+  args+=("/rsi $NODE_ID $phase --since $since")
+
+  local out rc=0 fields
+  fields=$(jq -nc --arg name "$name" --argjson since "$since" \
+              '{eval_name: $name, eval_since_epoch: $since}')
+  out=$("$SPAWN_JOB" "${args[@]}" 2>&1) || rc=$?
+  if (( rc == 0 )); then
+    EVAL_SPAWNED_KEY="$key"
+    # dispatch-spawn-job's stdout protocol is exactly one word, but stderr is
+    # merged in above so a diagnostic line can precede it. Match the protocol
+    # words themselves rather than taking whatever line came first, so the
+    # disposition vocabulary in events.jsonl stays closed.
+    local disp=unknown-answer
+    if grep -qx spawned <<<"$out"; then disp=spawned
+    elif grep -qx deduped <<<"$out"; then disp=deduped
+    fi
+    log_event eval "$phase" "$disp" "name=$name model=${model:-default}" "$fields"
+  else
+    # A WARNING, NEVER FATAL. The ladder's disposition is about the node, not
+    # about whether its review started. The key is deliberately NOT claimed
+    # here — see the claim rule above; halt() gets the one retry.
+    echo "dispatch-ladder-run: WARNING — the per-phase evaluation of '$phase' did not spawn (rc=$rc): $(head -n1 <<<"$out")" >&2
+    log_event eval "$phase" spawn-failed "rc=$rc name=$name" "$fields"
+  fi
+  return 0
+}
+
+# halt <exit-code> <disposition> <detail> — the ONLY terminal path. Never
+# called from inside a command substitution or subshell (`exit` there would
+# only leave the subshell and the loop would carry on past a halt).
+#
+# It is also where a halted run pays the evaluation it owes. Every halting exit
+# — 0, 2, 10, 11, 12, 13, 14, 21 — passes through here, so ONE call covers them
+# all without touching a single call site. The spawn runs AFTER the state write
+# and the halt event, so the halt is recorded whatever the spawn does, and its
+# result can never change the exit code below it.
+#
+# AND IT IS WHERE THE TERMINUS IS CLASSIFIED, for the same "one terminal path"
+# reason. The classification answers a question the exit code cannot (see THE
+# EXIT CODE AND THE TERMINUS ARE ORTHOGONAL above) and reaches all three sinks:
+# state.json, the halt event's own fields, and the operator-facing stderr line.
+#
+# ORDER AND GUARDS. classify_terminus is a NETWORK read, so it is slow and it
+# can fail — but it runs BEFORE write_state because all three sinks must carry
+# the same value, and it is wrapped so nothing it does can prevent any of them:
+# it never exits, never halts (it is called from HERE, so halting inside it
+# would recurse), every read it makes is bounded by `timeout`
+# (TERMINUS_READ_TIMEOUT_S, so a hung fetch cannot wedge the terminal path
+# before state.json is written), and its answer is normalized against the
+# closed vocabulary. A classification that cannot be obtained is the token
+# `unknown` — never a missing field, never a crash, never a hang, and never a
+# different exit code.
+halt() {
+  EXIT_CODE="$1"; DISPOSITION="$2"; DETAIL="$3"
+  if [[ "$1" == "0" ]]; then STATUS=complete; else STATUS=halted; fi
+  # A plain assignment (not `local`), so the command substitution's own status
+  # is this statement's status and the `||` can see it — `local x=$(…)` would
+  # mask it behind `local`'s always-0. classify_terminus returns 0 by contract;
+  # the fallbacks below exist for the ways a shell can still surprise us.
+  TERMINUS=$(classify_terminus 2>/dev/null) || TERMINUS=""
+  case "$TERMINUS" in
+    done|excused-parked|excused-blocked|violation|unknown|pruned|not-a-node) ;;
+    *) TERMINUS=unknown ;;
+  esac
+  write_state
+  # The optional fifth argument is the carrier for structured fields (see
+  # log_event's header): an evaluator reads `.terminus` off the halt record
+  # rather than regexing `detail`.
+  local fields
+  fields=$(jq -nc --arg terminus "$TERMINUS" '{terminus: $terminus}' 2>/dev/null) \
+    || fields="{\"terminus\":\"unknown\"}"
+  log_event halt "$PHASE" "$DISPOSITION" "$DETAIL" "$fields"
+  # Guarded twice inside spawn_phase_eval: on a phase having launched at all,
+  # and on that phase not already having been evaluated at its own boundary.
+  spawn_phase_eval "$EVAL_LAUNCH_PHASE" "$EVAL_LAUNCH_EPOCH" || true
+  printf 'dispatch-ladder-run: %s %s (exit %s, terminus %s) — %s\n' \
+    "$STATUS" "$NODE_ID" "$1" "$TERMINUS" "$3" >&2
+  exit "$1"
+}
+
+check_deadline() {
+  (( $(now_epoch) < DEADLINE_EPOCH )) && return 0
+  halt 21 timeout "--max-run-s ${MAX_RUN_S}s exceeded; the ladder is unfinished and nothing was rolled back"
+}
+
+# --- A headless session identity, and the sentinel that makes it real -------
+# dispatch-acquire-lock keys the selection lock on CLAUDE_CODE_SESSION_ID and
+# exits 2 when it is unset (dispatch-acquire-lock:330-332), and `--release` is a
+# strict self-release keyed on the same value. A systemd-launched driver
+# inherits no session id, so it must synthesize one — exactly the problem the
+# systemd-launched dispatch-tick already solved (#1068), and this block mirrors
+# dispatch-tick:308-380 rather than inventing a second answer.
+#
+# An INVENTED id alone would be worthless: try_acquire treats a holder whose sid
+# is absent from `claude agents --json` as definitively dead and reclaims it
+# immediately (dispatch-acquire-lock:399-403), so a plain `ladder-<id>` holder
+# would give this driver NO exclusion against a concurrent tick. What makes a
+# synthetic id real is the `headless:<token>` FORM plus a PID sentinel:
+# resolve_holder_state special-cases a `headless:*` holder, never queries the
+# daemon for it, and resolves it live iff the sentinel exists AND its recorded
+# PID answers `kill -0`. A SIGKILL leaves a stale sentinel whose PID is gone, so
+# the lock self-heals.
+#
+# Token derivation mirrors the tick's: the systemd unit's INVOCATION_ID
+# (identical across all subprocesses of the unit, unique per run), validated to
+# hex-plus-hyphen so a hand-set value cannot inject a newline into the recorded
+# holder or a separator into the sentinel path; else a random hex token; else
+# this PID. Evaluated ONCE and frozen into the exported value so every child
+# agrees. dispatch-ladder-spawn deliberately passes NO session id through: the
+# driver synthesizes its own, exactly as the tick does.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+
+# One cleanup function, one trap — `trap` OVERWRITES per signal, so a second
+# `trap … EXIT` anywhere below would silently drop this one. It releases the
+# selection lock if a pass is holding it (a SIGTERM from `systemctl stop` lands
+# mid-pass otherwise and leaves the lock held until it goes stale) and removes
+# the liveness sentinel. Installed BEFORE the sentinel write below so a partial
+# sentinel is cleared if that write fails and we abort.
+SENTINEL=""
+LOCK_HELD=0
+_ladder_cleanup() {
+  if (( LOCK_HELD )); then
+    "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
+    LOCK_HELD=0
+  fi
+  [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
+}
+trap '_ladder_cleanup' EXIT INT TERM
+
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # Fail CLOSED, exactly as dispatch-tick:376-378 does. Continuing here would
+    # hold the lock with no liveness signal, so a concurrent tick would read
+    # this live holder as dead and reclaim it mid-merge — the duplicate-worker
+    # defect #1068 closed.
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-ladder-run: ERROR: failed to write the headless liveness sentinel '$SENTINEL'; a concurrent dispatch tick would reclaim this driver's selection lock mid-merge — refusing to start (#1068)" >&2
+      exit 2
+    fi
+  fi
+  # An unresolvable lock-file path is NOT swallowed into a degraded mode: it
+  # means dispatch-acquire-lock will itself exit 2 on the first reconcile pass,
+  # and that halts the run with its own message. Nothing to do here.
+fi
+
+# --- The landing signal ----------------------------------------------------
+# `done` is read at origin/main through verify-landed and nowhere else — a
+# session's exit status is not evidence that its transition landed, which is
+# the whole premise of verify-landed. Its three answers (0 landed / 4
+# not-landed / 1 unknown) are never collapsed into two.
+phase_is_done() {
+  local rc
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --jq '.phase == "done"' >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    4) return 1 ;;
+    *) halt 14 unknown-graph-read "verify-landed could not read $NODE_ID at origin/main (rc=$rc); nothing is claimed either way" ;;
+  esac
+}
+
+# --- Was stopping HERE legitimate? -----------------------------------------
+# classify_terminus — prints exactly ONE token and returns 0, always:
+#
+#   done             .phase == "done"
+#   excused-parked   .office_hours != null
+#   excused-blocked  (.blocked_by | length) > 0
+#   pruned           ABSENT from origin/main, and its history says it was once
+#                    there (a landed prune)
+#   not-a-node       ABSENT from origin/main and never there — the id is not in
+#                    the graph
+#   violation        none of the above, and every read answered definitively
+#   unknown          verify-landed answered `unknown` for a read, or the history
+#                    behind an absent node could not be read
+#
+# The exit code says why the driver stopped; this says whether stopping there
+# was legitimate. Only `done`, the two excuses and `pruned` are — see THE EXIT
+# CODE AND THE TERMINUS ARE ORTHOGONAL at the top, and the standing requirement
+# in intentions/tactic-ladder-terminus-owns-main-qa.md.
+#
+# IT NEVER HALTS AND NEVER EXITS, unlike phase_is_done just above (which halts
+# 14 on rc=1). It is called FROM halt(), so a halt inside it would recurse; and
+# a classification is a diagnostic, which may not change the disposition it
+# describes. Every failure path prints a token instead.
+#
+# THE 0/4/1 CONTRACT IS PRESERVED, which is the whole point of routing these
+# reads through verify-landed (read its header, :13-24): 0 landed, 4
+# definitively not-landed, 1 unknown. rc=1 classifies `unknown`, NEVER
+# `violation` — collapsing "could not tell" into a verdict is the precise defect
+# verify-landed exists to end, and here it would be an accusation.
+#
+# WHY `--blob absent` COMES FIRST. A pruned node is absent from origin/main, and
+# in `--jq` mode absence is NOT an error: readNodeAtRef returns null for it
+# (lib-store-at-ref.ts:100-123), verify-landed feeds jq the literal `null`
+# (:243), and every predicate below evaluates false on null — so all three
+# answer 4, `not-landed`, and a landed prune would be reported as a VIOLATION.
+# Measured, not assumed: `--node <absent> --jq '.phase == "done"'` exits 4,
+# `--node <absent> --blob absent` exits 0. So absence is asked separately, in
+# the `--blob` mode written for exactly this question (verify-landed:32). It is
+# also the cheap read — pure git plumbing, no tsx start-up — and it is disjoint
+# from the three predicates rather than jumping the queue: an absent node
+# satisfies none of them. What it does NOT settle is which KIND of absence this
+# is — classify_absent_node below splits a landed prune from an id that was
+# never in the graph at all.
+#
+# The three predicates are then evaluated in the documented order, so the
+# classification is deterministic when more than one holds. An `unknown` from
+# one read does NOT abandon the rest: a later read that answers a definite YES
+# is still an answer, and only the absence of any YES falls back to `unknown`.
+# `--no-fetch` on those three: the `--blob` read above already fetched, so they
+# reuse that same origin/main — cheaper, and all four answers then describe ONE
+# snapshot rather than four successive ones.
+#
+# EVERY READ IS BOUNDED BY `timeout`. classify_terminus runs INSIDE halt(),
+# BEFORE write_state and the halt event, so an unbounded read here is not
+# merely slow: a `git fetch` that hangs (a credential helper waiting on a
+# prompt, a stalled TLS connection) would leave state.json saying `running`
+# and no halt event on disk FOREVER, with `dispatch-ladder-status --wait`
+# answering 20 about a wedged process and --max-run-s unable to help — the
+# timeout path routes through halt() too. `timeout` expiry exits 124, which is
+# neither 0 nor 4 and therefore classifies `unknown`, exactly as any other
+# unreadable answer does. Overridable for tests; the default is generous
+# enough that only a genuine hang trips it.
+TERMINUS_READ_TIMEOUT_S="${TERMINUS_READ_TIMEOUT_S:-120}"
+
+terminus_probe() { # <jq-filter> — 0 true, 4 definitely false, anything else unknown
+  timeout "$TERMINUS_READ_TIMEOUT_S" \
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" --jq "$1" \
+    >/dev/null 2>&1
+}
+
+# classify_absent_node — the absent branch of classify_terminus. Prints exactly
+# one of `pruned`, `not-a-node` or `unknown`, and returns 0, always.
+#
+# WHY ABSENCE ALONE IS NOT A PRUNE. `--blob absent` answers "not present at
+# origin/main RIGHT NOW" and nothing more — it has no history awareness. A
+# typo'd node id, and a node whose graph-commit never pushed, are equally
+# absent, so answering `pruned` off that read alone records work that never
+# started as a LEGITIMATE terminus. verify-landed is right to call absence
+# landed (its `absent-and-expected-absent` contract, test-verify-landed.sh:118),
+# so the disambiguation belongs here, in the caller. This is the same split
+# dispatch-sweep:294-304 already makes, with the same git call — a node that
+# once existed and was pruned has a commit touching its file; one that never
+# existed has none.
+#
+# THE SHALLOW GUARD, and why it runs ONLY when the history came back empty. A
+# shallow clone's `git log` still exits 0 and still prints nothing for a node
+# pruned before the graft point (lib-deleted-node-ids.ts:39-63), so "no history"
+# from a truncated repo is evidence of nothing. That helper throws there; this
+# one may never throw (see classify_terminus above), so it maps the same
+# reasoning to `unknown`. Anything but a definite `false` — a `true`, a failed
+# read, an unexpected word — is `unknown`, never `not-a-node`: accusing a run of
+# working an id that is not in the graph needs a read that actually said so.
+# Ordering the guard after the log keeps the common path at ONE extra git call.
+#
+# Both reads are bounded by `timeout` for the reason the verify-landed reads
+# are: this runs inside halt() before write_state, so an unbounded read here
+# wedges the terminal path.
+classify_absent_node() {
+  local hist shallow rc
+  hist=$(timeout "$TERMINUS_READ_TIMEOUT_S" \
+    git -C "$PROJECT_ROOT" log -1 --format=%H origin/main -- "intentions/$NODE_ID.md" 2>/dev/null)
+  rc=$?
+  if (( rc != 0 )); then printf 'unknown\n'; return 0; fi
+  if [[ -n "$hist" ]]; then printf 'pruned\n'; return 0; fi
+
+  shallow=$(timeout "$TERMINUS_READ_TIMEOUT_S" \
+    git -C "$PROJECT_ROOT" rev-parse --is-shallow-repository 2>/dev/null)
+  rc=$?
+  if (( rc != 0 )) || [[ "$shallow" != "false" ]]; then printf 'unknown\n'; return 0; fi
+  printf 'not-a-node\n'
+  return 0
+}
+
+classify_terminus() {
+  local rc unknown=0
+
+  timeout "$TERMINUS_READ_TIMEOUT_S" \
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) classify_absent_node; return 0 ;;   # absent — history says which kind
+    4) ;;   # present at origin/main — ask the three questions
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  terminus_probe '.phase == "done"'; rc=$?
+  case "$rc" in 0) printf 'done\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  terminus_probe '.office_hours != null'; rc=$?
+  case "$rc" in 0) printf 'excused-parked\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  terminus_probe '(.blocked_by | length) > 0'; rc=$?
+  case "$rc" in 0) printf 'excused-blocked\n'; return 0 ;; 4) ;; *) unknown=1 ;; esac
+
+  if (( unknown )); then printf 'unknown\n'; else printf 'violation\n'; fi
+  return 0
+}
+
+# --- Advisory main-conflict prediction --------------------------------------
+# check_main_conflict_prediction — a read-only, edge-triggered heads-up that
+# origin/main and the node's own branch would no longer merge cleanly RIGHT
+# NOW. It exists to shrink the one gap this driver cannot close by merging:
+# provision-node-worktree merges origin/main into the node worktree at every
+# phase boundary, but a conflicting commit that lands on main WHILE a phase is
+# RUNNING goes unnoticed until the NEXT boundary — possibly an hour later,
+# given implement/qa/fix's measured durations.
+#
+# The worktree cannot be merged mid-phase — a live worker owns it as its cwd,
+# and merging would rewrite files out from under a running agent — but the
+# conflict CAN be predicted without touching the working tree, index or any
+# ref: `git merge-tree --write-tree` writes ONLY to the object store, so it is
+# safe to run against a branch a live worker is concurrently committing to.
+#
+# ADVISORY ONLY, PERMANENTLY. This must NEVER halt, requeue, or change any
+# disposition of its own — the authoritative answer stays
+# provision-node-worktree's real merge at the next phase boundary. A LATER
+# EDITOR MUST NOT PROMOTE THIS TO A GATE: there is no safe action to gate ON
+# here (the worktree cannot be merged mid-phase), only a value-free heads-up
+# for a person reading events.jsonl or dispatch-ladder-status.
+#
+# RUNS ON THE SAME POLL_S CADENCE AS THE DRIVER'S OWN IDLE/HELD/CI-WAIT
+# POLLING — reused, not a second timer. See poll_wait below, the one place
+# `sleep "$POLL_S"` happens in this script. It deliberately does NOT run
+# inside the inner await loop (dispatch-ladder-await's own exit-20 re-poll):
+# that loop's cadence is TIMEOUT_S, not POLL_S — dispatch-ladder-await polls
+# internally on ITS OWN --poll-s (default 15s) for up to --timeout-s before
+# ever returning to this script — and this driver's remit does not extend to
+# editing that script.
+#
+# EDGE-TRIGGERED, NOT LEVEL-TRIGGERED. A conflict that persists for an hour
+# must not write a line per poll — only a TRANSITION in
+# CONFLICT_PREDICTION_LAST does. The starting assumption is `clean`:
+# provision-node-worktree's own merge already confirmed the node clean against
+# main when the CURRENT phase launched (or it would not have launched), so the
+# first fact worth a line is a WORSENING, not the starting state repeated back.
+#
+# NO FETCH HERE, DELIBERATELY. This reads local refs exactly as they stand —
+# the same `git merge-tree --write-tree origin/main origin/<node>` verified
+# read-only and safe to run against a live node's branch. origin/main is
+# refreshed by reconcile_pass's own fetch on every "not-selectable" quiet
+# pass, and the node's own branch by provision-node-worktree at each phase
+# boundary, so staleness only DELAYS detection — it can never produce a false
+# gate action, because there is no gate here to falsely trip.
+#
+#   exit 0   merges clean                              -> clean
+#   exit 1   conflicts                                  -> conflict
+#   exit >1  error (e.g. the node's branch does not yet -> unknown
+#            exist on origin, or another infra failure)
+CONFLICT_PREDICTION_LAST=clean
+
+check_main_conflict_prediction() {
+  local rc verdict
+  git -C "$PROJECT_ROOT" merge-tree --write-tree origin/main "origin/$NODE_ID" \
+    >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) verdict=clean ;;
+    1) verdict=conflict ;;
+    *) verdict=unknown ;;
+  esac
+  if [[ "$verdict" != "$CONFLICT_PREDICTION_LAST" ]]; then
+    log_event main-conflict-prediction "$PHASE" "$verdict" \
+      "advisory only, never gates or halts: predicted merge of origin/main into origin/$NODE_ID transitioned ${CONFLICT_PREDICTION_LAST} -> $verdict (git merge-tree rc=$rc); the authoritative answer stays provision-node-worktree's real merge at the next phase boundary"
+    CONFLICT_PREDICTION_LAST="$verdict"
+  fi
+}
+
+# poll_wait — the one place `sleep "$POLL_S"` happens in this script, reused
+# (never duplicated) as the cadence for check_main_conflict_prediction above.
+# Every idle/held/quiet re-poll below calls this instead of a bare
+# `sleep "$POLL_S"`.
+poll_wait() {
+  check_main_conflict_prediction
+  sleep "$POLL_S"
+}
+
+# --- The reconcile pass ----------------------------------------------------
+# ONE pass over the three reconcilers, under the selection lock, with NO sleep
+# anywhere inside it. Sets two globals and returns 0:
+#
+#   RECONCILE_RESULT  routed | merged | changed | quiet
+#   QUIET_REASON      on `quiet` only: grace-wait | ci-wait — which of the two
+#                     honest silences we are waiting out. Kept distinct in
+#                     events.jsonl because no later evaluation can tell them
+#                     apart afterwards.
+#
+# It halts, never returns, on anything that needs a person.
+#
+# MERGED_ANY (run-scoped, set once) is what makes a later silent reconcile
+# readable as the grace window rather than as "nothing to absorb".
+MERGED_ANY=0
+
+# refresh_lock — bump the selection lock's heartbeat (its mtime) so a
+# legitimately-long step does not age the lock past MAX_HOLD_SECONDS (default
+# 300s) and let a concurrent tick reclaim it mid-pass. Any one of the three
+# scripts below can exceed that on a graph-commit that waits on the landing
+# lock. Called ONLY between steps, on a step's completion — never inside a
+# loop, which is INVARIANT #2 (dispatch-acquire-lock:96-103). Modelled on
+# dispatch-tick's refresh_lock (dispatch-tick:397). Best-effort: a noop (we no
+# longer hold the lock) or any error is swallowed.
+refresh_lock() {
+  "$ACQUIRE_LOCK" --heartbeat >/dev/null 2>&1 || true
+}
+
+release_lock() {
+  "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
+  LOCK_HELD=0
+}
+
+reconcile_pass() {
+  local out rc merged=0 changed=0 routed=0
+  RECONCILE_RESULT=quiet
+  QUIET_REASON=ci-wait
+
+  # ---- The selection lock ---------------------------------------------------
+  # dispatch-select-tick holds this same lock across these same three scripts,
+  # and none of them locks internally. Without it this driver and a dispatch
+  # tick can merge and absorb the same node at once.
+  STEP=lock; write_state
+  out=$("$ACQUIRE_LOCK" --wait); rc=$?
+  case "$rc" in
+    0) ;;
+    2) halt 2 usage "dispatch-acquire-lock exited 2 — it could not resolve the lock file or our session id; the environment is misconfigured, not busy" ;;
+    *) halt 11 throw "dispatch-acquire-lock hard-errored (rc=$rc); read its stderr in the journal" ;;
+  esac
+  if [[ "$(head -n1 <<<"$out")" != "acquired" ]]; then
+    # `busy` — a dispatch tick is mid-selection. Transient by construction, so
+    # this is a soft retry: the outer wait re-polls and the ci-wait budget
+    # bounds it. NOTHING else happens this pass.
+    log_event lock "$PHASE" busy "another holder has the selection lock; retrying next poll"
+    return 0
+  fi
+  LOCK_HELD=1
+
+  # ---- Sync the main checkout ----------------------------------------------
+  # graph-auto-merge and reconcile-graph-merged enumerate their candidate set
+  # from the LOCAL working tree and read each node's `office_hours` from it, so
+  # an unsynced checkout would merge straight past a park or an
+  # execution.conflict interrupt that landed after this run started. The only
+  # thing that routinely advances that checkout is dispatch-select-tick's own
+  # Step 1 — which never runs for a node the tick cannot reach, i.e. precisely
+  # the case this driver exists for. Fetch and merge are SEPARATE steps so a
+  # fetch failure is distinguishable from a divergence (#1546,
+  # dispatch-select-tick:377-382, dispatch-tick:583-597). `--ff-only` doubles as
+  # the dirty/diverged-tree guard: the reconcilers write node files into this
+  # tree and push through graph-commit, so a wedged tree must not be drained
+  # into. The fetch/merge pair now lives in lib.sh's `sync_main_checkout` (rc 1
+  # = fetch failed, rc 2 = merge failed) — the shared helper this comment used
+  # to defer; the two halts below keep their own wording, which is the whole
+  # reason the helper reports the two failures distinctly.
+  STEP=sync; write_state
+  SYNC_RC=0
+  sync_main_checkout "$PROJECT_ROOT" || SYNC_RC=$?
+  if [[ "$SYNC_RC" -eq 1 ]]; then
+    release_lock
+    halt 11 throw "main-sync-failed: 'git fetch origin main' failed in $PROJECT_ROOT — merging against a stale checkout could merge past a park landed since this run started"
+  fi
+  if [[ "$SYNC_RC" -ne 0 ]]; then
+    release_lock
+    halt 11 throw "main-sync-failed: 'git merge --ff-only origin/main' failed in $PROJECT_ROOT (the tree is dirty or diverged) — this checkout needs a person before anything may be merged or written into it"
+  fi
+  refresh_lock
+
+  # ---- The merge ------------------------------------------------------------
+  # dispatch_ci_verdict_rest memoizes per-SHA with no TTL and no invalidation
+  # (lib.sh:796-824), so a cache dir inherited from anywhere would pin this
+  # poll loop to the first `pending` it ever read and it would never see CI go
+  # green. The driver exports none and unsets it before every reconciler call.
+  unset DISPATCH_CI_VERDICT_CACHE
+  STEP=merge; write_state
+  out=$("$AUTO_MERGE" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) release_lock; halt 2 usage "graph-auto-merge rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "graph-auto-merge hard-errored (rc=$rc) — a gh sense/merge error or a freshness computation crash; read its stderr in the journal" ;;
+  esac
+  if grep -q "^held $NODE_ID " <<<"$out"; then
+    release_lock
+    halt 11 throw "$(grep "^held $NODE_ID " <<<"$out" | head -n1) — office-hours, a missing scope stamp and a stale scope are a person's call, never retried here"
+  fi
+  if grep -q "^merged #" <<<"$out"; then
+    merged=1
+    MERGED_ANY=1
+    log_event merge "$PHASE" merged "$(grep "^merged #" <<<"$out" | head -n1)"
+  elif grep -q "^synced #" <<<"$out"; then
+    # The up-to-date gate: the PR was behind origin/main, so graph-auto-merge
+    # merged main into the head instead of merging the PR, and CI restarted on
+    # the fresh base. Not a merge and not a graph change — but it is NOT the
+    # silence the `else` arm below describes either, and a run that halts `idle`
+    # after this needs the sync in its journal to be readable at all.
+    log_event merge "$PHASE" synced "$(grep "^synced #" <<<"$out" | head -n1)"
+  else
+    # Silence covers several honest cases — the node is not a merge candidate,
+    # the PR is already merged, CI is still pending, the config kill-switch is
+    # off, or main health is not known-good. All of them mean "no merge
+    # happened here"; the two reconcilers below are what tell them apart.
+    log_event merge "$PHASE" no-merge "graph-auto-merge merged nothing for $NODE_ID"
+  fi
+  refresh_lock
+
+  # ---- The absorb -----------------------------------------------------------
+  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  STEP=absorb; write_state
+  out=$("$RECONCILE" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) release_lock; halt 2 usage "reconcile-graph-merged rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "reconcile-graph-merged hard-errored (rc=$rc) — a gh sense failure or a failed graph-commit; read its stderr in the journal" ;;
+  esac
+  if grep -q "^reconciled $NODE_ID " <<<"$out"; then
+    changed=1
+    log_event absorb "$PHASE" reconciled "$(grep "^reconciled $NODE_ID " <<<"$out" | head -n1)"
+  elif grep -q "^deferred $NODE_ID " <<<"$out"; then
+    # The reconciler's own plan asked us to come back. Not a change, and not a
+    # CI wait either — the outer wait re-polls it as a grace-window silence.
+    QUIET_REASON=grace-wait
+    log_event absorb "$PHASE" deferred "$(grep "^deferred $NODE_ID " <<<"$out" | head -n1)"
+  elif (( MERGED_ANY == 1 )); then
+    # No output AND a merge happened this run: the merge has not aged past
+    # GRAPH_RECONCILE_GRACE, which reconcile-graph-merged skips SILENTLY. Poll
+    # through the window; never override the env var.
+    QUIET_REASON=grace-wait
+    log_event absorb "$PHASE" grace-wait "our merge has not aged past GRAPH_RECONCILE_GRACE yet"
+  else
+    log_event absorb "$PHASE" noop "nothing to absorb for $NODE_ID"
+  fi
+  refresh_lock
+
+  # ---- The review-stall route ----------------------------------------------
+  # The one CI branch the ordinary selection pass cannot take: a node the router
+  # classifies `pending-merge` (phase `review` + the `reviewed` marker) is
+  # excluded from selector candidates, so _gate_maybe_interrupt never sees its
+  # red CI. This sweep enters execution.fix for it, after which the router's
+  # fix-aware carve-out re-surfaces the node and the next advance launches
+  # /fix-checks. The driver reads the answer; it computes nothing.
+  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  STEP=review-stall; write_state
+  out=$("$REVIEW_STALL" --node "$NODE_ID"); rc=$?
+  case "$rc" in
+    0) ;;
+    2) release_lock; halt 2 usage "reconcile-graph-review-stall rejected its arguments (rc=2)" ;;
+    *) release_lock; halt 11 throw "reconcile-graph-review-stall hard-errored (rc=$rc) — its enumeration or a failed graph-commit; read its stderr in the journal" ;;
+  esac
+  if grep -q "^recovered $NODE_ID " <<<"$out"; then
+    routed=1
+    log_event review-stall "$PHASE" recovered "$(grep "^recovered $NODE_ID " <<<"$out" | head -n1)"
+  fi
+
+  release_lock
+
+  # Priority: an intervention outranks an absorb outranks a merge. Each of the
+  # three is real progress, so each resets the ci-wait budget in the caller.
+  if   (( routed  == 1 )); then RECONCILE_RESULT=routed
+  elif (( changed == 1 )); then RECONCILE_RESULT=changed
+  elif (( merged  == 1 )); then RECONCILE_RESULT=merged
+  fi
+  return 0
+}
+
+# --- The two sweeps this driver owes ---------------------------------------
+# Both are the tick's own sweeps, called verbatim. Extracted into one function
+# because they are owed at TWO points now: before every advance (the original
+# site, unchanged), and on every `held-observing` await answer — where the
+# second sweep is the KNOWN healer for the hold being observed, so re-running it
+# is the whole reason the driver waits at all rather than halting on the first
+# poll.
+run_owed_sweeps() {
+  # Sweep the reservation ledger before every advance. dispatch-ladder-advance
+  # writes an `origin=explicit` marker for this node before each spawn
+  # (dispatch-ladder-advance:218) and REFUSES with exit 13 when one already
+  # exists (:155-161). Nothing in this process releases it — its release is
+  # reservation_sweep, run today only by a dispatch heartbeat. On a host where
+  # that heartbeat is stopped, which is exactly the bootstrap-deadlock case this
+  # skill exists to serve, the driver's own previous step would deadlock its
+  # next one. So run the sweep the tick runs, unchanged: it reclaims a marker
+  # whose reserving session is dead (this driver's synthetic headless id never
+  # appears in `claude agents`, so the marker ages out under its origin TTL) or
+  # whose worktree already has a live worker. NO release policy of the driver's
+  # own — a driver that cleared markers by hand would be re-implementing the
+  # claim discipline it depends on.
+  reservation_sweep 1>&2
+
+  # And sweep the OTHER out-of-session disposition the tick owns. Every
+  # node-lane skill's ESCALATION path deliberately declares no in-session
+  # terminal marker: it writes `$CLAUDE_JOB_DIR/office-hours-reason` and leaves
+  # the park to a sweep (qa-fix/SKILL.md:203-210, fix-checks/SKILL.md:117-123,
+  # review-fix/SKILL.md:197-199, implement/SKILL.md:137-143). That sweep is
+  # terminal_without_disposition_sweep, and it too runs today only from a
+  # dispatch heartbeat (dispatch-tick:509-516, :799-800). With the heartbeat
+  # stopped — again, the bootstrap-deadlock case this skill exists to serve —
+  # an escalating phase leaves a job that `dispatch-self-close` HOLDs for want
+  # of a `node-terminal` marker (dispatch-self-close:48-101, and :70-77 for why
+  # it fails toward HOLD), which dispatch-ladder-await reads as `done-held` →
+  # `held-observing <id> <from>` (exit 21), with the node left unselectable
+  # because worktree_has_live_session is name-keyed. Nothing in this process
+  # would ever clear that. So run the sweep the tick runs, unchanged — it
+  # consumes the escalation reason and parks the node to office_hours, after
+  # which the next await answers `throw <id> parked`: a silent wedge turned into
+  # a halt a person can read. NO park policy of the driver's own: sequencing,
+  # not gating.
+  #
+  # Driver-appropriate budget caps, via the seams the library already exposes
+  # (lib-frozen-session-park.sh:150-167) rather than a copy of its logic. Each
+  # uses `${VAR:-default}` so an inherited environment override still wins —
+  # this only supplies a driver-sized default where none is set. See
+  # BUDGET-BOUNDED, NOT POLICY-CHANGED above for why these are smaller than the
+  # tick's own (park_max=2, park_timeout=120s, lock_wait=60s).
+  DISPATCH_TERMINAL_DISPOSITION_PARK_MAX="${DISPATCH_TERMINAL_DISPOSITION_PARK_MAX:-1}" \
+  DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S="${DISPATCH_TERMINAL_DISPOSITION_PARK_TIMEOUT_S:-30}" \
+  DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S="${DISPATCH_TERMINAL_DISPOSITION_LOCK_WAIT_S:-15}" \
+    terminal_without_disposition_sweep 1>&2
+}
+
+# --- The ladder ------------------------------------------------------------
+ci_waited=0
+requeue_budget=5
+
+log_event start "" running "unit=$UNIT_NAME timeout_s=$TIMEOUT_S max_run_s=$MAX_RUN_S poll_s=$POLL_S ci_wait_s=$CI_WAIT_S"
+write_state
+
+while :; do
+  check_deadline
+
+  STEP=advance; write_state
+
+  # Both tick-owed sweeps, before every advance — see run_owed_sweeps above for
+  # why each is owed here and why neither is a gate of the driver's own.
+  run_owed_sweeps
+
+  # Re-check the deadline HERE, after both sweeps and before the advance they
+  # guard. check_deadline already ran once at the top of this pass, but the two
+  # sweeps above are real work with their own budget (bounded, just above) —
+  # without this second check, a pass whose sweeps ran right up to the
+  # deadline would still START an advance, and the overshoot would compound
+  # every pass instead of costing at most one sweep's worth. This keeps the
+  # promise made to --max-run-s: the driver never BEGINS new work once its
+  # deadline has passed, even though the sweeps themselves are not
+  # interruptible mid-call.
+  check_deadline
+
+  # Captured WITHOUT a `| head` pipeline: inside `$( … )` the pipeline runs in a
+  # subshell, so PIPESTATUS is invisible out here and the assignment's status
+  # would be `head`'s, silently discarding every exit code this loop branches
+  # on. Take the first line afterwards instead.
+  # The launch window the await's lane-pass probe compares stamps against, AND
+  # (via EVAL_LAUNCH_EPOCH below) the --since bound handed to the phase
+  # evaluator — both taken HERE rather than beside LAUNCH_EPOCH below.
+  # dispatch-ladder-advance blocks on verify_launch before it returns, so
+  # LAUNCH_EPOCH is already later than the spawn: a lane that stamped inside
+  # that window would be read as older than the launch (a false stall for the
+  # probe), and an evaluator's `started_at >= since` filter seeded from it would
+  # drop the phase worker's own session — 12-13s of measured skew, stable —
+  # scoring only its subagents. LAUNCH_EPOCH itself is left alone: it is also
+  # elapsed_s's origin and means something else (how long the phase ran, not
+  # what window to search).
+  PASS_SINCE=$(now_epoch)
+  # dispatch-ladder-advance's one diagnostic line for a stale-selection /
+  # scope-stale-demoted case (e.g. "selected review but node is now qa") goes
+  # to ITS stderr, inherited from provision-node-worktree/assert-node-selection
+  # further down the call chain — it was previously visible only via a
+  # journalctl trawl, because ADV_OUT above captures stdout only. Capture
+  # stderr to a scratch file in the same per-node STATE_DIR mktemp uses below
+  # (so it cannot collide with another node's concurrently-running driver),
+  # read its last line, and remove it immediately — mirroring write_state's
+  # mktemp-then-mv/rm pattern rather than adding a second EXIT trap.
+  ADV_ERR_FILE=$(mktemp "$STATE_DIR/.adv-stderr.XXXXXX") || {
+    echo "dispatch-ladder-run: mktemp failed in $STATE_DIR" >&2; exit 1; }
+  ADV_OUT=$("$ADVANCE" "$NODE_ID" 2>"$ADV_ERR_FILE"); adv_rc=$?
+  ADV_OUT=$(head -n1 <<<"$ADV_OUT")
+  ADV_ERR_LAST=$(tail -n1 "$ADV_ERR_FILE" 2>/dev/null)
+  # REPLAY IT TO OUR OWN STDERR BEFORE DISCARDING. Capturing is for folding the
+  # last line into the requeue event below; it must not SWALLOW the rest.
+  # Everything advance's call chain writes — graph-select-target's gate event
+  # lines, dispatch-graph-execute's park reasons, provision-node-worktree's
+  # refusals — reached the journal by inheriting fd 2 before this capture, and
+  # the driver's own halt text still tells the operator to read exactly those
+  # lines there (see the exit-10 halt below).
+  cat "$ADV_ERR_FILE" >&2
+  rm -f "$ADV_ERR_FILE"
+
+  case "$adv_rc" in
+    0)
+      # `launched <id> <kind> <phase> <skill>`
+      read -r _ _ KIND PHASE SKILL <<<"$ADV_OUT"
+      if [[ -z "${PHASE:-}" ]]; then
+        halt 1 internal "dispatch-ladder-advance exited 0 with an unparseable line '$ADV_OUT'"
+      fi
+      ci_waited=0
+      requeue_budget=5
+      LAUNCH_EPOCH=$(now_epoch)
+      # What the halt path evaluates if this phase does not reach its boundary,
+      # and the time bound the evaluator scopes `aggregate-usage.sh --node` with.
+      #
+      # EVAL_LAUNCH_EPOCH is seeded from PASS_SINCE, NOT from LAUNCH_EPOCH just
+      # above. LAUNCH_EPOCH is stamped after "$ADVANCE" returns, and advance
+      # blocks on verify_launch before returning — so LAUNCH_EPOCH lands 12-13s
+      # after the phase worker session actually starts (measured, stable). A
+      # `--since` bound taken from LAUNCH_EPOCH would open after the worker's own
+      # `started_at`, so the evaluator's `started_at >= since` filter drops the
+      # worker session itself and scores only its subagents: on a phase like
+      # review-fix that's 94.9% of spend and the entire `dispatch.outcome.v1`
+      # object excluded from every evaluation. PASS_SINCE is captured at :1082,
+      # immediately before "$ADVANCE" is called, so it predates the worker's
+      # `started_at` and the filter keeps it. LAUNCH_EPOCH itself is left
+      # unchanged here and below — it is also elapsed_s's origin (see ELAPSED_S)
+      # and answers a different question ("how long did the phase run"), not
+      # "what window should the evaluator search".
+      EVAL_LAUNCH_PHASE="$PHASE"
+      EVAL_LAUNCH_EPOCH="$PASS_SINCE"
+      REPOLLS=0
+      HELD_S=0
+      log_event launched "$PHASE" launched "kind=${KIND:-?} skill=${SKILL:-?}"
+
+      STEP=await; write_state
+      while :; do
+        check_deadline
+        # --since is PASS_SINCE, captured before the advance and constant for
+        # the whole await loop — the exit-20 re-poll must call with identical
+        # arguments, and a window recomputed per poll would walk forward past a
+        # stamp already written.
+        AW_OUT=$("$AWAIT" "$NODE_ID" "$PHASE" --timeout-s "$TIMEOUT_S" --since "$PASS_SINCE"); aw_rc=$?
+        AW_OUT=$(head -n1 <<<"$AW_OUT")
+        AW_DISP=$(awk '{print $1; exit}' <<<"$AW_OUT")
+        # OPTIONAL TRAILING FIELD. dispatch-ladder-await appends
+        # ` reap_lag_s=<n>` to its verdict line when the completion was public at
+        # origin/main before the registry reaped the worker — the interval
+        # between those two events, which only that process can see both ends of.
+        # Read positionally-insensitively, and left EMPTY when the field is
+        # absent so the event omits the key rather than claiming a zero lag. The
+        # disposition parse above is unaffected: it takes field 1 and stops.
+        AW_REAP_LAG=""
+        [[ "$AW_OUT" =~ reap_lag_s=([0-9]+) ]] && AW_REAP_LAG="${BASH_REMATCH[1]}"
+        case "$aw_rc" in
+          0)
+            ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
+            log_event awaited "$PHASE" "$AW_DISP" \
+              "elapsed_s=$ELAPSED_S await_repolls=$REPOLLS window_s=$TIMEOUT_S${AW_REAP_LAG:+ reap_lag_s=$AW_REAP_LAG}" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S" "$AW_REAP_LAG")"
+            # THE PHASE BOUNDARY. The phase that just finished is evaluated
+            # here, while its transcript is small and warm, and the driver takes
+            # its next ladder step without waiting on the evaluation.
+            #
+            # PASS_SINCE, not LAUNCH_EPOCH — see the comment beside
+            # EVAL_LAUNCH_EPOCH above for why: LAUNCH_EPOCH is stamped after
+            # advance's verify_launch already blocked, so it lands after the
+            # worker's own started_at and the evaluator's `>= since` filter
+            # would drop the worker session itself.
+            #
+            # THE BOUNDARY IS A REAPED WORKER AGAIN, and nothing here had to
+            # change for that. dispatch-ladder-await reports a PROGRESS verdict
+            # (advanced / reviewed / lane-complete) only after the session row is
+            # gone — see its header — so on every path that CONTINUES the ladder,
+            # this line runs against a finished worker and aggregate-usage.sh at
+            # node scope sees the whole phase. `pruned` is the one verdict that
+            # can reach here against a still-registered row; the run halts on it
+            # immediately below, so it is the last evaluation of the run either
+            # way, and the alternative — deferring it — would lose the boundary
+            # spawn rather than improve it.
+            spawn_phase_eval "$PHASE" "$PASS_SINCE"
+            if [[ "$AW_DISP" == "pruned" ]]; then
+              halt 0 pruned "$NODE_ID is absent from origin/main — it completed and was pruned"
+            fi
+            break
+            ;;
+          20)
+            REPOLLS=$(( REPOLLS + 1 ))
+            ELAPSED_S=$(( $(now_epoch) - LAUNCH_EPOCH ))
+            log_event await-repoll "$PHASE" running \
+              "await_repolls=$REPOLLS window_s=$TIMEOUT_S elapsed_s=$ELAPSED_S" \
+              "$(timing_fields "$ELAPSED_S" "$REPOLLS" "$TIMEOUT_S")"
+            continue
+            ;;
+          21)
+            # `held-observing <id> <from>` — the phase session stopped without
+            # declaring a terminal disposition and the node carries no park
+            # YET. That is the signature of an escalation mid-flight, and
+            # terminal_without_disposition_sweep is its KNOWN healer: it
+            # consumes the `office-hours-reason` file and parks the node, after
+            # which the very next await answers `throw <id> parked` and this run
+            # halts on a terminus a person can read.
+            #
+            # So run the owed sweeps again and re-poll — NOT a retry of the
+            # phase, and not a wait on a hope: it is a bounded wait on one named
+            # script whose effect is checked at origin/main by the next await.
+            # The sweep needs DISPATCH_TERMINAL_DISPOSITION_GRACE_S (300s) of
+            # idle before it will act at all, which is why halting on the first
+            # poll made the healer unreachable in practice.
+            HELD_S=$(( HELD_S + POLL_S ))
+            log_event held-sweep "$PHASE" held-observing \
+              "held_s=${HELD_S}s of ${HELD_GRACE_S}s elapsed_s=$(( $(now_epoch) - LAUNCH_EPOCH ))"
+            # UNCONDITIONAL HALT, as everywhere else here. A hold no sweep ever
+            # heals is a stuck worker holding a slot, and it halts on its own
+            # budget rather than being waited on forever.
+            if (( HELD_S > HELD_GRACE_S )); then
+              halt 11 throw "$AW_OUT — held un-reaped for ${HELD_S}s, past the HELD_GRACE_S ${HELD_GRACE_S}s window in which terminal_without_disposition_sweep would have parked an escalation (its own grace is DISPATCH_TERMINAL_DISPOSITION_GRACE_S, 300s by default). The session stopped without a node-terminal marker and no park landed: read its transcript, then release it with 'claude rm <session-id>' — it holds a worker slot and keeps $NODE_ID unselectable"
+            fi
+            poll_wait
+            run_owed_sweeps
+            check_deadline
+            continue
+            ;;
+          11) halt 11 throw "$AW_OUT" ;;
+          12) halt 12 stalled "$AW_OUT — the worker stopped with no graph change; read its transcript before re-running" ;;
+          14) halt 14 unknown-graph-read "$AW_OUT" ;;
+          2)  halt 2 usage "dispatch-ladder-await rejected its arguments (rc=2)" ;;
+          *)  halt 1 internal "dispatch-ladder-await exited an unmapped $aw_rc with '$AW_OUT'" ;;
+        esac
+      done
+      continue
+      ;;
+
+    10)
+      # `idle <id> <reason>`
+      REASON=$(awk '{print $3; exit}' <<<"$ADV_OUT")
+      case "$REASON" in
+        ci-waiting)
+          # The normal state right after implement opens a draft PR. Halting
+          # here would halt after every implement phase.
+          log_event idle "$PHASE" ci-waiting "re-polling in ${POLL_S}s"
+          poll_wait
+          continue
+          ;;
+        stale-selection|scope-stale-demoted)
+          # dispatch-graph-execute already cleared the claim and the node is
+          # re-runnable. Bounded, because an unbounded requeue is a spin.
+          if (( requeue_budget == 0 )); then
+            # Only the fact this driver actually established: the budget
+            # drained on repeated occurrences of the last reason seen. NOT a
+            # claim about WHY the reselection kept happening — this driver
+            # never diagnoses that, and asserting a cause here was found to be
+            # actively wrong in the case that exposed this message (the node
+            # had already progressed to review; a separate gate defect misread
+            # it as still at qa). Whatever advance itself observed, when it
+            # wrote a diagnostic line, is on the idle event just below instead.
+            halt 12 stalled "the requeue budget drained on repeated '$REASON'"
+          fi
+          requeue_budget=$(( requeue_budget - 1 ))
+          # advance's own stderr diagnosis, when it wrote one, folded into the
+          # detail so it lands in events.jsonl instead of being visible only
+          # via a journalctl trawl of dispatch-ladder-advance's unit. Truncated
+          # so one pathological line cannot bloat the event log.
+          log_event idle "$PHASE" "$REASON" \
+            "requeue_budget=$requeue_budget${ADV_ERR_LAST:+; ${ADV_ERR_LAST:0:200}}"
+          continue
+          ;;
+        *)
+          # not-selectable, and any reason a future dispatch-ladder-advance
+          # adds. Two questions, in order.
+          if phase_is_done; then
+            halt 0 complete "$NODE_ID is at phase 'done' on origin/main"
+          fi
+          reconcile_pass
+          case "$RECONCILE_RESULT" in
+            routed|merged|changed)
+              # Real progress. `routed` is the INTERVENTION: the node is now in
+              # execution.fix, so the next advance answers
+              # `launched <id> tactic fix /fix-checks`.
+              ci_waited=0
+              log_event reconcile "$PHASE" "$RECONCILE_RESULT" "the reconcile pass changed state; the ci-wait budget is reset"
+              continue
+              ;;
+            *)
+              # quiet. The two honest silences — the reconciler's grace window
+              # and a PR whose CI is still running — share ONE budget, and are
+              # logged apart so the evaluation can tell them apart.
+              log_event idle "$PHASE" "$QUIET_REASON" \
+                "ci_waited=${ci_waited}s of ${CI_WAIT_S}s; re-polling in ${POLL_S}s"
+              poll_wait
+              ci_waited=$(( ci_waited + POLL_S ))
+              if (( ci_waited > CI_WAIT_S )); then
+                halt 10 idle "nothing to launch for $NODE_ID: ${ci_waited}s of reconcile polling, past the --ci-wait-s ${CI_WAIT_S}s budget, produced no merge, no absorb and no fix route (last silence: $QUIET_REASON; advance reason: ${REASON:-unknown}) — the PR's CI is most likely still pending, or a gate is holding it; read the PR's checks and dispatch-ladder-advance's event lines in the journal"
+              fi
+              continue
+              ;;
+          esac
+          ;;
+      esac
+      ;;
+
+    11) halt 11 throw "$ADV_OUT" ;;
+    13) halt 13 claimed "$ADV_OUT — a node is never worked by dispatch and dispatch-ladder at once" ;;
+    2)  halt 2 refused "$ADV_OUT" ;;
+    *)  halt 1 internal "dispatch-ladder-advance exited an unmapped $adv_rc with '$ADV_OUT'" ;;
+  esac
+done

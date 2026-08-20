@@ -113,7 +113,7 @@ Every frontmatter write goes through `write-node.ts` on a readNode-dumped,
 jq-patched JSON — **never hand-edit YAML**:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/<node>.json"
+npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions --file "$TMPDIR/<node>.json"
 ```
 
 Land **everything this session produced in ONE `graph-commit` bundle** at
@@ -157,6 +157,6 @@ No automated test surface — a SKILL.md is model instructions. Manual dry-run i
 an interactive session (stop before `graph-commit`): confirm the skill
 refreshes the gap report, walks nodes in report order, asks circumstantial
 before sourcing, produces mark JSON and one candidate-chunk node that
-`npx tsx packages/intentionsutil/scripts/validate-graph.ts` accepts, and plans
+`npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` accepts, and plans
 exactly one `graph-commit` bundle. Confirm no `gh` invocation appears in the
 flow and the skill states it is never tick-invoked.

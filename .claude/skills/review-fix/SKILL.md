@@ -191,7 +191,9 @@ On the node lane every step runs unchanged except three re-keyed seams:
   `reviewed` marker in `execution.markers` as one state-only graph-commit; it does
   **not** arm or perform any merge), **not** `dispatch-complete-phase` /
   `dispatch-mark-complete` / `dispatch-finalize-phase`. Merging is deferred to the
-  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker.
+  tick's `graph-auto-merge` reconciler, keyed off the `reviewed` marker. Step 7's
+  local lint gate precedes this call the same way it precedes the issue lane's
+  label apply — never write the marker over a red bundle.
 - **Deferred findings (Step 5)** — deferred/security follow-ups become **draft
   tactic nodes**, not gh issues.
 - **Escalation** — write the reason to `$CLAUDE_JOB_DIR/office-hours-reason`
@@ -240,6 +242,33 @@ re-litigate a recorded verdict and never redo a committed fix. The worktree and
 the PR survive a dead session; only reasoning-in-progress is lost, so a resumed
 run rebuilds nothing that already reached durable state.
 
+**Prior findings carry forward — the third guard on the narrowed base.** The
+same prior-comment read is also what stops re-scoping from silently dropping a
+finding the earlier pass raised. Once `REVIEW_BASE` narrows the diff (Step 1),
+a finding whose site sits *before* `REVIEW_BASE` is no longer in the delta at
+all, so nothing would re-surface it. From the prior comment's recorded
+dispositions, carry every **unresolved** and **deferred** finding back into this
+pass's pool and pass them to the Workflow as `prior_findings` (Step 2). Do not
+carry `resolved` or `ignore` findings — those are recorded verdicts, and
+re-raising them is exactly the re-litigation the paragraph above forbids.
+
+This is deliberately an extension of the existing resume channel rather than a
+second one. A separate prior-findings store would be a second source of truth
+about the same dispositions, and the two would drift the first time a run died
+between writing one and the other.
+
+**Carry the follow-up reference with each deferred finding, and never re-file
+it.** A `deferred` disposition is a recorded verdict that *already produced a
+durable artifact*: Step 5 turned it into a `blocked_by` tracking issue (issue
+lane) or a draft tactic node (node lane), and the prior comment names it. Carry
+that reference alongside the finding. Step 5 must **not** file a second record
+for a finding that arrives carrying one — it reuses the existing reference for
+Step 6's **Deferred** bucket. Without this, a PR that re-enters review three
+times accumulates three identical follow-ups for every deferred finding, and
+`--followups-filed` counts work nobody did. Carrying them forward is for
+*detection*, so a re-scoped pass cannot lose sight of them; it is not a
+re-filing trigger.
+
 ### 1. Capture the diff context and run the inline bash scans
 
 All reviews look at the same diff — and the preamble's single
@@ -282,7 +311,95 @@ app_or_rules=$(printf '%s\n' "$SURFACE_OUT" | sed -n 's/^app_or_rules=//p')
 api_call_site=$(git diff "$MERGE_BASE"...HEAD \
   | .claude/skills/dispatch-propagate/scripts/dispatch-api-call-site \
   | sed -n 's/^api_call_site=//p')
+
+# REVIEWED_HEAD: the sha this pass actually covers. Bound HERE, at Step 1, and
+# written to the sidecar at Step 7 — see the write point there for why the
+# Step 7 HEAD would be wrong.
+REVIEWED_HEAD=$(git rev-parse HEAD)
+
+# REVIEW_BASE: the base a RE-review diffs from — the sha the previous review
+# covered, or MERGE_BASE when there wasn't one. Fails closed; see below.
+#
+# REVIEW_BASE IS NOT ALWAYS A COMMIT ON THE BRANCH, and a log reader should not
+# be surprised to see a sha that `git log` does not show. When main moved between
+# the two passes — which it does at every phase boundary, because
+# provision-node-worktree merges origin/main into the branch — the recorded sha
+# cannot be used directly: `<recorded>..HEAD` is two-dot and would re-admit every
+# origin/main commit merged in since, all of it already reviewed on main, making
+# the "narrowed" review WIDER than the full one. So the script returns a
+# synthetic merge of the recorded sha with MERGE_BASE, which cancels that churn
+# and leaves only branch-authored work. `review_base_source=sidecar-rebased`
+# marks that path, and `review_base_recorded` still reports the real sha.
+RB_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-base \
+  --merge-base "$MERGE_BASE")
+REVIEW_BASE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base=//p')
+REVIEW_BASE_SOURCE=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_source=//p')
+# The sha actually recorded by the previous pass. Empty unless the source is
+# `sidecar-rebased`. Report it, never diff from it — see above.
+REVIEW_BASE_RECORDED=$(printf '%s\n' "$RB_OUT" | sed -n 's/^review_base_recorded=//p')
+
+# Blast radius: the files OUTSIDE the delta that reference a symbol the delta
+# added, changed, or deleted. Computed from the NARROWED range — its whole job
+# is to cover what narrowing hid. Same pipe-through-a-classifier discipline as
+# api_call_site above: the diff text never enters this skill's context.
+BR_OUT=$(git diff "$REVIEW_BASE"..HEAD \
+  | .claude/skills/dispatch-propagate/scripts/dispatch-blast-radius)
+blast_radius_files=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_file=//p')
+blast_radius_truncated=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_truncated=//p')
+# blast_radius_generic MUST be carried too — it is not optional detail. A
+# symbol dropped as too-widely-referenced produces NO reading list entry and
+# does NOT set `truncated`, so without this field a delta that changes a shared
+# helper looks byte-identical to one with no out-of-diff callers at all. That is
+# the largest blast radius there is, reported as silence.
+blast_radius_generic=$(printf '%s\n' "$BR_OUT" | sed -n 's/^blast_radius_generic=//p')
+
+# The DELTA's file list, for the reviewers' brief. `changed_files` (from the
+# context pack) is the whole PR's list, computed from MERGE_BASE; pairing it
+# with a narrowed base would tell a finder "review only the delta" and then hand
+# it an inventory of every file the PR ever touched.
+review_changed_files=$(git diff --name-only "$REVIEW_BASE"..HEAD)
 ```
+
+**`REVIEW_BASE` — narrow the base; keep `MERGE_BASE` bound and unchanged.**
+`MERGE_BASE` still means what it always meant and still feeds the dependency
+audit and the `api_call_site` pipeline above; nothing about it moves. What is
+new is a *second* base for the diff a re-review reads.
+
+The incident this closes: a `/review-fix` pass on PR #3075 cost 3h26m and 32
+subagents, `/fix-checks` pushed **one** CI-repair commit, resolving the
+fix-interrupt stripped the `reviewed` marker (correctly, by design at
+`packages/intentionsutil/scripts/apply-fix-state.ts:219-227`), and the lane
+re-reviewed the entire PR from merge-base — the whole prior review, re-performed
+for one commit.
+
+`dispatch-review-base` reads a sidecar beside the reviewed worktree
+(`<worktrees-root>/<basename>.review-base`, the same convention as
+`.scope-fingerprint` / `.ladder` / `.code-review-lock`) and **fails closed**:
+absent, unreadable, malformed, unreachable from `HEAD`, or not strictly ahead of
+`MERGE_BASE` all yield `REVIEW_BASE=$MERGE_BASE`, i.e. today's full review.
+`REVIEW_BASE_SOURCE` names which. This is the one deliberately fail-*closed*
+mechanism in this design — everything else here fails open — because here the
+cheap outcome is the narrow review, so the safe failure is the expensive one.
+The script's header carries the full argument; do not re-derive it.
+
+**Narrowing the base is only safe with all three guards.** Shipping the narrowed
+base without them *is* the detection reduction `strategy-token-economy`
+clarification 50 forbids:
+
+1. **The blast-radius reading list** above. A helper's contract changes and an
+   unmodified caller three files away breaks — invisible to a literal
+   `git diff <last-reviewed>..HEAD`, and `/fix-checks` repairs under CI pressure
+   are exactly the class that changes contracts. Those files are **required
+   reading** in the reviewers' brief, which is what makes narrow-diff/wide-context
+   preserve detection rather than reduce it.
+2. **The full `MERGE_BASE` still reaches the reviewers**, so "you may read
+   anything in this PR" stays true. The narrowed base says what to *report* on;
+   it never says what may be *read*.
+3. **Prior findings carry forward** — see "Resume from durable state" above.
+
+When `blast_radius_truncated` is `true` the reading list hit a cap. Say so in
+the brief (Step 2 passes it through) — a silently truncated list reads as
+"everything relevant", which is the failure this flag exists to prevent.
 
 - `surface` is `empty` (no changed files), `docs` (every changed path is
   documentation — markdown/text/license, no executable, config, dependency, or
@@ -326,6 +443,86 @@ Collect normalized CodeQL, npm, and erosion findings into `prescanned_findings`
 to pass to the Workflow. **See `references/inline-scans.md`** for the exact
 command block, normalization rules, and the per-finder roster and descriptions.
 
+### 1a. Run `/review-plan` to set this pass's depth
+
+**Fork one subagent, with `model: opus` set explicitly on the Agent call**, and
+have it run `/review-plan`. The pin is not inherited and not optional: a nested
+run does not inherit this session's model, so omitting it silently accepts a
+default and leaves clarification 46's cost measurement uninterpretable — the same
+argument that pins `dispatch-code-review` to `--model opus`.
+
+This runs **before** Step 1b's detached `/code-review` and before the Step 2
+Workflow, because its verdict sets the effort the first uses and the roster the
+second uses.
+
+Hand it, and nothing else — the **Bounded** rule is a real constraint, not
+advice:
+
+- `REVIEW_BASE`, `MERGE_BASE`, and `REVIEWED_HEAD` (it reads the delta once,
+  itself);
+- `$BR_OUT` — the blast-radius output from Step 1 (analysis 1; it does not
+  recompute this);
+- `surface`, `deps`, `app_or_rules`, `api_call_site`, `REVIEW_BASE_SOURCE`, and
+  `REVIEW_BASE_RECORDED` (empty unless the source is `sidecar-rebased`; it is the
+  only sha on that path that `git log` can resolve, so a reader who wants to see
+  what the previous pass covered needs it);
+- the prior pass's carried-forward findings (analysis 5), if any;
+- the worktree root as an absolute path.
+
+It returns the structured verdict documented in
+`.claude/skills/review-plan/SKILL.md`. Bind it as `REVIEW_PLAN` and pass it to
+the Workflow as `review_plan` (Step 2).
+
+**Fails open, always.** An error, a timeout, an absent verdict, or output that
+does not parse as that object runs today's defaults: effort `high` and the
+**full** finder roster. Never cheaper, never narrower — this is a condition on
+the strategy, not a preference. Do not retry it and do not substitute your own
+judgment for it; take the default and continue. A fail-open bug here presents as
+a clean review, which is why there is no degraded middle path.
+
+**The verdict is a proposal, not an instruction.** Every rule that keeps it from
+becoming a silent detection cut is re-enforced mechanically in `review-fix.js`'s
+`review plan gate` region (`reviewPlanEffort`, `reviewPlanFinderSet`,
+`reviewPlanDeadline`) — the author-set band, the `xhigh` irreversibility floor,
+the raise/cheapen asymmetry, and the never-remove-a-lens union. That region is
+covered by `test-review-plan-gate.sh`. Do not re-implement any of it here, and
+do not "simplify" it away on the grounds that the skill already checked: the
+verdict is derived from text the diff under review can influence.
+
+**Bind the effort by running the gate — never by reading the verdict yourself.**
+Write the verdict to `tmp/review-plan-$N.json` and pipe it through
+`dispatch-review-plan-gate`:
+
+```bash
+CR_GATE=$(.claude/skills/dispatch-propagate/scripts/dispatch-review-plan-gate \
+  < "tmp/review-plan-$N.json")
+CR_EFFORT=$(printf '%s\n' "$CR_GATE" | sed -n 's/^effort=//p')
+CR_EFFORT_REASON=$(printf '%s\n' "$CR_GATE" | sed -n 's/^effort_reason=//p')
+CR_DEADLINE_S=$(printf '%s\n' "$CR_GATE" | sed -n 's/^deadline_s=//p')
+CR_POLL_CAP=$(printf '%s\n' "$CR_GATE" | sed -n 's/^poll_cap=//p')
+```
+
+**This step is load-bearing and must not be collapsed into "use the verdict's
+effort".** The gate has to bind *here*, because Step 1b — which consumes
+`CR_EFFORT` — runs **before** the Step 2 Workflow. A gate that lived only inside
+`review-fix.js` would execute too late to constrain anything: it would record a
+constrained level in its log while Step 1b had already launched the real review
+at whatever the verdict asked for. The recorded rationale would then disagree
+with what actually ran, which is worse than having no gate, because it reads as
+enforcement. `dispatch-review-plan-gate` is not a second implementation — it
+slices and evals the same `review plan gate` region of `review-fix.js` that
+`test-review-plan-gate.sh` covers, so there is exactly one home for the rules.
+
+The script **fails open on everything**: no verdict file, empty input,
+unparseable JSON, missing `node`, an unreadable or sentinel-less `review-fix.js`
+— all yield `effort=high`, `deadline_s=5400`, `poll_cap=10`, i.e. today's
+behaviour exactly. It always exits 0, so `set -e` cannot turn a depth
+*suggestion* into a failed phase.
+
+If the subagent returned nothing usable, skip writing the file and run the gate
+on empty input (or simply bind the fail-open values directly) — do not invent a
+verdict.
+
 ### 1b. Run the built-in `/code-review` as an exclusive pre-stage
 
 `dispatch-code-review` shells `claude -p '/code-review <effort> --fix
@@ -338,10 +535,13 @@ Workflow's parallel finder fan-out, which would race concurrent writers
 against the same tree. This is why it is its own serialized step between
 Step 1 and Step 2, not a finder inside the Workflow.
 
-`MERGE_BASE` is already bound by Step 1 above — reuse it; do not recompute or
+`REVIEW_BASE` is already bound by Step 1 above — reuse it; do not recompute or
 hand-roll a second target formatter. Pass it as the **rev-range**
-`"$MERGE_BASE..HEAD"`, never as the bare `"$MERGE_BASE"` SHA. The built-in
-resolves a bare SHA to *that single commit's* diff, not to the diff from that
+`"$REVIEW_BASE..HEAD"`, never as a bare SHA. On a first review `REVIEW_BASE` is
+`MERGE_BASE` and this is byte-identical to what the step passed before; on a
+re-review it is the narrowed base. Everything the paragraph below says about a
+bare SHA applies unchanged — it is a property of the built-in's target parsing,
+not of which base is passed. The built-in resolves a bare SHA to *that single commit's* diff, not to the diff from that
 commit to `HEAD`: measured live, `claude -p '/code-review low <bare-sha>'`
 reviewed only the one commit at that SHA (a 1-file graph phase-bump), while
 `claude -p '/code-review low <sha>..HEAD'` reviewed the PR's full accumulated
@@ -351,28 +551,146 @@ phase-transition commit that *started* the review phase and returns
 this stage exists to eliminate. `dispatch-code-review` now rejects a
 non-range `--target` with exit 2, so this is enforced, not just documented.
 
-Do **not** pass `--effort` to `dispatch-code-review` here — leave it at the
-script's own default (`low`). This is deliberate, not an oversight: Unit 1's
-measured investigation (`references/code-review-invocation.md` §1.2, §5.4, §7)
-found that `max` effort against a real, non-trivial diff ran over 39 minutes
-without completing — `claude -p` buffers all output until the run completes,
-so the timeout was a total loss of ~$372 of price-proxy spend for zero bytes
-of output — and that `medium` effort did not complete within 300s either.
-Only `low` effort is measured to reliably complete (14-30s observed). Raising
-the effort level for this lane is an open follow-up for
-`strategy-token-economy`, not settled by this node.
+**`--model` stays pinned and untouched. `--effort` is now the caller's — within
+the author-set band.** This replaces, rather than deletes, the rule that used to
+forbid both.
 
-Run this call with `dangerouslyDisableSandbox: true` and `timeout: 600000`
-(it is a nested `claude` session — `--comment` shells `gh` and it touches the
-local Claude daemon; see `.claude/rules/sandbox.md`):
+- **`--model`**: do **not** pass it. The script owns it and pins the nested
+  session to `opus` (the 2026-08-13 model-pin ruling). The pin is explicit
+  because a nested `claude -p` does not inherit the launching session's model,
+  and the model is the dominant cost and quality term — an unpinned run would
+  leave clarification 46's realized-cost measurement uninterpretable.
+- **`--effort`**: pass `"$CR_EFFORT"` — Step 1a's gate-constrained verdict,
+  which is `high` on every fail-open path. The 2026-08-13 ruling that `high` is
+  the default (`strategy-token-economy` clarification 44, superseding the
+  earlier `max` ruling) is **preserved, not overturned**: it is still what an
+  absent, failed, unparseable, or band-violating verdict gets. What changed is
+  that a per-input verdict may move within `low` … `max` — a carve-out from the
+  no-auto-apply bar that holds only while the band stays author-set, `high`
+  stays the fallback, and every deviation is recorded.
+- **`--deadline-seconds`**: pass `"$CR_DEADLINE_S"`, and run the loop below to
+  `CR_POLL_CAP` attempts rather than a hardcoded 10.
+
+**Raising effort without also raising the deadline turns an expensive review
+into a total loss.** `dispatch-code-review` **kills** a run that exceeds its
+deadline (`:1225-1226`), default `5400`s, and `claude -p` buffers all output
+until the run completes — so a killed run yields **zero bytes**, not a partial
+result. The recorded `max` run burned 2363s and produced nothing. `xhigh` and
+`max` on today's 5400s deadline would be exactly that failure, every time. The
+per-effort table lives in `review-fix.js` (`REVIEW_PLAN_DEADLINES`) and every
+row is an exact multiple of the script's 540s await window, so the cap/deadline
+equality below holds at every level rather than only at `high`.
+
+**`--effort` participates in the run-dedup identity match** (`dispatch-code-review`
+header, "self-authenticating"): the cached-or-resumed run must match on
+cache-schema version, out-dir, target, resolved target commits, HEAD, effort,
+model and the comment flag. `--await-seconds` / `--deadline-seconds` are
+explicitly OPERATIONAL, not identity, so scaling the deadline does **not**
+discard a live run — but changing the **effort** between attempts does, killing
+the in-flight run as superseded and relaunching. So bind `CR_EFFORT` **once** in
+Step 1a and pass the identical value on every attempt of the loop below. Never
+re-derive it inside the loop.
+
+`high` is reachable only because the invocation is detached. The measured
+record is unchanged (`references/code-review-invocation.md` §1.2, §5.4, §7,
+§9): `low` completes in 14-30s, `medium` did not complete within 300s, and
+`max` ran 2363s against a real diff before being killed having produced **zero
+bytes** — `claude -p` buffers all output until the run completes, so that kill
+was a total loss of ~$372 of price-proxy spend, not a partial result. `high`
+sits between the two failing points and so cannot finish inside a single
+600000ms Bash call at all. `dispatch-code-review` therefore launches the run
+detached (`setsid`) and makes every invocation a bounded **await** over that
+one run: the caller pays for one review and collects it across as many calls
+as it takes.
+
+Run **every** call with `dangerouslyDisableSandbox: true` and
+`timeout: 600000`. The sandbox override is load-bearing twice over: this is a
+nested `claude` session (`--comment` shells `gh`, and it touches the local
+Claude daemon; see `.claude/rules/sandbox.md`), *and* a sandboxed launch does
+not survive at all — measured in §9.1, each sandboxed Bash call gets its own
+PID namespace, so the detached child records a namespace-local pid and is gone
+by the next call.
+
+**Between the launching call and the collecting call the session must do
+nothing else.** Step 1b is serialized before the Workflow fan-out precisely
+because `--fix` writes the working tree. With a detached run that property now
+depends on the *caller*: between the launching call and the collecting call the
+session must do nothing else — no other reads of the tree, no other steps, no
+other tool calls that touch the worktree. The run is writing that tree for the
+whole await window, not just during the first call.
+
+Invoke the script in a **bounded re-invocation loop** — the same fixed-cap,
+fail-closed-on-exhaustion shape as
+`.claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh:16-31`. At most
+**`$CR_POLL_CAP` attempts** (10 at effort `high`, i.e. unchanged from before).
+Each attempt is one Bash call running the exact command below, unchanged and
+with **identical arguments** every time; identical arguments are what make the
+next call resume the same detached run rather than pay for a second one.
 
 ```bash
 CR_OUT=$(.claude/skills/dispatch-propagate/scripts/dispatch-code-review \
-  --target "$MERGE_BASE..HEAD" --out-dir "tmp/code-review-$N" 2>"tmp/code-review-$N.err")
+  --target "$REVIEW_BASE..HEAD" --out-dir "tmp/code-review-$N" \
+  --effort "$CR_EFFORT" --deadline-seconds "$CR_DEADLINE_S" 2>"tmp/code-review-$N.err")
 CR_RC=$?
 ```
 
-**Hard stop on any non-zero `CR_RC`**, following the same stdout/stderr-split,
+- `CR_RC` is `5` — the detached run is still in flight. Attempt again with
+  identical arguments, up to the cap.
+- `CR_RC` is `0` — leave the loop; the `case` below passes it through.
+- anything else — leave the loop immediately and let the `case` below decide.
+- the cap is reached with no attempt returning `0` — **exhausting the cap is a
+  failure, not a pass.** Take the `4` branch of the `case` below, naming the
+  cause "attempt cap exhausted", and hard-stop the phase. Never continue to
+  Step 2 on an unfinished review.
+
+The cap is arithmetic, not a guess: `CR_POLL_CAP` attempts × the script's 540s
+default await window = `CR_DEADLINE_S`, **exactly** the deadline passed to the
+script. At effort `high` that is the familiar 10 × 540 = 5400. The equality is
+the point, and it is a correction of an earlier 8 (= 4320s ≈ 72 minutes). At 8
+the caller always gave up 18 minutes before the script's deadline could fire,
+which made the exit-4 path — **the only thing that kills the detached run and
+releases the worktree's `flock`** — unreachable. The phase hard-stopped while
+the run kept writing an abandoned worktree, holding the node lock and blocking
+`dispatch-ladder-advance` / `graph-select-target`, with the finished review
+never collected. The two bounds must agree, and they now do.
+
+**That equality is exactly why the deadline had to scale with effort rather than
+the cap alone.** Raising only the cap would leave the script killing the run at
+5400s while the caller kept polling; raising only the deadline would leave the
+caller giving up before the exit-4 path could fire — the 8-attempt defect
+again, in a new place. Every row of `REVIEW_PLAN_DEADLINES` is an exact multiple
+of 540 so `CR_POLL_CAP` is a whole number at every band level, and
+`test-review-plan-gate.sh` asserts that property directly rather than trusting
+the table to have been edited consistently.
+
+With them equal the deadline is what actually trips, on the last attempt at the
+latest. Two properties of the script's await loop make that certain rather than
+a coin flip: its per-call window is `min(--await-seconds, deadline - elapsed)`,
+so `window_end` can never fall *past* the deadline instant; and the loop tests
+`elapsed >= DEADLINE_SECONDS` **before** it tests `now >= window_end`, so when
+the two coincide the deadline branch wins and the call returns 4, not 5. Any
+per-call overhead (process start, launch verification, the caller's own gap
+between Bash calls) counts toward `elapsed` and so only brings the deadline
+*forward* in attempt count — it cannot push it out of reach.
+
+So cap exhaustion is now a backstop that the normal timeline does not reach,
+not the routine exit it used to be. It stays fail-closed anyway, for the cases
+that bypass the arithmetic: an overridden `--await-seconds`, or a call that
+returns 5 early. Each individual call's 540s await still fits well inside the
+600000ms Bash tool cap.
+
+**Open follow-up — Variant A.** This loop is the foreground-poll shape, chosen
+because it is known safe (`references/code-review-invocation.md` §9.4). If a
+later probe shows the harness delivers a completion notification for a
+backgrounded Bash call **and** that the awaiting session does not present as
+`blocked` while it waits, the whole loop collapses to a single
+`run_in_background: true` call. No `ScheduleWakeup` fallback may be added
+alongside it: `strategy-token-economy` clarification 11 records that a
+self-scheduled fallback timer for harness-tracked work fires redundantly after
+the auto-notification has already resumed and finished the work, burning a
+no-progress round.
+
+**Hard stop on any non-zero `CR_RC` other than `5`**, following the same stdout/stderr-split,
 case-on-exit-code idiom this file already uses for the front door
 (`DERIVE_OUT`/`DERIVE_ERR`, preamble above) and for `commit-merge-push`
 (Step 3):
@@ -382,16 +700,35 @@ CR_ERR="tmp/code-review-$N.err"
 CR_LOG="tmp/code-review-$N/output.txt"
 case $CR_RC in
   0) ;;
-  1) echo "/review-fix: 'claude -p /code-review' exited non-zero (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  2) echo "/review-fix: dispatch-code-review argument/empty-output error (see $CR_ERR)" >&2; exit 1 ;;
+  1) echo "/review-fix: the detached 'claude -p /code-review' exited non-zero, failed to launch, or died recording no exit code (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  2) echo "/review-fix: dispatch-code-review argument, empty-output, or unusable run-state error — including a superseded in-flight run whose before-image baseline cannot be derived, which needs the working tree resolved by hand (see $CR_ERR)" >&2; exit 1 ;;
   3) echo "/review-fix: /code-review is unavailable — rejection signature in output (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
-  4) echo "/review-fix: 'claude -p /code-review' timed out (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  4) echo "/review-fix: the detached '/code-review' run hit its ${CR_DEADLINE_S}s deadline, or the ${CR_POLL_CAP}-attempt await cap was exhausted (see $CR_ERR, $CR_LOG)" >&2; exit 1 ;;
+  5) : ;; # still in flight — NOT terminal. Re-invoke with identical arguments,
+          # up to the $CR_POLL_CAP cap; only cap exhaustion is terminal, and it
+          # routes to the 4 branch above.
+  6) echo "/review-fix: the reviewed worktree's .code-review-lock is held by another detached /code-review run — nothing was launched and no review ran (see $CR_ERR)" >&2; exit 1 ;;
   *) echo "/review-fix: dispatch-code-review exited unexpectedly ($CR_RC) — script missing, non-executable, sandbox-denied, signalled, or aborted under 'set -euo pipefail' (see $CR_ERR)" >&2; exit 1 ;;
 esac
 ```
 
+Exit `6` is **not** a retryable in-flight state and must never be fed back into
+the loop. `5` means *this* run is still working; `6` means the script never
+launched anything, because a **different** detached review already holds the
+kernel `flock` on this worktree's `<worktree>.code-review-lock` sidecar. Looping
+on it would burn attempts waiting on a run this session does not own and cannot
+collect. Hard-stop the phase and let the human read the lock file for the
+holder's diagnostics.
+
+**Order matters, and it is not negotiable.** The parse block and the
+`status=ok` gate further down run **only after** the loop has left with
+`CR_RC` 0. An exit-5 `CR_OUT` is a `status=running` block, not a summary: it
+carries no `findings_path=` and no `patch_path=`, so letting one reach the gate
+would hard-stop the phase on a review that is merely still working. Loop first,
+`case` second, parse and gate only on rc 0.
+
 The `*)` catch-all is **load-bearing, not defensive padding**. The script's
-documented exit codes are 0/1/2/3/4, but a stale worktree checked out before
+documented exit codes are 0/1/2/3/4/5/6, but a stale worktree checked out before
 this node landed yields 127 (missing script), a lost `+x` bit or a sandbox
 denial yields 126, a signal yields 128+n (130 on SIGINT), and a `set -euo
 pipefail` abort inside the script (e.g. `mkdir -p` on an unwritable
@@ -425,10 +762,25 @@ that carries a credential (the reason the finder roster has a dedicated
 
 The reason must instead carry, in this order:
 
-1. The exit code and what it means (`3` = instrument unavailable, `4` =
-   timeout, `1` = nested session exited non-zero, `2` = argument/empty output,
-   anything else = unexpected exit — see the catch-all above).
-2. The `--target` passed above and the effort level (`low`).
+1. The exit code and what it means (`3` = instrument unavailable, `4` = the
+   detached run's deadline was exhausted, `1` = nested session exited non-zero
+   or the run died recording no exit code, `2` = argument, empty output, or
+   unusable run state (an underivable before-image baseline), `6` =
+   another detached run holds this worktree's code-review lock, anything else =
+   unexpected exit — see the catch-all above). `5` never reaches a park: it is
+   an intermediate state the loop absorbs. A park for exhaustion — either the
+   script's own deadline (`4`) or the caller's exhausted attempt cap — **must
+   record the elapsed wall clock and the deadline it ran against**; both are in
+   the script's exit-4 stderr line, and `elapsed_s=`/`deadline_s=` are on every
+   `status=running` block the loop saw.
+2. The `--target` passed above, plus the effort level and the model actually
+   used. Read those back from the script's own output (`effort=` and `model=`
+   on the summary, `effort=` on a `status=running` block) rather than restating
+   a remembered default — the effort is now per-input (Step 1a), so a remembered
+   value is wrong more often than it is right. The model is always `opus`.
+   Include Step 1a's recorded effort **rationale** too: a park that says only
+   "ran at `low`" leaves a human unable to tell a correct cheapening from a
+   fail-open that should have been `high`.
 3. The on-disk paths of the full, unredacted evidence — `tmp/code-review-$N.err`
    and `tmp/code-review-$N/output.txt` — so the human reviewer can read it in
    the worktree, where it never leaves the machine.
@@ -518,7 +870,23 @@ RESULT_OUT_DIR=$(cd "$RESULT_OUT_DIR" && pwd)
 ```
 args = {
   pr_num:              <PR_NUM>,
-  merge_base:          <MERGE_BASE>,
+  merge_base:          <MERGE_BASE>,    // the FULL branch base — what may be READ
+  review_base:         <REVIEW_BASE>,   // the narrowed base — what is REPORTED on
+  review_base_source:  <REVIEW_BASE_SOURCE>,
+  review_base_recorded: <REVIEW_BASE_RECORDED>, // '' unless source is `sidecar-rebased`.
+                                        // On that path `review_base` is a SYNTHETIC commit
+                                        // no `git log` resolves; this is the real sha the
+                                        // previous pass covered. REPORT it, never diff from it.
+  review_changed_files: [ <review_changed_files lines> ], // the DELTA's file list
+  blast_radius_files:  [ <blast_radius_files lines> ], // required reading, outside the delta
+  blast_radius_truncated: <true|false>,
+  blast_radius_generic: <int>,          // symbols too widely referenced to list callers for
+  prior_findings:      [ ...unresolved + deferred findings carried forward, each deferred one
+                          carrying its EXISTING follow-up reference; [] if none... ],
+  review_plan:         <REVIEW_PLAN>,   // Step 1a's verdict; OMIT it on any fail-open
+                                        // path. review-fix.js re-enforces the band, the
+                                        // xhigh irreversibility floor, the raise/cheapen
+                                        // asymmetry, and never-remove-a-lens.
   changed_files:       [ ...the changed-file list from the pack's === DIFF section (same list dispatch-changed-files extracts)... ],
   surface:             "empty" | "docs" | "tests" | "code",
   deps:                <true|false>,
@@ -552,7 +920,7 @@ Step 2's Workflow-invocation prose). The current Workflow (`review-fix.js`)
 does not read this field yet — it is additive here, consumed once the
 Workflow is rewired.
 
-**Invoke the Workflow tool on `.claude/workflows/review-fix.js`**, passing `args`.
+**Invoke the Workflow tool on the registered `review-fix` workflow**, passing `args`.
 The Workflow is a sanctioned call from this skill — no `ultracode` keyword needed.
 The Workflow runs in the background and returns one compact disposition summary:
 
@@ -878,7 +1246,7 @@ use in the phase-log entry, so the parent never has to read `result.json` for it
 per-bucket body organization, the partial-coverage line, and the create/edit
 flush commands.
 
-### 7. Apply the terminal label, then write the marker (or park on deviation)
+### 7. Gate on local lint, apply the terminal label, then write the marker (or park on deviation)
 
 The terminal actions run in this order (the mechanical bookend of the phase):
 
@@ -888,20 +1256,63 @@ The terminal actions run in this order (the mechanical bookend of the phase):
    sandboxed (origin is HTTPS to an allowlisted host — no
    `dangerouslyDisableSandbox`). Without it the PR stays `CONFLICTING` and the
    router can never promote it.
-2. **Write the handoff note (phase-log)** — only when the Workflow ran this
+2. **Gate on the local lint bundle — before anything marks this review
+   complete.** Run `.claude/skills/dispatch-propagate/scripts/run-lint.sh` in
+   the worktree, over the branch as this pass left it (this review's own fix
+   commits included — Step 3 already committed them). Green is the precondition
+   for items 4 and 6. **Red means fix and re-run; never mark.** Only when the
+   Workflow ran this session — skip on re-entry, where the mark is already
+   written.
+3. **Write the handoff note (phase-log)** — only when the Workflow ran this
    session; it must PRECEDE the `dispatch:reviewed` apply. On re-entry call the
    writer with `--reentry true </dev/null` (preserves the prior entry verbatim).
-3. **Apply `dispatch:reviewed`** via `dispatch-complete-phase "$PR_NUM" review`
-   (use `dangerouslyDisableSandbox: true`). This skill owns the label; it is
-   applied regardless of whether any fixes were made. This skill does **not**
-   ready the PR — the router's `dispatch-reconcile-ready` owns promotion.
-4. **Write the phase-completed marker, or park on deviation.** Deviation fires
+4. **Apply `dispatch:reviewed`** via `dispatch-complete-phase "$PR_NUM" review`
+   (use `dangerouslyDisableSandbox: true`), **only once item 2 is green**. This
+   skill owns the label; it is applied regardless of whether any fixes were
+   made. This skill does **not** ready the PR — the router's
+   `dispatch-reconcile-ready` owns promotion.
+5. **Record the reviewed sha** — `dispatch-review-base --record "$REVIEWED_HEAD"`
+   with **`dangerouslyDisableSandbox: true`**. This is what lets the NEXT pass
+   review only the delta. It sits here, beside the `reviewed` marker, because the
+   two mean the same thing: this review is complete and covered up to that sha.
+   A failure here is not fatal — the next pass falls back to `MERGE_BASE` and
+   reviews everything, which is what happens today. Log it and continue.
+
+   **The sandbox override is required, not cautionary.** The sidecar is written
+   to `<repo>/.claude/worktrees/<name>.review-base` — *beside* the worktree, not
+   inside it — and `.claude/rules/sandbox.md:14-17` states that only the
+   session's **own** worktree is writable and that nothing mounts
+   `.claude/worktrees/` itself. Sandboxed, the write fails read-only, the script
+   exits non-zero, this step's own "not fatal, log and continue" swallows it,
+   and every subsequent pass resolves `no-sidecar` — so the entire feature
+   silently never engages while every run still looks clean. Same reason every
+   `dispatch-code-review` call needs the override for its `.code-review-lock`
+   sibling.
+
+   **Run this only when the Workflow ran this session** — same gating as the
+   lint gate (item 2), the phase-log write (item 3), and the outcome envelope
+   (item 7), and for a stronger reason. `REVIEWED_HEAD` is bound in Step 1, and
+   the re-entry path
+   documented in the preamble **skips Steps 1–6 entirely**, so on re-entry the
+   variable does not exist. Recording the current HEAD instead is exactly the
+   silent permanent hole warned about just below: at re-entry, HEAD carries the
+   *interrupted* pass's own unreviewed Lane-A and Lane-B fix commits. Skipping
+   is safe and costs nothing but a wider next review; substituting is not.
+
+   **Record `REVIEWED_HEAD` — the Step 1 HEAD — not the HEAD at this point.**
+   This is a detection decision, not a convenience. Lane A's `--fix` (Step 1b)
+   and Lane B's fix fan-out (Step 2) both commit *during* the pass, and nobody
+   has reviewed those commits. Recording the Step 7 HEAD would put them behind
+   the next pass's base and exclude them from review **forever** — a silent,
+   permanent hole in exactly the code the review lane itself wrote.
+
+6. **Write the phase-completed marker, or park on deviation.** Deviation fires
    when `result.deviation === true` (a high-confidence Required+Upheld finding
    left unresolved): skip the marker, run the in-session recommend step, and call
    `dispatch-mark-deviation`. No deviation: call `dispatch-mark-complete`.
-5. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
+7. **Emit the outcome envelope** (`dispatch-emit-outcome`, sandboxed) — only when
    the Workflow ran this session; skip on re-entry.
-6. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
+8. **`dispatch-finalize-phase <N> --pr "$PR_NUM"`** as the ABSOLUTE LAST action
    (no-deviation success path only) — it self-closes the session, so all prior
    steps must complete first.
 

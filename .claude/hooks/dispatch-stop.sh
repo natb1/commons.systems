@@ -49,8 +49,12 @@
 # killed ~1.7s later, the node left neither advanced nor parked). So the reap is
 # NOT decided here: this hook passes `--node "$JOB_NAME"` and dispatch-self-close
 # gates on a `node-terminal` marker naming that node, written by the terminal
-# primitives (transition-node, park-node, /fix-checks, /align-tactics). No marker
-# → the job is held alive, visible and resumable.
+# primitives (transition-node, park-node) and the lanes that declare in skill
+# prose (/fix-checks, /qa-fix — fix-attempt on the auto-fix lane, no-claim on a
+# stale or scope-stale front-door exit — /align-tactics, /dispatch-conflict's
+# Lane 3). dispatch-self-close's invariant-2 header is the canonical list; keep
+# the two in step, because a HOLD is diagnosed by reading it. No marker → the
+# job is held alive, visible and resumable.
 #
 # Best-effort by contract: every failure logs to stderr and the hook exits 0 — it
 # must never block session teardown.

@@ -27,10 +27,21 @@ assert_eq() {
   fi
 }
 
+# A quoted pattern match, never `echo "$haystack" | grep`. Every consumer runs
+# under `set -o pipefail`, and `grep -q` exits the instant it matches — so on a
+# haystack big enough that the writer is still going when that happens, echo
+# takes SIGPIPE, the pipeline reports 141, and a MATCHING assertion is reported
+# as a FAILURE. It fails only sometimes, and only on large haystacks, which is
+# the worst shape: the suites that assert over a whole script's source (the
+# doctrine ratchets) grow into it as the script grows, then fail on a CI runner
+# while passing on the author's machine. `[[ == *"$needle"* ]]` needs no
+# subprocess, no pipe and no temp file, quoting makes the needle literal exactly
+# as `grep -F` did, and it is what every hand-rolled assert_contains in this
+# script family (and assert_not_contains beside them) already uses.
 assert_contains() {
   local label="$1" needle="$2" haystack="$3"
   TOTAL=$((TOTAL + 1))
-  if echo "$haystack" | grep -qF -- "$needle"; then
+  if [[ "$haystack" == *"$needle"* ]]; then
     PASS=$((PASS + 1))
     echo "  PASS: $label"
   else

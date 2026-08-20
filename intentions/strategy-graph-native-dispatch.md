@@ -39,19 +39,10 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   superseded migration-completion threshold could not read. success_signal was
   amended this round accordingly; see the threshold-shape and steelman
   clarifications below."
-reading: "lifecycle: tactic-graph-select-target-node-tests
-  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
-  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
-  → 29.7% → 27.5% (non-increasing)"
-gap: "reading \"lifecycle: tactic-graph-select-target-node-tests
-  implement→qa→review→done (2026-08-10); router selections: 2177 records, 279
-  nodes; backlog: 64/233 = 27.5% (band ≤35%); backlog series 28d: 47.6% → 39.8%
-  → 29.7% → 27.5% (non-increasing)\" does not meet threshold \"the owned path
-  carries tactics through the full lifecycle continuously, and the machinery's
-  own open defect backlog — open (phase set, not done) plus born-parked tactics
-  serving this strategy — stays at or below 35% of all tactics serving this
-  strategy and is non-increasing across consecutive samples derived from
-  intentions/ git history at read time\""
+reading: "lifecycle: tactic-gap-derive-on-read implement→qa→review→done
+  (2026-08-10); router selections: 2374 records, 281 nodes; backlog: 58/236 =
+  24.6% (band ≤35%); backlog series 28d: 47.6% → 38.2% → 31.4% → 24.6%
+  (non-increasing)"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -2016,7 +2007,21 @@ clarifications:
       session never touches the serving strategy's frontmatter (rounds,
       clarifications, or otherwise) and routes any strategy-record need to a
       park instead. Which binds?"
-    answer: "(Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
+    answer: "OVERTURNED 2026-08-15 — this ruling NO LONGER BINDS. A per-node
+      /align-tactics session may no longer write clarifications to the serving
+      strategy at all; the immaterial path mints a born-parked observation node
+      instead. See the sibling clarification 'Which lanes violate the
+      autonomous-substance invariant today', violation V1, which supersedes this
+      entry and quotes it. WHY THE REASONING BELOW NO LONGER HOLDS: its decisive
+      argument was that the doctrine left immaterial observations with NO LEGAL
+      DESTINATION AT ALL, forcing a choice between dropping them and writing the
+      strategy. The born-parked observation node is a legal destination, so the
+      forced choice dissolves and the concession it justified is no longer
+      needed. The SECOND finding below — that DRIFT_SCHEMA emits {answer} while
+      the Clarification interface requires {question, answer}, so the
+      instruction was never mechanically executable — is UNAFFECTED and still
+      owed. The original ruling, preserved verbatim for provenance, follows.
+      (Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
       a per-node tactic-target session MAY append clarifications entries to the
       serving strategy, and may touch NOTHING else on it — never
       rounds/count/last_completed/last_aligned, never statement, rationale,
@@ -4774,15 +4779,1724 @@ clarifications:
       idempotency/tactic-target references. The sensor implementer may reuse
       align-tactics-census.ts's classify() (draft/born-parked/open/done, lines
       23-30) without a pending-retirement hazard."
+  - question: Does condition 10's 'Breaker state never lives outside the graph' bind
+      the per-claim evidence anchor for a node's freeze, or only the
+      tripped-breaker incident record? And where is the claim written?
+    answer: "Ratified in the 2026-08-10 office-hours sitting, clearing the parks on
+      tactic-claim-containment-durable-anchor (born-parked 2026-07-31) and
+      tactic-session-reap-authorization-durability (parked 2026-08-09) with one
+      answer. (i) IT BINDS THE PER-CLAIM ANCHOR. Condition 10's own closing text
+      is the governing sentence: the containment holds only where 'the freeze
+      must anchor on durable graph state rather than on a process-level session
+      registry'. That is about the freeze anchor, not merely the tripped-breaker
+      incident record. Consequence: a reservation-ledger anchor (option b of the
+      2026-07-31 park) and a reconciler derived from worktree/branch/PR (option
+      c) are both excluded — durable, but not graph state. Either may still be
+      adopted later, but only as an AMENDMENT to this condition, never as a
+      reading of it. (ii) THE CLAIM IS WRITTEN BATCHED, ONE graph-commit PER
+      SELECTION TICK, ISSUED BEFORE THE SPAWNS — not per spawn in
+      provision-node-worktree, which is the shape the 2026-08-09 sitting
+      ratified without pricing. Measured 2026-08-10: provision-node-worktree
+      performs no graph write today (only reservation_mark_spawned at
+      dispatch-graph-execute:159); baseline ~92 landings/day (1293/14d, peak
+      27/hour) against ~22 worker passes/day (312 transitions/14d), so a
+      per-spawn write adds only ~24% to landing VOLUME but places a CI-stamped
+      landing serialized behind the global refs/graph/landing-lock
+      (graph-commit:355) on the spawn critical path, where an N-wide fan-out
+      serializes into N landings. Batching makes the cost independent of fan-out
+      width, which is what the contention condition's 'negligible at fleet
+      concurrency' requires. Issuing the batch BEFORE spawning inverts the risk
+      window to claimed-but-not-yet-spawned, which reservation_sweep already
+      reconciles and which fails safe."
+  - question: Graph retrieval, editing, and concurrency control consume more session
+      effort than the content they carry. Does the mechanical-floor doctrine
+      cover session-facing graph operations, or only router and workflow
+      mechanics?
+    answer: "(Recorded 2026-08-11 interview.) It covers them, and this round widens
+      the doctrine to the session-facing graph-operation surface via a new
+      condition following the shape of the invalid-state mechanical-floor
+      condition. MEASUREMENT, over the 2026-08-10/11 transcript corpus read
+      across every commons.systems project directory including the per-worktree
+      ones (797 session transcripts, 164MB, 13,342 tool calls of which 8,728
+      Bash, 9.4MB of model-authored tool input): stripping heredoc bodies out of
+      Bash commands leaves 1,857KB of shell mechanics against 262KB of authored
+      content — a 7.1x ratio of effort spent reaching and writing the graph over
+      effort spent writing what goes in it. Ad-hoc node access (386 jq, 398
+      sed/awk/grep over a node .md, 105 inline python/node one-offs = 889 calls)
+      outnumbers the sanctioned node primitives (write-node.ts 65, dump-node.ts
+      63 = 128 calls) about 7:1. 1,612 of 8,728 Bash calls restate a worktree
+      path; 1,049 perform post-write git status/diff eyeball verification; 705
+      calls invoke graph-commit across 1,113 occurrences, the excess being retry
+      loops; 270 calls hand-roll `git show origin/main:intentions/<id>.md`. That
+      last one has a STRUCTURAL cause, not a discipline cause: storeAtRef
+      (packages/intentionsutil/scripts/lib-store-at-ref.ts) exists as a library
+      helper with five script consumers but no CLI, while dump-node.ts resolves
+      its store from import.meta.url and therefore reads the worktree copy — so
+      the doctrine that repeatedly mandates reading at origin/main has no
+      scripted path at all, and every doctrine-compliant read is necessarily
+      hand-written shell. Sessions were observed writing full-graph scans as
+      bash loops over `git ls-tree` plus per-node `git show` plus `sed`.
+      ROUND-TRIP COST is first-class alongside per-call bytes (author addendum,
+      same interview): 8,728 Bash calls produced 140 intentions/ commits in the
+      window, roughly 62 Bash round-trips per landed graph commit. ADOPTED: the
+      mechanical-floor framing — scripts carry what is mechanical, model spend
+      carries what needs judgment — extended from
+      selection/transition/provisioning and invalid-state to retrieval and
+      query, editing, and concurrency control. DIVERGED from the strongest rival
+      framing, that this overhead is appropriate generality and the hand-rolled
+      escape hatch is precisely the point: the measured calls are uniform rather
+      than diverse — all 270 origin/main reads are the same operation and the
+      1,612 path restatements carry no information whatsoever — so this is the
+      absence of a primitive for an already-uniform operation, not generality.
+      The divergence is bounded by writing the condition as a floor rather than
+      a ceiling."
+  - question: Does moving mechanical graph labor into owned scripts warrant a
+      recovers edge from this strategy to delegation-anthropic-claude?
+    answer: (Recorded 2026-08-11 interview.) No — raised and declined on this
+      round's basis, with the question retained rather than dropped. The
+      mechanical-floor doctrine already lives in this strategy as the
+      workflow-thin-composition condition and the invalid-state condition,
+      neither of which carries such an edge; if the edge is warranted it was
+      warranted for the whole doctrine, so newly adding it because this round
+      widens the same doctrine would be inconsistent.
+      delegation-anthropic-claude is additionally the pivotal delegation whose
+      recovery substrate is open-weight and local inference, which makes an edge
+      claim on it doctrinally heavy and wrong to let ride along on an efficiency
+      amendment. recovers stays [delegation-github] this round. The question is
+      retained as the draft tactic tactic-graph-ops-model-recovery-edge so a
+      later round can decide it on its own terms.
+  - question: What was this round's own freeze blast radius, and what does it say
+      about the strategy soft-freeze?
+    answer: "(Measured 2026-08-11 interview.) Effectively zero, corroborating
+      tactic-strategy-fingerprint-stamp-coverage. Computed with the
+      authoritative predicate (listNodes plus the per-child
+      execution.strategy_fingerprint read and strategyFingerprint from
+      packages/intentionsutil/src/router.ts), never a grep: 237 tactics serve
+      this strategy, 47 of them open (phase set, neither done nor draft), and
+      exactly ONE — tactic-strategy-fingerprint-stamp-coverage — carries a
+      non-null strategy_fingerprint entry for this strategy. A text grep over
+      the field would have counted 45 and inflated the estimate, which is the
+      failure mode the measurement rule exists to prevent. That single stamp was
+      ALREADY stale against the current strategyFingerprint before this round's
+      edit, i.e. frozen by some earlier delta. It was therefore classified
+      orthogonal to this round's delta but deliberately NOT re-stamped:
+      re-stamping would have silently discharged a prior round's freeze that
+      this session never classified. Leaving it untouched is the fail-closed
+      choice. The re-measurement (47 open children, 1 stamped) updates the
+      2026-08-03 finalize-time figure of 46 open and 0 keyed."
+  - question: What gate reviews an /align round's drafted graph updates before they
+      commit?
+    answer: "(Recorded 2026-08-11 interview; amended same day from the bootstrap
+      review's two rounds.) Every /align round whose graph-commit creates or
+      modifies any strategy-* node field other than the router-owned ones
+      (phase, execution, office_hours, reading, and attention stamps), or
+      creates any new node file, runs a mandatory adversarial draft design
+      review after drafting and before that commit — the predicate is the
+      commit's own diff, mechanically checkable, never the session's
+      self-judgment; it covers new-strategy rounds,
+      statement/rationale/signal-only amendments, and draft-tactic-only rounds,
+      while excluding the mechanical phase-transition writers, which touch only
+      router-owned fields. The reviewer is an independent subagent (launched
+      with an explicit model: opus parameter — the launch argument, not skill
+      frontmatter, which is only confirmed honored for context: fork skills)
+      executing /align-review with no drafting-session context. Its handoff pack
+      is assembled by an owned script (assemble-review-pack) from on-disk
+      artifacts, never composed as session narrative: the author's requirement
+      text written verbatim at step 1, the dump-node base JSON and exact
+      write-node input JSON for every edited node, each draft tactic's JSON and
+      body, the design-proposals rule, origin/main renders of every touched node
+      and of every file the round's carrier tactics will amend, and the round's
+      freeze classification and delegation-sweep outcome — each written to the
+      round's pack dir by the /align step that produces it, with the script
+      failing closed when any is missing. Interview resolutions enter the pack
+      as the drafted clarification entries themselves. The reviewer proposes
+      alternate designs against both the author's original proposal and the
+      draft, reconsiders assumptions in the existing graph — evaluating whether
+      the draft is ideal greenfield design — and returns a verdict, a
+      requirement-clause coverage table, and findings ranked MATERIAL/MINOR. The
+      coverage table is the authoritative discharge of the record-completeness
+      contract (condition 7): the reviewer reads only the pack, so it is a
+      fresh-session proxy — the exact reader that contract is written for — and
+      the skill's own coverage walk reconciles against the reviewer's table,
+      escalating any clause the reviewer could not place; the reviewer
+      additionally flags every fact it needed that is not in the material
+      landing on origin/main (the write-node inputs and draft-tactic bodies) —
+      that list is the round's condition-7 defect list. Disposition: MATERIAL
+      findings — anything that changes WHAT the record says, including
+      design-shape problems, contradictions with author-confirmed resolutions,
+      and any challenge to recorded doctrine — go to the author through the
+      interview's question mechanics (recommendation + boldness +
+      accept-as-deferral; a deferred material finding enrolls a Mode-A
+      born-parked review item per the deferral mechanics); MINOR findings are
+      structurally incapable of carrying judgment — they change only HOW the
+      record says something (typo, missing or wrong date, schema/format defect;
+      a wrong-citation fix only when the intended referent is unambiguous and
+      exists) — and fold into the draft, reported in the round summary. If
+      disposition changes the draft's design shape (a new or removed unit, a
+      changed carrier, changed condition semantics), the amended draft is
+      re-reviewed — never for MINOR folds or wording — capped at two review
+      rounds per bundle, after which the round surfaces the residue to the
+      author and proceeds on the author's call. Enforcement floor: graph-commit
+      refuses a gated commit (dedicated exit code) unless it carries --review
+      <report-file> whose report names the node ids it reviewed and a digest of
+      the exact write-node input JSON it was given — graph-commit recomputes the
+      digest from the staged node files and refuses on mismatch, so a stale
+      pre-disposition receipt fails mechanically — or an explicit --ack <reason>
+      flag recorded as a commit trailer (the condition-14 escape-hatch idiom; a
+      message-substring would have no author surface since graph-commit authors
+      its own messages). Judgment stays in the review; the receipt check is
+      mechanical, per the scripted-path condition of 2026-08-11. A multi-topic
+      round reviews per strategy commit bundle. /align-review is also
+      author-invocable standalone against any staged draft. Per-round cost — one
+      opus subagent per gated bundle, at most two — is accepted and read by the
+      token audit's by-node attribution. Arming: the gate as a whole reads
+      not-yet-armed until tactic-align-review-skill lands the skill text, the
+      pack script, and the receipt flag; the interim discharge is a general
+      subagent carrying this clarification's pack spec inline — the proven
+      bootstrap path (two live runs 2026-08-11) — and the interim expires when
+      that tactic's PR merges, after which an inline-pack discharge is drift,
+      not a sanctioned path. Scope is /align only (the author's directive names
+      /align executions); extending the gate to /align-tactics' drafted plans is
+      a recorded candidate — one --review flag, not a redesign. The gate changes
+      no delegation record: the reviewer is itself Claude and material findings
+      route to the author, so judgment stays author-held —
+      delegation-anthropic-claude is unchanged and no recovers edge applies.
+      Skill build tracked at tactic-align-review-skill."
+  - question: Steelman — the interview is already the audit; does a second reviewer
+      diffuse that responsibility?
+    answer: "(Diverged 2026-08-11, reasons recorded.) The rival holds the interview
+      solely responsible for design quality and reads a post-draft reviewer as
+      institutionalizing rushed interviews while adding per-round cost; its
+      softer form — the review as advisory, run at the session's discretion —
+      was offered and rejected in this round's interview. Diverged: the live
+      2026-08-11 precedent (the rsi-plan priorities round in this same session)
+      ran exactly this review ad hoc at author direction and caught three
+      material design-shape problems the completed interview had missed — an
+      actuator set that could defeat the author's forcing mechanism, a
+      mitigation with no recorded carrier, and a brownfield attribute split — at
+      the bounded cost of one subagent. The gate strengthens rather than
+      replaces the audit: findings route back through the interview's own
+      question mechanics, so responsibility stays with the round; and the
+      advisory alternative failed precisely because the precedent ran only by
+      author direction — an optional gate is the one that does not run. The same
+      argument closed the enforcement seam: an unenforced mandatory gate
+      inherits the advisory flaw, so the graph-commit receipt floor (see the
+      gate clarification) is part of the divergence's resolution, not an
+      optional extra."
+  - question: Is the interview still the audit once the draft review gate exists?
+    answer: "(Recorded 2026-08-11, from the bootstrap review's findings.) Yes,
+      amended: the interview is the audit; the draft review is the audit's
+      second reader, not a substitute for it. A rushed interview is still a
+      permanent gap — the reviewer sees only what the pack carries, so it can
+      catch a mis-shaped design but not an unasked question — and the reviewer's
+      material findings return to the interview's own question mechanics rather
+      than replacing them. This entry is the doctrine's graph home: the align
+      skill text previously asserted 'the interview is the audit... there is no
+      downstream review step' citing a clarification on this node that does not
+      exist (the phrase lived only in skill prose and a transient tactic node);
+      the carrier tactic rewrites that skill paragraph to match this record and
+      fixes the citation, and the tactic-graph-native-dispatch spec sentence is
+      reconciled in this same commit."
+  - question: What is /dispatch-emulate, why does the dispatch surface own a
+      hand-driven emulation entry point, and what bounds it?
+    answer: "(Recorded 2026-08-12 /align interview, post-hoc: the skill landed
+      first, at 55d07b51 / PR #3069, and this entry records the requirement it
+      was built to.) THE PROCEDURE. Drive ONE tactic node through the real
+      dispatch phase ladder, one phase at a time, as spawned sessions running
+      the real dispatch phase skills — align-tactics, implement, the fix and
+      conflict interrupts, review, qa, main-qa. Nothing in it re-implements a
+      phase. IT EXISTS FOR the case the tick structurally cannot reach: dispatch
+      is paused and the fix is what would unpause it, or any other bootstrap
+      deadlock the tick has no route into, or an author who wants one node
+      driven under supervision. Before the extraction the procedure was written
+      down only inside /rsi Step 4b, so reaching it meant running a full /rsi
+      iteration with its claim, its plan render, its judgment step and its
+      budget. WHY THE REQUIREMENT IS RECORDED HERE rather than on
+      strategy-recursive-self-improvement, which built it: this strategy owns
+      the dispatch skill surface, and it already carries the emulation doctrine
+      this skill must obey — the clarifications on what a bootstrap-emulating
+      session owes the qa phase and the review phase (2026-07-04, entries
+      19-20). rsi keeps only what is rsi's: the budget, the attendedness, the
+      judgment step, and pause authority; /rsi Step 4b is now a delegation to
+      this skill, and rsi's own rsi-implement-contract clarification is amended
+      to match in the same round. THE BOUND — recorded as a divergence, not an
+      omission. The steelman put to the author: a user-invocable emulation skill
+      IS the second orchestration surface strategy-recursive-self-improvement's
+      condition 3 forbids, and giving it its own front door removes the three
+      guards that bounded the 2026-08-10 divergence — attended, serialized,
+      budget-bounded. DIVERGED 2026-08-12, reason recorded: the extraction moves
+      no scheduling authority at all. graph-select-target --node owns every
+      eligibility question — claim safety, the per-phase CI and PR sensor gates,
+      the fix and conflict interrupts — and --node is a selection-ORDER
+      override, never a gate bypass; dispatch-graph-execute owns provisioning,
+      the phase-to-skill mapping, the spawn, the reservation handoff, and every
+      park and hold disposition; the verdict comes from verify-landed against
+      origin/main, never from a session's exit status. So there is one
+      orchestration surface, now merely named. THE INVARIANT that keeps the
+      divergence honest, and the thing to check any future edit against: THE TWO
+      SCRIPTS DECIDE NOTHING. If a rule about when a node may run ever appears
+      in dispatch-emulate-advance or dispatch-emulate-await, it is in the wrong
+      place and belongs to the selector. Second half of the bound: the skill has
+      NO attendedness and NO pace-exemption of its own — it is attended because
+      its callers are, and it inherits nothing else. A STRATEGY ID IS REFUSED
+      MECHANICALLY, not by prose: dispatch-emulate-advance gates on the
+      selector's own kind, prints 'refused <id> strategy' and exits 2, before
+      any reservation is written, because an /align-tactics pass on a strategy
+      decomposes it into CHILD tactic ids rather than advancing the strategy up
+      the ladder — so there is no single node for the loop to follow. A tactic
+      whose selector rung is align-tactics is a legitimate starting point, since
+      /align-tactics finalizes that same node in place. THE LOOP'S FINAL STEP is
+      the implementation evaluation (author ruling, 2026-08-12), which /rsi
+      inherits through the delegation rather than carrying separately; see
+      strategy-recursive-self-improvement's condition 14 and
+      tactic-rsi-implement-acceleration-review, re-targeted to this skill in the
+      same round. (Amended 2026-08-12, same-day /align round — superseded in
+      name and substrate. /dispatch-emulate is retired and replaced by
+      /dispatch-ladder: a detached shell driver that carries the whole ladder to
+      phase done, not a hand-driven per-phase loop. Everything recorded above
+      survives unchanged — the procedure, the case it exists for, the divergence
+      bound, the selector's ownership of every eligibility question, the
+      mechanical strategy-id refusal, and the align-tactics rung as a legitimate
+      start. What changes: the sequencing moves from skill prose into owned
+      code, the run detaches from the calling session, and THE LOOP'S FINAL STEP
+      named above is re-ruled — the closing implementation evaluation is now
+      performed by the invoking session after it polls the detached run to
+      terminus, because a shell driver cannot perform a judgment review. See the
+      entry recorded the same day on what replaces /dispatch-emulate.)"
+  - question: Who merges an emulated run's PR — the tick's merge lane, or the
+      emulation loop itself?
+    answer: "(Author-directed 2026-08-12, after the /align interview surfaced a
+      false instruction shipped in the skill.) THE DEFECT. /dispatch-emulate's
+      SKILL.md ships the rule 'Never hand-merge. The tick's merge lane runs even
+      while dispatch is paused. Let it.' The second sentence is false as
+      written, and this graph already knew it: graph-auto-merge is invoked only
+      at dispatch-select-tick:505, and every dispatch-select-tick invocation
+      sits past the pause short-circuit's exit 0 at dispatch-tick:415, so no
+      node-lane PR merges while the pause sentinel exists. The sentence was
+      inherited verbatim from /rsi's Step 4b during the extraction; note that
+      the extraction REMOVED it from /rsi, so it has one home, not two. THE
+      AUTHOR'S CHALLENGE, and the ruling: the loop delegates every other phase
+      to the same scripts dispatch uses, then outsources the terminal step to
+      the scheduler it exists to route around — a structural inconsistency, and
+      it fails precisely when the loop is most needed. So the answer is not to
+      patch the sentence but to make it unnecessary. GREENFIELD DESIGN, adopted:
+      graph-auto-merge owns ALL of its admission gates — including the
+      main-known-good check that today lives in dispatch-select-tick around the
+      call site rather than inside the script — and takes an optional node-id
+      filter, so a caller can merge one node rather than sweeping the queue;
+      reconcile-graph-merged takes the same filter, because a merge the loop
+      performs must also be absorbed or the node sits merged-but-stuck at phase
+      review. Both the dispatch tick and /dispatch-emulate then call one
+      fully-gated script, and the pause gates worker spawning only, exactly as
+      this graph's pause doctrine already says it should. The emulation loop
+      still decides nothing: it delegates the merge the same way it already
+      delegates selection and launch. WHY THIS DOES NOT BREAK THE ONE-GATE
+      INVARIANT of the 2026-08-05 admission-gate ruling (entry 197) — it extends
+      it. Main health is a FOURTH predicate on the same single admission
+      decision as mergeability, office_hours and blocked_by, and that ruling's
+      named defect is uncoordinated tactics racing the same gate surface. So the
+      main-health predicate is sequenced BEHIND the two gate tactics still open
+      (tactic-graph-auto-merge-up-to-date-gate at implement,
+      tactic-graph-auto-merge-office-hours-gate at main-qa) rather than opening
+      a third racer. ACCEPTED CONSEQUENCES, named: two callers of one gated
+      script can race when dispatch is unpaused — benign, because the second
+      sense reads a non-OPEN PR and skips; and the pause stops meaning 'no
+      merges', which is acceptable because the record already names an
+      operator-run dispatch-tick --manual and an author hand-merge as legitimate
+      escapes, so this formalizes an existing escape rather than inventing one.
+      The skill's stated invariant that neither script makes a merge, a graph
+      write, or a gh call is re-scoped accordingly: neither script makes a
+      DECISION. SEQUENCE: (1) tactic-pause-disables-merge-lane (PR #3068, in
+      flight at phase qa) makes the paused tick run the node-lane merge chain —
+      verified this round to gate correctly on OPEN_MAIN_RED via
+      dispatch-graph-main-red-sync and to run reconcile-graph-merged
+      unconditionally; (2) tactic-graph-auto-merge-main-health-gate moves that
+      gate into the script and adds the node filter, deleting BOTH call-site
+      copies (#3068 adds a second one); (3) tactic-dispatch-emulate-owns-merge
+      adds the node-scoped merge-and-absorb step to the loop and rewrites the
+      false rule. An interim wording correction lands ahead of all three,
+      because the false instruction is live on main while the queue is paused —
+      the exact condition under which someone would read it. OPERATIONAL NOTE
+      worth keeping: #3068 is itself stalled behind the bug it fixes, sitting at
+      qa while the pause blocks worker spawning and blocks the merge that would
+      land it — the same self-blocking loop this graph recorded for PR #3052.
+      (Amended 2026-08-12, same-day /align round — the ruling stands, its third
+      sequence item moves. Items (1) tactic-pause-disables-merge-lane and (2)
+      tactic-graph-auto-merge-main-health-gate are unchanged and still gate the
+      work. Item (3), tactic-dispatch-emulate-owns-merge, is superseded by
+      tactic-dispatch-ladder-skill, which carries the node-scoped
+      merge-and-absorb step into /dispatch-ladder's shell driver. The
+      replacement also strengthens the ruling's own point: the ladder now runs
+      THROUGH merge-and-absorb to phase done rather than leaving through idle,
+      so the structural inconsistency named here — a loop that delegates every
+      phase then outsources its terminal step to the scheduler it exists to
+      route around — actually goes away rather than being narrowed. The accepted
+      consequences named here are unchanged and are not re-litigated.)"
+  - question: What replaces /dispatch-emulate — what is /dispatch-ladder, how much
+      of the loop may the AI carry, and what bounds a detached driver?
+    answer: "(Recorded 2026-08-12 /align interview, same day as the entries it
+      amends.) THE REPLACEMENT. /dispatch-emulate is retired and replaced by
+      /dispatch-ladder <node-id>. THE NAME: the author's prompt proposed
+      /dispatch-workflow and the author then chose /dispatch-ladder instead,
+      because 'workflow' already carries two other senses here — the harness
+      Workflow tool, and 'the dispatch workflow' of strategy-distribute-workflow
+      — and the substrate ruling below excludes the first sense, so the name
+      would point a fresh clean session at the one implementation ruled out.
+      'Ladder' is this record's own word for the phase sequence. 'Emulate'
+      retires because the loop no longer emulates a tick: it runs the ladder
+      and, once the merge step lands, completes the node itself. THE SPAN — what
+      distinguishes it from the two existing entry points. The scheduled tick
+      and the manual `dispatch [<node-id>]` lane each execute ONE phase or
+      intervention per invocation; /dispatch-ladder progresses one node all the
+      way, /align-tactics through /qa-main and on through the node-scoped
+      merge-and-absorb. TERMINUS, ruled: run to terminal state — phase done, a
+      halt disposition, or a throw — not 'stop after main-qa' as the author's
+      prompt literally read, because stopping at main-qa leaves the loop
+      outsourcing its last step to the scheduler it exists to route around, the
+      exact structural inconsistency the same-day owns-merge ruling exists to
+      close. THE NEW REQUIREMENT: sequencing and conditional logic move out of
+      skill prose into owned code; the AI carries as little as possible.
+      SUBSTRATE, ruled — a plain shell driver, NOT a Workflow-tool script. The
+      deciding fact, put to the author because it inverts the obvious reading of
+      'workflow script': a Workflow-tool script has NO filesystem or shell
+      access, its only primitive is agent(), an AI subagent — so driving the
+      phase primitives through it would ADD an AI layer to a loop that is
+      already pure exit-code branching, achieving the opposite of the
+      requirement. Compounding it, this graph already records that a Workflow
+      launched by scriptPath dies unrecoverably when backgrounded. The precedent
+      for a fully mechanical driver is dispatch-tick itself, a bash script that
+      selects, launches and disposes with no AI at all. VERIFIED THIS ROUND,
+      discharging a claim flagged as unproven when the recommendation was made:
+      the loop's entire branch surface is exit codes and nothing in it needs
+      judgment — advance gives 0 launched / 2 usage-or-strategy-refused / 10
+      idle / 11 throw / 13 claimed, await gives 0 advanced-or-pruned / 11 throw
+      / 12 stalled / 14 unknown-graph-read / 20 still-running. RUNTIME, ruled —
+      detached. The measured phase durations on the superseded
+      acceleration-review node (implement 14m10s, qa 15m59s, fix ~50m) put a
+      full ladder at hours, while the Bash tool's ceiling is 600s. That ceiling
+      is WHY today's skill has the model re-call await on exit 20 repeatedly,
+      and that re-calling IS the AI sequencing being removed — a foreground
+      driver would preserve the very defect. So the driver launches as a
+      transient systemd-run --user unit, the pattern dispatch-spawn-tick already
+      uses for the tick, logging to journald, with the calling session returning
+      immediately. Rejected: a bounded-window foreground driver (thins the AI's
+      role, does not remove it) and a background Bash tool call (dies with the
+      session, which is the failure this loop hits most, since bootstrap
+      deadlocks are long). THE STEELMAN, put to the author from this graph's own
+      record, and the ruling. Rival framing: a detached, hours-long,
+      self-sequencing node driver IS the second orchestration surface
+      strategy-recursive-self-improvement condition 3 forbids, and detaching
+      falsifies the second of the two claims the 2026-08-12 divergence rested on
+      — that the skill is attended because its callers are. RULED: detached
+      execution, attended judgment. The driver detaches the WAITING only. It
+      never resolves a throw — exits 11, 12 and 14 halt the run unconditionally,
+      with no retry, no auto-park, no resume without a person. Attendedness is
+      preserved where it means something (judgment), not where it is only
+      polling. The divergence's FIRST claim is untouched: graph-select-target
+      --node still owns every eligibility question, dispatch-graph-execute still
+      owns provisioning, the phase-to-skill mapping, the spawn, the reservation
+      handoff and every park/hold disposition, and the verdict still comes from
+      verify-landed against origin/main. THE INVARIANT, re-scoped. 'The two
+      scripts decide nothing' becomes: the driver may SEQUENCE, never gate.
+      Sequencing is not authority here — the driver only re-asks the selector
+      what to do next, and every answer remains the selector's. THE CLOSING
+      REVIEW — a problem detachment creates that the attended loop did not have.
+      rsi condition 14 requires the acceleration review to run after terminus,
+      never interleaved; a detached run reaches terminus with no session
+      attached, and a shell script cannot perform a judgment review. RULED: the
+      invoking session, or a later author-started one, polls a status script to
+      terminus and then runs the review. Rejected: a terminus marker a later
+      session owes (risks the review being owed and never paid — precisely the
+      defect condition 14 names) and a driver-spawned review session (makes the
+      driver spawn AI work, the autonomy declined above). RETIREMENT, ruled —
+      full rename. dispatch-emulate-advance and dispatch-emulate-await become
+      dispatch-ladder-advance and dispatch-ladder-await with their tests;
+      .claude/skills/dispatch-emulate/ is deleted; /rsi Step 4b repoints by
+      name. Rejected: keeping the script names (leaves the retired word embedded
+      in the primitives and their tests) and folding the primitives into the
+      driver (loses two independently-testable units and the ability to step one
+      phase by hand). THE FOLDED NODES. tactic-dispatch-emulate-owns-merge (raw)
+      and tactic-rsi-implement-acceleration-review (phase implement, in flight,
+      already re-targeted once the same day) are both superseded by
+      tactic-dispatch-ladder-skill, which carries their scope forward: the
+      node-scoped merge-and-absorb step, the closing acceleration review, the
+      await-window sizing, and the irreplaceable measured-durations table. The
+      new node stays blocked_by tactic-graph-auto-merge-main-health-gate — the
+      node-scoped merge can only be delegated once graph-auto-merge owns the
+      main-health gate and takes a node filter. Rejected: letting the in-flight
+      node land first (pays for the same implement work twice) and a third
+      re-target of the same node (the record already names repeated re-targeting
+      as a defect pattern). SERVES, and why it is two edges.
+      tactic-dispatch-ladder-skill serves BOTH strategy-graph-native-dispatch —
+      the artifact-owner rule of clarification 27, the changed artifact being
+      this strategy's dispatch skill surface — and
+      strategy-recursive-self-improvement, whose condition 14 is the requirement
+      carried. The superseded node kept rsi alone, reasoning that a second edge
+      'would be a ranking act with no ordering effect (band is max across
+      distributors, and rsi resolves higher)'. That has inverted: rsi is the
+      higher distributor, so dropping it would LOWER the rank, and keeping both
+      PRESERVES the rank rather than granting one. DELEGATION ADVICE, Step 3
+      finding. This round's substrate choice moves a real loop off proprietary,
+      session-bound harness machinery (the Workflow executor) onto owned shell —
+      concrete evidence for the recovers edge to delegation-anthropic-claude
+      that tactic-graph-ops-model-recovery-edge owns. The edge is deliberately
+      NOT added here, honoring that node's own recorded instruction that an edge
+      claim on delegation-anthropic-claude is doctrinally heavy and must not be
+      settled as a side effect of an efficiency amendment; the evidence is cited
+      so the deciding round finds it. FREEZE BLAST RADIUS of this round,
+      measured with readNode + isFingerprintStale rather than a grep: one
+      stamped open child, tactic-strategy-fingerprint-stamp-coverage (phase qa),
+      classified ORTHOGONAL — its plan is the router's stamp-write plumbing,
+      untouched by ladder-driver doctrine — and re-stamped in this same commit.
+      Every other open child serving this strategy is unstamped and freezes
+      nothing."
+  - question: Is a recording round answerable for the internal consistency of its
+      own output, given that /align has no plan schema and refining tactical
+      content is /align-tactics’ job?
+    answer: "(Recorded 2026-08-12 /align interview, arising from a /dispatch-ladder
+      closing acceleration review.) YES — with the boundary drawn at
+      CONSISTENCY, never at plannability. DIVERGENCE, recorded with its reason:
+      the rival framing holds that an /align-tactics park is the mechanism
+      working, because the delegation economics deliberately move planning off
+      the author’s present, expensive interview time onto a cheap autonomous
+      session, so spending an autonomous session to discover unplannability is
+      the correct trade rather than waste. That framing is adopted for
+      plannability and diverged from for self-consistency: catching a
+      contradiction between two things the SAME round wrote consumes no author
+      judgment at all, so the economics argument does not reach it. Step 4’s
+      retain-not-refine rule is preserved verbatim — no plan schema and no
+      quality bar enter /align — and the duty asserted here is already implied
+      by Step 2’s standing obligation to always surface graph-internal
+      inconsistencies. EVIDENCE: commit 8249f664 (2026-08-12 14:22), an /align
+      round on strategy-graph-drives-dispatch, created
+      tactic-attention-namespaced-rank — whose body defers per-tier boost
+      storage to tactic-attention-per-tier-boost-migration — and in the SAME
+      commit gave that sibling blocked_by: [tactic-attention-namespaced-rank],
+      ordering the dependency after its own dependent. A /dispatch-ladder run
+      then spent roughly 13 minutes of Opus inside /align-tactics rediscovering
+      that inversion and parked the node (2184103c) for author ratification. The
+      defect was free to catch in the authoring round and cost a full autonomous
+      session to catch downstream. The same census pass found at least three
+      earlier parks naming an upstream recording round’s record gap as their
+      cause, one stating outright that it was a record-completeness gap of the
+      2026-07-02 /align-strategy round. SCOPE LIMIT: this does NOT make /align
+      answerable for whether a recorded tactic is plannable. That remains
+      /align-tactics’ sole judgment, and a park on genuine requirement ambiguity
+      — including the 2184103c park itself, which turned on an unratified
+      storage-shape ownership question — remains correct behavior. CAPTURE NOTE:
+      the walk makes Claude the checker of Claude’s own output, the same
+      self-audit shape strategy-graph-integrity records for its recurring
+      /align-audit; the loop is controlled, not unwound — no recovers edge is
+      added on that account. Mechanisms retained this round as draft tactics:
+      tactic-align-round-self-consistency-walk (the Step 6 walk),
+      tactic-validate-graph-ordering-inversion-lint (the mechanical backstop),
+      and tactic-align-tactics-premise-preflight (early refusal, so an
+      unplannable node parks cheaply). A fourth,
+      tactic-park-cause-sensor-instrument, was filed by this same round after it
+      measured that appending the park-cause sensor to success_signal.sensor
+      recorded the observable but registered nothing — the census sensor counter
+      read 19/53 with 45 unregistered both before and after the append, because
+      read-sensors matches the entire success_signal.sensor string against
+      registered Sensor names and this strategy’s prose was already
+      unregistered. Filing it rather than deferring it is this condition applied
+      to the round that recorded it."
+  - question: Is a session orphaned by a daemon crash, restart, or version roll an
+      invalid state?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) No — and this
+      is a ruling on the taxonomy, not a routing exception. An environmental
+      failure is a legitimate, expected state whose casualties are ORTHOGONAL to
+      the invalid-state dimension, the same shape as the 2026-08-04
+      done-but-parked ruling that phase and office_hours are orthogonal
+      dimensions. Clarification 185's detection design is a binary —
+      occupied-by-terminal routes to the lane, occupied-by-live is a valid skip
+      — and a daemon casualty is neither: the session is genuinely dead, yet the
+      state is legitimate and expected. That binary is amended here: detection
+      SUPPRESSES an environmental casualty, so no surface classifies it. Neither
+      the dispatch tick's sweeps nor /dispatch-ladder may recognise an orphaned
+      session as terminal-session or frozen-session; the lane never sees it and
+      spends nothing on it. Recovery is the AUTHOR's, by restart. Orphaned
+      background sessions are deliberately NOT proactively adopted when a new
+      daemon generation starts — that behaviour is kept exactly as it is today
+      and is not a defect to fix; the harness's own lazy re-adoption may still
+      recover such a session, but no machinery recorded here is owed that
+      outcome. Rejected alternative, the strongest rival framing put to the
+      author: make environmental a sixth invalid-state kind whose intervention
+      tier is notify-and-stop. It would preserve one uniform
+      detect-resolve-escalate pipeline and give the casualty a durable record,
+      but it spends lane machinery — a per-node attempt cap, a spawned model
+      session, a follow-up node — on a state that needs none, and it would keep
+      producing exactly the false positive this ruling exists to stop. Evidence:
+      2026-08-13, node tactic-attention-namespaced-rank, session 40c253c4. The
+      daemon crashed at 15:04:29Z (journald: \"Scheduled restart job, restart
+      counter is at 1\"), then a deliberate stop/start rolled the CLI from
+      2.1.227 to 2.1.231 at 15:12:56-15:13:01Z, killing an in-flight review-fix
+      Workflow's finder agents mid-fan-out. dispatch-fleet-watch alarmed the
+      outage correctly at 15:04:28Z and landed
+      tactic-fleet-alarm-daemon-degraded at 15:05:38Z; dispatch-tick nonetheless
+      routed the casualty to the invalid-state lane as terminal-session at
+      15:16:12Z. The session was re-adopted at 16:37:08Z and its Workflow
+      resumed and completed — an 84-minute stall with no work lost. One root
+      event, classified twice: once correctly as environmental and author-owned,
+      once wrongly as an invalid state and machinery-owned. Implementation
+      retained as draft tactic-invalid-state-environmental-suppression."
+  - question: What discriminates an environmental casualty from a genuine
+      terminal-session, without racing the daemon's own recovery?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) Classification
+      consults the daemon's current GENERATION, never its current health. A
+      health check races the recovery and fails silently: on 2026-08-13 the tick
+      classified at 15:16:12Z when the daemon had already been healthy since
+      15:13:01Z, so an \"is the daemon up now?\" gate would have answered yes
+      and routed anyway. The generation test has no such window — it stays
+      correct however long after the outage it runs. The chosen signal is
+      systemd's ExecMainStartTimestamp on dispatch-claude-daemon.service: a
+      session whose last activity predates the current generation's start
+      belongs to a previous generation and is therefore an orphan. Applied to
+      the incident, the session's agents last wrote at 15:04:27Z against a
+      generation that started at 15:13:01Z. Chosen over stamping the daemon's
+      InvocationID into session job state at spawn — which is exact and
+      race-free by construction — because ExecMainStartTimestamp needs NO new
+      write path: both values already exist today, and an InvocationID stamp
+      would protect only sessions spawned after it ships, leaving a fallback
+      needed anyway. The residual few-second race at a restart boundary biases
+      toward suppression, which is the fail-toward-keep posture clarification
+      185 already ratified for every mechanical-tier gate. NRestarts is NOT
+      usable and must not be built on: it read 0 immediately after this
+      incident, because the version roll's explicit Stop/Start reset it, even
+      though journald had recorded \"restart counter is at 1\" for the crash
+      minutes earlier. The check stays in owned script code with no per-node
+      model spend, per condition 23: dispatch-daemon-liveness is already an
+      owned, offline-testable script that dispatch-fleet-watch calls, while
+      lib-frozen-session-park.sh — the classifier that routed this node, at its
+      terminal-session route site — references it zero times today."
+  - question: The author is the recovery mechanism for an environmental failure —
+      what does the fleet alarm owe them?
+    answer: "(Recorded 2026-08-13 /align interview, author-ratified.) The restart
+      worklist. Because recovery is author-initiated by ruling (the
+      environmental-casualty clarification of this same date), the alarm that
+      reports the outage must also name what the outage stalled:
+      tactic-fleet-alarm-daemon-degraded's body carries the in-flight nodes and
+      /dispatch-ladder runs orphaned by the generation change, not merely the
+      daemon fault. A fault the author cannot act on without first enumerating
+      casualties by hand is not yet a signal — it names the cause and withholds
+      the work. This is the condition that makes \"the author restarts on daemon
+      failure\" a real recovery path rather than a hope: on 2026-08-13 the alarm
+      fired correctly within four seconds of the crash and the stall still ran
+      84 minutes, because nothing connected \"the daemon died\" to \"this ladder
+      run is stalled, restart it\". Implementation retained as draft
+      tactic-fleet-alarm-daemon-casualty-list. A sibling defect found in the
+      same reading is retained separately as
+      tactic-fleet-alarm-resolve-rollback-latch: dispatch-fleet-alarm --resolve
+      --kind daemon-degraded failed on every pass after the daemon returned
+      (11:05:52, 11:11:38 and 11:16:34 EDT, each logging \"resolve of
+      tactic-fleet-alarm-daemon-degraded failed; the write was rolled back to
+      origin/main\"), leaving the alarm latched open against a managed-live
+      reading — an alarm that cannot clear stops being a signal in the other
+      direction, and a latched alarm degrades the very channel this
+      clarification makes load-bearing."
+  - question: How is a finding recorded on the graph, and does the producer change
+      the answer?
+    answer: >-
+      (Recorded 2026-08-14 /align round, widening this node's sole-issue-tracker
+      condition from "the graph is the only place findings live" to "findings
+      live there the same way".) No — the producer never changes the answer. A
+      finding is an ordinary DRAFT TACTIC: phase null, serving the strategy that
+      owns the artifact it touches, whoever produced it — an /align Step 4
+      interview byproduct, a /review-fix follow-up, a /qa-main bug record, a
+      /rsi phase evaluation, an /rsi-audit ranked opportunity. Three rules bind
+      every producer equally. ONE, FIND BEFORE MINTING: search the open tactic
+      set for the same root-cause defect and, on a match, record the recurrence
+      on that existing node — a recurrence updates attributes.measured_impact
+      and mints nothing. TWO, THE SEARCH SET IS THE WHOLE GRAPH, NEVER A
+      NAMESPACE: no producer may scope the mint-or-reuse decision to an id
+      prefix or to a class attribute of its own, because a duplicate minted
+      outside that scope is structurally invisible to the search that is
+      supposed to catch it. THREE, MEASUREMENTS ARE NOT PRUNED: a node carrying
+      attributes.measured_impact is exempt from unreferenced-pruning regardless
+      of who wrote it, because pruning it destroys the measurement, and a
+      recurrence after retirement RESUMES the count rather than restarting at 1.
+
+
+      This retires the evaluation-finding ledger as a distinct graph primitive —
+      attributes.ledger_entry as a class marker, the tactic-eval-finding-*
+      namespace as a membership test, and a per-producer private writer all go.
+      It is not a theoretical tidy-up. The split it repairs is recorded with
+      evidence on tactic-eval-finding-eval-finding-list-misses-nonledger: two
+      nodes minted ten minutes apart for one defect, the shipped fix citing the
+      node OUTSIDE the namespace while the recurrence count stayed stranded on
+      the one inside it — an outcome a namespace-scoped search structurally
+      could not have caught, and the exact outcome the merge discipline exists
+      to prevent.
+
+
+      The seam the class marker is often thought to carry — a record is not a
+      task — is kept, not dissolved: phase null (draft) is the observation
+      state, and the router emits drafts at the align-tactics rung where a
+      decomposition session decides whether the observation is work. Carriers:
+      tactic-eval-finding-ledger (retire the marker, re-key the prune exemption
+      to attributes.measured_impact) and tactic-finding-search-all-producers
+      (the find-before-minting step in each producer's skill). The observable
+      that says this holds lives on strategy-recursive-self-improvement, where
+      /rsi — the instrument that reads it — lives.
+  - question: Must a /dispatch-ladder run carry its node all the way to a terminal
+      state, or may it stop once the PR merges?
+    answer: >-
+      (Recorded 2026-08-14 /align interview.) Standing requirement: a
+      /dispatch-ladder run may not report a terminal disposition until its
+      node's work is TERMINAL — phase `done`, or legitimately excused. Merge is
+      not a terminus. Exactly two excuses count: the work is parked to
+      office-hours (`office_hours` non-null), or it is blocked on an awaited
+      event it cannot yet observe. Nothing else — a halt, a drained budget, a
+      reconciler error, or a phase left mid-flight is a violation, not a stop.
+
+
+      WHY THIS IS NOT ALREADY SATISFIED BY THE RECORDED DESIGN. The code already
+      intends it: `dispatch-ladder-run`'s exit-0 contract is "the node reached
+      phase `done` at origin/main, or was pruned", and
+      `dispatch-ladder-advance:239-245` describes the loop's job as "follow this
+      node to main-qa". What the record ALSO says is that `review`'s clean
+      completion arms auto-merge and the FLEET-WIDE reconciler sweep — not the
+      ladder — writes the post-merge phase
+      (packages/intentionsutil/src/transitions.ts:75-78). That split is the
+      defect surface: the ladder's terminus depends on an actor it does not
+      control. Live case, tactic-attention-namespaced-rank: PR #3075 merged
+      2026-08-13T23:27:31Z; the ladder's own reconcile pass hard-errored at
+      23:38:10Z (exit 11, `reconcile-graph-merged hard-errored (rc=1)`, itself
+      the unrelated-dirty-main-checkout refusal recorded as
+      tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt); the node
+      reached `main-qa` only when the fleet sweep ran ~2.5h later (commit
+      1817ac7f) and has sat there since. The ladder reported a halt; the merge
+      looked like success; nothing carried the node on.
+
+
+      THE DIVERGENCE THIS RESTS ON — STATE VERSUS LIVENESS. The strongest rival
+      conception was put and DIVERGED from: it argues that this strategy's core
+      claim is that orchestration state lives in the GRAPH, so terminal
+      responsibility belongs to the reconciler reading origin/main, and an
+      ephemeral driver that owns completion re-centralises control in exactly
+      the place the strategy moved it away from — making #3075's stall a
+      reconciler-availability bug, not a ladder-ownership bug. Diverged because
+      STATE and LIVENESS are separable properties. The graph remains the sole
+      home of orchestration state; the ladder owns only the guarantee that
+      SOMEONE drives a node to terminal. A driver holding liveness reads no
+      state the graph does not already hold and writes none the graph does not
+      already own, so it does not re-centralise state. The rival is right that
+      reconciler availability is also a defect — it is recorded separately — but
+      availability of one absorbing actor is not a substitute for a run being
+      answerable for its own node.
+
+
+      PAUSE IS ORTHOGONAL, NOT AN EXCEPTION. (Author ruling, this interview,
+      correcting the interviewer's framing.) The dispatch pause sentinel gates
+      SCHEDULED dispatch ticks only. It does not gate /dispatch-ladder.
+      /dispatch-ladder picks up wherever its target node stands — whether left
+      mid-flight by scheduled dispatch, by a failed earlier ladder run, or by
+      anything else — so a paused fleet neither excuses nor blocks this
+      requirement. It is not an exception because it is not in scope. Corollary:
+      a node stranded post-merge while the fleet is paused is recoverable by
+      invoking /dispatch-ladder on it directly, and the five nodes counted below
+      are recoverable that way today.
+
+
+      THE REQUIREMENT FOLLOWS THE WORK, NOT THE NODE. The 2026-07-28
+      clarification on this strategy adopted a greenfield in which the source
+      tactic goes review -> done directly — "no main-qa phase on the source, no
+      residue body append" — and post-merge work instead lives on standalone
+      tactic-mainqa-* nodes carrying their own routing. Under that shape a
+      source's ladder legitimately never touches main-qa, which would hollow
+      this requirement out if it bound the node. It binds the WORK: a run may
+      not report complete until the main-qa work it spawned is itself terminal
+      or excused, whether that work sits on the source's own phase or on a
+      standalone tactic-mainqa-* node it created. This is a real scope increase
+      — it makes a run answerable across a node boundary, which no ladder code
+      does today — and is the substance of the implementing tactic.
+
+
+      MEASUREMENT. Observable: the merged-but-not-terminal count — a census over
+      intentions/ at origin/main of nodes whose `execution.completion.mergedAt`
+      is set but whose `phase` is not `done` and which carry neither
+      `office_hours` nor a non-empty `blocked_by`. Sensor: graph census (the
+      predicate is exactly the two recorded excuses, so this is a direct count,
+      not a proxy). Threshold: 0. Measured 2026-08-14 at origin/main 206a6994:
+      29 merged-not-done, 24 excused, 5 VIOLATIONS —
+      tactic-align-tactics-mark-terminal-skipped (#3047),
+      tactic-attention-namespaced-rank (#3075),
+      tactic-dependency-justification-audit (#2875),
+      tactic-graph-commit-landing-signal-unreliable (#3050),
+      tactic-pause-disables-merge-lane (#3068). That 24 of 29 classify as
+      excused is the evidence the two-excuse predicate discriminates rather than
+      merely passing everything.
+
+
+      KNOWN GAP IN THE PREDICATE, CARRIED INTO THE TACTIC. The second excuse is
+      not machine-readable today. tactic-attention-namespaced-rank's own
+      needs-main residue records "Verifiability: WAIT — awaited event:
+      tactic-attention-per-tier-boost-migration lands", which IS an awaited
+      event under this requirement — but it lives as prose in a body section,
+      not as a `blocked_by` edge, so the census scores it a violation. Either
+      such waits gain a structural edge or the sensor stays approximate;
+      resolving that is in scope for the implementing tactic and must not be
+      closed by loosening the census to accept prose.
+  - question: Where does /align's own charter live after 2026-08-13, and what did
+      that re-homing change here?
+    answer: "The /align interview's charter — elicitation, capture-completeness, and
+      the adversarial draft review — moved to a new child of
+      strategy-explicit-intent, strategy-discovered-requirements, whose
+      clarifications carry the boundary rule and the reasoning. This strategy
+      keeps /align-tactics: it turns recorded intent into dispatchable work, so
+      it is a dispatch phase worker and its defects are this strategy's
+      machinery defects. Four things are recorded here rather than left to be
+      re-derived. (1) serves membership is unchanged for
+      tactic-align-review-skill and tactic-align-round-self-consistency-walk:
+      both now name strategy-discovered-requirements FIRST and this strategy
+      second, honestly, because both touch artifacts of both (graph-commit's
+      --review flag here, the /align skill there) and because this strategy
+      still holds the doctrine they implement — the draft-review gate condition
+      and the self-consistency condition — which a node-assigned session
+      receives only through its serves chain. So this node's backlog ratio does
+      not move, and no signal reading is disturbed. (2) This node's
+      success_signal is deliberately NOT edited. Its sensor string is the
+      registry key that read-sensors.ts's LIFECYCLE_SENSOR_NAME mirrors
+      character-for-character, guarded by
+      packages/intentionsutil/test/lifecycle-sensor.test.ts; the round's first
+      draft moved the sensor's park-cause clause to the new strategy and would
+      have de-registered the lifecycle sensor and turned main red. Migrating
+      that clause is owed and requires a paired code change landing outside
+      intentions/, which graph-commit cannot carry. (3) The park-cause clause
+      and its unimplemented instrument (tactic-park-cause-sensor-instrument)
+      therefore stay here for now, even though they measure
+      capture-completeness, which is the new strategy's charter. (4) Amending
+      this node's clarifications changes its substance fingerprint, which
+      soft-freezes exactly one stamped open child,
+      tactic-strategy-fingerprint-stamp-coverage at phase qa; the freeze is
+      benign — nothing in this amendment bears on that node's plan — and it
+      clears on the next restamp. (Recorded 2026-08-13) (Amended 2026-08-14 by
+      the author's ratifying round, which falsified three statements above.
+      FIRST, this strategy no longer holds the doctrine those tactics implement:
+      the draft-review gate and the self-consistency condition both moved to
+      strategy-discovered-requirements, and the /align actuator tooling_goal
+      moved with them. SECOND, serves membership did NOT stay unchanged —
+      tactic-align-round-self-consistency-walk dropped its second edge to this
+      node, because that edge existed only to deliver the condition that has now
+      moved; tactic-align-review-skill keeps both edges, on the independent
+      artifact ground that it builds graph-commit --review. THIRD, the backlog
+      ratio therefore DID move, slightly: measured post-write with
+      strategyBacklogBand, 58/275 (0.2109) against 58/276 (0.2101) before — the
+      backlog count is unchanged because the dropped node classifies as a draft,
+      and only the denominator falls by one. The reasoning recorded above was
+      sound for the 2026-08-13 round it describes; it is superseded rather than
+      wrong, and is kept as the history of how the re-homing was staged.)"
+  - question: Where did the /align actuator goal, the draft-review gate and the
+      self-consistency condition go, and why did they leave this node?
+    answer: "Re-homed to strategy-discovered-requirements by the author's ratifying
+      /align round (Recorded 2026-08-14). The author was asked directly what the
+      draft-review gate and the self-consistency condition are about and
+      answered: /align's output. That settles a placement this node had held
+      since 2026-08-11 and 2026-08-12 respectively, and the record corroborates
+      the answer rather than merely permitting it — the self-consistency
+      condition's own text binds consistency \"ONLY and never plannability,
+      which stays /align-tactics' sole judgment\", distinguishing the recording
+      round from /align-tactics, and its cited incident is an inverted
+      blocked_by authored by a recording round that then cost a downstream
+      /align-tactics session ~13 minutes. The /align actuator tooling_goal
+      followed them: a tooling_goal claims what a strategy builds, and this node
+      would otherwise declare it builds /align while owning none of the tactics
+      that improve it. What this node keeps is /align's role as the
+      gh-replacement entry point — the condition that no new work enters via gh
+      once /align is live is unchanged and still lives here; what moved is
+      /align's charter and the quality of its interview. The /align-tactics and
+      router-tick actuator goals are untouched, as is the lifecycle sensor goal.
+      The gate was also SCOPED on the way over, not merely moved: it now covers
+      an /align round's own output only, and a /align-tactics decomposition, a
+      qa-fix finding node and a router transition are explicitly out of scope —
+      so the receipt floor tactic-align-review-skill builds must not make
+      graph-commit refuse every caller's write. That scoping is binding input to
+      that tactic, decided while it is still unplanned. Freeze cost of this edit
+      measured before it landed with readNode + isFingerprintStale rather than a
+      grep over strategy_fingerprint: one open child,
+      tactic-strategy-fingerprint-stamp-coverage, which was already stale from
+      the 2026-08-13 round and is left stale. It was the only one of this node's
+      46 open children carrying a non-null stamp at all — a fact that is itself
+      the argument for that tactic. Also verified before landing, because the
+      2026-08-13 round's first draft was caught de-registering a sensor this
+      way: no code mirrors this node's conditions or tooling_goals verbatim. The
+      only prose coupling is read-sensors.ts's LIFECYCLE_SENSOR_NAME to
+      success_signal.sensor, which this round does not touch."
+  - question: Is the find-before-minting rule discharged by each producer's skill
+      stating it, or by one shared write surface every producer calls?
+    answer: "(Recorded 2026-08-14 /align round, second round of this date, on author
+      ruling; amending the same-day 'How is a finding recorded on the graph'
+      ruling, which this strengthens rather than reverses.) By ONE SHARED WRITE
+      SURFACE. That ruling named its carriers as tactic-eval-finding-ledger
+      (retire the rsi-private marker and namespace) and
+      tactic-finding-search-all-producers, described as 'the find-before-minting
+      step in each producer's skill' — a rule installed as PROSE IN EACH of six
+      producer skills. The author raised the bar to merged common logic, stating
+      the goal as DRY/parsimony, and the reason it is the right bar is that six
+      copies of one instruction is the same defect class as five scripts: it is
+      precisely how the repo arrived at five private writers. MEASURED at record
+      time: seven skills call five distinct private writers —
+      dispatch-eval-finding, dispatch-invalid-state-followup (its own
+      tactic-invalid-state-rc-<sha256> namespace, exactly the namespace-scoped
+      search this ruling forbids), dispatch-security-followup with
+      dispatch-followup-exists, dispatch-qa-needs-main-followup, and
+      dispatch-fleet-alarm — and the RETIRED /file-issue is still cited as a
+      caller. The three rules recorded earlier today are unchanged in substance;
+      what changes is where they live: in the surface, not in six restatements
+      of it. The surface takes an OPTIONAL deterministic key where a caller has
+      a stable one (an invalid-state cause slug, a CI failure signature, a
+      CodeQL rule id, an npm advisory id), runs the whole-graph similarity
+      search in every case regardless, and records a key/search disagreement as
+      a finding rather than resolving it silently — so neither the determinism
+      the invalid-state lane deliberately built nor the whole-graph search set
+      this ruling requires is dropped. CARRIER:
+      tactic-finding-search-all-producers is REWRITTEN IN PLACE rather than
+      superseded (it is phase null, a draft), which is this ruling's own merge
+      discipline practised on itself, exactly as tactic-eval-finding-ledger was
+      rewritten earlier today. Zero new nodes for this half. The contract that
+      binds every producer lives on this strategy; the evaluator-side reasoning
+      and the observable that reads it live on
+      strategy-recursive-self-improvement, per the same-day split-by-owner
+      ruling."
+  - question: The four invalid-state intervention lanes become special cases of the
+      evaluation core. What does that change on this strategy's surface?
+    answer: "(Recorded 2026-08-14 /align round, second round of this date, on author
+      ruling; the doctrine is recorded on strategy-recursive-self-improvement
+      and this records only what this strategy owns.) The intervention SKILLS
+      are dispatch-surface artifacts owned here —
+      .claude/skills/dispatch-invalid-state, dispatch-conflict, fix-checks and
+      dispatch-diagnose-main — and each becomes a thin selector over the shared
+      evaluation core plus a closed remediation list declared in its own
+      frontmatter. Three properties this strategy already fixes are UNCHANGED by
+      the merge and must survive it: a lane session spawned with --name
+      <node-id> is a graph-node worker in the Stop hook's eyes and owes exactly
+      one mark-node-terminal disposition on every terminal path or it freezes
+      the node it was sent to unfreeze; dispatch-invalid-state-route's exit-code
+      contract (0 handled, 4 keep, 10 escalate, 1 router failure treated as
+      escalate, 2 usage) and its per-node attempt cap stay the ROUTER's and are
+      neither read nor written by the lane; and the kind table fixing
+      terminal-session and frozen-session to the human class stays
+      authoritative. So the merge changes what a lane's BODY is made of, never
+      its session contract with the router.
+      tactic-invalid-state-skill-per-kind's ruling — each invalid-state kind
+      carries its own skill body while the shared three-tier ladder stays
+      written down exactly once — is the same shape as this one and is subsumed
+      by it rather than contradicted: the shared ladder and the shared core are
+      the same 'written once' discipline applied at two layers. Carrier:
+      tactic-rsi-intervention-special-cases."
+  - question: A modified flake.lock — or unrelated dirt in any checkout — must not
+      be able to cause graph integrity errors. What is the standing invariant,
+      and does tactic-graph-ref-split discharge it?
+    answer: >-
+      (Recorded 2026-08-14 /align interview.) Two properties, stated
+
+      mechanism-neutrally so any writer/reader design can be tested against them
+
+      rather than one mechanism being mandated:
+
+
+      (1) WRITE INDEPENDENCE — no working tree a human may have touched may
+      affect
+
+      whether a graph write succeeds, or what content lands in it.
+
+
+      (2) READ COHERENCE — no reader may observe graph state older than a write
+      it
+
+      has already been told succeeded.
+
+
+      Both were violated live on 2026-08-13/14, in opposite directions, by one
+
+      partial migration. (1): graph-commit's assert_clean_outside_ids refused
+      every
+
+      write while the author's own modified flake.lock sat in the main checkout,
+      so
+
+      dispatch-eval-finding — the per-phase evaluator's ENTIRE write surface —
+      lost
+
+      every finding of every phase silently, the evaluator being fire-and-forget
+      with
+
+      a discarded transcript
+      (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt,
+
+      since phase done). It was self-sustaining: graph-select-target --clear-fix
+      leaked
+
+      another dirty node file per tick on top, one leak per ~70s until a human
+      cleared
+
+      it (fixed at e6421e6c by lib-graph-rollback.sh). (2): PR #3090 gave
+
+      dispatch-eval-finding a working-tree-free write via
+      GRAPH_COMMIT_WRITER=plumbing
+
+      but left its --list read on the checkout working tree, which the plumbing
+      writer
+
+      never moves — 7 stale rows, 28 lands without a HEAD move, duplicate slugs
+      minted
+
+      (tactic-eval-finding-list-reads-working-tree-stale-after-plumbing-land,
+      open).
+
+
+      Does tactic-graph-ref-split discharge the invariant? For (1) YES, and it
+      remains
+
+      the ratified greenfield (clarification 80's limb (a)): Unit 2's landing
+      loop is
+
+      pure plumbing — scratch GIT_INDEX_FILE against the worktree's own .git,
+      read-tree
+
+      from origin/graph-main, write-tree, commit-tree, plain fast-forward push
+      as CAS —
+
+      and it deletes ensure_intentions_only_base explicitly because the
+      far-ahead-worktree
+
+      rebuild hazard it exists for is structurally impossible once landing never
+      touches a
+
+      worktree's checkout; Unit 8 removes intentions/ from main altogether. For
+      (2) NO —
+
+      verified this round by reading all 1040 lines of that plan: its read side
+      is a symlink
+
+      to one shared long-lived GRAPH_WT refreshed by fetch + reset --hard at
+
+      worktree-provisioning time and in the hooks (Unit 3, four call sites), and
+      NO unit
+
+      refreshes GRAPH_WT after a land. A session that lands and then reads
+      through the
+
+      symlink sees its own write missing — the 2026-08-14 regression surviving
+      the cutover
+
+      intact. That is a gap to fill in a sound plan, not grounds to reject the
+      symlink: a
+
+      materialized tree is a cache, and the defect is cache coherence, not the
+      existence of
+
+      a cache. Carried as tactic-graph-refsplit-read-coherence.
+
+
+      Sequencing consequence, and the reason this is recorded now rather than
+      deferred to
+
+      ref-split: ref-split does not gate the fix. assert_clean_outside_ids sits
+      in land(),
+
+      not try_land(), and is already conditional on GRAPH_COMMIT_WRITER ==
+      worktree
+
+      (graph-commit:3502), so flipping that default makes it inert across every
+      writer —
+
+      one flag, no cutover, none of ref-split's 37 blockers (23 still open this
+      round).
+
+      ref-split stays the greenfield; it is not the critical path for this
+      invariant.
+
+      Carried as tactic-graph-commit-plumbing-default.
+
+
+      Boldness recorded: the two violations, the guard call site and its gating,
+      the absence
+
+      of any post-land refresh in ref-split, and the blocker phase counts are
+      all verified
+
+      in-session against origin/main. The reading that ref-split's 37 blockers
+      encode a
+
+      quiescence wish rather than real dependencies is INFERENCE from the
+      breadth of the
+
+      list — the blockers were not read individually — and is carried as the
+      open question
+
+      tactic-graph-refsplit-blocker-audit, not as a settled finding.
+  - question: What are the sanctioned ways a node enters the graph, and does the
+      answer depend on the node's kind?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, on author
+      ruling; generalizing the same-day 'How is a finding recorded on the graph'
+      and 'one shared write surface' rulings from findings to ALL node
+      creation.) EXACTLY TWO WRITE SURFACES, AND THE SEAM IS BY KIND. Surface
+      one is the /align interview record, and it is the only way a
+      PERSISTENT-LAYER node — virtue, strategy, delegation, tradition — enters
+      the graph; this generalizes strategy-discovered-requirements' existing
+      claim that the /align interview is the only place an author's requirement
+      enters. Surface two is the find-or-recur write surface
+      (tactic-finding-search-all-producers), and it is the only way a TACTIC
+      enters, whoever the caller is: /align Step 4 interview byproducts,
+      /align-tactics decomposition, /review-fix, /qa-main, /rsi, /rsi-audit, the
+      four invalid-state lanes and fleet sweeps all mint through it. The caller
+      list needs no enumeration and is closed by nothing, because the rule binds
+      the WRITE and not the caller — which is the whole point of the same-day
+      one-shared-write-surface ruling. THE AUTHOR'S RULING NAMED /align-tactics
+      EXPLICITLY: a decomposition that creates nodes does so USING the follow-up
+      surface, so it is a CALLER and not a third surface. That is what makes
+      'two' a fact about the design rather than a definitional collapse — the
+      alternative framing put to the author, which counted /align-tactics as a
+      third creation surface, was declined on exactly this ground. TWO CLAIMS
+      THAT ARE OFTEN CONFLATED AND BOTH HOLD: graph-commit remains the only
+      sanctioned write PATH — the mechanism that lands a commit, recorded across
+      many nodes — while these two surfaces are the only sanctioned
+      node-CREATION processes, which is a claim about what may author a node in
+      the first place. Neither implies the other. BOLDNESS DISCLOSED BEFORE THE
+      RULING: the by-kind seam follows directly from the author's own
+      /align-tactics ruling and is lint-testable, which is what makes it worth
+      recording; what was NOT verified at record time is whether any of the five
+      extant private writers legitimately mints a non-tactic. None was found,
+      but no exhaustive audit of their code paths was run. The carrier is told
+      to establish that before designing around the seam. BOTH SURFACES RUN THE
+      SAME COMMON ANALYSIS — see the shared-analysis clarification recorded this
+      same round, which is the reason the seam is worth recording at all."
+  - question: What common analysis do both node-creation surfaces run, and what does
+      its supersession half do?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, on author
+      ruling.) TWO CHECKS, ONE SEARCH PASS, IN THE SHARED SURFACE — never
+      restated as prose in each caller, per this strategy's same-day
+      one-shared-write-surface ruling. CHECK ONE, DUPLICATE AND MERGE, is
+      unchanged in substance from the find-before-minting rules recorded earlier
+      today: an optional deterministic key where the caller has a stable one, a
+      whole-graph similarity search in every case regardless, a match recording
+      the recurrence on the existing node and minting nothing, and a key/search
+      disagreement recorded as a finding rather than resolved silently. CHECK
+      TWO, SUPERSESSION, IS NEW. The node being created is tested as a potential
+      SUPERSEDER of existing nodes, so the graph does not implement one strategy
+      or tactic and later attempt the one it supersedes. It is a CREATION-TIME
+      check keyed on the NEW node, not a corpus sweep, which bounds its blast
+      radius to one search per creation and is what makes it affordable in the
+      shared surface. It absorbs the greenfield-relevance gate (clarification
+      26), which until now ran only at /align-tactics finalization; see the
+      stale-surface correction recorded this same round for why that was its
+      only remaining carrier. DISPOSITION ORDER — REWRITE FIRST, CLOSE AS
+      BACKSTOP. When the analysis finds an existing node the new one supersedes,
+      the FIRST disposition offered is REWRITE-IN-PLACE: merge the new intent
+      into the existing node and mint nothing. This is not a new discipline; it
+      is the one this record practised on itself twice on 2026-08-14, when
+      tactic-eval-finding-ledger and tactic-finding-search-all-producers were
+      each rewritten rather than superseded. CLOSE-AS-SUPERSEDED is the backstop
+      for what rewrite cannot reach: the existing node is non-draft
+      (clarification 26's 'a raw draft never obsoletes live work' read in the
+      other direction — a non-draft node carries live commitments a rewrite
+      would silently discard), it is in flight, or its intent genuinely DIES
+      rather than evolves. The rival framing — that a superseded node existing
+      at all IS the defect, so a close disposition is cleanup for a discipline
+      failure rather than a design — was put to the author and PARTLY ADOPTED:
+      it wins on PRIORITY (rewrite is tried first), and is DIVERGED FROM on
+      completeness, because a strategy superseded by a better strategy is not a
+      duplicate and merging the two would produce an incoherent node. CLOSE
+      AUTHORITY IS NOT THE PRODUCER'S. Closing a node terminates recorded work,
+      so under strategy-recursive-self-improvement's declared-remediation-list
+      condition a record-only producer may not do it, and a model similarity
+      judgment must not sit on the destructive side — the record already
+      documents that judgment being wrong, on
+      tactic-eval-finding-eval-finding-list-misses-nonledger. So the unattended
+      surface RECORDS: an edge naming the superseding node, on both nodes, plus
+      an office_hours PARK on the superseded node whose recommendation is to
+      close. The close itself is a DECLARED REMEDIATION, executed at an
+      office-hours sitting or by a lane that declares it. PARK COLLISION, RULED
+      BY THE AUTHOR: office_hours is single-valued, so an already-parked node is
+      NEVER CLOBBERED — the park reason is UPDATED to carry BOTH the
+      supersession AND the original reason, so the sitting reads why the node
+      was parked twice rather than losing the first reason to an overwrite. TWO
+      SUB-POINTS THE AUTHOR DID NOT RULE ON, derived here from rules already
+      recorded and flagged plainly as Claude-derived rather than author-ruled.
+      ONE: a node whose execution is non-null gets the edge but NO park —
+      extending the skipped-in-flight refusal
+      tactic-finding-search-all-producers already records for the dedup half,
+      rather than inventing a second in-flight rule; the live-PR exposure this
+      leaves open is the interim-live-risk exception clarification 26 already
+      permits. TWO: only a FULLY superseded node is parked, with partial
+      supersession keeping clarification 26's existing per-unit doomed-drop
+      unchanged. A born-parked review item,
+      tactic-review-supersession-derived-subpoints, enrolls both for
+      ratification. OWNERSHIP SPLIT, per the same-day split-by-owner ruling: the
+      binding contract is this strategy's; the observable that reads whether it
+      holds lives on strategy-recursive-self-improvement, where the instrument
+      lives. CARRIER: tactic-finding-search-all-producers is REWRITTEN IN PLACE
+      again — it is phase null, a draft — which is this ruling's own merge
+      discipline practised on itself for the third time on this date. Zero new
+      nodes for the carrier half."
+  - question: Clarification 26 binds the greenfield-relevance gate to
+      '/align-tactics finalization and every /align-strategy improvement pass'.
+      Does that second surface still exist?
+    answer: "(Recorded 2026-08-14 /align round, third round of this date, correcting
+      a stale cross-reference this round's evidence sweep found in this node's
+      own body.) NO — it has not existed since 2026-08-04, and the loss was
+      DELIBERATE rather than accidental, which is worth recording because the
+      surviving prose reads as though the surface were live.
+      tactic-align-entrypoint-consolidation Unit 2 deleted the whole no-prompt
+      improvement pass — naming 'the greenfield-relevance-gate corpus sweep
+      (strategy clarification 26)' in its own scope — and replaced it with the
+      onboarding funnel; the 2026-07-23 office-hours sitting with the author
+      present had already ruled both retained engines retire wholesale
+      (tactic-align-audit-legacy-review). /align's own coverage matrix records
+      the consequence plainly: 'Relevance — Retired with the improvement pass —
+      no longer covered by this skill'. The doctrine-encoding carrier
+      tactic-align-skills-greenfield-gate shipped as #2789 and was pruned as
+      done on 2026-07-07. SO SINCE 2026-08-04 THE GATE HAS HAD EXACTLY ONE
+      CARRIER: prose at .claude/skills/align-tactics/SKILL.md:322. That is
+      precisely the instruction-copied-into-skill-bodies shape this strategy's
+      same-day one-shared-write-surface ruling condemns, arrived at from the
+      other direction — by attrition down to one copy rather than by copying up
+      to six — and it is why the gate ran at decomposition time only and never
+      at node creation. This node's body is corrected to name /align-tactics
+      finalization alone, and the gate's substance moves into the shared surface
+      per the shared-analysis clarification recorded this round, after which the
+      surviving align-tactics prose reduces to naming the call. Worth naming for
+      the next reader: tactic-align-audit-legacy-review's own clarification (b)
+      already records the gate being SKIPPED in a round that was supposed to run
+      it. A gate whose only carrier is prose in one skill is a gate that gets
+      skipped; that is the argument for moving it into the shared surface,
+      independent of the creation-time requirement."
+  - question: On graph-commit’s fail-closed park path, what must SNAP_DIR/<id>.md
+      hold for an id whose layer-3 merge RESOLVED earlier in the same multi-id
+      invocation?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, resolving the park on
+      tactic-graph-commit-snap-dir-merge-clobbers-original.) Ruling (b): the
+      writer's FROZEN pre-merge original, with the merged content beside it
+      rather than over it. snapshot() writes $SNAP_DIR/<id>.md and never
+      rewrites it; the merge paths write $SNAP_DIR/<id>.merged.md; every
+      SNAP_DIR reader that wants "what this run intended to land" —
+      ensure_intentions_only_base()'s replay and print_verdict — prefers
+      .merged.md when it exists; park_write() names BOTH paths and labels which
+      is the session's own original content and which is graph-commit's partial
+      merge.
+
+
+      This reverses the narrower contract PR #2989 landed, under which SNAP_DIR
+      is authoritative for the reconciled intended-to-land content (defended in
+      code at graph-commit:794-808, 919-935 and 2091-2098). The defect that
+      forces the reversal: a multi-id batch fails closed as a unit, so when id
+      A's layer-3 merge RESOLVED and id B's did not, park_write's recovery text
+      points the human at SNAP_DIR/A.md claiming it holds their unlanded content
+      when it actually holds graph-commit's blend of their edit with a
+      concurrent writer's landed one. Because the concurrent writer chooses
+      which field to touch, they choose which of the losing writer's ids lose
+      their evidence — an accidental loss in the normal case, a targeted one if
+      that writer is adversarial.
+
+
+      BUILDABILITY WAS VERIFIED BEFORE RULING, correcting a contrary claim made
+      in the park record itself. The fix does NOT require weakening any
+      preserved regression guard, and .claude/rules/test-integrity.md is not
+      engaged. test-graph-commit.sh case 48 — the self-described Unit 1
+      regression guard, "far-ahead + stale --base: layer-3 merge survives the
+      far-ahead rebuild, both fields land" — passes unchanged, because the
+      far-ahead rebuild replays .merged.md, which carries exactly the merged
+      content SNAP_DIR carries today. Case 22 (:1551-1581), which asserts
+      SNAP_DIR retains the writer's original for an UNRESOLVED merge, is
+      preserved by construction. Only a naive freeze WITHOUT the
+      replay-preference half breaks them — the failure mode
+      plans/dispatch-rsi-serialized-pr-plan.md already warns against in its
+      work-to-skip list.
+
+
+      ALL THREE clobber sites are in scope, including the third in
+      build_commit_plumbing() (graph-commit:1650-1652), which is structurally
+      identical, feeds the same park_write text, and is named by neither the
+      node nor the serialized PR plan.
+
+
+      REJECTED ALTERNATIVES. (a) Keep #2989's contract and dismiss the node —
+      rejected: it accepts a park record that misattributes a concurrent
+      writer's content to the losing writer, which is a correctness defect in
+      the record, not merely a usability one. (c) Carry the losing writer's
+      content into the node's own office_hours record instead of any
+      machine-local pointer — NOT adopted here, but the concern behind it is
+      real and stays open as a separate question: park_write's own text concedes
+      the tmpdir is "this machine only — may not survive past this session"
+      (graph-commit:2944-2952), which fails this strategy's recorded condition
+      that a park whose context lives only in the parking session is a defect.
+      (b) and (c) are complements, not substitutes; (c) should be filed as its
+      own tactic rather than folded in.
+  - question: How is the explicit-ref read-path scope partitioned across
+      tactic-explicit-ref-graph-reads, tactic-demote-node-stale-local-read and
+      tactic-graph-read-at-ref-cli, none of which clarification 194 enumerated?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, resolving the park on
+      tactic-explicit-ref-graph-reads.) Shape (a). Clarification 194 (R3,
+      2026-08-05) adopted the general contract but recorded that its scope "was
+      NOT enumerated in this sitting"; three co-extensive raw nodes then claimed
+      overlapping files with no partition between them. The partition:
+
+
+      - tactic-explicit-ref-graph-reads owns the required-explicit-argument
+      CONTRACT plus exactly four files: validate-graph.ts, write-node.ts,
+      dump-node.ts, clear-park. Its one bare executable caller,
+      .claude/skills/align/scripts/validate-deployment.sh:53, invokes
+      validate-graph.ts with no directory and MUST be updated in the same
+      change; .github/workflows/graph-fast-path.yml:32 already passes intentions
+      explicitly and needs no change.
+
+      - tactic-demote-node-stale-local-read narrows to demote-node-to-implement
+      alone. That script is therefore NOT in tactic-explicit-ref-graph-reads'
+      scope and does NOT close with it.
+
+      - tactic-graph-read-at-ref-cli adds a NEW CLI (storeAtRef) rather than
+      editing these readers, so it is separable under any shape — recorded
+      explicitly here rather than left implicit.
+
+      - Out of scope under any shape: transition-node (claimed by
+      tactic-graph-ref-split, phase implement) and graph-commit (a writer; its
+      -C/cwd resolution is already the ratified correct shape, clarification
+      86).
+
+
+      Already converted, and not to be re-done: check-node-selection.ts:14-15
+      (required --dir) and compute-freshness.ts (explicit --snapshot/--stamp,
+      with transition-node as the acquiring wrapper). Still unconverted as of
+      this sitting: validate-graph.ts:73, write-node.ts:18-22,
+      dump-node.ts:35-40, clear-park:99-100.
+
+
+      REJECTED. (b) tactic-demote-node-stale-local-read absorbing the whole
+      root-resolution class under its own Ruling 27, with this node pruned as a
+      duplicate — rejected because that node is blocked_by
+      tactic-phase-evidence-fingerprint-bound, so absorbing the class would
+      stall every reader in it behind an unrelated blocker. (c) the reverse
+      split — no evidence favoured it.
+
+
+      TWO CORRECTIONS TO THE RECORD, both verified against origin/main this
+      sitting, neither previously noted:
+
+
+      (1) tactic-demote-node-stale-local-read's defect 3 ("stale read,
+      un-guarded write") is ALREADY FIXED. Commit 156ce3a1 gave
+      demote-node-to-implement both the fresh origin/main read (it refreshes the
+      node file from origin/main before computing the new one) and the --base
+      compare-and-swap (graph-commit -C "$REPO_ROOT" --base
+      "$NODE_ID=$FRESH_BLOB" --expect "$NODE_ID=$EXPECT_BLOB"). That node's body
+      still describes both as missing, and its line citations (:36, :46, :115,
+      :126-127) have all moved. Only defect 1 (script-location REPO_ROOT) and
+      its consequence defect 2 (the scope-fingerprint stamp path inheriting that
+      root) remain live. Any plan for that node must be re-derived from the
+      current file, not from its body as written.
+
+
+      (2) Consequently the serialized PR plan's instruction that PR1's Unit 8
+      lift "exactly one bullet" from that node — its Greenfield item 3, the
+      --base CAS — is void: that bullet is already implemented. Unit 8 must not
+      re-implement it, and under this ruling Unit 8 does not touch
+      demote-node-to-implement at all.
+  - question: demote-node-to-implement both reads a node and writes one, so
+      clarification 86’s writer shape and clarification 194’s reader shape both
+      claim it. Which binds?
+    answer: >-
+      (Ruled 2026-08-15 author sitting, alongside clarification 242.)
+      Clarification 194's READER shape binds: demote-node-to-implement takes the
+      tree as a REQUIRED explicit argument, with no cwd default and no
+      script-location default. Its caller transition-node — which today invokes
+      it positionally and reads only its exit code — is updated in the same
+      change to pass the tree.
+
+
+      The collision is real because demote-node-to-implement is both: it reads
+      the node it demotes and writes the demotion. Clarification 86 ratifies
+      -C-or-cwd, never-script-location, for graph-commit; clarification 194
+      requires an explicit argument on every graph read.
+
+
+      Rationale for preferring the reader shape here: the cwd fallback is not
+      merely weaker in this case, it is WRONG. transition-node runs inside the
+      worker's worktree and invokes demote-node-to-implement from there, so the
+      caller's cwd resolves to the worktree — the same wrong answer the script's
+      own location gives today — while the demotion must act on the main
+      checkout. This also means the remedy tactic-demote-node-stale-local-read
+      prescribes for its defect 1, "resolve the repo root from the caller's
+      cwd", does not fix its own defect; that node's Greenfield item 1 must be
+      rewritten. resolve_project_root (parent of the git common dir, lib.sh)
+      WOULD resolve correctly and is the shape transition-node itself uses, but
+      it leaves the tree implicit, which is the property R3 was adopted to end —
+      so it is rejected as the standing answer even though it would work.
+
+
+      Clarification 86 is NOT narrowed by this: it continues to bind
+      graph-commit, a pure writer for which -C-or-cwd is correct, and the
+      general rule stands that a script's own on-disk location never determines
+      the tree it acts on.
+
+
+      Ownership: this work belongs to tactic-demote-node-stale-local-read per
+      clarification 242, not to tactic-explicit-ref-graph-reads. It is blocked
+      until tactic-phase-evidence-fingerprint-bound clears, and it is not part
+      of PR1.
+  - question: The 2026-08-14 clarification recording 'exactly two node-creation
+      surfaces' asserted a by-kind seam and cited a five-writer census. An
+      adversarial draft review and a measured census both refuted it. What is
+      the corrected doctrine?
+    answer: "(Corrected 2026-08-14, third round of this date, after the adversarial
+      draft review that round skipped.) TWO THINGS WERE WRONG. (i) The by-kind
+      seam claimed the /align interview is the only way a persistent-layer node
+      enters the graph. kind-tradition.md's own creation rule refutes it — a
+      tradition record is created only at the office-hours sitting that examines
+      the candidate, i.e. /reading-review — and in the other direction /align
+      cannot mint a virtue, a delegation or a kind-* node at all, so the claim
+      asserted a creation path where there is a hole. (ii) The five-writer
+      census was stale: a measured sweep found roughly twenty write sites across
+      sixteen skill files and four scripts, including hold-node, resolve-hold,
+      dispatch-diagnose-main, reading-review, context-chunks, qa-main,
+      review-fix, fix-checks, dispatch-conflict and budget. THE CORRECTED FRAME:
+      the DRY seam is not WHO writes but WHAT KIND OF WRITE it is. Three
+      operations. CREATE mints a new node file — the duplicate and supersession
+      checks bind to this operation and to no other. EDIT-SUBSTANCE changes what
+      a node says. IT IS DEFINED NEGATIVELY, IN CODE, NOT BY ENUMERATION IN
+      PROSE: schema.ts exports STATE_FIELDS — the router- and sensor-owned set
+      (phase, execution, office_hours, reading, attention, rounds, status,
+      blocked_by) — and EDIT-SUBSTANCE is EVERY field not in it. The enumerated
+      form was drafted first and REPLACED on the author's ruling of 2026-08-15,
+      after the adversarial draft review showed it fails OPEN: a positive list
+      of substance fields silently exempts every field nobody thought to list,
+      and the measured fallthrough was large — rationale, parent, recovers,
+      validates, owner, pace_exempt, kind, and all of attributes except
+      conditions. Three of those are load-bearing. rationale is named FIRST in
+      the ratified doctrine that /dispatch-conflict reconciles against
+      (virtue/strategy/tradition/delegation statement, rationale, clarification
+      text), so a positive allowlist built from strategyFingerprint's six fields
+      leaves unprotected the very field the guard exists for. attributes is
+      graph-semantics-bearing — validateGraph rules key on attributes.goal_layer,
+      attributes.status_vocabulary and attributes.tier — and is written onto
+      durable nodes today by /grounding-research. owner and pace_exempt are
+      authority fields, so an unrestricted EDIT-STATE reading would let an
+      autonomous lane flip owner from human to ai unopposed. Under the negative
+      definition a field added to the schema tomorrow defaults to SUBSTANCE,
+      which is the fail-safe direction. The two fingerprints remain NARROWER
+      readings layered on top: strategyFingerprint's six-field allowlist
+      (packages/intentionsutil/src/router.ts:102-112) is what freezes CHILDREN,
+      and tacticScopeFingerprint's pair, statement plus markdown body
+      (router.ts:131-133), is what the chain-of-custody gate reads, because the
+      body is the plan a worker executes. FREEZE COVERAGE IS THEREFORE NARROWER
+      THAN SUBSTANCE, deliberately: a rationale edit is a substance write that
+      no child freeze detects. The earlier draft claimed the freeze and re-stamp
+      machinery exists for this operation and no other; that is FALSE and is
+      corrected here — dispatch-graph-census overwrites a census tactic's
+      markdown body wholesale on every autonomous run and contains no
+      scope_fingerprint restamp at all, which is a recurring autonomous
+      EDIT-SUBSTANCE with no freeze machinery attached. EDIT-STATE is a write
+      confined to STATE_FIELDS: mechanical, freeze-inert, unrestricted on
+      tactics. THE TAXONOMY IS DESCRIPTIVE, NOT INVENTED — the substance/state
+      line is already drawn independently three times in existing code:
+      strategyFingerprint's allowlist, tacticScopeFingerprint's pair, and
+      node-merge.ts's LIST_FIELDS/SCALAR_FIELDS split. It names a boundary the
+      code had but had not named. TWO ATTENDANCE CLASSES carry mint authority,
+      and this is where the author's 'exactly two' becomes true of a real axis
+      rather than by definitional fiat. ATTENDED means a human rules on the
+      write at the moment it happens: /align, /reading-review, /budget, and the
+      human's own write-node plus graph-commit following an office-hours
+      disposition. An attended entry point may CREATE any kind and may
+      EDIT-SUBSTANCE. NOTE, corrected 2026-08-15 by the adversarial review: the
+      office-hours SKILL is read-only by its own contract — it produces words
+      for a human and changes no state, it takes no chain or label action of its
+      own, and it never un-parks. The earlier draft listed the skill itself as
+      an attended CREATE surface, which named a non-writer as a write surface;
+      the attended surface in that lane is the human's subsequent write.
+      AUTONOMOUS means no human rules on it: /align-tactics,
+      qa-fix, review-fix, fix-checks, dispatch-diagnose-main, dispatch-conflict,
+      dispatch-eval-finding, dispatch-graph-census, hold-node, resolve-hold,
+      resolve-park, hold-node-decide, qa-main, context-chunks,
+      /grounding-research, transition-node, reconcile-graph and the tick sweeps.
+      An autonomous entry point may CREATE
+      tactics only, may EDIT-STATE freely, and may NOT EDIT-SUBSTANCE a
+      durable-layer node (virtue, strategy, delegation, kind, tradition). The
+      weaker reading of 'attended' — that a human merely typed the command — was
+      considered and REJECTED by the author: under it nearly every lane counts
+      as attended, including lanes where no human ever reads the resulting text,
+      which is the opposite of what the rule is for. THE INVARIANT WAS AUDITED
+      BEFORE BEING RECORDED, on the author's explicit ruling, precisely so this
+      round would not repeat the previous round's defect of recording an
+      unmeasured control. IT DOES NOT HOLD TODAY. Four violations, recorded
+      here rather than papered over, each with its ruled disposition — see the
+      sibling clarification 'Which lanes violate the autonomous-substance
+      invariant today'. TWO HONEST LIMITS ON THIS CENSUS, both from the
+      2026-08-15 review. First, the author's ruling was to classify EVERY
+      write-node call site as CREATE / EDIT-SUBSTANCE / EDIT-STATE; the sites
+      are named above and the four violators are classified, but a
+      per-site classification of all of them is NOT recorded here and is owed.
+      Second, a prose census decays the day it lands — that is precisely the
+      weakness that made the previous round's five-writer count wrong, and
+      re-recording it as a longer prose list does not fix it. The durable form
+      is a machine-readable roster mapping each write site to its operations and
+      attendance class, linted against the actual write-node caller set so a new
+      caller cannot be added silently. Both are carried as owed work on
+      tactic-finding-search-all-producers rather than claimed as done."
+  - question: Which lanes violate the autonomous-substance invariant today, and what
+      is the disposition of each?
+    answer: "(Measured and ruled 2026-08-14; extended to four 2026-08-15 after the
+      pre-commit adversarial review.) FOUR. V1 — /align-tactics lands dated
+      clarifications on strategy nodes autonomously, by design. Its two-sided
+      drift review routes MATERIAL drift to a park for author ratification
+      (correct, unchanged), but routes IMMATERIAL drift — an observation the
+      plans do not depend on — to a direct clarifications write, instructed
+      verbatim as 'land it as a dated clarification WITHOUT interrupting; do not
+      park for it' (.claude/workflows/align-tactics.js Side-B block;
+      .claude/skills/align-tactics/references/write-path.md, the
+      immaterial-observation path). clarifications is allowlist member two, so
+      this mutates strategyFingerprint and soft-freezes every open child of that
+      strategy for an observation defined as gating nothing. Two further harms:
+      it is a second requirement-entry surface, which
+      strategy-discovered-requirements reserves to the /align interview; and a
+      model-authored dated clarification is byte-indistinguishable from an
+      author-ruled one, so provenance collapses irreversibly in the field that
+      carries doctrine. AUTHOR RULING: redirect, do not carve out. The
+      immaterial path mints ONE born-parked observation node serving the
+      strategy — the same shape /align already mints for a deferral — instead of
+      writing clarifications_to_add. proceed stays true and the round runs on
+      uninterrupted, because non-interruption was only ever achieved by not
+      parking the STRATEGY and never required writing TO it. A human promotes
+      the worthwhile ones into clarifications at office hours through the
+      attended surface. THIS RULING OVERTURNS A STANDING AUTHOR RULING ON THIS
+      SAME NODE, and says so rather than leaving two live contradictory
+      clarifications — see the 2026-07-28 /align-strategy clarification 'Standing
+      requirement: a per-node tactic-target session MAY append clarifications
+      entries to the serving strategy', now amended in place with an OVERTURNED
+      prefix pointing here. That earlier ruling was correct on its own premises.
+      Its DECISIVE ARGUMENT was that the current doctrine leaves immaterial
+      observations with NO LEGAL DESTINATION AT ALL — write-path.md says write
+      them to the strategy, tactic-target.md forbids any strategy write, and the
+      autonomy contract closes the park escape because an immaterial observation
+      is none of its three park conditions. Faced with a forced choice between
+      dropping the observation and writing the strategy, it chose writing. WHAT
+      CHANGED IS THE PREMISE, NOT THE REASONING: the born-parked observation node
+      IS a legal destination, so the forced choice dissolves. The redirect
+      therefore SATISFIES the 2026-07-28 concern — nothing is dropped, the
+      sole-carrier condition still holds — while removing the strategy write it
+      had to concede. The earlier ruling's second, independent finding stands
+      unaffected and is still owed: DRIFT_SCHEMA.clarifications_to_add declares
+      items as {answer} only with additionalProperties:false, while the
+      Clarification interface requires {question, answer}, so the instruction was
+      never mechanically executable. The implementing node
+      tactic-align-tactics-per-node-clarifications is PARKED by this round: its
+      unit A widens the write authority this ruling removes and its unit B
+      hardens a field this ruling deletes, so it is doomed work as written — the
+      exact failure class this round exists to close, found on this round's own
+      output. Carried by tactic-align-tactics-immaterial-drift-redirect. V2 — /dispatch-conflict's
+      reconciliation lane builds an unconstrained jq filter from an opus
+      subagent's output and sets whatever fields diverged, on any node kind; the
+      skill explicitly names virtue/strategy/tradition/delegation doctrine
+      fields as in scope. The only thing preventing a rewrite of a virtue's
+      statement is a sentence in a prompt telling the subagent not to synthesize
+      substance — no code refuses an allowlist field on a durable-layer id.
+      AUTHOR RULING: replace the prompt-level guard with a MECHANICAL field
+      check — refuse any write to a NON-STATE field when the target id is
+      durable-layer, and park for a human instead. Ruled 2026-08-14 as a
+      six-field allowlist and CORRECTED 2026-08-15 to the negative form after
+      the adversarial review showed the six-field version misses rationale,
+      which is the field the ratified reconciliation doctrine names FIRST, and
+      also misses attributes, owner and parent. The check is
+      not STATE_FIELDS.has(field), which is total by construction and needs no
+      second list kept in sync. Carried by
+      tactic-dispatch-conflict-substance-allowlist. Not measured: whether this
+      has ever actually fired on a durable node; git history was not searched,
+      so it is not known whether any landed doctrine text was model-reconciled
+      without review. V3 — graph-commit's own layer-2 auto-merge unions
+      clarifications and three-way merges statement on whatever ids are in the
+      commit, inheriting the caller's lane, and on scalar divergence silently
+      prefers theirs (packages/intentionsutil/src/node-merge.ts). It does not
+      AUTHOR substance — it reconciles two already-authored values — so it is
+      recorded as a known structural exception rather than assigned a fix. ALSO
+      MEASURED, and not a violation: /budget writes only reading on its
+      strategy, a STATE_FIELDS member and therefore EDIT-STATE. That case is
+      what reframed the whole taxonomy from who-writes to what-kind-of-write:
+      /budget EDITS a durable node without minting anything, so a surfaces-based
+      seam could not classify it. V4 — /review-fix, ADDED 2026-08-15 by the
+      adversarial review, correcting this round's own draft. The 2026-08-14
+      draft excused it on the ground that it is mechanically fenced by a
+      post-hoc porcelain guard reverting any modification to a pre-existing
+      node. IT IS NOT: that guard exists only as prose in
+      .claude/skills/review-fix/SKILL.md — a repository-wide search for its
+      step5-baseline and step5-new markers finds that one file and no script, no
+      hook, no workflow. This round condemned V2 forty lines earlier with the
+      words a prompt is not a gate, then suspended that same standard for
+      review-fix, and the suspension was the only thing keeping it off this
+      list. Nothing mechanically confines review-fix to newly created nodes or
+      to tactics; that confinement is an unverified property of a prompt.
+      AUTHOR RULING: classify it as a violator pending a real guard, and promote
+      the Step-5 porcelain checklist into a script — it is trivially scriptable,
+      the SKILL.md already writes it as shell. Carried by
+      tactic-review-fix-porcelain-guard-script. ONE FURTHER MEASURED FINDING,
+      legal under the invariant but unmonitored: dispatch-graph-census
+      overwrites a census tactic's markdown body wholesale on every autonomous
+      run and carries no scope_fingerprint restamp. It is legal only because
+      census nodes are tactics, which is luck rather than design, and it
+      falsifies the draft claim that freeze machinery attaches to every
+      EDIT-SUBSTANCE."
+  - question: The same 2026-08-14 round argued the greenfield-relevance gate's only
+      carrier is prose in one skill, and moved it into the shared creation
+      surface. Is that argument sound?
+    answer: "(Refuted and corrected 2026-08-14 by the adversarial draft review.) NO
+      — the premise is false and the migration it justified was backwards. The
+      gate's real carrier is code: .claude/workflows/align-tactics.js makes
+      greenfield_drops a schema-REQUIRED member of the decomposer's output,
+      typed additionalProperties:false with required target, superseded_by and
+      reason. BE PRECISE ABOUT WHAT THAT ENFORCES — corrected 2026-08-15, because
+      the 2026-08-14 draft answered an overstatement with an overstatement of its
+      own. What is machine-enforced is the output SHAPE: the key is in
+      DECOMPOSE_SCHEMA's required list, and each entry that appears must carry
+      all three sub-fields. The JUDGMENT — check each unit's subject against
+      non-draft nodes elsewhere that delete or supersede it — is prose in the
+      prompt string, structurally the same kind of carrier the previous round was
+      condemned for citing. greenfield_drops [] satisfies the schema on every
+      run, so an empty result is INDISTINGUISHABLE from a search that never ran.
+      The honest comparison is therefore that the gate has a typed output where
+      the proposed replacement had none, not that it is enforced where the other
+      is prose. The prose at align-tactics/SKILL.md is
+      not a copy of the gate but a POINTER to clarification 26 — the shape the
+      one-shared-write-surface ruling wants, not the shape it condemns. So the
+      previous round moved a machine-enforced check into a prose-specified,
+      unbuilt surface and justified it by calling the enforced carrier prose.
+      THE REAL DEFECT IS DIFFERENT AND SMALLER: the validated supersession
+      judgment is DISCARDED. align-tactics/references/write-path.md directs that
+      greenfield_drops be recorded in the round's report; nothing lands on the
+      graph. A model makes the judgment, a JSON schema validates it, and it dies
+      with the session. AUTHOR RULING: PERSIST, do not relocate. On each drop,
+      write superseded_by onto the named node in the round's existing
+      graph-commit — greenfield_drops.superseded_by is already a validated
+      supersession edge in flight. Keep the creation-time check as a SUPPLEMENT
+      for the callers the workflow never sees: strategies, and every create site
+      that is not an /align-tactics decomposition. This is a strict superset of
+      the previous round's design and enforcement never drops. TWO ADDITIONS
+      RULED 2026-08-15 after the adversarial review. (a) ONE EVALUATOR, TWO
+      TRIGGERS. Persisting the gate where it is and adding a creation-time
+      supplement leaves the same judgment — is X superseded by Y — implemented
+      twice, once as workflow prompt prose and once in the create surface, with
+      nothing keeping them agreeing. The author asked in terms for a parsimonious
+      list of surfaces that is DRY, so the judgment is extracted ONCE as a pure
+      function in packages/intentionsutil/src — supersedes(candidate, corpus)
+      returning target, superseded_by and reason — and the two triggers CALL it:
+      the decomposer per unit, the create surface per mint. The gate stays
+      exactly where this ruling put it; it stops being a second specification
+      asserted to agree with the first. (b) MAKE AN EMPTY RESULT DISTINGUISHABLE
+      FROM AN ABSENT SEARCH. The decomposer emits, alongside the drops, a record
+      of what was searched — corpus size and method — so greenfield_drops [] can
+      be told apart from a judgment that never ran. This is the same principle
+      the create surface already carries, where a disagreement between the two
+      checks is itself a finding. Carried by tactic-persist-greenfield-drops."
+  - question: The supersession doctrine names an edge to record and a close to
+      recommend. Can the schema and the lifecycle express either?
+    answer: "(Verified and ruled 2026-08-14.) NEITHER, as recorded. IntentionNode
+      carries exactly five edge fields — parent, serves, recovers, validates,
+      blocked_by — and no supersession edge; and validateNode DROPS UNKNOWN
+      KEYS, stated verbatim in write-node.ts. So a superseded_by written today
+      vanishes silently on write: the same defect class as the gap field that
+      hundreds of nodes carry and that nothing reads. The observable recorded on
+      strategy-recursive-self-improvement therefore reads an edge that cannot
+      exist, and its claim that no new instrument is required is false — a limit
+      the recording round disclosed for recall but not for representability.
+      Separately the lifecycle admits ONE terminal, phase done, so executing the
+      recommended close would record abandoned work as FINISHED — destroying
+      exactly the distinction the requirement exists to preserve. AUTHOR RULING:
+      add a first-class superseded_by to the schema, stored on the SUPERSEDED
+      node; validate that the target resolves, as blocked_by is validated; and
+      add a cycle check modelled on validateGraph RULE 15, the blocked_by cycle
+      rule. THE TERMINAL IS CARRIED ON status, NOT ON phase. Ruled 2026-08-14 as
+      a non-pruning superseded PHASE and CORRECTED 2026-08-15 after the
+      pre-commit adversarial review falsified the reasoning behind it, on three
+      independently verified counts. FIRST, THE PRUNING PREMISE IS RETIRED. The
+      2026-08-14 draft argued that done launders abandoned work as finished
+      because the node is pruned and absence reads as completion. Nothing prunes
+      any more: reconcile-graph.ts states LEAVE the node present, no prune, and
+      Nothing is pruned anymore. Done nodes are retained. The prose the ruling
+      leaned on survives only as stale comments in router.ts and terminus.ts,
+      both still asserting prune-on-done makes absence completion. The harm is
+      real but its cause is the WORD done, not a deletion. SECOND, A NEW PHASE
+      WOULD DEADLOCK THE LADDER. Thirty predicates across fourteen files spell
+      terminal as phase equals done. The worst is blockersComplete, which counts
+      a blocker complete only when it is ABSENT from the store or present at
+      phase done; a non-pruning superseded node is neither, so every tactic
+      blocked_by a superseded node would be blocked FOREVER and classifyTerminus
+      would drain its dependents as excused-blocked, silently. THIRD, A PHASE
+      CANNOT MARK A SUPERSEDED STRATEGY. validateGraph rule 10 confines phase,
+      execution, blocked_by and validates to kind tactic, while the originating
+      requirement said in terms that the graph must not implement one
+      STRATEGY-or-tactic then later attempt the one it supersedes. A phase
+      covers half the requirement. status has none of these problems: its
+      vocabulary is already per-kind and already validated by rule 16, so it
+      reaches every kind with no rule-10 exemption; no code branches on it, so
+      the thirty predicates and blockersComplete are untouched. THE COST, STATED:
+      a superseded node still sits at whatever phase it reached, so wherever the
+      ladder currently reads phase alone to mean eligible it must also consult
+      status — one predicate to add, against thirty to migrate. Carried by
+      tactic-supersession-edge-and-terminal; until it lands, the RSI observable
+      is NOT readable and says so on its own node. EDGE CASES: direction is
+      ruled (store on the superseded node; derive the reverse by scanning, the
+      way inbound blocked_by edges are found today — note that inboundBlockers
+      is a prune-repair scan and not a maintained reverse index, so no index
+      pattern is being reused here). Cycles are ruled (checked, per rule 15).
+      ONE EDGE CASE IS OPENED BY THIS CORRECTION AND LEFT UNRULED: status is a
+      STATE_FIELDS member, and EDIT-STATE is unrestricted, so on the letter of
+      the invariant an autonomous lane could mark a STRATEGY superseded without
+      a human. Retiring a strategy is a doctrine act. Recommendation, not a
+      ruling: require attendance for a superseded status on a durable-layer
+      node, the same way this round requires it for any other durable substance
+      write. Enrolled on tactic-review-supersession-derived-subpoints alongside
+      the partial-supersession question. PARTIAL supersession remains UNRULED — the
+      existing workflow gate already handles it better than this doctrine does,
+      dropping individual units and demoting to draft only when a tactic is
+      FULLY superseded, whereas the creation-time check is whole-node. It stays
+      enrolled on tactic-review-supersession-derived-subpoints."
+  - question: A creation-time supersession check keyed on the new node cannot find
+      supersessions that already happened. What closes that half?
+    answer: "(Ruled 2026-08-14; the MECHANISM corrected 2026-08-15 after the
+      pre-commit adversarial review.) A RETIREMENT-TIME SWEEP, paired with the
+      creation-time check, because the creation-time check is structurally
+      incapable of this class: keyed on the new node, it only finds cases where
+      the NEW node is the superseder. THE SWEEP IS A WIDENING OF AN INSTRUMENT
+      THAT ALREADY SHIPS, NOT A NEW ONE. The 2026-08-14 draft specified a fresh
+      sweep fired by deletion events, and recorded that its live proof case was
+      found by an adversarial reviewer rather than by any instrument. That is
+      FALSE and is corrected here.
+      .claude/skills/dispatch-propagate/scripts/lint-verify-fence-paths.sh
+      exists and run-lint.sh calls it UNCONDITIONALLY, so it is already in CI on
+      every commit. Its contract is to fail at the commit that orphans a
+      fence-named path: for every non-done node it extracts the verify blocks
+      and asserts that every path-like token in them still exists. It already
+      has the trigger, the CI wiring, the done-node exclusion, a token rule
+      tuned against false positives, and a test suite. IT MISSED THE PROOF CASE
+      FOR ONE NARROW REASON, measured: the dead reference in
+      tactic-node-ancestry-context is in a prose Scope bullet, while that node's
+      verify fences begin hundreds of lines later, and the lint's scan window is
+      fence-scoped rather than body-scoped. So the accurate finding is that the
+      shipped guard's window is too narrow, not that no guard exists. AUTHOR
+      RULING: widen it — add a second pass over non-fence body prose restricted
+      to backticked path tokens under .claude and packages, and add a park lane
+      so a match on an OPEN node parks it rather than only reddening CI. This
+      also removes an undeclared dependency the fresh-sweep design carried:
+      nothing in this repository emits a deletion event, and the shipped guard
+      sidesteps that by running on every commit instead. LIVE PROOF IT IS
+      NEEDED:
+      tactic-node-ancestry-context sat at phase implement, status codified, with
+      a plan whose unit B inserts a step into
+      .claude/skills/align-strategy/SKILL.md — a skill deleted 2026-08-04. A
+      worker selecting it could not have executed it. It was invisible to the
+      observable this doctrine recorded, because that observable reads an edge
+      no sweep ever wrote. This round parks it. Carried by
+      tactic-supersession-retirement-sweep. Related residue the same sweep would
+      catch, left standing and now visible:
+      tactic-align-strategy-new-steps-revision, at phase null, is scoped
+      entirely to editing the deleted skill. A second candidate,
+      tactic-align-tactics-mechanical-floor, was named in the 2026-08-14 draft
+      and is WITHDRAWN here: it is at phase done, and both the shipped lint and
+      this sweep exclude done nodes by design, because done bodies are
+      historical archives that may legitimately name paths that no longer exist.
+      Naming it as evidence that the sweep is needed cited a case the sweep is
+      built not to touch. If stale references inside done bodies are a problem
+      worth solving, that is a different instrument with a different rationale
+      and it is not ruled here."
 tooling_goals:
-  - kind: actuator
-    statement: "/align — the single interactive entry point to the persistent layer:
-      with a prompt, the recording interview (superseding /file-issue
-      requirements definition; records or amends virtues, strategies,
-      traditions, and delegations, retaining draft-tactic byproducts); with no
-      prompt, onboarding — orientation, scripted deployment validation, and a
-      walk to crafting the prompt, which the session then executes. Consolidates
-      the former /align-strategy and /align-init"
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
       nodes with clean-session plans, superseding /file-issue epic structuring
@@ -4791,7 +6505,9 @@ tooling_goals:
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics in owned deterministic code, executes the tick as a thin
       workflow fan-out (one agent per selected node), transitions persisted
-      phase via direct-push rebase-retry writes
+      phase via direct-push writes — rebase-retry under the worktree writer,
+      plumbing CAS with no rebase under GRAPH_COMMIT_WRITER=plumbing
+      (2026-08-13), and CAS against graph-main once tactic-graph-ref-split lands
   - kind: sensor
     statement: lifecycle telemetry from the store itself — phase transition history
       and round counts readable from node state
@@ -4808,16 +6524,17 @@ success_signal:
     continuously, and the machinery's own open defect backlog — open (phase set,
     not done) plus born-parked tactics serving this strategy — stays at or below
     35% of all tactics serving this strategy and is non-increasing across
-    consecutive samples derived from intentions/ git history at read time
+    consecutive samples derived from intentions/ git history at read time, and
+    parks attributable to an upstream recording round’s own record gap trend to
+    zero
   is_proxy: true
 attention:
-  boost: 5
-  override: null
+  boosts:
+    "1": 5
   rationale: "Author-directed 2026-07-06: the graph-native dispatch router
     migration is the current focus — lift this strategy and its tactic subtree
     above derived-only ranks (derived terms cap at 2) so router selection works
     the migration first."
-  tier: 1
 phase: null
 execution: null
 validates: []
@@ -4829,6 +6546,22 @@ rounds:
   last_completed: null
   last_aligned: 2026-08-10
 attributes:
+  queue_summary:
+    date: 2026-08-11
+    summary: "Paused (`dispatch_pause_state` reads `paused`) and static: origin/main
+      advanced by exactly one commit since yesterday's render (0f2e1412 to
+      65d8952d, the rsi iteration itself), and the phase table is byte-identical
+      to it — 12 implement, 13 qa, 18 main-qa, 3 review. Backlog is 58/236 =
+      24.6%, inside the recorded 35% band and non-increasing across the 28d
+      series (47.6% then 38.2% then 31.4% then 24.6%) — but at this sample the
+      band is measuring a queue that is not moving rather than one that is
+      draining. The mass stays in verification: 31 of the 46 phase-set nodes sit
+      in qa or main-qa against 12 in implement, so the binding constraint on
+      resume is downstream of selection, not at it. Review holds three —
+      tactic-graph-commit-landing-signal-unreliable,
+      tactic-reap-safety-behind-branch-false-positive,
+      tactic-wait-calendar-release. Resume remains gated on the recorded
+      criteria, re-measured at the time of the decision."
   conditions:
     - the legacy gh router only drains existing issues; no new work enters via
       gh once the /align entry point (today /align-strategy, until
@@ -5073,6 +6806,48 @@ attributes:
       model session — and each invalid-state kind carries its own intervention
       skill rather than one skill body branching across kinds (Recorded
       2026-08-05)
+    - "graph operations available to sessions — retrieval and query, node
+      editing, and concurrency control — run through owned, offline-testable
+      primitives rather than hand-rolled shell, and every operation the doctrine
+      mandates has a scripted path: a read the doctrine requires at origin/main
+      with no CLI able to perform it is a tooling defect, not a
+      session-discipline problem. Round-trip count is a first-class cost
+      alongside per-call bytes. This is a FLOOR, not a ceiling — ad-hoc shell
+      stays available for genuinely novel graph questions, so the recovery path
+      virtue-progressive-detachment protects stays open (Recorded 2026-08-11)"
+    - /dispatch-ladder's driver decides nothing — it may SEQUENCE the phase
+      ladder, never gate it. Every rule about when a node may run stays in
+      graph-select-target, and any such rule appearing in the driver or in its
+      advance/await primitives is in the wrong file. This is the re-scoped form
+      of the 'two scripts decide nothing' invariant, extended to the driver that
+      calls them, and it is the thing to check every future edit against.
+    - node mutual exclusion on the /dispatch-ladder path stays the claim
+      primitive — advance's exit 13, worktree-as-claim and the reservation
+      marker. A systemd unit name may dedup identical launches as a convenience,
+      but it is never the authority on whether a node is held, so detaching the
+      run introduces no second detection mechanism beside the claim.
+    - "/dispatch-ladder throws always halt, never resolve — advance/await exits
+      11, 12 and 14 stop the run unconditionally, with no retry, no auto-park
+      and no resume without a person. This is what preserves attendedness once
+      the run is detached from the calling session: the waiting detaches, the
+      judgment does not."
+    - AI sequencing on the /dispatch-ladder path stays at zero — no model turn
+      may be required to advance the ladder between phases. A change that
+      reintroduces one (a re-invoke, a poll the model must perform, a branch the
+      model must judge) is a regression against this requirement, not an
+      implementation detail.
+    - "an environmental failure — the managed dispatch daemon dying, restarting,
+      or rolling to a new version — is never an invalid state: its orphaned
+      sessions are not routed to the invalid-state lane by any surface (neither
+      the tick's sweeps nor /dispatch-ladder), orphaned background sessions are
+      deliberately NOT proactively adopted when a new daemon generation starts,
+      and recovery is the author's by restart — signalled by the fleet's
+      daemon-degraded alarm, which carries the list of nodes and ladder runs the
+      outage stalled (Recorded 2026-08-13)"
+    - /dispatch-ladder remains invocable independently of the scheduled dispatch
+      tick and its pause sentinel — the recovery path for a node stranded
+      post-merge is invoking /dispatch-ladder directly on it, so a paused fleet
+      must never be the only actor that can carry a merged node to terminal
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
@@ -5990,13 +7765,37 @@ auto-applied.
 The greenfield-relevance gate checks each tactic against superseding non-draft
 nodes at finalization (Recorded 2026-07-06 interview, entry 26). To keep work off
 code the critical path deletes, a gate binds the align family: at /align-tactics
-finalization and in every /align-strategy improvement pass, each candidate and open
+finalization, each candidate and open
 tactic's subject is checked against non-draft nodes that delete or supersede it (a
 raw draft never obsoletes live work). The check is per-unit — doomed units are
 dropped from the plan body naming the superseding node, and only a fully-superseded
 tactic demotes to draft; a tactic on doomed surface may stay selectable only as an
 explicit interim-live-risk exception naming its expiry event (e.g. the gh-queue
 drain).
+
+**Amended 2026-08-14 (third /align round of that date), twice.** First, a
+correction: this paragraph until now also bound the gate to "every
+/align-strategy improvement pass". That surface has not existed since
+2026-08-04, when `tactic-align-entrypoint-consolidation` Unit 2 deleted the
+no-prompt improvement pass outright — naming this very gate in its own scope —
+per the 2026-07-23 office-hours ruling that both retained engines retire
+wholesale. The clause is struck rather than rewritten because there is nothing
+to point it at. See the stale-surface clarification in frontmatter for the full
+history and for why a gate whose only carrier is prose in one skill is a gate
+that gets skipped.
+
+Second, and consequently: the gate's substance **moves into the shared
+find-or-recur write surface** (`tactic-finding-search-all-producers`), where it
+runs at **node-creation time** on every creation rather than only at
+`/align-tactics` finalization, and where its disposition order is
+rewrite-in-place first and close-as-superseded as the backstop. The mechanics
+above — per-unit doomed drops, "a raw draft never obsoletes live work", the
+fully-superseded demotion, and the interim-live-risk exception — are preserved
+by that move, not replaced. What is added there is the terminal disposition this
+paragraph never had: an edge naming the superseding node, plus an `office_hours`
+park recommending the close, with the close itself reserved as a declared
+remediation. The surviving `/align-tactics` prose reduces to naming the call.
+See the two-surfaces and shared-analysis clarifications recorded the same round.
 
 Self-modifying tactics are detected at decomposition and born-parked (Recorded
 2026-07-07 interview, entry 41). Scope touching agent-behavior config

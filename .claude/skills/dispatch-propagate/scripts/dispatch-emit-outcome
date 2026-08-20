@@ -12,6 +12,8 @@
 #          --fixes-applied <n> \
 #          --followups-filed <n> \
 #          --subagents-launched <n> \
+#          [--tool-denials <n>] \
+#          [--denied-command <shape>]... \
 #          --disposition <disposition> \
 #          [--terminated-reason <reason>]
 #
@@ -29,8 +31,8 @@
 #   (dispatch-stamp-session:15-19). Both or neither given is a validation
 #   error (exit 2).
 #
-# --phase: one of the ALLOWED_PHASES set (review, qa). Extensible: update
-#   ALLOWED_PHASES below to add future phases.
+# --phase: one of the ALLOWED_PHASES set (review, qa, fix-checks). Extensible:
+#   update ALLOWED_PHASES below to add future phases.
 # --disposition: one of the ALLOWED_DISPOSITIONS set
 #   (completed, completed_with_fixes, escalated).
 # --terminated-reason: required-non-null when disposition == escalated;
@@ -39,6 +41,36 @@
 #   (exit 2), not silently treated as absent — presence is tracked by a
 #   set-flag, not by emptiness.
 # --pr, --base-sha: optional; serialize as JSON null when absent.
+#
+# --tool-denials / --denied-command: the permission-friction pair. Both fields
+#   are ALWAYS present in the record — `tool_denials` defaults to 0 and
+#   `denied_commands` to [] — so a phase that took tool denials cannot report a
+#   clean outcome without the gap being visible.
+#
+#   Both are DERIVED from this session's own transcript when --tool-denials is
+#   omitted: the harness stamps `toolDenialKind: "user-rejected"` on the user
+#   message carrying a declined tool call, and that JSON field is the only
+#   reliable marker (the human-readable "The user doesn't want to proceed with
+#   this tool use" text does not appear on every denial, so a literal search
+#   reads a friction-heavy session as clean). Deriving beats asking the caller:
+#   a phase that silently lost a verifying check to a denial is exactly the
+#   phase least likely to self-report it.
+#
+#   Derivation is best-effort and NEVER fails the emit. When the transcript
+#   cannot be located or parsed the fields fall back to 0 / []. Resolution
+#   order: $DISPATCH_OUTCOME_TRANSCRIPT (explicit path, also the test seam),
+#   else <projects-root>/*/$CLAUDE_CODE_SESSION_ID.jsonl, where projects-root is
+#   $DISPATCH_OUTCOME_PROJECTS_ROOT or $HOME/.claude/projects.
+#
+#   An explicit --tool-denials <n> overrides the derived count; one or more
+#   --denied-command <shape> flags override the derived shapes. The two arrays
+#   need not agree in length: `denied_commands` is a best-effort diagnostic
+#   (a denial whose originating tool_use is not in the transcript renders as
+#   "<unknown tool call>"), while `tool_denials` is the count of record.
+#
+#   This is the script's only filesystem read, and it stays sandbox-safe (the
+#   projects root is readable; nothing is written). "Pure" in the callers' sense
+#   — no gh, no git, no network — still holds.
 #
 # DIVERGENCE FROM dispatch-mark-complete:
 #   dispatch-mark-complete no-ops when CLAUDE_JOB_DIR is unset/empty, so
@@ -55,7 +87,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Allowed enum values — edit these to extend the enum sets.
 # ---------------------------------------------------------------------------
-ALLOWED_PHASES=("review" "qa")
+ALLOWED_PHASES=("review" "qa" "fix-checks")
 ALLOWED_DISPOSITIONS=("completed" "completed_with_fixes" "escalated")
 
 # ---------------------------------------------------------------------------
@@ -72,6 +104,9 @@ FINDINGS_ACTIONABLE=""
 FIXES_APPLIED=""
 FOLLOWUPS_FILED=""
 SUBAGENTS_LAUNCHED=""
+TOOL_DENIALS=""
+DENIED_COMMANDS=()
+DENIED_COMMANDS_SET=false
 DISPOSITION=""
 TERMINATED_REASON=""
 TERMINATED_REASON_SET=false
@@ -89,13 +124,18 @@ usage: dispatch-emit-outcome \
          --fixes-applied <n> \
          --followups-filed <n> \
          --subagents-launched <n> \
+         [--tool-denials <n>] \
+         [--denied-command <shape>]... \
          --disposition <disposition> \
          [--terminated-reason <reason>]
 
-  --phase        one of: review qa
+  --phase        one of: review qa fix-checks
   --issue        legacy gh-issue lane target (positive integer)
   --node-id      graph-native lane target (lowercase node-id slug);
                  exactly one of --issue / --node-id is required
+  --tool-denials    user-rejected tool calls this phase took; omit to derive
+                    the count from this session's transcript (0 on failure)
+  --denied-command  a denied call's shape; repeatable; omit to derive
   --disposition  one of: completed completed_with_fixes escalated
   --terminated-reason  required when disposition=escalated, forbidden otherwise
 EOF
@@ -140,6 +180,12 @@ while [[ $# -gt 0 ]]; do
     --subagents-launched)
       [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --subagents-launched requires a value" >&2; exit 2; }
       SUBAGENTS_LAUNCHED="$2"; shift 2 ;;
+    --tool-denials)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --tool-denials requires a value" >&2; exit 2; }
+      TOOL_DENIALS="$2"; shift 2 ;;
+    --denied-command)
+      [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --denied-command requires a value" >&2; exit 2; }
+      DENIED_COMMANDS+=("$2"); DENIED_COMMANDS_SET=true; shift 2 ;;
     --disposition)
       [[ $# -ge 2 ]] || { echo "dispatch-emit-outcome: --disposition requires a value" >&2; exit 2; }
       DISPOSITION="$2"; shift 2 ;;
@@ -247,6 +293,13 @@ _require_nonneg_int fixes-applied       "$FIXES_APPLIED"
 _require_nonneg_int followups-filed     "$FOLLOWUPS_FILED"
 _require_nonneg_int subagents-launched  "$SUBAGENTS_LAUNCHED"
 
+# --tool-denials is optional, but an explicitly given value must be well-formed:
+# a typo'd count is a caller bug, not something to silently replace with the
+# derived value.
+if [[ -n "$TOOL_DENIALS" ]]; then
+  _require_nonneg_int tool-denials "$TOOL_DENIALS"
+fi
+
 if [[ -n "$PR" ]]; then
   _require_pos_int pr "$PR"
 fi
@@ -265,6 +318,84 @@ fi
 if [[ "$DISPOSITION" != "escalated" && "$TERMINATED_REASON_SET" == true ]]; then
   echo "dispatch-emit-outcome: --terminated-reason must not be provided when --disposition is $DISPOSITION (only valid for escalated)" >&2
   exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# tool_denials / denied_commands — derive from this session's transcript
+# unless the caller supplied them. Best-effort throughout: every failure mode
+# lands on 0 / [] rather than aborting the emit, because a missing envelope is
+# strictly worse than an envelope whose denial count could not be measured.
+# ---------------------------------------------------------------------------
+_resolve_transcript() {
+  if [[ -n "${DISPATCH_OUTCOME_TRANSCRIPT:-}" ]]; then
+    printf '%s\n' "$DISPATCH_OUTCOME_TRANSCRIPT"
+    return 0
+  fi
+  local sid="${CLAUDE_CODE_SESSION_ID:-}"
+  [[ -n "$sid" ]] || return 1
+  local root="${DISPATCH_OUTCOME_PROJECTS_ROOT:-${HOME:-}/.claude/projects}"
+  [[ -d "$root" ]] || return 1
+  local hit
+  # -print -quit rather than `| head -1`: a pipe into head can SIGPIPE find,
+  # and under `pipefail` that would discard a hit we actually found.
+  hit=$(find "$root" -maxdepth 2 -type f -name "${sid}.jsonl" -print -quit 2>/dev/null) || hit=""
+  [[ -n "$hit" ]] || return 1
+  printf '%s\n' "$hit"
+}
+
+# Counts one denial per tool_result block on a line the harness stamped
+# `toolDenialKind == "user-rejected"` (a batched turn can have several calls
+# denied at once), falling back to the line count when a stamped line carries
+# no tool_result block. Shapes are recovered by joining each denied block's
+# tool_use_id back to the assistant tool_use that issued it.
+DERIVE_JQ='
+[inputs | fromjson? | select(type == "object")] as $lines
+| ( reduce ( $lines[]
+             | select(.type == "assistant")
+             | (.message.content // [])
+             | if type == "array" then .[] else empty end
+             | select(type == "object" and .type == "tool_use")
+             | select((.id | type) == "string")
+           ) as $tu ({};
+      .[$tu.id] = ( ( ($tu.name // "tool")
+                      + ( if ($tu.input.command? // null) != null
+                          then ": " + ($tu.input.command | tostring)
+                          else "" end ) )
+                    | gsub("\\s+"; " ") | .[0:160] )
+    ) ) as $shapes
+| [ $lines[]
+    | select(.toolDenialKind == "user-rejected")
+    | (.message.content // [])
+    | if type == "array" then .[] else empty end
+    | select(type == "object" and .type == "tool_result")
+    | (.tool_use_id // "") ] as $ids
+| ( [ $lines[] | select(.toolDenialKind == "user-rejected") ] | length ) as $line_count
+| ( if ($ids | length) > 0 then ($ids | length) else $line_count end ) as $n
+| { tool_denials: $n,
+    denied_commands: [ $ids[] | $shapes[.] // "<unknown tool call>" ] }
+'
+
+DERIVED_JSON=""
+if [[ -z "$TOOL_DENIALS" || "$DENIED_COMMANDS_SET" == false ]]; then
+  TRANSCRIPT=$(_resolve_transcript) || TRANSCRIPT=""
+  if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]]; then
+    DERIVED_JSON=$(jq -R -n "$DERIVE_JQ" "$TRANSCRIPT" 2>/dev/null) || DERIVED_JSON=""
+  fi
+fi
+
+if [[ -z "$TOOL_DENIALS" ]]; then
+  if [[ -n "$DERIVED_JSON" ]]; then
+    TOOL_DENIALS=$(jq -r '.tool_denials // 0' <<<"$DERIVED_JSON") || TOOL_DENIALS=""
+  fi
+  [[ "$TOOL_DENIALS" =~ ^[0-9]+$ ]] || TOOL_DENIALS=0
+fi
+
+if [[ "$DENIED_COMMANDS_SET" == true ]]; then
+  DENIED_COMMANDS_JSON=$(jq -n --args '$ARGS.positional' "${DENIED_COMMANDS[@]}")
+elif [[ -n "$DERIVED_JSON" ]]; then
+  DENIED_COMMANDS_JSON=$(jq -c 'if (.denied_commands | type) == "array" then .denied_commands else [] end' <<<"$DERIVED_JSON") || DENIED_COMMANDS_JSON='[]'
+else
+  DENIED_COMMANDS_JSON='[]'
 fi
 
 # ---------------------------------------------------------------------------
@@ -323,6 +454,8 @@ jq -n \
   --argjson fixes_applied       "$FIXES_APPLIED" \
   --argjson followups_filed     "$FOLLOWUPS_FILED" \
   --argjson subagents_launched  "$SUBAGENTS_LAUNCHED" \
+  --argjson tool_denials        "$TOOL_DENIALS" \
+  --argjson denied_commands     "$DENIED_COMMANDS_JSON" \
   --arg     disposition         "$DISPOSITION" \
   "${terminated_reason_arg[@]}" \
   '{
@@ -338,6 +471,8 @@ jq -n \
     fixes_applied:        $fixes_applied,
     followups_filed:      $followups_filed,
     subagents_launched:   $subagents_launched,
+    tool_denials:         $tool_denials,
+    denied_commands:      $denied_commands,
     disposition:          $disposition,
     terminated_reason:    $terminated_reason
   }'

@@ -33,7 +33,6 @@ rationale: "graph-auto-merge's candidate gate is `kind:tactic AND phase:review
   nodes the rest of the system considers withheld. That is the same structural
   defect class this node closes for blocked_by."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -41,8 +40,19 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: dispatch-ladder-e2e-unblock
+  pr: 3073
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T00:21:45Z
+    mergeCommitSha: 3fea9f35f7aeaf5ae48623c87cbf0724c9f5f819
+    graphCommitSha: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -51,3 +61,29 @@ rounds: null
 attributes: {}
 ---
 # graph-auto-merge's candidate enumeration must honour blockersComplete, so a node carrying an unsatisfied blocked_by edge is never merged ahead of its blocker even once it acquires a reviewed marker
+
+## Shipped 2026-08-13 — PR #3073, merge `3fea9f35`
+
+Landed as Unit 2 of the `/dispatch-ladder` e2e-unblock PR (branch commit
+`a3451bf9`). `graph-auto-merge`'s Step 2 candidate enumeration now applies the
+shared `blockersComplete` predicate
+(`packages/intentionsutil/src/router.ts`), so a node carrying an unsatisfied
+`blocked_by` edge is excluded from the merge candidate set even once it earns
+a `reviewed` marker.
+
+As the node's rationale anticipated, this is an added predicate on an existing
+read rather than a new traversal: the enumeration already loads the graph
+through `listNodesStrict`, which is exactly `blockersComplete`'s documented
+precondition. Code anchors at `graph-auto-merge:238-250` (the doctrine
+comment), `:260` (the dynamic import) and `:271` (the predicate itself); the
+gate is also stated in the script's ordered gate list at `:73-74`.
+
+**Why this one blocked the e2e run.** `/dispatch-ladder` calls
+`graph-auto-merge --node <id>` as its own merge step, so the ladder inherited
+the unguarded enumeration directly: a ladder node with an unsatisfied blocker
+would have merged ahead of it, on the ladder's own cadence, with no tick in
+between to notice.
+
+Pinned by `.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh`
+(84 assertions, up from 49), already wired at
+`.github/workflows/unit-tests.yml:199`.

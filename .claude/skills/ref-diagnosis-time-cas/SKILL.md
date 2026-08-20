@@ -57,7 +57,8 @@ for a later write to invalidate.
 **1. Capture** — at diagnosis time, dump every node under consideration:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir <dir> <id>...
+npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+  --out-dir <dir> <id>...
 ```
 
 Prints the manifest path on stdout: `<dir>/base-manifest.txt`, containing
@@ -72,7 +73,7 @@ manifest:
 
 ```bash
 park-node --base <manifest-path> <id> <reason> [recommendation]
-clear-park --base <manifest-path> <id> [note]
+clear-park -C <repo-root> --base <manifest-path> <id> [note]
 ```
 
 One manifest covers a whole batch of nodes: each invocation of park-node or

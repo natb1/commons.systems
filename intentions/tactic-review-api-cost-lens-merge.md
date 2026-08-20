@@ -23,13 +23,25 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
-  rationale: "Author-directed 2026-08-01: prioritize review-phase token/agent-cost
+  boosts:
+    "1": 0.01
+  rationale: >-
+    Author-directed 2026-08-01: prioritize review-phase token/agent-cost
     reduction. Puts this tactic ahead of the undecomposed baseline and on par
     with other tier-2 improvement work, without contending with active
-    reliability fixes (top-of-band ~55-61)."
-  tier: 1
+    reliability fixes (top-of-band ~55-61).
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-review-api-cost-lens-merge
@@ -46,6 +58,7 @@ execution:
     mergedAt: 2026-08-04T16:57:43Z
     mergeCommitSha: 7aecba983181ab9f432497aae0d9e62ecba5c94c
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -68,7 +81,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 # Merge the firebase and cost review lenses into one api-cost lens and widen its trigger so it samples every diff touching an API or query call site
 

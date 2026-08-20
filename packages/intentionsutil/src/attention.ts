@@ -1,27 +1,56 @@
 import { IntentionSchemaError } from "./errors.js";
-import { ownTier } from "./schema.js";
+import { TIERS, ownTier } from "./schema.js";
 import type { IntentionNode } from "./schema.js";
 import { deriveGap } from "./sensors.js";
 
 // --- Types -------------------------------------------------------------------
 
-/** One term's contribution to a node's composed rank, for explainability. */
-export interface TermContribution {
-  term: string;
-  value: number;
+/**
+ * The shared ranking key: the lexicographic quadruple every consumer orders by,
+ * descending, tier outermost.
+ *
+ *  - `tier` — the outer namespace axis (see `ResolvedAttention.tier`).
+ *  - `band` — the best score among the node's PARENTS, read in this node's own
+ *    resolved tier. It groups a node with its cohort before its own score
+ *    breaks ties inside that cohort.
+ *  - `score` — this node's own per-tier score (own contribution plus its whole
+ *    deduped lineage's).
+ *  - `depth` — how many distinct lineage nodes sit above it. Innermost, so a
+ *    child outranks its parent whenever the three outer components tie.
+ *
+ * Exported so every consumer sorts by ONE comparator rather than re-deriving
+ * the ordering (and re-deriving it slightly differently).
+ */
+export interface RankKey {
+  tier: number;
+  band: number;
+  score: number;
+  depth: number;
+}
+
+/**
+ * Lexicographic DESCENDING comparator over `RankKey`: tier, then band, then
+ * score, then depth. Suitable directly as an `Array.prototype.sort` argument —
+ * `[...items].sort((a, b) => compareRankKeyDesc(a.rank, b.rank))`.
+ *
+ * Ties on all four components return 0; callers that need a total order break
+ * the remaining tie themselves (by id, conventionally ascending).
+ */
+export function compareRankKeyDesc(a: RankKey, b: RankKey): number {
+  if (a.tier !== b.tier) return b.tier - a.tier;
+  if (a.band !== b.band) return b.band - a.band;
+  if (a.score !== b.score) return b.score - a.score;
+  return b.depth - a.depth;
 }
 
 /** The derived attention (rank) of one eligible node. Computed on read, NEVER stored. */
-export interface ResolvedAttention {
-  /** The node's rank — the weighted sum of every term's contribution. */
-  value: number;
+export interface ResolvedAttention extends RankKey {
   /**
-   * The node's EFFECTIVE tier — the outer ranking axis, dominating `value`
-   * lexicographically: order by `(tier, value)`, never by `value` alone. It is
-   * `max` of the node's own tier (`ownTier`: bug_fix/security marks or an
-   * explicit `attributes.tier`) and the effective tier of every node that
-   * distributes to it (parent/serves), so a tier lift flows downward exactly
-   * like the authored term does.
+   * The node's EFFECTIVE tier — the outer ranking axis, dominating every other
+   * component lexicographically. It is `max` of the node's own tier (`ownTier`:
+   * bug_fix/security marks or an explicit `attributes.tier`) and the effective
+   * tier of every one of its parents, so a tier lift flows downward exactly
+   * like a boost does.
    *
    * Required, not optional: an optional field invites a `?? 1` fallback at call
    * sites, which would silently sort a genuinely tier-3 node into tier 1 —
@@ -29,40 +58,49 @@ export interface ResolvedAttention {
    */
   tier: number;
   /**
-   * Ids of the source nodes whose authored boosts/overrides contribute to this
-   * node's rank via the `authored` term, ordered by contribution (largest
-   * first, id ascending on ties) — for explainability ("via strategy-x").
+   * The parent id whose score defined `band`, for explainability ("banded with
+   * strategy-x"). `null` exactly when `band` is 0 — either the node has no
+   * parents at all, or no parent carries any score in this node's tier.
+   */
+  bandSource: string | null;
+  /**
+   * Ids of the nodes whose per-tier contribution (authored boost in this node's
+   * resolved tier, plus a recovering strategy's capture addend) actually feeds
+   * this node's `score` — itself included when it contributes. Ordered by
+   * contribution, largest first, id ascending on ties. Explainability only
+   * ("via strategy-x"); nothing keys off it.
    */
   sources: string[];
-  /**
-   * Every registered term's contribution to `value`, in registry order — the
-   * per-term breakdown behind the composed score (strategy clarification 11:
-   * "expose the composed score and per-term contributions for explainability
-   * in frontier views"). Optional so hand-built `ResolvedAttention` literals
-   * (e.g. in tests driving `renderFrontier` directly) need not supply it;
-   * `resolveAttention` itself always populates it.
-   */
-  terms?: TermContribution[];
 }
 
 // --- Weights -----------------------------------------------------------------
-// Terms and weights live in code, per clarification 11 — a weight change is an
-// ordinary reviewed PR, never a graph edit. The authored term's own DFS values
-// are used as-is (implicit weight 1); the two derived terms below are scaled
-// so a typical authored boost (small integers, 1-10 across the current graph)
-// still dominates — a max derived contribution is
-// SIGNAL_TERM_WEIGHT + CAPTURE_TERM_WEIGHT = 2.
+// Weights live in code, per clarification 11 — a weight change is an ordinary
+// reviewed PR, never a graph edit. Authored per-tier boosts are used as-is
+// (implicit weight 1); the one derived term below is scaled so a typical
+// authored boost (small integers, 1-10 across the current graph) still
+// dominates it.
 
-/** Flat bonus for a node on the path to an unvalidated signal's terminal. */
-const SIGNAL_TERM_WEIGHT = 1;
-
-/** Scales the normalized (0..1 per delegation) capture-resolution sum. */
+/** Scales the normalized (0..1 per delegation, capped at 1) capture-resolution sum. */
 const CAPTURE_TERM_WEIGHT = 1;
 
 // --- Helpers -------------------------------------------------------------------
 
 function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Every map below is seeded/keyed from the SAME `nodes` source, so a lookup by
+ * a known node id is a maintained invariant, not user input — `mustGet` turns a
+ * violation into a clear error instead of an `as`-cast that would silently
+ * paper over a real bug.
+ */
+function mustGet<V>(map: Map<string, V>, id: string, what: string): V {
+  const value = map.get(id);
+  if (value === undefined) {
+    throw new IntentionSchemaError(`attention: expected ${what} for node id "${id}"`);
+  }
+  return value;
 }
 
 /**
@@ -77,6 +115,33 @@ function isPlainObjectLike(value: unknown): value is Record<string, unknown> {
  */
 export function isSignalUnvalidated(strategy: IntentionNode): boolean {
   return strategy.reading === null || deriveGap(strategy) !== null;
+}
+
+/**
+ * The reverse `blocked_by` relation: `id -> every node that lists `id` in its
+ * OWN blocked_by` — i.e. the nodes `id` blocks.
+ *
+ * ONE construction, shared by two consumers that must agree on its direction:
+ *
+ *  - `computeSignalPath`, where walking it (plus `parent`, downward) is how a
+ *    node reaches a validates-terminal: completing it is on the path to
+ *    completing something that validates a signal.
+ *  - the parent relation inside `resolveAttention`, where a node's blockees are
+ *    among its parents for exactly the same reason — the work `id` unblocks is
+ *    what `id` is FOR, so `id` inherits its urgency.
+ *
+ * Values are in input order; every caller either sorts or treats them as a set.
+ */
+export function buildReverseBlockedBy(nodes: IntentionNode[]): Map<string, string[]> {
+  const reverseBlockers = new Map<string, string[]>();
+  for (const n of nodes) {
+    for (const blocker of n.blocked_by) {
+      const list = reverseBlockers.get(blocker);
+      if (list) list.push(n.id);
+      else reverseBlockers.set(blocker, [n.id]);
+    }
+  }
+  return reverseBlockers;
 }
 
 // --- Capture-resolution scoring ------------------------------------------------
@@ -134,6 +199,41 @@ function captureScore(delegation: IntentionNode): number {
   return (divergenceScore(delegation) + irreversibilityScore(delegation)) / 6;
 }
 
+/**
+ * The capture addend a node contributes ON ITS OWN BEHALF: the summed severity
+ * of the delegations IT recovers, capped at 1.
+ *
+ * Attribution sits on the node that OWNS the `recovers` edges (a strategy) and
+ * nowhere else. It used to be recomputed from the TACTIC side by walking
+ * `serves` back up to the recovering strategy; that walk is gone, because
+ * `recovers` (and `serves`) are now parent edges, so the owning strategy's
+ * addend reaches every descendant as ordinary lineage — one mechanism instead
+ * of two, and correct at any depth rather than only one `serves` hop away.
+ *
+ * Tier-agnostic: capture severity is a property of the delegation, not of a
+ * tier namespace, so the same addend applies in every tier's ranking.
+ */
+function captureAddendFor(n: IntentionNode, byId: Map<string, IntentionNode>): number {
+  let sum = 0;
+  for (const id of new Set(n.recovers)) {
+    const delegation = byId.get(id);
+    if (delegation !== undefined && delegation.kind === "delegation") {
+      sum += captureScore(delegation);
+    }
+  }
+  // Cap at 1 so ONE node's own addend never exceeds CAPTURE_TERM_WEIGHT: a
+  // single node recovering several high-severity delegations cannot sum past 1.
+  //
+  // The cap is PER NODE, not per resolved score. `score` sums the contribution
+  // of every distinct member of `{n} ∪ lineage(n)`, so a node whose lineage
+  // holds several recovering strategies accumulates one capped addend from each
+  // and its total capture contribution CAN exceed 1 (the live store already
+  // reaches 1.67). That is the same additive treatment authored boosts get and
+  // is deliberate; what it means is that "an authored boost always dominates
+  // the derived term" holds per node, not per resolved score.
+  return CAPTURE_TERM_WEIGHT * Math.min(1, sum);
+}
+
 // --- Signal-path reachability ----------------------------------------------------
 
 /**
@@ -144,12 +244,14 @@ function captureScore(delegation: IntentionNode): number {
  * signal is unvalidated, or such a strategy itself (a strategy is its own
  * validates-terminal while unvalidated).
  *
- * This is `resolveAttention`'s signal-term reachability, exported so the graph
- * router's strategy-eligibility gate ("no non-draft child tactics on the
- * strategy's signal path") shares one implementation. The DFS does NOT throw on
- * a cycle: a boolean OR-over-paths query is well-defined even with a cycle in
- * the mix — a node fully enclosed in a cycle with no external escape to a
- * terminal simply isn't on-path, which is the correct answer, not an error.
+ * Exported for the graph router's strategy-eligibility gate ("no non-draft
+ * child tactics on the strategy's signal path"). It no longer feeds the rank:
+ * the standalone signal TERM is gone (rank is the tier/band/score/depth key
+ * below), but this reachability predicate is unchanged and still consumed. The
+ * DFS does NOT throw on a cycle: a boolean OR-over-paths query is well-defined
+ * even with a cycle in the mix — a node fully enclosed in a cycle with no
+ * external escape to a terminal simply isn't on-path, which is the correct
+ * answer, not an error.
  */
 export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -169,18 +271,7 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
     }
   }
 
-  // reverseBlockers(id) = every node that lists `id` in its OWN blocked_by —
-  // i.e. the nodes `id` blocks. Walking this (plus parent, downward) is how a
-  // node reaches a validates-terminal: completing it is on the path to
-  // completing something that validates a signal.
-  const reverseBlockers = new Map<string, string[]>();
-  for (const n of nodes) {
-    for (const blocker of n.blocked_by) {
-      const list = reverseBlockers.get(blocker);
-      if (list) list.push(n.id);
-      else reverseBlockers.set(blocker, [n.id]);
-    }
-  }
+  const reverseBlockers = buildReverseBlockedBy(nodes);
 
   const onPathMemo = new Map<string, boolean>();
   const onPathStack = new Set<string>();
@@ -242,6 +333,55 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
   return result;
 }
 
+// --- Band --------------------------------------------------------------------
+
+/**
+ * The band axis: the best score among a node's PARENTS, read in the CHILD's
+ * resolved tier.
+ *
+ * Doctrine (unified relation, per-tier boosts): band groups a node with the
+ * strongest thing it hangs off, so a whole cohort under one hot parent sorts
+ * together before each member's own score breaks ties inside the cohort. It is
+ * derived from the parents' RESOLVED per-tier score, not from any authored term
+ * read directly off the parent — a parent that is itself only hot by
+ * inheritance bands its children just as strongly as one that authored the
+ * boost, which is what "the cohort under this parent" is supposed to mean.
+ *
+ * The tier read is the CHILD's resolved tier, not each parent's own. A parent
+ * sitting in a lower tier still bands its child by whatever that parent scores
+ * in the CHILD's tier (usually 0, since a lower-tier node rarely authors a
+ * higher-tier boost) — which is what keeps tier a real namespace rather than a
+ * label that leaks magnitudes across scales.
+ *
+ * OWED RE-VALIDATION: the follow-up node `tactic-review-band-derivation-ratification`
+ * owes re-validating precisely this choice — that band derives from the
+ * parents' resolved rank rather than from their authored term. Both readings
+ * were live when this was written; this one was taken so that inheritance and
+ * authorship band identically. Revisit there, not here.
+ *
+ * Ties are broken by ascending parent id, so `bandSource` is deterministic.
+ * `bandSource` is null exactly when `band` is 0 (no parents, or no parent
+ * carries any score in this tier) — there is no meaningful source for a
+ * zero band.
+ */
+function bandFor(
+  parents: string[],
+  tierKey: string,
+  scoreByTier: Map<string, Map<string, number>>,
+): { band: number; bandSource: string | null } {
+  const scores = mustGet(scoreByTier, tierKey, "per-tier score table");
+  let band = 0;
+  let bandSource: string | null = null;
+  for (const p of parents) {
+    const parentScore = mustGet(scores, p, "score entry");
+    if (parentScore > band) {
+      band = parentScore;
+      bandSource = p;
+    }
+  }
+  return { band, bandSource };
+}
+
 // --- Resolver ------------------------------------------------------------------
 
 /**
@@ -251,112 +391,121 @@ export function computeSignalPath(nodes: IntentionNode[]): Set<string> {
  * are never written back to node frontmatter — `intentions/` stores intent,
  * not derived execution state.
  *
- * v3 model — a term registry composed as a weighted sum (strategy
- * clarification 11, superseding the v2 single-term additive-flow design
- * described on `intentions/strategy-graph-drives-dispatch.md`). Terms:
+ * ## One relation
  *
- *   - `authored` — additive-flow rank via an outgoing `Map<sourceId, amount>`
- *     per node, without decay or dilution ("hot means hot"). A node's outgoing
- *     set flows DOWNWARD ONLY, along `parent` and `serves`, to its subtree.
- *     It does NOT flow backward along `blocked_by`: a boost on a blocked node
- *     no longer lifts its blockers. Blocking precedence is a separate,
- *     structural concern of the selector — an authored value flowing into a
- *     blocker made the blocker's rank a function of who happened to be blocked
- *     on it, which is not what the author claimed. An `override` REPLACES a
- *     node's outgoing set with `{(self, override)}` (incoming discarded — a cap
- *     on this node's own branch, though a distributee's OTHER sources still
- *     contribute their own claims); a `boost` adds `(self, boost)` to the
- *     incoming union. Computed as a monotone fixpoint: each non-override node's
- *     outgoing = union of its distributors' outgoing plus its own boost entry,
- *     iterated to convergence (unions only grow, override outputs are
- *     constant). The fixpoint is kept as-is — it is still correct and still the
- *     mechanism — but with `blocked_by` out of the distributor relation, MIXED
- *     parent/blocked_by cycles can no longer arise at all; the only cycle the
- *     relation can now form is a pure `parent` (or parent/serves) cycle, and
- *     the pure-parent-cycle guard below is what remains active against it.
- *     This term is also the one that reports `sources` (the "via strategy-x"
- *     explainability marker) and short-circuits the whole composition on
- *     `override` — clarification 11: "an override pins the value absolutely."
- *   - `signal` — structural: a node is on-path iff it (transitively) blocks —
- *     reachable by walking `blocked_by` in reverse (who lists me as a
- *     blocker), or inherits down a `parent` chain — a validates-terminal: a
- *     tactic bearing a `validates` edge to a strategy whose signal is
- *     unvalidated, or such a strategy itself (a strategy is its own
- *     validates-terminal while unvalidated). On-path contributes
- *     `SIGNAL_TERM_WEIGHT`; off-path contributes 0. Self-updating: a new
- *     `validates` edge upstream lifts every node that blocks it, with no other
- *     change.
- *   - `capture` — from the node's own `recovers` (strategies) or its serving
- *     strategy's `recovers` (tactics, via `serves`): each resolved delegation
- *     contributes its normalized divergence/irreversibility axis sum (kind-
- *     delegation), scaled by `CAPTURE_TERM_WEIGHT`.
+ * `parents(n) = { n.parent } ∪ n.serves ∪ n.recovers ∪ { c : n ∈ c.blocked_by,
+ * c not done }` — the node it hangs under, the nodes it expresses, the
+ * delegations it unwinds, and the nodes it STILL unblocks. Every axis below
+ * (tier, lineage, score, band) is derived from this ONE relation; there is no
+ * second edge set and no per-axis special case.
+ * `serves`/`recovers`/reverse-`blocked_by` are gated on the node being
+ * goal-layer eligible, because a delegation's `serves` is deliberately
+ * unenforced and must not be read as an attention edge. The reverse-`blocked_by`
+ * half additionally drops DONE blockees (see the construction below): a done
+ * parent stays transparent, but a done blockee leaves the relation entirely.
  *
- * New attention conditions add as terms with weights — never bands.
+ * ## Axes
  *
- * Orthogonal to the weighted sum, every result also carries a `tier` — the
- * OUTER ranking axis. `tier` is resolved as its own monotone fixpoint over the
- * SAME downward distributor relation: `effectiveTier(n) = max(ownTier(n), max
- * over distributors d of effectiveTier(d))`. So a tier-3 strategy lifts every
- * tactic serving it, and tier never flows upward. It is resolved for EVERY node
- * (an ineligible node can still sit mid-chain relaying tier to descendants),
- * though only eligible nodes get a `ResolvedAttention` entry. Consumers order
- * lexicographically by `(tier, value)` — tier dominates, value breaks ties
- * within a tier. An `override` pins `value` only; `tier` is a separate axis and
- * is still computed and reported on an overridden node.
+ *  - **tier** — `max(ownTier(n), max over parents p of tier(p))`, a monotone
+ *    fixpoint. Resolved for EVERY node (an ineligible node can sit mid-chain
+ *    relaying tier), though only eligible nodes get a `ResolvedAttention`.
+ *  - **lineage** — `lineage(n) = ∪ over parents p of ({p} \ done) ∪ lineage(p)`,
+ *    a monotone SET-union fixpoint. A set, not a path walk: an ancestor reached
+ *    by two routes is one member, so it contributes once.
+ *  - **score** — in tier T, the summed tier-T contribution of `{n} ∪ lineage(n)`.
+ *    A node's contribution is its authored `attention.boosts[T]` (absent ⇒ 0 —
+ *    "unauthored", never a minimum of 1) plus, for a strategy that owns
+ *    `recovers` edges, its capture addend. Per-tier boosts ARE the tier
+ *    isolation: in tier 2's ranking only `boosts["2"]` is ever read, so a
+ *    tier-1 boost is invisible there by construction, with no filter to
+ *    maintain.
+ *  - **band** — see `bandFor`.
+ *  - **depth** — `|lineage(n)|`.
  *
- * Cycle guards: the authored term throws an `IntentionSchemaError` only on a
- * pure `parent`-edge cycle (a node that is its own ancestor — malformed, and
- * NOT caught by `validateGraph`, whose rule 15 rejects only `blocked_by`
- * cycles); its values are ill-defined there. With `blocked_by` no longer in the
- * distributor relation, a mixed parent/blocked_by cycle can no longer arise, so
- * that guard is the only cycle guard the authored/tier fixpoints need. The
- * signal term's reachability DFS does NOT throw on a cycle: a
- * boolean OR-over-paths query is well-defined even with a cycle in the mix — a
- * node fully enclosed in a cycle with no external escape to a terminal simply
- * isn't on-path, which is the correct answer, not an error.
+ * Consumers order by `compareRankKeyDesc` — `(tier, band, score, depth)`
+ * descending — never by any single component.
  *
- * Rank 0 is the neutral baseline: with no injections, no `validates` edges
- * (or all signals already validated), and no `recovers` edges anywhere, every
- * eligible node resolves to value 0 with no sources.
+ * ## Terminal (`phase: "done"`) nodes
+ *
+ * A done node contributes NOTHING: its boost reads as 0, its own tier mark is
+ * ignored (it asserts tier 1), and it is not a member of any lineage set, so it
+ * adds no depth. As a PARENT it stays TRANSPARENT — traversal passes THROUGH
+ * it, and it still relays an inherited tier — so a live child under a done
+ * parent keeps everything above that parent. Severing the edge instead would
+ * demote live children to band 0, which is wrong.
+ *
+ * As a BLOCKEE the ruling is the opposite: the edge is severed. Transparency is
+ * right downward because a done parent still expresses what its live children
+ * are FOR; it is wrong upward because a done blockee is no longer being held up
+ * by anything, so a blocker must not go on inheriting its urgency.
+ *
+ * ## Cycles
+ *
+ * A pure `parent`-edge cycle still throws (see the guard below): it is a
+ * malformed graph `validateGraph` does not catch, and `parent` is one pointer
+ * per node so the check stays cheap. A MIXED cycle across the widened relation
+ * (say `a.parent = b` with `a.blocked_by = [b]`) CAN arise again — the earlier
+ * claim that it could not was true only while `blocked_by` was out of the
+ * relation. It is not an error here: under the dedup set-union fixpoint a
+ * cycle's members simply converge on overlapping lineage sets (sets are
+ * bounded, so the iteration terminates), rather than diverging. REJECTING such
+ * a cycle on the write path is out of scope for this resolver and belongs to
+ * the sibling `tactic-attention-unified-relation-cycle-rule`; the obligation
+ * here is only that resolution never hangs, which the fixpoint guarantees.
+ *
+ * Rank 0 is the neutral baseline: with no boosts anywhere and no `recovers`
+ * edges, every eligible node resolves to score 0, band 0 and no sources.
  */
 export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAttention> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  const sortedNodeIds = nodes.map((n) => n.id).sort();
+  const doneIds = new Set(nodes.filter((n) => n.phase === "done").map((n) => n.id));
 
   const isEligible = (n: IntentionNode): boolean => {
     const kindNode = byId.get(`kind-${n.kind}`);
     return kindNode !== undefined && kindNode.attributes.goal_layer === true;
   };
 
-  // --- Distributor relation (downward only) -------------------------------
+  // --- Parent relation (precomputed ONCE) ----------------------------------
 
-  // Distribution edges into c — the nodes whose outgoing set c inherits:
-  //   { c.parent } ∪ (eligible c only) { c.serves }.
-  // Downward only. `blocked_by` is deliberately NOT part of this relation: a
-  // boost on a blocked node does not flow back into its blockers (blocking
-  // precedence is the selector's structural concern, not an authored value's).
-  // Each entry is restricted to ids that resolve; sorted for determinism.
-  // Shared by the authored-term fixpoint and the effective-tier fixpoint below.
-  const distributorIds = (c: IntentionNode): string[] => {
+  // Built once, before any fixpoint, and read from by all three sweeps below
+  // (lineage, tier) plus the band pass. It is a pure function of immutable
+  // input node data, so hoisting it out of the sweeps changes no result — only
+  // the cost, which matters now that several fixpoints share the relation.
+  const reverseBlocked = buildReverseBlockedBy(nodes);
+  const parentIds = new Map<string, string[]>();
+  for (const n of nodes) {
     const ids = new Set<string>();
-    if (c.parent !== null && byId.has(c.parent)) ids.add(c.parent);
-    if (isEligible(c)) {
-      for (const s of c.serves) {
-        if (byId.has(s)) ids.add(s);
+    if (n.parent !== null && byId.has(n.parent)) ids.add(n.parent);
+    if (isEligible(n)) {
+      for (const s of n.serves) if (byId.has(s)) ids.add(s);
+      for (const r of n.recovers) if (byId.has(r)) ids.add(r);
+      // A DONE blockee is dropped from the relation entirely — not merely made
+      // transparent like a done PARENT. The two directions are not symmetric.
+      // A done parent still expresses what its live children are FOR, so its
+      // own lineage must keep reaching them. A done blockee expresses nothing
+      // any more: `id` is not holding it up, because it is finished. Keeping
+      // the edge would let a blocker inherit, forever, the tier/band/score of
+      // work that already completed — and `blocked_by` edges to done nodes are
+      // never cleaned up (`blockersComplete` treats a done blocker as cleared
+      // rather than rewriting the edge), so those stale edges accumulate. This
+      // is the same "a done blocker is cleared" convention `openBlockers` and
+      // the retired `officeHours` surfacing lift both applied.
+      for (const b of reverseBlocked.get(n.id) ?? []) {
+        if (byId.has(b) && !doneIds.has(b)) ids.add(b);
       }
     }
-    return [...ids].sort();
-  };
+    parentIds.set(n.id, [...ids].sort());
+  }
 
   // A pure `parent`-edge cycle is a malformed graph (a node that is its own
   // ancestor) that `validateGraph` does NOT catch — rule 15 rejects only
   // `blocked_by` cycles. `parent` is a single pointer per node, so following it
   // from any node either reaches a root (`parent === null`) or repeats; a
-  // repeat is the cycle. Surface it as a clear error (authored values are
-  // ill-defined under a pure authored cycle) rather than let the fixpoint
-  // silently converge it to 0. This is now the ONLY cycle the distributor
-  // relation can form: with `blocked_by` removed from it, a mixed
-  // parent/blocked_by cycle can no longer arise at all, so this pure-parent
-  // guard is the one that remains active.
+  // repeat is the cycle. Surface it as a clear error rather than let the
+  // fixpoint silently converge it. This guards ONLY the single-pointer parent
+  // chain — it is deliberately NOT extended to the widened relation, which can
+  // form mixed cycles that converge harmlessly (see the doc comment above).
   for (const start of nodes) {
     const seen = new Set<string>();
     let cur: IntentionNode | undefined = start;
@@ -371,96 +520,56 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     }
   }
 
-  // --- Authored term (monotone fixpoint over the downward relation) --------
+  // --- Lineage (monotone SET-union fixpoint over the parent relation) ------
 
-  // Outgoing source set per node, computed as a monotone fixpoint. Seed each
-  // node from its own authored field: override → the constant `{(self,
-  // override)}` (incoming discarded — a branch cap); boost → `{(self, boost)}`;
-  // else empty. Then sweep in sorted id order, recomputing every non-override
-  // node's outgoing = union of its distributors' outgoing plus its own boost
-  // entry, until a full sweep changes nothing. Unions only grow and override
-  // outputs are constant, so the iteration is monotone and convergence is
-  // guaranteed; the sorted sweep makes the result independent of input order.
-  const authoredOutgoing = new Map<string, Map<string, number>>();
-  const isOverrideNode = new Set<string>();
-  for (const n of nodes) {
-    const attention = isEligible(n) ? n.attention : null;
-    if (attention !== null && attention.override !== null) {
-      authoredOutgoing.set(n.id, new Map([[n.id, attention.override]]));
-      isOverrideNode.add(n.id);
-    } else if (attention !== null && attention.boost !== null) {
-      authoredOutgoing.set(n.id, new Map([[n.id, attention.boost]]));
-    } else {
-      authoredOutgoing.set(n.id, new Map());
-    }
-  }
+  // lineage(n) = ∪ over parents p of ({p} minus done nodes) ∪ lineage(p).
+  // Seeded empty, then swept in sorted id order until a full sweep adds
+  // nothing. Sets only grow and are bounded by the node count, so convergence
+  // is guaranteed even through a mixed cycle; comparing sizes across a sweep is
+  // a sufficient change test precisely because growth is monotone. The least
+  // fixpoint does not depend on sweep order, so the result is input-order
+  // independent.
+  const lineage = new Map<string, Set<string>>();
+  for (const id of sortedNodeIds) lineage.set(id, new Set<string>());
 
-  const sortedNodeIds = nodes.map((n) => n.id).sort();
-  const mapsDiffer = (a: Map<string, number>, b: Map<string, number>): boolean => {
-    if (a.size !== b.size) return true;
-    for (const [k, v] of a) if (b.get(k) !== v) return true;
-    return false;
-  };
-
-  // Both maps below are seeded/keyed from the SAME `nodes`/`sortedNodeIds`
-  // source, so a lookup by a known node id is a maintained invariant, not
-  // user input — `mustGet` turns a violation into a clear error instead of an
-  // `as`-cast that would silently paper over a real bug.
-  function mustGet<V>(map: Map<string, V>, id: string, what: string): V {
-    const value = map.get(id);
-    if (value === undefined) {
-      throw new IntentionSchemaError(`attention: expected ${what} for node id "${id}"`);
-    }
-    return value;
-  }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
+  let lineageChanged = true;
+  while (lineageChanged) {
+    lineageChanged = false;
     for (const id of sortedNodeIds) {
-      if (isOverrideNode.has(id)) continue; // constant outgoing
-      const node = mustGet(byId, id, "node");
-      const next = new Map<string, number>();
-      const attention = isEligible(node) ? node.attention : null;
-      if (attention !== null && attention.boost !== null) {
-        next.set(id, attention.boost); // own relative claim
+      const set = mustGet(lineage, id, "lineage entry");
+      const before = set.size;
+      for (const p of mustGet(parentIds, id, "parentIds entry")) {
+        // A done parent is traversed THROUGH but never joins the set: it
+        // contributes no score and no depth, while its own lineage (everything
+        // above it) still flows down.
+        if (!doneIds.has(p)) set.add(p);
+        for (const ancestor of mustGet(lineage, p, "lineage entry")) set.add(ancestor);
       }
-      for (const d of distributorIds(node)) {
-        for (const [src, amt] of mustGet(authoredOutgoing, d, "authoredOutgoing entry")) {
-          next.set(src, amt); // dedupe by src; amounts identical (undiluted)
-        }
-      }
-      if (mapsDiffer(next, mustGet(authoredOutgoing, id, "authoredOutgoing entry"))) {
-        authoredOutgoing.set(id, next);
-        changed = true;
-      }
+      if (set.size !== before) lineageChanged = true;
     }
   }
 
-  // --- Effective tier (monotone fixpoint over the SAME downward relation) --
+  // --- Effective tier (monotone fixpoint over the SAME relation) -----------
 
-  // effectiveTier(n) = max(ownTier(n), max over distributors d of
-  // effectiveTier(d)). Same shape and sweep style as the authored fixpoint
-  // above: seed from the node's own value, then sweep in sorted id order until
-  // a full pass changes nothing. Values only increase and are bounded above by
-  // the top tier, so convergence is guaranteed; the sorted sweep keeps the
-  // result independent of input order.
+  // effectiveTier(n) = max(ownTier(n), max over parents p of effectiveTier(p)),
+  // where a done node's OWN mark is ignored (it asserts the default tier) while
+  // it still relays whatever it inherits. Values only increase and are bounded
+  // by the top tier, so convergence is guaranteed.
   //
   // Resolved for EVERY node, not just eligible ones: an ineligible node (a
   // virtue, say) can sit mid-chain and relay a tier to its descendants, so
   // skipping it would silently cut the chain. Only eligible nodes still get a
   // `ResolvedAttention` entry in the output map.
   const effectiveTier = new Map<string, number>();
-  for (const n of nodes) effectiveTier.set(n.id, ownTier(n));
+  for (const n of nodes) effectiveTier.set(n.id, doneIds.has(n.id) ? 1 : ownTier(n));
 
   let tierChanged = true;
   while (tierChanged) {
     tierChanged = false;
     for (const id of sortedNodeIds) {
-      const node = mustGet(byId, id, "node");
       let next = mustGet(effectiveTier, id, "effectiveTier entry");
-      for (const d of distributorIds(node)) {
-        next = Math.max(next, mustGet(effectiveTier, d, "effectiveTier entry"));
+      for (const p of mustGet(parentIds, id, "parentIds entry")) {
+        next = Math.max(next, mustGet(effectiveTier, p, "effectiveTier entry"));
       }
       if (next !== mustGet(effectiveTier, id, "effectiveTier entry")) {
         effectiveTier.set(id, next);
@@ -469,103 +578,68 @@ export function resolveAttention(nodes: IntentionNode[]): Map<string, ResolvedAt
     }
   }
 
-  // --- Signal-satisfaction term -------------------------------------------
-  // Shared with the graph router's strategy-eligibility gate — see
-  // computeSignalPath above for the reachability semantics and cycle handling.
+  // --- Per-tier contribution and score -------------------------------------
 
-  const onPathIds = computeSignalPath(nodes);
-  const isOnPath = (id: string): boolean => onPathIds.has(id);
+  const tierKeys = TIERS.map((t) => String(t));
 
-  // --- Capture-resolution term ---------------------------------------------
-
-  const captureScoreFor = (n: IntentionNode): number => {
-    const strategies: IntentionNode[] =
-      n.kind === "strategy"
-        ? [n]
-        : n.serves
-            .map((id) => byId.get(id))
-            .filter((s): s is IntentionNode => s !== undefined && s.kind === "strategy");
-
-    const delegationIds = new Set<string>();
-    for (const strategy of strategies) {
-      for (const id of strategy.recovers) delegationIds.add(id);
-    }
-
-    let sum = 0;
-    for (const id of delegationIds) {
-      const delegation = byId.get(id);
-      if (delegation !== undefined && delegation.kind === "delegation") {
-        sum += captureScore(delegation);
-      }
-    }
-    // Cap at 1 so the capture term never exceeds CAPTURE_TERM_WEIGHT: the
-    // "Weights" invariant (derived terms max out at SIGNAL_TERM_WEIGHT +
-    // CAPTURE_TERM_WEIGHT = 2, so an authored boost still dominates) only holds
-    // if a node recovering several high-severity delegations can't sum past 1.
-    return Math.min(1, sum);
+  // One node's own contribution in tier T: its authored boost on that tier's
+  // scale (absent ⇒ 0, the "unauthored" reading — never a floor of 1) plus its
+  // own capture addend. A done node contributes nothing at all.
+  const contributionOf = (id: string, tierKey: string): number => {
+    const n = mustGet(byId, id, "node");
+    if (n.phase === "done") return 0;
+    const attention = isEligible(n) ? n.attention : null;
+    const authored = attention?.boosts[tierKey] ?? 0;
+    return authored + captureAddendFor(n, byId);
   };
+
+  // contributors(n) = {n} ∪ lineage(n), as a SET — so an ancestor reached by
+  // several paths is summed once, and a node caught in a cycle (where it can
+  // appear in its own lineage) is not double-counted either.
+  const contributors = new Map<string, string[]>();
+  for (const id of sortedNodeIds) {
+    const set = new Set(mustGet(lineage, id, "lineage entry"));
+    set.add(id);
+    contributors.set(id, [...set].sort());
+  }
+
+  const scoreByTier = new Map<string, Map<string, number>>();
+  for (const tierKey of tierKeys) {
+    const scores = new Map<string, number>();
+    for (const id of sortedNodeIds) {
+      let score = 0;
+      for (const c of mustGet(contributors, id, "contributors entry")) {
+        score += contributionOf(c, tierKey);
+      }
+      scores.set(id, score);
+    }
+    scoreByTier.set(tierKey, scores);
+  }
 
   // --- Compose --------------------------------------------------------------
 
   // Iterate in id order for a deterministic result regardless of input order.
-  const sorted = [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const eligible = sorted.filter(isEligible);
-
   const result = new Map<string, ResolvedAttention>();
-  for (const n of eligible) {
-    const tier = mustGet(effectiveTier, n.id, "effectiveTier entry");
+  for (const id of sortedNodeIds) {
+    const node = mustGet(byId, id, "node");
+    if (!isEligible(node)) continue;
 
-    // TIER IS AN ISOLATION BOUNDARY (author ruling 2026-07-31, design decision
-    // (b)). Authored authority does not flow ACROSS a tier namespace: only a
-    // claim authored by a source sitting in this node's own effective tier
-    // contributes to its value. Filtering here rather than in the authored
-    // fixpoint keeps that fixpoint a pure "who reaches whom" relation, and
-    // keeps the isolation rule stated in exactly one place.
-    //
-    // Effective tier is max-lifted along the SAME distributor edges the
-    // authored fixpoint walks, so every source reaching `n` has an effective
-    // tier <= `n`'s: this filter only ever drops strictly-LOWER-tier sources,
-    // and can never drop the node's own claim, which by construction sits at
-    // the node's own tier. That is also why it cannot introduce a tier
-    // inversion — it removes contributions, never adds them.
-    const authoredOut = mustGet(authoredOutgoing, n.id, "authoredOutgoing entry");
-    const contributing = [...authoredOut.entries()].filter(
-      ([src]) => mustGet(effectiveTier, src, "effectiveTier entry") === tier,
-    );
-    let authoredValue = 0;
-    for (const [, amt] of contributing) authoredValue += amt;
-    const sources = contributing
-      .sort((a, b) => (a[1] !== b[1] ? b[1] - a[1] : a[0] < b[0] ? -1 : 1))
-      .map(([src]) => src);
+    const tier = mustGet(effectiveTier, id, "effectiveTier entry");
+    const tierKey = String(tier);
+    const score = mustGet(mustGet(scoreByTier, tierKey, "per-tier score table"), id, "score entry");
+    const parents = mustGet(parentIds, id, "parentIds entry");
+    const { band, bandSource } = bandFor(parents, tierKey, scoreByTier);
+    const lineageSet = mustGet(lineage, id, "lineage entry");
 
-    const overridden = n.attention !== null && n.attention.override !== null;
-    if (overridden) {
-      // Clarification 11: an override pins the value absolutely — derived
-      // terms never silently overwhelm (or even touch) it. It pins the VALUE
-      // only: tier is a separate, outer axis, so an overridden node still
-      // reports its computed (possibly inherited) effective tier.
-      result.set(n.id, {
-        value: authoredValue,
-        tier,
-        sources,
-        terms: [{ term: "authored", value: authoredValue }],
-      });
-      continue;
-    }
+    // Explainability only: who actually put magnitude on this node, largest
+    // contribution first, id ascending on ties.
+    const sources = mustGet(contributors, id, "contributors entry")
+      .map((c) => ({ id: c, amount: contributionOf(c, tierKey) }))
+      .filter((c) => c.amount > 0)
+      .sort((a, b) => (a.amount !== b.amount ? b.amount - a.amount : a.id < b.id ? -1 : 1))
+      .map((c) => c.id);
 
-    const signalValue = isOnPath(n.id) ? SIGNAL_TERM_WEIGHT : 0;
-    const captureValue = CAPTURE_TERM_WEIGHT * captureScoreFor(n);
-    const value = authoredValue + signalValue + captureValue;
-    result.set(n.id, {
-      value,
-      tier,
-      sources,
-      terms: [
-        { term: "authored", value: authoredValue },
-        { term: "signal", value: signalValue },
-        { term: "capture", value: captureValue },
-      ],
-    });
+    result.set(id, { tier, band, score, depth: lineageSet.size, bandSource, sources });
   }
   return result;
 }

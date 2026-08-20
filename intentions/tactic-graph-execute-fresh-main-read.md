@@ -64,20 +64,59 @@ rationale: "Found 2026-08-05 by the iteration-N+4 invariant audit, which asks of
   detect the checkout is behind origin/main -- the unknown-never-clear posture
   of tactic-probe-unknown-never-clear, applied to staleness."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Has the stale-store read actually been observed launching a real
+      session, and what makes it fire more often than the record implies?
+    answer: "(Recorded 2026-08-11 rsi iteration.) Yes — reproduced live, and the
+      pause makes it routine rather than rare. rsi-advance launched
+      tactic-pause-disables-merge-lane seconds after that node landed on
+      origin/main, and dispatch-graph-execute refused it with `stale-selection:
+      exists: ... is no longer in the store (pruned or removed)`, mapped to exit
+      10 `idle`. The node was on origin/main throughout; the main checkout was 4
+      commits behind (65d8952d against origin/main 790aaab2), so the gate read a
+      tree that predated the node. Fast-forwarding the main checkout by hand and
+      re-running launched it immediately. Two things this adds to the record
+      above. First, the failure is not only 'launch a worker onto a node parked
+      on origin/main' (a false positive); it is equally a false NEGATIVE — a
+      node that exists and is eligible reports as pruned, and the caller cannot
+      distinguish that from a genuine prune, so the correct-looking response is
+      to stop. Second, the freshness precondition is maintained only by
+      dispatch-select-tick, and dispatch-select-tick does not run while the
+      pause sentinel is present (dispatch-tick exits at :415, before every
+      dispatch-select-tick invocation at :638-642). So during a pause nothing
+      fast-forwards the main checkout, its store drifts further from origin/main
+      the longer the pause lasts, and every non-tick launch path — the
+      sanctioned manual `dispatch <node-id>` lane and rsi-advance alike — reads
+      a store that is stale by construction. The pause is exactly when
+      hand-dispatch is the prescribed mode, so the gate is least reliable
+      precisely when it is most used. Same root as
+      tactic-pause-disables-merge-lane: work that only dispatch-select-tick
+      performs stops silently while paused."
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
+  boost: 0.04
   override: null
-  rationale: "Bootstrap band 2 (50/20/10 interim scale): a launch-path correctness
-    defect that can double-book a held node -- same band as the other
+  rationale: >-
+    Bootstrap band 2 (50/20/10 interim scale): a launch-path correctness defect
+    that can double-book a held node -- same band as the other
     dispatch-containment fixes, and the sibling tactic-probe-unknown-never-clear
-    carries the same boost."
+    carries the same boost.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
 phase: qa
 execution:
@@ -98,7 +137,8 @@ blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 # The node-selection gate must take snapshot provenance as an explicit input
 

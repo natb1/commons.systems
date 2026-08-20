@@ -53,14 +53,26 @@ success_signal:
   threshold: new test case passes; existing test-graph-auto-merge.sh suite unaffected
   is_proxy: false
 attention:
-  boost: 12
-  override: null
-  rationale: "Author-directed 2026-08-03: prioritize bug-ledger fixes directly
-    BELOW the token-efficiency cluster. Boost 12 resolves to 17.33 because an
-    inbound distributor adds 5.33 — under that cluster's 20.00 and above the
-    5.33 undecomposed baseline. Simulated over the live store before writing: 0
-    tier changes, 0 value drift onto non-target nodes."
-  tier: 1
+  boosts:
+    "1": 0.03
+  rationale: >-
+    Author-directed 2026-08-03: prioritize bug-ledger fixes directly BELOW the
+    token-efficiency cluster. Boost 12 resolves to 17.33 because an inbound
+    distributor adds 5.33 — under that cluster's 20.00 and above the 5.33
+    undecomposed baseline. Simulated over the live store before writing: 0 tier
+    changes, 0 value drift onto non-target nodes.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 12 to 0.03 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-graph-auto-merge-office-hours-gate
@@ -77,6 +89,7 @@ execution:
     mergedAt: 2026-08-06T02:00:42Z
     mergeCommitSha: 09468eac70282674cd7df38eec0b1a14ff296cf3
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -102,7 +115,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 12
 ---
 # graph-auto-merge must decline to merge a node-lane PR while its node carries a live office_hours park
 

@@ -15,7 +15,15 @@ set -euo pipefail
 # PR/rollup builders and constants).
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# SCRIPT_DIR — the dispatch-propagate scripts directory, i.e. THIS FILE's own
+# directory, resolved from BASH_SOURCE rather than from `$0`. For every suite
+# that lives alongside this fixture the two are identical; they differ for a
+# suite in another skill's scripts dir (the .claude/skills/dispatch-ladder/
+# suites), where `$0` would resolve SCRIPT_DIR to that directory and every
+# `$SCRIPT_DIR/<dispatch-script>` reference below — including this file's own
+# `source "$SCRIPT_DIR/lib-test-decision-log-guard.sh"` — would miss. A suite
+# outside this directory keeps its OWN dir in a variable of its own.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # HOOK_SCRIPT_DIR — the project hooks directory the hook-copying sections
 # (dispatch-office-hours-strip, dispatch-stop) copy from. SCRIPT_DIR here is
@@ -906,6 +914,18 @@ case "$args" in
     fi
     echo '{}'
     ;;
+  "api -X PUT "*/pulls/*/update-branch*)
+    # gh_pr_update_branch_rest sentinel (tactic-graph-auto-merge-up-to-date-gate):
+    # PUT .../pulls/<N>/update-branch. MUST precede the generic
+    # `api repos/*/pulls/*` branch (case is first-wins).
+    # $args form: "api -X PUT repos/.../pulls/<N>/update-branch -f expected_head_sha=..."
+    echo "$args" >> "$STUB_DIR/gh-pr-update-branch-rest-calls.log"
+    if [[ -f "$STUB_DIR/gh-fail-rest" ]]; then
+      echo "stub forced gh api failure" >&2
+      exit 1
+    fi
+    echo '{}'
+    ;;
   api\ repos/*/issues/*)
     # Generic single-issue GET: gh api repos/{owner}/{repo}/issues/<N>. Two
     # consumers route here (case is first-wins; the 9xxx sentinel arm precedes it):
@@ -1158,13 +1178,23 @@ case "$args" in
     else echo '[]'; fi
     ;;
   api\ repos/*/check-suites/*)
-    # main_broken_sha: branch-attribution lookup for a check-run's parent
-    # check-suite. Fixtures are keyed by suite id: main-check-suite-<id>.json.
-    # Default: unattributable (null head_branch), so an un-fixtured suite is
-    # conservatively dropped rather than misread as main's own.
-    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/]+)$#\1#')
-    if [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
-    else echo '{"head_branch":null}'; fi
+    # Two consumers share this endpoint:
+    #   - main_broken_sha: branch-attribution lookup for a check-run's parent
+    #     check-suite (reads .head_branch).
+    #   - dispatch_ci_verdict_rest's orphaned-check-run rule: does the pending
+    #     row's parent suite report `status: completed`? (reads .status)
+    # Fixtures are keyed by suite id: check-suite-<id>.json, falling back to the
+    # older main-check-suite-<id>.json name. Default: unattributable
+    # (null head_branch) AND still running (in_progress) — so an un-fixtured
+    # suite is conservatively dropped by the branch attribution rather than
+    # misread as main's own, and never mistaken for a concluded suite by the
+    # orphan rule.
+    # Every call is logged so a test can assert the FAST PATH makes zero of them.
+    suite_id=$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/ ]+).*#\1#')
+    echo "$suite_id" >> "$STUB_DIR/gh-check-suites-calls.log"
+    if [[ -f "$STUB_DIR/check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/check-suite-${suite_id}.json"
+    elif [[ -f "$STUB_DIR/main-check-suite-${suite_id}.json" ]]; then cat "$STUB_DIR/main-check-suite-${suite_id}.json"
+    else echo '{"head_branch":null,"status":"in_progress"}'; fi
     ;;
   issue\ list\ --repo\ *)
     # JIT scan: gh issue list --repo <repo> --label <label> --state <open|closed> --json ...

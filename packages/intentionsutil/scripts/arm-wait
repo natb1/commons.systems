@@ -261,7 +261,7 @@ else
   # what `attributes` needs: the patch's wait_until/wait_attempts/wait_reason/
   # wait_recommendation overwrite in place while `wait_for` (absent from the
   # patch) survives.
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --dir "$INTENTIONS_DIR" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
     echo "arm-wait: dump-node failed for $WAIT_ID" >&2
     exit 1
   fi
@@ -274,7 +274,7 @@ else
     exit 1
   fi
 fi
-if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/node.json") >/dev/null; then
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/node.json") >/dev/null; then
   echo "arm-wait: write-node failed for $WAIT_ID" >&2
   exit 1
 fi
@@ -316,7 +316,7 @@ fi
 # script only handles `phase`/`--set-pr` and has no blocked_by support.
 SOURCE_CHANGED=0
 if [[ "$SOURCE_EDGE_NEEDED" == "true" ]]; then
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/src" "$SOURCE_ID") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --dir "$INTENTIONS_DIR" --out-dir "$TMPD/src" "$SOURCE_ID") >/dev/null; then
     echo "arm-wait: dump-node failed for $SOURCE_ID" >&2
     exit 1
   fi
@@ -325,7 +325,7 @@ if [[ "$SOURCE_EDGE_NEEDED" == "true" ]]; then
     echo "arm-wait: could not compose the blocked_by edit for $SOURCE_ID" >&2
     exit 1
   fi
-  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/src-edge.json") >/dev/null; then
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/src-edge.json") >/dev/null; then
     echo "arm-wait: write-node failed for $SOURCE_ID (blocked_by edge)" >&2
     exit 1
   fi

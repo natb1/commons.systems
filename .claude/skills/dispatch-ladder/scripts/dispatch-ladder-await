@@ -1,0 +1,684 @@
+#!/usr/bin/env bash
+# dispatch-ladder-await — wait for one node's phase session to finish, then
+# ask origin/main what actually happened.
+#
+# The other half of the dispatch-ladder loop (built by
+# `intentions/tactic-rsi-implement-skill.md`); `dispatch-ladder-advance`
+# launches, this waits and verifies. It makes no graph writes, no merges, and
+# no decisions — it reports one of six outcomes and lets the calling thread
+# (`/dispatch-ladder`, invoked directly by an author) judge.
+#
+# NEVER MERGES. The tick's merge lane runs even while dispatch is paused and it
+# owns every merge (strategy condition, and the node's own plan). A wait loop is
+# the one place it would be tempting to "just merge it and move on"; this script
+# has no gh call and no git write at all.
+#
+# THE VERDICT COMES FROM origin/main, NOT FROM THE SESSION. A phase worker's
+# exit status is not evidence that its transition landed — that is the whole
+# premise of `verify-landed` (tactic-graph-commit-landing-signal-unreliable), and
+# this script reuses it rather than re-deriving a second landing signal. The
+# session poll answers only "has the worker stopped?"; the graph answers "did
+# anything change?", and the two disagreeing is a real and reportable state
+# (`stalled`).
+#
+# HOW A FINISHED SESSION LOOKS. Graph node workers declare a terminal
+# disposition with `mark-node-terminal`, and dispatch-stop.sh's discriminator
+# hands that to `dispatch-self-close`, which reaps the job — so the registry row
+# DISAPPEARS. A worker that never declares one is HELD alive by that same hook:
+# its row survives with `state: done`. The two are therefore distinguishable and
+# mean different things:
+#   row gone            — declared terminal and reaped. The normal path.
+#   row present, done   — stopped WITHOUT declaring terminal. The session is
+#                         holding a worker slot and keeping the node
+#                         unselectable. Reported as `held-observing`, NOT as a
+#                         throw — see A HOLD IS NOT YET A VERDICT below.
+#   row present, other  — still working. Keep polling.
+#
+# A HOLD IS NOT YET A VERDICT. A held row is the shape an ESCALATING phase
+# leaves behind on purpose: every node-lane skill's escalation path writes
+# `$CLAUDE_JOB_DIR/office-hours-reason` and deliberately declares NO
+# `node-terminal` marker, leaving the park to
+# `terminal_without_disposition_sweep` (lib-frozen-session-park.sh) — so
+# `dispatch-self-close` HOLDs the job and the row survives with `state: done`.
+# The park lands SECONDS TO MINUTES later, once that sweep runs.
+#
+# So the hold is read in two steps. The graph is asked about a park FIRST: once
+# the sweep has landed it, this reports `throw <id> parked` — the terminus a
+# person can actually read. With no park yet, the answer is an OBSERVATION, not
+# a verdict: `held-observing` at exit 21, which says "still held, nothing
+# claimed" and leaves it to the caller (dispatch-ladder-run) to run the owed
+# sweep and call again. This script still never retries and never sweeps; it
+# only stops mistaking a mid-escalation hold for a final answer.
+#
+# BOOT GRACE. `dispatch-graph-execute` returns as soon as the spawn kick
+# succeeds, before the worker's session registers with the daemon. Polling
+# immediately would see no row and misread the boot window as a completed
+# session, so the wait has two stages: first wait for the row to APPEAR (up to
+# --boot-grace-s), then wait for it to leave. A row that never appears is not
+# assumed dead — the graph is consulted first, because a very short phase can
+# genuinely start, transition, and reap inside the grace window.
+#
+# The grace is a CEILING, not a delay: the ordinary case breaks out of stage 1
+# on the first poll that sees the worker, and the full window is only ever spent
+# when no session appears at all. It defaults to 90s — three times the
+# reservation ledger's own 30s boot grace
+# (DISPATCH_RESERVATION_BOOT_GRACE_S, lib-reservation-ledger.sh), because that
+# sweep is reclaiming a slot and should be impatient, while this wait is about
+# to declare a phase dead and should not be.
+#
+# UNKNOWN IS NOT DONE. `claude_sessions_with_name_all` returns non-zero when the
+# daemon cannot be queried (missing binary, sandboxed socket read). That is
+# treated as "still running" and keeps polling — never as "finished", which
+# would send the loop on to the next phase while a worker is live.
+#
+# THE GRAPH IS ASKED WHILE THE WORKER IS STILL LIVE, BUT ONLY THREE VERDICTS MAY
+# ACT ON THE ANSWER. The signal reported here — a phase moved, a marker landed, a
+# stamp appeared at origin/main — is independent of the registry: it is public
+# the moment the worker pushes, which can be many minutes before the session row
+# is reaped. Branching on session state alone therefore bounded detection below
+# by REAP LAG rather than by when the completion became public. Measured on a
+# review phase: the `reviewed` marker was public at origin/main at 17:15:05Z and
+# this wait did not notice until 17:56:18Z — 2473s of await carrying a provable
+# floor of 1201s of pure lag, 20.1% of that phase's elapsed 12326s.
+#
+# So stage 2 asks the graph on its own cadence whatever the session says — and
+# then splits on what the CALLER does next with the answer, because that, not
+# the graph, decides whether reporting early is a saving or a terminated run:
+#
+#   pruned / parked / blocked — RUN-ENDING. dispatch-ladder-run maps these to
+#       `halt 0` / `halt 11` and stops; it never calls dispatch-ladder-advance
+#       again, so a registry row lingering past the report cannot bite. These are
+#       reported the moment the graph shows them. This is where the measured
+#       saving above is real and collectable.
+#   advanced / reviewed / lane-complete — PROGRESS. The run logs `awaited`,
+#       spawns the phase evaluation, `break`s, and immediately calls
+#       dispatch-ladder-advance again (dispatch-ladder-run:1179 → :1104, nothing
+#       in between). advance REFUSES on a still-registered session before it does
+#       anything else — exit 13, "a live session is registered on $NODE_WT"
+#       (dispatch-ladder-advance:199) — which the run maps to `halt 13 claimed`.
+#       The gate is CORRECT and stays: the old worker still owns the node's
+#       worktree until it exits, so the next phase cannot start there whatever
+#       the graph says. Milliseconds separate that `break` from the advance while
+#       reap lag is minutes, so reporting a progress verdict against a live row
+#       converts a long wait into a terminated run. These are therefore NOT
+#       reported: the sighting is recorded (verdict + epoch), stderr says so
+#       ONCE, and the poll continues. The loop leaves through the `absent` arm
+#       once the row is reaped and reports exactly what it always did — plus
+#       `reap_lag_s=<n>`, see MEASURING THE LAG.
+#   unchanged / unknown — not terminal at all. A graph that cannot be read
+#       mid-phase keeps the poll going and never becomes the exit-14 throw that
+#       only a STOPPED worker earns.
+#
+# This ADDS a path — the `absent` and `done-held` arms are untouched and still
+# answer first. Whenever one of the three run-ending verdicts IS reported against
+# a session that is still registered, stderr says so: a row that lingers holds a
+# worker slot and keeps the node unselectable (worktree_has_live_session is
+# name-keyed), so the caller's next step may need it swept or released.
+#
+# AN EARLY READ IS NOT A FINAL READ. The reported verdict is RE-DERIVED at reap,
+# never replayed from the sighting, because the fact set is still moving while
+# the worker is live. `graph_verdict` ranks `blocked` above `reviewed`, so a
+# worker that lands `reviewed` and THEN files a `blocked_by` follow-up would
+# report `reviewed` from a cached sighting where a fresh read reports `blocked`;
+# a late park is the same shape. And on the three run-ending verdicts, which ARE
+# reported early, a later park or `blocked_by` is not lost either — it is caught
+# at the next advance, because the router gates on both facts:
+# `office_hours !== null` (packages/intentionsutil/src/router.ts:392) and an
+# incomplete `blocked_by` (:229).
+#
+# MEASURING THE LAG. The two timestamps that bound reap lag — when the verdict
+# became public, and when the row went away — are both inside one process for the
+# first time, so the `absent` arm appends a trailing `reap_lag_s=<n>` field to
+# its stdout line when an early sighting happened, and appends NOTHING when none
+# did. It is a floor, not a total: nothing survives an exit-20 timeout, so a lag
+# spanning a caller re-poll is measured only from the sighting made inside the
+# final await window.
+#
+# THROTTLED, BECAUSE THE FIRST PROBE FETCHES. `graph_verdict`'s first
+# verify-landed call fetches origin (every later call within one verdict passes
+# --no-fetch), so a graph read per poll is a git fetch per poll — 240 an hour at
+# the default 15s cadence. `--graph-poll-every` asks on every Nth poll instead,
+# defaulting to 4: one fetch a minute at the default cadence, with detection
+# latency capped at N × --poll-s instead of left unbounded on reap lag.
+#
+# A RUN-ENDING VERDICT AGAINST A LIVE ROW SHIFTS TIMING, NOT THE ANSWER. Each of
+# the three is one the old code reported too, once the row went — the probe order
+# inside `graph_verdict` is unchanged, so the same facts still produce the same
+# word. The arm worth naming: `blocked` can appear mid-pass (a worker files a
+# blocked_by follow-up and keeps working) and it outranks every probe but
+# absence, so it halted the run at session end before and halts it sooner now.
+#
+# A LANE THAT COMPLETES WITHOUT MOVING THE PHASE. Two lanes finish a pass by
+# pushing to the node's branch and writing job-dir markers, never by touching
+# `.phase`: dispatch-conflict's Lane 3 (an origin/main conflict resolved on the
+# node's own branch) and qa-fix's auto-fix fixing pass. Read by phase alone, a
+# SUCCESSFUL pass on either can only ever come back `stalled`. So both stamp
+# `execution.lane_pass` — `{at, lane, phase}` — on the node, and this script
+# reads that stamp.
+#
+# THE STAMP IS COMPARED AGAINST A WINDOW, NOT MERELY READ. `--since <epoch>` is
+# the caller's launch time, and a stamp counts only when its `at` is at or after
+# it. A presence-only check would repeat the weakness the `reviewed` carve-out
+# below documents: stamps persist, so the pass AFTER a completed one would read
+# its predecessor's stamp and report a genuine stall as complete. The `at`
+# format — `YYYY-MM-DDTHH:MM:SSZ`, fixed width, literal `Z` — is what makes the
+# comparison a plain lexicographic `>=` with no date arithmetic.
+#
+# SAME-HOST CLOCK. Writer and reader are the same machine by construction: the
+# lane worker is spawned by this ladder's own driver, on this host. A future
+# multi-host dispatch breaks that assumption, and this probe with it.
+#
+# THE SKEW IS BOUNDED ON THE SIDE THAT MATTERS. A clock stepped BACKWARD between
+# launch and stamp makes a completed pass read `stalled` — today's answer, and
+# the safe direction. A backward step between two passes at the SAME phase could
+# make a stale stamp read fresh: a false `lane-complete`. That one is affordable
+# because of what this probe can and cannot produce. It is never `pruned` (halt
+# 0) and never `parked` (halt 11) — only a NON-TERMINAL, self-correcting
+# disposition the loop steps through. A false `lane-complete` costs one
+# iteration; the next advance re-derives the truth from origin/main. That
+# asymmetry is what makes clock-derived evidence acceptable here.
+#
+# A STALL WITH NO STAMP STILL HALTS. The probe splits the `unchanged` arm; it
+# does not soften it. No stamp, or one older than this launch, is `stalled` at
+# exit 12 exactly as before — no re-entry, no retry, no branch-tip backstop.
+#
+# Usage: dispatch-ladder-await <node-id> <from-phase>
+#                  [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>]
+#                  [--graph-poll-every <n>] [--since <epoch>]
+#
+#   <from-phase>       the phase dispatch-ladder-advance printed. The
+#                      transition check asks whether the node has moved off
+#                      it.
+#   --timeout-s <n>    give up waiting after n seconds (default 540). The
+#                      default sits under the Bash tool's 600s ceiling on
+#                      purpose, so a call from a Claude session returns a real
+#                      answer rather than being killed mid-poll. A phase that
+#                      outlives it is NOT an error — exit 20 says "still
+#                      running, call again".
+#   --poll-s <n>       seconds between daemon reads (default 15).
+#   --boot-grace-s <n> how long to wait for the worker to REGISTER before
+#                      concluding none exists (default 90 — see BOOT GRACE).
+#   --graph-poll-every <n>
+#                      ask origin/main on every nth stage-2 poll even while the
+#                      worker is live (default 4 — see THE GRAPH IS ASKED WHILE
+#                      THE WORKER IS STILL LIVE). 1 asks on every poll, which
+#                      also means a fetch per poll. The bound it buys is
+#                      n × --poll-s of detection latency; without it the bound
+#                      is registry reap lag, which nothing here controls.
+#   --since <epoch>    unix epoch of THIS launch. Only with it is
+#                      `execution.lane_pass` consulted at all, and only a stamp
+#                      dated at or after it counts — see A LANE THAT COMPLETES
+#                      WITHOUT MOVING THE PHASE. Omitted (the by-hand form
+#                      above), the stamp is not read: a hand caller has no
+#                      launch time to assert, and a defaulted window would
+#                      invent evidence rather than reproduce today's behavior.
+#
+# Stdout, one line:
+#   advanced <id> <from> -> <to-known-via>   the node moved off <from>.
+#   reviewed <id> review -> pending-merge    the review completed clean. It
+#                                            writes a marker, not a phase, so
+#                                            the node is STILL at `review`.
+#   lane-complete <id> <from>                the lane completed its pass by
+#                                            pushing, stamping
+#                                            `execution.lane_pass` rather than
+#                                            moving `phase`. Needs --since.
+#   pruned <id>                              the node is gone from origin/main —
+#                                            completed and pruned.
+#   throw <id> <reason>                      parked, or blocked by an edge.
+#   stalled <id> <from>                      the worker stopped and NOTHING
+#                                            changed at origin/main.
+#   held-observing <id> <from>               the worker stopped without
+#                                            declaring a terminal disposition
+#                                            and no park has landed yet.
+#   running <id> <from>                      still working at the timeout.
+#
+# A verdict line reported through the `absent` arm after an early sighting
+# carries one extra trailing field, ` reap_lag_s=<n>` — seconds between the
+# verdict becoming public at origin/main and the session row going away. It is
+# APPENDED, so every existing parse still works (dispatch-ladder-run reads the
+# disposition with `awk '{print $1; exit}'`), and it is OMITTED ENTIRELY when no
+# early sighting happened: an absent field means "not measured", which a 0 would
+# confuse with "measured, and there was no lag".
+#
+# Exit codes:
+#   0   advanced, reviewed, lane-complete or pruned — the loop may take another
+#       step. `lane-complete` shares this code with `reviewed` deliberately: it
+#       is the same class of answer, and a code of its own would force a new
+#       branch in dispatch-ladder-run for no behavioral difference. The distinct
+#       TOKEN is what carries the information onward (events.jsonl, status).
+#   11  throw: the node is parked, or held by a blocked_by edge. Both need the
+#       calling thread (`/dispatch-ladder`, invoked directly by an author);
+#       neither is retried here.
+#   12  stalled: the session ended with no graph change. Needs judgment — it is
+#       the shape a silently-failed phase takes, and retrying blindly would
+#       spend budget on a repeat.
+#   14  unknown: origin/main could not be read (verify-landed's third answer).
+#       Nothing is claimed either way; re-run once the read works.
+#   20  still running at the timeout. Call again — this is the expected result
+#       for any phase longer than --timeout-s, not a failure.
+#   21  held-observing: the session stopped without declaring a terminal
+#       disposition, and the graph carries no park. Nothing is claimed — the
+#       caller runs `terminal_without_disposition_sweep` (the known healer for
+#       an escalation) and calls again. A hold that no sweep ever heals is the
+#       caller's halt to make, on the caller's own budget, not this script's.
+#   2   usage or environment error.
+#
+# Requires `dangerouslyDisableSandbox: true` — the liveness read reaches the
+# Claude daemon over a Unix socket the sandbox blocks silently, and
+# `verify-landed` fetches (.claude/rules/sandbox.md).
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+
+TIMEOUT_S=540
+POLL_S=15
+BOOT_GRACE_S=90
+# Every nth stage-2 poll asks origin/main regardless of session state. 4 × the
+# 15s default poll is one fetch a minute and a 60s ceiling on detection latency.
+GRAPH_POLL_EVERY=4
+NODE_ID=""
+FROM_PHASE=""
+# Empty means "no launch window was asserted", which is NOT a window of zero:
+# with it empty the lane-pass probe is skipped entirely.
+SINCE_EPOCH=""
+SINCE_ISO=""
+
+usage() {
+  echo "usage: dispatch-ladder-await <node-id> <from-phase> [--timeout-s <n>] [--poll-s <n>] [--boot-grace-s <n>] [--graph-poll-every <n>] [--since <epoch>]" >&2
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-s)    [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
+    --poll-s)       [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --boot-grace-s) [[ $# -ge 2 ]] || usage; BOOT_GRACE_S="$2"; shift 2 ;;
+    --graph-poll-every) [[ $# -ge 2 ]] || usage; GRAPH_POLL_EVERY="$2"; shift 2 ;;
+    --since)        [[ $# -ge 2 ]] || usage; SINCE_EPOCH="$2"; shift 2 ;;
+    --*)            echo "dispatch-ladder-await: unknown flag $1" >&2; usage ;;
+    *)
+      if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
+      elif [[ -z "$FROM_PHASE" ]]; then FROM_PHASE="$1"
+      else echo "dispatch-ladder-await: unexpected argument $1" >&2; usage
+      fi
+      shift ;;
+  esac
+done
+
+[[ -n "$NODE_ID" && -n "$FROM_PHASE" ]] || usage
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "dispatch-ladder-await: invalid node id '$NODE_ID'" >&2; exit 2; }
+[[ "$TIMEOUT_S" =~ ^[0-9]+$ && "$BOOT_GRACE_S" =~ ^[0-9]+$ && "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-await: --timeout-s, --poll-s and --boot-grace-s must be integers (--poll-s positive)" >&2; exit 2; }
+# Positive, not merely an integer: 0 would make the `% GRAPH_POLL_EVERY` below a
+# division by zero, and there is no reading of "ask every 0th poll" worth
+# guessing at (.claude/rules/code-style.md).
+[[ "$GRAPH_POLL_EVERY" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-await: --graph-poll-every must be a positive integer, got '$GRAPH_POLL_EVERY'" >&2; exit 2; }
+
+# Converted ONCE, here, into the same fixed-width UTC form the lanes stamp, so
+# the probe below is a plain lexicographic compare. A `date` that cannot do this
+# is an environment error and exits — NEVER a silent skip of the probe, which
+# would resurrect the missed-lane-pass defect invisibly, as a `stalled` nobody
+# could tell apart from a real one.
+if [[ -n "$SINCE_EPOCH" ]]; then
+  [[ "$SINCE_EPOCH" =~ ^[0-9]+$ ]] || {
+    echo "dispatch-ladder-await: --since must be an integer unix epoch, got '$SINCE_EPOCH'" >&2; exit 2; }
+  SINCE_ISO=$(date -u -d "@$SINCE_EPOCH" +%FT%TZ) || {
+    echo "dispatch-ladder-await: could not convert --since '$SINCE_EPOCH' to a UTC timestamp with 'date -u -d @<epoch>'" >&2; exit 2; }
+  [[ -n "$SINCE_ISO" ]] || {
+    echo "dispatch-ladder-await: 'date -u -d @$SINCE_EPOCH' produced an empty timestamp" >&2; exit 2; }
+fi
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-ladder-await: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+VERIFY_LANDED="$PROJECT_ROOT/packages/intentionsutil/scripts/verify-landed"
+[[ -x "$VERIFY_LANDED" ]] || {
+  echo "dispatch-ladder-await: verify-landed not found or not executable at $VERIFY_LANDED" >&2; exit 2; }
+
+# --- Session state ---------------------------------------------------------
+# Echoes one of: working | done-held | absent | unknown.
+session_state() {
+  local rows
+  if ! rows="$(claude_sessions_with_name_all "$NODE_ID")"; then
+    printf 'unknown\n'; return 0
+  fi
+  if [[ -z "${rows//[[:space:]]/}" ]]; then
+    printf 'absent\n'; return 0
+  fi
+  # Column 2 is the granular state. ANY row not yet `done` means work is live.
+  if awk -F'\t' '$2 != "done" { found = 1 } END { exit found ? 0 : 1 }' <<<"$rows"; then
+    printf 'working\n'
+  else
+    printf 'done-held\n'
+  fi
+}
+
+# --- Graph verdict ---------------------------------------------------------
+# Every question is asked of origin/main through verify-landed, whose three
+# answers (landed / not-landed / unknown) are never collapsed into two.
+#
+# Order matters. `absent` is checked FIRST because an absent node satisfies
+# `.phase != "<from>"` — a pruned node and an advanced node would otherwise be
+# indistinguishable, and they call for different reports.
+graph_verdict() {
+  local rc
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --node "$NODE_ID" --blob absent >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'pruned\n'; return 0 ;;
+    4) ;;                        # present — the expected case, fall through
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  # Park before phase: a parked node may ALSO have advanced, and the park is the
+  # disposition that needs the attended thread.
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq '.office_hours != null' >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'parked\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq ".blocked_by | length > 0" >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'blocked\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  # A CLEAN REVIEW WRITES NO PHASE. review-fix's completion is the `reviewed`
+  # marker in `execution.markers` (REVIEWED_MARKER,
+  # packages/intentionsutil/src/transitions.ts), landed by `transition-node` as a
+  # state-only graph-commit; the node deliberately STAYS at `review` until the
+  # merge lane absorbs it. Without this check the phase comparison below calls a
+  # finished review `stalled`, and the ladder halts one step short of
+  # merge-and-absorb.
+  #
+  # Gated on the from-phase because markers ACCUMULATE and are never cleared: a
+  # node awaited at `qa` or `main-qa` still carries the `reviewed` marker from
+  # its earlier review pass, so an ungated check would report it complete and
+  # mask a genuine stall.
+  #
+  # NOT folded into the `execution.lane_pass` probe below, and deliberately so.
+  # `reviewed` is live ROUTING state, not a reporting artifact — graph-auto-merge
+  # arms on it, selectGraphTargets excludes on it, check-node-selection.ts:294-305
+  # asserts on it — so a stamp cannot replace it, only duplicate it. And the
+  # accumulation weakness this from-phase gate guards against is structurally
+  # unreachable anyway: every path that needs a re-review strips the marker, and
+  # the selector refuses to select a `review` node still carrying one.
+  if [[ "$FROM_PHASE" == "review" ]]; then
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+      --jq '(.execution.markers // []) | index("reviewed") != null' >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+      0) printf 'reviewed\n'; return 0 ;;
+      4) ;;
+      *) printf 'unknown\n'; return 0 ;;
+    esac
+  fi
+
+  "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+    --jq ".phase != \"$FROM_PHASE\"" >/dev/null 2>&1
+  rc=$?
+  case "$rc" in
+    0) printf 'advanced\n'; return 0 ;;
+    4) ;;
+    *) printf 'unknown\n'; return 0 ;;
+  esac
+
+  # THE PHASE PROBE STAYS AHEAD OF THIS ONE. If a lane ever stamps AND moves the
+  # phase, `advanced` is the stronger fact and remains the answer; this only
+  # splits what used to be the single `unchanged` arm.
+  #
+  # Null-total by construction: `.execution` absent → jq yields null → `// ""`
+  # → `"" >= "<iso>"` is false → verify-landed's 4. There is no error path for a
+  # node that simply carries no stamp, so an absent stamp can never masquerade
+  # as an unreadable graph.
+  if [[ -n "$SINCE_ISO" ]]; then
+    "$VERIFY_LANDED" -C "$PROJECT_ROOT" --no-fetch --node "$NODE_ID" \
+      --jq "((.execution.lane_pass.phase // \"\") == \"$FROM_PHASE\") and ((.execution.lane_pass.at // \"\") >= \"$SINCE_ISO\")" >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+      0) printf 'lane-complete\n'; return 0 ;;
+      4) ;;
+      # Same three-answer discipline as every probe above: an unreadable stamp
+      # is `unknown` (exit 14), never quietly read as "no stamp".
+      *) printf 'unknown\n'; return 0 ;;
+    esac
+  fi
+
+  printf 'unchanged\n'
+}
+
+# EARLY SIGHTING STATE. Set by the live poll when a PROGRESS verdict
+# (advanced / reviewed / lane-complete) is already public at origin/main while
+# the worker's row is still registered — the case the live poll deliberately
+# does NOT report (see THE GRAPH IS ASKED WHILE THE WORKER IS STILL LIVE).
+# Empty means no sighting was made, which is why `reap_lag_s` is omitted rather
+# than reported as 0.
+EARLY_VERDICT=""
+EARLY_EPOCH=""
+# Seconds from the sighting to the reap, computed once in the `absent` arm.
+REAP_LAG_S=""
+
+# report_graph_verdict <session-note> [<already-computed-verdict>]
+#
+# The second argument exists for the held-session arm, which must ASK the graph
+# (is there a park?) before it decides whether to report at all. Passing the
+# verdict it already has keeps that one decision on a single read of
+# origin/main: re-deriving it here would both double the verify-landed calls
+# and open a window where the second read answers a different question than the
+# one the caller branched on.
+#
+# It is deliberately NOT used for an early progress sighting: that verdict is
+# re-derived here at reap, because the fact set was still moving when it was
+# sighted — see AN EARLY READ IS NOT A FINAL READ.
+report_graph_verdict() {
+  local note="$1" verdict="${2:-}"
+  [[ -n "$verdict" ]] || verdict=$(graph_verdict)
+  # Appended to the stdout verdict line, and empty unless the `absent` arm
+  # measured a lag. Trailing by construction: every consumer parses the leading
+  # disposition token, so an extra field at the end is inert. The two arms that
+  # CONTRADICT a sighting — `stalled` and unknown-graph-read — omit it: a graph
+  # that no longer shows the change it showed a moment ago has no interval worth
+  # reporting, and the note would read as corroboration of a verdict it isn't.
+  local lag=""
+  [[ -z "$REAP_LAG_S" ]] || lag=" reap_lag_s=$REAP_LAG_S"
+  case "$verdict" in
+    pruned)
+      echo "pruned $NODE_ID$lag"
+      echo "dispatch-ladder-await: $NODE_ID is absent from origin/main — it completed and was pruned ($note)." >&2
+      exit 0 ;;
+    parked)
+      echo "throw $NODE_ID parked$lag"
+      echo "dispatch-ladder-await: $NODE_ID carries office_hours at origin/main ($note). The calling thread (/dispatch-ladder, invoked directly by an author) conducts the engagement; this script never clears a park." >&2
+      exit 11 ;;
+    blocked)
+      echo "throw $NODE_ID blocked-by$lag"
+      echo "dispatch-ladder-await: $NODE_ID has a non-empty blocked_by at origin/main ($note) — most likely a tracked hold born by a mechanical producer. Resolve the hold, not the source." >&2
+      exit 11 ;;
+    reviewed)
+      echo "reviewed $NODE_ID review -> pending-merge$lag"
+      echo "dispatch-ladder-await: $NODE_ID carries the 'reviewed' marker at origin/main ($note) — the review completed clean. It stays at phase 'review' by design; the next step is the merge-and-absorb, not another phase session." >&2
+      exit 0 ;;
+    lane-complete)
+      echo "lane-complete $NODE_ID $FROM_PHASE$lag"
+      echo "dispatch-ladder-await: $NODE_ID carries an execution.lane_pass stamp for phase '$FROM_PHASE' dated at or after this launch ($note) — the lane completed its pass by pushing to the node's branch, not by moving the phase. Same class as 'reviewed': the loop may take another step." >&2
+      exit 0 ;;
+    advanced)
+      echo "advanced $NODE_ID $FROM_PHASE -> origin/main$lag"
+      exit 0 ;;
+    unchanged)
+      echo "stalled $NODE_ID $FROM_PHASE"
+      echo "dispatch-ladder-await: the worker stopped ($note) but $NODE_ID is still at phase '$FROM_PHASE' on origin/main, unparked and unblocked. Read the session transcript before re-running — a blind retry spends budget on a repeat of whatever failed silently." >&2
+      if [[ -n "$SINCE_ISO" ]]; then
+        echo "dispatch-ladder-await: if a lane pass did complete, execution.lane_pass on origin/main will show it and its timestamp; a stamp older than this launch means a previous pass, not this one." >&2
+      fi
+      exit 12 ;;
+    *)
+      echo "throw $NODE_ID unknown-graph-read"
+      echo "dispatch-ladder-await: could not read $NODE_ID at origin/main (verify-landed's 'unknown'). Nothing is claimed either way — re-run once the read works." >&2
+      exit 14 ;;
+  esac
+}
+
+# --- Stage 1: wait for the worker to register ------------------------------
+DEADLINE=$(( SECONDS + TIMEOUT_S ))
+BOOT_DEADLINE=$(( SECONDS + BOOT_GRACE_S ))
+SAW_SESSION=0
+GOT_ANSWER=0
+
+while (( SECONDS < BOOT_DEADLINE && SECONDS < DEADLINE )); do
+  case "$(session_state)" in
+    working|done-held) SAW_SESSION=1; GOT_ANSWER=1; break ;;
+    absent)            GOT_ANSWER=1 ;;
+    # `unknown` deliberately does NOT set GOT_ANSWER — see below.
+  esac
+  sleep "$POLL_S"
+done
+
+if (( SAW_SESSION == 0 && GOT_ANSWER == 0 )); then
+  # Every read in the grace window was UNANSWERABLE — not one of them said
+  # "no session". Falling through to the graph here would let an unreadable
+  # registry produce a real verdict: a node whose phase had not landed YET would
+  # be reported `stalled` while its worker was alive and simply invisible. That
+  # is the same "trust an unanswerable probe" failure every claim primitive in
+  # this family refuses to make.
+  # Report `running` instead — the caller re-runs, and nothing is claimed.
+  echo "running $NODE_ID $FROM_PHASE"
+  echo "dispatch-ladder-await: the Claude session registry could not be read at all during the ${BOOT_GRACE_S}s boot window, so nothing is known about $NODE_ID's worker — and an unanswerable probe is never read as 'finished'." >&2
+  echo "dispatch-ladder-await: the usual cause is running sandboxed, which blocks the daemon's Unix socket silently (.claude/rules/sandbox.md). Re-run with dangerouslyDisableSandbox: true." >&2
+  exit 20
+fi
+
+if (( SAW_SESSION == 0 )); then
+  # The registry answered, and it said there is no session. That is NOT proof
+  # the worker died: a short phase can start, transition, and reap before the
+  # first poll. Ask the graph — if it moved, the phase simply ran fast.
+  report_graph_verdict "no session registered within ${BOOT_GRACE_S}s"
+fi
+
+# --- Stage 2: wait for it to finish ----------------------------------------
+# POLLS counts stage-2 iterations, and the graph is asked on every
+# GRAPH_POLL_EVERY-th of them — see THE GRAPH IS ASKED WHILE THE WORKER IS STILL
+# LIVE. It starts at 0 and is incremented BEFORE the modulo, so with
+# --graph-poll-every 1 the very first poll asks.
+POLLS=0
+while (( SECONDS < DEADLINE )); do
+  STATE="$(session_state)"
+  case "$STATE" in
+    absent)
+      # THE SINGLE REPORTING PATH FOR A PROGRESS VERDICT. The live poll below
+      # only ever RECORDS one; it is reported here, re-derived from origin/main,
+      # exactly as it was before the live poll existed. The one addition is the
+      # measured interval between the two events this process now sees both of.
+      if [[ -n "$EARLY_EPOCH" ]]; then
+        REAP_LAG_S=$(( $(date +%s) - EARLY_EPOCH ))
+        echo "dispatch-ladder-await: $NODE_ID's session row is gone ${REAP_LAG_S}s after '$EARLY_VERDICT' became public at origin/main — that interval is registry reap lag, and it is reported as reap_lag_s on the verdict line." >&2
+      fi
+      report_graph_verdict "session reaped after declaring terminal"
+      ;;
+    done-held)
+      # Stopped without declaring a terminal disposition, so the Stop hook is
+      # holding the job. THE PARK IS ASKED FIRST — see A HOLD IS NOT YET A
+      # VERDICT above: this is exactly the shape an escalating phase leaves
+      # behind, and once terminal_without_disposition_sweep has consumed its
+      # `office-hours-reason` the node carries office_hours and the run
+      # terminates on `throw <id> parked`, the terminus a person can read.
+      HELD_VERDICT=$(graph_verdict)
+      if [[ "$HELD_VERDICT" == parked ]]; then
+        report_graph_verdict "the session stopped without declaring a terminal disposition, and the node has since been parked" "$HELD_VERDICT"
+      fi
+      # No park. Report the OBSERVATION and stop — nothing is claimed about the
+      # hold, because the sweep that would resolve it has not run yet and this
+      # script never runs it. The caller re-polls.
+      echo "held-observing $NODE_ID $FROM_PHASE"
+      echo "dispatch-ladder-await: the session named $NODE_ID has state 'done' but was NOT reaped — it stopped without writing a node-terminal marker, so dispatch-stop.sh is holding the job alive, and $NODE_ID carries no office_hours park at origin/main." >&2
+      echo "dispatch-ladder-await: that is the shape of an escalation mid-flight (office-hours-reason written, no node-terminal marker), so the caller runs terminal_without_disposition_sweep and calls again. A hold no sweep heals occupies a worker slot AND keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed) until released with 'claude rm <session-id>'." >&2
+      if [[ "$HELD_VERDICT" == advanced ]]; then
+        echo "dispatch-ladder-await: NOTE — $NODE_ID HAS moved off '$FROM_PHASE' at origin/main despite the missing marker; the phase work may be complete." >&2
+      elif [[ "$HELD_VERDICT" == lane-complete ]]; then
+        echo "dispatch-ladder-await: NOTE — $NODE_ID DOES carry an execution.lane_pass stamp for '$FROM_PHASE' dated at or after this launch, despite the missing marker; the lane pass may be complete." >&2
+      fi
+      exit 21
+      ;;
+  esac
+
+  # THE LIVE POLL. The session is `working`, or the registry could not be read
+  # at all — either way the graph is asked on the throttled cadence, because the
+  # completion is public at origin/main the moment the worker pushes and waiting
+  # for the row to go bounds detection on reap lag instead.
+  #
+  # ONLY A RUN-ENDING VERDICT ENDS THE WAIT. `unchanged` is the ordinary answer
+  # for a phase still in flight, and `unknown` here is a transient unreadable
+  # graph, NOT the exit-14 throw — that answer belongs to a worker that has
+  # already stopped, where nothing further will change. Both keep polling. So do
+  # the three PROGRESS verdicts, for a different reason: reporting one sends the
+  # caller straight into dispatch-ladder-advance's live-session refusal and ends
+  # the run. See the header for the full split.
+  POLLS=$(( POLLS + 1 ))
+  if (( POLLS % GRAPH_POLL_EVERY == 0 )); then
+    LIVE_VERDICT=$(graph_verdict)
+    case "$LIVE_VERDICT" in
+      pruned|parked|blocked)
+        # RUN-ENDING. dispatch-ladder-run halts on these (exit 0 / exit 11) and
+        # never calls advance again, so the lingering row cannot bite and the
+        # whole reap lag is saved.
+        echo "dispatch-ladder-await: $NODE_ID reached '$LIVE_VERDICT' at origin/main while its session was still registered (state '$STATE') — reported now rather than waiting for the registry to reap it, because this verdict ends the run and no advance follows it." >&2
+        echo "dispatch-ladder-await: the row may still be there. A row that lingers holds a worker slot and keeps $NODE_ID unselectable (worktree_has_live_session is name-keyed), so the caller's next step may need it swept or released." >&2
+        report_graph_verdict "the worker was still registered ($STATE) when the change became public at origin/main" "$LIVE_VERDICT"
+        ;;
+      advanced|reviewed|lane-complete)
+        # PROGRESS. Record the sighting and KEEP POLLING. Reporting here would
+        # have the run break, call dispatch-ladder-advance, and take its exit-13
+        # "a live session is registered" refusal (dispatch-ladder-advance:199)
+        # as `halt 13 claimed` — the run ends instead of taking its next step.
+        # The verdict is reported by the `absent` arm above once the row is
+        # reaped, re-derived rather than replayed from this sighting.
+        #
+        # STDERR SAYS SO ONCE, not on every subsequent poll: the sighting is one
+        # event, and repeating it every cadence would bury the reap line that
+        # follows it.
+        if [[ -z "$EARLY_VERDICT" ]]; then
+          EARLY_VERDICT="$LIVE_VERDICT"
+          EARLY_EPOCH=$(date +%s)
+          echo "dispatch-ladder-await: $NODE_ID reached '$LIVE_VERDICT' at origin/main while its session was still registered (state '$STATE'). NOT reported yet — the worker still owns the node's worktree until it exits, and dispatch-ladder-advance refuses to launch the next phase against a registered session (exit 13). Polling on until the row is reaped; the wait from here is registry reap lag, reported as reap_lag_s." >&2
+        fi
+        ;;
+      unchanged|unknown) ;;
+    esac
+  fi
+  sleep "$POLL_S"
+done
+
+# THE TIMEOUT. An early sighting does not change this answer either: the caller
+# re-polls with the same arguments and a fresh process, so the sighting is made
+# again there and reap_lag_s is measured from the LAST window (see MEASURING THE
+# LAG). Saying what was seen keeps the operator from reading a long `running` as
+# a phase that produced nothing.
+if [[ -n "$EARLY_VERDICT" ]]; then
+  echo "dispatch-ladder-await: NOTE — $NODE_ID's '$EARLY_VERDICT' is already public at origin/main; what this wait is waiting on is the registry reaping the session row." >&2
+fi
+
+echo "running $NODE_ID $FROM_PHASE"
+echo "dispatch-ladder-await: $NODE_ID is still working after ${TIMEOUT_S}s. This is the expected result for a long phase — call dispatch-ladder-await again with the same arguments." >&2
+exit 20

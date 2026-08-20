@@ -8,7 +8,6 @@ parent: null
 rationale: Auto-created by dispatch-diagnose-main on a failing main-health sensor read.
 reading: "green: every check on the current origin/main HEAD concludes success
   (or neutral/skipped)"
-gap: null
 serves:
   - strategy-main-health
 recovers: []

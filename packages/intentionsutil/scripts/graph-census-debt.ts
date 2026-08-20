@@ -9,7 +9,10 @@
 //   - owed prunes    — done-but-present nodes (phase === "done", still in the
 //                      store, not yet pruned by the reconciler). This is the
 //                      dominant, network-free signal the tick +3 (2026-07-10)
-//                      observation flagged as re-accumulating.
+//                      observation flagged as re-accumulating. Evaluation
+//                      finding ledger entries (attributes.ledger_entry) are
+//                      EXEMPT: a retired entry keeps its summary metrics on
+//                      purpose, so it is done-but-present forever by design.
 //   - unverified PR-merges — nodes carrying execution.pr whose PR is merged but
 //                      the node is not yet absorbed to done. Computed only when
 //                      the caller supplies --pr-states (a JSON map id -> state);
@@ -45,6 +48,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes } from "../src/store.js";
 import { isWaitNode } from "../src/waits.js";
+import { isLedgerEntry } from "../src/schema.js";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 
 const CENSUS_SERVES = "strategy-graph-native-dispatch";
@@ -106,6 +110,7 @@ function isCensusNode(n: IntentionNode): boolean {
   return n.kind === "tactic" && n.attributes?.census === true;
 }
 
+
 export interface CensusDebt {
   total: number;
   donePresent: string[];
@@ -151,7 +156,25 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
   const openCensus: string[] = [];
 
   for (const n of nodes) {
-    if (n.phase === "done" && !isLiveRearmTarget(n)) donePresent.push(n.id);
+    // The owed-prune exemption for evaluation finding ledger entries.
+    // `donePresent` is not a report — it is the batch a census drains with
+    // `graph-commit --prune <id>`, which deletes the node file outright. A
+    // ledger entry retires to `phase: "done"` while KEEPING its summary
+    // metrics, precisely so a later recurrence resumes the occurrence count
+    // instead of restarting at 1 (intentions/tactic-eval-finding-ledger.md,
+    // "Durability"); pruning it sends those metrics to git history where no
+    // ranking read will find them. The exemption lives in this candidate query
+    // because that is the only place it is mechanical: `graph-commit --prune`
+    // is content-blind (it only checks the file is already deleted on disk and
+    // existed in HEAD), so nothing downstream can honour a convention the
+    // query does not encode. Same shape as isCensusNode's exclusion below.
+    // The live-re-arm exemption above (isLiveRearmTarget) is the same shape,
+    // for a different reason: a released WAIT node re-arms in place, so
+    // pruning it in the released window destroys its attempt counter and the
+    // hold it applies.
+    if (n.phase === "done" && !isLedgerEntry(n) && !isLiveRearmTarget(n)) {
+      donePresent.push(n.id);
+    }
 
     const danglingParent = n.parent !== null && !ids.has(n.parent);
     const danglingServes = n.serves.some((s) => !ids.has(s));

@@ -23,7 +23,7 @@
 #   `gh api --paginate ...` would have returned (one or more JSON array
 #   documents). When set, the file is read instead of shelling out to `gh`, so
 #   the test suite runs offline. Mirrors DISPATCH_AUDIT_PROJECTS_ROOT in
-#   .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh.
+#   .claude/skills/rsi-audit/scripts/aggregate-usage.sh.
 #
 # NORMALIZATION NOTES
 #   - Location: most_recent_instance.location.path:start_line.

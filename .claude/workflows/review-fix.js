@@ -19,6 +19,28 @@
  * args IN:
  *   { pr_num, merge_base, changed_files:[...], surface:"empty"|"docs"|"tests"|"code",
  *     deps:bool, app_or_rules:bool,
+ *     review_base?:string,        // the NARROWED base a re-review reports on
+ *       // (dispatch-review-base). Defaults to merge_base, so a caller that omits
+ *       // it gets exactly today's full-PR review. merge_base stays bound and
+ *       // unchanged: it is what may be READ, review_base is what is REPORTED on.
+ *     review_base_source?:string, // which resolution path produced review_base
+ *     review_base_recorded?:string, // on the `sidecar-rebased` path review_base is a
+ *       // SYNTHETIC commit that no `git log` resolves; this is the real sha the
+ *       // previous pass covered. For REPORTING only — never diff from it, since
+ *       // diffing from it is exactly the origin/main churn bug it replaced.
+ *     blast_radius_files?:[...],  // files OUTSIDE the delta referencing a symbol
+ *       // it changed — REQUIRED reading, the guard that keeps the narrowed base
+ *       // from being a detection reduction (clarification 50)
+ *     blast_radius_truncated?:bool, // the reading list hit its cap; say so
+ *     prior_findings?:[...],      // unresolved + deferred findings from the
+ *       // previous pass, carried forward so re-scoping cannot silently drop one
+ *     review_plan?:{ effort, finder_set:[...], reasons:{...},
+ *       focus?:{ question:string, finders?:[...] } }, // /review-plan's
+ *       // verdict (SKILL.md Step 1a). Absent/failed/unparseable ⇒ today's
+ *       // defaults: effort `high`, FULL finder roster. Fails OPEN, always.
+ *       // `focus` is a SCOPE, not an intensity: a question added to the brief
+ *       // of the named already-launched lenses (all of them when unnamed). It
+ *       // changes no effort and no roster.
  *     prescanned_findings:[...Per-finding items, Source "codeql"|"npm",
  *       carrying their source-specific fields...],
  *     implementing_issues:[N,...], run_started_at:string (ISO8601, captured by
@@ -609,6 +631,326 @@ function agentFinderSet(surface, app_or_rules, api_call_site) {
 }
 // <<< domain sweep gate <<<
 
+// The /review-plan pre-pass's verdict, mechanically enforced.
+//
+// SKILL.md Step 1a runs a `/review-plan` subagent (pinned `model: opus`) that
+// reads the delta ONCE plus the mechanical classifier outputs and returns a
+// small structured verdict: an effort level, a finder gate set, and a per-lens
+// reason. This region is where that verdict is CONSTRAINED. Nothing below
+// trusts the verdict's own arithmetic — a verdict is an untrusted proposal
+// derived from text the diff under review can influence, and the four governing
+// rules (strategy-token-economy clarifications 49, 52, 53) have to hold whether
+// or not the skill honoured them.
+//
+// THE FOUR GOVERNING RULES — the part a later editor is most likely to drop:
+//
+//   FAIL-OPEN. Error, timeout, absent, or unparseable verdict runs TODAY'S
+//   defaults: effort `high`, FULL finder roster. Never cheaper, never narrower.
+//   This is a condition on the strategy, not a preference. Note the deliberate
+//   contrast with dispatch-review-base, which fails CLOSED — there the cheap
+//   outcome is the narrow review, so the safe failure is the expensive one;
+//   here the cheap outcome is the degraded one, so the safe failure is the
+//   expensive one too. Both rules point the same way: when in doubt, review
+//   MORE.
+//
+//   BOUNDED. The skill reads the delta once plus the mechanical outputs, never
+//   the whole repo. Enforced in the skill, not here — but recorded here so the
+//   constraint has a home a reader reaches from the code.
+//
+//   ASYMMETRIC. Raising is ANY-OF; cheapening requires ALL signals to agree.
+//   Unanimous to go cheap, one hit to go deep. Enforced by reviewPlanEffort
+//   below: a cheapen is refused outright if any raise signal is present. This
+//   rule is NOT relaxed by the `focus` field added below — a scope-shaped
+//   concern belongs in `focus`, and putting it in `raise` still pins global
+//   depth, correctly.
+//
+//   RECORDED. Effort, finder set and rationale are written out. With both
+//   tactics landing in one PR at author direction (overriding clarification
+//   54's sequencing), the delta-only baseline was never measured — so this is
+//   now the ONLY thing that keeps the delta-scoping's saving and the
+//   depth-selection's saving distinguishable. Both functions return a `reason`
+//   for exactly that.
+//
+// THE BAND IS AUTHOR-SET and this code may not re-open it: `low` … `max`,
+// default `high`. `dispatch-code-review` also accepts `ultra`; the band stops
+// at `max`. A verdict naming anything outside the band is REJECTED — it falls
+// back to `high` — never silently CLAMPED to the nearest legal value. Clamping
+// would turn a malformed or injected verdict into a valid-looking one.
+// >>> review plan gate: sliced + eval'd by review-fix-review-plan-probe.mjs >>>
+const REVIEW_PLAN_BAND = ['low', 'medium', 'high', 'xhigh', 'max'];
+const REVIEW_PLAN_DEFAULT_EFFORT = 'high';
+
+// Per-effort deadline for dispatch-code-review, and the matching Step 1b poll
+// cap. Raising effort above `high` WITHOUT raising both converts an expensive
+// review into a TOTAL LOSS: dispatch-code-review kills a run past its deadline
+// (:1225-1226), and `claude -p` buffers all output until the run completes, so
+// a killed run yields ZERO BYTES — the recorded `max` run burned 2363s and
+// produced nothing. The upper half of the band is a trap without this table.
+//
+// Every deadline is an exact multiple of the script's 540s default await
+// window, so SKILL.md Step 1b's `cap × 540 == deadline` equality — which is
+// load-bearing, not decorative (it is what makes the script's own exit-4 path
+// reachable, and that path is the only thing that kills the detached run and
+// releases the worktree flock) — holds at every level, not just at `high`.
+// `high` is 5400/10, byte-identical to today.
+const REVIEW_PLAN_AWAIT_S = 540;
+const REVIEW_PLAN_DEADLINES = {
+  low: 2160,
+  medium: 3240,
+  high: 5400,
+  xhigh: 10800,
+  max: 16200,
+};
+
+function reviewPlanRank(effort) {
+  return REVIEW_PLAN_BAND.indexOf(effort);
+}
+
+// reviewPlanEffort(plan) -> { effort, reason }
+// `plan` is the /review-plan verdict, or anything at all — including null,
+// undefined, a string, or an object with hostile fields.
+function reviewPlanEffort(plan) {
+  const dflt = REVIEW_PLAN_DEFAULT_EFFORT;
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    return { effort: dflt, reason: 'fail-open: no usable /review-plan verdict' };
+  }
+
+  const proposed = plan.effort;
+  if (reviewPlanRank(proposed) === -1) {
+    return {
+      effort: dflt,
+      reason: `band-violation: effort '${String(proposed)}' is outside the author-set band ${REVIEW_PLAN_BAND.join('|')} — rejected, not clamped`,
+    };
+  }
+
+  const raise = Array.isArray(plan.raise) ? plan.raise : [];
+  const cheapen = Array.isArray(plan.cheapen) ? plan.cheapen : [];
+
+  // ANALYSIS 3 — the irreversibility floor. Migrations, destructive git ops,
+  // deletes, deploy/release config, credentials, billing, graph writes: a HARD
+  // `xhigh` floor that overrides every cheapening signal, applied before the
+  // asymmetry test so a cheapen can never survive it. A one-line change to an
+  // auth predicate outranks a 900-line rename, which is also why analysis 8
+  // (size and dispersion) is a tie-breaker only.
+  if (plan.irreversible === true) {
+    if (reviewPlanRank(proposed) < reviewPlanRank('xhigh')) {
+      return {
+        effort: 'xhigh',
+        reason: `irreversibility-floor: raised from '${proposed}' — an irreversible surface overrides every cheapening signal`,
+      };
+    }
+    return { effort: proposed, reason: `irreversibility-floor satisfied at '${proposed}'` };
+  }
+
+  // ASYMMETRY. Below the default is a CHEAPEN and needs unanimity: no raise
+  // signal may be present, and the verdict must actually name the signals that
+  // agreed. At or above the default is a RAISE (or a no-op) and needs nothing —
+  // one hit is enough to go deep.
+  if (reviewPlanRank(proposed) < reviewPlanRank(dflt)) {
+    if (raise.length > 0) {
+      return {
+        effort: dflt,
+        reason: `cheapen-blocked: ${raise.length} raise signal(s) present (${raise.join(', ')}) — cheapening requires ALL signals to agree`,
+      };
+    }
+    if (cheapen.length === 0) {
+      return {
+        effort: dflt,
+        reason: 'cheapen-blocked: verdict proposed a cheaper level but named no cheapening signals',
+      };
+    }
+    return { effort: proposed, reason: `cheapened to '${proposed}': ${cheapen.join(', ')}` };
+  }
+
+  if (reviewPlanRank(proposed) > reviewPlanRank(dflt)) {
+    const why = raise.length ? raise.join(', ') : 'unstated';
+    return { effort: proposed, reason: `raised to '${proposed}': ${why}` };
+  }
+  return { effort: proposed, reason: `default '${proposed}' retained` };
+}
+
+// reviewPlanDeadline(effort) -> { deadline_s, poll_cap, await_s }
+// An out-of-band effort yields the `high` row rather than throwing: this is
+// consumed on the fail-open path, where a throw would take the whole phase
+// down over a depth SUGGESTION.
+function reviewPlanDeadline(effort) {
+  const level = REVIEW_PLAN_DEADLINES[effort] ? effort : REVIEW_PLAN_DEFAULT_EFFORT;
+  const deadlineS = REVIEW_PLAN_DEADLINES[level];
+  return {
+    deadline_s: deadlineS,
+    poll_cap: deadlineS / REVIEW_PLAN_AWAIT_S,
+    await_s: REVIEW_PLAN_AWAIT_S,
+  };
+}
+
+// reviewPlanFinderSet(base, plan) -> { set, reason }
+// GATING AUTHORITY IS SEMANTIC TRIGGERS ONLY, and it is enforced as UNION —
+// today's agentFinderSet output is the FLOOR and nothing can fall below it.
+//
+// The skill may WIDEN a lens's trigger on the semantics of the diff; it may
+// NEVER disable a lens for being expensive or low-yield. Clarification 18 is
+// the precedent and it is unambiguous: `api-cost` was retained at a MEASURED
+// ZERO finding rate and its trigger was WIDENED instead of cut.
+//
+// So semantic narrowing lives in the BRIEF — which sections a launched lens is
+// told to emphasise — and never in the roster. Once a removal reaches the
+// roster it is indistinguishable from a removal for cost, and the rule that
+// forbids the second cannot be enforced while permitting the first. A union is
+// the only form of this gate that is mechanically checkable.
+// The ONLY names that may be added. A widen is a widen within the known agent
+// roster, never an invitation to name an arbitrary agent.
+//
+// This is an allowlist rather than a filter on `DOMAIN_PROMPTS` because the
+// failure it prevents is silent, not loud: `launchFinder` → `finderPrompt` has
+// explicit branches for `security-review`, `api-cost` and `domain-sweep` and
+// falls through to `Domain: ${DOMAIN_PROMPTS[name]}` for everything else. An
+// unknown name therefore launches a real Opus subagent whose entire brief reads
+// "Domain: undefined", and its findings come back tagged with that Source —
+// colliding in dedup and in per-lens accounting with the prescanned `codeql` /
+// `npm` / `erosion` sources, which are NOT agent finders and must never be
+// spawned as one. A `__proto__`- or `constructor`-shaped name would reach
+// `DOMAIN_PROMPTS[name]` as an inherited function and stringify into the prompt.
+//
+// The verdict is derived from text the diff under review can influence, and
+// this is the one place in this region where it reaches a spawn loop. Constrain
+// it here.
+const REVIEW_PLAN_KNOWN_FINDERS = [
+  'input-validation',
+  'domain-sweep',
+  'red-team',
+  'security-review',
+  'api-cost',
+];
+
+function reviewPlanFinderSet(base, plan) {
+  const floor = Array.isArray(base) ? base.slice() : [];
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan) || !Array.isArray(plan.finder_set)) {
+    return { set: floor, reason: 'fail-open: full roster (no usable finder_set in the verdict)' };
+  }
+  const added = [];
+  const rejected = [];
+  for (const name of plan.finder_set) {
+    if (typeof name !== 'string' || !name) continue;
+    if (floor.indexOf(name) !== -1 || added.indexOf(name) !== -1) continue;
+    if (REVIEW_PLAN_KNOWN_FINDERS.indexOf(name) === -1) {
+      if (rejected.indexOf(name) === -1) rejected.push(name);
+      continue;
+    }
+    added.push(name);
+  }
+  const dropped = floor.filter((n) => plan.finder_set.indexOf(n) === -1);
+  let reason = added.length ? `widened by ${added.join(', ')}` : 'roster unchanged';
+  if (dropped.length) {
+    reason += `; ${dropped.length} floor lens(es) omitted by the verdict and RETAINED anyway (${dropped.join(', ')}) — a lens is never removed for cost or yield`;
+  }
+  if (rejected.length) {
+    reason += `; ${rejected.length} unknown finder name(s) REJECTED (${rejected.join(', ')}) — not in the known agent roster`;
+  }
+  return { set: floor.concat(added), reason };
+}
+
+// reviewPlanFocus(plan, roster) -> { question, finders, reason }
+//
+// THE DIMENSION THE VERDICT WAS MISSING. Before this field a verdict had one
+// intensity dial (`effort`) and one roster, so a SCOPE-shaped analysis had
+// nowhere to go but `raise` — and `raise` is ANY-OF, so it pinned GLOBAL depth.
+// Measured: one legitimate narrow concern ("verify this lane-authored sensor
+// suppression is not laundering a type error") held effort at `high` against
+// six independent cheapen signals, and a 1-file +2/-2 comment-only delta cost
+// $76.09, 248 turns and 13 subagents to return 10 findings and 0 actionable.
+//
+// A focus is a QUESTION, not an intensity. A verdict can now say "low effort,
+// this one lens, this one question" — the analysis-7 case — and the cheapen it
+// otherwise earned survives.
+//
+// WHAT IT DELIBERATELY IS NOT:
+//
+//   NOT a relaxation of the asymmetry. `reviewPlanEffort` is untouched: one
+//   raise signal still refuses a cheapen. The fix is that a scope-shaped
+//   concern belongs in `focus` and NOT in `raise` — answering a scope question
+//   with an intensity dial was the defect, and widening the dial's tolerance
+//   would have been the same mistake in the other direction.
+//
+//   NOT a roster gate. `focus.finders` names which of the ALREADY-CONSTRAINED
+//   lenses carry the question in their brief. It adds no lens and removes none
+//   — every lens `reviewPlanFinderSet` returned still launches, still runs its
+//   whole brief. This is the "semantic narrowing lives in the BRIEF, never in
+//   the roster" rule above, and it is why a name outside the launched roster is
+//   IGNORED here rather than added.
+//
+//   NOT a licence to shorten a lens. The brief clause says so in as many words,
+//   because a focus that could shorten coverage is a detection cut wearing a
+//   question's clothes.
+//
+// The question text is derived from the diff under review, so it is capped to
+// one line and to REVIEW_PLAN_FOCUS_MAX_CHARS before it reaches a prompt.
+const REVIEW_PLAN_FOCUS_MAX_CHARS = 400;
+
+function reviewPlanFocus(plan, roster) {
+  const none = (reason) => ({ question: '', finders: [], reason });
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    return none('no focus: no usable /review-plan verdict');
+  }
+  const focus = plan.focus;
+  if (!focus || typeof focus !== 'object' || Array.isArray(focus)) {
+    return none('no focus: the verdict named none');
+  }
+  // A finder subset with no question would narrow nothing and say nothing —
+  // there is no brief to attach. Refuse it rather than half-apply it.
+  if (typeof focus.question !== 'string' || !focus.question.trim()) {
+    return none('no focus: the verdict named a focus with no question');
+  }
+  const question = focus.question
+    .replace(/[\r\n]+/g, ' ')
+    .trim()
+    .slice(0, REVIEW_PLAN_FOCUS_MAX_CHARS);
+
+  const launched = Array.isArray(roster) ? roster : [];
+  const finders = [];
+  const ignored = [];
+  if (Array.isArray(focus.finders)) {
+    for (const name of focus.finders) {
+      if (typeof name !== 'string' || !name) continue;
+      if (finders.indexOf(name) !== -1) continue;
+      if (launched.indexOf(name) === -1) {
+        if (ignored.indexOf(name) === -1) ignored.push(name);
+        continue;
+      }
+      finders.push(name);
+    }
+  }
+  // An empty `finders` — named none, or named only lenses that are not
+  // launched — means EVERY launched lens carries the question. That is the
+  // broader direction, which is the safe one: a focus may never end up
+  // narrowing coverage because its subset was junk.
+  let reason = finders.length
+    ? `focused on ${finders.join(', ')}: ${question}`
+    : `focused on every launched lens: ${question}`;
+  if (ignored.length) {
+    reason += `; ${ignored.length} focus finder(s) not in the constrained roster and IGNORED (${ignored.join(', ')}) — a focus never adds or removes a lens`;
+  }
+  return { question, finders, reason };
+}
+
+// reviewPlanFocusBrief(focus, name) -> string ('' when this lens has no focus)
+// `focus` is the CONSTRAINED object reviewPlanFocus returned, never the raw
+// verdict's field. An empty string means the lens's prompt is byte-identical to
+// what it was before this field existed — which is what every verdict carrying
+// no focus gets.
+function reviewPlanFocusBrief(focus, name) {
+  if (!focus || typeof focus !== 'object' || Array.isArray(focus)) return '';
+  if (typeof focus.question !== 'string' || !focus.question) return '';
+  const subset = Array.isArray(focus.finders) ? focus.finders : [];
+  if (subset.length && subset.indexOf(name) === -1) return '';
+  return [
+    `FOCUS (set by the /review-plan pre-pass): ${focus.question}`,
+    'Answer it IN ADDITION to your normal brief above. It does not replace any section, and it is',
+    'never a reason to shorten one — a focus narrows what this review is CURIOUS about, never what',
+    'it covers. Report the answer as a finding only if the answer is a problem.',
+  ].join('\n');
+}
+// <<< review plan gate <<<
+
 // normative spec: .claude/skills/dispatch-propagate/scripts/dispatch-review-dedup
 // Collapse one partition subgroup of same-root findings into one representative.
 // Each finding must carry an `_idx` (its global input index) for tie-breaking.
@@ -789,16 +1131,125 @@ const LANE_A_BLURB = [
   'Return { "fixed": [ ... ], "residue": [ ... ], "instrument": { ... } }. Use [] for an empty array.',
 ].join('\n');
 
+// Two bases, deliberately. `review_base` is what the finder REPORTS on; on a
+// re-review it is the sha the previous pass covered, so the delta is one
+// /fix-checks commit rather than the whole PR (dispatch-review-base). `merge_base`
+// is the full branch base and stays in the brief because "you may read anything in
+// this PR" must remain true — narrowing what is reported must never narrow what
+// may be read, or the narrowed base becomes the detection reduction
+// strategy-token-economy clarification 50 forbids.
+//
+// `blast_radius_files` is the third element and the one that makes the narrowing
+// safe: files OUTSIDE the delta that reference a symbol the delta changed. A
+// helper's contract changes and an unmodified caller three files away breaks —
+// invisible to a literal `git diff <review_base>..HEAD`. They are REQUIRED
+// reading, not a suggestion.
+//
+// review_base falls back to merge_base, which falls back to origin/main, so a
+// caller that passes neither gets exactly today's behaviour.
+// >>> diff context: sliced + eval'd by review-fix-diff-context-probe.mjs >>>
 function diffContext(args) {
-  const base = args.merge_base || 'origin/main';
-  const filesStr = (args.changed_files || []).join(', ') || '(see git diff HEAD)';
-  return [
-    `Review ONLY the pending diff against the merge base \`${base}\` (the branch's`,
-    `changes vs origin/main). Changed files: ${filesStr}.`,
+  const fullBase = args.merge_base || 'origin/main';
+  const narrowedBase = args.review_base || fullBase;
+  // The file list must describe the range the finder is told to review. On a
+  // re-review, `changed_files` is the WHOLE PR's list (the context pack computes
+  // it from merge_base), so pairing it with a narrowed base tells the finder
+  // "review only the delta" and then hands it an inventory of every file the PR
+  // ever touched. The file list is the more concrete instruction of the two, so
+  // the finder either reviews the full PR anyway (no saving at all) or treats
+  // the list as the delta (wrong scope).
+  //
+  // So base and file list move TOGETHER — there are only two coherent pairs,
+  // (narrowed base, delta list) and (full base, whole-PR list), and `narrowed`
+  // picks one of them for both.
+  //
+  // An EMPTY delta list takes the FULL pair, not the narrowed one. The caller
+  // always supplies `review_changed_files` when it narrows, so an empty array
+  // means "nothing changed since the last review", not "no opinion" — and an
+  // empty list paired with a narrowed base instructs the finder to review
+  // nothing at all. Falling back to the full pair is the same fail-CLOSED
+  // direction as every other fallback on this seam: the narrowing can make a
+  // review wider than necessary, never narrower than correct.
+  const narrowed =
+    narrowedBase !== fullBase &&
+    Array.isArray(args.review_changed_files) &&
+    args.review_changed_files.length > 0;
+  const base = narrowed ? narrowedBase : fullBase;
+  const deltaFiles = narrowed ? args.review_changed_files : args.changed_files || [];
+  const filesStr = deltaFiles.join(', ') || '(see git diff HEAD)';
+  const lines = [
+    `Review ONLY the pending diff against \`${base}\`. Changed files: ${filesStr}.`,
     'Read full files for the context needed to judge each change, but report findings only',
     'on the pending changes. You report findings ONLY — edit no files, commit nothing, push nothing.',
-  ].join(' ');
+  ];
+  if (base !== fullBase) {
+    lines.push(
+      `This is a RE-review: \`${base}\` is the sha the previous review already covered, and`,
+      `\`${fullBase}\` is the branch's full merge base. You may read anything in the branch —`,
+      `\`git diff ${fullBase}..HEAD\` is available and in scope to READ — but report findings`,
+      'only on the delta above, except where a required-reading file below is genuinely broken',
+      'by it.',
+    );
+    // Without this, an agent that tries to orient itself with `git log <base>` on
+    // the `sidecar-rebased` path gets "unknown revision" and has no way to reach
+    // the real previous-pass sha — the base it was handed is synthetic and
+    // unreferenced. Name the resolvable sha, and say plainly that it is not the
+    // range start, so nobody "helpfully" re-diffs from it and re-admits the churn.
+    if (args.review_base_recorded) {
+      lines.push(
+        `(\`${base}\` is a SYNTHETIC commit — the previously-reviewed state brought up to the`,
+        `merge base — so \`git log\` will not resolve it. The previous pass actually covered`,
+        `\`${args.review_base_recorded}\`; read that for history, but do NOT diff from it —`,
+        `it predates the merge base and its range re-admits already-reviewed origin/main work.)`,
+      );
+    }
+  }
+  const br = args.blast_radius_files || [];
+  if (br.length) {
+    lines.push(
+      `REQUIRED READING — these files are outside the delta but reference a symbol it added,`,
+      `changed, or deleted, so a broken contract shows up here and nowhere in the diff:`,
+      `${br.join(', ')}.`,
+      'Read each one and check it against the changed symbol. A finding here is in scope.',
+    );
+  }
+  if (args.blast_radius_truncated) {
+    lines.push(
+      'NOTE: that required-reading list was TRUNCATED at its cap — it is not exhaustive.',
+      'Treat out-of-delta callers as under-covered and widen your reading where the delta',
+      'changes a shared contract.',
+    );
+  }
+  // The generic-symbol drop needs its OWN warning, and it is the one that
+  // matters most. A symbol referenced by more out-of-diff files than the
+  // classifier's threshold is dropped as carrying no locality — but that fires
+  // precisely when the delta changes a WIDELY-USED helper, which is the largest
+  // blast radius there is. Without this line, that case emits no reading list
+  // and no truncation flag, byte-identical to "this delta has no out-of-diff
+  // callers at all" — the most dangerous possible silence.
+  const generic = Number(args.blast_radius_generic || 0);
+  if (generic > 0) {
+    lines.push(
+      `NOTE: ${generic} changed symbol(s) were too widely referenced to list callers for.`,
+      'That means the delta touches a shared helper, NOT that it has no callers — the',
+      'out-of-delta reading list is silent about exactly the highest-fan-out symbols.',
+      'If the delta changes any of their contracts, check callers yourself.',
+    );
+  }
+  const prior = args.prior_findings || [];
+  if (prior.length) {
+    lines.push(
+      `CARRIED FORWARD — ${prior.length} finding(s) the previous pass raised and left unresolved`,
+      'or deferred. Their sites may predate the delta, so nothing else would re-surface them.',
+      'Re-assess each against the current code and report it if it still holds:',
+      prior
+        .map((f) => `- ${f.location || f.file || '(no location)'}: ${f.description || f.title || ''}`)
+        .join('\n'),
+    );
+  }
+  return lines.join(' ');
 }
+// <<< diff context <<<
 
 // Direct security-domain reviewer descriptions — mirror SKILL.md §1c. This region
 // also holds the `api-cost` brief: the COST_BRIEF text and the apiCostDomains/
@@ -976,8 +1427,13 @@ function instrumentClause(spec) {
   ].join('\n');
 }
 
-function finderPrompt(name, args) {
+// `focus` is the CONSTRAINED /review-plan focus (reviewPlanFocus's return), or
+// nothing at all. It contributes one extra clause to the lenses it names and
+// NOTHING to the rest — every `.filter(Boolean)` below is what keeps an absent
+// focus byte-identical to the pre-focus prompt.
+function finderPrompt(name, args, focus) {
   const ctx = diffContext(args);
+  const focusClause = reviewPlanFocusBrief(focus, name);
   // NOTE: there is deliberately no `code-review` branch here. code-review is not
   // an agent finder in this Workflow at all — see agentFinderSet's comment and
   // the INSTRUMENTS scope note. It runs as the SKILL.md Step-1b `claude -p`
@@ -996,9 +1452,12 @@ function finderPrompt(name, args) {
       '`exploit_scenario` (the concrete attack scenario from the report), `recommended_fix` (the',
       'concrete remediation from the report).',
       'Return `{ fixed: [], residue: [...] }` — `fixed` is always empty for this source.',
+      focusClause,
       instrumentClause(INSTRUMENTS['security-review']),
       LANE_A_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   // The merged API lens: ONE agent, TWO finding sources ("firebase" security-
   // classified, "cost" advisory). See agentFinderSet's comment for the fold.
@@ -1038,8 +1497,11 @@ function finderPrompt(name, args) {
       'those sections.',
       'Fill OWASP and STRIDE on every "firebase" finding (they are security findings); leave BOTH',
       'as "" on every "cost" finding (cost findings are advisory and are never security-classified).',
+      focusClause,
       SCHEMA_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   if (name === 'domain-sweep') {
     return [
@@ -1058,8 +1520,11 @@ function finderPrompt(name, args) {
         .map((d) => `"${d}"`)
         .join(', ')}. Never invent a combined source name and never use a source that is`,
       'not one of those sections. Fill OWASP and STRIDE for every finding.',
+      focusClause,
       SCHEMA_BLURB,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
   // input-validation | red-team
   // (`firebase` is no longer an agent name — it is only a Source, reached through
@@ -1068,8 +1533,11 @@ function finderPrompt(name, args) {
     `You are a findings-only security reviewer. Domain: ${DOMAIN_PROMPTS[name]}`,
     ctx,
     `Set Source "${name}" on every finding. Fill OWASP and STRIDE for each finding.`,
+    focusClause,
     SCHEMA_BLURB,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 // =============================================================================
@@ -1131,7 +1599,26 @@ let subagentsLaunched = 0;
 
 // --- 1. FINDERS (two waves, probe-gated) -------------------------------------
 phase('finders');
-const finderNames = agentFinderSet(_a.surface, _a.app_or_rules, _a.api_call_site);
+// agentFinderSet's output is the FLOOR; reviewPlanFinderSet may only add to it.
+// With no `review_plan` in args this is byte-identical to the bare call it
+// replaced — the fail-open path IS the old behaviour, not a reconstruction of it.
+const finderPlan = reviewPlanFinderSet(
+  agentFinderSet(_a.surface, _a.app_or_rules, _a.api_call_site),
+  _a.review_plan
+);
+const finderNames = finderPlan.set;
+// RECORDED (governing rule 4). With both tactics landing in one PR, this line
+// and effortPlan.reason below are the only things that keep the delta-scoping's
+// saving and the depth-selection's saving distinguishable in measurement.
+const effortPlan = reviewPlanEffort(_a.review_plan);
+// The verdict's SCOPE dimension. Constrained against the roster that actually
+// launches, so a focus can never name a lens that is not running. With no
+// `focus` in the verdict this is `{ question: '', finders: [] }` and every
+// finder prompt below is byte-identical to what it was before the field existed.
+const focusPlan = reviewPlanFocus(_a.review_plan, finderNames);
+log(
+  `review-plan: effort=${effortPlan.effort} (${effortPlan.reason}); finders=${finderNames.length} (${finderPlan.reason}); focus: ${focusPlan.reason}`
+);
 // Probe-wave throttle short-circuit: `security-review` is real review work that
 // runs whenever there are ANY agent finders at all (it is added by agentFinderSet
 // under the same `surface === 'code'` gate as the rest of the roster), so launch it
@@ -1162,7 +1649,7 @@ log(
 // Lane-A-aware (finderPrompt branches on the name). Lane-B finders (everything else)
 // keep the FINDINGS_SCHEMA findings-list shape.
 const launchFinder = (name) => () =>
-  agent(finderPrompt(name, _a), {
+  agent(finderPrompt(name, _a, focusPlan), {
     model: 'opus',
     agentType: 'general-purpose',
     schema: LANE_A.has(name) ? LANE_A_SCHEMA : FINDINGS_SCHEMA,
@@ -2451,7 +2938,11 @@ const residueResolvedByIdx = new Map();
 // or unvoted items before the residue agent sees them. Dropped items still appear
 // in the audit as Refuted, so nothing disappears silently.
 {
-  const residueBase = _a.merge_base || 'origin/main';
+  // review_base, not merge_base: these residue items came out of Lane A, which
+  // reviewed `review_base..HEAD`. Judging them against a WIDER range than the one
+  // that produced them would put the skeptic's "is this location inside the diff"
+  // test out of step with the review that raised them.
+  const residueBase = _a.review_base || _a.merge_base || 'origin/main';
   const residueItems = [];
   laneAResidue.forEach((r, i) => {
     if (r.source === 'code-review') residueItems.push({ i, r });
@@ -2493,7 +2984,13 @@ const residueResolvedByIdx = new Map();
         '- the defect is not present in the pending diff (pre-existing, or simply not there);',
         '- it is not a defect report at all — an assertion or instruction with no observable',
         '  wrong behavior behind it.',
-        `Check read-only against the code: read the named file and \`git diff ${residueBase}...HEAD\`.`,
+        // TWO dots, not three. `review_base` may be a SYNTHETIC merge of the
+        // previously-reviewed sha with MERGE_BASE (dispatch-review-base's
+        // `sidecar-rebased` path). Both of its parents are ancestors of HEAD and
+        // neither dominates the other, so `<synthetic>...HEAD` has TWO merge
+        // bases; git warns and picks one arbitrarily, re-admitting exactly the
+        // origin/main churn the synthetic base exists to cancel.
+        `Check read-only against the code: read the named file and \`git diff ${residueBase}..HEAD\`.`,
         'Default to verdict="refuted" under uncertainty — this gate guards handing an Opus agent',
         'with working-tree edit authority a finding nothing has independently confirmed.',
         '',
@@ -2969,7 +3466,9 @@ if (laneAResidue.length === 0) {
     recommended_fix: r.recommended_fix,
     source: r.source,
   }));
-  const base = _a.merge_base || 'origin/main';
+  // Same reasoning as residueBase above: the residue was raised against
+  // `review_base..HEAD`, so that is the range the disposition agent judges within.
+  const base = _a.review_base || _a.merge_base || 'origin/main';
   const filesStr = (_a.changed_files || []).join(', ') || '(see git diff HEAD)';
   const residuePrompt = [
     'You are the residue-disposition subagent for the trust-the-built-in review lane.',
@@ -2994,7 +3493,10 @@ if (laneAResidue.length === 0) {
     '',
     `Contract context: the pending diff is against merge base \`${base}\`. Changed files: ${filesStr}.`,
     'Inspect the introduced diff read-only to judge whether each item is IN-CONTRACT: use',
-    `Bash/git (e.g. \`git diff ${base}...HEAD\`) or read the changed files, and reason about`,
+    // TWO dots, not three — same reason as the residue skeptic above: on the
+    // `sidecar-rebased` path `base` is a synthetic merge commit with two merge
+    // bases against HEAD, and the three-dot form picks one of them arbitrarily.
+    `Bash/git (e.g. \`git diff ${base}..HEAD\`) or read the changed files, and reason about`,
     "whether the finding concerns something the diff's own tactic/plan claims to deliver, or",
     'the security/integrity of code the diff itself introduced, versus pre-existing surface',
     'the diff merely touched.',

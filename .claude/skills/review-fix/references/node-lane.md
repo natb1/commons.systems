@@ -19,13 +19,26 @@ Every step runs unchanged except these re-keyed seams:
   .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
   ```
 
+  **The Step 7 lint gate precedes this call, exactly as it precedes the issue
+  lane's `dispatch:reviewed` apply** — `run-lint.sh` must come back green before
+  `transition-node` writes the `reviewed` marker, and a gate still red after its
+  two fix attempts skips this call and escalates instead (see
+  `terminal-actions.md`, "Gate on the local lint bundle"). The marker is what
+  `graph-auto-merge` keys on, so writing it over a red bundle arms the merge of a
+  branch this pass itself broke.
+
   The graph-tick worker runs it with the reset-dance a PR-branch worktree needs;
   the skill hands it the node id and never writes the graph directly. Merging is
   deferred entirely to the tick's `graph-auto-merge` reconciler, which runs every
   tick keyed off the `reviewed` marker: for each reviewed-marked node it senses the
-  PR and — only when it is `mergeable == MERGEABLE`, green on CI, and the node's
-  tactic-scope fingerprint is fresh against `origin/main` — squash-merges it
-  label-free. `reconcile-graph-merged` then absorbs that out-of-band merge to
+  PR and — only when it is `mergeable == MERGEABLE`, green on CI, the node's
+  tactic-scope fingerprint is fresh against `origin/main`, and the branch is up
+  to date with the live `origin/main` tip — squash-merges it label-free. A
+  branch that is behind is **not** merged: the reconciler updates it against
+  main (`PUT .../pulls/<n>/update-branch`, which re-triggers CI on the fresh
+  base), reports `merge: synced #<pr> (<id>)`, and defers the merge to a later
+  tick that sees CI green on that now-current base.
+  `reconcile-graph-merged` then absorbs that out-of-band merge to
   `done`/`main-qa` on a later tick.
 - **Deferred findings (Step 5).** On the node lane, deferred/security follow-up
   findings become **draft tactic nodes**, not gh follow-up issues — see the

@@ -7,15 +7,18 @@ import { describe, expect, it } from "vitest";
 import {
   BACKLOG_BAND_PCT,
   LIFECYCLE_SENSOR_NAME,
+  UNBOUND_SENSOR_NAMES,
   buildDefaultRegistry,
   readBacklogBand,
   readBacklogSeries,
   readLifecyclePhaseHistory,
   readLifecycleReading,
   readSelectionLog,
+  registeredSensorNames,
 } from "../scripts/read-sensors.js";
 import { writeNodeFromJson } from "../scripts/write-node.js";
-import { readNode } from "../src/store.js";
+import { validateRegisteredSensorNames } from "../src/sensors.js";
+import { listNodesStrict, readNode } from "../src/store.js";
 
 const STRATEGY_ID = "strategy-graph-native-dispatch";
 const EMPTY_BAND = `0/0 = n/a (band ≤${BACKLOG_BAND_PCT}%)`;
@@ -327,5 +330,15 @@ describe.skipIf(!existsSync(intentionsDir))("recorded sensor name", () => {
   it("LIFECYCLE_SENSOR_NAME equals strategy-graph-native-dispatch's success_signal.sensor", () => {
     const node = readNode(intentionsDir, STRATEGY_ID);
     expect(node.success_signal?.sensor).toBe(LIFECYCLE_SENSOR_NAME);
+  });
+
+  // The same guard generalized over the whole registry — the rule
+  // validate-graph.ts runs on the graph write path, exercised here against the
+  // live store so a drift shows up in unit CI too.
+  it("every registered sensor name is recorded verbatim by some node", () => {
+    const nodes = listNodesStrict(intentionsDir);
+    expect(() =>
+      validateRegisteredSensorNames(nodes, registeredSensorNames(), UNBOUND_SENSOR_NAMES),
+    ).not.toThrow();
   });
 });

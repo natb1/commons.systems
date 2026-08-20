@@ -29,7 +29,6 @@ rationale: "Measured 2026-07-28 during an /align-strategy round that amended
   different strategy) is a related but distinct failure mode and is explicitly
   out of scope here."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -37,14 +36,26 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
-  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
-    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
-    follows the Wave-A write-path fixes. Interim scaffolding only;
+  boosts:
+    "1": 0.04
+  rationale: >-
+    Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
+    20 / 10) - dispatch-containment and evidence-custody work that follows the
+    Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
-    numeric scheme."
-  tier: 1
+    numeric scheme.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: qa
 execution:
   branch: tactic-strategy-fingerprint-stamp-coverage
@@ -54,21 +65,22 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 8ca07d4c8e5540539be1aa0092cdc45a16b28e49920d59358a48c559ff70fd80
-      sha: ba85a73587be52bb0d9f7f0a7960c97a65776b8f
+      hash: 16df2a3310d03257cf23d4b44daf39e992c78b57187614d601e4ec350e9238eb
+      sha: e23fea437e9c1e1f6872d54f717c49da818116c8
   fix:
     since: 2026-08-03
     attempt: 1
     pushed_sha: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
-blocked_by:
-  - tactic-hold-conflict-strategy-fingerprint-stamp-coverage
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 # The strategy soft-freeze is inert: no open tactic serving strategy-graph-native-dispatch carries a `strategy_fingerprint` entry for it, because no production code path has ever written one — wire the live-router stamp
 

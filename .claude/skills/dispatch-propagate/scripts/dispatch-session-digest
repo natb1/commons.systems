@@ -117,8 +117,16 @@ fi
 
 # Edge validation BEFORE the id feeds a `find -name` glob — the same check
 # `lib-session-reap.sh:311-317` applies at the same edge, for the same reason.
-if [[ ! "$SESSION" =~ ^[0-9a-fA-F-]+$ ]]; then
-  echo "dispatch-session-digest: --session must match ^[0-9a-fA-F-]+\$, got: $SESSION" >&2
+# Widened to `(agent-)?` because a fan-out phase's session rows are ~95%
+# subagents, whose ids are prefixed (`agent-abeb8e443ad63b2eb`) and would
+# otherwise never match — still bounded, so a genuine typo still fails loudly.
+#
+# Skipped entirely when --transcript is given: that flag makes $TRANSCRIPT
+# the authority and $SESSION only an echoed label (see `--arg session_id
+# "$SESSION"` below), so it must never gate the one flag that exists
+# specifically to bypass the store-lookup glob this check protects.
+if [[ -z "$TRANSCRIPT" ]] && [[ ! "$SESSION" =~ ^(agent-)?[0-9a-fA-F-]+$ ]]; then
+  echo "dispatch-session-digest: --session must match ^(agent-)?[0-9a-fA-F-]+\$, got: $SESSION" >&2
   exit 2
 fi
 

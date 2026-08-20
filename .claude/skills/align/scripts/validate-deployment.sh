@@ -8,7 +8,11 @@
 #      FATAL on failure: the intentionsutil workspace is not installed (tests
 #      fail, or `npx tsx` cannot resolve). Remediation: run `npm ci` at the
 #      repo root and rerun this script.
-#   2. Graph clean — `npx tsx packages/intentionsutil/scripts/validate-graph.ts`.
+#   2. Graph clean — `npx tsx packages/intentionsutil/scripts/validate-graph.ts
+#      "$REPO_ROOT/intentions"`. The store directory is a REQUIRED argument
+#      (strategy-graph-native-dispatch clarification 194/242): passing it
+#      explicitly is what makes a missing/unreadable intentions/ a loud failure
+#      rather than an empty node list validated as clean.
 #      FATAL on failure: dangling refs, cycles, or a schema violation in the
 #      `intentions/` graph (or a missing/unreadable `intentions/` directory).
 #      The exact underlying error is printed; do not proceed to interview over
@@ -49,8 +53,8 @@ else
 fi
 echo
 
-echo "=== 2/3: Graph clean (npx tsx packages/intentionsutil/scripts/validate-graph.ts) ==="
-if npx tsx packages/intentionsutil/scripts/validate-graph.ts; then
+echo "=== 2/3: Graph clean (npx tsx packages/intentionsutil/scripts/validate-graph.ts \"$REPO_ROOT/intentions\") ==="
+if npx tsx packages/intentionsutil/scripts/validate-graph.ts "$REPO_ROOT/intentions"; then
   echo "validate-deployment: graph clean — OK"
 else
   echo "validate-deployment: FATAL — the intentions graph failed validation (dangling refs, cycles, schema violation, or a missing/unreadable intentions/ directory). See the validate-graph.ts output above for the exact error. Do not proceed to interview over a broken store." >&2

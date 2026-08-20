@@ -714,6 +714,62 @@ else
 fi
 sweep_teardown
 
+# --- Test M-cwd: merged+in-sync worktree with a NAME-MISMATCHED live session ---
+# worktree_has_live_session is NAME-keyed, so a session resident in the
+# worktree under a different name is invisible to it; node_cwd_has_live_session
+# is the cwd-keyed complement that must catch it instead.
+#
+# NOTE on what this proves: the harness's fake `claude` (installed by
+# sweep_fake_claude_sessions_by_name, see its header comment above) ignores any
+# --cwd argument and returns the full payload unconditionally — it does not
+# emulate the daemon's own --cwd filtering. So this test proves the
+# SKIP_MERGED_LIVE_SESSION_CWD gate is WIRED (dispatch-sweep calls
+# node_cwd_has_live_session and reacts correctly to a non-empty result), not
+# that the underlying --cwd filter itself is correct. That filter's semantics
+# are covered separately in test-lib-claude-agents.sh (see :290 and :1537-1595).
+echo "Test: Step 3 skips merged+in-sync worktree when a live session's cwd matches but its name does not"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/72-live-merged-cwd"
+sweep_register_wt "$WT_PATH" "72-live-merged-cwd"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"state":"closed","merged_at":"2024-01-01T00:00:00Z","number":301,"created_at":"2024-01-01T00:00:00Z","title":"PR 301"}]' \
+  > "$STUB_DIR/pr-state-72-live-merged-cwd.json"
+# Register a live session whose NAME does not match the worktree's basename —
+# worktree_has_live_session (name-keyed) sees nothing; node_cwd_has_live_session
+# must be the one that blocks the reap.
+sweep_fake_claude_sessions_by_name "some-human-session=sess-live-cwd-72"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-live-merged-cwd sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -q "worktree-remove:$WT_PATH"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 must NOT remove a worktree with a cwd-resident live session"
+  echo "    calls: $calls"
+else
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 did not remove the cwd-live-session worktree"
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_LIVE_SESSION_CWD: '$WT_PATH' branch=72-live-merged-cwd pr=#301" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_MERGED_LIVE_SESSION_CWD log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_MERGED_LIVE_SESSION_CWD log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED" "$DISPATCH_SWEEP_LOG_FILE"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED must NOT appear when cwd-keyed liveness blocks the reap"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+else
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED absent"
+fi
+sweep_teardown
+
 # --- Test 16: Step 3 happy path — merged+in-sync with no live session is removed
 
 echo "Test: Step 3 removes merged+in-sync worktree when no live session matches its basename"
@@ -929,6 +985,60 @@ if grep -q "SKIP_CLOSED_LIVE_SESSION: '$WT_PATH' branch=92-closed-live issue=#92
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_LIVE_SESSION log line present"
   echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test R3-cwd: closed-issue worktree with a NAME-MISMATCHED live session ---
+# worktree_has_live_session is NAME-keyed, so a session resident in the
+# worktree under a different name is invisible to it; node_cwd_has_live_session
+# is the cwd-keyed complement that must catch it instead.
+#
+# NOTE on what this proves: the harness's fake `claude` (installed by
+# sweep_fake_claude_sessions_by_name, see its header comment above) ignores any
+# --cwd argument and returns the full payload unconditionally — it does not
+# emulate the daemon's own --cwd filtering. So this test proves the
+# SKIP_CLOSED_LIVE_SESSION_CWD gate is WIRED (dispatch-sweep calls
+# node_cwd_has_live_session and reacts correctly to a non-empty result), not
+# that the underlying --cwd filter itself is correct. That filter's semantics
+# are covered separately in test-lib-claude-agents.sh (see :290 and :1537-1595).
+echo "Test: closed-issue worktree with a cwd-resident, name-mismatched live session is skipped (SKIP_CLOSED_LIVE_SESSION_CWD)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/93-closed-live-cwd"
+sweep_register_wt "$WT_PATH" "93-closed-live-cwd"
+# No pr-state fixture — stub returns '[]' by default, sending this to the issue path.
+echo "CLOSED" > "$STUB_DIR/issue-state-93.txt"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+# Register a live session whose NAME does not match the worktree's basename —
+# worktree_has_live_session (name-keyed) sees nothing; node_cwd_has_live_session
+# must be the one that blocks the reap.
+sweep_fake_claude_sessions_by_name "some-human-session=sess-live-cwd-93"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-live-cwd sweep exits 0" "0" "$rc"
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if ! echo "$calls" | grep -q "worktree-remove"; then
+  PASS=$((PASS + 1)); echo "  PASS: closed cwd-live-session worktree not removed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: closed cwd-live-session worktree not removed"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_CLOSED_LIVE_SESSION_CWD: '$WT_PATH' branch=93-closed-live-cwd issue=#93" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_CLOSED_LIVE_SESSION_CWD log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_CLOSED_LIVE_SESSION_CWD log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_CLOSED_ISSUE" "$DISPATCH_SWEEP_LOG_FILE"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_CLOSED_ISSUE must NOT appear when cwd-keyed liveness blocks the reap"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+else
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_CLOSED_ISSUE absent"
 fi
 sweep_teardown
 

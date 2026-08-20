@@ -73,6 +73,59 @@ export const PHASES: readonly Phase[] = [
 ];
 
 /**
+ * The wider dispatch phase vocabulary: every `PHASES` member plus the two
+ * orthogonal interrupt names a dispatch driver prints as a phase — `fix` (the
+ * CI-fix interrupt, carried in `execution.fix`) and `conflict` (the
+ * merge-conflict interrupt, carried in `execution.conflict`). Neither is a
+ * `Phase` member by deliberate design (see `Phase` above), but both name a real
+ * pass a lane runs, and `execution.attempts` is ALREADY keyed by exactly this
+ * wider set — see `scripts/apply-conflict-state.ts`'s `CONFLICT_ATTEMPTS_KEY`.
+ *
+ * `LanePass.phase` is validated against this rather than against `PHASES`
+ * because `fix` and `conflict` are REAL awaited rungs, not merely printable
+ * names: `graph-select-target`'s `sensor_gate` emits both as the selected phase,
+ * `dispatch-ladder-advance` passes that through, and `dispatch-ladder-await` is
+ * then invoked with it as the from-phase.
+ *
+ * THE RULE FOR A WRITER: stamp the rung the ladder awaited at. The reader's
+ * probe is `.execution.lane_pass.phase == "$FROM_PHASE"`, so nothing else can
+ * match. That is NOT always the node's persisted `phase`, and the two entries
+ * into `dispatch-conflict` are exactly where they diverge:
+ *
+ * - provision exit 11 (`execution.conflict` null) — advance reports the node's
+ *   own ladder phase as the from-phase, so the node's `phase` IS the rung.
+ * - the router's conflict interrupt (`execution.conflict` non-null) — the
+ *   selector emits `conflict`, so the rung is `conflict`, NOT the node's phase.
+ *
+ * `dispatch-conflict` SKILL 7b stamps the node's persisted `phase` on both, so
+ * it is right on the first and wrong on the second; qa-fix's auto-fix lane
+ * stamps the literal `qa`, which is right because its front door already gated
+ * on `phase == qa`. The `dispatch-conflict` mismatch is currently UNREACHABLE
+ * rather than fixed: on any rung that is not a `Phase` member the reader's
+ * phase probe runs first and asks `.phase != "conflict"`, which is true for
+ * every node, so it returns `advanced` before the lane-pass probe is consulted.
+ * That vacuous-`advanced` defect is filed separately; when it is fixed, this
+ * writer must start stamping the rung. Do not "simplify" this set down to
+ * `PHASES` in the meantime — that would break the fix rather than the bug.
+ */
+export const DISPATCH_PHASE_NAMES: readonly string[] = [...PHASES, "fix", "conflict"];
+
+/**
+ * The closed set of lanes that may stamp `execution.lane_pass` — the lanes that
+ * complete a pass by pushing to the node's branch and writing job-dir markers
+ * without moving the node's `phase`, so a successful pass is otherwise
+ * indistinguishable from a stall.
+ *
+ * `fix-checks` is listed here as vocabulary before it has a writer: the
+ * constant is the one place the lane names are declared, and the ladder reader
+ * accepts any member, so listing it now costs nothing and keeps the set from
+ * being re-spelled per lane.
+ */
+export type LanePassLane = "conflict" | "qa-fix" | "fix-checks";
+
+export const LANE_PASS_LANES: readonly LanePassLane[] = ["conflict", "qa-fix", "fix-checks"];
+
+/**
  * What kind of office-hours attention a parked node needs, keyed to the
  * criterion actually used to backfill this field:
  *
@@ -123,22 +176,21 @@ export interface ToolingGoal {
 }
 
 /**
- * A user-authored attention injection. Exactly one of `boost` / `override` is
- * non-null (authored YAML supplies one key); the other is `null`.
+ * A user-authored attention injection: a SPARSE per-tier map of boost values.
  *
- *  - `boost` adds `(self, boost)` to this node's outgoing source set — a
- *    RELATIVE claim that survives upstream re-weighting. Must be finite and
- *    `> 0` (a zero boost is meaningless; use `override: 0` to explicitly zero a
- *    branch).
- *  - `override` REPLACES this node's outgoing set with `{(self, override)}` —
- *    an ABSOLUTE cap on this node's own branch. Must be finite and `>= 0`.
- *  - `tier` is the per-tier boost NAMESPACE tag: the tier whose scale the value
- *    was chosen in — NOT the node's tier (that is derived by `ownTier`, and the
- *    effective tier is derived by `resolveAttention`). Defaults to 1 when
- *    absent, so every pre-tier boost is implicitly a tier-1 boost. Rule 20 in
- *    `validateGraph` requires it to equal the node's OWN tier, which is what
- *    forces an author to re-select a boost value when a node's tier changes:
- *    a value meaningful on the tier-1 scale means nothing on the tier-2 scale.
+ *  - `boosts` maps a tier key (the decimal strings `"1"`, `"2"`, `"3"` — the
+ *    members of `TIERS`) to the boost the author chose ON THAT TIER'S SCALE.
+ *    Each value must be finite and `> 0`. Namespacing by tier is what makes a
+ *    value meaningful: a magnitude picked on the tier-1 scale says nothing on
+ *    the tier-2 scale, so a node claiming attention in two tiers states each
+ *    claim separately rather than carrying one value plus a namespace tag.
+ *  - Sparseness is load-bearing. An ABSENT tier key means "this node makes no
+ *    claim in that tier" and must stay distinguishable from an authored lowest
+ *    value. Never write a `0` into the stored map to stand for an unauthored
+ *    tier — treating a missing tier as 0 is a RESOLVER-time convention, not a
+ *    storage-time one.
+ *  - A plain object, never a `Map`: nodes are serialized with `yaml.stringify`
+ *    (`src/store.ts`) and re-serialized to JSON into the office-hours seed.
  *
  * Valid only on goal-layer kinds (those whose kind node sets
  * `attributes.goal_layer: true`) — enforced by `validateGraph`, not here. The
@@ -146,10 +198,8 @@ export interface ToolingGoal {
  * in frontmatter.
  */
 export interface Attention {
-  boost: number | null; // finite, > 0 when present
-  override: number | null; // finite, >= 0 when present
+  boosts: Record<string, number>; // tier key ("1"|"2"|"3") -> finite value > 0; sparse
   rationale: string; // required, non-empty
-  tier: number; // 1 | 2 | 3; the tier whose scale the value was chosen in (default 1)
 }
 
 // --- Node ------------------------------------------------------------------
@@ -332,46 +382,104 @@ function validateToolingGoals(value: unknown, field: string): ToolingGoal[] {
   });
 }
 
+/** The legal tier keys of an `attention.boosts` map, as decimal strings. */
+const TIER_KEYS: readonly string[] = TIERS.map((t) => String(t));
+
+/**
+ * Read a legacy `tier:` namespace tag, defaulting to `"1"` when absent — every
+ * boost authored before the tier axis existed was chosen on the tier-1 scale.
+ * Accepts the number or the string form (YAML scalar keys/values arrive as
+ * either depending on the parse path).
+ */
+function legacyTierKey(value: unknown, field: string): string {
+  if (value == null) return String(DEFAULT_TIER);
+  const key = typeof value === "number" ? String(value) : value;
+  if (typeof key !== "string" || !TIER_KEYS.includes(key)) {
+    throw new IntentionSchemaError(
+      `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value)}`,
+    );
+  }
+  return key;
+}
+
+function requirePositiveBoost(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new IntentionSchemaError(`Expected finite number for ${field}`);
+  }
+  if (value <= 0) {
+    throw new IntentionSchemaError(`${field} must be > 0, got ${value}`);
+  }
+  return value;
+}
+
 function validateAttention(value: unknown, field: string): Attention {
   if (!isPlainObject(value)) {
     throw new IntentionSchemaError(`Expected object for ${field}, got ${typeof value}`);
   }
 
-  const hasBoost = value.boost != null;
-  const hasOverride = value.override != null;
-  if (hasBoost && hasOverride) {
-    throw new IntentionSchemaError(
-      `${field} must set exactly one of boost/override, not both`,
-    );
-  }
-  if (!hasBoost && !hasOverride) {
-    throw new IntentionSchemaError(
-      `${field} must set exactly one of boost/override, got neither`,
-    );
-  }
+  const boosts: Record<string, number> = {};
 
-  let boost: number | null = null;
-  let override: number | null = null;
-  if (hasBoost) {
-    if (typeof value.boost !== "number" || !Number.isFinite(value.boost)) {
-      throw new IntentionSchemaError(`Expected finite number for ${field}.boost`);
-    }
-    if (value.boost <= 0) {
+  if (value.boosts != null) {
+    // Canonical form. YAML integer keys reach us as JS string keys on a plain
+    // object, but a JSON/JS caller may hand us number keys — normalize both.
+    if (!isPlainObject(value.boosts)) {
       throw new IntentionSchemaError(
-        `${field}.boost must be > 0, got ${value.boost} (use override: 0 to explicitly zero a branch)`,
+        `Expected object for ${field}.boosts, got ${typeof value.boosts}`,
       );
     }
-    boost = value.boost;
-  } else {
+    for (const [rawKey, rawValue] of Object.entries(value.boosts)) {
+      const key = String(rawKey);
+      if (!TIER_KEYS.includes(key)) {
+        throw new IntentionSchemaError(
+          `${field}.boosts key must be one of ${TIER_KEYS.join(", ")}, got ${JSON.stringify(rawKey)}`,
+        );
+      }
+      boosts[key] = requirePositiveBoost(rawValue, `${field}.boosts[${key}]`);
+    }
+  } else if (value.boost != null) {
+    // LEGACY compatibility sugar, owned by
+    // tactic-attention-per-tier-boost-migration: `boost: X` with an optional
+    // `tier: T` namespace tag becomes `{ "T": X }` (tier "1" when untagged).
+    // Required, not optional cleanup — the live intentions/ store still has 91
+    // nodes on this form. Delete this branch once those node files are
+    // rewritten to the canonical `boosts:` map.
+    const key = legacyTierKey(value.tier, field);
+    boosts[key] = requirePositiveBoost(value.boost, `${field}.boost`);
+  } else if (value.override != null) {
+    // LEGACY compatibility sugar, owned by
+    // tactic-attention-per-tier-boost-migration: the old branch-cap semantics
+    // of `override` are gone; this is now purely a shape mapping. `override: X`
+    // with optional `tier: T` becomes `{ "T": X }`. Required, not optional
+    // cleanup — one live node is still on `override: 60`. Delete this branch
+    // with the `boost:` branch above.
+    //
+    // `override: 0` — the old "zero this branch" spelling — is REJECTED, not
+    // mapped to the empty map. Accepting it would make the read-accepted and
+    // write-emitted shapes disagree: `validateNode` would yield
+    // `{boosts: {}, rationale}`, `writeNode` serializes exactly that
+    // (`stringify(validated)`), and re-reading that file hits the empty-map
+    // rejection below — so any write that round-trips the node (read-sensors'
+    // reading write-back, write-node, graph-commit, the boost scripts) would
+    // permanently corrupt it into a file `listNodes` can only warn about and
+    // skip, silently dropping the node (and any `blocked_by` gate it holds)
+    // out of the graph. Rejecting at parse time keeps the failure loud and at
+    // the authoring seam.
+    const key = legacyTierKey(value.tier, field);
     if (typeof value.override !== "number" || !Number.isFinite(value.override)) {
       throw new IntentionSchemaError(`Expected finite number for ${field}.override`);
     }
-    if (value.override < 0) {
+    if (value.override <= 0) {
       throw new IntentionSchemaError(
-        `${field}.override must be >= 0, got ${value.override}`,
+        `${field}.override must be > 0, got ${value.override} — the legacy "zero this branch" spelling has no meaning in the per-tier boosts map; drop the ${field} block entirely to claim nothing`,
       );
     }
-    override = value.override;
+    boosts[key] = value.override;
+  }
+
+  if (Object.keys(boosts).length === 0) {
+    throw new IntentionSchemaError(
+      `${field} must claim at least one tier in ${field}.boosts — an attention block with no boosts says nothing; drop the block instead`,
+    );
   }
 
   const rationale = requireString(value.rationale, `${field}.rationale`);
@@ -379,20 +487,7 @@ function validateAttention(value: unknown, field: string): Attention {
     throw new IntentionSchemaError(`${field}.rationale must be a non-empty string`);
   }
 
-  // Absent/null defaults to 1: every boost authored before the tier axis existed
-  // was chosen on the tier-1 scale, so the default keeps the field additive over
-  // the whole existing store with no node-file edits.
-  let tier = 1;
-  if (value.tier != null) {
-    if (typeof value.tier !== "number" || !Number.isInteger(value.tier) || !TIERS.includes(value.tier)) {
-      throw new IntentionSchemaError(
-        `${field}.tier must be one of ${TIERS.join(", ")}, got ${JSON.stringify(value.tier)}`,
-      );
-    }
-    tier = value.tier;
-  }
-
-  return { boost, override, rationale, tier };
+  return { boosts, rationale };
 }
 
 /**
@@ -408,8 +503,8 @@ function validateAttention(value: unknown, field: string): Attention {
  *    true` — the marks that mean "this is a defect/security fix", which sit in
  *    tier 2 without the author naming a tier at all.
  *
- * One implementation, shared by `attention.ts`'s effective-tier fixpoint and by
- * `validateGraph`'s rule 20.
+ * One implementation, used by `attention.ts`'s effective-tier fixpoint. (It was
+ * also the basis of the retired rule 20; see the `validateGraph` rule catalog.)
  */
 export function ownTier(node: IntentionNode): number {
   const attributes = isPlainObject(node.attributes) ? node.attributes : {};
@@ -417,6 +512,29 @@ export function ownTier(node: IntentionNode): number {
     attributes.tier === 2 || attributes.tier === 3 ? attributes.tier : 0;
   const semantic = attributes.bug_fix === true || attributes.security === true ? 2 : 0;
   return Math.max(explicit, semantic, DEFAULT_TIER);
+}
+
+/**
+ * Whether a node is an EVALUATION FINDING LEDGER ENTRY — a tactic carrying
+ * `attributes.ledger_entry: true`, minted by
+ * `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`.
+ *
+ * A ledger entry is a durable record of a recurring evaluation finding: its
+ * `attributes.measured_impact` carries the recurrence count and impact figures
+ * that inform ranking. Retirement is `phase: "done"` WITH those figures intact,
+ * so a later recurrence resumes the count instead of restarting it — which is
+ * only true if a retired entry is never deleted. Every consumer that treats
+ * `phase: "done"` as "finished, delete or drop it" must therefore exempt these:
+ * the owed-prune census (`scripts/graph-census-debt.ts`) and `rsi.ts`'s §6 task
+ * plan both call this. `intentions/kind-tactic.md`'s `ledger_entry` section is
+ * the normative contract.
+ *
+ * One implementation rather than a predicate re-spelled at each call site: a
+ * consumer that spells it differently silently un-exempts the ledger.
+ */
+export function isLedgerEntry(node: IntentionNode): boolean {
+  const attributes = isPlainObject(node.attributes) ? node.attributes : {};
+  return node.kind === "tactic" && attributes.ledger_entry === true;
 }
 
 // --- Dispatch-state structured fields --------------------------------------
@@ -495,6 +613,37 @@ export interface ConflictState {
 }
 
 /**
+ * A COMPLETED lane pass, stamped by the lane that finished it. The durable
+ * graph-state answer to "did that pass actually run?".
+ *
+ * The dispatch ladder driver (`dispatch-ladder-await`) decides whether a phase
+ * pass completed by reading `origin/main` graph state. Two lanes — the
+ * merge-conflict lane and qa-fix's auto-fix "fixing pass" — complete their work
+ * by pushing to the node's branch and writing job-dir markers; neither moves
+ * the node's `phase`. Without a stamp, a SUCCESSFUL pass by either lane can
+ * only ever read as `stalled`. So the completing lane writes this and the
+ * ladder compares it against the launch window.
+ *
+ *  - `at` is the completion instant, `YYYY-MM-DDTHH:MM:SSZ` (see
+ *    `requireTimestampString` for why the format is load-bearing).
+ *  - `lane` is which lane completed the pass, one of `LANE_PASS_LANES`.
+ *  - `phase` is the dispatch phase the pass ran in, one of
+ *    `DISPATCH_PHASE_NAMES` — the wider vocabulary, not `PHASES`.
+ *  - `sha` is the sha the lane pushed, when it pushed one; null otherwise.
+ *    Optional at the type level for the same additive-only reason
+ *    `Execution.conflict` itself is; `validateLanePass` always populates it.
+ *
+ * A single object, not a list: each pass OVERWRITES the previous stamp. It is
+ * bounded, and no consumer reads history, so it never needs clearing.
+ */
+export interface LanePass {
+  at: string;
+  lane: string;
+  phase: string;
+  sha?: string | null;
+}
+
+/**
  * Merge-verification evidence recorded on `Execution` at the done-transition,
  * so a merge-verification gate need not trust `execution.pr` alone. There are
  * two independent sufficient proofs:
@@ -540,6 +689,13 @@ export interface Execution {
    */
   conflict?: ConflictState | null;
   completion?: Completion | null;
+  /**
+   * Optional (not just nullable) at the type level: existing `Execution`
+   * object literals across the codebase predate this field and are out of
+   * scope for this additive-only unit. `validateExecution` always populates
+   * it (to a validated object or `null`) on any value it returns.
+   */
+  lane_pass?: LanePass | null;
 }
 
 /** A first-class parking record: why a node is in office hours and since when. */
@@ -593,6 +749,33 @@ function requireDateString(value: unknown, field: string): string {
 function optionalDateString(value: unknown, field: string): string | null {
   if (value == null) return null;
   return requireDateString(value, field);
+}
+
+/**
+ * A fixed-width UTC second-precision timestamp, `YYYY-MM-DDTHH:MM:SSZ`. Shape
+ * only, like `requireDateString` — semantic calendar validity is not this
+ * layer's job.
+ *
+ * The repo's date-only convention is unusable for the launch-window comparison
+ * `LanePass` exists for: a stamp written this morning would qualify for every
+ * launch for the rest of the day (the accumulation trap). Fixed-width second
+ * precision with a literal `Z` is LOAD-BEARING — it makes lexicographic order
+ * equal chronological order, which is what lets the reader compare with a plain
+ * jq `>=` and no date arithmetic.
+ *
+ * A writer must therefore truncate `toISOString()` output with
+ * `.replace(/\.\d{3}Z$/, "Z")`. Left in, the milliseconds are a same-second
+ * landmine: `"…:06.789Z" >= "…:06Z"` is FALSE, because `.` is 0x2E and `Z` is
+ * 0x5A.
+ */
+function requireTimestampString(value: unknown, field: string): string {
+  const s = requireString(value, field);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(s)) {
+    throw new IntentionSchemaError(
+      `Expected YYYY-MM-DDTHH:MM:SSZ timestamp string for ${field}, got "${s}"`,
+    );
+  }
+  return s;
 }
 
 function validateAttempts(value: unknown, field: string): Record<string, number> {
@@ -680,6 +863,29 @@ function validateConflictState(value: unknown, field: string): ConflictState | n
 }
 
 /**
+ * Nullable `LanePass` object: second-precision `at`, `lane` from
+ * `LANE_PASS_LANES`, `phase` from `DISPATCH_PHASE_NAMES` (the wider dispatch
+ * vocabulary — `fix` and `conflict` are members, unlike in `PHASES`), and a
+ * nullable `sha`. Mirrors `validateConflictState`.
+ *
+ * Both vocabularies are closed on purpose: a stamp naming a lane or phase the
+ * reader does not recognize would be silently rejected at compare time and read
+ * as a stall, which is the exact failure this field exists to remove.
+ */
+function validateLanePass(value: unknown, field: string): LanePass | null {
+  if (value == null) return null;
+  if (!isPlainObject(value)) {
+    throw new IntentionSchemaError(`Expected object or null for ${field}, got ${typeof value}`);
+  }
+  return {
+    at: requireTimestampString(value.at, `${field}.at`),
+    lane: requireOneOf(value.lane, LANE_PASS_LANES, `${field}.lane`),
+    phase: requireOneOf(value.phase, DISPATCH_PHASE_NAMES, `${field}.phase`),
+    sha: optionalString(value.sha, `${field}.sha`),
+  };
+}
+
+/**
  * Nullable `Completion` object: nullable strings `mergedAt`, `mergeCommitSha`,
  * `graphCommitSha`. Deliberately uses `optionalString` (not
  * `optionalDateString`) for `mergedAt` — GitHub's `merged_at` is a full
@@ -711,6 +917,7 @@ function validateExecution(value: unknown, field: string): Execution {
     fix: validateFixState(value.fix, `${field}.fix`),
     conflict: validateConflictState(value.conflict, `${field}.conflict`),
     completion: validateCompletion(value.completion, `${field}.completion`),
+    lane_pass: validateLanePass(value.lane_pass, `${field}.lane_pass`),
   };
 }
 
@@ -1106,28 +1313,69 @@ function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
 }
 
 /**
- * Rule 20: the per-tier boost namespace. A non-null `attention` must tag the
- * tier its value was chosen in, and that tag must equal the node's OWN tier
- * (`ownTier`) — never its effective/inherited tier. An effective-tier check
- * would cascade: marking one ancestor tier 2 would instantly invalidate every
- * boosted descendant, none of whose authors did anything wrong. Checking the
- * node's own tier localizes the obligation to the node whose tier actually
- * changed.
+ * The four string-valued fields every `attributes.measured_impact` entry
+ * carries. `value` (a finite number) and `measured` (a `YYYY-MM-DD` date) are
+ * checked separately because their types differ.
  */
-function checkAttentionTierNamespace(node: IntentionNode, problems: string[]): void {
-  if (node.attention === null) return;
-  const own = ownTier(node);
-  if (node.attention.tier !== own) {
+const MEASURED_IMPACT_STRING_FIELDS: readonly string[] = [
+  "metric",
+  "unit",
+  "window",
+  "sensor",
+];
+
+/**
+ * Rule 21: `attributes.measured_impact` shape — an array of SUMMARY measurement
+ * records `{metric, value, unit, window, sensor, measured}`. See
+ * `intentions/kind-tactic.md`'s `measured_impact` section for what each field
+ * means and why the key never orders anything.
+ *
+ * `attributes` is otherwise a free-form record, so a malformed measurement would
+ * reach every consumer unchallenged. This key drives decisions — it is the
+ * evidence a delegated attention write or a `bug_fix` classification cites — so
+ * it gets a shape rule, on the same reasoning as rule 19's tier marks.
+ */
+function checkMeasuredImpactShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.measured_impact;
+  if (raw === undefined) return;
+  if (!Array.isArray(raw)) {
     problems.push(
-      `${node.id}: attention.tier is ${node.attention.tier} but the node's own tier is ${own} — ` +
-        `a boost value is only meaningful within one tier's scale, so pick a fresh boost/override ` +
-        `value on the tier-${own} scale and set attention.tier: ${own} to match`,
+      `${node.id}: attributes.measured_impact must be an array of measurement records, got ${raw === null ? "null" : typeof raw}`,
     );
+    return;
+  }
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const at = `${node.id}: attributes.measured_impact[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${at} must be a {metric, value, unit, window, sensor, measured} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const field of MEASURED_IMPACT_STRING_FIELDS) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(
+          `${at}.${field} must be a non-empty string, got ${JSON.stringify(value)}`,
+        );
+      }
+    }
+    const value = entry.value;
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      problems.push(`${at}.value must be a finite number, got ${JSON.stringify(value)}`);
+    }
+    const measured = entry.measured;
+    if (typeof measured !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(measured)) {
+      problems.push(
+        `${at}.measured must be a YYYY-MM-DD date, got ${JSON.stringify(measured)}`,
+      );
+    }
   }
 }
 
 /**
- * Rule 21: WAIT-node shape. A WAIT node is a `kind: "tactic"` node carrying
+ * Rule 22: WAIT-node shape. A WAIT node is a `kind: "tactic"` node carrying
  * `attributes.wait_for` — the id of the source tactic it holds (via that
  * source's `blocked_by` naming the WAIT). This check fires on exactly that
  * signature (`kind === "tactic"` AND `wait_for` present) and is otherwise
@@ -1357,15 +1605,21 @@ function checkBlockedByCycles(
  *      when present, is the number 2 or 3. An explicit `attributes.tier: 1` is
  *      rejected — 1 is the implicit default every unmarked node already
  *      carries, so authoring it would give one state two spellings.
- *  20. Per-tier boost namespace: a node with non-null `attention` must set
- *      `attention.tier` equal to its OWN tier (`ownTier` — its own marks, NOT
- *      the effective tier it inherits down parent/serves). A boost value is
- *      only meaningful within one tier's scale, so when a node's tier changes
- *      the author must re-select the value in the new tier's namespace. The
- *      check deliberately uses the own tier, not the effective one: an
- *      effective-tier check would cascade, invalidating every boosted
- *      descendant the moment any ancestor gained a mark.
- *  21. WAIT-node shape: a `kind: "tactic"` node carrying `attributes.wait_for`
+ *  20. RETIRED — was the per-tier boost namespace check, retired along with the
+ *      `attention.tier` namespace tag when attention became a per-tier boost
+ *      map. Rule numbers are cross-referenced from node bodies; 20 is burned,
+ *      so the next new rule takes 21.
+ *  21. `attributes.measured_impact`, when present, is an array of summary
+ *      measurement records `{metric, value, unit, window, sensor, measured}` —
+ *      `metric`/`unit`/`window`/`sensor` non-empty strings, `value` a finite
+ *      number, `measured` a `YYYY-MM-DD` date. `attributes` is otherwise
+ *      free-form, so without this rule a malformed measurement would reach
+ *      every consumer unchallenged; the key is cited evidence for attention
+ *      and classification writes, so it earns a shape rule like rule 19's tier
+ *      marks. The rule checks shape only — it never reads a value, because a
+ *      measurement is queryable input to a ranking act, never an ordering
+ *      authority of its own.
+ *  22. WAIT-node shape: a `kind: "tactic"` node carrying `attributes.wait_for`
  *      (the id of the source tactic it holds) is a WAIT node, and must be
  *      completely formed as one. Its `wait_for` is a non-empty string and its
  *      own id equals `waitIdFor(wait_for)` — that canonical-id tie is what
@@ -1432,9 +1686,9 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkTierDominance(node, mainHealthPresent, problems);
     // Rule 19: tier marks are well-shaped.
     checkTierMarkShape(node, problems);
-    // Rule 20: attention.tier tags the node's own tier namespace.
-    checkAttentionTierNamespace(node, problems);
-    // Rule 21: a WAIT node's id, calendar predicate and hold fields are well-shaped.
+    // Rule 21: measured_impact entries are well-shaped summary records.
+    checkMeasuredImpactShape(node, problems);
+    // Rule 22: a WAIT node's id, calendar predicate and hold fields are well-shaped.
     checkWaitNodeShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
@@ -1506,6 +1760,20 @@ export function mentionsRef(
  * form `"<ref>|<referencedBy>"`) so the CI check does not retroactively break
  * main; it should not grow going forward.
  *
+ * `batchIds` is the set of node ids the write batch currently in flight is
+ * committed to creating but has not landed yet. A batch that writes its members
+ * one graph-commit at a time (the evaluation ledger writer is the motivating
+ * case) cannot land a member naming a sibling of the same batch unless the
+ * members are hand-ordered: when the first member is validated the sibling sits
+ * in neither the store nor the deleted set, so it classifies `missing`.
+ * Resolving against the batch as well as the store removes that ordering
+ * constraint.
+ *
+ * `batchIds` is matched by EXACT id membership only — never by shape, prefix, or
+ * family — so declaring a batch can never admit an id the batch does not
+ * actually contain, and the default empty set leaves this check exactly as
+ * strict as it was.
+ *
  * Throws a single IntentionSchemaError listing ALL problems found, matching
  * `validateGraph`'s collect-then-throw contract.
  */
@@ -1514,15 +1782,22 @@ export function validateGraphProseRefs(
   bodies: Map<string, string>,
   deletedIds: string[],
   baseline: Set<string>,
+  batchIds: ReadonlySet<string> = new Set<string>(),
 ): void {
   const storeIds = new Set(nodes.map((n) => n.id));
   const deleted = new Set(deletedIds);
   // Vocabulary and kind prefixes are built the SAME way the digest's
   // tableDanglingRefs builds them (current store ids ∪ deleted ids; prefixes
-  // derived from the vocabulary, never a hardcoded kind list).
-  const vocab = new Set<string>([...storeIds, ...deleted]);
+  // derived from the vocabulary, never a hardcoded kind list), plus the ids the
+  // in-flight batch declares, which are known ids that simply have not landed
+  // yet. Adding them to the vocabulary only ever makes the extractor recognize
+  // MORE tokens as references; the exemption below is what makes them resolve.
+  const vocab = new Set<string>([...storeIds, ...deleted, ...batchIds]);
   const prefixes = new Set([...vocab].map((id) => id.split("-")[0]).filter((p) => p.length > 0));
   const matchers = buildIdRefMatchers(prefixes);
+  // Named in the violation message only when a batch was actually declared, so
+  // an undeclared run does not report a clause that could not have applied.
+  const batchClause = batchIds.size > 0 ? ", not minted by the batch under write" : "";
 
   const problems: string[] = [];
   for (const node of nodes) {
@@ -1542,11 +1817,12 @@ export function validateGraphProseRefs(
     }
     for (const ref of refs) {
       if (classifyRef(ref, storeIds, deleted) !== "missing") continue;
+      if (batchIds.has(ref)) continue; // minted by the batch under write
       if (mentionsRef(nodes, bodies, ref, node.id)) continue; // planned forward reference
       if (baseline.has(`${ref}|${node.id}`)) continue; // grandfathered
       problems.push(
         `${node.id}: prose reference \`${ref}\` does not resolve to a node ` +
-          `(not planned by any open tactic, not baselined)`,
+          `(not planned by any open tactic${batchClause}, not baselined)`,
       );
     }
   }

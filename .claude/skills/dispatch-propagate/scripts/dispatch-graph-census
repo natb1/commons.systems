@@ -126,7 +126,7 @@ jq -c '.node' <<<"$OUT" > "$NODE_JSON_FILE"
 
 # write-node.ts is the single validation gate; it lands frontmatter only.
 MUTATED=1
-if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$NODE_JSON_FILE") >/dev/null; then
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$REPO_ROOT/intentions" --file "$NODE_JSON_FILE") >/dev/null; then
   echo "dispatch-graph-census: write-node failed for $NODE_ID" >&2; exit 1
 fi
 

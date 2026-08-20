@@ -111,7 +111,7 @@ reconciliation — so the serving strategy's substance must ride in `args`
 for the Workflow to judge draft-vs-soft-frozen disposition and reconcile the
 node against it.
 
-**Invoke the Workflow tool on `.claude/workflows/align-tactics.js`**, passing
+**Invoke the Workflow tool on the registered `align-tactics` workflow**, passing
 `args` (this skill is a sanctioned caller — no `ultracode` keyword). It
 returns the single target tactic with its authored `body_markdown` merged
 in, plus any `plans`/`parks`; the `tactics` array holds exactly the one

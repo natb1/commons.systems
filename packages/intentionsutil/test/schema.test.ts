@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
+import { readNode, writeNode } from "../src/store.js";
 import { WAIT_MAX_HORIZON_MS } from "../src/waits.js";
 
 describe("validateNode", () => {
@@ -26,16 +30,13 @@ describe("validateNode", () => {
         is_proxy: true,
       },
       attention: {
-        boost: 2,
-        override: null,
+        boosts: { "1": 2 },
         rationale: "Draws attention now.",
       },
       attributes: { source: "github:natb1/commons.systems#1" },
     };
     expect(validateNode(input)).toEqual({
       ...input,
-      // attention.tier defaults to 1 when the author names no tier.
-      attention: { ...input.attention, tier: 1 },
       // Graph-native dispatch fields default when absent.
       phase: null,
       execution: null,
@@ -83,6 +84,7 @@ describe("validateNode", () => {
       fix: null,
       conflict: null,
       completion: null,
+      lane_pass: null,
     });
     expect(result.validates).toEqual(["strategy-1"]);
     expect(result.blocked_by).toEqual(["tactic-2"]);
@@ -118,6 +120,7 @@ describe("validateNode", () => {
       fix: null,
       conflict: null,
       completion: null,
+      lane_pass: null,
     });
   });
 
@@ -290,6 +293,165 @@ describe("validateNode", () => {
         },
       }),
     ).toThrow(IntentionSchemaError);
+  });
+
+  // --- execution.lane_pass -------------------------------------------------
+  //
+  // The completed-pass stamp the dispatch ladder reads to tell a successful
+  // conflict/qa-fix pass (which never moves `phase`) from a stall.
+
+  /** An `execution` block carrying `lane_pass`, for the round-trip tests below. */
+  function nodeWithLanePass(id: string, lanePass: unknown): unknown {
+    return {
+      id,
+      kind: "tactic",
+      statement: "Execution with a lane-pass stamp.",
+      owner: "ai",
+      status: "raw",
+      execution: {
+        branch: "b",
+        pr: 42,
+        attempts: {},
+        markers: [],
+        strategy_fingerprint: null,
+        lane_pass: lanePass,
+      },
+    };
+  }
+
+  it("round-trips a valid execution.lane_pass stamp", () => {
+    const result = validateNode(
+      nodeWithLanePass("n1-lane-pass", {
+        at: "2026-08-13T09:41:06Z",
+        lane: "conflict",
+        phase: "conflict",
+        sha: "deadbeef",
+      }),
+    );
+    expect(result.execution?.lane_pass).toEqual({
+      at: "2026-08-13T09:41:06Z",
+      lane: "conflict",
+      phase: "conflict",
+      sha: "deadbeef",
+    });
+  });
+
+  it("defaults execution.lane_pass.sha to null when absent", () => {
+    const result = validateNode(
+      nodeWithLanePass("n1-lane-pass-no-sha", {
+        at: "2026-08-13T09:41:06Z",
+        lane: "qa-fix",
+        phase: "qa",
+      }),
+    );
+    expect(result.execution?.lane_pass?.sha).toBeNull();
+  });
+
+  it("defaults execution.lane_pass to null when absent", () => {
+    const result = validateNode({
+      id: "n1-lane-pass-absent",
+      kind: "tactic",
+      statement: "Execution with no lane_pass field at all.",
+      owner: "ai",
+      status: "raw",
+      execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
+    });
+    expect(result.execution?.lane_pass).toBeNull();
+  });
+
+  // The `at` format is load-bearing: the ladder compares stamps with a plain
+  // string `>=`, so anything but fixed-width second precision ending in `Z`
+  // breaks chronological ordering. Each rejected shape below is a real way a
+  // writer drifts.
+
+  it("rejects an execution.lane_pass.at carrying milliseconds", () => {
+    // `toISOString()` straight from the clock. `"…:06.789Z" >= "…:06Z"` is
+    // false (`.` is 0x2E, `Z` is 0x5A) — a same-second landmine.
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-ms", {
+          at: "2026-08-13T09:41:06.789Z",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects a date-only execution.lane_pass.at", () => {
+    // The repo's `YYYY-MM-DD` convention: a stamp written this morning would
+    // qualify for every launch window for the rest of the day.
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-date-only", {
+          at: "2026-08-13",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an execution.lane_pass.at with no trailing Z", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-no-z", {
+          at: "2026-08-13T09:41:06",
+          lane: "conflict",
+          phase: "conflict",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an unknown execution.lane_pass.lane", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-bad-lane", {
+          at: "2026-08-13T09:41:06Z",
+          lane: "review-fix",
+          phase: "review",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("rejects an unknown execution.lane_pass.phase", () => {
+    expect(() =>
+      validateNode(
+        nodeWithLanePass("n1-lane-pass-bad-phase", {
+          at: "2026-08-13T09:41:06Z",
+          lane: "conflict",
+          phase: "shipping",
+        }),
+      ),
+    ).toThrow(IntentionSchemaError);
+  });
+
+  it("accepts the interrupt phase names fix and conflict, which PHASES excludes", () => {
+    // `lane_pass.phase` is validated against DISPATCH_PHASE_NAMES, the wider
+    // vocabulary `execution.attempts` is already keyed by.
+    for (const phase of ["fix", "conflict"]) {
+      const result = validateNode(
+        nodeWithLanePass(`n1-lane-pass-${phase}`, {
+          at: "2026-08-13T09:41:06Z",
+          lane: "conflict",
+          phase,
+        }),
+      );
+      expect(result.execution?.lane_pass?.phase).toBe(phase);
+      // ...and the node's own `phase` field still refuses them.
+      expect(() =>
+        validateNode({
+          id: "n1-phase-strict",
+          kind: "tactic",
+          statement: "s",
+          owner: "ai",
+          status: "raw",
+          phase,
+        }),
+      ).toThrow(IntentionSchemaError);
+    }
   });
 
   it("accepts a per-strategy strategy_fingerprint map", () => {
@@ -878,57 +1040,123 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
-  it("accepts an attention with only a boost", () => {
+  it("accepts the canonical sparse per-tier boosts map", () => {
     const result = validateNode({
       id: "n8a",
       kind: "strategy",
-      statement: "Boosted.",
+      statement: "Boosted in two tiers.",
+      owner: "human",
+      status: "raw",
+      attention: { boosts: { "1": 3, "2": 20 }, rationale: "urgent" },
+    });
+    // Sparse: tier 3 is absent, NOT defaulted to 0.
+    expect(result.attention).toEqual({ boosts: { "1": 3, "2": 20 }, rationale: "urgent" });
+  });
+
+  it("normalizes number boosts keys to string keys", () => {
+    const result = validateNode({
+      id: "n8a2",
+      kind: "strategy",
+      statement: "Number keys from a JS/JSON parse path.",
+      owner: "human",
+      status: "raw",
+      attention: { boosts: { 1: 3, 2: 20 }, rationale: "urgent" },
+    });
+    expect(result.attention).toEqual({ boosts: { "1": 3, "2": 20 }, rationale: "urgent" });
+  });
+
+  it("reinterprets a legacy untagged boost as a tier-1 claim", () => {
+    const result = validateNode({
+      id: "n8b",
+      kind: "strategy",
+      statement: "Legacy boost.",
       owner: "human",
       status: "raw",
       attention: { boost: 3, rationale: "urgent" },
     });
-    expect(result.attention).toEqual({ boost: 3, override: null, rationale: "urgent", tier: 1 });
+    expect(result.attention).toEqual({ boosts: { "1": 3 }, rationale: "urgent" });
   });
 
-  it("accepts an attention with only an override (including override 0)", () => {
+  it("reinterprets a legacy tier-tagged boost as a claim in that tier", () => {
     const result = validateNode({
-      id: "n8b",
+      id: "n8b2",
       kind: "strategy",
-      statement: "Zeroed branch.",
+      statement: "Legacy tagged boost.",
       owner: "human",
       status: "raw",
-      attention: { override: 0, rationale: "parked" },
+      attention: { boost: 5, tier: 2, rationale: "urgent" },
     });
-    expect(result.attention).toEqual({ boost: null, override: 0, rationale: "parked", tier: 1 });
+    expect(result.attention).toEqual({ boosts: { "2": 5 }, rationale: "urgent" });
   });
 
-  it("rejects an attention that sets both boost and override", () => {
+  it("reinterprets a legacy positive override as a plain claim in its tier", () => {
+    const result = validateNode({
+      id: "n8c",
+      kind: "strategy",
+      statement: "Legacy override.",
+      owner: "human",
+      status: "raw",
+      attention: { override: 60, tier: 3, rationale: "capped" },
+    });
+    expect(result.attention).toEqual({ boosts: { "3": 60 }, rationale: "capped" });
+  });
+
+  // `override: 0` must NOT canonicalize to `{boosts: {}}`: the empty map is not
+  // a writable shape (the next test rejects it on read), so accepting it here
+  // would mint a node that `writeNode` emits and `readNode` can no longer load.
+  it("rejects a legacy override: 0 rather than minting an unreadable empty map", () => {
     expect(() =>
       validateNode({
-        id: "n8c",
+        id: "n8c2",
         kind: "strategy",
-        statement: "Both set.",
+        statement: "Legacy zeroed branch.",
         owner: "human",
         status: "raw",
-        attention: { boost: 1, override: 2, rationale: "r" },
+        attention: { override: 0, rationale: "parked" },
       }),
-    ).toThrow(/exactly one of boost\/override/);
+    ).toThrow(/override must be > 0, got 0 — the legacy "zero this branch" spelling/);
   });
 
-  it("rejects an attention that sets neither boost nor override", () => {
+  it("rejects a negative legacy override", () => {
+    expect(() =>
+      validateNode({
+        id: "n8c3",
+        kind: "strategy",
+        statement: "Legacy negative override.",
+        owner: "human",
+        status: "raw",
+        attention: { override: -1, rationale: "parked" },
+      }),
+    ).toThrow(/override must be > 0, got -1/);
+  });
+
+  it("rejects a non-null attention whose boosts map is empty", () => {
     expect(() =>
       validateNode({
         id: "n8d",
         kind: "strategy",
-        statement: "Neither set.",
+        statement: "Empty boosts.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: {}, rationale: "r" },
+      }),
+    ).toThrow(/must claim at least one tier/);
+  });
+
+  it("rejects an attention block that claims nothing at all", () => {
+    expect(() =>
+      validateNode({
+        id: "n8d2",
+        kind: "strategy",
+        statement: "No boosts key at all.",
         owner: "human",
         status: "raw",
         attention: { rationale: "r" },
       }),
-    ).toThrow(/exactly one of boost\/override/);
+    ).toThrow(/must claim at least one tier/);
   });
 
-  it("rejects a boost of 0 (points at override: 0 for explicit zeroing)", () => {
+  it("rejects a boost value of 0", () => {
     expect(() =>
       validateNode({
         id: "n8e",
@@ -936,12 +1164,12 @@ describe("validateNode", () => {
         statement: "Zero boost.",
         owner: "human",
         status: "raw",
-        attention: { boost: 0, rationale: "r" },
+        attention: { boosts: { "1": 0 }, rationale: "r" },
       }),
-    ).toThrow(/boost must be > 0.*override: 0/);
+    ).toThrow(/boosts\[1\] must be > 0/);
   });
 
-  it("rejects a negative boost", () => {
+  it("rejects a negative boost value", () => {
     expect(() =>
       validateNode({
         id: "n8f",
@@ -949,22 +1177,48 @@ describe("validateNode", () => {
         statement: "Negative boost.",
         owner: "human",
         status: "raw",
-        attention: { boost: -1, rationale: "r" },
+        attention: { boosts: { "1": -1 }, rationale: "r" },
       }),
-    ).toThrow();
+    ).toThrow(/boosts\[1\] must be > 0/);
   });
 
-  it("rejects a negative override", () => {
+  it("rejects a non-finite boost value", () => {
+    expect(() =>
+      validateNode({
+        id: "n8g",
+        kind: "strategy",
+        statement: "Infinite boost.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: { "1": Number.POSITIVE_INFINITY }, rationale: "r" },
+      }),
+    ).toThrow(/Expected finite number for attention\.boosts\[1\]/);
+  });
+
+  it("rejects a boosts key outside the tier vocabulary", () => {
+    expect(() =>
+      validateNode({
+        id: "n8h",
+        kind: "strategy",
+        statement: "Bogus tier key.",
+        owner: "human",
+        status: "raw",
+        attention: { boosts: { "4": 3 }, rationale: "r" },
+      }),
+    ).toThrow(/boosts key must be one of 1, 2, 3/);
+  });
+
+  it("rejects a legacy tier tag outside the tier vocabulary", () => {
     expect(() =>
       validateNode({
         id: "n9a",
         kind: "strategy",
-        statement: "Negative override.",
+        statement: "Bogus legacy tier tag.",
         owner: "human",
         status: "raw",
-        attention: { override: -1, rationale: "r" },
+        attention: { boost: 3, tier: 4, rationale: "r" },
       }),
-    ).toThrow(/override must be >= 0/);
+    ).toThrow(/tier must be one of 1, 2, 3/);
   });
 
   it("rejects an attention missing a rationale", () => {
@@ -975,7 +1229,7 @@ describe("validateNode", () => {
         statement: "No rationale.",
         owner: "human",
         status: "raw",
-        attention: { boost: 1 },
+        attention: { boosts: { "1": 1 } },
       }),
     ).toThrow();
   });
@@ -988,7 +1242,7 @@ describe("validateNode", () => {
         statement: "Empty rationale.",
         owner: "human",
         status: "raw",
-        attention: { boost: 1, rationale: "" },
+        attention: { boosts: { "1": 1 }, rationale: "" },
       }),
     ).toThrow(/rationale must be a non-empty string/);
   });
@@ -1054,10 +1308,8 @@ describe("validateGraph", () => {
         serves: ["virtue-root"],
         recovers: ["delegation-1"],
         attention: {
-          boost: 3,
-          override: null,
+          boosts: { "1": 3 },
           rationale: "A live strategy that draws attention.",
-          tier: 1,
         },
       }),
       gnode({
@@ -1120,7 +1372,7 @@ describe("validateGraph", () => {
       gnode({
         id: "virtue-1",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
+        attention: { boosts: { "1": 1 }, rationale: "r" },
       }),
     ];
     expect(() => validateGraph(nodes)).toThrow(/attention is only valid on goal-layer kinds/);
@@ -1254,7 +1506,7 @@ describe("validateGraph", () => {
       gnode({
         id: "broken-2",
         kind: "virtue",
-        attention: { boost: 1, override: null, rationale: "r", tier: 1 },
+        attention: { boosts: { "1": 1 }, rationale: "r" },
       }),
       // Same-kind-parent violation: a tactic parented to a virtue.
       gnode({ id: "broken-3", kind: "tactic", parent: "virtue-root" }),
@@ -1702,10 +1954,8 @@ describe("validateGraph", () => {
     const nodes = mainHealthNodes({
       attributes: { tier: 3 },
       attention: {
-        boost: 5,
-        override: null,
+        boosts: { "3": 5 },
         rationale: "Deliberately co-dominant. ACK: main-health-dominance",
-        tier: 3,
       },
     });
     expect(() => validateGraph(nodes)).not.toThrow();
@@ -1741,17 +1991,13 @@ describe("validateGraph", () => {
   });
 
   it("Rule 18: strategy-main-health opts out of the must-hold half via attention.rationale", () => {
-    // With no tier mark its ownTier is the implicit default 1, so rule 20
-    // requires attention.tier: 1 here.
     const nodes = mainHealthNodes(
       {},
       {
         mainHealth: {
           attention: {
-            boost: 5,
-            override: null,
+            boosts: { "1": 5 },
             rationale: "Deliberately demoted. ACK: main-health-dominance",
-            tier: 1,
           },
         },
       },
@@ -1769,7 +2015,9 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  // Rules 19 & 20: tier-mark shape and the per-tier boost namespace.
+  // Rule 19: tier-mark shape. (Rule 20, the per-tier boost namespace check, is
+  // retired — attention now carries a per-tier boosts map with no namespace tag
+  // to cross-check.)
 
   /** A goal-layer kind set plus one strategy carrying the fields under test. */
   function tierNodes(partial: Partial<IntentionNode>): IntentionNode[] {
@@ -1809,30 +2057,107 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 20: rejects a tier-2 node whose attention.tier still reads 1, telling the author to re-select", () => {
+  it("accepts a tier-marked node whose boosts claim a tier other than its own", () => {
+    // Retired rule 20 would have rejected this: the node's own tier is 2 (via
+    // bug_fix) while its only claim sits in tier 1. With the per-tier map the
+    // two are independent — a node may claim attention in any tier's scale.
     const nodes = tierNodes({
       attributes: { bug_fix: true },
-      attention: { boost: 5, override: null, rationale: "hot", tier: 1 },
-    });
-    expect(() => validateGraph(nodes)).toThrow(
-      /strategy-under-test: attention\.tier is 1 but the node's own tier is 2 — .*pick a fresh boost\/override value on the tier-2 scale and set attention\.tier: 2 to match/,
-    );
-  });
-
-  it("Rule 20: accepts the same node once attention.tier matches its own tier", () => {
-    const nodes = tierNodes({
-      attributes: { bug_fix: true },
-      attention: { boost: 5, override: null, rationale: "hot", tier: 2 },
+      attention: { boosts: { "1": 5 }, rationale: "hot" },
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 20: is inert on a marked node with no attention at all", () => {
+  it("accepts a tier-marked node claiming several tiers at once", () => {
+    const nodes = tierNodes({
+      attributes: { bug_fix: true },
+      attention: { boosts: { "1": 5, "2": 40 }, rationale: "hot" },
+    });
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("accepts a marked node with no attention at all", () => {
     const nodes = tierNodes({ attributes: { bug_fix: true, security: true }, attention: null });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  // Rule 21: WAIT-node shape.
+  // Rule 21: attributes.measured_impact shape.
+
+  /** A well-formed measurement record, the base every rule-21 fixture mutates. */
+  const measurement = {
+    metric: "recurrence_count",
+    value: 4,
+    unit: "occurrences",
+    window: "7d",
+    sensor: "token-economy-sensor",
+    measured: "2026-08-12",
+  };
+
+  /** A goal-layer kind set plus one strategy carrying `measured_impact`. */
+  function impactNodes(measured_impact: unknown): IntentionNode[] {
+    return tierNodes({ attributes: { measured_impact } });
+  }
+
+  it("Rule 21: accepts an array of well-formed measurement records", () => {
+    const nodes = impactNodes([
+      measurement,
+      { ...measurement, metric: "recoverable_tokens", value: 12_500.5, unit: "tokens" },
+    ]);
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("Rule 21: is inert when the key is absent, and accepts an empty list", () => {
+    expect(() => validateGraph(tierNodes({ attributes: {} }))).not.toThrow();
+    expect(() => validateGraph(impactNodes([]))).not.toThrow();
+  });
+
+  it("Rule 21: rejects a non-array measured_impact", () => {
+    expect(() => validateGraph(impactNodes(measurement))).toThrow(
+      /strategy-under-test: attributes\.measured_impact must be an array of measurement records, got object/,
+    );
+    expect(() => validateGraph(impactNodes(null))).toThrow(
+      /attributes\.measured_impact must be an array of measurement records, got null/,
+    );
+  });
+
+  it("Rule 21: rejects a non-record entry", () => {
+    expect(() => validateGraph(impactNodes(["recurrence_count=4"]))).toThrow(
+      /strategy-under-test: attributes\.measured_impact\[0\] must be a \{metric, value, unit, window, sensor, measured\} record, got string/,
+    );
+  });
+
+  it("Rule 21: rejects a missing or empty string field, naming its index", () => {
+    const { sensor: _dropped, ...noSensor } = measurement;
+    expect(() => validateGraph(impactNodes([measurement, noSensor]))).toThrow(
+      /strategy-under-test: attributes\.measured_impact\[1\]\.sensor must be a non-empty string, got undefined/,
+    );
+    expect(() => validateGraph(impactNodes([{ ...measurement, metric: "   " }]))).toThrow(
+      /attributes\.measured_impact\[0\]\.metric must be a non-empty string, got "   "/,
+    );
+  });
+
+  it("Rule 21: rejects a non-finite or non-numeric value", () => {
+    expect(() => validateGraph(impactNodes([{ ...measurement, value: "4" }]))).toThrow(
+      /attributes\.measured_impact\[0\]\.value must be a finite number, got "4"/,
+    );
+    expect(() =>
+      validateGraph(impactNodes([{ ...measurement, value: Number.POSITIVE_INFINITY }])),
+    ).toThrow(/attributes\.measured_impact\[0\]\.value must be a finite number/);
+  });
+
+  it("Rule 21: rejects a measured date that is not YYYY-MM-DD", () => {
+    expect(() =>
+      validateGraph(impactNodes([{ ...measurement, measured: "August 12 2026" }])),
+    ).toThrow(
+      /attributes\.measured_impact\[0\]\.measured must be a YYYY-MM-DD date, got "August 12 2026"/,
+    );
+  });
+
+  it("Rule 21: accepts a value of 0 — a measured zero is a measurement", () => {
+    expect(() => validateGraph(impactNodes([{ ...measurement, value: 0 }]))).not.toThrow();
+  });
+
+  // Rule 22: WAIT-node shape.
 
   /** The attributes a well-formed WAIT node holding `tactic-source` carries. */
   function waitAttrs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1881,25 +2206,25 @@ describe("validateGraph", () => {
     ];
   }
 
-  it("Rule 21: accepts a well-formed armed WAIT node", () => {
+  it("Rule 22: accepts a well-formed armed WAIT node", () => {
     expect(() => validateGraph(waitNodes())).not.toThrow();
   });
 
-  it("Rule 21: accepts a released WAIT node (phase done) and one carrying wait_attempts", () => {
+  it("Rule 22: accepts a released WAIT node (phase done) and one carrying wait_attempts", () => {
     const nodes = waitNodes({ phase: "done", attributes: waitAttrs({ wait_attempts: 2 }) });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 21: is inert on an ordinary tactic with no attributes.wait_for", () => {
+  it("Rule 22: is inert on an ordinary tactic with no attributes.wait_for", () => {
     const nodes = waitNodes({
-      // No wait_* attributes at all: none of Rule 21's requirements apply.
+      // No wait_* attributes at all: none of Rule 22's requirements apply.
       attributes: { status_vocabulary: { raw: "Not yet started.", codified: "Complete." } },
       phase: "implement",
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 21: is inert on a non-tactic node carrying wait_for (the gate is kind + wait_for)", () => {
+  it("Rule 22: is inert on a non-tactic node carrying wait_for (the gate is kind + wait_for)", () => {
     const nodes = waitNodes();
     // A strategy carrying the WAIT signature is not a WAIT node — the rule
     // never fires, so its id mismatch and missing fields go unreported here.
@@ -1914,35 +2239,35 @@ describe("validateGraph", () => {
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 21: rejects a non-string attributes.wait_for", () => {
+  it("Rule 22: rejects a non-string attributes.wait_for", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_for: 7 }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_for must be a non-empty string/,
     );
   });
 
-  it("Rule 21: rejects an empty attributes.wait_for", () => {
+  it("Rule 22: rejects an empty attributes.wait_for", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_for must be a non-empty string/,
     );
   });
 
-  it("Rule 21: rejects an id that is not waitIdFor(wait_for)", () => {
+  it("Rule 22: rejects an id that is not waitIdFor(wait_for)", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "tactic-other" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: a WAIT node's id must equal waitIdFor\(attributes\.wait_for\), which is "tactic-wait-other"/,
     );
   });
 
-  it("Rule 21: reports a wait_for whose derived id fails the node-id slug shape", () => {
+  it("Rule 22: reports a wait_for whose derived id fails the node-id slug shape", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_for: "Tactic_Source!" }) }); // type-safety-ok: "!" is inside a string literal test fixture, not a non-null assertion
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_for "Tactic_Source!" does not derive a usable wait id — .*does not match the node-id slug shape/, // type-safety-ok: "!" is inside a regex literal test fixture, not a non-null assertion
     );
   });
 
-  it("Rule 21: rejects a missing attributes.wait_until", () => {
+  it("Rule 22: rejects a missing attributes.wait_until", () => {
     const attrs = waitAttrs();
     delete attrs.wait_until;
     const nodes = waitNodes({ attributes: attrs });
@@ -1951,35 +2276,35 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 21: rejects a date-only attributes.wait_until (sub-day precision is required)", () => {
+  it("Rule 22: rejects a date-only attributes.wait_until (sub-day precision is required)", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "2026-08-07" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_until must be an ISO 8601 UTC instant/,
     );
   });
 
-  it("Rule 21: rejects a well-shaped but unparseable attributes.wait_until", () => {
+  it("Rule 22: rejects a well-shaped but unparseable attributes.wait_until", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "2026-13-45T99:99:99Z" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_until must be an ISO 8601 UTC instant/,
     );
   });
 
-  it("Rule 21: rejects a non-integer attributes.wait_attempts when present", () => {
+  it("Rule 22: rejects a non-integer attributes.wait_attempts when present", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_attempts: 1.5 }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_attempts must be an integer >= 1 when present/,
     );
   });
 
-  it("Rule 21: rejects attributes.wait_attempts: 0 (the counter starts at 1)", () => {
+  it("Rule 22: rejects attributes.wait_attempts: 0 (the counter starts at 1)", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_attempts: 0 }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_attempts must be an integer >= 1 when present/,
     );
   });
 
-  it("Rule 21: rejects a missing attributes.wait_reason", () => {
+  it("Rule 22: rejects a missing attributes.wait_reason", () => {
     const attrs = waitAttrs();
     delete attrs.wait_reason;
     const nodes = waitNodes({ attributes: attrs });
@@ -1988,7 +2313,7 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 21: rejects a missing attributes.wait_recommendation", () => {
+  it("Rule 22: rejects a missing attributes.wait_recommendation", () => {
     const attrs = waitAttrs();
     delete attrs.wait_recommendation;
     const nodes = waitNodes({ attributes: attrs });
@@ -1997,7 +2322,7 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 21: rejects a ladder phase on a WAIT node", () => {
+  it("Rule 22: rejects a ladder phase on a WAIT node", () => {
     const nodes = waitNodes({ phase: "implement" });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: a WAIT node's phase must be null \(armed\) or "done" \(released\), got "implement"/,
@@ -2012,7 +2337,7 @@ describe("validateGraph", () => {
     return new Date(Date.now() + ms).toISOString().replace(/\.\d{3}Z$/, "Z");
   }
 
-  it("Rule 21: rejects a wait_until beyond the wait horizon", () => {
+  it("Rule 22: rejects a wait_until beyond the wait horizon", () => {
     const nodes = waitNodes({
       attributes: waitAttrs({ wait_until: fromNow(WAIT_MAX_HORIZON_MS + 60 * 60 * 1000) }),
     });
@@ -2021,21 +2346,21 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 21: rejects the degenerate far-future wait_until", () => {
+  it("Rule 22: rejects the degenerate far-future wait_until", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_until: "9999-12-31T23:59:59Z" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_until .* is more than 30 days in the future/,
     );
   });
 
-  it("Rule 21: accepts a wait_until inside the horizon", () => {
+  it("Rule 22: accepts a wait_until inside the horizon", () => {
     const nodes = waitNodes({
       attributes: waitAttrs({ wait_until: fromNow(24 * 60 * 60 * 1000) }),
     });
     expect(() => validateGraph(nodes)).not.toThrow();
   });
 
-  it("Rule 21: rejects a wait_until more than the horizon past wait_armed_since", () => {
+  it("Rule 22: rejects a wait_until more than the horizon past wait_armed_since", () => {
     // Inside the horizon measured from now, but far past the arming instant:
     // the extend-forever loop, which never increments wait_attempts.
     const nodes = waitNodes({
@@ -2051,14 +2376,14 @@ describe("validateGraph", () => {
     );
   });
 
-  it("Rule 21: rejects a malformed attributes.wait_armed_since when present", () => {
+  it("Rule 22: rejects a malformed attributes.wait_armed_since when present", () => {
     const nodes = waitNodes({ attributes: waitAttrs({ wait_armed_since: "2026-08-07" }) });
     expect(() => validateGraph(nodes)).toThrow(
       /tactic-wait-source: attributes\.wait_armed_since must be an ISO 8601 UTC instant/,
     );
   });
 
-  it("Rule 21: accepts a WAIT node with no wait_armed_since at all", () => {
+  it("Rule 22: accepts a WAIT node with no wait_armed_since at all", () => {
     // Waits minted before the field existed stay landable.
     expect(() => validateGraph(waitNodes())).not.toThrow();
   });
@@ -2203,6 +2528,64 @@ describe("validateGraphProseRefs", () => {
     expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).not.toThrow();
   });
 
+  // --- batch-under-write resolution (forward cross-references) ---------------
+  //
+  // A write batch whose members land one graph-commit at a time cannot name a
+  // sibling of the same batch unless the members are hand-ordered: at the moment
+  // the first member is validated the sibling is in neither the store nor the
+  // deleted set. `batchIds` lets the writer declare the ids it is minting so the
+  // reference resolves; the tests below pin BOTH halves — the forward reference
+  // is accepted, and a genuinely dangling reference is still rejected.
+
+  it("passes a forward cross-reference to a sibling in the SAME batch under write", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Cross-links `tactic-sibling`." }),
+    ];
+    const batch = new Set(["tactic-a", "tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).not.toThrow();
+  });
+
+  it("passes a forward cross-reference from a node BODY to a sibling in the batch", () => {
+    const nodes = [realTactic, pnode({ id: "tactic-a", kind: "tactic" })];
+    const bodies = new Map([["tactic-a", "# heading\n\nSee `tactic-sibling` for the pair.\n"]]);
+    const batch = new Set(["tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, bodies, [], new Set(), batch)).not.toThrow();
+  });
+
+  it("STILL throws on a ref in neither the batch nor the store — a batch is not a blanket pass", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Names `tactic-nowhere`." }),
+    ];
+    // A non-empty batch is declared and simply does not contain the reference.
+    const batch = new Set(["tactic-a", "tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).toThrow(
+      /tactic-a: prose reference `tactic-nowhere` does not resolve to a node/,
+    );
+  });
+
+  it("matches batch ids EXACTLY — a longer compound is not covered by a batch member", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Names `tactic-sibling-v2`." }),
+    ];
+    const batch = new Set(["tactic-sibling"]);
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set(), batch)).toThrow(
+      /tactic-a: prose reference `tactic-sibling-v2` does not resolve to a node/,
+    );
+  });
+
+  it("is exactly as strict as before when no batch is declared", () => {
+    const nodes = [
+      realTactic,
+      pnode({ id: "tactic-a", kind: "tactic", rationale: "Cross-links `tactic-sibling`." }),
+    ];
+    expect(() => validateGraphProseRefs(nodes, new Map(), [], new Set())).toThrow(
+      /tactic-a: prose reference `tactic-sibling` does not resolve to a node/,
+    );
+  });
+
   it("lists ALL prose-ref violations in one throw", () => {
     const nodes = [
       realTactic,
@@ -2223,5 +2606,24 @@ describe("validateGraphProseRefs", () => {
     if (!(caught instanceof Error)) throw new Error("unreachable");
     expect(caught.message).toContain("tactic-a: prose reference `tactic-x`");
     expect(caught.message).toContain("tactic-b: prose reference `tactic-y`");
+  });
+});
+
+describe("attention store round-trip", () => {
+  it("round-trips a per-tier boosts map through writeNode/readNode", () => {
+    // YAML serializes the string key "1" as the bare scalar `1` and parses it
+    // back as a number-ish key, so this is the test that actually proves the
+    // canonicalization is stable in BOTH directions, not just on read.
+    const dir = mkdtempSync(join(tmpdir(), "intentions-attention-"));
+    const attention = { boosts: { "1": 3, "2": 20 }, rationale: "Two-tier claim." };
+    writeNode(dir, {
+      id: "strategy-round-trip",
+      kind: "strategy",
+      statement: "A node whose attention claims two tiers.",
+      owner: "human",
+      status: "codified",
+      attention,
+    });
+    expect(readNode(dir, "strategy-round-trip").attention).toEqual(attention);
   });
 });

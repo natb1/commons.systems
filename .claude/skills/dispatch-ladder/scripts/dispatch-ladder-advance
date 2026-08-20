@@ -1,0 +1,458 @@
+#!/usr/bin/env bash
+# dispatch-ladder-advance — kick ONE phase step of ONE node, through the
+# dispatch lane.
+#
+# Half of the dispatch-ladder loop; built by
+# `intentions/tactic-rsi-implement-skill.md`.
+# `dispatch-ladder-advance` launches a phase; `dispatch-ladder-await` waits
+# for it and verifies the transition off `origin/main`. The
+# `/dispatch-ladder` loop alternates them until the node is done or throws.
+#
+# WHAT THIS IS NOT. It is not a scheduler, not a selector, and not a second
+# orchestration surface — `strategy-recursive-self-improvement`'s standing
+# constraint is that rsi reuses the dispatch skills VERBATIM and maintains no
+# orchestration rule dispatch does not already have. So this script decides
+# nothing about eligibility. It delegates:
+#
+#   graph-select-target --node <id>   the phase directive, read at origin/main,
+#                                     with EVERY environmental gate applied —
+#                                     claim safety, the per-phase CI/PR sensor
+#                                     gates, the fix and conflict interrupts.
+#                                     `--node` is documented as a selection-ORDER
+#                                     override, not a gate bypass, which is
+#                                     exactly the property rsi needs.
+#   dispatch-graph-execute <spec>     provisioning, the phase-skill mapping, the
+#                                     spawn, the reservation handoff, and every
+#                                     park/hold disposition.
+#
+# Everything below those two calls is argument marshalling and exit-code
+# mapping. If a rule about WHEN a node may run ever appears in this file, it is
+# in the wrong file.
+#
+# NO --standalone, DELIBERATELY. `graph-select-target --standalone` would fold
+# in the lock, the ledger claim, and the headroom cap — but it also applies the
+# pace curve, and its header says so plainly: a --standalone caller is treated
+# as unattended and degrades to `empty` at the ceiling. This script has no
+# attended/pace-exempt status of its own — that property belongs to its
+# caller. `/dispatch-ladder` inherits attended and pace-exempt status from
+# whichever attended thread invokes it — an author directly. More concretely: the execute lane
+# exists FOR the bootstrap-deadlock case, where dispatch is paused and the fix
+# is what would unpause it. Under a pause the worker target is 0, so
+# --standalone would print `empty` on every call and the lane would be dead in
+# precisely the situation it was built for. The ledger claim --standalone
+# would have written is made explicitly below instead.
+#
+# CLAIM DISCIPLINE. A node must never be worked by dispatch and
+# dispatch-ladder at once.
+# Three things enforce that, none of them new:
+#   1. The pre-launch refusal below — `worktree_occupancy_state`, fail-safe
+#      (unknown counts as occupied, as does a terminal-but-unreleased holder),
+#      plus an existing reservation marker.
+#   2. The reservation marker this script writes before executing, with
+#      `origin=explicit` — the origin dispatch-select-tick's own explicit
+#      named-node lane uses, so reservation_sweep's TTL rule already reclaims
+#      it if this script dies before the worker registers. NOT a new origin:
+#      a new one would need a new branch in the sweep, and this claim has the
+#      same lifecycle as that lane's.
+#   3. dispatch-graph-execute's spawn handoff, which re-stamps the marker
+#      `origin=spawned` and lets the sweep release it once the worker's own
+#      live session registers. From that moment the worktree IS the claim and
+#      graph-select-target skips the node for the router.
+#
+# Usage: dispatch-ladder-advance <node-id>
+#
+# Stdout, one line:
+#   launched <id> <kind> <phase> <skill>   a session is running — and was
+#                                          VERIFIED registered with the daemon,
+#                                          not merely spawned; call
+#                                          dispatch-ladder-await with <phase>
+#                                          as the from-phase.
+#   idle <id> <reason>                     nothing to launch right now.
+#   throw <id> <reason>                    the node needs the attended thread.
+#                                          `launch-unverified` is the phantom
+#                                          spawn: the kick reported success, the
+#                                          daemon ANSWERED, and no session ever
+#                                          appeared — so the claim is released.
+#                                          `launch-unverifiable` is the daemon
+#                                          that could not be asked at all: the
+#                                          spawn may well have worked, so the
+#                                          claim is KEPT and ages out under its
+#                                          own TTL.
+#   claimed <id> live-session              a running session (or an
+#                                          unanswerable probe) holds it.
+#   claimed <id> terminal-session          a registered-but-finished session
+#                                          holds it — an INVALID state; release
+#                                          it with `claude rm <session-id>`.
+#   claimed <id> reservation:<owner>       an unreleased ledger marker holds it.
+#   refused <id> strategy                  <id> is a strategy; run
+#                                          /align-tactics on it directly
+#                                          instead — see exit code 2.
+#
+# Exit codes:
+#   0   launched — a phase session is running.
+#   10  idle: not selectable, ci-waiting, stale-selection, or scope-stale. Not
+#       an error; the loop stops or retries later. The graph-select-target
+#       event lines on stderr say which.
+#   11  throw: parked, held, a failed launch, or an UNVERIFIED one. The calling
+#       thread (`/dispatch-ladder`, invoked directly by an author) conducts the
+#       office-hours engagement — this script never pushes through one.
+#   13  claimed: a live session, a terminal-but-unreleased session, or an
+#       unreclaimed ledger marker holds the node. NEVER proceed past this; it is
+#       the dispatch/dispatch-ladder mutual exclusion. A `terminal-session`
+#       halt is not auto-released here: releasing another session's claim is a
+#       policy act, and this driver may sequence, never gate.
+#   2   usage or environment error, OR the node is a strategy (`refused <id>
+#       strategy`) — /align-tactics decomposes a strategy into child tactic
+#       ids rather than advancing it, so this loop has no single node to
+#       follow; run /align-tactics <id> directly instead.
+#
+# Requires `dangerouslyDisableSandbox: true`: the selector's sensor gates call
+# `gh`, the liveness read reaches the Claude daemon over a Unix socket, and
+# dispatch-graph-execute runs git/direnv and spawns `claude --bg`
+# (.claude/rules/sandbox.md).
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# .claude/skills/dispatch-ladder/scripts → the checkout root is four levels
+# up. Used only to
+# locate sibling scripts and libraries; the PROJECT root is resolved from git
+# below, because this checkout may itself be a worktree.
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+DISPATCH_SCRIPTS="$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts"
+
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-claude-agents.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-reservation-ledger.sh"
+# shellcheck source=/dev/null
+source "$DISPATCH_SCRIPTS/lib-graph-worktree.sh"
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: dispatch-ladder-advance <node-id>" >&2
+  exit 2
+fi
+
+NODE_ID="$1"
+
+# Validate before the id reaches a spawn prompt or a worktree path — the same
+# slug regex dispatch-graph-execute and provision-node-worktree apply.
+if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
+  echo "dispatch-ladder-advance: invalid node id '$NODE_ID'" >&2
+  exit 2
+fi
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-ladder-advance: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+# Freshness. Every read below answers about origin/main, so fetch first — a
+# stale remote-tracking ref would let this launch a phase the graph has already
+# advanced past.
+if ! git -C "$PROJECT_ROOT" fetch origin main --quiet 1>&2; then
+  echo "dispatch-ladder-advance: git fetch origin main failed; refusing to act on unverified graph state" >&2
+  exit 2
+fi
+
+# --- Claim safety ----------------------------------------------------------
+# Checked HERE as well as inside the selector, for the message: the selector
+# folds a claimed node into a bare `empty`, and "another session is working
+# this node" is the one disposition the dispatch-ladder loop must never mistake for
+# "nothing to do".
+NODE_WT="$PROJECT_ROOT/.claude/worktrees/$NODE_ID"
+# `worktree_occupancy_state`, not the `worktree_has_live_session` boolean it was
+# extracted from: the boolean collapses free/live/terminal/unknown into one bit,
+# so a done-but-not-removed holder — the COMMON residue of the ladder's own
+# earlier phase workers, which stay registered until an explicit release — and a
+# blocked daemon read both printed `live-session`, sending the operator to wait
+# on a session that finished long ago. The node is still refused in every
+# non-`free` case (halting 13 on a terminal holder is deliberate: auto-releasing
+# another session's claim is a policy act, and this driver may sequence, never
+# gate); only the TOKEN changes, so `claude rm <session-id>` becomes the
+# discoverable remedy it always was.
+#
+# Called DIRECTLY with stdout redirected, never via `$( )`: command substitution
+# runs the function in a subshell and the evidence globals die with it, so the
+# diagnostic would name the file-scope initializer instead of the real holder.
+# See the CAVEAT in worktree_occupancy_state's header, and
+# graph-select-target's identical consumption of the same classifier.
+worktree_occupancy_state "$NODE_WT" >/dev/null
+case "$WORKTREE_OCCUPANCY_STATE" in
+  free)
+    : # fall through to the reservation check
+    ;;
+  terminal)
+    echo "claimed $NODE_ID terminal-session"
+    echo "dispatch-ladder-advance: REFUSED — session ${WORKTREE_OCCUPANCY_SESSION_ID:-unknown} is registered on $NODE_WT but is no longer running; the claim survives until it is released. This is an INVALID state, not a busy one." >&2
+    echo "dispatch-ladder-advance: release it with 'claude rm ${WORKTREE_OCCUPANCY_SESSION_ID:-<session-id>}' and re-run. This script will not release another session's claim on its own." >&2
+    exit 13
+    ;;
+  *)
+    # `live` (a valid claim) and `unknown` (the probe could not answer) share
+    # the unchanged `live-session` token. UNKNOWN must never be reported as an
+    # invalid state — a daemon hiccup would manufacture an intervention out of
+    # a healthy node.
+    echo "claimed $NODE_ID live-session"
+    echo "dispatch-ladder-advance: REFUSED — a live session is registered on $NODE_WT (or the liveness probe could not answer, which counts as occupied)." >&2
+    echo "dispatch-ladder-advance: a node is never worked by dispatch and dispatch-ladder at once. Wait for that session, or release a terminal holder with 'claude rm <session-id>'." >&2
+    exit 13
+    ;;
+esac
+
+if reservation_exists "$NODE_ID"; then
+  RES_OWNER=$(reservation_owner "$NODE_ID" 2>/dev/null || echo "unknown")
+  echo "claimed $NODE_ID reservation:$RES_OWNER"
+  echo "dispatch-ladder-advance: REFUSED — an unreleased reservation-ledger marker claims $NODE_ID (owner $RES_OWNER)." >&2
+  echo "dispatch-ladder-advance: if that claim is stale, reservation_sweep reclaims it on the next dispatch heartbeat; do not clear it by hand while a worker may still be booting." >&2
+  exit 13
+fi
+
+# --- Selection: the directive, with every gate applied ---------------------
+# stderr flows through — its event lines are the record of WHY a node was not
+# selectable, and the calling thread reads them.
+SELECTION=$("$DISPATCH_SCRIPTS/graph-select-target" --node "$NODE_ID")
+select_rc=$?
+if (( select_rc != 0 )); then
+  echo "throw $NODE_ID selector-failed"
+  echo "dispatch-ladder-advance: graph-select-target exited $select_rc for $NODE_ID" >&2
+  exit 11
+fi
+
+# Protocol: `node <id> <kind> <phase>` or `empty`.
+SPEC_LINE=$(grep -E "^node ${NODE_ID} " <<<"$SELECTION" | head -n1)
+if [[ -z "$SPEC_LINE" ]]; then
+  echo "idle $NODE_ID not-selectable"
+  echo "dispatch-ladder-advance: graph-select-target selected nothing for $NODE_ID — the event lines above name the gate that held it (phase null with no align route, a CI verdict still pending, a park, a blocked_by edge, a stale strategy fingerprint)." >&2
+  exit 10
+fi
+
+read -r _ _ KIND PHASE <<<"$SPEC_LINE"
+if [[ -z "$KIND" || -z "$PHASE" ]]; then
+  echo "throw $NODE_ID malformed-selection"
+  echo "dispatch-ladder-advance: could not parse the selector line '$SPEC_LINE'" >&2
+  exit 11
+fi
+
+# A strategy is refused, never launched: /align-tactics on a strategy
+# decomposes it into CHILD tactic ids rather than advancing the strategy
+# itself up the ladder, so "follow this node to main-qa" has no single node
+# for the loop to follow. Gate on $KIND from the selector's own answer, never
+# a re-derived kind lookup — and gate on kind only, never phase, so a tactic
+# whose selector rung is align-tactics (a draft/raw/frozen tactic starting
+# its own finalize pass) still launches normally.
+if [[ "$KIND" == "strategy" ]]; then
+  echo "refused $NODE_ID strategy"
+  echo "dispatch-ladder-advance: REFUSED — $NODE_ID is a strategy; an /align-tactics pass on a strategy decomposes it into child tactic ids rather than advancing the strategy itself up the ladder, so there is no single node for this loop to follow." >&2
+  echo "dispatch-ladder-advance: run /align-tactics $NODE_ID directly, then /dispatch-ladder <child-tactic-id> on the tactic it produces." >&2
+  exit 2
+fi
+
+# --- Claim, then execute ---------------------------------------------------
+# Written BEFORE the spawn so the boot window is covered: between this line and
+# the worker's own session registering, the marker is what keeps a concurrent
+# dispatch tick from selecting the same node. dispatch-graph-execute re-stamps
+# it `origin=spawned` on a successful kick (its hand_off_reservation), after
+# which reservation_sweep owns its release.
+#
+# The `issue-N` slot carries the node id: graph nodes have no issue number, and
+# the slot is rejected empty, so the graph lane puts the id there —
+# `reservation_write "$id" "$id" ...`, exactly as graph-select-target's own
+# --standalone claim does. The session-id slot falls back to a literal `rsi`
+# rather than an empty string for the same reason: empty is rejected, and a
+# claim that silently failed to write is the boot-window hole this line exists
+# to close.
+if ! reservation_write "$NODE_ID" "$NODE_ID" "${CLAUDE_CODE_SESSION_ID:-rsi}" explicit; then
+  echo "throw $NODE_ID reservation-write-failed"
+  echo "dispatch-ladder-advance: could not write the reservation marker for $NODE_ID; refusing to spawn a worker whose claim is unrecorded (a concurrent dispatch tick could select the same node)." >&2
+  exit 11
+fi
+
+EXEC_OUT=$("$DISPATCH_SCRIPTS/dispatch-graph-execute" "$NODE_ID:$KIND:$PHASE")
+exec_rc=$?
+
+# --- Post-launch verification ----------------------------------------------
+# dispatch-graph-execute spawns through `dispatch-spawn-job --no-verify`, which
+# deliberately SKIPS the registration wait — the tick's budget path wants a
+# spawn to cost nothing but the fork. The consequence for this lane is that
+# `launched` rests on `claude --bg` exiting 0, and several conditions make it
+# exit 0 while no session ever registers: an auto-mode classifier denial, a
+# bg-supervisor parenting failure, a stale daemon version, an OOM during boot.
+# The ladder then hands a phantom to dispatch-ladder-await, which correctly
+# reads "no session", finds the graph unchanged, and halts the whole run
+# `stalled` on a perfectly healthy node — while the ledger holds the claim for
+# the full handoff TTL. Verifying HERE turns that into an immediate, named
+# throw. The tick's own --no-verify path is untouched.
+#
+# The budget: verify_agent_registered_under_state makes 5 attempts with 4
+# sleeps, and its 0.2s default (≈0.8s total) is far too short for daemon
+# registration under load — a worker that registers at 1.2s would
+# false-negative. Widen the interval through the library's existing seam to 3s,
+# i.e. ≈12s per candidate cwd. Two candidates are tried SEQUENTIALLY on the
+# miss path, so the worst case is ≈24s — still comfortably inside
+# dispatch-ladder-await's 90s BOOT_GRACE_S. A caller that already set the seam
+# (the tests) keeps its value.
+: "${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:=3}"
+
+# verify_launch <cwd>... — true when a session named for this node is
+# registered under ANY of the candidate cwds.
+#
+# Sets LAUNCH_VERIFY_STATE to the aggregated verdict, because the FAILURE modes
+# are not interchangeable: `absent` is the registry answering "nothing is
+# there", `unknown` is the registry declining to answer. Aggregation is
+# fail-safe, in this order:
+#   registered — any candidate saw the session. Nothing else matters.
+#   unknown    — no candidate saw it AND at least one probe could not read the
+#                registry, or no candidate was probed at all (every path was
+#                missing on disk). A non-observation is not an observation.
+#   absent     — no candidate saw it and at least one probe was a DEFINITE read.
+# Note the default is `unknown`, not `absent`: the ordering above is written so
+# that only positive evidence of absence produces `absent`.
+#
+# The cwd is lane-dependent, and a single-cwd probe false-negatives on the
+# other lane: dispatch-graph-execute spawns the strategy/align-tactics lane and
+# the conflict lane with `--cwd "$PROJECT_ROOT"` (the skill enters its own
+# worktree afterwards) and the tactic phase lane with `--cwd "$WT"`, the node
+# worktree. The lane's own cwd is passed first; the other is passed as a
+# fallback because /align-tactics may already have entered the node worktree by
+# the time this probe runs, moving the session's registered cwd out from under
+# the launch-time value. A candidate that does not exist on disk is skipped
+# rather than costing a full budget.
+#
+# Never run this sandboxed: `claude agents --json` returns `[]` at exit 0 under
+# the sandbox's network-namespace isolation, so EVERY attempt false-empties and
+# no launch can verify (.claude/rules/sandbox.md). Which failure it becomes
+# depends on the library's empty-read corroboration: with no visible `claude
+# daemon` process the `[]` folds to UNKNOWN and this reports `unverifiable`
+# (claim kept); with one visible it is read as a definite empty registry and
+# reports `unverified` (claim released). Neither is a verdict about the spawn.
+LAUNCH_VERIFY_STATE="unknown"
+verify_launch() {
+  LAUNCH_VERIFY_STATE="unknown"
+  local cwd st saw_absent=0 saw_unknown=0
+  for cwd in "$@"; do
+    [[ -n "$cwd" && -d "$cwd" ]] || continue
+    # Captured with `$( )` deliberately: the TOKEN is the library's contract,
+    # and the subshell that would swallow VERIFY_AGENT_REGISTERED_STATE takes
+    # nothing this loop needs (see the CAVEAT in the library header).
+    st=$(verify_agent_registered_under_state "$NODE_ID" "$cwd")
+    case "$st" in
+      registered)
+        LAUNCH_VERIFY_STATE="registered"
+        return 0
+        ;;
+      absent) saw_absent=1 ;;
+      *) saw_unknown=1 ;;
+    esac
+  done
+  if (( saw_unknown == 0 && saw_absent == 1 )); then
+    LAUNCH_VERIFY_STATE="absent"
+  else
+    LAUNCH_VERIFY_STATE="unknown"
+  fi
+  return 1
+}
+
+# Mirrors dispatch-graph-execute's own lane split — strategy or the
+# align-tactics rung spawns at the project root, everything else at the node
+# worktree. (A strategy never reaches here; the kind gate above refused it.
+# The condition is kept whole so it cannot drift from the spawn site.)
+if [[ "$KIND" == "strategy" || "$PHASE" == "align-tactics" ]]; then
+  LAUNCH_CWDS=("$PROJECT_ROOT" "$NODE_WT")
+else
+  LAUNCH_CWDS=("$NODE_WT" "$PROJECT_ROOT")
+fi
+
+# launch_unverified <spawn-cwd>... — the failed-verify disposition, SPLIT on
+# $LAUNCH_VERIFY_STATE. The split is the whole point: a failed verify used to
+# clear the reservation unconditionally, which meant one unanswerable daemon
+# read released the claim on a node whose worker may have been mid-boot — and
+# the re-run then opened a duplicate-worker window. That inverts the fail-safe
+# the PRE-launch gate applies above, where `unknown` counts as occupied.
+launch_unverified() { # <spawn-cwd>...
+  if [[ "$LAUNCH_VERIFY_STATE" == "absent" ]]; then
+    # The registry ANSWERED and the session is not in it. Release the claim: a
+    # spawn that produced no session must not hold the node for the handoff TTL
+    # while nothing works it.
+    reservation_clear "$NODE_ID" || true
+    echo "throw $NODE_ID launch-unverified"
+    echo "dispatch-ladder-advance: dispatch-graph-execute reported a launch for $NODE_ID, but the Claude daemon answered and no session named $NODE_ID was registered within the verify budget (searched: $*). The reservation has been released." >&2
+    echo "dispatch-ladder-advance: the spawn is fire-and-forget (dispatch-spawn-job --no-verify), so 'claude --bg' can exit 0 having started nothing — an auto-mode classifier denial, a bg-supervisor parenting failure, a stale daemon version, or an OOM during boot. Check the daemon and the spawn log before re-running." >&2
+    echo "dispatch-ladder-advance: if this ran sandboxed, that is the cause — 'claude agents --json' answers [] at exit 0 under the sandbox's network-namespace isolation, and when a 'claude daemon' process is visible the library reads that [] as a definite empty registry. Re-run with dangerouslyDisableSandbox." >&2
+    echo "$EXEC_OUT" >&2
+    return
+  fi
+  # UNKNOWN: every probe failed to read the registry, so this is not evidence
+  # that the spawn failed. The claim is KEPT — reservation_sweep's TTL rule
+  # reclaims it if the worker really never registered, and until then it keeps a
+  # concurrent dispatch tick off a node that may already be booting a worker.
+  echo "throw $NODE_ID launch-unverifiable"
+  echo "dispatch-ladder-advance: dispatch-graph-execute reported a launch for $NODE_ID, but the Claude daemon could not be queried at all within the verify budget (searched: $*) — 'claude' missing or non-zero, a non-array payload, or an uncorroborated empty read. Whether a session started is UNKNOWN." >&2
+  echo "dispatch-ladder-advance: the reservation is deliberately RETAINED. A worker may be booting behind that unanswerable read, and releasing the claim on a non-observation would let a concurrent dispatch tick select the same node. It ages out under reservation_sweep's TTL on its own." >&2
+  echo "dispatch-ladder-advance: if this ran sandboxed, that is the cause — 'claude agents --json' answers [] at exit 0 under the sandbox's network-namespace isolation and no launch can ever verify. Re-run with dangerouslyDisableSandbox." >&2
+  echo "$EXEC_OUT" >&2
+}
+
+DISPOSITION=$(awk '{print $1; exit}' <<<"$EXEC_OUT")
+case "$DISPOSITION" in
+  launched)
+    SKILL=$(awk '{print $3; exit}' <<<"$EXEC_OUT")
+    if ! verify_launch "${LAUNCH_CWDS[@]}"; then
+      launch_unverified "${LAUNCH_CWDS[@]}"
+      exit 11
+    fi
+    echo "launched $NODE_ID $KIND $PHASE $SKILL"
+    exit 0
+    ;;
+  conflict-lane)
+    # A session WAS launched — /dispatch-conflict, in the primary checkout,
+    # named for this node. It is awaited exactly like a phase session, and it
+    # declares its own terminal disposition on both of its exit paths. The
+    # from-phase reported is the node's ladder phase: Lane 3 resolves the
+    # conflict and the node re-enters at that phase, so a plain phase-changed
+    # check would read as `stalled`. dispatch-ladder-await's absent/park checks still fire,
+    # and the attended thread reads the lane's own report.
+    #
+    # Verified like any other launch, and for the same reason — a phantom
+    # conflict-lane kick strands the node exactly as a phantom phase kick does.
+    # PROJECT_ROOT first: this lane always spawns there (the node's own
+    # worktree is stale by construction on the conflict path, which is why
+    # dispatch-graph-execute refuses to spawn into it).
+    if ! verify_launch "$PROJECT_ROOT" "$NODE_WT"; then
+      launch_unverified "$PROJECT_ROOT" "$NODE_WT"
+      exit 11
+    fi
+    echo "launched $NODE_ID $KIND $PHASE /dispatch-conflict"
+    exit 0
+    ;;
+  waiting)
+    reservation_clear "$NODE_ID" || true
+    echo "idle $NODE_ID ci-waiting"
+    exit 10
+    ;;
+  skipped)
+    # dispatch-graph-execute already cleared the marker on this path.
+    echo "idle $NODE_ID stale-selection"
+    exit 10
+    ;;
+  scope-stale)
+    # Likewise cleared; the node was demoted to implement and is re-runnable.
+    echo "idle $NODE_ID scope-stale-demoted"
+    exit 10
+    ;;
+  parked|held)
+    # A mechanical producer parked the node or born a tracked hold. Both need
+    # the attended thread — never pushed through here.
+    echo "throw $NODE_ID $DISPOSITION"
+    echo "$EXEC_OUT" >&2
+    exit 11
+    ;;
+  failed|*)
+    reservation_clear "$NODE_ID" || true
+    echo "throw $NODE_ID execute-failed"
+    echo "dispatch-ladder-advance: dispatch-graph-execute exited $exec_rc with '$EXEC_OUT'" >&2
+    exit 11
+    ;;
+esac

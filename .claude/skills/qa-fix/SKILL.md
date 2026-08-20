@@ -336,8 +336,8 @@ each fork site.
    Run this step only when the in-memory residue list is **non-empty**; if empty,
    skip it and proceed to Step 4 with no dispositions.
 
-   **Build `args`** and **invoke the Workflow tool on
-   `.claude/workflows/qa-fix.js`** (a sanctioned caller — no `ultracode` keyword).
+   **Build `args`** and **invoke the Workflow tool on the registered `qa-fix`
+   workflow** (a sanctioned caller — no `ultracode` keyword).
    It runs in the background and returns one compact `result`. `args` carries
    `pr_num`, `issue_num`, `app_dir`, `browser_available`, `firestore_caveat`, the
    `residue` list, `plan_fix` (`ATTEMPT_N < CAP` — the read-only pre-gate: false at
@@ -431,9 +431,13 @@ each fork site.
    Otherwise run Step 4, Step 5, `dispatch-mark-complete --phase qa` (NO
    `dispatch:qa-done`), emit the outcome envelope (`--disposition
    completed_with_fixes`, `--fixes-applied <fixes_applied_count>`); node lane
-   then writes `mark-node-terminal "$N" fix-attempt` (**after** the PR
-   comment, phase marker, and outcome envelope — `Stop` fires on every turn
-   yield, not only terminal exit, so writing it any earlier risks the hook
+   then stamps the pass — `apply-lane-pass.ts "$N" --stamp --lane qa-fix --phase
+   qa --sha "$(git rev-parse HEAD)"` plus a `graph-commit`, so a successful
+   fixing pass does not read as `stalled` (a failed stamp **warns and
+   continues** — it is not a hard stop) — and then writes
+   `mark-node-terminal "$N" fix-attempt` (**after** the PR
+   comment, phase marker, outcome envelope, and stamp — `Stop` fires on every
+   turn yield, not only terminal exit, so writing it any earlier risks the hook
    reaping the job mid-write); and **STOP**.
 
    **Escalate finalize path** (cap / scope-deviation / planning-failed /

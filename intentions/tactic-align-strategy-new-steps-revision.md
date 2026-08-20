@@ -23,9 +23,8 @@ rationale: "Surfaced by /review-fix of PR #2867
   /align-tactics split into sequenced units on this one surface) fixes them
   together."
 reading: null
-gap: null
 serves:
-  - strategy-explicit-intent
+  - strategy-discovered-requirements
 recovers: []
 clarifications: []
 tooling_goals: []

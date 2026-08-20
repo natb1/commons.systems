@@ -53,9 +53,11 @@ import { listNodes, writeNode } from "../src/store.js";
 import { strategyBacklogBand } from "../src/census.js";
 import { listNodesAtRef } from "./lib-store-at-ref.js";
 import { SensorRegistry, type Sensor } from "../src/sensors.js";
+import { attributeSpend, spendBucketsFrom } from "../src/spend.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import { computeDependencyAudit } from "./dependency-audit.js";
+import { ladderTerminusCensus } from "../src/terminus.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/read-sensors.ts`, so the
@@ -85,8 +87,10 @@ const execOpts = {
  * as last committed", rather than running the full suite once per node. Reports
  * a simple status string; QA (#2372) verifies the concrete signal.
  */
+const VITEST_SENSOR_NAME = "vitest";
+
 const vitestSensor: Sensor = {
-  name: "vitest",
+  name: VITEST_SENSOR_NAME,
   read(): string {
     try {
       execFileSync("git", ["diff", "--quiet", "HEAD"], execOpts);
@@ -102,8 +106,10 @@ const vitestSensor: Sensor = {
  * working tree is clean. A clean tree is the author's own-execution evidence
  * that committed work is the live state.
  */
+const GIT_SENSOR_NAME = "git";
+
 const gitSensor: Sensor = {
-  name: "git",
+  name: GIT_SENSOR_NAME,
   read(): string {
     try {
       const out = execFileSync("git", ["status", "--porcelain"], execOpts);
@@ -453,7 +459,29 @@ const tokenEconomySensor: Sensor = {
 // distinct sampled store states), or a per-sample `skipped` token (that
 // historical ref's store does not read/validate).
 
-/** The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch. */
+/**
+ * The verbatim `success_signal.sensor` name on strategy-graph-native-dispatch.
+ * Load-bearing: this string is the registry key the anti-drift test
+ * (lifecycle-sensor.test.ts) compares character-for-character against the
+ * node's live `success_signal.sensor` frontmatter, and the same match is
+ * asserted for every registered sensor by the registered-sensor rule
+ * (validateRegisteredSensorNames in src/sensors.ts) — fatally in that unit
+ * suite, and reported non-fatally by validate-graph.ts on the graph write
+ * path, which must not be denied over a registry defect. Any edit to that field (including via /align) must be
+ * mirrored here in the same round — while the two differ the sensor is
+ * de-registered by name and reads nothing at all.
+ *
+ * The 2026-08-12 /align round (56039748) appended a fourth clause to the
+ * recorded sensor — "a park-cause reading over office_hours.reason across
+ * parked nodes counts /align-tactics parks attributable to an upstream
+ * recording round's own record gap" — naming a reading this file does not
+ * produce, which is exactly how the sensor went silent. That clause was
+ * dropped from the node in the same change that wrote this comment: the
+ * recorded sensor names the three readings below and nothing more, and the
+ * park-cause observable belongs to its own node
+ * (`tactic-park-cause-sensor-instrument`). Restore the clause here only if
+ * this file grows the reading it names.
+ */
 export const LIFECYCLE_SENSOR_NAME =
   "the intention store and the router's selection log — align-tactics-census.ts enumerates the open machinery-defect population serving this strategy; the selection log carries lifecycle completions";
 
@@ -1154,6 +1182,62 @@ export function makeDelegationRecordsSensor(
   };
 }
 
+// --- ladder-terminus census sensor -------------------------------------------
+// Measures the ladder-terminus predicate (tactic-ladder-terminus-owns-main-qa,
+// `../src/terminus.ts`) over the whole store: how many merged-but-not-done
+// nodes exist, split into legitimately excused (parked or blocked) and
+// violation. STORE-WIDE like `makeIntentionStoreSensor` and
+// `makeDelegationRecordsSensor` above — it counts over every node in the
+// store, not one node's own fields — so it is built the same way, as a
+// factory taking an injected `loadNodes` rather than a plain `Sensor`
+// constant.
+//
+// Error discipline follows `dependencyAuditSensor` above, not the silent
+// `"unknown"` degrade `makeIntentionStoreSensor` uses: `ladderTerminusCensus`
+// itself is a pure function over an already-loaded node array and cannot
+// throw, but the injected `loadNodes` call (a real store read in production)
+// can — a missing/corrupt intentions dir, or a node `listNodes` cannot parse.
+// That failure is caught here and degrades to a fixed status token; the
+// caught error goes to stderr ONLY, never into the returned reading, because
+// readings are committed to a public repo and an error string can carry a
+// local filesystem path or stack trace.
+
+/**
+ * The verbatim `success_signal.sensor` string this sensor is registered
+ * under. A later, separate step places this exact string as
+ * `success_signal.sensor` on the tactic node that measures
+ * tactic-ladder-terminus-owns-main-qa — not this file's job to edit that
+ * node. Registry resolution is a verbatim string match
+ * (`SensorRegistry.resolve` in `../src/sensors.ts`), so any drift — even
+ * whitespace — silently de-registers this sensor.
+ */
+export const LADDER_TERMINUS_SENSOR_NAME =
+  "ladder-terminus census over the intention store (merged-but-not-terminal count)";
+
+/**
+ * Build the ladder-terminus census sensor. `loadNodes` is injected — the same
+ * pattern `makeDelegationRecordsSensor`/`makeIntentionStoreSensor` use — so
+ * unit tests supply fixture arrays without touching the live store.
+ */
+export function makeLadderTerminusSensor(loadNodes: () => IntentionNode[]): Sensor {
+  return {
+    name: LADDER_TERMINUS_SENSOR_NAME,
+    read(): string {
+      try {
+        const census = ladderTerminusCensus(loadNodes());
+        return (
+          `ladder terminus: ${census.mergedNotDone} merged-not-done, ` +
+          `${census.excused} excused, ${census.violations} violations`
+        );
+      } catch (err) {
+        // stderr only — not persisted into the node, so it may carry detail.
+        console.error(`ladder terminus sensor: read error — ${String(err)}`);
+        return "ladder terminus: unknown";
+      }
+    },
+  };
+}
+
 // --- intention-store sensor --------------------------------------------------
 // The verbatim `success_signal.sensor` name strategy-graph-drives-dispatch
 // declares, and the store's self-measuring sensor: it counts how many open
@@ -1267,6 +1351,252 @@ export function makeIntentionStoreSensor(
   };
 }
 
+// --- rsi sensor --------------------------------------------------------------
+// Name is the exact `success_signal.sensor` string
+// `strategy-recursive-self-improvement` declares — same match-the-declared-name
+// contract as `token-economy`/lifecycle above.
+//
+// Why it is registered HERE rather than in a metrics registry of its own: that
+// strategy's condition 8 says rsi metrics are "sensors registered in the graph's
+// existing success_signal/readings machinery on their owning strategies — never
+// a parallel metric registry". Registering here is what makes the strategy's own
+// dated reading the measurement of record rather than a side system, and it
+// drops the graph's standing unregistered-sensor count by one.
+//
+// Reading format (stable and parseable), one segment per IMPLEMENTED source the
+// declared sensor names, plus the token attribution the fitness function needs:
+//   `pause: <state>; backlog: <B>/<T> = <P>% (band ≤35%); parked: <N> (<M> blocked); worktrees: <W>; tokens <window>: dispatch <x>% / office-hours <y>% / rsi <z>%`
+// Every segment degrades independently to `unknown` and never throws (the
+// total-sensor contract at the top of this file).
+//
+// The declared name also carries three instruments that are NOT implemented and
+// so contribute no segment: the find-or-recur write-surface lint, the
+// sessions-per-invalid-state-episode reading, and the declared-remediation-list
+// check. They are named in the constant deliberately — writing the final string
+// once means each instrument can land later as a pure `read()` change, without
+// re-touching the node prose and re-opening the de-registration window this
+// file's RSI_SENSOR_NAME docstring describes. Until they land, the three
+// matching `success_signal.threshold` clauses on
+// `strategy-recursive-self-improvement` are registered and unread; the work is
+// owed by `tactic-rsi-intervention-special-cases`.
+
+/**
+ * The verbatim `success_signal.sensor` name strategy-recursive-self-improvement
+ * declares.
+ *
+ * The registry matches this against the node's prose character-for-character, so
+ * any `/align` round that rewords the sensor field silently de-registers this
+ * sensor — the node stops getting a reading and only shows up in read-sensors'
+ * "skipped (unregistered sensor)" tail, which already runs 57 entries deep. That
+ * is exactly what happened when the research lane was appended in `47219a1a`;
+ * the trailing clause below is that amendment. Re-read the node's sensor field
+ * before trusting a null reading here.
+ *
+ * LAND BOTH HALVES IN ONE COMMIT. An earlier version of this docstring said the
+ * lockstep was "split across two commits, by construction" — this constant in a
+ * code commit, the node prose separately through `graph-commit` — and called the
+ * window between them expected rather than a defect. That was written before
+ * `validateRegisteredSensorNames` existed. It is now wrong, and following it is
+ * how the repo lost 54 minutes of graph writes on 2026-08-14: the rule then ran
+ * FATALLY in the `guard` job of `graph-fast-path.yml`, every other required
+ * context in that workflow carries `needs: guard`, so ONE unbound registered
+ * name left four required checks non-success and `graph-commit` refused to land
+ * — for every writer in the repo, on content that had nothing to do with
+ * sensors. See
+ * `tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes`.
+ *
+ * Both orderings break: prose-first leaves a registered name no node records,
+ * constant-first leaves a node whose sensor matches nothing. `graph-commit`
+ * cannot land the pair — it rebuilds on an `intentions/`-only base and strips
+ * non-intentions changes. An ordinary PR touching both files can, and is the
+ * only atomic path.
+ *
+ * Where an open window is now caught — and, just as important, where it is NOT.
+ * `validate-graph.ts` REPORTS an unbound registered name and exits 0, so the
+ * graph write path is no longer denied over it; it follows that the
+ * `graph-validate` job, which runs that same script, can never go red on this
+ * condition either. The ONE fatal gate is the unit suite
+ * `test/lifecycle-sensor.test.ts` (against the live store), in the `unit-tests`
+ * job. So the half of the pairing caught is a CONSTANT edit: a PR touching
+ * `packages/intentionsutil` runs that suite and goes red.
+ *
+ * The other half is NOT caught. A node PROSE reword — an `/align` round
+ * rewriting some node's `success_signal.sensor` — lands through a `graph/**`
+ * push, and `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, so
+ * neither the unit suite nor `graph-validate` ever runs for it. The reword
+ * lands, CI is green, and the sensor reads `null` from then on with only a
+ * stderr line in the fast path's `guard` log. Restoring a failing gate on that
+ * half is deliberately deferred, not overlooked: the shape has to be ruled
+ * (node-scoped fatal in `guard`, vs a post-merge check on `main`), and a
+ * careless answer re-arms the repo-wide denial described above. Until it is
+ * ruled, the UNREGISTERED-SENSOR COUNT below is the backstop for this half.
+ * Locally, against the merged state:
+ * `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`.
+ *
+ * If a window is ever open anyway, the check for it is read-sensors'
+ * UNREGISTERED-SENSOR COUNT (the `skipped (unregistered sensor)` figure and its
+ * named tail), never the readings count — a de-registered sensor keeps its last
+ * written reading forever, and the readings count moves for unrelated reasons on
+ * every run.
+ */
+export const RSI_SENSOR_NAME =
+  "sensors registered in the graph's existing success_signal/readings " +
+  "machinery on their owning strategies (backlog band, parked critical-path " +
+  "count, held-session/worktree census, pause state), plus per-workflow token " +
+  "attribution across dispatch, office-hours, and rsi reported by /rsi-audit; " +
+  "plus the research lane's weekly dated readings on this strategy " +
+  "(research-cycle landings); plus three instruments for the evaluation-core " +
+  "readings recorded 2026-08-14 — a write-path lint counting the scripts that " +
+  "implement a mint-or-reuse follow-up write (find-or-recur surface count), " +
+  "aggregate-usage.sh at node scope for sessions per invalid-state episode " +
+  "(degrading to sessions-per-node-per-day if that instrument cannot express " +
+  "an episode), and the per-session decision log checked against each lane's " +
+  "declared frontmatter remediation list (remediation acts outside a declared " +
+  "list)";
+
+/**
+ * Dispatch pause state, delegated to the canonical shell helper
+ * (`lib-pause-state.sh`'s `dispatch_pause_state`) rather than re-testing the
+ * sentinel path here. The helper already distinguishes `paused` /`not-paused` /
+ * `unknown` — an unsearchable state directory means the sentinel's presence
+ * cannot be determined, and a second implementation of that logic would drift
+ * from the gate the tick itself consults.
+ */
+export function readPauseState(repoDir: string): string {
+  const lib = join(
+    repoDir,
+    ".claude/skills/dispatch-propagate/scripts/lib-pause-state.sh",
+  );
+  try {
+    return execFileSync(
+      "bash",
+      ["-c", `source ${JSON.stringify(lib)} && dispatch_pause_state`],
+      execOpts,
+    ).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Count of provisioned worktrees under `.claude/worktrees/`. */
+function readWorktreeCount(repoDir: string): string {
+  try {
+    const out = execFileSync(
+      "git",
+      ["-C", repoDir, "worktree", "list", "--porcelain"],
+      execOpts,
+    );
+    return String(out.split("\n").filter((l) => l.startsWith("worktree ")).length);
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Parked-node census over a node set: how many nodes are parked, and how many
+ * OPEN nodes are held by a `blocked_by` edge onto one of them. The second
+ * number is the critical-path one — a park nothing depends on costs nothing,
+ * whereas a park holding open work is the one the author has to clear.
+ *
+ * DENOMINATOR, chosen deliberately: `blocked` counts HELD NODES (open nodes
+ * with at least one `blocked_by` edge onto a parked node), not the number of
+ * DISTINCT parked nodes doing the blocking. The two disagree whenever one
+ * park blocks several open nodes, or several parks together block one node.
+ * This function used to compute the other denominator (distinct blocking
+ * parks) while the retired `rsi-plan.md` renderer's `countBlockedByParked`
+ * computed this one on the same input — a real divergence between two
+ * implementations of "what does a park block?", caught when
+ * `/rsi-audit`'s parked-population lens (`.claude/skills/rsi-audit/SKILL.md`)
+ * was re-homed onto this sensor. Held-node is the one kept: it answers "how
+ * much open work is stuck," which is what
+ * `strategy-recursive-self-improvement`'s own declared sensor name means by
+ * "parked critical-path count" (see `RSI_SENSOR_NAME` above). This is now the
+ * ONE place that count is computed — `readParkedCensus` below and the audit
+ * lens both read it from here, so the two can no longer drift apart.
+ */
+export function parkedCensus(nodes: IntentionNode[]): { parked: number; blocked: number } {
+  const parkedIds = new Set(nodes.filter((n) => n.office_hours !== null).map((n) => n.id));
+  const blocked = nodes.filter(
+    (n) =>
+      n.office_hours === null &&
+      n.phase !== null &&
+      n.phase !== "done" &&
+      n.blocked_by.some((b) => parkedIds.has(b)),
+  ).length;
+  return { parked: parkedIds.size, blocked };
+}
+
+/**
+ * Parked-node census over the store, formatted for the rsi sensor reading.
+ * Delegates to `parkedCensus` — see its doc comment for the denominator this
+ * reports.
+ */
+export function readParkedCensus(storeDir: string): string {
+  let nodes: IntentionNode[];
+  try {
+    nodes = listNodes(storeDir);
+  } catch {
+    return "unknown";
+  }
+  const { parked, blocked } = parkedCensus(nodes);
+  return `${parked} (${blocked} blocked)`;
+}
+
+/**
+ * Per-workflow token shares from an already-produced usage aggregate.
+ *
+ * The aggregate is NOT produced here. `aggregate-usage.sh` parses every session
+ * transcript in the window — far too heavy for a batch sensor driver that runs
+ * over the whole store. `/rsi-audit` produces one per audit and this sensor
+ * reads the artifact, reporting `unavailable` when there is none. Reporting
+ * absence honestly matters more than usual here: a fabricated 0% for rsi would
+ * silently satisfy the recorded "dispatch dominates spend" expectation, which is
+ * a review trigger, not a formality.
+ */
+export function readWorkflowSpend(usagePath: string): string {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(readFileSync(usagePath, "utf8"));
+  } catch {
+    return "unavailable";
+  }
+  const buckets = spendBucketsFrom(doc);
+  if (buckets === null) return "unavailable";
+  const spend = attributeSpend(buckets);
+  return spend
+    .map((s) => `${s.workflow} ${(s.share * 100).toFixed(0)}%`)
+    .join(" / ");
+}
+
+/**
+ * Compose the full rsi reading from its segments. Exported for unit tests,
+ * which inject a fixture repo, a fixture store and a fixture usage aggregate.
+ */
+export function readRsiReading(
+  repoDir: string,
+  storeDir: string,
+  usagePath: string,
+  window: string,
+): string {
+  return (
+    `pause: ${readPauseState(repoDir)}; ` +
+    `backlog: ${readBacklogBand(storeDir, BACKLOG_STRATEGY_ID)}; ` +
+    `parked: ${readParkedCensus(storeDir)}; ` +
+    `worktrees: ${readWorktreeCount(repoDir)}; ` +
+    `tokens ${window}: ${readWorkflowSpend(usagePath)}`
+  );
+}
+
+const rsiSensor: Sensor = {
+  name: RSI_SENSOR_NAME,
+  read(): string {
+    const usagePath =
+      process.env.RSI_USAGE_AGGREGATE_PATH ?? join(repoRoot, "tmp", "usage-audit.json");
+    const window = process.env.RSI_USAGE_WINDOW ?? "7d";
+    return readRsiReading(repoRoot, intentionsDir, usagePath, window);
+  },
+};
+
 /**
  * Build the default registry of local-first own-execution sensors. Exported so
  * the registration set can be unit-tested (verification deferred to #2372/QA).
@@ -1279,7 +1609,9 @@ export function buildDefaultRegistry(): SensorRegistry {
   registry.register(tokenEconomySensor);
   registry.register(lifecycleSensor);
   registry.register(dependencyAuditSensor);
+  registry.register(rsiSensor);
   registry.register(makeDelegationRecordsSensor(() => listNodes(intentionsDir)));
+  registry.register(makeLadderTerminusSensor(() => listNodes(intentionsDir)));
   // Register the intention-store sensor last and have it derive the set of
   // registered sensor names from the registry itself at read() time — by then
   // the registry holds every sensor, including this one. Deriving the set (vs
@@ -1293,6 +1625,38 @@ export function buildDefaultRegistry(): SensorRegistry {
   );
   return registry;
 }
+
+/**
+ * The names the default registry resolves — the set a consumer needs to answer
+ * "is this node's declared sensor actually measured?".
+ *
+ * Consumers use it to separate real metrics (measured, with a threshold) from
+ * declared-but-unread aspirations — the same split the driver's own
+ * unregistered-sensor tail reports. Derived
+ * from the registry itself, never hand-listed, for the same reason
+ * `makeIntentionStoreSensor` derives its set: a hand-list silently drifts the
+ * moment a sensor is added above.
+ */
+export function registeredSensorNames(): ReadonlySet<string> {
+  return buildDefaultRegistry().names();
+}
+
+/**
+ * The registered names that are deliberately NODE-AGNOSTIC: short generic
+ * adapters any node may adopt by naming them, which no node names today. They
+ * are exempt from validate-graph's registered-sensor rule
+ * (`validateRegisteredSensorNames`), which otherwise requires every registered
+ * name to be some node's recorded `success_signal.sensor`.
+ *
+ * Every other registered sensor is node-bound: its name is a verbatim copy of
+ * one node's recorded sensor prose, so a reword on either side de-registers it.
+ * Do not park a node-bound name here to quiet the rule — that is the drift the
+ * rule exists to catch.
+ */
+export const UNBOUND_SENSOR_NAMES: ReadonlySet<string> = new Set([
+  VITEST_SENSOR_NAME,
+  GIT_SENSOR_NAME,
+]);
 
 // --- Core driver -----------------------------------------------------------
 

@@ -13,7 +13,6 @@ status: raw
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -21,8 +20,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: pr1-graph-write-path
+  pr: 3095
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-15T15:45:21Z
+    mergeCommitSha: fe0b1c4d27973922957f4a173c9a44042a31b8f8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -89,3 +100,86 @@ Not addressed by PR #2989 (source: `tactic-graph-commit-intentions-base-stale-re
 This is a draft — a later `/align-tactics` round should finalize it into a
 plannable tactic (or dismiss it) after re-validating this provenance against
 what actually merged.
+
+## Disposition — ruled 2026-08-15
+
+Ruled **(b)** by clarification 241: keep the writer's original snapshot
+immutable and put the merged content *beside* it, not over it. The
+`## Recommended fix` above stands as written and is now the plannable shape.
+
+The 2026-08-14 `/align-tactics` round parked this node claiming the fix "cannot
+be built without breaking `test-graph-commit.sh` cases 48-51". **That claim was
+wrong and is withdrawn.** The round under-weighted the second half of the
+node's own fix — that `ensure_intentions_only_base()` replays
+`<id>.merged.md`. With the replay preference in place:
+
+- **Case 48** (the Unit 1 regression guard: *"far-ahead + stale `--base`:
+  layer-3 merge survives the far-ahead rebuild, both fields land"*) passes
+  unchanged — the rebuild replays `.merged.md`, which carries exactly the
+  merged content `SNAP_DIR` carries today.
+- **Case 22** (`:1551-1581`, `SNAP_DIR` retains the writer's original on an
+  **unresolved** merge) is preserved by construction.
+
+Only a naive freeze *without* the replay-preference half breaks them. No
+preserved regression guard is weakened, so `.claude/rules/test-integrity.md`
+is not engaged.
+
+### Corrected anchors
+
+Every line citation in the sections above predates PR #2989 and has moved:
+
+| Cited above | Current |
+|---|---|
+| `535` (`check_base_freshness()` clobber) | `:809-810` |
+| `811` (`replay_snapshot_onto_base()` clobber) | `:1203-1208` |
+| `629-635` (`SNAP_DIR` is the sole surviving copy) | `:919-935` |
+| `1987-1996` (same, second assertion) | `:1157-1211` |
+| `1590` (`park_write()` recovery text) | `:2944-2952` |
+
+### A third clobber site, named by nobody
+
+`build_commit_plumbing()` clobbers `SNAP_DIR/<id>.md` at **`:1650-1652`** —
+structurally identical to the other two and feeding the same `park_write()`
+text. It is in scope. Neither this node nor
+`plans/dispatch-rsi-serialized-pr-plan.md` names it.
+
+### Readers that must change with the writers
+
+Freezing the file is not enough; every consumer that means *"what this run
+intended to land"* must prefer `.merged.md`:
+
+- `ensure_intentions_only_base()`'s replay (the far-ahead rebuild).
+- `print_verdict` (`:2091-2098`), which reads `SNAP_DIR` as ground truth for
+  the run's intent.
+- `park_write()` (`:2944-2952`), which must name **both** paths and label which
+  is the session's own original and which is graph-commit's partial merge.
+
+### Not adopted, still open
+
+Candidate **(c)** — that the losing writer's content belongs in this node's own
+`office_hours` record rather than behind any machine-local tmpdir pointer — was
+**not** adopted, but its premise is sound: `park_write`'s own text concedes the
+tmpdir is *"this machine only — may not survive past this session"*, which
+fails the strategy's recorded condition that a park whose context lives only in
+the parking session is a defect. (b) and (c) are complements, not substitutes.
+File (c) as its own tactic; it is not part of this node's scope.
+
+## Implementation record
+
+Shipped in PR #3095, squash-merged to `main` as `fe0b1c4d`, under
+`strategy-graph-native-dispatch` clarification **241**, ruling **(b)**:
+`SNAP_DIR/<id>.md` is frozen as the writer's pre-merge original, and every merge
+output is written beside it as `SNAP_DIR/<id>.merged.md`.
+
+All **three** clobber sites were redirected — including `build_commit_plumbing()`
+at `:1650-1652`, which neither this node nor
+`plans/dispatch-rsi-serialized-pr-plan.md` names. The readers that mean *"what
+this run intended to land"* (the far-ahead rebuild's replay, `print_verdict`,
+and `park_write`) now resolve through `snap_intended_file`, and `park_write`
+names both paths and labels which is the writer's own original and which is
+graph-commit's partial merge.
+
+Candidate **(c)** was not adopted, as ruled, and is filed as
+`tactic-graph-commit-park-content-durability`. That node is `blocked_by` both
+this one and `tactic-eval-finding-noop-verdict-hides-dropped-node-edit`, so it
+becomes workable once the two of them close.

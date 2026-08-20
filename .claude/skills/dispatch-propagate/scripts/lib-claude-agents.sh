@@ -15,11 +15,13 @@
 #   live_session_claimed_nums
 #   worktree_has_live_session          <worktree-path> [exclude_sid]
 #   worktree_occupancy_state           <worktree-path> [exclude_sid]
+#   worktree_code_review_lock_path     <worktree-path>
 #   claude_agents_count_busy_workers
 #   claude_agents_list_blocked_workers
 #   claude_agents_count_held_for_debug
 #   claude_agents_list_terminal_workers
 #   verify_agent_registered_under      <agent-name> <cwd>
+#   verify_agent_registered_under_state <agent-name> <cwd>
 #   claude_agents_snapshot_capture            <path>
 #   claude_agents_snapshot_capture_registered <path>
 #   claude_job_id_for_name_all         <name>
@@ -225,6 +227,39 @@
 #     return 0 — a row with the given <agent-name> was observed.
 #     return 1 — exhaustion: the agent never appeared within the budget.
 #   Used by `dispatch-launch-worker` / `dispatch-spawn-job` Step 4 verify.
+#   THIS BOOLEAN CONFLATES TWO OUTCOMES. `return 1` means either "the registry
+#   answered and the agent is not there" or "the registry could not be asked at
+#   all". A caller whose response to a failed verify is destructive — releasing
+#   a claim, say — MUST NOT use it: use
+#   `verify_agent_registered_under_state` below and act on the token.
+#
+# verify_agent_registered_under_state <agent-name> <cwd>
+#   The granular verify: same probe, same budget, same seam, but it reports
+#   WHICH of the two `return 1` outcomes happened. Prints exactly ONE token on
+#   stdout and ALWAYS returns 0 — the same token-not-exit-code contract
+#   `worktree_occupancy_state` uses, and for the same reason: there are three
+#   outcomes, not two.
+#
+#     registered — an attempt observed a non-`stopped` row named <agent-name>.
+#     absent     — at least one attempt was a DEFINITE read (`claude_sessions_under`
+#                  returned 0) and no attempt matched the name. The agent really
+#                  is not registered.
+#     unknown    — EVERY attempt was UNKNOWN (`claude` missing, non-zero exit,
+#                  non-array payload, or an uncorroborated `[]`). NOT evidence
+#                  of anything: the registry was never read. Callers MUST NOT
+#                  treat this as absence — in particular, must not release a
+#                  reservation, reap a worktree, or declare a phantom spawn on
+#                  it, because a real worker may be booting behind an
+#                  unanswerable daemon.
+#
+#   Also sets VERIFY_AGENT_REGISTERED_STATE (mirrors stdout).
+#   CAVEAT — that global is observable ONLY on a DIRECT call:
+#       verify_agent_registered_under_state "$n" "$cwd" >/dev/null  # global set
+#       st=$(verify_agent_registered_under_state "$n" "$cwd")       # NOT set
+#   Command substitution runs the function in a subshell, so the assignment dies
+#   with it. The TOKEN is the contract; the global is a convenience for callers
+#   that already redirect stdout (see worktree_occupancy_state's identical
+#   CAVEAT).
 #
 # claude_session_id_is_live <sid>
 #   The winner-liveness predicate for the duplicate-worker stand-down protocol.
@@ -967,6 +1002,11 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # --json --all`): a session that has stopped but has not been `claude rm`'d
   # still holds its worktree. Registration IS the claim; release is an explicit
   # human act. No timeout — see the header contract.
+  # It ALSO reports occupied while the worktree's code-review lock is held by a
+  # detached `/code-review --fix` run, whose nested session never appears in the
+  # registered view at all — see `worktree_occupancy_state`'s contract. That is
+  # a pure widening of "occupied": no worktree this predicate used to call
+  # occupied becomes free.
   # Name-keyed, two-name check against a SINGLE claude_agents_list_registered fetch
   # (one daemon round-trip per worktree, not two): exact-matches the live-session
   # name against both the worktree basename (the phase-worker session spawned
@@ -1006,13 +1046,40 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
-  # WORKTREE_OCCUPANCY_STATE / WORKTREE_OCCUPANCY_SESSION_ID — the granular
-  # verdict and the matched holder's sessionId from the most recent
+  # WORKTREE_OCCUPANCY_STATE / WORKTREE_OCCUPANCY_SESSION_ID /
+  # WORKTREE_OCCUPANCY_REASON — the granular verdict, the matched holder's
+  # sessionId, and WHY the verdict came out that way, from the most recent
   # `worktree_occupancy_state` call. Initialized here so a read before the first
   # call under `set -u` is not an unbound-variable error (same idiom as
   # CLAUDE_SESSION_ID_LIVE_STATE).
   WORKTREE_OCCUPANCY_STATE="unknown"
   WORKTREE_OCCUPANCY_SESSION_ID=""
+  WORKTREE_OCCUPANCY_REASON=""
+
+  # WORKTREE_CODE_REVIEW_LOCK_SUFFIX — the sidecar name a detached
+  # `/code-review --fix` run holds while it is writing a worktree. The file sits
+  # BESIDE the worktree, never inside it: `<worktrees-root>/<basename><suffix>`,
+  # the same sidecar convention as `<id>.scope-fingerprint` and `<id>.ladder`.
+  # Inside the worktree would be wrong twice over — it is the reviewed (and so
+  # attacker-writable) tree, and it would be swept away with the worktree while
+  # the run it describes was still going.
+  WORKTREE_CODE_REVIEW_LOCK_SUFFIX=".code-review-lock"
+
+  # worktree_code_review_lock_path <worktree-path> — the sidecar path for a
+  # worktree. Pure string derivation; touches no filesystem and creates nothing.
+  worktree_code_review_lock_path() {
+    local pth="${1:-}"
+    if [[ -z "$pth" ]]; then
+      printf 'lib-claude-agents: worktree_code_review_lock_path requires a <path> argument\n' >&2
+      return 1
+    fi
+    # Strip any trailing slash so `basename`/`dirname` see the worktree itself
+    # rather than its parent (a caller passing "<root>/<id>/" must key the same
+    # sidecar as one passing "<root>/<id>").
+    while [[ "$pth" == */ && "$pth" != "/" ]]; do pth="${pth%/}"; done
+    printf '%s/%s%s\n' "$(dirname "$pth")" "$(basename "$pth")" "$WORKTREE_CODE_REVIEW_LOCK_SUFFIX"
+    return 0
+  }
 
   # worktree_occupancy_state <path> [exclude_sid] — the granular OCCUPANCY
   # classifier behind `worktree_has_live_session`.
@@ -1023,7 +1090,8 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   # written as a predicate: it has four outcomes, not two.
   #
   #   free      — the daemon answered and no session claims this worktree.
-  #   live      — a registered session claims it and is NOT in a terminal state.
+  #   live      — a registered session claims it and is NOT in a terminal state,
+  #               OR the worktree's code-review lock is held (see below).
   #               A valid claim: callers skip the node and never spawn into it.
   #   terminal  — a registered session claims it but its state is terminal
   #               (see CLAUDE_AGENTS_TERMINAL_STATES_JQ). Nothing is running, yet
@@ -1034,9 +1102,50 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   #               an invalid state: a daemon hiccup must never manufacture an
   #               intervention.
   #
-  # Also sets WORKTREE_OCCUPANCY_STATE (mirrors stdout) and
+  # Also sets WORKTREE_OCCUPANCY_STATE (mirrors stdout),
   # WORKTREE_OCCUPANCY_SESSION_ID (the matched row's sessionId; empty for `free`
-  # and `unknown`) for callers that need the evidence rather than the verdict.
+  # and `unknown`, and empty for a code-review lock, which is not a session) and
+  # WORKTREE_OCCUPANCY_REASON (why: `code-review-lock`,
+  # `code-review-lock-unverifiable`, `session`, `daemon-unreadable`, `no-path`,
+  # or empty for `free`) for callers that need the evidence rather than the
+  # verdict.
+  #
+  # THE CODE-REVIEW LOCK, checked BEFORE the daemon is queried
+  # ---------------------------------------------------------
+  # A `/code-review --fix` run launched by `dispatch-code-review` is DETACHED:
+  # it outlives the session that launched it, and the nested `claude -p` session
+  # it runs never appears in the registered view at all
+  # (review-fix/references/code-review-invocation.md §6). So the registered view
+  # alone can report a worktree free while a review is still writing it — and a
+  # worker spawned into that worktree corrupts both trees and makes
+  # dispatch-code-review's `git diff <before-image>` attribute unrelated changes
+  # to the review.
+  #
+  # The launcher runs the detached child under `flock -w 1 <sidecar>`, so the
+  # KERNEL holds the lock for exactly the child's lifetime and releases it on
+  # any death, SIGKILL and host crash included. Here we only ask the kernel:
+  #
+  #   no sidecar file            → no lock. Today's logic, unchanged.
+  #   sidecar + acquire FAILS    → held → `live`, reason `code-review-lock`.
+  #   sidecar + acquire SUCCEEDS → a stale file, not a held lock. Today's logic,
+  #                                unchanged. The file is NOT deleted: deletion
+  #                                races a launcher that is at this instant
+  #                                creating it, and would drop the lock it is
+  #                                about to take.
+  #   no `flock` on PATH + file  → `unknown`, which every caller folds toward
+  #                                occupied. Fail-safe, the same posture an
+  #                                unreadable daemon gets — not a silent
+  #                                downgrade to free.
+  #
+  # LIMITS (strategy-token-economy clarification 45). `flock` is ADVISORY: it
+  # binds only claimers that check for it. That is sound here only because the
+  # claim paths are few and every one of them routes through this one predicate
+  # (`worktree_has_live_session` is a thin wrapper over this function) — which is
+  # why the check lives here rather than being taught separately to
+  # provision-node-worktree, the reservation sweep, the invalid-state lane and
+  # office-hours select. A human who walks into the worktree by hand bypasses
+  # the lock exactly as they bypass the registered-session claim today; the lock
+  # narrows the machine's own races, and does not fence people out.
   #
   # CAVEAT — the two globals are observable ONLY on a DIRECT call:
   #     worktree_occupancy_state "$wt" >/dev/null   # globals set
@@ -1057,16 +1166,69 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
   worktree_occupancy_state() {
     WORKTREE_OCCUPANCY_STATE="unknown"
     WORKTREE_OCCUPANCY_SESSION_ID=""
+    WORKTREE_OCCUPANCY_REASON=""
     local pth="${1:-}"
     if [[ -z "$pth" ]]; then
       printf 'lib-claude-agents: worktree_occupancy_state requires a <path> argument\n' >&2
       # Fail safe: no path is not evidence of freedom. `unknown` folds to
       # occupied in every caller, matching worktree_has_live_session's own
       # empty-arg handling.
+      WORKTREE_OCCUPANCY_REASON="no-path"
       printf 'unknown\n'
       return 0
     fi
     local exclude_sid="${2:-}"
+
+    # --- the code-review lock, BEFORE the daemon query --------------------
+    # Deliberately first: the whole point is that the session which launched
+    # the run may already be gone from the registered view (or never appeared
+    # in it), so consulting the daemon first would answer `free` for a worktree
+    # that is actively being written. See the contract above for the four
+    # cases, and for why `flock` being advisory is acceptable here.
+    #
+    # `exclude_sid` does NOT apply: it excludes a caller's own SESSION, and a
+    # held lock is not a session — it is a running process with no registry
+    # row. A caller cannot exempt itself from a lock it does not hold.
+    local _crlock
+    _crlock="$(worktree_code_review_lock_path "$pth")"
+    if [[ -n "$_crlock" && -e "$_crlock" ]]; then
+      if ! command -v flock >/dev/null 2>&1; then
+        # The file exists and we cannot ask the kernel whether it is held.
+        # Fail safe: `unknown` folds to occupied in every caller. Say so once,
+        # naming the remedy, so this is a visible degradation and not a silent
+        # one.
+        printf 'lib-claude-agents: %s has a code-review lock sidecar but `flock` is not on PATH — reporting unknown (occupied); install util-linux to get a definite answer\n' \
+          "$pth" >&2
+        WORKTREE_OCCUPANCY_STATE="unknown"
+        WORKTREE_OCCUPANCY_REASON="code-review-lock-unverifiable"
+        printf 'unknown\n'
+        return 0
+      fi
+      # `flock -n <file> true` acquires and immediately releases. Failing to
+      # acquire is the ONLY liveness signal — never the file's existence, never
+      # its body (the body is diagnostics the holder wrote, and a leftover file
+      # from a crashed run keeps its stale body forever). The probe cannot
+      # create the file: we already know it exists.
+      #
+      # The probe is EXCLUSIVE for the fork+exec of `true` (~ms), and this
+      # predicate runs across the whole worktrees root on every claim path — so
+      # a launcher's own acquire can land inside one of those holds. That is why
+      # `dispatch-code-review`'s launch wrapper acquires with `-w 1` rather than
+      # `-n`: a millisecond probe hold must not be reported as a rival run.
+      if ! flock -n "$_crlock" true 2>/dev/null; then
+        WORKTREE_OCCUPANCY_STATE="live"
+        WORKTREE_OCCUPANCY_REASON="code-review-lock"
+        # No sessionId: the holder is a detached process, not a registered
+        # session. A caller reporting WHY this worktree is occupied reads
+        # WORKTREE_OCCUPANCY_REASON, and can read the sidecar's body for the
+        # pid/node/target the holder recorded.
+        printf 'live\n'
+        return 0
+      fi
+      # Acquired — the file is stale residue from a finished run. Fall through
+      # to the registered-session logic unchanged, and leave the file alone:
+      # removing it here would race a launcher creating it right now.
+    fi
     local base oh
     base="$(basename "$pth")"
     # The office-hours key is only meaningful for a legacy `<N>-<slug>` issue
@@ -1097,6 +1259,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       # evidence exists, and a blocked read must never manufacture an invalid
       # state.
       WORKTREE_OCCUPANCY_STATE="unknown"
+      WORKTREE_OCCUPANCY_REASON="daemon-unreadable"
       printf 'unknown\n'
       return 0
     fi
@@ -1131,6 +1294,7 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       msid="${matched%%$'\t'*}"
       mstate="${matched#*$'\t'}"
       WORKTREE_OCCUPANCY_SESSION_ID="$msid"
+      WORKTREE_OCCUPANCY_REASON="session"
 
       # Classify the matched row's state against the single shared terminal
       # enumeration. jq (not a bash case) so this cannot drift from the two
@@ -1565,18 +1729,28 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     return 0
   }
 
-  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
-  # that closes the async-registration race after `claude --bg` returns.
-  # See the header comment for the return-code contract.
+  # VERIFY_AGENT_REGISTERED_STATE — the granular verdict from the most recent
+  # `verify_agent_registered_under_state` call. Initialized here so a read
+  # before the first call under `set -u` is not an unbound-variable error (same
+  # idiom as WORKTREE_OCCUPANCY_STATE / CLAUDE_SESSION_ID_LIVE_STATE).
+  VERIFY_AGENT_REGISTERED_STATE="unknown"
+
+  # verify_agent_registered_under_state <agent-name> <cwd> — the granular
+  # bounded-retry verify behind `verify_agent_registered_under`.
+  # See the header comment for the token contract and the globals CAVEAT.
   # STAYS ON THE ACTIVE VIEW (via claude_sessions_under): the registration race
   # needs a LIVE successor; a stale done row of the same name would falsely
   # report success.
-  verify_agent_registered_under() {
+  verify_agent_registered_under_state() {
+    VERIFY_AGENT_REGISTERED_STATE="unknown"
     local agent_name="${1:-}"
     local cwd="${2:-}"
     if [[ -z "$agent_name" || -z "$cwd" ]]; then
       printf 'lib-claude-agents: verify_agent_registered_under requires <agent-name> <cwd>\n' >&2
-      return 1
+      # Fail safe: a missing argument is a caller bug, not an observation that
+      # the agent is absent. `unknown` keeps every destructive response off.
+      printf 'unknown\n'
+      return 0
     fi
     local max_attempts=5
     local interval_s="${LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S:-0.2}"
@@ -1587,17 +1761,53 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       interval_s=0.2
     fi
     local i sessions status name
+    # The discriminator between `absent` and `unknown`: did the registry EVER
+    # answer? A `claude_sessions_under` return of 0 is a definite read — an
+    # empty one included, since the library already refuses an uncorroborated
+    # `[]`. Non-zero attempts are retried (a daemon momentarily unresponsive
+    # during async registration is exactly what the retry absorbs), but they
+    # contribute no evidence, so a run of nothing but non-zero attempts
+    # exhausts to `unknown`, never `absent`.
+    local definite_read=0
     for (( i = 0; i < max_attempts; i++ )); do
       if sessions=$(claude_sessions_under "$cwd"); then
+        definite_read=1
         while IFS=$'\t' read -r _ _ status name; do
           # Confirm only a live successor: a "stopped" row with the target name
           # must not count as registered (mirrors the spawn-script dedup guards).
           [[ "$status" == "stopped" ]] && continue
-          [[ "$name" == "$agent_name" ]] && return 0
+          if [[ "$name" == "$agent_name" ]]; then
+            VERIFY_AGENT_REGISTERED_STATE="registered"
+            printf 'registered\n'
+            return 0
+          fi
         done <<<"$sessions"
       fi
       (( i + 1 < max_attempts )) && sleep "$interval_s"
     done
+    if (( definite_read )); then
+      VERIFY_AGENT_REGISTERED_STATE="absent"
+      printf 'absent\n'
+    else
+      VERIFY_AGENT_REGISTERED_STATE="unknown"
+      printf 'unknown\n'
+    fi
+    return 0
+  }
+
+  # verify_agent_registered_under <agent-name> <cwd> — bounded-retry verify
+  # that closes the async-registration race after `claude --bg` returns.
+  # See the header comment for the return-code contract.
+  #
+  # A thin wrapper over the classifier above. The boolean contract is UNCHANGED
+  # for every existing caller: only `registered` returns 0, and both `absent`
+  # and `unknown` return 1 — preserving the conservative-fail semantic verbatim.
+  # Callers that must tell the two apart (because their response to a failed
+  # verify is destructive) ask for the token instead.
+  verify_agent_registered_under() {
+    local _st
+    _st="$(verify_agent_registered_under_state "$@")"
+    [[ "$_st" == "registered" ]] && return 0
     return 1
   }
 

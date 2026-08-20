@@ -63,6 +63,10 @@ ca_teardown() {
   # snapshot set by a ca_all_* case can never leak into a case using this
   # (older) pair — a stale snapshot would shadow the fake daemon entirely.
   unset CLAUDE_AGENTS_CMD DISPATCH_AGENTS_SNAPSHOT_ALL
+  # A case that stubs PATH to hide `flock` (the no-flock occupancy case) must
+  # never leak that override into a later case — restore unconditionally here
+  # rather than relying on each case to put it back itself.
+  export PATH="$SAVED_PATH"
 }
 
 # write_fake_claude <stdout-payload> <exit-code> — install a fake `claude` that
@@ -575,6 +579,138 @@ if printf '%s' "$err" | grep -q "is not a non-negative number"; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: verify-bad-interval: warns and falls back to default"
 fi
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25b: verify_agent_registered_under_state — the three verdicts -------
+# THE REQUIREMENT: the boolean above collapses "the registry answered and the
+# agent is not there" and "the registry could not be asked" into one `return 1`.
+# A caller whose response is destructive (dispatch-ladder-advance releases the
+# node's reservation) must be able to tell them apart, or one daemon hiccup
+# drops the claim on a node whose worker is still booting.
+
+echo "Test: verify_agent_registered_under_state reports registered/absent/unknown"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+
+# registered — a live row with the target name.
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+assert_eq "verify-state: a live matching row is registered" \
+  "registered" "$(verify_agent_registered_under_state "dispatch-live" "$CA_DIR")"
+
+# absent — the registry ANSWERED (a corroborated `[]`) and the name is not in it.
+write_fake_claude '[]' 0
+assert_eq "verify-state: a corroborated empty registry is absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR")"
+
+# absent — a definite read carrying OTHER sessions, still no match.
+write_fake_claude '[{"sessionId":"s-2","pid":8,"status":"busy","name":"someone-else"}]' 0
+assert_eq "verify-state: a definite read without the name is absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR")"
+
+# absent — a `stopped` row bearing the target name is NOT a live successor, and
+# the read that produced it was definite.
+write_fake_claude '[{"sessionId":"s-3","pid":9,"status":"stopped","name":"dispatch-dead"}]' 0
+assert_eq "verify-state: a stopped row of the target name is absent, not registered" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-dead" "$CA_DIR")"
+
+# unknown — `claude` exits non-zero on every attempt. Nothing was observed.
+write_fake_claude '' 1
+assert_eq "verify-state: a non-zero claude exit is unknown, never absent" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# unknown — a missing `claude` binary (127).
+CA_SAVED_CMD="$CLAUDE_AGENTS_CMD"
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+assert_eq "verify-state: a missing claude binary is unknown" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+CLAUDE_AGENTS_CMD="$CA_SAVED_CMD"
+
+# unknown — a non-array payload.
+write_fake_claude '{"daemon":"unreachable"}' 0
+assert_eq "verify-state: a non-array payload is unknown" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# unknown — an UNCORROBORATED `[]`: byte-identical to the definite-empty case
+# above, separated only by the daemon-process probe. This is the sandbox shape,
+# and the one that must never read as absence.
+write_fake_claude '[]' 0
+CLAUDE_AGENTS_PGREP_CMD="$CA_PROBE_ABSENT"
+assert_eq "verify-state: an uncorroborated [] is unknown, not absent" \
+  "unknown" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+CLAUDE_AGENTS_PGREP_CMD="$CA_DIR/pgrep-daemon-visible"
+
+# unknown — a missing argument is a caller bug, not an observation of absence.
+assert_eq "verify-state: a missing argument fails safe to unknown" \
+  "unknown" "$(verify_agent_registered_under_state "" "$CA_DIR" 2>/dev/null)"
+
+# The global mirrors stdout on a DIRECT call (the documented CAVEAT: it does
+# NOT survive a `$( )`, which is why the token is the contract).
+write_fake_claude '[]' 0
+verify_agent_registered_under_state "dispatch-x" "$CA_DIR" >/dev/null
+assert_eq "verify-state: VERIFY_AGENT_REGISTERED_STATE mirrors the token" \
+  "absent" "$VERIFY_AGENT_REGISTERED_STATE"
+
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25c: a mixed run — one UNKNOWN attempt does not poison the verdict --
+# The retry exists because the daemon can be momentarily unresponsive DURING
+# async registration. A single failed attempt must neither force `unknown` when
+# a later attempt reads cleanly, nor block a late registration from counting.
+echo "Test: verify_agent_registered_under_state discriminates per attempt, not per run"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+CA_COUNTER="$CA_DIR/attempts"
+: > "$CA_COUNTER"
+# Attempt 1 fails; attempts 2+ answer with a corroborated empty registry.
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+echo x >> "$CA_COUNTER"
+n=\$(wc -l < "$CA_COUNTER")
+if (( n == 1 )); then exit 1; fi
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+assert_eq "verify-state-mixed: a later definite read makes the verdict absent" \
+  "absent" "$(verify_agent_registered_under_state "dispatch-x" "$CA_DIR" 2>/dev/null)"
+
+# The complement: attempt 1 fails, attempt 3 carries the registration.
+: > "$CA_COUNTER"
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+echo x >> "$CA_COUNTER"
+n=\$(wc -l < "$CA_COUNTER")
+if (( n == 1 )); then exit 1; fi
+if (( n < 3 )); then echo '[]'; exit 0; fi
+echo '[{"sessionId":"s-late","pid":5,"status":"busy","name":"dispatch-late"}]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+assert_eq "verify-state-mixed: a late registration still reads as registered" \
+  "registered" "$(verify_agent_registered_under_state "dispatch-late" "$CA_DIR" 2>/dev/null)"
+
+unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
+ca_teardown
+
+# --- Test 25d: the boolean wrapper's contract is unchanged -------------------
+# Every existing caller (dispatch-spawn-job, dispatch-resume-worker,
+# office-hours) still sees exactly two outcomes: only `registered` returns 0.
+echo "Test: verify_agent_registered_under still folds absent and unknown to rc 1"
+ca_setup
+export LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S=0
+write_fake_claude '[{"sessionId":"s-1","pid":7,"status":"busy","name":"dispatch-live"}]' 0
+if verify_agent_registered_under "dispatch-live" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: registered is rc 0" "0" "$rc"
+write_fake_claude '[]' 0
+if verify_agent_registered_under "dispatch-x" "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: absent is rc 1" "1" "$rc"
+write_fake_claude '' 1
+if verify_agent_registered_under "dispatch-x" "$CA_DIR" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: unknown is rc 1" "1" "$rc"
+if verify_agent_registered_under "" "$CA_DIR" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "verify-wrapper: a missing argument is rc 1" "1" "$rc"
 unset LIB_CLAUDE_AGENTS_VERIFY_INTERVAL_S
 ca_teardown
 
@@ -1679,6 +1815,120 @@ case "$diag" in
   *) diag_ok="no: $diag" ;;
 esac
 assert_eq "wrapper: the operator diagnostic still reaches stderr" "yes" "$diag_ok"
+ca_teardown
+
+# --- Test 73: a held code-review lock alone reports live -----------------------
+# The lock is checked BEFORE the daemon is queried (see the "THE CODE-REVIEW
+# LOCK" comment above worktree_occupancy_state). Stub the daemon to `free` so a
+# `live` verdict here can only be coming from the lock, never from a session
+# match.
+echo "Test: worktree_occupancy_state reports live when the code-review lock is held, daemon stubbed free"
+ca_setup
+write_fake_claude '[]' 0
+
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+# `flock <file> <cmd>` forks: the backgrounded `flock`'s CHILD (`sleep`)
+# inherits the locked fd from its parent, so releasing the lock later means
+# killing BOTH — killing only the pid captured in `$!` (the `flock` process)
+# would leave `sleep` running (and the lock still held), since `sleep` is the
+# one holding the inherited fd. (A whole-process-GROUP kill is the wrong tool
+# here: this job is backgrounded from a non-interactive script with no job
+# control, so it shares the SCRIPT's own process group rather than getting
+# its own — signalling the group would take down the test harness itself.)
+flock "$lockfile" sleep 5 &
+holder_pid=$!
+# Wait for the background flock to actually acquire the lock rather than
+# assume a fixed startup delay: a non-blocking acquire attempt keeps
+# succeeding (and instantly releasing) until the background holder has it.
+for (( i = 0; i < 50; i++ )); do
+  if ! flock -n "$lockfile" true 2>/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "held lock: occupancy reports live" "live" "$out"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "held lock: reason is code-review-lock" "code-review-lock" "$WORKTREE_OCCUPANCY_REASON"
+assert_eq "held lock: no session id — the holder is a process, not a session" \
+  "" "$WORKTREE_OCCUPANCY_SESSION_ID"
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "held lock: worktree_has_live_session reports occupied" "occupied" "$live"
+
+# Release: kill `flock`'s child (`sleep`, which holds the inherited locked
+# fd) FIRST, then `flock` itself. Killing only $holder_pid would leave the
+# child running with the fd still open and the lock still held.
+holder_child=$(pgrep -P "$holder_pid" 2>/dev/null | head -1)
+[[ -n "$holder_child" ]] && kill -9 "$holder_child" 2>/dev/null || true
+kill -9 "$holder_pid" 2>/dev/null || true
+wait "$holder_pid" 2>/dev/null || true
+rm -f "$lockfile"
+ca_teardown
+
+# --- Test 74: a stale (unheld) lock file leaves the daemon verdict unchanged ---
+# The sidecar's mere EXISTENCE is never the liveness signal — only a failed
+# `flock -n` acquire is. A leftover file from a finished run must fall through
+# to the ordinary registered-session logic, and must not be deleted by the
+# reader (deleting it would race a launcher creating it at that instant).
+echo "Test: a stale code-review lock file (nobody holding it) does not change the verdict, and is not deleted"
+ca_setup
+ca_basename=$(basename "$CA_DIR")
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+write_fake_claude '[]' 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "stale lock, daemon free: verdict is free" "free" "$out"
+assert_eq "stale lock, daemon free: lock file untouched" "1" "$([[ -e "$lockfile" ]] && echo 1 || echo 0)"
+
+write_fake_claude "[{\"sessionId\":\"sess-live\",\"status\":\"busy\",\"name\":\"$ca_basename\",\"state\":\"working\"}]" 0
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null)
+assert_eq "stale lock, daemon live: verdict is live" "live" "$out"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "stale lock, daemon live: reason is session, not the lock" "session" "$WORKTREE_OCCUPANCY_REASON"
+assert_eq "stale lock, daemon live: lock file still present" "1" "$([[ -e "$lockfile" ]] && echo 1 || echo 0)"
+
+rm -f "$lockfile"
+ca_teardown
+
+# --- Test 75: no `flock` on PATH + a lock file present ⇒ unknown ---------------
+# `flock`'s absence is the ONLY way to tell "held" from "stale" apart, so
+# losing it while the file exists must fail safe to `unknown` (which every
+# caller folds toward occupied) rather than silently falling through to the
+# session check as if the file were not there.
+echo "Test: no flock on PATH with a lock file present yields unknown (fail safe, occupied)"
+ca_setup
+write_fake_claude '[]' 0
+lockfile="$(worktree_code_review_lock_path "$CA_DIR")"
+: >"$lockfile"
+
+# Hide `flock` from PATH while keeping the two externals the guard still needs
+# before it ever reaches the `command -v flock` check (`dirname`/`basename`,
+# used by worktree_code_review_lock_path) resolvable — the lock check runs
+# BEFORE any daemon call, so nothing else on PATH is exercised here.
+noflock_bin="$CA_DIR-noflock-bin"
+mkdir -p "$noflock_bin"
+ln -s "$(command -v dirname)" "$noflock_bin/dirname"
+ln -s "$(command -v basename)" "$noflock_bin/basename"
+export PATH="$noflock_bin"
+
+out=$(worktree_occupancy_state "$CA_DIR" 2>/dev/null); rc=$?
+assert_eq "no-flock: missing flock + lock file yields unknown" "unknown" "$out"
+assert_eq "no-flock: unknown still returns 0" "0" "$rc"
+worktree_occupancy_state "$CA_DIR" >/dev/null 2>&1
+assert_eq "no-flock: reason is code-review-lock-unverifiable" \
+  "code-review-lock-unverifiable" "$WORKTREE_OCCUPANCY_REASON"
+
+# Restore PATH before cleanup — `rm` itself is not resolvable under the
+# flock-hiding PATH stub. ca_teardown restores it too (belt and suspenders,
+# per the "restore in the fixture teardown" rule), but the cleanup below
+# needs it back immediately.
+export PATH="$SAVED_PATH"
+rm -f "$lockfile"
+rm -rf "$noflock_bin"
 ca_teardown
 
 report_results

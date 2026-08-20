@@ -9,6 +9,9 @@ import {
   findCodificationDrift,
   surfaceCandidates,
   confirmPushDowns,
+  validateRegisteredSensorNames,
+  findUnboundRegisteredSensorNames,
+  formatUnboundSensorNames,
   type Sensor,
 } from "../src/sensors.js";
 
@@ -94,6 +97,141 @@ describe("readNodeSignal", () => {
     const n = node({ id: "n1", success_signal: null });
     expect(() => readNodeSignal(n, registry)).toThrow(IntentionSchemaError);
     expect(() => readNodeSignal(n, registry)).toThrow(/no success_signal/);
+  });
+});
+
+describe("validateRegisteredSensorNames", () => {
+  const RECORDED = "the intention store and the router's selection log";
+
+  it("passes when every registered name is recorded verbatim by a node", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "main-health", threshold: "t" }) }),
+    ];
+    expect(() =>
+      validateRegisteredSensorNames(nodes, [RECORDED, "main-health"])
+    ).not.toThrow();
+  });
+
+  it("throws when a node's sensor prose drifted from the registered name", () => {
+    // The 2026-08-12 shape: an /align round appends a clause to the recorded
+    // sensor, so the registered name resolves to nothing.
+    const nodes = [
+      node({
+        id: "strategy-a",
+        success_signal: signal({ sensor: `${RECORDED}; and a park-cause reading`, threshold: "t" }),
+      }),
+    ];
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(IntentionSchemaError);
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(/not recorded by any node/);
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).toThrow(new RegExp(RECORDED));
+  });
+
+  it("does not assert the reverse: an unregistered node sensor is fine", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "owner judgment", threshold: "t" }) }),
+      node({ id: "strategy-c", success_signal: null }),
+    ];
+    expect(() => validateRegisteredSensorNames(nodes, [RECORDED])).not.toThrow();
+  });
+
+  it("exempts a declared node-agnostic name that no node records", () => {
+    const nodes = [node({ id: "strategy-a", success_signal: null })];
+    expect(() => validateRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest", "git"])).not.toThrow();
+    expect(() => validateRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest"])).toThrow(/"git"/);
+  });
+});
+
+describe("findUnboundRegisteredSensorNames", () => {
+  const RECORDED = "the intention store and the router's selection log";
+
+  it("returns nothing when every registered name is recorded verbatim", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+    ];
+    expect(findUnboundRegisteredSensorNames(nodes, [RECORDED])).toEqual([]);
+  });
+
+  it("attributes a reworded sensor to the node that reworded it (2026-08-12 shape)", () => {
+    // An /align round appends a clause, so the registered name resolves to
+    // nothing. The orphan IS about a node, and the diagnostic names it.
+    const nodes = [
+      node({
+        id: "strategy-a",
+        success_signal: signal({ sensor: `${RECORDED}; and a park-cause reading`, threshold: "t" }),
+      }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "owner judgment", threshold: "t" }) }),
+    ];
+    expect(findUnboundRegisteredSensorNames(nodes, [RECORDED])).toEqual([
+      { name: RECORDED, candidateNodeIds: ["strategy-a"] },
+    ]);
+  });
+
+  it("attributes a trimmed sensor too — the reword can shorten the prose", () => {
+    const nodes = [
+      node({
+        id: "strategy-a",
+        success_signal: signal({ sensor: "the intention store", threshold: "t" }),
+      }),
+    ];
+    expect(findUnboundRegisteredSensorNames(nodes, [RECORDED])).toEqual([
+      { name: RECORDED, candidateNodeIds: ["strategy-a"] },
+    ]);
+  });
+
+  it("attributes a never-bound constant to NO node (2026-08-14 shape)", () => {
+    // The registry gained a name and the binding step was deferred. Nothing
+    // about any node is wrong, so no node is named — and this is the case that
+    // must not deny an unrelated writer the graph write path.
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: RECORDED, threshold: "t" }) }),
+    ];
+    expect(
+      findUnboundRegisteredSensorNames(nodes, [RECORDED, "ladder-terminus census"]),
+    ).toEqual([{ name: "ladder-terminus census", candidateNodeIds: [] }]);
+  });
+
+  it("does not attribute a node that verbatim records a different registered name", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: signal({ sensor: "main-health", threshold: "t" }) }),
+    ];
+    expect(
+      findUnboundRegisteredSensorNames(nodes, ["main-health", "main-health check count"]),
+    ).toEqual([{ name: "main-health check count", candidateNodeIds: [] }]);
+  });
+
+  it("exempts declared node-agnostic names and sorts the rest by name", () => {
+    const nodes = [node({ id: "strategy-a", success_signal: null })];
+    expect(findUnboundRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest", "git"])).toEqual([]);
+    expect(findUnboundRegisteredSensorNames(nodes, ["vitest", "git"], ["vitest"])).toEqual([
+      { name: "git", candidateNodeIds: [] },
+    ]);
+  });
+
+  it("ignores nodes with no success_signal and empty sensor prose", () => {
+    const nodes = [
+      node({ id: "strategy-a", success_signal: null }),
+      node({ id: "strategy-b", success_signal: signal({ sensor: "   ", threshold: "t" }) }),
+    ];
+    expect(findUnboundRegisteredSensorNames(nodes, [RECORDED])).toEqual([
+      { name: RECORDED, candidateNodeIds: [] },
+    ]);
+  });
+});
+
+describe("formatUnboundSensorNames", () => {
+  it("names the attributed nodes when the orphan is a reword", () => {
+    const message = formatUnboundSensorNames([
+      { name: "store census", candidateNodeIds: ["strategy-a", "strategy-b"] },
+    ]);
+    expect(message).toContain(`  - "store census" — possibly reworded on: strategy-a, strategy-b`);
+    expect(message).toContain("not recorded by any node");
+  });
+
+  it("says so explicitly when the orphan is attributable to no node", () => {
+    const message = formatUnboundSensorNames([{ name: "store census", candidateNodeIds: [] }]);
+    expect(message).toContain("attributable to no node");
   });
 });
 

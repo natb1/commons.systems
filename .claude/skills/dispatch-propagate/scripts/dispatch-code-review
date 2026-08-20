@@ -4,7 +4,8 @@
 #
 # Usage:
 #   dispatch-code-review --target <rev-range> --out-dir <dir> \
-#     [--effort low|medium|high|xhigh|max|ultra] [--no-comment]
+#     [--effort low|medium|high|xhigh|max|ultra] [--model <alias>] \
+#     [--await-seconds N] [--deadline-seconds N] [--no-comment]
 #
 #   --target      the diff target passed through to /code-review. MUST be a
 #                 rev-RANGE ("<a>..<b>" or "<a>...<b>"); the SKILL passes
@@ -15,12 +16,48 @@
 #                 range" below. A non-range target exits 2.
 #   --out-dir     directory for the durable artifacts (output.txt, fix.patch,
 #                 touched-files.txt, summary.txt); created if absent.
-#   --effort      default "low". See "Effort level" below — do not raise this
-#                 default without new measurement.
+#   --effort      default "high". See "Effort level" below.
+#   --model       default "opus". The model the detached nested session runs on,
+#                 passed through as `--model <alias>`. Part of the run identity.
+#   --await-seconds
+#                 default $DISPATCH_CODE_REVIEW_AWAIT_S, else 540. How long ONE
+#                 invocation waits for the detached run before returning exit 5.
+#                 540 s sits comfortably inside the caller's 600 000 ms Bash
+#                 tool cap. Operational, not part of the run identity.
+#   --deadline-seconds
+#                 default $DISPATCH_CODE_REVIEW_DEADLINE_S, else 5400. Total
+#                 wall clock, measured from launch, before the run is killed.
+#                 5400 s is the author's ruling (strategy-token-economy
+#                 clarification 45), not a value derived from measurement.
+#                 Operational, not part of the run identity.
 #   --no-comment  omit --comment (used by the test suite; the SKILL never
 #                 passes it).
 #
-# Resume cache — why it does NOT live in --out-dir
+# There is no mode — every run is detached
+# -----------------------------------------------------------------------------
+# The run is ALWAYS launched detached (`setsid`), and every invocation is a
+# bounded AWAIT over that one run. Nothing here can run a review synchronously,
+# at any effort level: the shape is structural, not a convention a later edit
+# can drift away from.
+#
+# An invocation therefore ends in one of two places:
+#   - the run finished inside this call's await window → the script behaves
+#     exactly as it always has: exit 0 with the status=ok summary on stdout;
+#   - it did not → exit 5 with a status=running block, and the CALLER invokes
+#     this script again with identical arguments. The run keeps going; nothing
+#     in --out-dir is finalized.
+# At `low` effort (14-30 s measured) the run always completes inside the first
+# window, so exit 5 is never seen there.
+#
+# The launch and every later await REQUIRE `dangerouslyDisableSandbox: true` on
+# the calling Bash tool call. Measured (references/code-review-invocation.md
+# §9.1): a sandboxed launch records a namespace-local pid and the child is gone
+# by the next call, because each sandboxed Bash call gets its own PID namespace.
+# The caller already passes that flag for the `--fix` write-allowlist reason
+# (§3.1); this is a second, independent reason for it. This script cannot solve
+# it from the inside.
+#
+# Resume cache and run state — why they do NOT live in --out-dir
 # -----------------------------------------------------------------------------
 # The nested `claude -p` session is expensive, so a completed review is cached
 # and replayed on a resumed pass. That cache is a security boundary: replaying
@@ -32,24 +69,92 @@
 # content this script is reviewing, can write. Keying the resume there let an
 # attacker pre-plant `summary.txt` with `status=ok` and skip the review
 # entirely (and dictate the findings_path/patch_path the caller then reads).
-# So the cache lives OUTSIDE the reviewed worktree:
+#
+# The SAME argument now covers the detached run's own state. A planted `.rc`
+# marker (the completion signal) plus a planted `.output` file would let a
+# review that never ran report status=ok — the identical bypass, one level
+# down. So the run record, its captured output, its exit-code marker, its
+# untracked-before snapshot and its lock ALL live beside the summary cache,
+# OUTSIDE the reviewed worktree:
 #
 #   $DISPATCH_CODE_REVIEW_CACHE_DIR (test seam / explicit override), else
 #   $CLAUDE_JOB_DIR/dispatch-code-review, else
 #   ${XDG_STATE_HOME:-$HOME/.local/state}/dispatch-code-review
 #
 # and it is self-authenticating: a cached summary is replayed only when the
-# cache-schema version, out-dir, --target, the resolved target commit, HEAD,
-# --effort and the --comment flag ALL match this invocation, and the artifacts
-# it points at are the ones this run computed and still exist. Anything else —
-# an advanced target, a new HEAD (the review phase is legitimately re-entered
-# after qa-fix / fix-checks pushes), a different effort, a target that does not
-# resolve to a single commit — re-runs the review rather than replaying a
-# summary that describes a diff nobody reviewed.
+# cache-schema version, out-dir, --target, the resolved target commits, HEAD,
+# --effort, --model and the --comment flag ALL match this invocation, and the
+# artifacts it points at are the ones this run computed and still exist. An
+# in-flight run is resumed under the same identity test. Anything else — an
+# advanced target, a new HEAD (the review phase is legitimately re-entered
+# after qa-fix / fix-checks pushes), a different effort or model, a target that
+# does not resolve to a single commit — re-runs the review rather than replaying
+# or resuming something that describes a diff nobody reviewed.
+#
+# --await-seconds and --deadline-seconds are OPERATIONAL, not identity: changing
+# how long a caller is willing to wait must not discard a live run.
+#
+# Killing a superseded run does NOT reset the before-image (branch (c))
+# -----------------------------------------------------------------------------
+# When the identity test fails on an in-flight run, branch (c) kills it and
+# relaunches. That killed run held `--permission-mode acceptEdits` and may
+# already have WRITTEN files. Taking a fresh `git stash create` after the kill
+# would capture those edits into the new run's baseline, so Step 6's
+# `git diff <before-image>` could never see them: the summary would under-report
+# the yield and `commit-merge-push` would commit files nothing attributed —
+# defeating the mechanical derivation that strategy-token-economy
+# clarification 25 requires ("not any agent's self-report").
+#
+# So on that path alone the baseline is HEAD, and the KILLED run's
+# untracked-before snapshot is carried forward rather than re-taken. HEAD, not
+# the killed run's own before_sha: (c) fires BECAUSE head_sha advanced, so that
+# stash predates the intervening qa-fix / fix-checks commits and would attribute
+# those commits to the review — a larger error than the one it fixes. HEAD is
+# sound because /review-fix Step 1b runs this as an exclusive pre-stage, so any
+# UNCOMMITTED change present at the kill point is the killed run's. When that
+# cannot be established the script exits 2 rather than guessing.
 #
 # summary.txt under --out-dir is still written, as a durable artifact for
 # humans and for the caller's own reading. It is NEVER read back as the resume
 # key — it lives in attacker-writable space.
+#
+# The node lock — the worktree stays claimed for the DETACHED run's lifetime
+# -----------------------------------------------------------------------------
+# strategy-token-economy condition 9: an overrunning run is never killed for
+# being slow, and the node stays locked for the detached run's own lifetime,
+# INDEPENDENTLY of whether the session that launched it survives.
+#
+# Nothing in the repo's claim invariant provides that. Worktree-is-the-claim is
+# keyed on the REGISTERED session, and the nested `claude -p` session never
+# appears in that view at all (references/code-review-invocation.md §6). The
+# launching session can die for reasons that have nothing to do with the review
+# — a frozen-session park, an API error, `claude rm`, a host restart — while its
+# child runs on. What follows is a worker spawning into a worktree an active
+# `--fix` run is still writing: both trees corrupt, and Step 6's mechanical
+# `git diff <before-image>` attributes the intruder's changes to the review,
+# breaching condition 6 with a derivation that is confidently wrong.
+#
+# So the child is launched under `flock -w 1 <sidecar>`. The KERNEL holds the
+# lock for exactly the child's lifetime and releases it on any death — clean
+# exit, SIGKILL, host crash — which is the property no bookkeeping file can
+# have. `worktree_occupancy_state` (lib-claude-agents.sh) probes it BEFORE it
+# queries the daemon and reports `live`, so every claim path inherits the
+# property through the one predicate they all already route through.
+#
+# The sidecar is `<worktrees-root>/<worktree-basename>.code-review-lock`, BESIDE
+# the worktree, never inside it — the same convention as `<id>.scope-fingerprint`
+# and `<id>.ladder`. Inside would be wrong twice: it is the reviewed (so
+# attacker-writable) tree, and it would be swept away with the worktree. The
+# path is derived by `worktree_code_review_lock_path`, the same function the
+# reader uses, so the two ends cannot drift apart.
+#
+# The lock is taken ONLY when the reviewed tree is a dispatch worktree — i.e.
+# its parent directory is a `.claude/worktrees` root. Anywhere else (the test
+# suite's throwaway repo, a hand-run review in a plain clone) there is no
+# dispatch claim to protect and no worktrees root to put a sidecar in, so the
+# run proceeds unlocked. That is an EXPLICIT, tested condition on the path
+# shape, not a swallowed error: a missing `flock` while the condition holds is
+# a hard exit 2, never a quiet unlocked run.
 #
 # Why --target must be a range, not a bare SHA
 # -----------------------------------------------------------------------------
@@ -68,43 +173,82 @@
 # Hence the hard range check below: a wrong target is a caller bug, and a clear
 # exit-2 error beats a green run over the wrong diff (.claude/rules/code-style.md).
 #
-# Effort level — why the default is "low", not "max" or "medium"
+# Effort level — why the default is "high", and why that requires a detached run
 # -----------------------------------------------------------------------------
-# The plan this script implements originally defaulted --effort to "max". Unit
-# 1's measured investigation (references/code-review-invocation.md §1.2, §7)
-# falsified that assumption:
-#   - a `max`-effort review of a real, non-trivial diff ran >39 minutes and was
-#     still incomplete when killed — $371 of price-proxy spend for ZERO bytes
-#     of output. `claude -p` buffers all output until the run completes, so a
-#     killed/timed-out run is a total loss, not a partial result.
-#   - a `medium`-effort run against the same diff also did not complete within
-#     300s (tested directly, main session, 2026-07-31).
-#   - only `low` effort is measured to reliably complete: 14-30s observed,
-#     ~$1.40-$1.77 price-proxy each (§5.4, §7).
-# `low` is therefore the only effort level currently proven to fit this
-# script's timeout budget. `medium`/`high`/`xhigh`/`max`/`ultra` remain
-# available via --effort for callers who have their own measured basis for a
-# larger timeout, but this script does not default to them. Effort-level
-# tuning (is `low` good enough review depth for the dispatch lane, is there a
-# workable middle ground) is an OPEN follow-up for strategy-token-economy —
-# not settled by this script.
+# `high` is an author ruling: strategy-token-economy clarification 44, recorded
+# in the 2026-08-13 /align round, supersedes the 2026-08-09 office-hours ruling
+# that directed `max`. It is a routing change, and condition 3 requires explicit
+# author approval for one — that round is the approval.
+#
+# What the measured record (references/code-review-invocation.md) actually says:
+#   - `max` on a real diff ran 2363 s (39 m 23 s) and was killed having produced
+#     ZERO bytes, at a $371.54 price proxy (§1.2, §5.4, §7). `claude -p` buffers
+#     all output until the run completes, so a killed run is a total loss, not a
+#     partial result.
+#   - `medium` on the same diff did not complete within 300 s (§7).
+#   - only `low` is measured to complete reliably: 14-30 s (§7).
+# So `high` is UNMEASURED, not refuted — §7 says the untested middle is where
+# the usable operating point probably sits. It brackets between measured
+# `medium` (>300 s) and measured `max` (>2363 s), and both ends of that bracket
+# exceed the 600 000 ms Bash tool cap. `high` therefore cannot be run inside one
+# foreground call at all, which is why the invocation is detached rather than
+# synchronous. Unit A measured the detached mechanism itself (§9): `setsid`,
+# with the sandbox requirement recorded above.
+#
+# ROLLBACK. The whole change reverts to the previous cost point with one line:
+# set EFFORT="high" back to EFFORT="low". The detached harness stays correct at
+# `low` — the run completes inside the first await window, so the script exits 0
+# on the first call exactly as it did before. Rollback is an effort change,
+# never a structural one.
 #
 # Exit codes
 # -----------------------------------------------------------------------------
 #   0  invoked, verified, summary on stdout (fresh run, or an authenticated
 #      resume of an identical earlier run — see "Resume cache")
-#   1  `claude -p` exited non-zero
-#   2  invalid arguments, unusable resume-cache location, or empty output
+#   1  `claude -p` exited non-zero, or the detached run could not be launched /
+#      died without recording an exit code
+#   2  invalid arguments, unusable resume-cache location or run state, or empty
+#      output. "Unusable run state" includes a superseded in-flight run whose
+#      before-image baseline cannot be derived (branch (c) below): the review
+#      cannot be relaunched over an attributable diff, and refusing beats
+#      emitting a yield that is confidently wrong
 #   3  output carries a rejection / unavailability signature
-#   4  timed out
+#   4  the detached run exceeded --deadline-seconds and was killed
+#   5  the detached run is still in flight — call again with the same arguments
+#   6  the reviewed worktree's code-review lock is already held by another
+#      detached run — nothing was launched, and no review ran. Distinct from 1
+#      on purpose: a failed lock acquire is a different fact from a child that
+#      failed, and must never be reported as either a completed or a crashed run
 set -euo pipefail
 
 PROG="dispatch-code-review"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# kill_tree — SIGTERM pass, 2 s grace, SIGKILL survivors, over the WHOLE process
+# tree. Both kill sites here need the tree, not the pid: the nested CLI fans out
+# subagent grandchildren (§1.2 recorded 10 of them), and `kill` on the wrapper
+# alone would orphan them still running and still spending.
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+# worktree_code_review_lock_path — the ONE derivation of the node-lock sidecar
+# path, shared with `worktree_occupancy_state`, the reader that every claim path
+# routes through. Sourced (not reimplemented) so the writer and the reader can
+# never disagree about which file the lock lives in.
+# shellcheck source=lib-claude-agents.sh
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 TARGET=""
 OUT_DIR=""
-EFFORT="low"
+EFFORT="high"
+# Pinned explicitly, not inherited: a nested `claude -p` does NOT take the
+# launching session's model, so omitting this silently accepts whatever the CLI
+# defaults to. At `high` effort the model is the dominant cost and quality term,
+# so an unpinned run would leave clarification 46's realized-cost measurement
+# uninterpretable. `opus` is the correct ALIAS — do NOT expand it to a full
+# model id (dispatch-spawn-job:255 records the same rule).
+MODEL="opus"
 NO_COMMENT=""
+AWAIT_SECONDS=""
+DEADLINE_SECONDS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -120,6 +264,35 @@ while [[ $# -gt 0 ]]; do
       EFFORT="${2:-}"
       shift 2
       ;;
+    --model)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --model requires a value" >&2
+        exit 2
+      fi
+      MODEL="$2"
+      shift 2
+      ;;
+    --await-seconds)
+      # Explicit arity guard, like --model above. Without it a value-less flag
+      # reaches `shift 2` with $# == 1; bash's `shift` returns non-zero when
+      # n > $# and does not shift, so `set -euo pipefail` kills the script with
+      # a silent exit 1 — which the caller's `case` reads as "the nested
+      # session crashed", not as an argument error.
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --await-seconds requires a value" >&2
+        exit 2
+      fi
+      AWAIT_SECONDS="$2"
+      shift 2
+      ;;
+    --deadline-seconds)
+      if [[ $# -lt 2 ]]; then
+        echo "$PROG: --deadline-seconds requires a value" >&2
+        exit 2
+      fi
+      DEADLINE_SECONDS="$2"
+      shift 2
+      ;;
     --no-comment)
       NO_COMMENT=1
       shift
@@ -131,12 +304,33 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# DISPATCH_CODE_REVIEW_TIMEOUT is RETIRED, not aliased. It named a single
+# foreground `timeout` budget, a thing this script no longer has; a stale value
+# carried into either new knob would set a meaningless budget. Fail with the
+# replacement names rather than fall back (.claude/rules/code-style.md).
+if [[ -n "${DISPATCH_CODE_REVIEW_TIMEOUT:-}" ]]; then
+  echo "$PROG: DISPATCH_CODE_REVIEW_TIMEOUT is retired — the run is detached, so there is no single foreground timeout. Use --await-seconds (or DISPATCH_CODE_REVIEW_AWAIT_S) for the per-call window and --deadline-seconds (or DISPATCH_CODE_REVIEW_DEADLINE_S) for the total wall clock" >&2
+  exit 2
+fi
+
 if [[ -z "$TARGET" ]]; then
   echo "$PROG: --target is required and must be non-empty" >&2
   exit 2
 fi
 if [[ -z "$OUT_DIR" ]]; then
   echo "$PROG: --out-dir is required and must be non-empty" >&2
+  exit 2
+fi
+
+# Same opaque-forward shape as dispatch-spawn-job:144-146,186: the value is
+# passed straight through to the CLI, so it is guarded for shape only, never
+# matched against a model list this script would then have to keep current.
+if [[ -z "$MODEL" ]]; then
+  echo "$PROG: --model is required and must be non-empty" >&2
+  exit 2
+fi
+if [[ ! "$MODEL" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "$PROG: --model value '$MODEL' contains unexpected characters" >&2
   exit 2
 fi
 
@@ -153,6 +347,27 @@ fi
 # still reports status=ok.
 if ! [[ "$TARGET" =~ ^[A-Za-z0-9._/@^~-]+\.\.\.?[A-Za-z0-9._/@^~-]+$ ]]; then
   echo "$PROG: --target '$TARGET' is not a rev-range — pass '<base>..<head>' (e.g. \"\$MERGE_BASE..HEAD\"), not a bare commit-ish; a bare SHA reviews only that single commit" >&2
+  exit 2
+fi
+
+# Integer-guard-or-default, the house idiom (lib-frozen-session-park.sh:366-380):
+# a malformed value falls back to the documented default rather than propagating
+# into arithmetic. These are operator knobs at a system edge, not business logic.
+[[ -n "$AWAIT_SECONDS" ]] || AWAIT_SECONDS="${DISPATCH_CODE_REVIEW_AWAIT_S:-540}"
+if [[ ! "$AWAIT_SECONDS" =~ ^[0-9]+$ ]] || (( AWAIT_SECONDS < 1 )); then
+  AWAIT_SECONDS=540
+fi
+[[ -n "$DEADLINE_SECONDS" ]] || DEADLINE_SECONDS="${DISPATCH_CODE_REVIEW_DEADLINE_S:-5400}"
+if [[ ! "$DEADLINE_SECONDS" =~ ^[0-9]+$ ]] || (( DEADLINE_SECONDS < 1 )); then
+  DEADLINE_SECONDS=5400
+fi
+POLL_INTERVAL_S="${DISPATCH_CODE_REVIEW_POLL_INTERVAL_S:-5}"
+if [[ ! "$POLL_INTERVAL_S" =~ ^[0-9]+$ ]] || (( POLL_INTERVAL_S < 1 )); then
+  POLL_INTERVAL_S=5
+fi
+
+if ! command -v setsid >/dev/null 2>&1; then
+  echo "$PROG: 'setsid' is not available — it is the measured detached-launch mechanism (references/code-review-invocation.md §9) and there is no synchronous fallback" >&2
   exit 2
 fi
 
@@ -175,6 +390,39 @@ if GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   esac
 fi
 
+# --- Step 1a': resolve the node-lock sidecar ----------------------------------
+# See "The node lock" in the header. The lock is keyed on the REVIEWED
+# WORKTREE's own path (GIT_ROOT above — this script always runs with its cwd
+# inside the tree it is reviewing), never on --out-dir or the node id, because
+# the thing being protected from a second claimer is that directory.
+#
+# The explicit condition: the reviewed tree's PARENT is a `.claude/worktrees`
+# root. That is exactly what makes it a dispatch worktree — the only kind of
+# tree a claim path can spawn a worker into, and the only place the established
+# `<worktrees-root>/<name>.<suffix>` sidecar convention has a home. Fail the
+# condition and LOCK_FILE stays empty: the run proceeds unlocked, deliberately,
+# because there is no dispatch claim to protect (the test suite runs in a
+# throwaway repo; a human may run this in a plain clone).
+LOCK_FILE=""
+if [[ -n "$GIT_ROOT" ]]; then
+  WT_PARENT="$(dirname "$GIT_ROOT")"
+  case "$WT_PARENT" in
+    */.claude/worktrees)
+      LOCK_FILE="$(worktree_code_review_lock_path "$GIT_ROOT")"
+      ;;
+  esac
+fi
+
+# `flock` is how the lock is HELD, so a dispatch worktree with no `flock` on
+# PATH cannot be locked at all. Exit rather than run unlocked: a silent
+# unlocked run in a dispatch worktree is precisely the condition-9 breach this
+# whole mechanism exists to prevent (.claude/rules/code-style.md — clear error
+# over a fallback). Outside a dispatch worktree the check does not apply.
+if [[ -n "$LOCK_FILE" ]] && ! command -v flock >/dev/null 2>&1; then
+  echo "$PROG: 'flock' is not available, so the detached run cannot hold the node lock for '$GIT_ROOT' — refusing to run unlocked inside a dispatch worktree (strategy-token-economy condition 9); install util-linux" >&2
+  exit 2
+fi
+
 SUMMARY_FILE="$OUT_DIR/summary.txt"
 OUTPUT_FILE="$OUT_DIR/output.txt"
 PATCH_FILE="$OUT_DIR/fix.patch"
@@ -188,8 +436,10 @@ CLAUDE_CMD="${DISPATCH_CODE_REVIEW_CLAUDE_CMD:-claude}"
 
 # --- Step 1a: the run identity the resume cache is keyed on -------------------
 # Bump CACHE_VERSION whenever the meaning of a summary line changes, so summaries
-# written by an older copy of this script are never replayed by a newer one.
-CACHE_VERSION=2
+# written by an older copy of this script are never replayed by a newer one. It
+# also versions the in-flight run record, so a record written by an older copy
+# is discarded rather than resumed.
+CACHE_VERSION=3
 
 COMMENT_FLAG=1
 [[ -n "$NO_COMMENT" ]] && COMMENT_FLAG=0
@@ -204,8 +454,8 @@ TARGET_HEAD_SHA="$(git rev-parse --verify --quiet "${TARGET_HEAD_REV}^{commit}" 
 HEAD_SHA="$(git rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null || true)"
 
 # Cache location — deliberately OUTSIDE the reviewed worktree (see "Resume cache"
-# in the header). --out-dir is attacker-writable space; a resume key placed there
-# lets a planted status=ok file skip the built-in entirely.
+# in the header). --out-dir is attacker-writable space; a resume key or a run
+# marker placed there lets a planted status=ok file skip the built-in entirely.
 CACHE_DIR="${DISPATCH_CODE_REVIEW_CACHE_DIR:-}"
 if [[ -z "$CACHE_DIR" ]]; then
   if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
@@ -233,11 +483,28 @@ else
 fi
 CACHE_FILE="$CACHE_DIR/$CACHE_KEY.summary"
 
+# Run state for the detached run, all keyed on the same CACHE_KEY and all in
+# CACHE_DIR — never in --out-dir (see the header).
+RUN_FILE="$CACHE_DIR/$CACHE_KEY.run"
+RUN_OUTPUT="$CACHE_DIR/$CACHE_KEY.output"
+RUN_RC="$CACHE_DIR/$CACHE_KEY.rc"
+RUN_PIDFILE="$CACHE_DIR/$CACHE_KEY.pid"
+RUN_UNTRACKED="$CACHE_DIR/$CACHE_KEY.untracked-before"
+LOCK_DIR="$CACHE_DIR/$CACHE_KEY.lock"
+# Written by the detached launch wrapper when, and only when, `flock -n` came
+# back with the conflict exit code. It is what turns "no pid ever appeared"
+# from an ambiguity into a fact: the child never started because the node lock
+# was held, as opposed to the child starting and dying. Like every other run
+# marker it lives in CACHE_DIR, outside the reviewed worktree.
+RUN_CONFLICT="$CACHE_DIR/$CACHE_KEY.lock-conflict"
+
 # --- Step 2: idempotent resume ------------------------------------------------
 # The nested session is expensive; re-running a completed review on a resumed
 # pass would double the cost and re-post duplicate --comment comments. But a
 # replayed summary means the built-in never ran, so every field of the run
 # identity must match before one is served — a mismatch re-runs the review.
+# The same reader serves the in-flight run record, which is the same key=value
+# shape.
 summary_field() {
   sed -n "s/^$2=//p" "$1" | head -1
 }
@@ -252,6 +519,7 @@ cache_is_current() {
   [[ "$(summary_field "$f" target_head_sha)" == "$TARGET_HEAD_SHA" ]] || return 1
   [[ "$(summary_field "$f" head_sha)"       == "$HEAD_SHA"       ]] || return 1
   [[ "$(summary_field "$f" effort)"         == "$EFFORT"         ]] || return 1
+  [[ "$(summary_field "$f" model)"          == "$MODEL"          ]] || return 1
   [[ "$(summary_field "$f" comment)"        == "$COMMENT_FLAG"   ]] || return 1
   # The artifacts a resumed summary points at must be the ones THIS run
   # computed, and must still exist — never a caller-chosen path.
@@ -261,49 +529,768 @@ cache_is_current() {
   return 0
 }
 
+# --- Step 2a: replay a completed summary --------------------------------------
+# replay_completed_summary — the ONE authenticated completed-summary replay.
+# Prints the cached summary on stdout and returns 0 when a CURRENT cache entry
+# exists for this exact run identity; prints nothing and returns 1 otherwise.
+#
 # An unresolvable endpoint (a range this worktree cannot resolve to commits)
 # leaves the cache unauthenticatable — re-run rather than replay.
-if [[ -n "$TARGET_BASE_SHA" && -n "$TARGET_HEAD_SHA" && -n "$HEAD_SHA" && -f "$CACHE_FILE" ]] \
-   && cache_is_current "$CACHE_FILE"; then
+#
+# TWO callers: this step, and `await_concurrent_completion` below, which serves
+# every site where a CONCURRENT awaiter may have finished the run while we were
+# mid-poll. Factored into one function so they can never drift apart in what
+# they accept — the authentication is the security boundary described under
+# "Resume cache" in the header, and a second hand-inlined copy is exactly how
+# one of them would end up weaker than the other.
+replay_completed_summary() {
+  [[ -n "$TARGET_BASE_SHA" && -n "$TARGET_HEAD_SHA" && -n "$HEAD_SHA" ]] || return 1
+  [[ -f "$CACHE_FILE" ]] || return 1
+  cache_is_current "$CACHE_FILE" || return 1
   cat "$CACHE_FILE"
+  return 0
+}
+
+if replay_completed_summary; then
   exit 0
 fi
 
-# --- Step 3: capture the before-image ----------------------------------------
-# `git stash create` writes a commit object capturing the worktree + index
-# WITHOUT touching either, and prints nothing on a clean tree. This is the
-# mechanical ground truth for "what the built-in changed" (strategy-token-economy
-# clarification 25) — not any agent's self-report.
-BEFORE=$(git stash create)
-if [[ -z "$BEFORE" ]]; then
-  BEFORE=$(git rev-parse HEAD)
+# --- Step 2a': resolving a concurrent awaiter's completion --------------------
+# A run has exactly ONE detached child but may have MANY awaiters: `review-fix`
+# Step 1b re-invokes this script with identical arguments until it stops
+# returning 5, and nothing serializes those invocations against each other — the
+# launch mutex (Step 2c) guards the LAUNCH decision and is released before the
+# await loop begins. So two awaiters routinely reach the finish line together,
+# and the one that arrives second finds the record already collected AND deleted
+# by the first: `discard_run_record` removes `.rc`, `.output`, `.run` and the
+# untracked-before snapshot in one go.
+#
+# What the loser observes is AMBIGUOUS, never a verdict. The very same on-disk
+# state is produced by two different histories:
+#
+#   1. the child really did die without recording a result — a genuine failure;
+#   2. the run SUCCEEDED milliseconds ago and another awaiter banked it.
+#
+# Concluding (1) from a single observation is what the caller
+# (skills/review-fix/SKILL.md Step 1b) turns into a hard stop of the whole
+# review phase, discarding a completed, expensive `high`-effort review as a
+# crash. So every site that can observe it resolves the ambiguity HERE first,
+# folding toward "still running" while it is unresolved — the empty-read
+# discipline this repo already applies to every liveness probe
+# (lib-claude-agents.sh:1-40, and `run_is_alive` below).
+#
+# NOT A FALLBACK (.claude/rules/code-style.md). Nothing here buries an error: a
+# run that actually died still fails with its caller's own message on
+# exhaustion, and a replayed summary is still authenticated by the full identity
+# check in `cache_is_current` — the winner's summary is accepted only if it
+# describes THIS out-dir, target, head_sha, effort and model, with its artifacts
+# present. The retry only buys the evidence needed to tell the histories apart.
+#
+# Bounded retry, same shape as lib-claude-agents.sh:1738-1789's
+# `verify_agent_registered_under_state`: fixed attempt cap, short fixed
+# interval, NO sleep after the final attempt, fail closed on exhaustion.
+#
+# BUDGET. The summary is the LAST thing the winner writes (Step 7's `cp` to
+# CACHE_FILE), so this poll must outlast its whole Steps 5-7 run:
+# `git diff --name-only`, `git status --untracked-files=all`, a full `git diff`
+# into fix.patch, then the summary write. Measured in this repo those git calls
+# are ~10 ms each, ~30 ms total. Budget 60 attempts x 0.5 s = 59 sleeps ~= 29.5
+# s: a ~1000x margin on the measured cost, and still ~10x on a pessimistic 3 s
+# for a cold page cache on a loaded host with a large `--fix` diff. Half-second
+# spacing keeps the common case (the winner is milliseconds ahead) returning
+# almost immediately; the full budget is only ever paid on a real crash, which
+# is a terminal path.
+#
+# Contract — exactly one of three outcomes:
+#   - EXITS 0, having printed the winner's authenticated summary;
+#   - RETURNS 0 when the optional watch path reappeared, which is equally proof
+#     the run finished: the caller resumes its normal completion path;
+#   - RETURNS 1 on exhaustion: the caller reports its own failure.
+COMPLETION_ATTEMPTS=60
+COMPLETION_INTERVAL_S=0.5
+
+await_concurrent_completion() {
+  local watch="${1-}" i
+  for (( i = 0; i < COMPLETION_ATTEMPTS; i++ )); do
+    if [[ -n "$watch" && -f "$watch" ]]; then
+      return 0
+    fi
+    if replay_completed_summary; then
+      exit 0
+    fi
+    (( i + 1 < COMPLETION_ATTEMPTS )) && sleep "$COMPLETION_INTERVAL_S"
+  done
+  return 1
+}
+
+# --- Step 2b: run-state helpers -----------------------------------------------
+
+# The run's identity, tested exactly like the summary cache's. --await-seconds
+# and --deadline-seconds are absent on purpose: they are operational, so
+# changing how long a caller waits must not discard a live, paid-for run.
+run_identity_matches() {
+  local f="$1"
+  [[ "$(summary_field "$f" run_version)"     == "$CACHE_VERSION"   ]] || return 1
+  [[ "$(summary_field "$f" out_dir)"         == "$OUT_DIR"         ]] || return 1
+  [[ "$(summary_field "$f" target)"          == "$TARGET"          ]] || return 1
+  [[ "$(summary_field "$f" target_base_sha)" == "$TARGET_BASE_SHA" ]] || return 1
+  [[ "$(summary_field "$f" target_head_sha)" == "$TARGET_HEAD_SHA" ]] || return 1
+  [[ "$(summary_field "$f" head_sha)"        == "$HEAD_SHA"        ]] || return 1
+  [[ "$(summary_field "$f" effort)"          == "$EFFORT"          ]] || return 1
+  [[ "$(summary_field "$f" model)"           == "$MODEL"           ]] || return 1
+  [[ "$(summary_field "$f" comment)"         == "$COMMENT_FLAG"    ]] || return 1
+  [[ "$(summary_field "$f" pid)" =~ ^[0-9]+$ ]] || return 1
+  [[ "$(summary_field "$f" launched_at)" =~ ^[0-9]+$ ]] || return 1
+  [[ -n "$(summary_field "$f" before_sha)" ]] || return 1
+  return 0
+}
+
+# Field 22 of /proc/<pid>/stat. Recorded at launch and re-read on every liveness
+# probe so a RECYCLED pid — a different process that happens to have inherited
+# the number — is never mistaken for this run. `comm` (field 2) is parenthesised
+# and may itself contain spaces and parens, so parse after the LAST ')': what
+# follows starts at field 3, putting starttime at offset 20.
+proc_starttime() {
+  local pid="$1" statline rest
+  [[ -r "/proc/$pid/stat" ]] || return 0
+  statline="$(cat "/proc/$pid/stat" 2>/dev/null || true)"
+  [[ -n "$statline" ]] || return 0
+  rest="${statline##*') '}"
+  awk '{print $20}' <<<"$rest"
+}
+
+# Liveness: `kill -0` PLUS the /proc starttime match. UNKNOWN folds to ALIVE —
+# an unreadable probe never means "finished" or "failed". This mirrors
+# lib-claude-agents.sh:1-40's empty-read discipline, where an uncorroborated
+# empty registry read folds to UNKNOWN rather than to "no sessions". The
+# deadline is the backstop for a run that is actually gone.
+run_is_alive() {
+  local pid="$1" want="$2" have
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  if [[ -r "/proc/$pid/stat" ]]; then
+    have="$(proc_starttime "$pid")"
+    if [[ -n "$want" && -n "$have" && "$want" != "$have" ]]; then
+      return 1
+    fi
+  fi
+  if kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  # `kill -0` failed. On Linux that is ESRCH (gone) or EPERM (alive, but not
+  # ours to signal) and the shell cannot tell them apart — /proc discriminates.
+  if [[ -e "/proc/$pid" ]]; then
+    return 0
+  fi
+  if [[ -d /proc/self ]]; then
+    return 1
+  fi
+  return 0
+}
+
+discard_run_record() {
+  rm -f "$RUN_FILE" "$RUN_OUTPUT" "$RUN_RC" "$RUN_RC.tmp" "$RUN_PIDFILE" \
+        "$RUN_UNTRACKED" "$RUN_CONFLICT"
+  return 0
+}
+
+# Terminal cleanup for a launch that never got off the ground — used ONLY on
+# the failure paths BETWEEN branch (c)'s kill and the new record's write.
+#
+# On the SUPERSEDED_RELAUNCH path a plain `discard_run_record` there is
+# destructive: it deletes `$RUN_UNTRACKED`, which by then holds the KILLED
+# run's carried-forward snapshot and is the only copy, and it leaves no record
+# at all. The caller's retry would then find nothing, fall into (d') as a
+# first-ever launch, take a fresh `git stash create` (swallowing the killed
+# run's uncommitted --fix edits) and a fresh untracked snapshot (marking the
+# files it CREATED as pre-existing) — precisely the attribution loss branch (c)
+# exists to prevent, and silently. The exit-6 path is not hypothetical: branch
+# (c) drains the dying run's `flock` for at most 5 s and then "launches anyway
+# and takes the honest conflict".
+#
+# So restore the killed run's record instead. The retry re-enters branch (c),
+# re-runs its fail-closed guard, and re-derives the same HEAD baseline off the
+# same preserved snapshot. The restored record names a pid that is already
+# dead, which costs the retry only a no-op `kill_tree`.
+discard_or_restore_run_record() {
+  if [[ "$SUPERSEDED_RELAUNCH" == "1" && -f "$RUN_FILE.superseded" ]]; then
+    rm -f "$RUN_OUTPUT" "$RUN_RC" "$RUN_RC.tmp" "$RUN_PIDFILE" "$RUN_CONFLICT"
+    mv -f "$RUN_FILE.superseded" "$RUN_FILE"
+    return 0
+  fi
+  discard_run_record
+}
+
+# Copy the child's captured output into --out-dir. Called on EVERY terminal
+# path, success and failure alike, so the operator still finds the artifact at
+# the path this script's error messages name.
+#
+# NEVER truncates an existing '$OUTPUT_FILE'. Three of its callers sit on the
+# concurrent-awaiter paths of Step 2a', where `.output` is missing precisely
+# because the WINNER collected and discarded it — and the winner has by then
+# already written its real output.txt here. Blanking that file would destroy
+# the only evidence of the run for the operator the error message is
+# addressing, and (since `cache_is_current` tests existence, not content) would
+# let a later resume replay `status=ok` with an empty `findings_path`. This is
+# the same property `collect_run_artifacts` documents below; it must hold on
+# the failure paths too, not just the success one.
+collect_output() {
+  if [[ -f "$RUN_OUTPUT" ]]; then
+    cp "$RUN_OUTPUT" "$OUTPUT_FILE"
+  elif [[ ! -f "$OUTPUT_FILE" ]]; then
+    : >"$OUTPUT_FILE"
+  fi
+  return 0
+}
+
+# Hand a COMPLETED run's artifacts to Steps 5-7 at the paths they consume.
+# Returns 1, naming the missing source in MISSING_ARTIFACT, if either source has
+# vanished — which on a completed run means a concurrent awaiter collected and
+# discarded the record (see Step 2a'), since `.output` is created by the child
+# wrapper's redirect before the built-in starts and the snapshot is written at
+# launch, so neither can be absent except by deletion.
+#
+# Two properties this must NOT lose, and why it is not `collect_output` plus a
+# `cp`:
+#
+#   1. Nothing is written into --out-dir until BOTH sources have been read, and
+#      each destination lands by atomic rename. A losing awaiter therefore can
+#      never truncate or half-overwrite the artifacts the winner has already
+#      collected there — `collect_output` alone would happily write an EMPTY
+#      output.txt over the winner's real one on its way to failing.
+#   2. The failure is reported as an ambiguous observation, never as a verdict.
+MISSING_ARTIFACT=""
+collect_run_artifacts() {
+  MISSING_ARTIFACT=""
+  if [[ ! -f "$RUN_OUTPUT" ]]; then
+    MISSING_ARTIFACT="$RUN_OUTPUT"
+    return 1
+  fi
+  if [[ ! -f "$RUN_UNTRACKED" ]]; then
+    MISSING_ARTIFACT="$RUN_UNTRACKED"
+    return 1
+  fi
+  if ! cp "$RUN_OUTPUT" "$OUTPUT_FILE.tmp" 2>/dev/null; then
+    rm -f "$OUTPUT_FILE.tmp"
+    MISSING_ARTIFACT="$RUN_OUTPUT"
+    return 1
+  fi
+  if ! cp "$RUN_UNTRACKED" "$UNTRACKED_BEFORE_FILE.tmp" 2>/dev/null; then
+    rm -f "$OUTPUT_FILE.tmp" "$UNTRACKED_BEFORE_FILE.tmp"
+    MISSING_ARTIFACT="$RUN_UNTRACKED"
+    return 1
+  fi
+  mv -f "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+  mv -f "$UNTRACKED_BEFORE_FILE.tmp" "$UNTRACKED_BEFORE_FILE"
+  return 0
+}
+
+# --- Step 2c: the cache mutex --------------------------------------------------
+# `mkdir` is atomic, so it is the mutex. Held ONLY across read-record → decide →
+# launch → write-record, and NEVER across the await loop: two concurrent
+# invocations for one out-dir would otherwise each launch a full-price run.
+#
+# This is a CACHE mutex, not the node lock, and the two are unrelated: this one
+# serializes launches for ONE --out-dir and is released the moment the launch is
+# recorded, while the node lock (see "The node lock" in the header) is held by
+# the kernel on the detached child's behalf for the whole run and keeps other
+# claimers out of the reviewed WORKTREE.
+LOCK_HELD=0
+LOCK_STALE_S=300
+
+release_lock() {
+  if [[ "$LOCK_HELD" == "1" ]]; then
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    LOCK_HELD=0
+  fi
+  return 0
+}
+trap release_lock EXIT
+
+acquire_lock() {
+  local i max=60 now mtime age
+  for (( i = 0; i < max; i++ )); do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      LOCK_HELD=1
+      return 0
+    fi
+    # The critical section is short, so a lock older than LOCK_STALE_S was
+    # abandoned by a holder that died mid-launch, not held by a live one.
+    now="$(date -u +%s)"
+    mtime="$(stat -c %Y "$LOCK_DIR" 2>/dev/null || printf '%s' "$now")"
+    age=$(( now - mtime ))
+    if (( age > LOCK_STALE_S )); then
+      echo "$PROG: breaking an abandoned cache lock '$LOCK_DIR' (age ${age}s)" >&2
+      rmdir "$LOCK_DIR" 2>/dev/null || true
+    fi
+    (( i + 1 < max )) && sleep 0.5
+  done
+  return 1
+}
+
+if ! acquire_lock; then
+  echo "$PROG: could not acquire the cache lock '$LOCK_DIR' — another invocation for this out-dir is launching a run; retry, or remove the directory if no such invocation exists" >&2
+  exit 2
 fi
 
-# `git stash create` does not capture untracked files; snapshot them separately
-# so newly-untracked paths created by --fix can be unioned into touched-files.
-git status --porcelain --untracked-files=all \
-  | awk '$1=="??"{print $2}' >"$OUT_DIR/.untracked-before.raw"
-if [[ -n "$OUT_DIR_REL" ]]; then
-  grep -v -e "^${OUT_DIR_REL}/" -e "^${OUT_DIR_REL}\$" "$OUT_DIR/.untracked-before.raw" \
-    | sort >"$UNTRACKED_BEFORE_FILE" || true
+# --- Step 3: launch or resume the detached run --------------------------------
+RUN_PID=""
+RUN_STARTTIME=""
+RUN_LAUNCHED_AT=""
+BEFORE=""
+# Set by branch (c) when this launch REPLACES a killed superseded run, which
+# changes the before-image rule (d') applies. See "Killing a superseded run does
+# NOT reset the before-image" in the header.
+SUPERSEDED_RELAUNCH=0
+
+if [[ -f "$RUN_FILE" ]] && run_identity_matches "$RUN_FILE"; then
+  # (b) Resume: the record describes this exact invocation's run.
+  RUN_PID="$(summary_field "$RUN_FILE" pid)"
+  RUN_STARTTIME="$(summary_field "$RUN_FILE" pid_starttime)"
+  RUN_LAUNCHED_AT="$(summary_field "$RUN_FILE" launched_at)"
+  BEFORE="$(summary_field "$RUN_FILE" before_sha)"
 else
-  sort "$OUT_DIR/.untracked-before.raw" >"$UNTRACKED_BEFORE_FILE"
-fi
-rm -f "$OUT_DIR/.untracked-before.raw"
+  if [[ -f "$RUN_FILE" ]]; then
+    # (c) The in-flight run is reviewing a superseded diff — normally because
+    # qa-fix / fix-checks pushed while it ran, advancing head_sha. Its result
+    # would describe a diff nobody is asking about, so it is killed rather than
+    # left spending. ONE stderr line, naming both head_shas, so the discarded
+    # spend is attributable.
+    #
+    # The killed run ran under `--permission-mode acceptEdits` and may already
+    # have WRITTEN files, so this path also fixes the before-image (d') will
+    # take. A fresh `git stash create` after the kill would swallow those edits
+    # into the baseline, hiding them from Step 6's `git diff "$BEFORE"`: the
+    # summary would under-report touched_files_count and commit-merge-push would
+    # commit files nothing attributed — defeating the mechanical yield
+    # derivation strategy-token-economy clarification 25 requires ("not any
+    # agent's self-report"). SUPERSEDED_RELAUNCH tells (d') to baseline at HEAD
+    # and to KEEP this run's untracked snapshot instead of re-taking one.
+    #
+    # HEAD, not the killed run's before_sha: (c) fires BECAUSE head_sha
+    # advanced, so that stash predates the intervening qa-fix / fix-checks
+    # commits and would attribute those commits to this review — a larger error
+    # than the one being fixed.
+    stale_pid="$(summary_field "$RUN_FILE" pid)"
+    stale_head="$(summary_field "$RUN_FILE" head_sha)"
+    stale_effort="$(summary_field "$RUN_FILE" effort)"
+    stale_model="$(summary_field "$RUN_FILE" model)"
+    stale_before="$(summary_field "$RUN_FILE" before_sha)"
+    echo "$PROG: discarding a superseded in-flight run (pid=${stale_pid:-unknown} head_sha=${stale_head:-unknown} effort=${stale_effort:-unknown} model=${stale_model:-unknown}); this invocation reviews head_sha=${HEAD_SHA:-unknown} effort=$EFFORT model=$MODEL" >&2
+    if [[ "$stale_pid" =~ ^[0-9]+$ ]]; then
+      kill_tree "$stale_pid" || true
+    fi
 
-# --- Step 4: invoke -----------------------------------------------------------
-PROMPT="/code-review $EFFORT --fix"
-if [[ -z "$NO_COMMENT" ]]; then
-  PROMPT="$PROMPT --comment"
-fi
-PROMPT="$PROMPT $TARGET"
+    # Fail closed when HEAD cannot serve as the baseline. `git stash create`
+    # prints nothing on a clean tree and (d') falls back to `git rev-parse
+    # HEAD`, so the killed run's tree was clean at ITS OWN launch exactly when
+    # its before_sha EQUALS its head_sha. When the two differ, the tree already
+    # carried uncommitted edits that predate the killed review, and HEAD cannot
+    # separate those from the killed run's own edits — no baseline yields an
+    # attributable diff, so refuse rather than emit a yield that is confidently
+    # wrong (.claude/rules/code-style.md: prefer clear errors over defensive
+    # fallbacks). This should essentially never fire: /review-fix Step 1b runs
+    # this as an exclusive pre-stage on a clean tree.
+    #
+    # Exit 2, NOT 1: /review-fix maps exit 1 to "the nested run crashed", the
+    # mis-reporting defect finding 2 of this same review fixed. Exit 2 is the
+    # unusable-resume/run-state code, and this is unusable run state.
+    #
+    # The run record is deliberately NOT discarded here. Left in place, a
+    # re-invocation lands in this same branch and refuses identically, instead
+    # of finding no record and silently taking the fresh, wrong before-image
+    # this guard exists to prevent. The killed pid is already dead, so the
+    # repeat costs nothing.
+    # ABSENT is not CLEAN: an empty before_sha or head_sha is unusable run
+    # state, not proof the killed run launched on a clean tree. Only
+    # `run_identity_matches` requires before_sha to be non-empty, and branch
+    # (c) is by definition the path where that test FAILED — so a record from
+    # a different `run_version`, or one whose fields this version does not
+    # know, reaches here with either field empty. Testing `-n` first would let
+    # exactly those records skip the guard and take the HEAD baseline it exists
+    # to refuse, so the empties fail closed alongside a real divergence.
+    if [[ -z "$stale_before" || -z "$stale_head" || "$stale_before" != "$stale_head" ]]; then
+      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's tree was already dirty at ITS launch, or its record does not say (before_sha=${stale_before:-<absent>} != its head_sha=${stale_head:-<absent>}), so HEAD (head_sha=${HEAD_SHA:-unknown}) cannot separate any pre-existing uncommitted edits from the killed run's own --fix edits; resolve the working tree (commit or revert the unattributed changes), clear the run record at '$RUN_FILE', and re-run" >&2
+      exit 2
+    fi
+    if [[ ! -f "$RUN_UNTRACKED" ]]; then
+      echo "$PROG: cannot derive a before-image for the relaunch — the killed run's untracked-before snapshot '$RUN_UNTRACKED' is gone (killed run head_sha=${stale_head:-unknown}, this invocation head_sha=${HEAD_SHA:-unknown}), and re-taking one would record any file the killed run created as pre-existing; clear the run record at '$RUN_FILE' after resolving the working tree, then re-run" >&2
+      exit 2
+    fi
 
-set +e
-timeout "${DISPATCH_CODE_REVIEW_TIMEOUT:-540}"s \
-  "$CLAUDE_CMD" -p "$PROMPT" --permission-mode acceptEdits \
-  </dev/null >"$OUTPUT_FILE" 2>&1
-rc=$?
-set -e
+    # Carry the killed run's untracked snapshot across `discard_run_record`,
+    # which deletes $RUN_UNTRACKED along with the rest of the record. The
+    # record itself is copied aside too, so a relaunch that never gets off the
+    # ground can put it back rather than leaving the next invocation with no
+    # evidence at all — see `discard_or_restore_run_record`.
+    SUPERSEDED_RELAUNCH=1
+    cp "$RUN_UNTRACKED" "$RUN_UNTRACKED.superseded"
+    cp "$RUN_FILE" "$RUN_FILE.superseded"
+    discard_run_record
+    mv -f "$RUN_UNTRACKED.superseded" "$RUN_UNTRACKED"
+
+    # We just killed the holder of the node lock, and we are about to ask for
+    # it back. `kill_tree` reaches the child and its descendants, but the
+    # `flock` process is the child's PARENT — it lives a moment longer, until
+    # it has reaped the child, and it holds the lock until it does. Launching
+    # into that window would lose the acquire and report exit 6 against our own
+    # dying run. Bounded drain, 5 s: on expiry we launch anyway and take the
+    # honest conflict, because a lock still held after 5 s belongs to someone
+    # else. Probed only when the file exists, so this never creates a sidecar
+    # for a worktree that has none.
+    if [[ -n "$LOCK_FILE" && -e "$LOCK_FILE" ]]; then
+      for (( i = 0; i < 25; i++ )); do
+        if flock -n "$LOCK_FILE" true 2>/dev/null; then
+          break
+        fi
+        sleep 0.2
+      done
+    fi
+  fi
+
+  # (d') Capture the before-image, then launch.
+  # `git stash create` writes a commit object capturing the worktree + index
+  # WITHOUT touching either, and prints nothing on a clean tree. This is the
+  # mechanical ground truth for "what the built-in changed"
+  # (strategy-token-economy clarification 25) — not any agent's self-report.
+  #
+  # EXCEPT when branch (c) just killed a superseded run that may already have
+  # written files. Stashing then would capture ITS edits into the baseline and
+  # Step 6 could never see them, so the baseline is HEAD instead:
+  #   - uncommitted at the kill point ⇒ the killed run's edits (Step 1b's
+  #     exclusivity rule — "between the launching call and the collecting call
+  #     the session must do nothing else" — leaves nothing else they could be)
+  #     ⇒ correctly VISIBLE in this run's derived yield;
+  #   - already committed in HEAD ⇒ qa-fix / fix-checks' commits, which are what
+  #     advanced head_sha and triggered (c) ⇒ correctly EXCLUDED.
+  # Branch (c) has already proved HEAD is a usable baseline (its exit-2 guard
+  # refuses otherwise), so this is a derived rule, not a fallback.
+  if [[ "$SUPERSEDED_RELAUNCH" == "1" ]]; then
+    BEFORE=$(git rev-parse HEAD)
+  else
+    BEFORE=$(git stash create)
+    if [[ -z "$BEFORE" ]]; then
+      BEFORE=$(git rev-parse HEAD)
+    fi
+  fi
+
+  # `git stash create` does not capture untracked files; snapshot them separately
+  # so newly-untracked paths created by --fix can be unioned into touched-files.
+  # The snapshot lives in CACHE_DIR because a LATER invocation reads it back —
+  # it is run state now, not an out-dir artifact.
+  #
+  # Skipped on the SUPERSEDED_RELAUNCH path, which keeps the KILLED run's
+  # snapshot (branch (c) carried it across `discard_run_record` for exactly
+  # this). Re-snapshotting would record every untracked file the dead run
+  # CREATED as pre-existing, so Step 6's `comm -13` would drop them from the
+  # union — the same attribution loss as a fresh stash, in the untracked half.
+  if [[ "$SUPERSEDED_RELAUNCH" != "1" ]]; then
+    git status --porcelain --untracked-files=all \
+      | awk '$1=="??"{print $2}' >"$RUN_UNTRACKED.raw"
+    if [[ -n "$OUT_DIR_REL" ]]; then
+      grep -v -e "^${OUT_DIR_REL}/" -e "^${OUT_DIR_REL}\$" "$RUN_UNTRACKED.raw" \
+        | sort >"$RUN_UNTRACKED" || true
+    else
+      sort "$RUN_UNTRACKED.raw" >"$RUN_UNTRACKED"
+    fi
+    rm -f "$RUN_UNTRACKED.raw"
+  fi
+
+  PROMPT="/code-review $EFFORT --fix"
+  if [[ -z "$NO_COMMENT" ]]; then
+    PROMPT="$PROMPT --comment"
+  fi
+  PROMPT="$PROMPT $TARGET"
+
+  rm -f "$RUN_RC" "$RUN_RC.tmp" "$RUN_PIDFILE" "$RUN_OUTPUT" "$RUN_CONFLICT"
+  RUN_LAUNCHED_AT="$(date -u +%s)"
+
+  # The lock body — diagnostics ONLY, for a human reading the sidecar to see
+  # what is holding the worktree. It is NEVER the liveness signal: the kernel's
+  # flock(2) state is, and a reader that trusted this text would be fooled by
+  # the stale body a crashed run leaves behind forever.
+  LOCK_BODY=""
+  if [[ -n "$LOCK_FILE" ]]; then
+    LOCK_BODY="$(printf '%s\n' \
+      "holder=dispatch-code-review" \
+      "node=$(basename "$GIT_ROOT")" \
+      "worktree=$GIT_ROOT" \
+      "target=$TARGET" \
+      "launch_head_sha=${HEAD_SHA:-unknown}" \
+      "effort=$EFFORT" \
+      "model=$MODEL" \
+      "deadline_s=$DEADLINE_SECONDS" \
+      "launched_at=$RUN_LAUNCHED_AT" \
+      "note=advisory lock; liveness is the kernel flock(2) state, not this text")"
+  fi
+
+  # `setsid` is the measured mechanism (references/code-review-invocation.md
+  # §9.1): the child gets its own session, so it survives both a clean return of
+  # this call AND the launching call being killed outright. The wrapper's first
+  # action is to record its own pid — this script cannot get it from `$!`,
+  # because setsid may either fork or exec. Its last action is to write the exit
+  # code ATOMICALLY (write .tmp, then mv), so the marker's existence is the
+  # completion signal and a half-written marker can never be read as one.
+  #
+  # Completion is signalled by that file and by nothing else. In particular
+  # `claude agents --json` is never consulted, so the vacuous-`[]` hazard
+  # (lib-claude-agents.sh:1-40 — a sandboxed read exits 0 with `[]`, byte
+  # identical to "no live sessions") cannot apply to this script at all.
+  # THE CHILD. Runs with the node lock already held by its `flock` parent (when
+  # there is one), so everything it does — including writing the lock body — is
+  # inside the lock.
+  CHILD_SCRIPT='
+    lockfile="$1"; lockbody="$2"; pidfile="$3"; outfile="$4"; rcfile="$5"
+    cmd="$6"; prompt="$7"; model="$8"
+    # Body-write ordering. It happens HERE, first thing in the child, and
+    # nowhere else. Writing it in the launcher BEFORE the launch would describe
+    # a run that may never acquire the lock, and would race a concurrent
+    # launcher into overwriting the diagnostics of whoever actually holds it.
+    # Writing it here cannot: only the process that won the lock reaches this
+    # line.
+    # The `>` redirection opens its OWN file descriptor. flock(2) locks the
+    # open file DESCRIPTION our parent holds, not the file contents, so
+    # truncating and rewriting the bytes neither touches nor releases that
+    # lock.
+    if [ -n "$lockfile" ]; then
+      { printf "%s\n" "$lockbody"; printf "pid=%s\n" "$$"; } >"$lockfile" || true
+    fi
+    printf "%s\n" "$$" >"$pidfile"
+    rc=0
+    "$cmd" -p "$prompt" --model "$model" --permission-mode acceptEdits \
+      </dev/null >"$outfile" 2>&1 || rc=$?
+    printf "%s\n" "$rc" >"$rcfile.tmp"
+    mv -f "$rcfile.tmp" "$rcfile"
+  '
+  CHILD_CMD=( bash -c "$CHILD_SCRIPT" dispatch-code-review-child
+              "$LOCK_FILE" "$LOCK_BODY" "$RUN_PIDFILE" "$RUN_OUTPUT" "$RUN_RC"
+              "$CLAUDE_CMD" "$PROMPT" "$MODEL" )
+
+  if [[ -n "$LOCK_FILE" ]]; then
+    # `flock` holds the node lock for exactly the child's lifetime — see "The
+    # node lock" in the header. `-E 111` gives a failed ACQUIRE its own exit
+    # code, distinct from anything the child can return, and the thin wrapper
+    # turns that code into the RUN_CONFLICT marker. Without it, a lost acquire
+    # is indistinguishable from a child that never started, and the launcher
+    # below would blame the child. 111 is chosen to sit outside both `claude`'s
+    # range and the shell's 126/127/128+n signal codes; the child's own last
+    # statement is an `mv`, so it cannot return 111 by accident.
+    #
+    # `-w 1`, not `-n`. The READER side of this lock
+    # (`worktree_occupancy_state`) probes with `flock -n <file> true`, which
+    # holds the lock exclusively for the fork+exec of `true`, and every dispatch
+    # claim path routes through that predicate — so those probes fire routinely
+    # across the whole worktrees root. A `-n` acquire landing inside one of
+    # those millisecond holds would report exit 6 ("another detached run holds
+    # this worktree") for a lock nobody owns, which the caller treats as
+    # terminal and non-retryable, hard-stopping the whole review phase. One
+    # second absorbs a probe's hold completely while still expiring long before
+    # a REAL holder (a whole `/code-review` run) could release, so a genuine
+    # conflict is still reported as 111.
+    LAUNCH_CMD=( setsid bash -c '
+      lockfile="$1"; conflict="$2"; shift 2
+      rc=0
+      flock -w 1 -E 111 "$lockfile" "$@" || rc=$?
+      if [ "$rc" = "111" ]; then
+        printf "conflict=1\nlockfile=%s\n" "$lockfile" >"$conflict"
+      fi
+    ' dispatch-code-review-lock-wrapper "$LOCK_FILE" "$RUN_CONFLICT" "${CHILD_CMD[@]}" )
+  else
+    # Not a dispatch worktree: nothing to claim, so no lock and no wrapper.
+    LAUNCH_CMD=( setsid "${CHILD_CMD[@]}" )
+  fi
+
+  "${LAUNCH_CMD[@]}" </dev/null >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+
+  # Verify it came up. Same discipline as dispatch-spawn-job:280-291,324-336
+  # (launch, then prove it registered) and the same bounded-retry shape as
+  # lib-claude-agents.sh's verify_agent_registered_under: fixed attempt cap,
+  # short fixed interval, NO sleep after the final attempt, fail closed on
+  # exhaustion. A silent "assume it started" would leave the caller awaiting a
+  # run that never existed until the 5400 s deadline.
+  LAUNCH_ATTEMPTS=50
+  LAUNCH_INTERVAL_S=0.2
+  for (( i = 0; i < LAUNCH_ATTEMPTS; i++ )); do
+    if [[ -s "$RUN_PIDFILE" ]]; then
+      RUN_PID="$(head -1 "$RUN_PIDFILE" | tr -d '[:space:]')"
+      if [[ "$RUN_PID" =~ ^[0-9]+$ ]]; then
+        break
+      fi
+      RUN_PID=""
+    fi
+    # A lost lock acquire is TERMINAL, not slow: the child will never start, so
+    # waiting out the remaining attempts would only delay the same answer. It
+    # is checked inside the loop rather than after it so the conflict is
+    # reported as itself and never as "the run did not come up".
+    if [[ -n "$LOCK_FILE" && -s "$RUN_CONFLICT" ]]; then
+      break
+    fi
+    (( i + 1 < LAUNCH_ATTEMPTS )) && sleep "$LAUNCH_INTERVAL_S"
+  done
+  if [[ -z "$RUN_PID" && -n "$LOCK_FILE" && -s "$RUN_CONFLICT" ]]; then
+    # `flock -w 1` waited out its second and still did not get the lock:
+    # another detached run already owns this worktree. A reader probe's
+    # millisecond hold cannot reach here — that is what the wait absorbs.
+    # Nothing was launched and no review ran — a fact of its own,
+    # with its own exit code (6), never folded into the exit-1 "the child
+    # failed" path and never into a status=ok summary.
+    echo "$PROG: the node lock '$LOCK_FILE' for worktree '$GIT_ROOT' is already held by another detached '/code-review' run — nothing was launched; read the lock file for the holder's diagnostics, or wait for it to finish" >&2
+    discard_or_restore_run_record
+    exit 6
+  fi
+  if [[ -z "$RUN_PID" ]]; then
+    echo "$PROG: the detached '/code-review' run did not come up — no pid appeared at '$RUN_PIDFILE' within $(( LAUNCH_ATTEMPTS ))x${LAUNCH_INTERVAL_S}s (target=$TARGET, effort=$EFFORT, model=$MODEL)" >&2
+    discard_or_restore_run_record
+    exit 1
+  fi
+  # A run that has ALREADY finished is equally proof that it came up — a `low`
+  # run, and every stubbed run, can complete before this check is reached.
+  if [[ ! -f "$RUN_RC" ]] && ! run_is_alive "$RUN_PID" ""; then
+    sleep 1
+    if [[ ! -f "$RUN_RC" ]]; then
+      echo "$PROG: the detached '/code-review' run (pid=$RUN_PID) is not alive and recorded no exit code — see '$RUN_OUTPUT'" >&2
+      collect_output
+      discard_or_restore_run_record
+      exit 1
+    fi
+  fi
+  RUN_STARTTIME="$(proc_starttime "$RUN_PID" || true)"
+
+  {
+    echo "run_version=$CACHE_VERSION"
+    echo "out_dir=$OUT_DIR"
+    echo "target=$TARGET"
+    echo "target_base_sha=$TARGET_BASE_SHA"
+    echo "target_head_sha=$TARGET_HEAD_SHA"
+    echo "head_sha=$HEAD_SHA"
+    echo "effort=$EFFORT"
+    echo "model=$MODEL"
+    echo "comment=$COMMENT_FLAG"
+    echo "pid=$RUN_PID"
+    echo "pid_starttime=$RUN_STARTTIME"
+    echo "launched_at=$RUN_LAUNCHED_AT"
+    echo "before_sha=$BEFORE"
+    echo "output_path=$RUN_OUTPUT"
+    echo "rc_path=$RUN_RC"
+    echo "pid_path=$RUN_PIDFILE"
+    echo "untracked_before_path=$RUN_UNTRACKED"
+  } >"$RUN_FILE.tmp"
+  mv -f "$RUN_FILE.tmp" "$RUN_FILE"
+  # The relaunch is recorded and owns the state now: the killed run's saved
+  # record has nothing left to restore to.
+  rm -f "$RUN_FILE.superseded"
+fi
+
+release_lock
+
+# --- Step 4: await the detached run -------------------------------------------
+# The window is min(--await-seconds, whatever is left of --deadline-seconds), so
+# a resumed call never waits past the deadline it is about to enforce.
+now="$(date -u +%s)"
+elapsed=$(( now - RUN_LAUNCHED_AT ))
+window="$AWAIT_SECONDS"
+remaining=$(( DEADLINE_SECONDS - elapsed ))
+(( remaining < window )) && window="$remaining"
+window_end=$(( now + window ))
+
+rc=""
+while :; do
+  # The rc marker is checked FIRST on every pass, so a run that is already done
+  # (always the case at `low` effort) returns without sleeping at all.
+  if [[ -f "$RUN_RC" ]]; then
+    # `|| true` because the read races a concurrent awaiter's
+    # `discard_run_record`: under `set -o pipefail` an unlinked `.rc` would
+    # otherwise abort this script through `set -e`, with no message at all.
+    rc="$(head -1 "$RUN_RC" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ ! "$rc" =~ ^[0-9]+$ ]]; then
+      # The marker is written atomically (`.rc.tmp` + `mv`), so one that is
+      # PRESENT is always complete — garbage in it really is corruption. But
+      # reading nothing from a file that has since disappeared means it was
+      # unlinked between the test above and the read: the concurrent-awaiter
+      # race of Step 2a', landing in the narrowest window it has.
+      if [[ ! -f "$RUN_RC" ]] && await_concurrent_completion "$RUN_RC"; then
+        continue
+      fi
+      echo "$PROG: the detached run's exit-code marker '$RUN_RC' is not an integer ('$rc') — see '$RUN_OUTPUT'" >&2
+      collect_output
+      discard_run_record
+      exit 1
+    fi
+    break
+  fi
+
+  now="$(date -u +%s)"
+  elapsed=$(( now - RUN_LAUNCHED_AT ))
+
+  if (( elapsed >= DEADLINE_SECONDS )); then
+    echo "$PROG: the detached '/code-review' run exceeded the ${DEADLINE_SECONDS}s deadline (elapsed ${elapsed}s, pid=$RUN_PID, target=$TARGET, effort=$EFFORT, model=$MODEL) — killing it" >&2
+    kill_tree "$RUN_PID" || true
+    # `claude -p` buffers all output until the run completes, so a killed run
+    # is a total loss: expect '$OUTPUT_FILE' to be 0 bytes. It is still copied
+    # so the path the caller reports to an operator exists.
+    collect_output
+    echo "$PROG: expect '$OUTPUT_FILE' to be empty — 'claude -p' buffers all output until the run completes, so a killed run yields zero bytes" >&2
+    discard_run_record
+    exit 4
+  fi
+
+  if (( now >= window_end )); then
+    # Still in flight and still inside the deadline. The run keeps going and the
+    # record stays; nothing in --out-dir is finalized. The caller invokes this
+    # script again with identical arguments.
+    echo "status=running"
+    echo "run_id=$CACHE_KEY"
+    echo "pid=$RUN_PID"
+    echo "elapsed_s=$elapsed"
+    echo "deadline_s=$DEADLINE_SECONDS"
+    echo "target=$TARGET"
+    echo "effort=$EFFORT"
+    exit 5
+  fi
+
+  if ! run_is_alive "$RUN_PID" "$RUN_STARTTIME"; then
+    # "The process is gone and there is no `.rc`" is the widest window of the
+    # concurrent-awaiter ambiguity documented at Step 2a': the winner's
+    # `discard_run_record` deleted `.rc` and `.output` while this poll was
+    # sleeping, so a run that SUCCEEDED looks byte-identical to a child that
+    # crashed without recording an exit code. Resolve before deciding. `.rc`
+    # reappearing is equally proof the run finished, so it is the watch path —
+    # take the normal completion path unchanged when it does.
+    if await_concurrent_completion "$RUN_RC"; then
+      continue
+    fi
+    echo "$PROG: the detached '/code-review' run (pid=$RUN_PID) is gone and recorded no exit code — see '$RUN_OUTPUT'" >&2
+    collect_output
+    discard_run_record
+    exit 1
+  fi
+
+  sleep "$POLL_INTERVAL_S"
+done
+
+WALL_CLOCK_S=$(( $(date -u +%s) - RUN_LAUNCHED_AT ))
+
+# Hand the run's artifacts to the (unchanged) verification and yield-derivation
+# steps at exactly the paths they have always consumed.
+#
+# This is the LAST place the concurrent-awaiter race of Step 2a' can land, and
+# the narrowest: both awaiters saw `.rc` in the same instant and broke out of
+# the loop together, and the winner's `discard_run_record` lands between this
+# one's `.rc` read and its read of the record. Same ambiguity, same resolution —
+# reporting it as a failure would discard a completed review that another
+# awaiter is at that very moment reporting as a success.
+if ! collect_run_artifacts; then
+  # With no watch path `await_concurrent_completion` either exits 0 on the
+  # winner's authenticated summary or returns 1 exhausted; there is no third
+  # outcome, so reaching the body means the artifacts really are gone.
+  if ! await_concurrent_completion; then
+    echo "$PROG: the completed run's artifact '$MISSING_ARTIFACT' is missing — the before/after yield derivation cannot run" >&2
+    collect_output
+    discard_run_record
+    exit 1
+  fi
+fi
+discard_run_record
 
 # --- Step 5: verify at the source ---------------------------------------------
 # Exit status PLUS output signature — exit status alone is never sufficient:
@@ -328,12 +1315,6 @@ REJECT_PATTERNS=(
   'cannot be used with Skill tool due to disable-model-invocation'
   'use /review for a local review instead'
 )
-
-if [[ "$rc" -eq 124 ]]; then
-  echo "$PROG: 'claude -p' timed out after ${DISPATCH_CODE_REVIEW_TIMEOUT:-540}s (target=$TARGET, effort=$EFFORT)" >&2
-  echo "$OUTPUT_CONTENT" >&2
-  exit 4
-fi
 
 if [[ "$rc" -ne 0 ]]; then
   echo "$PROG: 'claude -p' exited $rc" >&2
@@ -398,6 +1379,8 @@ TOUCHED_COUNT=$(grep -c . "$TOUCHED_FILE" 2>/dev/null || true)
 # --- Step 7: emit the compact summary -----------------------------------------
 # The identity block (cache_version .. comment) is what Step 2 authenticates a
 # resume against; the caller reads only findings_path/patch_path/touched_file.
+# Field names are a contract other code parses with `sed -n 's/^key=//p'` —
+# EXTEND this list, never rename a line.
 {
   echo "status=ok"
   echo "exit_code=0"
@@ -408,7 +1391,9 @@ TOUCHED_COUNT=$(grep -c . "$TOUCHED_FILE" 2>/dev/null || true)
   echo "target_head_sha=$TARGET_HEAD_SHA"
   echo "head_sha=$HEAD_SHA"
   echo "effort=$EFFORT"
+  echo "model=$MODEL"
   echo "comment=$COMMENT_FLAG"
+  echo "wall_clock_s=$WALL_CLOCK_S"
   echo "findings_path=$OUTPUT_FILE"
   echo "patch_path=$PATCH_FILE"
   echo "touched_files_count=$TOUCHED_COUNT"

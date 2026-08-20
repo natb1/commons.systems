@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# dispatch-ladder-status — read where one node's detached ladder run has got to.
+#
+# The session-facing half of the split dispatch-ladder-spawn makes: the driver
+# runs under systemd and outlives every session, so a session never waits on
+# it. It asks this script, gets one line, and either acts on a terminus or
+# calls again later.
+#
+# It reads TWO things and reconciles them:
+#   state.json                                  what the driver last wrote.
+#   systemctl --user is-active <unit>           whether the driver is alive.
+# Neither alone is enough. state.json can say `running` for a driver that was
+# killed (an OOM, a `systemctl stop`, a reboot), and the unit being gone says
+# nothing about which rung the node reached. The pair distinguishes them, and a
+# driver that is gone while its state still says `running` is reported
+# `orphaned` rather than quietly reported as still working — a wait that never
+# ends is the worse failure.
+#
+# Usage: dispatch-ladder-status <node-id> [--wait] [--timeout-s <n>] [--poll-s <n>]
+#
+#   --wait          poll until the run reaches a terminus (or the timeout).
+#   --timeout-s <n> the --wait budget (default 540). The default sits UNDER the
+#                   Bash tool's 600s ceiling on purpose, the same contract
+#                   dispatch-ladder-await uses: a call from a Claude session
+#                   returns a real answer instead of being killed mid-poll, and
+#                   exit 20 means "still running, call again" rather than
+#                   "something failed".
+#   --poll-s <n>    seconds between reads while waiting (default 15).
+#
+# Stdout, exactly one line:
+#   <status> <node> <step> <phase> <disposition> <terminus>
+# where <status> is one of:
+#   complete   the driver finished the ladder (exit 0).
+#   halted     the driver stopped and wrote why.
+#   running    the driver is alive and working.
+#   orphaned   state.json says running but the unit is not active — the driver
+#              died without writing a terminal state.
+# and <terminus> is set only once a run has halted — it classifies whether
+# stopping there was legitimate, a question the exit code never answers on its
+# own (see dispatch-ladder-run's classify_terminus). It is one of:
+#   done             the node reached phase `done`.
+#   excused-parked   the node is parked (`office_hours` set).
+#   excused-blocked  the node is `blocked_by` another node.
+#   pruned           the node is absent from origin/main — a landed prune.
+#   violation        none of the above, every read definitive: the run
+#                     stopped on live work with no excuse — surface this, do
+#                     not report the halt as an ordinary stopping point.
+#   not-a-node       the run was launched against an id that is not in the
+#                     graph at all — also surface this as such.
+#   unknown          a read needed to classify could not answer either way.
+# Absent fields print as `-`.
+#
+# Exit codes:
+#   0   terminal: complete, halted, or orphaned. Nothing more will happen.
+#   20  still running. Call again — the expected answer for a long ladder.
+#   2   usage error.
+#   1   no state file for this node (no ladder has run, or the driver has not
+#       written its first state yet).
+#
+# `systemctl --user is-active` needs the user's systemd over D-Bus, so a
+# Bash-tool caller needs `dangerouslyDisableSandbox: true`. Without it the
+# probe fails and a live driver reads as `orphaned` — which is why the failure
+# is called out on stderr rather than folded in silently.
+#
+# Environment overrides for testability:
+#   DISPATCH_LADDER_STATUS_SYSTEMCTL_CMD  the `systemctl` binary.
+#   DISPATCH_GRAPH_MAIN_WORKTREE          the main worktree (shared seam; the
+#                                         driver resolves its state dir the
+#                                         same way, so both move together).
+#
+# NOT set -e — exits are handled explicitly, matching the dispatch siblings.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CHECKOUT_ROOT="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
+# shellcheck source=/dev/null
+source "$CHECKOUT_ROOT/.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
+
+NODE_ID=""
+WAIT=0
+TIMEOUT_S=540
+POLL_S=15
+
+usage() {
+  echo "usage: dispatch-ladder-status <node-id> [--wait] [--timeout-s <n>] [--poll-s <n>]" >&2
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --wait)      WAIT=1; shift ;;
+    --timeout-s) [[ $# -ge 2 ]] || usage; TIMEOUT_S="$2"; shift 2 ;;
+    --poll-s)    [[ $# -ge 2 ]] || usage; POLL_S="$2"; shift 2 ;;
+    --*)         echo "dispatch-ladder-status: unknown flag $1" >&2; usage ;;
+    *)
+      if [[ -z "$NODE_ID" ]]; then NODE_ID="$1"
+      else echo "dispatch-ladder-status: unexpected argument $1" >&2; usage
+      fi
+      shift ;;
+  esac
+done
+
+[[ -n "$NODE_ID" ]] || usage
+[[ "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]] || {
+  echo "dispatch-ladder-status: invalid node id '$NODE_ID'" >&2; exit 2; }
+[[ "$TIMEOUT_S" =~ ^[0-9]+$ ]] || {
+  echo "dispatch-ladder-status: --timeout-s must be a non-negative integer" >&2; exit 2; }
+[[ "$POLL_S" =~ ^[1-9][0-9]*$ ]] || {
+  echo "dispatch-ladder-status: --poll-s must be a positive integer (0 would spin)" >&2; exit 2; }
+
+PROJECT_ROOT=$(resolve_main_worktree 2>/dev/null)
+if [[ -z "$PROJECT_ROOT" || ! -d "$PROJECT_ROOT" ]]; then
+  echo "dispatch-ladder-status: cannot resolve the project root (no worktree with 'main' checked out)" >&2
+  exit 2
+fi
+
+STATE_FILE="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.ladder/state.json"
+UNIT_NAME="dispatch-ladder-$NODE_ID"
+SYSTEMCTL_CMD="${DISPATCH_LADDER_STATUS_SYSTEMCTL_CMD:-systemctl}"
+
+# unit_is_active — 0 when systemd reports the unit active. `is-active` prints a
+# word and exits non-zero for every non-active state, which is what we want:
+# `inactive` (a --collect'd finished unit), `failed`, and `unknown` all mean the
+# driver is not running.
+unit_is_active() {
+  "$SYSTEMCTL_CMD" --user is-active --quiet "$UNIT_NAME.service" 2>/dev/null
+}
+
+# read_once — sets LINE, VERDICT_RC and WAITABLE from the current state.json +
+# unit probe.
+#   VERDICT_RC: 0 terminal, 20 running, 1 no state file / corrupt state.
+#   WAITABLE:   1 when polling again could change the answer (the file has not
+#               appeared yet, or the driver is still running); 0 when it cannot
+#               (a terminus, or a state file that is corrupt — waiting out the
+#               full window on corruption would just delay the report).
+LINE=""
+VERDICT_RC=1
+WAITABLE=1
+read_once() {
+  WAITABLE=1
+  if [[ ! -f "$STATE_FILE" ]]; then
+    LINE=""
+    VERDICT_RC=1
+    return
+  fi
+  local status step phase disposition terminus
+  # A half-written state.json is not possible (the driver writes via mktemp +
+  # mv in the same directory), so a jq failure here is a real corruption — say
+  # so rather than inventing a status.
+  if ! status=$(jq -r '.status // "-"' "$STATE_FILE" 2>/dev/null); then
+    echo "dispatch-ladder-status: $STATE_FILE is not readable JSON" >&2
+    LINE=""
+    VERDICT_RC=1
+    WAITABLE=0
+    return
+  fi
+  step=$(jq -r '.step // "-"' "$STATE_FILE")
+  phase=$(jq -r '.phase // "-"' "$STATE_FILE")
+  disposition=$(jq -r '.disposition // "-"' "$STATE_FILE")
+  terminus=$(jq -r '.terminus // "-"' "$STATE_FILE")
+
+  case "$status" in
+    complete|halted)
+      VERDICT_RC=0; WAITABLE=0 ;;
+    running)
+      if unit_is_active; then
+        VERDICT_RC=20
+      else
+        status=orphaned
+        VERDICT_RC=0
+        WAITABLE=0
+      fi ;;
+    *)
+      # An unrecognized status is corruption, not a state to guess at.
+      echo "dispatch-ladder-status: unrecognized status '$status' in $STATE_FILE" >&2
+      VERDICT_RC=1; WAITABLE=0 ;;
+  esac
+  LINE="$status $NODE_ID $step $phase $disposition $terminus"
+}
+
+emit() {
+  if [[ -n "$LINE" ]]; then
+    echo "$LINE"
+  else
+    echo "dispatch-ladder-status: no ladder state for $NODE_ID at $STATE_FILE" >&2
+  fi
+  exit "$VERDICT_RC"
+}
+
+read_once
+if (( WAIT == 0 )); then
+  emit
+fi
+
+DEADLINE=$(( SECONDS + TIMEOUT_S ))
+while (( WAITABLE == 1 && SECONDS < DEADLINE )); do
+  sleep "$POLL_S"
+  read_once
+done
+
+if (( VERDICT_RC == 20 )); then
+  echo "dispatch-ladder-status: $NODE_ID is still running after ${TIMEOUT_S}s — call again (exit 20 is not a failure)" >&2
+fi
+emit

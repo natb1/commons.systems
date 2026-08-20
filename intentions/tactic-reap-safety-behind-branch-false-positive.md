@@ -53,7 +53,6 @@ rationale: "Confirmed live 2026-08-06 by direct measurement during an N+7
   missing origin/main ref fails both the rev-list and diff arms identically, so
   an unknown ahead-count can never reach a reap)."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -61,21 +60,35 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
+  boost: 0.04
   override: null
-  rationale: "Bootstrap band 2 (50/20/10 interim scale): a reap-path correctness
-    defect that permanently strands a worker slot and freezes its node — the
-    same band as the other dispatch-containment fixes
+  rationale: >-
+    Bootstrap band 2 (50/20/10 interim scale): a reap-path correctness defect
+    that permanently strands a worker slot and freezes its node — the same band
+    as the other dispatch-containment fixes
     (tactic-graph-execute-fresh-main-read, tactic-probe-unknown-never-clear),
-    which carry the identical boost."
+    which carry the identical boost.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
   tier: 1
-phase: qa
+phase: review
 execution:
   branch: tactic-reap-safety-behind-branch-false-positive
   pr: 3052
   attempts: {}
   markers:
     - planned
+    - qa-done
   strategy_fingerprint: null
   fix:
     since: 2026-08-09
@@ -91,7 +104,8 @@ blocked_by:
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
 ---
 
 # A strictly-behind branch is not unlanded work
@@ -502,3 +516,30 @@ Prose-rule lint over the net-new lines in the committed `.sh` files:
 strictly-behind theme in `graph-commit`: a HEAD behind `origin/main` misread as a
 state to act on. Same root shape (a symmetric comparison mistaken for a
 directional one), different subsystem; neither node subsumes the other.
+
+## needs-main residue
+
+- **id 8 — Design call: is `rev-list --count == 0` the right safety predicate?**
+  - Expected outcome: an author-level ruling that the `rev-list --count 0`
+    short-circuit (arm 1 of gate 7b) is an acceptable safety predicate for the
+    dispatch fleet, or a recorded follow-up to tighten it.
+  - Finding: planned-deferral — a safety-vs-throughput tradeoff on an
+    irreversible operation (`claude rm` / worktree removal); belongs to the
+    author, not an autonomous QA walk. QA's own re-verification (a mutation
+    test that temporarily neutralized arm 1's short-circuit) confirmed the
+    landed implementation matches the design already argued for at length in
+    this node's own finalized rationale above (FINALIZED 2026-08-06 via
+    `/align-tactics`): the two-dot content diff alone is symmetric and
+    false-positives on strictly-behind branches; `ahead == 0` is "trivially
+    safe: there is nothing that could have failed to land"; the fail-closed
+    reasoning is spelled out (an unreadable `origin/main` ref fails both arms
+    together, so an unknown ahead-count can never reach a reap); alternatives
+    considered and deliberately rejected include a new `skip-rev-list-error`
+    token and a `merge-tree`/reflog/stash probe. With the mutation reverted,
+    the full suite (129/129, 26/26, 135/135) and the repo-wide unit-test and
+    prose-lint runs all pass. The residual question is not implementation
+    correctness — QA confirms that — it is whether the risk-tolerance judgment
+    itself, already made at plan time, should stand or be revisited.
+  - Verifiability: AUTHOR — a subjective risk-tolerance judgment on an
+    irreversible operation; no machine check can decide whether the accepted
+    safety margin is sufficient.

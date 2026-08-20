@@ -45,7 +45,6 @@ rationale: >-
   tactics that validate a strategy's signal; both are tactic-layer edges
   resolved by validateGraph like the rest.
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -59,6 +58,227 @@ clarifications:
       statement' doctrine, which was already false for tactics — their bodies
       carry the clean-session plans dispatch executes. Recorded 2026-07-09
       interview (strategy-graph-self-description)."
+  - question: How does an authored boost compose across the parent/serves chain — as
+      a flat global sum, or namespaced by the distributor?
+    answer: "(Recorded 2026-08-11.) Namespaced, and asymmetrically by kind — the
+      accumulated (source-node, amount) set described in this node's body under
+      'Derived values are never stored' is what the order reads FROM, not itself
+      the order. A tactic's own authored boost orders it only within the band of
+      the strategy distributing to it, at its tier: it can never carry the
+      tactic past a tactic of a higher-ranked strategy in the same tier, and a
+      tactic with several distributors sits in the band of the highest-ranked
+      one (max across distributors, never the sum) — the same max rule the
+      effective-tier fixpoint already applies. A strategy's authored boost is
+      the complementary case: additive and unscoped, summing with its parent's
+      down parent/serves, so a child strategy may be boosted in conjunction with
+      its parent to outrank cousin and uncle strategies. Tier dominates both
+      lexicographically. (Corrected 2026-08-11, third round: the clause here
+      previously called tier the ONLY cross-strategy escape. It is not — see the
+      escape-set clarification below.) The derived-state doctrine is unchanged:
+      rank stays computed on read and is never stored — this clarifies the ORDER
+      the accumulated claims express, not where they live. As implemented,
+      resolveAttention sums a tactic's own boost with its strategy-distributed
+      value (packages/intentionsutil/src/attention.ts), so the namespacing is
+      not yet mechanically enforced; the greenfield target is lexicographic
+      ordering by (tier, distributing-strategy rank, within-strategy value),
+      with a behavioral-doctrine-plus-lint migration first. Tracked at
+      tactic-attention-namespaced-rank; the ownership half of the doctrine (who
+      may write which attention) lives on strategy-recursive-self-improvement.
+      Amended 2026-08-12: the composition question is settled, and the ASYMMETRY
+      BY KIND is retired. There is one relation and one rule for every kind: a
+      node's score is its own per-tier boost plus the sum of the boosts of every
+      distinct node in its lineage, each counted once. Strategies are banded on
+      the same terms as tactics (a strategy's band is the maximum score among
+      its own parents), so 'strategies live on a single flat additive scale' no
+      longer holds. The namespacing BOUND this entry records is preserved — a
+      tactic still cannot outrank a tactic of a higher-ranked strategy — but it
+      is now delivered by the band component of a uniform key rather than by a
+      kind-specific rule."
+  - question: What exactly are the three components of the rank key, and how is each
+      derived?
+    answer: "(Recorded 2026-08-11, third round, after adversarial review found the
+      second-round statement of this key underspecified in all three
+      components.) The key is the lexicographic triple (tier, band, residual),
+      descending. TIER — unchanged, the existing max-lifted effective tier. BAND
+      — the resolved rank of the strategy the node sits under, derived by the
+      SAME downward monotone fixpoint the effective tier already uses
+      (attention.ts, the effectiveTier loop): band(n) = max(ownBand(n), max over
+      distributors d of band(d)), where ownBand is a strategy's own resolved
+      rank and 0 for every other kind. Deriving it as a fixpoint rather than as
+      a direct max over the node's own distributor set is what makes it total:
+      an epic child whose only distributor is another tactic inherits its
+      subtree root's band instead of falling to 0; a node with no distributor at
+      all gets an honest 0; and because the band is computed OUTSIDE the
+      tier-isolation filter, it survives a tier lift, so the namespacing bound
+      stays live at tier 2 and tier 3 — where every bug fix and every red-main
+      item lives — instead of going inert exactly where it matters most. That
+      also answers, in the affirmative, the tier-isolation question absorbed
+      into tactic-attention-namespaced-rank: a lower-tier strategy does define
+      the band for a tier-lifted tactic. RESIDUAL — the node's value MINUS its
+      band, i.e. its own authored boost plus the signal term plus the capture
+      term. This is deliberately not 'the node's own boost': defining the third
+      component as own-boost-only would drop the signal term (on-path to an
+      unvalidated success_signal) and the capture term (recovers severity) out
+      of ordering entirely, silently demoting two of the three registered terms;
+      and leaving it as the bare value would double-count the distributing
+      strategy's rank, once as the band and once inside value, so that order
+      within a band would still track strategy rank rather than the node's own
+      claim. Taking the residual keeps every registered term live, keeps
+      resolveAttention's composition untouched (the band is a subtraction, not a
+      rewrite), and preserves the shape the 2026-07-18 tier amendment already
+      established for tiers: terms-and-weights govern ordering WITHIN a band.
+      (Amended 2026-08-12, office-hours round that cleared
+      tactic-attention-namespaced-rank's park.) The RESIDUAL derivation stated
+      above is corrected. 'The node's value MINUS its band' does not equal the
+      gloss that follows it -- 'its own authored boost plus the signal term plus
+      the capture term' -- and the gloss is the intended meaning.
+      resolveAttention distributes ancestors' AUTHORED claims only
+      (packages/intentionsutil/src/attention.ts, the authored fixpoint at lines
+      417-437), while the signal and capture terms are computed per node and
+      never flow downward (lines 553-556). So subtracting a band equal to the
+      distributing strategy's RESOLVED rank subtracts that strategy's own signal
+      and capture weight as well, driving the residual negative by up to that
+      amount -- the worked case recorded on strategy-recursive-self-improvement,
+      where strategy-rsi-plan-surface's tactics sit in band 9 carrying an
+      authored 8 for a residual of MINUS 1 -- and letting the distributing
+      strategy's own terms reorder tactics WITHIN a band, the exact artifact the
+      residual exists to remove. Corrected: BAND is unchanged, a strategy's own
+      RESOLVED rank exactly as stated above. RESIDUAL is the node's value minus
+      the authored contribution INHERITED from its distributors, which is
+      precisely the gloss above -- its own authored boost plus its own signal
+      term plus its own capture term. So defined, the residual is never
+      negative, keeps all three registered terms live in ordering, and leaks
+      nothing from the band into within-band order. This also preserves the
+      flat-additive-strategy-scale property that
+      tactic-attention-namespaced-rank's greenfield target asserts (strategies
+      live on a single flat additive scale, unchanged from today): a strategy's
+      own band is its resolved rank, so strategy-versus-strategy order remains
+      exactly today's value order, with the residual acting only as a tiebreak.
+      Deriving the band from the authored term instead would have made a
+      strategy's own key the lexicographic pair (authored, signal+capture) and
+      reordered strategies against each other, which that property forbids -- a
+      cost the park reason did not surface. This closes, in favour of the
+      resolved value, the ownBand question strategy-recursive-self-improvement
+      records as an open decision recorded on tactic-attention-namespaced-rank.
+      Author-directed: the author accepted this resolution on trust in the same
+      round rather than deriving it, so it is enrolled for re-validation as a
+      born-parked office-hours review sitting
+      (tactic-review-band-derivation-ratification). Amended 2026-08-12 (/align
+      round on strategy-graph-drives-dispatch; the unified ranking model). The
+      key is no longer a triple and RESIDUAL IS RETIRED as a distinct component.
+      The key is the lexicographic QUADRUPLE (resolved tier, band, score,
+      depth), descending. TIER and BAND are unchanged in derivation. SCORE
+      replaces residual, and the residual correction recorded above becomes MOOT
+      rather than merely superseded — under the unified model every term flows
+      down the parent relation (the signal term is retired outright, and capture
+      becomes lineage via `recovers`), so a node's lineage necessarily contains
+      its band-defining parent and everything above it. Therefore band <= score
+      always, the residual can never go negative, and since every node sharing a
+      band has that same band value inside its score, subtracting it is
+      subtracting a constant: ordering by score within a band is IDENTICAL to
+      ordering by residual. The residual existed to stop the band leaking into
+      within-band order; making every term flow down removes the leak at its
+      source, so the subtraction is no longer needed. DEPTH — the count of
+      distinct lineage nodes — is the new final component, and it is what
+      guarantees a child always outranks its parent. Consequence for the
+      terms-and-weights doctrine: with the signal term retired and capture
+      converted to lineage, the term registry is emptied and attention has
+      exactly ONE input, the authored per-tier boost. A new attention condition
+      must therefore become a tier, a lineage edge, or an authored boost — 'add
+      it as a term with a weight' is no longer an available move."
+  - question: Is the band derived, or authored and checked?
+    answer: "(Author-directed 2026-08-11, third round.) Both, and the second is the
+      point. The band is derived as above, but the VALUE chosen inside a band
+      also carries an authored namespace stamp, generalizing a mechanism the
+      schema already has one axis over: Attention.tier is documented as 'the
+      per-tier boost NAMESPACE tag — the tier whose scale the value was chosen
+      in', and validateGraph rule 20 requires it to equal the node's own tier,
+      precisely so an author must re-select a boost when a node's tier changes,
+      since a value meaningful on the tier-1 scale means nothing on the tier-2
+      scale. A boost has exactly the same problem across bands: authored under a
+      band-3 strategy, it means something different after that strategy is
+      reranked to band 9, and today nothing stamps or catches it. Greenfield:
+      extend Attention to {boost | override, rationale, scope: {tier,
+      strategy}}, where scope.strategy names the distributing strategy in whose
+      band the value was chosen, with the rule-20 analogue requiring it to match
+      the node's resolved band distributor. Three payoffs: the namespace becomes
+      authored and CHECKABLE rather than derived and implicit; the migration
+      lint collapses from a global re-derivation diff to a field comparison,
+      which is what validateGraph can actually do on the write path; and
+      reranking a strategy mechanically surfaces every boost whose meaning it
+      just invalidated, instead of silently reinterpreting them. Note the
+      interaction to settle when this lands: validateGraph rule 18 (the
+      strategy-main-health boost-dominance guard) has a tactic-facing half that
+      becomes dead under namespaced rank — the implementing tactic must record
+      whether it retires. Amended 2026-08-12: split, and only half is resolved.
+      The per-TIER half is adopted and is now structural — a node carries an
+      authored boost per tier, and in tier T's ranking every node contributes
+      its tier-T boost, which is what makes a node's rank well-defined in a tier
+      it does not itself belong to (see strategy-graph-drives-dispatch,
+      2026-08-12). The per-BAND scope stamp this entry proposes remains OPEN and
+      is not resolved by that round: a boost authored while its node sat in one
+      band still means something different after the band-defining parent is
+      reranked, and nothing yet stamps or catches that. Recorded explicitly so
+      the per-tier adoption is not misread as having closed the per-band
+      question. CLOSED 2026-08-12 (author-decided): the per-band scope stamp is
+      REJECTED and the question it addresses is DISSOLVED rather than policed.
+      An authored boost is drawn from a CLOSED VOCABULARY OF ABSOLUTE LEVELS,
+      not chosen as a free magnitude against whatever else currently shares a
+      band, so a value means the same thing everywhere and is commensurable
+      across bands and tiers by construction. Two findings drove it. First, the
+      proposed mechanism is aimed off-target: it keys on the node's resolved
+      BAND DISTRIBUTOR, so it fires on distributor-identity change (a
+      re-parenting, or a multi-parent node whose max-scoring parent flips) —
+      cases that are already explicit authoring acts — and stays SILENT on the
+      case that actually goes unnoticed, two previously separate bands
+      COLLIDING so nodes calibrated against different neighbour sets suddenly
+      compare directly. A pure rerank invalidates nothing: every descendant has
+      the reranked node in its lineage, so score and band shift by the same
+      amount and within-subtree order is preserved exactly. Second, the live
+      graph is already using an informal levels scale — 91 authored values but
+      only 17 distinct, with six values (20, 50, 12, 10, 3, 85) covering 88%
+      and 20/50 alone covering 64% — so codifying levels formalizes existing
+      practice rather than imposing a new discipline. PER-TIER BOOSTS ARE
+      RETAINED (author-directed): a node still carries a boost per tier, each
+      drawn from the level vocabulary. The per-tier structure exists for
+      COVERAGE — making a node's rank well-defined in a tier it does not itself
+      belong to — which the absolute scale does not supply and does not
+      replace. What the absolute scale removes is the CALIBRATION rationale, and
+      with it validateGraph rule 20, whose stated justification is that 'a boost
+      value is only meaningful within one tier's scale'; that premise is false
+      under a closed level vocabulary, and the rule's single-scalar
+      attention.tier shape is obsoleted by the per-tier map independently.
+      Migration and the level values are owned by
+      tactic-attention-per-tier-boost-migration."
+  - question: Which order-changing mechanisms sit outside the rank key, and how do
+      they compose with it?
+    answer: "(Recorded 2026-08-11, third round.) Two, and the second-round record
+      wrongly named tier as the sole one. First, CLASSIFICATION acts: adding a
+      recognized bug_fix/security mark lifts tier, and adding a serves edge to a
+      higher-ranked strategy lifts band — both are sanctioned model instruments,
+      and the ownership doctrine for them lives on
+      strategy-recursive-self-improvement. Second, the blocked_by PRECEDENCE
+      LIFT, which is already implemented and already recorded doctrine on
+      strategy-graph-drives-dispatch: router.ts's effectivePrecedence lifts each
+      node to the lexicographic max over its own pair and the precedence of
+      every node it blocks, recursively and max-based rather than additive, and
+      selectGraphTargets sorts on that LIFTED pair, not on the pair the node
+      reports. This matters mechanically, not just descriptively: Precedence is
+      a 2-tuple {tier, rank} today, so unless it is extended to the 3-tuple
+      (tier, band, residual) with maxPrecedence comparing lexicographically over
+      all three, the band never reaches the sort and the whole namespacing
+      change is INERT on the selection path. Under the 3-tuple a blocker
+      inherits the band of what it blocks, which is the correct reading — the
+      blocked work's urgency is exactly what the lift models — and it preserves
+      the never-additive, always-max property the 2026-07-13 supersession was
+      built on. Amended 2026-08-12: reduced to ONE mechanism. The blocked_by
+      PRECEDENCE LIFT described here is deleted, because blocked_by moves inside
+      the parent relation — a blocker is a child of what it blocks and therefore
+      inherits its tier, its band and its lineage directly, by the ordinary rank
+      key. The mechanical concern this entry raises (Precedence must widen to a
+      3-tuple or the band never reaches the sort) is resolved by deletion rather
+      than by widening: there is no separate Precedence tuple left to keep in
+      sync. CLASSIFICATION acts remain outside the key exactly as recorded."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -271,15 +491,26 @@ node that owns them:
 
 ### `Attention`
 
-A user-authored injection that seeds the derived rank. Exactly one of `boost` /
-`override` is set — the authored YAML supplies one key and the other resolves to
-`null`. Setting both, or neither, is rejected.
+A user-authored injection that seeds the derived rank: a SPARSE per-tier map of
+boost values, plus the rationale for claiming them.
 
-| Name        | Type             | Meaning |
-| ----------- | ---------------- | ------- |
-| `boost`     | `number \| null` | A RELATIVE claim: adds `(self, boost)` to this node's outgoing source set, surviving upstream re-weighting. Must be finite and `> 0` — a zero boost is meaningless; use `override: 0` to explicitly zero a branch. |
-| `override`  | `number \| null` | An ABSOLUTE cap: replaces this node's outgoing set with `{(self, override)}`, capping its own branch only (a descendant's other parents still contribute). Must be finite and `>= 0`. |
-| `rationale` | `string`         | Why this node draws (or defers) attention now. Must be non-empty. |
+| Name        | Type                      | Meaning |
+| ----------- | ------------------------- | ------- |
+| `boosts`    | `Record<string, number>`  | A RELATIVE claim per tier: `{"<tier>": <boost>}`, where the key is one of the decimal tier strings `"1"`, `"2"`, `"3"` and the value is the boost chosen ON THAT TIER'S SCALE. Each value must be finite and `> 0`. SPARSE: an absent tier key means "makes no claim in that tier" and must stay distinguishable from an authored lowest value — never write a `0` to stand for an unauthored tier. |
+| `rationale` | `string`                  | Why this node draws attention now. Must be non-empty. |
+
+An `attention` block must claim at least one tier: a block whose `boosts` map is
+empty says nothing, and is rejected. To claim nothing, drop the `attention`
+block entirely (`attention: null`) — there is no "zero this branch" spelling.
+
+The pre-tier fields `boost` (with an optional `tier:` namespace tag) and a
+positive `override` are still accepted on read as LEGACY compatibility sugar and
+canonicalize into `boosts` — `boost: X` ⇒ `{"1": X}` untagged, `{"<tier>": X}`
+when tagged; `override: X` ⇒ `{"<tier>": X}`. They are read-only spellings: every
+writer emits the `boosts` map, and `tactic-attention-per-tier-boost-migration`
+rewrites the remaining node files, after which both are deleted. The old
+absolute-cap semantics of `override` are gone (it is now purely a shape
+mapping), and the old `override: 0` "zero this branch" spelling is rejected.
 
 ### `Execution`
 
@@ -471,6 +702,28 @@ problem set rather than the first entry. It enforces:
     `attention`/`attention.boost` is null there is no dominance to protect and
     the guard is inert. A node opts out by placing the literal substring
     `ACK: main-health-dominance` in its `attention.rationale`.
+19. Tier marks are well-shaped: `attributes.bug_fix` and `attributes.security`,
+    when present, are booleans; `attributes.tier`, when present, is the number 2
+    or 3. An explicit `attributes.tier: 1` is rejected — 1 is the implicit
+    default every unmarked node already carries, so authoring it would give one
+    state two spellings.
+20. Per-tier boost namespace: a node with non-null `attention` sets
+    `attention.tier` equal to its OWN tier — its own marks, not the effective
+    tier it inherits down `parent`/`serves`. A boost value is only meaningful
+    within one tier's scale, so a node whose tier changes must have its value
+    re-selected in the new tier's namespace. The check deliberately uses the own
+    tier: an effective-tier check would cascade, invalidating every boosted
+    descendant the moment any ancestor gained a mark.
+21. `attributes.measured_impact`, when present, is an array of summary
+    measurement records `{metric, value, unit, window, sensor, measured}` —
+    `metric`/`unit`/`window`/`sensor` non-empty strings, `value` a finite
+    number, `measured` a `YYYY-MM-DD` date. `attributes` is otherwise free-form,
+    so without this rule a malformed measurement would reach every consumer
+    unchallenged; the key is cited evidence for attention and classification
+    writes, so it earns a shape rule as tier marks do. The rule checks shape
+    only and never reads a value — a measurement is queryable input to a ranking
+    act, never an ordering authority of its own. `kind-tactic` carries the
+    field's normative detail.
 
 Rules 6–9 judge only edges whose target already resolves — rules 2–4 report the
 dangling case — so a single broken edge is not double-reported. Rules 13–14 own

@@ -73,6 +73,12 @@
 #  22. layer 3 leaves a stale-`--base` SAME-field divergence
 #      mechanical-unresolved: exit 1, office_hours.reason carries
 #      "mechanical-unresolved", both values are named in the recommendation
+# 22b. the SNAP_DIR frozen-original contract on a MULTI-ID batch where id A's
+#      layer-3 merge resolves and id B's does not (so the batch fails closed
+#      and both park): SNAP_DIR/A.md still hashes to A's PRE-merge content,
+#      graph-commit's blend of it with the concurrent writer's landed edit sits
+#      beside it at SNAP_DIR/A.merged.md, and the park recommendation names
+#      both paths and says which is which
 #  23. a --prune id racing a concurrent edit to the same node is excluded from
 #      the layer-2 merge attempt entirely (a deletion has nothing to
 #      structurally merge against) — no false "auto-resolved" claim, parks
@@ -256,6 +262,104 @@
 #      which would deny land-align-round its park marker for a park that IS on
 #      main. origin/main must not move.
 #
+# Cases 60-69 cover build_commit_plumbing() — the commit builder behind
+# GRAPH_COMMIT_WRITER=plumbing — as a UNIT. Unlike every case above they do not
+# drive the CLI end to end: they source graph-commit (which defines its
+# functions and runs nothing) and call the builder directly against a real
+# throwaway repo, which is how the tree-SHA equivalence claim below is made
+# precisely. Cases 70-73 then drive the wired-in writer through the CLI.
+#
+# The central assertion is TREE-SHA EQUIVALENCE: for identical inputs, the
+# plumbing writer and the working-tree writer (git add + git commit) must
+# produce the same tree object. A tree SHA is a total, order-independent
+# fingerprint of the content a commit lands, so equal trees IS the proof that
+# swapping the writer changes nothing about what reaches main.
+#  60. single-node edit: same tree SHA as `git add` + `git commit`
+#  61. multi-node edit (three ids in one commit): same tree SHA
+#  62. prune (file deleted on disk): same tree SHA, and the path is gone from
+#      the plumbing tree
+#  63. mixed edit + prune in one commit: same tree SHA
+#  64. RESURRECTED_IDS: a resurrected id is excluded from the plumbing tree
+#      exactly as commit_files() excludes it — same tree SHA as the
+#      working-tree writer's identical exclusion, and the node still carries
+#      BASE content (never the on-disk re-materialization) in the built commit
+#  65. carry-through: the built commit differs from its base in EXACTLY the
+#      named node paths — every other path in the repo (the other intentions/
+#      nodes, packages/**) is untouched
+#  66. the builder touches neither the working tree nor the repo's own
+#      .git/index: both are byte-identical after a build, and the built commit
+#      is reachable from no ref (HEAD has not moved)
+#  67. GRAPH_COMMIT_WRITER gating: unset lands exactly as today, an explicit
+#      `worktree` lands identically, `plumbing` LANDS THE SAME CONTENT while
+#      leaving the checkout's HEAD exactly where it was (no local commit is ever
+#      made on that path), and an unknown value is refused with origin/main
+#      unmoved
+#  68. base-commit fidelity: the builder builds against the BASE COMMIT it is
+#      handed, not against HEAD or the index — a commit built on an older base
+#      carries that base's content for paths it does not name
+#  69. a --prune id naming a path the base commit does not carry is REFUSED —
+#      `update-index --force-remove` would silently succeed there, so the
+#      builder dies instead of emitting a commit that pruned nothing
+#
+# Cases 70-75 drive GRAPH_COMMIT_WRITER=plumbing through the CLI end to end —
+# the wiring itself, not the builder.
+#  70. UNRELATED DIRTY TRACKED FILE. The finding this wiring dissolves
+#      (tactic-eval-finding-eval-write-blocked-by-unrelated-main-dirt): a
+#      modified file the write never reads must NOT block a plumbing landing,
+#      must still block a worktree landing (that writer's rebase genuinely
+#      cannot run on it), and must SURVIVE the plumbing landing — a writer that
+#      tolerates dirt by destroying it is not tolerating it
+#  71. SAME-NODE CONCURRENT EDIT, disjoint fields: with no rebase to conflict,
+#      the divergence is caught by comparing the node's blob between bases and
+#      routed through the SAME field-level merge layer 2 uses, so BOTH writers'
+#      edits survive on main — never a blind overwrite of the peer's landed edit
+#  72. SAME-NODE CONCURRENT EDIT the merge CANNOT resolve: parks exactly as the
+#      worktree writer's unresolvable rebase conflict does (exit 1, the peer's
+#      content stands on main, office_hours landed, the loser's content kept in
+#      the snapshot dir) — the return-10 → land()-12 → park_and_exit() path is
+#      preserved, not re-derived
+#  73. the park in case 72 leaves the checkout's UNRELATED dirt intact:
+#      park_and_exit()'s whole-tree `git reset --hard` is a path-scoped sync for
+#      this writer, so the park cannot destroy what the pre-flight refusal was
+#      dropped for
+#  74. NO-OP FIDELITY. A clean checkout merely BEHIND origin/main whose content
+#      is already there must still short-circuit: the "HEAD == origin/main" test
+#      is the wrong question for a writer that builds from disk onto
+#      origin/main, and without the widened arm the run would push an empty
+#      commit whose tree equals its parent's
+#  75. COMPOSITION WITH --base. dispatch-eval-finding, the one caller that opts
+#      into this writer, passes --base on every update, so the layer-3
+#      stale-base reconciliation (which merges on disk) and the plumbing
+#      rebuild (which then reconciles and builds) must compose — both edits
+#      reach main
+#
+# Cases 76-77 return to the builder as a unit, to pin its commit-date behavior:
+#  76. same base, same content, same message -> the SAME commit SHA (the
+#      GIT_AUTHOR_DATE/GIT_COMMITTER_DATE pin, not the wall clock)
+#  77. a different base -> a different commit SHA regardless, since the base
+#      is the built commit's parent
+#
+# Cases 78-79 pin the no-op integrity guard (assert_noop_matches_intent): the
+# invariant that `noop` is never reported for a run whose INTENDED content is
+# not what origin/main carries
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit — the incident
+# printed `verdict: landed ids=… pushed=none context=noop` while origin/main
+# still held the pre-edit body):
+#  78. END TO END: a far-ahead worktree (an unpushed non-intentions commit on
+#      HEAD) editing an EXISTING node whose content differs from origin/main
+#      lands that edit and never reports `verdict: landed … context=noop`. The
+#      far-ahead rebuild's `git reset --hard` makes HEAD and origin/main equal
+#      for every id, so every repository-vs-repository guard on the no-op path
+#      is satisfied by construction and none of them can see a dropped edit.
+#  79. THE GUARD AS A UNIT (sourced, in the cases 60-69 idiom), because no CLI
+#      path currently reaches a mismatch — that is what an assertion is for.
+#      Four arms: intent equal to origin/main proceeds silently; intent
+#      differing dies naming the id, the preserved snapshot dir and the --base
+#      entry, reporting `verdict: not-landed` and never `landed`; a resolved
+#      merge's <id>.merged.md matching origin/main proceeds (case 48's shape,
+#      proving the comparison reads snap_intended_file()); and the mirror —
+#      frozen original matching while the merge output does not — still dies
+#
 # No network and no real gh/node needed; requires only bash + git + jq + setsid.
 
 set -uo pipefail
@@ -285,6 +389,12 @@ no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 ORIGIN="$WORK/origin.git"
 git init -q --bare "$ORIGIN"
 git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+# Silence the only asynchronous writer the scratch origin can have: an
+# in-process auto-gc that relocates loose objects into a pack right after the
+# seed push, racing make_clone's --no-local clone (see there). No assertion
+# in this suite depends on gc behavior in the fixtures.
+git -C "$ORIGIN" config gc.auto 0
+git -C "$ORIGIN" config receive.autogc false
 # plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
 # which needs an author identity. CI runners have no global git identity, so
 # without this commit-tree fails, plant_lock yields an empty sha, and the lock
@@ -298,6 +408,8 @@ mkdir -p "$SEED"
 git -C "$SEED" init -q -b main
 git -C "$SEED" config user.email harness@test
 git -C "$SEED" config user.name harness
+git -C "$SEED" config gc.auto 0
+git -C "$SEED" config receive.autogc false
 git -C "$SEED" remote add origin "$ORIGIN"
 mkdir -p "$SEED/intentions" \
          "$SEED/packages/intentionsutil/scripts" \
@@ -325,7 +437,11 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-bystander-prune t-bystander-conflict t-prune-base-stale \
           t-base-bystander-prune t-manifest-foreign t-manifest-prune \
           t-kill-lockwait t-kill-stamp t-kill-busy \
-          t-verdict-happy t-verdict-park t-park-retry; do
+          t-verdict-happy t-verdict-park t-park-retry \
+          t-orphan t-live-pending \
+          t-plumb-cli t-plumb-dirty t-plumb-race t-plumb-race-conflict \
+          t-plumb-noop t-plumb-base \
+          t-noop-guard t-noop-unit t-merge-npx-guard; do
   seed_node "$id"
 done
 
@@ -335,8 +451,8 @@ done
 # lines, for the layer-2/3 field-merge cases (17-21) below. Unlike seed_node's
 # bare line-based format (kept untouched for cases 1-16, which only exercise
 # textual rebase mechanics), this is real enough for a human reader to
-# recognize as node content, though the npx merge-node.ts shim below never
-# actually parses it as YAML — it only greps `key: value` lines.
+# recognize as node content, though the node shim's merge-node.ts branch
+# below never actually parses it as YAML — it only greps `key: value` lines.
 seed_field_node() { # <id> <extra-yaml-lines...>
   local id="$1"; shift
   {
@@ -362,6 +478,15 @@ seed_field_node t-farahead-race-conflict "sentinel: base"
 seed_field_node t-farahead-list-removal "fieldB: base" "blocked_by:" "  - t-satisfied-blocker" "  - t-other-blocker"
 seed_field_node t-base-bystander-conflict "sentinel: base"
 seed_field_node t-field-delete-edit "fieldA: base"
+seed_field_node t-multi-snap-a "fieldA: base" "fieldB: base"
+seed_field_node t-multi-snap-b "sentinel: base"
+# Dedicated to the merge-npx-park-storm regression cases (Unit 3 of
+# tactic-graph-commit-merge-npx-park-storm): a launch-failure of the merge
+# tool must die with no park, while a genuine same-field divergence on an
+# otherwise-identical fixture must still park.
+seed_field_node t-merge-unrunnable-base "sentinel: base"
+seed_field_node t-merge-unrunnable-farahead "sentinel: base"
+seed_field_node t-merge-real-divergence "sentinel: base"
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -369,7 +494,15 @@ git -C "$SEED" push -q origin main
 
 # --- Independent writer clones -------------------------------------------
 make_clone() { # <dst> <identity>
-  git clone -q "$ORIGIN" "$1"
+  # --no-local routes the clone through upload-pack (one streamed pack)
+  # instead of the default local-path file-copy/hardlink of $ORIGIN/objects,
+  # which races a source-side loose->pack relocation triggered by auto-gc
+  # right after the seed push. --no-hardlinks is NOT equivalent: it keeps the
+  # same per-file copy loop and is exposed to the same race.
+  if ! git clone -q --no-local "$ORIGIN" "$1"; then
+    echo "error: fixture setup failed: git clone --no-local $ORIGIN $1" >&2
+    exit 1
+  fi
   git -C "$1" config user.email "$2@test"
   git -C "$1" config user.name "$2"
 }
@@ -381,6 +514,10 @@ make_clone "$B" writer-b
 mkdir -p "$WORK/bin" "$WORK/fixtures"
 MODE_FILE="$WORK/gh-mode"
 CALL_LOG="$WORK/gh-calls"
+# Parent-check-suite lookups are counted separately from check-run polls: a
+# suite lookup is not a poll, and every existing poll-count assertion would
+# otherwise shift the moment check_suite_concluded() fires.
+SUITE_CALL_LOG="$WORK/gh-suite-calls"
 FIXTURE_DIR="$WORK/fixtures"
 
 # Fixture JSON per mode: {status,conclusion}-shaped check_runs entries for the
@@ -495,6 +632,34 @@ cat >"$FIXTURE_DIR/forged-green.json" <<'JSON'
 ]}
 JSON
 
+# Orphaned required row (tactic-orphaned-check-run-pins-pending-ci-guard): three
+# required names concluded green while `preview-and-smoke` sits at in_progress
+# with a null conclusion — the shape that burned the whole green-wait budget on
+# 2026-08-11. The row carries its parent check_suite id, which is what lets
+# check_suite_concluded() tell an orphan from a slow check. The `orphan-pending`
+# and `live-pending` fixtures are byte-identical: only the SUITE fixture below
+# differs, so the pair isolates exactly the suite-status signal.
+for _m in orphan-pending live-pending; do
+cat >"$FIXTURE_DIR/$_m.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "id": 1, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}},
+  {"name": "preview-and-smoke", "id": 2, "app": {"slug": "github-actions"}, "status": "in_progress", "conclusion": null, "check_suite": {"id": 85480333626}},
+  {"name": "lint", "id": 3, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}},
+  {"name": "unit-tests", "id": 4, "app": {"slug": "github-actions"}, "status": "completed", "conclusion": "success", "check_suite": {"id": 85480333626}}
+]}
+JSON
+done
+# The orphan signal: the parent suite has already reported completed, so the
+# unconcluded row can never report.
+cat >"$FIXTURE_DIR/orphan-pending-suite-85480333626.json" <<'JSON'
+{"status": "completed", "conclusion": "success"}
+JSON
+# Default for any un-fixtured suite lookup, and the `live-pending` negative: the
+# suite is still running, so an unconcluded row is a genuinely slow check.
+cat >"$FIXTURE_DIR/suite-running.json" <<'JSON'
+{"status": "in_progress", "conclusion": null}
+JSON
+
 cat >"$WORK/bin/gh" <<'SH'
 #!/usr/bin/env bash
 # gh shim: behavior selected by $GC_GH_MODE_FILE; every invocation appends one
@@ -503,8 +668,28 @@ cat >"$WORK/bin/gh" <<'SH'
 # For modes that reach the check-runs endpoint, this runs graph-commit's REAL
 # --jq program (extracted from "$@") against a mode-specific fixture file, so
 # the filter itself is exercised rather than a hardcoded count string.
-echo "gh-invocation" >>"$GC_GH_CALL_LOG"
+args="$*"
 mode="$(cat "$GC_GH_MODE_FILE")"
+# check_suite_concluded()'s parent-suite lookup is a DIFFERENT endpoint from the
+# check-run poll, so it is logged to its own file — poll-count assertions must
+# keep counting polls, not suite lookups. Fixture per mode+suite:
+# <mode>-suite-<id>.json; when absent the suite is reported as still running,
+# which is the inert default. Every legacy fixture's rows carry no `check_suite`
+# at all, so graph-commit emits `-` for them and this branch is never reached.
+if [[ "$args" == *check-suites/* ]]; then
+  echo "gh-suite-invocation" >>"${GC_GH_SUITE_CALL_LOG:-/dev/null}"
+  suite_id="$(printf '%s' "$args" | sed -E 's#.*check-suites/([^/ ]+).*#\1#')"
+  suite_fixture="$GC_FIXTURE_DIR/$mode-suite-$suite_id.json"
+  [[ -f "$suite_fixture" ]] || suite_fixture="$GC_FIXTURE_DIR/suite-running.json"
+  suite_jq=""
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--jq" ]]; then suite_jq="$2"; break; fi
+    shift
+  done
+  jq -r "$suite_jq" "$suite_fixture"
+  exit 0
+fi
+echo "gh-invocation" >>"$GC_GH_CALL_LOG"
 if [[ "$mode" == "hard-fail" ]]; then
   echo "gh: HTTP 403: API rate limit exceeded (harness shim)" >&2
   exit 1
@@ -523,8 +708,8 @@ fixture="$GC_FIXTURE_DIR/$mode.json"
 jq -r "$jq_program" "$fixture"
 SH
 
-cat >"$WORK/bin/npx" <<'SH'
-#!/usr/bin/env bash
+printf '#!/usr/bin/env bash\nREAL_NODE=%q\n' "$(command -v node)" >"$WORK/bin/node"
+cat >>"$WORK/bin/node" <<'SH'
 # npx shim: dispatches on the script path passed right after `tsx` (argv[2] to
 # this shim) so it can emulate TWO distinct real tsx invocations without node:
 #
@@ -541,12 +726,25 @@ cat >"$WORK/bin/npx" <<'SH'
 #     only one side touched it), that value wins; if both sides changed it
 #     away from base to DIFFERENT values (or there is no base to compare
 #     against and the two sides disagree), it is an unresolved conflict. A
-#     missing --ours file exits 1 with no JSON, mirroring the real CLI's crash
-#     contract (merge-node.ts:14-16) instead of silently resolving from theirs
-#     alone.
+#     missing --ours file exits 3 with no JSON, mirroring the real CLI's
+#     "ran and failed on its inputs" contract (see merge-node.ts's output
+#     contract header) instead of silently resolving from theirs alone. The code
+#     must be 3, not 1: graph-commit's run_merge_node() reads 3 as a content
+#     outcome that parks, and every OTHER non-zero status as "the merge tool
+#     could not be executed", which dies without writing any office_hours.
 #   anything else (park_write's throwaway tsx module) — emulates `npx tsx
 #     <helper> <storeModule> <intentionsDir> <since> <reason> <snapDir>
 #     <pruneCsv> <id...>` without node. Mirrors the real helper's two-pass
+#
+# GC_MERGE_NODE_UNRUNNABLE, when set, short-circuits BEFORE the case
+# statement below: it models a merge tool that never started (a module
+# resolution failure, e.g. ERR_MODULE_NOT_FOUND) rather than one that ran and
+# reached a verdict. Deliberately exits 1, not 127: run_merge_node() must
+# route "the tool could not be executed" to die() on ANY non-3, non-parsable
+# outcome, not merely a recognizable "missing binary" code — a naive
+# rc==127-only check would misclassify a real ERR_MODULE_NOT_FOUND (which
+# also exits 1) as a content divergence and park it. See
+# tactic-graph-commit-merge-npx-park-storm.
 #     shape: verify every id is readable first, then write all. Composes
 #     office_hours.recommendation additively like the real helper: a per-id BASE
 #     recovery string distinguishing a pruned id (no snapshot) from an ordinary
@@ -555,7 +753,17 @@ cat >"$WORK/bin/npx" <<'SH'
 #     text — see graph-commit's park_write) when it is set, so tests can assert
 #     on both the prune-vs-edit distinction and the field detail reaching the
 #     landed node.
-[[ "$1" == "tsx" ]] || { echo "npx shim: unexpected invocation: $*" >&2; exit 1; }
+if [[ "$1" == "--import" && "$2" == "tsx/esm" ]]; then
+  shift 2
+  set -- tsx "$@"          # re-shape argv to what the body below already parses
+else
+  exec "$REAL_NODE" "$@"   # any other node invocation runs for real
+fi
+
+if [[ -n "${GC_MERGE_NODE_UNRUNNABLE:-}" ]]; then
+  echo "node: ERR_MODULE_NOT_FOUND: Cannot find package 'tsx'" >&2
+  exit 1
+fi
 
 case "$(basename "$2")" in
   merge-node.ts)
@@ -571,15 +779,19 @@ case "$(basename "$2")" in
       esac
     done
 
-    # Mirror the real CLI's crash contract (merge-node.ts:14-16: "A tool crash
-    # ... exits non-zero with an error on stderr and NO JSON on stdout") for a
-    # missing --ours file. Without this guard the shim below silently treats a
-    # nonexistent --ours as an empty OURS_V map and resolves from theirs alone
-    # — diverging from the real merge-node.ts, which throws ENOENT reading a
-    # missing --ours path.
+    # Mirror the real CLI's "ran and failed ON ITS INPUTS" contract (see the
+    # output-contract header of merge-node.ts: exit 3, an error on stderr, NO
+    # JSON on stdout) for a missing --ours file. Without this guard the shim
+    # below silently treats a nonexistent --ours as an empty OURS_V map and
+    # resolves from theirs alone — diverging from the real merge-node.ts, which
+    # throws ENOENT reading a missing --ours path and exits 3 from its catch.
+    # The 3 is load-bearing, not cosmetic: run_merge_node() routes exit 3 to a
+    # park (Case 47 depends on that) and every other non-zero status to a die
+    # with no office_hours written. Exiting 1 here would model a merge tool that
+    # never started, which is a different test.
     if [[ -n "$ours" && ! -f "$ours" ]]; then
       echo "merge-node shim: --ours file does not exist: $ours" >&2
-      exit 1
+      exit 3
     fi
 
     # theirs genuinely absent (the id no longer exists on the landed side).
@@ -667,6 +879,28 @@ case "$(basename "$2")" in
   *)
     shift 3   # tsx, helper script path, store module path
     dir="$1"; since="$2"; reason="$3"; snap_dir="$4"; prune_csv="$5"; shift 5
+    # SNAP_DIR path contract, mirroring the real helper's snapIntended() /
+    # preservedContent() (graph-commit's park_write) and the shell-side
+    # snap_intended_file(): <id>.md is the writer's FROZEN pre-merge original,
+    # and <id>.merged.md — present only when a layer-2/3 merge resolved for that
+    # id — is graph-commit's own merge output. Which content a human is pointed
+    # at, and how the two are labelled, is decided in ONE place here, as it is
+    # in the real helper.
+    snap_intended() {
+      if [[ -f "$snap_dir/$1.merged.md" ]]; then
+        printf '%s' "$snap_dir/$1.merged.md"
+      else
+        printf '%s' "$snap_dir/$1.md"
+      fi
+    }
+    preserved_content() {
+      local orig="$snap_dir/$1.md" merged="$snap_dir/$1.merged.md"
+      if [[ -f "$merged" ]]; then
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy); graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged, which is neither this session's content nor anything that landed"
+      else
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)"
+      fi
+    }
     # Delete/modify divergence: a non-prune id whose target file is absent but
     # whose snapshot exists was deleted by another writer's already-landed
     # change while this session's edit was in flight; re-materialize it from the
@@ -678,7 +912,7 @@ case "$(basename "$2")" in
         continue
       fi
       if [[ ",$prune_csv," != *",$id,"* && -f "$snap_dir/$id.md" ]]; then
-        cp "$snap_dir/$id.md" "$dir/$id.md"
+        cp "$(snap_intended "$id")" "$dir/$id.md"
         deleted_csv="$deleted_csv,$id"
         continue
       fi
@@ -707,13 +941,13 @@ case "$(basename "$2")" in
       if [[ ",$prune_csv," == *",$id,"* ]]; then
         rec="prune, no content snapshot, mailbox discipline"
       elif [[ ",$deleted_csv," == *",$id,"* ]]; then
-        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; the landed deletion WINS and this record is LOCAL ONLY. Re-materialized from ${snap_dir}/${id}.md with authored body preserved, untracked.
+        rec="delete/modify divergence: other writer deleted this node while this session's edit was in flight; the landed deletion WINS and this record is LOCAL ONLY. Re-materialized from $(snap_intended "$id") with authored body preserved, untracked; $(preserved_content "$id").
 Recommended: a human picks ONE of two intents.
 (1) OVERRIDE the deletion: review the file, drop office_hours, re-run graph-commit ${id}.
 (2) CONFIRM the other writer's deletion: rm ${dir}/${id}.md.
 Mailbox discipline."
       else
-        rec="unlanded content preserved at ${snap_dir}/${id}.md; mailbox discipline"
+        rec="$(preserved_content "$id"); mailbox discipline"
       fi
       [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
       # SET, not append. The real helper does `node.office_hours = {...}` and
@@ -731,11 +965,19 @@ Mailbox discipline."
     ;;
 esac
 SH
-chmod +x "$WORK/bin/gh" "$WORK/bin/npx"
+
+printf '#!/usr/bin/env bash\nNPX_CALL_LOG=%q\n' "$WORK/npx-calls.log" >"$WORK/bin/npx"
+cat >>"$WORK/bin/npx" <<'SH'
+printf '%s\n' "$*" >>"$NPX_CALL_LOG"
+echo "npx shim: npx must not be invoked by graph-commit (see tactic-graph-commit-merge-npx-park-storm)" >&2
+exit 127
+SH
+chmod +x "$WORK/bin/gh" "$WORK/bin/npx" "$WORK/bin/node"
 
 # --- Helpers ------------------------------------------------------------------
-set_mode() { printf '%s' "$1" >"$MODE_FILE"; : >"$CALL_LOG"; }
+set_mode() { printf '%s' "$1" >"$MODE_FILE"; : >"$CALL_LOG"; : >"$SUITE_CALL_LOG"; }
 gh_calls() { wc -l <"$CALL_LOG" | tr -d ' '; }
+gh_suite_calls() { wc -l <"$SUITE_CALL_LOG" | tr -d ' '; }
 origin_show() { git -C "$ORIGIN" show "main:intentions/$1.md"; }
 origin_sha() { git -C "$ORIGIN" rev-parse main; }
 sync_clone() { git -C "$1" fetch -q origin main && git -C "$1" reset -q --hard FETCH_HEAD; }
@@ -750,11 +992,13 @@ lock_ref_exists() { git -C "$ORIGIN" show-ref --verify --quiet refs/graph/landin
 
 run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMPTS
            # GC_LOCK_TTL GC_LOCK_POLL GC_LOCK_WAIT GC_SENTINEL
+           # GC_MERGE_NODE_UNRUNNABLE
   local clone="$1"; shift
   (
     cd "$clone" || exit 99
     export PATH="$WORK/bin:$PATH"
     export GC_GH_MODE_FILE="$MODE_FILE" GC_GH_CALL_LOG="$CALL_LOG" GC_FIXTURE_DIR="$FIXTURE_DIR"
+    export GC_GH_SUITE_CALL_LOG="$SUITE_CALL_LOG"
     export GRAPH_COMMIT_CHECK_POLL_SECONDS="${GC_POLL:-0}"
     export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS="${GC_TIMEOUT:-5}"
     export GRAPH_COMMIT_MAX_ATTEMPTS="${GC_ATTEMPTS:-5}"
@@ -762,6 +1006,7 @@ run_gc() { # <clone> [graph-commit args...]; knobs: GC_POLL GC_TIMEOUT GC_ATTEMP
     export GRAPH_COMMIT_LOCK_POLL_SECONDS="${GC_LOCK_POLL:-}"
     export GRAPH_COMMIT_LOCK_WAIT_SECONDS="${GC_LOCK_WAIT:-}"
     export GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}"
+    export GC_MERGE_NODE_UNRUNNABLE="${GC_MERGE_NODE_UNRUNNABLE:-}"
     bash packages/intentionsutil/scripts/graph-commit "$@"
   )
 }
@@ -815,6 +1060,7 @@ start_gc_killable() {
     PATH="$WORK/bin:$PATH" \
     GC_GH_MODE_FILE="$MODE_FILE" \
     GC_GH_CALL_LOG="$CALL_LOG" \
+    GC_GH_SUITE_CALL_LOG="$SUITE_CALL_LOG" \
     GC_FIXTURE_DIR="$FIXTURE_DIR" \
     GC_GH_SENTINEL_FILE="${GC_SENTINEL:-}" \
     GC_PGID_FILE="$pgidfile" \
@@ -1011,6 +1257,75 @@ if [[ $rc -eq 0 ]] && origin_show t-desync | grep -q 'line1: desync-lands'; then
   ok "desynced check-run (status stuck in_progress, conclusion success) still lands"
 else
   no "desynced check-run handling (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 8b: ORPHANED required row — bounded re-stamp, then a GitHub-side die --
+# The complement of case 8's #2457 desync: `preview-and-smoke` has NO conclusion
+# at all, and its parent check suite has already reported completed. A suite
+# cannot conclude while one of its own jobs is still running, so the row will
+# never report and `gh run rerun` refuses it. Pre-fix, graph-commit read it as
+# pending and burned the whole green-wait budget (five 180s attempts) before
+# exiting busy-exhausted with an orphan local commit — with the graph store's
+# only write path shut for the duration.
+#
+# An orphan is a GitHub artifact, not a statement about the commit, so the run
+# must neither wait for it nor accuse the content. It re-stamps: delete the
+# graph/** scratch ref and push the SHA again for a fresh stamping run, on its
+# OWN cap (MAX_ORPHAN_RESTAMPS, default 2) that is separate from the landing
+# budget. This fixture mode replays the orphan on every poll, so the cap is
+# always exhausted here: exactly ONE poll per stamp (initial + 2 re-stamps = 3
+# polls, 3 suite lookups — no green-wait is ever entered, which is what keeps
+# the store open), no landing attempt consumed, nothing landed, and a terminal
+# message naming the GitHub-side cause instead of the old content accusation.
+set_mode orphan-pending
+sync_clone "$A"
+edit_line "$A" t-orphan 1 never-lands
+out="$(export GC_POLL=1 GC_TIMEOUT=5 GC_ATTEMPTS=5; run_gc "$A" t-orphan 2>&1)"; rc=$?
+calls="$(gh_calls)"; scalls="$(gh_suite_calls)"
+if [[ $rc -eq 1 && "$calls" -eq 3 && "$scalls" -eq 3 ]] \
+   && grep -q 're-stamp 1/2' <<<"$out" \
+   && grep -q 're-stamp 2/2' <<<"$out" \
+   && grep -q 'still ORPHANED after 2 re-stamp' <<<"$out" \
+   && ! grep -q 'attempt 2/' <<<"$out" \
+   && ! origin_show t-orphan | grep -q 'never-lands'; then
+  ok "orphaned required row re-stamps under its own cap then fails closed (3 polls, 3 suite lookups, no landing attempt burned, nothing landed)"
+else
+  no "orphaned required row re-stamp cap (rc=$rc gh_calls=$calls suite_calls=$scalls)"; printf '%s\n' "$out"
+fi
+# The diagnostic must be specific enough to distinguish a GitHub orphan from a
+# genuinely failing check — the required check's name AND its suite id — and the
+# terminal message must not accuse the commit content, which is the thing an
+# orphan is NOT evidence of.
+if grep -q 'preview-and-smoke=orphaned' <<<"$out" \
+   && grep -q '85480333626 already concluded' <<<"$out" \
+   && grep -q 'GitHub-side condition, NOT broken commit content' <<<"$out" \
+   && grep -q 'nothing was pushed to main' <<<"$out" \
+   && ! grep -q 'the commit content fails CI' <<<"$out"; then
+  ok "orphaned required row: diagnostic names the check and its concluded suite, and blames GitHub rather than the content"
+else
+  no "orphaned required row diagnostic"; printf '%s\n' "$out"
+fi
+sync_clone "$A"   # drop the never-landed local commit
+
+# --- Case 8c: the negative — same row, suite still running, keeps waiting -------
+# Byte-identical check-runs payload; only the SUITE fixture differs (absent, so
+# the shim reports in_progress). A check whose suite is still running is just
+# slow, and relaxing THAT into a refusal would turn every genuinely in-flight
+# graph write into a hard failure. It must keep the pre-existing wait-and-retry
+# behavior and time out as transient.
+set_mode live-pending
+sync_clone "$A"
+edit_line "$A" t-live-pending 1 stuck
+out="$(export GC_POLL=1 GC_TIMEOUT=1 GC_ATTEMPTS=2; run_gc "$A" t-live-pending 2>&1)"; rc=$?
+scalls="$(gh_suite_calls)"
+if [[ $rc -eq 1 && "$scalls" -ge 1 ]] \
+   && grep -q 'attempt 2/2' <<<"$out" \
+   && grep -q 'could not land on main after 2/2 attempts' <<<"$out" \
+   && ! grep -q 'orphaned' <<<"$out"; then
+  ok "unconcluded row under a STILL-RUNNING suite keeps waiting (transient, not a refusal)"
+else
+  no "live pending row handling (rc=$rc suite_calls=$scalls)"; printf '%s\n' "$out"
 fi
 sync_clone "$A"
 
@@ -1372,6 +1687,68 @@ if [[ $rc -eq 1 ]] \
   ok "layer 3: stale --base same-field divergence stays mechanical-unresolved (parks via a single stamp poll, no prior retry loop), and SNAP_DIR retains the writer's original node content"
 else
   no "layer 3 base conflict (rc=$rc calls=$calls)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# Case 22b: the frozen-original SNAP_DIR contract, on the shape this defect was
+# filed about — a MULTI-ID batch in which id A's layer-3 merge RESOLVES and id
+# B's does not. The batch fails closed as a unit, so both park; A's resolved
+# merge must not have eaten A's evidence on the way. Assert all three halves:
+#   (1) SNAP_DIR/A.md still hashes to A's PRE-merge content — byte-identical to
+#       what the writer had on disk before graph-commit ran;
+#   (2) SNAP_DIR/A.merged.md holds the blend (this writer's fieldA edit plus the
+#       concurrent writer's landed fieldB edit);
+#   (3) the park recommendation names BOTH paths and says which is which.
+# Before the fix the merge output was copied OVER SNAP_DIR/A.md, so the losing
+# writer's only surviving copy of its own edit was a blend it never wrote and
+# that never landed — and the concurrent writer, by choosing which field to
+# touch, chose which of the losing writer's ids kept their evidence.
+#
+# NOTE on (3): the recovery text asserted here is the node SHIM's, which mirrors
+# the real park helper's wording (the harness shims `node`, so the real tsx
+# heredoc in park_write never executes). What this pins end to end is that
+# park_write is handed a SNAP_DIR carrying both files, that they hold the right
+# content, and that the recommendation reaching origin/main distinguishes them.
+set_mode green
+W22B="$WORK/w22b"
+make_clone "$W22B" writer-22b
+msa_sha="$(git -C "$W22B" hash-object intentions/t-multi-snap-a.md)"
+msb_sha="$(git -C "$W22B" hash-object intentions/t-multi-snap-b.md)"
+edit_field "$W22B" t-multi-snap-a fieldA a-writer-edit
+edit_field "$W22B" t-multi-snap-b sentinel b-writer-value
+# The writer's pre-merge content for A, captured before graph-commit sees it.
+msa_pre="$(git -C "$W22B" hash-object intentions/t-multi-snap-a.md)"
+
+OTHER22B="$WORK/other22b"
+make_clone "$OTHER22B" other22b
+# A's landed edit touches a DIFFERENT field (A's layer-3 merge resolves); B's
+# touches the SAME field (B's does not, so the whole batch parks).
+edit_field "$OTHER22B" t-multi-snap-a fieldB concurrent-edit
+edit_field "$OTHER22B" t-multi-snap-b sentinel concurrent-value
+git -C "$OTHER22B" commit -qam 'concurrent edits racing a multi-id batch'
+git -C "$OTHER22B" push -q origin main
+
+out="$(run_gc "$W22B" -m 'test: multi-id partial resolve' \
+       --base "t-multi-snap-a=$msa_sha" --base "t-multi-snap-b=$msb_sha" \
+       t-multi-snap-a t-multi-snap-b 2>&1)"; rc=$?
+content="$(origin_show t-multi-snap-a 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+snap_a_sha=""
+[[ -n "$snap" && -f "$snap/t-multi-snap-a.md" ]] \
+  && snap_a_sha="$(git -C "$W22B" hash-object "$snap/t-multi-snap-a.md")"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && [[ -n "$snap_a_sha" && "$snap_a_sha" == "$msa_pre" ]] \
+   && [[ -f "$snap/t-multi-snap-a.merged.md" ]] \
+   && grep -q 'fieldA: a-writer-edit' "$snap/t-multi-snap-a.merged.md" \
+   && grep -q 'fieldB: concurrent-edit' "$snap/t-multi-snap-a.merged.md" \
+   && ! grep -q 'fieldB: concurrent-edit' "$snap/t-multi-snap-a.md" \
+   && grep -qF "$snap/t-multi-snap-a.md" <<<"$content" \
+   && grep -qF "$snap/t-multi-snap-a.merged.md" <<<"$content" \
+   && grep -q 'PARTIAL MERGE' <<<"$content"; then
+  ok "multi-id partial resolve: SNAP_DIR keeps the resolved id's frozen pre-merge original, the merge lands beside it as <id>.merged.md, and the park names both"
+else
+  no "multi-id partial resolve (rc=$rc snap='$snap' snap_a_sha=$snap_a_sha msa_pre=$msa_pre)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # Case 23: a --prune id racing a concurrent edit to the same node is excluded
@@ -1945,7 +2322,7 @@ if [[ $rc -eq 1 ]] \
    && [[ -n "$content" ]] \
    && grep -q 'office_hours' <<<"$content" \
    && grep -q 'prune base moved' <<<"$content" \
-   && ! grep -q 'could not attempt structural merge' <<<"$content" \
+   && ! grep -q 'ran and rejected these inputs' <<<"$content" \
    && ! grep -q 'layer 2/3 auto-resolved' <<<"$out"; then
   ok "prune stale base: refuses to land, parks with a prune-specific reason, no resurrection"
 else
@@ -2575,6 +2952,771 @@ if [[ $rc59b -eq 1 ]] \
   ok "idempotent park retry: an already-parked byte-identical node needs no push and still reports verdict: parked (not not-landed)"
 else
   no "idempotent park retry (rc_b=$rc59b rc=$rc59 sha_moved=$([[ "$sha_after_retry" == "$sha_after_park" ]] && echo no || echo yes))"; printf '%s\n' "$out59"
+fi
+
+# --- Cases 60-69: build_commit_plumbing() as a unit (GRAPH_COMMIT_WRITER) ------
+# A dedicated clone whose base commit is LOCAL ONLY (never pushed), so these
+# cases neither depend on nor disturb origin/main, and every other case's
+# fixtures are untouched. The clone carries the whole seed tree — every other
+# intentions/ node plus packages/** — which is what makes the carry-through
+# assertion (case 65) meaningful rather than vacuous.
+P="$WORK/wplumb"
+make_clone "$P" writer-plumb
+PLUMB_MSG="test: plumbing equivalence"
+for pid in t-plumb-a t-plumb-b t-plumb-c t-plumb-prune t-plumb-prune2 t-plumb-res; do
+  printf 'id: %s\nline1: base\nline2: base\n' "$pid" >"$P/intentions/$pid.md"
+done
+git -C "$P" add -A
+git -C "$P" commit -qm 'plumbing fixture base'
+PBASE="$(git -C "$P" rev-parse HEAD)"
+
+plumb_reset() { git -C "$P" reset -q --hard "$PBASE" && git -C "$P" clean -qfd; }
+
+# plumb_case <edit-ids> <prune-ids> <resurrected-ids> — space-separated lists,
+# "" for none. Runs BOTH writers over the same on-disk state and records their
+# trees. The plumbing writer runs FIRST precisely because it must not mutate
+# anything: the working-tree writer that follows it sees the identical tree and
+# index it would have seen had the plumbing writer never run.
+#
+# Sets: PLUMB_SHA, PLUMB_TREE, WT_TREE, PLUMB_RC, and the index/worktree
+# before/after fingerprints case 66 asserts on.
+plumb_case() {
+  local edits="$1" prunes="$2" res="$3" i
+  PLUMB_SHA=""; PLUMB_TREE=""; WT_TREE=""; PLUMB_RC=0
+  PLUMB_INDEX_BEFORE="$(cksum <"$P/.git/index")"
+  PLUMB_STATUS_BEFORE="$(git -C "$P" status --porcelain)"
+  PLUMB_HEAD_BEFORE="$(git -C "$P" rev-parse HEAD)"
+  # Sourcing graph-commit defines its functions and runs nothing (its
+  # BASH_SOURCE/$0 guard), which is how the builder is reachable at all while
+  # try_land() still uses the worktree writer.
+  PLUMB_SHA="$(
+    cd "$P" || exit 99
+    # shellcheck source=/dev/null
+    source "$GC_SCRIPT"
+    IDS=(); PRUNE_IDS=(); RESURRECTED_IDS=()
+    for i in $edits; do IDS+=("$i"); done
+    for i in $prunes; do PRUNE_IDS+=("$i"); done
+    for i in $res; do RESURRECTED_IDS+=("$i"); done
+    ALL_IDS=("${IDS[@]}" "${PRUNE_IDS[@]}")
+    CURRENT_MSG="$PLUMB_MSG"
+    build_commit_plumbing HEAD
+  )" || PLUMB_RC=$?
+  PLUMB_INDEX_AFTER="$(cksum <"$P/.git/index")"
+  PLUMB_STATUS_AFTER="$(git -C "$P" status --porcelain)"
+  PLUMB_HEAD_AFTER="$(git -C "$P" rev-parse HEAD)"
+  [[ $PLUMB_RC -eq 0 && -n "$PLUMB_SHA" ]] || return 1
+  PLUMB_TREE="$(git -C "$P" rev-parse "$PLUMB_SHA^{tree}")"
+
+  # The working-tree writer, mirroring commit_files() exactly: `git add` every
+  # id that is not resurrected (edits AND prunes — `git add` stages a deletion
+  # for a tracked file missing from the working tree), then commit.
+  for i in $edits $prunes; do
+    case " $res " in *" $i "*) continue ;; esac
+    git -C "$P" add -- "intentions/$i.md"
+  done
+  git -C "$P" commit -qm "$PLUMB_MSG"
+  WT_TREE="$(git -C "$P" rev-parse "HEAD^{tree}")"
+}
+
+# --- Case 60: single-node edit ------------------------------------------------
+plumb_reset
+echo "line3: plumb-edit-a" >>"$P/intentions/t-plumb-a.md"
+if plumb_case "t-plumb-a" "" "" && [[ "$PLUMB_TREE" == "$WT_TREE" ]]; then
+  ok "plumbing writer, single-node edit: same tree SHA as the working-tree writer ($PLUMB_TREE)"
+else
+  no "plumbing writer, single-node edit (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
+fi
+
+# --- Case 61: multi-node edit -------------------------------------------------
+plumb_reset
+echo "line3: plumb-edit-a" >>"$P/intentions/t-plumb-a.md"
+echo "line3: plumb-edit-b" >>"$P/intentions/t-plumb-b.md"
+echo "line3: plumb-edit-c" >>"$P/intentions/t-plumb-c.md"
+if plumb_case "t-plumb-a t-plumb-b t-plumb-c" "" "" && [[ "$PLUMB_TREE" == "$WT_TREE" ]]; then
+  ok "plumbing writer, multi-node edit (3 ids, one commit): same tree SHA as the working-tree writer"
+else
+  no "plumbing writer, multi-node edit (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
+fi
+
+# --- Case 62: prune -----------------------------------------------------------
+plumb_reset
+rm -f "$P/intentions/t-plumb-prune.md"
+if plumb_case "" "t-plumb-prune" "" \
+   && [[ "$PLUMB_TREE" == "$WT_TREE" ]] \
+   && ! git -C "$P" cat-file -e "$PLUMB_SHA:intentions/t-plumb-prune.md" 2>/dev/null; then
+  ok "plumbing writer, prune: same tree SHA as the working-tree writer, and the path is removed from the tree"
+else
+  no "plumbing writer, prune (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
+fi
+
+# --- Case 63: mixed edit + prune in one commit --------------------------------
+plumb_reset
+echo "line3: plumb-mixed" >>"$P/intentions/t-plumb-a.md"
+echo "line3: plumb-mixed-b" >>"$P/intentions/t-plumb-b.md"
+rm -f "$P/intentions/t-plumb-prune.md"
+rm -f "$P/intentions/t-plumb-prune2.md"
+# `git show … | grep -q` is deliberately NOT used for the content assertions in
+# these cases: this suite runs under `set -o pipefail`, so a grep -q that exits
+# on its first match can SIGPIPE the git show ahead of it and make the whole
+# pipeline non-zero regardless of the match. In a negated assertion (cases 64
+# and 68) that turns a real regression into a silent pass. Capture the blob
+# into a variable first and grep the variable.
+mixed_a=""
+if plumb_case "t-plumb-a t-plumb-b" "t-plumb-prune t-plumb-prune2" "" \
+   && [[ "$PLUMB_TREE" == "$WT_TREE" ]] \
+   && ! git -C "$P" cat-file -e "$PLUMB_SHA:intentions/t-plumb-prune.md" 2>/dev/null \
+   && ! git -C "$P" cat-file -e "$PLUMB_SHA:intentions/t-plumb-prune2.md" 2>/dev/null \
+   && mixed_a="$(git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-a.md")" \
+   && grep -q 'plumb-mixed' <<<"$mixed_a"; then
+  ok "plumbing writer, mixed edit + prune in one commit: same tree SHA, both prunes removed, both edits present"
+else
+  no "plumbing writer, mixed edit + prune (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
+fi
+
+# --- Case 64: RESURRECTED_IDS are excluded ------------------------------------
+# The data-integrity case. park_write() re-materializes on disk a node another
+# writer's ALREADY-LANDED change deleted from main; putting it in the tree would
+# push a deleted node's content back onto main with no PR and no review,
+# silently reverting a redaction. The on-disk file here carries content that
+# must NOT reach the built commit.
+plumb_reset
+echo "line3: plumb-edit-a" >>"$P/intentions/t-plumb-a.md"
+echo "line3: RESURRECTED-MUST-NOT-LAND" >>"$P/intentions/t-plumb-res.md"
+res_body=""
+if plumb_case "t-plumb-a t-plumb-res" "" "t-plumb-res" \
+   && [[ "$PLUMB_TREE" == "$WT_TREE" ]] \
+   && res_body="$(git -C "$P" show "$PLUMB_SHA:intentions/t-plumb-res.md")" \
+   && [[ -n "$res_body" ]] \
+   && ! grep -q 'RESURRECTED-MUST-NOT-LAND' <<<"$res_body" \
+   && [[ "$(git -C "$P" rev-parse "$PLUMB_SHA:intentions/t-plumb-res.md")" \
+       == "$(git -C "$P" rev-parse "$PBASE:intentions/t-plumb-res.md")" ]]; then
+  ok "plumbing writer, RESURRECTED_IDS: the resurrected node is excluded from the tree and still carries base content (a landed deletion is not reverted)"
+else
+  no "plumbing writer, RESURRECTED_IDS exclusion (rc=$PLUMB_RC plumb=$PLUMB_TREE worktree=$WT_TREE)"
+fi
+
+# --- Case 65: unrelated paths carried through untouched -----------------------
+plumb_reset
+echo "line3: plumb-carry" >>"$P/intentions/t-plumb-a.md"
+rm -f "$P/intentions/t-plumb-prune.md"
+if plumb_case "t-plumb-a" "t-plumb-prune" ""; then
+  changed="$(git -C "$P" diff --name-only "$PBASE" "$PLUMB_SHA" | sort | tr '\n' ' ')"
+  base_entries="$(git -C "$P" ls-tree -r --name-only "$PBASE" | wc -l | tr -d ' ')"
+  new_entries="$(git -C "$P" ls-tree -r --name-only "$PLUMB_SHA" | wc -l | tr -d ' ')"
+  if [[ "$changed" == "intentions/t-plumb-a.md intentions/t-plumb-prune.md " ]] \
+     && [[ "$new_entries" -eq $((base_entries - 1)) ]] \
+     && [[ "$base_entries" -gt 10 ]]; then
+    ok "plumbing writer carries every unrelated path through from the base commit ($base_entries base entries, exactly the 2 named paths differ)"
+  else
+    no "plumbing writer carry-through (changed='$changed' base=$base_entries new=$new_entries)"
+  fi
+else
+  no "plumbing writer carry-through: build failed (rc=$PLUMB_RC)"
+fi
+
+# --- Case 66: neither the working tree nor the repo's own index is touched ----
+# Fingerprints captured by plumb_case around the builder call only — the
+# working-tree writer runs after them.
+if [[ "$PLUMB_INDEX_BEFORE" == "$PLUMB_INDEX_AFTER" ]] \
+   && [[ "$PLUMB_STATUS_BEFORE" == "$PLUMB_STATUS_AFTER" ]] \
+   && [[ "$PLUMB_HEAD_BEFORE" == "$PLUMB_HEAD_AFTER" ]]; then
+  ok "plumbing writer touches neither the repo's .git/index nor the working tree, and moves no ref"
+else
+  no "plumbing writer mutated the checkout (index '$PLUMB_INDEX_BEFORE'->'$PLUMB_INDEX_AFTER', head $PLUMB_HEAD_BEFORE->$PLUMB_HEAD_AFTER)"
+fi
+
+# --- Case 67: GRAPH_COMMIT_WRITER gating --------------------------------------
+# The default must be byte-for-byte today's behavior, and the opt-in must never
+# silently downgrade to the writer the caller did not ask for.
+set_mode green
+sync_clone "$A"
+edit_line "$A" t-plumb-cli 1 default-writer
+out="$(run_gc "$A" -m 'test: writer default' t-plumb-cli 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && origin_show t-plumb-cli | grep -q 'line1: default-writer'; then
+  ok "GRAPH_COMMIT_WRITER unset: the CLI lands exactly as before"
+else
+  no "GRAPH_COMMIT_WRITER unset (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+sync_clone "$A"
+edit_line "$A" t-plumb-cli 2 explicit-worktree
+export GRAPH_COMMIT_WRITER=worktree
+out="$(run_gc "$A" -m 'test: writer explicit worktree' t-plumb-cli 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+if [[ $rc -eq 0 ]] && origin_show t-plumb-cli | grep -q 'line2: explicit-worktree'; then
+  ok "GRAPH_COMMIT_WRITER=worktree: identical to the default, lands"
+else
+  no "GRAPH_COMMIT_WRITER=worktree (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+sync_clone "$A"
+edit_line "$A" t-plumb-cli 3 plumbing-writer
+head_before="$(git -C "$A" rev-parse HEAD)"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$A" -m 'test: writer plumbing' t-plumb-cli 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+# HEAD unmoved is the load-bearing half: the plumbing writer makes NO local
+# commit, so the checkout it was pointed at is exactly where it started even
+# though the content reached main.
+if [[ $rc -eq 0 ]] && origin_show t-plumb-cli | grep -q 'line3: plumbing-writer' \
+   && [[ "$(git -C "$A" rev-parse HEAD)" == "$head_before" ]]; then
+  ok "GRAPH_COMMIT_WRITER=plumbing lands the same content and never moves the checkout's HEAD"
+else
+  no "GRAPH_COMMIT_WRITER=plumbing landing (rc=$rc head $head_before -> $(git -C "$A" rev-parse HEAD))"; printf '%s\n' "$out"
+fi
+
+before="$(origin_sha)"
+export GRAPH_COMMIT_WRITER=bogus
+out="$(run_gc "$A" -m 'test: writer bogus' t-plumb-cli 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+if [[ $rc -ne 0 ]] && grep -q "must be 'worktree' or 'plumbing'" <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]]; then
+  ok "GRAPH_COMMIT_WRITER with an unknown value is refused; origin/main untouched"
+else
+  no "GRAPH_COMMIT_WRITER unknown-value refusal (rc=$rc)"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 68: the builder builds against the BASE it is handed ----------------
+# Not against HEAD, not against the index. An older base is handed in while the
+# checkout's HEAD carries a newer commit; the built commit must carry the OLD
+# base's content for every path it does not name, and parent the OLD base.
+plumb_reset
+echo "line3: newer-head-content" >>"$P/intentions/t-plumb-b.md"
+git -C "$P" add -A
+git -C "$P" commit -qm 'plumbing fixture: a newer HEAD commit'
+echo "line3: plumb-old-base" >>"$P/intentions/t-plumb-a.md"
+old_base_sha="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc=$?
+old_a=""; old_b=""
+if [[ $rc -eq 0 ]] \
+   && [[ "$(git -C "$P" rev-parse "$old_base_sha^")" == "$PBASE" ]] \
+   && old_a="$(git -C "$P" show "$old_base_sha:intentions/t-plumb-a.md")" \
+   && old_b="$(git -C "$P" show "$old_base_sha:intentions/t-plumb-b.md")" \
+   && grep -q 'plumb-old-base' <<<"$old_a" \
+   && [[ -n "$old_b" ]] \
+   && ! grep -q 'newer-head-content' <<<"$old_b"; then
+  ok "plumbing writer builds against the base commit it is handed, not HEAD (parent is the given base; unnamed paths carry the base's content)"
+else
+  no "plumbing writer base fidelity (rc=$rc sha=$old_base_sha)"
+fi
+plumb_reset
+
+# --- Case 69: a --prune id absent from the base commit is refused -------------
+# The one place the plumbing writer is deliberately STRICTER than `git add`:
+# `git update-index --force-remove` silently succeeds on a path the base tree
+# does not carry, where `git add -- <path>` rejects the unmatched pathspec. The
+# builder must die rather than emit a commit that pruned nothing — and it must
+# not leave its throwaway index dir behind when it does.
+absent_sha="$(
+  {
+    cd "$P" || exit 99
+    # shellcheck source=/dev/null
+    source "$GC_SCRIPT"
+    IDS=(); PRUNE_IDS=(t-plumb-absent); RESURRECTED_IDS=()
+    ALL_IDS=("${PRUNE_IDS[@]}")
+    CURRENT_MSG="$PLUMB_MSG"
+    build_commit_plumbing HEAD
+  } 2>"$WORK/plumb-absent.err"
+)"; rc=$?
+absent_head="$(git -C "$P" rev-parse HEAD)"
+if [[ $rc -ne 0 ]] && [[ -z "$absent_sha" ]] \
+   && grep -q 'names a path absent from base commit' "$WORK/plumb-absent.err" \
+   && [[ "$absent_head" == "$(git -C "$P" rev-parse HEAD)" ]]; then
+  ok "plumbing writer refuses a --prune id absent from the base commit instead of emitting a no-op commit"
+else
+  no "plumbing writer absent-prune refusal (rc=$rc sha=$absent_sha)"; cat "$WORK/plumb-absent.err"
+fi
+plumb_reset
+
+# ---------------------------------------------------------------------------
+# Cases 70-75: GRAPH_COMMIT_WRITER=plumbing driven through the CLI
+# ---------------------------------------------------------------------------
+
+# --- Case 70: an unrelated dirty tracked file blocks worktree, not plumbing ----
+# The finding this wiring dissolves. Case 24 above already pins the worktree
+# writer's refusal on its own fixture; the first half here re-states it on the
+# SAME dirty checkout the second half then lands from, so the two answers are
+# about one state rather than two.
+set_mode green
+WPD="$WORK/wplumbdirty"
+make_clone "$WPD" writer-plumb-dirty
+edit_line "$WPD" t-plumb-dirty 1 plumbing-with-dirt
+echo "unrelated local change" >>"$WPD/packages/intentionsutil/src/store.js"
+
+before="$(origin_sha)"
+out="$(run_gc "$WPD" -m 'test: dirty tree, worktree writer' t-plumb-dirty 2>&1)"; rc=$?
+if [[ $rc -ne 0 ]] && grep -q 'unrelated dirty tracked file' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]]; then
+  ok "unrelated dirty tracked file still refuses the WORKTREE writer (its rebase cannot run on it); origin/main untouched"
+else
+  no "worktree writer dirty-tree refusal (rc=$rc)"; printf '%s\n' "$out"
+fi
+
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$WPD" -m 'test: dirty tree, plumbing writer' t-plumb-dirty 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+dirt_survived=0
+grep -q 'unrelated local change' "$WPD/packages/intentionsutil/src/store.js" && dirt_survived=1
+if [[ $rc -eq 0 ]] && origin_show t-plumb-dirty | grep -q 'line1: plumbing-with-dirt' \
+   && [[ "$dirt_survived" -eq 1 ]]; then
+  ok "the SAME unrelated dirty tracked file does NOT block the plumbing writer, and the dirt survives the landing untouched"
+else
+  no "plumbing writer over a dirty tree (rc=$rc dirt_survived=$dirt_survived)"; printf '%s\n' "$out"
+fi
+
+# --- Case 71: same-node concurrent edit, disjoint fields -> layer-2 merge -------
+# There is no rebase here to produce a conflict, so a blind rebuild would stamp
+# this writer's on-disk content over the peer's landed edit and exit 0. The blob
+# comparison between bases is what catches it, and run_merge_node is what
+# reconciles it — the same primitive the rebase path calls.
+set_mode green
+sync_clone "$A"                       # B stays stale at the pre-edit commit
+sync_clone "$B"
+edit_line "$A" t-plumb-race 1 A-top
+run_gc "$A" -m 'test: plumb race, peer lands first' t-plumb-race >/dev/null 2>&1; rcA=$?
+edit_line "$B" t-plumb-race 12 B-bottom
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumb race, plumbing writer' t-plumb-race 2>&1)"; rcB=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-race)"
+if [[ $rcA -eq 0 && $rcB -eq 0 ]] \
+   && grep -q 'line1: A-top' <<<"$content" \
+   && grep -q 'line12: B-bottom' <<<"$content"; then
+  ok "plumbing writer: a same-node concurrent edit is field-merged, not overwritten — both writers' edits are on main"
+else
+  no "plumbing same-node auto-merge (rcA=$rcA rcB=$rcB)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Cases 72-73: same-node concurrent edit the merge CANNOT resolve -----------
+# Overlapping edits to the SAME field. The plumbing path must reach the same
+# fail-closed park the worktree path reaches through a rebase conflict — and,
+# unlike that path, must do so without resetting the whole tree out from under
+# the caller's unrelated dirt.
+set_mode green
+sync_clone "$A"; sync_clone "$B"
+edit_line "$A" t-plumb-race-conflict 1 A-wins
+run_gc "$A" -m 'test: plumb conflict, peer lands first' t-plumb-race-conflict >/dev/null 2>&1
+edit_line "$B" t-plumb-race-conflict 1 B-loses
+echo "unrelated local change during a park" >>"$B/packages/intentionsutil/src/store.js"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumb conflict, plumbing writer' t-plumb-race-conflict 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-race-conflict)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'concurrent-edit conflict' <<<"$out" \
+   && grep -q 'line1: A-wins' <<<"$content" \
+   && ! grep -q '^line1: B-loses' <<<"$content" \
+   && grep -q 'office_hours' <<<"$content" \
+   && [[ -n "$snap" && -f "$snap/t-plumb-race-conflict.md" ]] \
+   && grep -q 'B-loses' "$snap/t-plumb-race-conflict.md"; then
+  ok "plumbing writer: an unresolvable same-node concurrent edit parks — peer's content stands on main, office_hours landed, loser's content preserved"
+else
+  no "plumbing unresolvable same-node park (rc=$rc snap='$snap')"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+if grep -q 'unrelated local change during a park' "$B/packages/intentionsutil/src/store.js"; then
+  ok "the park path's re-sync is path-scoped for the plumbing writer: the checkout's unrelated dirt survived the park"
+else
+  no "plumbing park destroyed the checkout's unrelated dirty file"
+fi
+git -C "$B" checkout -- packages/intentionsutil/src/store.js
+sync_clone "$B"
+
+# --- Case 74: a clean checkout merely BEHIND origin/main is still a no-op ------
+# The no-op short-circuit's HEAD == origin/main test is the wrong question for
+# this writer — it builds from the ON-DISK content onto origin/main, so what
+# decides whether anything can land is whether that content is already there.
+# Without the widened arm this run would build a commit whose tree equals its
+# parent's and push that empty no-op onto main.
+set_mode green
+sync_clone "$B"
+sync_clone "$A"
+edit_line "$A" t-plumb-cli 4 advance-main-past-B
+run_gc "$A" -m 'test: advance main past B' t-plumb-cli >/dev/null 2>&1
+before="$(origin_sha)"
+calls_before="$(gh_calls)"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$B" -m 'test: plumbing no-op behind main' t-plumb-noop 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+if [[ $rc -eq 0 ]] && grep -q 'no new changes to stage' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]] \
+   && [[ "$(gh_calls)" == "$calls_before" ]]; then
+  ok "plumbing writer: a clean checkout BEHIND origin/main whose content already matches is a no-op — no empty commit pushed, no stamp cycle bought"
+else
+  no "plumbing no-op behind main (rc=$rc origin moved: $before -> $(origin_sha))"; printf '%s\n' "$out"
+fi
+sync_clone "$B"
+
+# --- Case 75: plumbing + a STALE --base (the ledger's own update shape) --------
+# dispatch-eval-finding — the one caller that opts into this writer — passes
+# --base on every update, so the layer-3 stale-base reconciliation and the
+# plumbing rebuild must compose. Layer 3 merges the writer's edit against
+# origin/main ON DISK; the plumbing writer then reconciles that same node
+# against its own base and builds. Both edits must reach main.
+set_mode green
+WPB="$WORK/wplumbbase"
+make_clone "$WPB" writer-plumb-base
+pb_stale_sha="$(git -C "$WPB" hash-object intentions/t-plumb-base.md)"
+OTHERPB="$WORK/other-plumb-base"
+make_clone "$OTHERPB" other-plumb-base
+echo "line16: concurrent edit" >>"$OTHERPB/intentions/t-plumb-base.md"
+git -C "$OTHERPB" commit -qam 'concurrent edit to t-plumb-base'
+git -C "$OTHERPB" push -q origin main
+echo "line15: plumbing writer edit (based on a stale read)" >>"$WPB/intentions/t-plumb-base.md"
+export GRAPH_COMMIT_WRITER=plumbing
+out="$(run_gc "$WPB" -m 'test: plumbing + stale base' --base "t-plumb-base=$pb_stale_sha" t-plumb-base 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER
+content="$(origin_show t-plumb-base 2>/dev/null)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line15: plumbing writer edit (based on a stale read)' <<<"$content" \
+   && grep -q 'line16: concurrent edit' <<<"$content"; then
+  ok "plumbing writer composes with a stale --base: layer 3 reconciles on disk, the rebuild lands both edits"
+else
+  no "plumbing + stale --base (rc=$rc)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+fi
+
+# --- Case 76: rebuilding against the SAME base, content and message yields ----
+# the SAME commit SHA ----------------------------------------------------------
+# The date-pinning fix under test: build_commit_plumbing() now pins
+# GIT_AUTHOR_DATE/GIT_COMMITTER_DATE to the base commit's own committer date
+# instead of letting git stamp the wall clock. With no pin, two builds a
+# moment apart would mint two different commit SHAs even though base, tree
+# and message are byte-identical — which is what turns a checks-timeout retry
+# into a full CI restart instead of a re-push of the already-running commit.
+# Two builder calls back to back, same base/content/message, must collapse to
+# one SHA.
+plumb_reset
+echo "line3: plumb-stable" >>"$P/intentions/t-plumb-a.md"
+stable_sha_1="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc1=$?
+stable_sha_2="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc2=$?
+if [[ $rc1 -eq 0 && $rc2 -eq 0 && -n "$stable_sha_1" ]] \
+   && [[ "$stable_sha_1" == "$stable_sha_2" ]]; then
+  ok "plumbing writer: rebuilding against the same base with the same content and message yields the same commit SHA ($stable_sha_1) — a checks-timeout retry re-pushes the identical commit instead of restarting CI"
+else
+  no "plumbing writer SHA stability (rc1=$rc1 rc2=$rc2 sha1=$stable_sha_1 sha2=$stable_sha_2)"
+fi
+plumb_reset
+
+# --- Case 77: rebuilding against a DIFFERENT base yields a DIFFERENT SHA ------
+# even with identical content and message. The base commit is the built
+# commit's parent, so it is always part of the commit object regardless of
+# date pinning — the pin collapses only SAME-base rebuilds, not every rebuild.
+echo "line3: plumb-diffbase" >>"$P/intentions/t-plumb-a.md"
+diffbase_sha_1="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$PBASE"
+)"; rc1=$?
+# A second, distinct base: PBASE plus one unrelated committed change (the
+# on-disk edit from just above, committed here rather than left staged).
+git -C "$P" commit -qam 'plumbing fixture: a second distinct base'
+second_base="$(git -C "$P" rev-parse HEAD)"
+diffbase_sha_2="$(
+  cd "$P" || exit 99
+  # shellcheck source=/dev/null
+  source "$GC_SCRIPT"
+  IDS=(t-plumb-a); PRUNE_IDS=(); RESURRECTED_IDS=()
+  ALL_IDS=("${IDS[@]}")
+  CURRENT_MSG="$PLUMB_MSG"
+  build_commit_plumbing "$second_base"
+)"; rc2=$?
+if [[ $rc1 -eq 0 && $rc2 -eq 0 && -n "$diffbase_sha_1" && -n "$diffbase_sha_2" ]] \
+   && [[ "$diffbase_sha_1" != "$diffbase_sha_2" ]] \
+   && [[ "$(git -C "$P" rev-parse "$diffbase_sha_1^")" == "$PBASE" ]] \
+   && [[ "$(git -C "$P" rev-parse "$diffbase_sha_2^")" == "$second_base" ]]; then
+  ok "plumbing writer: rebuilding against a different base yields a different commit SHA, even with identical content and message"
+else
+  no "plumbing writer base-sensitivity (rc1=$rc1 rc2=$rc2 sha1=$diffbase_sha_1 sha2=$diffbase_sha_2 base2=$second_base)"
+fi
+plumb_reset
+
+# --- Cases 78-79: the no-op integrity guard (assert_noop_matches_intent) ------
+# The invariant: `noop` is never reported for a run whose INTENDED content is
+# not what origin/main carries
+# (tactic-eval-finding-noop-verdict-hides-dropped-node-edit).
+
+# --- Case 78: far-ahead + an edit to an existing node is never a `noop` -------
+# The shape the incident was filed on, end to end. A far-ahead worktree's
+# rebuild runs `git reset --hard "$MAIN_SHA"`, after which HEAD and origin/main
+# hold the SAME blob for every id — so every repository-vs-repository guard on
+# the no-op path (the nothing-staged wrong-repo die, the HEAD == origin/main
+# short-circuit) is satisfied by construction and cannot notice a dropped edit.
+# This pins the outcome that must never regress: the edit LANDS, and in no case
+# does the run report `verdict: landed … context=noop`.
+set_mode green
+W78="$WORK/w78"
+make_clone "$W78" writer-78
+mkdir -p "$W78/src"
+echo "console.log('pr feature code, no-op guard')" >"$W78/src/noop-guard-feature.js"
+git -C "$W78" add src/noop-guard-feature.js
+git -C "$W78" commit -qm 'pr: non-intentions code change (no-op guard)'
+n78_tip="$(git -C "$W78" rev-parse HEAD)"
+edit_line "$W78" t-noop-guard 1 noop-guard-edit
+out="$(run_gc "$W78" -m 'test: far-ahead edit is not a no-op' t-noop-guard 2>&1)"; rc=$?
+landed78="$(origin_show t-noop-guard 2>/dev/null || true)"
+restored78="$(git -C "$W78" rev-parse HEAD)"
+if [[ $rc -eq 0 ]] \
+   && grep -q 'line1: noop-guard-edit' <<<"$landed78" \
+   && ! grep -q 'verdict: landed.*context=noop' <<<"$out" \
+   && [[ "$restored78" == "$n78_tip" ]]; then
+  ok "far-ahead + an edit to an existing node lands and is never reported as a no-op"
+else
+  no "far-ahead no-op guard, end to end (rc=$rc restored78=$restored78 tip=$n78_tip)"; printf '%s\n' "$out"; printf '%s\n' "$landed78"
+fi
+
+# --- Case 79: the guard as a unit --------------------------------------------
+# Sourced and called directly, in the idiom cases 60-69 use, because no CLI path
+# currently REACHES a mismatch: the far-ahead replay re-materializes every id
+# from SNAP_DIR before the no-op test runs, so intent and origin/main agree
+# whenever the tree reads clean. That is what an assertion is for — the case
+# pins the behavior for the day some path stops maintaining the invariant, which
+# is precisely how the incident happened.
+#
+# Four arms, because the guard has to be right in both directions:
+#   (a) intent byte-identical to origin/main → proceeds silently (a genuine
+#       no-op must not be turned into a failure);
+#   (b) intent differing → dies, naming the id, the preserved snapshot dir and
+#       the --base entry, and reports `verdict: not-landed` — never `landed`;
+#   (c) a RESOLVED merge's <id>.merged.md matching origin/main → proceeds, even
+#       though the frozen pre-merge original differs. This is case 48's shape (a
+#       merge concluding this writer's whole delta is already on main) and
+#       proves the comparison reads snap_intended_file();
+#   (d) the mirror of (c) — frozen original matching while the merge output does
+#       NOT — still dies, so the preference is "the merge output wins", not
+#       "either file will do".
+W79="$WORK/w79"
+make_clone "$W79" writer-79
+GUARD_ID=t-noop-unit
+guard_main_content="$(git -C "$W79" show "origin/main:intentions/$GUARD_ID.md")"
+guard_base_sha="$(git -C "$W79" rev-parse "origin/main:intentions/$GUARD_ID.md")"
+GUARD_RC=0; GUARD_OUT=""
+run_guard() { # <snap-dir> [--base sha] — plant SNAP_DIR, call the guard
+  GUARD_RC=0
+  GUARD_OUT="$(
+    (
+      cd "$W79" || exit 99
+      # shellcheck source=/dev/null
+      source "$GC_SCRIPT"
+      IDS=("$GUARD_ID"); PRUNE_IDS=(); RESURRECTED_IDS=(); ALL_IDS=("$GUARD_ID")
+      SNAP_DIR="$1"
+      # print_verdict()'s "was a write attempted" boundary: set, so die() reports
+      # the real content-compared verdict instead of the cheap `refused`.
+      SNAPSHOT_TAKEN=1
+      MAIN_SHA="$(git rev-parse origin/main)"
+      if [[ -n "${2:-}" ]]; then BASE["$GUARD_ID"]="$2"; fi
+      assert_noop_matches_intent
+    ) 2>&1
+  )" || GUARD_RC=$?
+}
+guard_snap() { # <name> <id.md content> [<id.merged.md content>]
+  local d="$WORK/snap-$1"
+  mkdir -p "$d"
+  printf '%s\n' "$2" >"$d/$GUARD_ID.md"
+  [[ $# -ge 3 ]] && printf '%s\n' "$3" >"$d/$GUARD_ID.merged.md"
+  printf '%s' "$d"
+}
+guard_equal="$(guard_snap equal "$guard_main_content")"
+guard_diff="$(guard_snap diff "$guard_main_content"$'\n'"line13: dropped-edit")"
+guard_merged="$(guard_snap merged "$guard_main_content"$'\n'"line13: pre-merge" "$guard_main_content")"
+guard_merged_bad="$(guard_snap mergedbad "$guard_main_content" "$guard_main_content"$'\n'"line13: unlanded-merge")"
+
+run_guard "$guard_equal"; a_rc=$GUARD_RC; a_out="$GUARD_OUT"
+run_guard "$guard_diff" "$guard_base_sha"; b_rc=$GUARD_RC; b_out="$GUARD_OUT"
+run_guard "$guard_merged"; c_rc=$GUARD_RC; c_out="$GUARD_OUT"
+run_guard "$guard_merged_bad"; d_rc=$GUARD_RC; d_out="$GUARD_OUT"
+if [[ $a_rc -eq 0 && -z "$a_out" ]] \
+   && [[ $b_rc -ne 0 ]] \
+   && grep -q "intentions/$GUARD_ID.md" <<<"$b_out" \
+   && grep -q "Refusing to emit a false 'landed'" <<<"$b_out" \
+   && grep -q "preserved at $guard_diff" <<<"$b_out" \
+   && grep -q -- "--base $GUARD_ID=$guard_base_sha" <<<"$b_out" \
+   && grep -q 'verdict: not-landed' <<<"$b_out" \
+   && ! grep -q 'verdict: landed' <<<"$b_out" \
+   && [[ $c_rc -eq 0 ]] \
+   && [[ $d_rc -ne 0 ]]; then
+  ok "no-op integrity guard: equal intent proceeds, differing intent dies not-landed naming the snapshot and --base, and the comparison reads the merged file"
+else
+  no "no-op integrity guard as a unit (a_rc=$a_rc b_rc=$b_rc c_rc=$c_rc d_rc=$d_rc)"; printf 'A: %s\nB: %s\nC: %s\nD: %s\n' "$a_out" "$b_out" "$c_out" "$d_out"
+fi
+
+# ---------------------------------------------------------------------------
+# Cases 80-83: tactic-graph-commit-merge-npx-park-storm, Unit 3 — regression
+# coverage for run_merge_node()'s launch-failure discriminator (Unit 2). The
+# property under test: an UNRUNNABLE merge tool must die with no park and no
+# push, while a REAL content divergence must still park exactly as before —
+# the anti-overcorrection guard. GC_MERGE_NODE_UNRUNNABLE (see the node shim
+# above) models the tool never starting: stderr only, no stdout, exit 1 (not
+# 127 — the real-world ERR_MODULE_NOT_FOUND rc, deliberately not a
+# recognizable "missing binary" code, so a naive rc==127 check could not have
+# caught the bug this guards).
+# ---------------------------------------------------------------------------
+
+# --- Case 80: layer-3 stale --base, merge tool unrunnable -> die, no park ----
+# check_base_freshness() call site. A concurrent writer lands a same-field
+# edit after W80 read its --base blob, so check_base_freshness() would
+# normally hand the divergence to run_merge_node(). With the tool unrunnable,
+# the run must die with a clear environment error and write NOTHING to
+# origin/main — not even an office_hours park.
+set_mode green
+W80="$WORK/w80"
+make_clone "$W80" writer-80
+base80_sha="$(git -C "$W80" hash-object intentions/t-merge-unrunnable-base.md)"
+edit_field "$W80" t-merge-unrunnable-base sentinel writer80-value
+
+OTHER80="$WORK/other80"
+make_clone "$OTHER80" other80
+edit_field "$OTHER80" t-merge-unrunnable-base sentinel concurrent80-value
+git -C "$OTHER80" commit -qam 'concurrent same-field edit (unrunnable merge tool, layer 3)'
+git -C "$OTHER80" push -q origin main
+
+before80="$(origin_sha)"
+out="$(export GC_MERGE_NODE_UNRUNNABLE=1
+       run_gc "$W80" -m 'test: layer-3 unrunnable merge tool' \
+         --base "t-merge-unrunnable-base=$base80_sha" t-merge-unrunnable-base 2>&1)"; rc=$?
+content="$(origin_show t-merge-unrunnable-base 2>/dev/null)"
+after80="$(origin_sha)"
+if [[ $rc -eq 1 ]] \
+   && grep -q "could not be executed for 't-merge-unrunnable-base'" <<<"$out" \
+   && grep -q 'NO office_hours park was written and NOTHING was pushed' <<<"$out" \
+   && grep -q "ERR_MODULE_NOT_FOUND" <<<"$out" \
+   && [[ "$after80" == "$before80" ]] \
+   && ! grep -q 'office_hours' <<<"$content" \
+   && grep -q 'sentinel: concurrent80-value' <<<"$content"; then
+  ok "layer-3 stale --base, merge tool unrunnable: dies with a clear environment error, no office_hours park, origin/main untouched"
+else
+  no "layer-3 unrunnable merge tool (rc=$rc before80=$before80 after80=$after80)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 81: far-ahead rebuild, merge tool unrunnable -> die, HEAD restored, snapshot kept ---
+# replay_snapshot_onto_base() call site (via ensure_intentions_only_base()).
+# W81 is far-ahead (a non-intentions commit on HEAD, like case 48/50) racing a
+# concurrent same-field landing, so the far-ahead rebuild's three-way replay
+# would normally call run_merge_node(). With the tool unrunnable: die, no
+# park, cleanup()'s RESTORE_HEAD still returns the checkout to its PR tip, and
+# the writer's only surviving copy of its edit — SNAP_DIR, named in the die
+# message — must survive the exit (KEEP_SNAP=1).
+set_mode green
+W81="$WORK/w81"
+make_clone "$W81" writer-81
+mkdir -p "$W81/src"
+echo "console.log('pr feature code, far-ahead unrunnable merge tool')" >"$W81/src/farahead-unrunnable-feature.js"
+git -C "$W81" add src/farahead-unrunnable-feature.js
+git -C "$W81" commit -qm 'pr: non-intentions code change (far-ahead, unrunnable merge tool)'
+fu_tip="$(git -C "$W81" rev-parse HEAD)"
+edit_field "$W81" t-merge-unrunnable-farahead sentinel writer81-value
+
+OTHER81="$WORK/other81"
+make_clone "$OTHER81" other81
+edit_field "$OTHER81" t-merge-unrunnable-farahead sentinel concurrent81-value
+git -C "$OTHER81" commit -qam 'concurrent same-field edit (far-ahead, unrunnable merge tool)'
+git -C "$OTHER81" push -q origin main
+
+before81="$(origin_sha)"
+out="$(export GC_MERGE_NODE_UNRUNNABLE=1
+       run_gc "$W81" -m 'test: far-ahead unrunnable merge tool' t-merge-unrunnable-farahead 2>&1)"; rc=$?
+content="$(origin_show t-merge-unrunnable-farahead 2>/dev/null)"
+after81="$(origin_sha)"
+restored81="$(git -C "$W81" rev-parse HEAD)"
+snap="$(sed -n 's/.*preserved at \([^ ]*\)\..*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q "could not be executed for 't-merge-unrunnable-farahead'" <<<"$out" \
+   && grep -q 'NO office_hours park was written and NOTHING was pushed' <<<"$out" \
+   && [[ "$after81" == "$before81" ]] \
+   && ! grep -q 'office_hours' <<<"$content" \
+   && grep -q 'sentinel: concurrent81-value' <<<"$content" \
+   && [[ "$restored81" == "$fu_tip" ]] \
+   && [[ -n "$snap" && -f "$snap/t-merge-unrunnable-farahead.md" ]] \
+   && grep -q 'writer81-value' "$snap/t-merge-unrunnable-farahead.md"; then
+  ok "far-ahead rebuild, merge tool unrunnable: dies, no park, HEAD restored to the PR tip, writer's snapshot survives at SNAP_DIR"
+else
+  no "far-ahead unrunnable merge tool (rc=$rc restored81=$restored81 fu_tip=$fu_tip snap=$snap)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 82: a REAL divergence still parks (no overcorrection) --------------
+# Same shape as case 80 — layer-3 stale --base, same-field concurrent edit —
+# but with GC_MERGE_NODE_UNRUNNABLE unset, so the harness's real merge-node.ts
+# emulation runs and genuinely cannot resolve the conflict. This must still
+# park exactly as it did before Unit 2: the anti-overcorrection guard against
+# "fixed the storm by never parking anything."
+set_mode green
+W82="$WORK/w82"
+make_clone "$W82" writer-82
+base82_sha="$(git -C "$W82" hash-object intentions/t-merge-real-divergence.md)"
+edit_field "$W82" t-merge-real-divergence sentinel writer82-value
+
+OTHER82="$WORK/other82"
+make_clone "$OTHER82" other82
+edit_field "$OTHER82" t-merge-real-divergence sentinel concurrent82-value
+git -C "$OTHER82" commit -qam 'concurrent same-field edit (real divergence, layer 3)'
+git -C "$OTHER82" push -q origin main
+
+out="$(run_gc "$W82" -m 'test: layer-3 real divergence still parks' \
+        --base "t-merge-real-divergence=$base82_sha" t-merge-real-divergence 2>&1)"; rc=$?
+content="$(origin_show t-merge-real-divergence 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+if [[ $rc -eq 1 ]] \
+   && grep -q 'office_hours' <<<"$content" \
+   && grep -q 'mechanical-unresolved' <<<"$content" \
+   && grep -q 'writer82-value' <<<"$content" \
+   && grep -q 'concurrent82-value' <<<"$content"; then
+  ok "real divergence still parks: a genuine same-field conflict is unaffected by the unrunnable-tool die path"
+else
+  no "real divergence regression check (rc=$rc)"; printf '%s
+' "$out"; printf '%s
+' "$content"
+fi
+
+# --- Case 83: npx is never on the write path ---------------------------------
+# A full happy-path run through run_gc must never reach the hard-failing npx
+# shim (Unit 1) — proving graph-commit's write path no longer spawns npx at
+# all, in a way a silent regression back to `npx tsx` would fail loudly rather
+# than only be catchable by grepping the source.
+set_mode green
+sync_clone "$A"
+edit_line "$A" t-merge-npx-guard 1 A-edit-npx-guard
+out="$(run_gc "$A" t-merge-npx-guard 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]] && [[ ! -s "$WORK/npx-calls.log" ]]; then
+  ok "npx is never invoked on the write path (happy path proven via an empty call log, not just a source grep)"
+else
+  no "npx-never-invoked guard (rc=$rc)"; printf '%s
+' "$out"; printf 'npx-calls.log: %s
+' "$(cat "$WORK/npx-calls.log" 2>/dev/null || true)"
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

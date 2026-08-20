@@ -54,13 +54,25 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 12
-  override: null
-  rationale: Bug-ledger tracking node under the standing priority order
-    (token-efficiency first, bug-ledger second). Boost 12 matches the other
-    bug-ledger nodes in this cluster; re-simulated over the live store after
-    writing to confirm 0 tier changes and 0 value drift onto non-target nodes.
-  tier: 1
+  boosts:
+    "1": 0.03
+  rationale: >-
+    Bug-ledger tracking node under the standing priority order (token-efficiency
+    first, bug-ledger second). Boost 12 matches the other bug-ledger nodes in
+    this cluster; re-simulated over the live store after writing to confirm 0
+    tier changes and 0 value drift onto non-target nodes.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 12 to 0.03 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-terminal-disposition-sweep-park-without-cas
@@ -77,6 +89,7 @@ execution:
     mergedAt: 2026-08-04T16:48:30Z
     mergeCommitSha: 4725a16b61ab48921c0a74aa5d3bc9ae4ac26e82
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -130,7 +143,8 @@ office_hours:
   session_type: other
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 12
 ---
 # lib-frozen-session-park's sweeps invoke park-node with no --base CAS token, so their already-parked guard is a bare read-then-write: a specific office_hours park that lands between the guard and the write is silently overwritten with generic boilerplate, destroying the author-facing reason and recommendation an office-hours reviewer needs
 

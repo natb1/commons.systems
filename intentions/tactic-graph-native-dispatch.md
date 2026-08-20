@@ -95,8 +95,10 @@ rounds:
 ```
 
 - **Draft phase.** `phase: draft` (equivalently: no phase set) marks
-  retained tactical context from strategy work. The router never selects a
-  draft tactic, and drafts do not count as children for strategy
+  undecomposed tactical context from strategy work. The router **does**
+  select a draft tactic, emitting it at the `align-tactics` directive rung
+  (gated on `office_hours` null, blockers all `done`, and not being another
+  tactic's `parent`); drafts do not count as children for strategy
   eligibility — they are `/align-tactics` input.
 - **Phase is persisted, transitions are sensed.** The router never
   re-derives phase from GitHub; it reads the node's `phase`, consults the
@@ -237,8 +239,10 @@ an office-hours sitting deciding a possible future `/align-audit` skill.
 4. **Retain draft tactics.** Tactical context naturally developed during
    the session is dumped into draft tactic nodes (`status: raw`, no
    execution phase, `serves` the strategy) — retain, not refine.
-5. **Record.** `graph-commit` the node(s). The interview is the audit; the
-   push makes the strategy schedulable. Editing a strategy with open
+5. **Record.** `graph-commit` the node(s). The interview is the audit — the
+   draft review gate is its second reader, not a substitute (2026-08-11
+   gate clarification on strategy-graph-native-dispatch); the push makes
+   the strategy schedulable. Editing a strategy with open
    non-draft tactics queues a soft freeze and re-evaluation of the open
    subtree — warn the author at record time (clarification 10).
 

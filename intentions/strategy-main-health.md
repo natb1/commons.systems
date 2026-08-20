@@ -29,7 +29,6 @@ rationale: "Red main halts the autonomous dispatch chain — no new work is safe
   records, superseded in effect by this note, not rewritten."
 reading: "green: every check on the current origin/main HEAD concludes success
   (or neutral/skipped)"
-gap: null
 serves: []
 recovers: []
 clarifications:

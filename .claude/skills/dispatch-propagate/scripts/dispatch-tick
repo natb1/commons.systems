@@ -144,6 +144,13 @@
 #      Behavior item 0.5 above) on the same two cadences as the frozen-session
 #      sweep it is paired with. Never gates the tick — a load failure logs
 #      loudly and the tick continues.
+#   5. On the PAUSED branch only: drain the node lane (graph-auto-merge +
+#      reconcile-graph-merged, both called unconditionally — graph-auto-merge
+#      owns its own main-health admission gate internally) before the `exit 0`. A paused tick
+#      schedules nothing but still lands reviewed, green node-lane PRs — see
+#      the pause-sentinel block for the operator-facing statement of that
+#      contract and for the three preconditions (main-checkout sync, the
+#      selection lock, and a `timeout` around each drain call).
 #
 # The legacy gh-issue lane (explicit/pr/issue decisions →
 # dispatch-materialize-spawn → dispatch-launch-worker, and the recoverable-death
@@ -238,7 +245,7 @@ if [[ "${DISPATCH_TOPIC_USAGE_ENABLED:-}" == "1" ]]; then
       fi
     fi
     if [[ "$_TU_ALREADY_RAN" == "0" ]]; then
-      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../dispatch-token-audit/scripts/topic-usage-writer.mjs}"
+      WRITER="${DISPATCH_TOPIC_USAGE_WRITER:-$SCRIPT_DIR/../../rsi-audit/scripts/topic-usage-writer.mjs}"
       mkdir -p "$_TU_STATE_DIR" 2>/dev/null || true
       # Launch detached so the producer survives tick exit and never blocks the
       # tick (a first-run backfill can take a while).  Backgrounding with `&`
@@ -298,19 +305,119 @@ if [[ -n "$MANUAL" && -n "$NODE_ARG" ]]; then
   exit 2
 fi
 
-# --- Pause sentinel: stop autonomous scheduling, do not interfere with running work ---
-# When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
-# timer) does nothing: it exits here — before dispatch-select-tick, any spawn,
-# and any reseed-arming — so no new workers are scheduled and the tick arms no
-# follow-up reseed. Already-running workers are separate sessions and are left
-# untouched, so they run to completion. This is the durable, non-interfering
-# pause: unlike stopping/masking the systemd timers (which ensure_heartbeat_units
-# recreates on the next tick), a firing timer here becomes a harmless no-op.
-# A manual `dispatch --manual` run OVERRIDES the pause (deliberate human action).
-# Resume by removing the flag file. The path is overridable for tests.
+# --- Synthesize a session identity for the headless tick ---------------------
+# The terminal `dispatch` command may or may not run inside a .claude session:
+# when invoked from within a Claude session it inherits a stable
+# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it; when run
+# from a plain terminal the env var is absent. A systemd-launched tick likewise
+# starts from a clean environment (systemd-run --user forwards only PATH), so it
+# inherits no session id — yet dispatch-acquire-lock
+# hard-requires one (exit 2 if unset) to key the selection lock on a stable
+# holder. Declare a synthetic, stable id here, at the single headless entry
+# point, so every sub-script invoked below (dispatch-select-tick →
+# dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
+# consistent holder id across the acquire / hold / release of this tick. Derive
+# it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
+# subprocesses of the unit and unique per tick), falling back to a random token
+# (openssl rand -hex 16) when INVOCATION_ID is absent, with the dispatch-tick PID
+# ($$) as last resort if openssl is unavailable. The random token (or PID) is
+# evaluated once at export time and frozen into the value, so all children see
+# the same fixed string. Exported once so all children agree. (#1068)
 #
-# The sentinel gates worker SPAWNING only, never ledger bookkeeping — the paused
-# branch below reaps the reservation ledger before it exits.
+# Placement: this block sits ABOVE the pause sentinel below, not after it,
+# because the paused branch now takes the selection lock for its node-lane drain
+# (see that branch's own comment). dispatch-acquire-lock hard-requires a holder
+# id, and a `headless:*` holder is only resolvable as live through the sentinel
+# written here — so a paused tick needs both before it can safely hold the lock.
+#
+# INVOCATION_ID validation (#1068, same-user threat model): under systemd
+# INVOCATION_ID is always 32 lowercase hex chars. A manually-set value containing
+# a newline would truncate the recorded holder in the lock file (causing a
+# self-release noop → one-tick lock stall); a backslash or control sequence could
+# mislead the `awk -F'\t'` comparison in dispatch-acquire-lock or corrupt the
+# sentinel path (dispatch-tick-<token>.live). Drop any non-conforming value so
+# the random-token fallback fires instead. Hex digits plus hyphen cover both the
+# standard 32-hex form and any UUID-style variant.
+[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
+#
+# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
+# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
+# resolve_holder_state cannot resolve its liveness through the daemon registry —
+# a concurrent tick would read this LIVE holder as dead and reclaim the lock
+# mid-selection. To give the headless holder a daemon-independent liveness
+# signal, write a sentinel containing this tick's PID alongside the shared lock
+# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
+# treats the holder as live iff the sentinel exists and its PID is alive. Only a
+# synthesized id writes a sentinel — a real inherited session id is governed by
+# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
+# content regardless of whether the id token uses it.
+#
+# Two failure modes, two dispositions (#1068):
+#   - The lock-file path cannot be resolved (not in a git repo and
+#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
+#     still governs real ids, and a headless tick that cannot resolve the lock
+#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
+#     never reaches selection — there is nothing to serialize.
+#   - The path resolves but the sentinel write fails (e.g. an over-long token
+#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
+#     clear with exit 2. Continuing here would let this tick acquire the lock
+#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
+#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
+#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
+#     the concurrency guarantee silently; the chain self-heals on the next tick.
+export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
+if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
+  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
+    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
+    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
+    # The consolidated EXIT/INT/TERM trap installed near the top of this script
+    # already covers this write: SENTINEL is set just above, so a partial sentinel
+    # is cleared if the write fails and we abort below.
+    if ! printf '%s\n' "$$" >"$SENTINEL"; then
+      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
+      exit 2
+    fi
+  fi
+fi
+
+# refresh_lock — bump the selection lock's mtime (its heartbeat) so a
+# legitimately-long paused-branch drain never goes stale under the staleness
+# cap (MAX_HOLD_SECONDS, dispatch-acquire-lock:227, default 300). The drain
+# below runs graph-auto-merge and reconcile-graph-merged back to back, each
+# under its own DISPATCH_PAUSED_DRAIN_TIMEOUT_S budget (default 600), so the
+# combined hold can reach 1200s against the 300s default cap — without a
+# heartbeat in between, a second paused tick's `--wait` would read the lock as
+# stale and reclaim it mid-drain. Call ONLY between the two drain calls, on
+# graph-auto-merge's completion, never inside a loop — INVARIANT #2
+# (dispatch-acquire-lock:96-103): a refresh inside a poll/wait loop would keep
+# the mtime fresh while the holder spins there, defeating the cap. Modelled on
+# dispatch-select-tick's refresh_lock (dispatch-select-tick:198-200) and
+# graph-select-target's _refresh_lock (graph-select-target:599-601).
+# Best-effort: a noop (we no longer hold the lock) or any error is swallowed.
+refresh_lock() {
+  "$SCRIPT_DIR/dispatch-acquire-lock" --heartbeat >/dev/null 2>&1 || true
+}
+
+# --- Pause sentinel: stop autonomous scheduling, keep the node lane draining ---
+# When the pause flag file exists, an AUTONOMOUS tick (heartbeat timer, reseed
+# timer) SCHEDULES nothing: it never reaches dispatch-select-tick, spawns no
+# worker, and arms no follow-up reseed. Already-running workers are separate
+# sessions and are left untouched, so they run to completion. This is the
+# durable, non-interfering pause: unlike stopping/masking the systemd timers
+# (which ensure_heartbeat_units recreates on the next tick), a firing timer here
+# becomes a harmless no-op. A manual `dispatch --manual` run OVERRIDES the pause
+# (deliberate human action). Resume by removing the flag file. The path is
+# overridable for tests.
+#
+# A paused tick is NOT inert, and if you are pausing during an incident, read
+# this literally: before its `exit 0` the branch below reaps the reservation
+# ledger, runs the four other sweeps, and DRAINS THE NODE LANE — a reviewed,
+# green, unparked node-lane PR is still squash-merged to `main` by
+# graph-auto-merge and absorbed by reconcile-graph-merged. The sentinel gates
+# worker SPAWNING and scheduling; it does not gate ledger bookkeeping, and it
+# does not freeze `main`. To stop code landing as well, remove the `reviewed`
+# marker or park the node (`park-node`) — an `office_hours` park is the one
+# thing graph-auto-merge will not merge past.
 DISPATCH_PAUSE_FLAG="${DISPATCH_PAUSE_FLAG:-${XDG_DATA_HOME:-$HOME/.local/share}/commons-dispatch/paused}"
 if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
   # A dead session's reservation marker must still be reaped even on a paused
@@ -428,77 +535,151 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     echo "dispatch-tick: lib-frozen-session-park.sh failed to load; terminal-disposition sweep NOT run this tick" >&2
   fi
 
-  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick"
-  exit 0
-fi
+  # Print the paused banner BEFORE the node-lane merge/reconcile drain below so
+  # an operator scanning `journalctl --user -t dispatch-tick` reads the pause
+  # state first and interprets the following `merge:`/`reconcile-graph:` lines
+  # as the paused-branch drain, not as scheduling activity. (`-t`, the syslog
+  # identifier this script logs under — there is no dispatch-tick.service, so
+  # `-u dispatch-tick` matches nothing.)
+  echo "dispatch-tick: paused (sentinel present at $DISPATCH_PAUSE_FLAG); no scheduling this tick; draining node-lane merge/reconcile only"
 
-# --- Synthesize a session identity for the headless tick ---------------------
-# The terminal `dispatch` command may or may not run inside a .claude session:
-# when invoked from within a Claude session it inherits a stable
-# CLAUDE_CODE_SESSION_ID, so the `:-` fallback below never fires for it; when run
-# from a plain terminal the env var is absent. A systemd-launched tick likewise
-# starts from a clean environment (systemd-run --user forwards only PATH), so it
-# inherits no session id — yet dispatch-acquire-lock
-# hard-requires one (exit 2 if unset) to key the selection lock on a stable
-# holder. Declare a synthetic, stable id here, at the single headless entry
-# point, so every sub-script invoked below (dispatch-select-tick →
-# dispatch-acquire-lock, the materialize-spawn hold, and the release) sees one
-# consistent holder id across the acquire / hold / release of this tick. Derive
-# it from the systemd unit's INVOCATION_ID (set by systemd, identical across all
-# subprocesses of the unit and unique per tick), falling back to a random token
-# (openssl rand -hex 16) when INVOCATION_ID is absent, with the dispatch-tick PID
-# ($$) as last resort if openssl is unavailable. The random token (or PID) is
-# evaluated once at export time and frozen into the value, so all children see
-# the same fixed string. Exported once so all children agree. (#1068)
-#
-# INVOCATION_ID validation (#1068, same-user threat model): under systemd
-# INVOCATION_ID is always 32 lowercase hex chars. A manually-set value containing
-# a newline would truncate the recorded holder in the lock file (causing a
-# self-release noop → one-tick lock stall); a backslash or control sequence could
-# mislead the `awk -F'\t'` comparison in dispatch-acquire-lock or corrupt the
-# sentinel path (dispatch-tick-<token>.live). Drop any non-conforming value so
-# the random-token fallback fires instead. Hex digits plus hyphen cover both the
-# standard 32-hex form and any UUID-style variant.
-[[ "${INVOCATION_ID:-}" =~ ^[0-9a-fA-F-]+$ ]] || INVOCATION_ID=""
-#
-# Headless-liveness sentinel (#1068). A synthetic `headless:*` id is a bash
-# string that never appears in `claude agents --json`, so dispatch-acquire-lock's
-# resolve_holder_state cannot resolve its liveness through the daemon registry —
-# a concurrent tick would read this LIVE holder as dead and reclaim the lock
-# mid-selection. To give the headless holder a daemon-independent liveness
-# signal, write a sentinel containing this tick's PID alongside the shared lock
-# file and install a single EXIT/INT/TERM trap to remove it; resolve_holder_state
-# treats the holder as live iff the sentinel exists and its PID is alive. Only a
-# synthesized id writes a sentinel — a real inherited session id is governed by
-# the daemon path and writes none. $$ is the tick PID, recorded in the sentinel
-# content regardless of whether the id token uses it.
-#
-# Two failure modes, two dispositions (#1068):
-#   - The lock-file path cannot be resolved (not in a git repo and
-#     DISPATCH_LOCK_FILE unset): skip the sentinel silently. The daemon path
-#     still governs real ids, and a headless tick that cannot resolve the lock
-#     file also cannot acquire the lock (dispatch-acquire-lock exits 2), so it
-#     never reaches selection — there is nothing to serialize.
-#   - The path resolves but the sentinel write fails (e.g. an over-long token
-#     yielding ENAMETOOLONG while the short dispatch.lock stays writable): fail
-#     clear with exit 2. Continuing here would let this tick acquire the lock
-#     with no liveness sentinel, so a concurrent tick reads this LIVE holder as
-#     dead and reclaims mid-selection — the exact duplicate-spawn defect #1068
-#     closes. Per .claude/rules/code-style.md, fail clear rather than degrade
-#     the concurrency guarantee silently; the chain self-heals on the next tick.
-export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_ID:-$(openssl rand -hex 16 2>/dev/null || echo "$$")}}"
-if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
-  if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then
-    SENTINEL=$(headless_sentinel_path "$CLAUDE_CODE_SESSION_ID" "$SENTINEL_LOCK_FILE")
-    mkdir -p "$(dirname "$SENTINEL")" 2>/dev/null || true
-    # The consolidated EXIT/INT/TERM trap installed near the top of this script
-    # already covers this write: SENTINEL is set just above, so a partial sentinel
-    # is cleared if the write fails and we abort below.
-    if ! printf '%s\n' "$$" >"$SENTINEL"; then
-      echo "dispatch-tick: ERROR: failed to write headless sentinel '$SENTINEL'; cannot signal liveness — aborting so a concurrent tick does not reclaim this lock mid-selection (#1068)" >&2
-      exit 2
+  # --- Paused-branch node-lane drain ------------------------------------------
+  # A reviewed, green node-lane PR must still merge even while dispatch is
+  # paused — the pause sentinel gates worker SPAWNING and scheduling (see the
+  # block comment above), never ledger bookkeeping or draining, and this exit 0 path is
+  # the ONLY autonomous tick path that never reaches dispatch-select-tick's own
+  # merge/reconcile calls, so pausing spawning would otherwise also stop
+  # already-reviewed green PRs from landing. Run graph-auto-merge (which gates
+  # itself on main health — see the note at its call below), then
+  # reconcile-graph-merged, so a merge from this tick (or an earlier one) is
+  # absorbed to done/main-qa. These are plain
+  # subprocess invocations of dispatch-select-tick's own scripts, not sourced
+  # library functions, so the conditional-source + verify + loud-failure idiom
+  # used for the sweeps above does not apply here.
+  #
+  # Three preconditions guard the drain, because it is the one thing on this
+  # branch that makes an IRREVERSIBLE change to `main` (a squash-merge):
+  #
+  #   a. The main checkout is synced with origin/main. graph-auto-merge
+  #      enumerates its candidate set from the LOCAL working tree
+  #      (listNodesStrict("./intentions")) and reads each node's `office_hours`
+  #      from it. The routine things that advance that checkout are
+  #      dispatch-select-tick's Step 1 sync — which this branch exits before —
+  #      and provision-node-worktree's own sync, which only runs when a worker
+  #      is being provisioned (i.e. not during a pause). During a
+  #      standing pause nothing else would ever refresh it, so the drain would
+  #      run forever against the tree as it stood when the pause began: a node
+  #      reviewed after the pause is invisible (the drain does nothing), and an
+  #      `office_hours` park or `execution.conflict` interrupt landed after the
+  #      pause is invisible too (the drain merges straight past the park that
+  #      exists to stop it). So sync FIRST, mirroring select-tick's guards
+  #      (only on the `main` branch, honoring DISPATCH_TICK_MAIN_WORKTREE), and
+  #      SKIP the whole drain loudly when the sync fails. `--ff-only` doubles as
+  #      the dirty/diverged-tree guard: reconcile-graph-merged writes node files
+  #      into this tree and pushes through graph-commit, so a wedged tree must
+  #      not be drained into. Deliberately NOT copied from select-tick: its
+  #      sync_repair_* escalation (reseed arming, /commit-merge-push spawn,
+  #      dispatch:sync-broken latch). That is select-tick's job; here a failed
+  #      sync just skips, and the next tick retries.
+  #   b. The selection lock is held. dispatch-select-tick holds
+  #      `dispatch-acquire-lock --wait` across these same calls, and neither
+  #      graph-auto-merge (nor the `dispatch-graph-main-red-sync --read-only`
+  #      read it now makes internally) nor reconcile-graph-merged locks
+  #      internally. `dispatch --manual` is permitted during a pause and
+  #      the reseed/spawn units are distinct from dispatch-heartbeat.service, so
+  #      two ticks can otherwise overlap on this worktree. `busy` (another tick
+  #      is draining) skips this drain — the next tick retries.
+  #   c. Each drain script runs under `timeout`. dispatch-heartbeat.service is
+  #      Type=oneshot, for which systemd disables TimeoutStartSec by default: a
+  #      drain hung on an unbounded `gh` call would leave the unit `activating`
+  #      forever and every later timer fire would be skipped, silently stopping
+  #      the reservation reap and park sweeps for the rest of the pause. Same
+  #      bounded-call idiom as lib-frozen-session-park.sh's park-node wrapper
+  #      (resolve `timeout` explicitly; a missing binary is a loud skip, not a
+  #      silent unbounded call). A timeout is never fatal to the tick: it is
+  #      logged and the tick still exits 0.
+  DRAIN_MAIN_BRANCH=$(git -C "$MAIN_WORKTREE" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  DRAIN_SYNC_OK=0
+  if [[ "$DRAIN_MAIN_BRANCH" != "main" ]]; then
+    echo "dispatch-tick: WARNING: main checkout '$MAIN_WORKTREE' is on branch '${DRAIN_MAIN_BRANCH:-<unresolved>}', not 'main'; SKIPPING the paused-branch node-lane merge/reconcile drain this tick (a drain against a non-main checkout would merge from a stale candidate set)" >&2
+  else
+    # sync_main_checkout (lib.sh) is the shared fetch+ff-merge: same two git
+    # calls in the same order this branch open-coded, with rc 1 = fetch failed
+    # and rc 2 = merge failed so the two warnings below stay distinct. Captured
+    # with `|| rc=$?` so a non-zero return is a value here, never a control-flow
+    # surprise.
+    DRAIN_SYNC_RC=0
+    sync_main_checkout "$MAIN_WORKTREE" || DRAIN_SYNC_RC=$?
+    if [[ "$DRAIN_SYNC_RC" -eq 1 ]]; then
+      echo "dispatch-tick: WARNING: 'git fetch origin main' failed in '$MAIN_WORKTREE'; SKIPPING the paused-branch node-lane merge/reconcile drain this tick (draining against a stale checkout would merge past parks landed since the pause began)" >&2
+    elif [[ "$DRAIN_SYNC_RC" -ne 0 ]]; then
+      echo "dispatch-tick: WARNING: 'git merge --ff-only origin/main' failed in '$MAIN_WORKTREE' (tree dirty or diverged); SKIPPING the paused-branch node-lane merge/reconcile drain this tick — select-tick's sync-repair escalation does not run while paused, so this tree needs a human" >&2
+    else
+      DRAIN_SYNC_OK=1
     fi
   fi
+
+  if (( DRAIN_SYNC_OK )); then
+    DRAIN_TIMEOUT_BIN=$(command -v timeout 2>/dev/null) || DRAIN_TIMEOUT_BIN=""
+    DRAIN_TIMEOUT_S="${DISPATCH_PAUSED_DRAIN_TIMEOUT_S:-600}"
+    [[ "$DRAIN_TIMEOUT_S" =~ ^[0-9]+$ ]] || DRAIN_TIMEOUT_S=600
+    if [[ -z "$DRAIN_TIMEOUT_BIN" ]]; then
+      echo "dispatch-tick: WARNING: \`timeout\` not found; refusing to run an unbounded merge/reconcile drain on a Type=oneshot heartbeat; SKIPPING the paused-branch node-lane drain this tick" >&2
+    else
+      DRAIN_LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || DRAIN_LOCK=""
+      if [[ "$DRAIN_LOCK" != acquired ]]; then
+        echo "dispatch-tick: paused-branch node-lane drain SKIPPED; dispatch-acquire-lock reported '${DRAIN_LOCK:-error}' (another tick holds the selection lock); the next tick retries" >&2
+      else
+        # No main-health read here: graph-auto-merge performs that admission
+        # gate ITSELF (tactic-graph-auto-merge-main-health-gate), calling
+        # `dispatch-graph-main-red-sync --read-only` internally and merging
+        # nothing when the latch is non-empty, UNKNOWN, or unreadable. This
+        # branch used to compute OPEN_MAIN_RED and wrap the call; that caller-side
+        # copy is gone, so there is exactly one implementation of the gate.
+        #
+        # The `--read-only` flag matters especially here: this drain runs while
+        # dispatch is PAUSED, and completing the latch nodes is the tick's
+        # authoritative act, not a paused drain's.
+        #
+        # A timeout still needs no branch of its own beyond the 124 warning: the
+        # inner script's own gate has already fail-closed on anything it could
+        # not read, and a `timeout`-killed graph-auto-merge simply merges
+        # nothing this tick.
+        DRAIN_RC=0
+        GRAPH_MERGE_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/graph-auto-merge" </dev/null) || DRAIN_RC=$?
+        if (( DRAIN_RC == 124 )); then
+          echo "dispatch-tick: WARNING: graph-auto-merge timed out after ${DRAIN_TIMEOUT_S}s on the paused-branch drain; continuing (the next tick retries)" >&2
+        fi
+        if [[ -n "$GRAPH_MERGE_OUT" ]]; then
+          while IFS= read -r merge_line; do
+            [[ -n "$merge_line" ]] && echo "merge: $merge_line"
+          done <<< "$GRAPH_MERGE_OUT"
+        fi
+        # Heartbeat BETWEEN the two drain calls (see refresh_lock's comment
+        # above): graph-auto-merge just completed its own up-to-600s budget,
+        # and reconcile-graph-merged is about to spend up to another 600s — the
+        # combined 1200s worst case exceeds the 300s default staleness cap, so
+        # without this refresh a second paused tick could reclaim the lock
+        # mid-drain.
+        refresh_lock
+        DRAIN_RC=0
+        RECONCILE_GRAPH_OUT=$("$DRAIN_TIMEOUT_BIN" "$DRAIN_TIMEOUT_S" "$SCRIPT_DIR/reconcile-graph-merged" </dev/null) || DRAIN_RC=$?
+        if (( DRAIN_RC == 124 )); then
+          echo "dispatch-tick: WARNING: reconcile-graph-merged timed out after ${DRAIN_TIMEOUT_S}s on the paused-branch drain; continuing (the next tick retries)" >&2
+        fi
+        if [[ -n "$RECONCILE_GRAPH_OUT" ]]; then
+          while IFS= read -r graph_line; do
+            [[ -n "$graph_line" ]] && echo "reconcile-graph: $graph_line"
+          done <<< "$RECONCILE_GRAPH_OUT"
+        fi
+        # Release unconditionally — including after a timeout — so a wedged
+        # drain never leaves the selection lock held for the rest of the pause.
+        "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
+      fi
+    fi
+  fi
+
+  exit 0
 fi
 
 # --- Step 0.5: refresh rate-limit telemetry (headless source) ----------------

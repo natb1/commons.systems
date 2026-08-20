@@ -20,19 +20,30 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 7
-  override: null
-  rationale: "Author-directed 2026-07-08 (refined):
-    curriculum-maintenance/execution tooling (this skill, sibling
-    tactic-sync-reader-skill) ranks below tactics that directly edit the
-    /align-strategy and /align-tactics SKILL.md files (authored 8) and above the
-    rest of strategy-graph-native-dispatch's subtree (inherited 5, unboosted) —
-    boost 7. Supersedes the prior boost-4 rationale (dated 2026-07-08), which
-    only cleared strategy-attention-surface (boost 3) and did not yet clear the
-    rest of strategy-graph-native-dispatch. Scoped to curriculum-execution
-    tactics only, not the reading-chunk tactics under
-    strategy-philosophical-grounding, which remain unboosted."
-  tier: 1
+  boosts:
+    "1": 0.01
+  rationale: >-
+    Author-directed 2026-07-08 (refined): curriculum-maintenance/execution
+    tooling (this skill, sibling tactic-sync-reader-skill) ranks below tactics
+    that directly edit the /align-strategy and /align-tactics SKILL.md files
+    (authored 8) and above the rest of strategy-graph-native-dispatch's subtree
+    (inherited 5, unboosted) — boost 7. Supersedes the prior boost-4 rationale
+    (dated 2026-07-08), which only cleared strategy-attention-surface (boost 3)
+    and did not yet clear the rest of strategy-graph-native-dispatch. Scoped to
+    curriculum-execution tactics only, not the reading-chunk tactics under
+    strategy-philosophical-grounding, which remain unboosted.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 7 to 0.01 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: implement
 execution:
   branch: tactic-sync-reader-skill
@@ -41,20 +52,22 @@ execution:
   markers: []
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 2984f3e1b320656f005dbdf04e93a4ab6e6c707b7553e23c16485bbcb9fd70c5
-      sha: 95913ceb8f780bb38059a207585a00836789b6fd
+      hash: 16df2a3310d03257cf23d4b44daf39e992c78b57187614d601e4ec350e9238eb
+      sha: e23fea437e9c1e1f6872d54f717c49da818116c8
   fix:
     since: 2026-07-22
     attempt: 1
     pushed_sha: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 7
 ---
 # /sync-reader skill — sync curriculum reading excerpts from the print share to the USB reader, priority-named, retiring resolved chunks
 

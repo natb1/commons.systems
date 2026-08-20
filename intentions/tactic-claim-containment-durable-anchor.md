@@ -22,7 +22,6 @@ rationale: "Byproduct of the 2026-07-29 /align-strategy dispatch-containment
   Frequency of registry loss is reasoned about, not measured — worth quantifying
   during planning."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -30,75 +29,178 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 20
-  override: null
-  rationale: "Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim
-    scale (50 / 20 / 10) - dispatch-containment and evidence-custody work that
-    follows the Wave-A write-path fixes. Interim scaffolding only;
+  boosts:
+    "1": 0.04
+  rationale: >-
+    Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
+    20 / 10) - dispatch-containment and evidence-custody work that follows the
+    Wave-A write-path fixes. Interim scaffolding only;
     tactic-attention-tier-ranking and tactic-attention-boost-scripts retire this
-    numeric scheme."
+    numeric scheme.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 20 to 0.04 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "(/align-tactics tactic-target round, 2026-07-31.) Drift review surfaced
-    one MATERIAL design premise this tactic's plan cannot be authored without,
-    and which the strategy does not record: WHERE THE DURABLE CLAIM ANCHOR
-    LIVES. Three options are live and the round's own gather evidence recommends
-    two of them in opposite directions. (a) A first-class graph field on the
-    node, following the Execution.fix / office_hours precedent
-    (packages/intentionsutil/src/schema.ts:399-444, validated at :554-564 and
-    :600-612). Cost: the spawn path carries NO graph write today — its only
-    claim-time write is reservation_mark_spawned
-    (.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:159) into
-    the file ledger — so this adds a graph-commit round trip (scratch branch + 4
-    CI checks, packages/intentionsutil/scripts/graph-commit:11-27) to every
-    node-worker spawn, a new per-selection write volume and landing-lock
-    contention that condition 2 prices as 'negligible at fleet concurrency'. (b)
-    An extension of the file reservation ledger
-    (.claude/skills/dispatch-propagate/scripts/lib-reservation-ledger.sh), which
-    already is a durable, atomically-written, project-root-relative record with
-    a sweep that reconciles against the daemon registry. Cost: sweep rule (a)
-    ('live-worker-redundant', :593-596) deliberately CLEARS the marker the
-    instant a live named session registers — handing authority back to the
-    registry at exactly the moment a freeze anchor must persist — so the option
-    requires reversing that ledger's documented pace-budget/dedup design intent,
-    the same class of unilateral reversal a 2026-07-31 clarification already
-    ruled out of a single tactic's scope for the busy-worker filter. (c) No new
-    record at all: a reconciler deriving 'a pass started and never declared'
-    from state that already lands durably (the provisioned node-id
-    worktree/branch, the PR). This is the crash-only reading the author DIVERGED
-    from on 2026-07-29 for the declaration marker, on the ground that
-    turn-yield-versus-terminal is knowledge only the session holds — but that
-    ground does not transfer to the claim side, where 'a pass started' IS
-    reconstructable from durable state, so the divergence does not settle it.
-    Cutting across all three: condition 10 records 'Breaker state never lives
-    outside the graph', and whether that binds the fuse's per-claim evidence
-    anchor or only the tripped-breaker incident record is unrecorded either way.
-    Four immaterial observations from this same drift review landed as dated
-    clarifications on strategy-graph-native-dispatch alongside this park (no
-    author action needed on those). Recommend: ratify, in a one-question
-    /align-strategy sitting citing this park, where the durable claim anchor
-    lives (graph field on the node vs. reservation-ledger extension vs. no new
-    record) and whether condition 10's 'Breaker state never lives outside the
-    graph' binds the fuse's per-claim evidence anchor or only the
-    tripped-breaker incident record; then clear this office_hours park and
-    re-run /align-tactics tactic-claim-containment-durable-anchor to finalize —
-    the round already produced a complete reuse set (worktree_has_live_session
-    at lib-claude-agents.sh:770-876 as the predicate to supersede; the
-    FixState/office_hours schema precedent; lib-reservation-ledger.sh's
-    write/sweep/origin-token machinery; check-node-selection.ts:141-178 for the
-    read-side helper shape; dispatch-reclaim-audit as the existing template for
-    quantifying how often registry loss actually strands a claim) and no
-    ordering blocker (tactic-router-failure-fuses records this node must be
-    planned first in its chain, before itself and before
-    tactic-terminal-declaration-verified-against-node)."
-  since: 2026-07-31
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 20
+  first_seen: 2026-07-29
+  measured_impact:
+    - metric: worktree_destroyed_under_live_session
+      value: 2
+      unit: occurrences
+      window: single /align session, 2026-08-14
+      sensor: align
+      measured: 2026-08-14
+    - metric: recurrence_count
+      value: 1
+      unit: occurrences
+      window: all-time (first OBSERVED occurrence; node drafted 2026-07-29 from
+        reasoning)
+      sensor: align
+      measured: 2026-08-14
 ---
 # Anchor a claimed node's freeze in durable state rather than the daemon-backed session registry, so a registry loss cannot silently free an undeclared pass without firing the fuse
+
+## Office-hours sitting 2026-08-10 — park cleared, anchor ratified
+
+This node has been born-parked since 2026-07-31 on WHERE THE DURABLE CLAIM
+ANCHOR LIVES. The 2026-08-09 park on
+`tactic-session-reap-authorization-durability` re-raised the identical
+question from the other side, so both were answered in one sitting.
+
+### Ratified answer
+
+**Option (a), the graph anchor — but written batched, not per spawn.** The
+claim is a first-class record in durable graph state, following the
+`Execution.fix` / `office_hours` optional-field precedent this node's park
+already cited. The selection loop issues ONE `graph-commit` per tick carrying
+every claim for that tick, **before** the workers spawn; `graph-commit` already
+accepts multiple node ids (`graph-commit:531`).
+
+This directly answers the cost objection recorded in this node's own park. The
+park priced option (a) as "a graph-commit round trip to every node-worker
+spawn", which is correct for a per-spawn write and was the reason the question
+went to the author. Batching removes it: cost becomes independent of fan-out
+width. Measured 2026-08-10 — ~92 graph landings/day baseline (1293 / 14d,
+peaking at 27/hour) against ~22 worker passes/day (312 transitions / 14d), so
+a per-spawn write adds only ~24% to landing volume, but puts a CI-stamped,
+globally-lock-serialized landing (`refs/graph/landing-lock`,
+`graph-commit:355`) on the spawn critical path — an N-wide fan-out serializes
+into N landings. One batched landing per tick does not.
+
+Issuing the batch before the spawns inverts the risk window to
+claimed-but-not-yet-spawned, which `reservation_sweep` already reconciles and
+which fails safe.
+
+### Option (b) is ruled out on doctrine, not on cost
+
+The reservation-ledger extension is rejected. Condition 10 of
+`strategy-graph-native-dispatch` governs the anchor directly: the containment
+holds only where "the freeze must anchor on durable graph state rather than on
+a process-level session registry". Ratified 2026-08-10 — that binds the
+per-claim evidence anchor, not merely the tripped-breaker incident record,
+which is the cross-cutting question this node's park raised.
+
+A ledger anchor may still be defensible one day, but it would be an
+**amendment** to condition 10, not a reading of it, and must be put to the
+author as such. This also avoids the independent problem the park identified:
+ledger sweep rule (a) `live-worker-redundant`
+(`lib-reservation-ledger.sh:662`) clears the marker the instant a live named
+session registers — the exact moment a freeze anchor must persist.
+
+### Option (c) is ruled out by the same condition
+
+A reconciler deriving "a pass started and never declared" from the provisioned
+worktree/branch and the PR anchors on state that is durable but is not graph
+state, so condition 10 excludes it on the same ground.
+
+## Ordering and scope
+
+`tactic-router-failure-fuses` records that this node must be planned first in
+its chain. That ordering leg is now satisfiable — this park is cleared. Its
+other leg (`tactic-terminal-declaration-verified-against-node`) remains parked
+on a genuinely different question, so the fuses node stays parked.
+
+This node and `tactic-session-reap-authorization-durability` now share one
+design. That node was rescoped in the same sitting onto the surviving
+claim/release deliverable, so the two must be planned together or merged by
+the next `/align-tactics` round rather than each planning the same write.
+
+## First observed occurrence — 2026-08-14, an `/align` session's worktree destroyed under it, twice
+
+Recorded 2026-08-14 as a **recurrence on this existing node** rather than a new
+finding, under the merge discipline landed the same day
+(`strategy-graph-native-dispatch`, "How is a finding recorded on the graph").
+The root cause is the one this node already names: `worktree_has_live_session`
+reads the daemon-backed session registry, and a live session that stops reading
+as live has its claim silently freed.
+
+This node's rationale closed with "frequency of registry loss is reasoned about,
+not measured — worth quantifying during planning." This is the first
+**measurement**, and it is worse than the reasoned-about case in one respect.
+
+### What happened
+
+A single `/align` round, mid-interview, working in
+`.claude/worktrees/strategy-recursive-self-improvement`:
+
+1. Worktree provisioned and verified fresh against `origin/main`. Interview ran;
+   graph reads succeeded.
+2. Mid-session the checkout was **emptied and deregistered** — `ls` returned
+   nothing, the directory shell survived, and `git worktree list` no longer
+   named it. `git status` from the emptied path walked up and reported the
+   **shared main checkout**, so the next write would have landed there.
+3. The worktree was recreated from `origin/main` and re-verified fresh. The
+   interview continued.
+4. It was destroyed a **second time**, at the same point in the lifecycle.
+5. Recreating it under a name outside the node-id namespace
+   (`align-finding-uniformity`) survived to completion.
+
+### Why this is stronger evidence than the reasoned-about case
+
+The rationale above anticipates the node becoming *selectable* with no
+declaration made — a lost claim. Observed here is the harder failure: the
+**checkout itself was deleted while a session was actively writing in it**. The
+loss is not confined to selection state. Two further consequences the
+containment argument does not currently cover:
+
+- **Silent redirection to the shared checkout.** With the worktree gone, plain
+  `git` from the dead cwd resolves to the repo root. A session that does not
+  notice the deletion writes to the user's main checkout — the exact Step-0
+  violation worktree isolation exists to prevent.
+- **The node-id name is what draws the sweep.** A worktree named for a node with
+  `phase: null` reads as unclaimed. A strategy node is *always* `phase: null`,
+  so every `/align` round is structurally exposed: the round's own target node
+  can never look claimed to a phase-keyed sweep.
+
+### Measurements
+
+Recorded on `attributes.measured_impact`. `worktree_destroyed_under_live_session`
+is 2 for the single session; `recurrence_count` is 1 because this is the first
+**observed** occurrence — the node was drafted 2026-07-29 from reasoning, not
+from an observation, so counting the draft as occurrence 1 would overstate it.
+
+### What this adds to the fix direction
+
+The durable anchor this node already proposes would have prevented the lost
+claim. It does not by itself prevent the **destructive** sweep, so planning
+should also settle:
+
+- whether a sweep may delete a checkout at all, versus only releasing the claim;
+- how an `/align` round claims a `phase: null` strategy node, given no
+  phase-keyed liveness test can ever read it as claimed.

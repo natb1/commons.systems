@@ -689,6 +689,22 @@ count_open_blockers() {
 #             unrecognized non-terminal state.
 # This is the classification logic that dispatch-phase applies inline; it is
 # factored here so the readiness predicate can reuse it verbatim.
+#
+# Input shapes — and why only one of them is live (tactic-orphaned-check-run-
+# pins-pending-ci-guard, Unit 2). The classifier accepts two entry shapes: the
+# GraphQL `statusCheckRollup` CheckRun/StatusContext union, and the REST
+# check-runs projection `dispatch_ci_verdict_rest` adapts to it. As of the
+# REST-default migration (#1601) `dispatch_ci_verdict_rest` is the ONLY live
+# producer — every dispatch caller (dispatch-ci-ready, dispatch-reconcile-ready,
+# dispatch-auto-merge, graph-auto-merge, graph-select-target,
+# dispatch-context-pack, reconcile-graph-review-stall) reaches the classifier
+# through it, and no script feeds a raw `gh pr view --json statusCheckRollup`
+# array here any more. So the orphaned-check-run rule (a check run whose parent
+# check suite has already concluded is STALE, never pending) is applied ONCE, at
+# the REST adaptation point below, and there is deliberately no second
+# implementation for the GraphQL shape. If a GraphQL feeder is ever
+# reintroduced, apply the same rule at its adaptation point — the GraphQL
+# CheckRun node exposes `checkSuite` inline, so it needs no extra API call.
 dispatch_classify_rollup() {
   local rollup="$1"
   local rollup_len
@@ -784,11 +800,43 @@ dispatch_classify_rollup() {
 # UPPERCASE; each adapted entry is `ascii_upcase`d so the classifier applies
 # unchanged. Every adapted object carries a `conclusion` key so the classifier's
 # `has("conclusion")` check-run branch fires (never the status-context branch).
+# Orphaned check runs (tactic-orphaned-check-run-pins-pending-ci-guard). GitHub
+# sometimes leaves a check run permanently un-concluded — `status: queued` with
+# a null conclusion — while that row's PARENT check suite has already finished.
+# A suite cannot conclude and still be running one of its own jobs, so such a
+# row will never report and is not retriable (`gh run rerun` answers "This
+# workflow run cannot be retried"). Adapted naively it reads `pending` forever,
+# which pins graph-select-target's `pending-ci-guard` on a node with every other
+# check green and gives the router no automated exit. So: a NON-COMPLETED row
+# with NO conclusion whose parent suite reports `status: completed` is adapted as
+# `{status: COMPLETED, conclusion: STALE}` — a conclusion dispatch_classify_rollup
+# already counts as failing, which routes the node into the fix lane's normal
+# budgeted re-push (a new head sha, fresh checks, orphan gone).
+#   - Only rows with a NULL conclusion qualify. A row carrying a conclusion
+#     behind a stale `in_progress` status is the DIFFERENT, complementary #2457
+#     desync, and it is already classified correctly off its conclusion;
+#     re-labelling it STALE would flip genuinely-green PRs to failing.
+#   - Extra API cost is paid only on a sha that is genuinely mid-flight: when
+#     every row is `completed`, or no pending row carries a `check_suite.id`,
+#     zero extra calls are made. Otherwise one call per DISTINCT parent suite.
 # Memoisation: when DISPATCH_CI_VERDICT_CACHE names a non-empty directory, the
 # verdict is cached per-SHA at $DISPATCH_CI_VERDICT_CACHE/<sha> — a cache hit
 # returns the stored verdict and makes no REST call; a miss fetches, writes the
 # verdict, then prints it. The caller owns the directory's lifecycle (this
 # helper does not mkdir it). When the var is unset/empty, every call fetches.
+# ONLY TERMINAL verdicts (`passing`, `failing`) are cached. A `pending` verdict
+# is deliberately never stored: pending is a statement about a moment, and a sha
+# classified pending while its suite was still running must be recomputed once
+# the suite concludes — otherwise the orphan rule above is shadowed by the very
+# cache entry the orphan produced, for as long as the cache directory lives.
+# That window is bounded today, not forever: the only producer is
+# dispatch-select-tick, which mktemp -d's the directory and rm -rf's it on EXIT
+# (dispatch-select-tick:296-304), and dispatch-ladder-run unsets the var
+# outright before every reconciler call. The cost of not caching is therefore
+# bounded to repeat queries on one in-flight sha within a single tick. The rule
+# is written against the lifecycle CONTRACT rather than today's only caller —
+# this helper does not own the directory, so a longer-lived owner would extend
+# the shadow without touching this file.
 dispatch_ci_verdict_rest() {
   local sha="$1"
 
@@ -804,22 +852,72 @@ dispatch_ci_verdict_rest() {
 
   # One paginated REST call. `gh api --paginate` emits one JSON object per page,
   # so slurp (`jq -s`) and concatenate every page's `.check_runs` into a single
-  # array; `add` over an empty slurp is null, so coerce to `[]`. Then adapt each
-  # entry to the statusCheckRollup CheckRun shape and uppercase it.
-  local adapted
-  adapted=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
-    | jq -s 'map(.check_runs) | add // []
-             | map({status: (.status | ascii_upcase),
-                    conclusion: ((.conclusion // "") | ascii_upcase)})') || {
+  # array; `add` over an empty slurp is null, so coerce to `[]`.
+  local rows
+  rows=$(gh_retry gh api --paginate "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq -s 'map(.check_runs) | add // []') || {
     echo "error: dispatch_ci_verdict_rest: check-runs fetch failed for $sha" >&2
+    return 1
+  }
+
+  # Orphan detection, step 1 — the distinct parent suites of the rows that could
+  # be orphans (not completed, no conclusion). Empty on the fast path, which is
+  # what keeps the all-green case at exactly one REST call.
+  local suite_ids
+  suite_ids=$(jq -r '
+    [ .[]
+      | select((.status // "") != "completed")
+      | select((.conclusion // "") == "")
+      | .check_suite.id // empty
+      | tostring ]
+    | unique | .[]' <<<"$rows") || {
+    echo "error: dispatch_ci_verdict_rest: check-run projection failed for $sha" >&2
+    return 1
+  }
+
+  # Step 2 — read each candidate suite once; collect the ids that have concluded.
+  local stale_suites="" suite_id suite_json suite_status
+  if [[ -n "$suite_ids" ]]; then
+    while IFS= read -r suite_id; do
+      [[ -n "$suite_id" ]] || continue
+      suite_json=$(gh_retry gh api "repos/{owner}/{repo}/check-suites/$suite_id") || {
+        echo "error: dispatch_ci_verdict_rest: check-suite fetch failed for suite $suite_id (sha $sha)" >&2
+        return 1
+      }
+      suite_status=$(jq -r '.status // ""' <<<"$suite_json")
+      if [[ "$suite_status" == "completed" ]]; then
+        stale_suites+="$suite_id"$'\n'
+      fi
+    done <<<"$suite_ids"
+  fi
+  local stale_json
+  stale_json=$(printf '%s' "$stale_suites" | jq -R -s 'split("\n") | map(select(length > 0))')
+
+  # Step 3 — adapt to the statusCheckRollup CheckRun shape. REST reports
+  # lowercase enums, so uppercase every entry; orphaned rows are replaced
+  # wholesale by the already-uppercase COMPLETED/STALE pair.
+  local adapted
+  adapted=$(jq --argjson stale "$stale_json" '
+    map(
+      if ((.status // "") != "completed")
+         and ((.conclusion // "") == "")
+         and ((.check_suite.id // "" | tostring) as $sid
+              | $sid != "" and ($stale | index($sid)) != null)
+      then {status: "COMPLETED", conclusion: "STALE"}
+      else {status: (.status | ascii_upcase),
+            conclusion: ((.conclusion // "") | ascii_upcase)}
+      end
+    )' <<<"$rows") || {
+    echo "error: dispatch_ci_verdict_rest: check-run adaptation failed for $sha" >&2
     return 1
   }
 
   local verdict
   verdict=$(dispatch_classify_rollup "$adapted")
 
-  # Memoisation miss: persist the verdict for subsequent ticks before printing.
-  if [[ -n "$cache_file" ]]; then
+  # Memoisation miss: persist TERMINAL verdicts only (see the header note) before
+  # printing.
+  if [[ -n "$cache_file" && "$verdict" != "pending" ]]; then
     printf '%s\n' "$verdict" > "$cache_file"
   fi
 
@@ -1587,6 +1685,61 @@ gh_pr_merge_rest() {
   }
 }
 
+# REST-backed mutation: update a pull request's branch with the latest upstream
+# base (tactic-graph-auto-merge-up-to-date-gate).
+# Uses PUT repos/{owner}/{repo}/pulls/<N>/update-branch.
+#
+# The endpoint MERGES the base branch INTO the PR head — it creates a merge
+# commit on the head branch and re-triggers CI on that fresh base. It does NOT
+# rebase, so the head oid changes but the branch's own history is preserved.
+#
+# `expected_head_sha` is a compare-and-swap guard: GitHub rejects the update
+# with HTTP 422 when the head moved since the caller sensed it, so a racing push
+# can never be silently merged over. gh_retry (lib.sh:125) retries only
+# transient failures, so a 422 returns immediately rather than being retried.
+#
+# Args: $1 = <N> (PR number, required); --expected-head-sha <sha> (optional);
+#   --repo owner/repo (optional).
+# On gh failure: errors to stderr and returns 1.
+gh_pr_update_branch_rest() {
+  local num="" expected="" has_expected="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --expected-head-sha) expected="$2"; has_expected=1; shift 2 ;;
+      --repo)              repo="$2";                     shift 2 ;;
+      --*) echo "error: gh_pr_update_branch_rest: unknown flag '$1'" >&2; return 1 ;;
+      *)
+        if [[ -z "$num" ]]; then
+          num="$1"; shift 1
+        else
+          echo "error: gh_pr_update_branch_rest: unexpected argument '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+  if [[ -z "$num" ]]; then
+    echo "error: gh_pr_update_branch_rest: PR number is required" >&2
+    return 1
+  fi
+
+  local path
+  if [[ -n "$repo" ]]; then
+    path="repos/$repo/pulls/$num/update-branch"
+  else
+    path="repos/{owner}/{repo}/pulls/$num/update-branch"
+  fi
+
+  # expected_head_sha only when --expected-head-sha is passed; omitting it lets
+  # GitHub update whatever the current head is (no CAS guard).
+  local -a flags=()
+  [[ -n "$has_expected" ]] && flags+=(-f "expected_head_sha=$expected")
+
+  gh_retry gh api -X PUT "$path" "${flags[@]}" >/dev/null || {
+    echo "error: gh_pr_update_branch_rest: gh api failed for $path" >&2
+    return 1
+  }
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
@@ -1864,9 +2017,24 @@ get_worktree_id() {
 # Print the project root (parent of git --git-common-dir) to stdout.
 # Returns non-zero if not in a git repo. Prints no error and does not exit —
 # the caller supplies its own message/cleanup via `|| { … }`.
+#
+# This body is duplicated, deliberately, in lib-repo-roots.sh — which is the
+# canonical home and the single definition the three worktree hooks share.
+# lib.sh does NOT source it: ~17 test fixtures copy lib.sh into a temp scripts
+# dir by name (`cp "$SCRIPT_DIR/lib.sh" "$TMP/scripts/lib.sh"`), so giving
+# lib.sh a new sibling dependency breaks every one of them at source time with
+# `resolve_project_root: command not found`. Measured — CI caught exactly that.
+# test-lib-repo-roots.sh asserts the two definitions agree, so drift is a red
+# test rather than a silent divergence. Collapsing these into one definition
+# means converting those fixtures to the `lib-*.sh` glob form that a few
+# already use; that is a separate, mechanical change.
+#
+# The `[ -n "$common_dir" ]` guard is load-bearing — see lib-repo-roots.sh's
+# copy for the rationale. Keep the two bodies byte-identical.
 resolve_project_root() {
   local common_dir
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$common_dir" ] || return 1
   dirname "$common_dir"
 }
 
@@ -1898,6 +2066,50 @@ assert_primary_checkout_on_main() {
   echo "assert_primary_checkout_on_main: INVARIANT VIOLATED — the primary checkout at '$path' must stay on 'main' (a condition on strategy-autonomous-execution), but found $found." >&2
   echo "  Repair: git -C \"$path\" switch main" >&2
   return 1
+}
+
+# Fast-forward the main checkout at <project-root> onto origin/main.
+#
+# WHY THIS IS A FUNCTION AND NOT A BARE FETCH. `git fetch` moves REFS ONLY — it
+# never touches a working tree. So anything that then READS that checkout (a
+# store directory under intentions/, a candidate enumeration, a merge base) is
+# reading whatever happened to be checked out last, which may be arbitrarily far
+# behind origin/main. Fetch-without-merge is the defect recorded as
+# tactic-provision-revalidation-reads-stale-main-checkout: provision-node-worktree
+# fetched, then pointed check-node-selection.ts at the unmoved working tree and
+# reported a false `stale-selection` (exit 12) against a perfectly current
+# selection, halting a /dispatch-ladder run twice on 2026-08-13. Callers that
+# READ FROM or WRITE INTO the main checkout call this, never a bare fetch.
+#
+# `--ff-only` doubles as the dirty/diverged-tree guard: a checkout carrying
+# uncommitted changes or local commits refuses to fast-forward, and that is
+# exactly the state no caller may merge into or write from.
+#
+# Args: $1 = the main checkout's path (the project root — what
+#            resolve_main_worktree, or resolve_project_root on the de-bared
+#            layout, prints).
+#
+# Both git calls send their STDOUT to stderr (`1>&2`), the form every call site
+# already used, so nothing here can contaminate the caller's stdout. git's own
+# STDERR is left to inherit the caller's fd 2 — a call site that wants it
+# captured redirects at the call site rather than this function hardcoding it.
+#
+# Returns 0 on a clean fast-forward; 1 if the FETCH failed (origin unreachable,
+# auth, a broken remote); 2 if the MERGE failed (the tree is dirty or diverged).
+# The two are DISTINCT because the escalations differ and each call site phrases
+# its own: a failed fetch is a transient/environment problem, a failed merge is
+# a wedged tree that needs a person.
+#
+# Sandbox: `git merge` updates the working tree non-transactionally, and this
+# repo's checkout contains the read-only `.claude/` carve-outs, so every caller
+# must already run with `dangerouslyDisableSandbox: true`
+# (.claude/rules/sandbox.md, "Tree-updating git ops touching read-only paths").
+# This adds no new requirement — every current call site already required it for
+# the open-coded merge this replaces.
+sync_main_checkout() {
+  local root="$1"
+  git -C "$root" fetch origin main 1>&2 || return 1
+  git -C "$root" merge --ff-only origin/main 1>&2 || return 2
 }
 
 # Print the canonical dispatch selection-lock file path to stdout. An explicit
@@ -2015,26 +2227,64 @@ graph_write_lock_file() {
   printf '%s\n' "$repo_root/tmp/graph-write.lock"
 }
 
-# graph_write_lock_acquire <repo-root> — take that checkout's graph-write mutex
-# NON-BLOCKING on fd 9 of the CALLING shell. The flock is held for the caller's
-# whole process lifetime and released when fd 9 closes (process exit), so there
-# is deliberately no release verb: an out-of-band instrument that could "release
-# early" would reopen the window this mutex exists to close.
+# TWO ACQUIRE VERBS, ONE MUTEX — WHICH ONE A CALLER TAKES DEPENDS ON WHETHER IT
+# HAS A NEXT PASS.
 #
-# NON-BLOCKING ON PURPOSE. Every caller is an unattended instrument fired by a
-# systemd timer. A pass that BLOCKS on a wedged holder pins its oneshot service
-# until the next fire and stacks passes on top of each other; skipping costs
-# nothing, because these instruments re-derive their entire reading from scratch
-# on the next pass. Callers must SKIP the pass on return 1, never wait.
+# Both verbs take the same flock on fd 9 of the CALLING shell, held for the
+# caller's whole process lifetime and released when fd 9 closes (process exit).
+# Neither has a release verb, deliberately: an out-of-band instrument that could
+# "release early" would reopen the window this mutex exists to close. They
+# differ only in what they do when the lock is already held.
 #
-# fd inheritance: children (git, npx, graph-commit) inherit fd 9 and would hold
-# the flock past our exit if one of them ever daemonized. Callers that invoke a
-# child which can fork a background helper should close it there with `9>&-`.
+#   graph_write_lock_acquire       — NON-BLOCKING. For a caller fired by a
+#                                    systemd TIMER (dispatch-fleet-alarm and the
+#                                    other fleet instruments). A pass that blocks
+#                                    on a wedged holder pins its oneshot service
+#                                    until the next fire and stacks passes on top
+#                                    of each other. Skipping costs nothing there:
+#                                    these instruments re-derive their entire
+#                                    reading from scratch on the next pass, which
+#                                    is a minute or two away. Such callers must
+#                                    SKIP on return 1, never wait.
 #
-# Return: 0 acquired; 1 another writer holds it (SKIP the pass, do not block);
+#   graph_write_lock_acquire_wait  — BOUNDED WAIT. For a FIRE-AND-FORGET one-shot
+#                                    job that has NO next pass — nothing
+#                                    re-invokes it, so a skipped pass is not a
+#                                    deferred write, it is a LOST write. The
+#                                    per-phase evaluator's call to
+#                                    dispatch-eval-finding is the case this
+#                                    exists for: it is spawned fire-and-forget by
+#                                    the ladder driver, and a skip silently
+#                                    under-counts the recurrence metric the
+#                                    evaluation-finding ledger exists to carry.
+#                                    Concurrent ladders make that contention
+#                                    routine, not exceptional.
+#
+# THE WAIT IS ALWAYS BOUNDED, NEVER UNBOUNDED. The timeout is a required
+# argument precisely so no caller can acquire an open-ended block: a wedged
+# holder must eventually release every waiter, and a job that waits forever is
+# a new wedge rather than a fix for the old one. On timeout the waiting caller
+# is back in the skip case and must say so loudly — the write it just lost has
+# no next pass to recover it.
+#
+# This split is the documented exception to the older "callers must SKIP, never
+# wait" rule, whose stated premise (every caller is a timer oneshot) stopped
+# being true when the per-phase evaluator arrived. A contract with an
+# undocumented exception is the next defect, so the exception lives here.
+#
+# fd inheritance (both verbs): children (git, npx, graph-commit) inherit fd 9 and
+# would hold the flock past our exit if one of them ever daemonized. Callers that
+# invoke a child which can fork a background helper should close it there with
+# `9>&-`.
+#
+# Return (both verbs, identical contract):
+#         0 acquired;
+#         1 another writer holds it (for _acquire, immediately; for
+#           _acquire_wait, still after the timeout elapsed);
 #         2 the mutex could not be established at all (no repo root, no `flock`
-#           binary, unwritable directory) — an environment error the caller must
-#           surface, NEVER silently downgrade to an unserialized graph write.
+#           binary, unwritable directory, and for _acquire_wait a missing or
+#           malformed timeout) — an environment error the caller must surface,
+#           NEVER silently downgrade to an unserialized graph write.
 graph_write_lock_acquire() {
   local repo_root="${1:-}" lock_file
   lock_file=$(graph_write_lock_file "$repo_root") || return 2
@@ -2044,6 +2294,24 @@ graph_write_lock_acquire() {
   # race a concurrent holder's open.
   exec 9>>"$lock_file" || return 2
   flock -n 9 || return 1
+  return 0
+}
+
+# graph_write_lock_acquire_wait <repo-root> <timeout-seconds> — as
+# graph_write_lock_acquire, but waits up to <timeout-seconds> for a held lock
+# instead of returning 1 at once. Same fd, same held-until-process-exit
+# contract, same return codes (see the block above). The timeout is REQUIRED and
+# must be a non-negative number (integer or decimal, as `flock -w` accepts); a
+# missing or malformed one is return 2, not a silent unbounded wait.
+graph_write_lock_acquire_wait() {
+  local repo_root="${1:-}" timeout="${2:-}" lock_file
+  [[ "$timeout" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 2
+  lock_file=$(graph_write_lock_file "$repo_root") || return 2
+  command -v flock >/dev/null 2>&1 || return 2
+  mkdir -p "$(dirname "$lock_file")" 2>/dev/null || return 2
+  # Append-open, never truncate — same reasoning as the non-blocking verb.
+  exec 9>>"$lock_file" || return 2
+  flock -w "$timeout" 9 || return 1
   return 0
 }
 

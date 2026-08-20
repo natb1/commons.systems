@@ -56,10 +56,11 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 56
-  override: null
-  rationale: "Author-directed 2026-07-31: top-of-band boost so the generic
-    lane-instrument substitution guard is picked first. /code-review ships with
+  boosts:
+    "1": 0.06
+  rationale: >-
+    Author-directed 2026-07-31: top-of-band boost so the generic lane-instrument
+    substitution guard is picked first. /code-review ships with
     disable-model-invocation, so all 18 Skill(code-review) calls across
     07-27..07-31 were rejected and the finder substituted its own review under
     the built-in's name — undetected for four days. This node is the generic
@@ -70,8 +71,19 @@ attention:
     (strategy-main-health = 101). Part of the interim 50/20/10 scale's inventory
     — convert to a tier/bug_fix mark when tactic-attention-tier-ranking and
     tactic-attention-boost-scripts retire the interim scale; do not orphan this
-    boost."
-  tier: 1
+    boost.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 56 to 0.06 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-lane-instrument-substitution-guard
@@ -88,6 +100,7 @@ execution:
     mergedAt: 2026-07-31T22:45:49Z
     mergeCommitSha: 778a1c943392ad4fea31d7d2e92cdadab404262f
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -195,7 +208,8 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 56
 ---
 
 # Fail a dispatch lane that cannot invoke its named instrument, instead of letting the agent substitute itself and report under the instrument's name

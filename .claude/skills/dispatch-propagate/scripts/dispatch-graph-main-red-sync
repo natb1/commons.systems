@@ -172,9 +172,9 @@ if [[ "$READ_ONLY" -eq 0 && -n "$OPEN_MAIN_RED" && "$OPEN_MAIN_RED" != "UNKNOWN"
       fi
       if ! (
         cd "$REPO_ROOT" || exit 1
-        MANIFEST=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --out-dir "$COMPLETE_DIR" "$node_id") || exit 1
+        MANIFEST=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir "$REPO_ROOT/intentions" --out-dir "$COMPLETE_DIR" "$node_id") || exit 1
         jq '.phase = "done"' "$COMPLETE_DIR/$node_id.json" > "$COMPLETE_DIR/$node_id.patched.json" || exit 1
-        npx tsx packages/intentionsutil/scripts/write-node.ts --file "$COMPLETE_DIR/$node_id.patched.json" || exit 1
+        npx tsx packages/intentionsutil/scripts/write-node.ts --dir "$REPO_ROOT/intentions" --file "$COMPLETE_DIR/$node_id.patched.json" || exit 1
         packages/intentionsutil/scripts/graph-commit --base "$MANIFEST" -m "graph: complete $node_id (main-health green)" "$node_id"
       ) 1>&2; then
         # Roll back this iteration's mutation FIRST (restore intentions/$node_id.md

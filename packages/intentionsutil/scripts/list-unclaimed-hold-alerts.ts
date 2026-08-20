@@ -21,8 +21,16 @@
 //                      the current time.
 //
 // Stdout: one TSV line per alert,
-//   `<hold-id>\t<source-id>\t<kind>\t<age-seconds>\t<source-tier>\t<source-value>`
+//   `<hold-id>\t<source-id>\t<kind>\t<age-seconds>\t<source-tier>\t<source-band>\t<source-score>`
 // (nothing when there are no alerts).
+//
+// COLUMN CONTRACT: columns 1-5 are unchanged and never reordered. When the
+// resolved rank became the `(tier, band, score, depth)` quadruple, column 6
+// (formerly the single `source-value`) became `source-band` and `source-score`
+// was APPENDED as column 7 — appended, not inserted, so a positional reader that
+// only wants the ids/kind/age keeps working.
+// `.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch` is the one
+// reader in this repo; it reads the row with a 7-variable `IFS=$'\t' read`.
 // Exit 0 on success; exit 2 on a usage error or a malformed store.
 //
 // NOTE: this is a SEPARATE CLI from list-recheckable-holds.ts on purpose. That
@@ -104,7 +112,8 @@ function main(argv: string[]): void {
   const nodes = listNodesStrict(dir);
   for (const a of listUnclaimedHoldAlerts(nodes, { now, minAgeSeconds, topK })) {
     process.stdout.write(
-      `${a.holdId}\t${a.sourceId}\t${a.kind}\t${a.ageSeconds}\t${a.sourceTier}\t${a.sourceValue}\n`,
+      `${a.holdId}\t${a.sourceId}\t${a.kind}\t${a.ageSeconds}\t${a.sourceTier}\t` +
+        `${a.sourceBand}\t${a.sourceScore}\n`,
     );
   }
 }

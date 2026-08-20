@@ -86,7 +86,7 @@ if [ "$EXPLICIT" = false ]; then
       firestore.rules) RUN_RULES=true ;;
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
       .claude/skills/dispatch-propagate/scripts/*) RUN_PR_SCRIPTS=true ;;
-      .claude/skills/dispatch-token-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
+      .claude/skills/rsi-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
       .claude/skills/file-issue/scripts/*) RUN_FILE_ISSUE_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
@@ -203,10 +203,10 @@ if [ "$RUN_PR_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run dispatch-token-audit script tests (no test-helpers.sh in that dir)
+# Run rsi-audit script tests (no test-helpers.sh in that dir)
 if [ "$RUN_TOKEN_AUDIT_SCRIPTS" = true ]; then
-  echo "=== Dispatch token-audit script tests ==="
-  TOKEN_AUDIT_SCRIPTS="$REPO_ROOT/.claude/skills/dispatch-token-audit/scripts"
+  echo "=== RSI audit script tests ==="
+  TOKEN_AUDIT_SCRIPTS="$REPO_ROOT/.claude/skills/rsi-audit/scripts"
   TOKEN_AUDIT_FAIL=false
   for test_script in "$TOKEN_AUDIT_SCRIPTS"/test-*.sh; do
     name=$(basename "$test_script")

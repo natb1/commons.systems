@@ -28,16 +28,28 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 50
-  override: null
-  rationale: "Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale
-    (50 / 20 / 10) that puts write-path integrity work above ordinary feature
-    work. This band holds the silent graph-write-corruption defects plus the two
-    paths the bootstrap arms or depends on. Interim scaffolding only -
+  boosts:
+    "1": 0.02
+  rationale: >-
+    Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale (50 / 20
+    / 10) that puts write-path integrity work above ordinary feature work. This
+    band holds the silent graph-write-corruption defects plus the two paths the
+    bootstrap arms or depends on. Interim scaffolding only -
     tactic-attention-tier-ranking replaces the whole numeric scheme with
     lexicographic (tier, rank) and max-lifting, and
-    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks."
-  tier: 1
+    tactic-attention-boost-scripts converts these boosts to tier/bug_fix marks.
+
+
+    NAMESPACING STOPGAP 2026-08-11: magnitude compressed from 50 to 0.02 so this
+    boost can no longer lift the node out of its parent strategy's band. The
+    bound - a tactic boost is namespaced to its strategy's rank and must never
+    cause the tactic to outrank a tactic of a higher-ranked strategy - is
+    recorded doctrine on strategy-recursive-self-improvement but is NOT yet
+    enforced by the resolver; tactic-attention-namespaced-rank makes it
+    structural. Until then the flat additive sum defeats it, so the magnitudes
+    are compressed by hand onto a 0.01-per-level ladder that preserves the
+    original ordering WITHIN the band. Original magnitude preserved at
+    attributes.pre_namespacing_boost for restoration.
 phase: main-qa
 execution:
   branch: tactic-attention-tier-ranking
@@ -54,6 +66,7 @@ execution:
     mergedAt: 2026-08-01T17:46:53Z
     mergeCommitSha: 7876d5f91041fd806e7fea4084f26727c21cb763
     graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
@@ -84,7 +97,8 @@ office_hours:
   session_type: other
 pace_exempt: true
 rounds: null
-attributes: {}
+attributes:
+  pre_namespacing_boost: 50
 ---
 # Implement the three-tier ranking floor: bug_fix/security/tier marks resolve to an outer tier in resolveAttention, the selector sorts by (tier, rank), blocking lifts the lexicographic (tier, rank) pair, and strategy-main-health migrates from boost 100 to tier 3
 

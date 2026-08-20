@@ -37,10 +37,7 @@ rationale: >-
   capture-visibility surface) — so aggregate drift has an owner. The divergence
   half is why this strategy also serves virtue-alignment-of-attachments.
 reading: "exercised: 4/22 records; 18 null last_exercised; review_trigger firing
-  not recorded"
-gap: "reading \"exercised: 4/22 records; 18 null last_exercised; review_trigger
-  firing not recorded\" does not meet threshold \"no record's last_exercised is
-  null, and no fired review_trigger is left unactioned\""
+  not recorded (sensor read 2026-08-10)"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments

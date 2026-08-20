@@ -41,7 +41,7 @@ envelope.
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
 | `schema` | string | no | const `"dispatch.outcome.v1"` |
-| `phase` | string | no | enum `{review, qa}`, extensible to future phases |
+| `phase` | string | no | enum `{review, qa, fix-checks}`, extensible to future phases |
 | `repo` | string | no | e.g. `natb1/commons.systems` |
 | `issue` | integer | yes | the dispatch issue number on the issue lane, or `null` on the node lane |
 | `node_id` | string | yes | the intention-graph node id on the node lane, or `null` on the issue lane |
@@ -52,6 +52,8 @@ envelope.
 | `fixes_applied` | integer ≥ 0 | no | findings the phase actually fixed |
 | `followups_filed` | integer ≥ 0 | no | follow-up issues the phase filed |
 | `subagents_launched` | integer ≥ 0 | no | total subagents spawned (see semantics below) |
+| `tool_denials` | integer ≥ 0 | no | user-rejected tool calls the phase took (see below); `0` when none |
+| `denied_commands` | array of string | no | best-effort shapes of the denied calls; `[]` when none |
 | `disposition` | string | no | enum `{completed, completed_with_fixes, escalated}` |
 | `terminated_reason` | string | yes | escalation reason on `escalated`, else `null` |
 
@@ -77,6 +79,9 @@ Path → value mapping:
 | qa-fix | clean pass | `completed` |
 | qa-fix | auto-fix applied | `completed_with_fixes` |
 | qa-fix | escalate | `escalated` |
+| fix-checks | Step 9, outcome `fixed` | `completed_with_fixes` |
+| fix-checks | Step 9, outcome `generic-no-repro` / `main-fixed` / `flake` | `completed` |
+| fix-checks | Step 4, needs-human | `escalated` |
 
 ## `terminated_reason`
 
@@ -136,7 +141,7 @@ non-zero.
 
 ### Which rate reflects which phase
 
-`/dispatch-token-audit` reports each phase on the metric that phase can actually
+`/rsi-audit` reports each phase on the metric that phase can actually
 move. (These rates once fed an automated promote-to-Opus routing policy generator;
 that policy was retired in #2872 — the phase orchestrator is now always Sonnet and
 Opus tiering is chosen per-`agent()` inside each Workflow. The rates now inform the
@@ -163,6 +168,38 @@ report a human reads, not an automated router.)
 
 Unit 3 (the Workflow returns) computes source 1; the SKILL wiring (Unit 4) adds
 source 2 before calling the emit script. The emitted value is the total.
+
+## `tool_denials` / `denied_commands` semantics
+
+An unattended phase can lose a tool call mid-flight to a permission denial and
+still finish. It then reports a clean record — `disposition: completed`,
+`findings_actionable: 0` — with nothing to say the check it was assessing never
+ran. `tool_denials` closes that gap: it is **always present**, so a phase that
+took denials cannot emit a clean-looking record without the gap being visible to
+the ladder and to `/rsi`.
+
+The signal is the harness's `toolDenialKind: "user-rejected"` JSON field on the
+user message carrying the declined call — the same field `aggregate-usage.sh`
+classifies `user_rejections` from. Do **not** grep for the human-readable "The
+user doesn't want to proceed with this tool use" phrase: it is absent from many
+denials, so a literal search returns zero and reads as a clean session.
+
+`dispatch-emit-outcome` **derives both fields itself** from the emitting
+session's transcript whenever `--tool-denials` is omitted. Deriving is the
+default rather than an argument the phase supplies, because a phase that
+silently lost a verifying check to a denial is exactly the phase least likely to
+self-report it. Derivation is best-effort: an unlocatable or unparseable
+transcript yields `0` / `[]` and never fails the emit.
+
+Overrides, for a caller that has a better number than the transcript does:
+
+- `--tool-denials <n>` replaces the derived count.
+- `--denied-command <shape>` (repeatable) replaces the derived shapes.
+
+The two need not agree in length. `tool_denials` is the count of record;
+`denied_commands` is a diagnostic — a denial whose originating `tool_use` is not
+in the transcript renders as `"<unknown tool call>"`, and a `Bash` denial renders
+as `Bash: <command>` truncated to 160 characters.
 
 ## Reader contract
 
@@ -193,7 +230,9 @@ To make a future phase emit the envelope:
    `disposition` and `terminated_reason` for each terminal path.
 2. Call `dispatch-emit-outcome` at **every** terminal path of the phase
    (complete, complete-with-fixes, and escalate), passing the computed fields and
-   adding any SKILL-body subagent count to `subagents_launched`.
+   adding any SKILL-body subagent count to `subagents_launched`. Leave
+   `--tool-denials` / `--denied-command` off — the script derives them; a new
+   phase inherits the denial accounting for free.
 3. Use the `disposition` enum and the actionability/hit-rate definitions in this
    doc. Add the new `phase` value to the enum here when you do.
 
@@ -218,6 +257,8 @@ follow-ups, and spawned 11 subagents — a `completed_with_fixes` outcome:
   "fixes_applied": 3,
   "followups_filed": 2,
   "subagents_launched": 11,
+  "tool_denials": 0,
+  "denied_commands": [],
   "disposition": "completed_with_fixes",
   "terminated_reason": null
 }

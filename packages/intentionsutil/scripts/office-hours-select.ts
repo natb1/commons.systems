@@ -62,13 +62,13 @@
 //
 // --list output columns (the single canonical statement of this contract; the
 // `office-hours-graph` read loop and `dispatch-terminal-gap-audit` both cite
-// this block): `<rank>\t<sessionType>\t<nodeId>\t<since>` per line, rendered by
-// the exported `formatQueueRow` below and pinned by its unit test. `rank` is
-// the soft-penalty-adjusted rank, not raw attention. These four columns are
-// UNCHANGED by lift advisories: when a member's key was lifted from a blocked
-// source (`liftedFrom !== null`), the "why" goes to stderr as a `NOTE —` line
-// (`formatLiftNote`), never as a fifth stdout column — see the stderr contract
-// above.
+// this block): `<score>\t<sessionType>\t<nodeId>\t<since>` per line, rendered by
+// the exported `formatQueueRow` below and pinned by its unit test. `score` is
+// the soft-penalty-adjusted score of the resolved rank key, not raw attention.
+// These four columns are UNCHANGED by band advisories: when a member's band came
+// from a parent (`bandSource !== null`), the "why" goes to stderr as a `NOTE —`
+// line (`formatBandNote`), never as a fifth stdout column — see the stderr
+// contract above.
 //
 // LOAD-BEARING for a second consumer, outside this package:
 // `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit` runs
@@ -169,6 +169,11 @@ export function formatDisposition(
  * reports a false `empty`. Extracted and exported so the column order is
  * pinned by a unit test rather than by comment alone.
  *
+ * Exactly FOUR columns, in this order. The first column now carries the
+ * penalized `score` of the resolved rank key (it used to carry the lifted
+ * `rank`); the column COUNT and the position of every other column are
+ * unchanged, so every positional reader keeps working.
+ *
  * A SECOND positional parser lives outside this package:
  * `.claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit` reads
  * these rows with `IFS=$'\t' read -r _rank _stype nid _since` to enumerate the
@@ -179,19 +184,28 @@ export function formatDisposition(
  * this source file and fails if the four columns move.
  */
 export function formatQueueRow(m: QueueMember): string {
-  return `${m.rank}\t${m.sessionType}\t${m.nodeId}\t${m.since}`;
+  return `${m.score}\t${m.sessionType}\t${m.nodeId}\t${m.since}`;
 }
 
 /**
- * The stderr advisory for a queue member whose ordering key was lifted from a
- * blocked source (`liftedFrom !== null`) — surfaces WHY the hold jumped the
- * queue. Follows the `formatBlockerNote` `NOTE —` convention. Never called for
- * a member with `liftedFrom === null`.
+ * The stderr advisory for a queue member that ranks in a band it got from a
+ * parent (`bandSource !== null`) — surfaces WHY the park sorts where it does,
+ * with its own score alongside for contrast. Follows the `formatBlockerNote`
+ * `NOTE —` convention. Never called for a member with `bandSource === null`
+ * (band 0: there is no source to name).
+ *
+ * `band` and `score` on a `QueueMember` carry the session-type penalty;
+ * `ownScore` does NOT. Printing the two side by side unqualified would invite
+ * the reader to conclude that a park whose band reads below its own score is
+ * banded by a WEAKER parent, when the gap is only the penalty. So whenever the
+ * penalty actually bites (`score !== ownScore`) the note says so and prints the
+ * penalized score — the number that really sorts — next to it.
  */
-export function formatLiftNote(m: QueueMember): string {
+export function formatBandNote(m: QueueMember): string {
+  const penaltyNote = m.score !== m.ownScore ? `, un-penalized; penalized ${m.score}` : "";
   return (
-    `NOTE — ${m.nodeId} ranks at tier ${m.tier}/${m.rank} inherited from blocked source ` +
-    `${m.liftedFrom} (own: tier ${m.ownTier}/${m.ownRank})`
+    `NOTE — ${m.nodeId} ranks at tier ${m.tier} band ${m.band} via ${m.bandSource} ` +
+    `(own score ${m.ownScore}${penaltyNote})`
   );
 }
 
@@ -388,8 +402,8 @@ function main(): void {
   if (wantList) {
     for (const m of officeHoursQueue(nodes, sessionType)) {
       process.stdout.write(`${formatQueueRow(m)}\n`);
-      if (m.liftedFrom !== null) {
-        process.stderr.write(`${formatLiftNote(m)}\n`);
+      if (m.bandSource !== null) {
+        process.stderr.write(`${formatBandNote(m)}\n`);
       }
     }
     return;

@@ -342,7 +342,7 @@ fi
 # --- Write phase: done -------------------------------------------------------
 # dump-node → jq → write-node, the same read-modify-write idiom hold-node uses
 # for the source's blocked_by edit. `phase` is the ONLY field that changes.
-if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$DUMP_NODE_TS" --dir "$INTENTIONS_DIR" --out-dir "$TMPD/wait" "$WAIT_ID") >/dev/null; then
   echo "release-wait: dump-node failed for $WAIT_ID" >&2
   exit 1
 fi
@@ -350,7 +350,7 @@ if ! jq '.phase = "done"' "$TMPD/wait/$WAIT_ID.json" > "$TMPD/released.json"; th
   echo "release-wait: could not compose the release edit for $WAIT_ID" >&2
   exit 1
 fi
-if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --file "$TMPD/released.json") >/dev/null; then
+if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/released.json") >/dev/null; then
   echo "release-wait: write-node failed for $WAIT_ID (phase: done)" >&2
   exit 1
 fi

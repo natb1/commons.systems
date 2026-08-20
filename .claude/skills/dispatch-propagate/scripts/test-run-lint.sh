@@ -77,6 +77,18 @@ make_repo() {
   # extensionless dispatch-thing is NET-NEW on the feature branch only, so it
   # is the sole entry in the origin/main...HEAD diff.
   printf '%s\n' 'baseline' > "$REPO/README"
+  # run-lint.sh runs the type-safety escape-hatch check UNCONDITIONALLY, by an
+  # absolute path under the CWD repo's root — and that checker resolves its own
+  # repo root (and its origin/main...HEAD baseline) from its own on-disk
+  # location, which is exactly why run-lint.sh invokes the copy in the tree
+  # under test rather than its own sibling. So the ephemeral repo must carry it,
+  # or every case here fails on a missing file rather than on what it asserts.
+  # Committed in the BASELINE so the feature branch's diff stays exactly
+  # dispatch-thing (and the checker's TS/JS filter makes it a self-noop anyway).
+  mkdir -p "$REPO/.github/scripts"
+  cp "$SCRIPT_DIR/../../../../.github/scripts/check-type-safety-escapes.sh" \
+     "$REPO/.github/scripts/check-type-safety-escapes.sh"
+  chmod +x "$REPO/.github/scripts/check-type-safety-escapes.sh"
   git -C "$REPO" add -A
   git -C "$REPO" commit --quiet -m "baseline"
   git -C "$REPO" push --quiet origin main

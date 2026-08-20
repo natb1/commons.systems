@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -61,10 +61,8 @@ describe("store round-trip", () => {
         is_proxy: false,
       },
       attention: {
-        boost: 4,
-        override: null,
+        boosts: { "1": 4 },
         rationale: "This root draws attention this cycle.",
-        tier: 1,
       },
       phase: null,
       execution: null,
@@ -81,12 +79,12 @@ describe("store round-trip", () => {
     expect(read).toEqual(node);
   });
 
-  it("round-trips a node carrying an override injection", () => {
+  it("round-trips a node carrying boosts in several tiers", () => {
     const dir = tempDir();
     const node: IntentionNode = {
       id: "capped-1",
       kind: "strategy",
-      statement: "A branch capped by an override.",
+      statement: "A branch boosted in more than one tier.",
       owner: "human",
       status: "refining",
       parent: "root-1",
@@ -98,10 +96,8 @@ describe("store round-trip", () => {
       tooling_goals: [],
       success_signal: null,
       attention: {
-        boost: null,
-        override: 0,
-        rationale: "Parked this branch until the blocker clears.",
-        tier: 1,
+        boosts: { "1": 2, "3": 7 },
+        rationale: "Ordinary work now, but it is on the security path.",
       },
       phase: null,
       execution: null,
@@ -116,6 +112,95 @@ describe("store round-trip", () => {
     writeNode(dir, node);
     const read = readNode(dir, node.id);
     expect(read).toEqual(node);
+  });
+
+  /**
+   * Every accepted `attention` spelling — canonical and legacy — must survive
+   * the full write→read cycle. `writeNode` emits `stringify(validateNode(node))`
+   * verbatim, so any spelling that canonicalizes to a shape the parser then
+   * REJECTS writes a file that can never be loaded again (the old
+   * `override: 0` ⇒ `{boosts: {}}` mapping did exactly that). The failure is
+   * silent where it matters: `listNodes` only warns about an unreadable file
+   * and skips it, so the node — and every `blocked_by` gate it holds —
+   * disappears from the graph. This table is the guard: a future shape
+   * migration that reintroduces a write-then-unreadable spelling fails here.
+   */
+  const ATTENTION_SPELLINGS: Array<{
+    name: string;
+    authored: Record<string, unknown>;
+    canonical: { boosts: Record<string, number>; rationale: string };
+  }> = [
+    {
+      name: "the canonical per-tier boosts map",
+      authored: { boosts: { "1": 3, "2": 20 }, rationale: "r" },
+      canonical: { boosts: { "1": 3, "2": 20 }, rationale: "r" },
+    },
+    {
+      name: "a legacy untagged boost",
+      authored: { boost: 3, rationale: "r" },
+      canonical: { boosts: { "1": 3 }, rationale: "r" },
+    },
+    {
+      name: "a legacy tier-tagged boost",
+      authored: { boost: 5, tier: 2, rationale: "r" },
+      canonical: { boosts: { "2": 5 }, rationale: "r" },
+    },
+    {
+      // The shape the live store actually carries: `boost:` set, `override:`
+      // explicitly null.
+      name: "a legacy boost alongside an explicit override: null",
+      authored: { boost: 6, override: null, rationale: "r" },
+      canonical: { boosts: { "1": 6 }, rationale: "r" },
+    },
+    {
+      name: "a legacy positive override",
+      authored: { override: 60, tier: 3, rationale: "r" },
+      canonical: { boosts: { "3": 60 }, rationale: "r" },
+    },
+  ];
+
+  for (const spelling of ATTENTION_SPELLINGS) {
+    it(`round-trips ${spelling.name} through write → read → write`, () => {
+      const dir = tempDir();
+      const input = {
+        id: "attn-1",
+        kind: "strategy",
+        statement: "Attention spelling round-trip.",
+        owner: "human",
+        status: "raw",
+        attention: spelling.authored,
+      } as unknown as IntentionNodeInput; // type-safety-ok: legacy attention spellings intentionally omit fields IntentionNodeInput requires
+
+      writeNode(dir, input);
+      const read = readNode(dir, "attn-1");
+      expect(read.attention).toEqual(spelling.canonical);
+
+      // The emitted shape must itself be re-writable and re-readable: the
+      // second cycle is what a read-modify-write consumer (read-sensors,
+      // write-node, graph-commit, the boost scripts) actually performs.
+      writeNode(dir, read);
+      expect(readNode(dir, "attn-1").attention).toEqual(spelling.canonical);
+    });
+  }
+
+  it("refuses to write a node whose attention claims nothing", () => {
+    const dir = tempDir();
+    const base = {
+      id: "attn-zero",
+      kind: "strategy",
+      statement: "Attention that claims nothing.",
+      owner: "human",
+      status: "raw",
+    };
+    // Legacy `override: 0` ("zero this branch") and a bare empty map are the
+    // two ways to author a claim-nothing block. Both must fail AT THE WRITE,
+    // not produce a file that only fails on the next read.
+    for (const attention of [{ override: 0, rationale: "r" }, { boosts: {}, rationale: "r" }]) {
+      expect(() =>
+        writeNode(dir, { ...base, attention } as unknown as IntentionNodeInput), // type-safety-ok: claim-nothing attention fixtures intentionally omit fields IntentionNodeInput requires
+      ).toThrow();
+    }
+    expect(existsSync(join(dir, "attn-zero.md"))).toBe(false);
   });
 
   it("is lossless for a node with multi-line string fields", () => {

@@ -61,10 +61,10 @@
 # It never writes. No fetch-into-worktree, no `git show > file`, no index
 # touch, no node file rewritten — only `git fetch` (which updates a
 # remote-tracking ref, not the tree) and read-only plumbing. This is also why
-# it cannot be built on dump-node.ts: that tool resolves its intentionsDir
-# from its OWN file location (dump-node.ts:37-40), so it can only ever read
-# the script's checkout's WORKING TREE — the wrong repo and the wrong
-# revision. The `--jq` mode goes through readNodeAtRef
+# it cannot be built on dump-node.ts: that tool reads a WORKING TREE (now the
+# one named by its required `--dir`; it used to resolve its own file location,
+# which was worse still) — never a ref. Verifying what LANDED needs the
+# revision, not the tree. The `--jq` mode goes through readNodeAtRef
 # (lib-store-at-ref.ts) instead, which takes the repo root as a parameter and
 # reads at a ref.
 #
