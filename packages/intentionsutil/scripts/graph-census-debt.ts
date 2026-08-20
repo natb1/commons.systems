@@ -47,6 +47,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodes } from "../src/store.js";
+import { isWaitNode } from "../src/waits.js";
 import { isLedgerEntry } from "../src/schema.js";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 
@@ -120,7 +121,34 @@ export interface CensusDebt {
 
 /** Compute the three debt components and the open-census latch set. */
 export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): CensusDebt {
-  const ids = new Set(nodes.map((n) => n.id));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = new Set(byId.keys());
+
+  /**
+   * tactic-wait-calendar-release: a released WAIT node whose source is still
+   * present and still open is NOT owed-prune debt — it is a live re-arm
+   * target, and the exception below is deliberate, not a bug.
+   *
+   * A WAIT node re-arms IN PLACE: the tick sweep releases it to `phase: done`
+   * when `attributes.wait_until` passes, and on a repeat not-yet-observed
+   * verdict it is re-armed (phase back to null, a fresh `wait_until`, and
+   * `wait_attempts` incremented) rather than re-created. Pruning it in the
+   * released window breaks that design twice over: the `wait_attempts`
+   * counter goes with the file, so the finite attempt cap resets to zero and
+   * becomes unreachable (the wait can never escalate to the author); and
+   * because Rule 13 rejects a dangling `blocked_by`, the prune must also strip
+   * the source's `blocked_by` edge naming the wait, releasing the hold the
+   * wait exists to apply.
+   *
+   * The exception is narrow. A released WAIT whose source is GONE from the
+   * store, or whose source is ITSELF done, has nothing left to hold and is
+   * genuine debt — it stays in `donePresent` for the census to drain.
+   */
+  const isLiveRearmTarget = (n: IntentionNode): boolean => {
+    if (!isWaitNode(n)) return false;
+    const source = byId.get(n.attributes.wait_for as string); // type-safety-ok: isWaitNode already checked wait_for is a string
+    return source !== undefined && source.phase !== "done";
+  };
 
   const donePresent: string[] = [];
   const orphans: string[] = [];
@@ -140,7 +168,13 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
     // is content-blind (it only checks the file is already deleted on disk and
     // existed in HEAD), so nothing downstream can honour a convention the
     // query does not encode. Same shape as isCensusNode's exclusion below.
-    if (n.phase === "done" && !isLedgerEntry(n)) donePresent.push(n.id);
+    // The live-re-arm exemption above (isLiveRearmTarget) is the same shape,
+    // for a different reason: a released WAIT node re-arms in place, so
+    // pruning it in the released window destroys its attempt counter and the
+    // hold it applies.
+    if (n.phase === "done" && !isLedgerEntry(n) && !isLiveRearmTarget(n)) {
+      donePresent.push(n.id);
+    }
 
     const danglingParent = n.parent !== null && !ids.has(n.parent);
     const danglingServes = n.serves.some((s) => !ids.has(s));

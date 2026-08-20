@@ -775,6 +775,51 @@ describe("frozen-node candidates", () => {
     expect(ids).not.toContain("tactic-parent");
   });
 
+  it("an armed WAIT node (phase-null, canonical id) is not draft-selectable", () => {
+    // tactic-wait-calendar-release Unit 4: an armed WAIT node is phase-null
+    // and office_hours-null by construction, so without the router's WAIT
+    // exclusion it would look exactly like an undecomposed draft.
+    const nodes = [
+      tactic({
+        id: "tactic-wait-source",
+        phase: null,
+        attributes: { wait_for: "tactic-source", wait_until: "2026-08-07T00:00:00Z" },
+      }),
+      tactic({ id: "tactic-source", phase: "implement", blocked_by: ["tactic-wait-source"] }),
+    ];
+    // The WAIT itself emits nothing; its source is blocked by the (not-done)
+    // WAIT and also emits nothing.
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("a released WAIT (phase: done) emits no candidate and unblocks its source", () => {
+    const nodes = [
+      tactic({
+        id: "tactic-wait-source",
+        phase: "done",
+        attributes: { wait_for: "tactic-source", wait_until: "2026-08-07T00:00:00Z" },
+      }),
+      tactic({ id: "tactic-source", phase: "implement", blocked_by: ["tactic-wait-source"] }),
+    ];
+    // The done WAIT isn't open (not draft-selectable, not an open tactic), and
+    // its source's blocker is now satisfied (blockersComplete: blocker is
+    // phase "done"), so the source's real `implement` candidate surfaces.
+    expect(candidateIds(nodes)).toEqual(["tactic-source"]);
+  });
+
+  it("a wait_for attribute under a NON-canonical id is treated as an ordinary draft", () => {
+    // isWaitNode is keyed on the canonical id (waitIdFor(wait_for)), not mere
+    // presence of `wait_for` — a decoy id must not be excluded.
+    const nodes = [
+      tactic({
+        id: "tactic-not-the-wait-id",
+        phase: null,
+        attributes: { wait_for: "tactic-source", wait_until: "2026-08-07T00:00:00Z" },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual(["tactic-not-the-wait-id"]);
+  });
+
   it("a parked draft tactic emits no candidate", () => {
     const nodes = [
       tactic({
