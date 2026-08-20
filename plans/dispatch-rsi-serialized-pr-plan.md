@@ -21,12 +21,12 @@ nodes are surveyed, documented and deliberately unassigned — see §"Coverage".
 > Its section is kept only as the **shipped baseline** every later PR builds on:
 > a unit index of what the write path now does, not work to execute.
 >
-> **PR18 is next, and no *node* gates it.** Its one `blocked_by` edge cleared
-> when PR1's nodes closed. The pre-first-PR list is empty apart from one settings
-> change — see §"Retention: the one forward-looking change". But an open PR does
-> reach it: **#3037 deletes `dispatch-graph-census` outright**, which is PR18
-> Unit 1's second measured site. Settle that first — §"In-flight work outside
-> this plan", Step 1 of Bundle 0.
+> **PR18 is next, and nothing gates it.** Its one `blocked_by` edge cleared when
+> PR1's nodes closed. The pre-first-PR list is empty apart from one settings
+> change — see §"Retention: the one forward-looking change". The one open PR that
+> appeared to reach it, **#3037**, was settled on 2026-08-20: it does not carry
+> the defect, it carries the fix, so it is deferred to A3 and **PR18 Unit 1
+> narrows to a single site**. See Bundle 0 step 1. PR18 can start.
 
 ---
 
@@ -198,7 +198,7 @@ Two populations came through that filter untouched:
 
 | Class | Count | State | What it does to this plan |
 |---|---|---|---|
-| **A — open draft PRs in charter** | **20** of 30 open | 16 `CONFLICTING`, 4 `MERGEABLE`, all but one draft; oldest untouched since 2026-07-28 | Two are hard blockers (#3037, #3023). The rest move anchors under PR4/PR5/PR9/PR12/PR15/PR16/PR18/PR19/PR20 |
+| **A — open draft PRs in charter** | **20** of 30 open | 16 `CONFLICTING`, 4 `MERGEABLE`, all but one draft; oldest untouched since 2026-07-28 | Partitioned 12 A1 / 4 A2 / 4 A3. **#3037 was a presumed hard blocker and is not** (Bundle 0 step 1). They move anchors under PR4/PR5/PR9/PR12/PR15/PR16/PR18/PR19/PR20 |
 | **B — planned nodes, no PR** | **20** of 55 | 19 at `phase: implement`, 1 at `qa`; plan body written, **no branch, no commits, no PR** | Invisible today; **tick-selectable the moment the sentinel lifts**, which would violate ground rule 1 |
 
 Class B is the one this plan had no way to see. Those nodes are not stalled work
@@ -236,13 +236,19 @@ verification rather than a stale branch's. Land-first is reserved for PRs that
 are already `MERGEABLE` and cheap; a third class is sequenced *after* the plan
 because it rewrites node content en masse.
 
-**A1 — close and absorb (13).** Close the PR with a comment pointing at this
-section, leave the node at `phase: implement`, delete the branch, and add the
-node to the named PR's `### Nodes closed` list and its `### Scope`.
+**A1 — close and absorb (12, none yet closed).** *Was 13; #3037 was reclassified
+to A3 on 2026-08-20 after verification — see Bundle 0 step 1.* The intended
+treatment: close the PR with a comment pointing at this section, leave the node
+at `phase: implement`, delete the branch, and add the node to the named PR's
+`### Nodes closed` list and its `### Scope`.
+
+> **Each close must pass the redundancy test in Bundle 0 step 5 first.** The one
+> A1 disposition that was verified in full was refuted, and two spot-checks of
+> the rest fail as written. Treat the table below as *candidates* with a named
+> target, not as a settled disposition.
 
 | PR | Node | Absorb into | Why |
 |---|---|---|---|
-| **#3037** | `tactic-census-scripted-tick` | **PR18** (+PR15, PR4, PR5, PR8 anchors) | **Deletes `dispatch-graph-census`** — PR18 Unit 1's second measured site — and ports the behavior to `packages/intentionsutil/scripts/census-tick.ts`. The defect survives the port at a new path |
 | **#3023** | `tactic-strategy-fingerprint-stamp-coverage` | **PR16** (as a new unit, ahead of Unit 8) | This plan already names it a hard dependency of PR16 Unit 8 in two places. Absorbing converts a wait into a unit |
 | **#3002** | `tactic-autonomous-ci-pending-liveness-bound` | **PR5** | `reconcile-graph-review-stall` is PR5's *entire* scope surface. #3002 also *adds* per-tick `gh` calls to the file PR5 exists to make cheaper — landing it first would defeat PR5's own measurement |
 | **#3064** | `tactic-graph-review-exclusion-stall-recovery-main-qa-regression` | **PR5** | Same file, same region as #3002, and the two conflict with each other. One PR converges all three |
@@ -266,14 +272,16 @@ carry, and merging retires its anchor drift permanently.
 | **#2805** | `tactic-office-hours-snapshot-wire-contract` | No plan-file overlap at all. **Parked** — this plan's other named pre-PR sitting. Resolve the sitting, then land |
 | **#2879** | `tactic-align-audit-skill` | No file overlap with PR20. Lands a single new skill file. Related to PR20's required pre-PR sitting `tactic-align-audit-legacy-review` only by subject, not by a declared edge |
 
-**A3 — sequence after this plan's bookkeeping (3).** These rewrite node
+**A3 — sequence after this plan's bookkeeping (4).** The first three rewrite node
 *content* in bulk. Landing any of them mid-plan invalidates every
 `graph-commit --base` CAS manifest pinned before it — the hazard §"Closing nodes
 after each merge" already warns about — and would collide with roughly a hundred
-node closures still to run.
+node closures still to run. The fourth, #3037, is here for a different reason:
+it is real, un-reimplemented work that edits `graph-commit`.
 
 | PR | Node | Bulk change |
 |---|---|---|
+| **#3037** | `tactic-census-scripted-tick` | *(moved from A1, 2026-08-20.)* 1,582 added lines / 15 files: retires `dispatch-graph-census` for `dispatch-census-tick` + `census-tick.ts` + `census-decide.ts`, with two new test suites. **No unit in this plan reimplements it.** Edits `graph-commit` (+12/−5) and `dispatch-select-tick`, so it lands after this plan's closures. It also *carries the fix* for what PR18 Unit 1 called its second site — see Bundle 0 step 1 |
 | **#3093** | `tactic-attention-per-tier-boost-migration` | Rewrites **92** `intentions/*.md` frontmatters; migrates `attention.boost`+`tier` → `attention.boosts`. Touches two nodes this plan closes. This plan cites its *branch* once but never tracked it as work |
 | **#2856** | `tactic-mount-schema` | `schema.ts`, `attention.ts`, `goals.ts`, 13 test files |
 | **#3040** | `tactic-delegation-classification-derivation` | `schema.ts`, `attention.ts`, plus 22 `delegation-*.md` nodes |
@@ -334,14 +342,42 @@ tells you to re-locate; this is why.
 
 Ordered so each step reduces the next one's cost. No step opens a new PR.
 
-1. **Settle #3037 against PR18 Unit 1.** This is the one decision that cannot be
-   deferred, because PR18 is position 1 and #3037 deletes its target file.
-   Recommended: **close #3037, absorb `tactic-census-scripted-tick` into PR18**,
-   and respecify Unit 1's second site against the ported behavior. Read
-   `census-tick.ts`'s `spliceBody()` first — its own comment states it does what
-   `dispatch-graph-census` did, so the defect and the fix both transfer.
-   *Do not* land #3037 first and then start PR18: it is `CONFLICTING`, two weeks
-   stale, and also shifts `graph-commit` anchors PR15 and PR18 Unit 5 depend on.
+1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
+   refuted by the reading it ordered.** This step said to read
+   `census-tick.ts`'s `spliceBody()` first, then close #3037 and absorb
+   `tactic-census-scripted-tick` into PR18. The reading was done. It refutes the
+   premise, and the disposition is reversed:
+
+   > **The defect does not survive the port.** On #3037's branch,
+   > `packages/intentionsutil/scripts/census-tick.ts:163` `spliceBody()` has
+   > **exactly one call site** — `:327`, immediately after `writeNode(...)`, on a
+   > path guarded twelve lines earlier by
+   > `if (existsSync(join(args.dir, `${defectId}.md`))) { …; continue; }`. It can
+   > therefore only ever splice a node it minted microseconds before, whose body
+   > is the generated `# <statement>` placeholder. Its own doc comment says so:
+   > *"`writeNode` only generates the placeholder for a brand-new file (it
+   > preserves an existing body verbatim), so this runs immediately after the
+   > mint."* **#3037 is not a carrier of the defect — it is the fix for it.** The
+   > `existsSync` skip is precisely the guard the main-side script lacks.
+
+   Two consequences, both applied to this document:
+
+   - **#3037 moves A1 → A3** (sequence after the plan's bookkeeping). It is not
+     a stale draft whose diff a plan PR re-authors; it is 1,582 added lines
+     across 15 files — two new TypeScript entry points, two new test suites —
+     that **no unit in this plan reimplements**. Closing it would discard the
+     work and hand PR18 a scripted-census-tick charter it does not have. Its A3
+     hazard is the ordinary one: it edits `graph-commit` (+12/−5) and
+     `dispatch-select-tick`, so land it after this plan's node closures, not
+     during them.
+   - **PR18 Unit 1 narrows to one measured site** — see §PR18. The second site,
+     `dispatch-graph-census:133-140`, stays on `main` untouched for the duration
+     of this plan, which is safe because **the census does not run while the
+     sentinel holds**: it is not among the six things a paused tick does
+     (§"The freeze"). Its fix already exists, implemented and tested, in #3037.
+
+   **The precedent this sets for step 5 is the opposite of the one intended.**
+   Verify before closing — see the gate added there.
 
 2. **Land the four A2 PRs** (#3052, #3084, then #2805 and #2879 after their
    sittings). Cheapest anchor drift on the board, and #3052 re-widens the freeze
@@ -351,13 +387,98 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    Unblocked in substance since #3051 merged. Landing it first puts the rebase
    cost on the smaller of the two diffs.
 
-4. **Run the two parked pre-PR sittings** — `tactic-clarification-citation-ids`
-   and `tactic-office-hours-snapshot-wire-contract`. Both are already on this
-   plan's pre-PR list; both now also gate a class-A disposition (#3041 absorb,
-   #2805 land).
+4. **Clear the two parks — they are not "sittings".** *Corrected 2026-08-20 after
+   reading both `office_hours` blocks.* This step called them pre-PR sittings and
+   implied `/office-hours` design sessions. Neither is. Neither appears in
+   §"Pre-PR sessions (no diff)". Both are **operational parks**, and they need
+   different handling:
 
-5. **Close the remaining 12 A1 PRs and fold their nodes in.** Mechanical once
-   step 1 sets the precedent. For each: close with a pointer to this section,
+   - **`tactic-office-hours-snapshot-wire-contract` (#2805) — its blocker is
+     already gone.** Park reason (2026-08-03): a `/review-fix` pass could not
+     invoke the code-review instrument, so the PR carries no Lane-A review — a
+     coverage gap, explicitly "rather than a diff defect". Its own recommendation
+     says the highest-value action is not on this PR but on the instrument fix,
+     `tactic-review-code-review-invocation-contract` / **#3007** — and **#3007
+     merged 2026-08-03**. So the systemic cause is fixed and the park's
+     suggested order ("land the instrument fix, then clear this park") is
+     already half-executed. What remains is a judgement the author still owns:
+     **accept the Lane-A coverage gap on this PR, or run `/code-review max
+     --fix` against the branch first.** The park's own text frames per-PR review
+     as "the expensive path". Two gotchas it records, both still live: run
+     `transition-node` from a main-based checkout, and check scope freshness
+     first or `transition-node` **demotes the node to `implement`** and loses
+     the review work.
+   - **`tactic-clarification-citation-ids` (#3041) — the park's alarm is stale;
+     no content is at risk.** Park reason (2026-08-10) is a
+     `standdown-winner-dead-work-unpushed`: a session stood down for a winner no
+     longer registered with the Claude daemon, and that winner "left work
+     UNPUSHED" at `837b1bf6` in
+     `.claude/worktrees/tactic-clarification-citation-ids`. **Measured
+     2026-08-20 — the unpushed set contains no authored work:**
+
+     ```
+     git log --oneline --no-merges origin/main..837b1bf6 \
+       --not origin/tactic-clarification-citation-ids
+     # (empty)
+     ```
+
+     All six authored commits — Units 1/2/3 of the citation conversion plus the
+     fingerprint-stability and type-safety-marker fixes — are **already on
+     `origin/tactic-clarification-citation-ids`**. The three commits the park
+     names (`837b1bf6`, `4b145b91`, `d37dfa90`) are all
+     `Merge remote-tracking branch 'origin/main'` merges; they carry no original
+     content. The worktree head is *behind* the remote branch head
+     (`60260eb4`), not ahead of it in substance.
+
+     So the push-first dance the recommendation prescribes is unnecessary. What
+     still applies: release the holding session with `claude stop <job-id>`,
+     **never `claude rm`** — that deletes the session *and* its worktree — then
+     `clear-park`. A worktree-isolated session cannot do the worktree half:
+     `git -C` to a sibling is refused (`.claude/rules/sandbox.md`), and
+     `claude agents --json` needs `dangerouslyDisableSandbox` or it silently
+     returns `[]` and reports the worktree free. Run it from the main checkout.
+
+     > **This is the second stale park alarm found in one pass.** #2805's blocker
+     > was fixed 17 days before this reading; #3041's "unpushed work" was already
+     > pushed. Re-measure a park's stated cause before acting on its
+     > recommendation — the recommendation text is a snapshot of the moment the
+     > park was written, and nothing re-verifies it.
+
+5. **Close the remaining 12 A1 PRs and fold their nodes in — NOT mechanical.
+   Gate each one.** This step originally read "mechanical once step 1 sets the
+   precedent". Step 1 set the opposite precedent, so a gate is required before
+   any close. **Nothing in A1 has been closed as of 2026-08-20.**
+
+   > **The redundancy test.** The A1 rule assumes the draft's diff is worthless
+   > because *the plan PR re-authors the same lines*. That is a claim about the
+   > **plan PR's units**, not about file-name overlap, and it must be checked per
+   > PR before the close:
+   >
+   > 1. List the draft's changed files (`gh pr view <n> --json files`).
+   > 2. For each, find the unit in the target section's `### Scope` that
+   >    re-authors that region. Not the file — the *region*.
+   > 3. Any file with no such unit is **work the close would destroy** and the
+   >    plan would silently owe. Either write the unit that covers it, or
+   >    reclassify the PR to A3.
+   >
+   > **The 12 carry ~10,900 added lines between them.** Two spot-checks already
+   > fail the test as written:
+   >
+   > - **#3002 → PR5.** PR5's `### Scope` is six *localized efficiency* edits at
+   >   `reconcile-graph-review-stall:146/:186/:214/:220` plus a conflict lane and
+   >   a base pin — it does not re-author the file. #3002 is 911 lines across 10
+   >   files and **adds behavior** (a CI-pending strike counter, a `CI_STALL_IDS`
+   >   hold block, a new `hold-node-decide.ts`). Six of its ten files appear
+   >   nowhere in PR5's scope. Absorbing it makes PR5 a different PR than the one
+   >   whose **Recommended model: sonnet** was chosen for "five localized fixes".
+   > - **#3064 → PR5.** Same file, but its hunks are at `:42/:59/:98/:221` —
+   >   three of the four outside every anchor PR5 names — plus
+   >   `apply-fix-state.ts` and `transitions.ts`, which PR5 does not touch.
+   >
+   > The *conflict-lane* half of the PR5 rationale survives: three producers of
+   > one policy should converge in one PR. The rest does not.
+
+   For any PR that **passes** the gate: close with a pointer to this section,
    delete the branch, add the node id to the target PR's `### Nodes closed`, and
    add its surface to that PR's `### Scope`.
 
@@ -375,10 +496,18 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    sentinel set, finish the plan, and lift it once §"Closing nodes after each
    merge" has run for the last PR. Ground rule 1 has no other enforcement.
 
-**After Bundle 0** the plan's node total rises from 117 to **131** (+13 class-A
-absorbed, +1 `mainqa-record-time-routing` sequenced), with 3 class-A PRs and 3
-class-B nodes deferred to post-plan, 4 PRs landed, and 10 out-of-charter PRs
-untouched.
+**After Bundle 0** — *projected when written; revised 2026-08-20 after steps 1
+and 5 were executed.* The original projection was 117 → **131** nodes (+13
+class-A absorbed, +1 `mainqa-record-time-routing` sequenced). It no longer holds:
+**#3037's absorption was refuted**, and the remaining 12 are now gated
+candidates rather than settled closes, so the class-A contribution is between
+**0 and +12**, not a fixed +13. The floor is therefore **118** (117 + the
+sequenced `mainqa-record-time-routing`) and the ceiling **130**. Class-A PRs
+deferred to post-plan rose from 3 to **4**. What did not change: 4 PRs to land,
+3 class-B nodes deferred, 10 out-of-charter PRs untouched.
+
+> **Do not quote 131.** The number is now an output of the step-5 gate, not an
+> input to it. Recompute it when the gate has been run on all 12.
 
 ---
 
@@ -465,12 +594,12 @@ never mid-window.
 **Bundle 0 is new and displaces Bundle 1c from the front.** It opens no PR: it
 lands four already-mergeable PRs, closes thirteen conflicting drafts whose nodes
 fold into the sections above, sequences one node as its own PR, and restates that
-the sentinel is held to the end (ground rule 4). It goes first for one mechanical
-reason — **#3037 deletes
-`dispatch-graph-census`, which is Bundle 1c's Unit 1 target.** Starting 1c
-without settling that means either respecifying the unit mid-flight or landing a
-fix into a file another open PR deletes. Full census and per-item disposition:
-§"In-flight work outside this plan".
+the sentinel is held to the end (ground rule 4). It went first for one mechanical
+reason — **#3037 deletes `dispatch-graph-census`, which is Bundle 1c's Unit 1
+target** — and that reason is now discharged: step 1 was executed on 2026-08-20,
+#3037 was deferred rather than closed, and Bundle 1c's Unit 1 was narrowed to the
+site that survives. Full census and per-item disposition: §"In-flight work
+outside this plan".
 
 Bundles 3 and 4 can swap or overlap — they share no files. Bundle 4 comes before
 3 only because Bundles 5 and 2b depend on it.
@@ -2907,15 +3036,18 @@ the `execution.completion` object — **not** `resolved_by`, which is not a sche
 
 # PR18 — Durable-layer write fence
 
-> **In-flight overhang (2026-08-20) — settle before starting.** §"In-flight work
-> outside this plan" assigns this PR two class-A absorptions:
-> **#3037** (`tactic-census-scripted-tick`) — **deletes
-> `dispatch-graph-census`**, Unit 1's second measured site, porting the behavior
-> to `packages/intentionsutil/scripts/census-tick.ts`. Unit 1 must be respecified
-> against the port; the defect transfers.
+> **In-flight overhang — settled 2026-08-20 for #3037, open for #3054.**
+> **#3037** (`tactic-census-scripted-tick`) was to be closed and absorbed here.
+> **It is not.** Reading `census-tick.ts`'s `spliceBody()` showed the defect does
+> **not** survive the port — the ported function is mint-only behind an
+> `existsSync` skip, i.e. it is the fix. #3037 moved to A3 (land after this
+> plan). **Unit 1 loses its second site**, which stays on `main` untouched;
+> see the note in Unit 1 and Bundle 0 step 1.
 > **#3054** (`tactic-blocked-session-invisible-to-census`) — Unit 4's
-> `dispatch-fleet-alarm` anchors. Both are `CONFLICTING` drafts: close and
-> absorb, do not land first.
+> `dispatch-fleet-alarm` anchors. Still a `CONFLICTING` draft, still a close-and-
+> absorb *candidate*, but it must pass Bundle 0 step 5's redundancy test first:
+> it is 1,325 lines across 10 files, six of them test suites this PR has no unit
+> for.
 
 **Recommended model: opus** — four of the five units decide what an unattended
 writer is *permitted* to do to durable content, and getting the fence wrong in
@@ -2954,7 +3086,7 @@ hundred node closures in this plan still run through that fence.
 ### Scope
 
 **Unit 1 — an unattended body write must be an append or a splice, never a
-wholesale replace.** Two measured sites:
+wholesale replace.** **One live site** *(was two — revised 2026-08-20)*:
 
 - `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding:743-761` —
   `splice_body()` keeps the frontmatter and **replaces everything after it**. It
@@ -2964,8 +3096,19 @@ wholesale replace.** Two measured sites:
   create authors its own body — leave it), `:1223` the **recurrence** path, and
   `:1027` the **resolved** path. The latter two run against a node that already
   exists.
-- `.claude/skills/dispatch-propagate/scripts/dispatch-graph-census:133-140` —
-  the equivalent on every run after the first.
+> **Dropped: `dispatch-graph-census:133-140`.** It was listed here as "the
+> equivalent on every run after the first". That description is wrong, and the
+> site is out of scope for this PR. Reading it (2026-08-20): the script computes
+> `PRIOR_BLOB` from `origin/main:intentions/$NODE_ID.md` and its own comment
+> calls absence "the EXPECTED born-fresh case" and presence "the rare same-day
+> id-collision race". So the wholesale replace only reaches a pre-existing body
+> **on that race**, not on every subsequent run. Three reasons to leave it:
+> **(1)** the fix already exists in #3037, which adds the `existsSync` skip the
+> bash lacks; **(2)** `dispatch-graph-census` does not run while the sentinel
+> holds — the census is not one of the six things a paused tick does, so the
+> race cannot fire during this plan; **(3)** fixing it here writes into a file
+> #3037 deletes, which is the exact "land a fix into a file another open PR
+> deletes" hazard Bundle 0 warns about. Re-check when #3037 lands (A3).
 
 Why this is substance and not bookkeeping: the body is half of
 `tacticScopeFingerprint` — `packages/intentionsutil/src/router.ts:131`
