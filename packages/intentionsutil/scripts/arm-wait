@@ -73,8 +73,20 @@
 # wait-node-decide.ts's own refusals (a bad `--until`, an `--until` not after
 # now, an `--until` beyond the wait horizon, an EXTEND that would keep the wait
 # armed past that horizon, or a wait node that already carries a cap-park
-# `office_hours` and must be `clear-park`ed before it can re-arm). Nothing is
-# written on any of those.
+# `office_hours` and must be `clear-park`ed before it can re-arm).
+#
+# Write-failure rollback (mirrors release-wait): the origin/main refreshes are
+# themselves writes, so the rollback is armed BEFORE them — every non-zero exit
+# from that point on, the exit-2 refusals included, restores
+# intentions/<source>.md and intentions/<wait-id>.md to the state this script
+# FOUND them in, from a PRE-REFRESH copy rather than from the origin/main blob
+# (restoring origin/main's bytes would leave them behind as a local
+# modification in the far-behind checkout this script routinely runs from). The
+# restore is itself conditional on the checkout still being the one this script
+# wrote — HEAD unmoved AND the file still hashing to what this script wrote —
+# because graph-commit has failure paths that commit locally or `git reset
+# --hard` before exiting non-zero, and restoring over those would be an
+# uncommitted REVERT of an already-committed arm.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -144,6 +156,104 @@ run_decide() {
   fi
 }
 
+TMPD="$(mktemp -d)" || { echo "arm-wait: mktemp -d failed" >&2; exit 1; }
+
+# --- Rollback state, captured BEFORE the first write --------------------------
+# The origin/main refreshes below are already mutations of the working tree, so
+# the rollback has to be armed BEFORE them — otherwise every failure between the
+# first refresh and the land (including wait-node-decide's own exit-2 refusals)
+# leaves a rewritten intentions/*.md behind, and graph-commit's
+# assert_clean_outside_ids then trips for every OTHER unrelated node.
+#
+# The restore target is the PRE-REFRESH copy, never the origin/main blob:
+# restoring origin/main's bytes into the far-behind checkout this script
+# routinely runs from would leave them there as a local modification (the same
+# reasoning release-wait's header records for its own TMPORIG).
+SOURCE_MUTATED=0
+WAIT_MUTATED=0
+SOURCE_ORIG_EXISTED=0
+WAIT_ORIG_EXISTED=0
+SOURCE_ORIG="$TMPD/orig-source.md"
+WAIT_ORIG="$TMPD/orig-wait.md"
+SOURCE_EXPECT_BLOB=""
+WAIT_EXPECT_BLOB=""
+WAIT_ID=""
+# HEAD_BEFORE pins the commit the checkout was on when the pre-refresh copies
+# were taken; the rollback declines once HEAD has moved (graph-commit has
+# failure paths that commit locally or `git reset --hard` before exiting
+# non-zero, and restoring over those would be an uncommitted REVERT of an
+# already-committed arm). An empty value (unborn HEAD, git unavailable)
+# disables the comparison rather than failing the rollback.
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+
+if [[ -f "$INTENTIONS_DIR/$SOURCE_ID.md" ]]; then
+  if ! cp "$INTENTIONS_DIR/$SOURCE_ID.md" "$SOURCE_ORIG"; then
+    echo "arm-wait: could not capture the pre-refresh copy of intentions/$SOURCE_ID.md" >&2
+    rm -rf "$TMPD"
+    exit 1
+  fi
+  SOURCE_ORIG_EXISTED=1
+fi
+
+# restore_one <id> <pre-refresh-copy> <existed> <expect-blob>
+restore_one() {
+  local id="$1" orig="$2" existed="$3" expect="$4" blob_now
+  # EXPECT_BLOB is only set once this script's own writes have landed on disk;
+  # before that there is nothing to compare against.
+  if [[ -n "$expect" ]]; then
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$id.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && "$blob_now" != "$expect" ]]; then
+      echo "arm-wait: intentions/$id.md is no longer the content arm-wait wrote ($blob_now != $expect) — graph-commit already committed or reset it; leaving it in place rather than restoring the pre-refresh copy" >&2
+      return 0
+    fi
+  fi
+  if [[ "$existed" == 1 ]]; then
+    if cp "$orig" "$INTENTIONS_DIR/$id.md.rollback"; then
+      mv "$INTENTIONS_DIR/$id.md.rollback" "$INTENTIONS_DIR/$id.md"
+    else
+      rm -f "$INTENTIONS_DIR/$id.md.rollback"
+      echo "arm-wait: CRITICAL — could not restore intentions/$id.md from its pre-refresh copy; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  elif git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$id.md" >/dev/null 2>&1; then
+    # Absent at capture time but TRACKED now: graph-commit reset the checkout
+    # onto an origin/main where this node file exists. `rm -f` would manufacture
+    # a deletion of a live node file; restore from the index instead.
+    if ! git -C "$REPO_ROOT" checkout -- "intentions/$id.md"; then
+      echo "arm-wait: CRITICAL — intentions/$id.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+    fi
+  else
+    rm -f "$INTENTIONS_DIR/$id.md"
+  fi
+  return 0
+}
+
+arm_wait_rollback() {
+  local head_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "arm-wait: HEAD moved from $HEAD_BEFORE to $head_now during the arm — graph-commit already committed or reset the node files, so the pre-refresh copies are no longer the correct restore target; leaving them as graph-commit left them" >&2
+    return 0
+  fi
+  if [[ "$SOURCE_MUTATED" == 1 ]]; then
+    restore_one "$SOURCE_ID" "$SOURCE_ORIG" "$SOURCE_ORIG_EXISTED" "$SOURCE_EXPECT_BLOB"
+  fi
+  if [[ "$WAIT_MUTATED" == 1 && -n "$WAIT_ID" ]]; then
+    restore_one "$WAIT_ID" "$WAIT_ORIG" "$WAIT_ORIG_EXISTED" "$WAIT_EXPECT_BLOB"
+  fi
+  return 0
+}
+
+# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
+# owns both files' rollback AND the temp cleanup — in that order, since the
+# rollback reads the pre-refresh copies out of $TMPD.
+trap '
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    arm_wait_rollback
+  fi
+  rm -rf "$TMPD"
+' EXIT
+
 # --- Fresh-origin/main refresh (source) --------------------------------------
 # Refresh the LOCAL source file from origin/main BEFORE reading it, so the
 # blocked_by mutation lands on top of the current landed content rather than a
@@ -159,6 +269,7 @@ if ! SOURCE_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$SOURC
   echo "arm-wait: intentions/$SOURCE_ID.md does not exist on origin/main — cannot arm a wait for a node that is not landed" >&2
   exit 1
 fi
+SOURCE_MUTATED=1
 if ! git -C "$REPO_ROOT" show "origin/main:intentions/$SOURCE_ID.md" > "$INTENTIONS_DIR/$SOURCE_ID.md"; then
   echo "arm-wait: could not refresh intentions/$SOURCE_ID.md from origin/main" >&2
   exit 1
@@ -184,6 +295,14 @@ WAIT_ID="$(jq -r '.wait_id' <<<"$DECIDE_OUT")"
 WAIT_BLOB=""
 if git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$WAIT_ID.md" >/dev/null 2>&1; then
   WAIT_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$WAIT_ID.md")"
+  if [[ -f "$INTENTIONS_DIR/$WAIT_ID.md" ]]; then
+    if ! cp "$INTENTIONS_DIR/$WAIT_ID.md" "$WAIT_ORIG"; then
+      echo "arm-wait: could not capture the pre-refresh copy of intentions/$WAIT_ID.md" >&2
+      exit 1
+    fi
+    WAIT_ORIG_EXISTED=1
+  fi
+  WAIT_MUTATED=1
   if ! git -C "$REPO_ROOT" show "origin/main:intentions/$WAIT_ID.md" > "$INTENTIONS_DIR/$WAIT_ID.md"; then
     echo "arm-wait: could not refresh intentions/$WAIT_ID.md from origin/main" >&2
     exit 1
@@ -210,40 +329,10 @@ if [[ -n "$WAIT_BLOB" && "$DISPOSITION" == "NONE" ]] \
   exit 1
 fi
 
-TMPD="$(mktemp -d)" || { echo "arm-wait: mktemp -d failed" >&2; exit 1; }
-# MUTATED gates the rollback: only undo the on-disk writes if this script
-# actually began writing (armed immediately before the first mutation below). A
-# pre-mutation failure must not touch files this script never wrote. A failed
-# land must leave NO dirty intentions/*.md — otherwise graph-commit's
-# assert_clean_outside_ids guard trips for every OTHER unrelated node on the
-# next run.
-MUTATED=0
-# Bash traps REPLACE (not stack) on the same signal, so this single EXIT trap
-# owns the temp cleanup AND both files' rollback: restore each pre-existing file
-# from the immutable blob SHA captured before the mutation (not the moving
-# origin/main ref), and delete a wait file that was born fresh in this run.
-trap '
-  rc=$?
-  rm -rf "$TMPD"
-  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
-    if git -C "$REPO_ROOT" show "$SOURCE_BLOB" > "$INTENTIONS_DIR/$SOURCE_ID.md.rollback"; then
-      mv "$INTENTIONS_DIR/$SOURCE_ID.md.rollback" "$INTENTIONS_DIR/$SOURCE_ID.md"
-    else
-      rm -f "$INTENTIONS_DIR/$SOURCE_ID.md.rollback"
-    fi
-    if [[ -n "$WAIT_BLOB" ]]; then
-      if git -C "$REPO_ROOT" show "$WAIT_BLOB" > "$INTENTIONS_DIR/$WAIT_ID.md.rollback"; then
-        mv "$INTENTIONS_DIR/$WAIT_ID.md.rollback" "$INTENTIONS_DIR/$WAIT_ID.md"
-      else
-        rm -f "$INTENTIONS_DIR/$WAIT_ID.md.rollback"
-      fi
-    else
-      rm -f "$INTENTIONS_DIR/$WAIT_ID.md"
-    fi
-  fi
-' EXIT
-
-MUTATED=1
+# The wait file is written below whether or not the origin/main refresh touched
+# it (a born-fresh NONE wait is created by write-node), so arm its rollback here
+# too. Idempotent: the REARM/EXTEND path already set this before its refresh.
+WAIT_MUTATED=1
 
 # --- Write the wait node -----------------------------------------------------
 WAIT_MD="$INTENTIONS_DIR/$WAIT_ID.md"
@@ -347,6 +436,11 @@ if [[ -n "$WAIT_BLOB" ]]; then
   COMMIT_ARGS+=(--base "$WAIT_ID=$WAIT_BLOB")
 fi
 IDS+=("$WAIT_ID")
+
+# Pin what this script wrote, so the rollback can tell its own bytes apart from
+# a graph-commit failure path that committed or reset the file first.
+SOURCE_EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$SOURCE_ID.md" 2>/dev/null || true)"
+WAIT_EXPECT_BLOB="$(git -C "$REPO_ROOT" hash-object -- "intentions/$WAIT_ID.md" 2>/dev/null || true)"
 
 if ! (cd "$REPO_ROOT" && "$GRAPH_COMMIT" "${COMMIT_ARGS[@]}" \
         -m "graph: arm $WAIT_ID for $SOURCE_ID ($DISPOSITION)" "${IDS[@]}"); then
