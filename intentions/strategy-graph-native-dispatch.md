@@ -2021,8 +2021,8 @@ clarifications:
       the Clarification interface requires {question, answer}, so the
       instruction was never mechanically executable — is UNAFFECTED and still
       owed. The original ruling, preserved verbatim for provenance, follows.
-      (Recorded 2026-07-28 /align-strategy interview.) Standing requirement:
-      a per-node tactic-target session MAY append clarifications entries to the
+      (Recorded 2026-07-28 /align-strategy interview.) Standing requirement: a
+      per-node tactic-target session MAY append clarifications entries to the
       serving strategy, and may touch NOTHING else on it — never
       rounds/count/last_completed/last_aligned, never statement, rationale,
       attributes.conditions, success_signal, or any edge. write-path.md:168-171
@@ -6168,16 +6168,16 @@ clarifications:
       (virtue/strategy/tradition/delegation statement, rationale, clarification
       text), so a positive allowlist built from strategyFingerprint's six fields
       leaves unprotected the very field the guard exists for. attributes is
-      graph-semantics-bearing — validateGraph rules key on attributes.goal_layer,
-      attributes.status_vocabulary and attributes.tier — and is written onto
-      durable nodes today by /grounding-research. owner and pace_exempt are
-      authority fields, so an unrestricted EDIT-STATE reading would let an
-      autonomous lane flip owner from human to ai unopposed. Under the negative
-      definition a field added to the schema tomorrow defaults to SUBSTANCE,
-      which is the fail-safe direction. The two fingerprints remain NARROWER
-      readings layered on top: strategyFingerprint's six-field allowlist
-      (packages/intentionsutil/src/router.ts:102-112) is what freezes CHILDREN,
-      and tacticScopeFingerprint's pair, statement plus markdown body
+      graph-semantics-bearing — validateGraph rules key on
+      attributes.goal_layer, attributes.status_vocabulary and attributes.tier —
+      and is written onto durable nodes today by /grounding-research. owner and
+      pace_exempt are authority fields, so an unrestricted EDIT-STATE reading
+      would let an autonomous lane flip owner from human to ai unopposed. Under
+      the negative definition a field added to the schema tomorrow defaults to
+      SUBSTANCE, which is the fail-safe direction. The two fingerprints remain
+      NARROWER readings layered on top: strategyFingerprint's six-field
+      allowlist (packages/intentionsutil/src/router.ts:102-112) is what freezes
+      CHILDREN, and tacticScopeFingerprint's pair, statement plus markdown body
       (router.ts:131-133), is what the chain-of-custody gate reads, because the
       body is the plan a worker executes. FREEZE COVERAGE IS THEREFORE NARROWER
       THAN SUBSTANCE, deliberately: a rationale edit is a substance write that
@@ -6204,35 +6204,35 @@ clarifications:
       own, and it never un-parks. The earlier draft listed the skill itself as
       an attended CREATE surface, which named a non-writer as a write surface;
       the attended surface in that lane is the human's subsequent write.
-      AUTONOMOUS means no human rules on it: /align-tactics,
-      qa-fix, review-fix, fix-checks, dispatch-diagnose-main, dispatch-conflict,
+      AUTONOMOUS means no human rules on it: /align-tactics, qa-fix, review-fix,
+      fix-checks, dispatch-diagnose-main, dispatch-conflict,
       dispatch-eval-finding, dispatch-graph-census, hold-node, resolve-hold,
       resolve-park, hold-node-decide, qa-main, context-chunks,
       /grounding-research, transition-node, reconcile-graph and the tick sweeps.
-      An autonomous entry point may CREATE
-      tactics only, may EDIT-STATE freely, and may NOT EDIT-SUBSTANCE a
-      durable-layer node (virtue, strategy, delegation, kind, tradition). The
-      weaker reading of 'attended' — that a human merely typed the command — was
-      considered and REJECTED by the author: under it nearly every lane counts
-      as attended, including lanes where no human ever reads the resulting text,
-      which is the opposite of what the rule is for. THE INVARIANT WAS AUDITED
-      BEFORE BEING RECORDED, on the author's explicit ruling, precisely so this
-      round would not repeat the previous round's defect of recording an
-      unmeasured control. IT DOES NOT HOLD TODAY. Four violations, recorded
-      here rather than papered over, each with its ruled disposition — see the
-      sibling clarification 'Which lanes violate the autonomous-substance
-      invariant today'. TWO HONEST LIMITS ON THIS CENSUS, both from the
-      2026-08-15 review. First, the author's ruling was to classify EVERY
-      write-node call site as CREATE / EDIT-SUBSTANCE / EDIT-STATE; the sites
-      are named above and the four violators are classified, but a
-      per-site classification of all of them is NOT recorded here and is owed.
-      Second, a prose census decays the day it lands — that is precisely the
-      weakness that made the previous round's five-writer count wrong, and
-      re-recording it as a longer prose list does not fix it. The durable form
-      is a machine-readable roster mapping each write site to its operations and
-      attendance class, linted against the actual write-node caller set so a new
-      caller cannot be added silently. Both are carried as owed work on
-      tactic-finding-search-all-producers rather than claimed as done."
+      An autonomous entry point may CREATE tactics only, may EDIT-STATE freely,
+      and may NOT EDIT-SUBSTANCE a durable-layer node (virtue, strategy,
+      delegation, kind, tradition). The weaker reading of 'attended' — that a
+      human merely typed the command — was considered and REJECTED by the
+      author: under it nearly every lane counts as attended, including lanes
+      where no human ever reads the resulting text, which is the opposite of
+      what the rule is for. THE INVARIANT WAS AUDITED BEFORE BEING RECORDED, on
+      the author's explicit ruling, precisely so this round would not repeat the
+      previous round's defect of recording an unmeasured control. IT DOES NOT
+      HOLD TODAY. Four violations, recorded here rather than papered over, each
+      with its ruled disposition — see the sibling clarification 'Which lanes
+      violate the autonomous-substance invariant today'. TWO HONEST LIMITS ON
+      THIS CENSUS, both from the 2026-08-15 review. First, the author's ruling
+      was to classify EVERY write-node call site as CREATE / EDIT-SUBSTANCE /
+      EDIT-STATE; the sites are named above and the four violators are
+      classified, but a per-site classification of all of them is NOT recorded
+      here and is owed. Second, a prose census decays the day it lands — that is
+      precisely the weakness that made the previous round's five-writer count
+      wrong, and re-recording it as a longer prose list does not fix it. The
+      durable form is a machine-readable roster mapping each write site to its
+      operations and attendance class, linted against the actual write-node
+      caller set so a new caller cannot be added silently. Both are carried as
+      owed work on tactic-finding-search-all-producers rather than claimed as
+      done."
   - question: Which lanes violate the autonomous-substance invariant today, and what
       is the disposition of each?
     answer: "(Measured and ruled 2026-08-14; extended to four 2026-08-15 after the
@@ -6260,30 +6260,31 @@ clarifications:
       the worthwhile ones into clarifications at office hours through the
       attended surface. THIS RULING OVERTURNS A STANDING AUTHOR RULING ON THIS
       SAME NODE, and says so rather than leaving two live contradictory
-      clarifications — see the 2026-07-28 /align-strategy clarification 'Standing
-      requirement: a per-node tactic-target session MAY append clarifications
-      entries to the serving strategy', now amended in place with an OVERTURNED
-      prefix pointing here. That earlier ruling was correct on its own premises.
-      Its DECISIVE ARGUMENT was that the current doctrine leaves immaterial
-      observations with NO LEGAL DESTINATION AT ALL — write-path.md says write
-      them to the strategy, tactic-target.md forbids any strategy write, and the
-      autonomy contract closes the park escape because an immaterial observation
-      is none of its three park conditions. Faced with a forced choice between
-      dropping the observation and writing the strategy, it chose writing. WHAT
-      CHANGED IS THE PREMISE, NOT THE REASONING: the born-parked observation node
-      IS a legal destination, so the forced choice dissolves. The redirect
-      therefore SATISFIES the 2026-07-28 concern — nothing is dropped, the
-      sole-carrier condition still holds — while removing the strategy write it
-      had to concede. The earlier ruling's second, independent finding stands
-      unaffected and is still owed: DRIFT_SCHEMA.clarifications_to_add declares
-      items as {answer} only with additionalProperties:false, while the
-      Clarification interface requires {question, answer}, so the instruction was
-      never mechanically executable. The implementing node
-      tactic-align-tactics-per-node-clarifications is PARKED by this round: its
-      unit A widens the write authority this ruling removes and its unit B
-      hardens a field this ruling deletes, so it is doomed work as written — the
-      exact failure class this round exists to close, found on this round's own
-      output. Carried by tactic-align-tactics-immaterial-drift-redirect. V2 — /dispatch-conflict's
+      clarifications — see the 2026-07-28 /align-strategy clarification
+      'Standing requirement: a per-node tactic-target session MAY append
+      clarifications entries to the serving strategy', now amended in place with
+      an OVERTURNED prefix pointing here. That earlier ruling was correct on its
+      own premises. Its DECISIVE ARGUMENT was that the current doctrine leaves
+      immaterial observations with NO LEGAL DESTINATION AT ALL — write-path.md
+      says write them to the strategy, tactic-target.md forbids any strategy
+      write, and the autonomy contract closes the park escape because an
+      immaterial observation is none of its three park conditions. Faced with a
+      forced choice between dropping the observation and writing the strategy,
+      it chose writing. WHAT CHANGED IS THE PREMISE, NOT THE REASONING: the
+      born-parked observation node IS a legal destination, so the forced choice
+      dissolves. The redirect therefore SATISFIES the 2026-07-28 concern —
+      nothing is dropped, the sole-carrier condition still holds — while
+      removing the strategy write it had to concede. The earlier ruling's
+      second, independent finding stands unaffected and is still owed:
+      DRIFT_SCHEMA.clarifications_to_add declares items as {answer} only with
+      additionalProperties:false, while the Clarification interface requires
+      {question, answer}, so the instruction was never mechanically executable.
+      The implementing node tactic-align-tactics-per-node-clarifications is
+      PARKED by this round: its unit A widens the write authority this ruling
+      removes and its unit B hardens a field this ruling deletes, so it is
+      doomed work as written — the exact failure class this round exists to
+      close, found on this round's own output. Carried by
+      tactic-align-tactics-immaterial-drift-redirect. V2 — /dispatch-conflict's
       reconciliation lane builds an unconstrained jq filter from an opus
       subagent's output and sets whatever fields diverged, on any node kind; the
       skill explicitly names virtue/strategy/tradition/delegation doctrine
@@ -6296,8 +6297,8 @@ clarifications:
       six-field allowlist and CORRECTED 2026-08-15 to the negative form after
       the adversarial review showed the six-field version misses rationale,
       which is the field the ratified reconciliation doctrine names FIRST, and
-      also misses attributes, owner and parent. The check is
-      not STATE_FIELDS.has(field), which is total by construction and needs no
+      also misses attributes, owner and parent. The check is not
+      STATE_FIELDS.has(field), which is total by construction and needs no
       second list kept in sync. Carried by
       tactic-dispatch-conflict-substance-allowlist. Not measured: whether this
       has ever actually fired on a durable node; git history was not searched,
@@ -6323,10 +6324,10 @@ clarifications:
       words a prompt is not a gate, then suspended that same standard for
       review-fix, and the suspension was the only thing keeping it off this
       list. Nothing mechanically confines review-fix to newly created nodes or
-      to tactics; that confinement is an unverified property of a prompt.
-      AUTHOR RULING: classify it as a violator pending a real guard, and promote
-      the Step-5 porcelain checklist into a script — it is trivially scriptable,
-      the SKILL.md already writes it as shell. Carried by
+      to tactics; that confinement is an unverified property of a prompt. AUTHOR
+      RULING: classify it as a violator pending a real guard, and promote the
+      Step-5 porcelain checklist into a script — it is trivially scriptable, the
+      SKILL.md already writes it as shell. Carried by
       tactic-review-fix-porcelain-guard-script. ONE FURTHER MEASURED FINDING,
       legal under the invariant but unmonitored: dispatch-graph-census
       overwrites a census tactic's markdown body wholesale on every autonomous
@@ -6342,18 +6343,18 @@ clarifications:
       gate's real carrier is code: .claude/workflows/align-tactics.js makes
       greenfield_drops a schema-REQUIRED member of the decomposer's output,
       typed additionalProperties:false with required target, superseded_by and
-      reason. BE PRECISE ABOUT WHAT THAT ENFORCES — corrected 2026-08-15, because
-      the 2026-08-14 draft answered an overstatement with an overstatement of its
-      own. What is machine-enforced is the output SHAPE: the key is in
-      DECOMPOSE_SCHEMA's required list, and each entry that appears must carry
-      all three sub-fields. The JUDGMENT — check each unit's subject against
-      non-draft nodes elsewhere that delete or supersede it — is prose in the
-      prompt string, structurally the same kind of carrier the previous round was
-      condemned for citing. greenfield_drops [] satisfies the schema on every
-      run, so an empty result is INDISTINGUISHABLE from a search that never ran.
-      The honest comparison is therefore that the gate has a typed output where
-      the proposed replacement had none, not that it is enforced where the other
-      is prose. The prose at align-tactics/SKILL.md is
+      reason. BE PRECISE ABOUT WHAT THAT ENFORCES — corrected 2026-08-15,
+      because the 2026-08-14 draft answered an overstatement with an
+      overstatement of its own. What is machine-enforced is the output SHAPE:
+      the key is in DECOMPOSE_SCHEMA's required list, and each entry that
+      appears must carry all three sub-fields. The JUDGMENT — check each unit's
+      subject against non-draft nodes elsewhere that delete or supersede it — is
+      prose in the prompt string, structurally the same kind of carrier the
+      previous round was condemned for citing. greenfield_drops [] satisfies the
+      schema on every run, so an empty result is INDISTINGUISHABLE from a search
+      that never ran. The honest comparison is therefore that the gate has a
+      typed output where the proposed replacement had none, not that it is
+      enforced where the other is prose. The prose at align-tactics/SKILL.md is
       not a copy of the gate but a POINTER to clarification 26 — the shape the
       one-shared-write-surface ruling wants, not the shape it condemns. So the
       previous round moved a machine-enforced check into a prose-specified,
@@ -6373,18 +6374,19 @@ clarifications:
       TRIGGERS. Persisting the gate where it is and adding a creation-time
       supplement leaves the same judgment — is X superseded by Y — implemented
       twice, once as workflow prompt prose and once in the create surface, with
-      nothing keeping them agreeing. The author asked in terms for a parsimonious
-      list of surfaces that is DRY, so the judgment is extracted ONCE as a pure
-      function in packages/intentionsutil/src — supersedes(candidate, corpus)
-      returning target, superseded_by and reason — and the two triggers CALL it:
-      the decomposer per unit, the create surface per mint. The gate stays
-      exactly where this ruling put it; it stops being a second specification
-      asserted to agree with the first. (b) MAKE AN EMPTY RESULT DISTINGUISHABLE
-      FROM AN ABSENT SEARCH. The decomposer emits, alongside the drops, a record
-      of what was searched — corpus size and method — so greenfield_drops [] can
-      be told apart from a judgment that never ran. This is the same principle
-      the create surface already carries, where a disagreement between the two
-      checks is itself a finding. Carried by tactic-persist-greenfield-drops."
+      nothing keeping them agreeing. The author asked in terms for a
+      parsimonious list of surfaces that is DRY, so the judgment is extracted
+      ONCE as a pure function in packages/intentionsutil/src —
+      supersedes(candidate, corpus) returning target, superseded_by and reason —
+      and the two triggers CALL it: the decomposer per unit, the create surface
+      per mint. The gate stays exactly where this ruling put it; it stops being
+      a second specification asserted to agree with the first. (b) MAKE AN EMPTY
+      RESULT DISTINGUISHABLE FROM AN ABSENT SEARCH. The decomposer emits,
+      alongside the drops, a record of what was searched — corpus size and
+      method — so greenfield_drops [] can be told apart from a judgment that
+      never ran. This is the same principle the create surface already carries,
+      where a disagreement between the two checks is itself a finding. Carried
+      by tactic-persist-greenfield-drops."
   - question: The supersession doctrine names an edge to record and a close to
       recommend. Can the schema and the lifecycle express either?
     answer: "(Verified and ruled 2026-08-14.) NEITHER, as recorded. IntentionNode
@@ -6426,24 +6428,25 @@ clarifications:
       covers half the requirement. status has none of these problems: its
       vocabulary is already per-kind and already validated by rule 16, so it
       reaches every kind with no rule-10 exemption; no code branches on it, so
-      the thirty predicates and blockersComplete are untouched. THE COST, STATED:
-      a superseded node still sits at whatever phase it reached, so wherever the
-      ladder currently reads phase alone to mean eligible it must also consult
-      status — one predicate to add, against thirty to migrate. Carried by
-      tactic-supersession-edge-and-terminal; until it lands, the RSI observable
-      is NOT readable and says so on its own node. EDGE CASES: direction is
-      ruled (store on the superseded node; derive the reverse by scanning, the
-      way inbound blocked_by edges are found today — note that inboundBlockers
-      is a prune-repair scan and not a maintained reverse index, so no index
-      pattern is being reused here). Cycles are ruled (checked, per rule 15).
-      ONE EDGE CASE IS OPENED BY THIS CORRECTION AND LEFT UNRULED: status is a
-      STATE_FIELDS member, and EDIT-STATE is unrestricted, so on the letter of
-      the invariant an autonomous lane could mark a STRATEGY superseded without
-      a human. Retiring a strategy is a doctrine act. Recommendation, not a
-      ruling: require attendance for a superseded status on a durable-layer
-      node, the same way this round requires it for any other durable substance
-      write. Enrolled on tactic-review-supersession-derived-subpoints alongside
-      the partial-supersession question. PARTIAL supersession remains UNRULED — the
+      the thirty predicates and blockersComplete are untouched. THE COST,
+      STATED: a superseded node still sits at whatever phase it reached, so
+      wherever the ladder currently reads phase alone to mean eligible it must
+      also consult status — one predicate to add, against thirty to migrate.
+      Carried by tactic-supersession-edge-and-terminal; until it lands, the RSI
+      observable is NOT readable and says so on its own node. EDGE CASES:
+      direction is ruled (store on the superseded node; derive the reverse by
+      scanning, the way inbound blocked_by edges are found today — note that
+      inboundBlockers is a prune-repair scan and not a maintained reverse index,
+      so no index pattern is being reused here). Cycles are ruled (checked, per
+      rule 15). ONE EDGE CASE IS OPENED BY THIS CORRECTION AND LEFT UNRULED:
+      status is a STATE_FIELDS member, and EDIT-STATE is unrestricted, so on the
+      letter of the invariant an autonomous lane could mark a STRATEGY
+      superseded without a human. Retiring a strategy is a doctrine act.
+      Recommendation, not a ruling: require attendance for a superseded status
+      on a durable-layer node, the same way this round requires it for any other
+      durable substance write. Enrolled on
+      tactic-review-supersession-derived-subpoints alongside the
+      partial-supersession question. PARTIAL supersession remains UNRULED — the
       existing workflow gate already handles it better than this doctrine does,
       dropping individual units and demoting to draft only when a tactic is
       FULLY superseded, whereas the creation-time check is whole-node. It stays
@@ -6477,9 +6480,8 @@ clarifications:
       also removes an undeclared dependency the fresh-sweep design carried:
       nothing in this repository emits a deletion event, and the shipped guard
       sidesteps that by running on every commit instead. LIVE PROOF IT IS
-      NEEDED:
-      tactic-node-ancestry-context sat at phase implement, status codified, with
-      a plan whose unit B inserts a step into
+      NEEDED: tactic-node-ancestry-context sat at phase implement, status
+      codified, with a plan whose unit B inserts a step into
       .claude/skills/align-strategy/SKILL.md — a skill deleted 2026-08-04. A
       worker selecting it could not have executed it. It was invisible to the
       observable this doctrine recorded, because that observable reads an edge
@@ -6496,6 +6498,172 @@ clarifications:
       built not to touch. If stale references inside done bodies are a problem
       worth solving, that is a different instrument with a different rationale
       and it is not ruled here."
+  - question: "Clarification 232 binds a /dispatch-ladder run to the WORK it spawned
+      rather than to its node. Under record-time main-qa routing the spawned
+      node is open and independently dispatch-selectable at the instant the
+      source reaches done — so what actually discharges the run's answerability:
+      chain onto it, await it, or halt?"
+    answer: >-
+      (Recorded 2026-08-20, attended /align-tactics office-hours interview;
+      author-ratified. AMENDS clarification 232's "THE REQUIREMENT FOLLOWS THE
+      WORK, NOT THE NODE" paragraph — read them together.)
+
+
+      NONE OF THE THREE. Answerability is discharged STRUCTURALLY, not
+      temporally. Call the ruling DELEGATE. A run reports complete when (a) its
+      SOURCE node is terminal or excused under clarification 232's existing
+      predicate, AND (b) every node the run spawned exists, validates, and
+      carries a durable structural provenance edge back to the node whose run
+      minted it. The run is answerable for THE HANDOFF BEING RECORDED, not for
+      waiting out the spawned work. The spawned node then carries its own
+      terminus obligation in its own right, discharged by its own run under the
+      same rule.
+
+
+      WHY ALL THREE RECORDED OPTIONS WERE REJECTED. Each buys literal compliance
+      with 232's sentence at the price of a property this strategy holds
+      elsewhere. CHAIN (take a second sequential claim and walk the spawned node
+      to terminal) extends a detached, hours-long run across another node's full
+      main-qa cycle, against clarification 226's "progresses ONE NODE all the
+      way" span, and leaves duration unbounded. AWAIT (block on the spawned
+      node's terminus without claiming it) burns a detached run idling on work
+      it does not own while the ordinary dispatch tick may be driving that same
+      node concurrently — an unspecified concurrency story, and the same
+      unbounded duration. HALT (end non-complete for a person) is safe and
+      consistent with "throws always halt, never resolve", but residue-bearing
+      runs are the common case, so halts would stop being the exception, against
+      226's "detached execution, attended judgment". The shared defect is that
+      all three treat answerability as a span of TIME the run must survive; the
+      graph is the thing that persists, so the obligation belongs to the graph.
+
+
+      A MEASURED CORRECTION TO THE QUESTION AS IT WAS FIRST PUT. The 2026-08-20
+      park that raised this recorded that the spawned node "classifies as
+      `violation`" at the instant the source reaches done. That is FALSE,
+      measured at origin/main c281e300. classifyTerminus
+      (packages/intentionsutil/src/terminus.ts:57-66) tests
+      `execution.completion.mergedAt == null` FIRST and returns `not-merged`,
+      and the minted node's `execution` is `{branch, pr, attempts, markers,
+      strategy_fingerprint}` with NO `completion` key at all
+      (tactic-mainqa-record-time-routing:152). So the spawned node classifies
+      `not-merged` and sits OUTSIDE the census population entirely — invisible,
+      never counted, not flagged. This STRENGTHENS the ruling rather than
+      weakening it: the existing predicate cannot express "spawned work
+      outstanding" in any form, so no tightening of the census alone could ever
+      have discharged 232's cross-node clause. Some structural carrier is
+      required, which is what DELEGATE supplies.
+
+
+      WHAT THIS COSTS, STATED PLAINLY. Clarification 232's sentence — "a run may
+      not report complete until the main-qa work it spawned is itself terminal
+      or excused" — does NOT survive this ruling literally. Under DELEGATE the
+      spawned work at the completion instant is neither terminal nor excused; it
+      is merely RECORDED, with its own obligation pending. The implementing
+      tactic's `statement` is rewritten to match. This is a deliberate narrowing
+      of 232 ratified by the author in this sitting, not an implementation
+      shortcut and not tactic drift, and it is recorded here so that no later
+      reader reconciles the two texts by assuming the tactic wandered from its
+      strategy.
+
+
+      WHAT IS DELIBERATELY LEFT TO THE IMPLEMENTING TACTIC. The interview
+      sketched a new `excused-delegated` classification on the SOURCE node. That
+      may prove unnecessary and must not be treated as ruled: under record-time
+      main-qa routing the source goes `review -> done` directly (the 2026-07-28
+      greenfield on this strategy), so the source classifies `done` outright and
+      needs no excuse. A source-side excuse is only wanted for the TRANSITIONAL
+      shape, where forwardPhase still inserts `main-qa` on the source when
+      residue is present. Whether to add the enum member, and whether the
+      transitional window is long enough to be worth it, is an evidence question
+      for the tactic, not doctrine. What IS ruled here is the principle:
+      structural handoff, recorded at completion, verified thereafter by the
+      graph rather than by the run.
+  - question: Which spawn sites does a run's answerability cover, and what bounds
+      the recursion when a spawned node's own /qa-main pass can mint further
+      nodes?
+    answer: >-
+      (Recorded 2026-08-20, same attended /align-tactics office-hours sitting as
+      the DELEGATE ruling immediately above; author-ratified. Together with it
+      this amends clarification 232.)
+
+
+      UNIVERSAL, NOT ENUMERATED — AND BOUNDED AT DEPTH 1. Every node minted
+      during a run must carry a durable structural provenance edge to the node
+      whose run minted it, uniformly and without regard to its id prefix:
+      tactic-mainqa-*-{machine,author}, /qa-main's
+      tactic-<source-id>-main-qa-regression nodes, and the deploy-lag
+      tactic-wait-* holds alike. A run is answerable ONLY for its own DIRECT
+      spawns. Each spawned node's own run is answerable for whatever IT spawns,
+      under this same rule. Recursion is therefore bounded at depth 1 by
+      construction, and no chain of any length can extend a detached run's
+      duration.
+
+
+      WHY NOT AN ENUMERATED LIST OF SPAWN SITES. Enumeration is precisely what
+      produced the drift this ruling corrects. Clarification 232 named only "a
+      standalone tactic-mainqa-* node it created". Measured at origin/main
+      c281e300: /qa-main's broken branch
+      (.claude/skills/qa-main/SKILL.md:310-350) mints
+      tactic-<source-id>-main-qa-regression carrying `blocked_by: []` and
+      `office_hours: null`, and records its provenance — "the source PR
+      (`execution.pr`) and source node id" — as PROSE IN THE BODY, deliberately,
+      because `body` is not a write-node.ts input field. There is no structural
+      edge of any kind. Four live instances today:
+      tactic-graph-review-exclusion-stall-recovery-,
+      tactic-review-code-review-invocation-contract-,
+      tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-, and
+      tactic-tactic-graph-native-signal-instrument-arm-main-qa-regression. A
+      closed list re-opens this question at every new spawn site and silently
+      leaves un-covered exactly the sites nobody remembered to add — which is
+      the failure already on the ground, not a hypothetical.
+
+
+      WHY DEPTH 1 LOSES NOTHING. The obvious objection is that grandchildren
+      escape. They do not. The census walks the WHOLE graph, so a grandchild is
+      covered by ITS parent's run under the same rule; depth 1 bounds what any
+      ONE run must verify, not what the graph tracks. This is exactly the
+      property that makes the structural discharge finite: a temporal discharge
+      (CHAIN or AWAIT) would have needed an arbitrary numeric depth cap to bound
+      run duration, and there is no non-arbitrary answer to "how many levels of
+      spawned QA should one detached run sit through".
+
+
+      TWO CONSEQUENCES THE IMPLEMENTING TACTIC MUST CARRY.
+
+
+      (1) THE EDGE CANNOT BE `blocked_by`. The record-time-routing design
+      already puts `blocked_by: [<source-id>]` on the minted node, but that is a
+      BLOCKING edge, not provenance: prune-on-done deletes the source at `done`,
+      and blockersComplete (packages/intentionsutil/src/router.ts) treats an
+      ABSENT blocker as COMPLETE, so the relation stops meaning anything at
+      exactly the moment provenance becomes interesting. Overloading it would
+      also conflate "waiting on" with "came from" in a field the router reads to
+      open dispatch gates. A dedicated carrier is needed, and — unlike every
+      other edge in the schema — it must remain valid when its referent NO
+      LONGER EXISTS, since prune-on-done is expected to delete the source. That
+      survives-the-prune property is the constraint; the tactic chooses the
+      carrier.
+
+
+      (2) THE EDGE MUST SHIP WITH A CHECK — BUT THE CHECK IS NOT "WIDEN THE
+      LADDER-TERMINUS CENSUS POPULATION". That mechanism was proposed in this
+      sitting and is REJECTED on inspection, recorded here so it is not
+      re-attempted. Admitting spawned nodes into the merged-but-not-terminal
+      population would classify freshly-minted, perfectly healthy backlog as
+      `violation`: a spawned node is not-done, not-parked, and — once its source
+      is pruned — not-blocked, so it falls straight through classifyTerminus to
+      the violation arm the moment it is created. Spawned work is honest backlog
+      and is already dispatch-selectable; it is not stalled merged work, which
+      is the only thing that census exists to catch. What the requirement
+      actually needs is a check on the EDGE, not on the phase: a run-completion
+      postcondition asserting that every node carrying a provenance edge to the
+      node just completed validates, and/or a store-wide orphan check that fails
+      when a node bearing a spawn-site shape carries no provenance edge (which
+      would fail today on the four instances above). The tactic chooses the
+      shape. What is ruled is that the edge must not ship without a check that
+      fails when it is missing — an unchecked provenance field would record the
+      handoff while proving nothing, which is worse than the status quo because
+      it looks like coverage.
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
