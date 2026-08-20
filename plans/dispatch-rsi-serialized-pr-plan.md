@@ -300,6 +300,28 @@ waits only for a worker. Absorbing a class-B node costs no PR closure and no
 rebase — it is purely an edit to a plan section's `### Nodes closed` and
 `### Scope`.
 
+> **FOLDED 2026-08-20 (Bundle 0 step 6) — 12 of the 20.** The table below is now
+> a record of *where each node went*, not a to-do list. Landed in their target
+> sections: `node-merge-list-removal-loss` (**PR15 Unit 0**),
+> `rebuild-snapshot-stale-revert-main-qa-regression` and
+> `flake-hook-tests-graph-commit-fixture-clone` (PR15 Verification),
+> `review-code-review-invocation-contract-main-qa-regression` (PR6),
+> `select-tick-main-sync-gated-on-caller-cwd`, `worker-self-close-configurable`
+> and `dispatch-config-template` (PR8),
+> `dispatch-stop-backstop-comment` (PR12),
+> `graph-native-signal-instrument-arm-main-qa-regression` (PR16),
+> `schema-drift-guard` (PR19), `review-lows-automation` (PR3), and
+> `mainqa-record-time-routing` (**§PR5a**, its own PR — step 3).
+>
+> **Not folded, by ruling, and each for a different reason:**
+> `align-session-claiming-liveness-correction` is an **invalid state** to fix,
+> not work to absorb; `office-hours-graph-read-cwd-whitespace` is moot if the
+> legacy lane is deleted, so it resolves against the node below it;
+> `legacy-office-hours-entry-removal`, `omit-default-serialization` and
+> `serves-inheritance-full-strip` are deferred past the plan; and
+> `graph-function-docs`, `ratchet-teeth-census` and `model-portability-inventory`
+> stay documented-not-assigned.
+
 | Node | Phase | Disposition |
 |---|---|---|
 | `tactic-node-merge-list-removal-loss` | implement, **parked** | **→ PR15.** `graph-commit`'s layer-2 field merge cannot express a REMOVAL: the base-free list union silently restores a deleted `blocked_by`/`serves` entry and reports a clean auto-resolve. **Deterministic, not a race, and `--base` does not protect against it.** This plan runs ~100 node closures through that merge. Highest-value item on this page. Its park is a stale `provision-node-worktree` exit-2 from 2026-07-31 — clear it, do not re-provision |
@@ -486,10 +508,22 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    delete the branch, add the node id to the target PR's `### Nodes closed`, and
    add its surface to that PR's `### Scope`.
 
-6. **Fold the class-B nodes into their named PR sections.** Edits to this
-   document only. Do `tactic-node-merge-list-removal-loss` → PR15 first: it is a
-   silent-corruption defect in the merge path every closure in this plan runs
-   through.
+6. **Fold the class-B nodes into their named PR sections. — DONE 2026-08-20.**
+   Twelve folded; each target section's `### Nodes closed` count was raised and a
+   note added explaining what the node contributes and how to treat it. Full
+   index in the class-B blockquote above.
+
+   `tactic-node-merge-list-removal-loss` went first, as instructed, and became
+   **PR15 Unit 0** — numbered 0 rather than 5 because it is the only
+   *correctness* fix in a PR that is otherwise simplification, and PR15 carries a
+   standing ref-split HOLD on its Units 1–2. If that hold ever splits the PR,
+   Unit 0 must still ship: every node closure in this plan runs through the merge
+   path it repairs.
+
+   One correction found while folding: the disposition table described the defect
+   as restoring a deleted `blocked_by`/`serves` entry. The node's own statement is
+   wider — `blocked_by`, `serves`, **`validates`**, *and* an **`attributes`-key
+   deletion**. PR15 Unit 0 scopes all four.
 
 7. **Do not lift the sentinel.** There is no decision here to take — ground rule
    4 settles it: the freeze is held for this plan and lifts only when the plan is
@@ -1390,7 +1424,7 @@ lines). Three of its lens nodes are already shipped and only need verification
 and closing; two lenses are genuinely missing; and three findings say the
 instrument is blind to the very workers it is meant to measure.
 
-### Nodes closed (9)
+### Nodes closed (10)
 
 *Verify-and-close (likely no diff):*
 - `tactic-audit-instrument-scoping`
@@ -1404,6 +1438,11 @@ instrument is blind to the very workers it is meant to measure.
 - `tactic-eval-finding-sidecar-monitor-post-filter-self-conceals`
 - `tactic-eval-finding-ladder-worker-unstamped-audit-blind`
 - `tactic-eval-finding-align-tactics-worker-transcript-unscanned`
+- `tactic-review-lows-automation` *(folded in 2026-08-20, Bundle 0 step 6)*
+
+> **The folded node lands on this PR's exact surface** — `aggregate-usage.sh`,
+> `dispatch-reclaim-audit` and `lib.sh`, the three files this PR already edits.
+> No new surface, so it costs a unit rather than a PR.
 
 ### Scope
 
@@ -1902,12 +1941,23 @@ Four findings on `dispatch-code-review` (1411 lines). One is a falsification:
 the node lock shipped in PR #3078, but the detached child **still dies with its
 launcher** despite `setsid` — so the lock node's fix does not hold.
 
-### Nodes closed (4)
+### Nodes closed (5)
 
 - `tactic-eval-finding-detached-code-review-dies-with-launcher`
 - `tactic-code-review-detached-node-lock`
 - `tactic-dispatch-code-review-concurrent-write-attribution`
 - `tactic-dispatch-code-review-reject-pattern-self-match`
+- `tactic-review-code-review-invocation-contract-main-qa-regression` *(folded in 2026-08-20, Bundle 0 step 6)*
+
+> **The folded node is a record correction, not a code change — but do not skip
+> it.** It corrects the *recorded* `dispatch-code-review` invocation contract:
+> which of `--comment` / `--no-comment` is actually passed, and whether the
+> `/code-review low --fix` pre-stage runs to completion. PR6 owns that script, so
+> this is the one PR where the recorded contract and the real one can be
+> reconciled in the same change. It is a `main-qa` regression node: the code it
+> describes **already merged** (#3007, 2026-08-03) — what never happened is the
+> post-merge verification. Verify against the merged behavior, then correct the
+> record; do not re-implement.
 
 ### Scope
 
@@ -2089,11 +2139,32 @@ realistic config-tamper case.
 > The untracked `dispatch.config/` directory is visible in the repo's current
 > `git status` — this is a live exposure, not a hypothetical.
 
-### Nodes closed (3)
+### Nodes closed (6)
 
 - `tactic-dispatch-config-untracked-pace-curve`
 - `tactic-target-workers-max-silent-corrupt-fallback`
 - `tactic-dispatch-pause-config-field`
+- `tactic-select-tick-main-sync-gated-on-caller-cwd` *(folded in 2026-08-20, Bundle 0 step 6)*
+- `tactic-worker-self-close-configurable` *(folded in 2026-08-20 — `dispatch-stop.sh` half coordinated with PR12)*
+- `tactic-dispatch-config-template` *(folded in 2026-08-20)*
+
+> **Three class-B folds, all on this PR's config surface.**
+>
+> - **`tactic-select-tick-main-sync-gated-on-caller-cwd`** — `dispatch-select-tick`
+>   gates its main-checkout sync on the **caller's cwd**, so a single stray dirty
+>   file wedges every writer. This one is **on the paused-tick path**, so unlike
+>   the rest of this PR it is *hot*: it can bite during the freeze, not only at
+>   resumption. Reconcile it with `sync_main_checkout`'s own requirement that
+>   tree-updating git ops run with the sandbox override
+>   (`.claude/rules/sandbox.md`).
+> - **`tactic-worker-self-close-configurable`** — the `dispatch-config-load` half
+>   belongs to this PR's Unit 3; the `.claude/hooks/dispatch-stop.sh` half
+>   overlaps PR12's surface. **Do not split the policy across two PRs** — decide
+>   here, and have PR12 consume the field rather than re-deriving it.
+> - **`tactic-dispatch-config-template`** — records the `dispatch.config/`
+>   instance-repo convention: tracked human-edited config versus gitignored
+>   machine-written artifacts. This is the config PR, so the convention is
+>   documented here or nowhere.
 
 ### Scope
 
@@ -2442,9 +2513,17 @@ evaluation core and make each lane a thin selector over **core + lens catalog +
 the one write surface**, adding a variance-debugging lens and a closed
 remediation list declared in its own frontmatter.
 
-### Nodes closed (1)
+### Nodes closed (2)
 
 - `tactic-rsi-intervention-special-cases`
+- `tactic-dispatch-stop-backstop-comment` *(folded in 2026-08-20, Bundle 0 step 6)*
+
+> **The folded node is one stale comment** at
+> `.claude/hooks/dispatch-stop.sh:62-63` — trivial, and homed here only because
+> this is the first PR in the order that touches the file. If PR8's
+> `tactic-worker-self-close-configurable` fold lands its `dispatch-stop.sh` half
+> first, fix the comment there instead and close this node from that PR. Either
+> home is correct; two homes is not.
 
 ### Scope
 
@@ -2612,19 +2691,19 @@ anti-thrash check refuses a second boost inside the same window.
 
 # PR15 — `graph-commit` structural simplification
 
-> **In-flight overhang (2026-08-20).** Absorb from §"In-flight work outside this
-> plan":
-> **`tactic-node-merge-list-removal-loss`** (class B, no PR, park is a stale
-> 2026-07-31 provisioning failure) — the layer-2 field merge **cannot express a
-> REMOVAL**: the base-free list union silently restores a deleted
-> `blocked_by`/`serves` entry and exits 0 reporting a clean auto-resolve. It is
-> deterministic, and `--base` does not protect against it. This plan's ~100 node
-> closures all run through that merge; this is the highest-value absorption on
-> the page and belongs in the merge-path unit.
-> Also **`tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression`**
-> and **`tactic-flake-hook-tests-graph-commit-fixture-clone`** into Verification
-> — both are `test-graph-commit.sh` defects, and this PR runs that suite hardest.
-> Note #3037 (absorbed into PR18) also shifts this PR's `graph-commit` anchors.
+> **In-flight overhang — FOLDED 2026-08-20 (Bundle 0 step 6).** All three
+> class-B absorptions are now in this section, not pending:
+> **`tactic-node-merge-list-removal-loss`** → **Unit 0** (numbered 0 because it
+> is the one *correctness* fix here and must survive a split);
+> **`tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression`**
+> and **`tactic-flake-hook-tests-graph-commit-fixture-clone`** →
+> §Verification. Node count 4 → 7.
+>
+> **Correction to the anchor warning:** #3037 is **not** absorbed into PR18 — it
+> was deferred to class A3 on 2026-08-20 (Bundle 0 step 1). It still edits
+> `graph-commit` (+12/−5), so it still shifts this PR's anchors — but it now
+> lands *after* this plan, which means **this PR's anchors are stable and #3037
+> rebases over PR15**, not the reverse.
 
 **Recommended model: opus** — restructures the writer whose failure mode is
 silent data loss, on the same file PR1 edits.
@@ -2655,14 +2734,65 @@ None of these is a correctness defect, so none is in PR1. All four are on the
 >
 > Units 3–4 carry no such exposure and could be split out if PR15 stalls.
 
-### Nodes closed (4)
+### Nodes closed (7)
 
 - `tactic-graph-commit-plumbing-default`
 - `tactic-graph-commit-direct-three-way-merge`
 - `tactic-graph-commit-invocation-classifier-bypass`
 - `tactic-graph-commit-noop-shortcircuit-head-behind`
+- `tactic-node-merge-list-removal-loss` *(folded in 2026-08-20, Bundle 0 step 6 — Unit 0 below)*
+- `tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression` *(folded in 2026-08-20 — Verification)*
+- `tactic-flake-hook-tests-graph-commit-fixture-clone` *(folded in 2026-08-20 — Verification)*
 
 ### Scope
+
+**Unit 0 — the layer-2 field merge must be able to express a REMOVAL.**
+*Folded in 2026-08-20 (Bundle 0 step 6) from `tactic-node-merge-list-removal-loss`.
+It is numbered 0 because it is a **correctness** fix and the rest of this PR is
+simplification — if PR15 is ever split or stalled on the ref-split hold, this
+unit ships anyway.*
+
+`graph-commit`'s layer-2 merge shells out via `run_merge_node()` to
+`packages/intentionsutil/scripts/merge-node.ts:83`, which delegates to
+`packages/intentionsutil/src/node-merge.ts`. The list merge is a **base-free
+union**, so it has no way to distinguish "this entry was never here" from "this
+entry was deliberately deleted". A removal that meets a concurrent land is
+therefore **silently reverted, and `graph-commit` exits 0 reporting a clean
+layer-2 auto-resolve.**
+
+- **Not a race in the usual sense.** The union rule is base-free, so the
+  restoration is **deterministic** for any removal that meets a concurrent land.
+- **`--base` does not save you.** The node's own scope says so explicitly, and
+  names the two call sites that already pass `base` — layer 2 at
+  `graph-commit:688` (stage `:1:`) — which is why passing it is not the fix.
+- **The affected fields are wider than "blocked_by/serves".** The node's
+  statement names `blocked_by`, `serves`, **`validates`**, *and* an
+  **`attributes`-key deletion**. Treat all four as in scope.
+- **Observed in production**, 2026-07-25, on `tactic-align-tactics-workflow`
+  (PR #2931): one write set `office_hours: null` **and** removed a satisfied
+  `blocked_by` edge; the null applied, the edge came back, exit 0. The drain
+  session only caught it by independently re-reading `origin/main` on its own
+  verification step, then had to rebuild the node and land a second commit — so
+  a "single atomic graph operation" took two.
+
+**The plan of record is the node body**, which carries two units, a settled
+design decision, an explicit *"What is deliberately NOT in scope"* section, and
+a *"Citation drift in the node's own rationale"* section correcting several of
+its own anchors. Read it before touching anything:
+
+| Unit | Heading in `intentions/tactic-node-merge-list-removal-loss.md` |
+|---|---|
+| 1 | base-aware three-way list and attributes-key merge |
+| 2 | direct-import coverage for the merge-node CLI round-trip — `merge-node.ts` has **zero** test coverage today |
+
+> **Why this outranks everything else on this page.** Roughly a hundred node
+> closures in this plan run through that merge, and §"Closing nodes after each
+> merge" tells you to close nodes by editing exactly the fields this defect
+> reverts. Until Unit 0 lands, every closure that removes a `blocked_by` edge
+> while another writer is landing can silently un-remove it **and report
+> success** — the plan's bookkeeping would then be quietly wrong in a way no
+> verdict line shows. Its `office_hours` park is a stale `provision-node-worktree`
+> exit-2 from 2026-07-31: clear the park, do not re-provision.
 
 **Unit 1 — flip the writer default to plumbing.**
 `packages/intentionsutil/scripts/graph-commit:406` (verified) —
@@ -2750,9 +2880,37 @@ behind `origin/main` with nothing staged, confirm the run short-circuits without
 taking the landing lock (Unit 4). Confirm the `graph-commit` invocation is
 auto-approved rather than prompting (Unit 3).
 
+**Unit 0** needs a verification the suite above cannot give: a *concurrent*
+removal. Construct it directly — build base/ours/theirs fixture nodes where
+`ours` deletes a `blocked_by` entry and `theirs` edits an unrelated field, run
+the merge, and assert the entry stays deleted. The node body's Unit 2 specifies
+this as an exported `mergeNodeFiles(...)` direct-import test
+(`packages/intentionsutil/test/merge-node-cli.test.ts`); prefer that to a shell
+harness, because `merge-node.ts` has **zero** test coverage today and a
+round-trip test is the thing actually missing.
+
+**Two class-B `test-graph-commit.sh` defects fold into this section**
+*(2026-08-20, Bundle 0 step 6)*. This PR runs that suite hardest, so it is the
+right place to fix them, and both are verification-integrity defects rather than
+product defects:
+
+- **`tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression`**
+  — `test-graph-commit.sh` case *numbers* cited in a merged PR body drifted when
+  an unrelated commit inserted cases ahead of them. The citations now point at
+  the wrong cases. Re-anchor them, and prefer case *names* to ordinals so the
+  next insertion cannot repeat it.
+- **`tactic-flake-hook-tests-graph-commit-fixture-clone`** — fixture clones race
+  source-side git object relocation, and **one clone failure cascades into 11
+  misattributed failures**, so the suite blames cases that are fine. That
+  matters here beyond flake-cleanliness: this PR's Unit 2 warning says a
+  CI-only, non-locally-reproducing failure in these harnesses already cost PR1
+  dearly. A cascade that misattributes 11 failures is precisely what makes that
+  trap expensive to diagnose. Fix the cascade before relying on the suite to
+  judge Units 1–2.
+
 ### Closing the nodes
 
-After merge, for each of the 4 ids set `phase: done` and
+After merge, for each of the 7 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
@@ -2785,8 +2943,9 @@ argument and then writes unconditionally.
 
 **Hot** — this PR repairs the tools this plan's own bookkeeping depends on.
 
-### Nodes closed (11)
+### Nodes closed (12)
 
+- `tactic-tactic-graph-native-signal-instrument-arm-main-qa-regression` *(folded in 2026-08-20, Bundle 0 step 6)*
 - `tactic-transition-node-needs-main-residue-clobbered`
 - `tactic-park-node-clear-park-base-pin-dedup`
 - `tactic-read-sensors-arg-rejection-check-mode`
@@ -2798,6 +2957,17 @@ argument and then writes unconditionally.
 - `tactic-validate-graph-empty-store-pass` *(Unit 9 — PR1 residual)*
 - `tactic-sensor-deregistration-gate` *(Unit 10 — PR1 residual; born parked)*
 - `tactic-verify-landed-unknown-arm-untested` *(Unit 11 — PR1 residual)*
+
+> **The folded class-B node is a `read-sensors.ts` verification gap**, listed
+> first because it is a precondition rather than a peer: a merged unit's
+> fresh-reading landing **was never executed against a clean clone**, so the
+> instrument arm this PR's other units depend on has never actually been proven
+> to run outside a warm worktree. Verify it before trusting any sensor reading
+> this PR produces. It is a `main-qa` regression node — the code merged, the
+> post-merge verification did not happen — so verify against merged behavior,
+> do not re-implement. Compare `.claude/rules/sandbox.md` on why a clean-clone
+> run differs: `--dir`-less script invocations and `claude agents --json` both
+> behave differently outside a provisioned worktree.
 
 > **The last three were filed after PR1 merged**, landing on `main` as
 > `920492be` — PR1's closing batch could not carry a `create` (see the `--base`
@@ -3387,11 +3557,21 @@ round report**, where they die with the transcript.
 Three units: the representation, the producer that writes it, and the sweep that
 catches prose left pointing at superseded work.
 
-### Nodes closed (3)
+### Nodes closed (4)
 
 - `tactic-supersession-edge-and-terminal`
 - `tactic-persist-greenfield-drops`
 - `tactic-supersession-retirement-sweep`
+- `tactic-schema-drift-guard` *(folded in 2026-08-20, Bundle 0 step 6)*
+
+> **The folded node is a CI guard**, and this PR is its first beneficiary. It
+> asserts that every field, rule, enum and vocabulary term `schema.ts` enforces
+> is **declared on a kind node** — i.e. that the executable schema and the
+> documented graph cannot drift apart. This PR *adds* a schema field
+> (`superseded_by`) and a status terminal (`superseded`), which is exactly the
+> change the guard exists to catch when its kind-node declaration is forgotten.
+> Land the guard in the same PR that first exercises it, and let this PR's own
+> additions be its first test case.
 
 ### Scope
 
