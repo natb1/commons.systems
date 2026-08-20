@@ -719,6 +719,12 @@ clarification 243, did **not** ship, and remains `phase: null`, deferred behind
 **Recommended model: opus** — one 1544-line bash driver with overloaded exit
 codes and two mirror-image probe bugs; changes interact.
 
+> **Execution mode — ad hoc, NOT `/dispatch-ladder`.** Author ruling,
+> 2026-08-19 office-hours sitting. This PR is implemented by hand; no ladder
+> invocation drives any part of it, including the stranded-node recovery in
+> Unit 7. The three office-hours parks that blocked it are cleared (landed
+> `aee9b0cf`), and their rulings are folded into Units 3, 6 and 7 below.
+
 ### Context
 
 Nine findings land on the same three scripts. The driver overloads exit codes
@@ -727,17 +733,30 @@ halt path — the one that spawns the evaluator — emits neither timing fields 
 the failure cause it already holds; and the await probe both false-stalls and
 false-succeeds depending on which rung it is on.
 
-### Nodes closed (9)
+### Nodes closed (7 — two more already landed out-of-band)
 
 - `tactic-dispatch-ladder-exit-code-space` *(the structural change; do first)*
 - `tactic-eval-finding-halt-path-emits-no-timing-fields`
 - `tactic-eval-finding-ladder-halt-drops-captured-cause`
 - `tactic-eval-finding-ladder-ci-wait-swallows-blocked-node`
-- `tactic-ladder-await-phase-only-completion-test`
 - `tactic-ladder-await-interrupt-rung-vacuous-advanced`
 - `tactic-eval-finding-main-dirt-halts-ladder-as-violation`
 - `tactic-eval-finding-terminal-without-disposition-dominates-clock`
-- `tactic-ladder-terminus-owns-main-qa`
+  *(reduced to measurement — see Unit 6; the only implementable residual is the
+  owed investigation, and it is unplanned)*
+
+Already `phase: done` at `origin/main` as of `aee9b0cf`. **Do not re-implement
+either one** — both shipped out-of-band and were closed by the 2026-08-19
+office-hours sitting after re-verification:
+
+- `tactic-ladder-await-phase-only-completion-test` — shipped as PR #3077
+  (`execution.lane_pass`, `apply-lane-pass.ts`, the `--since` launch window).
+  This retires **half of Unit 3**; see the unit.
+- `tactic-ladder-terminus-owns-main-qa` — shipped as PR #3091 (`terminus.ts`,
+  `ladder-terminus-census.ts`, the `ladder-terminus` sensor, the
+  `dispatch-ladder-run` classification wiring). **Unit 7 is now the enforcement
+  residual only**, and its scope item 2 is re-homed onto the new node
+  `tactic-ladder-run-answerable-across-node-boundary` (blocked, out of this PR).
 
 ### Scope
 
@@ -767,16 +786,47 @@ why they share a PR rather than blocking each other.
 
 **Unit 3 — completion signals that are not a phase change.**
 `dispatch-ladder-await`'s `graph_verdict()` at `:377` decides completion from
-`.phase != "$FROM_PHASE"` at `:440` (verified). Two defects, same probe:
+`.phase != "$FROM_PHASE"` at `:440` (verified). Two defects, same probe — **one
+is already fixed**:
 
-- *False stall:* the conflict lane and a qa fixing pass complete by pushing and
-  writing job-dir markers without touching graph phase → reported `stalled`.
-  A `lane_pass` probe already exists at `:458` — verify how much of this is
-  already covered before writing new code.
-- *False success:* `fix` and `conflict` are awaited rungs that are not `Phase`
-  members, so `.phase != "$FROM_PHASE"` is trivially true and `advanced` (`:443`)
-  is returned unconditionally. The `review` carve-out at `:428` is the existing
-  pattern to follow.
+- *False stall — DONE, do not rebuild.* Shipped as PR #3077 and re-verified at
+  `origin/main` on 2026-08-19: `Execution.lane_pass` and the
+  `LanePass {at, lane, phase, sha}` interface in `schema.ts`, the orthogonal
+  writer `apply-lane-pass.ts`, the `--since` window
+  (`dispatch-ladder-await:292-339`), the `execution.lane_pass` probe inserted
+  **after** the `.phase != FROM_PHASE` arm (`:456-461`), the lane-complete
+  verdict at exit 0 (`:523-525`), and `dispatch-ladder-run`'s `PASS_SINCE`
+  threading (`:1315`, `:1380`, `:1368`). Both producing lanes stamp
+  (`dispatch-conflict/SKILL.md` Step 7b; `qa-fix/references/auto-fix-lane.md`
+  item 6). Coverage is green: 7 `lane_pass` cases in
+  `test-dispatch-ladder-await.sh` (48 passed) and 17 in
+  `apply-lane-pass.test.ts`.
+  **Load-bearing invariant a later editor must not undo:** the stamp is
+  compared against a **launch window** (`--since`, seeded from `PASS_SINCE`
+  captured *before* the advance), never read as mere presence — a
+  merely-present stamp would mask a genuine stall at a later pass on the same
+  phase. And it is a deliberately **orthogonal** field, not folded into
+  `execution.fix` / `execution.conflict`, because those are live routing
+  interrupts the selector re-dispatches on and a completion record must not
+  double as a dispatch instruction.
+- *False success — this is the whole of Unit 3's remaining work.* `fix` and
+  `conflict` are awaited rungs that are not `Phase` members, so
+  `.phase != "$FROM_PHASE"` is trivially true and `advanced` (`:443`) is
+  returned unconditionally. The `review` carve-out at `:428` is the existing
+  pattern to follow. There is a **producer-side half**: on the router's
+  conflict-interrupt entry the selector's awaited rung is `conflict`, but the
+  stamp passes the node's persisted phase, so phase equality cannot match —
+  `dispatch-conflict/SKILL.md:1305-1312` records this as a known gap and
+  assigns it here ("Whoever fixes that must make this call pass `conflict` on
+  the interrupt path"). It costs nothing today *only because* the phase probe
+  fires first and vacuously returns `advanced`; fixing the vacuous arm without
+  the producer-side half converts a silent pass into a false stall.
+
+> Stale cross-reference to ignore:
+> `intentions/tactic-dispatch-ladder-exit-code-space.md` lists
+> `tactic-ladder-await-phase-only-completion-test` under "await test coverage
+> gaps". That note predates the shipped coverage and is **not** an outstanding
+> obligation.
 
 **Unit 4 — blocked node is not honest silence.** `graph-select-target` collapses
 blocked/parked/done/absent/reviewed into one empty answer with the reason only
@@ -791,19 +841,112 @@ modified `intentions/` file made `provision-node-worktree` refuse its
 through the failed catch-all to exit 11 — classifying a transient environment
 state as `violation`. Give it its own disposition.
 
-**Unit 6 — terminal-without-disposition dominates the clock.** Neither phase
-declared a node-terminal marker, so each finished phase stayed registered until
-the sweep freed it — 49.5% of a 9644s run elapsed after the work was already
-public. Make phase completion declare its own marker rather than waiting for
-the sweep.
+**Unit 6 — terminal-without-disposition: RULED OUT OF THIS PR, one
+investigation only.** The measurement stands — neither phase declared a
+node-terminal marker, so each finished phase stayed registered until the sweep
+freed it, and 49.5% of a 9644s run elapsed after the work was already public.
+But the remediation is **not** built here. Author ruling, 2026-08-19
+office-hours sitting (shape (ii) of three):
 
-**Unit 7 — terminus owns main-qa.** `dispatch-ladder-advance:239-245`,
-`packages/intentionsutil/src/transitions.ts:75-78`,
-`dispatch-graph-execute:189` *(all from node body — re-locate)*. Drive the node
-to a terminal state including spawned main-qa work, instead of ending at merge
-and leaving the post-merge write to a fleet reconciler the run does not control.
-**This is the largest unit — if PR2 is running long, split Unit 7 into its own
-PR2b; nothing else here depends on it.**
+- `dispatch-ladder-advance`'s **exit-13 refusal stands as designed.** Its
+  guarding comment at `:165-203` — "auto-releasing another session's claim is a
+  policy act, and this driver may sequence, never gate" — is ratified, not
+  merely tolerated. Do not relax it in this PR or any other without a fresh
+  ruling.
+- **The marker work is routed to the per-skill declaration family** under
+  `strategy-graph-native-dispatch`: `tactic-align-tactics-mark-terminal-skipped`
+  (PR #3047, landed), `tactic-qa-fix-node-terminal-declaration`,
+  `tactic-qa-main-node-terminal-declaration`. Building it here would record the
+  same root-cause defect on a second tactic, which
+  `strategy-recursive-self-improvement`'s own `success_signal` forbids in terms,
+  and would put an orchestration repair under a strategy whose statement is
+  "measurement, not a second orchestrator".
+- **Knob-tuning is not a path.** The 300s `DISPATCH_TERMINAL_DISPOSITION_GRACE_S`
+  floor was not the dominant term: 3092s of the 4290s align-tactics block
+  elapsed with the phase finished and *no actor at all*, and the invalid-state
+  lane then burned a further 1196s on a node whose work was already at
+  `origin/main`. The dominant term is the sweep's **invocation cadence** once
+  the driver had halted (falling back to the fleet tick's ~15-minute heartbeat)
+  plus the invalid-state hop.
+
+**What remains in scope here is one investigation**, owed regardless of shape
+and cheap: establish which write path the 2026-08-14 align-tactics round
+actually took. `land-align-round --terminal` shipped 2026-08-05 and
+`align-tactics/SKILL.md:353-380` already mandated the marker, so this is **not**
+a missing-instruction gap. Live candidates: an exit-12 no-claim path; a
+`graph-commit` park whose own push failed (documented as writing no marker **by
+design**); a batch/strategy-mode land; or a session that died before reaching
+the land at all. This investigation is **unplanned** — run
+`/align-tactics tactic-eval-finding-terminal-without-disposition-dominates-clock`
+before implementing it.
+
+**Unit 7 — terminus: enforcement residual only.** The instrument already
+shipped as PR #3091 (merge `de347430`, 2026-08-14) and
+`tactic-ladder-terminus-owns-main-qa` is now `phase: done` crediting it:
+`packages/intentionsutil/src/terminus.ts` (`classifyTerminus`,
+`ladderTerminusCensus`, `findUnstructuredWaits`),
+`packages/intentionsutil/scripts/ladder-terminus-census.ts`, the
+`ladder-terminus` sensor in `read-sensors.ts`, and `dispatch-ladder-run`'s
+`classify_terminus` / `classify_absent_node` / halt wiring with 48 shell
+assertions. **Do not rebuild any of it.** Two things moved out; what is left is
+enforcement, folded into this PR by author ruling on 2026-08-19:
+
+*Out of this PR entirely.* The original scope item 2 — "the requirement follows
+the work, not the node", making a run answerable for spawned main-qa work
+**across a node boundary** — is re-homed onto the new node
+`tactic-ladder-run-answerable-across-node-boundary`, `blocked_by`
+`tactic-mainqa-record-time-routing` — which is **no longer raw**: it was
+finalized to `phase: implement` on 2026-08-20 (`fcb792af`) carrying a
+seven-unit plan in its own node body, and is itself `blocked_by`
+`tactic-wait-calendar-release` (PR #3051, still an open draft). It stays out of
+this plan and lands as its own PR; see the file-collision note under PR5's
+Dependencies for the one place its scope touches this plan's. That is the
+governing rule from PR #3091's own "Not in this PR" section: *no cross-node
+machinery is built while no caller can exercise it.*
+
+*In this PR, executed ad hoc.* `ladder-terminus-census.ts --strict` is wired
+into nothing today, by the script's own deliberate choice, and the node's
+recorded threshold of **0 violations** is unmet. Baseline re-measured
+2026-08-19 at `origin/main`: `merged-not-done=29 excused=24 violations=5`, plus
+2 unstructured waits. Sequence:
+
+1. **Recover the three plain stranded nodes by hand.** They involve no wait at
+   all — `tactic-align-tactics-mark-terminal-skipped` (#3047),
+   `tactic-dependency-justification-audit` (#2875),
+   `tactic-graph-commit-landing-signal-unreliable` (#3050), all sitting at
+   `phase: main-qa`. **Do not invoke `/dispatch-ladder` on them** — the author's
+   ruling for this PR is ad-hoc execution throughout, notwithstanding
+   clarification 232's corollary that the ladder would pick each up wherever it
+   stands. This moves the observable 5 → 2.
+2. **Then decide the two remaining prose waits**, which is the whole of
+   clarification 232's open question and is much sharper once step 1 lands:
+   - `tactic-attention-namespaced-rank` names a real node
+     (`tactic-attention-per-tier-boost-migration`) and **is expressible as a
+     `blocked_by` edge today**, no new machinery.
+   - `tactic-pause-disables-merge-lane` awaits an **episode** — a heartbeat tick
+     with the pause sentinel present and a reviewed green node-lane PR pending
+     merge. That is neither a node nor a calendar deadline, so neither
+     `blocked_by` nor `tactic-wait-calendar-release`'s `wait_until` shape fits.
+     Inventing a shape for it deserves its own tactic, not a unit here — so for
+     this one take clarification 232's recorded escape: **the sensor stays
+     approximate and says so**, which means `ladder-terminus-census.ts` states
+     the approximation in its own output rather than leaving readers to infer
+     it, and this node's `success_signal` threshold is amended off 0.
+3. **Only then wire `--strict`** — it is gated on step 2's answer.
+
+**Two invariants bound every option here** (both carried in the shipped code's
+doc comments, and restated in the node's clarifications so a later reader does
+not undo them): `classifyTerminus` requires a **strict** enumeration
+(`listNodesStrict`, `terminus.ts:46-55`) because it and `router.ts`'s
+`blockersComplete` fail open in *opposite* directions on a missing `byId` entry;
+and `findUnstructuredWaits` must **never** feed back into `classifyTerminus` to
+reclassify a prose wait as excused (`terminus.ts:153-162`). Closing the wait gap
+means converting prose to real `blocked_by` edges — **never** loosening the
+predicate.
+
+Re-measure with
+`npx tsx packages/intentionsutil/scripts/ladder-terminus-census.ts intentions --lint`
+before and after, rather than citing any stored figure.
 
 ### Dependencies
 
@@ -1176,6 +1319,19 @@ re-locate)*.
 ### Dependencies
 
 PR1. Independent of PR2–PR4.
+
+> **File collision, not a dependency — `tactic-mainqa-record-time-routing`.**
+> That node is outside this plan and lands as its own PR, but its Unit 4 edits
+> the same two files this PR touches: `reconcile-graph.ts` (its `isOpen` and
+> pass-1 enumeration at `:139-141` / `:175`, against this PR's retention-scan
+> work at `:186`) and `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged`
+> (its inline `open` set at `:135`, against this PR's shared-enumeration
+> refactor). The concerns are disjoint — correctness there, tick cost here — so
+> either order works, but whichever lands second rebases over the other.
+> **Do not fold that node into this PR:** it is `blocked_by`
+> `tactic-wait-calendar-release` (PR #3051, an open draft outside this plan),
+> and absorbing it would gate this PR on that draft while raising a
+> five-efficiency-fix sonnet PR to an opus correctness change.
 
 ### Reuse
 
