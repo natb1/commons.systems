@@ -141,13 +141,17 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
    * wait exists to apply.
    *
    * The exception is narrow. A released WAIT whose source is GONE from the
-   * store, or whose source is ITSELF done, has nothing left to hold and is
-   * genuine debt — it stays in `donePresent` for the census to drain.
+   * store, whose source is ITSELF done, or whose source's `blocked_by` no
+   * longer names it, has nothing left to hold and is genuine debt — it stays in
+   * `donePresent` for the census to drain. The edge check mirrors
+   * `listWaitCandidates` (src/wait-sweep.ts, step 3, "edge already detached"):
+   * without it a wait whose edge was dropped during its released window is
+   * enumerated by nothing yet exempted forever, i.e. un-drainable residue.
    */
   const isLiveRearmTarget = (n: IntentionNode): boolean => {
     if (!isWaitNode(n)) return false;
     const source = byId.get(n.attributes.wait_for as string); // type-safety-ok: isWaitNode already checked wait_for is a string
-    return source !== undefined && source.phase !== "done";
+    return source !== undefined && source.phase !== "done" && source.blocked_by.includes(n.id);
   };
 
   const donePresent: string[] = [];

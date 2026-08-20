@@ -44,6 +44,7 @@ import {
   WAIT_MAX_HORIZON_DAYS,
   WAIT_MAX_HORIZON_MS,
   WAIT_RELEASE_SENTENCE,
+  isWaitNode,
   waitIdFor,
   parseWaitUntil,
 } from "../src/waits.js";
@@ -199,7 +200,9 @@ function buildWaitBody(waitId: string, input: WaitInput): string {
  * beyond `now` (an over-horizon wait never comes due, so it never reaches the
  * attempt cap and never escalates); an EXTEND would push `until` more than
  * `WAIT_MAX_HORIZON_DAYS` past the existing node's `wait_armed_since` (the
- * unbounded-extension loop the attempt cap cannot see); or the existing node
+ * unbounded-extension loop the attempt cap cannot see); a node already sits at
+ * the derived wait id but is not a canonical WAIT node (an id collision with
+ * unrelated work — rewriting it would corrupt that node); or the existing node
  * at the derived wait id carries a non-null `office_hours` (the cap-park
  * already fired — re-arming would erase the escalation; the caller must
  * `clear-park` first).
@@ -250,6 +253,23 @@ export function decideWait(nodes: IntentionNode[], input: WaitInput): WaitDecisi
   }
 
   const existing = nodes.find((n) => n.id === waitId);
+  // The node sitting at the derived id must actually BE a wait — the same
+  // canonical-id check wait-sweep.ts, router.ts, graph-census-debt.ts and
+  // release-wait's re-assert all apply. Without it an ordinary tactic that
+  // merely happens to be named `tactic-wait-*` (e.g. the real work tactic
+  // `tactic-wait-calendar-release`) is classified EXTEND and silently rewritten
+  // as this source's wait: `wait_until`/`wait_armed_since` merged into its
+  // attributes, an `## Extend` stanza appended to its body, and a `blocked_by`
+  // edge added from the source. Because such a patch never adds `wait_for`,
+  // validate-graph rule 22 stays inert and the corruption lands unnoticed.
+  if (existing !== undefined && !isWaitNode(existing)) {
+    throw new Error(
+      `wait-node-decide: "${waitId}" already exists but is not a WAIT node ` +
+        `(no canonical attributes.wait_for naming "${input.sourceId}") — the ` +
+        `derived wait id collides with an unrelated node, and re-arming here ` +
+        `would rewrite it; rename that node or pick a different source id`,
+    );
+  }
   if (existing !== undefined && existing.office_hours !== null) {
     throw new Error(
       `wait-node-decide: "${waitId}" already carries a non-null office_hours — ` +

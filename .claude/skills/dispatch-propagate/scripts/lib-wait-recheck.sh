@@ -605,7 +605,7 @@ TS
 
     local wait_id source_id attempts until_at cls
     local wt wait_wt claimed_id rc attrs_json reason recommendation
-    local writer skips_left fails_now
+    local writer skips_left fails_now attrs_problem
     local -A seen_ids=()
     local k idx
     for (( k = 0; k < total; k++ )); do
@@ -637,6 +637,15 @@ TS
 
       # (c) Not yet due: nothing to do, nothing wrong.
       if [[ "$cls" == "waiting" ]]; then
+        # A wait that is armed and not yet due has left whatever failing state
+        # it was in — it was released and re-armed, extended, or repaired — so
+        # the previous cycle's consecutive-failure streak is over. Clearing it
+        # here is what stops a stale streak from carrying across cycles: the
+        # node stays enumerated (so the end-of-pass prune never touches it) and
+        # only a successful write clears the streak otherwise, which would let
+        # one fresh failure trip DISPATCH_WAIT_RECHECK_FAIL_ESCALATE and park a
+        # healthy wait as though it had failed N times in a row.
+        _wait_recheck_clear_failure "$wait_id"
         printf 'lib-wait-recheck: observing (until=%s) for %s\n' "$until_at" "$wait_id" >&2
         observing=$(( observing + 1 ))
         _wait_recheck_log_decision "$wait_id" "$source_id" "$attempts" "$until_at" "$cls" "observing"
@@ -697,21 +706,47 @@ TS
         # pair KEEPS the WAIT: parking with an invented reason would hand the
         # author an escalation that names nothing. No landing-lock push was
         # spent, so this path does NOT consume the cap.
+        attrs_problem=""
         if ! attrs_json=$(_wait_recheck_park_attrs "$root" "$wait_id"); then
-          printf 'lib-wait-recheck: resolve-failed (rc=attrs-unreadable) — could not read attributes.wait_reason/wait_recommendation; keeping the wait armed, retrying next tick (%s)\n' \
-            "$wait_id" >&2
-          failed=$(( failed + 1 ))
-          _wait_recheck_log_decision "$wait_id" "$source_id" "$attempts" "$until_at" "$cls" "resolve-failed"
-          continue
+          attrs_problem="attrs-unreadable"
+        else
+          # `jq <<<`, never `echo | jq` — see .claude/rules/shell-json.md.
+          reason=$(jq -r '.wait_reason // ""' <<<"$attrs_json" 2>/dev/null) || reason=""
+          recommendation=$(jq -r '.wait_recommendation // ""' <<<"$attrs_json" 2>/dev/null) || recommendation=""
+          [[ -n "$reason" && -n "$recommendation" ]] || attrs_problem="attrs-empty"
         fi
-        # `jq <<<`, never `echo | jq` — see .claude/rules/shell-json.md.
-        reason=$(jq -r '.wait_reason // ""' <<<"$attrs_json" 2>/dev/null) || reason=""
-        recommendation=$(jq -r '.wait_recommendation // ""' <<<"$attrs_json" 2>/dev/null) || recommendation=""
-        if [[ -z "$reason" || -z "$recommendation" ]]; then
-          printf 'lib-wait-recheck: resolve-failed (rc=attrs-empty) — attributes.wait_reason/wait_recommendation are missing or empty; keeping the wait armed, retrying next tick (%s)\n' \
-            "$wait_id" >&2
+        if [[ -n "$attrs_problem" ]]; then
+          printf 'lib-wait-recheck: resolve-failed (rc=%s) — attributes.wait_reason/wait_recommendation could not be read or are empty; keeping the wait armed, retrying next tick (%s)\n' \
+            "$attrs_problem" "$wait_id" >&2
           failed=$(( failed + 1 ))
           _wait_recheck_log_decision "$wait_id" "$source_id" "$attempts" "$until_at" "$cls" "resolve-failed"
+          # This failure gets the SAME backoff and escalation bookkeeping as a
+          # writer refusal. Without it the streak never advances, no skip window
+          # ever arms, and the escalation threshold is never reached — so a wait
+          # whose park strings can never be read is retried every tick forever
+          # while the summary keeps reading status=ok, which is exactly the
+          # starvation rule (e) exists to close.
+          _wait_recheck_note_failure "$wait_id" "$backoff_max"
+          fails_now="${_WAIT_RECHECK_FAILS[$wait_id]:-0}"
+          if (( fails_now >= escalate_at )); then
+            # `_wait_recheck_escalate` is deliberately NOT used here: it reads
+            # the very strings that could not be read. This escalation names the
+            # SWEEP's own failure instead, which invents nothing about the wait.
+            if "$park_cmd" "$wait_id" \
+                "the calendar-wait sweep cannot read this wait's attributes.wait_reason/attributes.wait_recommendation ($attrs_problem) after $fails_now consecutive attempts, so it cannot escalate the wait on its own terms and has stopped retrying it" \
+                "repair intentions/$wait_id.md so validate-graph rule 22 holds (non-empty attributes.wait_reason and attributes.wait_recommendation), then release or re-arm the wait by hand" \
+                >/dev/null; then
+              printf 'lib-wait-recheck: escalated %s to office hours (%s consecutive %s failures; the sweep has stopped retrying it)\n' \
+                "$wait_id" "$fails_now" "$attrs_problem" >&2
+              escalated=$(( escalated + 1 ))
+              _wait_recheck_clear_failure "$wait_id"
+              _wait_recheck_log_decision "$wait_id" "$source_id" "$attempts" "$until_at" "$cls" "escalate-parked"
+            else
+              printf 'lib-wait-recheck: escalate-failed (%s) — %s consecutive %s failures could not be escalated to office hours; keeping the wait armed and backing off\n' \
+                "$wait_id" "$fails_now" "$attrs_problem" >&2
+              _wait_recheck_log_decision "$wait_id" "$source_id" "$attempts" "$until_at" "$cls" "escalate-failed"
+            fi
+          fi
           continue
         fi
 

@@ -144,11 +144,25 @@ describe("computeDebt", () => {
     });
   }
 
+  /** The source a released WAIT still holds — its `blocked_by` names the wait. */
+  function heldSource(id: string): IntentionNode {
+    return openTactic(id, { blocked_by: [`tactic-wait-${id.replace(/^tactic-/, "")}`] });
+  }
+
   it("excludes a released WAIT whose source is still present and open", () => {
-    const nodes = [strategy(), openTactic("tactic-src"), releasedWait("tactic-src")];
+    const nodes = [strategy(), heldSource("tactic-src"), releasedWait("tactic-src")];
     const debt = computeDebt(nodes, new Set());
     expect(debt.donePresent).toEqual([]);
     expect(debt.total).toBe(0);
+  });
+
+  it("counts a released WAIT whose source no longer names it in blocked_by", () => {
+    // The edge is what makes the wait a live re-arm target; detached, it holds
+    // nothing and no sweep enumerates it (wait-sweep.ts step 3), so it is
+    // genuine owed-prune debt rather than a permanently-exempt residue node.
+    const nodes = [strategy(), openTactic("tactic-src"), releasedWait("tactic-src")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual(["tactic-wait-src"]);
   });
 
   it("counts a released WAIT whose source is itself done", () => {
@@ -166,7 +180,7 @@ describe("computeDebt", () => {
   it("still counts an ordinary done node alongside an excluded WAIT (no regression)", () => {
     const nodes = [
       strategy(),
-      openTactic("tactic-src"),
+      heldSource("tactic-src"),
       releasedWait("tactic-src"),
       doneTactic("tactic-ordinary"),
     ];
