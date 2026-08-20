@@ -62,6 +62,45 @@ clarifications:
       path, a graph-commit park whose own push failed (documented as writing no
       marker BY DESIGN), a batch/strategy-mode land, or a session that died
       before reaching the land at all."
+  - question: Does consequence (2) of the 2026-08-19 ruling — routing the
+      node-terminal repair to the per-skill declaration family — name carriers
+      that actually exist and are unparked, and is the third carrier's undrafted
+      state a gap this node must close?
+    answer: "(Recorded 2026-08-19 /align-tactics tactic-mode drift review;
+      immaterial, plan_depends=false, no park.) Verified against the worktree at
+      this round: the three carriers the 2026-08-19 office-hours ruling routes
+      the node-terminal repair to all exist under strategy-graph-native-dispatch
+      and none is parked — tactic-align-tactics-mark-terminal-skipped (phase
+      main-qa, status codified), tactic-qa-fix-node-terminal-declaration (phase
+      qa, status codified), tactic-qa-main-node-terminal-declaration (phase
+      null, status raw). Consequence (2) of that ruling is therefore live rather
+      than aspirational. The third carrier being still undrafted is not a gap
+      this node closes: drafting it is strategy-graph-native-dispatch's
+      decomposition, and planning it here would record the same root-cause
+      defect on a second tactic, which is exactly what the ruling and this
+      strategy's success_signal forbid."
+  - question: Does the investigation left owed by consequence (5) require a new
+      instrument, and does planning it on this node disturb consequence (4)'s
+      'retains its measurement and nothing else'?
+    answer: "(Recorded 2026-08-19 /align-tactics tactic-mode drift review;
+      immaterial, plan_depends=false, no park.) The owed investigation of
+      consequence (5) is a read-only forensic pass over instruments that already
+      exist, not new build:
+      .claude/skills/dispatch-propagate/scripts/dispatch-terminal-gap-audit
+      reconstructs the node-id -> worktree -> project-slug ->
+      workflows/wf_*.json chain and already classifies landed-then-skipped,
+      parked-by-design, no-workflow-record and unmeasurable;
+      packages/intentionsutil/scripts/land-align-round documents the verdict ->
+      disposition table and graph-commit's single `graph-commit: verdict: ...`
+      stdout line; packages/intentionsutil/scripts/mark-node-terminal documents
+      the marker byte format whose absence this entry measures. Together they
+      discriminate the four candidate paths (exit-12 no-claim, park with failed
+      push, batch/strategy-mode land, death before land) without a new
+      instrument. This does not disturb consequence (4): establishing which
+      write path was taken EXTENDS this node's measurement and attaches no
+      orchestration rule, so it is admissible here in a way the remediation
+      explicitly is not. Per clarification 44 on the serving strategy, deciding
+      whether a draft-phase observation is work is this rung's own job."
 tooling_goals: []
 success_signal: null
 attention: null
