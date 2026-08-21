@@ -22,11 +22,128 @@ rationale: "Found in the 2026-08-05 /align interview.
   at line 106 reads oddly but is CORRECT by contract -- line 37 documents it as
   caller-flattened from attributes.conditions."
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
-clarifications: []
+clarifications:
+  - question: Does the serving strategy's armed maintenance-burden band still hold
+      at the time of this round, and by what method was it measured?
+    answer: "(Measured 2026-08-21 /align-tactics per-node round on
+      tactic-align-tactics-drift-dump-office-hours, independently of the gather
+      agent.) Fourth consecutive independent measurement of the armed
+      maintenance-burden band failing on strategy-graph-native-dispatch. Method:
+      `intentions/` extracted at origin/main 3313bc46 via `git archive`,
+      classified verbatim per packages/intentionsutil/src/census.ts:13-40
+      (classifyTactic / strategyBacklogBand). Result: 316 tactics serve this
+      strategy — 97 done, 91 draft, 84 open, 44 born-parked — giving backlog
+      128/316 = 40.5% against a declared 35% ceiling. Both limbs fail: the
+      ceiling is breached by 5.5 points, and the series is increasing rather
+      than non-increasing against the strategy's own recorded descent (47.6% →
+      38.2% → 31.4% → 24.6%) and against the same-day 39.4% at 481572f1. Prior
+      samples: 39.4% (481572f1), 38.5% (fd98fd26, sibling park on
+      tactic-graph-commit-park-content-durability), 41.1% (this round's gather
+      agent). The canonical census script could not be run directly (`npx tsx`
+      fails EPERM binding its IPC pipe under the sandbox — the known tsx
+      scratch-dir restriction), so the classification was reimplemented against
+      the census.ts source rather than shelled out; four samples agreeing within
+      2 points cross-validates it. Separately: the strategy's stored `reading`
+      field still records 58/236 = 24.6%, stale by ~16 points and by 80 tactics
+      against the live corpus — a round must re-derive the band rather than
+      reuse `reading`. CALLER-THREAD CORRECTION (2026-08-21, same round): the
+      claim that the canonical census could not be shelled out is true only of
+      the Workflow subagents. The caller thread DID run it — `listNodes` +
+      `strategyBacklogBand` imported directly from
+      packages/intentionsutil/src/census.ts against `intentions/` extracted at
+      origin/main 3313bc46 — and reproduces the subagent figure EXACTLY: 97
+      done, 91 draft, 84 open, 44 born-parked, band 128/316 = 40.5%, ceiling
+      limb FAILS. So the band failure is confirmed by the canonical code path,
+      not only by a reimplementation of it."
+  - question: Is the office_hours dump-site omission still live at origin/main, and
+      does this tactic's motivating example still hold?
+    answer: "(Verified 2026-08-21 /align-tactics per-node round on
+      tactic-align-tactics-drift-dump-office-hours.) The office_hours dump-site
+      omission is CONFIRMED LIVE at origin/main 3313bc46 — `office_hours`
+      appears in none of the four strategy-record payloads, while the
+      strategy-mode eligibility prose at .claude/workflows/align-tactics.js:743
+      still names 'office_hours is null' as one of five criteria the agent must
+      apply. But this tactic's motivating example has expired:
+      strategy-graph-native-dispatch now carries `office_hours: null`
+      (intentions/strategy-graph-native-dispatch.md:6710), so the rationale's
+      'parked from 2026-08-04, so every drift round on it reasoned about a park
+      it could not see' is history rather than a live symptom. The defect stands
+      without that example; a re-plan should not cite it as current evidence."
+  - question: What are the correct current anchors for the four dump sites and for
+      the caller-side args.strategy blocks, replacing the rationale's stale line
+      numbers?
+    answer: "(Re-anchored 2026-08-21 /align-tactics per-node round, verified against
+      origin/main 3313bc46.) Corrected anchors for
+      tactic-align-tactics-drift-dump-office-hours, replacing the rationale's
+      stale 'line 28 / line 45 / lines 101-107 / 801, 904, 980': the instruction
+      prose is at .claude/workflows/align-tactics.js:726 (tactic-mode block,
+      which tells the agent NOT to evaluate office_hours) and :743
+      (strategy-mode eligibility, which requires it); the three `asJson({...})`
+      strategy dumps are buildDriftPrompt :798-808, buildDecomposePrompt
+      :901-908, and buildPlanPrompt's tactic-mode branch :977-986. The FOURTH
+      site, buildCorpusPrompt :656-663, is a plain template-string join
+      (statement/success_signal/reading/gap only), NOT an asJson object, so it
+      takes a different edit shape from the other three — the rationale's 'all
+      four dump sites' does not disambiguate this. Beyond the four, three
+      further sites are required: the JSDoc args contract at :32-40, and the two
+      caller-side args.strategy literals at
+      .claude/skills/align-tactics/SKILL.md:252-259 (strategy mode) and
+      .claude/skills/align-tactics/references/tactic-target.md:91-98 (tactic
+      mode). `office_hours` is a first-class strategy frontmatter field
+      (intentions/kind-strategy.md:91), read directly off the node — unlike
+      `derived_gap`, which is computed via deriveGap and must never be read off
+      frontmatter."
+  - question: Is a workflow-side-only fix sufficient, and does the fix buy the same
+      thing in strategy mode and tactic mode?
+    answer: "(Recorded 2026-08-21 /align-tactics per-node round on
+      tactic-align-tactics-drift-dump-office-hours.) The office_hours dump fix
+      is INERT without its caller-side half: align-tactics.js can only serialize
+      `strategy.office_hours`, and both callers build args.strategy from an
+      explicit field list that omits it (SKILL.md:252-259,
+      tactic-target.md:91-98). A plan that edits only the four workflow dump
+      sites ships a change that forwards `undefined` on every invocation and
+      would pass a naive grep-count assertion while fixing nothing. The
+      caller-side edits are load-bearing units, not consistency polish. Note
+      also the per-mode asymmetry in what the fix buys: in TACTIC mode the
+      eligibility block at align-tactics.js:726 explicitly instructs the agent
+      NOT to evaluate the strategy's office_hours, so supplying it into the two
+      tactic-mode dumps is read-only context only; it is the STRATEGY-mode drift
+      dump (:798-808, paired with the :743 criterion) that actually restores a
+      declared-but-currently-unenforceable gate. A plan should say which of the
+      two outcomes each unit delivers rather than treating all four sites as
+      equivalent."
+  - question: How must a test covering .claude/workflows/align-tactics.js be wired
+      into CI, and does any existing test already cover the strategy-record dump
+      payloads?
+    answer: "(Verified 2026-08-21 /align-tactics per-node round on
+      tactic-align-tactics-drift-dump-office-hours.) CI-wiring trap for any test
+      covering .claude/workflows/align-tactics.js: run-unit-tests.sh's
+      changed-path auto-detect (lines 84-90) sets RUN_PR_SCRIPTS only for
+      `.claude/skills/dispatch-propagate/scripts/*` and lists no
+      `.claude/workflows/*` case, so a new test-align-tactics-*.sh for a
+      workflow-file change is never selected by the glob fallback and must be
+      added as an unconditional step in the hook-tests job of
+      .github/workflows/unit-tests.yml — which is why all five existing
+      align-tactics shell tests are wired unconditionally there (:271, :273,
+      :299, :301, :369). Confirmed additionally: no existing test asserts any
+      field of the strategy-record dump payloads, and `grep '^// >>>'` over
+      align-tactics.js returns exactly four sentinel pairs (resolveTempRefs,
+      computePhaseGates, synthesizeTargetPlanTactic, tacticModeFraming) — none
+      around the three buildXPrompt dump functions — so no probe.mjs already
+      covers this surface, and a grep-count regression assertion in the style of
+      test-align-tactics-gates.sh:31-33 is the lighter-weight fit unless new
+      sentinels are added around the dump functions. CALLER-THREAD CORRECTION
+      (2026-08-21, same round): the cited style anchor is wrong.
+      test-align-tactics-gates.sh:31-33 is a probe-OUTPUT assertion (`assert_eq
+      ... \"align-tactics-gates-probe: ALL PASS\"`), not a grep count. The
+      grep-count doctrine-ratchet style the observation means is
+      test-align-tactics-terminal-marker.sh:85-87 and :101-103 (`n=$(grep -cE
+      ... )` then assert present/absent). Every other anchor in these five
+      entries was re-verified on the caller thread at origin/main 3313bc46 and
+      is correct."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -34,9 +151,297 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "SIDE A — MAJOR SCOPE DEVIATION. The serving strategy's ARMED
+    maintenance-burden band condition is measured FALSE on BOTH limbs, so this
+    node's plan cannot be authored against it. WHAT FAILED:
+    strategy-graph-native-dispatch's condition declares 'the open
+    machinery-defect population — open (phase set, not done) plus born-parked
+    tactics serving this strategy — stays at or below 35% of all tactics serving
+    this strategy, and is non-increasing across consecutive samples' (armed
+    2026-08-05, measured at arming 59/197 = 30.0%). MEASUREMENT: at origin/main
+    3313bc46 on 2026-08-21, 316 tactics serve this strategy — 97 done, 91 draft,
+    84 open, 44 born-parked — giving backlog 128/316 = 40.5%. Limb one (≤35%
+    ceiling) is breached by 5.5 points. Limb two (non-increasing) fails against
+    the strategy's own recorded descent 47.6% → 38.2% → 31.4% → 24.6% and
+    against the same-day prior sample of 39.4%. METHOD, so a fresh session need
+    not re-derive it: `intentions/` extracted at origin/main via `git archive`,
+    classified verbatim per packages/intentionsutil/src/census.ts:13-40
+    (classifyTactic / strategyBacklogBand); the canonical
+    align-tactics-census.ts could not be shelled out because `npx tsx` fails
+    EPERM binding its IPC pipe under the sandbox, so the classification was
+    reimplemented from the census.ts source. This is the FOURTH independent
+    measurement of the same failure on this strategy within 24 hours (39.4% at
+    481572f1, 38.5% at fd98fd26, 41.1% by this round's gather agent, 40.5% here)
+    — agreement within 2 points cross-validates the method and establishes a
+    worsening trend, not a sampling artifact. WHY THIS PARKS RATHER THAN
+    PROCEEDS: the condition itself states that a burden growing without bound IS
+    the condition failing and parks the strategy for an author decision, not
+    merely more work to do. Conditions are human-decided; a per-node session may
+    not re-resolve one, and may not write the strategy — hence this park lands
+    on the tactic and names the strategy-level failure inside it. Precedent on
+    this same strategy: 481572f1 (tactic-supersession-retirement-sweep) and the
+    sibling escalation on tactic-graph-commit-park-content-durability. AUTHOR
+    DECISION OWED: rule the band — re-affirm 35%, re-declare a different
+    ceiling, or accept the breach with a stated remediation — and refresh the
+    strategy's `reading`, which still records 58/236 = 24.6% and is stale by ~16
+    points and 80 tactics against the live corpus. RECOMMENDATION / STATE FOR A
+    FRESH SESSION: nothing about THIS node is defective — its premise was
+    independently verified live at origin/main 3313bc46, and its plan is
+    otherwise ready to author. `office_hours` is absent from all four
+    strategy-record payloads in .claude/workflows/align-tactics.js while the
+    strategy-mode eligibility prose at :743 still requires it. Once the band is
+    ruled, re-run /align-tactics tactic-align-tactics-drift-dump-office-hours;
+    five clarifications landed on this node by this round carry the corrected
+    anchors (prose :726 and :743; asJson dumps :798-808, :901-908, :977-986; the
+    fourth site buildCorpusPrompt :656-663 is a string join, not asJson), the
+    inert-without-caller-side finding (SKILL.md:252-259 and
+    tactic-target.md:91-98 must change or the fix forwards `undefined`), the
+    per-mode asymmetry (tactic mode is instructed at :726 NOT to evaluate
+    office_hours, so only the strategy-mode dump restores a real gate), the
+    expired motivating example (the strategy now carries office_hours: null at
+    intentions/strategy-graph-native-dispatch.md:6710), and the CI-wiring trap
+    (`.claude/workflows/*` is not in run-unit-tests.sh's auto-detect at lines
+    84-90, so any new test must be wired unconditionally in the hook-tests job
+    of .github/workflows/unit-tests.yml). No re-derivation of any of that is
+    needed. CALLER-THREAD RE-VERIFICATION (2026-08-21): before accepting this
+    park the caller thread re-measured the band independently using the
+    CANONICAL code path the subagent could not reach — `listNodes` and
+    `strategyBacklogBand` imported directly from
+    packages/intentionsutil/src/census.ts, over `intentions/` extracted at
+    origin/main 3313bc46 via `git archive` — and reproduced the subagent counts
+    EXACTLY (97 done / 91 draft / 84 open / 44 born-parked; band 128/316 =
+    40.5%; ceiling limb FAILS). The park is therefore confirmed by the canonical
+    census functions themselves, not only by a reimplementation of their rules.
+    NOTE ON WHERE THE OBSERVATIONS LANDED, recorded so the placement does not
+    read as an error: the round's five immaterial Side-B observations were
+    folded into this node's own `clarifications` and body round-record rather
+    than minted as a separate born-parked carrier node. That is deliberate.
+    Clarification 245/V1 forbids only an autonomous write to the STRATEGY's
+    clarifications, which this is not; and minting a carrier when the park's own
+    reason is a backlog-band breach would add a fresh born-parked tactic to the
+    very numerator the park is about (strategyBacklogBand, census.ts:26-40,
+    scores born-parked as backlog). Since this node is itself now in the
+    office-hours queue, the observations reach the same sitting a carrier would
+    have routed them to."
+  since: 2026-08-21
+  recommendation: >-
+    AUTHOR DECISION OWED — rule the maintenance-burden band on
+    strategy-graph-native-dispatch.
+
+    Three dispositions, all legal; pick one in an /align round on the STRATEGY
+    (this per-node
+
+    session may not write it):
+
+    (a) RE-AFFIRM 35% and treat the 40.5% breach as a backlog-reduction mandate
+    — then the
+        remediation itself needs a named carrier, because parking nodes is what raised the number;
+    (b) RE-DECLARE the ceiling against the live corpus (128/316 = 40.5% at
+    3313bc46) with a stated
+        descent target, if 35% was calibrated against a 197-tactic population that has since grown
+        to 316;
+    (c) ACCEPT the breach with a stated remediation and re-arm later, recording
+    why the band is
+        not currently the right instrument.
+
+    READ THIS FIRST — the band is now a compounding gate, not a single reading.
+    Every per-node
+
+    /align-tactics round on this strategy now parks on this same condition, and
+    each park converts
+
+    a `draft` tactic into a `born-parked` one. classifyTactic
+    (packages/intentionsutil/src/census.ts:13-18)
+
+    scores born-parked as BACKLOG and draft as neither, so each park moves one
+    tactic INTO the
+
+    numerator the condition measures. Four nodes were parked on this condition
+    within 24 hours
+
+    (tactic-supersession-retirement-sweep at 481572f1, tactic-align-review-skill
+    at a89740c2,
+
+    tactic-graph-commit-park-content-durability at fd98fd26, and this node), and
+    the samples rose
+
+    monotonically across them: 38.5% -> 39.4% -> 40.5%. The autonomy contract is
+    behaving
+
+    correctly at each step; the aggregate is a positive feedback loop that no
+    autonomous lane can
+
+    exit. Whichever disposition is chosen, it should be chosen soon and it
+    should say what the
+
+    lane does with the already-parked cohort.
+
+
+    ALSO OWED, cheap, independent of the ruling: refresh the strategy's stored
+    `reading`. It still
+
+    records `58/236 = 24.6%` — stale by ~16 points and 80 tactics against the
+    live corpus — and it
+
+    is the field a reader would naturally trust.
+
+
+    ON THIS NODE SPECIFICALLY — nothing about it is defective and no
+    re-derivation is owed. Its
+
+    premise was independently verified LIVE this round at origin/main 3313bc46:
+    `office_hours`
+
+    appears in none of the four strategy-record payloads in
+    .claude/workflows/align-tactics.js,
+
+    while the strategy-mode eligibility prose at :743 still names "office_hours
+    is null" as one of
+
+    five criteria the drift agent must apply. Once the band is ruled, re-run
+
+    `/align-tactics tactic-align-tactics-drift-dump-office-hours` and it can be
+    planned straight
+
+    from its own body: the five clarifications landed on this node by this round
+    carry the
+
+    corrected anchors, the inert-without-the-caller-side finding, the per-mode
+    asymmetry, the
+
+    expired motivating example, and the CI-wiring trap. Sequence it against
+
+    tactic-eval-finding-review-fix-workflow-args-rederived-each-pass (phase
+    implement), which edits
+
+    the same three args-contract anchors.
+  session_type: requirement-discovery
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # the /align-tactics drift agent is instructed to weigh the strategy's own office_hours but is never given the field -- pass office_hours into the drift payload at all four dump sites so the instruction and the data agree
+
+## Status — PARKED to office_hours, 2026-08-21 (no plan authored)
+
+This node is **still a draft**. The 2026-08-21 `/align-tactics` per-node round ran
+its two-sided drift review and parked before authoring a plan: Side A found the
+serving strategy's **armed maintenance-burden band condition measured false on
+both limbs**, and conditions are human-decided. `office_hours.reason` carries the
+measurement and `office_hours.recommendation` carries the decision owed. Nothing
+about *this* node is defective — its premise was verified live this round, and it
+can be planned straight from the record below once the band is ruled.
+
+**Where this round's observations live, and why.** The round's five immaterial
+Side-B observations were folded into this node's own `clarifications` array and
+this section, rather than minted as a separate born-parked observation carrier.
+That placement is deliberate, not an oversight. Clarification 245/V1 forbids an
+autonomous write to the *strategy's* `clarifications`; it does not forbid a
+session writing its own target node. And minting a carrier here would be actively
+counterproductive: `strategyBacklogBand`
+(`packages/intentionsutil/src/census.ts:26-40`) scores a born-parked tactic as
+backlog, so a new carrier would add to the very numerator this park is about.
+Since this node is itself now in the office-hours queue, the observations reach
+the same sitting a carrier would have routed them to.
+
+## The defect, re-verified at origin/main 3313bc46 (2026-08-21)
+
+Confirmed live. `.claude/workflows/align-tactics.js` serializes the serving
+strategy into agent payloads at **four** sites, and `office_hours` appears in
+**none** of them — while the strategy-mode eligibility prose at `:743` still names
+`office_hours is null` as one of five criteria the drift agent must apply. The
+agent must therefore hallucinate the field or silently treat it as absent.
+
+**Corrected anchors** — every line number in the `rationale` above is stale (it
+was written 2026-08-05 against a smaller file) and must not be trusted. Locate by
+symbol; these were re-checked on the caller thread at 3313bc46:
+
+| Site | Anchor | Shape |
+| --- | --- | --- |
+| `buildCorpusPrompt` | `:656-663` | template-string join — statement/success_signal/reading/gap only. **Different edit shape from the other three.** |
+| `buildDriftPrompt` | `:798-808` | `asJson({...})` full record. **The site the `:743` instruction depends on.** |
+| `buildDecomposePrompt` | `:901-908` | `asJson({...})`, full record minus `rounds` |
+| `buildPlanPrompt` (tactic branch) | `:977-986` | `asJson({...})` full record |
+
+The instruction prose sits at `:726` (tactic-mode block, which tells the agent
+**not** to evaluate `office_hours`) and `:743` (strategy-mode eligibility, which
+requires it). `buildReusePrompt` (`:628-632`) and `buildPlanPrompt`'s strategy
+branch (`:989-994`) carry only statement + success_signal and are not counted
+among the four.
+
+## Three findings a plan must not rediscover
+
+1. **A workflow-side-only fix is INERT.** `align-tactics.js` can only serialize
+   `strategy.office_hours`, and *both* callers build `args.strategy` from an
+   explicit field list that omits it — `.claude/skills/align-tactics/SKILL.md:252-259`
+   (strategy mode) and `.claude/skills/align-tactics/references/tactic-target.md:91-98`
+   (tactic mode) — plus the JSDoc args contract at `align-tactics.js:32-40`. Editing
+   only the four dump sites ships a change that forwards `undefined` on every
+   invocation and would pass a naive grep-count assertion while fixing nothing. The
+   caller-side edits are load-bearing units, not consistency polish. `office_hours`
+   is a first-class strategy frontmatter field (`intentions/kind-strategy.md:91`),
+   read directly off the node — unlike `derived_gap`, which is computed via
+   `deriveGap` and must never be read off frontmatter. Args normalization
+   (`align-tactics.js:1017`) passes `strategy` through whole, so no normalization
+   change is needed.
+
+2. **The two modes do not buy the same thing.** In tactic mode the eligibility
+   block at `:726` explicitly instructs the agent *not* to evaluate the strategy's
+   `office_hours`, so supplying it into the two tactic-mode dumps is read-only
+   context only. It is the **strategy-mode drift dump** (`:798-808`, paired with the
+   `:743` criterion) that actually restores a declared-but-currently-unenforceable
+   gate. A plan should say which outcome each unit delivers rather than treating all
+   four sites as equivalent.
+
+3. **CI-wiring trap.** `run-unit-tests.sh`'s changed-path auto-detect
+   (`:84-90`) sets `RUN_PR_SCRIPTS` only for `.claude/skills/dispatch-propagate/scripts/*`
+   and has no `.claude/workflows/*` case, so a new `test-align-tactics-*.sh` for a
+   workflow-file change is never selected by the glob fallback. It must be added as
+   an **unconditional** step in the `hook-tests` job of
+   `.github/workflows/unit-tests.yml` — which is why all five existing align-tactics
+   shell tests are wired there (`:271`, `:273`, `:299`, `:301`, `:369`). No existing
+   test asserts any field of the strategy-record dump payloads, and the file's four
+   sentinel pairs (`resolveTempRefs`, `computePhaseGates`, `synthesizeTargetPlanTactic`,
+   `tacticModeFraming`) surround none of the `buildXPrompt` dump functions — so no
+   probe covers this surface. A grep-count doctrine ratchet in the style of
+   `test-align-tactics-terminal-marker.sh:85-87` / `:101-103` is the lighter-weight fit
+   unless new sentinels are added around the dump functions.
+
+## Two corrections to this node's own record
+
+- **The motivating example has expired.** The `rationale` says
+  `strategy-graph-native-dispatch` "was parked from 2026-08-04, so every drift round
+  on it reasoned about a park it could not see." The strategy now carries
+  `office_hours: null` (`intentions/strategy-graph-native-dispatch.md:6710`), so that
+  is history, not a live symptom. The defect stands without it; a re-plan should not
+  cite it as current evidence.
+
+- **The blast-radius claim is overstated.** `packages/intentionsutil/src/router.ts:488`
+  (`if (s.office_hours !== null) continue;`) keeps a parked strategy out of the
+  selector's align-tactics candidate list, and Step 0's mandatory
+  `assert-node-selection` defers wholesale to `strategyAlignSelectable`
+  (`router.ts:588-592`), which is membership in exactly that list. A strategy-mode
+  round therefore cannot *start* on a parked strategy. The residual live exposure is
+  narrower: a park landed by a concurrent `/align` between Step 0's gate and the
+  Workflow invocation, and an agent instructed to weigh a field absent from its
+  payload. Plan the fix on the coherence ground — an instruction and its data must
+  agree, and a checked-but-unsupplied field is a prompt defect regardless of
+  reachability — not on the "every round was blind" ground.
+
+## Sequencing
+
+`tactic-eval-finding-review-fix-workflow-args-rederived-each-pass` is at phase
+`implement` and edits the **same three args-contract anchors**: it adds a
+sentinel-bounded `ARGS_CONTRACT` plus a `validateWorkflowArgs()` that throws on an
+undeclared field, rewrites both skill-side args blocks into pointers, and adds a CI
+guard asserting the two field-name sets match. Worth checking rather than assuming:
+`office_hours` is a sub-field of `strategy`, not a top-level args key, so it may
+fall outside `ARGS_CONTRACT`'s key set entirely. Either way, sequence the two
+explicitly — clarification 152 on the serving strategy records the standing
+precedent that overlapping edits to this one file are region-separable and
+expressible as a `blocked_by` edge, requiring no author decision.
+
+Out of scope: `.claude/workflows/qa-fix.js` and `.claude/workflows/review-fix.js`
+carry the same args-JSDoc shape and are named in that sibling node; they are not
+this node's work.
