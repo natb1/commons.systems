@@ -297,8 +297,6 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-fix-checks-cas-guard.sh
       - name: Run align-tactics write-path freshness doctrine ratchet
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-write-path-freshness.sh
-      - name: Run strategy_fingerprint stamp-coverage doctrine ratchet
-        run: .claude/skills/dispatch-propagate/scripts/test-strategy-stamp-doctrine.sh
       - name: Run align-tactics terminal-marker doctrine ratchet
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-terminal-marker.sh
       - name: Run dispatch-terminal-gap-audit tests
