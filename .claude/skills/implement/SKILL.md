@@ -275,6 +275,17 @@ Exit codes:
   `dispatch-mark-deviation` (skip the `phase-completed` marker) and stop.
 - **exit 2** — non-numeric arg.
 
+If `.claude/ancestry-context.md` is present in the worktree, read it before
+resolving any plan-under-determined judgment call — it is the bounded ancestry
+projection (parent chain + served strategies up to virtue roots) for this
+node.
+
+This projection is read-only decision context for in-scope, plan-under-determined
+judgment calls; the node body remains the sole work contract (a plan that assumes
+the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+conflict parks to `office_hours` with a recommendation — never self-expanded or
+self-reduced scope.
+
 ### 2. Build each unit
 
 Before building, create a tracked task list with the harness `TaskCreate` tool:
