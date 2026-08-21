@@ -531,14 +531,31 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    Note that this did **not** release
 >    `tactic-mainqa-office-hours-snapshot`, which `blocked_by` it — that node
 >    carries its own independent park, as recorded above.
-> 3. Land the ten clean halves as one batch, then re-verify the plan's anchors
->    once (step 5).
+> 3. ~~Land the ten clean halves as one batch~~ **PARTLY DONE 2026-08-21 — six
+>    of ten, not ten.** #3099 and #3101 merged; #3100, #3102, #3104 and #3105
+>    are open with auto-merge armed. **#2975, #2974, #3057 and #3002 were
+>    attempted and abandoned deliberately** — their clean halves are dead
+>    without the contested core (dead config, an uncalled helper, docs for
+>    absent behaviour). See the CORRECTION and RESULT blockquotes in step 5,
+>    which also carry the four procedural rules the original step was missing.
+>    **Anchors are not yet re-verified** — do that once, after the four open PRs
+>    land, not before.
 > 4. Close all twelve drafts and fold their nodes in; leave the branches alive.
-> 5. Clear #3041's park (`claude stop`, never `claude rm`, then `clear-park` —
->    same two invocation constraints as item 2).
+>    **Not started, and its scope changed:** for the four unsplittable drafts
+>    the contested half is the *whole* draft, so the absorption is the larger one
+>    the original A1 table assumed, not the reduced one the split promised.
+>    Re-read step 6 before starting.
+> 5. ~~Clear #3041's park~~ **DONE 2026-08-21** (`e03c20e0`, blob-verified).
+>    The `claude stop` half turned out to be moot: `claude agents --json`
+>    (sandbox off) showed the holding session the park names is no longer
+>    registered at all. The "unpushed work" claim was re-measured before
+>    clearing and is still empty of authored non-merge commits.
 >
-> Items 2–5 are **all that is left in Bundle 0**, and every one of them is
-> execution rather than judgement. §"Residuals not owned by any Bundle 0 step"
+> Items 2 and 5 are **done**; item 3 is six-tenths done and its remaining four
+> were deliberately dropped; item 4 is untouched and larger than advertised.
+> Item 3 turned out to need judgement, not just execution — the step as written
+> would have landed a vacuously-passing test, a reverted nix pin, and three
+> bodies of dead code. §"Residuals not owned by any Bundle 0 step"
 > tracks the items that are *not* Bundle 0 steps.
 
 1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
@@ -817,6 +834,71 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    > So the A1 rule is **right about the contested 2,860 lines and wrong about
    > the clean 8,006.** Do not apply one verdict to both halves of a PR.
 
+   > **CORRECTION — 2026-08-21, from executing this step on all ten drafts.**
+   > The claim above ("the conflict boundary and the collision boundary are the
+   > same line") is **false as a general rule**, and the +8,006 figure is an
+   > over-count. It measures *textual* auto-mergeability. What actually governs
+   > is **semantic** independence, and the two diverge in three distinct ways —
+   > each of which was hit in practice:
+   >
+   > 1. **A test file merges cleanly while its subject conflicts.** The test then
+   >    lands without the code it exercises. `write-node.test.ts` (#3023, +164)
+   >    exercises `parseArgs`, which exists only on the branch side of the
+   >    conflicting `write-node.ts`: 9/9 failed.
+   >    **Rule: when a source file is resolved to main's side, its test file must
+   >    be too.**
+   > 2. **A non-conflicting source file calls a function that lives in a
+   >    conflicting one.** `dispatch-sweep` (#3054, +44) calls
+   >    `claude_agents_count_by_state`, which is on neither `main` nor the
+   >    resolved `lib-claude-agents.sh`. Two of its tests failed and **one passed
+   >    vacuously** — N10c asserts the `UNKNOWN (daemon unqueryable)` branch,
+   >    which is exactly what a missing function produces. A vacuous pass is the
+   >    dangerous case: it makes the batch look green.
+   > 3. **The whole draft IS the contested change.** Where a tactic's subject is
+   >    the contested file, its "clean" lines are the same change wearing a
+   >    different filename, and extracting them yields dead code. Four of the ten
+   >    are like this (below).
+   >
+   > A fourth hazard is not about coupling at all: **the merge can silently
+   > revert `main`.** #3056's branch side of `nix/home/wezterm-pin.nix` strips
+   > the pin rationale and rolls the version back — unrelated host
+   > personalization drift that a mechanical "take everything that auto-merged"
+   > split would have landed as a regression. Diff every auto-merged file that
+   > the tactic has no business touching.
+
+   > **RESULT — six of ten split, four did not.** Landed or open as their own
+   > PRs: #2946 → #3099 (+1,052), #3054 → #3101 (+325, *not* +962),
+   > #3023 → #3100 (+1,216, not +1,380), #3018 → #3102 (+946),
+   > #3056 → #3104 (+700, not +934), #3064 → #3105 (+245).
+   >
+   > **Not splittable — take the ordinary close-and-absorb path, no extraction:**
+   >
+   > - **#2975** — the branch widens `execution.markers` from `string[]` to
+   >   `MarkerEntry[]` in `schema.ts`. That widening *is* the tactic, and
+   >   `transitions.ts`, `compute-freshness.ts` and both test files all depend on
+   >   the new type. What remains genuinely clean is skill documentation
+   >   describing marker binding — landing it alone would make `main`'s docs
+   >   describe behaviour that does not exist.
+   > - **#2974** — `scopeStampMatches` and `tacticScopeFingerprint` both live in
+   >   the conflicting `router.ts`. Even `body-substance.ts`, a genuinely new
+   >   file, has an invariant test binding it to that fingerprint.
+   > - **#3057** — the clean remainder is `dispatch-config-load`'s `wip` type,
+   >   which documents itself as the ceiling for `selectGraphTargets` in the
+   >   conflicting `router.ts`. Nothing on `main` would read it.
+   > - **#3002** — the clean remainder is `ci_pending_strike_bump` in `lib.sh`
+   >   (+60) with **no caller**: the counter's only call site is
+   >   `graph-select-target`'s `ci-pending` arm, which conflicts.
+   >   `dispatch-graph-execute`'s +10 is a comment explaining why it deliberately
+   >   does *not* count.
+   >
+   > The shared test for all four: **would the extracted half do anything on
+   > `main`?** Dead config, an uncalled helper, and docs for absent behaviour all
+   > fail it. Landing them would be churn that reads as progress.
+   >
+   > Consequence for step 6: the contested half of these four is the **whole**
+   > draft, so the absorption they need is the one the original A1 table assumed,
+   > not the smaller one the split promised.
+
    **The disposition: split each draft at its own conflict boundary.** The clean
    half lands now, before any plan PR starts. The contested half is what folds
    into the named plan PR as a unit — which is the thing the absorb mechanism is
@@ -834,6 +916,25 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
       module it lands, and merge it. CI on all twelve drafts is already green or
       near-green (23 checks passing on eight of them), so this is not a repair
       job.
+
+      > **Amended 2026-08-21.** Step 1's `--ours` resolution is necessary but not
+      > sufficient — see the CORRECTION blockquote above. After resolving, and
+      > before opening anything, do all four:
+      >
+      > - Reset to main **every test file whose subject you just reset**.
+      > - Run the suites and treat a *vacuous* pass as a failure: a test that
+      >   asserts an error/UNKNOWN branch can pass precisely *because* the
+      >   function is missing.
+      > - Run `run-typecheck.sh` **and** `run-lint.sh`, not just the unit suite.
+      >   `vitest` does not typecheck, so schema drift on `main` (`gap` removed
+      >   from `IntentionNode`; `attention.boost`+`tier` → `attention.boosts`)
+      >   passes the suite and fails CI. #2946's test file hit exactly this.
+      > - Diff every auto-merged file the tactic has no business touching, and
+      >   reset it. #3056 would otherwise have reverted `nix/home/wezterm-pin.nix`.
+      >
+      > Then ask the gate question: **would this half do anything on `main`?**
+      > If it is dead config, an uncalled helper, or documentation for absent
+      > behaviour, do not extract it.
    3. **Then** close the original draft with a comment pointing at this section,
       and fold the node into the target PR's `### Nodes closed` and `### Scope` —
       scoped now to the contested files only, which is a far smaller absorption
@@ -900,6 +1001,41 @@ PRs untouched.
 > the original draft and is folded into its named plan PR either way.
 
 ---
+
+## `main` can be red without anyone knowing — check before blaming a PR
+
+Found 2026-08-21, while every clean-half PR sat `BLOCKED` on a `unit-tests`
+failure none of them caused.
+
+`.github/workflows/unit-tests.yml` carries `branches-ignore: main`. **The unit
+suite never runs on `main`.** The green "Push on main" runs in the Actions list
+are a *different* workflow, so a breakage that lands on `main` produces no red
+anywhere — it becomes visible only on the next PR, which then appears to have
+broken something it never touched.
+
+That is exactly what happened. `artifacts/plan-view` had been red on `main`
+since the attention-boosts migration: `lineage.ts`'s `authoredAmount` read
+`attention.override` and `attention.boost`, neither of which exists any more
+(`Attention` is now `{ boosts: Record<string, number>, rationale }`), so it
+returned `0` for every node — no band spine, no heat. Two tests failed.
+Fixed in #3103 by reading `boosts[tier]`, matching the canonical read at
+`packages/intentionsutil/src/attention.ts:592`.
+
+**How to apply, before debugging any PR-only CI failure:**
+
+1. Check whether the failing tests touch files your branch changed at all.
+2. If not, prove it: `git diff origin/main --stat -- <the failing workspace>`.
+   An empty diff with a failing test means the failure is `main`'s.
+3. Fix `main` on its own PR first, then update the blocked branches onto it.
+   Do not rebase-and-hope, and do not weaken the test.
+
+Related, and left open: `run-typecheck.sh` **skips** `artifacts/plan-view`
+entirely with `origin/main baseline fails`, because `rows.ts:137` still reads
+`resolved.value` — a field the four-component `RankKey`
+(`tier`/`band`/`score`/`depth`) replaced. A skipped workspace is a silent
+workspace. Collapsing that key into plan-view's single `rank` scalar is a design
+decision, not a mechanical substitution, so #3103 deliberately left it for an
+author ruling.
 
 ## Residuals not owned by any Bundle 0 step
 
