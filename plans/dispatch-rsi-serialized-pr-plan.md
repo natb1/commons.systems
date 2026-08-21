@@ -531,17 +531,19 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    Note that this did **not** release
 >    `tactic-mainqa-office-hours-snapshot`, which `blocked_by` it — that node
 >    carries its own independent park, as recorded above.
-> 3. ~~Land the ten clean halves as one batch~~ **PARTLY DONE 2026-08-21 — six
->    of ten, not ten.** #3099 and #3101 merged; #3100, #3102, #3104 and #3105
->    are open with auto-merge armed. **#2975, #2974, #3057 and #3002 were
->    attempted and abandoned deliberately** — their clean halves are dead
->    without the contested core (dead config, an uncalled helper, docs for
->    absent behaviour). See the CORRECTION and RESULT blockquotes in step 5,
->    which also carry the four procedural rules the original step was missing.
->    **Anchors are not yet re-verified** — do that once, after the four open PRs
->    land, not before.
+> 3. ~~Land the ten clean halves as one batch~~ **DONE 2026-08-21 — five of ten
+>    landed, five deliberately not attempted or withdrawn.** Merged: #3099,
+>    #3101, #3102, #3104, #3105. **#3023 (as #3100) was attempted and closed;
+>    #2975, #2974, #3057 and #3002 were attempted and abandoned** — in every
+>    case the clean half is dead or unlandable without the contested core (dead
+>    config, an uncalled helper, docs for absent behaviour, or a doctrine
+>    ratchet whose subject is contested). See the CORRECTION and RESULT
+>    blockquotes in step 5, which also carry the five procedural rules the
+>    original step was missing.
+>    **Anchors are not yet re-verified** — do that as its own pass now that the
+>    five have landed.
 > 4. Close all twelve drafts and fold their nodes in; leave the branches alive.
->    **Not started, and its scope changed:** for the four unsplittable drafts
+>    **Not started, and its scope changed:** for the five unsplittable drafts
 >    the contested half is the *whole* draft, so the absorption is the larger one
 >    the original A1 table assumed, not the reduced one the split promised.
 >    Re-read step 6 before starting.
@@ -551,12 +553,13 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    registered at all. The "unpushed work" claim was re-measured before
 >    clearing and is still empty of authored non-merge commits.
 >
-> Items 2 and 5 are **done**; item 3 is six-tenths done and its remaining four
-> were deliberately dropped; item 4 is untouched and larger than advertised.
+> Items 2 and 5 are **done**; item 3 is done at five of ten, with the other five
+> deliberately not landed; item 4 is untouched and larger than advertised.
 > Item 3 turned out to need judgement, not just execution — the step as written
-> would have landed a vacuously-passing test, a reverted nix pin, and three
-> bodies of dead code. §"Residuals not owned by any Bundle 0 step"
-> tracks the items that are *not* Bundle 0 steps.
+> would have landed a vacuously-passing test, a reverted nix pin, three bodies
+> of dead code, and a doctrine ratchet asserting flags that are not there.
+> §"Residuals not owned by any Bundle 0 step" tracks the items that are *not*
+> Bundle 0 steps.
 
 1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
    refuted by the reading it ordered.** This step said to read
@@ -866,12 +869,27 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    > split would have landed as a regression. Diff every auto-merged file that
    > the tactic has no business touching.
 
-   > **RESULT — six of ten split, four did not.** Landed or open as their own
-   > PRs: #2946 → #3099 (+1,052), #3054 → #3101 (+325, *not* +962),
-   > #3023 → #3100 (+1,216, not +1,380), #3018 → #3102 (+946),
-   > #3056 → #3104 (+700, not +934), #3064 → #3105 (+245).
+   > **RESULT — five of ten split, five did not.** Merged as their own PRs:
+   > #2946 → #3099 (+1,052), #3054 → #3101 (+325, *not* +962),
+   > #3018 → #3102 (+946), #3056 → #3104 (+700, not +934),
+   > #3064 → #3105 (+245). Three of the five are materially smaller than
+   > projected once coupled work was reassigned to the contested half.
    >
    > **Not splittable — take the ordinary close-and-absorb path, no extraction:**
+   >
+   > - **#3023** — attempted (#3100) and **closed**. Its own new doctrine
+   >   ratchet `test-strategy-stamp-doctrine.sh` (+237) asserts that
+   >   `write-node.ts` carries `--strategy-fingerprint` / `--strategy-sha` and
+   >   that `write-path.md` documents them — both conflicting files reset to
+   >   main — so it failed 3/11 in CI after a locally-green extraction.
+   >   **Dropping the ratchet does not work either:**
+   >   `intentions/tactic-strategy-fingerprint-stamp-coverage.md` cites that
+   >   script three times in its verify fences, and `lint-verify-fence-paths.sh`
+   >   specifically catches a branch deleting a cited path. So the clean half
+   >   cannot land without either shipping a failing ratchet or editing graph
+   >   content from a code PR. The +980 of genuinely independent work
+   >   (`strategy-stamp-census.ts`, `lib-strategy-stamp.ts`,
+   >   `compute-freshness.ts`) is not lost — it rides the contested half.
    >
    > - **#2975** — the branch widens `execution.markers` from `string[]` to
    >   `MarkerEntry[]` in `schema.ts`. That widening *is* the tactic, and
@@ -931,6 +949,15 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
       >   passes the suite and fails CI. #2946's test file hit exactly this.
       > - Diff every auto-merged file the tactic has no business touching, and
       >   reset it. #3056 would otherwise have reverted `nix/home/wezterm-pin.nix`.
+      > - **Run by hand every NEW shell suite the branch wires into
+      >   `unit-tests.yml`.** Shell tests are not auto-discovered, so a suite the
+      >   branch adds runs in CI but is invisible to a local `vitest` + lint
+      >   pass. #3023's `test-strategy-stamp-doctrine.sh` (+237) is exactly this:
+      >   it ratchets that `write-node.ts` carries `--strategy-fingerprint` and
+      >   that `write-path.md` documents it — both conflicting files reset to
+      >   main — and failed 3/11 in CI after a locally-green extraction. A
+      >   doctrine ratchet a branch adds is *the* file most likely to encode the
+      >   contested behaviour.
       >
       > Then ask the gate question: **would this half do anything on `main`?**
       > If it is dead config, an uncalled helper, or documentation for absent
@@ -1028,6 +1055,15 @@ Fixed in #3103 by reading `boosts[tier]`, matching the canonical read at
    An empty diff with a failing test means the failure is `main`'s.
 3. Fix `main` on its own PR first, then update the blocked branches onto it.
    Do not rebase-and-hope, and do not weaken the test.
+
+**The same blind spot hides a second violation.** `lint-verify-fence-paths.sh`
+has never run on `main` either, and `intentions/tactic-strategy-fingerprint-stamp-coverage.md`
+cites `test-strategy-stamp-doctrine.sh` three times in its verify fences while
+that script does not exist on `main` at all. The linter tolerates it only
+because it unions `HEAD`, `origin/main` *and* git history — the path exists on
+the draft branch. Any PR that *deletes* a cited path is caught immediately;
+`main` sitting in the violation permanently is not. Expect more of this class:
+**every check that skips `main` can accumulate debt there silently.**
 
 Related, and left open: `run-typecheck.sh` **skips** `artifacts/plan-view`
 entirely with `origin/main baseline fails`, because `rows.ts:137` still reads
