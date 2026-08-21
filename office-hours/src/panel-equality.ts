@@ -128,7 +128,10 @@ export function topicUsageEqual(a: TopicUsageDoc[], b: TopicUsageDoc[]): boolean
 /**
  * Content equality for QueueMetricsSnapshot (nullable). (null, null) → true,
  * the steady-null state must not trigger re-renders. null vs non-null (either
- * direction) → false. Otherwise compares all scalar fields, memberEmails
+ * direction) → false. Otherwise compares all scalar fields — including the
+ * optional capture `scope`, which the panels render (a parked-only capture shows
+ * depth/rate/runway as unmeasured) so a scope-only change must invalidate the
+ * cached slice — plus memberEmails
  * element-wise, and parked items field-by-field including the optional `phase`.
  * The queueMetrics doc mutates in place so per-field coverage is load-bearing.
  */
@@ -148,7 +151,8 @@ export function queueMetricsEqual(
     a.runwayDays !== b.runwayDays ||
     a.windowDays !== b.windowDays ||
     a.computedAt.getTime() !== b.computedAt.getTime() ||
-    a.groupId !== b.groupId
+    a.groupId !== b.groupId ||
+    a.scope !== b.scope
   ) {
     return false;
   }

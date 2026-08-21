@@ -155,7 +155,12 @@ const MAP_KEYS = new Set(["byTopic", "byType"]);
 //     office-hours/src/queue-metrics.ts). Without this exclusion EVERY
 //     `--scope parked-only --parity` run would report a permanent, unfixable
 //     divergence and mask the real drift the check exists to catch.
-const LOCAL_ONLY_KEYS = new Set(["forksDetail", "scope"]);
+// Keyed by the top-level snapshot field so the exemption is narrow: a `scope`
+// key appearing anywhere OTHER than queueMetrics is still reported.
+const LOCAL_ONLY_KEYS = new Map<string, Set<string>>([
+  ["projectSignals", new Set(["forksDetail"])],
+  ["queueMetrics", new Set(["scope"])],
+]);
 
 /**
  * Recursively diffs the SHAPE of a snapshot value against its Firestore/parsed
@@ -235,7 +240,7 @@ function diffObject(
     }
   }
   for (const k of Object.keys(snap)) {
-    if (LOCAL_ONLY_KEYS.has(k)) continue; // snapshot-only field the hosted producer never emits.
+    if (LOCAL_ONLY_KEYS.get(field)?.has(k)) continue; // snapshot-only field the hosted producer never emits.
     if (!(k in ref)) {
       out.push({
         field,

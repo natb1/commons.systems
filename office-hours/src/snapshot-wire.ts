@@ -320,7 +320,9 @@ export function serializeSnapshot(input: SnapshotInput): OfficeHoursSnapshot {
  * document (the `--scope analytics` write path).
  *
  * The fold is SURGICAL: every prior field — including top-level `computedAt`
- * and `scope` — is preserved verbatim, and ONLY `projectSignals` is replaced.
+ * and `scope` — is preserved verbatim, and ONLY `projectSignals` (and the
+ * `version: 1` stamp, re-applied because a prior doc may predate the field) is
+ * replaced.
  * The section carries its own `computedAt` for analytics freshness; leaving the
  * top-level watermark untouched keeps it an honest staleness signal for the
  * full producer (a dead hourly timer must not be masked by the daily analytics
@@ -345,7 +347,11 @@ export function foldProjectSignals(
   const nowIso = now.toISOString();
   const projectSignals = serializeProjectSignals(signals, nowIso);
   if (prior !== null) {
-    return { ...prior, projectSignals };
+    // Re-stamp `version: 1`. A prior document written before the version field
+    // existed (or by any producer that omitted it) carries none, and the fold
+    // otherwise preserves prior fields verbatim — the folded doc would go to
+    // disk unversioned and `decodeSnapshot` would reject the whole snapshot.
+    return { ...prior, version: 1, projectSignals };
   }
   return {
     version: 1,
