@@ -20,7 +20,6 @@ rationale: "Authored in the 2026-07-09 /align consolidation interview. The
   wording the author accepted from Claude on trust — delegating the ratification
   would recreate the capture."
 reading: null
-gap: null
 serves:
   - strategy-graph-integrity
   - strategy-graph-native-dispatch
@@ -169,6 +168,85 @@ clarifications:
       With all three decisions resolved and recorded at their homes, this tactic
       is achieved; prune is owed at a future census once the census-line
       amendment lands."
+  - question: Why did the 2026-08-21 /align-tactics per-node round park this node
+      instead of finalizing it, and does its own 'achieved, prune owed' closing
+      statement hold?
+    answer: "Parked, not finalized (Recorded 2026-08-21 /align-tactics tactic-target
+      session, at origin/main 76abc77a). Two independent grounds, plus one
+      material correction to this node's own closing statement. Ground A, Side
+      A: strategy-graph-native-dispatch's ARMED maintenance-burden band measures
+      false on BOTH limbs — 139/317 = 43.85% against a declared 35% ceiling,
+      re-measured on the caller thread through the canonical census functions
+      (listNodes from packages/intentionsutil/src/store.ts plus
+      strategyBacklogBand/classifyTactic from
+      packages/intentionsutil/src/census.ts), and rising monotonically across
+      eight same-day samples (38.5 -> 39.4 -> 40.5 -> 41.14 -> 41.77 -> 42.09 ->
+      42.72 -> 43.85). Eleventh node parked on that one condition in ~72 hours;
+      the strategy's stored reading (58/236 = 24.6%) is stale by ~19 points.
+      Ground B, major scope deviation: this node's determination work is
+      COMPLETE, and /align-tactics' per-node tactic-target path lands only
+      phase: implement (never phase: done; prunes are empty in tactic mode), so
+      a finalize would assert executable scope that does not exist. All three
+      decisions verified landed at their homes this round — D1 as a 2026-07-23
+      clarification on tactic-align-audit-skill with the retirement itself
+      shipped (.claude/skills/align-init/ and .claude/skills/align-strategy/ are
+      both gone from the tree); D2 on strategy-explicit-intent, ratified with
+      the SUCCESSOR framing intact plus the accepted-gap record; D3 on
+      tactic-condition-review-sweep, now status: raw, phase: null, office_hours:
+      null, blocked_by: [], /align-audit home ratified. Reinforcing both: owner
+      is human and this node's rationale reserves the call ('delegating the
+      ratification would recreate the capture'), a boundary an autonomous
+      session already crossed once at commit 8e23a272. MATERIAL CORRECTION: the
+      body's closing 'prune is owed at a future census once the census-line
+      amendment lands' is NOT satisfied. The unserved-virtue census — the single
+      piece of retired engine-2 content the sitting voted to KEEP, as an
+      info-only report line in /align-audit — is absent from the shipped
+      .claude/skills/align-audit/SKILL.md (no match for census, unserved,
+      report-only or info-only; Step 6 'Report and record' at line 232 lists the
+      report's contents and it is not among them), while its vehicle
+      tactic-align-audit-skill sits at phase: done with PR #2879 merged
+      2026-08-20T18:41:56Z. The clarification's own contingency — apply it as a
+      follow-up unit if #2879 is already past implement — was never filed as a
+      node. The capability itself is NOT lost: the mechanical unserved-virtues
+      computation is live at
+      packages/intentionsutil/scripts/align-strategy-census.ts:63-74 and 109,
+      but that is the /align census, a different home from the /align-audit
+      report the sitting amended. So this node is achieved on its three
+      decisions and NOT prune-ready by its own precondition, with the residue
+      untracked. No node was minted for that residue deliberately — a
+      born-parked carrier would feed the very backlog numerator Ground A is
+      about; the disposition is named in office_hours.recommendation for the
+      author to place. Coverage bound, stated rather than implied: NO Workflow
+      fan-out ran this round (strategy-graph-native-dispatch is 564K, past the
+      args limit, and the plan phase would have been gated off by the drift
+      block anyway), so no full Side-B drift sweep was performed —
+      no-further-drift is UNESTABLISHED, not checked-and-clear. Everything
+      asserted above was verified directly on the caller thread at 76abc77a.
+      Park-feeds-the-numerator, disclosed for this park too: classifyTactic
+      scores born-parked as backlog and draft as neither, so this park moves the
+      node into the numerator (139/317 -> 140/317 = 44.16%); a finalize would
+      have moved it identically, so only a prune lowers the ratio — and a prune
+      is what this node actually needs. The breach is not merely that
+      bookkeeping: excluding all 13 tactic-*-drift-observations carriers from
+      both sides still gives 126/304 = 41.45%. Classification split at 76abc77a:
+      81 draft, 54 born-parked, 85 open, 97 done."
+  - question: Is .claude/skills/align-tactics/references/autonomy.md still accurate
+      about office_hours.recommendation?
+    answer: "No — its transitional note is stale as of 2026-08-21 (Recorded
+      2026-08-21 /align-tactics tactic-target session). autonomy.md's 'Park-time
+      recommendation' section says a first-class office_hours.recommendation
+      field 'is not yet in schema.ts, so write-node.ts rejects that key today'
+      and instructs carrying the recommendation inside the reason string as a
+      trailing 'Recommend: ...' sentence. That is refuted at origin/main
+      76abc77a: packages/intentionsutil/src/schema.ts declares recommendation:
+      string | null on the OfficeHours interface (line 705) and
+      validateOfficeHours reads it via optionalString (line 931), alongside a
+      session_type field the note does not mention at all (line 706, validated
+      against SESSION_TYPES at line 932). This round used the first-class field.
+      Immaterial to this node's disposition and recorded here rather than as a
+      separate carrier node, per the same no-carrier reasoning as the
+      clarification above; the doc fix belongs wherever the author routes the
+      /align-audit census residue."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -176,7 +254,127 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "PARKED on two independent grounds, either of which alone blocks this
+    round. (A) SIDE A — the serving strategy's ARMED maintenance-burden band
+    measures false on BOTH limbs. strategy-graph-native-dispatch's
+    maintenance-burden condition (ARMED 2026-08-05) declares: the open
+    machinery-defect population — open (phase set, not done) plus born-parked
+    tactics serving this strategy — stays at or below 35% of all tactics serving
+    it, AND is non-increasing across consecutive samples. Re-measured on the
+    caller thread at origin/main 76abc77a through the canonical census functions
+    (listNodes from packages/intentionsutil/src/store.ts plus
+    strategyBacklogBand and classifyTactic from
+    packages/intentionsutil/src/census.ts, imported directly rather than shelled
+    out): 139 of 317 = 43.85% against the declared 35% ceiling. The
+    non-increasing limb fails too — eight same-day samples rise monotonically:
+    38.5 (fd98fd26) -> 39.4 (481572f1) -> 40.5 (3313bc46) -> 41.14 (787782c5) ->
+    41.77 -> 42.09 -> 42.72 (9a9312d4) -> 43.85 (76abc77a), against the
+    strategy's own recorded descent 47.6 -> 38.2 -> 31.4 -> 24.6. The strategy's
+    stored reading still claims 58/236 = 24.6%, stale by ~19 points and 81
+    tactics — re-derive it, never reuse it. This is the ELEVENTH node parked on
+    this single condition in ~72 hours, so the band needs ONE ruling for the
+    whole strategy; a per-node answer simply re-opens the queue at the next
+    selection. (B) MAJOR SCOPE DEVIATION — this node's work is already COMPLETE,
+    so no disposition this skill can author fits it. /align-tactics' per-node
+    tactic-target path lands only phase: implement (never phase: done, and
+    prunes are empty in tactic mode — .claude/skills/align-tactics/references/
+    tactic-target.md). Finalizing this node would assert executable scope that
+    does not exist. All three of the sitting's decisions were verified LANDED at
+    their homes this round, at 76abc77a: D1 (engine inclusion) — recorded as a
+    2026-07-23 clarification on tactic-align-audit-skill, and the retirement
+    itself SHIPPED: .claude/skills/align-init/ and
+    .claude/skills/align-strategy/ are both absent from the worktree. D2
+    (successor-cadence deferral) — 'Ratified with the SUCCESSOR framing intact;
+    resolved 2026-07-23' on strategy-explicit-intent, with the accepted-gap
+    record handing the anti-calcification role to the sitting cadence. D3
+    (tactic-condition-review-sweep rehoming) — that node is status: raw, phase:
+    null, office_hours: null, blocked_by: [], with the /align-audit home
+    ratified 2026-07-23. (C) Reinforcing both: owner is human and this node's
+    own rationale reserves the call — 'Not claude-executable: inclusion
+    decisions weigh author priorities ... delegating the ratification would
+    recreate the capture.' An autonomous session already breached that once
+    (commit 8e23a272, recorded at the 2026-07-23 sitting as a scope over-read).
+    A Claude-authored plan body here would repeat it. MATERIAL CORRECTION to
+    this node's own closing statement, found this round. The body ends 'this
+    tactic is achieved and prune is owed at a future census once the census-line
+    amendment lands.' That precondition is NOT satisfied: the unserved-virtue
+    census — the one piece of retired engine-2 content the sitting decided to
+    KEEP, as an info-only report line in /align-audit — is absent from the
+    shipped .claude/skills/align-audit/SKILL.md (grep for census / unserved /
+    report-only / info-only returns nothing; Step 6 'Report and record' at line
+    232 enumerates the report's contents and the census is not among them). Its
+    vehicle tactic-align-audit-skill is phase: done, PR #2879 merged
+    2026-08-20T18:41:56Z, so it closed without carrying the amendment, and the
+    clarification's own contingency — 'If PR #2879 is already past implement
+    when this lands, apply it as a follow-up unit' — was never filed: no node in
+    intentions/ tracks it as open work. Partial mitigation, so the capability is
+    not lost: the mechanical unserved-virtues computation IS live, but in a
+    DIFFERENT home — packages/intentionsutil/scripts/align-strategy-census.ts
+    lines 63-74 and 109, the /align census, not the /align-audit report. So this
+    node is achieved on its three decisions but NOT prune-ready by its own
+    stated precondition, and the residue is untracked. PARK-FEEDS-THE-NUMERATOR,
+    disclosed for this park too: classifyTactic (census.ts lines 13-18) scores
+    born-parked as backlog and draft as neither, so parking this draft moves it
+    INTO the numerator the band measures — 139/317 becomes 140/317 = 44.16% once
+    this lands. Finalizing it would have raised the numerator by exactly the
+    same 1, so the band cannot distinguish a park from a finalize; pruning is
+    the only disposition that lowers the ratio, and it is the one this node
+    actually needs. Sanity check that the breach is not merely this bookkeeping,
+    measured this round rather than carried over: removing all 13
+    tactic-*-drift-observations carriers from BOTH numerator and denominator
+    still leaves 126/304 = 41.45%, well clear of 35%. Full classification split
+    at 76abc77a: 81 draft, 54 born-parked, 85 open, 97 done (317 total).
+    Recommend: see office_hours.recommendation."
+  since: 2026-08-21
+  recommendation: "TWO rulings are needed, and they are separable — the first is
+    the strategy-wide one, the second is local to this node. RULING 1
+    (strategy-wide, blocks eleven nodes). Rule the maintenance-burden band ONCE
+    for strategy-graph-native-dispatch and state explicitly what becomes of the
+    already-parked nodes. Three dispositions, pick one: (a) RE-AFFIRM the 35%
+    ceiling as written and treat 43.85% as a real breach — which means halting
+    new decomposition on this strategy until the backlog drains, and saying so,
+    since today every round parks and each park raises the ratio it parked over;
+    (b) RE-DECLARE the band against the grown population — the ceiling was set
+    at 59/197 = 30.0% when the population was 197 tactics and is now measured
+    against 317, so a ratio that was calibrated on a smaller strategy may simply
+    be the wrong number rather than a signal; (c) ACCEPT the breach WITH
+    REMEDIATION — keep 35% as the target, declare a drain plan (which cohorts
+    get pruned or finalized, by when), and un-park the eleven on that basis.
+    Whichever you pick, name the already-parked set in the ruling; a per-node
+    answer just re-opens the queue at the next selection. RULING 2 (local to
+    this node). This node is achieved on all three of its decisions — verified
+    this round at their homes, see office_hours.reason — but it is NOT
+    prune-ready by its own stated precondition, because the /align-audit
+    unserved-virtue census line never landed and its vehicle closed. So: (i)
+    decide where the missing census line goes. Either file it as a fresh tactic
+    serving strategy-graph-integrity (amend .claude/skills/align-audit/SKILL.md
+    Step 6 to add the info-only unserved-virtue report line, reusing the live
+    computation at
+    packages/intentionsutil/scripts/align-strategy-census.ts:63-74 rather than
+    reimplementing it), or rule that align-strategy-census.ts already discharges
+    the sitting's intent and the /align-audit amendment is withdrawn. This
+    session did NOT mint a node for it — minting a born-parked carrier would
+    feed the very numerator Ruling 1 is about, and the sole-tracker rule is
+    satisfied by recording it here, on the node whose own prune precondition
+    depends on it. (ii) Then prune THIS node. /align-tactics cannot: its
+    per-node path lands only phase: implement, and prunes are empty in tactic
+    mode. The mechanical path is `graph-commit --prune
+    tactic-align-audit-legacy-review` after deleting
+    intentions/tactic-align-audit-legacy-review.md on disk. Before pruning,
+    discharge kind-tactic's settled-doctrine rule: this body carries the
+    VERBATIM retained content of both retired engines (the rung-5 dialectic's
+    roles and flow; the /align-strategy improvement pass), and the node says it
+    'stays for git-history reference'. Pruning deletes the file, leaving that
+    content only in git history at origin/main 44493733 and in this node's own
+    history — confirm that is the intent, or move the content to a
+    persistent-layer home first. Inbound blocked_by edges: none resolve to this
+    node today (tactic-condition-review-sweep's was already removed), but
+    re-check at prune time so validate-graph rule 13 does not dangle. This
+    session made NO strategy edit — a tactic-target run never writes the serving
+    strategy's frontmatter, so the band's stale reading (58/236) is left for the
+    ruling session to refresh."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -277,3 +475,60 @@ successor-cadence deferral is ratified with the SUCCESSOR framing restored
 home is ratified on independent merits. The retained engine content above
 stays for git-history reference; this tactic is achieved and prune is owed at
 a future census.
+
+**Correction (2026-08-21):** the sentence above — "prune is owed at a future
+census" — read in its original form as "once the census-line amendment lands."
+That precondition is **not** satisfied, so this node is achieved on its three
+decisions but **not** prune-ready. See "Round record", below.
+
+## Round record — 2026-08-21 /align-tactics (parked, not finalized)
+
+Per-node tactic-target round at `origin/main` `76abc77a`. **Parked to
+`office_hours`; no finalize.** Full reasoning is in `office_hours.reason` and
+`office_hours.recommendation`; this section carries only what a future session
+needs to re-enter the work.
+
+**Why no finalize.** Two independent grounds. (A) Side A — the serving strategy
+`strategy-graph-native-dispatch`'s ARMED maintenance-burden band measures false
+on **both** limbs: 139/317 = 43.85% against a declared 35% ceiling, rising
+monotonically across eight same-day samples (38.5 → 39.4 → 40.5 → 41.14 → 41.77
+→ 42.09 → 42.72 → 43.85). Eleventh node parked on that one condition in ~72
+hours. (B) Major scope deviation — this node's determination work is complete,
+and `/align-tactics`' per-node path lands only `phase: implement` (never `done`;
+`prunes` is empty in tactic mode), so a finalize would assert executable scope
+that does not exist. Reinforcing both: `owner: human`, and this node's own
+rationale reserves the call.
+
+**Verified this round** (all at `76abc77a`, on the caller thread):
+
+- **D1 landed** — 2026-07-23 clarification on `tactic-align-audit-skill`; the
+  retirement itself shipped (`.claude/skills/align-init/` and
+  `.claude/skills/align-strategy/` are both absent from the tree).
+- **D2 landed** — `strategy-explicit-intent`, "Ratified with the SUCCESSOR
+  framing intact; resolved 2026-07-23", plus the accepted-gap record.
+- **D3 landed** — `tactic-condition-review-sweep` is `status: raw`,
+  `phase: null`, `office_hours: null`, `blocked_by: []`, `/align-audit` home
+  ratified.
+- **No inbound structural edges** to this node — `blocked_by`, `parent`,
+  `validates`, `recovers` all empty across the store, so a prune would not
+  dangle `validateGraph` rule 13. Re-check at prune time.
+
+**The open residue — the missing census line.** The unserved-virtue census, the
+one piece of retired engine 2 the sitting voted to keep as an info-only report
+line in `/align-audit`, is **absent** from the shipped
+`.claude/skills/align-audit/SKILL.md`; Step 6 "Report and record" (line 232)
+enumerates the report's contents and it is not among them. Its vehicle
+`tactic-align-audit-skill` is `phase: done` (PR #2879, merged
+2026-08-20T18:41:56Z), and the clarification's own contingency — apply it as a
+follow-up unit if #2879 is already past implement — was never filed. The
+capability is **not** lost: the mechanical computation is live at
+`packages/intentionsutil/scripts/align-strategy-census.ts:63-74`, but that is
+the `/align` census, a different home from the `/align-audit` report the
+sitting amended. No node was minted for this residue deliberately — a
+born-parked carrier would feed the very backlog numerator ground (A) is about.
+
+**Coverage bound.** No Workflow fan-out ran this round —
+`strategy-graph-native-dispatch` is 564K, past the `args` limit, and the plan
+phase would have been gated off by the drift block regardless. So **no full
+Side-B drift sweep was performed**: no-further-drift is unestablished, not
+checked-and-clear. Every claim above was verified directly on the caller thread.
