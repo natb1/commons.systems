@@ -101,6 +101,30 @@ const FIX_INTERRUPTIBLE: ReadonlySet<string> = new Set(["implement", "qa", "revi
 export const FIX_ATTEMPT_CAP = 3;
 
 /**
+ * The `execution.attempts` key tracking a tactic's LIFETIME count of fresh
+ * fix-interrupt entries — bumped by `apply-fix-state.ts`'s `--set-fix` only on
+ * a genuinely fresh entry (`execution.fix` was null), and, unlike
+ * `execution.fix.attempt`, never reset by `--clear-fix`. This is the counter
+ * `FIX_CYCLE_CAP` compares against.
+ */
+export const FIX_CYCLE_ATTEMPT_KEY = "fix-cycle";
+
+/**
+ * Cross-cycle cap on fix-interrupt ENTRIES, distinct from `FIX_ATTEMPT_CAP`
+ * (which bounds retries WITHIN one open `execution.fix` episode).
+ * `--clear-fix` wipes `execution.fix` to null on resolution, so a node that
+ * repeatedly enters the interrupt, resolves it, and re-stalls would otherwise
+ * get a fresh `attempt: 1` budget every cycle and thrash indefinitely —
+ * `reconcile-graph-review-stall`'s fix-interrupt entry is the primary caller
+ * that can retrigger `--set-fix` after a prior episode already resolved (a
+ * `phase: review` + `reviewed` tactic is excluded from normal selection, so
+ * only that sweep, not the normal per-tick gate, can re-enter it). Counted via
+ * `FIX_CYCLE_ATTEMPT_KEY` on `execution.attempts`, which `--clear-fix` never
+ * touches.
+ */
+export const FIX_CYCLE_CAP = 3;
+
+/**
  * Whether a live CI verdict at `phase` should set the orthogonal `execution.fix`
  * interrupt (spec §1.1, clarification 18). Only a `failing` verdict at an
  * interruptible ladder phase fires; `unknown`/`passing` never do, and a `done`
