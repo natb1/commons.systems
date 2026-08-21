@@ -105,21 +105,40 @@ office_hours:
     against the current tactic population, to accept the breach with a stated
     recovery plan and a date, or to halt new tactic minting under
     strategy-graph-native-dispatch until the backlog drains. That ruling is a
-    write on the strategy, which no per-node session may make. Note that the
-    same breach was independently surfaced and parked earlier the same day by
-    tactic-supersession-retirement-sweep at 39.4% — this is the second node
-    parked on it, so the sitting should rule once rather than per-node. (2)
-    RATIFY OR AMEND the proposed clarification this round drafted, since this
-    node cannot be planned until it is settled: 'The immaterial-drift redirect
-    mints AT MOST ONE born-parked observation carrier per /align-tactics round,
-    carrying all of that round's immaterial observations — never one node per
-    observation. It mints NONE when the round parks its target (proceed=false):
-    in that case the observations fold into the parked target's own
-    office_hours.recommendation (those that inform the ruling being requested)
-    and its body round-record section (those that are reuse facts for the
-    re-plan), and the body says the placement was deliberate. Grounds: the
-    target already lands in the office-hours queue a carrier would route to, so
-    a carrier adds nothing but backlog; and strategyBacklogBand
+    write on the strategy, which no per-node session may make. CORRECTED
+    2026-08-21, after the park landed: an earlier draft of this recommendation
+    said this was the SECOND node parked on the band. It is the FOURTH, and the
+    count is the point. Measured with strategyBacklogBand over the committed
+    store after this park landed: FOUR tactics now carry a blocking Side-A park
+    naming this band — tactic-supersession-retirement-sweep (39.4%),
+    tactic-graph-commit-park-content-durability,
+    tactic-align-tactics-drift-dump-office-hours, and this node — all `since:
+    2026-08-21`. THERE IS A COMPOUNDING LOOP, and it is the reason a per-node
+    ruling will not work. classifyTactic
+    (packages/intentionsutil/src/census.ts:13-18) scores `born-parked` as
+    backlog and `draft` as neither, so a Side-A park CONVERTS its target from
+    draft to born-parked and thereby moves one tactic INTO the numerator the
+    condition measures. Each correct park makes the next round's measurement
+    worse. The series within this single session is the evidence: this round
+    measured 127/316 = 40.19% at its branch cut, and a re-measurement after
+    landing reads 130/316 = 41.14% — the band rose ~1 point while one round ran,
+    from concurrent sibling parks plus this one. Compare the strategy's stored
+    `reading` of 58/236 = 24.6% (2026-08-10), now stale by roughly 16 points. No
+    autonomous lane can exit this: every round behaves correctly in isolation,
+    and the failure is visible only in aggregate. So the sitting should rule
+    ONCE on the band for the whole strategy rather than per-node, and the ruling
+    should say what happens to the four already-parked nodes. (2) RATIFY OR
+    AMEND the proposed clarification this round drafted, since this node cannot
+    be planned until it is settled: 'The immaterial-drift redirect mints AT MOST
+    ONE born-parked observation carrier per /align-tactics round, carrying all
+    of that round's immaterial observations — never one node per observation. It
+    mints NONE when the round parks its target (proceed=false): in that case the
+    observations fold into the parked target's own office_hours.recommendation
+    (those that inform the ruling being requested) and its body round-record
+    section (those that are reuse facts for the re-plan), and the body says the
+    placement was deliberate. Grounds: the target already lands in the
+    office-hours queue a carrier would route to, so a carrier adds nothing but
+    backlog; and strategyBacklogBand
     (packages/intentionsutil/src/census.ts:26-40) scores born-parked as backlog,
     so minting one during a band-breach park writes into the numerator the park
     is over. The invariant clarification 245/V1 protects — no autonomous write
@@ -457,3 +476,33 @@ re-verified independently on the caller thread before the park was accepted —
 the digit), the 19-carrier creation window re-run through `git log`, the
 `STATE_FIELDS` grep re-run, and the absence of a PR-title CI guard confirmed
 against `.github/scripts/`.
+
+### R7 — the band park is a COMPOUNDING LOOP (measured after this park landed)
+
+Recorded as a post-landing correction to this same round, because it is only
+visible in aggregate and a session that measures once will not see it.
+
+`classifyTactic` (`packages/intentionsutil/src/census.ts:13-18`) scores
+`born-parked` as backlog and `draft` as neither. A Side-A park therefore
+**converts its target from `draft` to `born-parked`, moving one tactic into the
+numerator the failing condition measures**. Every correct park makes the next
+round's measurement worse, and no autonomous lane can exit the loop: each round
+behaves correctly in isolation.
+
+The evidence is this session's own two samples. At the branch cut the band read
+**127/316 = 40.19%**. Re-measured immediately after this park landed, through the
+same `strategyBacklogBand` call against the committed store, it reads
+**130/316 = 41.14%** — up roughly a point while a single round ran, from this
+park plus concurrent sibling parks. The strategy's stored `reading`
+(`58/236 = 24.6%`, 2026-08-10) is stale by ~16 points; re-derive it, never reuse
+it.
+
+**Four** tactics now carry a blocking Side-A park naming this band, all
+`since: 2026-08-21` — `tactic-supersession-retirement-sweep` (39.4%),
+`tactic-graph-commit-park-content-durability`,
+`tactic-align-tactics-drift-dump-office-hours`, and this node. Six further
+`-drift-observations` carriers mention the band without being blocked on it.
+An earlier draft of this node's `office_hours.recommendation` said this was the
+*second* such park; that was wrong and is corrected in place. The count matters
+because it is the argument for ruling **once** for the whole strategy rather than
+node by node — and for the ruling to say what becomes of the four already parked.
