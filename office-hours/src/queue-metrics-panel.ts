@@ -25,6 +25,10 @@ export function renderQueueMetricsPanel(
     return section;
   }
 
+  // A parked-only capture fabricates depth/rate/runway; render them as "—"
+  // (unmeasured) so they are not mistaken for real zeros. Only `parked` is real.
+  const unmeasured = metrics.scope === "parked-only";
+
   const cards = document.createElement("div");
   cards.className = "capacity-cards";
 
@@ -36,7 +40,7 @@ export function renderQueueMetricsPanel(
   depthLabel.textContent = "queue depth";
   const depthValue = document.createElement("span");
   depthValue.className = "capacity-card-value queue-depth-value";
-  depthValue.textContent = String(metrics.openHelpWanted);
+  depthValue.textContent = unmeasured ? "—" : String(metrics.openHelpWanted);
   depthCard.appendChild(depthLabel);
   depthCard.appendChild(depthValue);
 
@@ -52,7 +56,7 @@ export function renderQueueMetricsPanel(
   drainLabel.textContent = isGrowing ? "net growth" : "net drain";
   const drainValue = document.createElement("span");
   drainValue.className = "capacity-card-value queue-drain-value";
-  drainValue.textContent = `${Math.abs(metrics.netDrainPerDay).toFixed(1)}/day`;
+  drainValue.textContent = unmeasured ? "—" : `${Math.abs(metrics.netDrainPerDay).toFixed(1)}/day`;
   drainCard.appendChild(drainLabel);
   drainCard.appendChild(drainValue);
 
@@ -64,8 +68,9 @@ export function renderQueueMetricsPanel(
   runwayLabel.textContent = "runway";
   const runwayValue = document.createElement("span");
   runwayValue.className = "capacity-card-value queue-runway-value";
-  runwayValue.textContent =
-    metrics.runwayDays !== null && metrics.runwayDays >= 0
+  runwayValue.textContent = unmeasured
+    ? "—"
+    : metrics.runwayDays !== null && metrics.runwayDays >= 0
       ? `${metrics.runwayDays} days`
       : "growing";
   runwayCard.appendChild(runwayLabel);

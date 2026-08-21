@@ -12,6 +12,8 @@ import { projectSignalsEqual } from "../src/panel-equality.js";
 const fixtureSnapshot: OfficeHoursSnapshotV1 = {
   version: 1,
   computedAt: "2026-06-30T10:00:00Z",
+  scope: "full",
+  chainHealth: {},
   reminders: [
     {
       title: "Review #2659 PR",
@@ -31,7 +33,6 @@ const fixtureSnapshot: OfficeHoursSnapshotV1 = {
       activeWorkers: 3,
       targetWorkers: 8,
       groupId: "natb1",
-      memberEmails: ["nathan@natb1.com"],
     },
   ],
   issueSamples: [
@@ -42,7 +43,6 @@ const fixtureSnapshot: OfficeHoursSnapshotV1 = {
       openEnhancement: 12,
       openOther: 7,
       groupId: "natb1",
-      memberEmails: ["nathan@natb1.com"],
     },
   ],
   topicUsage: [

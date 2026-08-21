@@ -268,8 +268,20 @@ function parsePsiSignals(raw: unknown): PsiUrlSignals[] | undefined {
  * null and logs an error if any required field is missing or has an unexpected
  * type. Each optional source sub-object (github/ga4/gsc/psi) degrades to
  * omitted rather than failing the whole parse.
+ *
+ * `opts.requireMemberEmails` (default true) controls whether the source document
+ * must carry the denormalized `memberEmails` auth field. A live Firestore doc
+ * always carries it — the office-hours security rules evaluate it — so its
+ * absence there is real drift and must reject. The offline snapshot wire
+ * deliberately OMITS it (see office-hours/src/snapshot-wire.ts), so
+ * `decodeSnapshot` passes false and the parsed snapshot carries an empty list,
+ * matching the public-seed convention in data.ts.
  */
-export function parseProjectSignals(data: Record<string, unknown>): ProjectSignalsSnapshot | null {
+export function parseProjectSignals(
+  data: Record<string, unknown>,
+  opts: { requireMemberEmails?: boolean } = {},
+): ProjectSignalsSnapshot | null {
+  const requireMemberEmails = opts.requireMemberEmails ?? true;
   const computedAt = toDate(data.computedAt);
   const groupId = typeof data.groupId === "string" ? data.groupId : null;
   const memberEmails =
@@ -277,7 +289,7 @@ export function parseProjectSignals(data: Record<string, unknown>): ProjectSigna
       ? (data.memberEmails as string[]) // type-safety-ok: every() verifies element types but TS cannot narrow unknown[] to string[] via every()
       : null;
 
-  if (computedAt === null || groupId === null || memberEmails === null) {
+  if (computedAt === null || groupId === null || (requireMemberEmails && memberEmails === null)) {
     logError(new Error("office-hours project signals missing or invalid required fields"), {
       operation: "project-signals-validation",
     });
@@ -294,7 +306,9 @@ export function parseProjectSignals(data: Record<string, unknown>): ProjectSigna
   return {
     computedAt,
     groupId,
-    memberEmails,
+    // `[]` only on the snapshot-wire path, which strips the ACL and passes
+    // requireMemberEmails:false; the Firestore path always has the real list.
+    memberEmails: memberEmails ?? [],
     ...(github !== undefined ? { github } : {}),
     ...(ga4 !== undefined ? { ga4 } : {}),
     ...(gsc !== undefined ? { gsc } : {}),

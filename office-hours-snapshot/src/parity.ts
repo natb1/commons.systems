@@ -25,11 +25,14 @@
 //     QueueMetricsSnapshot / ProjectSignalsSnapshot, and both serializers emit
 //     it), so the raw doc's key set matches the snapshot's.
 //   - COLLECTIONS (reminders, issueSamples, topicUsage, samples) diff against the
-//     PARSED/mapped reference, NOT the raw doc. The office-hours parsers drop
-//     write-only fields (`memberEmails`, `kind`, `updatedAt`) that the snapshot
-//     intentionally does not carry, so a raw-doc comparison would falsely report
-//     `memberEmails` as a missing key on every clean element. The parsed shape
-//     equals the snapshot's serialized shape, which is the right reference.
+//     PARSED/mapped reference, NOT the raw doc: the office-hours parsers drop
+//     fields the snapshot never carries — the write-only `kind` / `updatedAt`,
+//     and the `memberEmails` auth field the serialized SERIES samples
+//     deliberately omit (the offline wire never exports the group ACL; see
+//     office-hours/src/snapshot-wire.ts) — so a raw-doc comparison would falsely
+//     report them as missing keys on every clean element. The parsers still run
+//     in their default strict mode here, so a live Firestore sample doc that has
+//     LOST its memberEmails auth field is still caught, as a "parse-failure".
 //
 // Parsers reused (a parser that returns null / throws on a live Firestore doc is
 // itself a shape divergence — reported as kind "parse-failure"):
@@ -143,9 +146,36 @@ const MAP_KEYS = new Set(["byTopic", "byType"]);
 // Snapshot-only keys the hosted Firestore producer never emits: the local
 // snapshot producer collects them, but parity compares against the RAW Firestore
 // doc, so their presence on the snapshot side would falsely report as an
-// extra-key. `forksDetail` (project-signals github sub-object) is one — it is a
-// local-only fork-and-derivative enrichment. Excluded from the extra-key check.
-const LOCAL_ONLY_KEYS = new Set(["forksDetail"]);
+// extra-key. Excluded from the extra-key check:
+//   - `forksDetail` (project-signals github sub-object) — a local-only
+//     fork-and-derivative enrichment.
+//   - `scope` (queueMetrics) — the parked-only capture marks its fabricated
+//     depth/rate/runway placeholders with `scope: "parked-only"`; the live
+//     Firestore producer never writes it (see the field doc on
+//     office-hours/src/queue-metrics.ts). Without this exclusion EVERY
+//     `--scope parked-only --parity` run would report a permanent, unfixable
+//     divergence and mask the real drift the check exists to catch.
+// Keyed by the top-level snapshot field so the exemption is narrow: a `scope`
+// key appearing anywhere OTHER than queueMetrics is still reported.
+const LOCAL_ONLY_KEYS = new Map<string, Set<string>>([
+  ["projectSignals", new Set(["forksDetail"])],
+  ["queueMetrics", new Set(["scope"])],
+]);
+
+// The MIRROR of LOCAL_ONLY_KEYS: keys the live Firestore doc carries that the
+// snapshot wire deliberately STRIPS, excluded from the missing-key check.
+//   - `memberEmails` (queueMetrics + projectSignals) — the group's real member
+//     list. The Firestore rules require it on the doc; the offline wire never
+//     carries it, because a `--plaintext` run would land the ACL unencrypted in
+//     the shared Drive dir (see office-hours/src/snapshot-wire.ts). Without this
+//     exclusion EVERY `--parity` run would report a permanent, unfixable
+//     divergence — the same failure mode the `scope` entry above prevents.
+// Keyed by top-level field for the same reason: a `memberEmails` key appearing
+// anywhere OTHER than these two blocks is still reported.
+const STRIPPED_KEYS = new Map<string, Set<string>>([
+  ["queueMetrics", new Set(["memberEmails"])],
+  ["projectSignals", new Set(["memberEmails"])],
+]);
 
 /**
  * Recursively diffs the SHAPE of a snapshot value against its Firestore/parsed
@@ -216,6 +246,7 @@ function diffObject(
   out: ParityDivergence[],
 ): void {
   for (const k of Object.keys(ref)) {
+    if (STRIPPED_KEYS.get(field)?.has(k)) continue; // auth field the wire deliberately strips.
     if (!(k in snap)) {
       out.push({
         field,
@@ -225,7 +256,7 @@ function diffObject(
     }
   }
   for (const k of Object.keys(snap)) {
-    if (LOCAL_ONLY_KEYS.has(k)) continue; // snapshot-only field the hosted producer never emits.
+    if (LOCAL_ONLY_KEYS.get(field)?.has(k)) continue; // snapshot-only field the hosted producer never emits.
     if (!(k in ref)) {
       out.push({
         field,
@@ -302,6 +333,23 @@ function mapReminderRef(doc: Record<string, unknown>): Record<string, unknown> |
     issueNumber: doc.issueNumber,
     dueAt: doc.dueAt,
   };
+}
+
+/**
+ * Series-sample reference: the office-hours parser's output, unmodified. The
+ * parser runs in its default STRICT mode, so a Firestore doc that is malformed
+ * OR missing the required `memberEmails` auth field is rejected here and reported
+ * as a parse-failure. Its output strips `memberEmails`, which is exactly the
+ * serialized sample's shape — the offline wire never carries the group ACL (see
+ * office-hours/src/snapshot-wire.ts), so the two key sets line up.
+ */
+function sampleRef(
+  parse: (id: string, doc: Record<string, unknown>) => object | null,
+  doc: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const parsed = parse("parity", doc);
+  if (parsed === null) return null;
+  return { ...parsed }; // type-safety-ok: parsed is a validated sample object; the shape diff reads it structurally
 }
 
 // ---------------------------------------------------------------------------
@@ -430,7 +478,7 @@ export async function checkParity(
     "issueSamples",
     `${ns}/issue-samples`,
     snapshot.issueSamples,
-    (d) => toIssueSample("parity", d) as Record<string, unknown> | null, // type-safety-ok: parsed IssueSample read structurally by the shape diff; cast supplies the Record index signature the interface lacks
+    (d) => sampleRef(toIssueSample, d),
     reader,
     divergences,
   );
@@ -448,7 +496,7 @@ export async function checkParity(
     "samples",
     `${ns}/usage-samples`,
     snapshot.samples,
-    (d) => toUsageSample("parity", d) as Record<string, unknown> | null, // type-safety-ok: parsed UsageSample read structurally by the shape diff; cast supplies the Record index signature the interface lacks
+    (d) => sampleRef(toUsageSample, d),
     reader,
     divergences,
   );

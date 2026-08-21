@@ -27,6 +27,10 @@ export function QueueMetricsPanel(props: QueueMetricsPanelProps) {
     );
   }
 
+  // A parked-only capture fabricates depth/rate/runway; render them as "—"
+  // (unmeasured) so they are not mistaken for real zeros. Only `parked` is real.
+  const unmeasured = metrics.scope === "parked-only";
+
   // A negative net-drain means the queue is growing, not draining. Relabel the
   // card to "net growth" and show the magnitude so the displayed sign stays
   // consistent with the label's meaning (mirrors the runway card's "growing").
@@ -44,17 +48,17 @@ export function QueueMetricsPanel(props: QueueMetricsPanelProps) {
         <Metric
           className="capacity-card queue-depth-card"
           label="queue depth"
-          value={String(metrics.openHelpWanted)}
+          value={unmeasured ? "—" : String(metrics.openHelpWanted)}
         />
         <Metric
           className="capacity-card queue-drain-card"
           label={drainLabel}
-          value={`${Math.abs(metrics.netDrainPerDay).toFixed(1)}/day`}
+          value={unmeasured ? "—" : `${Math.abs(metrics.netDrainPerDay).toFixed(1)}/day`}
         />
         <Metric
           className="capacity-card queue-runway-card"
           label="runway"
-          value={runwayValue}
+          value={unmeasured ? "—" : runwayValue}
         />
       </div>
     </section>

@@ -86,4 +86,25 @@ describe("toUsageSample malformed-doc cases", () => {
     const doc = { ...validDoc, memberEmails: "alice@example.com" };
     expect(toUsageSample("auto-id", doc)).toBeNull();
   });
+
+  /** validDoc with the denormalized auth field removed (the snapshot-wire shape). */
+  function docWithoutMemberEmails(): Record<string, unknown> {
+    const doc = { ...validDoc };
+    delete doc.memberEmails;
+    return doc;
+  }
+
+  it("returns null when memberEmails is absent (strict Firestore default)", () => {
+    expect(toUsageSample("auto-id", docWithoutMemberEmails())).toBeNull();
+  });
+
+  it("accepts an absent memberEmails under requireMemberEmails:false (snapshot wire)", () => {
+    // The offline snapshot deliberately omits the group ACL; the decoder opts
+    // out of the auth-field requirement, and the field is dropped either way.
+    const result = toUsageSample("auto-id", docWithoutMemberEmails(), {
+      requireMemberEmails: false,
+    });
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("memberEmails");
+  });
 });

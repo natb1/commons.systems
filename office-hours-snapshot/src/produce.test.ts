@@ -298,6 +298,9 @@ describe("produceSnapshot — scope=parked-only", () => {
     // chainHealth present, scope set
     expect(snap.chainHealth).toEqual({ liveSessions: 3 });
     expect(snap.scope).toBe("parked-only");
+    // The fabricated queueMetrics is tagged parked-only so the dashboard renders
+    // its zeroed depth/rate/runway as unmeasured rather than as real values.
+    expect(snap.queueMetrics?.scope).toBe("parked-only");
   });
 });
 

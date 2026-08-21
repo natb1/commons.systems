@@ -171,10 +171,21 @@ describe("serializeSnapshot", () => {
     expect(snap).toHaveProperty("topicUsage");
     expect(snap).toHaveProperty("projectSignals");
     // Metadata
+    expect(snap.version).toBe(1);
     expect(snap.computedAt).toBe(NOW_ISO);
     expect(snap.scope).toBe("full");
     expect(snap.chainHealth).toEqual({ liveSessions: 2, lastTickAgeSeconds: 30 });
     expect(snap.window).toEqual({ samples: 500, issueSamples: 500 });
+  });
+
+  it("never stamps the memberEmails ACL onto a series sample", () => {
+    // memberEmails is the group's real member list — the auth field the
+    // office-hours Firestore rules evaluate. The offline snapshot is protected
+    // only by the Drive share + passphrase (and `--plaintext` writes it
+    // unencrypted), so the wire must not export it per sample.
+    const snap = serializeSnapshot(buildInput());
+    expect(snap.samples[0]).not.toHaveProperty("memberEmails");
+    expect(snap.issueSamples[0]).not.toHaveProperty("memberEmails");
   });
 
   it("normalizes every timestamp to an ISO string (no Date/Timestamp survives)", () => {

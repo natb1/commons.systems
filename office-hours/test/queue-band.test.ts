@@ -31,6 +31,30 @@ describe("renderQueueBand cards", () => {
   });
 });
 
+describe("renderQueueBand parked-only (unmeasured)", () => {
+  const parked = make({
+    scope: "parked-only",
+    openHelpWanted: 0,
+    closedPerDay: 0,
+    createdPerDay: 0,
+    netDrainPerDay: 0,
+    runwayDays: null,
+  });
+
+  it("renders the fabricated backlog/closed/created cards as '—'", () => {
+    const section = renderQueueBand(parked);
+    const values = section.querySelectorAll(".queue-card-value");
+    expect([...values].map((v) => v.textContent)).toEqual(["—", "—", "—"]);
+  });
+
+  it("reads the runway as 'not measured', not a real 'queue empty/stable'", () => {
+    const section = renderQueueBand(parked);
+    const state = section.querySelector(".queue-runway-state");
+    expect(state!.textContent).toBe("queue not measured (parked-only capture)"); // type-safety-ok: test-only DOM query; a null match fails the assertion, not silently mistypes
+    expect(state!.classList.contains("unmeasured")).toBe(true); // type-safety-ok: test-only DOM query; a null match fails the assertion, not silently mistypes
+  });
+});
+
 describe("renderQueueBand runway readout", () => {
   it("draining: positive runway renders the days-until-empty phrase", () => {
     const section = renderQueueBand(make());

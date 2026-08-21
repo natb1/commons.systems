@@ -155,8 +155,15 @@ interface SearchDetailsResponse {
 
 // Mirrors searchIssueCountLive's GraphQL document, with the `$query` variable
 // renamed to `$searchQuery` to avoid colliding with gh's reserved `query` field.
-const COUNT_DOCUMENT = `
-  query($searchQuery: String!) { // type-safety-ok: false positive — '!' is a GraphQL non-null type marker in a template literal, not a TS assertion
+// The `$searchQuery: String!` variable line is split out as its own string
+// literal so the `// type-safety-ok` suppression marker sits OUTSIDE the query
+// text (after the closing quote): a `//` inside the GraphQL document is a syntax
+// error (GraphQL comments start with `#`), which broke every real query. The
+// suppression is still needed — the linter's non-null-assertion rule matches the
+// GraphQL `String!` non-null marker as a false positive.
+const COUNT_DOCUMENT =
+  "query($searchQuery: String!) {" + // type-safety-ok: '!' is a GraphQL non-null type marker in the query text, not a TS non-null assertion
+  `
     search(query: $searchQuery, type: ISSUE) {
       issueCount
     }
@@ -165,8 +172,9 @@ const COUNT_DOCUMENT = `
 
 // Mirrors searchIssueDetailsLive's GraphQL document (single page, first: 100),
 // with the same `$query`→`$searchQuery` rename.
-const DETAILS_DOCUMENT = `
-  query($searchQuery: String!) { // type-safety-ok: false positive — '!' is a GraphQL non-null type marker in a template literal, not a TS assertion
+const DETAILS_DOCUMENT =
+  "query($searchQuery: String!) {" + // type-safety-ok: '!' is a GraphQL non-null type marker in the query text, not a TS non-null assertion
+  `
     search(query: $searchQuery, type: ISSUE, first: 100) {
       nodes {
         ... on Issue {
@@ -244,8 +252,9 @@ interface IssuesQueryResponse {
   };
 }
 
-const JIT_ISSUES_DOCUMENT = `
-  query($owner: String!, $name: String!, $cursor: String) { // type-safety-ok: false positive — '!' markers are GraphQL non-null type annotations in a template literal, not TS assertions
+const JIT_ISSUES_DOCUMENT =
+  "query($owner: String!, $name: String!, $cursor: String) {" + // type-safety-ok: the '!' markers are GraphQL non-null type annotations in the query text, not TS non-null assertions
+  `
     repository(owner: $owner, name: $name) {
       issues(states: OPEN, first: 100, after: $cursor) {
         pageInfo { endCursor hasNextPage }

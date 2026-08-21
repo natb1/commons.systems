@@ -15,7 +15,23 @@ export function sampleTotal(s: IssueSample): number {
   return s.openSecurity + s.openBug + s.openEnhancement + s.openOther;
 }
 
-export function toIssueSample(id: string, data: Record<string, unknown>): IssueSample | null {
+/**
+ * Parse an issue-sample document into the domain `IssueSample`.
+ *
+ * `opts.requireMemberEmails` (default true) controls whether the source document
+ * must carry the denormalized `memberEmails` auth field. A live Firestore doc
+ * always carries it — the office-hours security rules evaluate it — so its
+ * absence there is real drift and must reject. The offline snapshot wire
+ * deliberately OMITS it (it is the group's real ACL, and a `--plaintext` debug
+ * run lands the whole document unencrypted in the shared Drive dir), so
+ * `decodeSnapshot` passes false and the field is ignored entirely. Either way it
+ * is stripped from the returned object — it is never a dashboard field.
+ */
+export function toIssueSample(
+  id: string,
+  data: Record<string, unknown>,
+  opts: { requireMemberEmails?: boolean } = {},
+): IssueSample | null {
   const sampledAtRaw = data.sampledAt;
   const sampledAt =
     sampledAtRaw && typeof (sampledAtRaw as { toDate?: unknown }).toDate === "function"
@@ -23,6 +39,7 @@ export function toIssueSample(id: string, data: Record<string, unknown>): IssueS
       : null;
 
   const groupId = typeof data.groupId === "string" ? data.groupId : null;
+  const requireMemberEmails = opts.requireMemberEmails ?? true;
   const memberEmails =
     Array.isArray(data.memberEmails) &&
     (data.memberEmails as unknown[]).every((e) => typeof e === "string")
@@ -58,7 +75,7 @@ export function toIssueSample(id: string, data: Record<string, unknown>): IssueS
     openEnhancement === null ||
     openOther === null ||
     groupId === null ||
-    memberEmails === null
+    (requireMemberEmails && memberEmails === null)
   ) {
     logError(new Error("issue-samples document missing required fields"), {
       operation: "issue-sample-validation",

@@ -89,7 +89,11 @@ export interface ProduceDeps {
   namespace: string;
   /** Owning group id, denormalized into each written doc. */
   groupId: string;
-  /** Member emails, denormalized into each written doc. */
+  /**
+   * Member emails, denormalized into the docs the cores write (the auth field
+   * the Firestore rules read). NOT stamped onto the serialized series samples —
+   * the offline wire deliberately omits the ACL (see snapshot-wire.ts).
+   */
   memberEmails: string[];
   /** Repos scanned for queue metrics + parked office-hours work. */
   queueRepos: string[];
@@ -309,7 +313,10 @@ export async function produceSnapshot(
     const parked = parkedPerRepo.flat();
     // Partial queue metrics: only `parked` is meaningful here. The rate fields
     // are zeroed and runwayDays is null (which satisfies the
-    // netDrainPerDay/runwayDays invariant: 0 > 0 is false ⇔ null).
+    // netDrainPerDay/runwayDays invariant: 0 > 0 is false ⇔ null). `scope:
+    // "parked-only"` marks depth/rate/runway as fabricated placeholders so the
+    // dashboard renders them as unmeasured rather than as a real (misleading)
+    // "queue empty / 0.0 net drain" reading.
     const queueMetrics: QueueMetricsSnapshot = {
       openHelpWanted: 0,
       closedPerDay: 0,
@@ -321,6 +328,7 @@ export async function produceSnapshot(
       groupId: deps.groupId,
       memberEmails: deps.memberEmails,
       parked,
+      scope: "parked-only",
     };
     return {
       samples: priorSamples.slice(-windowSize),
