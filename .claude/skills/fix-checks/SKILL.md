@@ -132,6 +132,17 @@ instead (see Step 1 below), and never pass `--issue`. The front door's
 `--pr-mode required` already guaranteed a non-empty `PR_NUM`; had none existed,
 the exit-4 escalation above would have parked the node on office-hours.
 
+If `.claude/ancestry-context.md` is present in the worktree, read it before
+resolving any plan-under-determined judgment call — it is the bounded ancestry
+projection (parent chain + served strategies up to virtue roots) for this
+node.
+
+This projection is read-only decision context for in-scope, plan-under-determined
+judgment calls; the node body remains the sole work contract (a plan that assumes
+the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+conflict parks to `office_hours` with a recommendation — never self-expanded or
+self-reduced scope.
+
 **Node-lane completion — the fix worker does NOT resolve the interrupt.** The
 selector, not this worker, owns clearing `execution.fix` (it decides when CI has
 gone green on the pushed sha, on a LATER tick). This worker's completion duty is

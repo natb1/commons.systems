@@ -106,6 +106,17 @@ case "$BRANCH" in
 esac
 ```
 
+If `.claude/ancestry-context.md` is present in the worktree, read it before
+resolving any plan-under-determined judgment call — it is the bounded ancestry
+projection (parent chain + served strategies up to virtue roots) for this
+node.
+
+This projection is read-only decision context for in-scope, plan-under-determined
+judgment calls; the node body remains the sole work contract (a plan that assumes
+the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+conflict parks to `office_hours` with a recommendation — never self-expanded or
+self-reduced scope.
+
 On the node lane, `$N` is the node id (keys `tmp/` filenames); never pass
 `--issue`. **On the node lane no gh issue is ever read or written.** This
 extends to every `dispatch-emit-outcome` call site (Step 7 /
