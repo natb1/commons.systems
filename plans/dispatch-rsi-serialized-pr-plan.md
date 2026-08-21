@@ -62,6 +62,13 @@ Four ground rules were set by the author and are assumed throughout:
 Every PR section is **clean-session-executable**: a session with no memory of
 this analysis can execute it from the section text alone.
 
+> **Where this file lives.** On the branch `dispatch-rsi-pr-plan` and nowhere
+> else — `plans/` is absent from `origin/main`, the branch has no PR, and
+> nothing in the graph references it. A clean session must check out that
+> branch to read this at all. Whether that stays true is an **open decision**:
+> see §"Residuals not owned by any Bundle 0 step" item 2, which recommends
+> merging the file to `main` as a docs-only PR and states the case against.
+
 > **Anchor freshness.** `path:line` anchors below were re-verified against
 > `da1c3c7f` unless marked *(from node body — re-locate)*. Several anchors
 > carried in node bodies had already drifted; those are corrected here. Anchors
@@ -134,6 +141,19 @@ in-flight `execution.conflict` and `office_hours` null. Counted against
 > mergeable**, 2 parked, 1 merged-awaiting-absorption. Only the two parked nodes
 > remain at `phase: review`, and neither can produce a merge candidate without a
 > worker. **Still no parking session needed.**
+>
+> **Re-run 2026-08-21 at `f98d6c78`, after #2805 merged — the margin widened
+> again, and the sentence above is now half wrong.** Of the two parked nodes,
+> only **one** is still at `phase: review`:
+> `tactic-clarification-citation-ids` (#3041, parked since 2026-08-10,
+> `markers: [planned, qa-done]`, no `reviewed`).
+> `tactic-office-hours-snapshot-wire-contract` **self-transitioned to
+> `phase: done`** off its merge, with `execution.completion` stamped
+> (`eba3313b`) — so it has left the candidate set through the exit, not the
+> park. Its park is nevertheless **still set** and still owed a clear; see
+> Bundle 0's execution list item 2 for why that matters even on a `done` node.
+> Standing candidate count: **0 mergeable**, 1 parked at `review`, 1 parked at
+> `done`. **Still no parking session needed.**
 
 There is no path from that state to a merge while the sentinel holds: the
 `reviewed` marker is written by a review session, review sessions run only from
@@ -292,7 +312,11 @@ Bundle 0 step 2 for the first three and step 4 for #2805's full record.
 | **#2805** | `tactic-office-hours-snapshot-wire-contract` | No plan-file overlap at all. **LANDED 2026-08-21 (`eba3313b`).** The sitting was resolved by running the review it was parked for; it found a deploy-blanking migration bug. Node still needs its park cleared and a phase transition — see step 4 |
 | **#2879** | `tactic-align-audit-skill` | No file overlap with PR20. Lands a single new skill file. Related to PR20's required pre-PR sitting `tactic-align-audit-legacy-review` only by subject, not by a declared edge |
 
-**A3 — sequence after this plan's bookkeeping (4).** The first three rewrite node
+**A3 — sequence after this plan's bookkeeping (4). These four are now
+§Bundles' Bundle 8**, sequenced last and ordered #3093 → #2856 → #3040 →
+#3037; see §"Residuals not owned by any Bundle 0 step" item 3 for why that
+order is not free. Until 2026-08-21 they carried this disposition with no step
+that owned it. The first three rewrite node
 *content* in bulk. Landing any of them mid-plan invalidates every
 `graph-commit --base` CAS manifest pinned before it — the hazard §"Closing nodes
 after each merge" already warns about — and would collide with roughly a hundred
@@ -384,14 +408,15 @@ tells you to re-locate; this is why.
 
 Ordered so each step reduces the next one's cost. No step opens a new PR.
 
-> **Status 2026-08-21 — 5 of 7 steps complete; step 5 diagnosed, not executed.**
+> **Status 2026-08-21 — 5 of 7 steps complete; step 4 is one stale field short
+> of done; step 5 is diagnosed but not executed.**
 >
 > | Step | State |
 > |---|---|
 > | 1 — settle #3037 | **done** — recommendation *refuted*; #3037 deferred to A3, PR18 Unit 1 narrowed |
-> | 2 — land the A2 PRs | **3 of 4 done** — `4dfb4648`, `9637479a`, `97085e52`; #2805 open |
+> | 2 — land the A2 PRs | **done** — all 4 merged: `4dfb4648`, `9637479a`, `97085e52`, and **#2805 `eba3313b`** (2026-08-21) |
 > | 3 — sequence `mainqa-record-time-routing` | **done** — now §PR5a, Bundle 2a |
-> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is closed, the blocker it found is fixed (`b17e996f`), both deferred decisions are resolved (`45f29cd7`), and **#2805 is MERGED (`eba3313b`)**. Its node still needs the park cleared and a phase transition |
+> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is closed, the blocker it found is fixed (`b17e996f`), both deferred decisions are resolved (`45f29cd7`), and **#2805 is MERGED (`eba3313b`)**. Its node self-transitioned to `phase: done` off the merge; **only the stale `office_hours` park is still owed**. #3041's park is untouched |
 > | 5 — close the 12 A1 PRs | **gate RUN 2026-08-21 — 0 of 12 pass.** Disposition rewritten: **10 split, 2 close.** None executed |
 > | 6 — fold the class-B nodes | **done** — 12 folded |
 > | 7 — the sentinel | **done** — settled by ground rule 4; nothing to decide |
@@ -418,19 +443,72 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    types, `STRIPPED_KEYS`, and the version gate are verified present on
 >    `origin/main`.
 >
->    **Node bookkeeping still owed on this one.**
->    `tactic-office-hours-snapshot-wire-contract` is still `phase: review` with
->    its `office_hours` park active. The park's reason — "the pass carries no
->    Lane-A code-quality review" — is now discharged: the review ran, found a
->    real blocker, and the blocker is fixed and merged. Clear the park and
->    transition the node, minding the two gotchas this step already records:
->    run `transition-node` **from a main-based checkout**, and check scope
->    freshness first or it **demotes the node to `implement`** and loses the
->    review work.
-> 2. Land the ten clean halves as one batch, then re-verify the plan's anchors
+>    **Node bookkeeping: the phase half is DONE, the park half is still owed.**
+>    Re-read at `f98d6c78` on 2026-08-21, *after* the earlier note in this slot
+>    was written: the node is **already `phase: done`**, with
+>    `execution.completion` stamped `mergedAt: 2026-08-21T17:04:48Z`,
+>    `mergeCommitSha: eba3313b…`. The transition ran itself off the merge. **So
+>    the `transition-node` hazard this slot used to warn about — run it from a
+>    main-based checkout, check scope freshness or it demotes to `implement` —
+>    no longer applies to this node.** Do not run `transition-node` on it;
+>    there is nothing left to transition and the demotion risk is the only
+>    thing an invocation could still produce.
+>
+>    What remains is one stale field: `office_hours` is still non-null,
+>    carrying the 2026-08-03 reason "the pass carries no Lane-A code-quality
+>    review". That reason is discharged — the review ran, found a real blocker,
+>    and the blocker is fixed and merged. **Clear the park:**
+>
+>    ```
+>    packages/intentionsutil/scripts/clear-park \
+>      tactic-office-hours-snapshot-wire-contract \
+>      'Lane-A review ran 2026-08-21; blocker fixed and merged in #2805 (eba3313b)'
+>    ```
+>
+>    Two invocation constraints, both load-bearing, neither obvious:
+>
+>    - **`clear-park` takes no `-C`.** It resolves `REPO_ROOT` from **its own
+>      file's location** (`clear-park:99-100`), not from cwd and not from a
+>      flag. The copy you invoke *is* the checkout you write. Invoke the
+>      **main checkout's** copy by absolute path.
+>    - **Never invoke it from this plan's own branch.** `clear-park` calls
+>      `graph-commit`, and a worktree whose HEAD is ahead of `origin/main`
+>      with **non-intentions** commits — which `dispatch-rsi-pr-plan` always is,
+>      it carries nothing but `plans/` — takes graph-commit's
+>      "rebuilding the edit on an intentions/-only base" path. That path
+>      `reset --hard origin/main`s first, which discards the edit for a node
+>      that **already exists** on `origin/main`, and then reports
+>      `pushed=none … context=noop` / `landed`. The clear silently does not
+>      happen. (`clear-park`'s own `verify-landed --blob` check catches it and
+>      exits non-zero, so this fails loudly rather than forging success — but it
+>      still will not land.)
+>
+>    Verify by reading landed truth, never the verdict line:
+>    `git show origin/main:intentions/tactic-office-hours-snapshot-wire-contract.md | grep -A2 '^office_hours'`
+>    must print `office_hours: null`.
+>
+>    **Why this is worth doing rather than leaving.**
+>    `hold-sweep.ts:128` computes `terminal = phase === "done" && office_hours
+>    === null` — **both** required. A `done` node with a live park is not
+>    terminal, so it keeps generating `hold-alerts` age against its 2026-08-03
+>    `since`, keeps appearing in the office-hours queue, and keeps
+>    `tactic-mainqa-office-hours-snapshot` (`blocked_by:
+>    [tactic-office-hours-snapshot-wire-contract]`) formally blocked. That last
+>    one has its own park too, so clearing this does not by itself release it —
+>    but it removes one of the two reasons it is stuck.
+> 2. Clear `tactic-office-hours-snapshot-wire-contract`'s stale park — the
+>    one-command residual above. Not on the critical path for anything else in
+>    Bundle 0, so it can run in any order, but it is the cheapest open item
+>    here and it stops an alert aging since 2026-08-03.
+> 3. Land the ten clean halves as one batch, then re-verify the plan's anchors
 >    once (step 5).
-> 3. Close all twelve drafts and fold their nodes in; leave the branches alive.
-> 4. Clear #3041's park (`claude stop`, never `claude rm`, then `clear-park`).
+> 4. Close all twelve drafts and fold their nodes in; leave the branches alive.
+> 5. Clear #3041's park (`claude stop`, never `claude rm`, then `clear-park` —
+>    same two invocation constraints as item 2).
+>
+> Items 2–5 are **all that is left in Bundle 0**, and every one of them is
+> execution rather than judgement. §"Residuals not owned by any Bundle 0 step"
+> tracks the items that are *not* Bundle 0 steps.
 
 1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
    refuted by the reading it ordered.** This step said to read
@@ -792,6 +870,104 @@ PRs untouched.
 
 ---
 
+## Residuals not owned by any Bundle 0 step
+
+Swept 2026-08-21 against `origin/main` `f98d6c78`. Bundle 0's own remaining
+items (its execution list, above) are not repeated here. Everything below was
+loose — either genuinely unrecorded, or recorded as a disposition with no step
+that owns it. Each now has a disposition and, where one is needed, an owner.
+
+### 1. `.claude/agents` in a sandboxed worktree — **resolved; no action, ever**
+
+A sandboxed `git status` inside a worktree reports `?? .claude/agents`. It is
+**not a file.** `ls -la` shows a character-special device, type `1,3`
+(`/dev/null`), owned `nobody:nogroup`; the identical command with
+`dangerouslyDisableSandbox: true` reports `No such file or directory` and a
+clean tree. The sandbox implements path denial by bind-mounting `/dev/null`
+over the denied path, and that mount leaks into the worktree's visible
+namespace for the life of the session.
+
+It was committed once, on 2026-08-21, by a `git add -A` in this worktree, and
+removed again in `83d490ae`. **The fix is procedural, not a `.gitignore`
+entry** — `.claude/agents/` is a real Claude Code directory for agent
+definitions, and ignoring it repo-wide would hide legitimate files from every
+future session to suppress a phantom that does not exist on disk.
+
+- Never `git add -A` from a sandboxed worktree session; stage named paths.
+- Before trusting any `git status`-driven file collection, re-run it with
+  `dangerouslyDisableSandbox: true`.
+- Do **not** try to `rm` or `umount` it — sandboxed, that reports `Device or
+  resource busy`. It needs no cleanup.
+
+Same root cause as the `config.worktree` failure mode in
+`.claude/rules/sandbox.md`, and the reason `git worktree remove` must never run
+sandboxed.
+
+### 2. Where this document lives, and whether it merges — **OPEN, author's call**
+
+`plans/` **does not exist on `origin/main`** and is not in `.gitignore`. This
+file exists only on the branch `dispatch-rsi-pr-plan`, which has **no PR**. No
+ground rule says whether it should ever merge, and that gap is load-bearing in
+two directions:
+
+- §"How to use this document" promises every PR section is
+  **clean-session-executable**. A clean session cannot execute what it cannot
+  read, so today every executing session must know to check out
+  `dispatch-rsi-pr-plan` first — a fact recorded nowhere but here.
+- The branch is unreferenced by any node, any PR, and any sweep. Worktree and
+  branch sweeps during this freeze have no reason to spare it, and the document
+  is the only copy of ~4,300 lines of analysis that took several sessions to
+  produce.
+
+**Recommendation: merge it to `main` as its own docs-only PR, now, before
+Bundle 0's remaining items run.** It touches no code, so it cannot conflict
+with any plan PR, and it converts "check out this branch" into "read
+`plans/dispatch-rsi-serialized-pr-plan.md`". Subsequent updates then land as
+ordinary commits on `main` — including the status stamps this document takes on
+after every step, which is the majority of its churn.
+
+**The argument against, which the author should weigh:** the intention graph
+(`intentions/`) is meant to be the single durable record, and a 4,300-line
+planning document on `main` is a second one that no sweep, census, or
+validator reads. If that objection wins, the alternative is explicit and must
+be written into §"How to use this document": the plan is branch-only and
+disposable, the branch is protected from sweeps for the duration of the freeze,
+and the document is deleted — not merged — when the last PR lands.
+
+Either answer is fine. **Leaving it unanswered is not**, because the default
+behaviour of an unanswered version of this question is silent loss.
+
+### 3. The four A3 PRs have a disposition but no sequenced step — **now Bundle 8**
+
+§"Class A" defers #3037, #3093, #2856 and #3040 to "after this plan's
+bookkeeping". That is a constraint, not a step: none of the four appears in
+§Bundles, in §"Recommended order", or in any PR section's `### Dependencies`.
+As written, this plan can be executed to completion without anyone ever
+noticing four open drafts it deliberately deferred.
+
+They are now **Bundle 8**, sequenced last — after Bundle 7 and *before* the
+staged resumption, since three of the four rewrite node content in bulk and the
+resumption is the first thing that will read that content autonomously. See the
+row added to §Bundles and the line added to §"Recommended order".
+
+The ordering *within* Bundle 8 is not free:
+
+1. **#3093** first (92 frontmatters, `attention.boost`+`tier` →
+   `attention.boosts`). Largest blast radius, purely mechanical, and it touches
+   two nodes this plan closes — so it must run after the closures, not before.
+2. **#2856** then **#3040** — both edit `schema.ts` and `attention.ts`, so they
+   conflict with each other; land one, rebase the other.
+3. **#3037** last. It edits `graph-commit` (+12/−5) and `dispatch-select-tick`,
+   the tools every preceding closure runs through. Landing it earlier would
+   change the writer mid-plan, which is exactly what Bundle 1's argument
+   forbids.
+
+Every one of the four invalidates any `graph-commit --base` CAS manifest pinned
+before it, which is the reason they are last and the reason they are a bundle
+rather than four independent lands.
+
+---
+
 ## Bundles
 
 | # | Bundle | PRs | Nodes | Risk |
@@ -809,6 +985,7 @@ PRs untouched.
 | **5b** | **`/align` charter + adversarial review** | PR20 | 8 | must precede the rename |
 | **6** | **Skill rename** | PR13 | 1 | last, alone |
 | **7** | **Merge queue + scan cadence** | PR17 | 6 | COLD — before the sentinel comes off |
+| **8** | **The four deferred A3 drafts** | #3093, #2856, #3040, #3037 | 4 (already counted in class A) | last — bulk node-content rewrites; invalidate every `--base` CAS manifest. See §"Residuals" item 3 |
 | — | *deferred* | PR8 U3 | 1 | see below |
 | | *pre-PR sessions* | | 9 | no diff |
 | | **total** | | **117** | + 11 documented-not-assigned |
@@ -870,6 +1047,8 @@ never mid-window.
 9.  Bundle 5b          /align charter + adversarial review   (before rename)
 10. Bundle 6           skill rename                          (last, alone)
 11. Bundle 7           merge queue + scan cadence            (COLD, pre-resume)
+12. Bundle 8           the four deferred A3 drafts           (#3093, #2856,
+                       in that order                          #3040, #3037)
 --  staged resumption: sentinel off at max_concurrent_workers: 1, one node
 --  deferred: PR8 Unit 3, during an attended un-pause
 ```
