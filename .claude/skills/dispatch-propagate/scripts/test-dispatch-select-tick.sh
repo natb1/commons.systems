@@ -44,8 +44,21 @@ sel_tick_setup() {
   # SCRIPT_DIR (= TMPDIR_TEST). Copy the real script so the wiring test can
   # assert reconcile-produced `ready:` lines appear in the tick output.
   cp "$SCRIPT_DIR/dispatch-reconcile-ready" "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # dispatch-select-tick's Decision A sources lib-standdown-recheck.sh via its
+  # SCRIPT_DIR (= TMPDIR_TEST) for _standdown_session_idle_s, the transcript-mtime
+  # idle probe that bounds the main-checkout defer. Stage the REAL lib (its idle
+  # math is under test) plus the sibling it sources that is not already staged
+  # (lib-worktree-in-sync.sh; lib.sh / lib-claude-agents.sh / lib-decision-log.sh
+  # are). A test drives idle age by writing a transcript under
+  # DISPATCH_STANDDOWN_PROJECTS_ROOT with a chosen mtime — see sel_tick_transcript.
+  cp "$SCRIPT_DIR/lib-standdown-recheck.sh" "$TMPDIR_TEST/lib-standdown-recheck.sh"
+  cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/lib-worktree-in-sync.sh"
   chmod +x "$TMPDIR_TEST/dispatch-select-tick" "$TMPDIR_TEST/dispatch-acquire-lock" \
            "$TMPDIR_TEST/dispatch-reconcile-ready"
+  # Transcript store the idle probe reads; empty by default, so a session with no
+  # staged transcript reads as UNKNOWN idle (the fail-safe defer case).
+  export DISPATCH_STANDDOWN_PROJECTS_ROOT="$TMPDIR_TEST/projects"
+  mkdir -p "$DISPATCH_STANDDOWN_PROJECTS_ROOT/proj"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
   # #1495: sync-repair attempt-counter file override (consumed by lib.sh's
@@ -254,6 +267,17 @@ claude_sessions_under() {
   [[ -n "${SEL_SESSIONS_UNDER_TSV:-}" ]] && printf '%s\n' "${SEL_SESSIONS_UNDER_TSV}"
   return 0
 }
+claude_agents_list_sessions_in_cwd_all() {
+  # The REGISTERED (--all) cwd-keyed view Decision A reads. Default UNKNOWN
+  # (rc 1) preserves the fall-through in every pre-existing main-branch test. A
+  # test sets SEL_MAIN_SESSIONS_RC=0 and SEL_MAIN_SESSIONS_TSV (rows of
+  # sessionId<TAB>id<TAB>name<TAB>state<TAB>status) to drive a definite list;
+  # SEL_MAIN_SESSIONS_RC=0 with no TSV models a definite "nobody is there".
+  local rc="${SEL_MAIN_SESSIONS_RC:-1}"
+  [[ "$rc" != 0 ]] && return "$rc"
+  [[ -n "${SEL_MAIN_SESSIONS_TSV:-}" ]] && printf '%s\n' "${SEL_MAIN_SESSIONS_TSV}"
+  return 0
+}
 FAKE
   # Default empty reservation ledger: the sweep no-ops, reservation_count is 0,
   # and the gap is unchanged from the pre-ledger gate (behavior-preserving).
@@ -403,6 +427,8 @@ sel_tick_teardown() {
     DISPATCH_RESERVATION_DIR SEL_AGENTS_TSV SEL_AGENTS_LIST_FAIL \
     DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE SEL_GIT_MERGE_LOG \
     SEL_SESSIONS_UNDER_RC SEL_SESSIONS_UNDER_TSV \
+    SEL_MAIN_SESSIONS_RC SEL_MAIN_SESSIONS_TSV \
+    DISPATCH_STANDDOWN_PROJECTS_ROOT DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S \
     DISPATCH_LOCK_PROBE_TIMEOUT DISPATCH_LOCK_FLOCK_TIMEOUT \
     SEL_AUTO_MERGE_OUT SEL_GRAPH_AUTO_MERGE_OUT SEL_RETRIAGE_OUT \
     SEL_MAIN_BROKEN_SHA SEL_MAIN_RED_NODES SEL_SYNC_BROKEN_LATCHED SEL_JIT_SCAN \
@@ -423,6 +449,18 @@ run_sel_tick() {
 run_sel_tick_err() {
   local errfile="$1"; shift
   "$TMPDIR_TEST/dispatch-select-tick" "$@" 2>"$errfile"
+}
+
+# sel_tick_transcript <sid> <age-seconds> — stage a transcript for <sid> whose
+# mtime is <age-seconds> in the past, which is exactly what
+# _standdown_session_idle_s measures (newest mtime of
+# <projects-root>/<project>/<sid>.jsonl). Omit the call entirely and the session
+# reads as UNKNOWN idle.
+sel_tick_transcript() {
+  local sid="$1" age="$2" f
+  f="$DISPATCH_STANDDOWN_PROJECTS_ROOT/proj/${sid}.jsonl"
+  : > "$f"
+  touch -d "@$(( $(date +%s) - age ))" "$f"
 }
 
 # --- empty queue → release + empty ------------------------------------------
@@ -921,11 +959,17 @@ assert_eq "sync-failed: escalate NOT called" "absent" \
   "$([ -f "$TMPDIR_TEST/logs/escalate-sync-broken.log" ] && echo present || echo absent)"
 sel_tick_teardown
 
+# --- Decision A (bounded main-checkout defer) --------------------------------
+# The rows below are the REGISTERED (--all) cwd-keyed view:
+# sessionId<TAB>id<TAB>name<TAB>state<TAB>status. Session ids are hex-and-dash
+# shaped on purpose — _standdown_session_idle_s validates that shape before it
+# globs for the transcript.
+
 # --- #1495: live sync-repair session → defer (sync-repair-pending), merge NOT run ---
-echo "Test: select-tick live sync-repair session → sync-repair-pending, merge deferred"
+echo "Test: select-tick working session in main → sync-repair-pending, merge deferred"
 sel_tick_setup
-export SEL_SESSIONS_UNDER_RC=0
-export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tbusy\tsync-repair'
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tworking\tbusy'
 out=$(run_sel_tick) || true
 assert_eq "defer: decision line" "sync-repair-pending" \
   "$(printf '%s\n' "$out" | tail -n 1)"
@@ -938,16 +982,114 @@ assert_eq "defer: counter untouched" "absent" \
   "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
 sel_tick_teardown
 
-# --- #1495: stopped sync-repair session does NOT defer → falls through to merge ---
-echo "Test: select-tick stopped sync-repair session → no defer, failing merge → sync-failed"
+# A `blocked` session INSIDE the grace still defers: it may yet come back.
+echo "Test: select-tick blocked session in main, idle < grace → sync-repair-pending"
 sel_tick_setup
-export SEL_SESSIONS_UNDER_RC=0
-export SEL_SESSIONS_UNDER_TSV=$'sid1\t100\tstopped\tsync-repair'
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tblocked\tidle'
+sel_tick_transcript aaa1-bbb2 60
+export DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S=1800
+out=$(run_sel_tick) || true
+assert_eq "grace-defer: decision line" "sync-repair-pending" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "grace-defer: merge NOT attempted" "absent" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+assert_eq "grace-defer: counter untouched" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# THE INCIDENT REGRESSION RATCHET. A `blocked` session past the grace must NOT
+# hold the tick any longer: the old name-and-status rule read its coarse status
+# as `idle` (never `stopped`), deferred forever, and so never bumped the
+# counter — making the 3-attempt sync-broken cap structurally unreachable.
+echo "Test: select-tick blocked session in main, idle >= grace → falls through, sync-failed"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tblocked\tidle'
+sel_tick_transcript aaa1-bbb2 7200
+export DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S=1800
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick) || true
+assert_eq "stuck-fallthrough: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "stuck-fallthrough: merge attempted" "present" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+assert_eq "stuck-fallthrough: counter bumped to 1" "1" \
+  "$(cat "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE")"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "stuck-fallthrough: decision log attributes the declined defer" \
+  "main-checkout-stuck:sync-repair:blocked" \
+  "$(tail -n 1 "$DLOG_FILE" | jq -r .skip_reason)"
+sel_tick_teardown
+
+# ... and on the 3rd attempt the cap is REACHED — the escalation the unbounded
+# defer could never get to.
+echo "Test: select-tick blocked session past grace at the cap → sync-broken, latch set"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tblocked\tidle'
+sel_tick_transcript aaa1-bbb2 7200
+export DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S=1800
+export FAKE_GIT_MERGE_FAIL=1
+printf '3\n' > "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE"   # two prior ticks bumped it
+out=$(run_sel_tick) || true
+assert_eq "stuck-cap: decision line" "sync-broken" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "stuck-cap: repo-health --set-sync-broken invoked" "1" \
+  "$(grep -cF -- '--reason merge-failed' "$TMPDIR_TEST/logs/repo-health-set-sync-broken.log")"
+sel_tick_teardown
+
+# The REGISTERED-view-only case: a `stopped`/`done` row is INVISIBLE to the
+# ACTIVE view the old rule read, so the old code could not see this holder at
+# all. A second, distinct regression ratchet.
+echo "Test: select-tick stopped session in main past grace → falls through to merge"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tdone\t'
+sel_tick_transcript aaa1-bbb2 7200
+export DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S=1800
 export FAKE_GIT_MERGE_FAIL=1
 out=$(run_sel_tick) || true
 assert_eq "stopped-defer: decision line" "sync-failed" \
   "$(printf '%s\n' "$out" | tail -n 1)"
 assert_eq "stopped-defer: merge attempted" "present" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# UNKNOWN idle (no transcript staged) is fail-SAFE: defer, never fall through.
+echo "Test: select-tick session in main with no transcript → sync-repair-pending"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=0
+export SEL_MAIN_SESSIONS_TSV=$'aaa1-bbb2\tjob1\tsync-repair\tblocked\tidle'
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick) || true
+assert_eq "idle-unknown: decision line" "sync-repair-pending" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "idle-unknown: merge NOT attempted" "absent" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# Daemon UNKNOWN (rc 1) is fail-OPEN, unchanged: the tick proceeds to the merge.
+echo "Test: select-tick registered session view UNKNOWN → falls through to merge"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=1
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick) || true
+assert_eq "daemon-unknown: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "daemon-unknown: merge attempted" "present" \
+  "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
+sel_tick_teardown
+
+# A definite EMPTY main-checkout session list is not a defer either.
+echo "Test: select-tick no sessions in main → falls through to merge"
+sel_tick_setup
+export SEL_MAIN_SESSIONS_RC=0
+export FAKE_GIT_MERGE_FAIL=1
+out=$(run_sel_tick) || true
+assert_eq "no-sessions: decision line" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "no-sessions: merge attempted" "present" \
   "$([ -f "$STUB_DIR/git-merge.log" ] && echo present || echo absent)"
 sel_tick_teardown
 
