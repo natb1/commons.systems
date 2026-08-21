@@ -137,6 +137,13 @@ build_seed_repo() {
   cp "$UTIL_SCRIPTS_SRC/write-node.ts" "$dst/packages/intentionsutil/scripts/write-node.ts"
   cp "$UTIL_SCRIPTS_SRC/graph-census-debt.ts" "$dst/packages/intentionsutil/scripts/graph-census-debt.ts"
   cp "$UTIL_SCRIPTS_SRC/restamp-scope-fingerprint.ts" "$dst/packages/intentionsutil/scripts/restamp-scope-fingerprint.ts"
+  # Sibling script-level libraries the copied scripts import relatively — e.g.
+  # write-node.ts / apply-node-transition.ts → ./lib-strategy-stamp.js, the one
+  # implementation of the --strategy-fingerprint/--strategy-sha flags and the
+  # stamp merge. Copy the whole `lib-*.ts` glob rather than cherry-picking
+  # names: a missing sibling surfaces only as an ERR_MODULE_NOT_FOUND deep
+  # inside a case, which reads as a behavior failure rather than a fixture gap.
+  cp "$UTIL_SCRIPTS_SRC"/lib-*.ts "$dst/packages/intentionsutil/scripts/"
   # reconcile-graph.ts is the real decision+write primitive behind
   # reconcile-graph-merged (cases 6-8); merge-node.ts is the layer-2/3 field
   # merge CLI the REAL graph-commit shells out to via `npx tsx` when a --base

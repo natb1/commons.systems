@@ -141,8 +141,14 @@ function isDraft(tactic: IntentionNode): boolean {
 }
 
 /** Open = in flight: a phase set, and neither draft nor done. (Type predicate:
- * a passing tactic provably carries a non-null phase.) */
-function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase: Phase } {
+ * a passing tactic provably carries a non-null phase.)
+ *
+ * Exported for the strategy-stamp census
+ * (`packages/intentionsutil/scripts/strategy-stamp-census.ts`), which measures
+ * soft-freeze stamp coverage over exactly the population the freeze applies to
+ * — the router's own open set. Sharing the predicate keeps the census's "open"
+ * and the selector's "open" from drifting apart. */
+export function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase: Phase } {
   return !isDraft(tactic) && tactic.phase !== "done";
 }
 

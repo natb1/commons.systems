@@ -34,6 +34,16 @@
 #     closed by the tick reconciler (graph-auto-merge) immediately before
 #     merging, not here.
 #
+# Stamp WRITE (the other half of the same gate): a FORWARD (not strategy-stale)
+# transition seeds/refreshes the tactic's per-strategy stamp map — it passes
+# apply-node-transition one `--strategy-fingerprint <sid>=<hash>` per serving
+# strategy compute-freshness resolved, plus the shared `--strategy-sha` naming
+# the origin/main COMMIT the hashes were computed against. A HELD
+# (strategy-stale) transition deliberately does NOT re-stamp: re-stamping a node
+# the gate just froze would silently self-clear the freeze before the
+# `/align-tactics` re-evaluation it exists to trigger ever ran. Re-stamping a
+# stale node is exclusively that re-evaluation's job.
+#
 # Usage: transition-node <node-id> [--set-pr <n>]
 #
 # Stdout: exactly one outcome line —
@@ -97,6 +107,14 @@ if ! git -C "$REPO_ROOT" fetch origin main >&2; then
 fi
 if ! FRESH_BLOB="$(git -C "$REPO_ROOT" rev-parse "origin/main:intentions/$NODE_ID.md" 2>/dev/null)"; then
   echo "transition-node: intentions/$NODE_ID.md does not exist on origin/main — cannot transition a node that is not landed" >&2
+  exit 1
+fi
+# MAIN_SHA is the origin/main COMMIT sha — the provenance the strategy-fingerprint
+# stamp records ("this hash was computed against this commit of main"). It is a
+# DIFFERENT object from FRESH_BLOB above (the node file's blob sha, the CAS token);
+# the two must never be substituted for one another.
+if ! MAIN_SHA="$(git -C "$REPO_ROOT" rev-parse origin/main 2>/dev/null)"; then
+  echo "transition-node: could not resolve the origin/main commit sha" >&2
   exit 1
 fi
 if ! git -C "$REPO_ROOT" show "origin/main:intentions/$NODE_ID.md" > "$REPO_ROOT/intentions/$NODE_ID.md"; then
@@ -188,6 +206,14 @@ FRESH="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/compute-fresh
   echo "transition-node: freshness gate computation failed for $NODE_ID" >&2; exit 2; }
 SCOPE_STALE="$(jq -r '.scopeStale' <<<"$FRESH")"
 STRATEGY_STALE="$(jq -r '.strategyStale' <<<"$FRESH")"
+# The per-strategy CURRENT hashes, one `<strategy-id>=<hash>` line each, from the
+# SAME $FRESH blob (no second compute-freshness run). Here-string, never
+# `echo "$FRESH" | jq` — zsh's echo un-escapes control characters and corrupts
+# the JSON (.claude/rules/shell-json.md).
+STRATEGY_FPS=()
+while IFS= read -r fp_entry; do
+  [[ -n "$fp_entry" ]] && STRATEGY_FPS+=("$fp_entry")
+done < <(jq -r '(.strategyFingerprints // {}) | to_entries[] | "\(.key)=\(.value)"' <<<"$FRESH")
 
 # --- Scope-stale → delegate to the demotion primitive ------------------------
 # main-qa is post-merge by definition (check-node-selection.ts:242), so scope
@@ -208,6 +234,24 @@ fi
 APPLY_FLAGS=("$NODE_ID")
 [[ "$STRATEGY_STALE" == "true" ]] && APPLY_FLAGS+=("--strategy-stale")
 [[ -n "$SET_PR" ]] && APPLY_FLAGS+=("--set-pr" "$SET_PR")
+# Seed/refresh the per-strategy stamp map — ONLY on the forward path. Semantics:
+#   null  -> SEEDED:    a tactic with no stamp gets one at its first forward
+#                       transition (the other execution writers — creation,
+#                       demote, park, fix-state — deliberately do not stamp).
+#   fresh -> REFRESHED: hash unchanged, sha advances to the current main commit.
+#   stale -> HELD and LEFT STALE: apply-node-transition holds the phase (the
+#                       "strategy-fingerprint freeze" outcome below), and we pass
+#                       NO stamp flags, so the freeze survives to the next tick.
+#                       Writing the fresh hash here would self-clear the freeze
+#                       and skip the /align-tactics re-evaluation it exists for.
+# Both flags are passed together or not at all: apply-node-transition rejects a
+# --strategy-sha with no --strategy-fingerprint, so an empty map appends nothing.
+if [[ "$STRATEGY_STALE" == "false" && ${#STRATEGY_FPS[@]} -gt 0 ]]; then
+  for fp_entry in "${STRATEGY_FPS[@]}"; do
+    APPLY_FLAGS+=("--strategy-fingerprint" "$fp_entry")
+  done
+  APPLY_FLAGS+=("--strategy-sha" "$MAIN_SHA")
+fi
 # FRESH_BLOB was already captured by the refresh-before-read block above (same
 # fetch, same blob) -- reused here rather than re-resolved, so the rollback
 # target and the --base CAS token below are pinned to the exact same
