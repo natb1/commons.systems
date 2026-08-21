@@ -390,7 +390,7 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 > | 1 — settle #3037 | **done** — recommendation *refuted*; #3037 deferred to A3, PR18 Unit 1 narrowed |
 > | 2 — land the A2 PRs | **3 of 4 done** — `4dfb4648`, `9637479a`, `97085e52`; #2805 open |
 > | 3 — sequence `mainqa-record-time-routing` | **done** — now §PR5a, Bundle 2a |
-> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is now closed and found a blocker |
+> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is closed, the blocker it found is fixed (`b17e996f`), both deferred decisions are resolved (`45f29cd7`), and #2805 is out of draft |
 > | 5 — close the 12 A1 PRs | **gate RUN 2026-08-21 — 0 of 12 pass.** Disposition rewritten: **10 split, 2 close.** None executed |
 > | 6 — fold the class-B nodes | **done** — 12 folded |
 > | 7 — the sentinel | **done** — settled by ground rule 4; nothing to decide |
@@ -408,8 +408,10 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 > gap is not acceptable and the PR does not land as it stood. What is left in
 > Bundle 0 is execution, in this order:
 >
-> 1. Commit and push #2805's three review fixes **from the main checkout** (step
->    4), then land it — the last of the four A2 PRs.
+> 1. ~~Commit and push #2805's three review fixes, then land it — the last of the
+>    four A2 PRs.~~ **DONE 2026-08-21.** The three fixes landed as `b17e996f`;
+>    both deliberately-deferred findings were then decided and resolved in
+>    `45f29cd7` (see step 4). #2805 is out of draft and merging.
 > 2. Land the ten clean halves as one batch, then re-verify the plan's anchors
 >    once (step 5).
 > 3. Close all twelve drafts and fold their nodes in; leave the branches alive.
@@ -534,22 +536,38 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
      > an over-stated no-ACL-on-the-wire invariant (`memberEmails` is still
      > emitted); and a redundant second `JSON.parse` of the whole plaintext.
      >
-     > **Three fixes are applied but UNCOMMITTED** in
-     > `.claude/worktrees/tactic-office-hours-snapshot-wire-contract` — the
-     > `version: 1` stamp, the `scope` comparison, and re-keying
-     > `LOCAL_ONLY_KEYS` to a `Map<string, Set<string>>` scoped per top-level
-     > field. Verified there: `tsc --noEmit` clean in both packages, 499 tests
-     > pass, `eslint` clean, `check-type-safety-escapes.sh` exit 0. Confirmed
-     > uncommitted by hash — worktree `ed96184e` vs branch head `97a19c77` for
-     > `snapshot-wire.ts`. **Commit and push them from the main checkout before
-     > merging; a worktree-isolated session cannot** (`git -C` to a sibling is
-     > refused and the sibling checkout is read-only —
-     > `.claude/rules/sandbox.md`).
+     > **Three fixes landed as `b17e996f`** — the `version: 1` stamp, the
+     > `scope` comparison, and re-keying `LOCAL_ONLY_KEYS` to a
+     > `Map<string, Set<string>>` scoped per top-level field.
      >
-     > Deliberately **not** fixed, both needing an author decision: the `run.ts`
-     > validation gate (throw versus re-init on an undecodable prior) and the
-     > `memberEmails` wire exposure (removing it needs the same
-     > `requireMemberEmails` opt-out the sample parsers already got).
+     > **The two deferred findings were decided 2026-08-21 and resolved in
+     > `45f29cd7`:**
+     >
+     > - *Prior-snapshot gate.* `defaultReadPriorSnapshot` now shape-checks
+     >   before the fold, deliberately **more permissively** than
+     >   `decodeSnapshot`: a document with no `version` is the legacy
+     >   pre-`version` producer's output — exactly what sits on disk until the
+     >   first post-deploy run — so it is ACCEPTED and upgraded by the fold's
+     >   version stamp. Strict validation was rejected for this reason: it would
+     >   have failed that first run instead of migrating it. A non-object, an
+     >   array, an unknown version, or non-JSON bytes throw a
+     >   `SnapshotValidationError` naming the file.
+     > - *`memberEmails` on the wire.* The invariant was true of series samples
+     >   only; both single-snapshot blocks leaked the ACL because they reuse the
+     >   Firestore serializers, where the field is required. Both serializers now
+     >   strip it, `SerializedQueueMetrics`/`SerializedProjectSignals` `Omit` it
+     >   from the type, and `parseQueueMetrics`/`parseProjectSignals` gained the
+     >   `requireMemberEmails` opt-out the sample parsers already had.
+     >   `parity.ts` gained `STRIPPED_KEYS`, the mirror of `LOCAL_ONLY_KEYS` —
+     >   without it every `--parity` run would report a permanent missing-key
+     >   divergence over the omission that is the point of the contract.
+     >
+     > The round-trip ACL assertion now covers the **whole document** rather than
+     > only the two series; the per-sample-only form passed while both blocks
+     > leaked. Both new guards were verified non-vacuous by reintroducing the
+     > defect and watching them fail. Verified on the branch: `tsc --noEmit`
+     > clean in both packages, **558** tests pass, `eslint` clean,
+     > `check-type-safety-escapes.sh` exit 0.
 
      Two gotchas the park records, both still live: run
      `transition-node` from a main-based checkout, and check scope freshness
