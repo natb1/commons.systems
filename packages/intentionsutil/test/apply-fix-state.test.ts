@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readNode, writeNode } from "../src/store.js";
+import { FIX_CYCLE_ATTEMPT_KEY, FIX_CYCLE_CAP } from "../src/transitions.js";
 import { applyFixState, parseArgs } from "../scripts/apply-fix-state.js";
 
 function tempDir(): string {
@@ -267,6 +268,86 @@ describe("applyFixState store round-trip", () => {
   });
 });
 
+describe("cross-cycle cap (--check-cycle-cap / --reset-cycle)", () => {
+  it("--set-fix on a fresh entry bumps the lifetime cycle counter; --clear-fix does not reset it", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts[FIX_CYCLE_ATTEMPT_KEY]).toBe(1);
+    applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts[FIX_CYCLE_ATTEMPT_KEY]).toBe(1);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    expect(readNode(dir, "tactic-syn").execution?.attempts[FIX_CYCLE_ATTEMPT_KEY]).toBe(2);
+  });
+
+  it("a defensive double --set-fix (no intervening --clear-fix) does not bump the cycle counter", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir }); // defensive re-set, same episode
+    expect(readNode(dir, "tactic-syn").execution?.attempts[FIX_CYCLE_ATTEMPT_KEY]).toBe(1);
+  });
+
+  it("--check-cycle-cap with no interrupt in flight reports the lifetime count and makes no write", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+    applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
+    const path = join(dir, "tactic-syn.md");
+    const mtimeBefore = statSync(path).mtimeMs;
+    const r = applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir });
+    expect(r.mode).toBe("check-cycle-cap");
+    expect(r.wrote).toBe(false);
+    expect(r.cycles).toBe(1);
+    expect(r.cycleCapped).toBe(false);
+    expect(statSync(path).mtimeMs).toBe(mtimeBefore);
+    expect(readNode(dir, "tactic-syn").execution?.fix).toBeNull();
+  });
+
+  it("a node that enters and clears the fix-interrupt FIX_CYCLE_CAP times in a row is routed to a hold (cycleCapped: true) on the next re-entry check, instead of getting a fresh attempt:1 budget", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    for (let i = 0; i < FIX_CYCLE_CAP; i++) {
+      const before = applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir });
+      expect(before.cycleCapped).toBe(false);
+      const set = applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+      expect(set.attempt).toBe(1); // fresh attempt:1 budget every cycle, as designed
+      applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
+    }
+    const capped = applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir });
+    expect(capped.cycles).toBe(FIX_CYCLE_CAP);
+    expect(capped.cycleCapped).toBe(true);
+  });
+
+  it("--reset-cycle resets the lifetime counter to 0 with no active interrupt required, and makes a write", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    for (let i = 0; i < FIX_CYCLE_CAP; i++) {
+      applyFixState({ id: "tactic-syn", mode: "set", pushedSha: null, dir });
+      applyFixState({ id: "tactic-syn", mode: "clear", pushedSha: null, dir });
+    }
+    expect(applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir }).cycleCapped).toBe(
+      true,
+    );
+    const r = applyFixState({ id: "tactic-syn", mode: "reset-cycle", pushedSha: null, dir });
+    expect(r.mode).toBe("reset-cycle");
+    expect(r.wrote).toBe(true);
+    expect(r.cycles).toBe(0);
+    expect(readNode(dir, "tactic-syn").execution?.attempts[FIX_CYCLE_ATTEMPT_KEY]).toBe(0);
+    expect(applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir }).cycleCapped).toBe(
+      false,
+    );
+  });
+
+  it("--check-cycle-cap on a node with no fix-cycle history yet reports cycles: 0, capped: false", () => {
+    const dir = tempDir();
+    seedTactic(dir, "qa", []);
+    const r = applyFixState({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null, dir });
+    expect(r.cycles).toBe(0);
+    expect(r.cycleCapped).toBe(false);
+  });
+});
+
 describe("apply-fix-state parseArgs", () => {
   it("parses --set-fix", () => {
     const a = parseArgs(["tactic-syn", "--set-fix"]);
@@ -298,6 +379,16 @@ describe("apply-fix-state parseArgs", () => {
     expect(a).toMatchObject({ id: "tactic-syn", mode: "reset-attempt", pushedSha: null });
   });
 
+  it("parses --check-cycle-cap", () => {
+    const a = parseArgs(["tactic-syn", "--check-cycle-cap"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "check-cycle-cap", pushedSha: null });
+  });
+
+  it("parses --reset-cycle", () => {
+    const a = parseArgs(["tactic-syn", "--reset-cycle"]);
+    expect(a).toMatchObject({ id: "tactic-syn", mode: "reset-cycle", pushedSha: null });
+  });
+
   it("rejects combining two modes", () => {
     expect(() => parseArgs(["tactic-syn", "--set-fix", "--clear-fix"])).toThrow(/mutually exclusive/);
   });
@@ -316,6 +407,12 @@ describe("apply-fix-state parseArgs", () => {
 
   it("rejects combining --reset-attempt with --check-cap", () => {
     expect(() => parseArgs(["tactic-syn", "--reset-attempt", "--check-cap"])).toThrow(
+      /mutually exclusive/,
+    );
+  });
+
+  it("rejects combining --check-cycle-cap with --reset-cycle", () => {
+    expect(() => parseArgs(["tactic-syn", "--check-cycle-cap", "--reset-cycle"])).toThrow(
       /mutually exclusive/,
     );
   });
