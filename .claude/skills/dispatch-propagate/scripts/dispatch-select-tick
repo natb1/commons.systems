@@ -27,8 +27,12 @@
 #   sync-failed      git fetch / merge --ff-only failed on `main` and the repair
 #                    attempt-cap is not yet hit; lock released, reseed armed.
 #                    dispatch-tick reads this to spawn the deduped repair job.
-#   sync-repair-pending   a live sync-repair job is mutating the main worktree;
-#                    deferred. lock released; reseed armed.
+#   sync-repair-pending   a session is genuinely holding the main worktree —
+#                    actively working there, or sitting there for less than
+#                    DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S (default 1800s) —
+#                    so the tick defers. BOUNDED: past that grace the tick
+#                    stops deferring and falls through to the fetch/merge
+#                    probe (see Decision A). lock released; reseed armed.
 #   sync-broken      local main cannot ff-merge origin/main and the repair
 #                    attempt-cap is hit (or the latch is already open); the
 #                    repo-health durable record is the latch. lock released;
@@ -82,6 +86,13 @@
 # releases before it emits; nothing holds the lock past select-tick. The graph
 # release is safe because the per-node reservation markers (written before the
 # emit) are the durable claim a concurrent tick's graph selector already skips on.
+#
+# Env: DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S (default 1800) — how long a
+# non-working session may sit in the shared main checkout before Decision A
+# stops deferring to it. 1800s is 2x DISPATCH_FROZEN_SESSION_GRACE_S's 900
+# (lib-frozen-session-park.sh): a legitimate /commit-merge-push run in the main
+# checkout can idle on a slow push or a CI wait, and the cost of waiting an
+# extra 30 minutes is far below the cost of a spurious `sync-broken` latch.
 #
 # Requires `dangerouslyDisableSandbox: true` — sub-scripts write tmp state, call
 # `gh`, and query the local Claude daemon over a Unix socket. The `--wait` lock
@@ -317,7 +328,7 @@ if [[ "$BRANCH" == "main" ]]; then
   # shellcheck source=/dev/null
   source "$SCRIPT_DIR/lib.sh"            # sync_repair_* + resolve_project_root
   # shellcheck source=/dev/null
-  source "$SCRIPT_DIR/lib-claude-agents.sh"   # claude_sessions_under
+  source "$SCRIPT_DIR/lib-claude-agents.sh"   # claude_agents_list_sessions_in_cwd_all
 
   # Resolve the main worktree the same way dispatch-tick does: an explicit
   # DISPATCH_TICK_MAIN_WORKTREE override is authoritative and bypasses the git
@@ -343,22 +354,111 @@ if [[ "$BRANCH" == "main" ]]; then
     exit 2
   }
 
-  # Decision A — defer while a live sync-repair session is mutating the main
-  # worktree, but fail OPEN on a daemon UNKNOWN (rc 1). claude_sessions_under
-  # returns rc 0 only on a definite list; a row whose name is `sync-repair` and
-  # whose status is not `stopped` means a repair is live: release, arm the
-  # reseed, and defer without bumping the counter or touching the tree. On rc 1
-  # (daemon down) we fall through to the merge — matching the concurrency gate's
-  # fail-open philosophy; the dispatch-spawn-job dedup itself fails closed on
-  # UNKNOWN, so no duplicate repair is spawned and git's index.lock contains the
-  # rare race.
-  if sessions=$(claude_sessions_under "$MAIN_WORKTREE"); then
-    if awk -F'\t' '$4=="sync-repair" && $3!="stopped"{f=1} END{exit !f}' <<<"$sessions"; then
+  # Decision A — defer while a session is genuinely holding the main worktree,
+  # but BOUNDED, and fail OPEN on a daemon UNKNOWN (rc 1).
+  #
+  # WHY THIS IS NOT THE OLD NAME-AND-STATUS TEST. The former rule deferred
+  # whenever a row named `sync-repair` had a status other than `stopped`. That
+  # defer was UNBOUNDED in two independent ways, and a 3-day incident rode both:
+  #   1. It read the ACTIVE view (claude_sessions_under), so a `stopped`/`done`
+  #      session still sitting in the main checkout was INVISIBLE to it.
+  #   2. A `blocked` session projects its coarse status as `idle`, never
+  #      `stopped` — so `$3!="stopped"` read it as "still live" FOREVER.
+  # Either way the tick emitted `sync-repair-pending` on every tick, never
+  # reached the merge probe, and never bumped sync_repair_*, which made the
+  # 3-attempt `sync-broken` escalation cap structurally unreachable.
+  #
+  # The rule now reads the REGISTERED view
+  # (claude_agents_list_sessions_in_cwd_all, exact-cwd match, no keyspace
+  # filter — a strict superset of the ACTIVE view, so a stopped/done holder is
+  # visible) and defers only while a session is genuinely holding the tree:
+  #   - state `working` (or coarse status `busy`) → actively mutating: defer.
+  #   - otherwise, transcript idle age below the grace → still plausibly alive:
+  #     defer. An UNMEASURABLE idle (rc 1: no transcript, or the helper failed
+  #     to load) folds to DEFER — fail-safe, per _standdown_session_idle_s's
+  #     documented "caller must keep" contract.
+  #   - beyond the grace → STOP DEFERRING. Fall through to the fetch/merge
+  #     probe below, unchanged.
+  #
+  # WHY FALLING THROUGH IS THE CORRECT ESCALATION, NOT A HAZARD:
+  #   - `git merge --ff-only` on a dirty tree FAILS; it corrupts nothing.
+  #   - A failed merge bumps sync_repair_bump_attempts (the existing failure
+  #     branch below) and emits `sync-failed`.
+  #   - dispatch-tick reads `sync-failed` and calls `dispatch-spawn-job --name
+  #     sync-repair`, whose dedup sees the existing live `sync-repair` name and
+  #     returns `deduped` — no duplicate repair session is spawned.
+  #   - After 3 such ticks the existing attempt cap below fires: `repo-health
+  #     --set-sync-broken --reason merge-failed` latches durably and the tick
+  #     emits `sync-broken`. That is the escalation the old rule could never
+  #     reach, and reaching it is the whole point of this bound.
+  # This decides only whether the TICK WAITS on the session. It never reaps,
+  # kills or parks it — `state: done` is the discriminator for REAPING, not for
+  # HEALTH, and the stuck session's own disposition belongs to the sweeps.
+  #
+  # FAIL OPEN on rc 1 (daemon unqueryable): fall through to the merge, matching
+  # the concurrency gate's fail-open philosophy — dispatch-spawn-job's own dedup
+  # fails CLOSED on UNKNOWN, so no duplicate repair is spawned, and git's
+  # index.lock contains the rare race.
+  MAIN_STUCK_GRACE_S="${DISPATCH_MAIN_CHECKOUT_STUCK_GRACE_S:-1800}"
+  [[ "$MAIN_STUCK_GRACE_S" =~ ^[0-9]+$ ]] || MAIN_STUCK_GRACE_S=1800
+  # Guarded source, dispatch-tick's idiom: source only when the function is
+  # absent, verify it arrived, and on failure degrade loudly (here: to the
+  # fail-safe defer) rather than aborting the script.
+  if ! declare -f _standdown_session_idle_s >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/lib-standdown-recheck.sh" 2>/dev/null
+  fi
+  MAIN_NOW=$(date +%s)
+  if MAIN_SESSIONS=$(claude_agents_list_sessions_in_cwd_all "$MAIN_WORKTREE"); then
+    MAIN_DEFER_REASON=""
+    MAIN_STUCK_ATTR=""
+    while IFS=$'\t' read -r M_SID M_JOBID M_NAME M_STATE M_STATUS; do
+      [[ -n "${M_SID}${M_NAME}${M_STATE}" ]] || continue
+      # `state` is the granular field the registered listing carries; `status`
+      # is the coarse busy/idle/stopped sibling. Either saying "working"/"busy"
+      # means the session is legitimately mutating the tree — wait for it.
+      if [[ "$M_STATE" == "working" || "$M_STATUS" == "busy" ]]; then
+        MAIN_DEFER_REASON="main-checkout-active:${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"
+        break
+      fi
+      if ! declare -f _standdown_session_idle_s >/dev/null 2>&1; then
+        echo "dispatch-select-tick: lib-standdown-recheck.sh failed to load; idle age of the session in the main checkout is unmeasurable — deferring (fail-safe)" >&2
+        MAIN_DEFER_REASON="main-checkout-idle-unmeasurable:${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"
+        break
+      fi
+      if ! M_IDLE=$(_standdown_session_idle_s "$M_SID" "$MAIN_NOW" 2>/dev/null) \
+         || [[ ! "$M_IDLE" =~ ^-?[0-9]+$ ]]; then
+        # UNKNOWN idle (no transcript / unreadable mtime): the helper's
+        # contract is "caller must keep". Defer.
+        MAIN_DEFER_REASON="main-checkout-idle-unknown:${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"
+        break
+      fi
+      # Grace, following lib-frozen-session-park.sh:495-529 exactly, INCLUDING
+      # its deliberate treatment of a negative (future-stamped) idle as
+      # `< grace`: observe, never act.
+      if (( M_IDLE < MAIN_STUCK_GRACE_S )); then
+        MAIN_DEFER_REASON="main-checkout-within-grace:${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"
+        break
+      fi
+      # Beyond the grace: record the attribution and DO NOT defer for this row.
+      MAIN_STUCK_ATTR="${MAIN_STUCK_ATTR:+$MAIN_STUCK_ATTR,}${M_NAME:-<unnamed>}:${M_STATE:-<state?>}"
+      # stderr names the sessionId deliberately: the graph-node body the
+      # main-checkout-held alarm writes omits it (it is a reading, not an
+      # identity), so this line is where a debugger recovers it.
+      echo "dispatch-select-tick: ${M_NAME:-<unnamed>} (session ${M_SID:-<sid?>}, job ${M_JOBID:-<id?>}, state ${M_STATE:-<state?>}/${M_STATUS:-<status?>}) has sat in the main checkout $MAIN_WORKTREE for ${M_IDLE}s >= grace ${MAIN_STUCK_GRACE_S}s; declining to defer and falling through to the fetch/merge probe" >&2
+    done <<<"$MAIN_SESSIONS"
+    if [[ -n "$MAIN_DEFER_REASON" ]]; then
       release_lock
       "$SCRIPT_DIR/dispatch-schedule-reseed" 1>&2 || true
       DLOG_DISPOSITION="sync-repair-pending"
+      DLOG_SKIP_REASON="$MAIN_DEFER_REASON"
       echo "sync-repair-pending"
       exit 0
+    fi
+    # Attribute the DECLINED defer in the routing decision log, so the record
+    # says WHICH session the tick stopped waiting on and in what state.
+    if [[ -n "$MAIN_STUCK_ATTR" ]]; then
+      DLOG_SKIP_REASON="main-checkout-stuck:$MAIN_STUCK_ATTR"
     fi
   fi
 

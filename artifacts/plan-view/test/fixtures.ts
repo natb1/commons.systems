@@ -43,7 +43,7 @@ export function kindNodes(): IntentionNode[] {
 
 /** An authored boost, with the `rationale`/`tier` the schema requires. */
 export function boost(amount: number): Record<string, unknown> {
-  return { boost: amount, override: null, rationale: "fixture", tier: 1 };
+  return { boosts: { "1": amount }, rationale: "fixture" };
 }
 
 export function strategy(id: string, extra: Record<string, unknown> = {}): IntentionNode {
