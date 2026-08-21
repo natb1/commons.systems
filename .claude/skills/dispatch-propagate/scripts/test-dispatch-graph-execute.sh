@@ -37,6 +37,23 @@ assert_not_contains() {  # $1 = label, $2 = needle, $3 = haystack
   fi
 }
 
+# assert_lane_file_fresh <label> <file> — the .conflict-lane sidecar contains
+# exactly one line matching ^spawned=[0-9]+$.
+assert_lane_file_fresh() {  # $1 = label, $2 = file
+  local label="$1" file="$2"
+  TOTAL=$((TOTAL + 1))
+  if [[ -f "$file" ]] && [[ "$(wc -l < "$file" | tr -d ' ')" == "1" ]] \
+      && grep -Eq '^spawned=[0-9]+$' "$file"; then
+    PASS=$((PASS + 1))
+    echo "  PASS: $label"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label"
+    echo "    expected a single line matching ^spawned=[0-9]+\$"
+    echo "    actual: $([[ -f "$file" ]] && cat "$file" || echo '(file missing)')"
+  fi
+}
+
 # --- harness ----------------------------------------------------------------
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -242,16 +259,25 @@ assert_contains "conflict-lane handoff preserves the selection session=" "sessio
   "$(cat "$RES_DIR/tactic-c")"
 assert_contains "conflict-lane handoff preserves the selection issue=" "issue=tactic-c" \
   "$(cat "$RES_DIR/tactic-c")"
+# A successful kick writes the .conflict-lane sidecar marker: one fixed
+# `spawned=<epoch>` line so a later sweep can detect a stuck lane.
+assert_lane_file_fresh "conflict-lane writes the .conflict-lane sidecar marker" \
+  "$MAIN_WT/.claude/worktrees/tactic-c.conflict-lane"
 
 # A successful kick must also CLEAR a strike file left by earlier failed kicks:
 # the backstop's counter means "consecutive failures to launch the lane", which
 # is what its hold reason asserts.
 printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes"
 printf 'session=headless:c\nissue=tactic-c\ntimestamp=2026-01-01T00:00:00Z\n' > "$RES_DIR/tactic-c"
+# Seed a stale .conflict-lane marker from a prior episode — a second kick must
+# OVERWRITE it, not append to it.
+printf 'spawned=1111111111\nstale-garbage-from-a-prior-episode\n' > "$MAIN_WT/.claude/worktrees/tactic-c.conflict-lane"
 PROV_RC=11 run_exec "tactic-c:tactic:qa"
 assert_eq "conflict-lane stdout after prior strikes" "conflict-lane tactic-c" "$OUT"
 assert_eq "a successful kick resets the strike counter" "gone" \
   "$([ -e "$MAIN_WT/.claude/worktrees/tactic-c.conflict-strikes" ] && echo present || echo gone)"
+assert_lane_file_fresh "a second kick overwrites (not appends to) the .conflict-lane marker" \
+  "$MAIN_WT/.claude/worktrees/tactic-c.conflict-lane"
 
 # ============================================================================
 # Case 5b: the strike-then-hold ladder survives as the BACKSTOP for the case
@@ -275,7 +301,12 @@ for n in 1 2 3 4; do
   assert_eq "accumulate strike $n leaves the reservation marker" "present" \
     "$([ -e "$RES_DIR/tactic-acc" ] && echo present || echo gone)"
 done
-# 5th run: strikes reach the cap -> escalate to hold-node.
+# 5th run: strikes reach the cap -> escalate to hold-node. Pre-seed a
+# .conflict-lane marker from an earlier successful (but never-resolved) lane
+# kick — the backstop hold success must clear it too, since the launch-failure
+# ladder already raised the hold for this node and the marker would only
+# produce a second escalation for the same state.
+printf 'spawned=1111111111\n' > "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-lane"
 PROV_RC=11 SPAWN_RC=1 run_exec "tactic-acc:tactic:qa"
 assert_eq "cap-th run stdout" "held tactic-acc" "$OUT"
 assert_eq "cap-th run exit 0" "0" "$RC"
@@ -287,15 +318,22 @@ assert_contains "cap-th run calls hold-node with --kind provision-conflict" \
 assert_eq "cap-th run makes no park-node write" "" "$(cat "$PARK_LOG")"
 assert_eq "cap-th run clears the strike sidecar" "gone" \
   "$([ -e "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-strikes" ] && echo present || echo gone)"
+assert_eq "cap-th run's backstop hold success clears the .conflict-lane marker" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-acc.conflict-lane" ] && echo present || echo gone)"
 
 # ============================================================================
 # Case 5c: exit 0 (successful provision) clears the strike sidecar file
 # ============================================================================
 echo "Case 5c: exit 0 clears any accumulated strike sidecar"
 printf '%s\n' "3" > "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-strikes"
+# A successful provision means any prior merge-conflict retry state
+# self-resolved — pre-seed a .conflict-lane marker from an earlier episode too.
+printf 'spawned=1111111111\n' > "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-lane"
 run_exec "tactic-clr:tactic:implement"
 assert_eq "exit-0 clears sidecar" "gone" \
   "$([ -e "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-strikes" ] && echo present || echo gone)"
+assert_eq "exit-0 clears the .conflict-lane marker" "gone" \
+  "$([ -e "$MAIN_WT/.claude/worktrees/tactic-clr.conflict-lane" ] && echo present || echo gone)"
 
 # ============================================================================
 # Case 6: provision exit 12 -> skipped, reservation cleared, no spawn
@@ -339,6 +377,10 @@ assert_contains "prov-error parks the node" "tactic-e" "$(cat "$PARK_LOG")"
 # office_hours is never written by this producer.
 # ============================================================================
 echo "Case 8b: provision exit 14 -> held via a worktree-residue hold, first occurrence"
+# Exit 14 must not acquire .conflict-lane marker semantics it does not own —
+# pre-seed one and assert it is untouched (still present, unchanged content)
+# after the run.
+printf 'spawned=1111111111\n' > "$MAIN_WT/.claude/worktrees/tactic-res.conflict-lane"
 PROV_RC=14 run_exec "tactic-res:tactic:qa"
 HOLD=$(cat "$HOLD_LOG")
 assert_eq "residue stdout" "held tactic-res worktree-residue" "$OUT"
@@ -347,6 +389,8 @@ assert_eq "residue spawns nothing" "" "$(cat "$SPAWN_LOG")"
 assert_eq "residue makes no park-node write" "" "$(cat "$PARK_LOG")"
 assert_contains "residue calls hold-node with --kind worktree-residue" \
   "tactic-res --kind worktree-residue" "$HOLD"
+assert_eq "exit 14 leaves the .conflict-lane marker untouched" "spawned=1111111111" \
+  "$(cat "$MAIN_WT/.claude/worktrees/tactic-res.conflict-lane")"
 
 # ============================================================================
 # Case 8c: exit 14 where hold-node itself fails -> failed, exit 1

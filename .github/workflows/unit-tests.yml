@@ -309,6 +309,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh
       - name: Run dispatch-graph-execute tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+      - name: Run conflict-lane hold sweep tests
+        run: .claude/skills/dispatch-propagate/scripts/test-lib-conflict-lane-hold.sh
       - name: Run provision-node-worktree tests
         run: .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
       - name: Run dispatch-derive-node-target tests
