@@ -18,7 +18,6 @@ rationale: "Surfaced by the 2026-07-05 review: the office-hours-snapshot
   (serialize/decode), which the rebuild tactics largely do not, so keep it a
   distinct foundational fix rather than folding it in."
 reading: null
-gap: null
 serves:
   - strategy-attention-surface
 recovers: []
@@ -26,7 +25,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: tactic-office-hours-snapshot-wire-contract
   pr: 2805
@@ -36,7 +35,12 @@ execution:
     - qa-done
   strategy_fingerprint: null
   fix: null
-  completion: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-21T17:04:48Z
+    mergeCommitSha: eba3313b1dabd7e6589de17c9dd00c466e774c03
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:
