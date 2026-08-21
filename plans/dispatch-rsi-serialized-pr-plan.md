@@ -62,12 +62,17 @@ Four ground rules were set by the author and are assumed throughout:
 Every PR section is **clean-session-executable**: a session with no memory of
 this analysis can execute it from the section text alone.
 
-> **Where this file lives.** On the branch `dispatch-rsi-pr-plan` and nowhere
-> else — `plans/` is absent from `origin/main`, the branch has no PR, and
-> nothing in the graph references it. A clean session must check out that
-> branch to read this at all. Whether that stays true is an **open decision**:
-> see §"Residuals not owned by any Bundle 0 step" item 2, which recommends
-> merging the file to `main` as a docs-only PR and states the case against.
+> **Where this file lives.** On `main`, at
+> `plans/dispatch-rsi-serialized-pr-plan.md` — merged 2026-08-21 as the
+> docs-only PR #3098, alongside `plans/dispatch-rsi-pre-pr-sessions.md` (the
+> session provenance behind the PR classification) and
+> `plans/pr1-graph-write-path-brief.md` (the write-path brief Bundle 1 depends
+> on). A clean session reads all three from `main`; no branch checkout is
+> needed, and the branch `dispatch-rsi-pr-plan` is no longer load-bearing.
+> Status stamps land as ordinary commits on `main`. The decision to merge
+> rather than keep this document branch-only was **settled 2026-08-21**; the
+> case against is preserved in §"Residuals not owned by any Bundle 0 step"
+> item 2.
 
 > **Anchor freshness.** `path:line` anchors below were re-verified against
 > `da1c3c7f` unless marked *(from node body — re-locate)*. Several anchors
@@ -903,20 +908,31 @@ Same root cause as the `config.worktree` failure mode in
 `.claude/rules/sandbox.md`, and the reason `git worktree remove` must never run
 sandboxed.
 
-### 2. Where this document lives, and whether it merges — **OPEN, author's call**
+### 2. Where this document lives, and whether it merges — **SETTLED 2026-08-21: merged**
 
-`plans/` **does not exist on `origin/main`** and is not in `.gitignore`. This
-file exists only on the branch `dispatch-rsi-pr-plan`, which has **no PR**. No
-ground rule says whether it should ever merge, and that gap is load-bearing in
-two directions:
+**Resolution.** Merged to `main` as the docs-only PR #3098, on the author's
+instruction, in favour of the recommendation recorded below. The PR carried all
+three files under `plans/` — this document, `dispatch-rsi-pre-pr-sessions.md`,
+and `pr1-graph-write-path-brief.md`, 6,093 lines in total, no code paths
+touched. The branch `dispatch-rsi-pr-plan` is no longer load-bearing; further
+status stamps land as ordinary commits on `main`. The rest of this item is
+retained as the record of *why*, including the case against, which was
+considered and not taken.
+
+---
+
+The problem as it stood: `plans/` **did not exist on `origin/main`** and was not
+in `.gitignore`. This file existed only on the branch `dispatch-rsi-pr-plan`,
+which had **no PR**. No ground rule said whether it should ever merge, and that
+gap was load-bearing in two directions:
 
 - §"How to use this document" promises every PR section is
   **clean-session-executable**. A clean session cannot execute what it cannot
-  read, so today every executing session must know to check out
+  read, so every executing session had to know to check out
   `dispatch-rsi-pr-plan` first — a fact recorded nowhere but here.
-- The branch is unreferenced by any node, any PR, and any sweep. Worktree and
-  branch sweeps during this freeze have no reason to spare it, and the document
-  is the only copy of ~4,300 lines of analysis that took several sessions to
+- The branch was unreferenced by any node, any PR, and any sweep. Worktree and
+  branch sweeps during this freeze had no reason to spare it, and the document
+  was the only copy of ~4,300 lines of analysis that took several sessions to
   produce.
 
 **Recommendation: merge it to `main` as its own docs-only PR, now, before
@@ -934,8 +950,9 @@ be written into §"How to use this document": the plan is branch-only and
 disposable, the branch is protected from sweeps for the duration of the freeze,
 and the document is deleted — not merged — when the last PR lands.
 
-Either answer is fine. **Leaving it unanswered is not**, because the default
-behaviour of an unanswered version of this question is silent loss.
+Either answer was defensible. **Leaving it unanswered was not**, because the
+default behaviour of an unanswered version of this question is silent loss.
+The author answered it on 2026-08-21: merge.
 
 ### 3. The four A3 PRs have a disposition but no sequenced step — **now Bundle 8**
 
