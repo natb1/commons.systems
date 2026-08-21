@@ -247,16 +247,22 @@ verification rather than a stale branch's. Land-first is reserved for PRs that
 are already `MERGEABLE` and cheap; a third class is sequenced *after* the plan
 because it rewrites node content en masse.
 
-**A1 — close and absorb (12, none yet closed).** *Was 13; #3037 was reclassified
-to A3 on 2026-08-20 after verification — see Bundle 0 step 1.* The intended
-treatment: close the PR with a comment pointing at this section, leave the node
-at `phase: implement`, delete the branch, and add the node to the named PR's
-`### Nodes closed` list and its `### Scope`.
+**A1 — absorb the contested half (12, none yet closed; 10 split first).** *Was
+13; #3037 was reclassified to A3 on 2026-08-20 after verification — see Bundle 0
+step 1.* The treatment as originally written: close the PR with a comment
+pointing at this section, leave the node at `phase: implement`, delete the
+branch, and add the node to the named PR's `### Nodes closed` list and its
+`### Scope`. **That treatment survives for #3041 and #2993 only** — and the
+branch deletion is deferred for all twelve.
 
-> **Each close must pass the redundancy test in Bundle 0 step 5 first.** The one
-> A1 disposition that was verified in full was refuted, and two spot-checks of
-> the rest fail as written. Treat the table below as *candidates* with a named
-> target, not as a settled disposition.
+> **SUPERSEDED 2026-08-21 — the redundancy test was run on all 12 and none
+> passed.** The "Absorb into" column below is still the right *target* for each
+> node, but "close and absorb" is the right *treatment* for only two of them
+> (#3041, #2993). For the other ten the draft is split at its conflict boundary:
+> the clean half — 8,006 lines that merge into today's `main` untouched, mostly
+> brand-new modules this plan never names — lands as its own PR first, and only
+> the contested half is absorbed. **Read Bundle 0 step 5 before acting on any
+> row of this table.**
 
 | PR | Node | Absorb into | Why |
 |---|---|---|---|
@@ -377,7 +383,7 @@ tells you to re-locate; this is why.
 
 Ordered so each step reduces the next one's cost. No step opens a new PR.
 
-> **Status 2026-08-20 — 5 of 7 steps complete.**
+> **Status 2026-08-21 — 5 of 7 steps complete; step 5 diagnosed, not executed.**
 >
 > | Step | State |
 > |---|---|
@@ -385,13 +391,17 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 > | 2 — land the A2 PRs | **3 of 4 done** — `4dfb4648`, `9637479a`, `97085e52`; #2805 open |
 > | 3 — sequence `mainqa-record-time-routing` | **done** — now §PR5a, Bundle 2a |
 > | 4 — the two parks | **measured, not cleared** — both alarms stale; one needs an author call |
-> | 5 — close the 12 A1 PRs | **gated, none closed** — the redundancy test is new and unrun |
+> | 5 — close the 12 A1 PRs | **gate RUN 2026-08-21 — 0 of 12 pass.** Disposition rewritten: **10 split, 2 close.** None executed |
 > | 6 — fold the class-B nodes | **done** — 12 folded |
 > | 7 — the sentinel | **done** — settled by ground rule 4; nothing to decide |
 >
-> **The two open items both need the author, and neither is mechanical:** whether
-> to accept #2805's Lane-A review-coverage gap (step 4), and whether the step-5
-> redundancy test's verdicts justify discarding ~10,900 lines of drafted work.
+> **The step-5 question is settled and is no longer a judgement call.** The gate
+> was run on all twelve; none passed, and the work is not superseded — 8,006 of
+> the 10,866 added lines merge into today's `main` without conflict and live in
+> modules this plan never mentions. Blanket-closing would destroy them. The
+> replacement disposition splits each draft at its conflict boundary and is
+> mechanical. **One open item still needs the author:** whether to accept
+> #2805's Lane-A review-coverage gap (step 4).
 
 1. **Settle #3037 against PR18 Unit 1. — DONE 2026-08-20; the recommendation was
    refuted by the reading it ordered.** This step said to read
@@ -558,9 +568,95 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    > The *conflict-lane* half of the PR5 rationale survives: three producers of
    > one policy should converge in one PR. The rest does not.
 
-   For any PR that **passes** the gate: close with a pointer to this section,
-   delete the branch, add the node id to the target PR's `### Nodes closed`, and
-   add its surface to that PR's `### Scope`.
+   > **GATE RUN 2026-08-21 on all 12. Zero passed.** Every one of the twelve has
+   > at least one changed file that appears *nowhere* in this plan's 3,700 lines
+   > — not in the target section, not anywhere. **7,480 added lines sit in files
+   > the plan never names.** A unit cannot re-author a file the plan has never
+   > heard of, so under the A1 treatment those lines are destroyed and silently
+   > owed. The disposition below replaces "close and absorb" for 10 of the 12.
+
+   **What the measurement found.** Two numbers per PR, both mechanical. *Clean*
+   is added lines in files that merge into today's `main` without conflict;
+   *contested* is added lines in the files that conflict.
+
+   | PR | clean | contested | conflicting files | verdict |
+   |---|---:|---:|---:|---|
+   | **#2946** | **+1052** | +25 | 2 | **split** — 97.7% clean |
+   | **#3023** | **+1380** | +191 | 2 | **split** |
+   | **#3054** | **+962** | +363 | 2 | **split** |
+   | **#3018** | **+946** | +126 | 2 | **split** |
+   | **#3056** | **+934** | +224 | 2 | **split** |
+   | **#2975** | **+762** | +525 | 9 | **split** |
+   | **#2974** | **+616** | +105 | 5 | **split** |
+   | **#3057** | **+560** | +136 | 1 | **split** |
+   | **#3002** | +455 | +456 | 5 | **split** |
+   | **#3064** | +245 | +91 | 1 | **split** |
+   | #3041 | +68 | **+370** | 3 | **close and absorb** — A1 as written |
+   | #2993 | +26 | **+248** | 4 | **close and absorb** — A1 as written |
+   | | **+8006** | **+2860** | 38 | |
+
+   > **The conflict boundary and the collision boundary are the same line.**
+   > This is the finding that decides the step, and it is not a coincidence.
+   > Every conflicting **source** file in all twelve drafts is a file this plan
+   > names and re-authors — `router.ts`, `transition-node`,
+   > `reconcile-graph-review-stall`, `write-node.ts`, `dispatch-tick`,
+   > `qa-fix/SKILL.md`, `dispatch-stop.sh`. A file conflicts *because* main moved
+   > under it, and main moved under it *because* it is the contested machinery
+   > this plan exists to rewrite. The only conflicting files the plan does not
+   > name are test files and a one-line `.gitignore` hunk.
+   >
+   > The converse holds just as sharply. The 8,006 clean lines are dominated by
+   > **brand-new modules that do not exist on `main` and that this plan never
+   > mentions**: `node-ancestry.ts` (+508) and its test (+461),
+   > `lib-conflict-lane-hold.sh` (+449) and its test (+435),
+   > `strategy-stamp-census.ts` (+258), `lib-claude-agents.sh` tests (+181),
+   > `lib-main-snapshot.sh` (+133), `append-machinery-section.ts` (+135),
+   > `body-substance.ts` (+91). These collide with nothing, and no unit of this
+   > plan will ever write them.
+   >
+   > So the A1 rule is **right about the contested 2,860 lines and wrong about
+   > the clean 8,006.** Do not apply one verdict to both halves of a PR.
+
+   **The disposition: split each draft at its own conflict boundary.** The clean
+   half lands now, before any plan PR starts. The contested half is what folds
+   into the named plan PR as a unit — which is the thing the absorb mechanism is
+   actually good at, and the only part it was ever justified for.
+
+   Per PR, in the order of the table above (largest clean half first):
+
+   1. Cut a scratch branch from current `origin/main`, merge the draft branch
+      into it, and resolve **every** conflicting file by taking main's side:
+      `git checkout --ours -- <file>` for each. No judgement is needed on those
+      files — their branch-side content is exactly what the plan PR re-authors.
+      All tree-updating git ops here need `dangerouslyDisableSandbox: true`
+      (`.claude/rules/sandbox.md`).
+   2. Run the suites the clean half touches, open it as its own PR titled for the
+      module it lands, and merge it. CI on all twelve drafts is already green or
+      near-green (23 checks passing on eight of them), so this is not a repair
+      job.
+   3. **Then** close the original draft with a comment pointing at this section,
+      and fold the node into the target PR's `### Nodes closed` and `### Scope` —
+      scoped now to the contested files only, which is a far smaller absorption
+      than the one the A1 table assumed.
+
+   For **#3041** and **#2993** the split buys nothing — 84% and 90% of their
+   content is contested — so the original A1 treatment stands: close, fold, no
+   extraction. #3041 additionally needs its park cleared first (step 4).
+
+   > **Do not delete any of the twelve branches until the plan PR that absorbs
+   > its contested half has merged.** The A1 treatment says "delete the branch"
+   > at close time. That is the one irreversible action in this step, and the
+   > dropped hunks must stay readable while the absorbing unit is being written.
+   > Keeping twelve refs alive costs nothing. Delete them in §"Closing nodes
+   > after each merge", not here.
+
+   > **Landing ten clean halves will move some of this plan's `path:line`
+   > anchors.** The clean halves do touch named files where the edit happened to
+   > auto-merge (`router.ts +8` in #3023, `align/SKILL.md +43`). Land all ten as
+   > one batch, then re-verify the plan's anchors in a single pass, rather than
+   > interleaving merges with PR work and re-checking anchors ten times. This is
+   > the same hazard §"Two stale-path classes" describes, and the same
+   > mitigation.
 
 6. **Fold the class-B nodes into their named PR sections. — DONE 2026-08-20.**
    Twelve folded; each target section's `### Nodes closed` count was raised and a
@@ -588,18 +684,20 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    sentinel set, finish the plan, and lift it once §"Closing nodes after each
    merge" has run for the last PR. Ground rule 1 has no other enforcement.
 
-**After Bundle 0** — *projected when written; revised 2026-08-20 after steps 1
-and 5 were executed.* The original projection was 117 → **131** nodes (+13
-class-A absorbed, +1 `mainqa-record-time-routing` sequenced). It no longer holds:
-**#3037's absorption was refuted**, and the remaining 12 are now gated
-candidates rather than settled closes, so the class-A contribution is between
-**0 and +12**, not a fixed +13. The floor is therefore **118** (117 + the
-sequenced `mainqa-record-time-routing`) and the ceiling **130**. Class-A PRs
-deferred to post-plan rose from 3 to **4**. What did not change: 4 PRs to land,
-3 class-B nodes deferred, 10 out-of-charter PRs untouched.
+**After Bundle 0** — *projected when written; revised 2026-08-21 after the
+step-5 gate was run.* The original projection was 117 → **131** nodes (+13
+class-A absorbed, +1 `mainqa-record-time-routing` sequenced). The gate settles
+it at **130**: #3037's absorption was refuted (−1), and the remaining 12 all
+still fold their node into a plan PR — ten of them contributing only their
+contested half, two of them whole. So the class-A contribution is **+12**, and
+117 + 12 + 1 = **130**. Class-A PRs deferred to post-plan rose from 3 to **4**.
+What did not change: 4 PRs to land, 3 class-B nodes deferred, 10 out-of-charter
+PRs untouched.
 
-> **Do not quote 131.** The number is now an output of the step-5 gate, not an
-> input to it. Recompute it when the gate has been run on all 12.
+> **Do not quote 131**, and note that **130 counts nodes, not PRs.** The ten
+> splits each open one additional short-lived PR for their clean half. Those
+> land and close inside Bundle 0; they add no nodes, because the node stays with
+> the original draft and is folded into its named plan PR either way.
 
 ---
 
@@ -608,7 +706,7 @@ deferred to post-plan rose from 3 to **4**. What did not change: 4 PRs to land,
 | # | Bundle | PRs | Nodes | Risk |
 |---|---|---|---|---|
 | ✅ **1** | **Graph read/write path** | PR1 | 8 | **SHIPPED `fe0b1c4d` (#3095)** |
-| **0** | **Retire the in-flight overhang** | no new PR — 4 lands, **0–12** closes (gated), 1 sequencing | **+1 to +13** | **IN PROGRESS 2026-08-20** — steps 1 and 4 executed; step 5 gated |
+| **0** | **Retire the in-flight overhang** | 4 lands + **10 clean-half splits**, 12 closes, 1 sequencing | **+13** | **IN PROGRESS 2026-08-21** — 5 of 7 steps done; step 5 gate run, disposition rewritten, execution pending |
 | **2a** | **Record-time main-qa routing** | PR5a | 1 | before Bundle 2 — see §PR5a |
 | **1c** | **Durable-layer write fence** | PR18 | 5 | HOT — guards every node write that follows |
 | **1b** | **Graph plumbing** | PR15 + PR16 | 15 | HOT — the closure toolchain |
