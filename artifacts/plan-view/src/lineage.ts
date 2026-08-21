@@ -17,19 +17,24 @@ export const SPINE_DEPTH = 2;
  * descendant that inherits it.
  *
  * This is the value `resolveAttention`'s authored term seeds a node's outgoing
- * set with: `override` REPLACES the set with `{(self, override)}`, `boost` ADDS
- * `(self, boost)` to the inherited union. Either way, the amount keyed by this
- * node in any descendant's source map is exactly the number returned here — so
- * a descendant's per-ancestor contribution is recoverable from the public
- * `sources` list without re-deriving the fixpoint.
+ * set with: `boosts[T]` ADDS `(self, boosts[T])` to the inherited union for the
+ * tier being ranked. The amount keyed by this node in any descendant's source
+ * map is exactly the number returned here — so a descendant's per-ancestor
+ * contribution is recoverable from the public `sources` list without
+ * re-deriving the fixpoint.
+ *
+ * The read is PER-TIER and must stay that way. `attention.boosts` is a sparse
+ * map keyed by tier ("1"|"2"|"3"), and per-tier boosts ARE the tier isolation
+ * the rank model depends on: in tier 2's ranking only `boosts["2"]` is ever
+ * read (`packages/intentionsutil/src/attention.ts:416-419`, and the canonical
+ * read at `:592`). Collapsing the map — summing it, or taking its max — would
+ * leak one tier's authored weight into another's ranking and silently
+ * contradict `resolveAttention`, whose `sources` this function must agree with.
  */
-export function authoredAmount(node: IntentionNode | undefined): number {
+export function authoredAmount(node: IntentionNode | undefined, tier: number): number {
   const attention = node?.attention;
   if (attention === null || attention === undefined) return 0;
-  if (attention.override !== null && attention.override !== undefined) {
-    return attention.override;
-  }
-  return attention.boost ?? 0;
+  return attention.boosts[String(tier)] ?? 0;
 }
 
 /**
@@ -48,7 +53,7 @@ export function sourceContributions(
 ): SourceContribution[] {
   return resolved.sources
     .filter((id) => id !== undefined)
-    .map((id) => ({ id, amount: authoredAmount(byId.get(id)) }));
+    .map((id) => ({ id, amount: authoredAmount(byId.get(id), resolved.tier) }));
 }
 
 /**
