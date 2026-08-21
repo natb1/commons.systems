@@ -192,15 +192,46 @@ assert_eq "squatter-office-hours-parked: exit 12" "12" "$RC"
 
 # ---------------------------------------------------------------------------
 # Test 6: --dir supplied -> no git fetch occurs. Assert by pointing origin at
-# an unreachable path (never pushed there) and still getting exit 0 from the
-# working-tree fixture passed via --dir.
+# an unreachable path (never pushed there) and still reaching the GATE (rather
+# than the exit-1 fetch failure) from the working-tree fixture passed via
+# --dir.
+#
+# An unaccompanied --dir (no provenance flags) is an unattested read. As of
+# tactic-graph-execute-fresh-main-read Unit 5 the freshness check is ENFORCED,
+# so the gate REFUSES it with exit 15 instead of warning and passing. The
+# wrapper's case statement passes 12/13/15 through unchanged (this is the
+# correct, intended behavior — align-tactics's Step 0 exit-code routing table
+# depends on 15 being distinguishable here from a generic mechanical failure),
+# so the observable exit here is 15, with the gate's own `unknown-freshness:`
+# line on stderr.
 # ---------------------------------------------------------------------------
-echo "Test 6: --dir supplied -> no fetch, exit 0 even with unreachable origin"
+echo "Test 6: --dir supplied -> no fetch; unattested read refused by the freshness gate"
 make_repo
 write_node_fixture "$REPO" "tactic-dir-override" implement
 git -C "$REPO" remote set-url origin "/nonexistent/path/origin.git"
 run_sut "tactic-dir-override" implement --dir "$REPO/intentions"
-assert_eq "dir-override: exit 0" "0" "$RC"
+assert_eq "dir-override: exit 15 (unknown-freshness passed through)" "15" "$RC"
+assert_contains "dir-override: stderr warns unknown-freshness (unattested --dir)" "unknown-freshness:" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 6b: --dir supplied ALONGSIDE the three provenance flags -> exit 0, NO
+# unknown-freshness warning (the snapshot is now a typed, checkable input
+# rather than an unattested read).
+# ---------------------------------------------------------------------------
+echo "Test 6b: --dir plus provenance flags -> exit 0, no unknown-freshness warning"
+make_repo
+write_node_fixture "$REPO" "tactic-dir-override-provenance" implement
+git -C "$REPO" remote set-url origin "/nonexistent/path/origin.git"
+PROVENANCE_SHA=$(git -C "$REPO" rev-parse HEAD)
+PROVENANCE_FETCHED_AT=$(date -u +%FT%TZ)
+run_sut "tactic-dir-override-provenance" implement --dir "$REPO/intentions" \
+  --snapshot-ref "origin/main" --snapshot-sha "$PROVENANCE_SHA" --snapshot-fetched-at "$PROVENANCE_FETCHED_AT"
+assert_eq "dir-override-provenance: exit 0" "0" "$RC"
+if [[ "$OUT" == *"unknown-freshness:"* ]]; then
+  assert_eq "dir-override-provenance: stderr does NOT warn unknown-freshness (got: $OUT)" "0" "1"
+else
+  assert_eq "dir-override-provenance: stderr does NOT warn unknown-freshness" "0" "0"
+fi
 
 # ---------------------------------------------------------------------------
 # Test 7: invalid node id -> exit 2.

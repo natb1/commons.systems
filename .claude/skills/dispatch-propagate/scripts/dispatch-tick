@@ -3,7 +3,7 @@
 # over dispatch-select-tick → dispatch-graph-execute (+ aux bg jobs), with NO
 # model session.
 #
-# Usage: dispatch-tick [--manual] [<node-id>]
+# Usage: dispatch-tick [--manual] [--allow-stale] [<node-id>]
 #
 # This is the scripted equivalent of the routing the dispatch-propagate SKILL.md
 # (Tables 1 and 2) used to describe for a model router session. Replacing that
@@ -269,12 +269,14 @@ fi
 # before any setup below runs.
 MANUAL=""
 NODE_ARG=""
+ALLOW_STALE=""
 for a in "$@"; do
   case "$a" in
     --manual) MANUAL=1 ;;
+    --allow-stale) ALLOW_STALE=1 ;;
     --*)
       echo "dispatch-tick: unknown flag '$a'" >&2
-      echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+      echo "usage: dispatch-tick [--manual] [--allow-stale] [<node-id>]" >&2
       exit 2
       ;;
     *)
@@ -286,7 +288,7 @@ for a in "$@"; do
         NODE_ARG="$a"
       else
         echo "dispatch-tick: explicit issue/PR targeting ('${a#\#}') was removed with the legacy issue lane; the graph selector owns target selection" >&2
-        echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+        echo "usage: dispatch-tick [--manual] [--allow-stale] [<node-id>]" >&2
         exit 2
       fi
       ;;
@@ -301,7 +303,17 @@ done
 # entry point rather than leaving it unreachable.
 if [[ -n "$MANUAL" && -n "$NODE_ARG" ]]; then
   echo "dispatch-tick: a node-id argument cannot be combined with --manual" >&2
-  echo "usage: dispatch-tick [--manual] [<node-id>]" >&2
+  echo "usage: dispatch-tick [--manual] [--allow-stale] [<node-id>]" >&2
+  exit 2
+fi
+
+# --allow-stale is an operator override for a specific dispatch act (a manual
+# fan-out or an explicit single-node target) — it has no meaning on the fully
+# autonomous no-flags-no-node tick, which has no operator present to attest an
+# unverified snapshot. Reject that combination here, before any setup below.
+if [[ -n "$ALLOW_STALE" && -z "$MANUAL" && -z "$NODE_ARG" ]]; then
+  echo "dispatch-tick: --allow-stale requires --manual or an explicit <node-id> (the autonomous tick has no operator to attest an unverified snapshot)" >&2
+  echo "usage: dispatch-tick [--manual] [--allow-stale] [<node-id>]" >&2
   exit 2
 fi
 
@@ -849,10 +861,22 @@ fi
 # --- Step 1: select the target ------------------------------------------------
 # Capture select-tick's full stdout and echo every line through (jit:/calendar:
 # passthrough AND the decision line) so journald and a live relay see it all.
+#
+# --allow-stale is forwarded to select-tick on BOTH operator lanes, not only
+# down the graph-execute path below: select-tick runs FIRST, and on the primary
+# checkout its own origin/main fetch + ff-only merge probe is what fails when
+# the network is down. Left unforwarded, that probe emits `sync-failed` — a
+# terminal disposition routed at Step 2 — so dispatch-graph-execute (where the
+# flag is otherwise consumed) is never reached at all, making the override
+# unreachable in exactly the offline scenario it exists for.
+#
+# The bare autonomous `else` branch never carries it: the guard above already
+# rejects --allow-stale without --manual or a node id, so that combination
+# cannot reach here.
 if [[ -n "$MANUAL" ]]; then
-  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual)
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" --manual ${ALLOW_STALE:+--allow-stale})
 elif [[ -n "$NODE_ARG" ]]; then
-  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG")
+  SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick" "$NODE_ARG" ${ALLOW_STALE:+--allow-stale})
 else
   SEL_OUT=$("$SCRIPT_DIR/dispatch-select-tick")
 fi
@@ -956,7 +980,7 @@ case "${1:-}" in
       exit 2
     fi
     shift 2
-    GRAPH_EXEC_OUT=$("$SCRIPT_DIR/dispatch-graph-execute" "$@")
+    GRAPH_EXEC_OUT=$("$SCRIPT_DIR/dispatch-graph-execute" ${ALLOW_STALE:+--allow-stale} "$@")
     GRAPH_EXEC_RC=$?
     if [[ -n "$GRAPH_EXEC_OUT" ]]; then
       printf '%s\n' "$GRAPH_EXEC_OUT"
