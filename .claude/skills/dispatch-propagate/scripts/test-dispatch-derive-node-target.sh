@@ -374,4 +374,22 @@ printf '%s %s\n' "00000000000000000000000000000000000000000000000000000000000000
 run_sut "tactic-scope-stale" --expect-phase qa --pr-mode none
 assert_eq "scope-stale: exit 5" "5" "$RC"
 
+# ---------------------------------------------------------------------------
+# Test 17: valid selection -> exit 0, and no `unknown-freshness` warning in
+# stdout/stderr (tactic-graph-execute-fresh-main-read Unit 2: the SUT now
+# captures the just-fetched snapshot's provenance via main_snapshot_capture
+# and forwards it to assert-node-selection, which forwards it to the gate —
+# proving the provenance plumbing works end-to-end and suppresses the
+# still-warn-only Unit 1 warning).
+# ---------------------------------------------------------------------------
+echo "Test 17: valid selection -> exit 0, no unknown-freshness warning"
+make_repo "tactic-snapshot-provenance" "with_node:implement"
+run_sut "tactic-snapshot-provenance" --expect-phase implement --pr-mode none
+assert_eq "snapshot-provenance: exit 0" "0" "$RC"
+if [[ "$OUT" == *"unknown-freshness:"* ]]; then
+  assert_eq "snapshot-provenance: no unknown-freshness warning (got: $OUT)" "0" "1"
+else
+  assert_eq "snapshot-provenance: no unknown-freshness warning" "0" "0"
+fi
+
 report_results

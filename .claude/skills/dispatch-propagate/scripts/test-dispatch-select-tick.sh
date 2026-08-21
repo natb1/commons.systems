@@ -2000,6 +2000,68 @@ assert_eq "node-explicit origin: marker stamped origin=explicit (TTL-reclaimable
   "origin=explicit" "$(grep '^origin=' "$DISPATCH_RESERVATION_DIR/foo-bar")"
 sel_tick_teardown
 
+# --- I17 --allow-stale: control — broken origin WITHOUT the flag → sync-failed --
+# tactic-graph-execute-fresh-main-read Unit 4. The bypass must be strictly
+# opt-in: an explicit node dispatch against an unreachable origin still takes
+# the ordinary `sync-failed` route when no operator attested it. This case FAILS
+# if the bypass ever leaks into the default path.
+echo "Test: select-tick explicit node-id, broken origin, NO --allow-stale → sync-failed"
+sel_tick_setup
+export FAKE_GIT_FETCH_FAIL=1   # origin unreachable: git fetch origin main fails
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+out=$(run_sel_tick foo-bar) || true
+assert_eq "allow-stale control: decision line is still sync-failed" "sync-failed" \
+  "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "allow-stale control: graph selector NOT consulted" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-select.log" ] && echo 1 || echo 0)"
+sel_tick_teardown
+
+# --- I17 --allow-stale: bypass — same broken origin, WITH the flag → selects ---
+# The operator override must reach selection rather than dead-ending on
+# `sync-failed`, because dispatch-tick routes `sync-failed` as a terminal
+# disposition and would never reach dispatch-graph-execute (where --allow-stale
+# is otherwise consumed). Assert all three observables: the decision line, the
+# loud unswallowed stderr warning, and the skip_reason annotation on this tick's
+# own routing-decision record.
+echo "Test: select-tick explicit node-id, broken origin, --allow-stale → proceeds to selection"
+sel_tick_setup
+export FAKE_GIT_FETCH_FAIL=1
+export SEL_GRAPH_TARGET="node foo-bar tactic implement"
+SEL_TICK_ERR="$TMPDIR_TEST/logs/sel-tick-allow-stale.err"
+out=$(run_sel_tick_err "$SEL_TICK_ERR" --allow-stale foo-bar) || true
+assert_eq "allow-stale bypass: decision line is the graph selection" \
+  "graph 1 foo-bar:tactic:implement" "$(printf '%s\n' "$out" | tail -n 1)"
+assert_eq "allow-stale bypass: loud unverified-checkout warning on stderr" "1" \
+  "$(grep -qF 'proceeding with selection against a LOCAL, UNVERIFIED main checkout' "$SEL_TICK_ERR" && echo 1 || echo 0)"
+assert_eq "allow-stale bypass: reseed still armed (environment keeps self-healing)" "present" \
+  "$([ -f "$TMPDIR_TEST/logs/schedule-reseed.log" ] && echo present || echo absent)"
+assert_eq "allow-stale bypass: attempt counter NOT bumped" "absent" \
+  "$([ -f "$DISPATCH_SYNC_REPAIR_ATTEMPTS_FILE" ] && echo present || echo absent)"
+assert_eq "allow-stale bypass: sync-broken latch NOT set" "absent" \
+  "$([ -f "$TMPDIR_TEST/logs/repo-health-set-sync-broken.log" ] && echo present || echo absent)"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "allow-stale bypass: decision log .skip_reason" "allow-stale-sync-bypass" \
+  "$(jq -r '.skip_reason' <<<"$(tail -n1 "$DLOG_FILE")")"
+assert_eq "allow-stale bypass: decision log .disposition is the reached routing decision" "graph" \
+  "$(jq -r '.disposition' <<<"$(tail -n1 "$DLOG_FILE")")"
+assert_eq "allow-stale bypass: decision log .allow_stale" "true" \
+  "$(jq -r '.allow_stale' <<<"$(tail -n1 "$DLOG_FILE")")"
+sel_tick_teardown
+unset SEL_TICK_ERR
+
+# --- I17 --allow-stale: rejected on the fully autonomous lane ------------------
+# The flag is an operator attestation; the no-flags-no-node autonomous tick has
+# nobody to attest, so the combination is a usage error, not a silent widening.
+echo "Test: select-tick --allow-stale with no --manual/node-id → usage error"
+sel_tick_setup
+if out=$(run_sel_tick --allow-stale); then rc=0; else rc=$?; fi
+assert_eq "allow-stale bare: exit 2" "2" "$rc"
+assert_eq "allow-stale bare: no decision line emitted" "" "$out"
+DLOG_FILE="$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl"
+assert_eq "allow-stale bare: decision log .skip_reason" "allow-stale-without-target" \
+  "$(jq -r '.skip_reason' <<<"$(tail -n1 "$DLOG_FILE")")"
+sel_tick_teardown
+
 # --- AC3 non-fatal guarantee: unwritable log dir does NOT kill the tick -------
 # Point DISPATCH_DECISION_LOG_DIR at a path that cannot be created (a sub-path of
 # an existing regular file). The lib's mkdir -p will fail with ENOTDIR. The

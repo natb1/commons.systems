@@ -313,6 +313,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
       - name: Run dispatch-derive-node-target tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
+      - name: Run assert-node-selection tests
+        run: .claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh
       - name: Run dispatch-daemon-liveness sensor tests
         run: .claude/skills/dispatch-propagate/scripts/test-dispatch-daemon-liveness.sh
       - name: Run park-node CAS-guard tests
