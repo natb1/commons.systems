@@ -464,18 +464,42 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    review". That reason is discharged — the review ran, found a real blocker,
 >    and the blocker is fixed and merged. **Clear the park:**
 >
+>    **DONE 2026-08-21.** Cleared and landed on `main` as `a1e71315`;
+>    `verify-landed` blob-mode `status=satisfied`, and landed truth re-read
+>    afterwards confirms `office_hours: null` with `phase: done` — so the node
+>    is now terminal under `hold-sweep.ts:128` and the alert aging since
+>    2026-08-03 has stopped. The command that ran:
+>
 >    ```
 >    packages/intentionsutil/scripts/clear-park \
+>      -C /home/n8/natb1/commons.systems \
 >      tactic-office-hours-snapshot-wire-contract \
 >      'Lane-A review ran 2026-08-21; blocker fixed and merged in #2805 (eba3313b)'
 >    ```
 >
 >    Two invocation constraints, both load-bearing, neither obvious:
 >
->    - **`clear-park` takes no `-C`.** It resolves `REPO_ROOT` from **its own
->      file's location** (`clear-park:99-100`), not from cwd and not from a
->      flag. The copy you invoke *is* the checkout you write. Invoke the
->      **main checkout's** copy by absolute path.
+>    - **`clear-park` REQUIRES `-C <repo-root>`, and it has no default.**
+>      *(Corrected 2026-08-21 — this document previously recorded the exact
+>      opposite, that the script takes no `-C` and derives its target from its
+>      own file location. That was true of an older revision; the contract has
+>      since been inverted, and the command recorded here without a `-C` would
+>      have exited 2 on a usage error.)* The script deliberately no longer
+>      derives the tree from `SCRIPT_DIR`, because callers routinely invoke the
+>      main checkout's copy by absolute path from inside a worktree and the old
+>      shape silently retargeted the whole read-modify-write at the main
+>      checkout (`clear-park:90-101`). `SCRIPT_DIR` still resolves *siblings*
+>      — `graph-commit`, `verify-landed`, `src/store.js` — which is
+>      co-location, not tree targeting. The `-C` value is passed straight
+>      through to `graph-commit`'s own `-C`, so the two cannot disagree.
+>    - **This needs `dangerouslyDisableSandbox: true`** when invoked from a
+>      worktree-isolated session: the main checkout is outside that session's
+>      rw mounts, so the sandboxed attempt fails `Read-only file system` on the
+>      origin/main refresh at `clear-park:346`. That failure is clean — it
+>      happens before any mutation, so nothing is written and no rollback is
+>      owed (the rollback `cp` fails too, harmlessly). `clear-park` is not
+>      `git`, so its `-C` does not trip the worktree-isolation refusal — the
+>      same exemption `graph-commit` relies on.
 >    - **Never invoke it from this plan's own branch.** `clear-park` calls
 >      `graph-commit`, and a worktree whose HEAD is ahead of `origin/main`
 >      with **non-intentions** commits — which `dispatch-rsi-pr-plan` always is,
@@ -501,10 +525,12 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    [tactic-office-hours-snapshot-wire-contract]`) formally blocked. That last
 >    one has its own park too, so clearing this does not by itself release it —
 >    but it removes one of the two reasons it is stuck.
-> 2. Clear `tactic-office-hours-snapshot-wire-contract`'s stale park — the
->    one-command residual above. Not on the critical path for anything else in
->    Bundle 0, so it can run in any order, but it is the cheapest open item
->    here and it stops an alert aging since 2026-08-03.
+> 2. ~~Clear `tactic-office-hours-snapshot-wire-contract`'s stale park — the
+>    one-command residual above.~~ **DONE 2026-08-21** (`a1e71315`,
+>    blob-verified). The node is terminal; the 2026-08-03 alert has stopped.
+>    Note that this did **not** release
+>    `tactic-mainqa-office-hours-snapshot`, which `blocked_by` it — that node
+>    carries its own independent park, as recorded above.
 > 3. Land the ten clean halves as one batch, then re-verify the plan's anchors
 >    once (step 5).
 > 4. Close all twelve drafts and fold their nodes in; leave the branches alive.
