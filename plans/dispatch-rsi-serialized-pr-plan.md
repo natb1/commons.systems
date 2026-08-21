@@ -279,16 +279,17 @@ branch deletion is deferred for all twelve.
 | **#3018** | `tactic-conflict-lane-exit11-retry-bound` | **PR8** Unit 3, coordinated with PR5's conflict-lane unit | `dispatch-tick:266-300`; same lane, different mechanism — converge the policy once |
 | **#3041** | `tactic-clarification-citation-ids` | **PR19** (+PR4/PR18 `schema.ts`, `router.ts`) | **Node is `office_hours`-parked** and is one of this plan's two named pre-PR sittings. Resolve the sitting first, then absorb — see Step 4 |
 
-**A2 — land first (4). — 3 LANDED 2026-08-20** (`4dfb4648`, `9637479a`,
-`97085e52`); **#2805 remains.** Each was cheaper to merge than to carry, and
-merging retired its anchor drift permanently. See Bundle 0 step 2 for the merge
-record and step 4 for why #2805 did not land.
+**A2 — land first (4). — ALL 4 LANDED.** Three on 2026-08-20 (`4dfb4648`,
+`9637479a`, `97085e52`); **#2805 on 2026-08-21 (`eba3313b`)**, after its review
+gap was closed and the blocker that gap had hidden was fixed. Each was cheaper
+to merge than to carry, and merging retired its anchor drift permanently. See
+Bundle 0 step 2 for the first three and step 4 for #2805's full record.
 
 | PR | Node | Effect on the plan |
 |---|---|---|
 | **#3052** | `tactic-reap-safety-behind-branch-false-positive` | Shifts three PR9 Unit 1 anchors (`lib-session-reap.sh:286-291`, `:374`, `:548`). Also the node the freeze recount flags — landing it returns the drain inventory to two parked nodes |
 | **#3084** | `artifact-plan-view` | Only `unit-tests.yml` overlap (PR16). Non-draft. The plan-view nodes are deliberately out of scope per §"Retention" — landing the PR does not change that |
-| **#2805** | `tactic-office-hours-snapshot-wire-contract` | No plan-file overlap at all. **Parked** — this plan's other named pre-PR sitting. Resolve the sitting, then land |
+| **#2805** | `tactic-office-hours-snapshot-wire-contract` | No plan-file overlap at all. **LANDED 2026-08-21 (`eba3313b`).** The sitting was resolved by running the review it was parked for; it found a deploy-blanking migration bug. Node still needs its park cleared and a phase transition — see step 4 |
 | **#2879** | `tactic-align-audit-skill` | No file overlap with PR20. Lands a single new skill file. Related to PR20's required pre-PR sitting `tactic-align-audit-legacy-review` only by subject, not by a declared edge |
 
 **A3 — sequence after this plan's bookkeeping (4).** The first three rewrite node
@@ -390,7 +391,7 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 > | 1 — settle #3037 | **done** — recommendation *refuted*; #3037 deferred to A3, PR18 Unit 1 narrowed |
 > | 2 — land the A2 PRs | **3 of 4 done** — `4dfb4648`, `9637479a`, `97085e52`; #2805 open |
 > | 3 — sequence `mainqa-record-time-routing` | **done** — now §PR5a, Bundle 2a |
-> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is closed, the blocker it found is fixed (`b17e996f`), both deferred decisions are resolved (`45f29cd7`), and #2805 is out of draft |
+> | 4 — the two parks | **both resolved 2026-08-21, neither cleared** — both alarms were stale; #2805's review gap is closed, the blocker it found is fixed (`b17e996f`), both deferred decisions are resolved (`45f29cd7`), and **#2805 is MERGED (`eba3313b`)**. Its node still needs the park cleared and a phase transition |
 > | 5 — close the 12 A1 PRs | **gate RUN 2026-08-21 — 0 of 12 pass.** Disposition rewritten: **10 split, 2 close.** None executed |
 > | 6 — fold the class-B nodes | **done** — 12 folded |
 > | 7 — the sentinel | **done** — settled by ground rule 4; nothing to decide |
@@ -405,13 +406,27 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 > **No open judgement calls remain in Bundle 0.** Step 4's last one — whether to
 > accept #2805's Lane-A coverage gap — was answered by running the review: it
 > found a migration bug that would have blanked the dashboard on deploy, so the
-> gap is not acceptable and the PR does not land as it stood. What is left in
-> Bundle 0 is execution, in this order:
+> gap was not acceptable and the PR did not land as it stood. It landed on
+> 2026-08-21 once the bug was fixed. What is left in Bundle 0 is execution, in
+> this order:
 >
 > 1. ~~Commit and push #2805's three review fixes, then land it — the last of the
->    four A2 PRs.~~ **DONE 2026-08-21.** The three fixes landed as `b17e996f`;
->    both deliberately-deferred findings were then decided and resolved in
->    `45f29cd7` (see step 4). #2805 is out of draft and merging.
+>    four A2 PRs.~~ **DONE 2026-08-21 — #2805 IS MERGED** (`eba3313b`), so all
+>    four A2 PRs have landed. The three fixes landed as `b17e996f`; both
+>    deliberately-deferred findings were then decided and resolved in `45f29cd7`
+>    (see step 4). All 23 checks green at merge; the strip, the `Omit`-ted wire
+>    types, `STRIPPED_KEYS`, and the version gate are verified present on
+>    `origin/main`.
+>
+>    **Node bookkeeping still owed on this one.**
+>    `tactic-office-hours-snapshot-wire-contract` is still `phase: review` with
+>    its `office_hours` park active. The park's reason — "the pass carries no
+>    Lane-A code-quality review" — is now discharged: the review ran, found a
+>    real blocker, and the blocker is fixed and merged. Clear the park and
+>    transition the node, minding the two gotchas this step already records:
+>    run `transition-node` **from a main-based checkout**, and check scope
+>    freshness first or it **demotes the node to `implement`** and loses the
+>    review work.
 > 2. Land the ten clean halves as one batch, then re-verify the plan's anchors
 >    once (step 5).
 > 3. Close all twelve drafts and fold their nodes in; leave the branches alive.
@@ -480,8 +495,9 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    > `.claude/skills/dispatch-propagate/scripts/remove-worktree`, never a bare
    > `git worktree remove` (`.claude/rules/sandbox.md`).
 
-   **#2805 is the one that did not land**, and its blocker is a judgement, not a
-   mechanism — see step 4.
+   **#2805 was the one that did not land in this batch** — its blocker was a
+   judgement, not a mechanism. That judgement was made on 2026-08-21 and #2805
+   merged the same day (`eba3313b`); see step 4.
 
 3. **Sequence `tactic-mainqa-record-time-routing` as its own PR, before PR5. —
    DONE 2026-08-20.** It is now **§PR5a**, listed as Bundle 2a and placed at
