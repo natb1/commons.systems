@@ -82,6 +82,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+# Snapshot-provenance capture helper (tactic-graph-execute-fresh-main-read
+# Unit 2), used after the fetch below succeeds so the snapshot materialized
+# from origin/main can be passed to assert-node-selection with its provenance.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-main-snapshot.sh"
 
 usage() {
   echo "usage: dispatch-derive-node-target <node-id> (--expect-phase <phase> | --expect-fix-active) [--pr-mode none|optional|required]" >&2
@@ -160,6 +165,15 @@ git fetch origin main --quiet || {
   exit 1
 }
 
+# NOTE: capture against the CALLER's cwd, not $REPO_ROOT — the fetch above is
+# unqualified (`git fetch`, no `-C`), so it acted on whatever repo the caller's
+# cwd belongs to (the node's own worktree), which need not be $REPO_ROOT (this
+# script's own checkout location, derived from where the script file lives).
+if ! main_snapshot_capture "$(pwd)"; then
+  echo "dispatch-derive-node-target: main_snapshot_capture failed for $(pwd) immediately after a successful fetch" >&2
+  exit 1
+fi
+
 SNAP_DIR="$(mktemp -d)" || { echo "dispatch-derive-node-target: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$SNAP_DIR"' EXIT
 
@@ -206,12 +220,13 @@ ACTUAL_PHASE="$(jq -r '.node.phase' <<<"$COMBINED_JSON")"
 if [[ "$EXPECT_FIX_ACTIVE" -eq 1 ]]; then GATE_PHASE="fix"; else GATE_PHASE="$EXPECT_PHASE"; fi
 # stdout discarded: the gate prints a scope fingerprint, and this script's own
 # stdout is a structured payload that must not gain a stray line.
-"$SCRIPT_DIR/assert-node-selection" "$NODE_ID" "$GATE_PHASE" --dir "$SNAP_DIR/intentions" >/dev/null
+"$SCRIPT_DIR/assert-node-selection" "$NODE_ID" "$GATE_PHASE" --dir "$SNAP_DIR/intentions" "${MAIN_SNAPSHOT_FLAGS[@]}" >/dev/null
 GATE_RC=$?
 case "$GATE_RC" in
   0)  ;;
   12) exit 3 ;;
   13) exit 5 ;;
+  15) exit 1 ;;  # unknown-freshness: an explicit mechanical error, not the catch-all.
   *)  exit 1 ;;
 esac
 

@@ -8,6 +8,7 @@
 # exits cheaply here instead of doing real work first.
 #
 # Usage: assert-node-selection <node-id> <selected-phase> [--dir <intentions-dir>]
+#          [--snapshot-ref <ref>] [--snapshot-sha <sha>] [--snapshot-fetched-at <iso8601>]
 #
 # Stdout: the node's scope fingerprint (exit 0 only). All diagnostics to stderr.
 #
@@ -18,10 +19,12 @@
 #       strategy's substance changed since the stamp. NOT a defect.
 #   13  scope-stale — the tactic's scope changed after the previous phase ran.
 #       NOT a defect; the node wants demoting to `implement`.
+#   15  unknown-freshness — the caller's snapshot provenance could not be
+#       proven fresh. NOT a defect; stderr carries the detail.
 #   1   could not obtain a fresh origin/main intentions store (fetch or
 #       `git archive` failed).
 #   2   usage error, unresolvable project root, or the gate itself failed
-#       mechanically (any check-node-selection exit other than 0/12/13).
+#       mechanically (any check-node-selection exit other than 0/12/13/15).
 #
 # Requires `dangerouslyDisableSandbox: true` from a Claude session for the
 # `git fetch`/`git archive` it runs when `--dir` is not supplied.
@@ -33,9 +36,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
+# Snapshot-provenance capture helper (tactic-graph-execute-fresh-main-read
+# Unit 2), used when this script does its own fetch+archive (no --dir given).
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib-main-snapshot.sh"
 
 usage() {
   echo "usage: assert-node-selection <node-id> <selected-phase> [--dir <intentions-dir>]" >&2
+  echo "         [--snapshot-ref <ref>] [--snapshot-sha <sha>] [--snapshot-fetched-at <iso8601>]" >&2
 }
 
 NODE_ID="${1:-}"
@@ -52,12 +60,36 @@ if [[ ! "$NODE_ID" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
 fi
 
 DIR_OVERRIDE=""
+SNAPSHOT_REF_ARG=""
+SNAPSHOT_SHA_ARG=""
+SNAPSHOT_FETCHED_AT_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dir)
       DIR_OVERRIDE="${2:-}"
       if [[ -z "$DIR_OVERRIDE" ]]; then
         echo "assert-node-selection: --dir requires a directory argument" >&2
+        exit 2
+      fi
+      shift 2 ;;
+    --snapshot-ref)
+      SNAPSHOT_REF_ARG="${2:-}"
+      if [[ -z "$SNAPSHOT_REF_ARG" ]]; then
+        echo "assert-node-selection: --snapshot-ref requires a ref argument" >&2
+        exit 2
+      fi
+      shift 2 ;;
+    --snapshot-sha)
+      SNAPSHOT_SHA_ARG="${2:-}"
+      if [[ -z "$SNAPSHOT_SHA_ARG" ]]; then
+        echo "assert-node-selection: --snapshot-sha requires a sha argument" >&2
+        exit 2
+      fi
+      shift 2 ;;
+    --snapshot-fetched-at)
+      SNAPSHOT_FETCHED_AT_ARG="${2:-}"
+      if [[ -z "$SNAPSHOT_FETCHED_AT_ARG" ]]; then
+        echo "assert-node-selection: --snapshot-fetched-at requires an ISO-8601 argument" >&2
         exit 2
       fi
       shift 2 ;;
@@ -89,15 +121,30 @@ fi
 # a warning on stderr).
 STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 
+# Provenance flags to forward to the gate. When --dir is supplied WITHOUT any
+# provenance flags, this stays empty and the gate falls through to its
+# unknown-freshness (still warn-only per Unit 1) branch — an unaccompanied
+# --dir is an unattested read, not an implicit assertion of freshness.
+SNAPSHOT_FLAGS=()
+
 if [[ -n "$DIR_OVERRIDE" ]]; then
-  # The caller asserts this is already a fresh-origin/main snapshot — use it
-  # verbatim, no fetch.
+  # The caller supplies the directory; whether it is ALSO attested as fresh is
+  # now a typed, checkable input rather than an assumption — pass through
+  # exactly the provenance flags the caller gave, if any.
   DIR="$DIR_OVERRIDE"
+  if [[ -n "$SNAPSHOT_REF_ARG" || -n "$SNAPSHOT_SHA_ARG" || -n "$SNAPSHOT_FETCHED_AT_ARG" ]]; then
+    SNAPSHOT_FLAGS=(--snapshot-ref "$SNAPSHOT_REF_ARG" --snapshot-sha "$SNAPSHOT_SHA_ARG" --snapshot-fetched-at "$SNAPSHOT_FETCHED_AT_ARG")
+  fi
 else
   if ! git -C "$PROJECT_ROOT" fetch origin main --quiet; then
     echo "assert-node-selection: git fetch origin main failed" >&2
     exit 1
   fi
+  if ! main_snapshot_capture "$PROJECT_ROOT"; then
+    echo "assert-node-selection: main_snapshot_capture failed for $PROJECT_ROOT immediately after a successful fetch" >&2
+    exit 1
+  fi
+  SNAPSHOT_FLAGS=("${MAIN_SNAPSHOT_FLAGS[@]}")
   SNAP_DIR="$(mktemp -d)" || { echo "assert-node-selection: mktemp failed" >&2; exit 1; }
   trap 'rm -rf "$SNAP_DIR"' EXIT
   # The WHOLE intentions/ tree is required, not just the target node file:
@@ -116,17 +163,17 @@ fi
 # exit here (12/13/other) must be captured, not kill the script. Mirrors
 # provision-node-worktree's GATE_FP/GATE_RC capture shape.
 GATE_FP=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
-  "$NODE_ID" "$SELECTED_PHASE" --dir "$DIR" --stamp "$STAMP_PATH")
+  "$NODE_ID" "$SELECTED_PHASE" --dir "$DIR" --stamp "$STAMP_PATH" "${SNAPSHOT_FLAGS[@]}")
 GATE_RC=$?
 
 case "$GATE_RC" in
   0)
     printf '%s\n' "$GATE_FP"
     exit 0 ;;
-  12|13)
-    # stderr already carries the one-line stale-selection / scope-stale
-    # reason from check-node-selection — emit nothing extra here, re-wrapping
-    # it would bury the detail.
+  12|13|15)
+    # stderr already carries the one-line stale-selection / scope-stale /
+    # unknown-freshness reason from check-node-selection — emit nothing
+    # extra here, re-wrapping it would bury the detail.
     exit "$GATE_RC" ;;
   *)
     echo "assert-node-selection: check-node-selection failed (exit $GATE_RC)" >&2

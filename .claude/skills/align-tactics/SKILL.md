@@ -93,6 +93,17 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    way, **STOP** and freshen (`git fetch origin main && git merge
    origin/main`) before proceeding. Never treat a failed fetch as license to
    proceed on unverified state.
+4. **Load the ancestry projection.** After entering the worktree, load the
+   ancestry projection for the claimed node: read `.claude/ancestry-context.md`
+   if `provision-node-worktree` wrote it, otherwise run `npx tsx
+   packages/intentionsutil/scripts/node-ancestry.ts <node-id> --dir
+   "$(pwd)/intentions"` and hold its output.
+
+   This projection is read-only decision context for in-scope, plan-under-determined
+   judgment calls; the node body remains the sole work contract (a plan that assumes
+   the projection exists is still an incomplete record), and a perceived plan-vs-ancestry
+   conflict parks to `office_hours` with a recommendation — never self-expanded or
+   self-reduced scope.
 
    **Then, unconditionally, on both entry paths — run the shared mechanical
    selection-validity gate**, in the worktree, after `assert-worktree-fresh`
@@ -141,6 +152,17 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    - `13` — not reachable at this phase: the gate's scope-chained-phase
      check only applies to the `fix`/`qa`/`review` phases, not
      `align-tactics`. Treat it as a mechanical error: report and stop.
+   - `15` — unknown-freshness: the gate could not prove the snapshot is
+     fresh. **STOP**, make no graph write, and record the terminal
+     disposition with `mark-node-terminal "<target-node-id>" no-claim`,
+     exactly as the `12` bullet above (this session did nothing and lost
+     nothing, so reaping it is correct):
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     Do not tell the session to retry with `--allow-stale`: the override is
+     an operator act on the manual `dispatch <node-id>` lane, not a
+     self-serve escape for an autonomous align-tactics worker.
    - any other non-zero — mechanical error (unresolvable project root,
      failed fetch, malformed store): report and stop. A stale selection
      (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical

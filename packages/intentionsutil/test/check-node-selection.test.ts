@@ -5,7 +5,14 @@ import { describe, expect, it } from "vitest";
 import { readNode, writeNode } from "../src/store.js";
 import { strategyFingerprint } from "../src/router.js";
 import type { IntentionNode, Phase } from "../src/schema.js";
-import { evaluateSelection } from "../scripts/check-node-selection.js";
+import {
+  classifySnapshot,
+  evaluateSelection,
+  EXIT_UNKNOWN_FRESHNESS,
+  MAX_SNAPSHOT_AGE_MS,
+  MAX_SNAPSHOT_CLOCK_SKEW_MS,
+} from "../scripts/check-node-selection.js";
+import type { SnapshotProvenance } from "../scripts/check-node-selection.js";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "check-node-selection-"));
@@ -43,11 +50,18 @@ function seed(dir: string, node: IntentionNode): void {
   writeNode(dir, node);
 }
 
+/** A provably-fresh snapshot attestation — the default for every non-freshness case. */
+const fresh = (): SnapshotProvenance => ({
+  ref: "origin/main",
+  sha: "a".repeat(40),
+  fetchedAt: new Date().toISOString(),
+});
+
 describe("evaluateSelection", () => {
   it("passes a matching directive and returns the scope fingerprint on stdout", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
-    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
     expect(r.stderr).toEqual([]);
@@ -55,7 +69,7 @@ describe("evaluateSelection", () => {
 
   it("exit 12 when the node was pruned (missing file)", () => {
     const dir = tempDir();
-    const r = evaluateSelection({ nodeId: "tactic-gone", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-gone", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stdout).toBeNull();
     expect(r.stderr[0]).toMatch(/exists:.*no longer in the store/);
@@ -64,7 +78,7 @@ describe("evaluateSelection", () => {
   it("exit 12 on a first-class phase mismatch", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
-    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/phase: selected qa but node is now implement/);
   });
@@ -73,7 +87,7 @@ describe("evaluateSelection", () => {
     const dir = tempDir();
     // phase:null first-class, real phase squatted under attributes (pre-migration subtree).
     seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
-    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     // Proves the squatter value was read, not the null first-class field.
     expect(r.stderr[0]).toMatch(/node is now qa/);
@@ -82,7 +96,7 @@ describe("evaluateSelection", () => {
   it("passes when the selected phase matches the squatter phase", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
-    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -97,7 +111,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: 1, attempts: {}, markers: ["reviewed"], strategy_fingerprint: null },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-r", selectedPhase: "review", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-r", selectedPhase: "review", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/tactic-r already carries the reviewed marker/);
   });
@@ -113,7 +127,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-r2", selectedPhase: "review", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-r2", selectedPhase: "review", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -135,7 +149,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -151,7 +165,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null, fix: null },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-fx", selectedPhase: "fix", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/selected fix but tactic-fx carries no execution\.fix interrupt/);
   });
@@ -174,7 +188,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -197,7 +211,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-cf", selectedPhase: "conflict", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/selected conflict but tactic-cf carries no execution\.conflict interrupt/);
   });
@@ -213,7 +227,7 @@ describe("evaluateSelection", () => {
         office_hours: { reason: "author park", since: "2026-07-07", recommendation: null, session_type: "other" },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-p", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/not-parked:.*parked to office_hours/);
   });
@@ -229,7 +243,7 @@ describe("evaluateSelection", () => {
         attributes: { office_hours: { reason: "author park", since: "2026-07-07" } },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-ps", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-ps", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/not-parked/);
   });
@@ -247,7 +261,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: "0".repeat(64) },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-x substance changed/);
   });
@@ -272,7 +286,7 @@ describe("evaluateSelection", () => {
     );
     // Simulate the partially-written / truncated node file.
     writeFileSync(join(dir, "strategy-x.md"), "");
-    expect(() => evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null })).toThrow(
+    expect(() => evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() })).toThrow(
       /strategy-x\.md/,
     );
   });
@@ -291,7 +305,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: currentFp },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -308,7 +322,7 @@ describe("evaluateSelection", () => {
         execution: { branch: "b", pr: null, attempts: {}, markers: [], strategy_fingerprint: null },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "implement", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -334,7 +348,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -360,7 +374,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
     expect(r.stderr[0]).toMatch(/fingerprint:.*strategy-b substance changed/);
   });
@@ -387,7 +401,7 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null });
+    const r = evaluateSelection({ nodeId: "tactic-x", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
   });
 
@@ -411,8 +425,8 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const fresh = evaluateSelection({ nodeId: "tactic-fresh", selectedPhase: "qa", dir, stamp: null });
-    expect(fresh.exitCode).toBe(0);
+    const freshCase = evaluateSelection({ nodeId: "tactic-fresh", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(freshCase.exitCode).toBe(0);
 
     seed(
       dir,
@@ -430,9 +444,9 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const stale = evaluateSelection({ nodeId: "tactic-stale", selectedPhase: "qa", dir, stamp: null });
-    expect(stale.exitCode).toBe(12);
-    expect(stale.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
+    const staleCase = evaluateSelection({ nodeId: "tactic-stale", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(staleCase.exitCode).toBe(12);
+    expect(staleCase.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
   });
 
   it("a squatter object-form {hash, sha} stamp (attributes.execution) survives the reader and participates in staleness", () => {
@@ -452,8 +466,8 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const fresh = evaluateSelection({ nodeId: "tactic-squat-fresh", selectedPhase: "qa", dir, stamp: null });
-    expect(fresh.exitCode).toBe(0);
+    const freshCase = evaluateSelection({ nodeId: "tactic-squat-fresh", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(freshCase.exitCode).toBe(0);
 
     seed(
       dir,
@@ -469,24 +483,24 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const stale = evaluateSelection({ nodeId: "tactic-squat-stale", selectedPhase: "qa", dir, stamp: null });
-    expect(stale.exitCode).toBe(12);
-    expect(stale.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
+    const staleCase = evaluateSelection({ nodeId: "tactic-squat-stale", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(staleCase.exitCode).toBe(12);
+    expect(staleCase.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
   });
 
   it("scope fingerprint is stable across state-field edits and changes on a body edit", () => {
     const dir = tempDir();
     seed(dir, anode({ id: "tactic-s", kind: "tactic", phase: "implement" }));
-    const fp1 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "implement", dir, stamp: null }).stdout;
+    const fp1 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() }).stdout;
 
     // A state-field edit (phase) preserves the tactic body -> same scope fingerprint.
     writeNode(dir, { ...readNode(dir, "tactic-s"), phase: "qa" });
-    const fp2 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null }).stdout;
+    const fp2 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() }).stdout;
     expect(fp2).toBe(fp1);
 
     // A body edit (a residue append) changes the scope fingerprint.
     appendFileSync(join(dir, "tactic-s.md"), "\n## residue\n\nnew plan content\n");
-    const fp3 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null }).stdout;
+    const fp3 = evaluateSelection({ nodeId: "tactic-s", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() }).stdout;
     expect(fp3).not.toBe(fp1);
   });
 
@@ -495,7 +509,7 @@ describe("evaluateSelection", () => {
       const dir = tempDir();
       // reading:null => deriveGap non-null => unvalidated signal => an align candidate.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", status: "codified" }));
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -510,7 +524,7 @@ describe("evaluateSelection", () => {
           office_hours: { reason: "author park", since: "2026-07-11", recommendation: null, session_type: "other" },
         }),
       );
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/not-parked/);
     });
@@ -519,7 +533,7 @@ describe("evaluateSelection", () => {
       const dir = tempDir();
       // reading set, no success_signal => deriveGap null => validated signal => selector drops the strategy.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", reading: "holding at threshold" }));
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/no longer align-eligible/);
     });
@@ -537,7 +551,7 @@ describe("evaluateSelection", () => {
           phase: "implement",
         }),
       );
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/no longer align-eligible/);
     });
@@ -553,7 +567,7 @@ describe("evaluateSelection", () => {
           rounds: { count: 2, last_completed: "2026-07-01T00:00:00Z", last_aligned: "2026-07-01" },
         }),
       );
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/no longer align-eligible/);
     });
@@ -562,7 +576,7 @@ describe("evaluateSelection", () => {
       const dir = tempDir();
       // A squatter phase advance stands in for any non-null stored phase.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", attributes: { phase: "implement" } }));
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/phase advanced to implement/);
     });
@@ -572,7 +586,7 @@ describe("evaluateSelection", () => {
       // An ordinary open tactic (phase set, not draft, not soft-frozen) is not a
       // frozenTacticSelectable candidate, so it fails the 3b re-eligibility check.
       seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
-      const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "tactic-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/no longer frozen-eligible/);
     });
@@ -582,7 +596,7 @@ describe("evaluateSelection", () => {
       // A draft tactic with office_hours null and no blockers is a frozen
       // align-tactics candidate — routes to /align-tactics.
       seed(dir, anode({ id: "tactic-draft", kind: "tactic", phase: null }));
-      const r = evaluateSelection({ nodeId: "tactic-draft", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "tactic-draft", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -607,8 +621,8 @@ describe("evaluateSelection", () => {
       );
       // Sanity: the SAME node selected at its stored phase exit-12s on the stale
       // fingerprint — proving align-tactics is what suppresses step 4, not the fixture.
-      expect(evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "qa", dir, stamp: null }).exitCode).toBe(12);
-      const r = evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "align-tactics", dir, stamp: null });
+      expect(evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() }).exitCode).toBe(12);
+      const r = evaluateSelection({ nodeId: "tactic-frozen", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(0);
       expect(r.stdout).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -626,7 +640,7 @@ describe("evaluateSelection", () => {
           office_hours: { reason: "author park", since: "2026-07-16", recommendation: null, session_type: "other" },
         }),
       );
-      const r = evaluateSelection({ nodeId: "tactic-draft-p", selectedPhase: "align-tactics", dir, stamp: null });
+      const r = evaluateSelection({ nodeId: "tactic-draft-p", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/not-parked/);
     });
@@ -634,15 +648,15 @@ describe("evaluateSelection", () => {
     it("a normal tactic phase still round-trips unchanged at align-tactics-adjacent phases", () => {
       const dir = tempDir();
       seed(dir, anode({ id: "tactic-q", kind: "tactic", phase: "qa" }));
-      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "qa", dir, stamp: null }).exitCode).toBe(0);
-      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "implement", dir, stamp: null }).exitCode).toBe(12);
+      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() }).exitCode).toBe(0);
+      expect(evaluateSelection({ nodeId: "tactic-q", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() }).exitCode).toBe(12);
     });
   });
 
   describe("scope chain (--stamp)", () => {
     function seedTactic(dir: string, phase: Phase): string {
       seed(dir, anode({ id: "tactic-c", kind: "tactic", phase }));
-      const { stdout } = evaluateSelection({ nodeId: "tactic-c", selectedPhase: phase, dir, stamp: null });
+      const { stdout } = evaluateSelection({ nodeId: "tactic-c", selectedPhase: phase, dir, stamp: null, snapshot: fresh() });
       if (stdout === null) throw new Error("seedTactic: expected a passing seed to produce a scope fingerprint");
       return stdout;
     }
@@ -652,7 +666,7 @@ describe("evaluateSelection", () => {
       const fp = seedTactic(dir, "qa");
       const stampPath = join(dir, "tactic-c.scope-fingerprint");
       writeFileSync(stampPath, `${fp} abc1234\n`);
-      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath, snapshot: fresh() });
       expect(r.exitCode).toBe(0);
     });
 
@@ -661,7 +675,7 @@ describe("evaluateSelection", () => {
       seedTactic(dir, "qa");
       const stampPath = join(dir, "tactic-c.scope-fingerprint");
       writeFileSync(stampPath, `${"f".repeat(64)} abc1234\n`);
-      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath });
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "qa", dir, stamp: stampPath, snapshot: fresh() });
       expect(r.exitCode).toBe(13);
       expect(r.stderr[0]).toMatch(/scope-stale: scope-chain: abc1234\.\.HEAD/);
     });
@@ -672,7 +686,7 @@ describe("evaluateSelection", () => {
       const stampPath = join(dir, "tactic-c.scope-fingerprint");
       // A deliberately-wrong stamp: implement must ignore it and pass.
       writeFileSync(stampPath, `${"f".repeat(64)} abc1234\n`);
-      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "implement", dir, stamp: stampPath });
+      const r = evaluateSelection({ nodeId: "tactic-c", selectedPhase: "implement", dir, stamp: stampPath, snapshot: fresh() });
       expect(r.exitCode).toBe(0);
     });
 
@@ -684,9 +698,192 @@ describe("evaluateSelection", () => {
         selectedPhase: "review",
         dir,
         stamp: join(dir, "does-not-exist.scope-fingerprint"),
+        snapshot: fresh(),
       });
       expect(r.exitCode).toBe(0);
       expect(r.stderr[0]).toMatch(/warning: no scope stamp.*bootstrap policy/);
     });
+  });
+
+  describe("check 0 — snapshot freshness (refuse by default, --allow-stale to proceed)", () => {
+    it("a fresh snapshot with a matching directive passes with NO warning noise", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: fresh(),
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toEqual([]);
+    });
+
+    it("a null snapshot REFUSES with exit 15 and exactly one unknown-freshness line", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: null,
+      });
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stdout).toBeNull();
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:/);
+    });
+
+    it("a snapshot older than the age limit REFUSES with exit 15", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const now = new Date("2026-08-09T12:00:00.000Z");
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: {
+          ref: "origin/main",
+          sha: "a".repeat(40),
+          fetchedAt: new Date(now.getTime() - (MAX_SNAPSHOT_AGE_MS + 1)).toISOString(),
+        },
+        now,
+      });
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stdout).toBeNull();
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:.*over the 600s limit/);
+    });
+
+    it("a snapshot exactly AT the age limit is still proven — exit 0, no warning", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const now = new Date("2026-08-09T12:00:00.000Z");
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: {
+          ref: "origin/main",
+          sha: "a".repeat(40),
+          fetchedAt: new Date(now.getTime() - MAX_SNAPSHOT_AGE_MS).toISOString(),
+        },
+        now,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toEqual([]);
+    });
+
+    it("--allow-stale records an ATTESTED unverified read, distinguishable from the un-attested one", () => {
+      const dir = tempDir();
+      seed(dir, anode({ id: "tactic-a", kind: "tactic", phase: "implement" }));
+      const r = evaluateSelection({
+        nodeId: "tactic-a",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: null,
+        allowStale: true,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:/);
+      expect(r.stderr[0]).toContain("--allow-stale");
+      expect(r.stderr[0]).not.toContain("not yet enforced");
+    });
+
+    it("freshness refuses BEFORE the parked check even runs — a PARKED node under a null snapshot exits 15, not 12", () => {
+      // The ordering is the point: check 0 returns immediately, so check 3
+      // (not-parked) never executes and its exit-12 verdict is never computed.
+      // Both refuse the launch; 15 is the honest reason, because the gate
+      // cannot see whether the node is parked through an unproven snapshot.
+      const dir = tempDir();
+      seed(
+        dir,
+        anode({
+          id: "tactic-p",
+          kind: "tactic",
+          phase: "implement",
+          office_hours: { reason: "author park", since: "2026-08-09", recommendation: null, session_type: "other" },
+        }),
+      );
+      const r = evaluateSelection({
+        nodeId: "tactic-p",
+        selectedPhase: "implement",
+        dir,
+        stamp: null,
+        snapshot: null,
+      });
+      expect(r.exitCode).toBe(EXIT_UNKNOWN_FRESHNESS);
+      expect(r.stderr).toHaveLength(1);
+      expect(r.stderr[0]).toMatch(/^unknown-freshness:/);
+      expect(r.stderr.some((l) => /not-parked/.test(l))).toBe(false);
+    });
+  });
+});
+
+describe("classifySnapshot", () => {
+  const now = new Date("2026-08-09T12:00:00.000Z");
+  const at = (offsetMs: number): string => new Date(now.getTime() - offsetMs).toISOString();
+  const prov = (partial: Partial<SnapshotProvenance> = {}): SnapshotProvenance => ({
+    ref: "origin/main",
+    sha: "a".repeat(40),
+    fetchedAt: at(0),
+    ...partial,
+  });
+
+  it("proven for a well-formed, just-fetched attestation", () => {
+    expect(classifySnapshot(prov(), now)).toEqual({ kind: "proven" });
+  });
+
+  it("unknown when no provenance was supplied at all", () => {
+    const v = classifySnapshot(null, now);
+    expect(v.kind).toBe("unknown");
+    expect(v.kind === "unknown" && v.detail).toMatch(/no snapshot provenance/);
+  });
+
+  it("unknown on an empty ref", () => {
+    const v = classifySnapshot(prov({ ref: "" }), now);
+    expect(v.kind).toBe("unknown");
+    expect(v.kind === "unknown" && v.detail).toMatch(/empty ref/);
+  });
+
+  it("unknown on a sha that is not 40 hex characters", () => {
+    for (const sha of ["", "abc123", "A".repeat(40), "a".repeat(39), "a".repeat(41), "z".repeat(40)]) {
+      const v = classifySnapshot(prov({ sha }), now);
+      expect(v.kind).toBe("unknown");
+      expect(v.kind === "unknown" && v.detail).toMatch(/not a 40-hex commit id/);
+    }
+  });
+
+  it("unknown on an unparseable fetchedAt", () => {
+    const v = classifySnapshot(prov({ fetchedAt: "yesterday-ish" }), now);
+    expect(v.kind).toBe("unknown");
+    expect(v.kind === "unknown" && v.detail).toMatch(/not a parseable date/);
+  });
+
+  it("proven exactly AT the age limit, unknown one millisecond past it", () => {
+    expect(classifySnapshot(prov({ fetchedAt: at(MAX_SNAPSHOT_AGE_MS) }), now)).toEqual({ kind: "proven" });
+    const v = classifySnapshot(prov({ fetchedAt: at(MAX_SNAPSHOT_AGE_MS + 1) }), now);
+    expect(v.kind).toBe("unknown");
+    // The detail names both the observed age and the limit, in seconds.
+    expect(v.kind === "unknown" && v.detail).toMatch(/fetched 600s ago, over the 600s limit/);
+  });
+
+  it("proven exactly AT the clock-skew allowance, unknown one millisecond past it", () => {
+    expect(classifySnapshot(prov({ fetchedAt: at(-MAX_SNAPSHOT_CLOCK_SKEW_MS) }), now)).toEqual({ kind: "proven" });
+    const v = classifySnapshot(prov({ fetchedAt: at(-(MAX_SNAPSHOT_CLOCK_SKEW_MS + 1)) }), now);
+    expect(v.kind).toBe("unknown");
+    expect(v.kind === "unknown" && v.detail).toMatch(/future-dated by 60s/);
+  });
+
+  it("is pure with respect to the clock — the SAME attestation flips verdict on `now` alone", () => {
+    const s = prov({ fetchedAt: at(0) });
+    expect(classifySnapshot(s, now)).toEqual({ kind: "proven" });
+    expect(classifySnapshot(s, new Date(now.getTime() + MAX_SNAPSHOT_AGE_MS + 1000)).kind).toBe("unknown");
   });
 });
