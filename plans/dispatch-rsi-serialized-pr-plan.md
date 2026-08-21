@@ -931,6 +931,15 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
       >   passes the suite and fails CI. #2946's test file hit exactly this.
       > - Diff every auto-merged file the tactic has no business touching, and
       >   reset it. #3056 would otherwise have reverted `nix/home/wezterm-pin.nix`.
+      > - **Run by hand every NEW shell suite the branch wires into
+      >   `unit-tests.yml`.** Shell tests are not auto-discovered, so a suite the
+      >   branch adds runs in CI but is invisible to a local `vitest` + lint
+      >   pass. #3023's `test-strategy-stamp-doctrine.sh` (+237) is exactly this:
+      >   it ratchets that `write-node.ts` carries `--strategy-fingerprint` and
+      >   that `write-path.md` documents it — both conflicting files reset to
+      >   main — and failed 3/11 in CI after a locally-green extraction. A
+      >   doctrine ratchet a branch adds is *the* file most likely to encode the
+      >   contested behaviour.
       >
       > Then ask the gate question: **would this half do anything on `main`?**
       > If it is dead config, an uncalled helper, or documentation for absent
