@@ -234,6 +234,7 @@ for spec in "$@"; do
       # reset the Producer 1 strike counter (below) so it means "consecutive
       # failures", not a lifetime total.
       rm -f "$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
+      rm -f "$PROJECT_ROOT/.claude/worktrees/$id.conflict-lane"
       if "$SCRIPT_DIR/dispatch-spawn-job" --no-verify --name "$id" \
           --cwd "$WT" --model "$ORCH_MODEL" "${EFFORT_ARGS[@]}" \
           "$SKILL $id" 1>&2; then
@@ -287,6 +288,14 @@ for spec in "$@"; do
       # successful kicks accumulate into a hold whose stated reason ("could not
       # be launched for N consecutive ticks") is false.
       STRIKE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-strikes"
+      # LANE_FILE: a sidecar marker, same convention as STRIKE_FILE and
+      # provision-node-worktree's own `.scope-fingerprint` — a plain file
+      # outside every checkout, so it never dirties a tree and is never a
+      # graph write. Written on a successful Lane 3 kick below so a later
+      # sweep (not part of this unit) can detect a stuck lane. Fail-open on
+      # loss: losing it just means no hold is ever raised for that episode —
+      # never a spurious one.
+      LANE_FILE="$PROJECT_ROOT/.claude/worktrees/$id.conflict-lane"
       # REAP CONTRACT: `--name "$id"` alone makes this session a graph-native
       # NODE WORKER — dispatch-stop.sh's discriminator 2 matches it (name ==
       # node id, `intentions/<id>.md` present) and hands it to
@@ -323,6 +332,11 @@ for spec in "$@"; do
           --cwd "$PROJECT_ROOT" --model "$ORCH_MODEL" \
           "/dispatch-conflict $id" 1>&2; then
         rm -f "$STRIKE_FILE"
+        # Best-effort bookkeeping only — never changes this branch's
+        # disposition (echo/continue/exit code). One fixed line so a reader
+        # can `sed -n 's/^spawned=//p' | head -n1`. Overwrite, not append: a
+        # later kick for the same node starts a new episode.
+        printf 'spawned=%s\n' "$(date -u +%s)" > "$LANE_FILE" || echo "dispatch-graph-execute: WARNING: could not write $LANE_FILE; a stuck conflict lane for $id will not be escalated" >&2
         # Hold the claim through the boot window; reservation_sweep rule (a)
         # releases it once the worker registers.
         hand_off_reservation "$id"
@@ -379,6 +393,7 @@ for spec in "$@"; do
         if "$HOLD_NODE" "$id" --kind provision-conflict \
             --reason-file "$REASON_FILE" --recommendation-file "$RECOMMENDATION_FILE"; then
           rm -f "$STRIKE_FILE"
+          rm -f "$LANE_FILE"
           echo "held $id"
         else
           echo "failed $id hold-failed"
