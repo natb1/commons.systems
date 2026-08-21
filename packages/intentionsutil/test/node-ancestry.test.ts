@@ -36,7 +36,6 @@ function anode(partial: Partial<IntentionNode> & { id: string; kind: string }): 
     recovers: partial.recovers ?? [],
     rationale: partial.rationale ?? null,
     reading: partial.reading ?? null,
-    gap: partial.gap ?? null,
     clarifications: partial.clarifications ?? [],
     tooling_goals: partial.tooling_goals ?? [],
     success_signal: partial.success_signal ?? null,
@@ -92,7 +91,7 @@ describe("buildAncestryProjection", () => {
           threshold: "< 20",
           is_proxy: false,
         },
-        attention: { boost: 3, override: null, rationale: "Focus this cycle." },
+        attention: { boosts: { "1": 3 }, rationale: "Focus this cycle." },
         clarifications: [
           { question: "What counts as the queue?", answer: "Open tactics (2026-07-01)." },
         ],
