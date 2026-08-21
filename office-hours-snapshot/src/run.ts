@@ -57,6 +57,7 @@ import {
 } from "./produce.js";
 import type { ProjectSignalsSnapshot } from "../../office-hours/src/project-signals.js";
 import { serializeSnapshot, foldProjectSignals } from "./snapshot.js";
+import { SnapshotValidationError } from "./snapshot.js";
 import type { OfficeHoursSnapshot, SnapshotInput, SnapshotScope } from "./snapshot.js";
 import {
   writeSnapshot,
@@ -182,6 +183,15 @@ function deserializeIssueSample(s: OfficeHoursSnapshot["issueSamples"][number]):
  * strings intact). A MISSING file → null (first run, fine). A
  * present-but-undecryptable file (wrong password / corrupt) → THROW (no silent
  * history reset — see .claude/rules/code-style.md).
+ *
+ * The decrypted document is shape-checked before it is handed to the analytics
+ * fold, but DELIBERATELY more permissively than `decodeSnapshot`: a `version`
+ * of `undefined` is the legacy pre-`version` producer's output, which is
+ * exactly what sits on disk until the first post-deploy run, and rejecting it
+ * would fail that run instead of migrating it. `foldProjectSignals` restamps
+ * `version: 1` on the way out, so the legacy document is upgraded by being
+ * folded. Anything else — a non-object, or a version this build does not know —
+ * is genuine corruption and throws rather than folding into garbage.
  */
 async function defaultReadPriorSnapshot(
   snapshotDir: string,
@@ -199,7 +209,28 @@ async function defaultReadPriorSnapshot(
   }
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer; // type-safety-ok: a file-backed Buffer is never SharedArrayBuffer-backed
   const plaintext = await decryptData(crypto.webcrypto.subtle, ab, password);
-  return JSON.parse(plaintext) as OfficeHoursSnapshot; // type-safety-ok: decrypted prior snapshot is our own serialized shape
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(plaintext);
+  } catch (err) {
+    // Decrypted fine but is not JSON — corrupt, or a foreign file under our
+    // name. Name the file: a bare SyntaxError gives the operator nothing.
+    throw new SnapshotValidationError(
+      `Prior snapshot at ${file} decrypted but is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new SnapshotValidationError(
+      `Prior snapshot at ${file} is not a JSON object (got ${Array.isArray(parsed) ? "array" : typeof parsed}).`,
+    );
+  }
+  const version = (parsed as { version?: unknown }).version; // type-safety-ok: reading one field off a validated object literal before the version gate below
+  if (version !== undefined && version !== 1) {
+    throw new SnapshotValidationError(
+      `Prior snapshot at ${file} has unsupported version ${JSON.stringify(version)} (this build writes version 1).`,
+    );
+  }
+  return parsed as OfficeHoursSnapshot; // type-safety-ok: shape- and version-gated above; a legacy version-less document is upgraded by foldProjectSignals
 }
 
 /**

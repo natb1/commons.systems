@@ -162,6 +162,21 @@ const LOCAL_ONLY_KEYS = new Map<string, Set<string>>([
   ["queueMetrics", new Set(["scope"])],
 ]);
 
+// The MIRROR of LOCAL_ONLY_KEYS: keys the live Firestore doc carries that the
+// snapshot wire deliberately STRIPS, excluded from the missing-key check.
+//   - `memberEmails` (queueMetrics + projectSignals) — the group's real member
+//     list. The Firestore rules require it on the doc; the offline wire never
+//     carries it, because a `--plaintext` run would land the ACL unencrypted in
+//     the shared Drive dir (see office-hours/src/snapshot-wire.ts). Without this
+//     exclusion EVERY `--parity` run would report a permanent, unfixable
+//     divergence — the same failure mode the `scope` entry above prevents.
+// Keyed by top-level field for the same reason: a `memberEmails` key appearing
+// anywhere OTHER than these two blocks is still reported.
+const STRIPPED_KEYS = new Map<string, Set<string>>([
+  ["queueMetrics", new Set(["memberEmails"])],
+  ["projectSignals", new Set(["memberEmails"])],
+]);
+
 /**
  * Recursively diffs the SHAPE of a snapshot value against its Firestore/parsed
  * reference, pushing divergences for `field`. SHAPE only — scalars are compared
@@ -231,6 +246,7 @@ function diffObject(
   out: ParityDivergence[],
 ): void {
   for (const k of Object.keys(ref)) {
+    if (STRIPPED_KEYS.get(field)?.has(k)) continue; // auth field the wire deliberately strips.
     if (!(k in snap)) {
       out.push({
         field,

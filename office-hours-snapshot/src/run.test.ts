@@ -372,3 +372,80 @@ describe("defaultIo.readPriorHistory round-trip", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Prior-snapshot validation gate (defaultIo.readPriorSnapshot).
+// The gate is deliberately MORE PERMISSIVE than decodeSnapshot: a legacy
+// document with no `version` is what sits on disk until the first post-deploy
+// run, and rejecting it would fail that run rather than migrating it — the
+// analytics fold restamps `version: 1` on the way out. Anything else — a
+// non-object, or an unknown version — is corruption and must throw rather than
+// fold into garbage.
+// ---------------------------------------------------------------------------
+
+describe("defaultIo.readPriorSnapshot validation", () => {
+  function withTmp(fn: (dir: string) => Promise<void>): () => Promise<void> {
+    return async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oh-snap-"));
+      try {
+        await fn(dir);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    };
+  }
+
+  async function writePrior(dir: string, doc: unknown): Promise<void> {
+    await defaultIo.writeSnapshot({ snapshotDir: dir, json: doc, password: "pw", now: NOW });
+  }
+
+  it("returns null when no prior snapshot exists", withTmp(async (dir) => {
+    expect(await defaultIo.readPriorSnapshot(dir, "pw")).toBeNull();
+  }));
+
+  it("accepts a well-formed version-1 document", withTmp(async (dir) => {
+    await writePrior(dir, serializeSnapshot(fakeInput()));
+    const prior = await defaultIo.readPriorSnapshot(dir, "pw");
+    expect(prior).not.toBeNull();
+    expect(prior!.version).toBe(1); // type-safety-ok: asserted non-null on the line above
+  }));
+
+  it("ACCEPTS a legacy document with no `version` — the migration case", withTmp(async (dir) => {
+    // Exactly what the pre-PR producer left on disk. decodeSnapshot rejects it
+    // ("Unsupported snapshot version: undefined"); the prior-read gate must
+    // not, or the first post-deploy analytics run fails outright.
+    const legacy: Record<string, unknown> = { ...serializeSnapshot(fakeInput()) };
+    delete legacy.version;
+    await writePrior(dir, legacy);
+    const prior = await defaultIo.readPriorSnapshot(dir, "pw");
+    expect(prior).not.toBeNull();
+    expect(prior!.version).toBeUndefined(); // type-safety-ok: asserted non-null on the line above
+  }));
+
+  it("throws on an unknown future version", withTmp(async (dir) => {
+    await writePrior(dir, { ...serializeSnapshot(fakeInput()), version: 2 });
+    await expect(defaultIo.readPriorSnapshot(dir, "pw")).rejects.toThrow("unsupported version 2");
+  }));
+
+  it("throws when the decrypted payload is a JSON scalar, not an object", withTmp(async (dir) => {
+    // writeSnapshot passes a string `json` through as already-serialized
+    // plaintext, so stringify first to write an actual JSON scalar.
+    await writePrior(dir, JSON.stringify("just a string"));
+    await expect(defaultIo.readPriorSnapshot(dir, "pw")).rejects.toThrow("not a JSON object");
+  }));
+
+  it("throws a NAMED error when the decrypted payload is not JSON at all", withTmp(async (dir) => {
+    // A bare JSON.parse SyntaxError names neither the file nor the cause.
+    await writePrior(dir, "not json at all {{{");
+    await expect(defaultIo.readPriorSnapshot(dir, "pw")).rejects.toThrow(
+      "decrypted but is not valid JSON",
+    );
+  }));
+
+  it("throws when the decrypted payload is an array", withTmp(async (dir) => {
+    // Arrays are typeof "object"; without the explicit Array check they would
+    // slip through and fold into a nonsense document.
+    await writePrior(dir, [1, 2, 3]);
+    await expect(defaultIo.readPriorSnapshot(dir, "pw")).rejects.toThrow("not a JSON object");
+  }));
+});

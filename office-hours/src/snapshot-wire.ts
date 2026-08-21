@@ -13,16 +13,25 @@
 // a pipeline that could not actually work end-to-end. A single serialize→decode
 // contract, exercised by a no-mock round-trip test, is the structural fix.
 //
-// The `memberEmails` ACL is deliberately NOT on the series wire. It is the
-// group's real member list — the denormalized auth field the
-// `office-hours/{env}/*` Firestore rules evaluate — and the offline snapshot's
-// only protection is the Drive share plus a passphrase (a `--plaintext` debug
-// run writes the whole document UNENCRYPTED into that shared dir). The sample
-// parsers validate the field and then discard it, so the reader never needed it:
-// `decodeSnapshot` parses samples with `requireMemberEmails: false` instead, and
-// nothing in this module exports the ACL per sample. This matches the repo's
-// existing convention (vite-plugin-*-seed.ts strip `memberEmails` from every
-// artifact leaving the auth-gated store).
+// The `memberEmails` ACL is deliberately NOT on the wire — nowhere in the
+// document, not merely per series sample. It is the group's real member list —
+// the denormalized auth field the `office-hours/{env}/*` Firestore rules
+// evaluate — and the offline snapshot's only protection is the Drive share plus
+// a passphrase (a `--plaintext` debug run writes the whole document UNENCRYPTED
+// into that shared dir). All four parsers therefore run with
+// `requireMemberEmails: false` under `decodeSnapshot` — the two series parsers
+// (toUsageSample/toIssueSample) and the two single-snapshot parsers
+// (parseQueueMetrics/parseProjectSignals) — and the two serializers strip the
+// field, which `SerializedQueueMetrics`/`SerializedProjectSignals` enforce by
+// `Omit`-ting it from the type. The reader never needed it: it is an auth field,
+// never a dashboard field, so a decoded snapshot carries an empty list. This
+// matches the repo's existing convention (vite-plugin-*-seed.ts strip
+// `memberEmails` from every artifact leaving the auth-gated store, and
+// data.ts:31 carries `memberEmails: []` for the public seed).
+//
+// Consequence for `--parity`: the live Firestore doc DOES carry the ACL, so the
+// parity shape-diff would report a permanent `missing-key` on it. See
+// `STRIPPED_KEYS` in office-hours-snapshot/src/parity.ts.
 //
 // Loadability: this module is imported at runtime by the firebase-admin
 // producer, so every import here must be node-loadable. It reuses the
@@ -71,8 +80,11 @@ type IsoDates<T> =
 export type SerializedUsageSample = IsoDates<UsageSample>;
 export type SerializedIssueSample = IsoDates<IssueSample>;
 export type SerializedReminder = IsoDates<Reminder>;
-export type SerializedQueueMetrics = IsoDates<QueueMetricsSnapshot>;
-export type SerializedProjectSignals = IsoDates<ProjectSignalsSnapshot>;
+// `memberEmails` is Omit-ted, not merely unset by the serializers: the group ACL
+// is deliberately absent from the whole wire, and encoding that in the TYPE means
+// a future field addition cannot quietly put it back (see the module header).
+export type SerializedQueueMetrics = Omit<IsoDates<QueueMetricsSnapshot>, "memberEmails">;
+export type SerializedProjectSignals = Omit<IsoDates<ProjectSignalsSnapshot>, "memberEmails">;
 
 // ---------------------------------------------------------------------------
 // Snapshot metadata types
@@ -250,7 +262,10 @@ function serializeQueueMetricsToIso(
   q: QueueMetricsSnapshot,
   now: string,
 ): SerializedQueueMetrics {
-  const base = serializeQueueMetrics(q);
+  // `memberEmails` is dropped here, not left to the caller: serializeQueueMetrics
+  // targets Firestore, where the ACL is required, so the wire must strip it.
+  const { memberEmails: _acl, ...base } = serializeQueueMetrics(q);
+  void _acl;
   const parked = (base.parked as Array<Record<string, unknown>>).map((p) => ({ // type-safety-ok: serializeQueueMetrics returns Record<string,unknown>; parked is its known array field
     ...p,
     createdAt: toIso(p.createdAt, now),
@@ -259,7 +274,7 @@ function serializeQueueMetricsToIso(
     ...base,
     computedAt: toIso(base.computedAt, now),
     parked,
-  } as SerializedQueueMetrics; // type-safety-ok: base is the reused serializer's Record<string,unknown>; the two Date fields are replaced with ISO strings to satisfy IsoDates<QueueMetricsSnapshot>
+  } as SerializedQueueMetrics; // type-safety-ok: base is the reused serializer's Record<string,unknown> minus memberEmails; the two Date fields are replaced with ISO strings to satisfy the Omit-ted IsoDates<QueueMetricsSnapshot>
 }
 
 /**
@@ -272,8 +287,12 @@ function serializeProjectSignals(
   p: ProjectSignalsSnapshot,
   now: string,
 ): SerializedProjectSignals {
+  // `memberEmails` is stripped for the same reason as in queueMetrics above: the
+  // group ACL never rides the offline wire (see the module header).
+  const { memberEmails: _acl, ...rest } = p;
+  void _acl;
   return {
-    ...p,
+    ...rest,
     computedAt: toIso(p.computedAt, now),
   } as SerializedProjectSignals; // type-safety-ok: spread copies the no-Date sub-objects unchanged; only computedAt is rewritten to an ISO string
 }
@@ -469,11 +488,14 @@ export function decodeSnapshot(plaintext: string): { data: PanelData; computedAt
     .map((d) => toTopicUsage(d))
     .filter((t): t is TopicUsageDoc => t !== null);
 
+  // Both run with `requireMemberEmails: false` for the same reason the two series
+  // parsers do: the wire strips the group ACL, so demanding it would reject every
+  // snapshot-borne queueMetrics/projectSignals block.
   const queueMetrics = raw.queueMetrics
-    ? parseQueueMetrics(raw.queueMetrics as Record<string, unknown>) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
+    ? parseQueueMetrics(raw.queueMetrics as Record<string, unknown>, { requireMemberEmails: false }) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
     : null;
   const projectSignals = raw.projectSignals
-    ? parseProjectSignals(raw.projectSignals as Record<string, unknown>) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
+    ? parseProjectSignals(raw.projectSignals as Record<string, unknown>, { requireMemberEmails: false }) // type-safety-ok: truthiness guard above ensures non-null; interface declares Record<string,unknown>|null
     : null;
 
   return {

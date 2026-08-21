@@ -278,6 +278,22 @@ describe("checkParity — clean parity", () => {
     expect(result.divergences.filter((d) => d.kind === "extra-key")).toEqual([]);
     expect(result.ok).toBe(true);
   });
+
+  it("does not report the deliberately-stripped memberEmails ACL as a missing-key divergence", async () => {
+    // The MIRROR of the scope case above. The live Firestore docs carry
+    // `memberEmails` (the rules evaluate it) but the snapshot wire strips it, so
+    // parity must exclude it in the Firestore→snapshot direction — otherwise
+    // EVERY --parity run reports a permanent divergence over an omission that is
+    // the point of the wire contract (see office-hours/src/snapshot-wire.ts).
+    const fx = cleanFixtures();
+    expect(
+      (fx.docs[`${NS}/metrics/dispatch-queue`] as Record<string, unknown>).memberEmails, // type-safety-ok: fixture read through opaque type to assert the precondition this test depends on
+    ).toBeDefined();
+
+    const result = await checkParity(cleanSnapshot(), { reader: readerFor(fx), namespace: NS });
+    expect(result.divergences.some((d) => d.detail.includes("memberEmails"))).toBe(false);
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("checkParity — divergences", () => {

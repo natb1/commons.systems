@@ -140,10 +140,15 @@ describe("producer→reader round-trip (no mocks)", () => {
     expect(() => decodeSnapshot(withoutVersion)).toThrow("Unsupported snapshot version");
   });
 
-  it("never exports the group `memberEmails` ACL onto a series sample", () => {
+  it("never exports the group `memberEmails` ACL anywhere in the document", () => {
     // The offline snapshot's only protection is the Drive share + passphrase,
     // and `--plaintext` writes it unencrypted, so the member list (the auth
     // field the Firestore rules evaluate) must not ride the wire at all.
+    //
+    // This asserts on the WHOLE serialized document, not just the two series:
+    // `queueMetrics` and `projectSignals` are built by reusing the Firestore
+    // serializers, which DO emit the ACL, so each has to strip it explicitly.
+    // A per-sample-only assertion passed while both blocks leaked the field.
     const snapshot = serializeSnapshot(realInput());
     for (const s of snapshot.samples) {
       expect(s).not.toHaveProperty("memberEmails");
@@ -151,8 +156,38 @@ describe("producer→reader round-trip (no mocks)", () => {
     for (const s of snapshot.issueSamples) {
       expect(s).not.toHaveProperty("memberEmails");
     }
-    expect(JSON.stringify(snapshot.samples)).not.toContain("nathan@natb1.com");
-    expect(JSON.stringify(snapshot.issueSamples)).not.toContain("nathan@natb1.com");
+    expect(snapshot.queueMetrics).not.toHaveProperty("memberEmails");
+    expect(snapshot.projectSignals).not.toHaveProperty("memberEmails");
+
+    // The catch-all: the fixture's member address must appear nowhere in the
+    // serialized bytes, at any depth, under any key name.
+    expect(JSON.stringify(snapshot)).not.toContain("nathan@natb1.com");
+  });
+
+  it("decodes a document whose queueMetrics/projectSignals omit the ACL", () => {
+    // The parsers for both blocks require `memberEmails` on a live Firestore
+    // doc. decodeSnapshot must opt out, or stripping the ACL would silently
+    // null out both panels instead of protecting them.
+    const snapshot = serializeSnapshot(realInput());
+    const { data } = decodeSnapshot(JSON.stringify(snapshot));
+    expect(data.queueMetrics).not.toBeNull();
+    expect(data.projectSignals).not.toBeNull();
+    // Parsed back as an empty list — an auth field, never a dashboard field.
+    expect(data.queueMetrics?.memberEmails).toEqual([]);
+    expect(data.projectSignals?.memberEmails).toEqual([]);
+  });
+
+  it("a queueMetrics/projectSignals block that still carries the ACL decodes and drops it", () => {
+    // Back-compat with any snapshot written before the strip landed.
+    const snapshot = serializeSnapshot(realInput());
+    const legacy = {
+      ...snapshot,
+      queueMetrics: { ...snapshot.queueMetrics, memberEmails: ["nathan@natb1.com"] },
+      projectSignals: { ...snapshot.projectSignals, memberEmails: ["nathan@natb1.com"] },
+    };
+    const { data } = decodeSnapshot(JSON.stringify(legacy));
+    expect(data.queueMetrics).not.toBeNull();
+    expect(data.projectSignals).not.toBeNull();
   });
 
   it("a series sample that still carries `memberEmails` decodes and drops it", () => {

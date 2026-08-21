@@ -100,8 +100,20 @@ function toDate(v: unknown): Date | null {
  * null and logs an error if any required field is missing or has an unexpected
  * type. Handles both plain Date values and Firestore Timestamp objects (via
  * `.toDate()`).
+ *
+ * `opts.requireMemberEmails` (default true) controls whether the source document
+ * must carry the denormalized `memberEmails` auth field. A live Firestore doc
+ * always carries it — the office-hours security rules evaluate it — so its
+ * absence there is real drift and must reject. The offline snapshot wire
+ * deliberately OMITS it (see office-hours/src/snapshot-wire.ts), so
+ * `decodeSnapshot` passes false and the parsed snapshot carries an empty list,
+ * matching the public-seed convention in data.ts.
  */
-export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSnapshot | null {
+export function parseQueueMetrics(
+  data: Record<string, unknown>,
+  opts: { requireMemberEmails?: boolean } = {},
+): QueueMetricsSnapshot | null {
+  const requireMemberEmails = opts.requireMemberEmails ?? true;
   const openHelpWanted = typeof data.openHelpWanted === "number" && Number.isFinite(data.openHelpWanted) ? data.openHelpWanted : null;
   const closedPerDay = typeof data.closedPerDay === "number" && Number.isFinite(data.closedPerDay) ? data.closedPerDay : null;
   const createdPerDay = typeof data.createdPerDay === "number" && Number.isFinite(data.createdPerDay) ? data.createdPerDay : null;
@@ -153,7 +165,7 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     netDrainPerDay === null ||
     windowDays === null ||
     groupId === null ||
-    memberEmails === null ||
+    (requireMemberEmails && memberEmails === null) ||
     computedAt === null ||
     !runwayDaysValid
   ) {
@@ -188,7 +200,9 @@ export function parseQueueMetrics(data: Record<string, unknown>): QueueMetricsSn
     windowDays,
     computedAt,
     groupId,
-    memberEmails,
+    // `[]` only on the snapshot-wire path, which strips the ACL and passes
+    // requireMemberEmails:false; the Firestore path always has the real list.
+    memberEmails: memberEmails ?? [],
     parked,
     ...(scope !== undefined ? { scope } : {}),
   };
