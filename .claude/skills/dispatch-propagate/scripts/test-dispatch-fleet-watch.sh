@@ -26,18 +26,6 @@
 #                                       the real repo (and predicate 5's
 #                                       worktree probes stay inside $WORK)
 #   DISPATCH_RESERVATION_DIR            lib-reservation-ledger.sh's ledger dir
-#   DISPATCH_STANDDOWN_PROJECTS_ROOT    lib-standdown-recheck.sh's transcript
-#                                       root, so predicate 6's idle measurement
-#                                       reads fixture mtimes instead of
-#                                       ~/.claude/projects
-#
-# Predicate 6 additionally needs its subject to BE a git repository:
-# DISPATCH_GRAPH_MAIN_WORKTREE points resolve_main_worktree at $CASEDIR, and the
-# predicate reads that checkout's tree with `git status --porcelain` and
-# `git rev-list --count HEAD --not --remotes`. new_env therefore initialises
-# $CASEDIR as a real repo with a bare origin and one pushed commit, so its
-# DEFAULT state is clean-and-fully-pushed (predicate 6 clear); dirty_main()
-# makes it dirty.
 #
 # No systemd, no real `claude` daemon, no git remote, no graph write — only bash
 # + jq. Run under bash, never zsh.
@@ -185,8 +173,6 @@ run_case() {
     DISPATCH_FLEET_WATCH_HOLDALERT_CMD="$BIN/holdalert" \
     DISPATCH_GRAPH_MAIN_WORKTREE="$CASEDIR" \
     DISPATCH_RESERVATION_DIR="$RESVDIR" \
-    DISPATCH_STANDDOWN_PROJECTS_ROOT="$PROJROOT" \
-    DISPATCH_FLEET_WATCH_MAIN_HELD_GRACE_S="${MAIN_HELD_GRACE_S:-1800}" \
     STUB_HOLDALERT_OUT="${STUB_HOLDALERT_OUT:-}" \
     STUB_HOLDALERT_RC="${STUB_HOLDALERT_RC:-0}" \
     STUB_LIVENESS_RC="${STUB_LIVENESS_RC:-0}" \
@@ -210,7 +196,6 @@ reset_stubs() {
   unset STUB_LIVENESS_RC STUB_LIVENESS_VERDICT STUB_LIVENESS_REASON STUB_LIVENESS_NOJSON
   unset STUB_REDSYNC_OUT STUB_AGENTS_JSON STUB_AGENTS_FAIL STUB_AGENTS_ALL_FAIL STUB_ALARM_RC
   unset STUB_HOLDALERT_OUT STUB_HOLDALERT_RC
-  unset MAIN_HELD_GRACE_S
 }
 
 # new_env <case-name> — fresh log/pause/state paths for an isolated case.
@@ -225,63 +210,18 @@ new_env() {
   # claimed) and the worktrees root under the faked main worktree ($CASEDIR).
   RESVDIR="$CASEDIR/reservations"; mkdir -p "$RESVDIR"
   mkdir -p "$CASEDIR/.claude/worktrees"
-  # Predicate 6's transcript root (idle measurement) and its subject repo.
-  PROJROOT="$CASEDIR/projects"; mkdir -p "$PROJROOT/proj"
-  # A real repo with a bare origin and one pushed commit: clean tracked tree,
-  # zero unpushed commits — predicate 6's `clear` baseline. The identity is
-  # passed with -c so the harness never depends on a global git identity (which
-  # CI does not have).
-  git -C "$CASEDIR" init -q -b main >/dev/null 2>&1
-  printf 'seed\n' > "$CASEDIR/seed.txt"
-  git -C "$CASEDIR" add seed.txt >/dev/null 2>&1
-  git -C "$CASEDIR" -c user.email=harness@example.invalid -c user.name=harness \
-    commit -q -m seed >/dev/null 2>&1
-  git init -q --bare "$WORK/$c-origin.git" >/dev/null 2>&1
-  git -C "$CASEDIR" remote add origin "$WORK/$c-origin.git" >/dev/null 2>&1
-  git -C "$CASEDIR" push -q origin main >/dev/null 2>&1
-}
-
-# dirty_main — modify a TRACKED file in the faked main checkout, so
-# `git status --porcelain --untracked-files=no` is non-empty. That is the harm
-# half of predicate 6's conjunction: a dirty shared tree blocks the tick's
-# --ff-only sync and every graph-commit through that checkout.
-dirty_main() { printf 'held\n' >> "$CASEDIR/seed.txt"; }
-
-# main_session_json <name> <state> <status> <sid> — the session array of
-# `agents_json 1`, plus one session whose cwd IS the faked main checkout. The
-# name is deliberately OUTSIDE the worker keyspace (`sync-repair` is the real
-# incident's session name), so predicate 3's keyspace-filtered busy count is
-# unaffected and only predicate 6 sees it.
-main_session_json() {
-  jq -c --arg nm "$1" --arg st "$2" --arg su "$3" --arg sid "$4" --arg cwd "$CASEDIR" \
-    '. + [{sessionId:$sid, id:"job-1", name:$nm, state:$st, status:$su, cwd:$cwd}]' \
-    <<<"$(agents_json 1)"
-}
-
-# make_transcript <sid> <idle-seconds> — a transcript file at
-# <projects-root>/<project>/<sid>.jsonl whose mtime is <idle-seconds> old, which
-# is exactly what _standdown_session_idle_s measures. Omit it entirely and that
-# helper returns UNKNOWN.
-#
-# The fixture sids are hex-and-dash shaped on purpose: _standdown_session_idle_s
-# validates the sid against `^[0-9a-fA-F-]+$` before feeding it to a `find -name`
-# glob, and a sid failing that edge check reads as UNKNOWN idle regardless of
-# any transcript on disk.
-make_transcript() {
-  : > "$PROJROOT/proj/$1.jsonl"
-  touch -d "@$((NOW - $2))" "$PROJROOT/proj/$1.jsonl"
 }
 
 fresh_log() { printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 60)))" > "$LOGFILE"; }
 stale_log() { printf '{"ts":"%s","site":"select-tick"}\n' "$(iso $((NOW - 99999)))" > "$LOGFILE"; }
 
 # ===========================================================================
-# Case 1: all six clear -> exit 0, six --resolve calls, zero finding calls.
+# Case 1: all five clear -> exit 0, five --resolve calls, zero finding calls.
 reset_stubs; new_env case1
 fresh_log
 STUB_LIVENESS_RC=0 STUB_AGENTS_JSON="$(agents_json 2)" STUB_REDSYNC_OUT="" run_case
 assert_eq "case1 exit code" 0 "$RUN_RC"
-assert_eq "case1 resolve count" 6 "$(grep -c -- '--resolve' <<<"$ALARMS")"
+assert_eq "case1 resolve count" 5 "$(grep -c -- '--resolve' <<<"$ALARMS")"
 assert_eq "case1 finding-alarm count" 0 "$(grep -c -- '--statement' <<<"$ALARMS")"
 assert_contains "case1 reports ok" "result: ok" "$RUN_OUT"
 # The latch is READ, never completed: completing it re-arms the auto-merge gate
@@ -342,8 +282,8 @@ assert_contains "case4 pause reported unknown" "pause=unknown" "$RUN_OUT"
 assert_eq "case4 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
 assert_not_contains "case4 does NOT report bare ok" "result: ok" "$RUN_OUT"
 if [[ "$RUN_RC" -ne 0 ]]; then ok "case4 exit is not 0"; else no "case4 exited 0 despite pause-unknown"; fi
-# All six still evaluated (each read cleanly, so each resolved).
-assert_eq "case4 all six predicates still evaluated" 6 "$(grep -c -- '--resolve' <<<"$ALARMS")"
+# All five still evaluated (each read cleanly, so each resolved).
+assert_eq "case4 all five predicates still evaluated" 5 "$(grep -c -- '--resolve' <<<"$ALARMS")"
 
 # ===========================================================================
 # Case 5: busy-worker count UNKNOWN (the daemon query fails) with a pre-set
@@ -711,203 +651,6 @@ assert_eq "case24 exit code (unknown)" 2 "$RUN_RC"
 # The ACTIVE view really was healthy, or the case proves nothing about WHICH
 # view the gate consults: predicate 3 read it and produced a definite verdict.
 assert_not_contains "case24 busy-stall still read the active view" "busy-stall:           unknown" "$RUN_OUT"
-
-# ===========================================================================
-# Predicate 6 (main-checkout-held). The subject is $CASEDIR — a real repo with a
-# bare origin, clean and fully pushed by default (see new_env). The session view
-# is the `claude` stub's `--all` answer, and idle age comes from a fixture
-# transcript whose mtime make_transcript sets.
-#
-# Case 25 (THE INCIDENT): dirty shared tree + a non-working session sitting in
-# it, idle past the grace -> finding, one main-checkout-held alarm, exit 1.
-reset_stubs; new_env case25
-fresh_log
-dirty_main
-make_transcript dead1234-beef-5678-90ab-cdef01234567 9000
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case25 verdict is finding" "main-checkout-held:   finding" "$RUN_OUT"
-assert_eq "case25 exactly one main-checkout-held finding" 1 \
-  "$(grep -c -- '--kind main-checkout-held --statement' <<<"$ALARMS")"
-assert_not_contains "case25 no main-checkout-held resolve" "--resolve --kind main-checkout-held" "$ALARMS"
-assert_eq "case25 exit code (finding)" 1 "$RUN_RC"
-
-# ===========================================================================
-# Case 26: the same dirty tree and the same session, but idle WITHIN the grace.
-# It is being observed, not acted on — verdict clear (the grace convention at
-# lib-frozen-session-park.sh:495-529).
-reset_stubs; new_env case26
-fresh_log
-dirty_main
-make_transcript dead1234-beef-5678-90ab-cdef01234567 60
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case26 verdict clear (within grace)" "main-checkout-held:   clear" "$RUN_OUT"
-assert_eq "case26 main-checkout-held resolved" 1 "$(grep -c -- '--resolve --kind main-checkout-held' <<<"$ALARMS")"
-assert_not_contains "case26 no finding" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case26 exit code (clear)" 0 "$RUN_RC"
-
-# ===========================================================================
-# Case 27: dirty tree, but the session sitting in it is WORKING. That is the
-# ordinary way the shared tree goes dirty and it is not an incident.
-reset_stubs; new_env case27
-fresh_log
-dirty_main
-make_transcript dead1234-beef-5678-90ab-cdef01234567 9000
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json 999-some-node working busy dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case27 verdict clear (someone is working)" "main-checkout-held:   clear" "$RUN_OUT"
-assert_not_contains "case27 no finding" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case27 exit code (clear)" 0 "$RUN_RC"
-
-# ===========================================================================
-# Case 28 (THE CRITICAL FALSE-POSITIVE GUARD): a CLEAN, fully-pushed tree with a
-# long-idle non-working session sitting in it. An interactive human session
-# started in the repo root registers with cwd == the main checkout and sits idle
-# for hours as a matter of course; alarming on the session alone would mint a
-# graph node against ordinary human use. The harm is the tree, not the session.
-reset_stubs; new_env case28
-fresh_log
-make_transcript dead1234-beef-5678-90ab-cdef01234567 999999
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json my-scratch blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case28 verdict clear (clean tree, idle human session)" "main-checkout-held:   clear" "$RUN_OUT"
-assert_not_contains "case28 no finding on an idle session alone" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case28 main-checkout-held resolved" 1 "$(grep -c -- '--resolve --kind main-checkout-held' <<<"$ALARMS")"
-assert_eq "case28 exit code (clear)" 0 "$RUN_RC"
-
-# ===========================================================================
-# Case 29 (FAIL DIRECTION, session view): the registered view (`--all`) is
-# unreadable with a dirty tree. An unreadable session list would emit zero rows,
-# which reads identically to "nobody is there" and would send
-# `--resolve --kind main-checkout-held`, closing an already-open alarm node.
-# Verdict must be unknown: no finding, no resolve, watch-unknown raised.
-reset_stubs; new_env case29
-fresh_log
-dirty_main
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" STUB_AGENTS_ALL_FAIL=1 \
-  STUB_AGENTS_JSON="$(agents_json 1)" run_case
-assert_contains "case29 verdict unknown (registered view unreadable)" "main-checkout-held:   unknown" "$RUN_OUT"
-assert_not_contains "case29 verdict is NOT a false clear" "main-checkout-held:   clear" "$RUN_OUT"
-assert_not_contains "case29 no main-checkout-held resolve" "--resolve --kind main-checkout-held" "$ALARMS"
-assert_not_contains "case29 no main-checkout-held finding" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case29 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
-assert_eq "case29 exit code (unknown)" 2 "$RUN_RC"
-# The ACTIVE view really was healthy, or the case proves nothing about WHICH
-# view this predicate's gate consults.
-assert_not_contains "case29 busy-stall still read the active view" "busy-stall:           unknown" "$RUN_OUT"
-
-# ===========================================================================
-# Case 30 (FAIL DIRECTION, tree read): the git read FAILS — $CASEDIR's repo is
-# gone, so `git status` cannot run. A failed git command is unknown, never
-# clear: worktree_in_sync collapses "git failed" into the same non-zero return
-# as "dirty", which is why this predicate does its own three-way read.
-reset_stubs; new_env case30
-fresh_log
-rm -rf "$CASEDIR/.git"
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" STUB_AGENTS_JSON="$(agents_json 1)" run_case
-assert_contains "case30 verdict unknown (git read failed)" "main-checkout-held:   unknown" "$RUN_OUT"
-assert_not_contains "case30 verdict is NOT a false clear" "main-checkout-held:   clear" "$RUN_OUT"
-assert_not_contains "case30 no main-checkout-held resolve" "--resolve --kind main-checkout-held" "$ALARMS"
-assert_not_contains "case30 no main-checkout-held finding" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case30 watch-unknown alarm fired" 1 "$(grep -c -- '--kind watch-unknown --statement' <<<"$ALARMS")"
-assert_not_contains "case30 does NOT report bare ok" "result: ok" "$RUN_OUT"
-assert_eq "case30 exit code (unknown)" 2 "$RUN_RC"
-
-# ===========================================================================
-# Case 31 (BODY-STABILITY RATCHET for predicate 6): two passes over the SAME
-# offending session whose readings differ — a different idle age and a different
-# number of modified tracked files — must emit a byte-identical body. A body
-# carrying either would fetch/rebase/push to origin/main once per 5-minute pass.
-reset_stubs; new_env case31
-fresh_log
-dirty_main
-make_transcript dead1234-beef-5678-90ab-cdef01234567 9000
-ALARM_BODY_DIR="$CASEDIR/bodies-1"
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_eq "case31 pass 1 raised the main-checkout-held finding" 1 \
-  "$(grep -c -- '--kind main-checkout-held --statement' <<<"$ALARMS")"
-CASE31_OUT_1="$RUN_OUT"
-# Move BOTH readings: a second modified tracked file, and a much older idle age.
-printf 'second\n' > "$CASEDIR/second.txt"
-git -C "$CASEDIR" add second.txt >/dev/null 2>&1
-git -C "$CASEDIR" -c user.email=harness@example.invalid -c user.name=harness \
-  commit -q -m second >/dev/null 2>&1
-git -C "$CASEDIR" push -q origin main >/dev/null 2>&1
-printf 'held too\n' >> "$CASEDIR/second.txt"
-make_transcript dead1234-beef-5678-90ab-cdef01234567 77777
-ALARM_BODY_DIR="$CASEDIR/bodies-2"
-reset_stubs
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-ALARM_BODY_DIR=""
-if [[ ! -s "$CASEDIR/bodies-1/main-checkout-held.body" || ! -s "$CASEDIR/bodies-2/main-checkout-held.body" ]]; then
-  no "case31 main-checkout-held body missing from one of the passes (the ratchet would be vacuous)"
-elif cmp -s "$CASEDIR/bodies-1/main-checkout-held.body" "$CASEDIR/bodies-2/main-checkout-held.body"; then
-  ok "case31 main-checkout-held body is identical across passes"
-else
-  no "case31 main-checkout-held body CHURNS across passes: $(diff "$CASEDIR/bodies-1/main-checkout-held.body" "$CASEDIR/bodies-2/main-checkout-held.body" | tr '\n' ' ')"
-fi
-# The readings really did differ, or the byte-comparison above proves nothing.
-if [[ "$(grep -F 'main-checkout-held:' <<<"$CASE31_OUT_1")" != "$(grep -F 'main-checkout-held:' <<<"$RUN_OUT")" ]]; then
-  ok "case31 main-checkout-held reading DID change between passes (stdout keeps the live numbers)"
-else
-  no "case31 main-checkout-held reading did not change between passes — the body comparison above is vacuous"
-fi
-CASE31_BODY="$(cat "$CASEDIR/bodies-2/main-checkout-held.body")"
-assert_not_contains "case31 body carries no idle age" "77777" "$CASE31_BODY"
-assert_not_contains "case31 body carries no sessionId" "dead1234-beef-5678-90ab-cdef01234567" "$CASE31_BODY"
-# ...but the offending session's name/state IS the condition's identity.
-assert_contains "case31 body names the offending session" "sync-repair:blocked" "$CASE31_BODY"
-assert_contains "case31 body names the main checkout" "$CASEDIR" "$CASE31_BODY"
-# The operator still needs the sessionId, so the body says where to find it —
-# and says plainly that the first act is reading the transcript, never a blind
-# removal: a stopped session may hold the only record of why it died.
-assert_contains "case31 body points at journald for the volatile reading" \
-  "journald" "$CASE31_BODY"
-assert_contains "case31 body recommends reading the transcript first" \
-  "READ THE SESSION'S TRANSCRIPT" "$CASE31_BODY"
-
-# ===========================================================================
-# Case 32: PAUSED. Predicate 6 still evaluates — a dirty shared main checkout is
-# not a consequence of pausing, and the incident that motivated this predicate
-# happened DURING a correct pause.
-reset_stubs; new_env case32
-fresh_log
-touch "$PAUSEFLAG"
-dirty_main
-make_transcript dead1234-beef-5678-90ab-cdef01234567 9000
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case32 predicate 6 evaluated under pause" "main-checkout-held:   finding" "$RUN_OUT"
-assert_not_contains "case32 predicate 6 is NOT quiet under pause" "main-checkout-held:   quiet" "$RUN_OUT"
-assert_eq "case32 main-checkout-held finding raised under pause" 1 \
-  "$(grep -c -- '--kind main-checkout-held --statement' <<<"$ALARMS")"
-
-# ===========================================================================
-# Case 33: a candidate session whose transcript is MISSING — its idle age is
-# unmeasurable, so it can be judged neither way. It is the only candidate, so
-# the verdict is unknown, never clear.
-reset_stubs; new_env case33
-fresh_log
-dirty_main
-STUB_LIVENESS_RC=0 STUB_REDSYNC_OUT="" \
-  STUB_AGENTS_JSON="$(main_session_json sync-repair blocked idle dead1234-beef-5678-90ab-cdef01234567)" run_case
-assert_contains "case33 verdict unknown (idle unmeasurable)" "main-checkout-held:   unknown" "$RUN_OUT"
-assert_not_contains "case33 no main-checkout-held resolve" "--resolve --kind main-checkout-held" "$ALARMS"
-assert_not_contains "case33 no main-checkout-held finding" "--kind main-checkout-held --statement" "$ALARMS"
-assert_eq "case33 exit code (unknown)" 2 "$RUN_RC"
-
-# ===========================================================================
-# Case 34 (I22 RATCHET): predicate 6 SURFACES, it never acts. `state: done` is
-# the discriminator for REAPING, not for HEALTH, and this predicate must not
-# grow into a reaper — no session removal, no kill, no park.
-if grep -Eq 'claude[[:space:]]+rm|kill[[:space:]]+-|pkill' "$SCRIPT"; then
-  no "ratchet: script removes or kills a session (predicate 6 surfaces, it never acts)"
-else
-  ok "ratchet: no session removal/kill (predicate 6 surfaces, it never acts)"
-fi
 
 # ===========================================================================
 # Case 17 (DOCTRINE RATCHET): the watcher must never fleet-halt. Grep the
