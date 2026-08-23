@@ -3,7 +3,11 @@ name: Unit Tests & Lint
 on:
   push:
     branches-ignore:
-      - main
+      # `main` is deliberately NOT ignored: a suite that never runs on the
+      # branch it merges into cannot report post-merge breakage, so the first
+      # symptom is the next unrelated PR going red for a failure it did not
+      # cause. `graph/**` stays ignored — those refs carry intention-node
+      # commits only, with no source to test.
       - 'graph/**'
 
 permissions:

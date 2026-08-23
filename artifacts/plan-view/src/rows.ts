@@ -1,4 +1,8 @@
-import { resolveAttention, selectGraphTargets } from "@commons-systems/intentionsutil";
+import {
+  compareRankKeyDesc,
+  resolveAttention,
+  selectGraphTargets,
+} from "@commons-systems/intentionsutil";
 import type { IntentionNode } from "@commons-systems/intentionsutil";
 import { bandSpine, laneEdges, reverseBlockerIndex, sourceContributions } from "./lineage.js";
 import { LABELS, PHASE_LADDER } from "./model.js";
@@ -134,7 +138,7 @@ export function buildRows(input: BuildRowsInput): PlanRow[] {
       id: node.id,
       statement: node.statement,
       tier: resolved?.tier ?? 1,
-      rank: resolved?.value ?? 0,
+      rank: resolved ?? null,
       phase: node.phase,
       phaseIndex: node.phase === null ? -1 : PHASE_LADDER.indexOf(node.phase),
       spine,
@@ -151,12 +155,26 @@ export function buildRows(input: BuildRowsInput): PlanRow[] {
   // Selection order first, then everything with no position, ranked. Rows
   // without a position still carry a real rank and are ordered by it so the
   // lineage columns stay meaningful below the scheduled block.
+  //
+  // The rank comparison delegates to `compareRankKeyDesc` rather than
+  // subtracting a scalar. That comparator IS the ordering — lexicographic over
+  // `(tier, band, score, depth)` — so tier is already its dominant component
+  // and must NOT be compared separately here; doing so twice, once against the
+  // display `tier` and once inside the key, is how the two drift apart. Rows
+  // with no rank key were not eligible for attention at all; they sort after
+  // every ranked row rather than being given a fabricated zero.
   rows.sort((a, b) => {
     if (a.position !== null && b.position !== null) return a.position - b.position;
     if (a.position !== null) return -1;
     if (b.position !== null) return 1;
-    if (a.tier !== b.tier) return b.tier - a.tier;
-    if (a.rank !== b.rank) return b.rank - a.rank;
+    if (a.rank !== null && b.rank !== null) {
+      const byRank = compareRankKeyDesc(a.rank, b.rank);
+      if (byRank !== 0) return byRank;
+    } else if (a.rank !== null) {
+      return -1;
+    } else if (b.rank !== null) {
+      return 1;
+    }
     return a.id.localeCompare(b.id);
   });
 

@@ -11,6 +11,8 @@
  * every row and every ancestor the filters can reach must already be here.
  */
 
+import type { RankKey } from "@commons-systems/intentionsutil";
+
 /** The three fixed lane categories. Hue encodes KIND, never ancestor identity. */
 export type LaneKind = "strategy" | "delegation" | "blocker";
 
@@ -42,8 +44,14 @@ export interface PlanRow {
   statement: string;
   /** Effective tier — the outer ranking axis, from `resolveAttention`. */
   tier: number;
-  /** Composed rank value — the inner axis. */
-  rank: number;
+  /**
+   * The row's full rank key, or null when the node got no `ResolvedAttention`
+   * (it was not eligible). Carried WHOLE rather than collapsed to one number:
+   * the ordering is lexicographic over `(tier, band, score, depth)`, and any
+   * single scalar standing in for it would let one tier's weight decide
+   * another tier's order. Sort with `compareRankKeyDesc`, never by subtraction.
+   */
+  rank: RankKey | null;
   /** Persisted phase, or null for a draft awaiting `/align-tactics`. */
   phase: string | null;
   /** 0-based index into `PHASE_LADDER`, or -1 for a draft. */
