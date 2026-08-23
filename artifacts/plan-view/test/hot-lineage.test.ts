@@ -13,7 +13,7 @@ function row(id: string, extra: Partial<PlanRow> = {}): PlanRow {
     id,
     statement: id,
     tier: 1,
-    rank: 0,
+    rank: null,
     phase: null,
     phaseIndex: -1,
     spine: [],
