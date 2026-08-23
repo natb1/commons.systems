@@ -543,10 +543,18 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    **Anchors are not yet re-verified** — do that as its own pass now that the
 >    five have landed.
 > 4. Close all twelve drafts and fold their nodes in; leave the branches alive.
->    **Not started, and its scope changed:** for the five unsplittable drafts
->    the contested half is the *whole* draft, so the absorption is the larger one
->    the original A1 table assumed, not the reduced one the split promised.
->    Re-read step 6 before starting.
+>    **PARTIALLY DONE 2026-08-23 — five of twelve closed, by author ruling.**
+>    Its scope had changed: for the five unsplittable drafts the contested half
+>    is the *whole* draft, so the absorption is the larger one the original A1
+>    table assumed, not the reduced one the split promised. Put to the author on
+>    2026-08-23, who ruled **close only the five whose clean half already
+>    landed** — #2946, #3018, #3054, #3056, #3064 — since what remains in each is
+>    contested-only and adds nothing reviewable as a diff. Each was closed with a
+>    comment recording why, and **every branch was left alive**: all five survive
+>    an explicit `git fetch --prune`, so any of them can be reopened.
+>    The other seven stay open, because for the five unsplittable ones the
+>    contested content is still worth reading *as a diff*. Re-read step 6 before
+>    closing any of them.
 > 5. ~~Clear #3041's park~~ **DONE 2026-08-21** (`e03c20e0`, blob-verified).
 >    The `claude stop` half turned out to be moot: `claude agents --json`
 >    (sandbox off) showed the holding session the park names is no longer
@@ -554,7 +562,8 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
 >    clearing and is still empty of authored non-merge commits.
 >
 > Items 2 and 5 are **done**; item 3 is done at five of ten, with the other five
-> deliberately not landed; item 4 is untouched and larger than advertised.
+> deliberately not landed; item 4 is done at five of twelve, by an author ruling
+> that scoped it to the drafts whose clean half had already landed.
 > Item 3 turned out to need judgement, not just execution — the step as written
 > would have landed a vacuously-passing test, a reverted nix pin, three bodies
 > of dead code, and a doctrine ratchet asserting flags that are not there.
@@ -1034,11 +1043,19 @@ PRs untouched.
 Found 2026-08-21, while every clean-half PR sat `BLOCKED` on a `unit-tests`
 failure none of them caused.
 
-`.github/workflows/unit-tests.yml` carries `branches-ignore: main`. **The unit
-suite never runs on `main`.** The green "Push on main" runs in the Actions list
-are a *different* workflow, so a breakage that lands on `main` produces no red
-anywhere — it becomes visible only on the next PR, which then appears to have
+`.github/workflows/unit-tests.yml` carried `branches-ignore: main`. **The unit
+suite never ran on `main`.** The green "Push on main" runs in the Actions list
+are a *different* workflow, so a breakage that landed on `main` produced no red
+anywhere — it became visible only on the next PR, which then appeared to have
 broken something it never touched.
+
+> **SETTLED 2026-08-23: `main` is no longer ignored.** The author ruled that the
+> suite should run where breakage lands. `main` was removed from
+> `branches-ignore` in #3108; `graph/**` stays ignored, because those refs carry
+> intention-node commits with no source to test. The first `unit-tests` run ever
+> to execute on `main` — run `32648102857`, on merge commit `6528ceec` —
+> completed **success**, all 17 jobs green. Post-merge breakage now surfaces on
+> `main` itself instead of on the next unrelated contributor's PR.
 
 That is exactly what happened. `artifacts/plan-view` had been red on `main`
 since the attention-boosts migration: `lineage.ts`'s `authoredAmount` read
@@ -1065,13 +1082,37 @@ the draft branch. Any PR that *deletes* a cited path is caught immediately;
 `main` sitting in the violation permanently is not. Expect more of this class:
 **every check that skips `main` can accumulate debt there silently.**
 
-Related, and left open: `run-typecheck.sh` **skips** `artifacts/plan-view`
-entirely with `origin/main baseline fails`, because `rows.ts:137` still reads
-`resolved.value` — a field the four-component `RankKey`
+**A third instance of the same class, now closed.** `run-typecheck.sh` **skipped**
+`artifacts/plan-view` entirely with `origin/main baseline fails`, because
+`rows.ts:137` read `resolved.value` — a field the four-component `RankKey`
 (`tier`/`band`/`score`/`depth`) replaced. A skipped workspace is a silent
-workspace. Collapsing that key into plan-view's single `rank` scalar is a design
-decision, not a mechanical substitution, so #3103 deliberately left it for an
-author ruling.
+workspace, and the script said so plainly: `No workspace was typechecked: 0
+non-TS, 1 baseline-skipped. This run verified nothing — it is not a pass.`
+
+> **SETTLED 2026-08-23: carry the whole key; do not collapse it.** Collapsing
+> `RankKey` into plan-view's single `rank` scalar was a design decision, not a
+> mechanical substitution, so #3103 deliberately left it for an author ruling.
+> The author ruled in #3108: carry the key **whole** and order with
+> `compareRankKeyDesc` (`packages/intentionsutil/src/attention.ts:39`), the
+> exported comparator that exists so consumers do not each re-derive the
+> ordering. Collapsing to one scalar was rejected because it drops `tier`, and
+> tier isolation is doctrine (`attention.ts:416-419`).
+>
+> Two details the fix turned up. First, the stale read was not merely untyped —
+> it was **dead**: `resolved?.value` evaluated to `undefined` for every row, so
+> `rank` was uniformly `0` and the rank tie-break never fired; ordering fell
+> through to `id.localeCompare`. Second, the separate `tier` comparison in the
+> row sort had to go, because `tier` is that comparator's dominant component —
+> comparing it twice, once against the display `tier` and once inside the key,
+> is how the two drift apart. Rows with no `ResolvedAttention` now carry
+> `rank: null` and sort after every ranked row rather than being handed a
+> fabricated zero.
+>
+> **This single line was the entire baseline failure.** Checking `origin/main`'s
+> plan-view files out in isolation produced exactly one error —
+> `rows.ts(137,23): error TS2339: Property 'value' does not exist on type
+> 'ResolvedAttention'.` — so with the fix the workspace typechecks clean and
+> `run-typecheck.sh` stops skipping it. A silent workspace became a checked one.
 
 ## Residuals not owned by any Bundle 0 step
 
@@ -3740,9 +3781,12 @@ match, so rewording a node silently unbinds it, and:
 
 - `graph-validate` runs `validate-graph.ts`, which PR1 made **non-fatal** on
   precisely this condition — so it can never go red on it;
-- `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, and
+- `unit-tests.yml` declares `branches-ignore: ['graph/**']`, and
   `graph-validate` lives in that same workflow — so for a write that lands via
-  a `graph/**` push, **neither job runs at all**.
+  a `graph/**` push, **neither job runs at all**. *(Updated 2026-08-23: `main`
+  was removed from that list in #3108, so the `main` half of this gap is closed
+  — but the `graph/**` half, which is the one this unit turns on, is unchanged
+  and the argument below stands.)*
 
 The result is a reword that lands green while the sensor reads `null`, with
 only a stderr line in the guard log. The brief scoped this to a *node-scoped
