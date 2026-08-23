@@ -302,7 +302,7 @@ branch deletion is deferred for all twelve.
 | **#2946** | `tactic-node-ancestry-context` | **PR13** | It edits eight skill bodies; PR13 renames all of them. Any other home guarantees a conflict with the rename |
 | **#3057** | `tactic-bounded-work-in-progress` | **PR8** Unit 3 (+PR18 `router.ts:540-556`) | `dispatch-config-load:342-344` |
 | **#3018** | `tactic-conflict-lane-exit11-retry-bound` | **PR8** Unit 3, coordinated with PR5's conflict-lane unit | `dispatch-tick:266-300`; same lane, different mechanism — converge the policy once |
-| **#3041** | `tactic-clarification-citation-ids` | **PR19** (+PR4/PR18 `schema.ts`, `router.ts`) | **Node is `office_hours`-parked** and is one of this plan's two named pre-PR sittings. Resolve the sitting first, then absorb — see Step 4 |
+| **#3041** | `tactic-clarification-citation-ids` | **PR19** (+PR4/PR18 `schema.ts`, `router.ts`) | ~~Node is `office_hours`-parked and is one of this plan's two named pre-PR sittings. Resolve the sitting first, then absorb~~ — **corrected 2026-08-23: there is no sitting here.** The node is `office_hours: null`, `owner: ai`, `phase: review` on `origin/main`. Its park was a mechanical `standdown-winner-dead-work-unpushed` fleet park, never a design sitting, and it was cleared 2026-08-21 (`e03c20e0`). **Absorb directly** — see Step 4 |
 
 **A2 — land first (4). — ALL 4 LANDED.** Three on 2026-08-20 (`4dfb4648`,
 `9637479a`, `97085e52`); **#2805 on 2026-08-21 (`eba3313b`)**, after its review
@@ -1716,6 +1716,15 @@ the staged resumption.
 These sessions produce no code. Each is listed against the PR it gates, with the
 prompt that starts it. **Run these before opening the PR they gate.** The full
 prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
+
+> **For the author's own running order, use
+> `plans/dispatch-rsi-author-sitting-agenda.md`.** This table indexes on "produces
+> no diff"; that file indexes on "needs the author", which is a different set. It
+> groups the ten author-owed items into four topics for a single sitting, and it
+> picks up three rulings that live in unit prose and appear in **no** table —
+> PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5. It also separates the
+> three rows below that are `/rsi-audit` measurement runs, not sittings, and so
+> cannot be resolved by an author at all.
 
 | Run before | Node | Session prompt |
 |---|---|---|
@@ -4207,9 +4216,15 @@ record the delete/modify residue on its node before closing.
 # PR19 — Supersession representation
 
 > **In-flight overhang (2026-08-20).** Class A: **#3041**
-> (`tactic-clarification-citation-ids`, `router.ts` + `schema.ts`) — its node is
+> (`tactic-clarification-citation-ids`, `router.ts` + `schema.ts`) — ~~its node is
 > `office_hours`-parked and is one of this plan's two named pre-PR sittings, so
-> **resolve the sitting first, then absorb** (Bundle 0 Step 4). Class B:
+> resolve the sitting first, then absorb~~ **(corrected 2026-08-23: no sitting
+> exists. On `origin/main` the node is `office_hours: null`, `owner: ai`,
+> `phase: review`; its park was a mechanical
+> `standdown-winner-dead-work-unpushed` fleet park, cleared 2026-08-21 in
+> `e03c20e0`. Absorb directly.)** So this PR has **one** named pre-PR sitting,
+> not two — `tactic-review-supersession-derived-subpoints`, below (Bundle 0
+> Step 4). Class B:
 > **`tactic-schema-drift-guard`** — a CI guard that every field, rule, enum and
 > vocabulary `schema.ts` enforces is declared on a kind node; this PR is the
 > `schema.ts` PR and its first beneficiary. Keep #3093, #2856 and #3040 *out* —
