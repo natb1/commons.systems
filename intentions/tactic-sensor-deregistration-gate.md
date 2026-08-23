@@ -4,8 +4,8 @@ kind: tactic
 statement: "rewording a node's prose silently de-registers the sensor bound to
   it by exact string match and nothing goes red -- validate-graph has been
   non-fatal on that condition since PR #3095 and unit-tests.yml declares
-  branches-ignore of main and the graph namespace, so a write landing through
-  the graph fast path is checked by neither job; the gate's shape is an
+  branches-ignore of the graph namespace, so a write landing through the graph
+  fast path is checked by neither job; the gate's shape is an
   unratified risk decision because the literal reading re-arms the repo-wide
   write outage the non-fatal change was made to prevent"
 owner: human
@@ -48,9 +48,12 @@ office_hours:
     blocked writes, none of them about sensors) that the PR #3095 non-fatal
     change exists to prevent; getting shape (1) wrong re-arms it exactly. (2) A
     post-merge check on main cannot deny any write, so it cannot re-arm the
-    outage, but it detects only after the fact and needs a new workflow --
-    nothing currently runs on a main push outside path-scoped deploys. Do not
-    implement either without a ruling."
+    outage, but it detects only after the fact. Its cost was recorded as
+    needing a new workflow, because nothing ran on a main push outside
+    path-scoped deploys; that is no longer true as of PR #3108, which removed
+    main from unit-tests.yml's branches-ignore, so graph-validate now runs on
+    every main push and (2) needs only the binding-comparison check, not a new
+    workflow to host it. Do not implement either without a ruling."
   since: 2026-08-18
   recommendation: "Carried from PR #3095's post-merge review: take (2) first to
     establish a detection floor that cannot deny a write, then (1) later as the
@@ -80,8 +83,11 @@ recommendation carry the full argument; this section states the choice.
    2026-08-14 outage, 54 minutes, three blocked writes, none of which were
    about sensors.
 2. **Post-merge check on `main`.** Cannot deny a write, so it cannot re-arm the
-   outage. It detects after the fact, and it needs a **new workflow** —
-   nothing currently runs on a `main` push outside path-scoped deploys.
+   outage. It detects after the fact. Its cost was recorded as needing a
+   **new workflow**, because nothing ran on a `main` push outside path-scoped
+   deploys — **no longer true as of #3108**, which took `main` out of
+   `unit-tests.yml`'s `branches-ignore`. `graph-validate` now runs on every
+   `main` push, so (2) needs only the check, not a workflow to host it.
 
 The recommendation carried from PR #3095's review is **(2) first, (1) later**,
 but that is a recommendation and not a ruling. Note what ratifying (1) alone
@@ -100,10 +106,13 @@ Since PR #3095 nothing catches that:
 - `validate-graph` was deliberately made **non-fatal** on this exact condition,
   so it can never go red on it. Its own output says so:
   `0 unbound (reported on stderr, never fatal)`.
-- `.github/workflows/unit-tests.yml:5` declares
-  `branches-ignore: [main, 'graph/**']`, and `graph-validate` lives in that
-  same workflow. **A write that lands through the graph fast path runs neither
-  job.**
+- `.github/workflows/unit-tests.yml` declares `branches-ignore: ['graph/**']`,
+  and `graph-validate` lives in that same workflow. **A write that lands
+  through the graph fast path runs neither job.** *(Updated 2026-08-23: `main`
+  was in that list until #3108. Its removal closes the `main`-push half of the
+  blind spot — `graph-validate` now runs there — but the `graph/**` half, which
+  is the fast path this node is about, is unchanged. `validate-graph` also
+  remains non-fatal on de-registration, so nothing goes red yet either way.)*
 
 So a reword lands green while the sensor reads `null`, leaving one stderr line
 in a guard log nobody reads.
@@ -125,9 +134,10 @@ never bound, which is the case `validate-graph` already reports non-fatally.
 The `origin/main` read must have an explicitly chosen and tested behaviour when
 it fails; failing **closed** there is what caused the 2026-08-14 outage.
 
-Under **(2)**: a new workflow triggered on `main` push, reading the same
-binding comparison against the previous commit. No change to any job that can
-deny a write.
+Under **(2)**: the binding comparison against the previous commit, run on
+`main` push. Since #3108 this no longer needs a new workflow — `unit-tests.yml`
+already triggers on `main` and already hosts `graph-validate` — so the scope is
+the check itself. No change to any job that can deny a write.
 
 Either way, out of scope: the sensor registry itself
 (`packages/intentionsutil/scripts/read-sensors.ts`) and the choice of which
@@ -143,8 +153,9 @@ sensor coverage.
   independent notions of "bound" is how this class of defect returns.
 - `.github/workflows/graph-fast-path.yml` (shape 1) and
   `.github/workflows/unit-tests.yml` (the `branches-ignore` declaration that
-  creates the blind spot) are the two files that define the current coverage
-  gap; read both before designing either shape.
+  creates the blind spot, now `['graph/**']` only, and the host for shape 2)
+  are the two files that define the current coverage gap; read both before
+  designing either shape.
 
 ## Verification
 
