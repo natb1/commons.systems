@@ -47,8 +47,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
     20 / 10) - dispatch-containment and evidence-custody work that follows the
@@ -67,8 +67,7 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
-phase: qa
+phase: done
 execution:
   branch: tactic-conflict-lane-exit11-retry-bound
   pr: 3018
@@ -79,6 +78,7 @@ execution:
   fix: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours:

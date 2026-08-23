@@ -98,8 +98,8 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap band 2 (50/20/10 interim scale): a launch-path correctness defect
     that can double-book a held node -- same band as the other
@@ -117,8 +117,7 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-execute-fresh-main-read
   pr: 3056
@@ -132,6 +131,7 @@ execution:
     pushed_sha: e921987afd69d9204186088d253a87ed43f4d4d5
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

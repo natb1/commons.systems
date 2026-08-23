@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution:
   branch: tactic-node-ancestry-context
   pr: 2946
@@ -35,7 +35,7 @@ execution:
 validates: []
 blocked_by: []
 office_hours:
-  reason: "Parked 2026-08-14 by the /align node-creation-surface correction round.
+  reason: Parked 2026-08-14 by the /align node-creation-surface correction round.
     This node is at phase implement with a plan whose unit B inserts a Step 0
     sub-step into .claude/skills/align-strategy/SKILL.md — a skill DELETED
     2026-08-04. A worker selecting it cannot execute that unit. Found by the
@@ -43,8 +43,8 @@ office_hours:
     which reads an edge the schema cannot represent, and it also slipped the
     shipped lint-verify-fence-paths.sh guard — whose scan window is fence-scoped
     while this node's dead reference sits in a prose Scope bullet. That narrow
-    gap is what tactic-supersession-retirement-sweep now widens; this node is its
-    live proof case."
+    gap is what tactic-supersession-retirement-sweep now widens; this node is
+    its live proof case.
   since: 2026-08-14
   recommendation: Re-plan against the surviving surfaces (/align and
     /align-tactics) after confirming which of this node's units still have a

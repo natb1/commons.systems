@@ -18,7 +18,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: qa
+phase: done
 execution:
   branch: tactic-graph-review-exclusion-stall-recovery-main-qa-regression
   pr: 3064
@@ -29,6 +29,7 @@ execution:
   fix: null
   conflict: null
   completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
