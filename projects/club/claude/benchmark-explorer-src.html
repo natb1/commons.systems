@@ -420,9 +420,9 @@
         <p>Switching site re-anchors three things at once: the <b>cost basis</b> (the §6 calibration), the <b>café columns</b> (drawn at 70–130% of that site's mark, so "top decile" is corridor-relative rather than a Little Italy number applied everywhere), and the <b>walk-in default</b> (snapped to the site's mark, since that is the base-case expectation the counts test against). What stays absolute is the 70/day lean stop — which is the quiet warning in SN/HT's column headers: its <i>expected</i> traffic sits barely above its own stop rule.</p>
         <h3>What the owner's draw has to clear</h3>
         <p>The old <b>$30K line is gone from this tool.</b> It was the plan's <i>partial-income floor</i> — the trigger test of §9 (debt service + ~$30K), premised on other household income covering the rest. That is a household-survival number, not a measure of when the business is worth the owner's labor and capital. The standard test for the latter is <b>economic profit</b>: owner comp must cover (a) a market or living wage for the hours actually worked and (b) a required return on the equity at risk. Small-business valuation formalizes the same idea as SDE minus a fair replacement salary. Two tiers replace the one line.</p>
-        <p><b>The wage half.</b> The owner's gridded week is ~40 hr (~30 on the floor + ~10 admin and sales). Priced at the same total-comp rate the plan pays its staff — the Wages rung, $23.21/hr at MIT living — that is <span class="mono">40 × 52 × $23.21 ≈ $48.3K</span>. The <i>total-comp</i> rate is the fair owner equivalent rather than the take-home one, since an LLC owner pays both halves of SE tax out of the draw. It moves with the Wages lever, and that coupling is the point: an owner who pays the $16.55 market floor is pricing their own year at $34K, not $48K. But a living wage on its own is not a bar — it says nothing about the money. Both tiers below start from it and add a return.</p>
-        <p><b>1 — Living wage &amp; zero opportunity cost.</b> The wage plus <b>10%</b> on the capital at risk: what that cash would earn sitting passively somewhere else. Clear this and the owner is no worse off than they'd be taking a job and leaving the money in the market — the venture has cost them nothing but risk. Capital at risk is its own lever, defaulted to the midpoint of the plan's grant-free cash-to-open range ($180–300K). At $240K the bar is <span class="mono">$48.3K + $24K = $72.3K</span>.</p>
-        <p><b>2 — The economic band.</b> The wage plus <b>20% or more</b> — the risk-adjusted rate a buyer of an illiquid, single-operator small business would demand. This is where the venture earns genuine economic profit rather than merely breaking even against the alternatives. At $240K it opens at <span class="mono">$96.3K</span>. On the SBLP-buy path the ~$10K/yr of principal paydown counts toward the return side, so both tiers are tested against draw + equity build.</p>
+        <p><b>The wage half.</b> The owner's gridded week is ~40 hr (~30 on the floor + ~10 admin and sales), and it is <i>additional</i> to the ~100 staffed hr/wk the labor line buys — the plan's grid is already net of the owner's floor hours (D5/D6), so nothing here is counted twice. Those hours are priced at the Wages rung, but not at the full staff rate: an owner drawing from the LLC carries the SE tax (15.3% on 92.35% of the draw, which makes a draw of <span class="mono">cash × 1.0755</span> the equal of a wage of <span class="mono">cash</span> — so the employer FICA half, 7.65%, is the right uplift), and buys their own benefits, but <b>unemployment insurance and workers' comp cover employees, not the member-owner</b>. So the owner's hour is take-home + FICA + benefits: <span class="mono">$21.03 × 1.0765 = $22.64</span> at MIT living, against the $23.21 the same hour costs as staff. That is <span class="mono">40 × 52 × $22.64 ≈ $47.1K</span>. It moves with the Wages lever, and that coupling is the point: an owner who pays the $16.55 market floor is pricing their own year at $34K, not $47K. But a living wage on its own is not a bar — it says nothing about the money. Both tiers below start from it and add a return.</p>
+        <p><b>1 — Living wage &amp; zero opportunity cost.</b> The wage plus <b>10%</b> on the capital at risk: what that cash would earn sitting passively somewhere else. Clear this and the owner is no worse off than they'd be taking a job and leaving the money in the market — the venture has cost them nothing but risk. Capital at risk is its own lever, defaulted to the midpoint of the plan's grant-free cash-to-open range ($180–300K). At $240K the bar is <span class="mono">$47.1K + $24K = $71.1K</span>.</p>
+        <p><b>2 — The economic band.</b> The wage plus <b>20% or more</b> — the risk-adjusted rate a buyer of an illiquid, single-operator small business would demand. This is where the venture earns genuine economic profit rather than merely breaking even against the alternatives. At $240K it opens at <span class="mono">$95.1K</span>. On the SBLP-buy path the ~$10K/yr of principal paydown counts toward the return side, so both tiers are tested against draw + equity build.</p>
         <p><b>Where the tiers land on this model.</b> The gate-clearing case (~110 walk-ins/day at ~55% utilization) reaches ~$30K+, and the wage alone would take roughly ~10 more walk-ins/day on top of that. The <i>bar</i> — wage plus zero opportunity cost — needs about ~23 more walk-ins/day than the gate case, or ~10 more filled weekly sessions, which puts it past the café's top decile and above the room evidence ceiling. The economic band opens at the top of the plan's own "Strong" scenario ($85–95K). Read plainly: on the plan's own numbers this venture pays its owner a living wage long before it pays for the capital, and the derived gates say so in red.</p>
         <h3>The gates are outputs, not fixtures</h3>
         <p>The $0 line is fixed by arithmetic, and the bar by the Wages rung plus the capital lever, but <i>where they fall on the grid</i> depends on every lever outside the two engines — pay market wages and the break-even roster shrinks (and the bar drops with it); take the SN/HT floor and it shrinks again while the café mark weakens. The "derived gates" strip computes, from the current site, deal, and constraint settings: the utilization and club roster needed for $0 and for the bar at the site's café mark, the walk-in count needed at gate-case rooms (55%), and the G2 cash test. A gate shown in red is one that current settings push outside the evidence region (or the cash cap) — meaning those settings demand proof the pilot can't currently supply.</p>
@@ -431,10 +431,13 @@
         <h3>Two different “bail” lines — one static, one derived</h3>
         <p>The plan has two stop rules that are easy to conflate. The <b>lean stop at 70 walk-ins/day</b> is a <i>pre-signature evidence rule</i> (risk 1): if counts come in under 70 post-haircut in both markets, no lease gets signed. It is deliberately static and absolute — it is a precommitment about what evidence justifies risking capital at all, not a statement about operating survival. The <b>bail line</b> is the operating question — how deep a loss the funded venture can sustain — and that is <i>not</i> static: it is the reserve spread over the decision horizon, <span class="mono">−(venture cash − net build-out + abatement relief) × 12 / runway</span>. Every capital lever moves it: harder TI negotiation deepens it, a build-out overrun shallows it. Cells red-ringed in the matrix burn the reserve before the verdict date — losses there don't buy information, they just end the venture. At plan defaults ($150K − $85K = $65K reserve over 24 months) the line sits at ≈ <b>−$32K/yr</b>: which is exactly why §6 calls the Lean scenario (−$65 to −$95K) “not survivable” while the base case (−$13K) is a slow bleed the reserve can carry past an honest verdict (~5 years of runway).</p>
         <h3>What changed across versions, and what deliberately didn't</h3>
-        <p><b>Adopted:</b> catering endogenous to the rooms engine; wages ordinal; site-relative café columns and re-anchored defaults; derived gates; the capital/concessions submodel; club churn reclassified into the market hypothesis (it is a claim about group retention behavior — the pilot measures it — not a property of the site or deal); room count fixed at 3 (a 4th room without footprint cost was a free-lunch lever); the $30K partial-income floor retired in favor of two economic-profit tiers — a living wage at zero opportunity cost, then the economic band at a risk-adjusted return — with capital at risk as a lever; wage rungs re-priced bottom-up from take-home + payroll + benefits, with MIT living as both the default and the rung the others are compared against, and D6 renamed <i>Living+</i>.</p>
+        <p><b>Adopted:</b> catering endogenous to the rooms engine; wages ordinal; site-relative café columns and re-anchored defaults; derived gates; the capital/concessions submodel; club churn reclassified into the market hypothesis (it is a claim about group retention behavior — the pilot measures it — not a property of the site or deal); room count fixed at 3 (a 4th room without footprint cost was a free-lunch lever); the $30K partial-income floor retired in favor of two economic-profit tiers — a living wage at zero opportunity cost, then the economic band at a risk-adjusted return — with capital at risk as a lever; wage rungs re-priced bottom-up from take-home + payroll + benefits, with MIT living as both the default and the rung the others are compared against, and D6 renamed <i>Living+</i>; the owner's wage-equivalent separated from the staff rate, carrying FICA and benefits but not the unemployment and workers'-comp lines that cover employees only.</p>
         <p><b>Considered and declined, to keep descriptive power without false precision:</b> (1) a price–utilization demand curve — the only elasticity evidence is the analog's near-sellout at $5–10/hr, one point; inventing a curve would launder a guess into a surface, so price and utilization stay independent with the evidence region shaded instead — the Phase 0.5 graduation ask is precisely the experiment that buys this curve. (2) Revenue-variable operations (~5% card fees + marketing) — it bends each marginal by ≲10% and would break cell-for-cell comparability with the published matrix; the plan's own §6 marginals ($4.4K / $1.8K) are kept. (3) Seasonality — the plan handles it as a 20–25% haircut on counts before they enter, not as a model term.</p>
+        <h3>Why the default reads −$14K where §6 published −$13K</h3>
+        <p>The site basis is not measured, it is <b>back-solved</b>: it is whatever number makes the model return §6's published owner comp at plan marks. That solve holds §6's own two commitment lines fixed — <span class="mono">$120K</span> of labor and <span class="mono">$6K</span> of commons — rather than reading the current lever settings. It has to: if the basis moved with the Wages lever, the two would cancel and the lever would do nothing. So the basis is a constant per site (<span class="mono">$107K</span> in Little Italy, <span class="mono">$93K</span> in SN/HT) and every lever is measured against it.</p>
+        <p>That is the whole of the $1K. The default rung prices the same ~5,200-hour grid at <span class="mono">$121.1K</span> instead of §6's <span class="mono">$120K</span>, and <span class="mono">−13 − 1.1 = −14.1</span>. Nothing is counted twice and nothing is missing — the published base case assumed a living wage that cost $120K, and a properly loaded one costs $1.1K more. Select <b>Living+</b> and the same arithmetic takes it to <span class="mono">−$22K</span>; select <b>Market</b> and to <span class="mono">+$21K</span>. Each rung's own hint states that delta before you move.</p>
         <h3>Model</h3>
-        <p><span class="mono">comp = sessions×(price×52×0.94) + walk-ins×(ticket×360×0.61) + catering margin − labor − commons − site basis</span>, with each site's basis calibrated on the plan's own $120K labor line so plan marks reproduce §6 exactly (the default MIT living rung prices that same grid at ~$121K, so the default view reads ~$1K under the published base) (LI −$13K at 33%·100tx; SN/HT −$35K at 33%·80tx) and every cell of the Aug 28 matrix lands within its rounding (±$2K). Utilization includes one-off events (~1.3 weekly-eq at 5–6/mo); club figures are net of them. Day-room and print lines sit inside the site basis. Figures are planning-grade — the G1 dual gate replaces assumptions with evidence.</p>
+        <p><span class="mono">comp = sessions×(price×52×0.94) + walk-ins×(ticket×360×0.61) + catering margin − labor − commons − site basis</span>, with each site's basis calibrated so plan marks reproduce §6 exactly (LI −$13K at 33%·100tx; SN/HT −$35K at 33%·80tx) and every cell of the Aug 28 matrix lands within its rounding (±$2K). Utilization includes one-off events (~1.3 weekly-eq at 5–6/mo); club figures are net of them. Day-room and print lines sit inside the site basis. Figures are planning-grade — the G1 dual gate replaces assumptions with evidence.</p>
       </div>
     </section>
   </div>
@@ -448,7 +451,8 @@
   var CAPACITY = 25;                 // session-slots/wk (3 rooms — the matrix's fixed basis)
   var ROOM_MARGIN = 0.94, CAFE_MARGIN = 0.606;
   var CATER_ORDER = 70, CATER_MARGIN = 0.6;   // $/pre-order, margin (≈$6K rev / $3.7K margin at plan marks)
-  var PLAN = {price:90, ticket:8.25, util:33, tx:{li:100,sn:80}, caClub:15, caEvent:50, events:5.5, commons:6, wage:3};
+  var PLAN_LABOR_K = 120;            // §6’s labor line ($K/yr) — the basis calibration holds it fixed
+  var PLAN = {price:90, ticket:8.25, util:33, tx:{li:100,sn:80}, caClub:15, caEvent:50, events:5.5, commons:6, rate:23};
   var SITES = {
     li:{label:'Little Italy', base:-13, mark:100, occ:78, hint:'~2,500 sf @ $22 NNN · occupancy $78K · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
     sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, hint:'~3,000 sf @ $16 · occupancy $64K · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
@@ -460,8 +464,10 @@
   };
   // wage rungs, priced bottom-up: cash wage + employer payroll load + employer-paid benefits.
   // rate (= total comp/hr) is derived from the parts, so the breakdown shown in the rail is the model.
-  var PAYROLL_LOAD = 0.1035;   // employer: FICA 7.65% + FUTA/MD UI ~0.7% (capped bases) + workers’ comp ~2.0%
-  var FTE_HRS = 2080;          // a full-time year — the basis for the per-worker annual column
+  var FICA = 0.0765;                       // Social Security + Medicare, employer half
+  var UI_WC = 0.0270;                      // FUTA + MD unemployment (capped bases) ~0.7% + workers’ comp ~2.0%
+  var PAYROLL_LOAD = FICA + UI_WC;         // 10.35% — the full employer load on a staff hour
+  var FTE_HRS = 2080;                      // a full-time year — the basis for the per-worker annual column
   var WAGES = [
     {label:'Market', cash:15.00, ben:0,
      desc:'MD minimum $15.00/hr cash, tips economy, no employer benefits.'},
@@ -507,17 +513,30 @@
     var orders = clubSess*(caClub/100) + Math.min(evEq, sess)*(caEvent/100);
     return orders * CATER_ORDER * 52 * CATER_MARGIN / 1000;
   }
-  // site basis R: calibrated so PLAN marks reproduce §6 base cases exactly
+  // Site basis R (occupancy + operations, net of the day-room and print lines): back-solved so
+  // that at PLAN marks — including §6’s own $120K labor line and $6K commons, NOT the current
+  // lever settings — comp equals the published base case. Holding labor and commons fixed here
+  // is what makes them levers: were they read from S, moving one would move the basis with it
+  // and cancel out.
   function siteR(site){
     var contrib = (PLAN.util/100)*CAPACITY*msess(PLAN.price)
       + SITES[site].mark*mtx(PLAN.ticket)
       + cateringK(PLAN.util, PLAN.caClub, PLAN.caEvent, PLAN.events);
-    return contrib - (120 + PLAN.commons) - SITES[site].base;
+    return contrib - (PLAN_LABOR_K + PLAN.commons) - SITES[site].base;
   }
-  var GRID_K_PER_RATE = 120/23;   // the plan’s $120K labor line ÷ its $23/hr — i.e. ~5,200 staffed hr/yr
-  function laborK(){ return GRID_K_PER_RATE * WAGES[S.wage].rate; }
+  // Labor is hours × rate. The hours are the plan’s own: its $120K line at its $23/hr is
+  // ~5,217 staffed hr/yr (~100/wk), already net of the owner’s ~30 floor hours (D5/D6), so
+  // the owner’s bar below double-counts nothing. The rung sets the rate; the grid is fixed.
+  var STAFF_HRS = PLAN_LABOR_K * 1000 / PLAN.rate;
+  function laborK(){ return STAFF_HRS * WAGES[S.wage].rate / 1000; }
   // ---- the owner’s bar: living wage, then a return on the capital at risk ----
-  function livingK(){ return OWNER_HRS * 52 * WAGES[S.wage].rate / 1000; }
+  // The owner’s hour is not a staff hour. An owner-operator drawing from the LLC carries the
+  // SE tax — 15.3% on 92.35% of the draw, which makes a draw of cash × 1.0755 the equal of a
+  // wage of cash, so the employer FICA half is the right uplift — but unemployment insurance
+  // and workers’ comp cover employees, not the member-owner. Benefits stay in: the owner buys
+  // their own. Pricing the owner’s year at the full staff rate would overstate the bar.
+  function ownerRate(){ var w = WAGES[S.wage]; return w.cash*(1+FICA) + w.ben; }
+  function livingK(){ return OWNER_HRS * 52 * ownerRate() / 1000; }
   function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
   function bandLoK(){ return livingK() + RET_LO*S.equity; }
   function bandHiK(){ return livingK() + RET_HI*S.equity; }
@@ -585,7 +604,7 @@
       return;
     }
     var dRate = w.rate - base.rate;
-    var dLab  = dRate * GRID_K_PER_RATE;      // $K on the shop\u2019s labor line \u2014 straight out of owner comp
+    var dLab  = dRate * STAFF_HRS / 1000;     // $K on the shop’s labor line — straight out of owner comp
     el('wagecmp').innerHTML = 'vs MIT living: total comp <b>' + sgn(dRate) + perHr(Math.abs(dRate)) + '</b>/hr, ' +
       '<b>' + sgn(dRate) + perYr(Math.abs(dRate)) + '</b>/yr per worker \u00b7 labor ' + sgn(dLab) + '$' + Math.abs(dLab).toFixed(1) +
       'K, so owner comp <b>' + sgn(-dLab) + '$' + Math.abs(dLab).toFixed(1) + 'K</b>.';
@@ -639,8 +658,8 @@
     el('out-equity').textContent = '$' + S.equity + 'K';
     el('equity-hint').textContent = 'Equity exposed to the venture. Default is the midpoint of the plan’s grant-free cash-to-open range ($' +
       EQUITY_RANGE[0] + '–' + EQUITY_RANGE[1] + 'K). On the buy path this is the 10% contribution + closing + FF&E.';
-    el('bar-hint').innerHTML = 'Living wage <b>' + fmtK(lw,false) + '</b> = 40 hr × 52 × $' + WAGES[S.wage].rate.toFixed(2) +
-      '/hr total comp (the Wages rung above). <b>' + fmtK(bLo,false) + '</b> adds ' + Math.round(RET_LO*100) +
+    el('bar-hint').innerHTML = 'Living wage <b>' + fmtK(lw,false) + '</b> = 40 hr × 52 × $' + ownerRate().toFixed(2) +
+      '/hr — the Wages rung’s take-home and benefits, plus the SE-tax half the owner pays on the draw (no UI or workers’ comp: those cover employees). <b>' + fmtK(bLo,false) + '</b> adds ' + Math.round(RET_LO*100) +
       '% on $' + S.equity + 'K at risk — a living wage at zero opportunity cost. <b>' + fmtK(bHi,false) +
       '+</b> adds ' + Math.round(RET_HI*100) + '% or more — the economic band.';
 
