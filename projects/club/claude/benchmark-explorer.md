@@ -32,3 +32,32 @@ Aug 28, 2026 — consistency audit of the whole model, prompted by the re-pricin
 - **The owner's wage-equivalent is no longer the staff rate.** An owner drawing from the LLC carries the SE tax — 15.3% on 92.35% of the draw makes a draw of `cash × 1.0755` the equal of a wage of `cash`, so the employer FICA half is the right uplift — and buys their own benefits, but unemployment insurance and workers' comp cover employees, not the member-owner. Pricing the owner's year at the full staff rate over-counted those two lines. At the default the owner's hour is $22.64 rather than $23.21, so the living wage reads $47.1K and the bar $71.1K.
 
 Verified by driving the page headlessly against an independent re-derivation of the model from the plan's constants: 30 lever combinations plus the §6 calibration at both sites, and the invariants — the breakdown rows reproduce every part and sum to the net; the sidebar sums match; both bars match; the stated marginals ($1.80K per walk-in/day, $4.4K per filled weekly session) are the actual marginals; catering can never attach to more sessions than exist; a matrix cell equals the readout at the same point; and the eight levers that must not touch owner comp (churn, build-out, TI, abatement, grants, venture cash, runway, capital at risk) do not. All pass.
+
+Aug 28, 2026 — the back-solved site basis is retired. It didn't survive a sniff test: it read $107K where §6's occupancy + operations for Little Italy is $143K. The $36K gap was two things the label never said — the day-room and print lines the tool didn't model (~$14K of contribution), and a **$22K café-margin error**. The old 60.6% margin was reverse-engineered from the plan's stated marginal ($8.25 × 360 × 0.606 = $1,800/walk-in/day) and then used to compute a *level*; a marginal rate is not an average rate, and the gap went into the plug.
+
+Both of the plan's numbers turn out to be right. §6's $104K COGS on a $297K café is a 32% cost of sale — a **68% gross contribution margin**. The $1.8K marginal is **net** of the operating costs that ride on revenue. Break those out and they reconcile: 8.25 × 360 × (68% − 5.1%) = $1.87K.
+
+So the model is now a line per §5/§6 quantity, with no catch-all:
+
+| Little Italy at plan marks | |
+| --- | --- |
+| Café — walk-ins ($297K × 68%) | +$202K |
+| Café — catering attach (60%) | +$4K |
+| Rooms — evenings (94%) | +$36K |
+| Rooms — day (94%) + prints (40%) | +$14K |
+| Card fees & marketing (5.1% of $360K) | −$18K |
+| Operations — fixed | −$47K |
+| Occupancy | −$78K |
+| Labor (the Wages rung) | −$121K |
+| Commons / books | −$6K |
+| **Owner compensation** | **−$14K** |
+
+- **The café contribution margin is now a market-hypothesis lever**, defaulted to 68%.
+- **The operations split is derived, not assumed.** §6 gives one operations figure per site ($65K LI / $62K SN). They differ in revenue and nothing else, so the pair solves for a revenue-proportional part (5.1% — card fees ~3% + marketing ~2.5%, the bottom-up lines §6 names) and a fixed base ($46.8K). The check: the fixed base is solved from Little Italy and lands on SN/HT **to the decimal**. That is what says the split is real rather than fitted.
+- Gross revenue across the five streams comes to $360K, §5's total. With labor held at §6's $120K the model returns −$12.9K in Little Italy against a published −$13K — it reproduces the base case without being told the answer.
+
+Two residues worth knowing: SN/HT comes out −$36.9K against §6's printed −$35K, but §6's own SN/HT column arithmetic (301 − 85 − 120 − 62 − 6 − 64) is −$36K, so the printed figure is a slip and the remaining ~$1K is that column's rounding; Little Italy ties exactly. And the plan's $4.4K per filled weekly session is gross — net of card fees and marketing it is $4.2K, which is what reaches owner comp.
+
+Revenue-variable operations had been *declined* in an earlier version on cell-for-cell comparability grounds. That is reversed: reconciling the plan with itself is worth more than comparability with a matrix built on the error.
+
+Re-verified against the independent re-derivation: 34 lever combinations (including the new margin lever), the §6 reproduction at both sites, and all the invariants. All pass.
