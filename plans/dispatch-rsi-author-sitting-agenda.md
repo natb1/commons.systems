@@ -583,22 +583,60 @@ rulings were on record.
 
 ## Owed after the sitting — writes the rulings imply
 
-None of these were executed by the sitting; each is a follow-on write.
+~~None of these were executed by the sitting; each is a follow-on write.~~
+
+**Status 2026-08-28 — all but one are now executed.** The sitting itself
+executed none of them; they were landed afterwards, in the same session, and
+each entry below records its landing commit. What remains owed:
+
+- **The `/align` round against `strategy-graph-native-dispatch` (A2)** — the
+  only outstanding graph write. Deliberately not run here: it is an author
+  interview round, not a mechanical amendment, and it needs a paired
+  `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change that `graph-commit` cannot
+  carry.
+- **D1's prune of `tactic-align-audit-legacy-review`** — re-authorized by the
+  ruling but never authorized *for this session* to execute, so it was not.
+  Note that its doc residue is now handled independently
+  (`tactic-retire-assessor-contract-docs`, `447fc27d`), so the prune no longer
+  strands the three citing sites once that tactic ships.
+- **`strategy-exercise-recovery-paths`'s threshold** — reclassified: it is not a
+  standalone graph edit at all, it is part of PR16 Unit 5. See its entry.
 
 **Graph edits**
 
-- `strategy-rsi-delegated-prioritization` — amend `success_signal` (b) per A1:
-  drop the structurally-zero cross-strategy inversion count, replace it with
-  model attention writes onto a **strategy's own** `attention` block, and retain
-  the existing no-`priority_log`-entry count. Both counts land on
-  `tactic-priority-provenance-schema`'s lint, which is unbuilt (`status: raw`,
-  `phase: null`).
-- `tactic-finding-search-all-producers` — amend to match B1. Its "Two sub-points
-  the author did not rule on" section is now stale and would mislead PR19's
-  implementer; item 4 needs the expiry-event requirement recorded.
-- `tradition-agentic-engineering` — amend `attributes.adopted` to the
-  three-idioms-plus-convergence wording per B3 item (1), and stamp
-  `last_assessed: 2026-08-28`.
+- ~~`strategy-rsi-delegated-prioritization` — amend `success_signal` (b) per
+  A1~~ **DONE 2026-08-28 — `bdfe72bc`.** Dropped the structurally-zero
+  cross-strategy inversion count, replaced it with model attention writes onto a
+  **strategy's own** `attention` block, and retained the existing
+  no-`priority_log`-entry count. The `threshold`'s "both counts in (b) stay at
+  zero" needed no change — still two counts, both expected zero. A body section
+  ("Why (b) measures the writable surface") records why the old count could
+  never fire: band derives from *resolved* rank, which the model cannot write,
+  so no model write can produce a cross-strategy inversion against it. Both
+  counts still land on `tactic-priority-provenance-schema`'s lint, which remains
+  unbuilt (`status: raw`, `phase: null`) — this corrects what will be measured,
+  not whether it is measured.
+- ~~`tactic-finding-search-all-producers` — amend to match B1~~ **DONE
+  2026-08-28 — `bdfe72bc`.** The "Two sub-points the author did not rule on"
+  section is retitled "Two sub-points — RULED 2026-08-28" and carries both
+  rulings: sub-point ONE **amended** (the edge-without-park behavior stands, but
+  the edge must now **name its expiry event** — normally the in-flight PR's
+  merge or closure — because clarification 26 permits the interim-live-risk
+  exception only when an expiry is named, and none was), and sub-point TWO
+  **ratified** with the per-unit drop's carrier stated explicitly (the node's own
+  unit list, not the edge and not a park — "parks nothing" alone read as
+  "records nothing"). The section also now says PR19 Unit 1 must encode the
+  ruled form, not the original wording.
+- ~~`tradition-agentic-engineering` — amend `attributes.adopted`~~ **DONE
+  2026-08-28 — `bdfe72bc`.** Three idioms recorded as genuine external
+  deference: skill/hook composition, subagent composition, verification-first
+  workflows. Context engineering is explicitly **excluded** and recorded as
+  convergence rather than deference — load-bearing in substance, but arrived at
+  independently and expressed natively as `strategy-token-economy`, so listing
+  it as adopted would overstate what was borrowed and weaken the capture audit.
+  `last_assessed` stamped `2026-08-28`. The entry had to be **quoted** in YAML:
+  the ruled wording contains `: ` inside the scalar, which unquoted parses as a
+  mapping key and made the node unreadable.
 - A dedicated `/align` round against `strategy-graph-native-dispatch` per A2:
   child count and boundaries, the disposition of its ~30 conditions between the
   children and `strategy-explicit-intent`, and the lifecycle `success_signal`
