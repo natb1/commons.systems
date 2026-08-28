@@ -27,24 +27,7 @@ execution: null
 validates:
   - strategy-recursive-self-improvement
 blocked_by: []
-office_hours:
-  reason: "Born-parked mode-A review sitting (see
-    tactic-tradition-reading-program's shared chunk reason, verify-record
-    variant, adapted: the texts are ongoing feeds, not fixed passages). Not
-    claude-executable — the sitting exists for the author to verify delegated
-    content personally. At office-hours: (1) test the already-load-bearing claim
-    — walk where harness design actually defers to agentic-engineering idiom;
-    (2) verify or amend the record's initial adopted and diverged entries
-    against a sample of the seed texts; (3) re-ratify or prune the seed list
-    (attributes.texts) and disposition any candidate seeds the /rsi-research
-    readings have proposed; (4) run the capture check — can the graph still
-    state its harness commitments in non-agentic-engineering terms, and is the
-    self-curation bias mitigation holding; (5) stamp last_assessed."
-  since: 2026-08-10
-  recommendation: Run after the first two or three /rsi-research cycles have
-    landed readings, so the sitting reviews the lane's real output alongside the
-    record; ~30 author-minutes.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
