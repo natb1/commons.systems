@@ -73,8 +73,8 @@ concurrently landed write being clobbered.
 > | B3 | **Split** — trust half sat, lane half deferred. Its precondition was *circular* | `c78f8cd3` |
 > | C1 | **(2) then (1)**, and (2) must be **FATAL**, not a stderr warning | `37e321ca` |
 > | C2 | Rule **still governs** — port it, then delete. The threshold is currently unsatisfiable | *(plan)* |
-> | C3 | **Both (a) and (b)** in PR17 Unit 4 — they fix different halves of the loop | *(plan)* |
-> | C4 | **Ordinary branch only**; record the delete/modify residue | *(plan)* |
+> | C3 | **Both (a) and (b)** in **PR18** Unit 4 — they fix different halves of the loop | *(plan)* |
+> | C4 | **Ordinary branch only**; record the delete/modify residue (**PR18** Unit 5) | *(plan)* |
 >
 > **Three corrections this sitting made to the text below.**
 >
@@ -95,6 +95,14 @@ concurrently landed write being clobbered.
 >    not exist; it is built by **PR14 Unit 3**, in the same position (8) that B3
 >    gates. Waiting for its cycles would block position 8 on output from a lane
 >    position 8 builds.
+> 4. **C3 and C4 are `PR18` Units 4 and 5, not `PR17`'s** — and therefore they
+>    gate **position 1**, not position 11. PR17's Unit 4 is "cap the alert rows"
+>    and its Unit 5 is "stop leaking scratch refs"; neither is related. PR18's own
+>    "Nodes closed (5)" list contains both `tactic-fleet-alarm-node-park-clobber-loop`
+>    and `tactic-graph-commit-park-content-durability`. So position 1 was **not**
+>    gate-free as the sequence table claimed — it carried two ungated author
+>    rulings, both of which this sitting made. **Seven** of the thirteen positions
+>    carried an author gate, not six: 1, 2, 6, 7, 8, 9 — and not 11.
 >
 > Owed follow-on writes are listed at the end of this Part under
 > "Owed after the sitting".
@@ -131,7 +139,7 @@ sets, and the gap between them is where work has been going missing:
 Three concrete divergences, each verified:
 
 1. **Three author rulings appear in neither table.** They are recorded only in
-   the PR plan's unit prose — PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5 — and are
+   the PR plan's unit prose — PR16 Unit 5, PR18 Unit 4 and PR18 Unit 5 — and are
    invisible to both indexes. A fourth of the same shape, PR16 Unit 10, at least
    reached the PR plan's table. All four are Group C below.
 2. **The PR plan names a sitting that does not exist.** At two places
@@ -401,7 +409,7 @@ and delete the dead function. If no, record that and delete. Deleting without
 deciding silently drops the rule — which is the exact failure the unit exists to
 prevent. There is no default here; this one genuinely needs an answer.
 
-### C3 · Fleet-alarm frozen-tactic clobber — blocks PR17 Unit 4 *(no node)*
+### C3 · Fleet-alarm frozen-tactic clobber — blocks **PR18** Unit 4 *(has a node; parked)*
 
 A `tactic-fleet-alarm-<kind>` node is minted, parked, and clobbered by the next
 mint — observed ~14 times on one node, 14 ending in a frozen worker rather than a
@@ -415,7 +423,7 @@ clean disposition. Two shapes:
 **On record: (a) is the fix, (b) is optional hardening.** Record the choice on
 the node.
 
-### C4 · Park content, delete/modify branch — shapes PR17 Unit 5 *(no node)*
+### C4 · Park content, delete/modify branch — shapes **PR18** Unit 5 *(has nodes; parked)*
 
 A park must carry the losing writer's content, not a pointer to it —
 `park_write()` preserves content by pointing at `SNAP_DIR`, a bare `mktemp -d`,
@@ -632,7 +640,7 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 |---|---|---|---|---|---|
 | ✅ | 1 · graph read/write path | PR1 | 8 | — | **SHIPPED `fe0b1c4d`** (#3095) |
 | **0** | 0 · retire the in-flight overhang | *no new PRs* | +13 | — | **IN PROGRESS** — clears the drafts every later bundle would conflict with |
-| **1** | 1c · durable-layer write fence | PR18 | 5 | — | HOT. The fence ~100 remaining node closures write through |
+| **1** | 1c · durable-layer write fence | PR18 | 5 | **C3**, **C4** *(both ruled 2026-08-28)* | HOT. The fence ~100 remaining node closures write through |
 | **2** | 1b · graph plumbing | PR15 + PR16 | 15 | **C1**, **C2**; PR15 carries a conditional hold | HOT. The closure toolchain itself |
 | **3** | 2a · record-time main-qa routing | PR5a | 1 | — | Must precede Bundle 2 |
 | **4** | 2 · tick-path reconcilers and sweeps | PR5 + PR9 U2,U6 + PR2 U6 | 10 | — | HOT. Runs on every tick, paused or not |
@@ -642,12 +650,14 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 | **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | **A1** (PR10), **B3** (PR11) | COLD. Needs PR2 + PR3 + PR4 |
 | **9** | 5b · `/align` charter + adversarial review | PR20 | 8 | **D1** | **Must** precede the rename |
 | **10** | 6 · skill rename | PR13 | 1 | — | Last, alone. Renames every path PR20 writes |
-| **11** | 7 · merge queue + scan cadence | PR17 | 6 | **C3**, **C4** | COLD. Must be in place *before* the resumption |
+| **11** | 7 · merge queue + scan cadence | PR17 | 6 | — *(was listed as C3, C4 — wrong; those are PR18's)* | COLD. Must be in place *before* the resumption |
 | **12** | 8 · the four deferred A3 drafts | #3093 → #2856 → #3040 → #3037 | 4 | — | Last. Bulk node-content rewrites invalidate every `--base` CAS manifest |
 | — | *staged resumption* | — | — | — | Sentinel off at `max_concurrent_workers: 1`, one node through the full ladder |
 | — | *deferred outright* | PR8 U3 | 1 | — | Rewrites the freeze mechanism; only during an attended un-pause |
 
-**Six of the thirteen positions carry an author gate** — 2, 6, 7, 8, 9 and 11 —
+**Seven of the thirteen positions carry an author gate** — 1, 2, 6, 7, 8, 9 —
+*(corrected 2026-08-28: position 1 carries C3 and C4, which were mis-filed under
+position 11's PR17; PR17 itself has no author gate)* —
 and every one of those gates is in Part I, so a single sitting unblocks the
 whole sequence. That is the argument for holding the sitting before position 1
 rather than at each gate as it is reached.
@@ -691,7 +701,14 @@ cleared when PR1's nodes closed, so it is ready and nothing else is. By
 argument, it is the fence that decides what an **autonomous** writer may do to
 durable node content — and roughly a hundred node closures still run through
 that fence. It sits ahead of Bundle 1b because it carries no ref-split exposure
-and PR15 does. **No author gate.**
+and PR15 does.
+
+**Gates: C3** (fleet-alarm frozen-tactic clobber, **Unit 4**) and **C4** (park
+content durability, **Unit 5**) — *both ruled 2026-08-28*. This position was
+listed as ungated because C3 and C4 were mis-filed under PR17. PR18's own "Nodes
+closed (5)" list contains `tactic-fleet-alarm-node-park-clobber-loop` and
+`tactic-graph-commit-park-content-durability`, which are exactly C3's and C4's
+nodes. Those two parks are **still set** — clear them before or during this PR.
 
 ### Position 2 · Bundle 1b — PR15 + PR16, the graph plumbing
 
@@ -840,9 +857,12 @@ must be in place before the staged resumption — otherwise that resumption
 measures an unbounded scan cadence and a silent merge veto instead of measuring
 the fleet.
 
-**Gates: C3** (fleet-alarm frozen-tactic clobber, Unit 4) and **C4** (park
-content, delete/modify branch, Unit 5). Neither has a node; both are recorded
-only in unit prose, which is why they went missing from both source documents.
+**No author gate.** *(Corrected 2026-08-28.)* This position was listed as gated
+on **C3** and **C4**, on the belief that they were PR17's Units 4 and 5. They are
+not: PR17's Unit 4 is "cap the alert rows" and its Unit 5 is "stop leaking
+scratch refs". C3 and C4 are **PR18** Units 4 and 5, so they gate **position 1**
+— see that position. Both were ruled 2026-08-28, and both *do* have parked nodes,
+contrary to the earlier "no node" claim.
 
 ### Position 12 · Bundle 8 — the four deferred A3 drafts
 

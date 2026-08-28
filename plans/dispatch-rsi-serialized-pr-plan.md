@@ -1731,7 +1731,8 @@ prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
 > no diff"; that file indexes on "needs the author", which is a different set. It
 > groups the ten author-owed items into four topics for a single sitting, and it
 > picks up three rulings that live in unit prose and appear in **no** table —
-> PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5. It also separates the
+> PR16 Unit 5, PR18 Unit 4 and PR18 Unit 5 *(corrected 2026-08-28: the last two
+> were mis-filed under PR17)*. It also separates the
 > three rows below that are `/rsi-audit` measurement runs, not sittings, and so
 > cannot be resolved by an author at all. As of 2026-08-28 that file also
 > carries the full serial PR sequence, so it — not this table — is where a
