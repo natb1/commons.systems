@@ -56,6 +56,49 @@ concurrently landed write being clobbered.
 
 # Part I — Prerequisites
 
+> ## ✅ SITTING HELD 2026-08-28 — all ten items ruled, all seven parks cleared
+>
+> Every Part I item below is discharged. The seven parked nodes were cleared
+> with `clear-park`, each carrying its full disposition, and all seven verify
+> `office_hours: null` on `origin/main`. **Six of the thirteen Part II positions
+> that carried an author gate — 2, 6, 7, 8, 9 and 11 — are unblocked.**
+>
+> | item | ruling | landed |
+> |---|---|---|
+> | A1 | (1) ratified on the code's ground; (2) recorded **superseded** (the residual no longer exists — the key is `(tier, band, score, depth)`); (3) **amend** `success_signal` (b) to measure the writable surface | `61b88950` |
+> | A2 | **Split ruled in.** Re-serve of the 316 children **deferred past position 12** so it cannot invalidate the `--base` CAS manifests | `08447ab8` |
+> | A3 | Re-derived, not quoted: **136/316 = 43.04%** at sitting start against a 35% ceiling. Rising-monotonically limb withdrawn | *(folded into A2/D1)* |
+> | B1 | ONE **amended** — no park, but the edge must name its expiry event; TWO **ratified**, per-unit drop's carrier stated explicitly | `34f9ab31` |
+> | B2 | **flock ratified**, held by the child; its precondition repaired by `systemd-run --user` re-parenting. Sitting-first order stands | `699b4b26` |
+> | B3 | **Split** — trust half sat, lane half deferred. Its precondition was *circular* | `c78f8cd3` |
+> | C1 | **(2) then (1)**, and (2) must be **FATAL**, not a stderr warning | `37e321ca` |
+> | C2 | Rule **still governs** — port it, then delete. The threshold is currently unsatisfiable | *(plan)* |
+> | C3 | **Both (a) and (b)** in PR17 Unit 4 — they fix different halves of the loop | *(plan)* |
+> | C4 | **Ordinary branch only**; record the delete/modify residue | *(plan)* |
+>
+> **Three corrections this sitting made to the text below.**
+>
+> 1. **"Only C1 has a node and a park — C2, C3 and C4 have no node at all" is
+>    wrong.** Each has a *parked* node on `origin/main`:
+>    `tactic-orphaned-delegation-records-reading` (C2, parked 2026-08-20),
+>    `tactic-fleet-alarm-node-park-clobber-loop` (C3, parked 2026-08-04), and for
+>    C4 both `tactic-graph-commit-park-content-durability` (2026-08-21) and
+>    `tactic-graph-commit-delete-vs-edit-park-hardening` (2026-08-10). Their
+>    rulings are recorded in the PR plan, but **those four parks are still set** —
+>    a PR touching them will see one.
+> 2. **D1 was not bookkeeping.** Its park carries *two* rulings, and the first is
+>    the strategy-wide band disposition. It was ruled **(c) accept the breach with
+>    remediation**, keeping the 35% target and naming Part II itself as the drain
+>    plan. Its "blocks eleven nodes" figure is stale: **82** tactics serving
+>    `strategy-graph-native-dispatch` are parked today.
+> 3. **B3's recommendation could not be honored as written.** `/rsi-research` does
+>    not exist; it is built by **PR14 Unit 3**, in the same position (8) that B3
+>    gates. Waiting for its cycles would block position 8 on output from a lane
+>    position 8 builds.
+>
+> Owed follow-on writes are listed at the end of this Part under
+> "Owed after the sitting".
+
 Everything waiting on the author and nothing else, consolidated into one running
 order for a single sitting.
 
@@ -519,6 +562,55 @@ Group C's C2, C3 and C4 have no node and no park. Their rulings are recorded in
 the plan and carried into the implementing PR.
 
 ---
+
+## Owed after the sitting — writes the rulings imply
+
+None of these were executed by the sitting; each is a follow-on write.
+
+**Graph edits**
+
+- `strategy-rsi-delegated-prioritization` — amend `success_signal` (b) per A1:
+  drop the structurally-zero cross-strategy inversion count, replace it with
+  model attention writes onto a **strategy's own** `attention` block, and retain
+  the existing no-`priority_log`-entry count. Both counts land on
+  `tactic-priority-provenance-schema`'s lint, which is unbuilt (`status: raw`,
+  `phase: null`).
+- `tactic-finding-search-all-producers` — amend to match B1. Its "Two sub-points
+  the author did not rule on" section is now stale and would mislead PR19's
+  implementer; item 4 needs the expiry-event requirement recorded.
+- `tradition-agentic-engineering` — amend `attributes.adopted` to the
+  three-idioms-plus-convergence wording per B3 item (1), and stamp
+  `last_assessed: 2026-08-28`.
+- A dedicated `/align` round against `strategy-graph-native-dispatch` per A2:
+  child count and boundaries, the disposition of its ~30 conditions between the
+  children and `strategy-explicit-intent`, and the lifecycle `success_signal`
+  edit — which needs a paired `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change
+  `graph-commit` cannot carry.
+- **One new tactic serving `strategy-graph-integrity`** for D1's doc residue.
+  Mandatory regardless of the census withdrawal: `.claude/docs/delegability.md`
+  (11-12), `.claude/docs/signal-identification.md` (11-12) and
+  `.claude/skills/align-audit/SKILL.md` (332) all still frame the 2026-07-23
+  Decision 1 as *pending* and name `tactic-align-audit-legacy-review` as its
+  decider. Pruning that node without this fix leaves three sites pointing at a
+  node that no longer exists.
+
+**Parks still set** (C2/C3/C4's nodes — see correction 1 above).
+
+**Plan edits**
+
+- **PR6 Unit 1 is mis-scoped.** It reads "Establish real detachment (process
+  group / session leader)" — precisely the remedy
+  `tactic-eval-finding-detached-code-review-dies-with-launcher`'s *Corrected
+  diagnosis (2026-08-14)* falsified, since the script already runs `setsid`,
+  disowns, and hard-refuses to start without it. Re-scope to `systemd-run --user`
+  transient-unit re-parenting, keeping the interrupt verification as the
+  confirming step.
+
+**Rescue before reaping**
+
+- `.claude/worktrees/tactic-align-audit-legacy-review/intentions/tactic-retire-assessor-contract-docs.md`
+  — 10,509 bytes, on no branch, lost when that worktree is reaped.
+
 
 # Part II — The serial PR sequence
 
