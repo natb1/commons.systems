@@ -50,11 +50,19 @@ rounds: null
 attributes:
   origin: chosen
   adopted:
-    - agentic-engineering practice as the harness's design idiom
-      (skill/hook/subagent composition, context engineering, verification-first
-      workflows) → load-bearing across strategy-graph-native-dispatch and
-      strategy-recursive-self-improvement; delegated articulation pending the
-      first review sitting (tactic-review-tradition-agentic-engineering)
+    - "agentic-engineering practice as the harness's design idiom — THREE idioms
+      adopted as genuine external deference: skill/hook composition, subagent
+      composition, and verification-first workflows → load-bearing across
+      strategy-graph-native-dispatch and strategy-recursive-self-improvement.
+      Context engineering is deliberately NOT in this list: it is load-bearing
+      in substance, but it was arrived at independently and is expressed
+      natively as strategy-token-economy, so it is CONVERGENCE, not deference —
+      listing it as adopted would claim deference on an axis where the graph
+      uses its own vocabulary and its own strategy, and would weaken the capture
+      audit by overstating what was borrowed. Ratified 2026-08-28 (author
+      sitting, Part I item B3 sub-point 1), discharging the delegated
+      articulation that was pending the first review sitting
+      (tactic-review-tradition-agentic-engineering)"
   diverged:
     - "frontier-chasing / newsletter-driven development — refused: external
       findings are hypotheses tested against the harness's own telemetry, never
@@ -88,6 +96,6 @@ attributes:
     an adopted entry; the born-parked sitting
     tactic-review-tradition-agentic-engineering; a candidate-seed promotion
     request
-  last_assessed: 2026-08-10
+  last_assessed: 2026-08-28
 ---
 # Agentic engineering — the practitioner and research literature on building, verifying, and economizing AI-agent systems; the harness's design idiom made auditable
