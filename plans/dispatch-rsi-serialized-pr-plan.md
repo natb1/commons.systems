@@ -32,6 +32,15 @@ nodes are surveyed, documented and deliberately unassigned — see §"Coverage".
 
 ## How to use this document
 
+> **The index for this window is
+> `plans/dispatch-rsi-author-sitting-agenda.md`.** That file carries the
+> execution order — thirteen bundle positions with each one's author gate,
+> node count and hard dependencies — and the ten author-owed decisions that
+> gate them, in one running order. Read it to know *what to do next and what
+> is blocking it*. Read **this** document for the executable detail: every PR
+> section here is clean-session-executable and the agenda deliberately does
+> not restate it.
+
 The work is being **serialized** — other development is frozen — so this plan
 optimizes for **fewer, larger PRs** grouped by shared code surface rather than
 one PR per node.
@@ -1724,7 +1733,9 @@ prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
 > picks up three rulings that live in unit prose and appear in **no** table —
 > PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5. It also separates the
 > three rows below that are `/rsi-audit` measurement runs, not sittings, and so
-> cannot be resolved by an author at all.
+> cannot be resolved by an author at all. As of 2026-08-28 that file also
+> carries the full serial PR sequence, so it — not this table — is where a
+> gate's position in the execution order is recorded.
 
 | Run before | Node | Session prompt |
 |---|---|---|
