@@ -1,0 +1,747 @@
+<title>Albemarle Benchmark Explorer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#F3F4EE; --card:#FBFBF7; --card2:#EFF1E7;
+    --ink:#212820; --ink2:#59614F; --muted:#7E8672; --line:#D8DCCB; --line2:#C6CBB5;
+    --pos:#2F6B4E; --neg:#A8502F; --brass:#8A6D1F; --brass-soft:#B99A3E;
+    --sel:#212820; --hatch:rgba(33,40,32,.10);
+    --shadow:0 1px 2px rgba(33,40,32,.06), 0 8px 24px rgba(33,40,32,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#151813; --card:#1E221C; --card2:#252A22;
+      --ink:#E6E9DD; --ink2:#A6AE9B; --muted:#838B74; --line:#39402F; --line2:#485140;
+      --pos:#74C297; --neg:#E3906A; --brass:#D2AC55; --brass-soft:#A5863C;
+      --sel:#E6E9DD; --hatch:rgba(230,233,221,.10);
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#151813; --card:#1E221C; --card2:#252A22;
+    --ink:#E6E9DD; --ink2:#A6AE9B; --muted:#838B74; --line:#39402F; --line2:#485140;
+    --pos:#74C297; --neg:#E3906A; --brass:#D2AC55; --brass-soft:#A5863C;
+    --sel:#E6E9DD; --hatch:rgba(230,233,221,.10);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;
+    font-size:14.5px;line-height:1.55;margin:0;padding:0}
+  .wrap{max-width:1200px;margin:0 auto;padding:28px 20px 64px}
+  header.masthead{padding:10px 2px 22px;border-bottom:2px solid var(--ink);margin-bottom:26px}
+  .eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);font-weight:600}
+  h1{font-family:'Spectral',Georgia,serif;font-weight:600;font-size:clamp(26px,4vw,38px);
+    margin:6px 0 8px;line-height:1.12;text-wrap:balance}
+  .std{color:var(--ink2);max-width:64ch;margin:0}
+  .layout{display:grid;grid-template-columns:322px minmax(0,1fr);gap:24px;align-items:start}
+  @media (max-width:920px){.layout{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+  .card h2{font-family:'Spectral',Georgia,serif;font-weight:600;font-size:19px;margin:0 0 4px}
+  .card .sub{color:var(--ink2);font-size:13px;margin:0 0 14px}
+
+  /* ---------- lever rail ---------- */
+  .levers{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow-y:auto;
+    padding:16px 18px 14px;display:flex;flex-direction:column;gap:20px;scrollbar-width:thin}
+  @media (max-width:920px){.levers{position:static;max-height:none}}
+  .sect{display:flex;flex-direction:column;gap:14px}
+  .sect>.st{border-bottom:2px solid var(--ink);padding-bottom:5px}
+  .sect>.st .n{font-family:'Spectral',Georgia,serif;font-style:italic;font-size:13px;color:var(--muted);margin-right:6px}
+  .sect>.st .t{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);font-weight:600}
+  .sub-g{display:flex;flex-direction:column;gap:11px;border-left:2px solid var(--line);padding-left:12px}
+  .sub-g>.sgt{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .sub-g>.sgt .l{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .sub-g>.sgt .sum{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums}
+  .sum.p{color:var(--pos)} .sum.n{color:var(--neg)}
+  .lever{display:flex;flex-direction:column;gap:4px}
+  .lever .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .lever label{font-weight:500;font-size:13.5px}
+  .lever output{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .lever .hint{font-size:12px;color:var(--muted)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;margin:0;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--card);border:2.5px solid var(--ink);margin-top:-6px}
+  input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line2)}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--card);border:2.5px solid var(--ink)}
+  input[type=range]:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:4px}
+  .seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+  .seg button{flex:1;padding:7px 3px;font:inherit;font-size:12px;font-weight:500;background:transparent;
+    color:var(--ink2);border:0;cursor:pointer;border-left:1px solid var(--line)}
+  .seg button:first-child{border-left:0}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:600}
+  .seg button:disabled{opacity:.4;cursor:not-allowed}
+  .seg button:focus-visible{outline:2px solid var(--brass);outline-offset:-2px}
+  .resetbtn{align-self:flex-start;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink2);
+    background:transparent;border:1px solid var(--line2);border-radius:7px;padding:6px 12px;cursor:pointer}
+  .resetbtn:hover{color:var(--ink);border-color:var(--ink2)}
+
+  /* ---------- results ---------- */
+  .results{display:flex;flex-direction:column;gap:22px;min-width:0}
+  .readout{padding:20px 22px}
+  .readout .top{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:flex-end;justify-content:space-between}
+  .bignum{font-family:'IBM Plex Mono',monospace;font-size:clamp(38px,6vw,54px);font-weight:500;
+    line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .bignum.pos{color:var(--pos)} .bignum.neg{color:var(--neg)}
+  .bigcap{font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{font-size:12.5px;font-weight:500;padding:4px 11px;border-radius:99px;border:1px solid var(--line2);color:var(--ink2)}
+  .chip b{font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+  .chip.ok{border-color:var(--pos);color:var(--pos)} .chip.ok b{color:var(--pos)}
+  .chip.bad{border-color:var(--neg);color:var(--neg)} .chip.bad b{color:var(--neg)}
+  .chip.bar{border-color:var(--brass);color:var(--brass)} .chip.bar b{color:var(--brass)}
+  .closers{margin-top:12px;font-size:13px;color:var(--ink2)}
+  .closers b{font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+  .gateswrap{margin-top:16px}
+  .gcap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+  .pipe .step .n .u{font-size:12px;color:var(--ink2);font-weight:400;font-family:'IBM Plex Sans',system-ui,sans-serif}
+  .pipe .step.good .n{color:var(--pos)} .pipe .step.warn .n{color:var(--neg)}
+  .breakdown{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:7px}
+  .brow{display:grid;grid-template-columns:168px 1fr 74px;gap:12px;align-items:center;font-size:13px}
+  @media (max-width:560px){.brow{grid-template-columns:118px 1fr 70px}}
+  .brow .lab{color:var(--ink2)}
+  .brow .barwrap{height:12px;position:relative}
+  .brow .bar{position:absolute;top:0;bottom:0;border-radius:3px;min-width:2px;left:0}
+  .brow .bar.p{background:var(--pos)} .brow .bar.n{background:var(--neg)}
+  .brow .val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+  .brow.netrow{border-top:1px solid var(--line);padding-top:7px;font-weight:600}
+  .brow.netrow .lab{color:var(--ink)}
+
+  /* ---------- matrix ---------- */
+  .matrixcard{padding:20px 22px}
+  .mhead{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink2);cursor:pointer;user-select:none;white-space:nowrap}
+  .toggle input{accent-color:var(--pos);width:15px;height:15px;cursor:pointer}
+  .mscroll{overflow-x:auto;padding-bottom:4px}
+  table.matrix{border-collapse:separate;border-spacing:2px;min-width:640px;width:100%}
+  table.matrix th{font-weight:500;font-size:12px;color:var(--ink2);padding:3px 6px}
+  table.matrix th.coltx{text-align:center;vertical-align:bottom}
+  table.matrix th.coltx .tx{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+  table.matrix th.rowu{text-align:right;white-space:nowrap;padding-right:10px;vertical-align:middle}
+  table.matrix th .badge{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  table.matrix th .clubs{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
+  table.matrix th .util{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+  td.cell{position:relative;text-align:center;padding:9px 4px;border-radius:5px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;font-variant-numeric:tabular-nums;
+    color:var(--ink);border:1px solid transparent}
+  td.cell:hover{border-color:var(--ink2)}
+  td.cell:focus-visible{outline:2px solid var(--brass);outline-offset:-1px}
+  td.cell.barclear{box-shadow:inset 0 0 0 2px var(--brass)}
+  td.cell.bailz{box-shadow:inset 0 0 0 2px var(--neg)}
+  td.cell.sel::after{content:'';position:absolute;inset:-3px;border:2px solid var(--sel);border-radius:7px;pointer-events:none}
+  td.cell.lowev{background-image:repeating-linear-gradient(135deg,transparent 0 5px,var(--hatch) 5px 7px)}
+  .mlegend{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin-top:12px;font-size:12px;color:var(--ink2)}
+  .mlegend .sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid var(--line)}
+  .grad{display:inline-block;width:96px;height:12px;border-radius:3px;vertical-align:-2px;margin:0 6px;
+    background:linear-gradient(90deg,color-mix(in oklab,var(--neg) 55%,var(--card)),var(--card) 50%,color-mix(in oklab,var(--pos) 55%,var(--card)));border:1px solid var(--line)}
+  .mnote{font-size:12px;color:var(--muted);margin-top:10px;max-width:78ch}
+  #tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);
+    font-size:12px;line-height:1.45;padding:8px 11px;border-radius:7px;max-width:250px;display:none;box-shadow:var(--shadow)}
+  #tip b{font-family:'IBM Plex Mono',monospace;font-weight:500}
+
+  /* ---------- roster ---------- */
+  .rostercard{padding:20px 22px}
+  .pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:2px;margin-top:6px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .pipe .step{background:var(--card2);padding:12px 14px}
+  .pipe .step .n{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+  .pipe .step .l{font-size:12px;color:var(--ink2);margin-top:2px}
+  .weekline{margin-top:12px;font-size:13px;color:var(--ink2)}
+  .weekline b{color:var(--ink);font-weight:600}
+
+  /* ---------- notes ---------- */
+  .notes{padding:22px 24px}
+  .notes h3{font-family:'Spectral',Georgia,serif;font-size:16px;font-weight:600;margin:20px 0 6px}
+  .notes h3:first-of-type{margin-top:8px}
+  .notes p{margin:0 0 10px;max-width:76ch;color:var(--ink2);font-size:13.5px}
+  .notes p b{color:var(--ink)}
+  .notes .flag{border-left:3px solid var(--brass);padding:2px 0 2px 14px;margin:12px 0}
+  .notes table.mini{border-collapse:collapse;margin:10px 0 14px;font-size:12.5px}
+  .notes table.mini th,.notes table.mini td{border:1px solid var(--line);padding:5px 10px;text-align:right}
+  .notes table.mini th{color:var(--ink2);font-weight:500;text-align:left}
+  .notes table.mini td{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+  @media (prefers-reduced-motion: no-preference){
+    td.cell,.chip,.brow .bar{transition:background .18s ease,box-shadow .18s ease,width .18s ease}
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="eyebrow">Albemarle Tea &amp; Odd Prints · planning tool</div>
+    <h1>Albemarle Benchmark Explorer</h1>
+    <p class="std">Owner draw as a function of the two gated engines, with every assumption sorted by what kind of uncertainty it is: the market bet the pilot must verify, the site-and-deal terms, and the constraints the plan chose. The deal and constraint levers move the gates; the market levers try to clear them. Calibrated to business-plan v0.3.3 §5–6 and the Aug 28 benchmark matrix.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="levers card" aria-label="Levers">
+
+      <div class="sect">
+        <div class="st"><span class="n">i.</span><span class="t">Market hypothesis</span></div>
+
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Rooms engine (§1a)</span><span class="sum" id="sum-rooms"></span></div>
+          <div class="lever">
+            <div class="row"><label for="in-util">Evening utilization</label><output id="out-util"></output></div>
+            <input type="range" id="in-util" min="5" max="85" step="1">
+            <div class="hint" id="util-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-price">Avg session price</label><output id="out-price"></output></div>
+            <input type="range" id="in-price" min="60" max="150" step="5">
+            <div class="hint" id="price-hint"></div>
+          </div>
+          <div class="lever">
+            <label>Club cadence mix</label>
+            <div class="seg" role="group" aria-label="Cadence mix">
+              <button data-cad="weekly">All weekly</button>
+              <button data-cad="mixed" aria-pressed="true">Mixed</button>
+              <button data-cad="slow">Slower</button>
+            </div>
+            <div class="hint" id="cad-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-events">One-off private events</label><output id="out-events"></output></div>
+            <input type="range" id="in-events" min="0" max="12" step="0.5">
+            <div class="hint" id="events-hint"></div>
+          </div>
+        </div>
+
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Café engine</span><span class="sum" id="sum-cafe"></span></div>
+          <div class="lever">
+            <div class="row"><label for="in-tx">Walk-in traffic</label><output id="out-tx"></output></div>
+            <input type="range" id="in-tx" min="40" max="160" step="1">
+            <div class="hint" id="tx-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-ticket">Avg walk-in ticket</label><output id="out-ticket"></output></div>
+            <input type="range" id="in-ticket" min="6" max="11" step="0.25">
+            <div class="hint" id="ticket-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-caclub">Catering attach — clubs</label><output id="out-caclub"></output></div>
+            <input type="range" id="in-caclub" min="0" max="40" step="1">
+            <div class="hint">D15 expects 10–20% of club sessions; optional, never a minimum, BYO always allowed</div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-caevent">Catering attach — events</label><output id="out-caevent"></output></div>
+            <input type="range" id="in-caevent" min="0" max="80" step="1">
+            <div class="hint" id="caevent-hint"></div>
+          </div>
+        </div>
+
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Roster dynamics</span></div>
+          <div class="lever">
+            <div class="row"><label for="in-churn">Club churn pipeline</label><output id="out-churn"></output></div>
+            <input type="range" id="in-churn" min="1" max="1.6" step="0.05">
+            <div class="hint">Clubs to program for ÷ clubs to maintain — a hypothesis about how groups behave (retention), so it lives here. Rate unknown; a Phase 0.5 deliverable. Affects the programming load, not owner comp.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="st"><span class="n">ii.</span><span class="t">Site &amp; deal terms</span></div>
+        <div class="sub-g">
+          <div class="sgt"><span class="l">The site</span><span class="sum" id="sum-ops"></span></div>
+          <div class="lever">
+            <label>Location</label>
+            <div class="seg" role="group" aria-label="Site">
+              <button id="site-li" aria-pressed="true">Little Italy</button>
+              <button id="site-sn" aria-pressed="false">Station N / Hlt</button>
+            </div>
+            <div class="hint" id="sitehint"></div>
+          </div>
+          <div class="lever">
+            <label>Tenure</label>
+            <div class="seg" role="group" aria-label="Tenure">
+              <button data-fin="lease" aria-pressed="true">Lease</button>
+              <button data-fin="buy" id="fin-buy">SBLP buy</button>
+            </div>
+            <div class="hint" id="finhint"></div>
+          </div>
+        </div>
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Capital &amp; concessions (G2)</span><span class="sum" id="sum-cash"></span></div>
+          <div class="lever">
+            <div class="row"><label for="in-build">Build-out</label><output id="out-build"></output></div>
+            <input type="range" id="in-build" min="40" max="140" step="5">
+            <div class="hint">Hard cap ~$85K (D7); overruns come out of scope, never the working-capital reserve (risk 4)</div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-ti">TI allowance</label><output id="out-ti"></output></div>
+            <input type="range" id="in-ti" min="0" max="60" step="5">
+            <div class="hint">Landlord tenant-improvement money — “negotiated hard” (#17); offsets build-out cash</div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-abate">Rent abatement</label><output id="out-abate"></output></div>
+            <input type="range" id="in-abate" min="0" max="6" step="1">
+            <div class="hint" id="abatehint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-grants">Grants</label><output id="out-grants"></output></div>
+            <input type="range" id="in-grants" min="0" max="60" step="5">
+            <div class="hint">Business Boost, façade, storefront — buy back fit-out scope or reserve depth. §4: acceleration, never assumption — the plan counts $0 in advance</div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-cash">Venture cash</label><output id="out-cash"></output></div>
+            <input type="range" id="in-cash" min="80" max="220" step="5">
+            <div class="hint">D7: under $150K, grant-free, covering everything — the binding constraint. What isn't spent on build-out is the reserve that absorbs operating losses.</div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-runway">Runway to verdict</label><output id="out-runway"></output></div>
+            <input type="range" id="in-runway" min="12" max="36" step="3">
+            <div class="hint">Post-opening decision horizon: the reserve must outlast it, or the bail line fires before the go/no-go review can be honest.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="st"><span class="n">iii.</span><span class="t">Constraints (chosen)</span></div>
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Commitments</span><span class="sum" id="sum-con"></span></div>
+          <div class="lever">
+            <label>Wages</label>
+            <div class="seg" role="group" aria-label="Wage tier">
+              <button data-wage="0">Market</button>
+              <button data-wage="1">Market+</button>
+              <button data-wage="2">MIT living</button>
+              <button data-wage="3" aria-pressed="true">Plan (D6)</button>
+            </div>
+            <div class="hint" id="wagehint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-commons">Commons / books line</label><output id="out-commons"></output></div>
+            <input type="range" id="in-commons" min="0" max="12" step="1">
+            <div class="hint">Budgeted philanthropy (D1/D3): the lending shelf and free programming. The plan chooses $6K; the Phase 2 nonprofit arm is its natural home.</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="resetbtn" id="reset">Reset to plan marks</button>
+    </aside>
+
+    <section class="results">
+      <div class="card readout">
+        <div class="top">
+          <div>
+            <div class="bigcap">Owner compensation / yr</div>
+            <div class="bignum" id="bignum">—</div>
+          </div>
+          <div class="chips" id="chips"></div>
+        </div>
+        <div class="closers" id="closers"></div>
+        <div class="gateswrap">
+          <div class="gcap">Derived gates — what sections ii &amp; iii make the market bet prove</div>
+          <div class="pipe" id="gates"></div>
+        </div>
+        <div class="breakdown" id="breakdown"></div>
+      </div>
+
+      <div class="card matrixcard">
+        <div class="mhead">
+          <div>
+            <h2>The matrix, recomputed live</h2>
+            <p class="sub">Rows: evening utilization of the room calendar. Columns: café <i>walk-ins</i>/day (catering rides on the rooms rows). Click any cell to move the levers there.</p>
+          </div>
+          <label class="toggle"><input type="checkbox" id="in-ev" checked> Shade limited-evidence region</label>
+        </div>
+        <div class="mscroll"><table class="matrix" id="matrix"></table></div>
+        <div class="mlegend">
+          <span><span class="mono">−</span><span class="grad"></span><span class="mono">+</span> owner comp</span>
+          <span><span class="sw" style="box-shadow:inset 0 0 0 2px var(--brass)"></span>clears the $30K bar</span>
+          <span><span class="sw" style="box-shadow:inset 0 0 0 2px var(--neg)"></span>below the bail line (reserve burns before verdict)</span>
+          <span><span class="sw" style="background-image:repeating-linear-gradient(135deg,transparent 0 4px,var(--hatch) 4px 6px)"></span>limited evidence</span>
+          <span><span class="sw" style="border:2px solid var(--sel);background:transparent"></span>current levers</span>
+        </div>
+        <p class="mnote">Columns are set at 70–130% of the selected site's café mark, so "top decile" moves with location: ~120–123/day in Little Italy, ~96–98/day in SN/HT. Limited evidence: columns beyond ~110% of the mark are top-decile café territory for that corridor; utilization above ~55% is unsupported by any current evidence at the $15–35/hr price band — the D&amp;J analog fills up only at $5–10/hr. The 70/day lean-stop threshold (risk 1) is absolute in both markets — note how close it sits to SN/HT's own mark. The credible planning region is the middle of the grid; the dual gate demands proof on both axes before a lease.</p>
+      </div>
+
+      <div class="card rostercard">
+        <h2>What this point means on the calendar</h2>
+        <p class="sub">The operational target is the club roster, not raw utilization — recurring clubs are the only instrument that books midweek reliably.</p>
+        <div class="pipe" id="pipe"></div>
+        <div class="weekline" id="weekline"></div>
+      </div>
+
+      <div class="card notes">
+        <h2>Reading the model</h2>
+        <h3>Why café ≠ walk-ins + catering as one tx/day number</h3>
+        <p>Walk-ins and catering are different generative processes with different units and different levers, so the model sums their <b>contributions</b>, not their transaction counts. Walk-ins come from foot traffic and site quality: <span class="mono">tx/day × ticket × 360 × ~61%</span>. Catering comes from the rooms engine: <span class="mono">(club sessions × club attach + events × event attach) × ~$70 order × 52 × ~60%</span>. Folding catering into tx/day would price a ~$70 pre-order at the $8.25 counter ticket and would hide the real coupling — catering rises when the <i>rooms</i> levers move, which the matrix now reflects row by row. At plan marks it reproduces the plan exactly: ~1.7 orders/wk ≈ $6K revenue, ~$3.7K margin (D15's "modest but real"). Its ceiling is honest too: even at the utilization ceiling with generous attach it tops out around ~$13K of margin — an attach that tracks the rooms, not a stream.</p>
+        <h3>The “SN/HT: subtract ~$22K” confusion, resolved</h3>
+        <div class="flag"><p>That sentence in the matrix doc bundles two separate site differences into one number. Decomposed at the base row (33% utilization):</p>
+        <table class="mini">
+          <tr><th>Little Italy at its 100 tx/day mark</th><td>−$13K</td></tr>
+          <tr><th>SN/HT cost basis at equal traffic (occupancy $64K vs $78K)</th><td>+$14K</td></tr>
+          <tr><th>SN/HT expected traffic: 20 fewer walk-ins/day (×~$1.8K)</th><td>−$36K</td></tr>
+          <tr><th>SN/HT at its own 80 tx/day mark</th><td>−$35K</td></tr>
+        </table>
+        <p>So “−$22K per cell” is the <b>net of both</b> (−13 → −35), valid only when comparing each site at its own expected column. Applied literally to a matrix whose columns are absolute tx/day, it double-counts the traffic difference (SN/HT at 80 tx would come out −$71K, contradicting §6). <b>Yes — the levers resolve it:</b> here the Location lever moves only the cost basis (+$14K in SN/HT's favor), and traffic is whatever column you read; the two effects can no longer be conflated. SN/HT's real story is <i>cheaper floor, weaker expected café column</i> — which is why it still only works toward the bottom-right.</p></div>
+        <h3>Wage rungs (the one ordinal lever)</h3>
+        <p>Labor scales from the plan's grid (~100 staffed hr/wk): <b>Market</b> ≈ $17/hr loaded (MD minimum $15.00 + tips economy) → ~$89K; <b>Market+</b> ≈ $19.50/hr loaded with a benefits stipend → ~$102K; <b>MIT living</b> — MIT's living wage for one adult in Baltimore city is $21.03/hr earned → ~$112K loaded-light; <b>Plan (D6)</b> ≈ $23/hr fully loaded, tips-independent → $120K. The spread between market and the D6 commitment is ~$31K/yr of owner comp — the plan knowingly spends it (“the ‘fair wages’ claim becomes true; owner comp absorbs the cost”).</p>
+        <h3>Location moves the expectations, not just the costs</h3>
+        <p>Switching site re-anchors three things at once: the <b>cost basis</b> (the §6 calibration), the <b>café columns</b> (drawn at 70–130% of that site's mark, so "top decile" is corridor-relative rather than a Little Italy number applied everywhere), and the <b>walk-in default</b> (snapped to the site's mark, since that is the base-case expectation the counts test against). What stays absolute is the 70/day lean stop — which is the quiet warning in SN/HT's column headers: its <i>expected</i> traffic sits barely above its own stop rule.</p>
+        <h3>The gates are outputs, not fixtures</h3>
+        <p>The $0 and $30K bars are fixed by the plan, but <i>where they fall</i> depends on every lever outside the two engines — pay market wages and the break-even roster shrinks; take the SN/HT floor and it shrinks again while the café mark weakens. The "derived gates" strip computes, from the current site, deal, and constraint settings: the utilization and club roster needed for $0 and for $30K at the site's café mark, the walk-in count needed at gate-case rooms (55%), and the G2 cash test. A gate shown in red is one that current settings push outside the evidence region (or the cash cap) — meaning those settings demand proof the pilot can't currently supply.</p>
+        <h3>Capital &amp; concessions (the G2 half of the deal)</h3>
+        <p>Build-out, TI allowance, rent abatement, and grants don't touch stabilized Year-2 owner comp — they decide whether the venture can be <i>reached</i> with the available cash (D7: &lt;$150K). Cash at risk ≈ (build-out − TI − grants) + working-capital reserve (~$50–65K, floored — abatement months relieve the Year-1 ramp portion at the site's monthly occupancy). If lease-path all-in can't fit the cap after TI negotiation, that is a G2 stop, not a stretch (risk 4). On the SBLP-buy path the cash math changes kind: 10% contribution + closing + FF&amp;E exceeds own cash by design, so the gate becomes "executed community-development terms in hand" (D8).</p>
+        <h3>Two different “bail” lines — one static, one derived</h3>
+        <p>The plan has two stop rules that are easy to conflate. The <b>lean stop at 70 walk-ins/day</b> is a <i>pre-signature evidence rule</i> (risk 1): if counts come in under 70 post-haircut in both markets, no lease gets signed. It is deliberately static and absolute — it is a precommitment about what evidence justifies risking capital at all, not a statement about operating survival. The <b>bail line</b> is the operating question — how deep a loss the funded venture can sustain — and that is <i>not</i> static: it is the reserve spread over the decision horizon, <span class="mono">−(venture cash − net build-out + abatement relief) × 12 / runway</span>. Every capital lever moves it: harder TI negotiation deepens it, a build-out overrun shallows it. Cells red-ringed in the matrix burn the reserve before the verdict date — losses there don't buy information, they just end the venture. At plan defaults ($150K − $85K = $65K reserve over 24 months) the line sits at ≈ <b>−$32K/yr</b>: which is exactly why §6 calls the Lean scenario (−$65 to −$95K) “not survivable” while the base case (−$13K) is a slow bleed the reserve can carry past an honest verdict (~5 years of runway).</p>
+        <h3>What changed across versions, and what deliberately didn't</h3>
+        <p><b>Adopted:</b> catering endogenous to the rooms engine; wages ordinal; site-relative café columns and re-anchored defaults; derived gates; the capital/concessions submodel; club churn reclassified into the market hypothesis (it is a claim about group retention behavior — the pilot measures it — not a property of the site or deal); room count fixed at 3 (a 4th room without footprint cost was a free-lunch lever).</p>
+        <p><b>Considered and declined, to keep descriptive power without false precision:</b> (1) a price–utilization demand curve — the only elasticity evidence is the analog's near-sellout at $5–10/hr, one point; inventing a curve would launder a guess into a surface, so price and utilization stay independent with the evidence region shaded instead — the Phase 0.5 graduation ask is precisely the experiment that buys this curve. (2) Revenue-variable operations (~5% card fees + marketing) — it bends each marginal by ≲10% and would break cell-for-cell comparability with the published matrix; the plan's own §6 marginals ($4.4K / $1.8K) are kept. (3) Seasonality — the plan handles it as a 20–25% haircut on counts before they enter, not as a model term.</p>
+        <h3>Model</h3>
+        <p><span class="mono">comp = sessions×(price×52×0.94) + walk-ins×(ticket×360×0.61) + catering margin − labor − commons − site basis</span>, with each site's basis calibrated so plan marks reproduce §6 exactly (LI −$13K at 33%·100tx; SN/HT −$35K at 33%·80tx) and every cell of the Aug 28 matrix lands within its rounding (±$2K). Utilization includes one-off events (~1.3 weekly-eq at 5–6/mo); club figures are net of them. Day-room and print lines sit inside the site basis. Figures are planning-grade — the G1 dual gate replaces assumptions with evidence.</p>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+(function(){
+  'use strict';
+  // ---- calibration (business-plan v0.3.3 §5–6; benchmark-matrix Aug 28 2026) ----
+  var CAPACITY = 25;                 // session-slots/wk (3 rooms — the matrix's fixed basis)
+  var ROOM_MARGIN = 0.94, CAFE_MARGIN = 0.606;
+  var CATER_ORDER = 70, CATER_MARGIN = 0.6;   // $/pre-order, margin (≈$6K rev / $3.7K margin at plan marks)
+  var PLAN = {price:90, ticket:8.25, util:33, tx:{li:100,sn:80}, caClub:15, caEvent:50, events:5.5, commons:6, wage:3};
+  var SITES = {
+    li:{label:'Little Italy', base:-13, mark:100, occ:78, hint:'~2,500 sf @ $22 NNN · occupancy $78K · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
+    sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, hint:'~3,000 sf @ $16 · occupancy $64K · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
+  };
+  var CADENCE = {
+    weekly:{label:'All weekly', avg:1.0, desc:'every club meets weekly (1.0 sessions/club/wk)'},
+    mixed:{label:'Mixed', avg:0.6825, desc:'½ weekly · ¼ biweekly · ¼ monthly (≈0.68 sessions/club/wk) — the pilot-predicted shape'},
+    slow:{label:'Slower', avg:0.49, desc:'¼ weekly · ¼ biweekly · ½ monthly (≈0.49 sessions/club/wk)'}
+  };
+  var WAGES = [
+    {label:'Market', rate:17, desc:'≈$17/hr loaded (MD minimum $15.00 + tips economy) → labor ≈ $89K'},
+    {label:'Market+', rate:19.5, desc:'≈$19.50/hr loaded with a benefits stipend → labor ≈ $102K'},
+    {label:'MIT living', rate:21.5, desc:'MIT living wage, 1 adult, Baltimore city: $21.03/hr earned → labor ≈ $112K'},
+    {label:'Plan (D6)', rate:23, desc:'~$23/hr fully loaded, tips-independent → labor $120K. The plan’s commitment: owner comp absorbs the cost.'}
+  ];
+  var FIN = {
+    lease:'Own cash, everything under the <$150K cap (D7): fit-out ≤$85K, working capital $50–65K first.',
+    buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, but builds ~$10K/yr of equity — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the G2 cash math below no longer applies.'
+  };
+  var UTILS = [25,33,40,45,50,55,60,65,70,75,80];
+  var TXREL = [0.7,0.8,0.9,1.0,1.1,1.2,1.3];   // café columns as multiples of the site's mark
+  var ROWBADGE = {33:'base', 45:'break-even', 55:'gate case', 75:'ceiling'};
+  var RELBADGE = {'1':'site mark', '1.2':'≈ top decile'};
+  var LEAN_STOP = 70;                 // absolute, both markets (risk 1) — a pre-signature evidence rule
+  var WC = 58, WC_FLOOR = 45;         // $K: working-capital reserve band
+
+  var DEF = {site:'li', fin:'lease', util:33, tx:100, price:90, ticket:8.25, cad:'mixed',
+             events:5.5, caClub:15, caEvent:50, wage:3, commons:6, churn:1.4,
+             build:85, ti:0, abate:0, grants:0, cash:150, runway:24};
+  var S = Object.assign({}, DEF);
+
+  function msess(p){ return p*52*ROOM_MARGIN/1000; }
+  function mtx(t){ return t*360*CAFE_MARGIN/1000; }
+  function evEqOf(ev){ return ev*12/52; }
+  function cateringK(util, caClub, caEvent, events){
+    var sess = (util/100)*CAPACITY;
+    var evEq = evEqOf(events);
+    var clubSess = Math.max(0, sess - evEq);
+    var orders = clubSess*(caClub/100) + Math.min(evEq, sess)*(caEvent/100);
+    return orders * CATER_ORDER * 52 * CATER_MARGIN / 1000;
+  }
+  // site basis R: calibrated so PLAN marks reproduce §6 base cases exactly
+  function siteR(site){
+    var contrib = (PLAN.util/100)*CAPACITY*msess(PLAN.price)
+      + SITES[site].mark*mtx(PLAN.ticket)
+      + cateringK(PLAN.util, PLAN.caClub, PLAN.caEvent, PLAN.events);
+    return contrib - (120 + PLAN.commons) - SITES[site].base;
+  }
+  function laborK(){ return 120 * WAGES[S.wage].rate / 23; }
+  function basisK(){ return siteR(S.site) + (S.fin==='buy' ? 2 : 0); }
+  function comp(util, tx){
+    return (util/100)*CAPACITY*msess(S.price)
+      + tx*mtx(S.ticket)
+      + cateringK(util, S.caClub, S.caEvent, S.events)
+      - laborK() - S.commons - basisK();
+  }
+  function sessions(util){ return (util/100)*CAPACITY; }
+  function clubsFor(util){
+    return Math.max(0, sessions(util) - evEqOf(S.events)) / CADENCE[S.cad].avg;
+  }
+  function txCols(){ return TXREL.map(function(r){ return Math.round(r*SITES[S.site].mark); }); }
+  function cashK(){ // G2 cash at risk (lease path): net build-out + WC reserve less abatement relief
+    if (S.fin==='buy') return null;
+    var netBuild = Math.max(0, S.build - S.ti - S.grants);
+    var relief = S.abate * SITES[S.site].occ/12;
+    return netBuild + Math.max(WC_FLOOR, WC - relief);
+  }
+  function reserveK(){ // cash left to absorb operating losses after capital spend (lease path)
+    if (S.fin==='buy') return null;
+    var netBuild = Math.max(0, S.build - S.ti - S.grants);
+    var relief = S.abate * SITES[S.site].occ/12;
+    return S.cash - netBuild + relief;
+  }
+  function bailComp(){ // deepest sustainable annual loss: reserve spread over the runway
+    var r = reserveK();
+    return r===null ? null : -Math.max(0,r)*12/S.runway;
+  }
+  function utilForTarget(target, tx){ // smallest util% with comp >= target (piecewise-linear; bisect)
+    if (comp(140, tx) < target) return null;
+    var lo=0, hi=140;
+    for (var i=0;i<40;i++){ var mid=(lo+hi)/2; if (comp(mid,tx)>=target) hi=mid; else lo=mid; }
+    return hi;
+  }
+  function txForTarget(target, util){ // walk-ins/day needed at a given util (linear in tx)
+    return (target - comp(util, 0)) / mtx(S.ticket);
+  }
+
+  function fmtK(v, signed){
+    var r = Math.round(v);
+    return (r>0 && signed!==false ? '+' : (r<0 ? '−' : '')) + '$' + Math.abs(r) + 'K';
+  }
+  function el(id){ return document.getElementById(id); }
+  function h(tag, cls, html){ var e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+
+  function render(){
+    var c = comp(S.util, S.tx);
+    var sess = sessions(S.util);
+    var clubs = clubsFor(S.util);
+    var roomsK = sess*msess(S.price);
+    var walkinK = S.tx*mtx(S.ticket);
+    var caterK = cateringK(S.util, S.caClub, S.caEvent, S.events);
+    var lab = laborK();
+
+    // outputs & hints
+    el('out-util').textContent = S.util + '%';
+    el('util-hint').textContent = '≈ ' + sess.toFixed(1) + ' weekly-eq sessions of ' + CAPACITY + ' slots/wk (3 rooms — fixed, the matrix’s basis)';
+    el('out-price').textContent = '$' + S.price;
+    el('price-hint').textContent = '≈ $' + Math.round(S.price/5) + '–' + Math.round(S.price/2) + '/hr for 2–5 hr sessions · each filled weekly session ≈ +$' + msess(S.price).toFixed(1) + 'K/yr';
+    el('cad-hint').textContent = CADENCE[S.cad].desc;
+    el('out-events').textContent = S.events + '/mo';
+    el('events-hint').textContent = '≈ ' + evEqOf(S.events).toFixed(1) + ' weekly-eq sessions (D11 base 5–6/mo; Strong 10/mo)';
+    el('out-tx').textContent = S.tx + ' tx/day';
+    var mk = SITES[S.site].mark;
+    el('tx-hint').textContent = (S.tx===mk?'at':(S.tx>mk?(S.tx-mk)+' above':(mk-S.tx)+' below')) + ' this site’s mark ('+mk+') · each walk-in/day ≈ +$' + mtx(S.ticket).toFixed(2) + 'K/yr';
+    el('out-ticket').textContent = '$' + S.ticket.toFixed(2);
+    el('ticket-hint').textContent = 'counter ticket for walk-ins only — catering orders are priced separately below';
+    el('out-caclub').textContent = S.caClub + '%';
+    el('out-caevent').textContent = S.caEvent + '%';
+    el('caevent-hint').textContent = '~$'+CATER_ORDER+' avg pre-order at ~60% margin · currently ≈ ' +
+      (Math.max(0,sess-evEqOf(S.events))*(S.caClub/100) + Math.min(evEqOf(S.events),sess)*(S.caEvent/100)).toFixed(1) + ' orders/wk';
+    el('sitehint').textContent = SITES[S.site].hint;
+    el('site-li').setAttribute('aria-pressed', S.site==='li');
+    el('site-sn').setAttribute('aria-pressed', S.site==='sn');
+    document.querySelectorAll('[data-fin]').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.fin===S.fin); });
+    el('fin-buy').disabled = (S.site==='li');
+    el('finhint').innerHTML = (S.site==='li' ? FIN[S.fin] + ' <i>(§6 models the buy path only for SN/HT.)</i>' : FIN[S.fin]);
+    el('out-churn').textContent = '×' + S.churn.toFixed(2);
+    el('out-build').textContent = '$' + S.build + 'K';
+    el('out-ti').textContent = '$' + S.ti + 'K';
+    el('out-abate').textContent = S.abate + ' mo';
+    el('abatehint').textContent = 'Free-rent months fund the Year-1 ramp: ≈ $' + (SITES[S.site].occ/12).toFixed(1) + 'K/mo relief at this site. No effect on stabilized Year-2 comp.';
+    el('out-grants').textContent = '$' + S.grants + 'K';
+    el('out-cash').textContent = '$' + S.cash + 'K';
+    el('out-runway').textContent = S.runway + ' mo';
+    document.querySelectorAll('[data-wage]').forEach(function(b){ b.setAttribute('aria-pressed', +b.dataset.wage===S.wage); });
+    el('wagehint').textContent = WAGES[S.wage].desc + (S.wage<3 ? ' · vs D6: +' + Math.round(120-lab) + 'K comp' : '');
+    el('out-commons').textContent = '$' + S.commons + 'K';
+
+    // subsection sums
+    function setSum(id, v){ var e=el(id); e.textContent=fmtK(v); e.className='sum '+(v>=0?'p':'n'); }
+    setSum('sum-rooms', roomsK);
+    setSum('sum-cafe', walkinK + caterK);
+    setSum('sum-ops', -basisK());
+    setSum('sum-con', -(lab + S.commons));
+    var cash = cashK(), reserve = reserveK(), bail = bailComp();
+    var sc = el('sum-cash');
+    if (cash === null){ sc.textContent = 'SBLP-gated'; sc.className = 'sum'; }
+    else { sc.textContent = '$' + Math.round(cash) + 'K cash'; sc.className = 'sum ' + (cash <= S.cash ? 'p' : 'n'); }
+
+    // readout
+    var bn = el('bignum');
+    bn.textContent = fmtK(c);
+    bn.className = 'bignum ' + (c>=0?'pos':'neg');
+    var chips = el('chips'); chips.innerHTML='';
+    chips.appendChild(h('span','chip '+(c>=0?'ok':'bad'), c>=0 ? 'above $0 by <b>'+fmtK(c,false)+'</b>' : 'burning <b>'+fmtK(Math.abs(c),false)+'</b>/yr'));
+    chips.appendChild(h('span','chip '+(c>=30?'bar':''), c>=30 ? '<b>clears</b> the $30K bar' : '$30K bar: <b>'+fmtK(30-c,false)+'</b> short'));
+    if (S.fin==='buy') chips.appendChild(h('span','chip bar','+ ~<b>$10K</b>/yr equity build (not draw)'));
+    if (c < 0 && reserve !== null){
+      var mo = reserve > 0 ? reserve/Math.abs(c)*12 : 0;
+      chips.appendChild(h('span','chip '+(mo>=S.runway?'':'bad'),
+        'runway ≈ <b>'+(mo>=120?'10+ yrs':Math.round(mo)+' mo')+'</b> on the $'+Math.round(Math.max(0,reserve))+'K reserve'));
+    }
+    var closers = el('closers');
+    if (c < 30){
+      var gap = 30-c;
+      closers.innerHTML = 'What closes the remaining gap: <b>~' + Math.ceil(gap/msess(S.price)) + '</b> more filled weekly sessions, or <b>~' + Math.ceil(gap/mtx(S.ticket)) + '</b> more walk-ins/day — or any mix (the plan’s point: only combinations are plausible).';
+    } else {
+      closers.innerHTML = 'This point clears the plan’s own bar. Check whether it sits inside the credible-evidence region below before believing it.';
+    }
+
+    // derived gates — functions of everything EXCEPT the two engine sliders
+    var mark = SITES[S.site].mark;
+    var u0 = utilForTarget(0, mark), u30 = utilForTarget(30, mark);
+    var t30 = txForTarget(30, 55);
+    var g = el('gates'); g.innerHTML='';
+    function tile(n, l, warn){
+      var d = h('div','step'+(warn===true?' warn':(warn===false?' good':'')));
+      d.appendChild(h('div','n',n)); d.appendChild(h('div','l',l)); g.appendChild(d);
+    }
+    function utilLabel(u){
+      if (u===null || u>100) return '&gt;100%<span class="u"> — out of reach on rooms</span>';
+      return Math.round(u)+'%<span class="u"> · ~'+Math.round(clubsFor(u))+' clubs</span>';
+    }
+    tile(utilLabel(u0), 'rooms for $0 draw at the café mark ('+mark+'/day)', u0===null||u0>55);
+    tile(utilLabel(u30), 'rooms for the $30K bar at the café mark', u30===null||u30>55);
+    tile(Math.round(t30)+'<span class="u"> walk-ins/day</span>',
+      'café for the $30K bar at gate-case rooms (55%)', t30>1.1*mark);
+    if (cash===null){
+      tile('SBLP','buy path: 10% + closing + FF&E exceeds own cash — no purchase without executed terms (D8)');
+      tile('SBLP','bail line on the buy path is set by the debt structure — not modeled');
+    } else {
+      tile('$'+Math.round(cash)+'K<span class="u"> of $'+S.cash+'K</span>',
+        'cash at risk (G2): net build-out + working capital − abatement relief', cash>S.cash);
+      tile(fmtK(bail)+'<span class="u">/yr</span>',
+        'bail line: deepest sustainable loss — $'+Math.round(Math.max(0,reserve))+'K reserve over '+S.runway+' mo', c<bail);
+    }
+
+    // breakdown
+    var parts = [
+      {lab:'Café — walk-ins', v: walkinK},
+      {lab:'Café — catering attach', v: caterK},
+      {lab:'Rooms — evenings', v: roomsK},
+      {lab:'Labor ('+WAGES[S.wage].label+')', v: -lab},
+      {lab:'Commons / books', v: -S.commons},
+      {lab:'Site basis (occ. + ops)*', v: -basisK()}
+    ];
+    var maxa = Math.max.apply(null, parts.map(function(p){return Math.abs(p.v);}).concat([Math.abs(c),1]));
+    var bd = el('breakdown'); bd.innerHTML='';
+    parts.concat([{lab:'Owner comp', v:c, net:true}]).forEach(function(p){
+      var row = h('div','brow'+(p.net?' netrow':''));
+      row.appendChild(h('div','lab',p.lab));
+      var w = h('div','barwrap');
+      var bar = h('div','bar '+(p.v>=0?'p':'n'));
+      bar.style.width = (Math.abs(p.v)/maxa*100)+'%';
+      w.appendChild(bar); row.appendChild(w);
+      row.appendChild(h('div','val',fmtK(p.v)));
+      bd.appendChild(row);
+    });
+    bd.appendChild(h('div','hint','*occupancy + operations for the selected site &amp; financing path, net of day-room and print lines — calibrated to reproduce the §6 pro formas at plan marks.'));
+
+    renderMatrix();
+    renderPipe(sess, clubs);
+  }
+
+  function renderMatrix(){
+    var t = el('matrix'); t.innerHTML='';
+    var cols = txCols();
+    var mark = SITES[S.site].mark;
+    var thead = h('tr');
+    thead.appendChild(h('th','',''));
+    cols.forEach(function(tx, i){
+      var badge = tx <= LEAN_STOP ? '≤ lean stop' : (RELBADGE[String(TXREL[i])] || '&nbsp;');
+      thead.appendChild(h('th','coltx','<span class="badge">'+badge+'</span><span class="tx">'+tx+'</span>'));
+    });
+    t.appendChild(thead);
+    var nu = UTILS.reduce(function(a,b){return Math.abs(b-S.util)<Math.abs(a-S.util)?b:a;});
+    var nt = cols.reduce(function(a,b){return Math.abs(b-S.tx)<Math.abs(a-S.tx)?b:a;});
+    var showEv = el('in-ev').checked;
+    var bailC = bailComp();
+    UTILS.forEach(function(u){
+      var tr = h('tr');
+      var clubs = clubsFor(u);
+      tr.appendChild(h('th','rowu',
+        '<span class="badge">'+(ROWBADGE[u]||'&nbsp;')+'</span>'+
+        '<span class="util">'+u+'%</span>'+
+        '<span class="clubs">~'+Math.round(clubs)+' clubs</span>'));
+      cols.forEach(function(tx){
+        var v = comp(u,tx);
+        var td = h('td','cell'+(v>=30?' barclear':'')+(bailC!==null&&v<bailC?' bailz':'')+(showEv&&(u>55||tx>1.1*mark+0.5)?' lowev':'')+((u===nu&&tx===nt)?' sel':''), fmtK(v));
+        var strength = Math.min(55, Math.abs(v)/70*55 + 3);
+        td.style.background = 'color-mix(in oklab, var(--'+(v>=0?'pos':'neg')+') '+strength.toFixed(0)+'%, var(--card))';
+        td.tabIndex = 0;
+        td.addEventListener('click', function(){ S.util=u; S.tx=tx; syncInputs(); render(); });
+        td.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault(); S.util=u; S.tx=tx; syncInputs(); render();} });
+        td.addEventListener('mouseenter', function(e){ showTip(e, u, tx, v); });
+        td.addEventListener('mousemove', moveTip);
+        td.addEventListener('mouseleave', hideTip);
+        tr.appendChild(td);
+      });
+      t.appendChild(tr);
+    });
+  }
+
+  var tip = null;
+  function showTip(e,u,tx,v){
+    tip = el('tip');
+    tip.innerHTML = '<b>'+u+'% · '+tx+' walk-ins/day → '+fmtK(v)+'</b><br>' +
+      sessions(u).toFixed(1)+' weekly-eq sessions · ~'+Math.round(clubsFor(u))+' clubs at this cadence' +
+      ((u>55||tx>1.1*SITES[S.site].mark+0.5)?'<br>⚠ outside the current evidence base':'') +
+      (tx<=LEAN_STOP?'<br>⚠ at/below the 70/day lean stop (risk 1)':'') +
+      (function(){ var r=reserveK(); if(v<0&&r!==null){ var mo=r>0?r/Math.abs(v)*12:0;
+        return '<br>runway ≈ '+(mo>=120?'10+ yrs':Math.round(mo)+' mo')+(mo<S.runway?' — burns out before verdict':''); } return ''; })();
+    tip.style.display='block';
+    moveTip(e);
+  }
+  function moveTip(e){
+    if(!tip) return;
+    tip.style.left = Math.min(e.clientX+14, window.innerWidth-260)+'px';
+    tip.style.top = (e.clientY+16)+'px';
+  }
+  function hideTip(){ if(tip){tip.style.display='none';} }
+
+  function renderPipe(sess, clubs){
+    var p = el('pipe'); p.innerHTML='';
+    [
+      {n: sess.toFixed(1), l:'weekly-eq sessions on the calendar'},
+      {n: evEqOf(S.events).toFixed(1), l:'of those, one-off events ('+S.events+'/mo)'},
+      {n: '~'+Math.round(clubs), l:'active clubs to maintain ('+CADENCE[S.cad].label.toLowerCase()+' mix)'},
+      {n: '~'+Math.round(clubs*S.churn), l:'clubs to program for (×'+S.churn.toFixed(2)+' churn pipeline)'}
+    ].forEach(function(s){
+      var d = h('div','step');
+      d.appendChild(h('div','n',s.n));
+      d.appendChild(h('div','l',s.l));
+      p.appendChild(d);
+    });
+    el('weekline').innerHTML = 'A week here: each of the <b>3 rooms</b> hosts <b>~'+(sess/3).toFixed(1)+' sessions</b> (of ~8 usable slots). ' +
+      'Phase 0.5 at a 50% graduation ask seeds <b>~3–4 weekly-committed clubs</b> — the site itself must close the rest via the walk-in funnel, new group formation, and house programs.';
+  }
+
+  // ---- wiring ----
+  function syncInputs(){
+    el('in-util').value=S.util; el('in-tx').value=S.tx; el('in-price').value=S.price;
+    el('in-ticket').value=S.ticket; el('in-events').value=S.events;
+    el('in-caclub').value=S.caClub; el('in-caevent').value=S.caEvent;
+    el('in-commons').value=S.commons; el('in-churn').value=S.churn;
+    el('in-build').value=S.build; el('in-ti').value=S.ti;
+    el('in-abate').value=S.abate; el('in-grants').value=S.grants;
+    el('in-cash').value=S.cash; el('in-runway').value=S.runway;
+  }
+  function bind(id, key){
+    el(id).addEventListener('input', function(e){ S[key]=parseFloat(e.target.value); render(); });
+  }
+  bind('in-util','util'); bind('in-tx','tx'); bind('in-price','price'); bind('in-ticket','ticket');
+  bind('in-events','events'); bind('in-caclub','caClub'); bind('in-caevent','caEvent');
+  bind('in-commons','commons'); bind('in-churn','churn');
+  bind('in-build','build'); bind('in-ti','ti'); bind('in-abate','abate'); bind('in-grants','grants');
+  bind('in-cash','cash'); bind('in-runway','runway');
+  function setSite(s){ S.site=s; if(s==='li'&&S.fin==='buy') S.fin='lease'; S.tx=SITES[s].mark; syncInputs(); render(); }
+  el('site-li').addEventListener('click', function(){ setSite('li'); });
+  el('site-sn').addEventListener('click', function(){ setSite('sn'); });
+  document.querySelectorAll('[data-fin]').forEach(function(b){
+    b.addEventListener('click', function(){ if(b.disabled) return; S.fin=b.dataset.fin; render(); });
+  });
+  document.querySelectorAll('[data-cad]').forEach(function(b){
+    b.addEventListener('click', function(){ S.cad=b.dataset.cad; render(); });
+  });
+  document.querySelectorAll('[data-wage]').forEach(function(b){
+    b.addEventListener('click', function(){ S.wage=+b.dataset.wage; render(); });
+  });
+  el('in-ev').addEventListener('change', render);
+  el('reset').addEventListener('click', function(){ S=Object.assign({},DEF); syncInputs(); render(); });
+
+  syncInputs();
+  render();
+})();
+</script>
+
