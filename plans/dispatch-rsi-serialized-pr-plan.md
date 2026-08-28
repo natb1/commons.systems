@@ -3756,8 +3756,41 @@ What this unit must do, in order:
    clarification-7 aggregate, just asks how many records have `last_exercised`
    set"*. That sentence is the reasoning the ruling overturns; leaving it in
    place invites the next reader to re-drop the rule.
-3. Only then delete `readDelegationRecordsReading` and its tests
-   (`packages/intentionsutil/test/delegation-records-sensor.test.ts`).
+3. **Retarget the two rule tests, do not delete them.**
+   `packages/intentionsutil/test/delegation-records-sensor.test.ts:143-184` --
+   the `describe("readDelegationRecordsReading")` block -- holds the **only two
+   assertions of the declined-origin rule anywhere in the repo**: *"counts
+   exercised, declined-class, and oldest last_assessed"* and *"never counts a
+   declined record as unexercised (its own class)"*. The ruling affirms that
+   rule still governs, so deleting its only coverage is the weakening
+   `.claude/rules/test-integrity.md` forbids. Point both at
+   `readExerciseRecoveryPathsReading` and update their expected strings to that
+   function's format.
+4. **Amend the strategy's threshold**, or the ruling does not close the gap.
+   `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
+   case-insensitive **string equality** between `reading` and
+   `success_signal.threshold` -- its own docstring says *"Equality is the only
+   'met' condition -- no numeric or fuzzy parsing."* So changing the reader
+   changes the reading string and nothing else; the gap on
+   `strategy-exercise-recovery-paths` stays open regardless. Amend that
+   strategy's `success_signal.threshold` so declined-origin records are
+   excluded from the no-null-`last_exercised` requirement, and so the satisfied
+   reading and the threshold are the same string. This is the strategy's own
+   record, so it is an author `/align` write on
+   `strategy-exercise-recovery-paths`, not a code edit -- sequence it with this
+   unit.
+5. Only then delete `readDelegationRecordsReading` itself. `readDelegationRecords`
+   (`read-sensors.ts:917`) and `renderDelegationRecordsReport` (`:998`, reached by
+   the `--report` flag at `:1739`) are **live** and must survive, along with their
+   own test blocks.
+
+> **Corrected 2026-08-28**, after the ruling was first recorded. The original
+> step 3 read *"Only then delete `readDelegationRecordsReading` and its tests"*
+> -- which directs a test-integrity violation on the branch this sitting
+> selected, and omits the threshold amendment without which the ruling's own
+> justification (the threshold is permanently unsatisfiable) goes unrepaired.
+> The node's own park text names both constraints; the ruling text had dropped
+> them.
 
 **This unit also has a parked node**, contrary to the agenda's earlier claim
 that C2 had none: `tactic-orphaned-delegation-records-reading`, `owner: ai`,

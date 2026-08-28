@@ -72,7 +72,7 @@ concurrently landed write being clobbered.
 > | B2 | **flock ratified**, held by the child; its precondition repaired by `systemd-run --user` re-parenting. Sitting-first order stands | `699b4b26` |
 > | B3 | **Split** — trust half sat, lane half deferred. Its precondition was *circular* | `c78f8cd3` |
 > | C1 | **(2) then (1)**, and (2) must be **FATAL**, not a stderr warning | `37e321ca` |
-> | C2 | Rule **still governs** — port it, then delete. The threshold is currently unsatisfiable | *(plan)* |
+> | C2 | Rule **still governs** — port it, **retarget** its two tests, amend the threshold, then delete the dead function | *(plan)* |
 > | C3 | **Both (a) and (b)** in **PR18** Unit 4 — they fix different halves of the loop | *(plan)* |
 > | C4 | **Ordinary branch only**; record the delete/modify residue (**PR18** Unit 5) | *(plan)* |
 >
@@ -594,6 +594,16 @@ None of these were executed by the sitting; each is a follow-on write.
   children and `strategy-explicit-intent`, and the lifecycle `success_signal`
   edit — which needs a paired `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change
   `graph-commit` cannot carry.
+- `strategy-exercise-recovery-paths` — amend `success_signal.threshold` per
+  C2. `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
+  case-insensitive **string equality**, so porting the declined-origin rule into
+  the reader changes the reading string and closes nothing on its own. The
+  threshold must exclude declined-origin records from the
+  no-null-`last_exercised` requirement — otherwise
+  `delegation-hosted-publishing` keeps it permanently unsatisfiable, which is
+  the very fact the C2 ruling rests on. *(Added 2026-08-28, after the ruling was
+  first recorded; the node's park text names it and the ruling had dropped it.)*
+
 - **One new tactic serving `strategy-graph-integrity`** for D1's doc residue.
   Mandatory regardless of the census withdrawal: `.claude/docs/delegability.md`
   (11-12), `.claude/docs/signal-identification.md` (11-12) and
