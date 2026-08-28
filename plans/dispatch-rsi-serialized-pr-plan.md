@@ -1641,21 +1641,47 @@ cheap — fail the escalation loudly when its recommendation cites a path under
 `$CLAUDE_JOB_DIR`, a string check at the point the park is written. Both halves
 belong in Bundle 3 alongside the escalation path they guard.
 
-### PR6 stays gated on its office-hours sitting
+### PR6's office-hours sitting — HELD AND RULED 2026-08-28
 
-The sitting `/office-hours tactic-review-sitting-code-review-lock-design` must
-resolve a specific contradiction rather than merely bless the design: the flock
-shipped in #3078, yet `tactic-eval-finding-detached-code-review-dies-with-launcher`
-shows the detached child dies with its launcher anyway despite `setsid`. That
-falsifies the lock's premise — **a lock held by a process that dies with its
-launcher is not a lock** — and the current design is held on trust.
+~~PR6 stays gated on its office-hours sitting.~~ The sitting
+`/office-hours tactic-review-sitting-code-review-lock-design` was **held on
+2026-08-28** (author sitting, Part I item B2) and its park was cleared in
+`699b4b26`. PR6 is no longer gated. What follows records the ruling; the
+question below it is answered, not open.
 
-Sequence the units so detachment is fixed and *demonstrated* before the lock is
-trusted: fix detachment (Unit 1), show a detached review surviving its launcher's
-exit, and only then build on the lock (Unit 2). A useful framing to hand the
-sitting: ask whether the lock should be held by the detached child at all, or by
-a supervisor that outlives both. If the answer is the supervisor, Unit 2 changes
-shape entirely — which is exactly why the sitting must precede the code.
+The contradiction the sitting had to resolve: the flock shipped in #3078, yet
+`tactic-eval-finding-detached-code-review-dies-with-launcher` shows the detached
+child dies with its launcher anyway despite `setsid` — **a lock held by a
+process that dies with its launcher is not a lock.**
+
+**RULED 2026-08-28 (author sitting, Part I item B2): the flock design is
+ratified, held by the detached child; its broken precondition is repaired
+rather than the design replaced.**
+
+The contradiction resolves *in favor of* the design, because it was never a
+defect in the lock. It is a defect in the detachment the lock stands on, and
+the node itself supplies the falsification: `dispatch-code-review` already runs
+`setsid`, already disowns, and already hard-refuses to start without it, so
+"establish real detachment via process group / session leader" is a remedy that
+**has already shipped and does not work**. `setsid` detaches a process from its
+controlling terminal; it does not re-parent the process out of the launcher's
+cgroup, and the cgroup is what the harness tears down when the Bash tool call
+is interrupted. Both halves were measured on this host during the sitting.
+
+So the fix is re-parenting, not detaching: `systemd-run --user` places the child
+in its **own** transient unit, outside the launcher's cgroup, where a teardown
+of the launcher's cgroup cannot reach it. See Unit 1.
+
+The framing the sitting was handed — *should the lock be held by the detached
+child at all, or by a supervisor that outlives both?* — was answered **child**.
+Once re-parenting makes the child genuinely outlive its launcher, a supervisor
+buys nothing and adds a second process whose own death is a new failure mode.
+Unit 2 keeps its shape.
+
+Unit ordering is unchanged and still matters: fix detachment (Unit 1), *show* a
+detached review surviving its launcher's exit, and only then build on the lock
+(Unit 2). The ruling ratifies the design, not the premise — the demonstration is
+still owed before Unit 2 is trusted.
 
 ### `strategy-discovered-requirements` is a separate charter
 
@@ -2625,20 +2651,25 @@ drops to at most 1 per tick.
 **Recommended model: opus** — process lifetime, kernel locks and a
 write-attribution race.
 
-### Pre-PR session (required)
+### Pre-PR session — ~~required~~ **HELD 2026-08-28, no longer a gate**
 
 ```
-/office-hours tactic-review-sitting-code-review-lock-design
+/office-hours tactic-review-sitting-code-review-lock-design    # DONE — 699b4b26
 ```
 
-The flock design this PR implements is currently held **on trust, not
-verification** — the author delegated the design choice. Ratify before building.
+~~The flock design this PR implements is currently held **on trust, not
+verification** — the author delegated the design choice. Ratify before
+building.~~ Ratified 2026-08-28 (Part I item B2): the flock stays, held by the
+detached child; Unit 1 is re-scoped to `systemd-run --user` re-parenting. See
+"PR6's office-hours sitting" above for the full ruling.
 
 ### Context
 
 Four findings on `dispatch-code-review` (1411 lines). One is a falsification:
 the node lock shipped in PR #3078, but the detached child **still dies with its
-launcher** despite `setsid` — so the lock node's fix does not hold.
+launcher** despite `setsid` — so the lock node's fix does not hold. Ruled
+2026-08-28: the lock design stands, the detachment under it does not, and the
+repair is `systemd-run --user` re-parenting (Unit 1).
 
 ### Nodes closed (5)
 
@@ -2663,9 +2694,31 @@ launcher** despite `setsid` — so the lock node's fix does not hold.
 **Unit 1 — the child is not actually detached.** Interrupting the launching
 Bash tool call killed the child session 3ms later and both in-flight max-effort
 angle subagents 96ms later, destroying a 4.5-hour-budgeted review 63 seconds
-after it started, leaving the phase with no graph change. Establish real
-detachment (process group / session leader) and verify by interrupting the
-launcher.
+after it started, leaving the phase with no graph change.
+
+**Re-scoped 2026-08-28 (Part I item B2 — see "PR6's office-hours sitting"
+above).** This unit previously read *"Establish real detachment (process group /
+session leader)."* **Do not implement that.** It is precisely the remedy the
+node's own *Corrected diagnosis (2026-08-14)* falsified: `dispatch-code-review`
+already runs `setsid`, already disowns, and already hard-refuses to start
+without it. Building it again reimplements shipped code and leaves the bug.
+
+Implement **`systemd-run --user` transient-unit re-parenting** instead. The
+failure is not a missing session leader; it is cgroup membership. `setsid`
+detaches from the controlling terminal but leaves the child inside the
+launcher's cgroup, and interrupting the Bash tool call tears that cgroup down.
+`systemd-run --user` starts the child in its own transient unit outside that
+cgroup, so the teardown cannot reach it.
+
+Keep the existing `setsid`/disown handling — it is not harmful and the
+hard-refuse guard is a real precondition check; this unit adds re-parenting
+around it rather than replacing it.
+
+**Verification is unchanged and is the whole point:** interrupt the launching
+Bash tool call and confirm the child review runs to completion and produces its
+graph change. That interrupt test is the confirming step — a re-parenting that
+is not demonstrated against a real interrupt is exactly the on-trust state this
+sitting existed to end.
 
 **Unit 2 — lock for the child's own lifetime.** A kernel-released `flock` held
 by the detached child and honored by every worktree-claim path, so a survivor
@@ -2690,7 +2743,9 @@ a successful review. Scope the match structurally.
 
 ### Dependencies
 
-PR1, and the office-hours ratification above. Units 1 → 2 → 3 internally.
+PR1. ~~and the office-hours ratification above~~ — that ratification landed
+2026-08-28 (`699b4b26`) and no longer blocks. Units 1 → 2 → 3 internally, and
+Unit 1's interrupt demonstration still gates Unit 2.
 
 ### Reuse
 

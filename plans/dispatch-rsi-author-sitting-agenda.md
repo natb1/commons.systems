@@ -614,31 +614,67 @@ None of these were executed by the sitting; each is a follow-on write.
   the very fact the C2 ruling rests on. *(Added 2026-08-28, after the ruling was
   first recorded; the node's park text names it and the ruling had dropped it.)*
 
-- **One new tactic serving `strategy-graph-integrity`** for D1's doc residue.
-  Mandatory regardless of the census withdrawal: `.claude/docs/delegability.md`
-  (11-12), `.claude/docs/signal-identification.md` (11-12) and
-  `.claude/skills/align-audit/SKILL.md` (332) all still frame the 2026-07-23
-  Decision 1 as *pending* and name `tactic-align-audit-legacy-review` as its
-  decider. Pruning that node without this fix leaves three sites pointing at a
-  node that no longer exists.
+- ~~**One new tactic serving `strategy-graph-integrity`** for D1's doc
+  residue.~~ **DONE 2026-08-28 — `447fc27d`, and it needed no new authorship.**
+  The tactic already existed: `tactic-retire-assessor-contract-docs`, written
+  2026-08-18 by the `/align-tactics tactic-align-audit-legacy-review` round, was
+  the "rescue before reaping" item below — the same round's prune never landed,
+  so the node was left unversioned in a worktree awaiting reap. Filing a fresh
+  tactic would have duplicated a fully-written hand-authored sibling. It was
+  rescued and landed instead.
+
+  Two corrections to what this line originally said:
+
+  - **It serves `strategy-graph-native-dispatch`, not `strategy-graph-integrity`.**
+    The `serves` edge was left as the authoring round set it, and that round
+    justified it explicitly (that strategy's sole-tracker rule is why the
+    residue lands as a tactic at all). "Serving `strategy-graph-integrity`" was
+    this agenda's own shorthand when D1 was recorded, not an author ruling on
+    the edge — so the node's edge stands and this line is the one corrected.
+  - **The residue does not depend on the prune.** This line said pruning the
+    node "leaves three sites pointing at a node that no longer exists." True,
+    but not the load-bearing defect: all three sites frame the 2026-07-23
+    Decision 1 as *pending* when it is **settled**, and that is wrong today with
+    the node still present. The prune only adds a second defect on top.
+
+  Three premises in the rescued node were stale and were corrected before it
+  landed — it asserted in three places that `tactic-align-audit-legacy-review`
+  was "pruned in the same round," which is false: that node is still on
+  `origin/main`, `office_hours: null`, and D1 re-authorized its prune without
+  executing it. A **Unit 3 was added**: the original filing covered
+  `.claude/docs/delegability.md` and `.claude/docs/signal-identification.md` but
+  **missed `.claude/skills/align-audit/SKILL.md`** — whose out-of-scope list
+  still calls the graft "a pending inclusion decision owned by the born-parked
+  office-hours sitting `tactic-align-audit-legacy-review`." Every clause of that
+  is false: decided 2026-07-23, decided *against*, and the node is not parked.
 
 **Parks** — none outstanding. The four the sitting found on C2/C3/C4's nodes
 were cleared after their rulings were recorded; see correction 1 above.
 
 **Plan edits**
 
-- **PR6 Unit 1 is mis-scoped.** It reads "Establish real detachment (process
-  group / session leader)" — precisely the remedy
+- ~~**PR6 Unit 1 is mis-scoped.**~~ **DONE 2026-08-28.** It read "Establish
+  real detachment (process group / session leader)" — precisely the remedy
   `tactic-eval-finding-detached-code-review-dies-with-launcher`'s *Corrected
   diagnosis (2026-08-14)* falsified, since the script already runs `setsid`,
-  disowns, and hard-refuses to start without it. Re-scope to `systemd-run --user`
-  transient-unit re-parenting, keeping the interrupt verification as the
+  disowns, and hard-refuses to start without it. Re-scoped to `systemd-run
+  --user` transient-unit re-parenting, keeping the interrupt verification as the
   confirming step.
 
-**Rescue before reaping**
+  Four further PR6 sites were stale for the same reason and were corrected in
+  the same pass — the B2 ruling had been recorded **only here**, so the
+  serialized plan still gated PR6 on a sitting that had already happened:
+  the `### Pre-PR session (required)` block, the `### PR6 stays gated on its
+  office-hours sitting` section (which now carries the ruling in full), the
+  `### Context` falsification paragraph, and the `### Dependencies` line naming
+  the ratification as a blocker.
 
-- `.claude/worktrees/tactic-align-audit-legacy-review/intentions/tactic-retire-assessor-contract-docs.md`
-  — 10,509 bytes, on no branch, lost when that worktree is reaped.
+**Rescue before reaping** — ~~owed~~ **DONE 2026-08-28.**
+
+- ~~`.claude/worktrees/tactic-align-audit-legacy-review/intentions/tactic-retire-assessor-contract-docs.md`
+  — 10,509 bytes, on no branch, lost when that worktree is reaped.~~ Rescued and
+  landed on `origin/main` as `447fc27d`; see the doc-residue entry above, which
+  it turned out to *be*. The worktree is now safe to reap.
 
 
 # Part II — The serial PR sequence
