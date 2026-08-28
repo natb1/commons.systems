@@ -604,15 +604,31 @@ None of these were executed by the sitting; each is a follow-on write.
   children and `strategy-explicit-intent`, and the lifecycle `success_signal`
   edit — which needs a paired `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change
   `graph-commit` cannot carry.
-- `strategy-exercise-recovery-paths` — amend `success_signal.threshold` per
-  C2. `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
-  case-insensitive **string equality**, so porting the declined-origin rule into
-  the reader changes the reading string and closes nothing on its own. The
-  threshold must exclude declined-origin records from the
-  no-null-`last_exercised` requirement — otherwise
-  `delegation-hosted-publishing` keeps it permanently unsatisfiable, which is
-  the very fact the C2 ruling rests on. *(Added 2026-08-28, after the ruling was
-  first recorded; the node's park text names it and the ruling had dropped it.)*
+- `strategy-exercise-recovery-paths` — **no longer a standalone graph edit;
+  folded into PR16 Unit 5.** This line previously said to amend
+  `success_signal.threshold` per C2. That is not sufficient, and landing it
+  alone would have been a silent no-op.
+
+  `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
+  case-insensitive **string equality**. `readExerciseRecoveryPathsReading`
+  (`read-sensors.ts:1028-1038`) emits
+  `exercised: <k>/<n> records; <m> null last_exercised; review_trigger firing
+  not recorded (sensor read <YYYY-MM-DD>)` — live counts **and the read date**
+  — so **no fixed threshold string can ever equal it**. Rewording the threshold
+  changes which records land in the counts; it cannot make equality reachable.
+
+  Measured 2026-08-28 across all 749 nodes: 68 carry a `success_signal`, 21 of
+  those also carry a `reading`, **12 of those 21 readings embed a date**, and
+  exactly **two** nodes in the graph meet their threshold at all
+  (`strategy-main-health`, `tactic-main-red-ac908454`) — both with date-free
+  readings. The equality rule works; this reader is simply not written for it.
+
+  So the reader must gain a canonical, date-free met-state string first, and the
+  threshold must then be set to **exactly** that string. Both halves are now
+  PR16 Unit 5's step 4, sequenced reader-then-threshold, because an
+  independently-worded threshold reproduces the same no-op. *(Added 2026-08-28
+  after the ruling was first recorded, then corrected the same day when the
+  reader's format was actually read rather than assumed.)*
 
 - ~~**One new tactic serving `strategy-graph-integrity`** for D1's doc
   residue.~~ **DONE 2026-08-28 — `447fc27d`, and it needed no new authorship.**

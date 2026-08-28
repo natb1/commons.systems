@@ -3821,19 +3821,55 @@ What this unit must do, in order:
    `.claude/rules/test-integrity.md` forbids. Point both at
    `readExerciseRecoveryPathsReading` and update their expected strings to that
    function's format.
-4. **Amend the strategy's threshold**, or the ruling does not close the gap.
+4. **Give the reader a canonical met-state string, then set the threshold to
+   exactly that string** -- or the ruling does not close the gap.
    `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
    case-insensitive **string equality** between `reading` and
    `success_signal.threshold` -- its own docstring says *"Equality is the only
    'met' condition -- no numeric or fuzzy parsing."* So changing the reader
    changes the reading string and nothing else; the gap on
-   `strategy-exercise-recovery-paths` stays open regardless. Amend that
-   strategy's `success_signal.threshold` so declined-origin records are
-   excluded from the no-null-`last_exercised` requirement, and so the satisfied
-   reading and the threshold are the same string. This is the strategy's own
-   record, so it is an author `/align` write on
-   `strategy-exercise-recovery-paths`, not a code edit -- sequence it with this
-   unit.
+   `strategy-exercise-recovery-paths` stays open regardless.
+
+   **A threshold edit alone cannot fix that, and this step said it could.**
+   `readExerciseRecoveryPathsReading` (`read-sensors.ts:1028-1038`) always
+   returns
+
+   ```
+   exercised: <k>/<n> records; <m> null last_exercised; review_trigger firing not recorded (sensor read <YYYY-MM-DD>)
+   ```
+
+   Every reading it emits carries live counts **and the read date**, so no fixed
+   threshold string can ever equal it. Rewording the threshold to exclude
+   declined-origin records changes which records land in `<k>` and `<m>`; it
+   does not make equality reachable. The signal stays permanently gapped.
+
+   Measured across the graph on 2026-08-28: of 749 nodes, 68 carry a
+   `success_signal`, 21 of those also carry a `reading`, and **12 of those 21
+   readings embed a date** -- none of which can ever meet its threshold. Exactly
+   **two** nodes in the whole graph currently meet theirs
+   (`strategy-main-health`, `tactic-main-red-ac908454`), and both do it with
+   date-free readings. So the equality rule is not decorative -- it works
+   exactly when the reader is written to produce a canonical string, and this
+   reader is not.
+
+   The unit therefore owns **both halves**:
+
+   - **Reader (code, this unit).** Have `readExerciseRecoveryPathsReading` emit
+     a canonical, date-free string in the met state -- the shape the two
+     currently-met nodes use -- reserving the counts-and-date form for the
+     unmet state. Declined-origin records are excluded from the
+     no-null-`last_exercised` requirement when deciding which state applies.
+   - **Threshold (graph, author `/align` write on
+     `strategy-exercise-recovery-paths`).** Set `success_signal.threshold` to
+     **exactly** the canonical met-state string the reader now emits, byte for
+     byte modulo trim and case. Author this *after* the reader lands, or copy
+     it from the reader's source; do not compose it independently, because an
+     independently-worded threshold is the same silent no-op this step
+     originally prescribed.
+
+   Sequence: reader first, then the threshold write. Verify by reading the node
+   back and confirming `deriveGap` returns `null` -- not by inspecting the
+   threshold prose.
 5. Only then delete `readDelegationRecordsReading` itself. `readDelegationRecords`
    (`read-sensors.ts:917`) and `renderDelegationRecordsReport` (`:998`, reached by
    the `--report` flag at `:1739`) are **live** and must survive, along with their
@@ -3844,6 +3880,16 @@ What this unit must do, in order:
 > -- which directs a test-integrity violation on the branch this sitting
 > selected, and omits the threshold amendment without which the ruling's own
 > justification (the threshold is permanently unsatisfiable) goes unrepaired.
+>
+> **Corrected again, same day.** That first correction's step 4 said to amend
+> the strategy's `success_signal.threshold`. That is not sufficient and would
+> have shipped as a silent no-op: the reader embeds the read date in every
+> reading, so equality with any fixed threshold is unreachable and no wording of
+> the threshold changes it. Step 4 now owns the reader change that makes a
+> canonical met-state string exist, with the threshold write sequenced after it.
+> The general trap: **`deriveGap` equality means a date-bearing reading can
+> never meet its threshold** -- 12 of the graph's 21 read signals are in that
+> state today.
 > The node's own park text names both constraints; the ruling text had dropped
 > them.
 
