@@ -8,10 +8,11 @@ the work that produces no code but must happen before the PR it gates.
 > on the author, in one running order, read
 > `plans/dispatch-rsi-author-sitting-agenda.md`. The two lists differ: three of
 > the nine sessions below are `/rsi-audit` measurement runs rather than sittings,
-> four author rulings live only in the serialized plan's unit prose, and one
-> gating sitting — `tactic-sensor-deregistration-gate`, which blocks PR16 Unit 10
-> — is **missing from this document entirely**. Come here for the full prompts;
-> go there to know what you owe.
+> three author rulings live only in the serialized plan's unit prose (PR16 Unit
+> 5, PR17 Unit 4, PR17 Unit 5), and one gating sitting —
+> `tactic-sensor-deregistration-gate`, which blocks PR16 Unit 10 — is **missing
+> from this document entirely**. Come here for the full prompts; go there to
+> know what you owe.
 
 > **Updated by Revision 7 (2026-08-15).**
 >
