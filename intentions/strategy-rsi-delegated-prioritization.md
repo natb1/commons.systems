@@ -275,10 +275,12 @@ tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,
     against the dispatch queue's baseline closure interval; and (b) the count of
-    cross-strategy rank inversions -- measured against each distributing
-    strategy's RESOLVED rank, the quantity band is derived from (settled
-    2026-08-12) -- plus the count of model attention writes carrying no
-    priority_log entry
+    model attention writes onto a strategy's OWN attention block -- the writable
+    surface -- plus the count of model attention writes carrying no priority_log
+    entry. The cross-strategy rank inversion count this replaced was
+    structurally zero and measured nothing; amended 2026-08-28 (author sitting,
+    Part I item A1 sub-point 3), see "Why (b) measures the writable surface"
+    below
   sensor: tactic-rsi-reprioritization-outcome-audit's outcome section (joining
     attributes.priority_log entry dates with node closure dates), plus
     validate-graph's ownership-boundary and marks-asymmetry lint from
@@ -360,3 +362,33 @@ attributes:
       resumes the count rather than restarting at 1 (Recorded 2026-08-12)"
 ---
 # The model holds ordering of dispatch-delegated tactics inside author-set strategy bands — every reordering logged, bounded, and answerable to the fitness function
+
+## Why (b) measures the writable surface (amended 2026-08-28)
+
+Recorded by the 2026-08-28 author sitting, Part I item A1 sub-point 3.
+
+`success_signal` (b) used to count **cross-strategy rank inversions**, measured
+against each distributing strategy's *resolved* rank. That count is
+**structurally zero** and always will be, so it could never detect the thing
+this strategy exists to detect.
+
+The reason is the 2026-08-12 band/residual resolution that item A1 ratified:
+band derives from **resolved** rank, not the authored term. Ranking is a single
+flat additive scale across strategies (`tactic-attention-namespaced-rank`), and
+the model cannot write a resolved rank directly — resolution is computed. So
+there is no write the model can make that produces a cross-strategy inversion
+against resolved rank. Counting them measures the algebra, not the delegatee.
+
+The replacement counts what the model **can** actually write: attention writes
+onto a **strategy's own** `attention` block. That is the real writable surface,
+so a bound on it is a bound on the delegated authority rather than a restatement
+of an invariant. The existing no-`priority_log`-entry count is retained
+unchanged — it catches an unlogged write, this catches a write that should not
+have been made at all.
+
+The `threshold`'s "both counts in (b) stay at zero" is unchanged and still
+reads correctly: two counts, both expected zero.
+
+**Still unbuilt.** Both counts land on `tactic-priority-provenance-schema`'s
+lint, which is `status: raw`, `phase: null`. This amendment corrects what will
+be measured; it does not make it measured.

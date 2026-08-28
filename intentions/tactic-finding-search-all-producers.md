@@ -305,17 +305,44 @@ search per creation and is what makes it affordable here.
    both** the supersession *and* the original reason. The sitting must read why
    the node was parked twice; an overwrite loses the first reason.
 
-### Two sub-points the author did not rule on
+### Two sub-points — RULED 2026-08-28
 
-Flagged as **Claude-derived**, not author-ruled, and enrolled for ratification by
-`tactic-review-supersession-derived-subpoints`:
+~~Two sub-points the author did not rule on.~~ Both were sat on 2026-08-28
+(author sitting, Part I item B1) via
+`tactic-review-supersession-derived-subpoints`, whose park cleared in
+`34f9ab31`. They are no longer Claude-derived-and-unratified. **PR19 Unit 1
+encodes both into the schema, so implement the ruled form below, not the
+original wording.**
 
-- **In-flight nodes get the edge but no park.** This extends item 4's existing
-  `skipped-in-flight` refusal rather than inventing a second in-flight rule. It
-  leaves a live PR able to land work on superseded surface — which is the
-  interim-live-risk exception clarification 26 already permits.
-- **Only a *fully* superseded node is parked.** Partial supersession keeps
-  clarification 26's per-unit doomed-drop unchanged and parks nothing.
+- **In-flight nodes get the edge but no park — AMENDED.** The behavior stands:
+  a node whose `execution` is non-null gets the supersession edge and is *not*
+  parked, extending item 4's existing `skipped-in-flight` refusal rather than
+  inventing a second in-flight rule. But it leaves a live PR able to land work
+  on superseded surface, and clarification 26 permits that **only as an explicit
+  interim-live-risk exception naming an expiry event** — and none was named.
+
+  **The amendment: the edge must name its expiry event.** An unparked
+  supersession edge on an in-flight node carries the event that ends the
+  interim risk (normally the in-flight PR's merge or closure — the point at
+  which `execution` goes null and the ordinary parking rule resumes). An edge
+  that names no expiry is not a permitted exception; it is an unbounded licence
+  to keep building on superseded surface. Unit 1 must carry the expiry on the
+  edge, not leave it implied.
+
+- **Only a *fully* superseded node is parked — RATIFIED.** Partial supersession
+  keeps clarification 26's per-unit doomed-drop unchanged and parks nothing.
+
+  Ratified **with the per-unit drop's carrier stated explicitly**, which the
+  original wording left implied: when supersession is partial, the doomed units
+  are dropped per-unit under clarification 26 and the *node* stays selectable
+  and unparked. The carrier of that drop is the **node's own unit list** — the
+  superseded units are struck there — not the supersession edge, and not a park.
+  Stating it matters because "parks nothing" alone reads as "records nothing",
+  which would lose the drop entirely.
+
+**Unmeasured, and unchanged by this ruling:** see "What is not measured" below —
+the park-storm risk still has no observable. The B1 sitting ruled the two
+sub-points, not the measurement gap.
 
 ### What is not measured
 
