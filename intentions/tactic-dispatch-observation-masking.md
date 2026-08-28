@@ -16,7 +16,8 @@ rationale: "Drafted 2026-08-11 from the /rsi-research dry run. On SWE-bench
   compaction -- and it is scoped to exactly this harness's domain, long sessions
   with verbose tool output. The audit already shows where the payload lives:
   payload_bytes.by_tool and worst_sessions rank tool-result bytes per tool and
-  per session, and context_lens isolates the sessions above 120k peak context
+  per session, and lenses.context_over_120k isolates the sessions above 120k
+  peak context
   with their price proxy. Because the source's magnitude is measured on a
   different harness, this is drafted as a hypothesis to test here, not a change
   to adopt on the strength of the citation."
@@ -52,7 +53,14 @@ clarifications:
       bookkeeping corrections so this node's Verification section is runnable as
       written. FIRST, `context_lens` is not a key anywhere in the audit: the
       field is `lenses.context_over_120k` (aggregate-usage.sh:1377, computed as
-      $ctx_lens, 120000-token threshold). The other two named readings are
+      $ctx_lens, 120000-token threshold) — `$ctx_lens` is a local shell
+      variable, not an emitted key, which is where the wrong name came from.
+      APPLIED 2026-08-28: every asserting use of `context_lens` in this
+      node's rationale, success_signal.sensor, and body now reads
+      `lenses.context_over_120k`, so the Verification section is runnable
+      as written; this clarification and the office_hours note below keep
+      the old spelling only to name what was corrected. The other two
+      named readings are
       correct — `payload_bytes.by_tool` and `payload_bytes.worst_sessions` at
       aggregate-usage.sh:1028-1047. SECOND, 'price proxy per closed tactic' is
       not a computed field: $by_node (aggregate-usage.sh:930-947) sums sessions,
@@ -112,8 +120,9 @@ success_signal:
   observable: price proxy per closed tactic falls in the affected phases while
     those phases' pooled disposition success rates hold
   sensor: aggregate-usage.sh over equal-length windows before and after the change
-    -- payload_bytes.by_tool and worst_sessions, context_lens (sessions above
-    the 120000 peak-context threshold and their price_proxy_usd), by_phase and
+    -- payload_bytes.by_tool and worst_sessions, lenses.context_over_120k
+    (sessions above the 120000 peak-context threshold and their
+    price_proxy_usd), by_phase and
     by_node price proxy, and by_phase_outcome pooled rates
   threshold: cost per closed tactic in the affected phases drops by at least 15%
     with no drop in by_phase_outcome pooled success rates. The source claims
@@ -218,7 +227,8 @@ exactly.
 
 The audit already knows where the payload is. `payload_bytes.by_tool` ranks
 tool-result bytes per tool across the window, `payload_bytes.worst_sessions`
-names the ten worst offenders, and `context_lens` isolates every session above
+names the ten worst offenders, and `lenses.context_over_120k` isolates every
+session above
 the 120000 peak-context threshold with its price proxy and dominant phase
 (`aggregate-usage.sh`, the `payload_bytes` and lenses sections). Those three
 readings pick the masking targets without guessing.
@@ -242,7 +252,7 @@ compaction).
 ## Reuse
 
 - `aggregate-usage.sh`'s `payload_bytes.by_tool` / `worst_sessions` for target
-  selection, and `context_lens` for the population most affected.
+  selection, and `lenses.context_over_120k` for the population most affected.
 - `by_phase_outcome`'s pooled disposition rates as the quality side of the
   trade — already computed, no new instrumentation.
 

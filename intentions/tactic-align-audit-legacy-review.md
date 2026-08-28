@@ -582,7 +582,18 @@ needs to re-enter the work.
 on **both** limbs: **138/316 = 43.67%** at `76abc77a` against a declared 35%
 ceiling, rising monotonically across the same-day series (38.5 → 39.4 → 40.5 →
 41.14 → 41.77 → 42.09 → 42.72 → 43.67), and **44.30%** at `a5ddeca1` once this
-park landed. One of at least fourteen nodes parked on that one condition. (B)
+park landed. One of at least fourteen nodes parked on that one condition.
+**Correction (2026-08-28):** the "rising monotonically" clause above no longer
+holds. Re-measured at `origin/main` `96dc5a14`: **136/316 = 43.04%**, below
+both `a5ddeca1`'s 44.30% and `76abc77a`'s 43.67%, and level with the 43.04%
+recorded at `b45c0d31` on `tactic-qa-main-node-terminal-declaration`. The
+denominator is 316, the same as at `a5ddeca1`, so the fall is a real change in
+the numerator, not dilution by new filings. What this does and does not
+change: the **ceiling** limb still measures false and decisively — 43.04%
+against a declared 35% — so ground (A) for not finalizing stands unaltered.
+Only the **trend** claim is withdrawn: a future sitting must not cite a
+monotonic rise as evidence, and must re-derive the figure rather than quote
+any number in this section. (B)
 Major scope deviation — this node's determination work is complete,
 and `/align-tactics`' per-node path lands only `phase: implement` (never `done`;
 `prunes` is empty in tactic mode), so a finalize would assert executable scope
