@@ -13,3 +13,40 @@ Aug 28, 2026 — owner-comp bar respec applied. The $30K owner-draw bar (the pla
 - **The economic band** — living wage + 20% or more, the risk-adjusted return. Opens at $96K.
 
 A living wage alone is no longer a marker. The notes card carries the rationale.
+
+## Preview artifact (development)
+
+https://claude.ai/code/artifact/ee469004-6be9-4f6f-b87a-7fffda1a9822 — a second,
+private artifact that renders the same page. Publish in-progress work here to
+look at it in a browser without touching the live artifact above, so several
+changes can be staged and reviewed together before one publish goes out.
+
+It is byte-identical to `benchmark-explorer-src.html` except for the `<title>`
+(`Benchmark Explorer Preview`, so the two are distinguishable in the artifact
+gallery and browser tabs) and its 🚧 favicon.
+
+Working on a change (from a cloud session or locally):
+
+1. `Artifact read` the live URL and reconcile `benchmark-explorer-src.html` with
+   it — the live artifact can move ahead of the committed file.
+2. Edit `benchmark-explorer-src.html` on a branch.
+3. Build the preview copy and publish it, passing the preview URL so it updates
+   in place rather than minting a new artifact:
+
+   ```
+   sed 's|<title>Albemarle Benchmark Explorer</title>|<title>Benchmark Explorer Preview</title>|' \
+     projects/club/claude/benchmark-explorer-src.html > /tmp/benchmark-explorer-preview.html
+   # then: Artifact publish that file with
+   #   url: https://claude.ai/code/artifact/ee469004-6be9-4f6f-b87a-7fffda1a9822
+   ```
+
+4. When the change is accepted, publish the same content to the live URL
+   (`c90fad60-…`) from the unmodified `benchmark-explorer-src.html`, and merge
+   the branch.
+
+Two changes in flight at the same time share one preview artifact, so whoever
+publishes last is what the preview shows. For genuinely parallel work, give each
+branch its own preview: publish a copy under a distinct file path and title
+(e.g. `<title>Owner-Comp Preview</title>`) with no `url`,
+which mints a fresh artifact, and record that URL on the branch's PR. Delete
+nothing; unused previews are private and harmless.
