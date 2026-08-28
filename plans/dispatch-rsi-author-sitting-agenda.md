@@ -479,6 +479,15 @@ two things, and neither is the decision the documents advertise:
 is achieved and prune is owed at a future census once the census-line amendment
 lands." That precondition is **not satisfied**.
 
+> **Updated 2026-08-28, after the ruling.** Ruling 2 *withdrew* the census-line
+> amendment, which retires this precondition rather than satisfying it — but a
+> second, unrecorded one was then found and the prune is still blocked. The node
+> is the only in-tree copy of both retired engine specifications (their skills
+> were deleted by `c845d50f`; verbatim source still survives in history at
+> `44493733`), and 28 prose references across 11 other nodes cite it — none
+> structural, so pruning would pass `validate-graph` green while silently
+> stranding them, five as live instructions. Full finding under "Owed after the sitting.
+
 **(ii) There is an untracked residue — verified today.** The one piece of retired
 engine-2 content the 2026-07-23 sitting decided to **keep** — the unserved-virtue
 census, as an info-only report line in `/align-audit` — is **absent from
@@ -594,11 +603,76 @@ each entry below records its landing commit. What remains owed:
   interview round, not a mechanical amendment, and it needs a paired
   `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change that `graph-commit` cannot
   carry.
-- **D1's prune of `tactic-align-audit-legacy-review`** — re-authorized by the
-  ruling but never authorized *for this session* to execute, so it was not.
-  Note that its doc residue is now handled independently
-  (`tactic-retire-assessor-contract-docs`, `447fc27d`), so the prune no longer
-  strands the three citing sites once that tactic ships.
+- **D1's prune of `tactic-align-audit-legacy-review`** — **not prune-ready, for
+  a reason no document had recorded.** Re-authorized by the ruling, and its
+  *stated* precondition is now moot: the body says "prune is owed at a future
+  census once the census-line amendment lands," and D1 Ruling 2 **withdrew** that
+  amendment, so the recorded gate can never be satisfied as written. But
+  attempting the prune surfaced a different, unrecorded gate.
+
+  **The node is a content archive, not only a decision record.** Its body carries
+  `## Retained engine 1 — the rung-5 dialectic` (lines 350-389) and `## Retained
+  engine 2 — the /align-strategy improvement pass` (lines 390-413) as verbatim
+  design specifications. Both source skills — `.claude/skills/align-init/` and
+  `.claude/skills/align-strategy/` — were **deleted from the tree** by `c845d50f`
+  ("Consolidate /align-strategy + /align-init into /align"). Verified absent
+  2026-08-28.
+
+  The node is therefore the **only copy in the working tree** — but not the only
+  copy anywhere, and the graph says so itself:
+  `tactic-align-entrypoint-consolidation:280-281` records that "verbatim source
+  also survives at `origin/main` commit `44493733`." Verified 2026-08-28 — that
+  commit exists and holds both `.claude/skills/align-init/` and
+  `.claude/skills/align-strategy/`. So a prune destroys the *curated* retention,
+  not the underlying source. That lowers the stakes; it does not clear the prune,
+  because five in-graph instructions send readers to the node rather than to the
+  commit.
+
+  **Measured residue, 2026-08-28: 28 reference lines across 11 other nodes** —
+  none of them a structural edge (`grep '^  - tactic-align-audit-legacy-review'`
+  over `intentions/` returns nothing), so `validate-graph` would stay green and
+  the damage would be silent. The references sort into two kinds, both of which
+  need handling:
+
+  - **Stale-framing references** — `strategy-explicit-intent` (5),
+    `tactic-condition-review-sweep` (4), `tactic-align-audit-skill` (2) and
+    others describe the inclusion decision as *pending* when it was settled
+    2026-07-23. These are the **same defect class** as the file-tree residue, and
+    pruning only adds a second defect on top of a wrong one.
+  - **Content-pointer references** — `tactic-align-entrypoint-consolidation`
+    carries 6, of which **5 are live instructions** pointing at the node for the
+    retained content: "both engines' content is retained verbatim in" (:99),
+    "Its design is retained verbatim in ... **do not duplicate it here**" (:176),
+    "point instead at `tactic-align-audit-legacy-review`, which retains the
+    rung-5 design" (:279), and "design retained in" (:349). The 6th (:123) is a
+    scope exclusion, harmless. Pruning turns the five into instructions pointing
+    at nothing — and :279 is the sharpest, since it is a *rewrite directive* to
+    aim other prose at a node that would no longer exist.
+
+    A sixth site is subtler and is **not** a content pointer:
+    `tactic-align-entrypoint-consolidation:289-293` recommends retaining the two
+    skills and two docs "as orphaned reference content, not delete," giving as
+    its reason that the node "is a live plan for a future `/align-audit` that
+    will re-consume this exact contract." That reason is exactly the premise
+    `tactic-retire-assessor-contract-docs` overturns — the decision went
+    *against* re-consumption — so this recommendation is already stale, and the
+    rescued tactic deleting those docs is what supersedes it. Worth noting so a
+    future reader does not treat it as an objection to that tactic.
+
+  **Scope gap:** `tactic-retire-assessor-contract-docs` (`447fc27d`) covers the
+  **file-tree** residue only — two `.claude/docs/` files and
+  `.claude/skills/align-audit/SKILL.md`. **No node scopes the in-graph residue.**
+  The earlier note here — that the prune "no longer strands the three citing
+  sites once that tactic ships" — was right about those three sites and wrong to
+  imply the prune was therefore clear.
+
+  **What the prune actually needs**, in order: (1) rule whether the retained
+  engine content is still wanted now that the decision it was held for went
+  *against* inclusion — if not, it can die with the node, and if so it needs a
+  home before the node goes; (2) sweep the 28 in-graph references, which is a
+  node-sized job nobody has filed. Both are author calls; neither was in this
+  sitting's scope. **Do not run `graph-commit --prune` on this node until (1) is
+  ruled** — it deletes the file outright and the loss would pass CI green.
 - **`strategy-exercise-recovery-paths`'s threshold** — reclassified: it is not a
   standalone graph edit at all, it is part of PR16 Unit 5. See its entry.
 
