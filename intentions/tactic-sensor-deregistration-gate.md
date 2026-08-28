@@ -5,9 +5,9 @@ statement: "rewording a node's prose silently de-registers the sensor bound to
   it by exact string match and nothing goes red -- validate-graph has been
   non-fatal on that condition since PR #3095 and unit-tests.yml declares
   branches-ignore of the graph namespace, so a write landing through the graph
-  fast path is checked by neither job; the gate's shape is an
-  unratified risk decision because the literal reading re-arms the repo-wide
-  write outage the non-fatal change was made to prevent"
+  fast path is checked by neither job; the gate's shape is an unratified risk
+  decision because the literal reading re-arms the repo-wide write outage the
+  non-fatal change was made to prevent"
 owner: human
 status: raw
 parent: null
@@ -37,31 +37,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "The remedy has two candidate shapes with materially different risk, and
-    choosing between them is an owner decision, not an implementation detail.
-    (1) A node-scoped fatal inside the guard -- fail when a sensor name was
-    bound at origin/main and is unbound after this write -- is the literal
-    reading of the original scope and gates at write time, but it puts a NEW
-    origin/main read inside the one job whose failure mode is repo-wide write
-    denial. That failure mode is the 2026-08-14 outage (54 minutes, three
-    blocked writes, none of them about sensors) that the PR #3095 non-fatal
-    change exists to prevent; getting shape (1) wrong re-arms it exactly. (2) A
-    post-merge check on main cannot deny any write, so it cannot re-arm the
-    outage, but it detects only after the fact. Its cost was recorded as
-    needing a new workflow, because nothing ran on a main push outside
-    path-scoped deploys; that is no longer true as of PR #3108, which removed
-    main from unit-tests.yml's branches-ignore, so graph-validate now runs on
-    every main push and (2) needs only the binding-comparison check, not a new
-    workflow to host it. Do not implement either without a ruling."
-  since: 2026-08-18
-  recommendation: "Carried from PR #3095's post-merge review: take (2) first to
-    establish a detection floor that cannot deny a write, then (1) later as the
-    real write-time gate once its origin/main read has a proven failure-open
-    path. Ratifying that ordering is enough to unpark this node; ratifying (1)
-    alone is not, because the failure-open behaviour of its origin/main read is
-    the whole risk."
-  session_type: requirement-discovery
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
