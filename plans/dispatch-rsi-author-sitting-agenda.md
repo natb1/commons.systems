@@ -56,12 +56,19 @@ concurrently landed write being clobbered.
 
 # Part I — Prerequisites
 
-> ## ✅ SITTING HELD 2026-08-28 — all ten items ruled, all seven parks cleared
+> ## ✅ SITTING HELD 2026-08-28 — all ten items ruled, all eleven parks cleared
 >
-> Every Part I item below is discharged. The seven parked nodes were cleared
-> with `clear-park`, each carrying its full disposition, and all seven verify
-> `office_hours: null` on `origin/main`. **Six of the thirteen Part II positions
-> that carried an author gate — 2, 6, 7, 8, 9 and 11 — are unblocked.**
+> Every Part I item below is discharged. Eleven parked nodes were cleared with
+> `clear-park`, each carrying its full disposition, and all eleven verify
+> `office_hours: null` on `origin/main`. **Every Part II position that carried
+> an author gate — 1, 2, 6, 7, 8 and 9 — is unblocked.**
+>
+> The seven the sitting was convened for: `61b88950` (A1), `08447ab8` (A2),
+> `34f9ab31` (B1), `699b4b26` (B2), `c78f8cd3` (B3), `37e321ca` (C1),
+> `751982b0` (D1). The four the sitting *found* — C2's, C3's and C4's nodes,
+> which the text below wrongly said did not exist — cleared after the rulings
+> were recorded: `ee3ccd64` (C2), `756a06f0` (C3), `f093e607` and `59ea8410`
+> (C4).
 >
 > | item | ruling | landed |
 > |---|---|---|
@@ -79,13 +86,14 @@ concurrently landed write being clobbered.
 > **Three corrections this sitting made to the text below.**
 >
 > 1. **"Only C1 has a node and a park — C2, C3 and C4 have no node at all" is
->    wrong.** Each has a *parked* node on `origin/main`:
+>    wrong.** Each had a *parked* node on `origin/main`:
 >    `tactic-orphaned-delegation-records-reading` (C2, parked 2026-08-20),
 >    `tactic-fleet-alarm-node-park-clobber-loop` (C3, parked 2026-08-04), and for
 >    C4 both `tactic-graph-commit-park-content-durability` (2026-08-21) and
 >    `tactic-graph-commit-delete-vs-edit-park-hardening` (2026-08-10). Their
->    rulings are recorded in the PR plan, but **those four parks are still set** —
->    a PR touching them will see one.
+>    rulings are recorded in the PR plan. **All four have since been cleared**
+>    (`ee3ccd64`, `756a06f0`, `f093e607`, `59ea8410`), so no PR in this window
+>    now walks into one.
 > 2. **D1 was not bookkeeping.** Its park carries *two* rulings, and the first is
 >    the strategy-wide band disposition. It was ruled **(c) accept the breach with
 >    remediation**, keeping the 35% target and naming Part II itself as the drain
@@ -566,8 +574,10 @@ packages/intentionsutil/scripts/clear-park -C <repo-root> <node-id> "<dispositio
 different trees. The script fetches `origin/main` and rebases the node's content
 onto it before mutating, so it is safe to run from a stale worktree.
 
-Group C's C2, C3 and C4 have no node and no park. Their rulings are recorded in
-the plan and carried into the implementing PR.
+Group C's C2, C3 and C4 each turned out to have a parked node after all — four
+between them — *(corrected 2026-08-28)*. Their rulings are recorded in the plan
+and carried into the implementing PR, and the four parks were cleared once the
+rulings were on record.
 
 ---
 
@@ -612,7 +622,8 @@ None of these were executed by the sitting; each is a follow-on write.
   decider. Pruning that node without this fix leaves three sites pointing at a
   node that no longer exists.
 
-**Parks still set** (C2/C3/C4's nodes — see correction 1 above).
+**Parks** — none outstanding. The four the sitting found on C2/C3/C4's nodes
+were cleared after their rulings were recorded; see correction 1 above.
 
 **Plan edits**
 
