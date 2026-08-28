@@ -31,38 +31,7 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Born parked at record time as the curriculum-frontier entry for content
-    the author accepted on trust rather than endorsing. In the 2026-08-13 /align
-    round the author declined the offered options for how a detached
-    /code-review run holds its node and instead delegated the choice —
-    'Recommend the best greenfield locking mechanism' — so the recorded
-    mechanism is Claude's articulation, not an author-verified decision. What is
-    held on trust: that a kernel-released flock held by the detached child is
-    the best greenfield mechanism, on the argument that it delegates
-    release-exactly-when-the-holder-dies to the kernel while a
-    pid-plus-timestamp sidecar needs staleness heuristics and carries a
-    pid-reuse window, a heartbeat needs a second process that can itself die,
-    and a graph-layer lock needs a reaper, would strand a node forever when the
-    child dies, and puts runtime machinery in the graph that condition 4 keeps
-    out. Two limits were recorded rather than buried and are the natural agenda
-    for the sitting: flock is advisory, so it binds only claimers that check and
-    a human entering the worktree by hand bypasses it; and flock availability
-    plus setsid fd-inheritance inside a dispatch worktree are UNVERIFIED. This
-    is a text-less deferral — Claude's own comparative analysis, with no
-    grounding tradition text — so it enrolls as an office-hours sitting rather
-    than a reading chunk."
-  since: 2026-08-13
-  recommendation: Read strategy-token-economy's 2026-08-13 clarification on what
-    holds the node during a detached run, then decide whether the flock
-    mechanism survives your own reading against the three alternatives it
-    declined. If tactic-code-review-detached-node-lock has by then measured
-    flock availability and setsid fd-inheritance in a dispatch worktree, take
-    that measurement as the sitting's evidence; if it has not, the sitting can
-    resolve to requiring that probe before the mechanism is built. Either ratify
-    the mechanism with a dated clarification, or amend it and re-plan the
-    carrier.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
