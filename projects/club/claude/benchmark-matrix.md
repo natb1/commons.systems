@@ -67,7 +67,7 @@ Rows: rooms performance (utilization / club roster). Columns: café performance 
 
 - **The $0 line (not losing money, no draw):** Little Italy (33%, ~108 tx) → (45%, ~101 tx) → (55%, ~95 tx) → (75%, ~83 tx); SN/HT (33%, ~101 tx) → (45%, ~93 tx) → (55%, ~87 tx) → (75%, ~76 tx). Every cell above/left of it is a business burning cash.
 - **The $30K line (the plan's §9 partial-income floor):** Little Italy (33%, ~124 tx) → (45%, ~117 tx) → (55%, ~111 tx) → (75%, ~99 tx); SN/HT (33%, ~117 tx) → (45%, ~110 tx) → (55%, ~104 tx) → (75%, ~92 tx). No single-engine cell clears it: café-alone needs ~124 walk-ins/day (top-decile), rooms-alone ~76% utilization.
-- **The owner's bar (a living wage at zero opportunity cost, $71.1K at $240K of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the $30K line, is what the venture has to close to be worth the owner's labor and capital.
+- **The owner's bar (a living wage at zero opportunity cost, $67.3K at $202K of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the $30K line, is what the venture has to close to be worth the owner's labor and capital.
 - **Evidence limits (mark before believing any cell):** columns right of 110 walk-ins/day at Little Italy are top-decile café territory; rows below 55% utilization are unsupported by any current evidence at the $15–35/hr band (the D&J analog hits ~100% peak at $5–10/hr — a ceiling test, not a forecast). The credible planning region is the middle of the matrix, which is exactly why the dual gate demands proof on both axes before a lease.
 <!-- model:end contours -->
 
