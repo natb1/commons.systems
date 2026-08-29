@@ -165,7 +165,13 @@ fi
 # origin/main baseline: it hashes the working tree's vendored skill directories
 # against the digests recorded in their .upstream.json markers, so it also runs
 # on a plain checkout or a worktree with no upstream ref. Cost is a sha256 over
-# a handful of small files. See .claude/rules/vendored-skills.md.
+# a handful of small files.
+#
+# INTEGRITY TIER ONLY — deliberately without --local. The drift and shadow
+# checks need the machine's own Claude skill roots (~/.claude/skills and its
+# synced buckets), which no CI runner has; invoked here they would silently
+# downgrade to this same tier and read as coverage that does not exist. They
+# run in .githooks/pre-commit instead. See .claude/rules/vendored-skills.md.
 echo "=== vendored-skill lint ==="
 if "$SCRIPTS/lint-vendored-skills.sh"; then
   echo "PASS: vendored skills"

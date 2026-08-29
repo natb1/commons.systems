@@ -94,6 +94,15 @@
               ]) ++ [ dispatch office-hours ];
               shellHook = ''
                 export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+
+                # Install the repo's git hooks (.githooks/pre-commit runs the
+                # drift and shadow checks CI cannot -- see
+                # .claude/rules/vendored-skills.md). Only claimed when unset, so
+                # a developer who points core.hooksPath somewhere of their own
+                # keeps it.
+                if [ -d .githooks ] && [ -z "$(git config --get core.hooksPath || true)" ]; then
+                  git config core.hooksPath .githooks
+                fi
               '';
             };
           });

@@ -53,17 +53,47 @@ what loads.
   the directory — update every caller that invokes it, including any routine
   prompt.
 
-`.claude/skills/dispatch-propagate/scripts/lint-vendored-skills.sh` enforces
-both halves, unconditionally on every PR via `run-lint.sh`.
+## Two enforcement tiers, because CI is blind to the interesting half
 
-## Shadowing is silent, and CI cannot see it
+`lint-vendored-skills.sh` runs in two tiers. The split is not cosmetic: the two
+failures that actually matter are invisible to a CI runner, which has no Claude
+skill roots on disk.
 
-A project skill overrides a personal, bundled, or account-synced skill of the
-same name, with no warning at any level. CI has none of those other roots on
-disk, so no check here can detect the clash — only the marker makes the
-intentional case (a vendored copy deliberately shadowing its own synced
-original) legible to a reader.
+| | Checks | Where |
+| --- | --- | --- |
+| default | **Integrity** — committed content vs the digests in `.upstream.json`, required marker keys, no unlisted files | `run-lint.sh`, every PR |
+| `--local` | integrity **+ drift + shadow** | `.githooks/pre-commit` |
 
-Before naming a **new repo-authored** skill, check the name against the
-bundled and synced skills listed in a live session. Claiming one of those
-names silently replaces it everywhere in this repo.
+- **Drift** — the vendored copy vs the live account-synced original. Integrity
+  alone cannot see this: a copy that faithfully matches its own recorded hashes
+  is still stale the moment upstream moves.
+- **Shadow** — a repo-authored skill name that silently overrides a personal or
+  account-synced skill. A project skill wins over both with no warning at any
+  level, so the clash is otherwise undetectable until behavior changes.
+
+Skill roots come from `CLAUDE_CONFIG_DIR` (default `~/.claude`). When that root
+is absent, `--local` says so and downgrades to integrity rather than failing —
+a machine without the account skills synced is not a broken checkout.
+
+Bundled skills are out of scope for the shadow check: their location is not
+portably discoverable from a script. Before naming a **new repo-authored**
+skill, check the name against the bundled skills listed in a live session.
+
+### Installing the hook
+
+The devshell claims `core.hooksPath` on entry when it is unset. Otherwise:
+
+```
+git config core.hooksPath .githooks
+```
+
+The hook only runs on commits that touch `.claude/skills/`. Drift can also
+appear with no commit at all — upstream moves on its own — and blocking an
+unrelated commit on that would stall work nobody involved caused. To see that
+case, run the check directly:
+
+```
+.claude/skills/dispatch-propagate/scripts/lint-vendored-skills.sh --local
+```
+
+`git commit --no-verify` bypasses a single commit.
