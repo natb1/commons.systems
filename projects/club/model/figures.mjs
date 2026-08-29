@@ -202,6 +202,29 @@ export const FIGURES = {
   sessionMarginalK: k(M.withState({}, () => M.msess(P.price)), 1),
   txMarginalK: k(M.withState({}, () => M.mtx(P.ticket)), 2),
 
+  // A filled weekly session brings its catering attach with it; the room line
+  // alone is the plan's figure, the all-in number is what a club actually adds.
+  sessionMarginalAllInK: k(M.withState({}, () => {
+    const step = 100 / M.CAPACITY;
+    return M.comp(P.util + step, M.SITES.li.mark) - M.comp(P.util, M.SITES.li.mark);
+  }), 1),
+  sessionMarginalSignedK: sk(M.withState({}, () => M.msess(P.price)), 1),
+  txMarginalSignedK: sk(M.withState({}, () => M.mtx(P.ticket)), 2),
+
+  // exact (one-decimal) statements of the two base cases, where the prose needs
+  // to show that the model reproduces §6 rather than rounds to it
+  compLiExact: k(LI.comp, 1),
+  compSnExact: k(SN.comp, 1),
+  compLiRung: k(M.withState({}, () => M.comp(P.util, M.SITES.li.mark))),
+  wageSpreadK: k(M.withState({ wage: 3 }, () => M.laborK()) - M.withState({ wage: 0 }, () => M.laborK())),
+
+  // exact (one-decimal) statements of the two base cases, where the prose shows
+  // that the model reproduces §6 rather than merely rounds to it
+  compLiExact: k(LI.comp, 1),
+  compSnExact: k(SN.comp, 1),
+  compLiRung: k(M.withState({}, () => M.comp(P.util, M.SITES.li.mark))),
+  wageSpreadK: k(M.withState({ wage: 3 }, () => M.laborK()) - M.withState({ wage: 0 }, () => M.laborK())),
+
   // the owner's bars
   livingWageK: k(bars.living, 1),
   ownerBarK: k(bars.bar, 1),
@@ -212,6 +235,32 @@ export const FIGURES = {
   staffHrsPerYr: Math.round(M.STAFF_HRS).toLocaleString("en-US"),
   leanStop: num(M.LEAN_STOP),
 
+  // what SN/HT's cheaper floor is worth at equal traffic
+  snFloorAdvantageK: sk(M.SITES.li.occ - M.SITES.sn.occ),
+
+  // club rosters at the marks the pilot docs compare themselves against
+  baseRosterWeekly: num(rosterFor(P.util).weekly),
+  baseRosterMixed: num(rosterFor(P.util).mixed),
+  breakEvenUtil: "45%",
+  breakEvenRosterWeekly: num(rosterFor(45).weekly),
+  breakEvenRosterMixed: num(rosterFor(45).mixed),
+  gateRosterWeekly: num(rosterFor(55).weekly),
+  gateRosterMixed: num(rosterFor(55).mixed),
+
+  cafeCogsPct: pct(100 - M.CAFE_MARGIN_DEF),
+  laborRungK: k(M.withState({}, () => M.laborK())),
+
+  // the catering attach (D15) and the cash constraint (D7)
+  cateringMarginK: k(LI.catering, 1),
+  cateringOrdersPerWk: num(M.withState({}, () => M.caterOrders(P.util, P.caClub, P.caEvent, P.events)), 1),
+  wcBandK: `$${M.WC_BAND[0]}–${M.WC_BAND[1]}K`,
+  wcReserveK: k(M.WC),
+  buildCapK: k(M.DEF.build),
+  ventureCashK: k(M.DEF.cash),
+  runwayMonths: num(M.DEF.runway),
+  bailLineK: k(M.withState({}, () => M.bailComp())),
+  equityRangeK: `$${M.EQUITY_RANGE[0]}–${M.EQUITY_RANGE[1]}K`,
+
   // gate-clearing arithmetic quoted in §6 and the precedent memo
   gateTx: "110",
   gateTxGainK: sk(M.withState({}, () => M.mtx(P.ticket)) * (110 - M.SITES.li.mark)),
@@ -221,13 +270,12 @@ export const FIGURES = {
 };
 
 // ---- BLOCKS --------------------------------------------------------------
-const GEN = (src) =>
-  `*Generated from \`${src}\` by \`node model/render.mjs\` — edit the model, not this table.*\n`;
+const GEN = () => "*Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*";
 
 function proForma() {
   const row = (label, li, sn, buy) => `| ${label} | ${li} | ${sn} | ${buy} |`;
   return [
-    GEN("model/model.mjs"),
+    GEN(),
     "",
     "| | **Little Italy lease** (~2,500 sf @ $22 NNN) | **SN/HT lease** (~3,000 sf @ $16) | **SN/HT buy** (SBLP-terms acceleration case) |",
     "|---|---|---|---|",
@@ -248,16 +296,16 @@ function sensitivity() {
     const r = scenario(s);
     return `| ${s.label} | ~${k(r.revenue)} | ~${k(r.comp)} |`;
   });
-  return [GEN("model/model.mjs"), "", "| Scenario | LI revenue | LI owner comp |", "|---|---|---|", ...rows].join("\n");
+  return [GEN(), "", "| Scenario | LI revenue | LI owner comp |", "|---|---|---|", ...rows].join("\n");
 }
 
 function matrixAssumptions() {
   const roster = rosterFor(P.util);
   return [
-    GEN("model/model.mjs"),
+    GEN(),
     "",
     `- **Capacity:** 3 bookable rooms × ~6 usable evenings + weekend-afternoon slots ≈ **${num(M.CAPACITY)} session-slots/week**. Full utilization ≈ ${k(M.CAPACITY * M.sessRevK(P.price))}/yr at a $${num(P.price)} average session.`,
-    `- **Marginal values:** each filled weekly session ≈ **${sk(M.withState({}, () => M.msess(P.price)), 1)}/yr owner comp**; each café walk-in/day ≈ **${sk(M.withState({}, () => M.mtx(P.ticket)), 2)}/yr**. Both are net of the ${pct(M.VAR_OPS * 100, 1)} of gross revenue that card fees and marketing take; the plan's §5 quotes the same sessions gross of that, at ${k(M.sessRevK(P.price) * M.ROOM_MARGIN, 1)}.`,
+    `- **Marginal values:** each filled weekly session ≈ **${sk(M.withState({}, () => M.msess(P.price)), 1)}/yr owner comp** on the room line, **${FIGURES.sessionMarginalAllInK}** once the catering that attaches to it is counted; each café walk-in/day ≈ **${sk(M.withState({}, () => M.mtx(P.ticket)), 2)}/yr**. All are net of the ${pct(M.VAR_OPS * 100, 1)} of gross revenue that card fees and marketing take; the plan's §5 quotes the session gross of that, at ${k(M.sessRevK(P.price) * M.ROOM_MARGIN, 1)}.`,
     `- **One-off private events** (parties/showers, D11 base ${num(P.events, 1)}/mo) contribute ~${num(M.evEqOf(P.events), 1)} weekly-equivalent sessions at every tier; the club roster figures below are net of them.`,
     `- **Club cadence mapping:** a weekly club = 1 session/wk; biweekly = 0.5; monthly ≈ 0.23. "Mixed roster" assumes ${M.CADENCE.mixed.desc.replace(/ — .*/, "")} — the realistic shape the pilot's "monthly or better" retention floor predicts. At the base row that is ~${num(roster.weekly, 0)} weekly-committed clubs or ~${num(roster.mixed, 0)} mixed-cadence ones.`,
     `- **Program-for vs maintain:** the roster numbers are *active clubs to maintain*. Programming must run above them — clubs churn (rate unknown; a pilot deliverable), so the recruiting pipeline needs to be perhaps ${num(M.DEF.churn, 1)}× the maintained roster. Validate the churn rate during Phase 0.5.`,
@@ -273,7 +321,7 @@ function rosterTable() {
     return `| **${pct(u)}**${badge} | ~${num(M.withState({}, () => M.sessions(u)), 1)} | **~${num(r.weekly)}** | **~${num(r.mixed)}** | **~${num(r.slow)}** | ${week[u] ?? ""} |`;
   });
   return [
-    GEN("model/model.mjs"), "",
+    GEN(), "",
     "| Evening utilization (3 rooms) | Weekly-eq sessions | All-weekly roster | Mixed-cadence roster | Slower-cadence roster | What a week looks like |",
     "|---|---|---|---|---|---|",
     ...rows, "",
@@ -282,7 +330,7 @@ function rosterTable() {
 }
 
 function matrixTables() {
-  const out = [GEN("model/model.mjs"), ""];
+  const out = [GEN(), ""];
   for (const site of ["li", "sn"]) {
     const m = matrixFor(site);
     out.push(`**${M.SITES[site].label}** — occupancy ${k(M.SITES[site].occ)}, operations ${k(M.SITES[site].ops)}, café mark ${num(M.SITES[site].mark)} walk-ins/day.`, "");
@@ -308,7 +356,7 @@ function contours() {
       .map((p) => `(${pct(p.util)}, ~${num(p.tx)} tx)`)
       .join(" → ");
   return [
-    GEN("model/model.mjs"), "",
+    GEN(), "",
     `- **The $0 line (not losing money, no draw):** Little Italy ${fmt("li", 0)}; SN/HT ${fmt("sn", 0)}. Every cell above/left of it is a business burning cash.`,
     `- **The ${k(M.PLAN_DRAW_FLOOR)} line (the plan's §9 partial-income floor):** Little Italy ${fmt("li", M.PLAN_DRAW_FLOOR)}; SN/HT ${fmt("sn", M.PLAN_DRAW_FLOOR)}. No single-engine cell clears it: café-alone needs ~${num(FIGURES.cafeAloneTx)} walk-ins/day (top-decile), rooms-alone ~${FIGURES.roomsAloneUtil} utilization.`,
     `- **The owner's bar (a living wage at zero opportunity cost, ${k(bars.bar, 1)} at ${k(M.DEF.equity)} of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the ${k(M.PLAN_DRAW_FLOOR)} line, is what the venture has to close to be worth the owner's labor and capital.`,
@@ -322,7 +370,7 @@ function wageRungs() {
     return `| ${w.label}${i === M.MIT_RUNG ? " *(default)*" : ""} | $${w.cash.toFixed(2)} | $${w.pay.toFixed(2)} | ${w.ben ? "$" + w.ben.toFixed(2) : "—"} | $${w.rate.toFixed(2)} | ~${k(labor)} |`;
   });
   return [
-    GEN("model/model.mjs"), "",
+    GEN(), "",
     "| Rung | Take-home | Payroll | Benefits | Total comp | Labor |",
     "| --- | --- | --- | --- | --- | --- |",
     ...rows, "",
@@ -339,3 +387,81 @@ export const BLOCKS = {
   contours,
   "wage-rungs": wageRungs,
 };
+
+// ---- HTML blocks -----------------------------------------------------------
+// The artifact's notes card states the model in prose and in two small tables.
+// They are generated for the same reason the documents' tables are: the page
+// must not be able to describe a model other than the one it runs.
+const GEN_HTML = () =>
+  "        <!-- generated from model/model.mjs — edit the model, then `node model/render.mjs` -->";
+
+// The default view, line by line: each stream at its own margin, then the costs.
+// Labor here is the Wages rung (what the tool spends), not §6's published line —
+// which is why this table's bottom row sits ~$1K below the pro forma's.
+function contributionHtml() {
+  const d = M.withState({}, () => ({
+    cafe: M.cafeK(M.S.tx), cafeRev: M.S.tx * M.txRevK(M.S.ticket),
+    catering: M.cateringK(M.S.util, M.S.caClub, M.S.caEvent, M.S.events),
+    rooms: M.roomsK(M.S.util), other: M.otherIncomeK(),
+    revenue: M.revenueK(M.S.util, M.S.tx), varOps: M.varOpsK(M.S.util, M.S.tx),
+    occ: M.occupancyK(), labor: M.laborK(), comp: M.comp(M.S.util, M.S.tx),
+  }));
+  const row = (label, contrib, cost) =>
+    `          <tr><th>${label}</th><td>${contrib ?? "—"}</td><td>${cost ?? "—"}</td></tr>`;
+  return [
+    GEN_HTML(),
+    `        <table class="mini">`,
+    `          <tr><th>${M.SITES[M.DEF.site].label} at plan marks</th><th class="hr">Contribution</th><th class="hr">Cost</th></tr>`,
+    row(`Café — walk-ins (${k(d.cafeRev)} × ${pct(M.CAFE_MARGIN_DEF)})`, sk(d.cafe), null),
+    row(`Café — catering attach (${pct(M.CATER_MARGIN * 100)})`, sk(d.catering), null),
+    row(`Rooms — evenings (${pct(M.ROOM_MARGIN * 100)})`, sk(d.rooms), null),
+    row(`Rooms — day (${pct(M.ROOM_MARGIN * 100)}) + prints (${pct(M.PRINT_MARGIN * 100)})`, sk(d.other), null),
+    row(`Card fees &amp; marketing (${pct(M.VAR_OPS * 100, 1)} of ${k(d.revenue)})`, null, sk(-d.varOps)),
+    row("Operations — fixed", null, sk(-M.FIXED_OPS)),
+    row("Occupancy", null, sk(-d.occ)),
+    row("Labor (the Wages rung)", null, sk(-d.labor)),
+    row("Commons / books", null, sk(-M.DEF.commons)),
+    row("<b>Owner compensation</b>", null, sk(d.comp)),
+    `        </table>`,
+  ].join("\n");
+}
+
+// Each site's base case decomposed into the two things "SN/HT: subtract ~$22K"
+// bundled — the cheaper floor, and the weaker expected café column.
+function siteDecompositionHtml() {
+  const liComp = LI.comp;
+  const snAtLiTraffic = M.withState({ site: "sn", tx: M.SITES.li.mark }, () =>
+    M.comp(P.util, M.SITES.li.mark) + (M.laborK() - M.PLAN_LABOR_K));
+  const row = (label, v) => `          <tr><th>${label}</th><td>${v}</td></tr>`;
+  // Stated to a decimal so the three steps visibly sum to the fourth.
+  return [
+    GEN_HTML(),
+    `        <table class="mini">`,
+    row(`${M.SITES.li.label} at its ${num(M.SITES.li.mark)} walk-ins/day mark`, k(liComp, 1)),
+    row(`SN/HT cost basis at equal traffic (occupancy ${k(M.SITES.sn.occ)} vs ${k(M.SITES.li.occ)})`, sk(snAtLiTraffic - liComp, 1)),
+    row(`SN/HT expected traffic: ${num(M.SITES.li.mark - M.SITES.sn.mark)} fewer walk-ins/day (×${k(M.withState({ site: "sn" }, () => M.mtx(P.ticket)), 2)})`, sk(SN.comp - snAtLiTraffic, 1)),
+    row(`SN/HT at its own ${num(M.SITES.sn.mark)} walk-ins/day mark`, k(SN.comp, 1)),
+    `        </table>`,
+  ].join("\n");
+}
+
+function wageRungsHtml() {
+  const row = (w, i) => {
+    const labor = M.withState({ wage: i }, () => M.laborK());
+    const label = w.label + (i === M.DEF.wage ? " <i>(default)</i>" : "");
+    return `          <tr><th>${label}</th><td>$${w.cash.toFixed(2)}</td><td>$${w.pay.toFixed(2)}</td><td>${w.ben ? "$" + w.ben.toFixed(2) : "—"}</td><td>$${w.rate.toFixed(2)}</td><td>~${k(labor)}</td></tr>`;
+  };
+  return [
+    GEN_HTML(),
+    `        <table class="mini">`,
+    `          <tr><th></th><th class="hr">Take-home</th><th class="hr">Payroll</th><th class="hr">Benefits</th><th class="hr">Total comp</th><th class="hr">Labor</th></tr>`,
+    ...M.WAGES.map(row),
+    `        </table>`,
+  ].join("\n");
+}
+
+Object.assign(BLOCKS, {
+  "contribution-html": contributionHtml,
+  "site-decomposition-html": siteDecompositionHtml,
+  "wage-rungs-html": wageRungsHtml,
+});

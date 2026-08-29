@@ -68,7 +68,11 @@
     // Operational scripts run by path (e.g. `node --import tsx/esm
     // ops/durability/audit.ts`), not statically imported — same rationale as
     // .claude/** above. The ops/ tree is invoked by operators/CI, never bundled.
-    "ops/**"
+    "ops/**",
+    // The club project's model, its document renderer and its invariant check.
+    // Run by path (`node model/render.mjs` from projects/club, and the
+    // club-model-sync CI job); nothing imports them, and they ship nowhere.
+    "projects/club/model/**"
   ],
 
   "workspaces": {

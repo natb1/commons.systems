@@ -31,7 +31,7 @@ Never silently substitute an easier observation for the one specified. If a sour
 
 ### T1 — Analog utilization sampling: Dungeons & Javas (REPEATING — the highest-value task)
 
-**Goal:** observed fill rate of bookable rooms/tables at the closest operating analog (Colorado Springs; rooms $5–10/hr), as a public proxy for the utilization curve. The plan's base case assumes ~33% evening/weekend utilization; the gate-clearing case ~55%.
+**Goal:** observed fill rate of bookable rooms/tables at the closest operating analog (Colorado Springs; rooms $5–10/hr), as a public proxy for the utilization curve. The plan's base case assumes ~<!--m:baseUtil-->33%<!--/m--> evening/weekend utilization; the gate-clearing case ~<!--m:gateUtil-->55%<!--/m-->.
 
 **Method:** start at https://www.dungeonsandjavas.com/ and find the room/table booking page (bookings run in 30-min increments up to a year out). Fetch the availability view for (a) the upcoming Friday and Saturday evenings, (b) the upcoming Sunday afternoon, (c) one weekday (Tue or Wed) evening. For each room × time window, record booked vs open slots.
 

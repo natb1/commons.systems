@@ -151,3 +151,21 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Flag unbounded Firestore getDocs queries
         run: .github/scripts/check-firestore-query-bounds.sh
+
+  # The club project's documents and its published benchmark explorer are both
+  # generated from projects/club/model/model.mjs. This fails the PR when a
+  # generated figure was hand-edited, or when the model moved and the renderer
+  # was not re-run — the drift this single-source arrangement exists to prevent.
+  club-model-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+      - name: Check the club model's invariants
+        run: node model/verify.mjs
+        working-directory: projects/club
+      - name: Check the club docs and artifact are in sync with the model
+        run: node model/render.mjs --check
+        working-directory: projects/club

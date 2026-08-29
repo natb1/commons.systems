@@ -67,7 +67,9 @@ export var LEAN_STOP = 70;                 // absolute, both markets (risk 1) �
 // owner's labor and capital — see OWNER_HRS/RET_LO below), but §6 and the
 // benchmark matrix quote it, so it lives here rather than in their prose.
 export var PLAN_DRAW_FLOOR = 30;
-export var WC = 58, WC_FLOOR = 45;         // $K: working-capital reserve band
+export var WC_BAND = [50, 65];              // $K: §6's working-capital + Year-1 ramp reserve, as the plan states it
+export var WC = Math.round((WC_BAND[0] + WC_BAND[1]) / 2);   // the band's midpoint — what the cash test carries
+export var WC_FLOOR = 45;                  // abatement relief cannot take the reserve below this
 export var OWNER_HRS = 40;                 // owner’s gridded week: ~30 on the floor + ~10 admin/sales
 export var RET_LO = 0.10, RET_HI = 0.20;   // required return on capital at risk: opportunity cost → illiquid-smallco
 export var EQUITY_RANGE = [180,300];       // plan’s grant-free cash-to-open range ($K); default is the midpoint

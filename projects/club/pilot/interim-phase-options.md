@@ -8,7 +8,7 @@
 
 The current plan steps from a free one-room residential pilot ($0 at stake) directly to the full commercial commitment (lease + build-out + reserve, ~2028). Three known weaknesses live in that gap:
 
-1. **Scale:** the pilot at full utilization (7 sessions/week, one room) with a 50% graduation conversion seeds ~3.5 weekly sessions — under half the ~8/week the money-losing base case already assumes, and a seventh of the 25-slot commercial week. A perfect pilot validates one room; the site needs three.
+1. **Scale:** the pilot at full utilization (7 sessions/week, one room) with a 50% graduation conversion seeds ~3.5 weekly sessions — under half the ~<!--m:baseSessions-->8.3<!--/m-->/week the money-losing base case already assumes, and a seventh of the <!--m:capacitySlots-->25<!--/m-->-slot commercial week. A perfect pilot validates one room; the site needs three.
 2. **Evidence quality:** the graduation ask is a deposit against a site ~a year away. Paid behavior at a real commercial venue is strictly stronger G1 evidence — actual willingness-to-pay, no stranger's-house confounder, no IOU.
 3. **The gap year:** converted groups must survive ~12 months between graduation (~May 2027) and opening (~2028) on a deposit. An interim phase carries them as active paying customers instead; the plan currently carries no attrition haircut for that wait.
 

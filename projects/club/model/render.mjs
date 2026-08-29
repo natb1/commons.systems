@@ -26,9 +26,9 @@ const DOCS = [
   "business-plan.md",
   "claude/benchmark-matrix.md",
   "claude/benchmark-explorer.md",
-  "open-questions.md",
   "pilot/interim-phase-options.md",
   "pilot/phase-0.5-spec.md",
+  "validation/data.md",
   "validation/precedent-research.md",
   "validation/runbook.md",
 ];
@@ -56,11 +56,11 @@ function spliceHtml(src) {
 
 function fillDoc(file, src) {
   let out = src.replace(
-    /(<!-- model:begin ([a-z-]+) -->\n)[\s\S]*?(\n<!-- model:end \2 -->)/g,
-    (_all, begin, name, end) => {
+    /([ \t]*)<!-- model:begin ([a-z-]+) -->\n[\s\S]*?[ \t]*<!-- model:end \2 -->/g,
+    (_all, indent, name) => {
       const block = BLOCKS[name];
       if (!block) throw new Error(`${file}: unknown generated block '${name}' — add it to figures.mjs BLOCKS`);
-      return begin + block() + end;
+      return `${indent}<!-- model:begin ${name} -->\n${block()}\n${indent}<!-- model:end ${name} -->`;
     },
   );
   out = out.replace(/<!--m:([A-Za-z]+)-->.*?<!--\/m-->/gs, (_all, name) => {
@@ -75,7 +75,9 @@ const stale = [];
 for (const file of [ARTIFACT, ...DOCS]) {
   const path = resolve(ROOT, file);
   const src = readFileSync(path, "utf8");
-  const next = file === ARTIFACT ? spliceHtml(src) : fillDoc(file, src);
+  // The artifact takes the model itself as well as the figures its notes card
+  // quotes; the documents take figures only.
+  const next = file === ARTIFACT ? fillDoc(file, spliceHtml(src)) : fillDoc(file, src);
   if (next === src) continue;
   stale.push(file);
   if (!check) writeFileSync(path, next);

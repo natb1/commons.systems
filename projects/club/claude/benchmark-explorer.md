@@ -1,11 +1,15 @@
 # Benchmark explorer (interactive)
-**The artifact is the live tool. `benchmark-explorer-src.html` is its source of truth; this doc is a pointer and is not maintained.**
+**The artifact is the live tool. `benchmark-explorer-src.html` is its committed source; the model it runs lives in `../model/model.mjs`. This changelog is a pointer and is not maintained.**
 
 https://claude.ai/code/artifact/c90fad60-5217-4399-9bb1-17bb1c2a54ad
 
 `benchmark-explorer-src.html` alongside this file is the authored source and the baseline for every change; the live artifact is its deployment. See `.claude/rules/published-artifacts.md` for the loop this follows. The file holds the authored page only — the publish-time `<!doctype html>`/`<head>`/`<body>` wrapper is added by the artifact service and is deliberately not committed.
 
-Companion to `claude/benchmark-matrix.md`; calibrated to business-plan.md v0.3.3 §5–6. The artifact's notes card documents the model, calibration, and the correction to the matrix doc's "SN/HT: subtract ~$22K per cell" shortcut.
+**The page's model is generated.** `../model/model.mjs` is spliced into this file's `<script>`, and the notes card's tables and figures are written from the same model, by `node model/render.mjs` — which also writes the numbers in `../business-plan.md`, `benchmark-matrix.md` and the pilot and validation docs. Edit the model there and re-render; never edit a figure or the spliced region in this file. `../model/README.md` is the working loop, `node model/verify.mjs` the invariants.
+
+Companion to `benchmark-matrix.md`; calibrated to business-plan.md §5–6. The artifact's notes card documents the model, its calibration, and the correction to the matrix doc's "SN/HT: subtract ~$22K per cell" shortcut.
+
+Aug 29, 2026 — model moved to `../model/model.mjs`, no behavior change to the page. Verified by evaluating the model region over a 1,200-scenario lever grid before and after the move and comparing the results byte for byte. The documents that used to restate the model by hand now read it: §6's pro forma, the sensitivity rows, both site matrices, the club rosters and the wage rungs are generated, and the figures inside authored prose are generated spans. Three published figures moved as a consequence — §6's SN/HT owner comp (−$35K → −$37K, a slip in the printed column), SN/HT revenue ($301K → $300K) and cost of sale ($104K → $101K) — and the matrix doc's per-cell "subtract ~$22K" shortcut is replaced by a second matrix on SN/HT's own cost basis.
 
 Aug 28, 2026 — owner-comp bar respec applied. The $30K owner-draw bar (the plan's §9 partial-income floor) is retired. Owner comp is now read against two economic-profit tiers, both starting from a living wage (~$48K: 40 hr × 52 × the Wages rung's loaded rate, so it moves with that lever) and adding a return on capital at risk (a new lever defaulted to $240K):
 
