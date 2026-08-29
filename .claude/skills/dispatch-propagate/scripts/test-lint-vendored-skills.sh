@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # Tests for lint-vendored-skills.sh. Each case builds a throwaway git repo plus a
 # fake CLAUDE_CONFIG_DIR skill root, so the drift and shadow checks are exercised
@@ -7,28 +7,18 @@ set -euo pipefail
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 LINTER="$SCRIPTS/lint-vendored-skills.sh"
-PASS=0
-FAIL=0
 
-report() {
-  if [ "$1" = "ok" ]; then
-    echo "  PASS: $2"; PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $2" >&2; FAIL=$((FAIL + 1))
-  fi
-}
+# shellcheck source=test-helpers.sh
+source "$SCRIPTS/test-helpers.sh"
 
-# expect <expected-exit> <name> -- runs the linter in $TMP/repo with $TMP/config
+# expect <expected-exit> <name> [linter args...] -- runs the linter in $TMP/repo
+# against the fixture skill root at $TMP/config.
 expect() {
   local want="$1" name="$2"; shift 2
   local got=0 out
   out=$(cd "$TMP/repo" && CLAUDE_CONFIG_DIR="$TMP/config" "$LINTER" "$@" 2>&1) || got=$?
-  if [ "$got" = "$want" ]; then
-    report ok "$name"
-  else
-    report no "$name (wanted exit $want, got $got)"
-    echo "$out" | sed 's/^/      /' >&2
-  fi
+  assert_eq "$name" "$want" "$got"
+  [ "$got" = "$want" ] || echo "$out" | sed 's/^/      /'
 }
 
 setup() {
@@ -138,6 +128,4 @@ rm -rf "$TMP/config/skills"
 expect 0 "absent skill root downgrades --local instead of failing" --local
 teardown
 
-echo
-echo "Passed: $PASS  Failed: $FAIL"
-[ "$FAIL" -eq 0 ]
+report_results
