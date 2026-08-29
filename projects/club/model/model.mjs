@@ -54,7 +54,7 @@ WAGES.forEach(function(w){
 export var MIT_RUNG = 2;            // the comparison baseline
 var FIN = {
   lease:'Own cash, everything under the <$150K cap (D7): fit-out ≤$85K, working capital $50–65K first.',
-  buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, but builds ~$10K/yr of equity — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the G2 cash math below no longer applies.'
+  buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, and the loan builds equity as it amortizes — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the cash gate applies here too, against a down payment, closing costs and the same derived working capital.'
 };
 var UTILS = [25,33,40,45,50,55,60,65,70,75,80];
 export var TXREL = [0.7,0.8,0.9,1.0,1.1,1.2,1.3];   // café columns as multiples of the site's mark
@@ -68,16 +68,76 @@ export var LEAN_STOP = 70;                 // absolute, both markets (risk 1) �
 // benchmark matrix quote it, so it lives here rather than in their prose.
 export var PLAN_DRAW_FLOOR = 30;
 export var WC_BAND = [50, 65];              // $K: §6's working-capital + Year-1 ramp reserve, as the plan states it
-export var WC = Math.round((WC_BAND[0] + WC_BAND[1]) / 2);   // the band's midpoint — what the cash test carries
-export var WC_FLOOR = 45;                  // abatement relief cannot take the reserve below this
+export var WC = Math.round((WC_BAND[0] + WC_BAND[1]) / 2);   // the band's midpoint — what the stated basis carries
 export var OWNER_HRS = 40;                 // owner’s gridded week: ~30 on the floor + ~10 admin/sales
 export var RET_LO = 0.10, RET_HI = 0.20;   // required return on capital at risk: opportunity cost → illiquid-smallco
-export var EQUITY_RANGE = [180,300];       // plan’s grant-free cash-to-open range ($K); default is the midpoint
-export var BUY_EQUITY = 10;                // $K/yr principal paydown on the SBLP path — counts toward the return side
+export var EQUITY_RANGE = [180,300];       // plan’s grant-free cash-to-open range ($K) — an assertion the capital layer can now check
+export var BUY_EQUITY = 10;                // $K/yr principal paydown the plan states for the SBLP path; principalK() is the built figure
 
+// ---- the capital layer: deal terms, the uses of cash, and the ramp ----------
+// Required capital is a derived output, not a slider, and the chain that derives
+// it is a directed acyclic graph. It has to stay one:
+//
+//   comp() → rampSeries() → peakDeficitK() → workingCapitalK()
+//          → requiredCapitalK() → capitalAtRiskK() → bandLoK()/bandHiK()
+//
+// comp() reads occupancy, the operations aggregates, labor and the commons
+// budget. It never reads the owner's bars, never reads USES, and never reads
+// working capital — so the capital layer can depend on the operating model
+// without the operating model depending back, and the ramp can call comp() at a
+// month's marks without re-entering itself. Two changes would close the cycle
+// and must not be written: putting the replacement-capex reserve inside comp()
+// (it lives in drawK(), below the operating model, for exactly this reason), and
+// deriving the depreciable base from requiredCapitalK() rather than from the
+// hard-cost uses — required capital contains working capital, which contains
+// comp(), so that base would run the reserve back into the number it is
+// subtracted from.
+//
+// Deal terms, beside SITES: site geometry and the deal are the two things
+// required capital is a function of. `tiPsf` and `abateMo` are the declared
+// defaults for the two terms the explorer drags — they are carried live in
+// S.ti ($/sf) and S.abate (months) so `withState` can move them; the rest are
+// read from DEAL directly.
+export var DEAL = {tiPsf:0, abateMo:0, depositMo:2, constructionMo:4, rampMo:18,
+                   deliveryCondition:'as-is', escalationPct:3, termYrs:5};
+// Fit-out priced per square foot instead of as a flat budget. $34/sf is the rate
+// today's flat $85K implies over Little Italy's 2,500 sf, so the LI defaults
+// reproduce the published build-out figure exactly and SN/HT's extra 500 sf
+// costs what it actually costs.
+export var FITOUT_PSF = 34;
+export var FFE_PSF = 5.6;            // $14K at LI's 2,500 sf — the [8,20] band's midpoint, per sf so it moves with the site
+export var PREOPEN_WKS = 6;          // staffed weeks before the doors open: ~4 hiring, ~2 training
+export var LICENSES_K = 14;          // licenses, architect, attorney — the [8,20] midpoint
+export var INVENTORY_K = 5.5;        // opening inventory — the [3,8] midpoint
+export var CONTINGENCY_RATE = 0.15;  // on hard cost (fit-out + FF&E) — the [10,20]% midpoint
+export var CLOSING_RATE = 0.035;     // buy path: closing costs as a share of price — the [2,5]% midpoint
+export var USEFUL_LIFE_YRS = 8;      // fit-out and FF&E replaced on a 7–10 year life
+export var TAX_DIST_RATE = 0.25;     // member tax distribution on taxable income — blended federal + MD, net of QBI
+export var RECOVERY = {deposit:1.0, ffe:0.30};   // what survives a wind-down: the deposit in full, FF&E at resale
+// The ramp: how fast the two engines reach the stabilized marks comp() prices.
+// The opening month is a fraction of stabilized — clubs recruit slower than the
+// café fills — and the fractions close linearly over DEAL.rampMo months.
+export var RAMP_OPEN = {util:0.35, tx:0.50};
+export var RAMP_HORIZON_MO = 60;     // months carried past opening; a curve that has not turned by here has not turned
+export var WC_BASIS = 'built';       // 'built' = the ramp's peak cash deficit | 'stated' = §6's $50–65K
+// The buy path, priced. The plan carries no purchase price — §6 gives only "buy
+// occupancy ≈ lease + $2K" — so pricePsf is graded D and banded, and the debt
+// service it implies is reconciled against that stated figure rather than
+// assumed to reproduce it.
+export var LOAN = {pricePsf:105, ltv:0.90, ratePct:6.5, termYrs:20};
+export var PROP_TAX_RATE = 0.02248;  // Baltimore City real property — $2.248 per $100 of assessed value
+export var OWNER_INS_K = 4;          // property insurance the owner carries directly on the buy path
+export var STRUCT_RESERVE_PSF = 1.0; // roof/HVAC/structure reserve, $/sf/yr — the landlord's job on the lease path
+
+// `build` is D7's scope cap, not the fit-out budget: the derived scope is what
+// the site costs to build out and the cap is what the plan committed to spend,
+// so scopeOverrunK() can report the difference instead of hiding it. `ti` is in
+// $/sf (#17's own units), not $K. `equity` is null meaning *derive it* —
+// capital at risk comes from the uses registry; a number overrides, so
+// withState({equity:300}, …) still answers a what-if.
 export var DEF = {site:'li', fin:'lease', util:33, tx:100, price:90, ticket:8.25, cad:'mixed', cafeM:CAFE_MARGIN_DEF,
            events:5.5, caClub:15, caEvent:50, wage:MIT_RUNG, commons:6, churn:1.4,
-           build:85, ti:0, abate:0, grants:0, cash:150, runway:24, equity:240};
+           build:85, ti:DEAL.tiPsf, abate:DEAL.abateMo, grants:0, cash:150, runway:24, equity:null};
 export let S = Object.assign({}, DEF);
 
 export function evEqOf(ev){ return ev*12/52; }
@@ -301,9 +361,13 @@ export function laborK(){ return STAFF_HRS * WAGES[S.wage].rate / 1000; }
 // their own. Pricing the owner’s year at the full staff rate would overstate the bar.
 export function ownerRate(){ var w = WAGES[S.wage]; return w.cash*(1+FICA) + w.ben; }
 export function livingK(){ return OWNER_HRS * 52 * ownerRate() / 1000; }
-function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
-export function bandLoK(){ return livingK() + RET_LO*S.equity; }
-export function bandHiK(){ return livingK() + RET_HI*S.equity; }
+function equityBuildK(){ return principalK(); }
+// The capital the return is charged on. Null equity means derive it from the
+// uses registry — which is what makes the bar move when the deal moves: harder
+// TI, a grant, or an abated month all land here. A number is an override.
+export function equityK(){ return S.equity === null ? capitalAtRiskK() : S.equity; }
+export function bandLoK(){ return livingK() + RET_LO*equityK(); }
+export function bandHiK(){ return livingK() + RET_HI*equityK(); }
 // Occupancy, built from its parts: base rent is floor area × the site's asking
 // rate; NNN (CAM, taxes, insurance) is what §6's occupancy total leaves after it.
 // NNN is still a residual — §6's total stays authoritative — but it is now a
@@ -333,21 +397,277 @@ export function clubsFor(util){
   return Math.max(0, sessions(util) - evEqOf(S.events)) / CADENCE[S.cad].avg;
 }
 export function txCols(){ return TXREL.map(function(r){ return Math.round(r*SITES[S.site].mark); }); }
-function cashK(){ // G2 cash at risk (lease path): net build-out + WC reserve less abatement relief
-  if (S.fin==='buy') return null;
-  var netBuild = Math.max(0, S.build - S.ti - S.grants);
-  var relief = S.abate * SITES[S.site].occ/12;
-  return netBuild + Math.max(WC_FLOOR, WC - relief);
+// ---- site geometry and the deal terms the capital layer reads ---------------
+export function sf(){ return SITES[S.site].sf; }
+export function tiPsf(){ return S.ti; }                  // the live lever, in DEAL.tiPsf's units
+export function tiK(){ return tiPsf() * sf() / 1000; }   // #17's $15–25/sf ask, stated in the plan's own units
+export function fitoutScopeK(){ return useInput('fitout', FITOUT_PSF) * sf() / 1000; }
+// What the site's geometry says the build-out costs, against what D7 said it
+// would spend. The model reports the difference; it does not clip the scope to
+// the cap, because clipping would hide the one number the cap exists to test.
+export function scopeOverrunK(){ return Math.max(0, fitoutScopeK() - S.build); }
+// Abatement is free rent from lease commencement, so the construction months
+// consume it first and only what is left spills into the operating ramp.
+// Counting it in both places would relieve the same months twice; splitting it
+// this way leaves required capital the same wherever the relief lands.
+export function abateMonths(){ return S.fin==='buy' ? 0 : S.abate; }
+export function abatePreopenMo(){ return Math.min(abateMonths(), DEAL.constructionMo); }
+export function abateOpenMo(){ return Math.max(0, abateMonths() - DEAL.constructionMo); }
+export function pricePsf(){ return useInput('downpayment', LOAN.pricePsf); }
+export function priceK(){ return pricePsf() * sf() / 1000; }
+
+// ---- the uses-of-cash registry ----------------------------------------------
+// The same shape and the same four obligations as COSTS: an id, the driver the
+// amount scales with, an evidence grade, an amount, and — where the number is an
+// estimate rather than a commitment — the band it is estimated within. `unit` is
+// the band's unit: 'K' is $K, 'psf' dollars per square foot, 'mo' months of
+// occupancy, 'wk' staffed weeks, 'rate' a share. `derived` marks a use that is
+// the output of another part of the model rather than an independently sourced
+// number — working capital is the ramp's trough, which is the whole point of
+// building the ramp. `amount()` returns $K as a positive magnitude at the
+// current state; a use that does not apply on the current finance path returns
+// zero, the way the purchase premium does in COSTS.
+export var USES = [
+  {id:'fitout', label:'Fit-out (net of TI and grants)', driver:'sqft', ev:'D',
+   band:[25,45], unit:'psf', src:'D7’s $85K over LI’s 2,500 sf is $34/sf; the band is the as-is to vanilla-box range',
+   amount:function(){ return Math.max(0, fitoutScopeK() - (S.fin==='buy' ? 0 : tiK()) - S.grants); }},
+  {id:'ffe', label:'FF&E', driver:'sqft', ev:'D',
+   band:[8,20], unit:'K', src:'§6 names FF&E in the cash paragraph and carries no line for it',
+   amount:function(){ return useInput('ffe', FFE_PSF * sf() / 1000); }},
+  {id:'deposit', label:'Security deposit', driver:'months', ev:'C',
+   band:[2,3], unit:'mo', src:'2–3 months of occupancy is the market term; the plan names deposits and carries no line',
+   amount:function(){ return S.fin==='buy' ? 0 : useInput('deposit', DEAL.depositMo) * occupancyK() / 12; }},
+  {id:'downpayment', label:'Down payment', driver:'price', ev:'D',
+   band:[60,150], unit:'psf', src:'no price in the plan — the band is the SN/HT small-commercial range; closing and property tax read the same price',
+   amount:function(){ return S.fin==='buy' ? (1 - LOAN.ltv) * priceK() : 0; }},
+  {id:'closing', label:'Closing costs', driver:'price', ev:'C',
+   band:[0.02,0.05], unit:'rate', src:'title, transfer and recordation, appraisal, legal — 2–5% of price',
+   amount:function(){ return S.fin==='buy' ? useInput('closing', CLOSING_RATE) * priceK() : 0; }},
+  {id:'preopen-occ', label:'Occupancy before opening', driver:'months', ev:'C',
+   band:null, unit:null, src:'construction months less the abatement they consume, at the site’s own occupancy',
+   amount:function(){ return Math.max(0, DEAL.constructionMo - abatePreopenMo()) * occupancyK() / 12; }},
+  {id:'preopen-pay', label:'Hiring & training', driver:'hours', ev:'D',
+   band:[4,10], unit:'wk', src:'staffed weeks off the plan’s own grid before revenue starts',
+   amount:function(){ return useInput('preopen-pay', PREOPEN_WKS) * laborK() / 52; }},
+  {id:'licenses', label:'Licenses, architect, attorney', driver:'fixed', ev:'C',
+   band:[8,20], unit:'K', src:'liquor and food licensing, permit drawings, lease and entity counsel',
+   amount:function(){ return useInput('licenses', LICENSES_K); }},
+  {id:'inventory', label:'Opening inventory', driver:'fixed', ev:'C',
+   band:[3,8], unit:'K', src:'first fill of café, catering and consignment stock',
+   amount:function(){ return useInput('inventory', INVENTORY_K); }},
+  {id:'contingency', label:'Contingency', driver:'hardCost', ev:'D',
+   band:[0.10,0.20], unit:'rate', src:'a rate on hard cost (fit-out + FF&E) — the line a first build-out always needs',
+   amount:function(){ return useInput('contingency', CONTINGENCY_RATE) * hardCostK(); }},
+  {id:'working-cap', label:'Working capital', driver:'ramp', ev:'D', derived:true,
+   band:WC_BAND, unit:'K', src:'the ramp’s peak cash deficit; the band is §6’s stated $50–65K, which it is reconciled against',
+   amount:function(){ return workingCapitalK(); }}
+];
+export function useById(id){
+  for (var ui=0; ui<USES.length; ui++){ if (USES[ui].id === id) return USES[ui]; }
+  return null;
 }
-export function reserveK(){ // cash left to absorb operating losses after capital spend (lease path)
-  if (S.fin==='buy') return null;
-  var netBuild = Math.max(0, S.build - S.ti - S.grants);
-  var relief = S.abate * SITES[S.site].occ/12;
-  return S.cash - netBuild + relief;
+export function useAmountK(id){
+  var u = useById(id);
+  if (u === null) throw new Error('unknown use id: ' + id);
+  return u.amount();
+}
+// The hard cost the contingency rides on and the replacement reserve is
+// depreciated over: the two uses that buy a physical thing. Deliberately not
+// requiredCapitalK() — see the acyclicity note above.
+export function hardCostK(){ return useAmountK('fitout') + useAmountK('ffe'); }
+// Every use that carries a band — the list a capital sensitivity sweep walks,
+// and the id each row's `withUse` takes. The derived one is excluded: pinning an
+// output is not a sweep of an input.
+export var CAP_INPUTS = [];
+USES.forEach(function(u){
+  if (u.band && u.derived !== true) CAP_INPUTS.push({id:u.id, label:u.label, ev:u.ev, band:u.band, unit:u.unit});
+});
+export function capInputById(id){
+  for (var ki=0; ki<CAP_INPUTS.length; ki++){ if (CAP_INPUTS[ki].id === id) return CAP_INPUTS[ki]; }
+  return null;
+}
+var USE_OVER = {};                 // use id → pinned input value; written only by withUse
+function usePinned(id){ return Object.prototype.hasOwnProperty.call(USE_OVER, id); }
+function useInput(id, dflt){ return usePinned(id) ? USE_OVER[id] : dflt; }
+// Pin one banded use to a value — a band endpoint, for a capital sweep — and
+// evaluate `fn` with it, the same shape as withCost. The value is in the band's
+// own unit, so 'fitout' takes $/sf and 'contingency' takes a rate.
+export function withUse(id, value, fn){
+  if (capInputById(id) === null) throw new Error("withUse: '" + id + "' is not a banded use");
+  var po = USE_OVER;
+  USE_OVER = Object.assign({}, USE_OVER);
+  USE_OVER[id] = value;
+  try { return fn(); } finally { USE_OVER = po; }
+}
+// The same idea for the deal terms and the loan, which are module objects rather
+// than lever state — so a generator can ask what four more construction months
+// or a point of interest cost without disturbing anything else.
+export function withDeal(over, fn){
+  var pd = DEAL;
+  DEAL = Object.assign({}, DEAL, over);
+  try { return fn(); } finally { DEAL = pd; }
+}
+export function withLoan(over, fn){
+  var pl = LOAN;
+  LOAN = Object.assign({}, LOAN, over);
+  try { return fn(); } finally { LOAN = pl; }
+}
+// What it costs to open, and what is left of D7's cap after it. This is the G2
+// test computed rather than asserted.
+export function requiredCapitalK(){
+  var t = 0;
+  USES.forEach(function(u){ t += u.amount(); });
+  return t;
+}
+export function headroomK(){ return S.cash - requiredCapitalK(); }
+
+// ---- the monthly ramp: the model's one time dimension -----------------------
+// The minimum time dimension that makes working capital derivable. The series
+// starts at opening — the construction months are already carried as
+// `preopen-occ`, so starting at signature would double-count them — and runs to
+// RAMP_HORIZON_MO. Each month reprices comp() at that month's marks and divides
+// by twelve; nothing about the stabilized model is restated here, which is what
+// keeps the ramp and the Year-2 snapshot from drifting apart. Occupancy is
+// waived in the abated months that survived construction.
+export function rampFrac(m, open){
+  if (DEAL.rampMo <= 1) return 1;
+  return open + (1 - open) * Math.min(1, (m - 1) / (DEAL.rampMo - 1));
+}
+export function rampSeries(){
+  var out = [], cum = 0, free = abateOpenMo(), relief = occupancyK() / 12;
+  for (var m=1; m<=RAMP_HORIZON_MO; m++){
+    var u = S.util * rampFrac(m, RAMP_OPEN.util);
+    var t = S.tx * rampFrac(m, RAMP_OPEN.tx);
+    var margin = comp(u, t) / 12 + (m <= free ? relief : 0);
+    cum += margin;
+    out.push({m:m, util:u, tx:t, margin:margin, cumulative:cum});
+  }
+  return out;
+}
+// The trough, as a positive magnitude, floored at zero. Each of these takes an
+// already-computed series so a caller that needs several does not rebuild it.
+export function peakDeficitK(series){
+  if (series === undefined) series = rampSeries();
+  var lo = 0;
+  for (var i=0; i<series.length; i++){ if (series[i].cumulative < lo) lo = series[i].cumulative; }
+  return -lo;
+}
+// Null, not a large number, where the ramp never turns inside the horizon: the
+// difference between "month 16" and "not within five years" is the answer, and
+// rendering the second as a number would bury it.
+export function monthsToPositive(series){
+  if (series === undefined) series = rampSeries();
+  for (var i=0; i<series.length; i++){ if (series[i].margin >= 0) return series[i].m; }
+  return null;
+}
+export function monthsToRecover(series){
+  if (series === undefined) series = rampSeries();
+  for (var i=0; i<series.length; i++){ if (series[i].cumulative >= 0) return series[i].m; }
+  return null;
+}
+// The stabilized burn, and the reserve that funds S.runway months of it — the
+// existing bailComp() relation inverted. This is the fallback when the ramp
+// never turns: there is no trough to measure, so the requirement is however long
+// the operator has decided to fund the verdict, which is what `runway` always
+// was. Where the ramp does turn, `runway` becomes a readout instead.
+export function stabilizedBurnK(){ return Math.max(0, -comp(S.util, S.tx)); }
+export function runwayReserveK(){ return stabilizedBurnK() * S.runway / 12; }
+export function rampTurns(){ return monthsToPositive() !== null; }
+// Working capital, on one of two bases — the same arrangement, and the same
+// reason for it, as OPS_BASIS. Under 'built' it is what the ramp requires; under
+// 'stated' it is §6's own $50–65K midpoint. The stated basis survives because
+// reproducing what §6 asserted is still worth asserting; the built basis is the
+// one that can be wrong, and reconciling the two is the real check.
+export function workingCapitalK(){
+  if (WC_BASIS === 'stated') return WC;
+  var s = rampSeries();
+  return monthsToPositive(s) === null ? runwayReserveK() : peakDeficitK(s);
+}
+export function withWcBasis(basis, fn){
+  var pw = WC_BASIS;
+  WC_BASIS = basis;
+  try { return fn(); } finally { WC_BASIS = pw; }
+}
+
+// ---- closing the loop to the owner's bar ------------------------------------
+// What survives a wind-down: the deposit comes back on a surrender in good
+// standing, FF&E resells at a haircut. Fit-out is a leasehold improvement and
+// stays with the building; the down payment on a 90%-LTV purchase is not
+// counted, because a forced sale at that leverage rarely returns it.
+export function recoverableK(){
+  return RECOVERY.deposit*useAmountK('deposit') + RECOVERY.ffe*useAmountK('ffe');
+}
+export function capitalAtRiskK(){ return requiredCapitalK() - recoverableK(); }
+
+// ---- draw, distinguished from comp ------------------------------------------
+// comp() is the operating residual and is not touched by any of this. A draw is
+// the cash the owner can actually take: comp less the reserve against the
+// capital the year consumed, less the tax the pass-through income triggers, less
+// principal on the buy path. The reserve is depreciation the model never carried
+// — a stabilized year that never reserves against the fit-out it is wearing out
+// overstates what the owner takes home.
+export function depreciableBaseK(){ return hardCostK(); }
+export function replacementReserveK(){ return depreciableBaseK() / USEFUL_LIFE_YRS; }
+export function taxDistK(util, tx){
+  if (util === undefined) util = S.util;
+  if (tx === undefined) tx = S.tx;
+  return TAX_DIST_RATE * Math.max(0, comp(util, tx) - replacementReserveK());
+}
+export function drawK(util, tx){
+  if (util === undefined) util = S.util;
+  if (tx === undefined) tx = S.tx;
+  return comp(util, tx) - replacementReserveK() - taxDistK(util, tx) - principalK();
+}
+
+// ---- the buy path, priced ---------------------------------------------------
+// The most speculative part of the layer: §6 gives no purchase price, only "buy
+// occupancy ≈ lease + $2K". So the price is banded and graded D, and what the
+// loan implies is *reconciled* against §6's figure rather than fitted to it —
+// occupancyK() stays on §6's stated basis, so comp() is unmoved on either path.
+export function loanK(){ return LOAN.ltv * priceK(); }
+export function pmtFactor(){        // annual debt service per $1 of loan
+  var r = LOAN.ratePct/100/12, n = LOAN.termYrs*12;
+  if (r === 0) return 12/n;
+  return 12 * r / (1 - Math.pow(1 + r, -n));
+}
+export function debtServiceK(){ return loanK() * pmtFactor(); }
+// Principal repaid in loan year `yr` — the amortization the flat BUY_EQUITY = 10
+// stood in for, and the number that actually moves as the loan seasons.
+export function loanPrincipalK(yr){
+  var r = LOAN.ratePct/100/12, n = LOAN.termYrs*12;
+  var pay = debtServiceK()/12, bal = loanK(), paid = 0;
+  for (var m=1; m<=n; m++){
+    var pr = pay - bal*r;
+    bal -= pr;
+    if (Math.ceil(m/12) === yr) paid += pr;
+  }
+  return paid;
+}
+export function principalK(){ return S.fin==='buy' ? loanPrincipalK(2) : 0; }
+export function propertyTaxK(){ return PROP_TAX_RATE * priceK(); }
+export function structReserveK(){ return STRUCT_RESERVE_PSF * sf() / 1000; }
+// The two sides of the buy-occupancy reconciliation: what the loan and the
+// building imply, against what §6 states.
+export function builtBuyOccupancyK(){
+  return debtServiceK() + propertyTaxK() + OWNER_INS_K + structReserveK();
+}
+export function statedBuyOccupancyK(){ return SITES[S.site].occ + 2; }
+// The price per square foot at which the two would agree. Built occupancy is
+// linear in the price, so this is solved rather than searched — and reporting it
+// beside the band is what says whether §6's figure is reachable at all.
+export function buyPricePsfForStated(){
+  var ksf = sf()/1000;
+  var slope = LOAN.ltv*ksf*pmtFactor() + PROP_TAX_RATE*ksf;
+  return (statedBuyOccupancyK() - OWNER_INS_K - structReserveK()) / slope;
+}
+
+// ---- the cash gate, on both paths -------------------------------------------
+export function cashK(){ return requiredCapitalK(); }   // G2 cash at risk: the sources-and-uses total
+export function reserveK(){ // cash left to absorb operating losses after the capital spend
+  return S.cash - (requiredCapitalK() - workingCapitalK());
 }
 export function bailComp(){ // deepest sustainable annual loss: reserve spread over the runway
-  var r = reserveK();
-  return r===null ? null : -Math.max(0,r)*12/S.runway;
+  return -Math.max(0, reserveK())*12/S.runway;
 }
 export function utilForTarget(target, tx){ // smallest util% with comp >= target (piecewise-linear; bisect)
   if (comp(140, tx) < target) return null;
