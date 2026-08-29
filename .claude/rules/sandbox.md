@@ -194,6 +194,25 @@ refused — and it *requires* the `-C`. It resolves the repo root from `-C`/`--r
 `-C <path>` — without it you commit your own cwd's checkout, and if that one holds
 the node unchanged it exits 0 as "a 'landed' that landed nothing".
 
+Getting the command matcher-shaped is necessary but not sufficient — there are
+two distinct approval gates. The static `allowedTools` prefix matcher is the
+first; the auto-mode permission classifier, a separate probabilistic gate, fires
+only when no static rule matches. Only a static `permissions.allow` rule resolves
+at step 1 and skips the classifier — a PreToolUse hook `allow`, including
+`approve-workflow-commands.sh`'s own approvals, does not. Consequently the allow
+rule must be a prefix of the literal command string as typed, so each sanctioned
+script gets exactly one canonical agent-typed spelling: repo-relative, with `-C
+<path>`, never `"$VAR/…"`, never absolute, never a `cd &&` compound. Both
+`graph-commit` and `land-align-round` are in `permissions.allow` in that spelling
+— re-spelling a call site silently re-exposes it to the classifier. This was
+observed live on 2026-07-21: a worktree-cwd compound — `cd` into the worktree,
+then invoke `graph-commit` joined with `&&` — was firmly denied ("Blocked by
+classifier"), and bare invocations drew transient "Stage 2 classifier error"
+denials that cleared only on retry. The static allow removes
+per-call classifier gating on the sole main-landing path; that's accepted
+deliberately because `graph-commit`'s own `--base` compare-and-swap, bounded
+rebase-retry, and landing lock — not per-call approval — are what keep it safe.
+
 ### Avoid inline env var prefixes
 
 `VAR=value command` breaks prefix matching. Use wrapper scripts that set the env

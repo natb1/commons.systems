@@ -131,6 +131,98 @@ describe("mergeIntentionNodes", () => {
     expect(merged.rationale).toBe("same");
   });
 
+  // --- base-aware list removal (the 2026-07-25 production incident) ---------
+
+  it("(i) honors a removal: ours drops a blocked_by entry theirs left untouched", () => {
+    // The production incident on tactic-align-tactics-workflow (PR #2931): the
+    // base-free union restored "x" and reported a clean auto-resolve.
+    const base = pair({ blocked_by: ["x", "y"] });
+    const ours = pair({ blocked_by: ["y"] });
+    const theirs = pair({ blocked_by: ["x", "y"] });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(merged.blocked_by).toEqual(["y"]);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(j) honors a removal combined with an unrelated scalar edit on the same write", () => {
+    // The full incident write: set a scalar AND remove a satisfied edge.
+    const base = pair({ blocked_by: ["x"], rationale: null });
+    const ours = pair({ blocked_by: [], rationale: "ours set this" });
+    const theirs = pair({ blocked_by: ["x"], rationale: null });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(merged.blocked_by).toEqual([]);
+    expect(merged.rationale).toBe("ours set this");
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(k) honors a removal in the mirror direction: theirs drops an entry ours kept", () => {
+    const base = pair({ blocked_by: ["x", "y"] });
+    const ours = pair({ blocked_by: ["x", "y"] });
+    const theirs = pair({ blocked_by: ["y"] });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(merged.blocked_by).toEqual(["y"]);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(l) still unions additions made on both sides (non-regression of case (a))", () => {
+    const base = pair({ serves: ["strategy-a"] });
+    const ours = pair({ serves: ["strategy-a", "strategy-b"] });
+    const theirs = pair({ serves: ["strategy-a", "strategy-c"] });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(merged.serves).toEqual(["strategy-a", "strategy-c", "strategy-b"]);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(m) with base null, disjoint list entries still union — nothing is dropped", () => {
+    const ours = pair({ serves: ["strategy-b"] });
+    const theirs = pair({ serves: ["strategy-c"] });
+    const { merged, conflicts } = mergeIntentionNodes(null, ours, theirs);
+    expect(merged.serves).toEqual(["strategy-c", "strategy-b"]);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(n) honors an attributes-key deletion, no conflict", () => {
+    const base = pair({ attributes: { k: 1 } });
+    const ours = pair({ attributes: {} });
+    const theirs = pair({ attributes: { k: 1 } });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(Object.prototype.hasOwnProperty.call(merged.attributes, "k")).toBe(false);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(o) reports one conflict for an attributes delete-vs-modify; merged stays landable", () => {
+    const base = pair({ attributes: { k: 1 } });
+    const ours = pair({ attributes: {} });
+    const theirs = pair({ attributes: { k: 2 } });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].field).toBe("attributes.k");
+    // The deleted side is `undefined`; the surviving value keeps merged landable.
+    expect(conflicts[0].ours).toBeUndefined();
+    expect(conflicts[0].theirs).toBe(2);
+    expect(merged.attributes.k).toBe(2);
+  });
+
+  it("(p) honors a removal from attributes.conditions", () => {
+    const base = pair({ attributes: { conditions: ["c1", "c2"] } });
+    const ours = pair({ attributes: { conditions: ["c2"] } });
+    const theirs = pair({ attributes: { conditions: ["c1", "c2"] } });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(merged.attributes.conditions).toEqual(["c2"]);
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it("(q) never reports a conflict for a list field, even on a two-sided removal", () => {
+    const base = pair({ serves: ["s1", "s2"], blocked_by: ["b1"], validates: ["v1"] });
+    const ours = pair({ serves: ["s1"], blocked_by: [], validates: ["v1", "v2"] });
+    const theirs = pair({ serves: ["s2"], blocked_by: ["b1"], validates: [] });
+    const { merged, conflicts } = mergeIntentionNodes(base, ours, theirs);
+    expect(conflicts).toHaveLength(0);
+    expect(merged.serves).toEqual([]);
+    expect(merged.blocked_by).toEqual([]);
+    expect(merged.validates).toEqual(["v2"]);
+  });
+
   it("does not treat object-key reordering as a conflict (structural eq, not stringify)", () => {
     const base = pair({ success_signal: null });
     const ss = { observable: "o", sensor: "s", threshold: "t", is_proxy: false };

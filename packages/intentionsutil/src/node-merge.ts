@@ -28,9 +28,12 @@ export interface MergeResult {
 }
 
 /**
- * The top-level IntentionNode fields merged by the list-union rule: dedup-append
- * union of theirs then ours, no base needed. `attributes.conditions` follows the
- * same rule but is handled key-by-key inside `attributes` (not listed here).
+ * The top-level IntentionNode fields merged by the base-aware three-way list
+ * rule: an entry dropped by exactly one side relative to `base` stays dropped,
+ * and an entry only one side has that `base` never had is a genuine addition
+ * and is kept. With no `base` the rule degrades to a dedup-append union of
+ * theirs then ours. `attributes.conditions` follows the same rule but is
+ * handled key-by-key inside `attributes` (not listed here).
  */
 export const LIST_FIELDS: readonly (keyof IntentionNode)[] = [
   "serves",
@@ -99,7 +102,11 @@ export function eq(a: unknown, b: unknown): boolean {
 }
 
 /** Union of two lists preserving `theirs` order first, then `ours` novel
- * entries in `ours` order, deduped by structural `eq`. Deterministic; base-free. */
+ * entries in `ours` order, deduped by structural `eq`. Deterministic and
+ * base-free — retained only for the no-common-ancestor path of `threeWayList`,
+ * where a removal genuinely cannot be told apart from an addition and keeping
+ * every entry is the correct answer. Do not call it directly for a merge that
+ * has a base: base-free union is what silently restored deleted entries. */
 function unionList(theirs: unknown[], ours: unknown[]): unknown[] {
   const out: unknown[] = [];
   const pushNovel = (item: unknown): void => {
@@ -107,6 +114,62 @@ function unionList(theirs: unknown[], ours: unknown[]): unknown[] {
   };
   for (const item of theirs) pushNovel(item);
   for (const item of ours) pushNovel(item);
+  return out;
+}
+
+/**
+ * Base-aware three-way list merge — the rule that makes a REMOVAL expressible.
+ *
+ * Per candidate entry, using structural `eq` for every membership test:
+ *
+ *   | in base | in ours | in theirs | outcome                        |
+ *   |---------|---------|-----------|--------------------------------|
+ *   | any     | yes     | yes       | keep                           |
+ *   | yes     | yes     | no        | theirs removed it -> drop      |
+ *   | no      | yes     | no        | ours added it -> keep          |
+ *   | yes     | no      | yes       | ours removed it -> drop        |
+ *   | no      | no      | yes       | theirs added it -> keep        |
+ *   | yes     | no      | no        | both removed it -> drop        |
+ *
+ * With `baseList === null` there is no common ancestor, so a removal and an
+ * addition are indistinguishable and this falls back to `unionList`. That is
+ * the correct answer for an add/add merge, not a fallback hiding an error;
+ * `scripts/merge-node.ts` deliberately synthesizes exactly that case.
+ *
+ * NEVER reports a conflict, by design. Entries are plain id strings, or objects
+ * with no stable identity key, so a per-entry "modify" is not representable —
+ * an edit is a remove plus an add. Residual: when both sides edit the SAME
+ * object entry differently, the base version drops (both sides removed it) and
+ * both new variants are kept, which leaves a visible duplicate a reader can
+ * fix rather than a silent restoration. Conflicting here instead would turn
+ * routine satisfied-`blocked_by` cleanup under contention into a park, which
+ * is the outcome this rule exists to avoid.
+ *
+ * Ordering matches `unionList`: `theirs` in order first, then `ours`' novel
+ * entries, deduped by `eq`, with dropped entries filtered out.
+ */
+function threeWayList(
+  baseList: unknown[] | null,
+  oursList: unknown[],
+  theirsList: unknown[],
+): unknown[] {
+  if (baseList === null) return unionList(theirsList, oursList);
+  // Bind post-guard so the non-null narrowing survives into the closures below.
+  const baseEntries = baseList;
+  const has = (list: unknown[], item: unknown): boolean =>
+    list.some((existing) => eq(existing, item));
+  const keep = (item: unknown): boolean => {
+    if (has(oursList, item) && has(theirsList, item)) return true;
+    // On exactly one side: absent from base means that side added it (keep);
+    // present in base means the other side deleted it (drop).
+    return !has(baseEntries, item);
+  };
+  const out: unknown[] = [];
+  const pushNovel = (item: unknown): void => {
+    if (!out.some((existing) => eq(existing, item))) out.push(item);
+  };
+  for (const item of theirsList) if (keep(item)) pushNovel(item);
+  for (const item of oursList) if (keep(item)) pushNovel(item);
   return out;
 }
 
@@ -135,10 +198,15 @@ function scalarMerge(
 /**
  * Three-way field-level merge of two divergent edits to the same node.
  *
- *  - List fields (`LIST_FIELDS`) union-dedup theirs+ours, base-free.
- *  - `attributes` is merged key-by-key: `conditions` gets the list-union rule;
+ *  - List fields (`LIST_FIELDS`) get the base-aware three-way list rule: an
+ *    entry dropped by exactly one side relative to `base` stays dropped, an
+ *    entry `base` never had is a genuine addition and is kept, and with no
+ *    `base` it degrades to a theirs+ours union-dedup. Never conflicts.
+ *  - `attributes` is merged key-by-key: `conditions` gets the same list rule;
  *    every other key gets the scalar rule. A key present on only one side is a
- *    pure addition (kept, never a conflict).
+ *    pure addition when `base` lacks it, and the other side's deletion when
+ *    `base` has it — a deletion racing a modification is the one conflict the
+ *    attributes merge reports.
  *  - Every other field (plus the synthetic `body`) gets the three-way scalar
  *    rule. `merged` always carries a landable value even for conflicted fields.
  */
@@ -157,11 +225,13 @@ export function mergeIntentionNodes(
   // keys (and the dotted "attributes.<key>" pseudo-keys further down).
   const mergedRec = merged as unknown as Record<string, unknown>; // type-safety-ok: generic dynamic-key assignment target, see comment above
 
-  // List fields: union-dedup, base-free.
+  // List fields: base-aware three-way, so a removal by either side is honored
+  // instead of being restored by a base-free union.
   for (const field of LIST_FIELDS) {
     const theirsList = theirs.node[field] as unknown[]; // type-safety-ok: field ranges over keyof IntentionNode, but LIST_FIELDS restricts it to array-typed keys at runtime
     const oursList = ours.node[field] as unknown[]; // type-safety-ok: same LIST_FIELDS array-typed-key invariant as theirsList above
-    mergedRec[field] = unionList(theirsList, oursList);
+    const baseList = base ? (base.node[field] as unknown[]) : null; // type-safety-ok: same LIST_FIELDS array-typed-key invariant; null when there is no common ancestor
+    mergedRec[field] = threeWayList(baseList, oursList, theirsList);
   }
 
   // Scalar/object top-level fields.
@@ -177,8 +247,10 @@ export function mergeIntentionNodes(
     if (conflict) conflicts.push(conflict);
   }
 
-  // attributes: merge key-by-key. Union of all keys across ours + theirs (and
-  // base for base-comparison legs). A key on only one side is a pure addition.
+  // attributes: merge key-by-key. `allKeys` is ours + theirs only, so a key
+  // both sides deleted is already correctly absent. For a key on exactly one
+  // side, `base` decides whether it is that side's addition or the other
+  // side's deletion.
   const baseAttrs = base ? base.node.attributes : {};
   const oursAttrs = ours.node.attributes;
   const theirsAttrs = theirs.node.attributes;
@@ -190,23 +262,56 @@ export function mergeIntentionNodes(
   for (const key of allKeys) {
     const inOurs = Object.prototype.hasOwnProperty.call(oursAttrs, key);
     const inTheirs = Object.prototype.hasOwnProperty.call(theirsAttrs, key);
+    const inBase = hasBase && Object.prototype.hasOwnProperty.call(baseAttrs, key);
     if (inOurs && !inTheirs) {
-      mergedAttrs[key] = oursAttrs[key]; // ours-only addition
+      // Not in base (or no base at all) — ours added it, so keep it.
+      if (!inBase) {
+        mergedAttrs[key] = oursAttrs[key]; // ours-only addition
+        continue;
+      }
+      // In base — theirs deleted it. Honor the deletion when ours left the
+      // value untouched.
+      if (eq(baseAttrs[key], oursAttrs[key])) continue;
+      // Delete-vs-modify: theirs deleted the key, ours changed its value.
+      // Report it and keep ours' value so `merged` stays landable. The deleted
+      // side is `undefined`.
+      //
+      // Rendering caveat: merge-node.ts JSON-stringifies the conflict list,
+      // graph-commit's run_merge_node reshapes it through jq, and
+      // build_recommendation renders a missing side literally, so in the park
+      // recommendation a deleted side reads the same way a genuine null value
+      // would. That ambiguity is not a correctness problem — either way
+      // the outcome is a park naming both values, which is the safe direction.
+      // Widening FieldConflict to disambiguate would require a matching
+      // graph-commit jq change and is deliberately out of scope.
+      conflicts.push({ field: `attributes.${key}`, ours: oursAttrs[key], theirs: undefined });
+      mergedAttrs[key] = oursAttrs[key];
       continue;
     }
     if (inTheirs && !inOurs) {
-      mergedAttrs[key] = theirsAttrs[key]; // theirs-only addition
+      // Mirror image of the branch above, with ours the deleting side.
+      if (!inBase) {
+        mergedAttrs[key] = theirsAttrs[key]; // theirs-only addition
+        continue;
+      }
+      if (eq(baseAttrs[key], theirsAttrs[key])) continue; // ours deleted a key theirs left untouched
+      conflicts.push({ field: `attributes.${key}`, ours: undefined, theirs: theirsAttrs[key] });
+      mergedAttrs[key] = theirsAttrs[key];
       continue;
     }
     // Present on both sides.
     if (key === "conditions" && Array.isArray(oursAttrs[key]) && Array.isArray(theirsAttrs[key])) {
-      mergedAttrs[key] = unionList(theirsAttrs[key], oursAttrs[key]);
+      const baseConditions = inBase ? baseAttrs[key] : undefined;
+      mergedAttrs[key] = threeWayList(
+        Array.isArray(baseConditions) ? baseConditions : null,
+        oursAttrs[key],
+        theirsAttrs[key],
+      );
       continue;
     }
-    const inBase = Object.prototype.hasOwnProperty.call(baseAttrs, key);
     const { value, conflict } = scalarMerge(
       `attributes.${key}`,
-      hasBase && inBase,
+      inBase,
       baseAttrs[key],
       oursAttrs[key],
       theirsAttrs[key],

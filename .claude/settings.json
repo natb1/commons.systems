@@ -55,6 +55,8 @@
       "Bash(.claude/skills/dispatch-propagate/scripts/dispatch-context-pack:*)",
       "Bash(.claude/skills/dispatch-propagate/scripts/run-pr-checks-wait.sh:*)",
       "Bash(.github/scripts/check-type-safety-escapes.sh:*)",
+      "Bash(packages/intentionsutil/scripts/graph-commit:*)",
+      "Bash(packages/intentionsutil/scripts/land-align-round:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",

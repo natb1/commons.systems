@@ -141,6 +141,42 @@ assert_approves \
   "Bash" \
   "echo hello && head file.txt"
 
+# --- Graph-commit classifier-bypass regressions ---
+# (tactic-graph-commit-invocation-classifier-bypass)
+# graph-commit lives under packages/, not .claude/skills/*/scripts/, so
+# SCRIPT_RE never matches it — approval here can only come from ALLOWED_CMDS,
+# harvested from the settings.json Bash(<path>:*) entries this tactic adds.
+# These cases pass only while those entries exist and are spelled without
+# spaces; deleting or re-spelling either one turns this section red.
+
+assert_approves \
+  "graph-commit canonical relative form (settings entry present)" \
+  "Bash" \
+  "packages/intentionsutil/scripts/graph-commit -C /tmp/x -m 'graph: land edit' tactic-foo"
+
+assert_approves \
+  "land-align-round canonical relative form" \
+  "Bash" \
+  "packages/intentionsutil/scripts/land-align-round --terminal tactic-foo -m 'graph: land round' tactic-foo"
+
+# cd is not in ALLOWED_CMDS, so validate_segments rejects the first segment
+# deterministically — a cd-compound must never be approved (2026-07-21 this
+# exact shape was denied by the classifier: "Blocked by classifier").
+assert_passthrough \
+  "cd-compound graph-commit is not approved (2026-07-21 classifier denial)" \
+  "Bash" \
+  "cd /tmp/x && packages/intentionsutil/scripts/graph-commit -m 'graph: x' tactic-foo"
+
+# is_allowed_cmd compares basename and exact-token equality against the
+# path-form entry, and an absolute path matches neither — this is the
+# executable record of Unit 1's "no bare-basename entry" decision; if a
+# future change adds Bash(graph-commit:*), this case goes red and forces
+# the decision to be re-made deliberately.
+assert_passthrough \
+  "absolute-path graph-commit is deliberately not the sanctioned spelling" \
+  "Bash" \
+  "/repo/packages/intentionsutil/scripts/graph-commit -C /repo -m 'graph: x' tactic-foo"
+
 # --- Quote-aware splitting (metacharacters inside quoted strings) ---
 
 assert_approves \
