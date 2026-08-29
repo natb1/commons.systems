@@ -109,8 +109,9 @@ concurrently landed write being clobbered.
 >    "Nodes closed (5)" list contains both `tactic-fleet-alarm-node-park-clobber-loop`
 >    and `tactic-graph-commit-park-content-durability`. So position 1 was **not**
 >    gate-free as the sequence table claimed — it carried two ungated author
->    rulings, both of which this sitting made. **Seven** of the thirteen positions
->    carried an author gate, not six: 1, 2, 6, 7, 8, 9 — and not 11.
+>    rulings, both of which this sitting made. The gated set is **1**, 2, 6, 7,
+>    8, 9 — and **not 11**. Note this is a *swap*, not an addition: position 11
+>    was gated before and is not now, so the total is still **six of thirteen**.
 >
 > Owed follow-on writes are listed at the end of this Part under
 > "Owed after the sitting".
@@ -840,9 +841,10 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 | — | *staged resumption* | — | — | — | Sentinel off at `max_concurrent_workers: 1`, one node through the full ladder |
 | — | *deferred outright* | PR8 U3 | 1 | — | Rewrites the freeze mechanism; only during an attended un-pause |
 
-**Seven of the thirteen positions carry an author gate** — 1, 2, 6, 7, 8, 9 —
+**Six of the thirteen positions carry an author gate** — 1, 2, 6, 7, 8, 9 —
 *(corrected 2026-08-28: position 1 carries C3 and C4, which were mis-filed under
-position 11's PR17; PR17 itself has no author gate)* —
+position 11's PR17; PR17 itself has no author gate — a swap, so the count is
+unchanged at six)* —
 and every one of those gates is in Part I, so a single sitting unblocks the
 whole sequence. That is the argument for holding the sitting before position 1
 rather than at each gate as it is reached.
@@ -893,7 +895,13 @@ content durability, **Unit 5**) — *both ruled 2026-08-28*. This position was
 listed as ungated because C3 and C4 were mis-filed under PR17. PR18's own "Nodes
 closed (5)" list contains `tactic-fleet-alarm-node-park-clobber-loop` and
 `tactic-graph-commit-park-content-durability`, which are exactly C3's and C4's
-nodes. Those two parks are **still set** — clear them before or during this PR.
+nodes. **Both parks are now cleared** — verified on `origin/main` 2026-08-29:
+`tactic-fleet-alarm-node-park-clobber-loop` and
+`tactic-graph-commit-park-content-durability` both carry `office_hours: null`
+(cleared by `756a06f0` and `f093e607`). The earlier "still set — clear them
+before or during this PR" was written before the clears landed and contradicted
+this document's own correction block above. **Position 1 needs no park work to
+start.**
 
 ### Position 2 · Bundle 1b — PR15 + PR16, the graph plumbing
 
