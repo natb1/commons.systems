@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Artifact",
       "Skill(file-issue)",
       "Skill(ref-issue-labels)",
       "Skill(ref-memory-management)",
@@ -78,6 +79,12 @@
   },
   "hooks": {
     "PreToolUse": [
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/approve-artifact.sh" }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [
