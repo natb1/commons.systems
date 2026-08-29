@@ -30,8 +30,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr18-durable-write-fence
+  pr: 3134
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T22:46:37Z
+    mergeCommitSha: 478cc3242048cfdee675dceda46a6e59827f1d10
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -499,3 +511,37 @@ Prose / judgment checks:
 - **Unit 1's probe result** is a finding, not a check: the verdict (theoretical
   or historical, with SHAs for any survivor) belongs in the PR body, and a
   negative result is a legitimate answer.
+
+## What shipped — 2026-08-29, Units 3 and 4 of 4
+
+Shipped as PR18 Unit 3 of the dispatch/RSI serialized window
+(`plans/dispatch-rsi-serialized-pr-plan.md` § PR18), merged as `478cc324`
+(#3134). The node's headline defect is fully closed: the Step-5 fence is now a
+script the lane runs, not prose it was trusted to follow.
+
+**Unit 3 — shipped.** `.claude/skills/dispatch-propagate/scripts/review-fix-write-surface-guard.sh`,
+with `test-review-fix-write-surface-guard.sh` alongside it (22 assertions), wired
+into CI in `.github/workflows/unit-tests.yml`. This is a **carrier change only**:
+the accept set — exactly `??` on `intentions/<id>.md` for a returned id — and all
+four reject cases are the SKILL.md prose transcribed, not redesigned.
+
+**Unit 4 — shipped.** `/review-fix` Step 5 invokes the guard
+(`.claude/skills/review-fix/SKILL.md:1159`) instead of describing it.
+
+### Residue — Units 1 and 2 did not ship
+
+Neither is required by the fix, and neither is assigned anywhere in the serialized
+plan. Recorded here so the work is not lost with the closure.
+
+- **Unit 1 — the bounded probe** (has `/review-fix` ever actually modified a
+  pre-existing node?) was **not run**. It is read-only history investigation that
+  the unit's own text calls "not a blocker on the fix". Its standing question is
+  unchanged: whether V4 is theoretical or historical is still **not measured**.
+  The time-boxed recipe and the layer-2 auto-merge confound are in the Unit 1
+  section above, ready to run as-is.
+- **Unit 2 — `lib-porcelain-snapshot.sh`** was **not created**, and
+  `subagent-contamination-guard` still carries its snapshot bracket inline. That
+  is a de-duplication of an adjacent guard, not part of the Step-5 fence; the
+  new script does its own snapshotting rather than sourcing a shared lib.
+
+Both are ordinary follow-up work. Neither leaves the shipped guard incomplete.

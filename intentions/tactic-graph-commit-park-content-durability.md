@@ -19,8 +19,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: pr18-durable-write-fence
+  pr: 3134
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T22:46:37Z
+    mergeCommitSha: 478cc3242048cfdee675dceda46a6e59827f1d10
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-commit-snap-dir-merge-clobbers-original
@@ -220,3 +232,72 @@ clarification 245 / V1 protects.
    the `office_hours.recommendation` above as an input to the band ruling.
 2. *graph-commit already pushes the content it later says it cannot preserve.*
    Recorded under Reuse above.
+
+## What shipped, and the residue — 2026-08-29
+
+Shipped as PR18 Unit 5 of the dispatch/RSI serialized window
+(`plans/dispatch-rsi-serialized-pr-plan.md` § PR18), merged as `478cc324`
+(#3134). The fix is scoped to the **ordinary lost-writer branch** only. This
+section is constraint 2's required explicit out-of-scope statement, and the
+record of what the other two branches got.
+
+**Ordinary lost writer — fixed.** `park_write()` now carries the losing writer's
+content verbatim inside `office_hours.recommendation`, which lands on
+`origin/main`, instead of only naming a path into the per-run `mktemp -d`. A new
+`ownContentEmbed(id)` helper reads the frozen original and returns a delimited
+block; it is appended last, after the prose and the field breakdown, so a human
+reads the instructions before the payload. The block begins with the literal
+line `----- BEGIN this session's unlanded content for <id> (verbatim) -----`.
+
+`preservedContent()` was rebuilt around three explicit states — no embed,
+truncated, whole — because an embed is not guaranteed: `snapMerged()` can exist
+with no frozen original beside it, and the previous wording promised a carried
+copy that would not be there. The "may not survive past this session" caveat is
+now attached to every `SNAP_DIR` path and to nothing else; it had migrated onto
+the embedded copy, which is the one path where it is false.
+
+The embed is capped at 65536 bytes and states exactly how many of how many bytes
+were dropped — never a silent truncation. The cut lands on a UTF-8 codepoint
+boundary (then prefers a line boundary when the window holds one), and `omitted`
+is derived from the byte index rather than from a post-decode length, so the
+figure in the landed record is exact rather than off by the width of a split
+sequence.
+
+**Prune branch — untouched, and deliberately so.** Constraint 1 above requires
+the prune recommendation stay content-independent, because that is the arm whose
+byte-identical re-park reaches the idempotent-retry path
+(`test-graph-commit.sh` case 59). It does. A `--prune` id has no snapshot, so
+`ownContentEmbed` finds no frozen original and returns `null`, and the shared
+composition line appends nothing. The constraint is preserved by the helper's
+own precondition, not by a branch-specific special case.
+
+**Delete/modify branch — RESIDUE. Not fixed, and not fixable this way.** The
+embed *is* appended on this branch, since the id does have a snapshot — but that
+buys nothing durable, and the branch's own text still says why: the whole
+`office_hours` record is **local only**. It exists nowhere on `origin/main`
+because the node does not; `RESURRECTED_IDS` is excluded from the park commit so
+a landed deletion is never reverted. Embedding content in a record that never
+lands does not make the content durable.
+
+The concrete residue, stated plainly because it is easy to miss: on this branch
+the losing writer's edit survives **only** as the re-materialized
+`intentions/<id>.md`, which is an **untracked local file**. Nothing tracks it and
+nothing pushes it. A reaped worktree destroys it — as do a container exit, a tmp
+reaper, or a plain `git clean`. The 2026-08-15 clarification-241 framing that a
+park whose context lives only in the parking session is a defect therefore still
+holds against this branch, unchanged, after this PR.
+
+Repairing it needs a durable substrate that does not depend on the node existing
+on `origin/main` — the substrate choice clarification 241 explicitly left
+unruled. The Reuse section above already names the most promising lead: every
+landing attempt force-pushes the writer's full commit to
+`refs/heads/graph/<id>-<pid>` on origin and the EXIT trap then deletes it, so the
+content has already reached origin durably at park time and is thrown away. Not
+landing that delete, or renaming the ref outside `graph-scratch-sweep`'s scope,
+is a far smaller change than inventing a parallel path. That remains a ruling
+this node did not receive and PR18 did not take.
+
+Adjacent but not the same work: `tactic-graph-commit-delete-vs-edit-park-hardening`
+(`phase: main-qa`) owns the delete/modify park's test and downstream coverage, per
+the "Out of scope" section above. It is not recorded here as the owner of the
+durable-substrate question.

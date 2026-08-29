@@ -60,7 +60,51 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours: null
+office_hours:
+  reason: "PR18 (merge 478cc324, #3134) shipped this node at ONE of its four
+    surfaces, by a local contract rather than the shared primitive the node
+    exists to introduce. Six of its seven units did not ship: Unit 1 (the shared
+    node_body_write in lib.sh) is absent, so Unit 3 hardened
+    dispatch-eval-finding's own splice_body in place instead of deleting it;
+    Units 2, 5, 6 and 7 are untouched, and Unit 4 was routed to #3037 on
+    2026-08-20. The copy-paste this node exists to eliminate still sits at three
+    sites (dispatch-eval-finding, dispatch-fleet-alarm,
+    dispatch-invalid-state-followup). The serialized plan lists this node under
+    PR18's \"Nodes closed (5)\", but it annotates it \"a draft, not a plan ...
+    no verification block\", which was true of the 2026-08-15 draft and is not
+    true of this node — the 2026-08-20 /align-tactics round finalized it to
+    phase implement with seven units and a Verification section. The plan
+    therefore closed a node it described as something else, and no ruling
+    narrows this node to the single site PR18 took. Grepped across the whole
+    serialized plan: no PR section claims node_body_write,
+    dispatch-diagnose-main, or dispatch-invalid-state-followup's copy, so
+    closing this node done would drop that work out of the graph rather than
+    hand it on. Parked by the PR18 closing batch rather than closed. Full
+    unit-by-unit measurement against the merge commit is in the body section
+    \"PR18 shipped Unit 3's site only\"."
+  since: 2026-08-29
+  recommendation: "Pick one of three, all of which the closing batch was not
+    authorized to pick. (1) SPLIT — keep this node open for the remaining work
+    and record that its Unit 3 is satisfied at dispatch-eval-finding by a local
+    contract; the shared-primitive extraction (Units 1, 2, 5, 6, 7) stays here
+    and gets a position in the serialized window. This is the recommended
+    option: it loses nothing and matches what actually shipped. (2) NARROW AND
+    CLOSE — rule that this node was only ever meant to cover the
+    dispatch-eval-finding site, close it done, and mint a new tactic for the
+    shared primitive and the two remaining copies so the work stays in the
+    graph. Do NOT close it without minting that successor; the remaining units
+    are assigned nowhere else. (3) CLOSE AS SUPERSEDED — if the shared-primitive
+    design is no longer wanted and per-site contracts are the intended end
+    state, close this node and record that ruling, so the three surviving
+    splice_body copies are a deliberate choice rather than an unfinished
+    migration. Note that PR18's own review raised the same shape one layer up:
+    the durable-write fence on tactic-dispatch-conflict-substance-allowlist was
+    argued to belong inside write-node.ts rather than in a skill step. If
+    per-site contracts are being chosen deliberately here, that argument is
+    worth ruling on at the same time. Whichever is picked, the four sibling
+    nodes of PR18 are already closed (phase done, execution.completion citing
+    478cc324) and none of them depends on this decision."
+  session_type: other
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -796,3 +840,68 @@ this round was not authorized to correct — an undercount in
 `tactic-finding-search-all-producers`' Layer-3 roster (a draft), and the same
 refuted census claim in `strategy-graph-native-dispatch` clarification 245 (a
 durable-layer node, attended-only).
+
+## PR18 shipped Unit 3's site only — parked rather than closed, 2026-08-29
+
+`plans/dispatch-rsi-serialized-pr-plan.md` § PR18 lists this node under "Nodes
+closed (5)" and its Unit 1 scoped the work to **one live site**,
+`dispatch-eval-finding`. That shipped, merged as `478cc324` (#3134). This node is
+**parked instead of closed**, because closing it would record six of its seven
+units as complete when they are not, and the closing session had no ruling that
+narrowed this node to that one site.
+
+**What shipped.** `dispatch-eval-finding`'s `splice_body()` gained an owned-region
+contract with two modes. `create` replaces the whole body but **refuses** unless
+the file is empty or holds the `# ${statement}` placeholder — a checked
+precondition rather than a comment the caller is trusted to honour. `region`
+replaces only what lies between `<!-- generated:dispatch-eval-finding -->` and
+its closing marker, keeping everything outside verbatim; an unmarked body
+self-migrates by appending a region, and an unbalanced **or inverted** pair is
+refused rather than guessed at. Call sites: `:1168` mint → `create`; `:1068`
+resolved and `:1263` recurrence → `region`. All failure paths `return 1` rather
+than `exit`, so the existing `restore_from_blob` rollback still fires.
+
+> The call-site classification above **contradicts the ordering in Unit 3's text**
+> (which reads mint `:1168`, resolved `:1068`, recurrence `:1263` against older
+> anchors). Re-verified against the merged file: the verdicts per path are the
+> ones Unit 3 intended — only the mint may author wholesale.
+
+**Why this is not Unit 3 as planned.** Unit 3 says to *delete* the local
+`splice_body` and call the shared `node_body_write` instead, and depends on Unit
+1 for that primitive. Unit 1 did not ship, so PR18 hardened the local copy in
+place. The defect is closed at this one site by a **local contract**, not by the
+shared primitive this node exists to introduce.
+
+**Measured on the merge commit `478cc324`:**
+
+| Node unit | State |
+|---|---|
+| 1 — shared `node_body_write` in `lib.sh` + CLI wrapper | **not shipped** — `lib.sh` defines no such primitive |
+| 2 — `dispatch-fleet-alarm` refresh writes a region | **not shipped** — still carries its own `splice_body` |
+| 3 — `dispatch-eval-finding` region write | shipped **locally**, not via the shared primitive |
+| 4 — `dispatch-graph-census` stale-read re-birth race | **not shipped** — dropped from PR18 scope on 2026-08-20, routed to #3037 |
+| 5 — `dispatch-diagnose-main` calls the primitive | **not shipped** |
+| 6 — retire the third `splice_body` in `dispatch-invalid-state-followup` | **not shipped** — the copy is still there |
+| 7 — repo-wide ratchet against a fifth copy | **not shipped** |
+
+So this node's statement — four surfaces, *one shared primitive*, wholesale
+replace mechanically reserved for creates — is satisfied at one surface. The
+copy-paste the node exists to eliminate now sits at **three** sites
+(`dispatch-eval-finding`, `dispatch-fleet-alarm`,
+`dispatch-invalid-state-followup`), and Unit 3's own ratchet extension ("SUT
+source defines no `splice_body`") could not be applied.
+
+**Why the plan's premise does not settle it.** The plan annotates this node
+"*a draft, not a plan: it carries the measurement and the shape of the fix but no
+verification block. Decompose before building.*" That was true of the
+2026-08-15 draft. It is **not** true of this node: the 2026-08-20 `/align-tactics`
+round finalized it to `phase: implement` with seven units and a Verification
+section (see Provenance above). The plan and the node were both revised on
+2026-08-20 and the plan's characterization did not catch up.
+
+**The remaining units are assigned nowhere.** Grepped across the whole serialized
+plan: no PR section claims `node_body_write`, `dispatch-diagnose-main`, or
+`dispatch-invalid-state-followup`'s copy. Closing this node `done` would drop
+them out of the graph rather than hand them on.
+
+**What the author needs to decide** is in `office_hours.recommendation`.

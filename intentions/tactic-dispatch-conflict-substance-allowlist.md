@@ -42,8 +42,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr18-durable-write-fence
+  pr: 3134
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T22:46:37Z
+    mergeCommitSha: 478cc3242048cfdee675dceda46a6e59827f1d10
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -789,3 +801,65 @@ npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
   should still return 0 commits. If it ever returns one, this node's framing
   changes from *theoretical hole* to *historical damage* and the landed commit
   must be inspected for a durable-node substance write.
+
+## What shipped — 2026-08-29, all three units
+
+Shipped as PR18 Unit 2 of the dispatch/RSI serialized window
+(`plans/dispatch-rsi-serialized-pr-plan.md` § PR18), merged as `478cc324`
+(#3134). All three units landed. Two divergences from the plan text above, both
+deliberate.
+
+**Unit 1 — landed as specified.** `packages/intentionsutil/src/schema.ts` exports
+`STATE_FIELDS` (`:560`) and `DURABLE_LAYER_KINDS` (`:584`), plus
+`refusedDurableFields(kind, fields)` (`:624`) and `isDurableLayerKind` /
+`isDurableWriteRefused`. The check is **negative** as this node settled: durable
+kind AND field outside `STATE_FIELDS` means refuse, so a field name nobody
+anticipated refuses by default.
+
+`DURABLE_LAYER_KINDS` is a **separate five-kind constant** rather than a reuse of
+`grounding.ts`'s existing `DURABLE_KINDS`. That was not an oversight:
+`DURABLE_KINDS` is four kinds and deliberately excludes `tradition`, because
+tradition records *are* the grounding. Importing it would have put every
+`tradition-*` node on the permitted side of exactly this fence. The divergence
+carries a comment at the definition.
+
+**Unit 2 — landed under a different name.** The primitive is
+`packages/intentionsutil/scripts/check-durable-write-fence.ts`, not
+`check-substance-write.ts` as the unit above names it. Same contract: pure read
+plus exit code, no graph writes, exit 0 permit / 1 usage-or-read error / 3
+refuse. Two hardenings beyond the spec, both because the writer that composed the
+candidate is the party whose honesty is in question — it **diffs base against
+candidate itself** rather than trusting a caller-declared field list, and it reads
+`kind` from the **base**, so a candidate that rewrites `kind` cannot escape (and
+`kind` is not a `STATE_FIELDS` member, so that rewrite is itself refused).
+
+**Unit 3 — landed as specified.** `/dispatch-conflict` Lane 2 invokes the gate
+between the model-composed `jq` filter and `write-node.ts`
+(`.claude/skills/dispatch-conflict/SKILL.md:678` and `:806`).
+
+Lane 2's parse gained one instruction that came out of review, worth keeping in
+view because it is prose, not a mechanical guard: on a **twice-parked** node the
+embedded copy of the node carries the previous park's `Diverged field` lines in
+its own frontmatter, so the lane would ingest stale conflict blocks. Lane 2 is
+told to cut at the embed's begin marker before parsing. There is no script to
+hook this on — Lane 2's parse is a model-performed string operation — so it stays
+an instruction.
+
+### Still owed, unchanged by this closure
+
+The two questions this node recorded as decided-but-not-implemented are exactly as
+recorded, and neither is assigned in the serialized plan:
+
+- **The greenfield form is kind data, not a code literal** — `attributes.durable_layer:
+  true` on the five kind nodes read through a `kindIsDurableLayer` helper. This
+  node explains why it could not take that path itself: writing that flag is an
+  edit-substance on five durable-layer nodes, which is the very write this guard
+  forbids an unattended session from making. The two-step attended migration path
+  is in the "Greenfield note on durable-layer membership" section above.
+- **The `attributes` sub-key granularity question**, recorded in its own section
+  above, remains recorded and not implemented.
+
+A third item came out of PR18's review and is new here: the argument that the
+fence belongs **inside `write-node.ts`** rather than in a skill step, since
+nothing forces a skill step to run. That is a fair criticism of this design and a
+much larger change than this node's ruled scope. It is recorded, not acted on.

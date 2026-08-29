@@ -20,8 +20,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: pr18-durable-write-fence
+  pr: 3134
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T22:46:37Z
+    mergeCommitSha: 478cc3242048cfdee675dceda46a6e59827f1d10
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -96,3 +108,54 @@ node should also cover the worktree, i.e. a fleet-alarm node that is never
 emitted as a candidate (fix a) never gets a checkout provisioned either, which
 makes (a) strictly better than (b) on this axis. That is an argument for the
 already-recommended ordering, not a new option.
+
+## The (a)/(b) decision — ruled and shipped 2026-08-29
+
+This node deliberately stopped at diagnosis because the choice between fix (a)
+and fix (b) was a design decision. **Both shipped**, as PR18 Unit 4 of the
+dispatch/RSI serialized window (`plans/dispatch-rsi-serialized-pr-plan.md`
+§ PR18), merged as `478cc324` (#3134). (a) is the fix; (b) is defense in depth,
+exactly the ordering this body already recommended.
+
+**(a) — `router.ts` no longer emits the family as `/align-tactics` candidates.**
+The exclusion is keyed on a **closed enum**, `FLEET_ALARM_KINDS`, exported from
+`packages/intentionsutil/src/router.ts` and asserted equal to the `KINDS=(...)`
+array in `.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm` by a
+drift guard in `router.test.ts` (with a second test pinning that parse as
+non-vacuous, so the guard cannot go quiet if the bash array is reshaped).
+
+The enum is not an implementation detail — it is the correction of a real defect
+found in review. The unit first shipped an id-*shape* regex
+(`^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$`), which anchors the prefix but
+matches any slug after it. Of the eight `tactic-fleet-alarm-*` nodes in the
+store only four name a machine-managed kind; the other four are hand-authored
+drafts. The shape form made **all eight** permanently unselectable — including
+this node, the one the unit closes. Membership, not shape, is the property that
+distinguishes a mechanically-minted alarm from a draft that happens to share the
+prefix.
+
+**(b) — `classify()` is park-aware.** It dropped its `office_hours` disjunct, so
+a node that is parked but not `done` now reads `open` and re-detection routes
+through the CAS refresh path that preserves frontmatter, instead of the
+mint-fresh path that overwrote it. That is the clobber this node is named for.
+
+**(b) needed a guard it did not originally have.** Making a parked node classify
+`open` interacts with `--resolve`, which only no-ops when the state is *not*
+`open` — so on its own, (b) would let a mechanical `--resolve` land `phase: done`
+on a node a human had parked with an unanswered question. That trades one silent
+overwrite for another. `--resolve` now refuses on a non-null `office_hours`,
+checked after the `dump-node` read and before any mutation, and prints `noop`.
+
+**A note on this body's own cross-references.** The sections above say "See
+`office_hours.reason` above" and "See `office_hours.recommendation` above". This
+node's `office_hours` is `null` — the park was cleared before this closure — so
+those pointers no longer resolve. The evidence they point at is the anchor list
+in the "Reason" section and the (a)/(b) framing in "How to resolve", both of
+which are intact; nothing was lost, but a reader should not go looking for
+frontmatter that is not there.
+
+**Worktree residue.** The 2026-08-09 note predicted that a node never emitted as
+a candidate never gets a checkout provisioned, making (a) strictly better than
+(b) on that axis. That holds with (a) shipped. It does not retroactively remove
+checkouts already on disk from earlier cycles; those are ordinary reap work, not
+part of this closure.
