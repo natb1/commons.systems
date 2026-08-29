@@ -8,7 +8,7 @@ statement: "Harness self-improvement is measurement, not a second orchestrator �
   on failure signals and threshold-gated on cost: /rsi is the degenerate case
   with an empty remediation list, the four invalid-state lanes are special cases
   adding a variance-debugging lens and a closed, frontmatter-declared list of
-  permitted remediations, and /rsi-audit measures token economy at any scope;
+  permitted remediations, and /rsi-audit measures token economy at any scope and hosts the opt-in research subskill that tests an endogenous finding against external sources when own telemetry cannot explain it;
   every producer records findings through that one write surface, merging a
   recurrence onto the existing node"
 owner: human
@@ -1894,6 +1894,35 @@ clarifications:
       dispatch/RSI split ruled earlier stands unchanged:
       strategy-graph-native-dispatch owns the RULE, this node owns the
       OBSERVABLE."
+  - question: Is the scheduled research lane built as specified, and where does it
+      live?
+    answer: "(Ruled 2026-08-29 author sitting, answering the build-or-retire
+      question the 2026-08-12 collapse round asked a future round to settle
+      before more doctrine accreted on an unbuilt lane. Three rounds had passed
+      without settling it.) BUILT, but FOLDED, and the schedule is retired. The
+      lane becomes an opt-in subskill of /rsi-audit rather than a standalone
+      /rsi-research skill with a weekly systemd timer. The decisive argument is
+      this statement's own first clause: harness self-improvement is measurement
+      and not a second orchestrator, and a weekly skill with its own schedule and
+      its own outputs is structurally a second lane. As a producer on the one
+      shared find-or-recur write surface it needs none of the bespoke doctrine a
+      separate lane kept requiring. It also stops reversing a decision already
+      made — PR 3074 collapsed this skill family into exactly two skills, and
+      building a third would re-expand it three weeks later. The external pass
+      fires only in response to an endogenous finding own telemetry cannot
+      explain, which makes endogenous primacy structural rather than merely
+      ruled: research can now only answer a measurement. The 2026-08-29
+      measurement round is why that matters — a measured 4.3% cache-creation
+      ceiling killed an imported 41-80% claim, and price_proxy_usd was found to
+      invert the real model-cost ranking, so imported magnitudes were actively
+      misleading exactly where own telemetry was not. Statement amended in the
+      same change to name the fold; blast radius measured first and found to be
+      zero, since neither of the two nodes in the graph carrying a non-null
+      execution.strategy_fingerprint serves this strategy, so no live session can
+      be mis-parked by the edit. Conditions 3 through 6 are amended in place
+      rather than retired wholesale — see each. The full execution plan, the
+      token-target lane presets, and the two silent failure modes measured that
+      day live on tactic-rsi-research-skill."
 tooling_goals: []
 success_signal:
   observable: "graph-native dispatch reaches stable autonomous operation; every
@@ -2037,7 +2066,15 @@ attributes:
       the author enumerated for it in advance'. The /fewer-permission-prompts
       and .claude/settings.json prohibitions are unaffected: no lane's list may
       name them.)"
-    - "the research lane is sensor-only: a scheduled /rsi-research run writes
+    - "the research lane is sensor-only. (AMENDED 2026-08-29 author sitting: the
+      lane is folded into /rsi-audit as an opt-in subskill and the schedule is
+      retired, so read every 'scheduled /rsi-research run' below as 'an opt-in
+      research pass of /rsi-audit'. The dated reading this condition requires is
+      RETIRED and not re-homed: findings land as tactic-eval-finding-<slug>
+      entries through dispatch-eval-finding carrying --sensor rsi-research,
+      distinct from /rsi-audit's own --sensor rsi-audit so that a hypothesis and
+      a measurement stay distinguishable on one surface. See
+      tactic-rsi-research-skill's rulings of that date.) A run writes
       only inert output — one dated reading on this strategy, born-parked
       candidate curriculum chunks, and draft tactics — and never grounding
       marks, tradition-record edits, graph-doctrine edits, or work execution;
@@ -2045,7 +2082,17 @@ attributes:
       judgment step, or /align), and the lane's token spend stays small relative
       to dispatch under the existing per-workflow attribution — spend
       approaching dispatch is itself a review trigger"
-    - "the research lane runs weekly via harness cron invoking /rsi-research,
+    - "RETIRED 2026-08-29 author sitting — the weekly cadence is not built and
+      the lane carries no schedule; it is an opt-in pass of /rsi-audit, fired
+      only in response to an endogenous finding own telemetry cannot explain.
+      Retained as dated record because the clause below is what the 2026-08-12
+      round asked a future round to decide, and this is that decision. A
+      consequence worth stating: because every run is now author-invoked,
+      strategy-complete-grounding's condition that /deep-research sourcing stays
+      author-invoked is SATISFIED rather than narrowed, and the reconcile
+      precondition that condition implied is no longer owed. The retired clause
+      read: the research lane runs weekly via harness cron invoking
+      /rsi-research,
       independent of the dispatch pause state (its output is inert, and research
       continuing while dispatch is paused is the bootstrap case rsi exists for).
       (Amended 2026-08-12 collapse round: the clause requiring each run to claim
@@ -2061,14 +2108,26 @@ attributes:
       accretes on it.)"
     - "the research lane's unread pool stays bounded: research-produced
       born-parked items (candidate chunks, review items) accumulating across
-      cycles without an office-hours sitting is a review trigger recorded in the
-      rsi-plan, never silent debt"
+      cycles without an office-hours sitting is a review trigger, never silent
+      debt. (AMENDED 2026-08-29: 'recorded in the rsi-plan' is retired with
+      rsi-plan.md itself — the pool is the evaluation-finding ledger's own
+      backlog, which existing machinery already surfaces, so it needs no bespoke
+      carrier.)"
     - "tactics the research lane drafts without author intervention always
       require qa-main validation before they count as validating this strategy:
       each lane-drafted tactic cites the reference finding that motivated it and
       states that reference's claimed effect in terms the graph's existing
-      sensors already observe (per-workflow token attribution, tactic closure
-      velocity, this strategy's own success_signal thresholds); qa-main verifies
+      sensors already observe. (AMENDED 2026-08-29 author sitting, and recorded
+      as a substantive weakening rather than housekeeping: the original clause
+      named three vocabularies — per-workflow token attribution, tactic closure
+      velocity, and this strategy's own success_signal thresholds — of which
+      only the first is readable today. The supersession observable becomes
+      readable when tactic-supersession-edge-and-terminal lands. Closure
+      velocity is NOT re-supplied: no closure-velocity sensor exists, and
+      minting one to satisfy an acceptance clause would build a sensor to pass a
+      test rather than to read a signal. What bounds the weakening is that this
+      condition binds only tactics drafted WITHOUT author intervention, and an
+      opt-in author-invoked pass produces few of those.); qa-main verifies
       the landed change actually produces that stated effect, and a change that
       lands cleanly without producing it is recorded as a refuted hypothesis
       rather than a validating success; a finding whose claimed effect cannot be

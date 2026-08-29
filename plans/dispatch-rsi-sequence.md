@@ -25,7 +25,7 @@ clean-session-executable, and this file deliberately does not restate it.
 |---|---|
 | **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
-| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**. No position in the sequence is waiting on the author |
+| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire. **One position is still waiting on the author: position 8.** PR14's `tactic-rsi-reprioritization-outcome-audit` remains parked on an unanswered ruling about what its observable measures — see position 8 |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
 | **Next** | **Position 1 — PR18**, the durable-layer write fence. Nothing gates it |
 | **Not started** | Positions 1 through 13. PR2 through PR20 |
@@ -242,8 +242,14 @@ was never a defect in the lock. It is a defect in the detachment beneath it:
 refuses to start without it, and the child died anyway. So the flock stands,
 held by the child, and **Unit 1 is re-parenting via a `systemd-run --user`
 transient unit** — not the falsified process-group remedy. The demonstration
-that a detached review survives its launcher's exit is still owed **before Unit
-2 is trusted**.
+that a detached review survives its launcher's exit is Unit 1's **own acceptance
+test**, not a gate on starting the PR — reading it as a prior gate is circular,
+since it tests the re-parenting Unit 1 builds. **De-risked 2026-08-29**: a child
+launched into a `systemd-run --user` transient unit survived the teardown of its
+launching Bash tool call and completed 12s later. The honest limit is that this
+killed a *background* task rather than a foreground tool call, so the interrupt
+test is now a confirmation rather than a discovery — still owed before Unit 2
+ships.
 
 PR8 Unit 1 is more urgent than its position suggests — the pace-curve config is
 untracked and unrecoverable.
@@ -271,10 +277,25 @@ proxy holds price constant to isolate token count. **Set `model:` from
 
 `tradition-agentic-engineering` was verified on the trust half — three idioms
 recorded as genuine external deference, context engineering excluded as
-convergence — and PR11 may encode that. Its **lane half is deferred**: it cannot
-be reviewed until `/rsi-research` has run, and `/rsi-research` is built by
-**PR14 Unit 3, in this same position**. Revisit it after this bundle lands, not
-before.
+convergence — and PR11 may encode that. Its **lane half is re-scoped, not deferred**
+(ruled 2026-08-29). There is no longer a lane to review: the research lane is
+folded into `/rsi-audit` as an opt-in subskill with no schedule, so B3's lane
+half now reviews **the fold** — does research-sourced input stay subordinate to
+measurement in practice, and does the seed list steer anything now that it is a
+source-trust filter rather than a crawl plan? That can be sat **after the first
+research-mode run**, which an author-invoked pass makes available the day Unit 3
+lands, instead of after two or three weekly cron firings. The circularity that
+made it look unreachable inside the window is gone.
+
+**PR14 is the least-ready work in the window, and this position should not be
+planned as though its 10 nodes were all ready.** Unit 3's node
+(`tactic-rsi-research-skill`) had its park cleared 2026-08-29 and is now
+`codified` with its plan in its body — but it carries a `blocked_by` edge onto
+`tactic-rsi-lane-token-attribution`, which owns the token-attribution fix a
+token-targeted lane cannot be calibrated without. Unit 1's node is blocked on
+`tactic-attention-namespaced-rank`, outside this plan. Unit 2's node is **still
+parked on an author ruling** and its own park says the plan cannot be written
+until that ruling lands. Expect to ship a subset.
 
 ### Position 9 · Bundle 5b — PR20, the `/align` charter and adversarial review
 

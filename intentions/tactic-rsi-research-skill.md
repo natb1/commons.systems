@@ -1,10 +1,11 @@
 ---
 id: tactic-rsi-research-skill
 kind: tactic
-statement: Build the /rsi-research skill and its weekly harness-cron schedule —
-  the scheduled /deep-research sensor lane of the rsi strategy
+statement: Build the research lane as an opt-in, token-targeted subskill of
+  /rsi-audit — external research fires only in response to an endogenous
+  finding, on no schedule, writing through the one shared find-or-recur surface
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Surfaced in the 2026-08-10 /align research-lane round on
   strategy-recursive-self-improvement; the skill is the lane's primary artifact.
@@ -138,152 +139,231 @@ clarifications:
       tradition-agentic-engineering attributes.texts holds exactly 9 seeds and
       its review_trigger already names 'each /rsi-research cycle's findings'
       (last_assessed 2026-08-10). Do not edit
-      intentions/tactic-rsi-plan-skill.md (historical),
-      .claude/skills/rsi/SKILL.md or .claude/skills/rsi-audit/SKILL.md (the
-      per-phase evaluator and the token-economy instrument; neither is this
-      lane)."
+      intentions/tactic-rsi-plan-skill.md (historical) or .claude/skills/rsi/SKILL.md
+      (the per-phase evaluator; not this lane). AMENDED 2026-08-29 by the
+      build-or-retire ruling below: the once-listed prohibition on editing
+      .claude/skills/rsi-audit/SKILL.md is REVERSED. That file is now this
+      lane's host — the ruling folds the lane into /rsi-audit as an opt-in
+      subskill, so the implementer must edit it. Left recorded rather than
+      deleted because a reader who remembers the old prohibition needs to see it
+      overturned, not silently absent."
+  - question: Ruling one of three — BUILD or RETIRE the research lane?
+    answer: "(Ruled 2026-08-29 author sitting; this answers the first of the three
+      rulings the 2026-08-20 park declared owed, and it gates the other two.)
+      BUILD, but NOT as the standalone lane the 2026-08-10 draft specifies. The
+      lane is folded into /rsi-audit as an opt-in subskill, and the weekly
+      schedule is RETIRED. Three grounds. (1) STATEMENT CONFORMANCE: the serving
+      strategy opens 'Harness self-improvement is measurement, not a second
+      orchestrator — one shared evaluation core ... every producer records
+      findings through that one write surface'. A weekly skill with its own
+      schedule and its own outputs is structurally a second lane, which is why
+      the doctrine kept needing bespoke clauses to justify it; as a producer on
+      the existing write surface it needs none of them. (2) IT STOPS REVERSING A
+      DECISION ALREADY MADE: PR 3074 collapsed the rsi skill family into exactly
+      two skills, verified on origin/main 2026-08-29 — .claude/skills/rsi/ and
+      .claude/skills/rsi-audit/ and nothing else. Building /rsi-research would
+      re-expand the family three weeks after it was deliberately contracted. (3)
+      ENDOGENOUS PRIMACY BECOMES STRUCTURAL RATHER THAN DOCTRINAL: the external
+      pass fires only when an endogenous finding lacks an internal explanation,
+      so research can only ever answer a measurement. That ordering was
+      previously a rule that a scheduled lane could not enforce. The 2026-08-29
+      measurement round is the evidence for insisting on it: a measured 4.3%
+      cache-creation ceiling killed an imported 41-80% claim outright, and
+      price_proxy_usd was found to invert the real model-cost ranking. Imported
+      magnitudes were actively misleading where own telemetry was not. NOT
+      user-invocable: the subskill is invoked BY /rsi-audit and is deliberately
+      absent from the user-invocable slash-command list, because a /rsi-research
+      command would re-create the separate lane this ruling removes."
+  - question: Ruling two of three — what carries a research-cycle landing?
+    answer: "(Ruled 2026-08-29 author sitting.) The question DISSOLVES rather than
+      being answered, and none of the three candidate carriers the park offered
+      is adopted. Under the fold there is no separate lane output to home:
+      findings land as tactic-eval-finding-<slug> nodes through
+      dispatch-eval-finding, the same find-or-recur surface /rsi-audit step 6
+      already writes, which already carries recurrence semantics so a finding
+      recurring across runs is one node with a rising recurrence_count rather
+      than a second node. Three consequences. (a) Condition 3's dated reading on
+      the strategy RETIRES; it is not re-homed. (b) No new sensor is registered,
+      so the recorded de-registration hazard is never approached — appending
+      prose to a success_signal.sensor registry key has de-registered a sensor
+      twice on this graph, 47219a1a on 2026-08-10 and 56039748 on 2026-08-12.
+      (c) Condition 5's unread-pool review trigger becomes the ledger's own
+      backlog, which existing machinery already surfaces, so it too needs no
+      bespoke home. REQUIRED, and the reason this is not merely a simplification:
+      research-derived entries MUST carry --sensor rsi-research, distinct from
+      /rsi-audit's own --sensor rsi-audit, and must name the endogenous finding
+      that provoked them. Without that marker a hypothesis and a measurement land
+      on one surface indistinguishable from each other, and the strategy's core
+      rule — an external finding never outranks a measured internal signal —
+      becomes unreadable in the data even though it stays true in the prose.
+      dispatch-eval-finding already accepts --sensor, so this is a parameter
+      choice and not new code."
+  - question: Ruling three of three — condition 6's acceptance vocabulary?
+    answer: "(Ruled 2026-08-29 author sitting.) RE-WORDED to name only what the
+      graph reads, and the weakening is recorded as a weakening rather than as
+      housekeeping. Of the three vocabularies condition 6 requires a lane-drafted
+      tactic to state its claimed effect in, only per-workflow token attribution
+      is readable today. The supersession observable becomes readable when
+      tactic-supersession-edge-and-terminal lands — that is PR19 at position 6 of
+      the dispatch/RSI window, ahead of this lane's own position, so it is
+      supplied by sequencing rather than by new work here. Closure velocity is
+      NOT re-supplied: no closure-velocity sensor exists, one code comment at
+      read-sensors.ts:309 notwithstanding, and inventing one to satisfy an
+      acceptance clause would be building a sensor to pass a test rather than to
+      read a signal. What bounds the weakening is the fold itself: condition 6
+      binds tactics the lane drafts WITHOUT author intervention, and an opt-in
+      author-invoked pass produces few such tactics, so the clause governs a much
+      smaller population than a weekly unattended lane would have. The 2026-08-11
+      directive's qa-main validation requirement is UNCHANGED and still applies
+      to every tactic the lane drafts."
+  - question: How is a run sized to a token target, and what does testing use?
+    answer: "(Ruled 2026-08-29 author sitting.) /rsi-audit takes a lane parameter
+      that selects a NAMED STRATEGY PRESET sized to a token target — it is not a
+      model reasoning-effort knob, though a preset may set one. Cost composes
+      multiplicatively across independent axes, which is why a scalar selects a
+      bundle rather than scaling one dimension. Research-side axes, which are
+      ours to set because correction C1 made the prompt template ours: seed
+      breadth (attributes.texts holds 9); WHICH seed, since they are not
+      interchangeable and the arXiv bundle is the widest and the one C6 governs;
+      C7 pass selection, where frontier expansion is the unbounded half that
+      makes source count unpredictable and is the largest single structural cut;
+      source-fetch cap (the dry run fetched 25); crawl depth per seed; source
+      recency window; claim-extraction cap (the dry run extracted 110);
+      adversarial verification ratio (25 of 110 verified, 8 killed); fan-out
+      width (108 subagents); and which of the durable writes actually land.
+      Audit-side axes, mostly existing flags: lens subset across the twelve
+      lenses; scope, noting that --session/--node is COUPLED to lens choice
+      because five lenses are tagged fleet-only and a scoped caller must skip
+      them rather than compute a degenerate version; window --days/--day, which
+      is also a correctness knob since short windows read empty under the
+      dispatch freeze; step 6's top-N landings; slice depth; and
+      --exclude-sidecar-sessions. SEQUENCING PRINCIPLE — CUT BREADTH BEFORE
+      DEPTH: correction C7 measured the ratified seed list as doing little
+      steering (all nine named, load-bearing findings still mostly from outside
+      the list), while the verification pass killed 8 of 25 claims, a 32% rate
+      the node itself records as real work. So breadth bought less than expected
+      and depth bought a lot. LANES: low is the test lane — one HTML seed, seed
+      crawl only, depth 1, a small source cap, verification off, ZERO durable
+      writes, audit scoped to one fixed session id with any-scope lenses only and
+      N=0 landings. medium is the interactive DEFAULT — a few seeds, seed crawl
+      only, verification ON, landings on; the minimum shape where a real finding
+      is plausible. full is the dry-run shape. Tests pin low EXPLICITLY and never
+      rely on the default, because a default that drifts silently re-arms the
+      cheapness assumption. If a preset does pass claude --effort, the value must
+      be validated locally against low|medium|high|xhigh|max: measured
+      2026-08-29, the CLI does NOT reject an unknown value — it prints a warning
+      to stderr and proceeds at DEFAULT effort, so a typo in the test path yields
+      a full-cost run that looks like it worked. Each lane declares a token
+      target and the run measures actual against it with aggregate-usage.sh
+      --session, recorded beside the existing dry-run baseline so the lanes are
+      calibrated rather than guessed."
+  - question: Does the fold still need strategy-complete-grounding's reconcile
+      precondition, and what does it depend on instead?
+    answer: "(Ruled 2026-08-29 author sitting.) NO — and this is a blocker the
+      ruling dissolves rather than inherits. The 2026-08-20 round recorded
+      tactic-grounding-deep-research-condition-reconcile as a genuine
+      precondition because scheduling this lane UNATTENDED would cross
+      strategy-complete-grounding's condition that '/deep-research sourcing stays
+      author-invoked; the tick never runs it' (verified at that node 2026-08-29).
+      The fold retires the schedule and makes every run author-invoked, so the
+      condition is SATISFIED rather than narrowed, and no blocked_by edge onto
+      that node is needed. What the lane does depend on is
+      tactic-rsi-lane-token-attribution (status codified, phase implement,
+      verified 2026-08-29), which owns correction C5. That dependency is now
+      load-bearing rather than incidental: a lane parameter targeting token usage
+      cannot be calibrated while a cycle's real cost lands in nested
+      subagents/workflows/wf_*/agent-*.jsonl under an anonymous headless session
+      id with no node id, because there is nothing to scope the confirming
+      measurement to. A target you cannot measure is not a target. Recorded as a
+      blocked_by edge accordingly."
 tooling_goals: []
 success_signal: null
 attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
-office_hours:
-  reason: >-
-    Two independent drift blockers, both author decisions, found by the
-    2026-08-20 /align-tactics per-node finalize round. No plan was authored and
-    no phase was set; the node stays a draft. 
-
-
-    SIDE A — a recorded condition of the serving strategy no longer holds, and
-    it is the condition that legitimates one of this node's four deliverables.
-    strategy-recursive-self-improvement's condition 6 (recorded 2026-08-11:
-    "tactics the research lane drafts without author intervention always require
-    qa-main validation before they count as validating this strategy") requires
-    every lane-drafted tactic to state its cited reference's claimed effect "in
-    terms the graph's existing sensors already observe (per-workflow token
-    attribution, tactic closure velocity, this strategy's own success_signal
-    thresholds)", and rules that "a finding whose claimed effect cannot be
-    stated observably is not draftable as a tactic at all". Two of those three
-    vocabularies are not observed. (1) TACTIC CLOSURE VELOCITY. The 2026-08-12
-    collapse clarification on dropping the judgment step states "(d) the fitness
-    function keeps its denominator (per-workflow spend) and loses its numerator
-    (closure velocity and strategy-signal progress), so it can say what was
-    spent and not what it bought", and the 2026-08-13 clarification on the spend
-    fold is blunter still: "What does not survive: closure velocity and
-    strategy-signal progress. Those were never computed by anything — they were
-    prose inside the deleted renderer's metrics section." Verified in this
-    worktree 2026-08-20: no closure-velocity sensor exists (one code comment at
-    read-sensors.ts:309, no sensor). (2) THIS STRATEGY'S OWN SUCCESS_SIGNAL
-    THRESHOLDS are only partly readable — its 2026-08-14 sensor field records
-    three evaluation-core instruments as "NOT YET IMPLEMENTED, so the three
-    readings stay declared and unproduced until each instrument lands", and the
-    supersession observable as "NOT YET READABLE as of 2026-08-14: blocked on
-    tactic-supersession-edge-and-terminal". Only per-workflow token attribution
-    survives intact. Planning the lane now would therefore either build the
-    draft-tactic write (write 3 of the 4 inert writes this node exists to build)
-    against a dead acceptance premise, or silently narrow the condition's
-    observable vocabulary to token attribution alone. Both are author decisions.
-    What is owed: either re-supply an observable closure-velocity signal, or
-    re-word condition 6 to name only what the graph reads today — noting that
-    the condition is the operational form of the 2026-08-10 endogenous-primacy
-    clarification and is this graph's answer to the dry run's own strongest
-    finding (across 35 self-improvement runs every run self-reported a passing
-    score while 43% actually scored below random baseline), so narrowing it is a
-    substantive weakening rather than housekeeping.
-
-
-    SIDE B — two material premises this node's plan would depend on that the
-    serving strategy does not record. Both are record-completeness defects of
-    the /align rounds that retired the research lane's machinery while leaving
-    its doctrine standing (strategy clarification 31 / condition 7 framing), so
-    the fix is an author /align pass, not a guess by an autonomous round.
-
-
-    FIRST: the lane's dated reading has no durable carrier. Condition 3 requires
-    the lane to write "one dated reading on this strategy", the draft body makes
-    it write 1 of 4, and condition 5's unread-pool review trigger — recorded as
-    living "in the rsi-plan" — has been re-homed into that same reading now that
-    rsi-plan.md and render-rsi-plan.ts are deleted (PR 3074, merge c3c229f0;
-    verified absent 2026-08-20). But `reading` on
-    strategy-recursive-self-improvement is machine-owned: read-sensors.ts
-    registers rsiSensor under RSI_SENSOR_NAME (read-sensors.ts:1590-1598), and
-    readStoreSensors recomputes every signalled node's reading and
-    writeNode-overwrites it on each batch pass (read-sensors.ts:1700-1728). A
-    research-cycle landing written to that field is clobbered by the next run.
-    The obvious alternative — naming the lane in success_signal.sensor — is a
-    recorded live hazard rather than an option: that field is a
-    character-for-character registry key matched against RSI_SENSOR_NAME, and
-    appending prose to it de-registers the sensor, which has happened twice on
-    this graph (47219a1a on 2026-08-10, when this very research-lane clause was
-    appended, and 56039748 on 2026-08-12). RULING OWED: name the carrier for a
-    research-cycle landing — (a) a separately registered research-cycle sensor,
-    landed as one atomic code-plus-prose change so the sensor is never
-    de-registered in between; (b) a dated-entries block under `attributes` on
-    the strategy, outside the sensor machinery entirely; or (c) the figures
-    folded into rsiSensor's own read() — and say where condition 5's unread-pool
-    review trigger is recorded now that rsi-plan is gone.
-
-
-    SECOND: whether the lane is wanted at all is deferred rather than settled,
-    and this round is exactly the "future round" the strategy asked to settle
-    it. The research-lane cron condition records: "The lane remains UNBUILT: no
-    /rsi-research skill exists in .claude/skills/, so these four research-lane
-    conditions are specification without a carrier. They are deliberately
-    retained rather than retired ... but a future round should decide whether an
-    unbuilt lane is still wanted before more doctrine accretes on it." Verified
-    2026-08-20: still no .claude/skills/rsi-research. Three /align rounds have
-    run since — the 2026-08-12 collapse and two on 2026-08-14 — without making
-    that decision, and the 2026-08-14 statement rewrite around "one shared
-    evaluation core" enumerates /rsi, the four invalid-state lanes and
-    /rsi-audit and does not name the research lane, while the rationale,
-    conditions 3-6 and the sensor field still carry it. The commitment is not
-    cheap: this node's own measured dry-run baseline is 108 subagents / 1,261
-    turns / ~364k output plus ~44.7M cache-read tokens for a single cycle,
-    weekly and indefinitely, on a lane whose own C7 correction records that the
-    ratified seed list did little steering work. RULING OWED: an explicit
-    build-or-retire decision. If BUILD, a statement clause placing the research
-    lane inside the evaluation-core framing, so the strategy's headline stops
-    omitting a lane it funds weekly. If RETIRE, conditions 3-6 retire together
-    and this node closes unbuilt.
-  since: 2026-08-20
-  recommendation: "Run an author `/align strategy-recursive-self-improvement`
-    pass; this is a record-completeness defect of the rounds that retired the
-    research lane's machinery while leaving its doctrine standing, not something
-    an autonomous round should decide. Three rulings are owed, and the first
-    gates the other two. (1) BUILD OR RETIRE the research lane — the 2026-08-12
-    collapse condition explicitly asked a future round to decide this before
-    more doctrine accretes, and three rounds have passed without deciding. (2)
-    If BUILD: name the carrier for a research-cycle landing (a separately
-    registered research-cycle sensor landed as ONE atomic code-plus-prose
-    change; a dated-entries block under `attributes`; or figures folded into
-    rsiSensor's read), and say where condition 5's unread-pool review trigger
-    lives now that rsi-plan.md is deleted. (3) If BUILD: reconcile condition 6's
-    acceptance vocabulary with what the graph actually observes — either
-    re-supply an observable closure-velocity signal or re-word the condition to
-    name only per-workflow token attribution, acknowledging that as a
-    substantive weakening of the outside-the-loop acceptance signal rather than
-    housekeeping. If the ruling is RETIRE, retire conditions 3-6 together and
-    close this node unbuilt — but PRESERVE the body's 2026-08-11 dry-run
-    corrections C1-C7 and its measured per-cycle baseline as the dated record of
-    what was learned; do not prune them. Then re-run `/align-tactics
-    tactic-rsi-research-skill`. Do NOT re-derive the mechanical findings: the
-    four clarifications landed on this node in this same round already record
-    the superseded serialization bullet (with the flock/worktree-occupancy reuse
-    candidates explicitly declined), the CronCreate-to-systemd-timer
-    substitution with its installer template and house idioms, the
-    historical-name-to-live-successor map, and the verified reuse/ownership map
-    naming which sibling nodes already own which of this node's spec corrections
-    — all with `path:line` anchors measured against origin/main 38934c61 on
-    2026-08-20."
-  session_type: requirement-discovery
+blocked_by:
+  - tactic-rsi-lane-token-attribution
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Build the /rsi-research skill and its weekly harness-cron schedule — the scheduled /deep-research sensor lane of the rsi strategy
+# Build the research lane as an opt-in, token-targeted subskill of /rsi-audit — external research fires only in response to an endogenous finding, on no schedule, writing through the one shared find-or-recur surface
+
+## Execution plan — ruled 2026-08-29 author sitting
+
+This section is the plan; everything below it is dated record. Where the two
+disagree, this section governs. The sections below are **kept, not pruned** —
+corrections C1–C7 and the measured per-cycle baseline are the dated record of
+what a real cycle cost and how it fails, and a build that has not read them will
+re-learn each one at full price.
+
+**Shape.** A subskill of `/rsi-audit`, invoked by it, **absent from the
+user-invocable slash-command list**. No `/rsi-research` command, no schedule, no
+systemd timer. The weekly-cron clarification recorded on this node describes a
+mechanism that is no longer built; it stays as the record of why `CronCreate`
+was rejected, not as an instruction.
+
+**Trigger.** The external pass fires **only in response to an endogenous
+finding** that own telemetry cannot explain, and only when the caller opts in.
+Default is off: a routine `/rsi-audit` run performs no external fetch.
+
+**Unit 1 — the lane parameter.** `/rsi-audit` accepts a lane selecting a named
+preset sized to a token target (`low`, `medium`, `full`; `medium` is the
+interactive default). The preset bundles the research-side and audit-side axes
+enumerated in this node's lane clarification. Validate the value and exit
+non-zero on anything unrecognized — never fall back to a default, per
+`.claude/rules/code-style.md`.
+
+**Unit 2 — the research invocation.** Preserve the C1 mechanism exactly: a
+headless session whose *initial user message* is the slash command,
+`claude -p "/deep-research <question>"`, because `/deep-research` is a harness
+built-in marked `disable-model-invocation` and **a subskill cannot call it any
+more than a skill could**. Carries C2 (`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`
+in a wrapper script, never an inline `VAR=value` prefix), C3 (a narrow
+`--allowedTools` grant, never `--dangerously-skip-permissions`), C4
+(`< /dev/null`), C6 (arXiv at `/abs/`), and C7 (two bounded passes).
+
+**Unit 3 — the post-processing.** Turn the returned report into
+`tactic-eval-finding-<slug>` entries through `dispatch-eval-finding`, passing
+**`--sensor rsi-research`** and naming the endogenous finding that provoked the
+run. This is the unit that carries the graph's ordering rule in its data.
+
+**Verification.** Unit 3 is the repo-owned logic and the part that can break:
+test it against a **fixture report with zero external calls**, which is cheap,
+deterministic, and covers more of what this repo owns than an end-to-end
+low-lane run would. Unit 2 gets a rare, deliberate smoke run. Tests pin `low`
+explicitly rather than relying on the default.
+
+**Two failure modes measured 2026-08-29, both silent — guard both.** `claude
+--effort <bad>` prints a warning and proceeds at *default* effort rather than
+failing, so a typo in a test path produces a full-cost run that looks correct.
+And effort throttles reasoning depth, **not fan-out** — it does not obviously
+reduce the ~108 subagents or 25 source fetches a full cycle performs, so a low
+lane must bound *work* (seeds, passes, caps) and not only reasoning. Pair the
+test lane with `--max-budget-usd` as a hard ceiling rather than a hint.
+
+**Dependency.** `blocked_by: tactic-rsi-lane-token-attribution` — it owns
+correction C5. Until a cycle's spend is attributable, a lane's declared token
+target cannot be confirmed against actual, and the calibration loop this plan
+depends on does not close.
+
+**Out of scope, owned elsewhere:** the 43%-self-report finding
+(`tactic-rsi-external-acceptance-gate`). **No longer required:** a `blocked_by`
+edge onto `tactic-grounding-deep-research-condition-reconcile` — see the
+clarification of 2026-08-29; the fold satisfies that condition instead of
+narrowing it.
+
 ## Draft context (2026-08-10 /align research-lane round)
+
+> **Superseded in part, 2026-08-29.** The **Trigger** bullet below (weekly
+> harness cron) and the **Serialization** bullet are retired by the ruling
+> above; the lane is opt-in and author-invoked. The **Run**, **Writes**,
+> **Prohibitions**, **Unread-pool guard** and **Spend** bullets still describe
+> what the folded subskill does, with the writes landing through
+> `dispatch-eval-finding` rather than as a separate dated reading.
+
 
 Skill spec, from the recorded interview resolutions (the authoritative record
 is the 2026-08-10 research-lane clarifications and conditions on
