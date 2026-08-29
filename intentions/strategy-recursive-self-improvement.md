@@ -66,6 +66,36 @@ serves:
   - virtue-alignment-of-attachments
 recovers: []
 clarifications:
+  - question: What did this harness's own telemetry say about subagent fan-out and
+      model routing, and where is that dated reading recorded?
+    answer: "(Measured 2026-08-29 for tactic-rsi-measure-fanout-and-model-routing,
+      whose threshold asks for a dated reading HERE stating whether fan-out and
+      the model-routing heuristic pay for themselves in this repo. Fleet 30d
+      window 2026-07-30..2026-08-29: 5032 sessions, 225896 turns.) FAN-OUT:
+      review ran 68 sessions launching 1266 subagents -- 18.6 per session -- to
+      surface 736 findings, 234 actionable (31.8%), 201 fixed: 6.3 launches per
+      fix, at 12.92 usd per fix. QA ran 130 sessions launching 440 subagents
+      (3.4 per session), 208 findings all marked actionable, 63 fixed: 7.0
+      launches per fix, at 31.87 usd per fix. Both phases converge near 6-7
+      subagent launches per applied fix. MODEL ROUTING: opus 94542 turns for
+      10457 usd, sonnet 130401 turns for 7565 usd; opus is 42% of turns but 57%
+      of spend, a 1.91x measured per-turn premium. Note that price_proxy_usd
+      INVERTS this ranking (sonnet 37827 above opus 31372) because the proxy
+      holds price constant to isolate token count -- so routing decisions must
+      read cost_usd, never the proxy. WHAT THIS DOES NOT SETTLE: the comparison
+      is descriptive, not a controlled trial; nothing here measures what review
+      would have found at lower fan-out, so 'pays for itself' is answered only
+      in the weak sense that the cost per applied fix is now known for this
+      configuration and the imported external ratios are not carried over.
+      Review's 68.2% non-actionable rate is the one figure that looks like
+      recoverable waste. LIMIT ON THE RECORDING SURFACE, recorded honestly: the
+      machine `reading:` field on this node is written by read-sensors and
+      carries pause/backlog/parked/worktrees/tokens; it is instrument-owned, so
+      this reading is recorded as a clarification instead. A dated reading also
+      cannot satisfy deriveGap, which is trimmed case-insensitive string
+      equality against a fixed threshold -- see
+      tactic-eval-finding-sensor-registry-key-prose-drift. Nothing here should
+      be read as the sensor threshold being mechanically met."
   - question: Why a new strategy rather than an edit of strategy-graph-native-dispatch?
     answer: (Recorded 2026-08-10 interview.) strategy-graph-native-dispatch records
       the execution architecture — dispatch runs on the graph. rsi is a

@@ -47,6 +47,36 @@ clarifications:
       cost drop paid for by a fall in disposition rates is a refutation, not a
       win'. See .claude/docs/outcome-envelope.md for the envelope shape and the
       rate formulas."
+  - question: What does the cost half of the threshold read on a window wide enough
+      to contain dispatch sessions, and is the quality half runnable yet?
+    answer: "(Measured 2026-08-29. This is the COST HALF the sequence plan says to
+      ship PR7 against; the quality half is unchanged and still deferred, because
+      it needs dispatch-phase sessions with a working ladder and Bundle 3
+      delivers those.) WINDOW CHOICE IS LOAD-BEARING: the plan named /rsi-audit
+      7d, but the dispatch freeze -- sentinel dated 2026-08-10 -- leaves a 7d
+      window with 2 sessions, no worker or subagent sessions, and every dispatch
+      phase at 0 turns. A 30d window straddling the freeze
+      (2026-07-30..2026-08-29, 5032 sessions, 225896 turns) is the narrowest one
+      that reads anything. COST HALF: lenses.context_over_120k reports 1029
+      sessions above the 120000 threshold at 48262 usd price proxy, folding to
+      align-tactics 327 sessions / 13333 usd, <none> 158 / 13134, qa-fix 143 /
+      8542, review-fix 136 / 4420, implement 78 / 2762, align 13 / 1630. This
+      widens the 2026-08-19 finding rather than overturning it: the affected
+      population is no longer effectively one phase, but align-tactics is still
+      the largest single share. payload_bytes.total is 329624854 bytes, Bash
+      191462249 over 92681 results and Read 128555071 over 12532 results -- the
+      same two tool families, now 97% of payload. THE ECONOMICS FINDING HOLDS
+      AND HARDENS: cache hit ratio over this window is 0.9570, and
+      cache_creation is only 1150179672 of 26796114528 context tokens (4.3%).
+      So the ceiling on any cache-side saving is 4.3%, and the 2026-08-19
+      conclusion stands unchanged -- ingest-time capping is cache-safe,
+      retro-masking is not, because rewriting a landed tool result re-pays
+      cache_creation for everything after the mask point. QUALITY HALF: still
+      unreadable, and now measurably so. by_phase_outcome carries only review
+      (68 sessions) and qa (130) in this window and nothing at all in a 14d one,
+      where sidecar_present is 0 of 122 eligible. The three-phase constraint
+      recorded in the clarification above is confirmed by measurement, not just
+      by reading dispatch-emit-outcome:90."
   - question: Do the field names and the per-closed-tactic denominator this node’s
       Verification section cites actually exist in aggregate-usage.sh?
     answer: "(Recorded 2026-08-19 /align-tactics per-node drift review.) Two
@@ -197,6 +227,26 @@ office_hours:
 pace_exempt: false
 rounds: null
 attributes:
+  measured_impact:
+    - metric: context_over_120k_sessions
+      value: 1029
+      unit: count
+      window: fleet 30d 2026-07-30..2026-08-29 (of 5032 sessions)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: context_over_120k_price_proxy_usd
+      value: 48262
+      unit: usd
+      window: fleet 30d 2026-07-30..2026-08-29
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: tool_result_payload_bytes_total
+      value: 329624854
+      unit: bytes
+      window: fleet 30d 2026-07-30..2026-08-29 (Bash 191462249, Read 128555071 --
+        together 97% of all tool-result payload)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
   reference:
     source: "2026-08-11 /rsi-research dry run: JetBrains Research, 'The Complexity
       Trap' (NeurIPS 2025), SWE-bench Verified, up to 250 turns, 5 model

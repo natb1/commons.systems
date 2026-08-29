@@ -23,7 +23,34 @@ reading: null
 serves:
   - strategy-recursive-self-improvement
 recovers: []
-clarifications: []
+clarifications:
+  - question: What does the pre-change baseline measure, and does it leave enough
+      headroom for the imported 41-80% claim to be credited here?
+    answer: "(Measured 2026-08-29, fleet 30d window 2026-07-30..2026-08-29, the
+      run this node's own success_signal asks for BEFORE any prompt-prefix
+      change.) The window is deliberately 30d rather than 7d: the dispatch
+      freeze (sentinel dated 2026-08-10) means a 7d window contains 2 sessions
+      and no dispatch phase at all, so only a window straddling the freeze has a
+      dispatch baseline to record. NO CHANGE HAS BEEN MADE -- these are
+      before-numbers. THE HEADROOM IS SMALL AND THIS IS THE DECISIVE NUMBER:
+      cache_creation is 1150179672 of 26796114528 total context tokens, or
+      4.3%. Since an append-only layout can only convert cache_creation into
+      cache_read, 4.3% is the ARITHMETIC CEILING on the context-token cost this
+      node can remove -- an order of magnitude below the imported 41-80%
+      agentic-cost reduction. That claim is therefore NOT credited here, on this
+      repo's own measurement, which is exactly the kill this node was built to
+      make possible ('the hypothesis can be killed before any cost claim is
+      credited'). SECOND, the specific mechanism is not firing: creation_churn
+      reports 0 churned sessions of 401 staggered across 86 node groups, so no
+      set of sessions sharing a node is losing its prefix to a mid-prefix
+      mutation. THIRD, a threshold note. The success_signal reads 'cache_read to
+      cache_creation ratio rises ... by at least 15%'. On the RAW ratio that is
+      22.30 -> 25.65 and is reachable; read as the emitted hit_ratio it is
+      0.9570 -> 1.10 and is arithmetically impossible. Keep the raw-ratio
+      reading, and note that even the full 15% raw rise moves hit_ratio only
+      0.9570 -> 0.9624. Per-phase baselines for the dispatch phases:
+      review-fix 0.9367, qa-fix 0.9723, fix-checks 0.9642, implement 0.9719,
+      code-review 0.9499, qa-main 0.9298, align-tactics 0.9500."
 tooling_goals: []
 success_signal:
   observable: the cache_read to cache_creation ratio rises for dispatch phase
@@ -46,6 +73,32 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
+  measured_impact:
+    - metric: cache_hit_ratio_window
+      value: 0.9570
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29 (5032 sessions, 5054 files, 22 failed)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: cache_read_to_cache_creation_ratio
+      value: 22.30
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: cache_creation_share_of_context_tokens
+      value: 0.043
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29 (1150179672 of 26796114528)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: creation_churn_rate
+      value: 0
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29 (0 churned of 401 staggered,
+        86 node groups, hit-ratio threshold 0.5)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
   reference:
     source: "2026-08-11 /rsi-research dry run: SICA paper (append-only
       KV-cache-preserving layout), corroborated by a 2026 prompt-caching eval"

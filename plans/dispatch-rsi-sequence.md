@@ -25,7 +25,8 @@ clean-session-executable, and this file deliberately does not restate it.
 |---|---|
 | **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
-| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. No position in the sequence is waiting on the author |
+| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**. No position in the sequence is waiting on the author |
+| **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
 | **Next** | **Position 1 — PR18**, the durable-layer write fence. Nothing gates it |
 | **Not started** | Positions 1 through 13. PR2 through PR20 |
 
@@ -78,14 +79,14 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 | ✅ | 1 · graph read/write path | PR1 | 8 | **SHIPPED `fe0b1c4d`** (#3095) |
 | ✅ | 0 · retire the in-flight overhang | *no new PRs* | +13 | **RETIRED** — cleared the drafts every later bundle would conflict with |
 | **1** | 1c · durable-layer write fence | PR18 | 5 | HOT. The fence ~100 remaining node closures write through |
-| **2** | 1b · graph plumbing | PR15 + PR16 | 15 | HOT. The closure toolchain itself. PR15 carries a conditional hold |
+| **2** | 1b · graph plumbing | PR15 (U0/U3/U4) + PR16 | 13 | HOT. The closure toolchain itself. PR15's hold discharged 2026-08-29 — split, U1–2 dropped |
 | **3** | 2a · record-time main-qa routing | PR5a | 1 | Must precede Bundle 2 |
 | **4** | 2 · tick-path reconcilers and sweeps | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT. Runs on every tick, paused or not |
 | **5** | 4 · instrument + finding surface | PR3 + PR4 | 16 | COLD, but unblocks positions 6 and 8 |
 | **6** | 2b · supersession representation | PR19 | 3 | Real `blocked_by` edge onto PR4's write surface |
 | **7** | 3 · dispatch runtime | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD. Nothing invokes it while paused |
 | **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | COLD. Needs PR2 + PR3 + PR4 |
-| **9** | 5b · `/align` charter + adversarial review | PR20 | 8 | **Must** precede the rename |
+| **9** | 5b · `/align` charter + adversarial review | PR20 + assessor-doc retirement | 9 | **Must** precede the rename |
 | **10** | 6 · skill rename | PR13 | 1 | Last, alone. Renames every path PR20 writes |
 | **11** | 7 · merge queue + scan cadence | PR17 | 6 | COLD. Must be in place *before* the resumption |
 | **12** | 8 · the four deferred A3 drafts | #3093 → #2856 → #3040 → #3037 | 4 | Bulk node-content rewrites invalidate every `--base` CAS manifest |
@@ -141,12 +142,20 @@ here. It absorbs #3023, #2975 and #2974. Two rulings shape its units:
   never meet any fixed threshold — rewording the threshold alone is a silent
   no-op.
 
-**PR15** (4 nodes — `graph-commit` simplification) carries a **conditional
-hold**, which comes due when this position is reached: the 2026-08-14 ref-split
-disposition recorded *defer*, but attached a standing instruction to revisit it
-before PR15 starts, because ref-split's Unit 2 rewrite would subsume PR15's
-Units 1–2. **Decide that before opening PR15.** PR16 does not share the exposure
-and may proceed independently.
+**PR15's conditional hold is discharged.** The revisit the 2026-08-14 ref-split
+disposition demanded was held on **2026-08-29** and ruled a **split**: PR15
+ships **Units 0, 3 and 4 only**. Units 1–2 are **not written** — ref-split's
+Unit 2 rewrite subsumes them, and the ruling refuses to write code with a known
+deletion date on the hot writer path. DEFER stands for ref-split itself; its
+rider (incremental cutover, blocker re-cut from 23 to 8) stays on the record as
+post-window work rather than being adopted into this window.
+
+Two consequences the position must carry: PR15 now closes **2 nodes, not 4** —
+`tactic-graph-commit-plumbing-default` and
+`tactic-graph-commit-direct-three-way-merge` move to the ref-split deferral set,
+which grows from three nodes to five. And **Unit 0 still ships**: it is the
+layer-2 REMOVAL correctness fix, and it was always marked as shipping even if
+PR15 split. PR16 never shared the exposure and proceeds independently.
 
 Kept separate from Bundle 1 deliberately: both touch `graph-commit`, but Bundle
 1 was correctness and this is simplification. Landing them together would mean a
@@ -185,8 +194,10 @@ an implementation, because the graph says four of its nodes are open and the
 code says otherwise. **Verify every "missing" claim before implementing**; see
 the plan's section of that name.
 
-Run `/rsi-audit 7d` for a baseline before changing anything — PR3 is what makes
-the two RSI measurement runs readable.
+The baselines this position was expected to unblock were **already taken on
+2026-08-29** — see §"Three measurement runs". PR3 turned out not to gate them:
+every lens they used already emits correctly. PR3 stays at this position for its
+own reasons, not as a measurement prerequisite.
 
 ### Position 6 · Bundle 2b — PR19, supersession representation
 
@@ -248,9 +259,15 @@ zero and so unfalsifiable — is **superseded rather than answered**: the residu
 no longer exists, because the sort key is now `(tier, band, score, depth)`. The
 `success_signal` amendment that followed is already landed.
 
-**PR11 needs `/rsi-audit 14d` first.** The catalog declares a `model:` per lens,
-and both imported fan-out/model-routing findings were measured on configurations
-this repo does not run. **Measure before fixing the values.**
+**PR11's measurement is done** — taken 2026-08-29, on a 30d window, because a
+14d one returns no fan-out data at all under the freeze. Two results bind this
+PR. First, the per-lens `model:` values must be anchored on the **measured 1.91×
+opus-to-sonnet per-turn cost premium**, not on the imported ratios, which came
+from configurations this repo does not run. Second, and easy to get wrong:
+**`price_proxy_usd` ranks sonnet *above* opus** (37827 vs 31372) because the
+proxy holds price constant to isolate token count. **Set `model:` from
+`cost_usd`.** Fan-out for context: review launches 18.6 subagents per session at
+6.3 per applied fix, with 31.8% of findings actionable.
 
 `tradition-agentic-engineering` was verified on the trust half — three idioms
 recorded as genuine external deference, context engineering excluded as
@@ -261,7 +278,15 @@ before.
 
 ### Position 9 · Bundle 5b — PR20, the `/align` charter and adversarial review
 
-8 nodes; a new `/align-review` skill plus `assemble-review-pack`,
+9 nodes. **`tactic-retire-assessor-contract-docs` rides here** by the 2026-08-29
+ruling — it was in no bundle, and PR20 already rewrites the `/align` skill
+surface its third unit edits. Its other two units retire
+`.claude/docs/delegability.md`, `.claude/docs/signal-identification.md` and
+their `ref-*` skills. Land it in the same PR: the shared file is
+`.claude/skills/align-audit/SKILL.md`, whose out-of-scope list still frames a
+decision settled 2026-07-23 as pending and cites a node that no longer exists.
+
+The other 8 are a new `/align-review` skill plus `assemble-review-pack`,
 `graph-commit --review`, `/align` and `/align-tactics` skill text, and a
 `validate-graph` lint.
 
@@ -358,38 +383,56 @@ mid-window.
 
 ## Open items that are not positions
 
-Nothing here waits on the author. Three are measurement runs, one is a decision
-that comes due mid-sequence, and one is work with no sequenced home.
+Nothing here waits on the author — the two decisions that did were ruled
+2026-08-29 and are recorded below as discharged. What remains is three
+measurement runs, of which one was taken on 2026-08-29 and two are blocked by
+the freeze itself.
 
-### Three measurement runs
+### Three measurement runs — TAKEN 2026-08-29
 
-They need an `/rsi-audit` run, not author time. All three are `owner: ai`, and
-two can run unattended today.
+All three were run and recorded on their nodes. **The window the plan named was
+wrong in every case, for one reason worth carrying forward.**
 
-| Node | Gates | Run |
+> **The freeze hides the thing being measured.** The pause sentinel is dated
+> **2026-08-10**, so a `7d` window holds 2 sessions, no worker or subagent
+> sessions, and every dispatch phase at 0 turns; a `14d` window has 899 sessions
+> but they are almost all `align-tactics`, and `by_phase_outcome` is `{}` with
+> `sidecar_present` **0 of 122** eligible workers. The envelope-emitting phases
+> are exactly the ones the freeze stops. **A 30d window straddling the freeze
+> (2026-07-30..2026-08-29 — 5032 sessions, 225896 turns, `sidecar_present` 431
+> of 695) is the narrowest one that reads anything**, and is what was run.
+> Any later re-measurement must clear the same bar, and any before/after
+> comparison must hold window width constant across the freeze boundary.
+
+| Node | Gates | Result |
 |---|---|---|
-| `tactic-dispatch-cache-preserving-context` | PR7 | `/rsi-audit 7d` — read `hit_ratio` (`aggregate-usage.sh:1211`) and record the baseline **before** changing prompt-prefix handling. Its `blocked_by` edge reads as "Bundle 4 first," but the blocker's deliverable already shipped — live by the code, open by the graph. Position 5 runs before position 7 anyway, so following the graph costs nothing |
-| `tactic-rsi-measure-fanout-and-model-routing` | PR11 | `/rsi-audit 14d` — measure this harness's own fan-out and model routing before the catalog fixes a per-lens `model:`. The instrument already counts `subagents_launched` (`aggregate-usage.sh:1052-1070`). Load-bearing: setting those values from unmeasured external numbers is the exact error this node exists to prevent |
-| `tactic-dispatch-observation-masking` | PR7 | **Splits.** The cost half runs now, on this window's own sessions. The **quality half cannot precede the PR it gates** — it needs dispatch-phase sessions with a working ladder, which Bundle 3 delivers, and PR7 is inside Bundle 3. Ship PR7 against the cost half; treat the quality half as a follow-up that may revise it. *(The node's rationale calls the third lens `context_lens`; no such key exists — it is `lenses.context_over_120k`. Fix the prose while you are in the node.)* |
+| `tactic-dispatch-cache-preserving-context` | PR7 | **Baseline recorded; the imported claim is not credited.** `hit_ratio` 0.9570, raw `cache_read:cache_creation` 22.30:1. The decisive figure is that `cache_creation` is **4.3%** of all context tokens (1150179672 of 26796114528) — an append-only layout can only convert creation into read, so **4.3% is the arithmetic ceiling**, against an imported claim of 41–80%. `creation_churn` is **0 churned of 401 staggered** across 86 node groups, so the mechanism is not firing either. This is the kill the node was built to make possible. **Threshold note:** "ratio rises 15%" is reachable on the raw ratio (22.30 → 25.65) and impossible on `hit_ratio` (0.9570 → 1.10) — keep the raw reading |
+| `tactic-rsi-measure-fanout-and-model-routing` | PR11 | **Measured, and the dated reading is recorded on `strategy-recursive-self-improvement`.** Review: 68 sessions, 1266 subagents (18.6/session), 736 findings, 234 actionable (**31.8%**), 201 fixed — 6.3 launches and \$12.92 per fix. QA: 130 sessions, 440 subagents, 63 fixed — 7.0 launches and \$31.87 per fix. Routing: opus 42% of turns but **57% of spend**, a measured **1.91×** per-turn premium. **`price_proxy_usd` inverts that ranking** (sonnet 37827 above opus 31372) because the proxy holds price constant — PR11 must set per-lens `model:` from `cost_usd`, never the proxy |
+| `tactic-dispatch-observation-masking` | PR7 | **Cost half taken; quality half still deferred, now confirmed by measurement.** `context_over_120k`: 1029 sessions, \$48262 proxy — align-tactics 327, `<none>` 158, qa-fix 143, review-fix 136. `payload_bytes.total` 329624854, Bash and Read together **97%**. The 2026-08-19 economics finding **hardens**: at 4.3% cache-creation share, ingest-time capping is cache-safe and retro-masking is not. The quality half needs `by_phase_outcome`, which the freeze empties — ship PR7 against the cost half, treat quality as a follow-up |
 
-### The PR15 ref-split revisit
+*The `context_lens` prose fix this section used to ask for was already applied on
+2026-08-28. The three surviving mentions in the node all name what was corrected;
+every asserting use already reads `lenses.context_over_120k`. Nothing to do.*
 
-A real decision, due when **position 2** is reached and not before. See that
-position, and §"Decisions already taken" in the plan for what was deferred and
-why.
+### The PR15 ref-split revisit — RULED 2026-08-29, no longer open
 
-### `tactic-retire-assessor-contract-docs` has no sequenced position
+It was ruled early rather than at position 2: **PR15 splits**, shipping Units 0,
+3 and 4 and not writing Units 1–2. See position 2 above, and §"Decisions already
+taken" in the plan.
+
+### `tactic-retire-assessor-contract-docs` — RULED 2026-08-29, now at position 9
 
 `phase: implement`, `owner: ai`, three units: retire `.claude/docs/delegability.md`,
 `.claude/docs/signal-identification.md` and their `ref-*` skills, plus
 `.claude/skills/align-audit/SKILL.md`, whose out-of-scope list still frames a
 decision settled 2026-07-23 as pending and cites a node that no longer exists.
 
-It is not in the 117 and appears in no bundle, so this sequence can be executed
-to completion without anyone noticing it — the same failure mode the four
-deferred A3 drafts had before they became position 12. **Recommendation, not a
-ruling:** ride it at position 9, whose PR20 already rewrites the `/align` skill
-surface it edits. It is small, and the freeze means no worker will pick it up.
+It was in no bundle, so the sequence could have run to completion without anyone
+noticing it — the same failure mode the four deferred A3 drafts had before they
+became position 12. **Ruled: it rides position 9**, whose PR20 already rewrites
+the `/align` skill surface it edits, so the two touch the same files and review
+together. It is small, and the freeze means no worker will pick it up on its
+own. This makes position 9 **9 nodes, not 8**.
 
 ---
 
