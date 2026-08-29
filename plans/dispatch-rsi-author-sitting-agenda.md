@@ -599,11 +599,44 @@ rulings were on record.
 executed none of them; they were landed afterwards, in the same session, and
 each entry below records its landing commit. What remains owed:
 
-- **The `/align` round against `strategy-graph-native-dispatch` (A2)** — the
-  only outstanding graph write. Deliberately not run here: it is an author
-  interview round, not a mechanical amendment, and it needs a paired
-  `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change that `graph-commit` cannot
-  carry.
+- **The `/align` round against `strategy-graph-native-dispatch` (A2)** —
+  **RULED 2026-08-29, author present.** The interview ran; the rulings are
+  recorded as three clarifications on `tactic-review-dispatch-charter-split`.
+  Execution remains deferred past position 12 per D1, so the re-serve cannot
+  invalidate the `--base` CAS manifests in flight — what is recorded is the
+  spec, not the edit.
+
+  - **Three charters**, cut along the strategy body's existing sections:
+    *recording surface* (Serialization & Commit, Other Settled Mechanism);
+    *router and selection* (Router Mechanism, Phase Transitions & Fix State,
+    Fingerprint & Freeze, Pace/Backlog/Attention, Review & QA Disposition);
+    *session lifecycle* (Worktree Claiming & Liveness, Recovery & Session
+    Lifecycle, Execution Substrate).
+  - **Exclusive re-serve**, and the parent's defect-ratio `success_signal` is
+    **retired** in favour of per-charter bands.
+
+  **The mechanical finding that forced the second ruling, measured 2026-08-29
+  and not previously recorded anywhere.** `strategyBacklogBand`
+  (`packages/intentionsutil/src/census.ts:30-32`) selects children with
+  `n.serves.includes(strategyId)` — **direct membership, with no ancestry
+  walk**. Re-serving children onto charters therefore removes them from the
+  parent's denominator outright: the parent's band would not measure the same
+  population re-cut, it would measure a shrinking rump, and at `total === 0` it
+  returns `pct: null` rather than erroring. The 2026-08-13 carve-out of
+  `strategy-discovered-requirements` hid this because it took only **5 of 317**
+  children. A three-way split will not. So retiring the parent's ratio is not
+  bookkeeping — leaving it in place after an exclusive re-serve yields a signal
+  that reads green because it measures almost nothing.
+
+  **The paired code change is harder than "graph-commit cannot carry it."**
+  `packages/intentionsutil/test/lifecycle-sensor.test.ts:330` asserts that
+  `LIFECYCLE_SENSOR_NAME` (`read-sensors.ts:485`) equals this strategy's
+  `success_signal.sensor` **verbatim**, and a second guard in the same file
+  requires every registered sensor name to be recorded by some node. **Editing
+  either side alone turns CI red.** The node edit, the constant and the test
+  must land together in one ordinary branch and PR. `read-sensors.ts` also
+  hardcodes `BACKLOG_STRATEGY_ID = "strategy-graph-native-dispatch"` and
+  `BACKLOG_BAND_PCT = 35`, both of which the retirement makes stale.
 - **D1's prune of `tactic-align-audit-legacy-review`** — **not prune-ready, for
   a reason no document had recorded.** Re-authorized by the ruling, and its
   *stated* precondition is now moot: the body says "prune is owed at a future
@@ -667,13 +700,43 @@ each entry below records its landing commit. What remains owed:
   sites once that tactic ships" — was right about those three sites and wrong to
   imply the prune was therefore clear.
 
-  **What the prune actually needs**, in order: (1) rule whether the retained
-  engine content is still wanted now that the decision it was held for went
-  *against* inclusion — if not, it can die with the node, and if so it needs a
-  home before the node goes; (2) sweep the 28 in-graph references, which is a
-  node-sized job nobody has filed. Both are author calls; neither was in this
-  sitting's scope. **Do not run `graph-commit --prune` on this node until (1) is
-  ruled** — it deletes the file outright and the loss would pass CI green.
+  **RULED 2026-08-29, author present.** Both calls the prune was waiting on
+  are now made, and both are recorded on the node itself as a clarification.
+
+  **(1) The retained engine content is NOT wanted in-graph — it may die with
+  the node.** The 2026-07-23 sitting decided against re-consumption, so the two
+  engine specifications are no longer being held for a decision and need no new
+  in-graph home. The content is not lost: verbatim source survives at
+  `44493733`, which the graph already records at
+  `tactic-align-entrypoint-consolidation:280-281`. A prune destroys the
+  *curated retention*, not the source.
+
+  **(2) The reference sweep gets its own node.** Filed as
+  `tactic-align-legacy-review-reference-sweep`, scoped to all 38 lines across
+  12 nodes — both the five live content pointers and the stale-framing
+  references. `tactic-align-audit-legacy-review` now carries a **`blocked_by`
+  edge** to it, so the gate is **structural rather than prose-only** and
+  `validate-graph` enforces it. Widening `tactic-retire-assessor-contract-docs`
+  to absorb the sweep was declined: it is `owner: ai` at `phase: implement`, so
+  widening it means re-planning work in flight.
+
+  **Before the prune runs**, the five pointers in
+  `tactic-align-entrypoint-consolidation` (:99, :176, :279, :291, :349) must be
+  repointed at `44493733` — and **:291 must be rewritten, not repointed**,
+  because it instructs "PRESERVE the content, not delete" on the premise, now
+  false, that the node is a live plan for a future `/align-audit`.
+
+  **Re-measured 2026-08-29: the residue grew to 38 lines across 12 nodes**,
+  from 28 across 11 the day before — it grows while the prune waits. Still
+  **zero structural edges**, so the prune would pass `validate-graph` green.
+  The new heavy citer is `tactic-retire-assessor-contract-docs` (10), but it is
+  written prune-safe — its line 145 says to expect the node and "do not read
+  its presence as a live consumer." Its line 47 does need fixing: it narrates
+  the prune as already performed. That is a provenance error, not a dependency.
+
+  **Do not run `graph-commit --prune` on this node until
+  `tactic-align-legacy-review-reference-sweep` ships** — it deletes the file
+  outright and the loss would pass CI green.
 - **`strategy-exercise-recovery-paths`'s threshold** — reclassified: it is not a
   standalone graph edit at all, it is part of PR16 Unit 5. See its entry.
 
