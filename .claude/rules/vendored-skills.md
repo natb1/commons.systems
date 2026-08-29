@@ -81,11 +81,17 @@ skill, check the name against the bundled skills listed in a live session.
 
 ### Installing the hook
 
-The devshell claims `core.hooksPath` on entry when it is unset. Otherwise:
+Once per clone:
 
 ```
 git config core.hooksPath .githooks
 ```
+
+Git has no way to install a hook automatically, and this repo deliberately does
+not claim `core.hooksPath` from the devshell `shellHook`: editing `flake.nix`
+turns on the `nixos-build` and `darwin-build` CI jobs, which are gated on nix
+files changing, and dragging those into every skills-related PR costs far more
+than the one command saves.
 
 The hook only runs on commits that touch `.claude/skills/`. Drift can also
 appear with no commit at all — upstream moves on its own — and blocking an
