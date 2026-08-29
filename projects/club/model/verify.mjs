@@ -68,6 +68,15 @@ for (const site of ["li", "sn"]) {
   const built = M.builtOpsK(site), stated = M.SITES[site].ops;
   check(`built operations reconciles with §6 at ${site}`, Math.abs(built - stated) <= 0.06 * stated,
     `built ${built.toFixed(2)} vs §6 ${stated} (${(100 * (built - stated) / stated).toFixed(1)}%)`);
+  // The Location lever's tooltip quotes that same figure to the reader. It used
+  // to quote it as a typed-in literal and went stale the moment the line was
+  // rebuilt — the page said $65K while the breakdown beside it said $67K. It is
+  // computed now, and this is what keeps it that way: a hardcoded number here
+  // fails as soon as the built total moves off it.
+  const hint = M.siteHint(site);
+  check(`the ${site} tooltip quotes the built operations figure`,
+    hint.includes(`operations $${Math.round(built)}K`),
+    hint.slice(0, 90));
 }
 
 // 4 — every cost carries its provenance. A cost with no stream cannot be placed
