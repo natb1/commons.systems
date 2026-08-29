@@ -648,9 +648,20 @@ Scope, not just its citation**, and do it before Bundle 5 is planned.
 
 | Class | Files | Action |
 |---|---|---|
-| Correctly historical — says "retired", or narrates the deletion | `.claude/skills/rsi-audit/SKILL.md:256`, `tactic-rsi-plan-render-retire`, `tactic-rsi-plan-skill`, `tactic-ladder-await-phase-only-completion-test:24`, `strategy-recursive-self-improvement:1181,1224` | **none** |
-| Stale — presents the script as live | `strategy-recursive-self-improvement:165,186,381,409,549,1013,1079`, `tactic-attention-namespaced-rank:822,826`, `tactic-graph-read-at-ref-cli:16`, `tactic-rsi-audit-workflow-attribution:59`, `tactic-rsi-external-acceptance-gate:108`, `tactic-rsi-research-skill:59`, `tactic-rsi-skill:39` | rewrite past-tense or repoint |
+| Correctly historical — says "retired", or narrates the deletion | `.claude/skills/rsi-audit/SKILL.md:256`, `tactic-rsi-plan-render-retire`, `tactic-rsi-plan-skill`, `tactic-ladder-await-phase-only-completion-test:24`, `strategy-recursive-self-improvement:1181,1224`, `tactic-rsi-research-skill:389` | **none** |
+| Stale — presents the script as live | `strategy-recursive-self-improvement:165,186,381,409,549,1013,1079`, `tactic-attention-namespaced-rank:822,826`, `tactic-graph-read-at-ref-cli:16`, `tactic-rsi-audit-workflow-attribution:59`, `tactic-rsi-external-acceptance-gate:108`, `tactic-rsi-skill:39` | rewrite past-tense or repoint |
 | **Scope hole** | `tactic-rsi-lane-token-attribution:127` | **re-scope the node** |
+
+> **`tactic-rsi-research-skill` was reclassified out of the stale row
+> (2026-08-29).** Two reasons, and both bite an implementer who trusts the old
+> entry. The `:59` anchor was already wrong on `origin/main` — line 59 is the
+> timer-installer clarification, not a `render-rsi-plan.ts` citation; the real
+> mention is at `:389`. And that line sits inside `## Draft context (2026-08-10
+> /align research-lane round)`, which the node's own 2026-08-20 clarification
+> covers: *"read all three as HISTORICAL, and do not rewrite the dated draft
+> prose that names them."* So the citation is correctly historical and
+> **must not be rewritten** — editing it would overturn a standing ruling to
+> satisfy a bookkeeping sweep.
 
 `tactic-rsi-reprioritization-outcome-audit` is split: `:43` already notes the
 deletion, but `:88` still says "All work is in
@@ -2367,9 +2378,14 @@ values.**
 > four.**
 >
 > The record's remaining half — whether the reading lane's own seed selection is
-> self-curating — **cannot be reviewed yet and does not gate this PR**. It needs
-> `/rsi-research` to have run, and `/rsi-research` is built by **PR14 Unit 3, in
-> this same bundle**. Revisit after the bundle lands.
+> self-curating — **does not gate this PR**, but it is no longer unreachable
+> inside the window. **Re-scoped 2026-08-29** by the research-lane ruling: there
+> is no standalone `/rsi-research` and no schedule, so the half now asks whether
+> research-sourced input stays subordinate to measurement in practice, and
+> whether the seed list steers anything now that it is a source-trust filter
+> rather than a crawl plan. It needs one author-invoked research-mode run of
+> `/rsi-audit`, available the day PR14 Unit 3 lands — not two or three weekly
+> cron firings. Revisit after the bundle lands.
 
 ### Context
 
@@ -2605,9 +2621,12 @@ than the queue baseline?
 > the file. This unit must first pick a new home for the derivation (most likely
 > `/rsi-audit` itself, which absorbed the rest of `/rsi-plan`), then implement
 > it there. Fix the stale citations in
-> `tactic-rsi-audit-workflow-attribution.md:59`,
-> `tactic-rsi-research-skill.md:59` and
+> `tactic-rsi-audit-workflow-attribution.md:59` and
 > `tactic-attention-namespaced-rank.md:822` while you are in the graph.
+> **`tactic-rsi-research-skill` is deliberately not in that list** — its mention
+> is at `:389`, inside dated draft prose its own 2026-08-20 clarification rules
+> historical and forbids rewriting. Leave it alone; see §"Two stale-path
+> classes".
 
 **Unit 3 — the research lane, folded.** **RULED 2026-08-29 — do NOT build a
 standalone `/rsi-research` skill and do NOT install a weekly schedule.** The
@@ -4245,7 +4264,7 @@ All **117** in-scope tactics are assigned; none appears twice.
 | PR11 | 1 | `/rsi` + `/rsi-audit` → `/rsi-lens-*` |
 | PR12 | 1 | four invalid-state lanes |
 | PR13 | 1 | repo-wide rename |
-| PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
+| PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-audit` research subskill |
 | PR15 | 2 | `graph-commit` — invocation, short-circuit (+ Unit 0 removal fix, closed under PR15) · **SPLIT 2026-08-29**: writer default and merge path deferred to ref-split |
 | PR16 | 11 | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
 | PR17 | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
