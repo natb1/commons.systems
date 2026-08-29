@@ -14,7 +14,6 @@ status: raw
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -22,8 +21,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr15-graph-commit-simplification
+  pr: 3136
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T23:45:52Z
+    mergeCommitSha: a4a964b8e80bcac307d089b001a5419b1ed46fd8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -85,3 +96,53 @@ gh pr view 2990 --json body --jq .body | grep -q 'cases 48-52\|48, 49, 50, 51, 5
 
 Manual check: if the body wasn't edited, confirm a comment exists on PR #2990
 stating the "cases 36-40" citation is deliberately left as historical text.
+
+## What shipped — 2026-08-29, closed against the follow-up-doc-fix outcome
+
+Landed in #3136 (merge commit `a4a964b8`), Position 2 of the dispatch/RSI
+serialized window.
+
+This node's Expected outcome is **disjunctive**: PR #2990's body *"(or a
+follow-up doc fix)"* cites the correct case numbers. It is closed against the
+second disjunct, and this section records exactly which, because that
+distinction is not visible from the diff alone.
+
+**What shipped in the repo.** `test-graph-commit.sh` gains a comment block above
+the affected group recording that these are the five Unit 1 / Unit 2 regression
+guards from #2990, that the PR body cited them as "cases 36-40", and that an
+unrelated commit on main inserted its own new cases 36-47 ahead of them —
+shifting the group to **48-52**. The block establishes the convention: cite cases
+by assertion text, never by ordinal. Three in-file citations that used bare
+ordinals were re-anchored to name their cases instead. All five cases exist at
+48-52 with the described scenarios and pass.
+
+**What was deliberately not changed.** #2990's merged body still reads "cases
+36-40". Editing a merged PR body rewrites a historical record, so it is left as
+written. Instead a comment was posted on that PR recording the correction, so the
+stale text is self-correcting for any future reader who lands there:
+https://github.com/natb1/commons.systems/pull/2990#issuecomment-5465593781
+
+That comment is what makes this a clean close rather than a partial one. No
+later section of `plans/dispatch-rsi-serialized-pr-plan.md` claims the
+GitHub-side correction — the only references are inside PR15's own section — so
+closing with nothing posted would have left it owed by nobody and dropped it
+from the graph entirely.
+
+### A trap in this node's own Verification fence
+
+The fence reads, in effect:
+
+```
+gh pr view 2990 … | grep -q 'cases 48-52…' && echo "corrected" || echo "not corrected"
+```
+
+This **exits 0 either way**. It prints a different word but cannot fail, so it
+is a vacuous gate and must not be cited as evidence of closure. The evidence is
+the in-repo comment block and the posted PR comment above.
+
+### Node body figures
+
+Verified accurate and left as written: the five case headers exist at 48, 49,
+50, 51 and 52 with exactly the described scenarios.
+
+**Verification:** `test-graph-commit.sh` 124/0; `run-lint.sh` clean.

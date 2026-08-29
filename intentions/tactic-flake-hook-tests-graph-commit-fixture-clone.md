@@ -99,8 +99,20 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr15-graph-commit-simplification
+  pr: 3136
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T23:45:52Z
+    mergeCommitSha: a4a964b8e80bcac307d089b001a5419b1ed46fd8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -278,3 +290,61 @@ it is not reproducible on demand and not owned by this repository. This node's
 claim is narrower and checkable: when that hiccup recurs, CI reports one
 accurate line instead of eleven misleading ones, and one retry usually means it
 does not report anything at all.
+
+## What shipped — 2026-08-29, both units
+
+Landed in #3136 (merge commit `a4a964b8`), Position 2 of the dispatch/RSI
+serialized window.
+
+**Unit 1 — fixture setup fails loudly.** A `setup_or_die` helper — the form this
+node's Reuse section sanctioned — now wraps every fixture-setup operation the
+node listed: the `$ORIGIN` `init --bare`, `symbolic-ref` and four `config`
+calls; the `$SEED` bootstrap (`mkdir -p`, `init`, four `config`, `remote add`,
+the second `mkdir -p`, the `cp` of `graph-commit`); the seed `add`/`commit`/
+`push`; and both `config` calls inside `make_clone`. The `store.js` truncation
+takes an inline guard in the same voice, since a redirect cannot take
+`setup_or_die`. It uses `exit 1`, and `set -uo pipefail` is untouched — no `-e`
+was added, so the tally survives.
+
+**Unit 2 — bounded single clone retry.** `make_clone` prints
+`warning: fixture clone failed, retrying once: …` to stderr, `rm -rf`s the
+partial directory, retries exactly once, and falls through to Unit 1's abort
+message. No loop, no sleep, nothing else retried.
+
+**The cascade proof.** With a PATH-shimmed `git` that always fails `clone`, the
+suite now prints four lines ending in `error: fixture setup failed: git clone …`
+and exits 1 with **zero `FAIL:` lines** — where it previously reported 11
+misattributed case failures. With a shim that fails only once, one `warning:`
+line and then a full green run. On a healthy run no warning line appears, so the
+retry is not firing spuriously.
+
+### Already landed elsewhere, correctly not re-implemented
+
+#3071 had already landed the clone race itself: `--no-local`, `gc.auto 0` /
+`receive.autogc false`, and `make_clone`'s own exit check. This node's "what the
+fix does" rationale lists those *alongside* the loud-failure check, which reads
+as though all four were outstanding. Only the loud-failure widening and the
+bounded retry actually were; the shipped change builds on #3071 rather than
+duplicating it.
+
+### Corrections to this node's own text
+
+- "VERIFIED: local suite passed **84**, failed 0" is stale — the suite is now
+  **124 passed / 0 failed**.
+- The body's "Confirmed transient: the immediately following run … passed all 23
+  checks" is **stale and contradicted by this node's own clarification**, which
+  falsified "transient" with two consecutive identical CI reproductions and then
+  also rejected "deterministic" via a third green run. The settled reading is a
+  genuine race with a high but not certain hit rate. Do not quote the
+  "Confirmed transient" line.
+- `make_clone` is cited at `:372`; it is now near `:518`. The `$SEED` bootstrap,
+  `mktemp` guard, `set -uo pipefail` and `sync_clone` anchors have all drifted
+  too. Locate by symbol.
+- The "What this does not fix" section stands unchanged and correctly: the
+  underlying runner filesystem behavior remains out of scope and unaddressed.
+  This change makes the failure legible, it does not remove the race.
+
+**Verification:** `test-graph-commit.sh` 124/0; `run-lint.sh` clean. The two
+manual judgment checks — forcing a setup failure, and shimming a single clone
+failure — were performed by the implementing session with the results quoted
+above; the clean-run figure was independently re-run at 124/0.

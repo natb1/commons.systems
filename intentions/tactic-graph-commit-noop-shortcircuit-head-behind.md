@@ -25,8 +25,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr15-graph-commit-simplification
+  pr: 3136
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T23:45:52Z
+    mergeCommitSha: a4a964b8e80bcac307d089b001a5419b1ed46fd8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -398,3 +410,95 @@ Manual / judgment checks:
   would delete the CI stamp and `await_checks` entirely, taking this surface
   with it) is at `phase: implement`, not landed. If it lands before this work
   starts, close this node as obsolete; otherwise the work stands.
+
+## What shipped — 2026-08-29, all three units
+
+Landed in #3136 (merge commit `a4a964b8`), Position 2 of the dispatch/RSI
+serialized window.
+
+**Unit 1 — the guard is now writer-agnostic.** It reads:
+
+```
+all_ids_match_main == 1 && (unpushed == 0 || GRAPH_COMMIT_WRITER == plumbing)
+```
+
+The old `head_sha == main_sha` arm is **subsumed, not dropped**: `HEAD ==
+origin/main` implies `unpushed == 0`, so every invocation that short-circuited
+before still does. No new `git` subprocess was added. The dead `else` arm is
+gone — `grep -n 'landing cycle will fast-forward'` now returns nothing — and the
+`if/else` pair collapsed into the unconditional orphan-recovery echo, with no
+unreachable `die` left as residue. The `die` prose in
+`assert_noop_matches_intent` was reworded, preserving all four grep-pinned
+substrings verbatim.
+
+The safety argument, verified against source rather than asserted: reaching the
+guard with `unpushed == 0` **forces** content parity, because a divergent id
+cannot get past the loop above — `id_divergence_is_own_orphan()` reads
+`MAIN_SHA..HEAD`, that range is empty when nothing is unpushed, so the `die`
+fires first. The widened arm is therefore unreachable on divergent content.
+`MAIN_SHA` and the locally-computed `main_sha` are the same `FETCH_HEAD` on
+every path that reaches the guard; the only intervening fetch is inside
+`park_and_exit`, which exits.
+
+**Unit 2 — honest verdict reporting.** `print_verdict()`'s step-3 reason no
+longer credits "a peer landed identical content" when `PUSHED_SHA` is empty and
+no push was ever attempted; that named an actor which did nothing. The
+push-attempted wording is preserved verbatim. Step 2's ref test is left
+**strict** on purpose, with a comment recording why: relaxing it to
+`merge-base --is-ancestor` would manufacture a false `landed`, because that
+function re-fetches and a peer can land a *different* edit to one of our ids in
+between. The behind case belongs to step 3, which is content-based and reads the
+fresh tip.
+
+**Unit 3 — regression case.** Shipped as **Case 85**, not Case 84 — a Case 84
+already existed (the real-park-helper block). No `GRAPH_COMMIT_WRITER` export,
+so it exercises the default writer. It carries two assertions beyond those
+specified, both anti-vacuity guards: a fixture precondition that the clone is
+genuinely behind main, and a check that `HEAD` is unmoved afterwards.
+
+**Accepted behavior change:** a behind-but-clean worktree-writer run no longer
+fast-forwards the caller's checkout as a side effect of `land()`'s rebase.
+`graph-commit` is a writer, not a tree-sync primitive — `sync_main_checkout()`
+in `lib.sh` is the sync path. Do not add a compensating fast-forward.
+
+### Independence from the unwritten Units 1–2 of PR15
+
+PR15 shipped under a split ruling that deliberately did **not** write the
+`GRAPH_COMMIT_WRITER` default flip or the worktree-writer retirement. Verified:
+the default still reads `worktree`. That is exactly why this node was needed —
+its whole point was to close the *worktree*-writer gap while that remains the
+default, and it listed the default as out of scope from the outset. The two
+sibling drafts those units would have closed,
+`tactic-graph-commit-plumbing-default` and
+`tactic-graph-commit-direct-three-way-merge`, were correctly left untouched;
+both remain open and travel with ref-split. They are not silently absorbed here.
+
+The node's "close as obsolete" branch does **not** apply: `tactic-graph-ref-split`
+is still unlanded under the 2026-08-29 ruling, so this work stands as done on its
+own merits, not as obsolete.
+
+### Corrections to this node's own text
+
+- The `statement`/title reads as though the guard were strictly `HEAD ==
+  origin/main`. It was not: a content-parity arm already existed, gated to the
+  plumbing writer. The Context section says so; the title does not.
+- Every line anchor has drifted by roughly 100–140 lines. Locate by symbol.
+- "Append as Case 84" is stale — see above.
+
+### Residue, carried forward as an observation
+
+A live tick showing a behind-main worker print "skipping the landing cycle" with
+`pushed=none … context=noop` and no landing-lock claim has not yet been
+observed. Observe-in-production item, not unshipped scope.
+
+**Verification:** `test-graph-commit.sh` 124/0 (three consecutive clean runs);
+`test-park-node.sh` 25/0; `test-land-align-round.sh` 10/0; `test-verify-landed.sh`
+25/0; `test-transition-node.sh` 3/0; `run-lint.sh` clean.
+
+The new case was proven non-vacuous by reverting only `graph-commit`, keeping the
+case, and confirming both arms `FAIL`. That proof caught a real vacuity bug on
+its first attempt: under the old code `land()` fast-forwarded the fixture, so the
+hard-fail arm passed against broken code. Both arms now assert their precondition
+before testing. Separately, `assert_noop_matches_intent` was **measured** — not
+asserted — to still fire on the widened path, via a temporary `die` probe that
+was then removed and the file confirmed byte-identical.

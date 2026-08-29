@@ -38,8 +38,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.05
-  override: null
+  boosts:
+    "1": 0.05
   rationale: >-
     Bootstrap re-scale 2026-07-30: Wave A of a three-band interim scale (50 / 20
     / 10) that puts write-path integrity work above ordinary feature work. This
@@ -60,17 +60,23 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr15-graph-commit-simplification
+  pr: 3136
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T23:45:52Z
+    mergeCommitSha: a4a964b8e80bcac307d089b001a5419b1ed46fd8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: provision-node-worktree failed for this tactic (exit 2)
-  since: 2026-07-31
-  recommendation: Inspect the provisioning failure (git fetch/worktree add,
-    direnv) in the tick journal, fix the environment, and re-run the phase.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
@@ -486,3 +492,70 @@ change Unit 1's design.
 References:
 - #2931: https://github.com/natb1/commons.systems/pull/2931
 - #2936: https://github.com/natb1/commons.systems/pull/2936
+
+## What shipped — 2026-08-29, both units, and the stale park cleared
+
+Landed in #3136 (merge commit `a4a964b8`), Position 2 of the dispatch/RSI
+serialized window.
+
+**Unit 1 — base-aware merge in `node-merge.ts`.**
+
+- `threeWayList(baseList, oursList, theirsList)` implements the six-row table
+  this node specified. `unionList` is **kept**, not deleted, as the
+  `baseList === null` (no-common-ancestor) path. Ordering is preserved: theirs
+  first, then ours-novel, deduped by `eq`. It never pushes a `FieldConflict`,
+  so the "no new parks in the drain lane" judgment constraint holds.
+- The `attributes` key-presence branches now consult `inBase`. A key absent from
+  base is an addition and is kept; a key present in base and unchanged on one
+  side is a genuine deletion and is honored; a delete-vs-modify raises a
+  `FieldConflict` on `attributes.<key>` with the deleted side `undefined`, while
+  keeping the value so `merged` stays landable. `FieldConflict`'s shape is
+  unchanged.
+- `attributes.conditions` routes through `threeWayList`.
+- All five now-false doc comments were rewritten, including `unionList`'s
+  "base-free" description, which now states it is retained only for the
+  no-common-ancestor path.
+- Nine unit tests, cases `(i)`–`(q)`. No existing test was modified or deleted.
+
+**Unit 2 — `merge-node.ts` CLI extraction.** `mergeNodeFiles(basePath, oursPath,
+theirsPath, outPath)` is exported and returns `{ resolved, conflicts }`.
+`main()` keeps argv parsing, the single JSON stdout line, and the exit code, so
+the stdout contract is byte-identical. The empty-`--theirs` delete-vs-edit guard
+moved into the extracted function as an early return. Six CLI tests, covering
+all three required assertions, with no `npx tsx` spawn.
+
+### Park cleared, not re-provisioned
+
+This node carried an `office_hours` park since 2026-07-31:
+`provision-node-worktree failed for this tactic (exit 2)`. That is an
+**environment** failure, not a substantive one, and the work it blocked has now
+shipped. The park is cleared in the same write that sets `phase: done` — a
+`done` node with a live park is an inconsistent state.
+
+### Corrections to this node's own text
+
+- Verification baselines are stale: "711 vitest tests across 38 files" is now
+  **1230 across 56 files**, and "`test-graph-commit.sh` reported 43 passing" is
+  now **124 passed / 0 failed**. The node flags these as stale itself; do not
+  quote either figure.
+- The node says the harness "must stay at 43 passing **with no edits to the
+  harness**." The harness *was* edited in this PR — but by sibling units, not by
+  this node's work: Case 85 belongs to
+  `tactic-graph-commit-noop-shortcircuit-head-behind`, and the `setup_or_die`
+  and retry changes to `tactic-flake-hook-tests-graph-commit-fixture-clone`.
+  This node's actual prohibition — do not add a list-removal case to the
+  harness, do not extend its `npx` shim — was honored. A future reader should
+  not read the harness diff as a scope violation.
+- Every line anchor has drifted with this PR's own edits, including the node's
+  own "Citation drift" section.
+
+### Residue, carried forward as an observation
+
+The interim operational rule — after any graph write that removes a list entry
+or `attributes` key, re-read `git show origin/main:intentions/<id>.md` and
+assert the removal actually landed — **stays in force** until a *contended*
+removal has been seen to land on main. That has not yet been observed. This is
+an observe-in-production item, not unshipped scope; the code fix is complete.
+
+**Verification:** `intentionsutil` vitest 1230/1230 across 56 files;
+`test-graph-commit.sh` 124/0; `run-typecheck.sh` 3/3; `run-lint.sh` clean.

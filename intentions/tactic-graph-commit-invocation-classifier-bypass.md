@@ -44,8 +44,20 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr15-graph-commit-simplification
+  pr: 3136
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-29T23:45:52Z
+    mergeCommitSha: a4a964b8e80bcac307d089b001a5419b1ed46fd8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-graph-commit-cwd-repo-resolution
@@ -429,3 +441,45 @@ end-to-end effect by observation, in an `auto`-mode session:
 3. Judgment call for the implementer: if the settings edit itself is blocked from
    the orchestrator thread (not just from a subagent), stop and park to
    office-hours per the "Execution caveats" note — do not route around it.
+
+## What shipped — 2026-08-29, all four units
+
+Landed in #3136 (merge commit `a4a964b8`), Position 2 of the dispatch/RSI
+serialized window.
+
+- **U1 — static allow entries.** `.claude/settings.json` carries
+  `"Bash(packages/intentionsutil/scripts/graph-commit:*)"` and
+  `"Bash(packages/intentionsutil/scripts/land-align-round:*)"`. No
+  bare-basename entry was added, and `.claude/settings.local.json` is
+  untouched — both out-of-scope constraints honored.
+- **U2 — call-site normalization.** `.claude/skills/dispatch-conflict/SKILL.md`
+  now uses the canonical repo-relative form with `-C "$PROJECT_ROOT"`, and
+  carries the "the relative prefix is deliberate" note directly beneath the
+  block. A repo-wide grep for the old `"$PROJECT_ROOT/packages/…"` spelling
+  returns no matches.
+- **U3 — two-gate doctrine.** `.claude/rules/sandbox.md` records all four
+  required points: the two distinct approval gates, that a PreToolUse hook
+  `allow` does *not* resolve at step 1, the literal-prefix consequence with both
+  canonical spellings, and the 2026-07-21 evidence plus the accepted tradeoff.
+  It extends the existing `-C` contract rather than duplicating it.
+- **U4 — regression cases.** Four cases added to
+  `.claude/hooks/test-approve-workflow-commands.sh` (two `assert_approves`, two
+  `assert_passthrough`), each with a why-comment.
+  `approve-workflow-commands.sh` itself is unchanged.
+
+### Corrections to this node's own text
+
+- The frontmatter clarification calls the remaining scope "allowlist-only".
+  That understates it: the body scoped four units and all four shipped,
+  including two documentation surfaces.
+- The body says "19 of 20 documented call sites use the repo-relative form."
+  After U2 it is **20 of 20**.
+- Every line anchor in this node has drifted (`.claude/settings.json:56/:57`,
+  `.claude/rules/sandbox.md:174-181`). Locate by symbol or heading, not ordinal.
+- The "Execution caveats" hard-stop — park if the orchestrator-thread settings
+  edit is blocked — never fired; the edit landed normally.
+
+**Verification:** `test-approve-workflow-commands.sh` 71/71; `run-lint.sh` all
+checks pass. Note that this node's own closing write is the first `graph-commit`
+invocation to run under the new static allow entry, so that run is itself the
+first live exercise of the bypass this tactic existed to remove.
