@@ -104,20 +104,27 @@ clarifications:
       resolving through the pruned classification. Scope discipline here is the
       point: the defect is instructions pointing at content that no longer
       exists, not the mere appearance of a pruned id in prose."
-  - question: Why does this node carry no dispatch markers at phase review?
+  - question: Why does this node carry no dispatch markers, and why was its done stamp written by hand?
     answer: "Because it was not produced by the dispatch lane. The sweep was
       authored interactively during the 2026-08-28/29 author sitting, in the same
       session that recorded the D1 ruling gating the prune on it, and landed as an
       ordinary branch and PR (#3122) rather than through a worker. The planned and
       qa-done markers are lane artifacts; writing them here would misrepresent how
       the work was produced, so markers is empty by construction rather than by
-      omission. The edits are the whole of the node's scope, so nothing remains
-      for a worker to implement — the node sits at review awaiting the merge that
-      satisfies tactic-align-audit-legacy-review's blocked_by edge."
+      omission. The edits are the whole of the node's scope, so nothing remained
+      for a worker to implement. PR #3122 merged 2026-08-29 as b36fe3d6, which
+      satisfied tactic-align-audit-legacy-review's blocked_by edge, and D1's prune
+      ran immediately after as b40bd123. The done stamp was written by hand for
+      the same reason the markers are empty. A clean review completion arms
+      auto-merge and writes no phase change
+      (packages/intentionsutil/src/transitions.ts:224-226), leaving the
+      review-to-done write to the tick reconciler — and that reconciler never ran
+      here, because the merge happened out of band and dispatch is paused. So
+      completion records the merge facts directly and markers stays empty."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: review
+phase: done
 execution:
   branch: legacy-review-reference-sweep
   pr: 3122
@@ -125,7 +132,9 @@ execution:
   markers: []
   strategy_fingerprint: null
   fix: null
-  completion: null
+  completion:
+    mergedAt: 2026-08-29T16:23:51Z
+    mergeCommitSha: b36fe3d6618b9e9cfccfa7cdb10f962212ff3b35
 validates: []
 blocked_by: []
 office_hours: null
