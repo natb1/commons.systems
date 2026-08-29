@@ -357,8 +357,12 @@
 #      Four arms: intent equal to origin/main proceeds silently; intent
 #      differing dies naming the id, the preserved snapshot dir and the --base
 #      entry, reporting `verdict: not-landed` and never `landed`; a resolved
-#      merge's <id>.merged.md matching origin/main proceeds (case 48's shape,
-#      proving the comparison reads snap_intended_file()); and the mirror —
+#      merge's <id>.merged.md matching origin/main proceeds (the shape of the
+#      "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild"
+#      case above — cite it by that assertion text, not a case number: PR #2990
+#      once cited this same case's earlier ordinal, and an unrelated insertion
+#      shifted it out from under the citation), proving the comparison reads
+#      snap_intended_file(); and the mirror —
 #      frozen original matching while the merge output does not — still dies
 #
 #  84. THE PARK CARRIES THE CONTENT, run against the REAL park helper — the
@@ -395,38 +399,49 @@ PASS=0; FAIL=0
 ok() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 no() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 
+# A fixture-setup failure is not a test result — it must abort the whole run
+# rather than being walked past by `set -uo pipefail` (no -e, deliberately,
+# so genuine case FAILs still get tallied instead of aborting the run). Every
+# bootstrap operation below that builds the scratch origin/seed is wrapped in
+# this guard, extending the mktemp/setsid guard idiom above to the rest of
+# fixture setup: a clone or init failure now reports ONE clear diagnostic
+# naming the operation instead of silently letting every case that depends on
+# it die downstream with a misleading assertion FAIL.
+setup_or_die() { "$@" || { echo "error: fixture setup failed: $*" >&2; exit 1; }; }
+
 # --- Scratch origin + seed content ------------------------------------------
 ORIGIN="$WORK/origin.git"
-git init -q --bare "$ORIGIN"
-git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+setup_or_die git init -q --bare "$ORIGIN"
+setup_or_die git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
 # Silence the only asynchronous writer the scratch origin can have: an
 # in-process auto-gc that relocates loose objects into a pack right after the
 # seed push, racing make_clone's --no-local clone (see there). No assertion
 # in this suite depends on gc behavior in the fixtures.
-git -C "$ORIGIN" config gc.auto 0
-git -C "$ORIGIN" config receive.autogc false
+setup_or_die git -C "$ORIGIN" config gc.auto 0
+setup_or_die git -C "$ORIGIN" config receive.autogc false
 # plant_lock (cases 30/31) runs `git commit-tree` directly in this bare repo,
 # which needs an author identity. CI runners have no global git identity, so
 # without this commit-tree fails, plant_lock yields an empty sha, and the lock
 # is never planted — case 31 lands immediately instead of waiting out the
 # expiry, and case 30 passes vacuously with nothing to steal.
-git -C "$ORIGIN" config user.email harness@test
-git -C "$ORIGIN" config user.name harness
+setup_or_die git -C "$ORIGIN" config user.email harness@test
+setup_or_die git -C "$ORIGIN" config user.name harness
 
 SEED="$WORK/seed"
-mkdir -p "$SEED"
-git -C "$SEED" init -q -b main
-git -C "$SEED" config user.email harness@test
-git -C "$SEED" config user.name harness
-git -C "$SEED" config gc.auto 0
-git -C "$SEED" config receive.autogc false
-git -C "$SEED" remote add origin "$ORIGIN"
-mkdir -p "$SEED/intentions" \
+setup_or_die mkdir -p "$SEED"
+setup_or_die git -C "$SEED" init -q -b main
+setup_or_die git -C "$SEED" config user.email harness@test
+setup_or_die git -C "$SEED" config user.name harness
+setup_or_die git -C "$SEED" config gc.auto 0
+setup_or_die git -C "$SEED" config receive.autogc false
+setup_or_die git -C "$SEED" remote add origin "$ORIGIN"
+setup_or_die mkdir -p "$SEED/intentions" \
          "$SEED/packages/intentionsutil/scripts" \
          "$SEED/packages/intentionsutil/src"
-cp "$GC_SCRIPT" "$SEED/packages/intentionsutil/scripts/graph-commit"
+setup_or_die cp "$GC_SCRIPT" "$SEED/packages/intentionsutil/scripts/graph-commit"
 # The path must exist for STORE_MODULE resolution; the npx shim never loads it.
-: >"$SEED/packages/intentionsutil/src/store.js"
+: >"$SEED/packages/intentionsutil/src/store.js" \
+  || { echo "error: fixture setup failed: writing $SEED/packages/intentionsutil/src/store.js" >&2; exit 1; }
 
 seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly
   local i
@@ -451,7 +466,8 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-orphan t-live-pending \
           t-plumb-cli t-plumb-dirty t-plumb-race t-plumb-race-conflict \
           t-plumb-noop t-plumb-base \
-          t-noop-guard t-noop-unit t-merge-npx-guard; do
+          t-noop-guard t-noop-unit t-merge-npx-guard \
+          t-behind-noop t-behind-advance; do
   seed_node "$id"
 done
 
@@ -498,9 +514,9 @@ seed_field_node t-merge-unrunnable-base "sentinel: base"
 seed_field_node t-merge-unrunnable-farahead "sentinel: base"
 seed_field_node t-merge-real-divergence "sentinel: base"
 
-git -C "$SEED" add -A
-git -C "$SEED" commit -qm seed
-git -C "$SEED" push -q origin main
+setup_or_die git -C "$SEED" add -A
+setup_or_die git -C "$SEED" commit -qm seed
+setup_or_die git -C "$SEED" push -q origin main
 
 # --- Independent writer clones -------------------------------------------
 make_clone() { # <dst> <identity>
@@ -509,12 +525,27 @@ make_clone() { # <dst> <identity>
   # which races a source-side loose->pack relocation triggered by auto-gc
   # right after the seed push. --no-hardlinks is NOT equivalent: it keeps the
   # same per-file copy loop and is exposed to the same race.
+  #
+  # Bounded single retry: the observed CI failure is a genuine race (a
+  # source-side loose-to-pack relocation), not a deterministic defect, so one
+  # retry usually clears it. The retry is loud (a warning on stderr, so a
+  # clean run's output is easy to tell apart from one that needed it) and
+  # bounded (exactly one extra attempt, no loop) — if it also fails, this
+  # falls through to the same loud abort as a first-attempt failure, naming
+  # the operation and destination. The partial destination directory is
+  # removed before retrying: the observed failure left dst/.git/objects/…
+  # missing files, so retrying git clone into the same half-populated
+  # directory would fail differently than a fresh attempt.
   if ! git clone -q --no-local "$ORIGIN" "$1"; then
-    echo "error: fixture setup failed: git clone --no-local $ORIGIN $1" >&2
-    exit 1
+    echo "warning: fixture clone failed, retrying once: $1" >&2
+    rm -rf "$1"
+    if ! git clone -q --no-local "$ORIGIN" "$1"; then
+      echo "error: fixture setup failed: git clone --no-local $ORIGIN $1" >&2
+      exit 1
+    fi
   fi
-  git -C "$1" config user.email "$2@test"
-  git -C "$1" config user.name "$2"
+  setup_or_die git -C "$1" config user.email "$2@test"
+  setup_or_die git -C "$1" config user.name "$2"
 }
 A="$WORK/a"; B="$WORK/b"
 make_clone "$A" writer-a
@@ -2487,6 +2518,19 @@ else
 fi
 
 # --- Case 48: far-ahead + stale --base: the layer-3 merge survives the rebuild ---
+# Cases 48-52 are the five Unit 1/Unit 2 regression guards from PR #2990. That
+# PR's body cited them as "cases 36-40" — its own numbers when the body was
+# written — but an unrelated origin/main commit inserted its own new cases
+# 36-47 ahead of them before the PR merged, shifting these five to 48-52
+# without the body text ever being corrected
+# (tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression).
+# The case content and behavior were never wrong, only the PR body's ordinal
+# citation — a hazard inherent to citing by position in an ordered list that
+# keeps growing. Cite these cases by their `ok`/`no` assertion text (e.g. "the
+# far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild"
+# case), never by number, in any PR body, node text, or comment elsewhere in
+# this file: the assertion text moves with the case; the ordinal does not.
+#
 # Unit 1 regression guard. Wfab is BOTH far-ahead (a non-intentions code
 # commit on HEAD, like case 16) AND carrying a stale --base whose field-level
 # delta is disjoint from a concurrent writer's landed edit (like case 21).
@@ -3580,8 +3624,11 @@ fi
 #   (b) intent differing → dies, naming the id, the preserved snapshot dir and
 #       the --base entry, and reports `verdict: not-landed` — never `landed`;
 #   (c) a RESOLVED merge's <id>.merged.md matching origin/main → proceeds, even
-#       though the frozen pre-merge original differs. This is case 48's shape (a
-#       merge concluding this writer's whole delta is already on main) and
+#       though the frozen pre-merge original differs. This is the shape of the
+#       "far-ahead + stale --base: layer-3 merge survives the far-ahead rebuild"
+#       case above (a merge concluding this writer's whole delta is already on
+#       main) — named here rather than numbered, since that case's ordinal has
+#       already drifted once under a PR body's citation (PR #2990) — and
 #       proves the comparison reads snap_intended_file();
 #   (d) the mirror of (c) — frozen original matching while the merge output does
 #       NOT — still dies, so the preference is "the merge output wins", not
@@ -3693,7 +3740,8 @@ fi
 
 # --- Case 81: far-ahead rebuild, merge tool unrunnable -> die, HEAD restored, snapshot kept ---
 # replay_snapshot_onto_base() call site (via ensure_intentions_only_base()).
-# W81 is far-ahead (a non-intentions commit on HEAD, like case 48/50) racing a
+# W81 is far-ahead (a non-intentions commit on HEAD, like the "far-ahead +
+# stale --base" and "far-ahead race, same field" cases above) racing a
 # concurrent same-field landing, so the far-ahead rebuild's three-way replay
 # would normally call run_merge_node(). With the tool unrunnable: die, no
 # park, cleanup()'s RESTORE_HEAD still returns the checkout to its PR tip, and
@@ -4035,6 +4083,75 @@ PRINTREC
     no "real park helper no-carry wording"; printf '%s\n' "$nocarry_rec"
   fi
 fi
+
+# --- Case 85: DEFAULT (worktree) writer, a checkout merely BEHIND origin/main ---
+# The worktree-writer half of Case 74's defect
+# (tactic-graph-commit-noop-shortcircuit-head-behind). $B is clean and its
+# content for the target id already matches origin/main, but $A has advanced
+# main past it, so HEAD is strictly BEHIND origin/main. Nothing HEAD carries can
+# reach main, so the whole landing cycle — landing lock, graph/** scratch push,
+# await_checks stamp poll, push to main — is pure cost. Before the widening this
+# fell through to a full land() and printed "landing current HEAD … the landing
+# cycle will fast-forward"; that branch is now unreachable and deleted, so its
+# text appearing at all is the regression.
+#
+# NO GRAPH_COMMIT_WRITER export here — that is the whole point. Case 74 is the
+# same shape with `plumbing`; this one must hold for the default.
+set_mode green
+sync_clone "$B"
+sync_clone "$A"
+edit_line "$A" t-behind-advance 4 advance-main-past-B
+run_gc "$A" -m 'test: advance main past B' t-behind-advance >/dev/null 2>&1
+before="$(origin_sha)"
+calls_before="$(gh_calls)"
+b_head_before="$(git -C "$B" rev-parse HEAD)"
+out="$(run_gc "$B" -m 'test: worktree no-op behind main' t-behind-noop 2>&1)"; rc=$?
+b_head_after="$(git -C "$B" rev-parse HEAD)"
+# `b_head_before != before` is the fixture's own precondition: without it every
+# assertion below would hold vacuously on a clone that happened to be AT
+# origin/main (which is the case the OLD guard already covered). `b_head_after
+# == b_head_before` pins the accepted behavior change — the checkout is no
+# longer fast-forwarded as a side effect of the skipped land(), and nothing may
+# compensate for that.
+if [[ $rc -eq 0 ]] \
+   && [[ "$b_head_before" != "$before" ]] \
+   && [[ "$b_head_after" == "$b_head_before" ]] \
+   && grep -q 'no new changes to stage' <<<"$out" \
+   && grep -q 'skipping the landing cycle' <<<"$out" \
+   && ! grep -q 'landing current HEAD' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before" ]] \
+   && [[ "$(gh_calls)" == "$calls_before" ]] \
+   && [[ -z "$(scratch_refs)" ]] \
+   && grep -qE 'verdict: landed-equivalent .*pushed=none .*context=noop' <<<"$out"; then
+  ok "worktree writer: a clean checkout BEHIND origin/main whose content already matches short-circuits — no landing cycle, no stamp poll, no scratch branch, HEAD left where it was"
+else
+  no "worktree no-op behind main (rc=$rc origin moved: $before -> $(origin_sha); B HEAD ${b_head_before:0:8} -> ${b_head_after:0:8}, main ${before:0:8})"; printf '%s\n' "$out"
+fi
+
+# The same invocation with gh in hard-fail mode (every call exits 1), $B STILL
+# behind because the run above pushed nothing and did not fast-forward it.
+# Case 41's angle, on the behind case: the short-circuit must fire BEFORE the
+# poller, so a broken gh cannot turn a behind-checkout no-op into a failure.
+#
+# The `still_behind` guard is what keeps this arm honest. A land() that
+# fast-forwards $B (the pre-fix behavior) leaves the clone AT origin/main, where
+# even the un-widened guard short-circuits with zero gh calls — so without this
+# check the arm would pass against the very code it exists to reject.
+set_mode hard-fail
+still_behind="$(git -C "$B" rev-parse HEAD)"
+out="$(run_gc "$B" -m 'test: worktree no-op behind main, gh broken' t-behind-noop 2>&1)"; rc=$?
+calls="$(gh_calls)"
+if [[ $rc -eq 0 ]] \
+   && [[ "$still_behind" != "$(origin_sha)" ]] \
+   && ! grep -q 'polling failed' <<<"$out" \
+   && [[ "$calls" -eq 0 ]] \
+   && [[ "$(origin_sha)" == "$before" ]]; then
+  ok "worktree writer: the behind-main short-circuit fires before the poller — zero gh calls even in hard-fail mode, on a clone still behind main"
+else
+  no "worktree no-op behind main under hard-fail (rc=$rc gh_calls=$calls still_behind=${still_behind:0:8} main=$(origin_sha))"; printf '%s\n' "$out"
+fi
+set_mode green
+sync_clone "$B"
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then

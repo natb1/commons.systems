@@ -1470,7 +1470,7 @@ assert_noop_matches_intent() {
     # would delete SNAP_DIR on the way out. Keep it and name it, the same way
     # the park path does.
     KEEP_SNAP=1
-    die "this run intended to land content for intentions/$id.md that is NOT what origin/main carries, yet nothing was staged and HEAD is already origin/main — so nothing is going to land it (intended blob=$intended from $intended_file, origin/main blob=${observed:-<absent>} at ${MAIN_SHA:0:8}). The caller's edit was dropped between the writer and this tree: the far-ahead rebuild's 'git reset --hard' makes HEAD and origin/main equal for every id, so the nothing-staged wrong-repo guard cannot see this, and the no-op short-circuit would otherwise report a false 'landed' for an edit that never reached main.$base_note This invocation's content is preserved at $SNAP_DIR — re-run graph-commit from the checkout that holds the edit, or re-apply it from that directory. Refusing to emit a false 'landed' for a run whose intended content is not on origin/main."
+    die "this run intended to land content for intentions/$id.md that is NOT what origin/main carries, yet nothing was staged and nothing this tree holds could land it (every id already matches origin/main, and HEAD is at or behind it — or, for the plumbing writer, HEAD is not the subject at all) — so nothing is going to land it (intended blob=$intended from $intended_file, origin/main blob=${observed:-<absent>} at ${MAIN_SHA:0:8}). The caller's edit was dropped between the writer and this tree: the far-ahead rebuild's 'git reset --hard' makes HEAD and origin/main equal for every id, so the nothing-staged wrong-repo guard cannot see this, and the no-op short-circuit would otherwise report a false 'landed' for an edit that never reached main.$base_note This invocation's content is preserved at $SNAP_DIR — re-run graph-commit from the checkout that holds the edit, or re-apply it from that directory. Refusing to emit a false 'landed' for a run whose intended content is not on origin/main."
   done
 }
 
@@ -2273,6 +2273,22 @@ print_verdict() { # <context>
   #    this verdict exists to end. Every other context falls through to the
   #    content comparison below, which asks about the CONTENT rather than the
   #    ref.
+  #
+  #    The ref test stays STRICT equality on purpose — do NOT relax it to
+  #    `git merge-base --is-ancestor HEAD FETCH_HEAD` to cover the checkout that
+  #    is merely BEHIND origin/main (main()'s widened no-op short-circuit). That
+  #    would manufacture a false `landed`. This function RE-FETCHES origin/main,
+  #    so a peer can land a DIFFERENT edit to one of our ids between main()'s
+  #    fetch and that re-fetch: HEAD is still an ancestor of the new tip, while
+  #    the tip no longer carries this run's intended content. An ancestry test
+  #    would answer `landed` and return before the content comparison that
+  #    catches it. Strictness is what makes this step self-limiting — it fires
+  #    only where HEAD IS the freshly-read tip, so "nothing to push" is a fact
+  #    about the current main rather than an inference from an old one. The
+  #    behind case belongs to step 3 precisely because step 3 is content-based
+  #    and reads that fresh tip; it resolves there as `landed-equivalent`, which
+  #    exits 0 just the same
+  #    (tactic-graph-commit-noop-shortcircuit-head-behind, Unit 2).
   local head_sha=""
   head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
   if [[ "$context" == "noop" && -z "$PUSHED_SHA" && -n "$head_sha" && "$head_sha" == "$main_sha" ]]; then
@@ -2348,7 +2364,17 @@ print_verdict() { # <context>
     reason="${PUSHED_SHA:-no push} did not reach origin/main, but origin/main already carries exactly this park's office_hours content for every parked id (the node was already parked byte-identically — nothing needed pushing)"
   elif [[ "$unsatisfied" -eq 0 ]]; then
     verdict="landed-equivalent"
-    reason="${PUSHED_SHA:-no push} did not reach origin/main, but origin/main already carries exactly this invocation's intended content for every id (a peer landed identical content)"
+    # Same status either way — the caller's intent IS on origin/main — but the
+    # two ways of getting here are different events and the reason phrase must
+    # not conflate them. With PUSHED_SHA empty no push was ever attempted (the
+    # nothing-staged no-op short-circuit, including the widened behind-main arm,
+    # and park_and_exit()'s idempotent retry), so crediting "a peer" would name
+    # an actor that did nothing.
+    if [[ -z "$PUSHED_SHA" ]]; then
+      reason="no push was attempted, and origin/main already carries exactly this invocation's intended content for every id — there was nothing to land"
+    else
+      reason="$PUSHED_SHA did not reach origin/main, but origin/main already carries exactly this invocation's intended content for every id (a peer landed identical content)"
+    fi
   else
     verdict="not-landed"
     reason="origin/main does not carry this invocation's intended content"
@@ -4066,49 +4092,71 @@ main() {
       die "the resolved repo ($REPO_ROOT) holds intentions/$id.md content differing from origin/main but has nothing staged to commit, and no unpushed local commit of this script's own explains it (HEAD blob=${local_blob:-<absent>}, origin/main blob=${main_blob:-<absent>}; $why). That rules out the killed-prior-run cause — an orphan this script made, which it detects and simply lands — and leaves a mis-pointed -C/--repo (or a cwd targeting the wrong checkout, e.g. a STALE worktree), so the edit the caller made lives in a DIFFERENT checkout. Landing this HEAD would rebase and push the stale content onto main, over whatever other writers already landed. Refusing to emit a false 'landed' for a tree that was never going to carry the caller's edit."
     done
 
-    # Nothing is staged AND every id already matches origin/main. If HEAD is
-    # also exactly origin/main there is, by definition, nothing to push: the
-    # whole land() cycle (landing lock, graph/** scratch push, await_checks,
-    # push to main) is pure cost on a SHA that already carries its checks.
-    # Exit success here rather than buying a stamp cycle that cannot change
-    # main (tactic-graph-commit-noop-landing-false-failure, Defect 1).
+    # Nothing is staged AND every id already matches origin/main, so the whole
+    # land() cycle (landing lock, graph/** scratch push, await_checks, push to
+    # main) is pure cost on content main already carries. Exit success here
+    # rather than buying a stamp cycle that cannot change main
+    # (tactic-graph-commit-noop-landing-false-failure, Defect 1;
+    # tactic-graph-commit-noop-shortcircuit-head-behind).
     #
-    # The plumbing writer widens the test by one arm, because HEAD is not its
-    # subject: it builds from the ON-DISK content onto origin/main, so what
-    # decides whether anything can land is whether that content already matches
-    # origin/main — which, on this clean branch, is exactly what the per-id loop
-    # above just established ($all_ids_match_main). Without the widening, a
-    # clean checkout merely BEHIND origin/main would build a commit whose tree
-    # equals its parent's and push that empty no-op onto main.
-    if [[ "$head_sha" == "$main_sha" ]] \
-       || [[ "$GRAPH_COMMIT_WRITER" == "plumbing" && "$all_ids_match_main" -eq 1 ]]; then
-      # Both arms above are repository-vs-repository tests, and on the far-ahead
+    # Content parity ($all_ids_match_main) is the load-bearing test. It is
+    # NECESSARY on both arms: a run whose ids differ from main has something to
+    # land, whatever HEAD looks like. What the second clause adds is the reason
+    # HEAD cannot supply that something either:
+    #
+    #   - $unpushed -eq 0 — HEAD is contained in origin/main, so it carries no
+    #     commit main lacks. land() would fetch, rebase HEAD onto the fresh tip
+    #     (a fast-forward), and push a ref that is already there. Nothing this
+    #     tree holds can reach main, so the cycle cannot change it. Applies to
+    #     BOTH writers; it is what makes the default worktree writer skip a
+    #     landing on a checkout merely BEHIND origin/main.
+    #   - plumbing — HEAD is not that writer's subject at all: it builds from
+    #     the ON-DISK content onto origin/main (prepare_plumbing_sha), so parity
+    #     alone settles it however far ahead HEAD is. Without this arm a clean
+    #     checkout behind origin/main would build a commit whose tree equals its
+    #     parent's and push that empty no-op onto main.
+    #
+    # The old `head_sha == main_sha` arm is gone, strictly subsumed rather than
+    # dropped: HEAD == origin/main implies $unpushed -eq 0, and reaching here
+    # with $unpushed -eq 0 already implies parity — a mismatched id cannot get
+    # past the loop above, because id_divergence_is_own_orphan() reads
+    # MAIN_SHA..HEAD and that range is empty, so the die() fires.
+    #
+    # Accepted behavior change: a behind-but-clean worktree-writer run no longer
+    # fast-forwards the caller's checkout as a side effect of land()'s rebase.
+    # graph-commit is a writer, not a tree-sync primitive — sync_main_checkout()
+    # in lib.sh, or an explicit fetch + reset --hard, is the sync path. Do not
+    # add a compensating fast-forward.
+    #
+    # Downstream, the behind case is confirmed by print_verdict()'s step 3
+    # (content equivalence against a freshly fetched main), NOT step 2 — step 2
+    # stays a strict ref test on purpose; see the comment there.
+    if [[ "$all_ids_match_main" -eq 1 ]] \
+       && { [[ "$unpushed" -eq 0 ]] || [[ "$GRAPH_COMMIT_WRITER" == "plumbing" ]]; }; then
+      # Every test above is repository-vs-repository, and on the far-ahead
       # rebuild path they are true BY CONSTRUCTION (see
       # assert_noop_matches_intent). Compare this run's INTENT against
       # origin/main before claiming there was nothing to do: a mismatch dies
       # here rather than reaching the `noop` verdict below.
       assert_noop_matches_intent
       echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} and the content is already on origin/main (HEAD ${head_sha:0:8}, origin/main ${main_sha:0:8}) — nothing to push; skipping the landing cycle" >&2
-      # Still route through the verdict rather than a bare `exit 0`: the "HEAD
-      # is already origin/main" reading is of the tip pinned BEFORE this run,
-      # and a peer can have moved main since. The verdict re-reads origin/main
-      # and answers about the current tip.
+      # Still route through the verdict rather than a bare `exit 0`: the reading
+      # above is of the tip pinned BEFORE this run, and a peer can have moved
+      # main since. The verdict re-reads origin/main and answers about the
+      # current tip.
       emit_verdict_and_exit noop
     fi
 
-    # HEAD differs from origin/main, so the landing cycle still runs — but WHY
-    # it differs decides what an operator should go looking for, and the two
-    # cases are not the same thing. Read the relation rather than asserting one
-    # of them: an unpushed-commit count of 0 means HEAD is BEHIND origin/main
-    # (a stale checkout), where telling the reader "a prior attempt committed
-    # but did not push" would point at a commit that does not exist.
-    # ($unpushed was computed above, where it also decides whether the
-    # wrong-repo die applies.)
-    if [[ "$unpushed" -gt 0 ]]; then
-      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push — this is the sanctioned orphan recovery; see the orphan-detected line above)" >&2
-    else
-      echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD (HEAD ${head_sha:0:8} is behind origin/main ${main_sha:0:8}; no unpushed local commit, so the landing cycle will fast-forward)" >&2
-    fi
+    # Reaching here means the short-circuit did not fire, and exactly one shape
+    # can do that: HEAD carries unpushed local commits ($unpushed -gt 0). The
+    # behind/at-main shapes are all handled above — $unpushed -eq 0 forces
+    # parity (a mismatched id dies in the loop, since
+    # id_divergence_is_own_orphan() finds nothing in an empty MAIN_SHA..HEAD),
+    # and parity plus $unpushed -eq 0 is precisely the widened guard. So this is
+    # the orphan-recovery path: a prior run of this script committed and was
+    # killed before it pushed, and re-running the same invocation rebases and
+    # lands that commit.
+    echo "graph-commit: no new changes to stage for ${ALL_IDS[*]} — landing current HEAD ($unpushed local commit(s) not on origin/main: a prior attempt already committed but did not push — this is the sanctioned orphan recovery; see the orphan-detected line above)" >&2
   fi
 
   local rc=0

@@ -37,7 +37,7 @@ import { parse, stringify } from "yaml";
 import { pathToFileURL } from "node:url";
 import { extractFrontmatter, extractBody } from "../src/frontmatter.js";
 import { validateNode, type IntentionNode } from "../src/schema.js";
-import { mergeIntentionNodes } from "../src/node-merge.js";
+import { mergeIntentionNodes, type FieldConflict } from "../src/node-merge.js";
 
 /** Read a raw node file into a validated { node, body } pair. */
 function readNodeFile(path: string): { node: IntentionNode; body: string } {
@@ -58,13 +58,27 @@ function requireFlag(args: string[], flag: string): string {
   return args[idx + 1];
 }
 
-function main(): void {
-  const args = process.argv.slice(2);
-  const basePath = requireFlag(args, "--base");
-  const oursPath = requireFlag(args, "--ours");
-  const theirsPath = requireFlag(args, "--theirs");
-  const outPath = requireFlag(args, "--out");
+// --- Core helper (exported for tests) --------------------------------------
 
+/**
+ * Read the three sides, run the three-way merge, and write the resolved node to
+ * `outPath` — returning the verdict instead of printing it. `main()` keeps argv
+ * parsing, the single JSON stdout line, and the exit code, so this file's
+ * documented output contract is unchanged.
+ *
+ * `--out` is written only when the merge resolved cleanly. An unresolved merge
+ * leaves `outPath` untouched so the caller parks on stale content rather than
+ * on a half-merged node.
+ *
+ * An empty `basePath` or `theirsPath` means the id was absent on that side; see
+ * the delete/modify note inline below.
+ */
+export function mergeNodeFiles(
+  basePath: string,
+  oursPath: string,
+  theirsPath: string,
+  outPath: string,
+): { resolved: boolean; conflicts: FieldConflict[] } {
   const ours = readNodeFile(oursPath);
 
   // An empty --base means the id did not exist on the base side → no base to
@@ -89,9 +103,7 @@ function main(): void {
   //     overwritten automatically. Report it as an unresolved conflict and do
   //     NOT write --out so the caller parks.
   if (theirsPath === "" && base !== null) {
-    const conflicts = [{ field: "<node>", ours: ours.node.id, theirs: null }];
-    process.stdout.write(JSON.stringify({ resolved: false, conflicts }) + "\n");
-    process.exit(0);
+    return { resolved: false, conflicts: [{ field: "<node>", ours: ours.node.id, theirs: null }] };
   }
 
   const theirs = theirsPath === "" ? { node: ours.node, body: ours.body } : readNodeFile(theirsPath);
@@ -105,12 +117,24 @@ function main(): void {
     // newline, so the closing fence lands on its own line.
     const content = `---\n${stringify(validateNode(merged))}---\n${body}`;
     writeFileSync(outPath, content);
-    process.stdout.write(JSON.stringify({ resolved: true, conflicts: [] }) + "\n");
-    process.exit(0);
+    return { resolved: true, conflicts: [] };
   }
 
   // Unresolved: do NOT write --out. This is an expected outcome, not a crash.
-  process.stdout.write(JSON.stringify({ resolved: false, conflicts }) + "\n");
+  return { resolved: false, conflicts };
+}
+
+// --- Main ------------------------------------------------------------------
+
+function main(): void {
+  const args = process.argv.slice(2);
+  const basePath = requireFlag(args, "--base");
+  const oursPath = requireFlag(args, "--ours");
+  const theirsPath = requireFlag(args, "--theirs");
+  const outPath = requireFlag(args, "--out");
+
+  const result = mergeNodeFiles(basePath, oursPath, theirsPath, outPath);
+  process.stdout.write(JSON.stringify(result) + "\n");
   process.exit(0);
 }
 

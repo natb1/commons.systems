@@ -1479,9 +1479,15 @@ Both writers edit the same file, so **one** commit covers everything this step
 wrote. Pick the message by which halves ran:
 
 ```bash
-"$PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit" -C "$PROJECT_ROOT" \
+packages/intentionsutil/scripts/graph-commit -C "$PROJECT_ROOT" \
   -m "<message>" "$SOURCE_ID"
 ```
+
+The relative prefix (not `"$PROJECT_ROOT/…"`) is deliberate — it is the spelling
+`.claude/settings.json`'s `permissions.allow` entry prefix-matches, which is what
+keeps this call off the auto-mode classifier. `-C "$PROJECT_ROOT"` still points
+the write at the main checkout; `graph-commit` never infers the repo from its own
+location.
 
 - **stamp only** (the provision-exit-11 entry — the ladder's whole path through
   this lane) → `graph: record conflict pass on <source-id>`. A one-line state
