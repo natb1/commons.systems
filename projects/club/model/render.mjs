@@ -24,6 +24,7 @@ const MODEL = resolve(HERE, "model.mjs");
 const ARTIFACT = "claude/benchmark-explorer-src.html";
 const DOCS = [
   "business-plan.md",
+  "model/evidence.md",
   "claude/benchmark-matrix.md",
   "claude/benchmark-explorer.md",
   "pilot/interim-phase-options.md",

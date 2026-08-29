@@ -243,11 +243,37 @@ for (const basis of ["built", "stated"]) {
     disagree === null, disagree ?? "");
 }
 
-// 14 — every figure the documents quote resolves to a number, not a NaN or an
+// 14 — absorbing the cross-cutting row is a presentation choice, not an
+// accounting one. Pushing marketing, labor and occupancy onto the three revenue
+// streams changes which stream looks profitable — that is the whole reason the
+// explorer makes the basis a visible control — but it must not change the
+// bottom line. Whatever basis a reader picks, the absorbed stream margins have
+// to add back up to owner comp, and the weights have to be a full distribution:
+// a basis that quietly dropped part of the shared row would make every stream
+// look better than it is.
+for (const basis of ["revenue", "sqft", "hours"]) {
+  let broke = null, lost = null;
+  for (const pt of GRID) {
+    M.withState(pt, () => {
+      const w = M.absorbWeights(basis, pt.util, pt.tx);
+      const wsum = Object.keys(w).reduce((a, key) => a + w[key], 0);
+      if (lost === null && near(wsum, 1, 1e-9) === false)
+        lost = `${at(pt)}: weights sum to ${wsum.toFixed(6)}`;
+      const abs = M.absorb(basis, pt.util, pt.tx);
+      const total = Object.keys(abs).reduce((a, key) => a + abs[key].margin, 0);
+      if (broke === null && near(total, M.comp(pt.util, pt.tx), 0.01) === false)
+        broke = `${at(pt)}: absorbed ${total.toFixed(3)} vs comp ${M.comp(pt.util, pt.tx).toFixed(3)}`;
+    });
+  }
+  check(`absorbing by ${basis} distributes the whole cross-cutting row`, lost === null, lost ?? "");
+  check(`absorbing by ${basis} leaves owner comp unchanged`, broke === null, broke ?? "");
+}
+
+// 15 — every figure the documents quote resolves to a number, not a NaN or an
 // empty string. A renamed model constant fails here rather than in the docs.
 for (const [name, value] of Object.entries(FIGURES)) {
   check(`figure ${name} resolves`, typeof value === "string" && value.length > 0 && !value.includes("NaN"), value);
 }
 
-console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and 14 invariant groups pass`);
+console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and 15 invariant groups pass`);
 process.exit(failures ? 1 : 0);

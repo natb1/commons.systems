@@ -23,8 +23,8 @@ export var DAYROOM_K = 12, PRINT_K = 6;            // §5 revenue the tool does 
 export var PLAN_LABOR_K = 120;                     // §6’s labor line ($K/yr)
 export var PLAN = {price:90, ticket:8.25, util:33, tx:{li:100,sn:80}, caClub:15, caEvent:50, events:5.5, commons:6, rate:23};
 export var SITES = {
-  li:{label:'Little Italy', base:-13, mark:100, occ:78, ops:65, sf:2500, psf:22, hint:'~2,500 sf @ $22 NNN · occupancy $78K · operations $65K · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
-  sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, ops:62, sf:3000, psf:16, hint:'~3,000 sf @ $16 · occupancy $64K · operations $62K · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
+  li:{label:'Little Italy', base:-13, mark:100, occ:78, ops:65, sf:2500, psf:22, hint:'~2,500 sf @ $22 NNN · occupancy $78K · operations {ops} · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
+  sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, ops:62, sf:3000, psf:16, hint:'~3,000 sf @ $16 · occupancy $64K · operations {ops} · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
 };
 export var CADENCE = {
   weekly:{label:'All weekly', avg:1.0, desc:'every club meets weekly (1.0 sessions/club/wk)'},
@@ -309,6 +309,12 @@ export function bandHiK(){ return livingK() + RET_HI*S.equity; }
 // NNN is still a residual — §6's total stays authoritative — but it is now a
 // labeled one with a band, so it can be swept and it can be argued about. The
 // per-site totals are unchanged: 55 + 23 = 78 (LI), 48 + 16 = 64 (SN).
+// The Location lever's tooltip. The operations figure is the built total, not a
+// typed-in literal — this string used to quote §6's stated $65K/$62K and went
+// stale the moment the line was rebuilt from components.
+export function siteHint(site){
+  return SITES[site].hint.replace('{ops}', '$' + Math.round(builtOpsK(site)) + 'K');
+}
 export function baseRentK(){ return SITES[S.site].sf * SITES[S.site].psf / 1000; }
 export function nnnK(){
   var st = SITES[S.site];
