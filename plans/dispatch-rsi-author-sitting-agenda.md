@@ -56,6 +56,65 @@ concurrently landed write being clobbered.
 
 # Part I — Prerequisites
 
+> ## ✅ SITTING HELD 2026-08-28 — all ten items ruled, all eleven parks cleared
+>
+> Every Part I item below is discharged. Eleven parked nodes were cleared with
+> `clear-park`, each carrying its full disposition, and all eleven verify
+> `office_hours: null` on `origin/main`. **Every Part II position that carried
+> an author gate — 1, 2, 6, 7, 8 and 9 — is unblocked.**
+>
+> The seven the sitting was convened for: `61b88950` (A1), `08447ab8` (A2),
+> `34f9ab31` (B1), `699b4b26` (B2), `c78f8cd3` (B3), `37e321ca` (C1),
+> `751982b0` (D1). The four the sitting *found* — C2's, C3's and C4's nodes,
+> which the text below wrongly said did not exist — cleared after the rulings
+> were recorded: `ee3ccd64` (C2), `756a06f0` (C3), `f093e607` and `59ea8410`
+> (C4).
+>
+> | item | ruling | landed |
+> |---|---|---|
+> | A1 | (1) ratified on the code's ground; (2) recorded **superseded** (the residual no longer exists — the key is `(tier, band, score, depth)`); (3) **amend** `success_signal` (b) to measure the writable surface | `61b88950` |
+> | A2 | **Split ruled in.** Re-serve of the 316 children **deferred past position 12** so it cannot invalidate the `--base` CAS manifests | `08447ab8` |
+> | A3 | Re-derived, not quoted: **136/316 = 43.04%** at sitting start against a 35% ceiling. Rising-monotonically limb withdrawn | *(folded into A2/D1)* |
+> | B1 | ONE **amended** — no park, but the edge must name its expiry event; TWO **ratified**, per-unit drop's carrier stated explicitly | `34f9ab31` |
+> | B2 | **flock ratified**, held by the child; its precondition repaired by `systemd-run --user` re-parenting. Sitting-first order stands | `699b4b26` |
+> | B3 | **Split** — trust half sat, lane half deferred. Its precondition was *circular* | `c78f8cd3` |
+> | C1 | **(2) then (1)**, and (2) must be **FATAL**, not a stderr warning | `37e321ca` |
+> | C2 | Rule **still governs** — port it, **retarget** its two tests, amend the threshold, then delete the dead function | *(plan)* |
+> | C3 | **Both (a) and (b)** in **PR18** Unit 4 — they fix different halves of the loop | *(plan)* |
+> | C4 | **Ordinary branch only**; record the delete/modify residue (**PR18** Unit 5) | *(plan)* |
+>
+> **Three corrections this sitting made to the text below.**
+>
+> 1. **"Only C1 has a node and a park — C2, C3 and C4 have no node at all" is
+>    wrong.** Each had a *parked* node on `origin/main`:
+>    `tactic-orphaned-delegation-records-reading` (C2, parked 2026-08-20),
+>    `tactic-fleet-alarm-node-park-clobber-loop` (C3, parked 2026-08-04), and for
+>    C4 both `tactic-graph-commit-park-content-durability` (2026-08-21) and
+>    `tactic-graph-commit-delete-vs-edit-park-hardening` (2026-08-10). Their
+>    rulings are recorded in the PR plan. **All four have since been cleared**
+>    (`ee3ccd64`, `756a06f0`, `f093e607`, `59ea8410`), so no PR in this window
+>    now walks into one.
+> 2. **D1 was not bookkeeping.** Its park carries *two* rulings, and the first is
+>    the strategy-wide band disposition. It was ruled **(c) accept the breach with
+>    remediation**, keeping the 35% target and naming Part II itself as the drain
+>    plan. Its "blocks eleven nodes" figure is stale: **82** tactics serving
+>    `strategy-graph-native-dispatch` are parked today.
+> 3. **B3's recommendation could not be honored as written.** `/rsi-research` does
+>    not exist; it is built by **PR14 Unit 3**, in the same position (8) that B3
+>    gates. Waiting for its cycles would block position 8 on output from a lane
+>    position 8 builds.
+> 4. **C3 and C4 are `PR18` Units 4 and 5, not `PR17`'s** — and therefore they
+>    gate **position 1**, not position 11. PR17's Unit 4 is "cap the alert rows"
+>    and its Unit 5 is "stop leaking scratch refs"; neither is related. PR18's own
+>    "Nodes closed (5)" list contains both `tactic-fleet-alarm-node-park-clobber-loop`
+>    and `tactic-graph-commit-park-content-durability`. So position 1 was **not**
+>    gate-free as the sequence table claimed — it carried two ungated author
+>    rulings, both of which this sitting made. **Seven** of the thirteen positions
+>    carried an author gate, not six: 1, 2, 6, 7, 8, 9 — and not 11.
+>
+> Owed follow-on writes are listed at the end of this Part under
+> "Owed after the sitting".
+
 Everything waiting on the author and nothing else, consolidated into one running
 order for a single sitting.
 
@@ -88,7 +147,7 @@ sets, and the gap between them is where work has been going missing:
 Three concrete divergences, each verified:
 
 1. **Three author rulings appear in neither table.** They are recorded only in
-   the PR plan's unit prose — PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5 — and are
+   the PR plan's unit prose — PR16 Unit 5, PR18 Unit 4 and PR18 Unit 5 — and are
    invisible to both indexes. A fourth of the same shape, PR16 Unit 10, at least
    reached the PR plan's table. All four are Group C below.
 2. **The PR plan names a sitting that does not exist.** At two places
@@ -358,7 +417,7 @@ and delete the dead function. If no, record that and delete. Deleting without
 deciding silently drops the rule — which is the exact failure the unit exists to
 prevent. There is no default here; this one genuinely needs an answer.
 
-### C3 · Fleet-alarm frozen-tactic clobber — blocks PR17 Unit 4 *(no node)*
+### C3 · Fleet-alarm frozen-tactic clobber — blocks **PR18** Unit 4 *(has a node; parked)*
 
 A `tactic-fleet-alarm-<kind>` node is minted, parked, and clobbered by the next
 mint — observed ~14 times on one node, 14 ending in a frozen worker rather than a
@@ -372,7 +431,7 @@ clean disposition. Two shapes:
 **On record: (a) is the fix, (b) is optional hardening.** Record the choice on
 the node.
 
-### C4 · Park content, delete/modify branch — shapes PR17 Unit 5 *(no node)*
+### C4 · Park content, delete/modify branch — shapes **PR18** Unit 5 *(has nodes; parked)*
 
 A park must carry the losing writer's content, not a pointer to it —
 `park_write()` preserves content by pointing at `SNAP_DIR`, a bare `mktemp -d`,
@@ -419,6 +478,15 @@ two things, and neither is the decision the documents advertise:
 **(i) The prune is owed but not prune-ready.** The node's body ends "this tactic
 is achieved and prune is owed at a future census once the census-line amendment
 lands." That precondition is **not satisfied**.
+
+> **Updated 2026-08-28, after the ruling.** Ruling 2 *withdrew* the census-line
+> amendment, which retires this precondition rather than satisfying it — but a
+> second, unrecorded one was then found and the prune is still blocked. The node
+> is the only in-tree copy of both retired engine specifications (their skills
+> were deleted by `c845d50f`; verbatim source still survives in history at
+> `44493733`), and 28 prose references across 11 other nodes cite it — none
+> structural, so pruning would pass `validate-graph` green while silently
+> stranding them, five as live instructions. Full finding under "Owed after the sitting.
 
 **(ii) There is an untracked residue — verified today.** The one piece of retired
 engine-2 content the 2026-07-23 sitting decided to **keep** — the unserved-virtue
@@ -515,10 +583,227 @@ packages/intentionsutil/scripts/clear-park -C <repo-root> <node-id> "<dispositio
 different trees. The script fetches `origin/main` and rebases the node's content
 onto it before mutating, so it is safe to run from a stale worktree.
 
-Group C's C2, C3 and C4 have no node and no park. Their rulings are recorded in
-the plan and carried into the implementing PR.
+Group C's C2, C3 and C4 each turned out to have a parked node after all — four
+between them — *(corrected 2026-08-28)*. Their rulings are recorded in the plan
+and carried into the implementing PR, and the four parks were cleared once the
+rulings were on record.
 
 ---
+
+## Owed after the sitting — writes the rulings imply
+
+~~None of these were executed by the sitting; each is a follow-on write.~~
+
+**Status 2026-08-28 — all but one are now executed.** The sitting itself
+executed none of them; they were landed afterwards, in the same session, and
+each entry below records its landing commit. What remains owed:
+
+- **The `/align` round against `strategy-graph-native-dispatch` (A2)** — the
+  only outstanding graph write. Deliberately not run here: it is an author
+  interview round, not a mechanical amendment, and it needs a paired
+  `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change that `graph-commit` cannot
+  carry.
+- **D1's prune of `tactic-align-audit-legacy-review`** — **not prune-ready, for
+  a reason no document had recorded.** Re-authorized by the ruling, and its
+  *stated* precondition is now moot: the body says "prune is owed at a future
+  census once the census-line amendment lands," and D1 Ruling 2 **withdrew** that
+  amendment, so the recorded gate can never be satisfied as written. But
+  attempting the prune surfaced a different, unrecorded gate.
+
+  **The node is a content archive, not only a decision record.** Its body carries
+  `## Retained engine 1 — the rung-5 dialectic` (lines 350-389) and `## Retained
+  engine 2 — the /align-strategy improvement pass` (lines 390-413) as verbatim
+  design specifications. Both source skills — `.claude/skills/align-init/` and
+  `.claude/skills/align-strategy/` — were **deleted from the tree** by `c845d50f`
+  ("Consolidate /align-strategy + /align-init into /align"). Verified absent
+  2026-08-28.
+
+  The node is therefore the **only copy in the working tree** — but not the only
+  copy anywhere, and the graph says so itself:
+  `tactic-align-entrypoint-consolidation:280-281` records that "verbatim source
+  also survives at `origin/main` commit `44493733`." Verified 2026-08-28 — that
+  commit exists and holds both `.claude/skills/align-init/` and
+  `.claude/skills/align-strategy/`. So a prune destroys the *curated* retention,
+  not the underlying source. That lowers the stakes; it does not clear the prune,
+  because five in-graph instructions send readers to the node rather than to the
+  commit.
+
+  **Measured residue, 2026-08-28: 28 reference lines across 11 other nodes** —
+  none of them a structural edge (`grep '^  - tactic-align-audit-legacy-review'`
+  over `intentions/` returns nothing), so `validate-graph` would stay green and
+  the damage would be silent. The references sort into two kinds, both of which
+  need handling:
+
+  - **Stale-framing references** — `strategy-explicit-intent` (5),
+    `tactic-condition-review-sweep` (4), `tactic-align-audit-skill` (2) and
+    others describe the inclusion decision as *pending* when it was settled
+    2026-07-23. These are the **same defect class** as the file-tree residue, and
+    pruning only adds a second defect on top of a wrong one.
+  - **Content-pointer references** — `tactic-align-entrypoint-consolidation`
+    carries 6, of which **5 are live instructions** pointing at the node for the
+    retained content: "both engines' content is retained verbatim in" (:99),
+    "Its design is retained verbatim in ... **do not duplicate it here**" (:176),
+    "point instead at `tactic-align-audit-legacy-review`, which retains the
+    rung-5 design" (:279), and "design retained in" (:349). The 6th (:123) is a
+    scope exclusion, harmless. Pruning turns the five into instructions pointing
+    at nothing — and :279 is the sharpest, since it is a *rewrite directive* to
+    aim other prose at a node that would no longer exist.
+
+    A sixth site is subtler and is **not** a content pointer:
+    `tactic-align-entrypoint-consolidation:289-293` recommends retaining the two
+    skills and two docs "as orphaned reference content, not delete," giving as
+    its reason that the node "is a live plan for a future `/align-audit` that
+    will re-consume this exact contract." That reason is exactly the premise
+    `tactic-retire-assessor-contract-docs` overturns — the decision went
+    *against* re-consumption — so this recommendation is already stale, and the
+    rescued tactic deleting those docs is what supersedes it. Worth noting so a
+    future reader does not treat it as an objection to that tactic.
+
+  **Scope gap:** `tactic-retire-assessor-contract-docs` (`447fc27d`) covers the
+  **file-tree** residue only — two `.claude/docs/` files and
+  `.claude/skills/align-audit/SKILL.md`. **No node scopes the in-graph residue.**
+  The earlier note here — that the prune "no longer strands the three citing
+  sites once that tactic ships" — was right about those three sites and wrong to
+  imply the prune was therefore clear.
+
+  **What the prune actually needs**, in order: (1) rule whether the retained
+  engine content is still wanted now that the decision it was held for went
+  *against* inclusion — if not, it can die with the node, and if so it needs a
+  home before the node goes; (2) sweep the 28 in-graph references, which is a
+  node-sized job nobody has filed. Both are author calls; neither was in this
+  sitting's scope. **Do not run `graph-commit --prune` on this node until (1) is
+  ruled** — it deletes the file outright and the loss would pass CI green.
+- **`strategy-exercise-recovery-paths`'s threshold** — reclassified: it is not a
+  standalone graph edit at all, it is part of PR16 Unit 5. See its entry.
+
+**Graph edits**
+
+- ~~`strategy-rsi-delegated-prioritization` — amend `success_signal` (b) per
+  A1~~ **DONE 2026-08-28 — `bdfe72bc`.** Dropped the structurally-zero
+  cross-strategy inversion count, replaced it with model attention writes onto a
+  **strategy's own** `attention` block, and retained the existing
+  no-`priority_log`-entry count. The `threshold`'s "both counts in (b) stay at
+  zero" needed no change — still two counts, both expected zero. A body section
+  ("Why (b) measures the writable surface") records why the old count could
+  never fire: band derives from *resolved* rank, which the model cannot write,
+  so no model write can produce a cross-strategy inversion against it. Both
+  counts still land on `tactic-priority-provenance-schema`'s lint, which remains
+  unbuilt (`status: raw`, `phase: null`) — this corrects what will be measured,
+  not whether it is measured.
+- ~~`tactic-finding-search-all-producers` — amend to match B1~~ **DONE
+  2026-08-28 — `bdfe72bc`.** The "Two sub-points the author did not rule on"
+  section is retitled "Two sub-points — RULED 2026-08-28" and carries both
+  rulings: sub-point ONE **amended** (the edge-without-park behavior stands, but
+  the edge must now **name its expiry event** — normally the in-flight PR's
+  merge or closure — because clarification 26 permits the interim-live-risk
+  exception only when an expiry is named, and none was), and sub-point TWO
+  **ratified** with the per-unit drop's carrier stated explicitly (the node's own
+  unit list, not the edge and not a park — "parks nothing" alone read as
+  "records nothing"). The section also now says PR19 Unit 1 must encode the
+  ruled form, not the original wording.
+- ~~`tradition-agentic-engineering` — amend `attributes.adopted`~~ **DONE
+  2026-08-28 — `bdfe72bc`.** Three idioms recorded as genuine external
+  deference: skill/hook composition, subagent composition, verification-first
+  workflows. Context engineering is explicitly **excluded** and recorded as
+  convergence rather than deference — load-bearing in substance, but arrived at
+  independently and expressed natively as `strategy-token-economy`, so listing
+  it as adopted would overstate what was borrowed and weaken the capture audit.
+  `last_assessed` stamped `2026-08-28`. The entry had to be **quoted** in YAML:
+  the ruled wording contains `: ` inside the scalar, which unquoted parses as a
+  mapping key and made the node unreadable.
+- A dedicated `/align` round against `strategy-graph-native-dispatch` per A2:
+  child count and boundaries, the disposition of its ~30 conditions between the
+  children and `strategy-explicit-intent`, and the lifecycle `success_signal`
+  edit — which needs a paired `read-sensors.ts` `LIFECYCLE_SENSOR_NAME` change
+  `graph-commit` cannot carry.
+- `strategy-exercise-recovery-paths` — **no longer a standalone graph edit;
+  folded into PR16 Unit 5.** This line previously said to amend
+  `success_signal.threshold` per C2. That is not sufficient, and landing it
+  alone would have been a silent no-op.
+
+  `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
+  case-insensitive **string equality**. `readExerciseRecoveryPathsReading`
+  (`read-sensors.ts:1028-1038`) emits
+  `exercised: <k>/<n> records; <m> null last_exercised; review_trigger firing
+  not recorded (sensor read <YYYY-MM-DD>)` — live counts **and the read date**
+  — so **no fixed threshold string can ever equal it**. Rewording the threshold
+  changes which records land in the counts; it cannot make equality reachable.
+
+  Measured 2026-08-28 across all 749 nodes: 68 carry a `success_signal`, 21 of
+  those also carry a `reading`, **12 of those 21 readings embed a date**, and
+  exactly **two** nodes in the graph meet their threshold at all
+  (`strategy-main-health`, `tactic-main-red-ac908454`) — both with date-free
+  readings. The equality rule works; this reader is simply not written for it.
+
+  So the reader must gain a canonical, date-free met-state string first, and the
+  threshold must then be set to **exactly** that string. Both halves are now
+  PR16 Unit 5's step 4, sequenced reader-then-threshold, because an
+  independently-worded threshold reproduces the same no-op. *(Added 2026-08-28
+  after the ruling was first recorded, then corrected the same day when the
+  reader's format was actually read rather than assumed.)*
+
+- ~~**One new tactic serving `strategy-graph-integrity`** for D1's doc
+  residue.~~ **DONE 2026-08-28 — `447fc27d`, and it needed no new authorship.**
+  The tactic already existed: `tactic-retire-assessor-contract-docs`, written
+  2026-08-18 by the `/align-tactics tactic-align-audit-legacy-review` round, was
+  the "rescue before reaping" item below — the same round's prune never landed,
+  so the node was left unversioned in a worktree awaiting reap. Filing a fresh
+  tactic would have duplicated a fully-written hand-authored sibling. It was
+  rescued and landed instead.
+
+  Two corrections to what this line originally said:
+
+  - **It serves `strategy-graph-native-dispatch`, not `strategy-graph-integrity`.**
+    The `serves` edge was left as the authoring round set it, and that round
+    justified it explicitly (that strategy's sole-tracker rule is why the
+    residue lands as a tactic at all). "Serving `strategy-graph-integrity`" was
+    this agenda's own shorthand when D1 was recorded, not an author ruling on
+    the edge — so the node's edge stands and this line is the one corrected.
+  - **The residue does not depend on the prune.** This line said pruning the
+    node "leaves three sites pointing at a node that no longer exists." True,
+    but not the load-bearing defect: all three sites frame the 2026-07-23
+    Decision 1 as *pending* when it is **settled**, and that is wrong today with
+    the node still present. The prune only adds a second defect on top.
+
+  Three premises in the rescued node were stale and were corrected before it
+  landed — it asserted in three places that `tactic-align-audit-legacy-review`
+  was "pruned in the same round," which is false: that node is still on
+  `origin/main`, `office_hours: null`, and D1 re-authorized its prune without
+  executing it. A **Unit 3 was added**: the original filing covered
+  `.claude/docs/delegability.md` and `.claude/docs/signal-identification.md` but
+  **missed `.claude/skills/align-audit/SKILL.md`** — whose out-of-scope list
+  still calls the graft "a pending inclusion decision owned by the born-parked
+  office-hours sitting `tactic-align-audit-legacy-review`." Every clause of that
+  is false: decided 2026-07-23, decided *against*, and the node is not parked.
+
+**Parks** — none outstanding. The four the sitting found on C2/C3/C4's nodes
+were cleared after their rulings were recorded; see correction 1 above.
+
+**Plan edits**
+
+- ~~**PR6 Unit 1 is mis-scoped.**~~ **DONE 2026-08-28.** It read "Establish
+  real detachment (process group / session leader)" — precisely the remedy
+  `tactic-eval-finding-detached-code-review-dies-with-launcher`'s *Corrected
+  diagnosis (2026-08-14)* falsified, since the script already runs `setsid`,
+  disowns, and hard-refuses to start without it. Re-scoped to `systemd-run
+  --user` transient-unit re-parenting, keeping the interrupt verification as the
+  confirming step.
+
+  Four further PR6 sites were stale for the same reason and were corrected in
+  the same pass — the B2 ruling had been recorded **only here**, so the
+  serialized plan still gated PR6 on a sitting that had already happened:
+  the `### Pre-PR session (required)` block, the `### PR6 stays gated on its
+  office-hours sitting` section (which now carries the ruling in full), the
+  `### Context` falsification paragraph, and the `### Dependencies` line naming
+  the ratification as a blocker.
+
+**Rescue before reaping** — ~~owed~~ **DONE 2026-08-28.**
+
+- ~~`.claude/worktrees/tactic-align-audit-legacy-review/intentions/tactic-retire-assessor-contract-docs.md`
+  — 10,509 bytes, on no branch, lost when that worktree is reaped.~~ Rescued and
+  landed on `origin/main` as `447fc27d`; see the doc-residue entry above, which
+  it turned out to *be*. The worktree is now safe to reap.
+
 
 # Part II — The serial PR sequence
 
@@ -540,7 +825,7 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 |---|---|---|---|---|---|
 | ✅ | 1 · graph read/write path | PR1 | 8 | — | **SHIPPED `fe0b1c4d`** (#3095) |
 | **0** | 0 · retire the in-flight overhang | *no new PRs* | +13 | — | **IN PROGRESS** — clears the drafts every later bundle would conflict with |
-| **1** | 1c · durable-layer write fence | PR18 | 5 | — | HOT. The fence ~100 remaining node closures write through |
+| **1** | 1c · durable-layer write fence | PR18 | 5 | **C3**, **C4** *(both ruled 2026-08-28)* | HOT. The fence ~100 remaining node closures write through |
 | **2** | 1b · graph plumbing | PR15 + PR16 | 15 | **C1**, **C2**; PR15 carries a conditional hold | HOT. The closure toolchain itself |
 | **3** | 2a · record-time main-qa routing | PR5a | 1 | — | Must precede Bundle 2 |
 | **4** | 2 · tick-path reconcilers and sweeps | PR5 + PR9 U2,U6 + PR2 U6 | 10 | — | HOT. Runs on every tick, paused or not |
@@ -550,12 +835,14 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 | **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | **A1** (PR10), **B3** (PR11) | COLD. Needs PR2 + PR3 + PR4 |
 | **9** | 5b · `/align` charter + adversarial review | PR20 | 8 | **D1** | **Must** precede the rename |
 | **10** | 6 · skill rename | PR13 | 1 | — | Last, alone. Renames every path PR20 writes |
-| **11** | 7 · merge queue + scan cadence | PR17 | 6 | **C3**, **C4** | COLD. Must be in place *before* the resumption |
+| **11** | 7 · merge queue + scan cadence | PR17 | 6 | — *(was listed as C3, C4 — wrong; those are PR18's)* | COLD. Must be in place *before* the resumption |
 | **12** | 8 · the four deferred A3 drafts | #3093 → #2856 → #3040 → #3037 | 4 | — | Last. Bulk node-content rewrites invalidate every `--base` CAS manifest |
 | — | *staged resumption* | — | — | — | Sentinel off at `max_concurrent_workers: 1`, one node through the full ladder |
 | — | *deferred outright* | PR8 U3 | 1 | — | Rewrites the freeze mechanism; only during an attended un-pause |
 
-**Six of the thirteen positions carry an author gate** — 2, 6, 7, 8, 9 and 11 —
+**Seven of the thirteen positions carry an author gate** — 1, 2, 6, 7, 8, 9 —
+*(corrected 2026-08-28: position 1 carries C3 and C4, which were mis-filed under
+position 11's PR17; PR17 itself has no author gate)* —
 and every one of those gates is in Part I, so a single sitting unblocks the
 whole sequence. That is the argument for holding the sitting before position 1
 rather than at each gate as it is reached.
@@ -599,7 +886,14 @@ cleared when PR1's nodes closed, so it is ready and nothing else is. By
 argument, it is the fence that decides what an **autonomous** writer may do to
 durable node content — and roughly a hundred node closures still run through
 that fence. It sits ahead of Bundle 1b because it carries no ref-split exposure
-and PR15 does. **No author gate.**
+and PR15 does.
+
+**Gates: C3** (fleet-alarm frozen-tactic clobber, **Unit 4**) and **C4** (park
+content durability, **Unit 5**) — *both ruled 2026-08-28*. This position was
+listed as ungated because C3 and C4 were mis-filed under PR17. PR18's own "Nodes
+closed (5)" list contains `tactic-fleet-alarm-node-park-clobber-loop` and
+`tactic-graph-commit-park-content-durability`, which are exactly C3's and C4's
+nodes. Those two parks are **still set** — clear them before or during this PR.
 
 ### Position 2 · Bundle 1b — PR15 + PR16, the graph plumbing
 
@@ -748,9 +1042,12 @@ must be in place before the staged resumption — otherwise that resumption
 measures an unbounded scan cadence and a silent merge veto instead of measuring
 the fleet.
 
-**Gates: C3** (fleet-alarm frozen-tactic clobber, Unit 4) and **C4** (park
-content, delete/modify branch, Unit 5). Neither has a node; both are recorded
-only in unit prose, which is why they went missing from both source documents.
+**No author gate.** *(Corrected 2026-08-28.)* This position was listed as gated
+on **C3** and **C4**, on the belief that they were PR17's Units 4 and 5. They are
+not: PR17's Unit 4 is "cap the alert rows" and its Unit 5 is "stop leaking
+scratch refs". C3 and C4 are **PR18** Units 4 and 5, so they gate **position 1**
+— see that position. Both were ruled 2026-08-28, and both *do* have parked nodes,
+contrary to the earlier "no node" claim.
 
 ### Position 12 · Bundle 8 — the four deferred A3 drafts
 

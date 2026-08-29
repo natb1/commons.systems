@@ -1641,21 +1641,47 @@ cheap — fail the escalation loudly when its recommendation cites a path under
 `$CLAUDE_JOB_DIR`, a string check at the point the park is written. Both halves
 belong in Bundle 3 alongside the escalation path they guard.
 
-### PR6 stays gated on its office-hours sitting
+### PR6's office-hours sitting — HELD AND RULED 2026-08-28
 
-The sitting `/office-hours tactic-review-sitting-code-review-lock-design` must
-resolve a specific contradiction rather than merely bless the design: the flock
-shipped in #3078, yet `tactic-eval-finding-detached-code-review-dies-with-launcher`
-shows the detached child dies with its launcher anyway despite `setsid`. That
-falsifies the lock's premise — **a lock held by a process that dies with its
-launcher is not a lock** — and the current design is held on trust.
+~~PR6 stays gated on its office-hours sitting.~~ The sitting
+`/office-hours tactic-review-sitting-code-review-lock-design` was **held on
+2026-08-28** (author sitting, Part I item B2) and its park was cleared in
+`699b4b26`. PR6 is no longer gated. What follows records the ruling; the
+question below it is answered, not open.
 
-Sequence the units so detachment is fixed and *demonstrated* before the lock is
-trusted: fix detachment (Unit 1), show a detached review surviving its launcher's
-exit, and only then build on the lock (Unit 2). A useful framing to hand the
-sitting: ask whether the lock should be held by the detached child at all, or by
-a supervisor that outlives both. If the answer is the supervisor, Unit 2 changes
-shape entirely — which is exactly why the sitting must precede the code.
+The contradiction the sitting had to resolve: the flock shipped in #3078, yet
+`tactic-eval-finding-detached-code-review-dies-with-launcher` shows the detached
+child dies with its launcher anyway despite `setsid` — **a lock held by a
+process that dies with its launcher is not a lock.**
+
+**RULED 2026-08-28 (author sitting, Part I item B2): the flock design is
+ratified, held by the detached child; its broken precondition is repaired
+rather than the design replaced.**
+
+The contradiction resolves *in favor of* the design, because it was never a
+defect in the lock. It is a defect in the detachment the lock stands on, and
+the node itself supplies the falsification: `dispatch-code-review` already runs
+`setsid`, already disowns, and already hard-refuses to start without it, so
+"establish real detachment via process group / session leader" is a remedy that
+**has already shipped and does not work**. `setsid` detaches a process from its
+controlling terminal; it does not re-parent the process out of the launcher's
+cgroup, and the cgroup is what the harness tears down when the Bash tool call
+is interrupted. Both halves were measured on this host during the sitting.
+
+So the fix is re-parenting, not detaching: `systemd-run --user` places the child
+in its **own** transient unit, outside the launcher's cgroup, where a teardown
+of the launcher's cgroup cannot reach it. See Unit 1.
+
+The framing the sitting was handed — *should the lock be held by the detached
+child at all, or by a supervisor that outlives both?* — was answered **child**.
+Once re-parenting makes the child genuinely outlive its launcher, a supervisor
+buys nothing and adds a second process whose own death is a new failure mode.
+Unit 2 keeps its shape.
+
+Unit ordering is unchanged and still matters: fix detachment (Unit 1), *show* a
+detached review surviving its launcher's exit, and only then build on the lock
+(Unit 2). The ruling ratifies the design, not the premise — the demonstration is
+still owed before Unit 2 is trusted.
 
 ### `strategy-discovered-requirements` is a separate charter
 
@@ -1731,7 +1757,8 @@ prompts and merge prerequisites live in `plans/dispatch-rsi-pre-pr-sessions.md`.
 > no diff"; that file indexes on "needs the author", which is a different set. It
 > groups the ten author-owed items into four topics for a single sitting, and it
 > picks up three rulings that live in unit prose and appear in **no** table —
-> PR16 Unit 5, PR17 Unit 4 and PR17 Unit 5. It also separates the
+> PR16 Unit 5, PR18 Unit 4 and PR18 Unit 5 *(corrected 2026-08-28: the last two
+> were mis-filed under PR17)*. It also separates the
 > three rows below that are `/rsi-audit` measurement runs, not sittings, and so
 > cannot be resolved by an author at all. As of 2026-08-28 that file also
 > carries the full serial PR sequence, so it — not this table — is where a
@@ -2624,20 +2651,25 @@ drops to at most 1 per tick.
 **Recommended model: opus** — process lifetime, kernel locks and a
 write-attribution race.
 
-### Pre-PR session (required)
+### Pre-PR session — ~~required~~ **HELD 2026-08-28, no longer a gate**
 
 ```
-/office-hours tactic-review-sitting-code-review-lock-design
+/office-hours tactic-review-sitting-code-review-lock-design    # DONE — 699b4b26
 ```
 
-The flock design this PR implements is currently held **on trust, not
-verification** — the author delegated the design choice. Ratify before building.
+~~The flock design this PR implements is currently held **on trust, not
+verification** — the author delegated the design choice. Ratify before
+building.~~ Ratified 2026-08-28 (Part I item B2): the flock stays, held by the
+detached child; Unit 1 is re-scoped to `systemd-run --user` re-parenting. See
+"PR6's office-hours sitting" above for the full ruling.
 
 ### Context
 
 Four findings on `dispatch-code-review` (1411 lines). One is a falsification:
 the node lock shipped in PR #3078, but the detached child **still dies with its
-launcher** despite `setsid` — so the lock node's fix does not hold.
+launcher** despite `setsid` — so the lock node's fix does not hold. Ruled
+2026-08-28: the lock design stands, the detachment under it does not, and the
+repair is `systemd-run --user` re-parenting (Unit 1).
 
 ### Nodes closed (5)
 
@@ -2662,9 +2694,31 @@ launcher** despite `setsid` — so the lock node's fix does not hold.
 **Unit 1 — the child is not actually detached.** Interrupting the launching
 Bash tool call killed the child session 3ms later and both in-flight max-effort
 angle subagents 96ms later, destroying a 4.5-hour-budgeted review 63 seconds
-after it started, leaving the phase with no graph change. Establish real
-detachment (process group / session leader) and verify by interrupting the
-launcher.
+after it started, leaving the phase with no graph change.
+
+**Re-scoped 2026-08-28 (Part I item B2 — see "PR6's office-hours sitting"
+above).** This unit previously read *"Establish real detachment (process group /
+session leader)."* **Do not implement that.** It is precisely the remedy the
+node's own *Corrected diagnosis (2026-08-14)* falsified: `dispatch-code-review`
+already runs `setsid`, already disowns, and already hard-refuses to start
+without it. Building it again reimplements shipped code and leaves the bug.
+
+Implement **`systemd-run --user` transient-unit re-parenting** instead. The
+failure is not a missing session leader; it is cgroup membership. `setsid`
+detaches from the controlling terminal but leaves the child inside the
+launcher's cgroup, and interrupting the Bash tool call tears that cgroup down.
+`systemd-run --user` starts the child in its own transient unit outside that
+cgroup, so the teardown cannot reach it.
+
+Keep the existing `setsid`/disown handling — it is not harmful and the
+hard-refuse guard is a real precondition check; this unit adds re-parenting
+around it rather than replacing it.
+
+**Verification is unchanged and is the whole point:** interrupt the launching
+Bash tool call and confirm the child review runs to completion and produces its
+graph change. That interrupt test is the confirming step — a re-parenting that
+is not demonstrated against a real interrupt is exactly the on-trust state this
+sitting existed to end.
 
 **Unit 2 — lock for the child's own lifetime.** A kernel-released `flock` held
 by the detached child and honored by every worktree-claim path, so a survivor
@@ -2689,7 +2743,9 @@ a successful review. Scope the match structurally.
 
 ### Dependencies
 
-PR1, and the office-hours ratification above. Units 1 → 2 → 3 internally.
+PR1. ~~and the office-hours ratification above~~ — that ratification landed
+2026-08-28 (`699b4b26`) and no longer blocks. Units 1 → 2 → 3 internally, and
+Unit 1's interrupt demonstration still gates Unit 2.
 
 ### Reuse
 
@@ -3729,10 +3785,119 @@ code (superseded by two per-strategy reading functions landed on
 rule** — excluding declined delegation records from unexercised counts for
 `strategy-exercise-recovery-paths`. Deleting it silently drops the rule.
 
-This unit needs an **author decision** before code: does the rule still govern
-the new readings? If yes, port it and delete the dead function. If no, record
-that on the node and delete. Do not delete without deciding — that is the
-failure mode the node exists to prevent.
+**RULED 2026-08-28 (author sitting, Part I item C2): the rule still governs —
+port it, then delete the dead function.**
+
+The ruling was made against a measurement, not a preference.
+`strategy-exercise-recovery-paths`'s threshold is **absolute**: *"no record's
+`last_exercised` is null, and no fired `review_trigger` is left unactioned"*.
+There are 22 delegation records and one of them —
+`delegation-hosted-publishing` — is `origin: declined`. Under
+`kind-delegation`'s abstention doctrine a declined delegation **has no entered
+path to walk**, so its `last_exercised` can never be set. The replacement
+reader `readExerciseRecoveryPathsReading` counts over **all** records with no
+declined-origin special-casing, which makes that absolute threshold
+**permanently unsatisfiable** — not hard, impossible. The doctrine rule is
+therefore not aggregate-presentation polish; it is what makes the strategy's
+own signal reachable, and it has already been silently dropped.
+
+What this unit must do, in order:
+
+1. Port the declined-origin handling into `readExerciseRecoveryPathsReading`
+   (`packages/intentionsutil/scripts/read-sensors.ts`), so declined records are
+   broken out as their own class and never counted as unexercised.
+2. **Correct that function's docstring**, which currently rationalizes the drop
+   — *"this strategy's threshold, unlike `readDelegationRecordsReading`'s
+   clarification-7 aggregate, just asks how many records have `last_exercised`
+   set"*. That sentence is the reasoning the ruling overturns; leaving it in
+   place invites the next reader to re-drop the rule.
+3. **Retarget the two rule tests, do not delete them.**
+   `packages/intentionsutil/test/delegation-records-sensor.test.ts:143-184` --
+   the `describe("readDelegationRecordsReading")` block -- holds the **only two
+   assertions of the declined-origin rule anywhere in the repo**: *"counts
+   exercised, declined-class, and oldest last_assessed"* and *"never counts a
+   declined record as unexercised (its own class)"*. The ruling affirms that
+   rule still governs, so deleting its only coverage is the weakening
+   `.claude/rules/test-integrity.md` forbids. Point both at
+   `readExerciseRecoveryPathsReading` and update their expected strings to that
+   function's format.
+4. **Give the reader a canonical met-state string, then set the threshold to
+   exactly that string** -- or the ruling does not close the gap.
+   `deriveGap` (`packages/intentionsutil/src/sensors.ts:241-255`) is trimmed,
+   case-insensitive **string equality** between `reading` and
+   `success_signal.threshold` -- its own docstring says *"Equality is the only
+   'met' condition -- no numeric or fuzzy parsing."* So changing the reader
+   changes the reading string and nothing else; the gap on
+   `strategy-exercise-recovery-paths` stays open regardless.
+
+   **A threshold edit alone cannot fix that, and this step said it could.**
+   `readExerciseRecoveryPathsReading` (`read-sensors.ts:1028-1038`) always
+   returns
+
+   ```
+   exercised: <k>/<n> records; <m> null last_exercised; review_trigger firing not recorded (sensor read <YYYY-MM-DD>)
+   ```
+
+   Every reading it emits carries live counts **and the read date**, so no fixed
+   threshold string can ever equal it. Rewording the threshold to exclude
+   declined-origin records changes which records land in `<k>` and `<m>`; it
+   does not make equality reachable. The signal stays permanently gapped.
+
+   Measured across the graph on 2026-08-28: of 749 nodes, 68 carry a
+   `success_signal`, 21 of those also carry a `reading`, and **12 of those 21
+   readings embed a date** -- none of which can ever meet its threshold. Exactly
+   **two** nodes in the whole graph currently meet theirs
+   (`strategy-main-health`, `tactic-main-red-ac908454`), and both do it with
+   date-free readings. So the equality rule is not decorative -- it works
+   exactly when the reader is written to produce a canonical string, and this
+   reader is not.
+
+   The unit therefore owns **both halves**:
+
+   - **Reader (code, this unit).** Have `readExerciseRecoveryPathsReading` emit
+     a canonical, date-free string in the met state -- the shape the two
+     currently-met nodes use -- reserving the counts-and-date form for the
+     unmet state. Declined-origin records are excluded from the
+     no-null-`last_exercised` requirement when deciding which state applies.
+   - **Threshold (graph, author `/align` write on
+     `strategy-exercise-recovery-paths`).** Set `success_signal.threshold` to
+     **exactly** the canonical met-state string the reader now emits, byte for
+     byte modulo trim and case. Author this *after* the reader lands, or copy
+     it from the reader's source; do not compose it independently, because an
+     independently-worded threshold is the same silent no-op this step
+     originally prescribed.
+
+   Sequence: reader first, then the threshold write. Verify by reading the node
+   back and confirming `deriveGap` returns `null` -- not by inspecting the
+   threshold prose.
+5. Only then delete `readDelegationRecordsReading` itself. `readDelegationRecords`
+   (`read-sensors.ts:917`) and `renderDelegationRecordsReport` (`:998`, reached by
+   the `--report` flag at `:1739`) are **live** and must survive, along with their
+   own test blocks.
+
+> **Corrected 2026-08-28**, after the ruling was first recorded. The original
+> step 3 read *"Only then delete `readDelegationRecordsReading` and its tests"*
+> -- which directs a test-integrity violation on the branch this sitting
+> selected, and omits the threshold amendment without which the ruling's own
+> justification (the threshold is permanently unsatisfiable) goes unrepaired.
+>
+> **Corrected again, same day.** That first correction's step 4 said to amend
+> the strategy's `success_signal.threshold`. That is not sufficient and would
+> have shipped as a silent no-op: the reader embeds the read date in every
+> reading, so equality with any fixed threshold is unreachable and no wording of
+> the threshold changes it. Step 4 now owns the reader change that makes a
+> canonical met-state string exist, with the threshold write sequenced after it.
+> The general trap: **`deriveGap` equality means a date-bearing reading can
+> never meet its threshold** -- 12 of the graph's 21 read signals are in that
+> state today.
+> The node's own park text names both constraints; the ruling text had dropped
+> them.
+
+**This unit also has a parked node**, contrary to the agenda's earlier claim
+that C2 had none: `tactic-orphaned-delegation-records-reading`, `owner: ai`,
+parked since 2026-08-20. Its recommendation pre-plans both branches; this
+ruling selects **branch A (still governs)**. The park must be cleared
+explicitly — recording the ruling here does not clear it.
 
 **Unit 6 — `transition-node` scope-stale test coverage.** Add shell-level
 coverage for two behaviors: (a) a scope-stale `main-qa` node transitions to
@@ -3823,11 +3988,38 @@ materially different and one of them is dangerous:
    2026-08-14 outage (54 minutes, three blocked writes, none about sensors) that
    PR1 Unit 2 exists to prevent. Getting it wrong re-arms exactly that.
 2. **Post-merge check on `main`** — cannot deny any write, so it cannot re-arm
-   the outage, but it detects after the fact and needs a **new workflow**:
-   nothing currently runs on `main` push outside path-scoped deploys.
+   the outage, but it detects after the fact. Its recorded cost was a **new
+   workflow**, because nothing ran on a `main` push outside path-scoped
+   deploys. *(That premise is dead — see the ruling below.)*
 
-Recommendation carried from PR1's review: **(2) first** for the detection floor,
-**(1) later** as the real gate. Do not implement either without the sitting.
+**RULED 2026-08-28 (author sitting, Part I item C1): (2) first, then (1) — and
+(2) must be FATAL.**
+
+The ordering carried from PR1's review is ratified: take the post-merge check
+on `main` first as a detection floor that cannot deny a write, then (1) later
+as the real write-time gate, and only once its new `origin/main` read has a
+proven failure-open path. Ratifying (1) alone was **explicitly declined** — the
+node's own terms say it is not sufficient to unpark, because the failure-open
+behavior of that read is the whole risk.
+
+**The added requirement is part of the ruling: (2) must FAIL the post-merge
+`graph-validate` job, not warn on stderr.** This unit exists precisely because
+the original brief scoped a node-scoped failure and what shipped was a warning.
+Ruling (2) without stating *fatal* invites the identical under-delivery a
+second time.
+
+**(2) now needs only the check, not a workflow — verified live at the sitting,
+not quoted.** `main` is not in `unit-tests.yml`'s `branches-ignore` (only
+`graph/**` is), and `graph-validate` is a job **inside** that workflow
+(`.github/workflows/unit-tests.yml:145`). Confirmed against five separate
+`graph-commit` direct pushes to `main` made during the sitting itself — runs
+`33202092698`, `33202500193`, `33203326304`, `33203688821`, `33204380154` —
+every one triggered `unit-tests.yml`.
+
+Two things the ruling does **not** change: the `graph/**` half of the blind
+spot stays ignored, and `validate-graph` stays deliberately **non-fatal on the
+write path**. The fatal behavior is required of the **post-merge job only**,
+which is exactly what keeps the write path unable to deny.
 
 **Unit 11 — `verify-landed`'s unknown-node arm is untested** *(PR1 residual)*.
 PR1's post-merge QA exercised `verify-landed` at 0/4/4/2 and
@@ -4134,11 +4326,37 @@ the clobbered-park commit pair `894e653a` → `7ff0962d`, and ~14 repeats of the
 mint/park/clobber cycle on one node — 14 ending in a frozen worker rather than a
 clean disposition. *(Anchors from the node body — re-locate.)*
 
-> **This unit needs an author decision before code.** The node deliberately stops
-> at diagnosis: **(a)** exclude the `tactic-fleet-alarm-<kind>` family from
-> `router.ts`'s frozen-tactic candidate loop, or **(b)** additionally harden
-> `dispatch-fleet-alarm`'s `classify()` to be park-aware as defense in depth.
-> (a) is the fix; (b) is optional hardening. Record the choice on the node.
+**RULED 2026-08-28 (author sitting, Part I item C3): do BOTH (a) and (b), in
+this unit.**
+
+The node's own recommendation was *(a) first, then separately evaluate (b)*.
+The sitting went further, on the ground that **(a) and (b) fix different halves
+of the observed loop**. The cycle is mint → park → clobber → frozen worker:
+
+- **(a)** — exclude the `tactic-fleet-alarm-<kind>` id family (or a general
+  mechanically-managed marker, e.g. a dedicated `attributes` flag) from
+  `router.ts`'s draft/raw candidate emission, so these nodes are never selected
+  for `/align-tactics` at all. This stops the **frozen worker**, and matches the
+  already-recorded contract that `--resolve` is their only terminal.
+- **(b)** — make `dispatch-fleet-alarm`'s `classify()` park-aware: a node with
+  `office_hours !== null` but *not* `phase: done` must not be treated as
+  closed/re-mintable. This stops the **clobber**, which is the actual loss of
+  park content — and (a) does not address it.
+
+(b) is therefore not cosmetic hardening; it is the half that prevents data
+loss. Ship both here rather than deferring (b) to a follow-up.
+
+**Regression coverage required by the ruling:** assert that a
+`tactic-fleet-alarm-*` node is never emitted as an `/align-tactics` candidate,
+and that a park landed on one survives a subsequent re-detection. Verify by
+confirming `tactic-fleet-alarm-unclaimed-hold` and
+`tactic-fleet-alarm-busy-stall` no longer appear in `selectGraphTargets`'
+candidate list, and that no new "worker session froze" park commits accumulate
+on any `tactic-fleet-alarm-*.md`.
+
+**This unit also has a parked node**, contrary to the agenda's earlier claim
+that C3 had none: `tactic-fleet-alarm-node-park-clobber-loop`, `owner: ai`,
+parked since 2026-08-04. Recording the ruling here does not clear that park.
 
 **Unit 5 — a park must carry the losing writer's content, not a pointer to it.**
 `park_write()` (`graph-commit:3029`, verified) is the fail-closed path whose
@@ -4159,8 +4377,40 @@ own tactic." PR1 left the seam in one place — both recovery branches call
 > block, so carrying content in `office_hours.recommendation` repairs it. The
 > **delete/modify** branch does not land the record at all — by its own text the
 > `office_hours` record "is LOCAL ONLY — it exists nowhere on origin/main,
-> because the node does not." A fix addressing only the first branch **must say
-> so on the node** rather than closing it silently.
+> because the node does not."
+
+**RULED 2026-08-28 (author sitting, Part I item C4): fix the ordinary branch
+only; record the delete/modify residue rather than closing it silently.**
+
+Scope this unit to the **ordinary lost-writer branch** — carry the losing
+writer's content in `office_hours.recommendation`, which lands on
+`origin/main` and so is durably fixable. Do **not** expand the unit to the
+delete/modify branch.
+
+**Why the delete/modify branch is out of scope: it is a designed contract, not
+a gap.** `tactic-graph-commit-delete-vs-edit-park-hardening`'s `main-qa` pass
+read the current code (`graph-commit:1839-1867`, `test-graph-commit.sh:212-223`
+and Case 53 at `:2089`) and found the finding text that describes it as
+"resurrect the deleted node onto `origin/main` with a park attached" is
+**stale**. Shipped behavior: the landed deletion always **stands** on
+`origin/main`, nothing is ever auto-pushed back, and the session's edit is
+re-materialized **only** as a local untracked worktree file carrying
+`office_hours`, with the operator explicitly choosing **OVERRIDE** (re-run
+`graph-commit` on the re-materialized file to re-land it) or **CONFIRM** (`rm`
+it, since `main` already reflects the deletion).
+
+**The residue that must be recorded**, per the ruling: that re-materialized
+file is *local and untracked*, so a **reaped worktree destroys it** — the same
+durability class as `SNAP_DIR`, reached by a different mechanism. Record this
+on the node; do not close the branch as fully handled and do not silently widen
+this unit to chase it.
+
+**C4 also has parked nodes**, contrary to the agenda's earlier claim that it had
+none: `tactic-graph-commit-park-content-durability` (parked 2026-08-21 — note
+its blocker A was the maintenance-burden band, ruled at the same sitting as
+Part I item D1) and `tactic-graph-commit-delete-vs-edit-park-hardening`
+(parked 2026-08-10, `phase: main-qa`). Recording the ruling here clears
+neither.
 
 ### Dependencies
 
