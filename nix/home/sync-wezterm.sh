@@ -70,6 +70,11 @@ write_pin() {
   srcHash = "$SRC_HASH";
   cargoHash = "$1";
   windowsZipHash = "$WINDOWS_ZIP_HASH";
+
+  # A successful sync leaves the pin matching the live asset, so the Windows
+  # install is enabled again. wezterm-windows.nix reads this attribute and fails
+  # to evaluate without it, so it must be written on every regeneration.
+  windowsInstallEnabled = true;
 }
 EOF
 }

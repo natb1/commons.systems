@@ -12,6 +12,12 @@
 # by `windowsZipHash` and unpack it at build time; activation only mirrors the
 # resulting store tree to Windows. Bump both sides together with
 # nix/home/sync-wezterm.sh.
+#
+# Currently INERT: `windowsInstallEnabled` in the pin is false, so none of the
+# below is in the generation. That is a workaround for the byte pin expiring
+# against a rolling URL, not a decision about how the GUI should be delivered —
+# see nix/home/wezterm-pin.nix and
+# intentions/tactic-nix-wezterm-pin-nightly-drift.md.
 
 {
   config,
@@ -52,7 +58,13 @@ in
   # WSL: mirror the pinned Windows WezTerm into the user's %LOCALAPPDATA%.
   # DAG ordering: runs after "linkGeneration" so symlinks are stable before we
   # reach across the WSL boundary.
-  home.activation.installWeztermWindows = lib.mkIf pkgs.stdenv.isLinux (
+  #
+  # Gated on pin.windowsInstallEnabled as well as the platform. That flag is a
+  # workaround for the rolling-URL pin going stale (see wezterm-pin.nix); while
+  # it is false, mkIf drops this activation entry before its content is forced,
+  # so weztermWindowsZip/weztermWindowsDir above are never evaluated and the
+  # nightly zip leaves the build closure entirely.
+  home.activation.installWeztermWindows = lib.mkIf (pin.windowsInstallEnabled && pkgs.stdenv.isLinux) (
     lib.hm.dag.entryAfter [ "linkGeneration" ] ''
       readonly WW_ERR_PERMISSION_DENIED=21
       readonly WW_ERR_USERNAME_DETECTION=22
