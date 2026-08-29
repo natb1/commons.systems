@@ -87,6 +87,20 @@ The devshell installs it. `flake.nix`'s `devShells.default.shellHook` sets
 path on its own, and nix is this repo's single path for environment
 configuration, so the claim belongs there and nowhere else.
 
+For a non-interactive environment — the Claude Code cloud container, which
+ships its own node/java/go/python and would pay minutes per session to realize
+the full devshell — `devShells.cloud` carries the same hook install and no
+packages:
+
+```
+nix develop .#cloud --command true
+```
+
+Measured 2026-08-29 in a cloud container: 17s cold, 0.4s warm, and it leaves
+the container's own `node` and `PLAYWRIGHT_BROWSERS_PATH` untouched. Env
+configuration the cloud needs belongs in that shell, beside the hook install,
+rather than in the init script.
+
 It is claimed only when `core.hooksPath` is unset — a developer who points it
 somewhere of their own keeps that. A failed `git config` (a read-only `.git`,
 as in some sandboxes) warns rather than aborting shell entry, so the fallback
