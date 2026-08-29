@@ -271,6 +271,21 @@ clarifications:
       priority_log entry' counts zero because zero writes occur. That is the
       conform-by-doing-nothing failure this node's own paired-signal
       clarification names, and it stays true until the writer lands.
+  - question: What does observable (a) of the success_signal measure — which
+      cohorts, and where does the interval start?
+    answer: "(Ruled 2026-08-29 by the author, disposition (A) of the office_hours
+      park on tactic-rsi-reprioritization-outcome-audit, ratified as proposed.)
+      Baseline = the complement cohort: closed owner: ai tactics with no
+      priority_log entry in the window. Interval = node creation date to
+      phase-done commit date, for BOTH cohorts. The priority_log entry date
+      partitions the cohorts and bounds the per-iteration delta; it is never a
+      start point — a boost-dated start would make the two cohorts
+      incommensurable, since the baseline cohort has no boost date by
+      construction. This is the stricter of the admissible readings and the only
+      one under which the front-loaded cohort can genuinely score WORSE than
+      baseline, which the sensor node's own body requires ('a sustained result
+      showing front-loaded nodes closing no faster than baseline is evidence the
+      delegated reordering is not earning its authority')."
 tooling_goals: []
 success_signal:
   observable: (a) the median closure interval of tactics the model front-loaded,
@@ -293,8 +308,8 @@ success_signal:
     one that buys throughput by inverting the author's strategies"
   is_proxy: true
 attention:
-  boost: 1
-  override: null
+  boosts:
+    "1": 1
   rationale: "Author-directed 2026-08-11: +1 over the parent's AUTHORED 6 gives
     this child an authored 7, and the authored term is what distributes to its
     tactics — second within the strategy-recursive-self-improvement subtree,
@@ -320,7 +335,6 @@ attention:
     to cancel a derived term would make the authored number mean two things at
     once — but it is recorded here so a future rerank starts from the real
     figure."
-  tier: 1
 phase: null
 execution: null
 validates: []
