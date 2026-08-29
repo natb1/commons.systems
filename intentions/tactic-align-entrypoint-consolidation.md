@@ -95,9 +95,14 @@ prompt, then execute `/align <prompt>` in-session) — a `do-one-thing-name`
 split (e.g. a separate `/align-graph`) was considered and rejected. (3) The
 scheduled align jit and rung-5 dialectic engine are retired, and
 **`/align-strategy`'s existing no-prompt "improvement pass" is retired with
-them, not folded into the new onboarding funnel** — both engines' content is
+them, not folded into the new onboarding funnel** — both engines' content was
 retained verbatim in `tactic-align-audit-legacy-review` (an office-hours
 sitting deciding future `/align-audit` inclusion; untouched by this tactic).
+**Superseded 2026-08-29:** that sitting resolved on 2026-07-23 *against*
+inclusion, and the node is owed a prune, so it is no longer where this content
+lives. Read both engines from their verbatim source at `origin/main` commit
+`44493733` — `.claude/skills/align-init/SKILL.md` and
+`.claude/skills/align-strategy/SKILL.md`.
 (4) `/align` keeps maintaining the review curriculum via the existing
 universal-deferral mechanics (`strategy-explicit-intent`) unchanged — no code
 change implied, no unit below touches this. (5) Backward compatibility is a
@@ -172,9 +177,12 @@ Scope — `.claude/skills/align/SKILL.md` (post-Unit-1 path):
   greenfield-relevance-gate corpus sweep (strategy clarification 26), and the
   unserved-virtue check. None of this candidate-sweep logic carries into the
   new onboarding funnel — per the strategy clarification cited in Context,
-  the improvement pass is retired, not relocated. Its design is retained
+  the improvement pass is retired, not relocated. Its design was retained
   verbatim in `tactic-align-audit-legacy-review` for a future `/align-audit`
-  decision; do not duplicate it here.
+  decision; do not duplicate it here. **Superseded 2026-08-29:** that decision
+  was resolved against inclusion on 2026-07-23 and the node is owed a prune —
+  read the design from `origin/main` commit `44493733`
+  (`.claude/skills/align-strategy/SKILL.md`) instead.
 - **Replace** with the new no-prompt onboarding funnel:
   1. Orient — the one-screen persistent-layer primer, carried from
      `.claude/skills/align-init/SKILL.md` Step 1 "Orient" (pre-delete lines
@@ -272,15 +280,23 @@ Dependencies: none — independent of Units 1-3, can run in parallel with them.
 
 **Recommended model:** opus (judgment call on the orphan-skill decision)
 
+**Superseded 2026-08-29 — this unit shipped, and its outcome has since been
+reversed.** Both docs and both `ref-*` skills are now slated for outright
+deletion by `tactic-retire-assessor-contract-docs`, because the premise this
+unit reasoned from (below) turned out to be false: the sitting decided
+*against* re-consuming the contract. The unit text is kept as the record of
+what was done and why, not as live instruction.
+
 Scope:
 - `.claude/docs/delegability.md` line 3 ("The delegability evaluation is the
   core of `/align-init`'s per-intention loop...") and line 17 ("Two axes run
   through `/align-init`...") — reword to drop the `/align-init` framing (it no
-  longer exists) and point instead at `tactic-align-audit-legacy-review`,
-  which retains the rung-5 design for a future `/align-audit` decision. Note
-  verbatim source also survives at `origin/main` commit `44493733`
-  (`.claude/skills/align-init/SKILL.md`). Do not duplicate content — reference
-  only.
+  longer exists) and point instead at `origin/main` commit `44493733`
+  (`.claude/skills/align-init/SKILL.md`), which holds the rung-5 design
+  verbatim. Do not duplicate content — reference only. (As shipped this
+  pointed at `tactic-align-audit-legacy-review` instead; that node is owed a
+  prune, and both docs are now slated for deletion anyway — see the
+  supersession note at the head of this unit.)
 - `.claude/docs/signal-identification.md` line 3 ("Signal identification is
   the parse-time half of `/align-init`'s feedback arm...") — same treatment.
 - **Decision point, confirm before editing:** grep confirms `ref-delegability`
@@ -290,7 +306,11 @@ Scope:
   disposition: **retain both skills and both docs as orphaned reference
   content**, not delete — `tactic-align-audit-legacy-review` is a live plan
   for a future `/align-audit` that will re-consume this exact contract;
-  deleting now would force re-authoring later for no benefit. If a live
+  deleting now would force re-authoring later for no benefit. **That reason
+  was refuted 2026-08-29:** the sitting had already decided against
+  re-consumption on 2026-07-23, so nothing will re-consume the contract and
+  the retention has no beneficiary. `tactic-retire-assessor-contract-docs`
+  supersedes this disposition and deletes all four files. If a live
   caller turns up during implementation that this plan missed, treat that as
   new information and keep the skill/doc live regardless (the "orphan"
   premise was wrong, not the conclusion).
@@ -346,7 +366,7 @@ earlier units already touched the same file):
   (strategy clarification 26 on strategy-graph-native-dispatch) —
   `/align-strategy`'s improvement pass, which ran a whole-corpus application
   of this gate, was retired by `tactic-align-entrypoint-consolidation` (design
-  retained in `tactic-align-audit-legacy-review`); `/align-tactics`'s
+  retained at `origin/main` commit `44493733`); `/align-tactics`'s
   per-round application below is now the gate's only live use." Do not word it
   as "moves into the onboarding walk" — the onboarding funnel (Unit 2) does
   not run this gate.

@@ -146,11 +146,18 @@ skill's prose checks are an incubator, never the permanent home.
 Skill-level out of scope: rewriting virtue/strategy substance autonomously;
 replacing the record-time gates (tactic-align-strategy-alignment-tests) or
 the align interviews — the skill audits the record between interviews, it
-never conducts one. Pending inclusion decision: the born-parked office-hours
-sitting tactic-align-audit-legacy-review will later decide whether components
-of the retired rung-5 dialectic and the retired /align-strategy improvement
-pass fold into /align-audit — author the skill without them; that sitting
-amends.
+never conducts one. Inclusion decision, SETTLED 2026-07-23 (author present, at
+the tactic-align-audit-legacy-review office-hours sitting): the retired rung-5
+dialectic and the retired /align-strategy improvement pass do NOT fold into
+/align-audit — both engines retire wholesale, and no amendment is coming. This
+paragraph previously described that decision as pending and owned by a
+born-parked sitting; every clause of that was false by the time it was read.
+Author the skill without those components, as before, but for a settled reason
+rather than a deferred one. The surviving records of the decision are this
+node's own 2026-07-23 clarification (points 2 and 3) and the
+`Is the 2026-07-09 successor-cadence deferral ratified?` clarification on
+strategy-explicit-intent; the engines' verbatim source is at origin/main commit
+44493733.
 
 **Landing caveat:** `.claude/skills/**` is agent-behavior config — dispatch
 auto mode denies the commit. If the commit is denied, park this tactic to

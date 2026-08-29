@@ -44,7 +44,10 @@ attributes: {}
 
 One PR. Deletes two docs and two skill directories and corrects two surviving
 prose pointers; no code, no tests, no runtime surface. Filed 2026-08-18 by the `/align-tactics
-tactic-align-audit-legacy-review` round that pruned the node these files cite.
+tactic-align-audit-legacy-review` round. (That round was ORIGINALLY described
+here as having pruned the node these files cite. It did not — the prune was
+owed, not performed, and as of 2026-08-29 the node is still on `origin/main`.
+Corrected by the reference sweep `tactic-align-legacy-review-reference-sweep`.)
 
 ## Context
 
@@ -143,8 +146,10 @@ to-be-deleted paths were: `packages/intentionsutil/scripts/read-sensors.ts:28`
 (`phase: done`, citing the two `SKILL.md` files only as a format/tone template
 for its own already-completed Unit 4 — historical, no live dependency), and
 `intentions/tactic-align-audit-legacy-review.md` (**still present** on
-`origin/main` as of 2026-08-28 — expect it, and do not read its presence as a
-live consumer; D1's prune is owed but unexecuted). If the sweep now shows a hit that is
+`origin/main` as of 2026-08-29 — expect it, and do not read its presence as a
+live consumer; D1's prune is owed but unexecuted, and now carries a structural
+`blocked_by` edge to `tactic-align-legacy-review-reference-sweep`, so it cannot
+run until that sweep ships). If the sweep now shows a hit that is
 none of those — an executable caller, an agent definition, or a skill that
 loads either doc — **stop and park to office_hours** rather than deleting: a
 live consumer would mean the retirement decision has been overtaken, which is
