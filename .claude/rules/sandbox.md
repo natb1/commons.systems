@@ -73,12 +73,28 @@ retrying: the retry fails `'.../.git' is not a .git file, error code 7`, the
 first attempt having destroyed the file the second validates against. Recover a
 half-deleted worktree with `rm -rf <path>` then `git worktree prune`.
 
-The procedures themselves live in code — run these rather than hand-running the
-git command: `sync_main_checkout` (`lib.sh`) for the main-checkout sync, whose
-header carries the requirement (`dispatch-select-tick` is its canonical caller),
-and `.claude/skills/dispatch-propagate/scripts/remove-worktree` for removal
-(fresh fetch, content safety gate, no `--force`, partial-delete recovery,
-verified post-state).
+The main-checkout sync lives in code — run `sync_main_checkout` (`lib.sh`)
+rather than hand-running the git command; its header carries the requirement,
+and `dispatch-select-tick` is its canonical caller.
+
+**Worktree removal has no wrapper script — use the built-in tooling.**
+`ExitWorktree`, session-exit cleanup, and `git worktree remove <abs path>` are
+the removal paths. Anything routed through the `WorktreeRemove` hook
+(`.claude/hooks/worktree-remove.sh`, registered in `.claude/settings.json`)
+recovers a torn removal on its own: it separates a removal git **refused**
+(checkout intact — kept, and safe to retry) from a **torn** one (checkout partly
+destroyed — unrecoverable by retry), and repairs the torn case in place with
+`rm -rf` + `git worktree prune`. A **hand-run** `git worktree remove` gets none
+of that, so apply the recovery in the paragraph above yourself if it tears.
+
+There was a `remove-worktree` wrapper under
+`.claude/skills/dispatch-propagate/scripts/` until 2026-08-29. It was deleted:
+nothing ever called it, and its content safety gate compared the branch against
+`origin/main` **symmetrically**, so a branch merely far *behind* main read as
+carrying unlanded work and could not be removed at all. The live reap path
+(`lib-session-reap.sh`) never had that bug — it checks `rev-list --count
+origin/main..HEAD` first and skips the content diff when the branch is an
+ancestor.
 
 ## Network namespace isolation
 
