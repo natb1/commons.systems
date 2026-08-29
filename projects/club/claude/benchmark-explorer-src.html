@@ -6,6 +6,7 @@
     --ink:#212820; --ink2:#59614F; --muted:#7E8672; --line:#D8DCCB; --line2:#C6CBB5;
     --pos:#2F6B4E; --neg:#A8502F; --brass:#8A6D1F; --brass-soft:#B99A3E;
     --sel:#212820; --hatch:rgba(33,40,32,.10);
+    --cap-bar:#9AA286; --cap-band:rgba(33,40,32,.05);
     --shadow:0 1px 2px rgba(33,40,32,.06), 0 8px 24px rgba(33,40,32,.05);
   }
   @media (prefers-color-scheme: dark){
@@ -14,6 +15,7 @@
       --ink:#E6E9DD; --ink2:#A6AE9B; --muted:#838B74; --line:#39402F; --line2:#485140;
       --pos:#74C297; --neg:#E3906A; --brass:#D2AC55; --brass-soft:#A5863C;
       --sel:#E6E9DD; --hatch:rgba(230,233,221,.10);
+      --cap-bar:#6E7A5E; --cap-band:rgba(230,233,221,.05);
       --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
     }
   }
@@ -22,6 +24,7 @@
     --ink:#E6E9DD; --ink2:#A6AE9B; --muted:#838B74; --line:#39402F; --line2:#485140;
     --pos:#74C297; --neg:#E3906A; --brass:#D2AC55; --brass-soft:#A5863C;
     --sel:#E6E9DD; --hatch:rgba(230,233,221,.10);
+    --cap-bar:#6E7A5E; --cap-band:rgba(230,233,221,.05);
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
   }
   *{box-sizing:border-box}
@@ -210,6 +213,71 @@
   .notes table.mini th.hr{text-align:right;font-weight:600}
   .notes table.mini td{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
   .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+
+  /* ---------- capital ---------- */
+  /* Readouts, not levers: a derived figure the rail states rather than takes.
+     `.ro .v.na` is the one that matters — a ramp that never turns is a state,
+     not a number, and it must never render as a dash that reads as zero. */
+  .ro{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .ro .l{font-size:13.5px;font-weight:500;color:var(--ink)}
+  .ro .v{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;
+    font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink)}
+  .ro .v.p{color:var(--pos)} .ro .v.n{color:var(--neg)}
+  .ro .v.na{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12px;font-style:italic;color:var(--muted);white-space:normal;text-align:right}
+  .capnote{font-size:12px;color:var(--muted)}
+  .capwarn{font-size:12px;color:var(--neg);border-left:2px solid var(--neg);padding-left:9px}
+  /* the override sliders and the two warnings are toggled with the `hidden`
+     attribute, which a display rule of our own would otherwise beat */
+  .lever[hidden],.capwarn[hidden],.never[hidden]{display:none}
+  .fixedcap{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+    border:1px dashed var(--line2);border-radius:7px;padding:6px 10px}
+  .fixedcap .l{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .fixedcap .v{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
+  .ovr{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);cursor:pointer;user-select:none}
+  .ovr input{accent-color:var(--brass);width:14px;height:14px;cursor:pointer}
+  .ovr input:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+  /* the two charts */
+  .capcard{padding:20px 22px}
+  .capcard h3{font-family:'Spectral',Georgia,serif;font-size:16px;font-weight:600;margin:18px 0 4px}
+  .capcard h3:first-of-type{margin-top:6px}
+  .capcard p.cs{color:var(--ink2);font-size:13px;margin:0 0 12px;max-width:78ch}
+  .capcard p.cs b{font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+  .chartwrap{overflow-x:auto;padding-bottom:4px}
+  svg.cap{display:block;height:auto}
+  svg.cap .ax{stroke:var(--line2);stroke-width:1;fill:none}
+  svg.cap .gl{stroke:var(--line);stroke-width:1;fill:none}
+  svg.cap .tk{font-size:10px;fill:var(--muted);font-family:'IBM Plex Mono',monospace}
+  svg.cap .lb{font-size:10.5px;fill:var(--ink2)}
+  svg.cap .an{font-size:11px;fill:var(--ink);font-weight:600}
+  svg.cap .use{fill:var(--cap-bar)}
+  svg.cap .over{fill:var(--neg)}
+  svg.cap .tot{fill:var(--ink)}
+  svg.cap .band{fill:var(--cap-band)}
+  svg.cap .capline{stroke:var(--neg);stroke-width:2;stroke-dasharray:6 4;fill:none}
+  svg.cap .curve{stroke:var(--neg);stroke-width:2;fill:none}
+  svg.cap .curve.p{stroke:var(--pos)}
+  svg.cap .mark{stroke:var(--brass);stroke-width:1.5;stroke-dasharray:3 3;fill:none}
+  svg.cap .dot{fill:var(--brass)}
+  .caplegend{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin-top:10px;font-size:12px;color:var(--ink2)}
+  .caplegend .sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid var(--line)}
+  .never{margin-top:10px;border-left:3px solid var(--neg);padding:2px 0 2px 14px;font-size:13px;color:var(--ink2);max-width:78ch}
+
+  /* the capital tornado: a swing about the current required-capital total */
+  .cap-tor{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .torrow{display:grid;grid-template-columns:176px 1fr 74px;gap:12px;align-items:center;font-size:13px}
+  @media (max-width:560px){.torrow{grid-template-columns:116px 1fr 70px}}
+  .torrow .lab{color:var(--ink2);display:flex;align-items:center;gap:6px;min-width:0}
+  .torrow .lab .lt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .torrow .lab .chip{font-size:9.5px;font-weight:600;letter-spacing:.04em;padding:0 5px;flex:0 0 auto}
+  .torrow .tw{height:14px;position:relative}
+  .torrow .tb{position:absolute;top:0;bottom:0;border-radius:3px;min-width:2px;background:var(--cap-bar)}
+  .torrow .zero{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--ink2)}
+  .torrow .val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+  @media (prefers-reduced-motion: no-preference){
+    svg.cap rect,.torrow .tb{transition:x .18s ease,y .18s ease,width .18s ease,height .18s ease,left .18s ease}
+  }
+
   @media (prefers-reduced-motion: no-preference){
     td.cell,.chip,.brow .bar{transition:background .18s ease,box-shadow .18s ease,width .18s ease}
   }
@@ -317,16 +385,11 @@
           </div>
         </div>
         <div class="sub-g">
-          <div class="sgt"><span class="l">Capital &amp; concessions (G2)</span><span class="sum" id="sum-cash"></span></div>
-          <div class="lever">
-            <div class="row"><label for="in-build">Build-out</label><output id="out-build"></output></div>
-            <input type="range" id="in-build" min="40" max="140" step="5">
-            <div class="hint">Hard cap ~$85K (D7); overruns come out of scope, never the working-capital reserve (risk 4)</div>
-          </div>
+          <div class="sgt"><span class="l">Deal terms (negotiated)</span><span class="sum" id="sum-deal"></span></div>
           <div class="lever">
             <div class="row"><label for="in-ti">TI allowance</label><output id="out-ti"></output></div>
-            <input type="range" id="in-ti" min="0" max="60" step="5">
-            <div class="hint">Landlord tenant-improvement money — “negotiated hard” (#17); offsets build-out cash</div>
+            <input type="range" id="in-ti" min="0" max="40" step="1">
+            <div class="hint" id="ti-hint"></div>
           </div>
           <div class="lever">
             <div class="row"><label for="in-abate">Rent abatement</label><output id="out-abate"></output></div>
@@ -334,19 +397,53 @@
             <div class="hint" id="abatehint"></div>
           </div>
           <div class="lever">
+            <div class="row"><label for="in-deposit">Security deposit</label><output id="out-deposit"></output></div>
+            <input type="range" id="in-deposit" min="0" max="6" step="1">
+            <div class="hint" id="deposit-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-constr">Construction to opening</label><output id="out-constr"></output></div>
+            <input type="range" id="in-constr" min="1" max="12" step="1">
+            <div class="hint" id="constr-hint"></div>
+          </div>
+          <div class="lever">
+            <div class="row"><label for="in-ramp">Ramp to stabilization</label><output id="out-ramp"></output></div>
+            <input type="range" id="in-ramp" min="6" max="36" step="1">
+            <div class="hint" id="ramp-hint"></div>
+          </div>
+          <div class="ro"><span class="l">Delivery condition</span><span class="v" id="out-delivery"></span></div>
+          <div class="hint" id="delivery-hint"></div>
+          <div class="lever">
+            <div class="row"><label for="in-build">Build-out scope cap</label><output id="out-build"></output></div>
+            <input type="range" id="in-build" min="40" max="140" step="5">
+            <div class="hint" id="build-hint"></div>
+          </div>
+          <div class="lever">
             <div class="row"><label for="in-grants">Grants</label><output id="out-grants"></output></div>
             <input type="range" id="in-grants" min="0" max="60" step="5">
             <div class="hint">Business Boost, façade, storefront — buy back fit-out scope or reserve depth. §4: acceleration, never assumption — the plan counts $0 in advance</div>
           </div>
-          <div class="lever">
-            <div class="row"><label for="in-cash">Venture cash</label><output id="out-cash"></output></div>
-            <input type="range" id="in-cash" min="80" max="220" step="5">
-            <div class="hint">D7: under $150K, grant-free, covering everything — the binding constraint. What isn't spent on build-out is the reserve that absorbs operating losses.</div>
+        </div>
+        <div class="sub-g">
+          <div class="sgt"><span class="l">Capital outcome (G2)</span><span class="sum" id="sum-cash"></span></div>
+          <div class="fixedcap">
+            <span class="l">Venture cash · D7 cap</span><span class="v" id="out-cash"></span>
           </div>
+          <label class="ovr"><input type="checkbox" id="cash-ovr"> Override the cap</label>
+          <div class="lever" id="cash-lever" hidden>
+            <input type="range" id="in-cash" min="80" max="220" step="5" aria-label="Venture cash override">
+          </div>
+          <div class="capwarn" id="cash-warn" hidden></div>
+          <div class="hint">D7 is a precommitment, not a preference: under $150K, grant-free, covering everything. It is drawn as a fixed line rather than a dial because a smooth slider quietly relaxes the plan's own binding constraint.</div>
+          <div class="ro"><span class="l">Required capital</span><span class="v" id="out-required"></span></div>
+          <div class="ro"><span class="l">Headroom against the cap</span><span class="v" id="out-headroom"></span></div>
+          <div class="ro"><span class="l">Peak cash deficit</span><span class="v" id="out-peak"></span></div>
+          <div class="ro"><span class="l">Months to cash-flow positive</span><span class="v" id="out-topos"></span></div>
+          <div class="capnote" id="capout-hint"></div>
           <div class="lever">
             <div class="row"><label for="in-runway">Runway to verdict</label><output id="out-runway"></output></div>
             <input type="range" id="in-runway" min="12" max="36" step="3">
-            <div class="hint">Post-opening decision horizon: the reserve must outlast it, or the bail line fires before the go/no-go review can be honest.</div>
+            <div class="hint" id="runway-hint"></div>
           </div>
         </div>
       </div>
@@ -379,11 +476,13 @@
         <div class="st"><span class="n">iv.</span><span class="t">The owner’s bars</span></div>
         <div class="sub-g">
           <div class="sgt"><span class="l">The bars</span><span class="sum" id="sum-bar"></span></div>
-          <div class="lever">
-            <div class="row"><label for="in-equity">Capital at risk</label><output id="out-equity"></output></div>
-            <input type="range" id="in-equity" min="100" max="360" step="10">
-            <div class="hint" id="equity-hint"></div>
+          <div class="ro"><span class="l">Capital at risk</span><span class="v" id="out-equity"></span></div>
+          <div class="hint" id="equity-hint"></div>
+          <label class="ovr"><input type="checkbox" id="equity-ovr"> Override with a what-if figure</label>
+          <div class="lever" id="equity-lever" hidden>
+            <input type="range" id="in-equity" min="100" max="360" step="10" aria-label="Capital at risk override">
           </div>
+          <div class="capwarn" id="equity-warn" hidden></div>
           <div class="hint" id="bar-hint"></div>
         </div>
       </div>
@@ -420,6 +519,31 @@
           </div>
         </div>
         <div class="breakdown streams" id="breakdown"></div>
+      </div>
+
+      <div class="card capcard">
+        <h2>What it costs to open, and how deep the hole gets</h2>
+        <p class="sub">Required capital is derived here, not typed in: site geometry and the deal terms set the uses, and the ramp's trough sets the working capital. Move any lever in section ii and both pictures move.</p>
+
+        <h3>Sources &amp; uses against the D7 cap</h3>
+        <p class="cs" id="wf-lede"></p>
+        <div class="chartwrap"><svg class="cap" id="waterfall" role="img" aria-labelledby="wf-title"><title id="wf-title">Sources and uses of cash, stacked as a waterfall against the venture-cash cap</title></svg></div>
+        <div class="caplegend">
+          <span><span class="sw" style="background:var(--cap-bar)"></span>a use, inside the cap</span>
+          <span><span class="sw" style="background:var(--neg)"></span>the part past the cap</span>
+          <span><span class="sw" style="background:var(--ink)"></span>required capital</span>
+          <span><span class="sw" style="background:transparent;border:2px dashed var(--neg)"></span>the cap (D7)</span>
+        </div>
+
+        <h3>The cash curve — cumulative cash from opening</h3>
+        <p class="cs" id="cc-lede"></p>
+        <div class="chartwrap"><svg class="cap" id="cashcurve" role="img" aria-labelledby="cc-title"><title id="cc-title">Cumulative cash by month from opening, with the trough, the cap and break-even marked</title></svg></div>
+        <div class="never" id="cc-never" hidden></div>
+
+        <h3>What to negotiate first</h3>
+        <p class="cs" id="tor-lede"></p>
+        <div class="cap-tor" id="captornado"></div>
+        <p class="cs" id="tor-note"></p>
       </div>
 
       <div class="card matrixcard">
@@ -484,17 +608,40 @@
         <h3>What the owner's draw has to clear</h3>
         <p>The old <b>$30K line is gone from this tool.</b> It was the plan's <i>partial-income floor</i> — the trigger test of §9 (debt service + ~$30K), premised on other household income covering the rest. That is a household-survival number, not a measure of when the business is worth the owner's labor and capital. The standard test for the latter is <b>economic profit</b>: owner comp must cover (a) a market or living wage for the hours actually worked and (b) a required return on the equity at risk. Small-business valuation formalizes the same idea as SDE minus a fair replacement salary. Two tiers replace the one line.</p>
         <p><b>The wage half.</b> The owner's gridded week is ~40 hr (~30 on the floor + ~10 admin and sales), and it is <i>additional</i> to the ~100 staffed hr/wk the labor line buys — the plan's grid is already net of the owner's floor hours (D5/D6), so nothing here is counted twice. Those hours are priced at the Wages rung, but not at the full staff rate: an owner drawing from the LLC carries the SE tax (15.3% on 92.35% of the draw, which makes a draw of <span class="mono">cash × 1.0755</span> the equal of a wage of <span class="mono">cash</span> — so the employer FICA half, 7.65%, is the right uplift), and buys their own benefits, but <b>unemployment insurance and workers' comp cover employees, not the member-owner</b>. So the owner's hour is take-home + FICA + benefits: <span class="mono">$21.03 × 1.0765 = <!--m:ownerRatePerHr-->$22.64<!--/m--></span> at MIT living, against the <!--m:staffRatePerHr-->$23.21<!--/m--> the same hour costs as staff. That is <span class="mono">40 × 52 × <!--m:ownerRatePerHr-->$22.64<!--/m--> ≈ <!--m:livingWageK-->$47.1K<!--/m--></span>. It moves with the Wages lever, and that coupling is the point: an owner who pays the $16.55 market floor is pricing their own year at $34K, not $47K. But a living wage on its own is not a bar — it says nothing about the money. Both tiers below start from it and add a return.</p>
-        <p><b>1 — Living wage &amp; zero opportunity cost.</b> The wage plus <b>10%</b> on the capital at risk: what that cash would earn sitting passively somewhere else. Clear this and the owner is no worse off than they'd be taking a job and leaving the money in the market — the venture has cost them nothing but risk. Capital at risk is its own lever, defaulted to the midpoint of the plan's grant-free cash-to-open range (<!--m:equityRangeK-->$180–300K<!--/m-->). At <!--m:capitalAtRiskK-->$240K<!--/m--> the bar is <span class="mono"><!--m:livingWageK-->$47.1K<!--/m--> + $24K = <!--m:ownerBarK-->$71.1K<!--/m--></span>.</p>
-        <p><b>2 — The economic band.</b> The wage plus <b>20% or more</b> — the risk-adjusted rate a buyer of an illiquid, single-operator small business would demand. This is where the venture earns genuine economic profit rather than merely breaking even against the alternatives. At <!--m:capitalAtRiskK-->$240K<!--/m--> it opens at <span class="mono"><!--m:economicBandK-->$95.1K<!--/m--></span>. On the SBLP-buy path the ~$10K/yr of principal paydown counts toward the return side, so both tiers are tested against draw + equity build.</p>
+        <p><b>1 — Living wage &amp; zero opportunity cost.</b> The wage plus <b>10%</b> on the capital at risk: what that cash would earn sitting passively somewhere else. Clear this and the owner is no worse off than they'd be taking a job and leaving the money in the market — the venture has cost them nothing but risk. Capital at risk is no longer a lever: it is the sources-and-uses total less what survives a wind-down (the deposit in full, FF&amp;E at resale), which is what makes the bar move when the deal moves. At <!--m:capitalAtRiskK-->$202K<!--/m--> the bar is <span class="mono"><!--m:livingWageK-->$47.1K<!--/m--> + $20K = <!--m:ownerBarK-->$67.3K<!--/m--></span>. The plan's own grant-free cash-to-open range (<!--m:equityRangeK-->$180–300K<!--/m-->) used to set this figure by assertion; note that it sits <i>above</i> the same plan's <!--m:ventureCashK-->$150K<!--/m--> cap at the bottom of the range, which is the contradiction the two capital systems kept from meeting.</p>
+        <p><b>2 — The economic band.</b> The wage plus <b>20% or more</b> — the risk-adjusted rate a buyer of an illiquid, single-operator small business would demand. This is where the venture earns genuine economic profit rather than merely breaking even against the alternatives. At <!--m:capitalAtRiskK-->$202K<!--/m--> it opens at <span class="mono"><!--m:economicBandK-->$87.4K<!--/m--></span>. On the SBLP-buy path the ~$10K/yr of principal paydown counts toward the return side, so both tiers are tested against draw + equity build.</p>
         <p><b>Where the tiers land on this model.</b> The gate-clearing case (~110 walk-ins/day at ~55% utilization) reaches <span class="mono">+$29K</span>, and the wage alone would take roughly ~10 more walk-ins/day on top of that. The <i>bar</i> — wage plus zero opportunity cost — needs about ~23 more walk-ins/day than the gate case, or ~11 more filled weekly sessions, which puts it past the café's top decile and above the room evidence ceiling. The economic band opens at the top of the plan's own "Strong" scenario ($85–95K). Read plainly: on the plan's own numbers this venture pays its owner a living wage long before it pays for the capital, and the derived gates say so in red.</p>
         <h3>The gates are outputs, not fixtures</h3>
-        <p>The $0 line is fixed by arithmetic, and the bar by the Wages rung plus the capital lever, but <i>where they fall on the grid</i> depends on every lever outside the two engines — pay market wages and the break-even roster shrinks (and the bar drops with it); take the SN/HT floor and it shrinks again while the café mark weakens. The "derived gates" strip computes, from the current site, deal, and constraint settings: the utilization and club roster needed for $0 and for the bar at the site's café mark, the walk-in count needed at gate-case rooms (55%), and the G2 cash test. A gate shown in red is one that current settings push outside the evidence region (or the cash cap) — meaning those settings demand proof the pilot can't currently supply.</p>
-        <h3>Capital &amp; concessions (the G2 half of the deal)</h3>
-        <p>Build-out, TI allowance, rent abatement, and grants don't touch stabilized Year-2 owner comp — they decide whether the venture can be <i>reached</i> with the available cash (D7: &lt;$150K). Cash at risk ≈ (build-out − TI − grants) + working-capital reserve (~$50–65K, floored — abatement months relieve the Year-1 ramp portion at the site's monthly occupancy). If lease-path all-in can't fit the cap after TI negotiation, that is a G2 stop, not a stretch (risk 4). On the SBLP-buy path the cash math changes kind: 10% contribution + closing + FF&amp;E exceeds own cash by design, so the gate becomes "executed community-development terms in hand" (D8).</p>
+        <p>The $0 line is fixed by arithmetic, and the bar by the Wages rung plus the capital the deal actually puts at risk, but <i>where they fall on the grid</i> depends on every lever outside the two engines — pay market wages and the break-even roster shrinks (and the bar drops with it); take the SN/HT floor and it shrinks again while the café mark weakens. The "derived gates" strip computes, from the current site, deal, and constraint settings: the utilization and club roster needed for $0 and for the bar at the site's café mark, the walk-in count needed at gate-case rooms (55%), and the G2 cash test — which is now required capital against the cap, derived, rather than the sum of two sliders. A gate shown in red is one that current settings push outside the evidence region (or the cash cap) — meaning those settings demand proof the pilot can't currently supply.</p>
+        <h3>Required capital, derived — and what it found</h3>
+        <p>The deal terms still don't touch stabilized Year-2 owner comp; they decide whether the venture can be <i>reached</i> with the available cash (D7: &lt;$150K). What changed is that the reaching is now computed. Required capital is a registry of uses with the same four obligations the cost registry carries — a driver, an evidence grade, an amount, and a band wherever the number is an estimate — summed at the current site geometry and deal terms. At Little Italy's plan marks it comes to <!--m:requiredCapitalLiK-->$218.9K<!--/m--> against the <!--m:ventureCashK-->$150K<!--/m--> cap: <b><!--m:headroomLiK-->−$68.9K<!--/m--></b>, not the $7K of headroom the old two-slider tile reported. At Station North / Highlandtown it is <!--m:requiredCapitalSnK-->$280.9K<!--/m--> (<!--m:headroomSnK-->−$130.9K<!--/m-->).</p>
+        <!-- model:begin uses-table-html -->
+        <!-- generated from model/model.mjs — edit the model, then `node model/render.mjs` -->
+        <table class="mini">
+          <tr><th>Little Italy — sources &amp; uses</th><th class="hr">Amount</th></tr>
+          <tr><th>Fit-out (net of TI and grants)</th><td>$85.0K</td></tr>
+          <tr><th>FF&E</th><td>$14.0K</td></tr>
+          <tr><th>Security deposit</th><td>$13.0K</td></tr>
+          <tr><th>Down payment</th><td>$0.0K</td></tr>
+          <tr><th>Closing costs</th><td>$0.0K</td></tr>
+          <tr><th>Occupancy before opening</th><td>$26.0K</td></tr>
+          <tr><th>Hiring & training</th><td>$14.0K</td></tr>
+          <tr><th>Licenses, architect, attorney</th><td>$14.0K</td></tr>
+          <tr><th>Opening inventory</th><td>$5.5K</td></tr>
+          <tr><th>Contingency</th><td>$14.9K</td></tr>
+          <tr><th>Working capital <i>(derived)</i></th><td>$32.5K</td></tr>
+          <tr><th><b>Required capital</b></th><td><b>$218.9K</b></td></tr>
+          <tr><th>$150K cap — headroom</th><td>−$68.9K</td></tr>
+        </table>
+        <!-- model:end uses-table-html -->
+        <p><b>The gap is not one missing line.</b> The security deposit (<!--m:depositLiK-->$13.0K<!--/m-->) was the omission the proposal flagged, but the pre-opening occupancy, the hiring and training weeks, the licensing and design fees, the opening inventory and the contingency on hard cost are each comparable in size and were each equally absent. Risk 4 says lease-path all-in that can't fit the cap after TI negotiation is a G2 stop, not a stretch — the model can now see the stop, and it reports it in red rather than trimming a line to fit. On the SBLP-buy path the same registry applies with different entries: down payment + closing + FF&amp;E + the same derived working capital, which is why the two "not modeled" tiles are gone.</p>
+        <p><b>Fit-out moves with the site now.</b> D7's flat $85K is $34/sf over Little Italy's 2,500 sf; carried to SN/HT's 3,000 sf it is <!--m:fitoutSnK-->$102.0K<!--/m--> — <b><!--m:fitoutDeltaK-->+$17.0K<!--/m--></b> of cash, and <!--m:scopeOverrunSnK-->$17.0K<!--/m--> over the scope cap D7 committed. The site's annual occupancy saving is ~$14K/yr, so the trade is defensible on payback — but under a binding cash cap the hidden number is the one that decides, and the Location lever now states it.</p>
+        <p><b>Working capital stopped being an assertion.</b> It is the trough of the cash curve: the peak cumulative deficit from opening to stabilization, which is a cash-flow quantity and was carried as a $50–65K band. At the base case the curve <i>never turns</i> — stabilized comp is negative there, so the cumulative line is <!--m:peakDeficitK-->$168.8K<!--/m--> down at month 60 and still falling, and months to cash-flow positive is <b><!--m:monthsToPositiveText-->never, within the horizon<!--/m--></b>. There is no trough to measure, so working capital falls back to funding the runway at the stabilized burn (<!--m:runwayReserveK-->$32.5K<!--/m-->). §6's $50–65K reconciles against the <i>gate</i> case, not the base case the same section prints — a stated-basis figure carried one scenario across, which is the same family of finding as the operations line.</p>
         <h3>Two different “bail” lines — one static, one derived</h3>
-        <p>The plan has two stop rules that are easy to conflate. The <b>lean stop at 70 walk-ins/day</b> is a <i>pre-signature evidence rule</i> (risk 1): if counts come in under 70 post-haircut in both markets, no lease gets signed. It is deliberately static and absolute — it is a precommitment about what evidence justifies risking capital at all, not a statement about operating survival. The <b>bail line</b> is the operating question — how deep a loss the funded venture can sustain — and that is <i>not</i> static: it is the reserve spread over the decision horizon, <span class="mono">−(venture cash − net build-out + abatement relief) × 12 / runway</span>. Every capital lever moves it: harder TI negotiation deepens it, a build-out overrun shallows it. Cells red-ringed in the matrix burn the reserve before the verdict date — losses there don't buy information, they just end the venture. At plan defaults (<!--m:ventureCashK-->$150K<!--/m--> − <!--m:buildCapK-->$85K<!--/m--> = $65K reserve over <!--m:runwayMonths-->24<!--/m--> months) the line sits at ≈ <b><!--m:bailLineK-->−$32K<!--/m-->/yr</b>: which is exactly why §6 calls the Lean scenario (−$65 to −$95K) “not survivable” while the base case (<!--m:compLi-->−$15K<!--/m-->) is a slow bleed the reserve can carry past an honest verdict (~5 years of runway).</p>
+        <p>The plan has two stop rules that are easy to conflate. The <b>lean stop at 70 walk-ins/day</b> is a <i>pre-signature evidence rule</i> (risk 1): if counts come in under 70 post-haircut in both markets, no lease gets signed. It is deliberately static and absolute — it is a precommitment about what evidence justifies risking capital at all, not a statement about operating survival. The <b>bail line</b> is the operating question — how deep a loss the funded venture can sustain — and that is <i>not</i> static: it is the reserve spread over the decision horizon, <span class="mono">−(venture cash − the capital spend before working capital) × 12 / runway</span>. Every deal term moves it, because every deal term moves the spend. <b>The formula and the figure both changed with this version, and the change is the finding.</b> The old reading was <span class="mono">venture cash − net build-out + abatement relief</span>, which counted only the fit-out against the cap and put the line at ≈−$32K/yr. Now that the spend is the whole uses registry, the capital side consumes <!--m:requiredCapitalLiK-->$218.9K<!--/m--> against a <!--m:ventureCashK-->$150K<!--/m--> cap: there is no residual left to absorb operating losses at all, so the reserve is negative and the bail line sits at <b><!--m:bailLineK-->$0K<!--/m-->/yr</b>. Read plainly, that says the venture as specified cannot fund <i>any</i> operating loss past opening — not that losses are survivable to −$32K. Every negative cell in the matrix is therefore red-ringed, which is the honest picture of a plan whose capital requirement exceeds its capital: §6's “not survivable” Lean scenario and its own base case (<!--m:compLi-->−$15K<!--/m-->) are on the same side of the line until the cash gate is closed by negotiation, by grants, or by cutting scope.</p>
         <h3>What changed across versions, and what deliberately didn't</h3>
         <p><b>Adopted:</b> catering endogenous to the rooms engine; wages ordinal; site-relative café columns and re-anchored defaults; derived gates; the capital/concessions submodel; club churn reclassified into the market hypothesis (it is a claim about group retention behavior — the pilot measures it — not a property of the site or deal); room count fixed at 3 (a 4th room without footprint cost was a free-lunch lever); the $30K partial-income floor retired in favor of two economic-profit tiers — a living wage at zero opportunity cost, then the economic band at a risk-adjusted return — with capital at risk as a lever; wage rungs re-priced bottom-up from take-home + payroll + benefits, with MIT living as both the default and the rung the others are compared against, and D6 renamed <i>Living+</i>; the owner's wage-equivalent separated from the staff rate, carrying FICA and benefits but not the unemployment and workers'-comp lines that cover employees only; and the back-solved site basis retired in favor of a line per §5/§6 quantity — the café contribution margin promoted to a lever, the day-room and print lines modelled, and revenue-variable operations (card fees + marketing) broken out from the fixed operating base, which is what reconciles the plan's own $1.8K marginal with its own 68% pro-forma margin. Revenue-variable operations had been declined in an earlier version on comparability grounds; reconciling the plan with itself is worth more than cell-for-cell comparability with a matrix built on the error.</p>
+        <p><b>This version added the capital layer</b>, and it is the largest single change the tool has taken. Nine capital quantities were sliders and nothing was derived; required capital was never computed at all, and the one figure that looked like an answer — “cash at risk” — was the sum of two of those sliders. Now: deal terms sit beside site geometry as a first-class object; TI is priced in #17's own <span class="mono">$/sf</span> rather than a $K slider that could not reach the plan's own ask at the larger site; fit-out is <span class="mono">sf × $/sf</span> so the site trade shows its capital half; a uses-of-cash registry carries the deposit, FF&amp;E, pre-opening occupancy, hiring, licensing, inventory and contingency lines the plan names and the model never held, under the same declaration obligations as the cost registry; a monthly ramp gives the model its one time dimension, so working capital is the trough of a curve instead of an assertion; and capital at risk is derived from that total, so the owner's bar finally moves when the deal moves. <b>Why it was worth the size:</b> the defect it fixes is not cosmetic — negotiating TI, landing grants or abating rent changed nothing about the bar the owner had to clear, and the two capital systems could be set into direct contradiction with nothing flagged. <b>What it cost:</b> the plan's headline cash claim no longer holds, and the page says so in red. That was ruled the right outcome — leaving the tool asserting a fit the model contradicts would recreate exactly the docs-versus-model drift the generated-figures loop exists to prevent. The design proposal this implements was deleted on landing; its reasoning lives in the business plan's decision log and in this card.</p>
         <p><b>Considered and declined, to keep descriptive power without false precision:</b> (1) a price–utilization demand curve — the only elasticity evidence is the analog's near-sellout at $5–10/hr, one point; inventing a curve would launder a guess into a surface, so price and utilization stay independent with the evidence region shaded instead — the Phase 0.5 graduation ask is precisely the experiment that buys this curve. (2) Seasonality — the plan handles it as a 20–25% haircut on counts before they enter, not as a model term.</p>
         <h3>Every line is its own quantity — there is no catch-all</h3>
         <p>An earlier version carried a single <i>site basis</i> of $107K, back-solved so that plan marks reproduced §6. That number did not survive a sniff test, and it should not have: §6's occupancy plus operations for Little Italy is <b>$143K</b>, not $107K. The $36K difference was two things the label never said — the day-room and print lines the tool did not model (worth ~$14K of contribution), and a <b>$22K café-margin error</b>. The old café margin, 60.6%, was reverse-engineered from the plan's stated marginal of <span class="mono">~$1.8K</span> per walk-in/day (<span class="mono">8.25 × 360 × 0.606 = 1,800</span>) and then used to compute a <i>level</i>. A marginal rate is not an average rate; the gap went into the plug.</p>
@@ -588,7 +735,7 @@
   var MIT_RUNG = 2;            // the comparison baseline
   var FIN = {
     lease:'Own cash, everything under the <$150K cap (D7): fit-out ≤$85K, working capital $50–65K first.',
-    buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, but builds ~$10K/yr of equity — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the G2 cash math below no longer applies.'
+    buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, and the loan builds equity as it amortizes — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the cash gate applies here too, against a down payment, closing costs and the same derived working capital.'
   };
   var UTILS = [25,33,40,45,50,55,60,65,70,75,80];
   var TXREL = [0.7,0.8,0.9,1.0,1.1,1.2,1.3];   // café columns as multiples of the site's mark
@@ -602,16 +749,76 @@
   // benchmark matrix quote it, so it lives here rather than in their prose.
   var PLAN_DRAW_FLOOR = 30;
   var WC_BAND = [50, 65];              // $K: §6's working-capital + Year-1 ramp reserve, as the plan states it
-  var WC = Math.round((WC_BAND[0] + WC_BAND[1]) / 2);   // the band's midpoint — what the cash test carries
-  var WC_FLOOR = 45;                  // abatement relief cannot take the reserve below this
+  var WC = Math.round((WC_BAND[0] + WC_BAND[1]) / 2);   // the band's midpoint — what the stated basis carries
   var OWNER_HRS = 40;                 // owner’s gridded week: ~30 on the floor + ~10 admin/sales
   var RET_LO = 0.10, RET_HI = 0.20;   // required return on capital at risk: opportunity cost → illiquid-smallco
-  var EQUITY_RANGE = [180,300];       // plan’s grant-free cash-to-open range ($K); default is the midpoint
-  var BUY_EQUITY = 10;                // $K/yr principal paydown on the SBLP path — counts toward the return side
+  var EQUITY_RANGE = [180,300];       // plan’s grant-free cash-to-open range ($K) — an assertion the capital layer can now check
+  var BUY_EQUITY = 10;                // $K/yr principal paydown the plan states for the SBLP path; principalK() is the built figure
 
+  // ---- the capital layer: deal terms, the uses of cash, and the ramp ----------
+  // Required capital is a derived output, not a slider, and the chain that derives
+  // it is a directed acyclic graph. It has to stay one:
+  //
+  //   comp() → rampSeries() → peakDeficitK() → workingCapitalK()
+  //          → requiredCapitalK() → capitalAtRiskK() → bandLoK()/bandHiK()
+  //
+  // comp() reads occupancy, the operations aggregates, labor and the commons
+  // budget. It never reads the owner's bars, never reads USES, and never reads
+  // working capital — so the capital layer can depend on the operating model
+  // without the operating model depending back, and the ramp can call comp() at a
+  // month's marks without re-entering itself. Two changes would close the cycle
+  // and must not be written: putting the replacement-capex reserve inside comp()
+  // (it lives in drawK(), below the operating model, for exactly this reason), and
+  // deriving the depreciable base from requiredCapitalK() rather than from the
+  // hard-cost uses — required capital contains working capital, which contains
+  // comp(), so that base would run the reserve back into the number it is
+  // subtracted from.
+  //
+  // Deal terms, beside SITES: site geometry and the deal are the two things
+  // required capital is a function of. `tiPsf` and `abateMo` are the declared
+  // defaults for the two terms the explorer drags — they are carried live in
+  // S.ti ($/sf) and S.abate (months) so `withState` can move them; the rest are
+  // read from DEAL directly.
+  var DEAL = {tiPsf:0, abateMo:0, depositMo:2, constructionMo:4, rampMo:18,
+                     deliveryCondition:'as-is', escalationPct:3, termYrs:5};
+  // Fit-out priced per square foot instead of as a flat budget. $34/sf is the rate
+  // today's flat $85K implies over Little Italy's 2,500 sf, so the LI defaults
+  // reproduce the published build-out figure exactly and SN/HT's extra 500 sf
+  // costs what it actually costs.
+  var FITOUT_PSF = 34;
+  var FFE_PSF = 5.6;            // $14K at LI's 2,500 sf — the [8,20] band's midpoint, per sf so it moves with the site
+  var PREOPEN_WKS = 6;          // staffed weeks before the doors open: ~4 hiring, ~2 training
+  var LICENSES_K = 14;          // licenses, architect, attorney — the [8,20] midpoint
+  var INVENTORY_K = 5.5;        // opening inventory — the [3,8] midpoint
+  var CONTINGENCY_RATE = 0.15;  // on hard cost (fit-out + FF&E) — the [10,20]% midpoint
+  var CLOSING_RATE = 0.035;     // buy path: closing costs as a share of price — the [2,5]% midpoint
+  var USEFUL_LIFE_YRS = 8;      // fit-out and FF&E replaced on a 7–10 year life
+  var TAX_DIST_RATE = 0.25;     // member tax distribution on taxable income — blended federal + MD, net of QBI
+  var RECOVERY = {deposit:1.0, ffe:0.30};   // what survives a wind-down: the deposit in full, FF&E at resale
+  // The ramp: how fast the two engines reach the stabilized marks comp() prices.
+  // The opening month is a fraction of stabilized — clubs recruit slower than the
+  // café fills — and the fractions close linearly over DEAL.rampMo months.
+  var RAMP_OPEN = {util:0.35, tx:0.50};
+  var RAMP_HORIZON_MO = 60;     // months carried past opening; a curve that has not turned by here has not turned
+  var WC_BASIS = 'built';       // 'built' = the ramp's peak cash deficit | 'stated' = §6's $50–65K
+  // The buy path, priced. The plan carries no purchase price — §6 gives only "buy
+  // occupancy ≈ lease + $2K" — so pricePsf is graded D and banded, and the debt
+  // service it implies is reconciled against that stated figure rather than
+  // assumed to reproduce it.
+  var LOAN = {pricePsf:105, ltv:0.90, ratePct:6.5, termYrs:20};
+  var PROP_TAX_RATE = 0.02248;  // Baltimore City real property — $2.248 per $100 of assessed value
+  var OWNER_INS_K = 4;          // property insurance the owner carries directly on the buy path
+  var STRUCT_RESERVE_PSF = 1.0; // roof/HVAC/structure reserve, $/sf/yr — the landlord's job on the lease path
+
+  // `build` is D7's scope cap, not the fit-out budget: the derived scope is what
+  // the site costs to build out and the cap is what the plan committed to spend,
+  // so scopeOverrunK() can report the difference instead of hiding it. `ti` is in
+  // $/sf (#17's own units), not $K. `equity` is null meaning *derive it* —
+  // capital at risk comes from the uses registry; a number overrides, so
+  // withState({equity:300}, …) still answers a what-if.
   var DEF = {site:'li', fin:'lease', util:33, tx:100, price:90, ticket:8.25, cad:'mixed', cafeM:CAFE_MARGIN_DEF,
              events:5.5, caClub:15, caEvent:50, wage:MIT_RUNG, commons:6, churn:1.4,
-             build:85, ti:0, abate:0, grants:0, cash:150, runway:24, equity:240};
+             build:85, ti:DEAL.tiPsf, abate:DEAL.abateMo, grants:0, cash:150, runway:24, equity:null};
   let S = Object.assign({}, DEF);
 
   function evEqOf(ev){ return ev*12/52; }
@@ -835,9 +1042,13 @@
   // their own. Pricing the owner’s year at the full staff rate would overstate the bar.
   function ownerRate(){ var w = WAGES[S.wage]; return w.cash*(1+FICA) + w.ben; }
   function livingK(){ return OWNER_HRS * 52 * ownerRate() / 1000; }
-  function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
-  function bandLoK(){ return livingK() + RET_LO*S.equity; }
-  function bandHiK(){ return livingK() + RET_HI*S.equity; }
+  function equityBuildK(){ return principalK(); }
+  // The capital the return is charged on. Null equity means derive it from the
+  // uses registry — which is what makes the bar move when the deal moves: harder
+  // TI, a grant, or an abated month all land here. A number is an override.
+  function equityK(){ return S.equity === null ? capitalAtRiskK() : S.equity; }
+  function bandLoK(){ return livingK() + RET_LO*equityK(); }
+  function bandHiK(){ return livingK() + RET_HI*equityK(); }
   // Occupancy, built from its parts: base rent is floor area × the site's asking
   // rate; NNN (CAM, taxes, insurance) is what §6's occupancy total leaves after it.
   // NNN is still a residual — §6's total stays authoritative — but it is now a
@@ -867,21 +1078,280 @@
     return Math.max(0, sessions(util) - evEqOf(S.events)) / CADENCE[S.cad].avg;
   }
   function txCols(){ return TXREL.map(function(r){ return Math.round(r*SITES[S.site].mark); }); }
-  function cashK(){ // G2 cash at risk (lease path): net build-out + WC reserve less abatement relief
-    if (S.fin==='buy') return null;
-    var netBuild = Math.max(0, S.build - S.ti - S.grants);
-    var relief = S.abate * SITES[S.site].occ/12;
-    return netBuild + Math.max(WC_FLOOR, WC - relief);
+  // ---- site geometry and the deal terms the capital layer reads ---------------
+  function sf(){ return SITES[S.site].sf; }
+  function tiPsf(){ return S.ti; }                  // the live lever, in DEAL.tiPsf's units
+  function tiK(){ return tiPsf() * sf() / 1000; }   // #17's $15–25/sf ask, stated in the plan's own units
+  function fitoutScopeK(){ return useInput('fitout', FITOUT_PSF) * sf() / 1000; }
+  // What the site's geometry says the build-out costs, against what D7 said it
+  // would spend. The model reports the difference; it does not clip the scope to
+  // the cap, because clipping would hide the one number the cap exists to test.
+  function scopeOverrunK(){ return Math.max(0, fitoutScopeK() - S.build); }
+  // Abatement is free rent from lease commencement, so the construction months
+  // consume it first and only what is left spills into the operating ramp.
+  // Counting it in both places would relieve the same months twice; splitting it
+  // this way leaves required capital the same wherever the relief lands.
+  function abateMonths(){ return S.fin==='buy' ? 0 : S.abate; }
+  function abatePreopenMo(){ return Math.min(abateMonths(), DEAL.constructionMo); }
+  function abateOpenMo(){ return Math.max(0, abateMonths() - DEAL.constructionMo); }
+  function pricePsf(){ return useInput('downpayment', LOAN.pricePsf); }
+  function priceK(){ return pricePsf() * sf() / 1000; }
+
+  // ---- the uses-of-cash registry ----------------------------------------------
+  // The same shape and the same four obligations as COSTS: an id, the driver the
+  // amount scales with, an evidence grade, an amount, and — where the number is an
+  // estimate rather than a commitment — the band it is estimated within. `unit` is
+  // the band's unit: 'K' is $K, 'psf' dollars per square foot, 'mo' months of
+  // occupancy, 'wk' staffed weeks, 'rate' a share. `derived` marks a use that is
+  // the output of another part of the model rather than an independently sourced
+  // number — working capital is the ramp's trough, which is the whole point of
+  // building the ramp. `amount()` returns $K as a positive magnitude at the
+  // current state; a use that does not apply on the current finance path returns
+  // zero, the way the purchase premium does in COSTS.
+  var USES = [
+    {id:'fitout', label:'Fit-out (net of TI and grants)', driver:'sqft', ev:'D',
+     band:[25,45], unit:'psf', src:'D7’s $85K over LI’s 2,500 sf is $34/sf; the band is the as-is to vanilla-box range',
+     amount:function(){ return Math.max(0, fitoutScopeK() - (S.fin==='buy' ? 0 : tiK()) - S.grants); }},
+    {id:'ffe', label:'FF&E', driver:'sqft', ev:'D',
+     band:[8,20], unit:'K', src:'§6 names FF&E in the cash paragraph and carries no line for it',
+     amount:function(){ return useInput('ffe', FFE_PSF * sf() / 1000); }},
+    {id:'deposit', label:'Security deposit', driver:'months', ev:'C',
+     band:[2,3], unit:'mo', src:'2–3 months of occupancy is the market term; the plan names deposits and carries no line',
+     amount:function(){ return S.fin==='buy' ? 0 : useInput('deposit', DEAL.depositMo) * occupancyK() / 12; }},
+    {id:'downpayment', label:'Down payment', driver:'price', ev:'D',
+     band:[60,150], unit:'psf', src:'no price in the plan — the band is the SN/HT small-commercial range; closing and property tax read the same price',
+     amount:function(){ return S.fin==='buy' ? (1 - LOAN.ltv) * priceK() : 0; }},
+    {id:'closing', label:'Closing costs', driver:'price', ev:'C',
+     band:[0.02,0.05], unit:'rate', src:'title, transfer and recordation, appraisal, legal — 2–5% of price',
+     amount:function(){ return S.fin==='buy' ? useInput('closing', CLOSING_RATE) * priceK() : 0; }},
+    {id:'preopen-occ', label:'Occupancy before opening', driver:'months', ev:'C',
+     band:null, unit:null, src:'construction months less the abatement they consume, at the site’s own occupancy',
+     amount:function(){ return Math.max(0, DEAL.constructionMo - abatePreopenMo()) * occupancyK() / 12; }},
+    {id:'preopen-pay', label:'Hiring & training', driver:'hours', ev:'D',
+     band:[4,10], unit:'wk', src:'staffed weeks off the plan’s own grid before revenue starts',
+     amount:function(){ return useInput('preopen-pay', PREOPEN_WKS) * laborK() / 52; }},
+    {id:'licenses', label:'Licenses, architect, attorney', driver:'fixed', ev:'C',
+     band:[8,20], unit:'K', src:'liquor and food licensing, permit drawings, lease and entity counsel',
+     amount:function(){ return useInput('licenses', LICENSES_K); }},
+    {id:'inventory', label:'Opening inventory', driver:'fixed', ev:'C',
+     band:[3,8], unit:'K', src:'first fill of café, catering and consignment stock',
+     amount:function(){ return useInput('inventory', INVENTORY_K); }},
+    {id:'contingency', label:'Contingency', driver:'hardCost', ev:'D',
+     band:[0.10,0.20], unit:'rate', src:'a rate on hard cost (fit-out + FF&E) — the line a first build-out always needs',
+     amount:function(){ return useInput('contingency', CONTINGENCY_RATE) * hardCostK(); }},
+    {id:'working-cap', label:'Working capital', driver:'ramp', ev:'D', derived:true,
+     band:WC_BAND, unit:'K', src:'the ramp’s peak cash deficit; the band is §6’s stated $50–65K, which it is reconciled against',
+     amount:function(){ return workingCapitalK(); }}
+  ];
+  function useById(id){
+    for (var ui=0; ui<USES.length; ui++){ if (USES[ui].id === id) return USES[ui]; }
+    return null;
   }
-  function reserveK(){ // cash left to absorb operating losses after capital spend (lease path)
-    if (S.fin==='buy') return null;
-    var netBuild = Math.max(0, S.build - S.ti - S.grants);
-    var relief = S.abate * SITES[S.site].occ/12;
-    return S.cash - netBuild + relief;
+  function useAmountK(id){
+    var u = useById(id);
+    if (u === null) throw new Error('unknown use id: ' + id);
+    return u.amount();
+  }
+  // The hard cost the contingency rides on and the replacement reserve is
+  // depreciated over: the two uses that buy a physical thing. Deliberately not
+  // requiredCapitalK() — see the acyclicity note above.
+  function hardCostK(){ return useAmountK('fitout') + useAmountK('ffe'); }
+  // Every use that carries a band — the list a capital sensitivity sweep walks,
+  // and the id each row's `withUse` takes. The derived one is excluded: pinning an
+  // output is not a sweep of an input.
+  var CAP_INPUTS = [];
+  USES.forEach(function(u){
+    if (u.band && u.derived !== true) CAP_INPUTS.push({id:u.id, label:u.label, ev:u.ev, band:u.band, unit:u.unit});
+  });
+  function capInputById(id){
+    for (var ki=0; ki<CAP_INPUTS.length; ki++){ if (CAP_INPUTS[ki].id === id) return CAP_INPUTS[ki]; }
+    return null;
+  }
+  var USE_OVER = {};                 // use id → pinned input value; written only by withUse
+  function usePinned(id){ return Object.prototype.hasOwnProperty.call(USE_OVER, id); }
+  function useInput(id, dflt){ return usePinned(id) ? USE_OVER[id] : dflt; }
+  // Pin one banded use to a value — a band endpoint, for a capital sweep — and
+  // evaluate `fn` with it, the same shape as withCost. The value is in the band's
+  // own unit, so 'fitout' takes $/sf and 'contingency' takes a rate.
+  function withUse(id, value, fn){
+    if (capInputById(id) === null) throw new Error("withUse: '" + id + "' is not a banded use");
+    var po = USE_OVER;
+    USE_OVER = Object.assign({}, USE_OVER);
+    USE_OVER[id] = value;
+    try { return fn(); } finally { USE_OVER = po; }
+  }
+  // The same idea for the deal terms and the loan, which are module objects rather
+  // than lever state — so a generator can ask what four more construction months
+  // or a point of interest cost without disturbing anything else.
+  function withDeal(over, fn){
+    var pd = DEAL;
+    DEAL = Object.assign({}, DEAL, over);
+    try { return fn(); } finally { DEAL = pd; }
+  }
+  function withLoan(over, fn){
+    var pl = LOAN;
+    LOAN = Object.assign({}, LOAN, over);
+    try { return fn(); } finally { LOAN = pl; }
+  }
+  // What it costs to open, and what is left of D7's cap after it. This is the G2
+  // test computed rather than asserted.
+  function requiredCapitalK(){
+    var t = 0;
+    USES.forEach(function(u){ t += u.amount(); });
+    return t;
+  }
+  function headroomK(){ return S.cash - requiredCapitalK(); }
+
+  // ---- the monthly ramp: the model's one time dimension -----------------------
+  // The minimum time dimension that makes working capital derivable. The series
+  // starts at opening — the construction months are already carried as
+  // `preopen-occ`, so starting at signature would double-count them — and runs to
+  // RAMP_HORIZON_MO. Each month reprices comp() at that month's marks and divides
+  // by twelve; nothing about the stabilized model is restated here, which is what
+  // keeps the ramp and the Year-2 snapshot from drifting apart. Occupancy is
+  // waived in the abated months that survived construction.
+  function rampFrac(m, open){
+    if (DEAL.rampMo <= 1) return 1;
+    return open + (1 - open) * Math.min(1, (m - 1) / (DEAL.rampMo - 1));
+  }
+  function rampSeries(){
+    var out = [], cum = 0, free = abateOpenMo(), relief = occupancyK() / 12;
+    for (var m=1; m<=RAMP_HORIZON_MO; m++){
+      var u = S.util * rampFrac(m, RAMP_OPEN.util);
+      var t = S.tx * rampFrac(m, RAMP_OPEN.tx);
+      var margin = comp(u, t) / 12 + (m <= free ? relief : 0);
+      cum += margin;
+      out.push({m:m, util:u, tx:t, margin:margin, cumulative:cum});
+    }
+    return out;
+  }
+  // The trough, as a positive magnitude, floored at zero. Each of these takes an
+  // already-computed series so a caller that needs several does not rebuild it.
+  function peakDeficitK(series){
+    if (series === undefined) series = rampSeries();
+    var lo = 0;
+    for (var i=0; i<series.length; i++){ if (series[i].cumulative < lo) lo = series[i].cumulative; }
+    return -lo;
+  }
+  // Null, not a large number, where the ramp never turns inside the horizon: the
+  // difference between "month 16" and "not within five years" is the answer, and
+  // rendering the second as a number would bury it.
+  function monthsToPositive(series){
+    if (series === undefined) series = rampSeries();
+    for (var i=0; i<series.length; i++){ if (series[i].margin >= 0) return series[i].m; }
+    return null;
+  }
+  function monthsToRecover(series){
+    if (series === undefined) series = rampSeries();
+    for (var i=0; i<series.length; i++){ if (series[i].cumulative >= 0) return series[i].m; }
+    return null;
+  }
+  // The stabilized burn, and the reserve that funds S.runway months of it — the
+  // existing bailComp() relation inverted. This is the fallback when the ramp
+  // never turns: there is no trough to measure, so the requirement is however long
+  // the operator has decided to fund the verdict, which is what `runway` always
+  // was. Where the ramp does turn, `runway` becomes a readout instead.
+  function stabilizedBurnK(){ return Math.max(0, -comp(S.util, S.tx)); }
+  function runwayReserveK(){ return stabilizedBurnK() * S.runway / 12; }
+  function rampTurns(){ return monthsToPositive() !== null; }
+  // Working capital, on one of two bases — the same arrangement, and the same
+  // reason for it, as OPS_BASIS. Under 'built' it is what the ramp requires; under
+  // 'stated' it is §6's own $50–65K midpoint. The stated basis survives because
+  // reproducing what §6 asserted is still worth asserting; the built basis is the
+  // one that can be wrong, and reconciling the two is the real check.
+  function workingCapitalK(){
+    if (WC_BASIS === 'stated') return WC;
+    var s = rampSeries();
+    return monthsToPositive(s) === null ? runwayReserveK() : peakDeficitK(s);
+  }
+  function withWcBasis(basis, fn){
+    var pw = WC_BASIS;
+    WC_BASIS = basis;
+    try { return fn(); } finally { WC_BASIS = pw; }
+  }
+
+  // ---- closing the loop to the owner's bar ------------------------------------
+  // What survives a wind-down: the deposit comes back on a surrender in good
+  // standing, FF&E resells at a haircut. Fit-out is a leasehold improvement and
+  // stays with the building; the down payment on a 90%-LTV purchase is not
+  // counted, because a forced sale at that leverage rarely returns it.
+  function recoverableK(){
+    return RECOVERY.deposit*useAmountK('deposit') + RECOVERY.ffe*useAmountK('ffe');
+  }
+  function capitalAtRiskK(){ return requiredCapitalK() - recoverableK(); }
+
+  // ---- draw, distinguished from comp ------------------------------------------
+  // comp() is the operating residual and is not touched by any of this. A draw is
+  // the cash the owner can actually take: comp less the reserve against the
+  // capital the year consumed, less the tax the pass-through income triggers, less
+  // principal on the buy path. The reserve is depreciation the model never carried
+  // — a stabilized year that never reserves against the fit-out it is wearing out
+  // overstates what the owner takes home.
+  function depreciableBaseK(){ return hardCostK(); }
+  function replacementReserveK(){ return depreciableBaseK() / USEFUL_LIFE_YRS; }
+  function taxDistK(util, tx){
+    if (util === undefined) util = S.util;
+    if (tx === undefined) tx = S.tx;
+    return TAX_DIST_RATE * Math.max(0, comp(util, tx) - replacementReserveK());
+  }
+  function drawK(util, tx){
+    if (util === undefined) util = S.util;
+    if (tx === undefined) tx = S.tx;
+    return comp(util, tx) - replacementReserveK() - taxDistK(util, tx) - principalK();
+  }
+
+  // ---- the buy path, priced ---------------------------------------------------
+  // The most speculative part of the layer: §6 gives no purchase price, only "buy
+  // occupancy ≈ lease + $2K". So the price is banded and graded D, and what the
+  // loan implies is *reconciled* against §6's figure rather than fitted to it —
+  // occupancyK() stays on §6's stated basis, so comp() is unmoved on either path.
+  function loanK(){ return LOAN.ltv * priceK(); }
+  function pmtFactor(){        // annual debt service per $1 of loan
+    var r = LOAN.ratePct/100/12, n = LOAN.termYrs*12;
+    if (r === 0) return 12/n;
+    return 12 * r / (1 - Math.pow(1 + r, -n));
+  }
+  function debtServiceK(){ return loanK() * pmtFactor(); }
+  // Principal repaid in loan year `yr` — the amortization the flat BUY_EQUITY = 10
+  // stood in for, and the number that actually moves as the loan seasons.
+  function loanPrincipalK(yr){
+    var r = LOAN.ratePct/100/12, n = LOAN.termYrs*12;
+    var pay = debtServiceK()/12, bal = loanK(), paid = 0;
+    for (var m=1; m<=n; m++){
+      var pr = pay - bal*r;
+      bal -= pr;
+      if (Math.ceil(m/12) === yr) paid += pr;
+    }
+    return paid;
+  }
+  function principalK(){ return S.fin==='buy' ? loanPrincipalK(2) : 0; }
+  function propertyTaxK(){ return PROP_TAX_RATE * priceK(); }
+  function structReserveK(){ return STRUCT_RESERVE_PSF * sf() / 1000; }
+  // The two sides of the buy-occupancy reconciliation: what the loan and the
+  // building imply, against what §6 states.
+  function builtBuyOccupancyK(){
+    return debtServiceK() + propertyTaxK() + OWNER_INS_K + structReserveK();
+  }
+  function statedBuyOccupancyK(){ return SITES[S.site].occ + 2; }
+  // The price per square foot at which the two would agree. Built occupancy is
+  // linear in the price, so this is solved rather than searched — and reporting it
+  // beside the band is what says whether §6's figure is reachable at all.
+  function buyPricePsfForStated(){
+    var ksf = sf()/1000;
+    var slope = LOAN.ltv*ksf*pmtFactor() + PROP_TAX_RATE*ksf;
+    return (statedBuyOccupancyK() - OWNER_INS_K - structReserveK()) / slope;
+  }
+
+  // ---- the cash gate, on both paths -------------------------------------------
+  // The old cashK() lived here. It meant "venture cash at risk on the lease path"
+  // and returned an input echo; requiredCapitalK() now derives that number and is
+  // the honest name for it, so keeping a second name for the same quantity only
+  // invites reading the old meaning into the new figure.
+  function reserveK(){ // cash left to absorb operating losses after the capital spend
+    return S.cash - (requiredCapitalK() - workingCapitalK());
   }
   function bailComp(){ // deepest sustainable annual loss: reserve spread over the runway
-    var r = reserveK();
-    return r===null ? null : -Math.max(0,r)*12/S.runway;
+    return -Math.max(0, reserveK())*12/S.runway;
   }
   function utilForTarget(target, tx){ // smallest util% with comp >= target (piecewise-linear; bisect)
     if (comp(140, tx) < target) return null;
@@ -1109,6 +1579,10 @@
 
   function render(){
     var c = comp(S.util, S.tx);
+    // The capital layer, read once per render and handed to everything that
+    // needs it: rampSeries() reprices comp() sixty times, and the rail, both
+    // charts and the tornado all want the same answer at the same settings.
+    var cap = capitalState();
     var sess = sessions(S.util);
     var clubs = clubsFor(S.util);
     var roomsC = roomsK(S.util);
@@ -1143,29 +1617,21 @@
     el('out-caevent').textContent = S.caEvent + '%';
     el('caevent-hint').textContent = '~$'+CATER_ORDER+' avg pre-order at ~60% margin · currently ≈ ' +
       (Math.max(0,sess-evEqOf(S.events))*(S.caClub/100) + Math.min(evEqOf(S.events),sess)*(S.caEvent/100)).toFixed(1) + ' orders/wk';
-    el('sitehint').textContent = siteHint(S.site);
+    el('sitehint').innerHTML = siteHint(S.site) + ' ' + siteCapitalHint();
     el('site-li').setAttribute('aria-pressed', S.site==='li');
     el('site-sn').setAttribute('aria-pressed', S.site==='sn');
     document.querySelectorAll('[data-fin]').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.fin===S.fin); });
     el('fin-buy').disabled = (S.site==='li');
     el('finhint').innerHTML = (S.site==='li' ? FIN[S.fin] + ' <i>(§6 models the buy path only for SN/HT.)</i>' : FIN[S.fin]);
     el('out-churn').textContent = '×' + S.churn.toFixed(2);
-    el('out-build').textContent = '$' + S.build + 'K';
-    el('out-ti').textContent = '$' + S.ti + 'K';
-    el('out-abate').textContent = S.abate + ' mo';
-    el('abatehint').textContent = 'Free-rent months fund the Year-1 ramp: ≈ $' + (SITES[S.site].occ/12).toFixed(1) + 'K/mo relief at this site. No effect on stabilized Year-2 comp.';
-    el('out-grants').textContent = '$' + S.grants + 'K';
-    el('out-cash').textContent = '$' + S.cash + 'K';
-    el('out-runway').textContent = S.runway + ' mo';
+    renderDealTerms(cap);
     document.querySelectorAll('[data-wage]').forEach(function(b){ b.setAttribute('aria-pressed', +b.dataset.wage===S.wage); });
     renderWageDetail();
     el('out-commons').textContent = '$' + S.commons + 'K';
-    el('out-equity').textContent = '$' + S.equity + 'K';
-    el('equity-hint').textContent = 'Equity exposed to the venture. Default is the midpoint of the plan’s grant-free cash-to-open range ($' +
-      EQUITY_RANGE[0] + '–' + EQUITY_RANGE[1] + 'K). On the buy path this is the 10% contribution + closing + FF&E.';
+    renderCapitalAtRisk(cap);
     el('bar-hint').innerHTML = 'Living wage <b>' + fmtK(lw,false) + '</b> = 40 hr × 52 × $' + ownerRate().toFixed(2) +
       '/hr — the Wages rung’s take-home and benefits, plus the SE-tax half the owner pays on the draw (no UI or workers’ comp: those cover employees). <b>' + fmtK(bLo,false) + '</b> adds ' + Math.round(RET_LO*100) +
-      '% on $' + S.equity + 'K at risk — a living wage at zero opportunity cost. <b>' + fmtK(bHi,false) +
+      '% on $' + Math.round(equityK()) + 'K at risk — a living wage at zero opportunity cost. <b>' + fmtK(bHi,false) +
       '+</b> adds ' + Math.round(RET_HI*100) + '% or more — the economic band.';
 
     // subsection sums
@@ -1177,10 +1643,9 @@
     var sb = el('sum-bar');
     sb.textContent = '$'+Math.round(bLo)+'K · $'+Math.round(bHi)+'K+';
     sb.className = 'sum ' + ((c+eq) >= bLo ? 'p' : 'n');
-    var cash = cashK(), reserve = reserveK(), bail = bailComp();
-    var sc = el('sum-cash');
-    if (cash === null){ sc.textContent = 'SBLP-gated'; sc.className = 'sum'; }
-    else { sc.textContent = '$' + Math.round(cash) + 'K cash'; sc.className = 'sum ' + (cash <= S.cash ? 'p' : 'n'); }
+    var reserve = reserveK(), bail = bailComp();
+    setSum('sum-deal', tiK() + S.grants + abateMonths()*occupancyK()/12);
+    setSum('sum-cash', cap.headroom);
 
     // readout
     var bn = el('bignum');
@@ -1195,7 +1660,7 @@
       c+eq>=bHi ? '<b>inside</b> the economic band'
                 : 'economic band (<b>'+fmtK(bHi,false)+'+</b>): <b>'+fmtK(bHi-(c+eq),false)+'</b> short'));
     if (S.fin==='buy') chips.appendChild(h('span','chip bar','+ ~<b>$10K</b>/yr equity build — counts toward the return, not the wage'));
-    if (c < 0 && reserve !== null){
+    if (c < 0){
       var mo = reserve > 0 ? reserve/Math.abs(c)*12 : 0;
       chips.appendChild(h('span','chip '+(mo>=S.runway?'':'bad'),
         'runway ≈ <b>'+(mo>=120?'10+ yrs':Math.round(mo)+' mo')+'</b> on the $'+Math.round(Math.max(0,reserve))+'K reserve'));
@@ -1229,23 +1694,372 @@
     tile(utilLabel(uBar), 'rooms for the bar (living wage + '+Math.round(RET_LO*100)+'%) at the café mark', uBar===null||uBar>55);
     tile(Math.round(tBar)+'<span class="u"> walk-ins/day</span>',
       'café for the bar at gate-case rooms (55%)', tBar>1.1*mark);
-    if (cash===null){
-      tile('SBLP','buy path: 10% + closing + FF&E exceeds own cash — no purchase without executed terms (D8)');
-      tile('SBLP','bail line on the buy path is set by the debt structure — not modeled');
-    } else {
-      tile('$'+Math.round(cash)+'K<span class="u"> of $'+S.cash+'K</span>',
-        'cash at risk (G2): net build-out + working capital − abatement relief', cash>S.cash);
-      tile(fmtK(bail)+'<span class="u">/yr</span>',
-        'bail line: deepest sustainable loss — $'+Math.round(Math.max(0,reserve))+'K reserve over '+S.runway+' mo', c<bail);
-    }
+    tile('$'+Math.round(cap.required)+'K<span class="u"> of $'+S.cash+'K</span>',
+      'required capital (G2): the sources-and-uses total against the cap', cap.required>S.cash);
+    tile(fmtK(bail)+'<span class="u">/yr</span>',
+      'bail line: deepest sustainable loss — $'+Math.round(Math.max(0,reserve))+'K reserve over '+S.runway+' mo', c<bail);
 
     // breakdown
     renderBreakdown(c);
 
+    renderWaterfall(cap);
+    renderCashCurve(cap);
+    renderCapTornado(cap);
     renderMatrix();
     renderPipe(sess, clubs);
   }
 
+
+  // ---- the capital layer -----------------------------------------------------
+  // Everything below reads the spliced model and nothing else. The deal terms
+  // that live on DEAL rather than in S (deposit, construction and ramp months)
+  // are moved by writing DEAL directly — DEAL0 keeps the declared defaults so
+  // #reset can put them back, the way DEF does for the lever state.
+  var DEAL0 = {depositMo:DEAL.depositMo, constructionMo:DEAL.constructionMo, rampMo:DEAL.rampMo};
+  // Whether each readout is currently being overridden. It is its own flag, not
+  // a re-reading of the value: checking the box before moving the slider must
+  // leave the box checked, and #reset has to clear both.
+  var OVR = {cash:false, equity:false};
+  var USE_SHORT = {fitout:'Fit-out', ffe:'FF&E', deposit:'Deposit', downpayment:'Down pmt',
+                   closing:'Closing', 'preopen-occ':'Pre-open', 'preopen-pay':'Hiring',
+                   licenses:'Licenses', inventory:'Inventory', contingency:'Conting.',
+                   'working-cap':'Working cap'};
+
+  // One pass over the capital layer, shared by the rail, both charts and the
+  // tornado. rampSeries() is the expensive call — sixty repricings of comp() —
+  // so it is made here and the derived quantities are read off the one series.
+  function capitalState(){
+    var series = rampSeries();
+    var toPos = monthsToPositive(series), toRec = monthsToRecover(series);
+    var trough = 0, troughMo = series.length ? series[series.length-1].m : 0;
+    for (var i=0; i<series.length; i++){
+      if (series[i].cumulative < trough){ trough = series[i].cumulative; troughMo = series[i].m; }
+    }
+    return {
+      series: series,
+      uses: USES.map(function(u){
+        return {id:u.id, label:u.label, ev:u.ev, derived:u.derived===true, amount:u.amount()};
+      }),
+      required: requiredCapitalK(),
+      headroom: headroomK(),
+      atRisk: capitalAtRiskK(),
+      peak: peakDeficitK(series),
+      troughMo: troughMo,
+      toPos: toPos,
+      toRec: toRec,
+      turns: toPos !== null,
+      wc: workingCapitalK(),
+      runwayReserve: runwayReserveK(),
+      fitoutScope: fitoutScopeK(),
+      scopeOverrun: scopeOverrunK()
+    };
+  }
+  function moText(m){ return m === null ? 'never, within the horizon' : 'month ' + m; }
+
+  // The site trade-off has a capital half the annual figures never showed: the
+  // larger floor costs more to build out, and under a binding cash cap that is
+  // the half that decides.
+  function siteCapitalHint(){
+    var other = S.site === 'li' ? 'sn' : 'li';
+    var here = fitoutScopeK();
+    var there = withState({site:other, fin:'lease'}, function(){ return fitoutScopeK(); });
+    var dsf = SITES[other].sf - SITES[S.site].sf, dk = there - here;
+    return '<b>Capital consequence:</b> ' + SITES[other].label.split(' /')[0] + '’s ' +
+      (dsf >= 0 ? '+' : '−') + Math.abs(dsf).toLocaleString() + ' sf is ' +
+      (dk >= 0 ? '+' : '−') + '$' + Math.abs(dk).toFixed(1) + 'K of fit-out cash at $' +
+      FITOUT_PSF + '/sf ($' + here.toFixed(1) + 'K here, $' + there.toFixed(1) + 'K there).';
+  }
+
+  function renderDealTerms(cap){
+    el('out-ti').textContent = '$' + S.ti + '/sf';
+    el('ti-hint').innerHTML = 'Landlord tenant-improvement money, in the plan’s own units — #17 asks <b>$15–25/sf</b> on a 5–7 yr term. At this site’s ' +
+      sf().toLocaleString() + ' sf that is <b>$' + tiK().toFixed(1) + 'K</b>. It offsets fit-out cash, so it lowers required capital <i>and</i> the owner’s bar.';
+    el('out-abate').textContent = S.abate + ' mo';
+    el('abatehint').innerHTML = 'Free rent from commencement: ≈ $' + (occupancyK()/12).toFixed(1) +
+      'K/mo here. The construction months consume it first (' + abatePreopenMo() + ' mo), and only what is left (' +
+      abateOpenMo() + ' mo) relieves the ramp — counting it twice would relieve the same months twice. No effect on stabilized Year-2 comp.';
+    el('out-deposit').textContent = DEAL.depositMo + ' mo';
+    el('deposit-hint').innerHTML = '2–3 months of occupancy is the market term. Here that is <b>$' +
+      useAmountK('deposit').toFixed(1) + 'K</b> — the line §6’s cash paragraph names and the model carried no entry for until now.';
+    el('out-constr').textContent = DEAL.constructionMo + ' mo';
+    el('constr-hint').innerHTML = 'Signature to opening. Rent runs through them, less whatever abatement they consume: <b>$' +
+      useAmountK('preopen-occ').toFixed(1) + 'K</b> of occupancy before a single dollar comes in.';
+    el('out-ramp').textContent = DEAL.rampMo + ' mo';
+    el('ramp-hint').innerHTML = 'The doors open at ' + Math.round(RAMP_OPEN.util*100) + '% of stabilized utilization and ' +
+      Math.round(RAMP_OPEN.tx*100) + '% of the café mark, closing to plan linearly over these months. This is what the cash curve below draws.';
+    el('out-delivery').textContent = DEAL.deliveryCondition;
+    el('delivery-hint').textContent = 'Carried as a term and reported, not priced: the fit-out band ($' +
+      capInputById('fitout').band[0] + '–' + capInputById('fitout').band[1] +
+      '/sf) is the as-is-to-vanilla-box range, and the ranking below sweeps that band rather than switching on this word. A vanilla-box delivery is a re-negotiation of the rate, which is the top row of that ranking.';
+    el('out-build').textContent = '$' + S.build + 'K';
+    el('build-hint').innerHTML = 'D7 committed <b>$' + S.build + 'K</b> of scope. This site’s geometry says the build-out costs <b>$' +
+      cap.fitoutScope.toFixed(1) + 'K</b> ($' + FITOUT_PSF + '/sf × ' + sf().toLocaleString() + ' sf)' +
+      (cap.scopeOverrun > 0.05
+        ? ' — <b>$' + cap.scopeOverrun.toFixed(1) + 'K over the cap</b>. The model reports the difference; it does not clip the scope, because clipping would hide the one number the cap exists to test.'
+        : ' — inside the cap.');
+    el('out-grants').textContent = '$' + S.grants + 'K';
+
+    // capital outcome
+    var ovrCash = S.cash !== DEF.cash;
+    var oc = el('out-cash');
+    oc.textContent = '$' + S.cash + 'K';
+    oc.className = 'v' + (ovrCash ? ' n' : '');
+    el('cash-lever').hidden = !OVR.cash;
+    var cw = el('cash-warn');
+    cw.hidden = !ovrCash;
+    if (ovrCash) cw.textContent = 'The cap is overridden: $' + S.cash + 'K against D7’s $' + DEF.cash +
+      'K. D7 is a precommitment about how much of the owner’s own money the venture may consume — moving it answers a what-if, it does not relax the constraint.';
+    setV('out-required', '$' + Math.round(cap.required) + 'K', cap.required > S.cash ? 'n' : 'p');
+    setV('out-headroom', fmtK(cap.headroom), cap.headroom >= 0 ? 'p' : 'n');
+    setV('out-peak', '$' + Math.round(cap.peak) + 'K' + (cap.turns ? ' in month ' + cap.troughMo : ' at month ' + RAMP_HORIZON_MO),
+      cap.peak > S.cash ? 'n' : '');
+    if (cap.turns) setV('out-topos', 'month ' + cap.toPos, 'p');
+    else setV('out-topos', 'never, within the horizon', 'na');
+    el('capout-hint').innerHTML = cap.turns
+      ? 'Working capital <i>is</i> the trough: <b>$' + cap.wc.toFixed(1) + 'K</b>, recovered in ' + moText(cap.toRec) +
+        '. Runway is a readout here — the ramp turns before the verdict horizon is reached.'
+      : 'The ramp never turns cash-flow positive inside the ' + RAMP_HORIZON_MO +
+        '-month horizon, so there is no trough to measure — the figure above is just wherever the horizon was cut. Working capital falls back to funding <b>' +
+        S.runway + ' months</b> of the stabilized burn ($' + stabilizedBurnK().toFixed(1) + 'K/yr), which is <b>$' +
+        cap.runwayReserve.toFixed(1) + 'K</b>. Months to positive and months to recover are a state, not a number.';
+    el('out-runway').textContent = S.runway + ' mo';
+    el('runway-hint').textContent = cap.turns
+      ? 'Post-opening decision horizon. The ramp recovers inside it, so this sets when the verdict is taken, not how much cash the venture needs.'
+      : 'Post-opening decision horizon — and, while the ramp does not turn, the thing that sizes working capital: the reserve has to fund the burn for this long, or the bail line fires before the go/no-go review can be honest.';
+  }
+  function setV(id, text, cls){
+    var e = el(id);
+    e.textContent = text;
+    e.className = 'v' + (cls ? ' ' + cls : '');
+  }
+
+  function renderCapitalAtRisk(cap){
+    var derived = S.equity === null;
+    setV('out-equity', '$' + Math.round(equityK()) + 'K' + (derived ? '' : ' · override'), derived ? '' : 'n');
+    el('equity-hint').innerHTML = 'The sources-and-uses total ($' + Math.round(cap.required) +
+      'K) less what survives a wind-down — the deposit in full and FF&amp;E at a ' + Math.round(RECOVERY.ffe*100) +
+      '% resale, $' + recoverableK().toFixed(1) + 'K. It is not a dial: <b>the bar moves when the deal moves</b> — negotiate TI and it falls, take the larger floor and it rises.';
+    el('equity-lever').hidden = !OVR.equity;
+    var w = el('equity-warn');
+    w.hidden = derived;
+    if (!derived) w.textContent = 'Overridden at $' + S.equity + 'K. The bar is no longer charged on what this deal actually puts at risk ($' +
+      Math.round(cap.atRisk) + 'K) — useful as a what-if, misleading as a reading of the deal on screen.';
+  }
+
+  // ---- the two charts --------------------------------------------------------
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs, text){
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs){ if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]); }
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  // Clear a chart but keep its <title>: the accessible name is markup, not data.
+  function svClear(node){
+    while (node.childNodes.length > 1) node.removeChild(node.lastChild);
+    return node;
+  }
+  function tickStep(span, target){
+    var raw = Math.max(1e-9, span/target);
+    var mag = Math.pow(10, Math.floor(Math.log(raw)/Math.LN10));
+    var n = raw/mag;
+    return (n <= 1 ? 1 : (n <= 2 ? 2 : (n <= 5 ? 5 : 10))) * mag;
+  }
+
+  // The sources-and-uses waterfall: each use stacked on the one before, the D7
+  // cap drawn as a hard line, and everything past it in red. The page's first
+  // picture of required capital.
+  function renderWaterfall(cap){
+    var rows = cap.uses.filter(function(u){ return Math.abs(u.amount) > 0.05; });
+    var svg = svClear(el('waterfall'));
+    var L = 54, R = 18, T = 22, B = 66;
+    var colW = 68, W = Math.max(560, L + R + colW*(rows.length + 1)), H = 300;
+    var plotH = H - T - B, plotW = W - L - R;
+    var yMax = Math.max(cap.required, S.cash) * 1.14;
+    var yv = function(v){ return T + plotH - (v/yMax)*plotH; };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.style.minWidth = W + 'px';
+
+    var step = tickStep(yMax, 5);
+    for (var t=0; t<=yMax; t+=step){
+      svg.appendChild(sv('line', {class:'gl', x1:L, x2:L+plotW, y1:yv(t).toFixed(1), y2:yv(t).toFixed(1)}));
+      svg.appendChild(sv('text', {class:'tk', x:L-8, y:(yv(t)+3.5).toFixed(1), 'text-anchor':'end'}, '$' + Math.round(t) + 'K'));
+    }
+    svg.appendChild(sv('line', {class:'ax', x1:L, x2:L+plotW, y1:yv(0), y2:yv(0)}));
+
+    // one bar per use, floating from the running total; then the total itself.
+    var cum = 0, bw = colW*0.62;
+    function bar(i, lo, hi, cls){
+      var x = L + colW*i + (colW - bw)/2;
+      var top = Math.min(yv(hi), yv(lo)), h = Math.abs(yv(lo) - yv(hi));
+      svg.appendChild(sv('rect', {class:cls, x:x.toFixed(1), y:top.toFixed(1), width:bw.toFixed(1),
+                                  height:Math.max(1, h).toFixed(1), rx:2}));
+    }
+    rows.forEach(function(u, i){
+      var lo = cum, hi = cum + u.amount;
+      var split = Math.min(Math.max(lo, S.cash), hi);
+      if (split > lo) bar(i, lo, split, 'use');
+      if (hi > split) bar(i, split, hi, 'over');
+      svg.appendChild(sv('text', {class:'tk', x:(L + colW*i + colW/2).toFixed(1), y:(yv(hi) - 5).toFixed(1),
+                                  'text-anchor':'middle'}, '$' + u.amount.toFixed(1) + 'K'));
+      var lbl = sv('text', {class:'lb', x:(L + colW*i + colW/2).toFixed(1), y:(yv(0) + 15).toFixed(1),
+                            'text-anchor':'middle'}, USE_SHORT[u.id] || u.label);
+      svg.appendChild(lbl);
+      if (u.derived) svg.appendChild(sv('text', {class:'tk', x:(L + colW*i + colW/2).toFixed(1),
+                                                 y:(yv(0) + 27).toFixed(1), 'text-anchor':'middle'}, 'derived'));
+      cum = hi;
+    });
+    var ti = rows.length, capSplit = Math.min(S.cash, cap.required);
+    bar(ti, 0, capSplit, 'tot');
+    if (cap.required > capSplit) bar(ti, capSplit, cap.required, 'over');
+    svg.appendChild(sv('text', {class:'an', x:(L + colW*ti + colW/2).toFixed(1), y:(yv(cap.required) - 5).toFixed(1),
+                                'text-anchor':'middle'}, '$' + Math.round(cap.required) + 'K'));
+    svg.appendChild(sv('text', {class:'lb', x:(L + colW*ti + colW/2).toFixed(1), y:(yv(0) + 15).toFixed(1),
+                                'text-anchor':'middle'}, 'Required'));
+
+    // the cap, as a hard line
+    svg.appendChild(sv('line', {class:'capline', x1:L, x2:L+plotW, y1:yv(S.cash).toFixed(1), y2:yv(S.cash).toFixed(1)}));
+    svg.appendChild(sv('text', {class:'an', x:(L + 6), y:(yv(S.cash) - 7).toFixed(1),
+                                fill:'var(--neg)'}, '$' + S.cash + 'K cap (D7)'));
+
+    el('wf-lede').innerHTML = 'Required capital is <b>$' + cap.required.toFixed(1) + 'K</b> against the $' + S.cash +
+      'K cap — ' + (cap.headroom >= 0
+        ? '<b>' + fmtK(cap.headroom) + '</b> of headroom.'
+        : '<b>' + fmtK(cap.headroom) + '</b>, over the cap. Risk 4 says that is a G2 stop, not a stretch; the model reports it rather than trimming a line to fit.') +
+      ' The deposit, the pre-opening occupancy, the hiring weeks and the contingency are lines §6’s cash paragraph names and the model carried no entry for until now — each of them is comparable in size to the fit-out overrun the plan does discuss.';
+  }
+
+  // Cumulative cash from opening. The trough is the working-capital requirement
+  // when there is one; when the curve never turns there is no trough to measure
+  // and the chart says so in words rather than printing the horizon's edge as an
+  // answer.
+  function renderCashCurve(cap){
+    var svg = svClear(el('cashcurve'));
+    var ser = cap.series;
+    var L = 60, R = 20, T = 20, B = 40, W = Math.max(560, 10*ser.length + L + R), H = 270;
+    var plotH = H - T - B, plotW = W - L - R;
+    var lo = -S.cash, hi = 0;
+    ser.forEach(function(d){ if (d.cumulative < lo) lo = d.cumulative; if (d.cumulative > hi) hi = d.cumulative; });
+    lo *= 1.10; hi = Math.max(hi*1.10, hi + Math.abs(lo)*0.04);
+    var yv = function(v){ return T + plotH - ((v - lo)/(hi - lo))*plotH; };
+    var xv = function(m){ return L + ((m - 1)/Math.max(1, ser.length - 1))*plotW; };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.style.minWidth = W + 'px';
+
+    // the funded region: what the cap can absorb before the venture is out of cash
+    svg.appendChild(sv('rect', {class:'band', x:L, y:yv(0).toFixed(1), width:plotW.toFixed(1),
+                                height:Math.max(0, yv(-S.cash) - yv(0)).toFixed(1)}));
+    var step = tickStep(hi - lo, 5);
+    for (var t = Math.ceil(lo/step)*step; t <= hi; t += step){
+      svg.appendChild(sv('line', {class:'gl', x1:L, x2:L+plotW, y1:yv(t).toFixed(1), y2:yv(t).toFixed(1)}));
+      svg.appendChild(sv('text', {class:'tk', x:L-8, y:(yv(t)+3.5).toFixed(1), 'text-anchor':'end'},
+        (t < 0 ? '−' : '') + '$' + Math.abs(Math.round(t)) + 'K'));
+    }
+    svg.appendChild(sv('line', {class:'ax', x1:L, x2:L+plotW, y1:yv(0).toFixed(1), y2:yv(0).toFixed(1)}));
+    for (var m=6; m<=ser.length; m+=6){
+      svg.appendChild(sv('text', {class:'tk', x:xv(m).toFixed(1), y:(T+plotH+16).toFixed(1), 'text-anchor':'middle'}, m));
+    }
+    svg.appendChild(sv('text', {class:'lb', x:(L+plotW/2).toFixed(1), y:(T+plotH+32).toFixed(1),
+                                'text-anchor':'middle'}, 'months from opening'));
+
+    // the cap as a horizontal rule
+    svg.appendChild(sv('line', {class:'capline', x1:L, x2:L+plotW, y1:yv(-S.cash).toFixed(1), y2:yv(-S.cash).toFixed(1)}));
+    svg.appendChild(sv('text', {class:'an', x:(L + 6), y:(yv(-S.cash) + 14).toFixed(1),
+                                fill:'var(--neg)'}, '−$' + S.cash + 'K — the D7 cap'));
+
+    var pts = ser.map(function(d){ return xv(d.m).toFixed(1) + ',' + yv(d.cumulative).toFixed(1); }).join(' ');
+    svg.appendChild(sv('polyline', {class:'curve' + (cap.toRec !== null ? ' p' : ''), points:pts}));
+
+    // the trough, annotated as the working-capital requirement
+    var tm = cap.troughMo, tv = -cap.peak;
+    svg.appendChild(sv('line', {class:'mark', x1:xv(tm).toFixed(1), x2:xv(tm).toFixed(1), y1:T, y2:(T+plotH).toFixed(1)}));
+    svg.appendChild(sv('circle', {class:'dot', cx:xv(tm).toFixed(1), cy:yv(tv).toFixed(1), r:3.5}));
+    var late = xv(tm) > L + plotW*0.55;
+    svg.appendChild(sv('text', {class:'an', x:(late ? xv(tm) - 8 : xv(tm) + 8).toFixed(1),
+                                y:(yv(tv) + (cap.turns ? 18 : -10)).toFixed(1),
+                                'text-anchor':(late ? 'end' : 'start')},
+      cap.turns ? 'trough $' + cap.peak.toFixed(1) + 'K — the working capital'
+                : 'still falling at month ' + tm + ' — no trough'));
+
+    // both marks flip to the left of their rule near the right edge, so a late
+    // break-even is not written off the end of the plot
+    function markLabel(m, y, text){
+      var right = xv(m) > L + plotW*0.62;
+      svg.appendChild(sv('text', {class:'an', x:(xv(m) + (right ? -6 : 6)).toFixed(1), y:y.toFixed(1),
+                                  'text-anchor':(right ? 'end' : 'start')}, text));
+    }
+    if (cap.toPos !== null){
+      svg.appendChild(sv('line', {class:'mark', x1:xv(cap.toPos).toFixed(1), x2:xv(cap.toPos).toFixed(1),
+                                  y1:T, y2:(T+plotH).toFixed(1)}));
+      markLabel(cap.toPos, T + 12, 'cash-flow positive · month ' + cap.toPos);
+    }
+    if (cap.toRec !== null){
+      svg.appendChild(sv('circle', {class:'dot', cx:xv(cap.toRec).toFixed(1), cy:yv(0).toFixed(1), r:3.5}));
+      markLabel(cap.toRec, yv(0) - 8, 'break-even · month ' + cap.toRec);
+    }
+
+    var never = el('cc-never');
+    never.hidden = cap.turns;
+    if (!cap.turns){
+      never.innerHTML = '<b>This ramp never turns.</b> At these settings stabilized comp is ' + fmtK(comp(S.util, S.tx)) +
+        '/yr, so the cumulative curve has no trough inside the ' + RAMP_HORIZON_MO + '-month horizon — it is $' +
+        cap.peak.toFixed(1) + 'K down at month ' + RAMP_HORIZON_MO + ' and still falling. Months to cash-flow positive and months to break-even are <b>' +
+        moText(cap.toPos) + '</b>, which is a state and not a large number: working capital falls back to funding ' +
+        S.runway + ' months of the burn ($' + cap.runwayReserve.toFixed(1) +
+        'K), because there is no peak deficit to size it from. Move the two engine levers up — at the gate case (55% utilization, 110 walk-ins/day) the curve does turn.';
+    }
+    el('cc-lede').innerHTML = 'Each month reprices <span class="mono">comp()</span> at that month’s marks and divides by twelve; the series starts at <i>opening</i>, because the construction months are already carried as pre-opening rent above. ' +
+      (cap.turns
+        ? 'The trough — <b>$' + cap.peak.toFixed(1) + 'K</b> in month ' + cap.troughMo +
+          ' — is the working-capital line in the waterfall above, which is what makes working capital a derived number rather than an assertion.'
+        : 'Where the curve turns, its trough <i>is</i> the working-capital line in the waterfall above. Here it does not turn, so that line carries the runway reserve instead — the two are different quantities and the page says which one it is showing.');
+  }
+
+  // The second ranking: what to negotiate first. CAP_INPUTS/withUse are the
+  // capital layer's mirror of INPUTS/withCost, so this is the same sweep the
+  // cost tornado runs, read against required capital instead of owner comp.
+  function renderCapTornado(cap){
+    var base = cap.required;
+    var rows = CAP_INPUTS.map(function(i){
+      var lo = withUse(i.id, i.band[0], requiredCapitalK);
+      var hi = withUse(i.id, i.band[1], requiredCapitalK);
+      return {id:i.id, label:i.label, ev:i.ev, band:i.band, unit:i.unit,
+              lo:Math.min(lo, hi), hi:Math.max(lo, hi), swing:Math.abs(hi - lo)};
+    });
+    var live = rows.filter(function(r){ return r.swing > 0.05; }).sort(function(a, b){ return b.swing - a.swing; });
+    var idle = rows.length - live.length;
+    var lo = base, hi = base;
+    live.forEach(function(r){ lo = Math.min(lo, r.lo); hi = Math.max(hi, r.hi); });
+    var span = Math.max(1, hi - lo);
+    var x = function(v){ return ((v - lo)/span*100).toFixed(3) + '%'; };
+    var t = el('captornado'); t.innerHTML = '';
+    live.forEach(function(r){
+      var e = h('div','torrow');
+      e.appendChild(h('div','lab','<span class="lt" title="' + r.label + '">' + (USE_SHORT[r.id] || r.label) + '</span>' + evChip(r.ev)));
+      var w = h('div','tw');
+      var b = h('div','tb');
+      b.style.left = x(r.lo);
+      b.style.width = ((r.hi - r.lo)/span*100).toFixed(3) + '%';
+      w.appendChild(b);
+      var z = h('div','zero');
+      z.style.left = x(base);
+      w.appendChild(z);
+      e.appendChild(w);
+      e.appendChild(h('div','val','$' + r.swing.toFixed(1) + 'K'));
+      t.appendChild(e);
+    });
+    el('tor-lede').innerHTML = 'Each banded use swept end to end with everything else held, ranked by the swing in <b>required capital</b> — the ranking that says what to negotiate first, against the constraint that actually binds. The vertical rule is the current total, <b>$' +
+      base.toFixed(1) + 'K</b>.';
+    el('tor-note').innerHTML = 'Top of the ranking: <b>' + (live.length ? live[0].label + '</b> at <b>$' + live[0].swing.toFixed(1) + 'K' : '—') +
+      '</b>. This is not the ranking on the evidence page — that one ranks what moves <i>owner comp</i>, and the fit-out rate moves owner comp by exactly nothing. Two outputs, two orders of business: what to go verify, and what to go negotiate.' +
+      (idle > 0 ? ' ' + (idle === 1 ? 'One banded use swings' : idle + ' banded uses swing') +
+        ' nothing at these settings and ' + (idle === 1 ? 'is' : 'are') +
+        ' left out: a use that does not apply on the current finance path — the deposit on a purchase, the down payment and closing costs on a lease — has no band to sweep.' : '');
+  }
 
   // ---- the breakdown ---------------------------------------------------------
   // Two groupings of the same P&L. `BDVIEW` and `BDOPEN` live here rather than in
@@ -1589,7 +2403,13 @@
     el('in-build').value=S.build; el('in-ti').value=S.ti;
     el('in-abate').value=S.abate; el('in-grants').value=S.grants;
     el('in-cash').value=S.cash; el('in-runway').value=S.runway;
-    el('in-equity').value=S.equity;
+    el('in-deposit').value=DEAL.depositMo; el('in-constr').value=DEAL.constructionMo;
+    el('in-ramp').value=DEAL.rampMo;
+    // The override sliders start from the figure they would replace, so opening
+    // one is a what-if about the derived number rather than a jump away from it.
+    el('in-equity').value = S.equity === null ? Math.round(capitalAtRiskK()) : S.equity;
+    el('cash-ovr').checked = OVR.cash;
+    el('equity-ovr').checked = OVR.equity;
   }
   function bind(id, key){
     el(id).addEventListener('input', function(e){ S[key]=parseFloat(e.target.value); render(); });
@@ -1599,6 +2419,25 @@
   bind('in-commons','commons'); bind('in-churn','churn'); bind('in-cafem','cafeM');
   bind('in-build','build'); bind('in-ti','ti'); bind('in-abate','abate'); bind('in-grants','grants');
   bind('in-cash','cash'); bind('in-runway','runway'); bind('in-equity','equity');
+  // The deal terms that live on DEAL rather than in S. DEAL is the model's own
+  // object — the page writes it directly, the way withDeal() does for a sweep.
+  function bindDeal(id, key){
+    el(id).addEventListener('input', function(e){ DEAL[key] = parseFloat(e.target.value); render(); });
+  }
+  bindDeal('in-deposit','depositMo'); bindDeal('in-constr','constructionMo'); bindDeal('in-ramp','rampMo');
+  // D7's cap and the derived capital at risk are readouts with an explicit
+  // override gesture, not dials: unchecking restores the precommitment and the
+  // derived figure (S.equity === null means *derive*).
+  el('cash-ovr').addEventListener('change', function(e){
+    OVR.cash = e.target.checked;
+    if (!OVR.cash) S.cash = DEF.cash;
+    syncInputs(); render();
+  });
+  el('equity-ovr').addEventListener('change', function(e){
+    OVR.equity = e.target.checked;
+    S.equity = OVR.equity ? Math.round(capitalAtRiskK()) : null;
+    syncInputs(); render();
+  });
   function setSite(s){ S.site=s; if(s==='li'&&S.fin==='buy') S.fin='lease'; S.tx=SITES[s].mark; syncInputs(); render(); }
   el('site-li').addEventListener('click', function(){ setSite('li'); });
   el('site-sn').addEventListener('click', function(){ setSite('sn'); });
@@ -1619,7 +2458,12 @@
     b.addEventListener('click', function(){ if(b.disabled) return; BDBASIS = b.dataset.bdbasis; render(); });
   });
   el('bd-absorb').addEventListener('change', render);
-  el('reset').addEventListener('click', function(){ S=Object.assign({},DEF); syncInputs(); render(); });
+  el('reset').addEventListener('click', function(){
+    S=Object.assign({},DEF);
+    DEAL.depositMo=DEAL0.depositMo; DEAL.constructionMo=DEAL0.constructionMo; DEAL.rampMo=DEAL0.rampMo;
+    OVR.cash=false; OVR.equity=false;
+    syncInputs(); render();
+  });
 
   syncInputs();
   render();
