@@ -11,6 +11,13 @@ it runs in. The executable per-PR detail is in
 `plans/dispatch-rsi-serialized-pr-plan.md` — every section there is
 clean-session-executable, and this file deliberately does not restate it.
 
+**The split is by question, not by topic.** This file answers *what to run
+next, and in what order*; it owns bundle composition, execution order, the hard
+ordering constraints and the cross-PR dependency edges. The plan answers *how to
+run one PR*. The plan carried its own copy of the bundle table, the recommended
+order and the dependency tree until 2026-08-29; the copies had drifted, so they
+were consolidated here and the plan now points at this file.
+
 > **This file carries no history.** Author rulings live on their nodes in
 > `intentions/`; how the window reached its current state is in the commit
 > history. What is written below is only what still governs work that has not
@@ -25,7 +32,7 @@ clean-session-executable, and this file deliberately does not restate it.
 |---|---|
 | **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
-| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire. **One position is still waiting on the author: position 8.** PR14's `tactic-rsi-reprioritization-outcome-audit` remains parked on an unanswered ruling about what its observable measures — see position 8 |
+| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. **One position is still waiting on the author: position 8.** PR14's `tactic-rsi-reprioritization-outcome-audit` remains parked on an unanswered ruling about what its observable measures — see position 8 |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
 | **Next** | **Position 1 — PR18**, the durable-layer write fence. Nothing gates it |
 | **Not started** | Positions 1 through 13. PR2 through PR20 |
@@ -69,10 +76,11 @@ Every position is a **bundle** — PRs grouped by shared code surface, because t
 work is serialized and the cost of a large PR is lower than the cost of two PRs
 touching the same file.
 
-**117 tactics are assigned across the sequence**, none twice, plus 11
-documented-and-deliberately-unassigned and 13 absorbed by the overhang
-retirement. 38 of the 117 sit on the graph read/write path — the largest single
-surface in the window, and the one every other PR's bookkeeping runs through.
+**114 tactics are assigned across the sequence**, none twice, plus 13
+surveyed-but-unassigned and 13 absorbed by the overhang retirement. 36 of the
+114 sit on the graph read/write path — the largest single surface in the window,
+and the one every other PR's bookkeeping runs through. It read 117 / 11 / 38
+until 2026-08-29; see §"Coverage" in the plan for the reconciliation.
 
 | # | Bundle | PRs | Nodes | Why here |
 |---|---|---|---|---|
@@ -85,7 +93,7 @@ surface in the window, and the one every other PR's bookkeeping runs through.
 | **5** | 4 · instrument + finding surface | PR3 + PR4 | 16 | COLD, but unblocks positions 6 and 8 |
 | **6** | 2b · supersession representation | PR19 | 3 | Real `blocked_by` edge onto PR4's write surface |
 | **7** | 3 · dispatch runtime | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD. Nothing invokes it while paused |
-| **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | COLD. Needs PR2 + PR3 + PR4 |
+| **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | COLD. Needs PR2 + PR3 + PR4. **PR14's 3 are not all plannable — expect a subset** |
 | **9** | 5b · `/align` charter + adversarial review | PR20 + assessor-doc retirement | 9 | **Must** precede the rename |
 | **10** | 6 · skill rename | PR13 | 1 | Last, alone. Renames every path PR20 writes |
 | **11** | 7 · merge queue + scan cadence | PR17 | 6 | COLD. Must be in place *before* the resumption |
@@ -477,10 +485,70 @@ cannot:
 
 ---
 
+## Cross-PR dependency edges
+
+Moved here from the plan on 2026-08-29, so ordering has one home. The six
+constraints above are the ones that cannot flex; this is the full picture at PR
+granularity.
+
+```
+PR1  graph read/write integrity (8)    ── ✅ SHIPPED fe0b1c4d (#3095), nodes closed
+ │
+ ├── PR18 durable-layer write fence    ── its blocked_by cleared WITH PR1 → ready
+ ├── PR15 graph-commit simplification  ── same file as PR1; SPLIT: U0/U3/U4 only
+ ├── PR16 node-mutation scripts (11)   ── needs PR1 U4 + U8
+ ├── PR2  ladder driver
+ ├── PR3  audit instrument ───────────┐
+ ├── PR4  finding write surface ──────┤──┐
+ ├── PR5  reconciler tick cost        │  │
+ ├── PR6  code-review lock            │  │
+ ├── PR7  review orchestration cost   │  │
+ ├── PR8  config fail-closed          │  │
+ └── PR9  worktree/session lifecycle  │  │
+                                      │  │
+        PR19 supersession repr.  ◄────┼──┘ (needs PR4's write surface)
+        PR10 rsi trigger chain  ◄─────┘ (needs PR2 + PR3)
+        PR11 lens catalog       ◄─────┘ (needs PR3)
+        PR12 intervention core  ◄─────── (needs PR11 + PR4)
+        PR14 rsi prioritization + research lane
+        PR20 /align charter + adversarial review ── MUST precede PR13
+        PR13 dispatch skill rename ── LAST, alone
+        PR17 merge queue + scan cadence ── COLD; before the sentinel comes off
+```
+
+PR2 and PR5–PR9 are mutually independent and may run in any order or in
+parallel. PR1 was the only universal prerequisite, and it has landed.
+
+**PR18** was pinned behind PR1 by a real `blocked_by` edge — now cleared — and
+sits ahead of everything else by argument: it is the fence the remaining ~100
+node closures write through. **PR16** repairs the scripts every node closure in
+this plan runs, so it is worth landing early despite depending on two PR1 units.
+**PR19** is pinned behind PR4 by a real `blocked_by` edge:
+`tactic-persist-greenfield-drops` is `blocked_by
+tactic-finding-search-all-producers`, PR4's central node — the one write surface
+every creation site routes through, and supersession edges are written *by* that
+surface. **PR20** is pinned *ahead* of PR13 because PR13 renames the skill file
+PR20 edits — the one hard ordering constraint whose violation is silent rather
+than a merge conflict. **PR17 is cold**: nothing in it fires while the sentinel
+holds, so it belongs immediately before the staged resumption.
+
+The four `blocked_by` edges landed in `da1c3c7f` are honored:
+`audit-threshold-table → trigger-threshold-gate → session-sweep-trigger →
+ladder-per-phase-evaluation` is the internal unit order inside PR10;
+`eval-finding-ledger → duplicate-finding-sensor` is the internal unit order
+inside PR4; `audit-cache-efficiency-lens → dispatch-cache-preserving-context`
+puts that experiment after PR3; `ladder-worker-unstamped-audit-blind →
+align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
+
+---
+
 ## What this sequence does not cover
 
-- **Six deferred nodes**, with reasons: the ref-split cluster
-  (`tactic-graph-ref-split`, `-blocker-audit`, `-read-coherence`),
+- **Eight deferred nodes**, with reasons: the ref-split cluster — now five, not
+  three (`tactic-graph-ref-split`, `-blocker-audit`, `-read-coherence`, plus
+  `tactic-graph-commit-plumbing-default` and
+  `tactic-graph-commit-direct-three-way-merge`, which joined it on 2026-08-29
+  when PR15 split),
   `tactic-node-scope-files-overlap-gate` and `tactic-scope-stamp-in-graph`
   (both need a running fleet, i.e. resumption work), and
   `tactic-demote-node-stale-local-read` (blocked behind
@@ -492,7 +560,25 @@ cannot:
   sentinel holds and they overlap PR12's surface. Plus
   `tactic-session-reap-authorization-durability` and
   `tactic-park-cause-sensor-instrument`, which need a running fleet.
-- **Eleven documented-but-unassigned tactics** from the third coverage pass.
+- **Five in-scope nodes that no PR closes** —
+  `tactic-review-sitting-code-review-lock-design`,
+  `tactic-review-band-derivation-ratification`,
+  `tactic-review-tradition-agentic-engineering`,
+  `tactic-review-supersession-derived-subpoints` and
+  `tactic-review-dispatch-charter-split`. These are *inside* the 114, not
+  excluded: their sittings were held at the 2026-08-28 round, which discharged
+  the gates they blocked, but the nodes themselves are still `status: raw`,
+  `phase: null` on `origin/main` and appear in no `### Nodes closed` section.
+  The plan dropped their coverage row on 2026-08-29 on the grounds that the
+  sittings were held, which made them invisible rather than closed; the row is
+  restored. **Route or close them deliberately before the window ends** — they
+  are the one part of the sequence nothing currently drives.
+- **Those two bullets are the whole surveyed-but-unassigned set — 13 nodes**,
+  8 deferred plus 5 adjacent. This list used to end with a third bullet reading
+  *"Eleven documented-but-unassigned tactics from the third coverage pass"*,
+  which read as a third disjoint set and made the sequence look as though it
+  left 24 nodes uncovered. It was the same eight-plus-five, counted again at its
+  2026-08-18 value of 6+5.
 
 ---
 

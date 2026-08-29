@@ -1,10 +1,15 @@
 # Dispatch + RSI serialized PR plan
 
-**Covers** the 117 tactics in the dispatch-ladder / RSI / evaluation-machinery /
+**Covers** the 114 tactics in the dispatch-ladder / RSI / evaluation-machinery /
 graph-plumbing / `/align`-charter scope that were `phase: null` **at scope-build
 time (2026-08-14)**: defects, integrity issues, token-efficiency findings,
-ledger entries, and the feature/design nodes that resolve them. A further 11
+ledger entries, and the feature/design nodes that resolve them. A further 13
 nodes are surveyed, documented and deliberately unassigned — see §"Coverage".
+
+> **It was 117 until 2026-08-29.** One node left the graph (`tactic-align-audit-legacy-review`,
+> pruned) and two moved from PR15 into the deferred set, which is counted
+> *outside* this total. The surveyed-but-unassigned figure rose 11 → 13 by the
+> same two. §"Coverage" shows the full reconciliation.
 
 > **The `phase: null` filter is what left work out.** Work already past
 > `phase: null` on 2026-08-14 was never a candidate, so the plan is silent on
@@ -390,186 +395,20 @@ sandboxed.
 
 ---
 
-## Bundles
+## Bundles, order and dependencies — the index owns these
 
-| # | Bundle | PRs | Nodes | Risk |
-|---|---|---|---|---|
-| ✅ **1** | **Graph read/write path** | PR1 | 8 | **SHIPPED `fe0b1c4d` (#3095)** |
-| ✅ **0** | **Retire the in-flight overhang** | *no new PRs* | **+13** | **RETIRED** — 5 clean halves landed; 7 drafts held open by ruling, each absorbed by its bundle |
-| **2a** | **Record-time main-qa routing** | PR5a | 1 | before Bundle 2 — see §PR5a |
-| **1c** | **Durable-layer write fence** | PR18 | 5 | HOT — guards every node write that follows |
-| **1b** | **Graph plumbing** | PR15 + PR16 | 15 | HOT — the closure toolchain |
-| **2** | **Tick-path reconcilers and sweeps** | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT — runs every tick |
-| **4** | **Instrument + finding surface** | PR3 + PR4 | 16 | COLD |
-| **2b** | **Supersession representation** | PR19 | 3 | needs PR4's write surface |
-| **3** | **Dispatch runtime (cold)** | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD — realized at resumption |
-| **5** | **RSI chain** | PR10 + PR11 + PR12 + PR14 | 10 | COLD |
-| **5b** | **`/align` charter + adversarial review** | PR20 | 8 | must precede the rename |
-| **6** | **Skill rename** | PR13 | 1 | last, alone |
-| **7** | **Merge queue + scan cadence** | PR17 | 6 | COLD — before the sentinel comes off |
-| **8** | **The four deferred drafts** | #3093, #2856, #3040, #3037 | 4 (already counted in the overhang) | bulk node-content rewrites; invalidate every `--base` CAS manifest. See §"In-flight work outside this plan" |
-| **9** | **The charter split** | *one new PR* | 1 | last — 316 children re-served; same CAS reason, larger blast radius. Node edit + paired `read-sensors.ts` change in one branch. See the index |
-| — | *deferred* | PR8 U3 | 1 | see below |
-| | *measurement runs* | | 3 | no diff — see the index |
-| | **total** | | **117** | + 11 documented-not-assigned |
+Bundle composition, the execution order, the hard ordering constraints and the
+cross-PR dependency edges live in `plans/dispatch-rsi-sequence.md`. They were
+duplicated here until 2026-08-29 and had already drifted apart in two places
+— a bundle's node count, and a ruling recorded in one file and not the other —
+so this document no longer carries a second copy.
 
-**Why Bundle 1 stayed alone, and why its successors inherit the argument.** Its
-failure mode was *silent*: a dropped node edit when local `main` is ahead, a
-destroyed snapshot, an abandoned write reported as a content failure — and
-supervision does not catch silent failures. Every other bundle's closing
-bookkeeping runs through it, so it landed first and was verified by reading
-`git show origin/main:` rather than by trusting a verdict line. Bundles 1c and
-1b are the same shape.
+**Read the index to decide what to run next. Read this document to run it.**
 
-**Bundle 1b is separate from Bundle 1 on purpose.** Both touch `graph-commit`,
-but Bundle 1 was correctness and Bundle 1b is simplification. Landing them
-together would mean a regression in the writer could not be bisected against a
-known-good one. Bundle 1b was also the work most exposed to the ref-split
-question; the 2026-08-29 split ruling removed that exposure by dropping the two
-exposed units — see §"Decisions already taken".
-
-**Bundle 1c is the front of the queue.** Two reasons, and the first is
-mechanical: `tactic-graph-commit-park-content-durability` was `blocked_by` two
-of PR1's own nodes, **both of which closed with PR1**, so it is unblocked and
-ready. The second is Bundle 1's own argument — this bundle is the fence that
-decides what an **autonomous** writer may do to durable node content, and
-roughly a hundred node closures still run through that fence. It is deliberately
-ahead of Bundle 1b, because Bundle 1c carried no ref-split exposure and PR15
-did. That asymmetry is now gone — the 2026-08-29 split dropped PR15's two
-exposed units — but the ordering stands on its second reason alone. PR1's commit message names the seam: candidate (c) of the SNAP_DIR ruling
-"was not adopted… The seam for it is deliberately one function: both recovery
-branches call `preservedContent()` and neither composes path wording of its
-own." PR18 Unit 5 is the work that seam was left for.
-
-**Bundle 3 is deliberately large (25 nodes).** Nothing invokes any of it while
-paused, so the cost of bundling is not a broken window — it is that the first
-fleet start after resumption becomes a single pass/fail boolean. Mitigate that
-with a **staged resumption** rather than by splitting: remove the sentinel with
-`max_concurrent_workers: 1`, walk one node through the full ladder, and only
-then restore normal concurrency. That converts the boolean into a diagnosable
-test and is worth more than any split. Note that the resumption is the *end* of
-this plan, not a midpoint — per ground rule 4 it happens after the last PR here
-has merged and its nodes are closed, so no bundle may be sequenced against it.
-
-**PR8 Unit 3 is deferred outright.** It replaces the pause sentinel with a
-config field — i.e. it rewrites the mechanism currently enforcing the freeze,
-while the freeze depends on it. Land it during a deliberate, attended un-pause,
-never mid-window.
-
-### Recommended order
-
-```
-✅  Bundle 1           graph read/write path       SHIPPED fe0b1c4d (#3095)
-✅  Bundle 0           retire the in-flight overhang         RETIRED
-1.  Bundle 1c          durable-layer write fence   ← START HERE (HOT)
-2.  Bundle 1b          graph plumbing                        (HOT, toolchain)
-3.  Bundle 2a          PR5a record-time main-qa routing      (before Bundle 2)
-4.  Bundle 2           tick-path reconcilers + sweeps        (HOT, live)
-5.  Bundle 4           instrument + finding surface          (unblocks 5, 2b)
-6.  Bundle 2b          supersession representation           (needs PR4)
-7.  Bundle 3           dispatch runtime                      (COLD, big)
-8.  Bundle 5           RSI chain
-9.  Bundle 5b          /align charter + adversarial review   (before rename)
-10. Bundle 6           skill rename                          (last, alone)
-11. Bundle 7           merge queue + scan cadence            (COLD, pre-resume)
-12. Bundle 8           the four deferred drafts              (#3093, #2856,
-                       in that order                          #3040, #3037)
-13. Bundle 9           the charter split                     (node + code, one PR)
---  staged resumption: sentinel off at max_concurrent_workers: 1, one node
---  deferred: PR8 Unit 3, during an attended un-pause
-```
-
-**Bundle 0 ran first and is retired.** It opened no PR: it landed the
-already-mergeable drafts and the clean halves of the contested ones, folded the
-orphaned nodes into the sections that own them, and sequenced one node as its
-own PR. It went first for one mechanical reason — **#3037 deletes
-`dispatch-graph-census`, which is Bundle 1c's Unit 1 target** — and that reason
-is discharged: #3037 was deferred rather than closed, and **Bundle 1c's Unit 1
-was narrowed to the site that survives**. What still routes work from it is in
-§"In-flight work outside this plan".
-
-Bundles 3 and 4 can swap or overlap — they share no files. Bundle 4 comes before
-3 only because Bundles 5 and 2b depend on it.
-
-**The order redistributes rather than simply demoting the ladder.** PR2 (ladder
-driver) drops sharply — it was second because everything ran through it, and
-nothing runs through it now; only its Unit 6 is urgent, and that moves to
-Bundle 2. PR5 (reconciler tick cost) rises: it reads as pure efficiency work for
-a paused system, but `reconcile-graph-merged` is in the drain on every tick, and
-PR5's base-pin unit prevents a **concurrently landed write being clobbered** — a
-live risk precisely because `main` is still moving. PR8 Unit 1 rises too: the
-pace-curve config is untracked and unrecoverable.
-
-**Bundle 1b may be deferred but not skipped.** PR16 (the closure toolchain) is
-worth landing at position 3 as shown. **PR15's hold is discharged**: the
-revisit the ref-split disposition demanded was held 2026-08-29 and ruled a
-**split** — Units 0, 3 and 4 ship, Units 1–2 are not written. PR15 now carries
-no conditional hold and may proceed alongside PR16.
-
-**Bundle 5b must land before Bundle 6, and that ordering is not a preference.**
-PR20 edits `.claude/skills/align-tactics/SKILL.md`; PR13 **renames that skill**
-to `/dispatch-plan`. Running them in the other order orphans every path PR20
-writes — the same failure this repo has already hit once, where a rename left
-`verify` fences pointing at a deleted skill.
-
-**Bundle 7 sits last deliberately, after the skill rename.** Everything in it is
-dormant while the sentinel holds, and it must be in place before the staged
-resumption — otherwise that resumption measures an unbounded scan cadence and a
-silent merge veto instead of measuring the fleet. It is the only bundle whose
-position is set by the resumption rather than by dependencies.
-
----
-
-## Dependency order
-
-```
-PR1  graph read/write integrity (8)    ── ✅ SHIPPED fe0b1c4d (#3095), nodes closed
- │
- ├── PR18 durable-layer write fence    ── its blocked_by cleared WITH PR1 → ready
- ├── PR15 graph-commit simplification  ── same file as PR1; SPLIT: U0/U3/U4 only
- ├── PR16 node-mutation scripts (11)   ── needs PR1 U4 + U8
- ├── PR2  ladder driver
- ├── PR3  audit instrument ───────────┐
- ├── PR4  finding write surface ──────┤──┐
- ├── PR5  reconciler tick cost        │  │
- ├── PR6  code-review lock            │  │
- ├── PR7  review orchestration cost   │  │
- ├── PR8  config fail-closed          │  │
- └── PR9  worktree/session lifecycle  │  │
-                                      │  │
-        PR19 supersession repr.  ◄────┼──┘ (needs PR4's write surface)
-        PR10 rsi trigger chain  ◄─────┘ (needs PR2 + PR3)
-        PR11 lens catalog       ◄─────┘ (needs PR3)
-        PR12 intervention core  ◄─────── (needs PR11 + PR4)
-        PR14 rsi prioritization + research lane
-        PR20 /align charter + adversarial review ── MUST precede PR13
-        PR13 dispatch skill rename ── LAST, alone
-        PR17 merge queue + scan cadence ── COLD; before the sentinel comes off
-```
-
-PR2 and PR5–PR9 are mutually independent and may run in any order or in
-parallel. PR1 was the only universal prerequisite, and it has landed.
-
-**PR18** was pinned behind PR1 by a real `blocked_by` edge — now cleared — and
-sits ahead of everything else by argument: it is the fence the remaining ~100
-node closures write through. **PR16** repairs the scripts every node closure in
-this plan runs, so it is worth landing early despite depending on two PR1 units.
-**PR19** is pinned behind PR4 by a real `blocked_by` edge:
-`tactic-persist-greenfield-drops` is `blocked_by
-tactic-finding-search-all-producers`, PR4's central node — the one write surface
-every creation site routes through, and supersession edges are written *by* that
-surface. **PR20** is pinned *ahead* of PR13 because PR13 renames the skill file
-PR20 edits — the one hard ordering constraint whose violation is silent rather
-than a merge conflict. **PR17 is cold**: nothing in it fires while the sentinel
-holds, so it belongs immediately before the staged resumption.
-
-The four `blocked_by` edges landed in `da1c3c7f` are honored:
-`audit-threshold-table → trigger-threshold-gate → session-sweep-trigger →
-ladder-per-phase-evaluation` is the internal unit order inside PR10;
-`eval-finding-ledger → duplicate-finding-sensor` is the internal unit order
-inside PR4; `audit-cache-efficiency-lens → dispatch-cache-preserving-context`
-puts that experiment after PR3; `ladder-worker-unstamped-audit-blind →
-align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
+Everything a PR needs in order to execute is inside its own section: its
+`### Dependencies` names the PRs that must precede it, and its `### Scope`
+carries the internal unit order. Nothing below depends on the sections that
+were removed.
 
 ---
 
@@ -648,9 +487,20 @@ Scope, not just its citation**, and do it before Bundle 5 is planned.
 
 | Class | Files | Action |
 |---|---|---|
-| Correctly historical — says "retired", or narrates the deletion | `.claude/skills/rsi-audit/SKILL.md:256`, `tactic-rsi-plan-render-retire`, `tactic-rsi-plan-skill`, `tactic-ladder-await-phase-only-completion-test:24`, `strategy-recursive-self-improvement:1181,1224` | **none** |
-| Stale — presents the script as live | `strategy-recursive-self-improvement:165,186,381,409,549,1013,1079`, `tactic-attention-namespaced-rank:822,826`, `tactic-graph-read-at-ref-cli:16`, `tactic-rsi-audit-workflow-attribution:59`, `tactic-rsi-external-acceptance-gate:108`, `tactic-rsi-research-skill:59`, `tactic-rsi-skill:39` | rewrite past-tense or repoint |
+| Correctly historical — says "retired", or narrates the deletion | `.claude/skills/rsi-audit/SKILL.md:256`, `tactic-rsi-plan-render-retire`, `tactic-rsi-plan-skill`, `tactic-ladder-await-phase-only-completion-test:24`, `strategy-recursive-self-improvement:1181,1224`, `tactic-rsi-research-skill:389` | **none** |
+| Stale — presents the script as live | `strategy-recursive-self-improvement:165,186,381,409,549,1013,1079`, `tactic-attention-namespaced-rank:822,826`, `tactic-graph-read-at-ref-cli:16`, `tactic-rsi-audit-workflow-attribution:59`, `tactic-rsi-external-acceptance-gate:108`, `tactic-rsi-skill:39` | rewrite past-tense or repoint |
 | **Scope hole** | `tactic-rsi-lane-token-attribution:127` | **re-scope the node** |
+
+> **`tactic-rsi-research-skill` was reclassified out of the stale row
+> (2026-08-29).** Two reasons, and both bite an implementer who trusts the old
+> entry. The `:59` anchor was already wrong on `origin/main` — line 59 is the
+> timer-installer clarification, not a `render-rsi-plan.ts` citation; the real
+> mention is at `:389`. And that line sits inside `## Draft context (2026-08-10
+> /align research-lane round)`, which the node's own 2026-08-20 clarification
+> covers: *"read all three as HISTORICAL, and do not rewrite the dated draft
+> prose that names them."* So the citation is correctly historical and
+> **must not be rewritten** — editing it would overturn a standing ruling to
+> satisfy a bookkeeping sweep.
 
 `tactic-rsi-reprioritization-outcome-audit` is split: `:43` already notes the
 deletion, but `:88` still says "All work is in
@@ -2367,9 +2217,14 @@ values.**
 > four.**
 >
 > The record's remaining half — whether the reading lane's own seed selection is
-> self-curating — **cannot be reviewed yet and does not gate this PR**. It needs
-> `/rsi-research` to have run, and `/rsi-research` is built by **PR14 Unit 3, in
-> this same bundle**. Revisit after the bundle lands.
+> self-curating — **does not gate this PR**, but it is no longer unreachable
+> inside the window. **Re-scoped 2026-08-29** by the research-lane ruling: there
+> is no standalone `/rsi-research` and no schedule, so the half now asks whether
+> research-sourced input stays subordinate to measurement in practice, and
+> whether the seed list steers anything now that it is a source-trust filter
+> rather than a crawl plan. It needs one author-invoked research-mode run of
+> `/rsi-audit`, available the day PR14 Unit 3 lands — not two or three weekly
+> cron firings. Revisit after the bundle lands.
 
 ### Context
 
@@ -2605,9 +2460,12 @@ than the queue baseline?
 > the file. This unit must first pick a new home for the derivation (most likely
 > `/rsi-audit` itself, which absorbed the rest of `/rsi-plan`), then implement
 > it there. Fix the stale citations in
-> `tactic-rsi-audit-workflow-attribution.md:59`,
-> `tactic-rsi-research-skill.md:59` and
+> `tactic-rsi-audit-workflow-attribution.md:59` and
 > `tactic-attention-namespaced-rank.md:822` while you are in the graph.
+> **`tactic-rsi-research-skill` is deliberately not in that list** — its mention
+> is at `:389`, inside dated draft prose its own 2026-08-20 clarification rules
+> historical and forbids rewriting. Leave it alone; see §"Two stale-path
+> classes".
 
 **Unit 3 — the research lane, folded.** **RULED 2026-08-29 — do NOT build a
 standalone `/rsi-research` skill and do NOT install a weekly schedule.** The
@@ -3961,6 +3819,20 @@ judgment quality, and three units revise interview skill text where the wording
 > 35% target stands, and this sequence is itself the drain plan. Do not re-open
 > the target.
 
+> **`tactic-retire-assessor-contract-docs` rides this PR — RULED 2026-08-29.**
+> It was in no bundle, so the sequence could have run to completion without
+> anyone noticing it. It rides here because PR20 already rewrites the `/align`
+> skill surface its third unit edits, so the two touch the same files and review
+> together; the freeze means no worker picks it up on its own.
+>
+> `phase: implement`, `owner: ai`, three units: retire `.claude/docs/delegability.md`,
+> `.claude/docs/signal-identification.md` and their `ref-*` skills, plus
+> `.claude/skills/align-audit/SKILL.md`, whose out-of-scope list still frames a
+> decision settled 2026-07-23 as pending and cites a node that no longer exists.
+>
+> **Counting:** PR20 itself still closes the 8 nodes listed below. The *bundle*
+> closes **9**. Close the rider's node with them.
+
 ### Context
 
 A new strategy landed on 2026-08-13: **`strategy-discovered-requirements`**,
@@ -4228,7 +4100,7 @@ Seven hazards on this path, each of which has bitten before:
 
 ## Coverage
 
-All **117** in-scope tactics are assigned; none appears twice.
+All **114** in-scope tactics are assigned; none appears twice.
 
 | PR | Nodes | Surface |
 |---|---|---|
@@ -4245,17 +4117,41 @@ All **117** in-scope tactics are assigned; none appears twice.
 | PR11 | 1 | `/rsi` + `/rsi-audit` → `/rsi-lens-*` |
 | PR12 | 1 | four invalid-state lanes |
 | PR13 | 1 | repo-wide rename |
-| PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
+| PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-audit` research subskill |
 | PR15 | 2 | `graph-commit` — invocation, short-circuit (+ Unit 0 removal fix, closed under PR15) · **SPLIT 2026-08-29**: writer default and merge path deferred to ref-split |
 | PR16 | 11 | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
 | PR17 | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
 | **PR18** | 5 | `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`, `/review-fix`, `router.ts`, `graph-commit` park path |
 | **PR19** | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
 | **PR20** | 8 | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
-| measurement runs | 3 | no diff — `/rsi-audit`; the sittings that once sat here are all held |
-| deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` |
-| adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) |
-| **total** | **117** | + 11 documented-not-assigned |
+| measurement runs | 3 | no diff — `/rsi-audit` |
+| sittings held, nodes still open | 5 | no diff — the sitting discharged the *gate*, not the node; all five are `status: raw`, `phase: null` on `origin/main` and in no PR |
+| **total — the 114** | **114** | PRs 106 + measurement 3 + sittings 5 |
+| deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` — **outside the 114** |
+| adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) — **outside the 114** |
+| **the 13 surveyed-but-unassigned** | **13** | deferred 8 + adjacent 5 |
+| **total accounted for** | **127** | 114 + 13 |
+
+> **Reading the arithmetic — the rule this table has always followed.** The
+> total counts the rows *above* it. `deferred` and `adjacent` sit **below** it
+> and are excluded, and the surveyed-but-unassigned figure is exactly their sum.
+> That rule holds at every revision of this document: 94 with 5+5=10 at Revision
+> 6, 112 with 6+5=11 at Revision 7, 117 with 6+5=11 at #3098. It was never
+> written down, which is how two figures drifted.
+>
+> **The 117 lost 3 and the 11 gained 2 on 2026-08-29.** `tactic-align-audit-legacy-review`
+> was pruned from the graph by the D1 prune, so it leaves the count entirely
+> (127 accounted for, down from 128). PR15's split moved 2 nodes into
+> `deferred` — a move from above the line to below it, which is why the total
+> falls by 2 while the surveyed figure rises by the same 2.
+>
+> **The five restored sittings are the reason the rows stopped summing.** Until
+> 2026-08-29 this table carried `pre-PR sessions | 9`. The prune replaced it
+> with `measurement runs | 3` on the grounds that the sittings were all held —
+> but a sitting discharges the *gate*, not the *node*. Five of those nodes are
+> still open on `origin/main` and in no `### Nodes closed` section, so dropping
+> the row made them invisible rather than closed. They have their own row again.
+> The ninth is the pruned node above.
 
 **How the scope was built.** The original sweep was ledger-driven — every open
 `tactic-eval-finding-*` node plus the design nodes resolving them — and was
@@ -4265,10 +4161,18 @@ counted open nodes serving a graph strategy
 `strategy-graph-drives-dispatch`, `strategy-graph-self-description`) whose
 **statement** names a graph read or write path: 32 more, none of them in the
 plan, creation dates spanning 2026-07-12 to 2026-08-14 — a coverage gap, not a
-timing artifact. 22 were assigned (PR1, PR15, PR16, PR17); 10 are documented and
-deliberately unassigned. A third pass added the `/align` charter and supersession
-work (PR18, PR19, PR20). Every assigned node was re-verified `phase: null` on
-`origin/main`.
+timing artifact. 22 were assigned (PR1, PR15, PR16, PR17); 10 were documented
+and deliberately unassigned. A third pass added the `/align` charter and
+supersession work (PR18, PR19, PR20). Every assigned node was re-verified
+`phase: null` on `origin/main`.
+
+> **That "10" is a 2026-08-14 reading of a figure that has moved twice since,
+> and it is not a separate set from the deferred and adjacent lists below.** It
+> is their sum. It became 11 on 2026-08-15 when clarification 243 moved
+> `tactic-demote-node-stale-local-read` out of PR1 into `deferred`, and 13 on
+> 2026-08-29 when the PR15 split moved two more. The sentence above was never
+> restamped, so the document carried 10 in prose and 11 in its table for two
+> weeks and the eleventh looked unaccounted for. The table is the live figure.
 
 > **That `phase: null` re-verification expired on 2026-08-20 — in both
 > directions.**
@@ -4284,13 +4188,16 @@ work (PR18, PR19, PR20). Every assigned node was re-verified `phase: null` on
 > **Outward:** the same filter is why the plan never saw the ~20 in-charter
 > nodes at `phase: implement` with no PR, or the 20 in-charter open draft PRs.
 > A fourth pass censused both and routed them; with the overhang retired the
-> total becomes **131**.
+> total becomes **128** — the 114, plus the 13 the overhang absorbed, plus
+> PR5a's one node, which was never in the original scope. It read 131 against
+> the old 117.
 
-Of the 117, **38 are on the graph read/write path** — PR1's 8, PR15's 4, PR16's
+Of the 114, **36 are on the graph read/write path** — PR1's 8, PR15's 2, PR16's
 11, PR17's 6, PR18's 5, PR19's 3 and PR4's `batchIds` unit — plus PR20's
 `--review` unit, which adds a receipt gate to that same writer. It is the largest
 single surface in the plan, and the one every other PR's bookkeeping runs
-through.
+through. It was 38 of 117 until the PR15 split moved 2 of them into the deferred
+set, which this total excludes.
 
 **Deferred, with reasons:**
 
@@ -4305,6 +4212,19 @@ through.
 - `tactic-demote-node-stale-local-read` — blocked behind
   `tactic-phase-evidence-fingerprint-bound` (`phase: qa`).
 
+**Sittings held, nodes still open — inside the 114, in no PR:**
+`tactic-review-sitting-code-review-lock-design`,
+`tactic-review-band-derivation-ratification`,
+`tactic-review-tradition-agentic-engineering`,
+`tactic-review-supersession-derived-subpoints` and
+`tactic-review-dispatch-charter-split`. All five are `status: raw`,
+`phase: null` on `origin/main`. Their sittings were held at the 2026-08-28
+author round, which discharged the gate each one blocked — but none of the
+nodes closed, and none appears in a `### Nodes closed` section. A sixth,
+`tactic-align-audit-legacy-review`, was pruned from the graph outright; a
+seventh, `tactic-sensor-deregistration-gate`, is counted under PR16. Close
+these five deliberately or route them; do not assume the sitting closed them.
+
 **Adjacent, surveyed and deliberately not claimed:**
 `tactic-qa-main-node-terminal-declaration`, `tactic-invalid-state-rc-f1c843b1`
 and `tactic-invalid-state-rc-fa3075ec` — all three are `/qa-main` node-lane paths
@@ -4312,6 +4232,15 @@ that write job-dir markers instead of graph state. Genuine write-integrity
 defects, but `/qa-main` does not run while the sentinel holds, and they overlap
 PR12's four-lane surface. Also `tactic-session-reap-authorization-durability` and
 `tactic-park-cause-sensor-instrument` — both need a running fleet.
+
+> **Why `tactic-retire-assessor-contract-docs` moved neither count.** It was
+> created 2026-08-28 (`447fc27d`) as residue from the D1 prune — two weeks after
+> the 2026-08-14 scope build this table counts. It was never a census member, so
+> it is neither in the 114 nor in the 13, and the 2026-08-29 ruling that put it
+> on PR20 correctly changed only the *bundle* count at position 9, 8 → 9. Its
+> earlier "in no bundle" state was a routing gap for a post-census node, not a
+> gap in this table. The plan's scope line is a dated filter, not a live census:
+> nodes minted after 2026-08-14 ride a PR without joining these totals.
 
 **What is done:** PR1 (8 nodes), the ref-split decision and the five residual
 nodes it discovered, the overhang retirement, and every author gate.
