@@ -1887,6 +1887,23 @@ a successful review. Scope the match structurally.
 PR1. Units 1 → 2 → 3 internally, and **Unit 1's interrupt demonstration gates
 Unit 2** — the design was ratified, the demonstration was not.
 
+> **The demonstration is Unit 1's own acceptance test, not a prior gate on
+> starting PR6.** It was briefly tracked as an owed item blocking the PR, which
+> is circular — it tests the `systemd-run --user` re-parenting that Unit 1
+> builds. Nothing gates *starting* this PR; the demonstration gates *trusting
+> Unit 2*, which is what the Scope section already said.
+>
+> **De-risked 2026-08-29.** The mechanism was demonstrated on this host ahead
+> of the PR: a child launched into a `systemd-run --user` transient unit
+> survived the teardown of the launching Bash tool call and ran to completion,
+> writing its marker 12s later. The 2026-08-28 sitting had established topology
+> only (PPID 314, own `app.slice` cgroup, `flock` released on child exit) and
+> explicitly *not* survival of a launcher teardown. **Honest limit:** that run
+> killed a *background* task, which is the same class of teardown but not
+> literally a user interrupting a foreground tool call. So Unit 1's interrupt
+> test is now a **confirmation**, not a discovery — but it is still owed before
+> Unit 2 ships.
+
 ### Reuse
 
 - The lock shipped in PR #3078 — repair it rather than replacing it; Unit 1 is
@@ -2552,8 +2569,21 @@ scope**.
 - `tactic-rsi-audit-prioritization-writer` — **blocked outside this plan.** Its
   `blocked_by` names `tactic-attention-namespaced-rank`, which is not in this
   scope and has an open branch. Confirm that node has landed before starting.
-- `tactic-rsi-reprioritization-outcome-audit`
-- `tactic-rsi-research-skill`
+- `tactic-rsi-reprioritization-outcome-audit` — **parked on an author ruling.**
+  Its `office_hours` park states plainly that the plan for this node *cannot be
+  written* without a ruling on what observable (a) measures: the serving
+  strategy's `success_signal` names "the median closure interval of tactics the
+  model front-loaded, against the dispatch queue's baseline" and defines
+  neither quantity. Still open as of 2026-08-29.
+- `tactic-rsi-research-skill` — **park CLEARED 2026-08-29**; all three owed
+  rulings answered. Now `status: codified`, carrying its execution plan in its
+  body, with a `blocked_by` edge onto `tactic-rsi-lane-token-attribution`.
+
+> **This PR is the least-ready work in the window; do not read "3 nodes" as
+> "3 plannable nodes."** As of 2026-08-29 one node is parked on an unanswered
+> author ruling (Unit 2), one is blocked on a node outside this plan (Unit 1),
+> and only Unit 3 is ready to build. Sequence accordingly, and expect to ship a
+> subset rather than the whole PR.
 
 ### Scope
 
@@ -2579,14 +2609,86 @@ than the queue baseline?
 > `tactic-rsi-research-skill.md:59` and
 > `tactic-attention-namespaced-rank.md:822` while you are in the graph.
 
-**Unit 3 — research skill.** Build `/rsi-research` and its weekly harness-cron
-schedule — the scheduled `/deep-research` sensor lane of the RSI strategy.
+**Unit 3 — the research lane, folded.** **RULED 2026-08-29 — do NOT build a
+standalone `/rsi-research` skill and do NOT install a weekly schedule.** The
+lane is folded into `/rsi-audit` as an **opt-in subskill**, invoked by it and
+deliberately absent from the user-invocable slash-command list; a
+`/rsi-research` command would re-create the separate lane the ruling removes.
+The external pass fires only in response to an endogenous finding own telemetry
+cannot explain, and is **default-off** so a routine audit performs no external
+fetch.
+
+Ground: the serving strategy opens *"measurement, not a second orchestrator —
+one shared evaluation core … every producer records findings through that one
+write surface."* A weekly skill with its own schedule and outputs is
+structurally a second lane. #3074 had already collapsed this family into
+exactly two skills; a third would re-expand it.
+
+Three sub-units, and the third is the one worth testing:
+
+- **U3a — the lane parameter.** `/rsi-audit` accepts a lane selecting a named
+  preset sized to a **token target** (`low`, `medium`, `full`; `medium` is the
+  interactive default). This is **not** a model reasoning-effort knob, though a
+  preset may set one. Validate the value; exit non-zero on anything
+  unrecognized rather than defaulting.
+- **U3b — the research invocation.** Preserve correction **C1** exactly: a
+  headless session whose *initial user message* is the slash command,
+  `claude -p "/deep-research <question>"`. `/deep-research` is a harness
+  built-in marked `disable-model-invocation` — **a subskill cannot call it any
+  more than a skill could.** Carries C2 (`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`
+  in a wrapper script, never an inline `VAR=value` prefix — see
+  `.claude/rules/sandbox.md`), C3 (narrow `--allowedTools`, never
+  `--dangerously-skip-permissions`), C4 (`< /dev/null`), C6 (arXiv at `/abs/`),
+  C7 (two bounded passes).
+- **U3c — the post-processing.** Turn the returned report into
+  `tactic-eval-finding-<slug>` entries via `dispatch-eval-finding`, passing
+  **`--sensor rsi-research`** — distinct from the skill's own `--sensor
+  rsi-audit` — and naming the endogenous finding that provoked the run. Without
+  that marker a hypothesis and a measurement land on one surface
+  indistinguishable, and the strategy's rule that an external finding never
+  outranks a measured internal signal becomes unreadable in the data.
+
+> **Two silent failure modes, both measured 2026-08-29 — guard both.**
+> `claude --effort <bad>` prints a warning to stderr and proceeds at **default**
+> effort rather than failing, so a typo in the test path yields a full-cost run
+> that looks like it worked. And effort throttles reasoning depth, **not
+> fan-out** — it does not obviously reduce the ~108 subagents or 25 source
+> fetches a full cycle performs. A `low` lane must therefore bound *work*
+> (seeds, passes, caps), not only reasoning; pair it with `--max-budget-usd` as
+> a hard ceiling rather than a hint.
+
+**Cut breadth before depth** when sizing a preset. C7 measured the ratified
+nine-seed list as doing little steering, while the verification pass killed 8 of
+25 claims — breadth bought less than expected, depth bought a lot. So `medium`
+keeps adversarial verification **on** and cuts seeds and frontier expansion
+instead.
+
+Full axis list, lane definitions and the calibration loop are on
+`tactic-rsi-research-skill` (clarifications of 2026-08-29). **Its "do not edit
+`.claude/skills/rsi-audit/SKILL.md`" note is reversed by the same ruling** —
+that file is now the host.
 
 ### Dependencies
 
 PR3 and PR10. Unit 1 additionally depends on `tactic-attention-namespaced-rank`,
 which is **outside this plan** — if it has not landed, ship Units 2–3 and leave
 Unit 1 open rather than blocking the PR.
+
+**Unit 3 additionally depends on `tactic-rsi-lane-token-attribution`** (status
+`codified`, phase `implement` as of 2026-08-29), which owns correction **C5**.
+That dependency is load-bearing, not incidental: a lane parameter targeting
+token usage cannot be calibrated while a cycle's real cost lands in nested
+`subagents/workflows/wf_*/agent-*.jsonl` under an anonymous headless session id
+with no node id — there is nothing to scope the confirming measurement to. A
+target you cannot measure is not a target. Recorded as a `blocked_by` edge on
+the node.
+
+**No longer required:** a `blocked_by` edge onto
+`tactic-grounding-deep-research-condition-reconcile`. That precondition existed
+because scheduling the lane *unattended* would cross
+`strategy-complete-grounding`'s condition that `/deep-research` sourcing stays
+author-invoked. The fold retires the schedule, so the condition is **satisfied
+rather than narrowed**.
 
 ### Verification
 
