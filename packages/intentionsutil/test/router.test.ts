@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Execution, IntentionNode, SuccessSignal } from "../src/schema.js";
 import { PHASES } from "../src/schema.js";
 import {
+  FLEET_ALARM_KINDS,
   frozenTacticSelectable,
   readingDate,
   resolveFrozenDescendant,
@@ -820,6 +824,81 @@ describe("frozen-node candidates", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-not-the-wait-id"]);
   });
 
+  it("a tactic-fleet-alarm-<kind> draft is not draft-selectable (tactic-fleet-alarm-node-park-clobber-loop, ruling (a))", () => {
+    // dispatch-fleet-alarm mints these nodes phase-null (draft shape) and
+    // resolves them exclusively via --resolve (phase -> done); /align-tactics
+    // must never treat one as an undecomposed draft, or a worker spawned on
+    // it could only ever freeze (there is nothing for it to decompose).
+    const nodes = [
+      tactic({ id: "tactic-fleet-alarm-unclaimed-hold", phase: null }),
+      tactic({ id: "tactic-fleet-alarm-busy-stall", phase: null }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("a tactic-fleet-alarm-<kind> draft carrying an office_hours park still emits no candidate", () => {
+    // The park-survival half of the fix lives in dispatch-fleet-alarm's
+    // classify() (shell layer, not this pure selector) — but the selector's
+    // own exclusion must hold regardless of office_hours, since the whole
+    // point is these nodes are never worked by /align-tactics at all.
+    const nodes = [
+      tactic({
+        id: "tactic-fleet-alarm-unclaimed-hold",
+        phase: null,
+        office_hours: {
+          reason: "worker session froze",
+          since: "2026-08-01",
+          recommendation: null,
+          session_type: "other",
+        },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("an id that merely starts with the fleet-alarm prefix, without a kind segment, is treated as an ordinary draft", () => {
+    // Boundary check on the anchored regex: `tactic-fleet-alarm` alone (no
+    // trailing `-<kind>`) is not a member of the reserved id family.
+    const nodes = [tactic({ id: "tactic-fleet-alarm", phase: null })];
+    expect(candidateIds(nodes)).toEqual(["tactic-fleet-alarm"]);
+  });
+
+  it("an id that continues past the fleet-alarm prefix with a different word is treated as an ordinary draft", () => {
+    // `startsWith("tactic-fleet-alarm-")` would wrongly swallow this; the
+    // ANCHORED regex only matches the exact reserved shape, mirroring the
+    // dispatch-graph-main-red-sync bare-prefix incident dispatch-fleet-alarm's
+    // own comments warn against.
+    const nodes = [tactic({ id: "tactic-fleet-alarmist-review", phase: null })];
+    expect(candidateIds(nodes)).toEqual(["tactic-fleet-alarmist-review"]);
+  });
+
+  it("EVERY kind in the closed enum is excluded — the whole family, not a sample", () => {
+    // The two cases above happen to name two kinds; this one is exhaustive, so
+    // adding a kind to FLEET_ALARM_KINDS without wiring it into the exclusion
+    // regex fails here rather than silently leaving that alarm node selectable.
+    const nodes = FLEET_ALARM_KINDS.map((k) => tactic({ id: `tactic-fleet-alarm-${k}`, phase: null }));
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("a hand-authored tactic-fleet-alarm-* draft whose slug is NOT an alarm kind is still emitted", () => {
+    // The regression this pins: the exclusion regex used to anchor the SHAPE
+    // (`^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$`) rather than the closed
+    // MEMBERSHIP, so it swallowed every hand-authored node whose id happened to
+    // start with the reserved prefix. These four are the real ones in the live
+    // store at the time of the fix — genuine undecomposed work nodes (kind:
+    // tactic, status: raw, phase: null) — and shape-anchoring made all four
+    // PERMANENTLY unselectable, including the very node this unit exists to
+    // close. Anchoring the shape is not anchoring the membership.
+    const ids = [
+      "tactic-fleet-alarm-daemon-casualty-list",
+      "tactic-fleet-alarm-mint-rollback-corruption",
+      "tactic-fleet-alarm-node-park-clobber-loop",
+      "tactic-fleet-alarm-resolve-rollback-latch",
+    ];
+    const nodes = ids.map((id) => tactic({ id, phase: null }));
+    expect(candidateIds(nodes).sort()).toEqual([...ids].sort());
+  });
+
   it("a parked draft tactic emits no candidate", () => {
     const nodes = [
       tactic({
@@ -1357,5 +1436,41 @@ describe("readingDate", () => {
 
   it("returns null when no parseable date exists", () => {
     expect(readingDate("single holder, nothing documented")).toBeNull();
+  });
+});
+
+describe("FLEET_ALARM_KINDS drift guard", () => {
+  // The alarm-kind enum exists in two places by necessity: this TS list (which
+  // builds the router's candidate-exclusion regex) and the bash `KINDS=(...)`
+  // array in dispatch-fleet-alarm (which needs it in bash ARRAY context for its
+  // --kind membership check and its own anchored ID_RE). Neither language can
+  // import the other's literal, so the coupling is enforced here instead: parse
+  // the bash array out of the script and require it to equal the TS list
+  // exactly. Extending the enum in one file only fails this test.
+  const scriptPath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm",
+  );
+
+  /** The kinds listed in the script's `KINDS=(...)` array, in source order. */
+  function bashKinds(): string[] {
+    const src = readFileSync(scriptPath, "utf8");
+    const match = /^KINDS=\(([^)]*)\)$/m.exec(src);
+    if (match === null) {
+      throw new Error(`no \`KINDS=(...)\` array found in ${scriptPath}`);
+    }
+    return match[1].trim().split(/\s+/);
+  }
+
+  it("the bash KINDS array is exactly the TS FLEET_ALARM_KINDS list", () => {
+    expect(bashKinds()).toEqual([...FLEET_ALARM_KINDS]);
+  });
+
+  it("the parse itself is non-vacuous: a real, non-empty array was read", () => {
+    // Without this, a regex that silently matched an empty capture would make
+    // the equality assertion above pass against a mistake rather than a match.
+    const kinds = bashKinds();
+    expect(kinds.length).toBeGreaterThan(0);
+    expect(kinds).toContain("tick-stale");
   });
 });

@@ -242,7 +242,12 @@ Then record the occurrence:
   required on every call because you cannot know whether this occurrence mints.
 - `--body-file` is the finding's prose: what was observed, the node/phase/run it
   was observed in, the evidence figures, and what would have to change. Name the
-  evidence a later session cannot rediscover.
+  evidence a later session cannot rediscover. It is written **into a region the
+  script owns** — the `<!-- generated:dispatch-eval-finding -->` marker pair —
+  so on a recurrence it replaces the previous reading and nothing else. Anything
+  a person has written around that region on an existing entry survives, and you
+  are not writing the whole body: do not try to reproduce a human's annotations
+  in your own body file to "keep" them.
 - `--sensor` names the instrument. `rsi` for the occurrence
   itself; for a figure lifted from another instrument, name that instrument in
   the `--impact-file` record's own `sensor` field (e.g. `aggregate-usage.sh`,

@@ -147,6 +147,73 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
 }
 
 /**
+ * The CLOSED enum of `dispatch-fleet-alarm` condition kinds — the single
+ * source of truth for which `tactic-fleet-alarm-<kind>` ids name a
+ * mechanically-managed alarm node.
+ *
+ * This list is mirrored by that script's own bash `KINDS=(...)` array
+ * (`.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm`), which
+ * needs it in bash array context for its `--kind` membership check. The two
+ * copies cannot silently diverge: `router.test.ts` parses `KINDS=(...)` out of
+ * that file and asserts it equals this list, element for element and in order.
+ * Extending the enum is therefore a deliberate two-file edit, and forgetting
+ * the second file fails the suite rather than quietly un-protecting a node.
+ */
+export const FLEET_ALARM_KINDS = [
+  "tick-stale",
+  "daemon-degraded",
+  "busy-stall",
+  "automerge-suppressed",
+  "unclaimed-hold",
+  "main-checkout-held",
+  "watch-unknown",
+  "heal-fired",
+  "heal-unknown",
+] as const;
+
+/**
+ * The id shape reserved for `dispatch-fleet-alarm`'s mechanically-managed
+ * alarm-node family (tactic-fleet-alarm-node-park-clobber-loop, ruling (a)):
+ * `tactic-fleet-alarm-<kind>`, one node per closed-enum condition kind.
+ * These nodes are minted, refreshed, and resolved EXCLUSIVELY by that script
+ * — `--resolve` (phase -> done) is their only terminal, never a human or
+ * `/align-tactics` decomposition — so they must never surface as a draft
+ * candidate here. Before this exclusion, a park landed on one (e.g. because
+ * its worker session froze) was silently wiped the next time the alarm
+ * script re-detected the condition and mint-fresh overwrote the parked node
+ * (see dispatch-fleet-alarm's `classify()` fix alongside this one).
+ *
+ * Built from `FLEET_ALARM_KINDS`, so it matches the CLOSED MEMBERSHIP, not
+ * merely the anchored shape. An earlier revision anchored the shape only
+ * (`^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$`), and that over-captured
+ * exactly the way a bare `startsWith` would: the live store carries four
+ * hand-authored `tactic-fleet-alarm-*` work nodes whose slugs are NOT alarm
+ * kinds (`daemon-casualty-list`, `mint-rollback-corruption`,
+ * `node-park-clobber-loop`, `resolve-rollback-latch`), and anchoring the shape
+ * made every one of them permanently unselectable — including
+ * `tactic-fleet-alarm-node-park-clobber-loop`, the node this very fix exists
+ * to close. Anchoring the SHAPE is not anchoring the MEMBERSHIP; only the enum
+ * is. This also keeps the original boundary property that motivated the
+ * anchoring (the `dispatch-graph-main-red-sync` bare-prefix incident, where a
+ * prefix test matched an unrelated hand-authored node and mechanically
+ * auto-completed it): `tactic-fleet-alarmist-review` still does not match.
+ *
+ * Chosen over a general `attributes` marker (the plan's alternative) because
+ * the marker would need either a schema change or an unvalidated ad hoc
+ * `attributes` key, AND a migration write to every already-minted
+ * `tactic-fleet-alarm-<kind>` node before the exclusion would protect them.
+ * The enum-backed id family already IS the durable, zero-migration marker:
+ * `dispatch-fleet-alarm` refuses any `--kind` outside it, so no node can join
+ * the family except through that script.
+ */
+const FLEET_ALARM_ID_RE = new RegExp(`^tactic-fleet-alarm-(?:${FLEET_ALARM_KINDS.join("|")})$`);
+
+/** Whether `node` belongs to the reserved `dispatch-fleet-alarm` id family. */
+function isFleetAlarmNode(node: IntentionNode): boolean {
+  return node.kind === "tactic" && FLEET_ALARM_ID_RE.test(node.id);
+}
+
+/**
  * The SIGNAL STRING an open tactic's candidate is emitted at — what the shell
  * layer routes on, which is not always the node's persisted ladder `phase`.
  *
@@ -453,12 +520,18 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   // against the drifted strategy. Both gate on office_hours null and complete
   // blockers. A tactic that is neither draft nor soft-frozen is already handled
   // by the executable loop above (or is done / not eligible) and skipped here.
+  // A draft in the reserved `tactic-fleet-alarm-<kind>` id family is excluded
+  // (isFleetAlarmNode, tactic-fleet-alarm-node-park-clobber-loop, ruling (a)):
+  // that family is minted and resolved exclusively by dispatch-fleet-alarm,
+  // never decomposed by /align-tactics, so treating it as an undecomposed
+  // draft candidate here spawned a worker that could only ever freeze on it.
   for (const t of tactics) {
     if (t.office_hours !== null) continue;
     if (!blockersComplete(t, byId)) continue;
     if (isDraft(t)) {
       if (subtreeParentIds.has(t.id)) continue; // permanent container, not an undecomposed draft
       if (waitNodeIds.has(t.id)) continue;      // armed calendar WAIT, not an undecomposed draft
+      if (isFleetAlarmNode(t)) continue;        // mechanically managed; --resolve is its only terminal
       candidates.push({
         id: t.id,
         kind: "tactic",

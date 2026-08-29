@@ -363,6 +363,10 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/test-lint-prose-rules.sh
       - name: Run ds-drift lint tests
         run: .claude/skills/dispatch-propagate/scripts/test-lint-ds-drift.sh
+      - name: Run review-fix write-surface guard tests
+        run: .claude/skills/dispatch-propagate/scripts/test-review-fix-write-surface-guard.sh
+      - name: Run fleet-alarm park-aware classify tests
+        run: .claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-alarm-classify.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
       - name: Run statusline hook tests

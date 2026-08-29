@@ -141,6 +141,53 @@
 # its phase over a ledger write, but a dropped occurrence must never be silent.
 #
 # ---------------------------------------------------------------------------
+# THE OWNED BODY REGION: ONLY A CREATE MAY WRITE A WHOLE BODY
+# ---------------------------------------------------------------------------
+#
+# The markdown body is half of `tacticScopeFingerprint`
+# (packages/intentionsutil/src/router.ts — the pair (statement, body)), so a
+# body write is a SCOPE-SUBSTANCE write. This script used to make that write
+# WHOLESALE on all three of its paths: keep the frontmatter, replace everything
+# after it with --body-file. On the mint that is correct — a create authors its
+# own body. On the two paths where the node ALREADY EXISTS (the recurrence, and
+# the --resolved-by refresh) it destroys whatever was there: the analysis an
+# /align round added to a parked ledger entry, an office-hours annotation, a
+# hand-written repro. Nothing detected it when it fired, because the script
+# cannot tell a body it generated from one a human wrote.
+#
+# So it stops guessing and marks its own work. Everything this script generates
+# is wrapped in the marker pair
+#
+#     <!-- generated:dispatch-eval-finding -->
+#     ...the finding...
+#     <!-- /generated:dispatch-eval-finding -->
+#
+# and the edit paths replace what is INSIDE that pair and nothing else. The
+# in-flight guard below is not a substitute for this and never was: it protects
+# an in-flight session's scope stamp, and says nothing about a node whose
+# `execution` is null — which is every parked or draft ledger entry, i.e. exactly
+# the ones a human has been reading.
+#
+# Two consequences worth stating outright:
+#
+#   * A BODY WITH NO MARKER PAIR IS MIGRATED, NOT REFUSED. The prior body is kept
+#     verbatim and a fresh region is appended after it, so a body grows exactly
+#     once and is stable from then on. Refusing to write an unmarked body would
+#     be safe and useless: every entry minted before this fence would become
+#     permanently unwritable, and the recurrence count is the figure the ledger
+#     exists to carry.
+#   * THE CREATE PATH IS GATED, not merely commented. `splice_body create`
+#     refuses unless what is on disk is empty or the single-line `# ${statement}`
+#     placeholder writeNode generates for a brand-new file. "This caller is a
+#     create, so a wholesale replace is fine" is thereby checked rather than
+#     trusted — a prompt where a gate belongs is the failure mode this whole
+#     fence exists to close.
+#
+# The rest of the ledger's contract is unchanged by this: an identical body still
+# commits (no body-identity gate — see divergence 2's consequences above), and
+# there is still no refresh interval.
+#
+# ---------------------------------------------------------------------------
 # THE CLOSE PATH: --resolved-by STATES A FACT, --retire MAKES A CALL
 # ---------------------------------------------------------------------------
 #
@@ -151,8 +198,9 @@
 # finding that had just been fixed. So the two acts are split:
 #
 #   --resolved-by <commit-or-PR>  states the FACT that a named change addresses
-#     this entry. It writes `attributes.resolved_by` (and refreshes the body if
-#     --body-file is given), and does NOT touch recurrence_count, its `measured`
+#     this entry. It writes `attributes.resolved_by` (and refreshes the body's
+#     generated region if --body-file is given — see "THE OWNED BODY REGION"
+#     above), and does NOT touch recurrence_count, its `measured`
 #     stamp, first_seen, phase, or ledger_entry. Stating a resolution is not an
 #     occurrence, so nothing about the recurrence figure may move.
 #   --retire                      makes the JUDGMENT that the entry is closed.
@@ -281,14 +329,17 @@ usage: dispatch-eval-finding --list
        dispatch-eval-finding -h|--help
 
 Records one occurrence of a recurring evaluation finding as the graph node
-tactic-eval-finding-<slug> (find-or-create; body refreshed and
-attributes.measured_impact recurrence count incremented on every occurrence).
+tactic-eval-finding-<slug> (find-or-create; the body's generated region
+refreshed and attributes.measured_impact recurrence count incremented on every
+occurrence). Only the mint writes a whole body: on an existing node the write is
+confined to the <!-- generated:dispatch-eval-finding --> region, so anything
+authored around it survives.
 
 --list prints the whole ledger as JSON (open AND retired entries) so the caller
 can judge whether the finding in hand IS one of them before choosing a slug.
 --resolved-by states the FACT that a commit sha or a PR reference ('#3079',
 '3079') addresses the entry: it writes attributes.resolved_by and refreshes the
-body, and never moves the recurrence count.
+generated body region, and never moves the recurrence count.
 --list-retirable prints the open entries whose resolved_by names a change that
 is an ancestor of origin/main — the candidate list a human acts on.
 --retire is the JUDGMENT that follows: it completes an entry to phase "done"
@@ -732,6 +783,11 @@ classify() {
 # verbatim in behaviour; see that script's header for why each guard exists.
 # (origin_main_ref_ok belongs to this group too but is defined further up, where
 # --list-retirable can reach it.)
+#
+# splice_body is the ONE member of that group that is NO LONGER verbatim: the
+# sibling's copy replaces the whole body on every path it is called from, and
+# this one will do that on a create and nowhere else. See "THE OWNED BODY
+# REGION" in the header for why.
 origin_blob() {
   local out
   out=$(git -C "$REPO_ROOT" rev-parse "origin/main:$NODE_REL" 2>/dev/null) || return 1
@@ -748,8 +804,43 @@ restore_from_blob() {
   mv "$tmp" "$NODE_FILE"
 }
 
+# THE MARKER PAIR THAT BOUNDS WHAT THIS SCRIPT OWNS. Everything the ledger
+# generates lives between these two lines, and an EDIT-path write replaces what
+# is between them and nothing else. HTML comments, so they render as nothing.
+BODY_REGION_OPEN="<!-- generated:dispatch-eval-finding -->"
+BODY_REGION_CLOSE="<!-- /generated:dispatch-eval-finding -->"
+
+# splice_body <create|region> — the only writer of $NODE_FILE's markdown body.
+#
+#   create  replaces everything after the frontmatter with the marked region.
+#           Legal ONLY over what writeNode has just generated: a body that is
+#           empty, or the single-line `# ${statement}` placeholder
+#           (packages/intentionsutil/src/store.ts, whose own assertNoBodyLoss
+#           recognises the same shape). Anything richer on disk is content this
+#           script did not author, and the mode refuses instead of replacing it.
+#           That refusal is what makes "a create may replace wholesale" a
+#           CHECKED PRECONDITION rather than a comment the caller is trusted to
+#           honour.
+#   region  replaces the content BETWEEN the markers and leaves every other byte
+#           of the body alone. A body carrying no marker pair keeps its whole
+#           prior content verbatim and gains a fresh region appended at the end —
+#           that append IS the migration, so a body grows exactly once and is
+#           stable after. Refusing to write an unmarked body instead would leave
+#           every entry minted before this fence permanently unwritable. An
+#           unbalanced pair is refused rather than guessed at.
+#
+# A failure RETURNS 1 and never exits: every call site chains this into the
+# rollback branch that restores $NODE_REL from its pre-write blob, and exiting
+# from here would skip it.
 splice_body() {
+  local mode="$1"
   local tmp="$NODE_FILE.tmp"
+  # The prior body is extracted to a FILE, not a variable: "every byte outside
+  # the region survives" is the whole claim, and a command substitution eats
+  # trailing newlines. It lives under $TMP_DIR, which the EXIT trap clears, so
+  # no call site's rollback has to learn about a second temp path.
+  local prior="$TMP_DIR/$ID.prior-body"
+
   if ! awk '{print} /^---$/{c++; if(c==2) exit}' "$NODE_FILE" > "$tmp"; then
     rm -f "$tmp"
     log "could not read the frontmatter of $NODE_FILE — the body splice was abandoned"
@@ -760,9 +851,104 @@ splice_body() {
     log "$NODE_FILE has no complete YAML frontmatter — refusing to splice a malformed node file"
     return 1
   fi
-  if ! cat "$BODY_FILE" >> "$tmp"; then
+  if ! awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_FILE" > "$prior"; then
+    rm -f "$tmp" "$prior"
+    log "could not read the existing body of $NODE_FILE — the body splice was abandoned"
+    return 1
+  fi
+
+  case "$mode" in
+    create)
+      local authored
+      authored=$(grep -v '^[[:space:]]*$' "$prior")
+      if [[ -n "$authored" && ( "$authored" == *$'\n'* || "$authored" != '# '* ) ]]; then
+        rm -f "$tmp" "$prior"
+        log "$NODE_FILE already carries an authored body, and a create replaces the body WHOLESALE — refusing to discard it. This path runs only for a node writeNode has just created, so a body here means the classification was wrong; nothing was written"
+        return 1
+      fi
+      ;;
+    region)
+      local opens closes
+      opens=$(grep -cxF "$BODY_REGION_OPEN" "$prior")
+      closes=$(grep -cxF "$BODY_REGION_CLOSE" "$prior")
+      if (( opens != closes || opens > 1 )); then
+        rm -f "$tmp" "$prior"
+        log "$NODE_FILE carries $opens opening and $closes closing '$BODY_REGION_OPEN' marker(s) — refusing to guess which bytes this script owns; repair the marker pair by hand, then re-record"
+        return 1
+      fi
+      if (( opens == 1 )); then
+        # A balanced pair (1 open, 1 close) is not yet a well-formed region —
+        # an edit that swaps their order leaves the count balanced but the
+        # close line precedes the open line. Refuse that explicitly instead of
+        # letting the awk below run off the end of the file (see the END guard
+        # there too, as a structural backstop).
+        local open_line close_line
+        open_line=$(grep -nxF "$BODY_REGION_OPEN" "$prior" | cut -d: -f1)
+        close_line=$(grep -nxF "$BODY_REGION_CLOSE" "$prior" | cut -d: -f1)
+        if (( close_line < open_line )); then
+          rm -f "$tmp" "$prior"
+          log "$NODE_FILE's '$BODY_REGION_CLOSE' marker appears before its '$BODY_REGION_OPEN' marker (close at line $close_line, open at line $open_line) — refusing to guess which bytes this script owns; repair the marker order by hand, then re-record"
+          return 1
+        fi
+        # Replace in place: every line before the opening marker and every line
+        # after the closing one is copied through untouched, so the generated
+        # reading may carry its own `##` headings without ambiguity.
+        #
+        # END guard: if the close marker were somehow never hit, `skip` stays
+        # 1 and the loop would otherwise silently drop every remaining line to
+        # EOF. The ordering check above already rules that out, but this is
+        # the structural backstop that makes the truncation impossible even if
+        # that check is ever weakened or bypassed.
+        if ! awk -v om="$BODY_REGION_OPEN" -v cm="$BODY_REGION_CLOSE" -v bf="$BODY_FILE" '
+          $0 == om { print; while ((getline line < bf) > 0) print line; close(bf); skip = 1; next }
+          skip && $0 == cm { print; skip = 0; next }
+          !skip { print }
+          END { if (skip) exit 1 }
+        ' "$prior" >> "$tmp"; then
+          rm -f "$tmp" "$prior"
+          log "could not rewrite the owned region of $NODE_FILE from $BODY_FILE — the closing '$BODY_REGION_CLOSE' marker was never reached while rewriting, so the rest of the body would have been dropped — the body splice was abandoned"
+          return 1
+        fi
+        rm -f "$prior"
+        # The region is already written; the shared append tail below is for the
+        # create mode and for the unmarked-body migration.
+        mv "$tmp" "$NODE_FILE" || return 1
+        return 0
+      fi
+      # No region yet. Keep the whole prior body and append one after it.
+      if ! cat "$prior" >> "$tmp"; then
+        rm -f "$tmp" "$prior"
+        log "could not preserve the existing body of $NODE_FILE — the body splice was abandoned"
+        return 1
+      fi
+      # A prior body with no trailing newline would run its last line into the
+      # opening marker.
+      if [[ -s "$prior" && -n "$(tail -c 1 "$prior")" ]]; then
+        printf '\n' >> "$tmp"
+      fi
+      ;;
+    *)
+      rm -f "$tmp" "$prior"
+      log "internal error: splice_body called with unknown mode '$mode'"
+      return 1
+      ;;
+  esac
+  rm -f "$prior"
+
+  if ! { printf '%s\n' "$BODY_REGION_OPEN" && cat "$BODY_FILE"; } >> "$tmp"; then
     rm -f "$tmp"
     log "could not read the finding from $BODY_FILE — the body splice was abandoned"
+    return 1
+  fi
+  # Same trailing-newline guard: a --body-file that does not end in one would
+  # glue the closing marker to its last line and leave the pair unparseable on
+  # the next pass.
+  if [[ -s "$BODY_FILE" && -n "$(tail -c 1 "$BODY_FILE")" ]]; then
+    printf '\n' >> "$tmp"
+  fi
+  if ! printf '%s\n' "$BODY_REGION_CLOSE" >> "$tmp"; then
+    rm -f "$tmp"
+    log "could not close the owned region in $NODE_FILE — the body splice was abandoned"
     return 1
   fi
   mv "$tmp" "$NODE_FILE"
@@ -1065,7 +1251,7 @@ if [[ -n "$RESOLVED_BY" ]]; then
     ' "$TMP_DIR/base/$ID.json" > "$TMP_DIR/$ID.patched.json" || exit 1
     cd "$REPO_ROOT" || exit 1
     "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
-  ) 1>&2 || { [[ -n "$BODY_FILE" ]] && ! splice_body; } \
+  ) 1>&2 || { [[ -n "$BODY_FILE" ]] && ! splice_body region; } \
     || ! run_graph_commit --base "$MANIFEST" -m "graph: finding ledger entry $SLUG resolved by $RESOLVED_BY" "$ID"; then
     rm -f "$NODE_FILE.tmp"
     if ! restore_from_blob "$PRE_BLOB"; then
@@ -1165,7 +1351,7 @@ case "$STATE" in
     if ! (
       cd "$REPO_ROOT" || exit 1
       "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.json" || exit 1
-    ) 1>&2 || ! splice_body || ! run_graph_commit -m "graph: record finding ledger entry $SLUG" "$ID"; then
+    ) 1>&2 || ! splice_body create || ! run_graph_commit -m "graph: record finding ledger entry $SLUG" "$ID"; then
       rm -f "$NODE_FILE.tmp"
       # No restore-from-blob arm here: the guard above already refused every
       # case where $NODE_REL exists at origin/main, so on this path there is no
@@ -1260,7 +1446,7 @@ case "$STATE" in
       ' "$TMP_DIR/base/$ID.json" > "$TMP_DIR/$ID.patched.json" || exit 1
       cd "$REPO_ROOT" || exit 1
       "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
-    ) 1>&2 || ! splice_body \
+    ) 1>&2 || ! splice_body region \
       || ! run_graph_commit --base "$MANIFEST" -m "graph: finding ledger entry $SLUG recurred" "$ID"; then
       rm -f "$NODE_FILE.tmp"
       if ! restore_from_blob "$PRE_BLOB"; then

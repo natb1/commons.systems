@@ -177,7 +177,15 @@ if ! source "$SCRIPT_DIR/lib.sh"; then
   exit 69
 fi
 
-# The closed enum of alarm kinds. Extending it is a deliberate edit here.
+# The closed enum of alarm kinds. Kept in bash array form because the --kind
+# membership check and the anchored ID_RE below both need it in array context.
+#
+# SINGLE SOURCE OF TRUTH: `FLEET_ALARM_KINDS` in
+# packages/intentionsutil/src/router.ts, which builds the router's
+# candidate-exclusion regex from the same list. Extending the enum is a
+# deliberate edit in BOTH files, in the same order — the drift guard in
+# packages/intentionsutil/test/router.test.ts parses this very `KINDS=(...)`
+# line and fails if the two ever diverge.
 KINDS=(tick-stale daemon-degraded busy-stall automerge-suppressed unclaimed-hold main-checkout-held watch-unknown heal-fired heal-unknown)
 
 usage() {
@@ -192,7 +200,8 @@ kinds: tick-stale daemon-degraded busy-stall automerge-suppressed
 Records an out-of-band fleet-health reading as the graph node
 tactic-fleet-alarm-<kind> (find-or-create; body refreshed on re-detection).
 --resolve completes an open alarm node to phase: "done" when its condition has
-definitively cleared.
+definitively cleared. It refuses (no-op) on a node carrying a non-null
+office_hours: a human park is theirs to clear, not this script's to complete.
 
 exit: 0 landed / no-op, 1 graph write failed (rolled back), 64 usage,
       69 environment, 70 write failed and the rollback left a dirty node file.
@@ -321,8 +330,29 @@ fi
 
 # classify <id> -> prints absent | open | closed
 # readNode reads only the YAML frontmatter, so classification never touches the
-# body. done, or parked in office_hours, is a since-resolved node -> closed; a
-# throw (no such file) -> absent.
+# body. `phase: done` alone is a since-resolved node -> closed; a throw (no
+# such file) -> absent.
+#
+# PARK-AWARE (tactic-fleet-alarm-node-park-clobber-loop, ruling (b)): a
+# non-null `office_hours` no longer classifies as closed on its own. It used
+# to (a retired `|| n.office_hours !== null` disjunct here), on the theory
+# that a human park was itself a form of resolution — but that conflated two
+# unrelated meanings of a park: "this alarm is dismissed" and "a worker
+# session froze, needs human attention, come back to the SAME condition."
+# The second case is the common one (this
+# script's own `--resolve` sets `phase: "done"` directly and never touches
+# `office_hours`), and classifying it as `closed` routed it into the
+# mint-fresh path below — which builds a brand-new frontmatter object from
+# scratch and overwrites the file, discarding the parked `office_hours`
+# record along with everything else a human or worker wrote. A node with
+# `office_hours !== null` but `phase !== "done"` now reads `open` instead,
+# which routes re-detection through the CAS refresh path (`splice_body` +
+# `graph-commit --base`) that only ever rewrites the body after the second
+# frontmatter fence — the park, and every other frontmatter field, survives
+# untouched. `--resolve` (see below) remains the only path that can complete
+# one of these nodes to `phase: "done"` — and it now REFUSES on a parked node
+# (its Guard 1), so classifying a park as `open` cannot be turned around into
+# mechanically completing the park.
 classify() {
   if [[ ${#CLASSIFY_CMD[@]} -gt 0 ]]; then
     "${CLASSIFY_CMD[@]}" "$1"
@@ -332,7 +362,7 @@ classify() {
     const { readNode } = await import("./packages/intentionsutil/src/store.js");
     try {
       const n = readNode(process.argv[1], process.argv[2]);
-      process.stdout.write((n.phase === "done" || n.office_hours !== null) ? "closed\n" : "open\n");
+      process.stdout.write((n.phase === "done") ? "closed\n" : "open\n");
     } catch {
       process.stdout.write("absent\n");
     }
@@ -580,7 +610,7 @@ STATE="${STATE//[$'\t\r\n ']/}"
 # resolves — the caller decides that; this script has no notion of an
 # "unknown" reading, so an unknown reading simply never calls --resolve.
 # Structure copied from dispatch-graph-main-red-sync lines 95-160, including its
-# three load-bearing guards.
+# load-bearing guards.
 if [[ "$RESOLVE" == "1" ]]; then
   if [[ "$STATE" != "open" ]]; then
     log "no open $ID to resolve (state: $STATE) — nothing to do"
@@ -593,7 +623,29 @@ if [[ "$RESOLVE" == "1" ]]; then
     exit 1
   }
 
-  # Guard 1: only when execution is null. A node past draft with a live
+  # Guard 1: only when office_hours is null — the PARK guard
+  # (tactic-fleet-alarm-node-park-clobber-loop, ruling (b) follow-up).
+  #
+  # classify() is deliberately park-aware: a node with a non-null office_hours
+  # and phase != done now reads `open` rather than `closed`, which is what stops
+  # the mint-fresh path from wiping the park. But `open` is also the state
+  # --resolve acts on, so without this guard the same change hands --resolve a
+  # parked node and it lands it at phase: "done" with office_hours still set.
+  # The scenario is concrete: a worker freezes on an alarm node, a human parks it
+  # with a question, the condition then clears on its own, the fleet watcher
+  # calls --resolve on its next pass — and the human's park is completed out from
+  # under them, their question never answered. Only a human clearing the park
+  # (clear-park) may complete a parked alarm node; the alarm's own re-detection
+  # path still refreshes its body underneath the park, so nothing is lost by
+  # waiting. This is a precondition on --resolve, NOT a revert of classify():
+  # reverting classify() would restore the clobber, which is the worse defect.
+  if ! jq -e '.office_hours == null' "$TMP_DIR/$ID.json" >/dev/null 2>&1; then
+    log "$ID carries a non-null office_hours (a human parked it and is owed an answer) — refusing to complete it mechanically; clear the park first"
+    printf 'noop\n'
+    exit 0
+  fi
+
+  # Guard 2: only when execution is null. A node past draft with a live
   # execution is an in-flight fix owning its own PR/qa/review lifecycle;
   # mechanical completion must never preempt it.
   if ! jq -e '.execution == null' "$TMP_DIR/$ID.json" >/dev/null 2>&1; then
@@ -602,7 +654,7 @@ if [[ "$RESOLVE" == "1" ]]; then
     exit 0
   fi
 
-  # Guard 2: capture the pre-mutation origin/main blob BEFORE mutating. A node
+  # Guard 3: capture the pre-mutation origin/main blob BEFORE mutating. A node
   # absent from origin/main at this instant is a HARD refusal: with no landed
   # blob there is nothing to roll back to, so mutating anyway would leak exactly
   # the dirty file the rollback exists to prevent. Resolve the REF first so that
@@ -623,7 +675,7 @@ if [[ "$RESOLVE" == "1" ]]; then
     cd "$REPO_ROOT" || exit 1
     "${WRITE_NODE_CMD[@]}" --file "$TMP_DIR/$ID.patched.json" || exit 1
   ) 1>&2 || ! run_graph_commit --base "$MANIFEST" -m "graph: resolve fleet alarm $KIND" "$ID"; then
-    # Guard 3: restore from the captured blob FIRST, then log. Never swallow the
+    # Guard 4: restore from the captured blob FIRST, then log. Never swallow the
     # failure with `|| true` — emit a greppable stderr diagnostic. And never
     # log a rollback that did not happen: branch on restore_from_blob's status.
     if ! restore_from_blob "$FRESH_BLOB"; then

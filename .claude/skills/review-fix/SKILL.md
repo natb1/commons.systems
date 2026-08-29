@@ -1146,16 +1146,21 @@ empty.
   `intentions/`" check does not catch that; enforce the full contract:
 
   ```bash
-  # Only entries that appeared since the pre-fork baseline are the subagent's.
   git -C <root> status --porcelain > "tmp/step5-after-$N.txt"
-  comm -13 <(sort "tmp/step5-baseline-$N.txt") \
-           <(sort "tmp/step5-after-$N.txt") \
-    > "tmp/step5-new-$N.txt"
   ```
 
   Write the returned `node_ids`, one per line, to
-  `tmp/step5-node-ids-$N.txt`, then require of **every** line in
-  `tmp/step5-new-$N.txt`:
+  `tmp/step5-node-ids-$N.txt`. Then run the extracted guard script — it
+  computes "only entries new since the baseline" itself (the same `comm -13`
+  over the sorted baseline/after files the fence used to specify by hand) and
+  enforces the full contract:
+
+  ```bash
+  .claude/skills/dispatch-propagate/scripts/review-fix-write-surface-guard.sh \
+    "tmp/step5-baseline-$N.txt" "tmp/step5-after-$N.txt" "tmp/step5-node-ids-$N.txt"
+  ```
+
+  It requires of **every** new porcelain entry:
 
   - its porcelain status is exactly `??` (untracked addition). Any `M`, `D`,
     `R`, `A`, or staged/unstaged-modified code fails the guard.
@@ -1169,11 +1174,12 @@ empty.
 
   (Step 3's `/commit-merge-push` already committed the fix edits, so a clean
   baseline is expected; the diff against the baseline is what makes the guard
-  sound when it is not.) On any failure do NOT commit: revert the offending
-  paths (`git -C <root> checkout --` for tracked, `git -C <root> clean -f` for
+  sound when it is not.) On a non-zero exit the script names every offending
+  path and its status on stderr — do NOT commit: revert the offending paths
+  (`git -C <root> checkout --` for tracked, `git -C <root> clean -f` for
   untracked) and treat it as a deviation, parking to office-hours per Step 7
-  rather than pushing an unreviewed edit to main. Only after every check passes,
-  run the single `graph-commit` here.
+  rather than pushing an unreviewed edit to main. Only after the script exits
+  0, run the single `graph-commit` here.
 
 Keep the follow-up references this step produced — the 5a/5b issue numbers on the
 issue lane, the `node_ids` on the node lane — keyed to their source finding. They

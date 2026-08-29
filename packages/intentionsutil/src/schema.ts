@@ -537,6 +537,94 @@ export function isLedgerEntry(node: IntentionNode): boolean {
   return node.kind === "tactic" && attributes.ledger_entry === true;
 }
 
+// --- Durable-layer write fence ----------------------------------------------
+
+/**
+ * The router- and sensor-owned state fields: the small, enumerable half of a
+ * node's frontmatter that an unattended writer may set on ANY node, including a
+ * durable-layer one. Everything a machine legitimately stamps lives here —
+ * dispatch state (`phase`, `execution`, `blocked_by`, `status`), the parking
+ * record (`office_hours`), sensor output (`reading`), round accounting
+ * (`rounds`), and the derived-rank seed (`attention`).
+ *
+ * Typed as `keyof IntentionNode` so a field renamed on the interface fails the
+ * typecheck here rather than silently dropping out of the set — a member that
+ * quietly stopped matching would move that field to the refused side, which is
+ * the safe direction, but a member that was never a real field would sit here
+ * looking like a permission that never applies.
+ *
+ * This is NOT an allowlist of what may be written. It is the exemption half of
+ * `isDurableWriteRefused`'s negative check — see that function for why the
+ * direction matters.
+ */
+export const STATE_FIELDS: readonly (keyof IntentionNode)[] = [
+  "phase",
+  "execution",
+  "office_hours",
+  "reading",
+  "attention",
+  "rounds",
+  "status",
+  "blocked_by",
+];
+
+/**
+ * The durable layer: the kinds whose content is human-owned doctrine rather
+ * than machine-managed work. An autonomous writer may move their state fields
+ * but never their substance.
+ *
+ * Deliberately NOT `grounding.ts`'s `DURABLE_KINDS`, which is a different set
+ * for a different question: that one audits which nodes must carry a grounding
+ * mark, and it excludes `tradition` precisely because tradition records ARE the
+ * grounding. Here `tradition` is squarely in scope — a tradition record is
+ * delegated articulation of a primary text, the last content an unattended
+ * writer should rewrite. Reusing the grounding set would leave every
+ * `tradition-*` node on the permitted side of the fence.
+ */
+export const DURABLE_LAYER_KINDS: readonly string[] = [
+  "virtue",
+  "strategy",
+  "delegation",
+  "kind",
+  "tradition",
+];
+
+/** Whether `kind` names a durable-layer node. */
+export function isDurableLayerKind(kind: string): boolean {
+  return DURABLE_LAYER_KINDS.includes(kind);
+}
+
+/**
+ * Whether an unattended writer must REFUSE to set `field` on a node of `kind`.
+ *
+ * The check is deliberately NEGATIVE — durable kind AND field not in
+ * `STATE_FIELDS` — so an unknown or novel field name lands on the refuse side by
+ * default. The positive form (permit when the field is in some allowed set)
+ * was ruled first, on 2026-08-14, and corrected on 2026-08-15 because it fails
+ * OPEN: the measured fallthrough included `rationale`, the field named first in
+ * the doctrine this fence protects. Getting a write fence wrong in the
+ * permissive direction is silent, so an unrecognized field must refuse.
+ *
+ * Do not "simplify" this into a lookup against a permitted-field list. The
+ * asymmetry is the whole point: `STATE_FIELDS` is a closed exemption applied
+ * only after the kind has already been recognized as durable.
+ */
+export function isDurableWriteRefused(kind: string, field: string): boolean {
+  if (!isDurableLayerKind(kind)) return false;
+  return !STATE_FIELDS.some((allowed) => allowed === field);
+}
+
+/**
+ * The subset of `fields` an unattended writer must refuse on a node of `kind`,
+ * in the order given. Empty means every field is permitted.
+ *
+ * One implementation rather than the predicate re-spelled per caller: a caller
+ * that spells the loop itself is one `!` away from inverting the fence.
+ */
+export function refusedDurableFields(kind: string, fields: readonly string[]): string[] {
+  return fields.filter((field) => isDurableWriteRefused(kind, field));
+}
+
 // --- Dispatch-state structured fields --------------------------------------
 
 /**

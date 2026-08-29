@@ -37,7 +37,10 @@
 # ROLLBACK FAILED rather than logging a rollback that never happened; (19) an
 # unresolvable refs/remotes/origin/main is an environment error (exit 69,
 # nothing read or written), not an empty pre-write blob; (20) a ratchet against
-# reintroducing an unchecked restore_from_blob call.
+# reintroducing an unchecked restore_from_blob call; (22) --resolve REFUSES on a
+# node carrying a non-null office_hours — the park guard, which stops ruling
+# (b)'s park-aware classify() (a parked node now reads `open`) from being turned
+# around into --resolve mechanically completing a human's park.
 #
 # Every run injects DISPATCH_FLEET_ALARM_STATE_DIR (so the suite never writes
 # the real ~/.local/share stamp) and pins
@@ -659,6 +662,40 @@ run_alarm -- --kind main-checkout --statement 'x' --body-file "$BODY21"
 assert_eq "(21) a near-miss kind still exits 64" "64" "$RC"
 assert_eq "(21) near-miss made no write-node"   "" "$(log_lines write-node.log)"
 assert_eq "(21) near-miss made no graph-commit" "" "$(log_lines graph-commit.log)"
+
+# --- (22) --resolve on a PARKED node -> refusal, the park is never completed --
+# The park guard (tactic-fleet-alarm-node-park-clobber-loop, ruling (b)
+# follow-up). classify() is deliberately park-aware — a parked, not-done node
+# reads `open` so re-detection refreshes it through the CAS path instead of
+# clobbering the park. But `open` is also the state --resolve acts on, so
+# without a precondition of its own --resolve would take a human's park and
+# land the node at phase: "done" underneath them, their question unanswered.
+# The guard sits AFTER dump-node (a read) and BEFORE any mutation, so the
+# assertions below are: dump-node ran, and nothing else did.
+git -C "$FR" checkout -- intentions
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+PARKED_JSON='{"id":"tactic-fleet-alarm-tick-stale","phase":"implement","execution":null,'
+PARKED_JSON+='"office_hours":{"reason":"worker session froze; what should this alarm do?",'
+PARKED_JSON+='"since":"2026-08-01","recommendation":null,"session_type":"other"}}'
+run_alarm STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$PARKED_JSON" -- \
+  --resolve --kind tick-stale
+assert_eq "(22) resolve on a parked node exits 0" "0" "$RC"
+assert_contains "(22) diagnostic names the park" "non-null office_hours" "$OUT"
+assert_contains "(22) diagnostic tells the caller to clear the park first" \
+  "clear the park first" "$OUT"
+assert_eq "(22) no write-node — the park was not completed" "" "$(log_lines write-node.log)"
+assert_eq "(22) no graph-commit" "" "$(log_lines graph-commit.log)"
+assert_contains "(22) the guard ran AFTER the read, not instead of it" \
+  "dump-node" "$(log_lines dump-node.log)"
+assert_eq "(22) tree left clean" "" "$(git -C "$FR" status --porcelain)"
+
+# Control: the SAME node with office_hours explicitly null still resolves, so
+# the guard narrows --resolve rather than disabling it.
+run_alarm STUB_STATE=open STUB_GC_LAND=1 \
+  STUB_NODE_JSON='{"id":"tactic-fleet-alarm-tick-stale","phase":"implement","execution":null,"office_hours":null}' -- \
+  --resolve --kind tick-stale
+assert_eq "(22) control: unparked node still resolves" "0" "$RC"
+assert_eq "(22) control: write-node got phase done" "done" "$(jq -r .phase "$LOG/write-node-input.json")"
 
 # --- results -----------------------------------------------------------------
 echo ""
