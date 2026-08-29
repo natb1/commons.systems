@@ -105,7 +105,14 @@
   .pipe .step .n .u{font-size:12px;color:var(--ink2);font-weight:400;font-family:'IBM Plex Sans',system-ui,sans-serif}
   .pipe .step .n .u.blk{display:block;line-height:1.35;margin-top:2px}
   .pipe .step.good .n{color:var(--pos)} .pipe .step.warn .n{color:var(--neg)}
-  .breakdown{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:7px}
+  .bdhead{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+  .bdhead .seg{flex:0 0 auto}
+  .bdhead .seg button{padding:6px 13px;white-space:nowrap}
+  .bdabs{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+  .bdabs[hidden]{display:none}
+  .breakdown{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+  .breakdown .hint{font-size:12px;color:var(--muted);margin-top:5px;max-width:78ch}
   .brow{display:grid;grid-template-columns:168px 1fr 74px;gap:12px;align-items:center;font-size:13px}
   @media (max-width:560px){.brow{grid-template-columns:118px 1fr 70px}}
   .brow .lab{color:var(--ink2)}
@@ -115,6 +122,37 @@
   .brow .val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
   .brow.netrow{border-top:1px solid var(--line);padding-top:7px;font-weight:600}
   .brow.netrow .lab{color:var(--ink)}
+
+  /* stream view: a revenue track with that stream's costs stacked over it. The
+     grid widens for the margin + margin-%, so the cost-nature view above keeps
+     its own geometry untouched. */
+  .breakdown.streams .brow{grid-template-columns:184px 1fr 104px}
+  @media (max-width:560px){.breakdown.streams .brow{grid-template-columns:112px 1fr 92px}}
+  .breakdown.streams .brow .barwrap{height:14px}
+  .brow .track{position:absolute;top:0;bottom:0;left:0;border-radius:3px;min-width:1px;
+    background:color-mix(in oklab, var(--pos) 18%, var(--card))}
+  .brow .cseg{position:absolute;top:0;bottom:0;border-radius:2px;min-width:1px}
+  /* costs running past the end of the revenue track — a stream spending more than
+     it earns. Outlined rather than filled, so the segments beneath stay readable. */
+  .brow .cover{position:absolute;top:-3px;bottom:-3px;border:1px solid var(--neg);border-radius:3px;
+    background-image:repeating-linear-gradient(135deg,transparent 0 3px,var(--hatch) 3px 5px);pointer-events:none}
+  .brow .whisk{position:absolute;top:-3px;bottom:-3px;border:1px solid color-mix(in oklab,var(--ink) 45%,transparent);
+    border-radius:2px;pointer-events:none;z-index:2}
+  /* label, evidence chip and (when absorbed) the basis it was computed on. The
+     chip must never wrap off the label line, so the two lines are explicit rows. */
+  .breakdown.streams .brow .lab{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .breakdown.streams .brow .lab .lr{display:flex;align-items:center;gap:6px;min-width:0}
+  .breakdown.streams .brow .lab .tw{flex:0 0 9px;font-size:9.5px;line-height:1;color:var(--muted)}
+  .breakdown.streams .brow .lab .lt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .breakdown.streams .brow .lab .lsub{font-size:10.5px;line-height:1.25;color:var(--muted);
+    padding-left:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brow .chip{font-size:9.5px;font-weight:600;letter-spacing:.04em;padding:0 5px;flex:0 0 auto}
+  .breakdown.streams .brow .val .pc{display:block;font-size:10.5px;line-height:1.25;color:var(--muted)}
+  .breakdown.streams .brow .val.pos{color:var(--pos)}
+  .breakdown.streams .brow .val.neg{color:var(--neg)}
+  .breakdown.streams .brow[role="button"]{cursor:pointer;border-radius:5px}
+  .breakdown.streams .brow[role="button"]:hover .lt{color:var(--ink)}
+  .breakdown.streams .brow:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:5px}
 
   /* ---------- matrix ---------- */
   .matrixcard{padding:20px 22px}
@@ -367,7 +405,21 @@
           <div class="gcap">Derived gates — what sections ii &amp; iii make the market bet prove</div>
           <div class="pipe" id="gates"></div>
         </div>
-        <div class="breakdown" id="breakdown"></div>
+        <div class="bdhead">
+          <div class="seg" role="group" aria-label="Breakdown grouping">
+            <button data-bdview="streams" aria-pressed="true">By stream</button>
+            <button data-bdview="nature">By cost nature</button>
+          </div>
+          <div class="bdabs" id="bdabs">
+            <label class="toggle"><input type="checkbox" id="bd-absorb"> Absorb shared costs</label>
+            <div class="seg" role="group" aria-label="Absorption basis">
+              <button data-bdbasis="revenue" aria-pressed="true" disabled>Revenue share</button>
+              <button data-bdbasis="sqft" disabled>Floor area</button>
+              <button data-bdbasis="hours" disabled>Staffed hours</button>
+            </div>
+          </div>
+        </div>
+        <div class="breakdown streams" id="breakdown"></div>
       </div>
 
       <div class="card matrixcard">
@@ -1188,6 +1240,244 @@
     }
 
     // breakdown
+    renderBreakdown(c);
+
+    renderMatrix();
+    renderPipe(sess, clubs);
+  }
+
+
+  // ---- the breakdown ---------------------------------------------------------
+  // Two groupings of the same P&L. `BDVIEW` and `BDOPEN` live here rather than in
+  // S because #reset rebuilds S from DEF and would wipe them; the absorption
+  // checkbox is read live from the DOM, the way #in-ev is.
+  var BDVIEW = 'streams';        // 'streams' | 'nature'
+  var BDBASIS = 'revenue';       // 'revenue' | 'sqft' | 'hours'
+  var BDOPEN = {};               // node id -> expanded
+  var BDFOCUS = null;            // node id to re-focus after a keyboard toggle
+
+  function bdBasisLabel(b){
+    return b === 'revenue' ? 'revenue share' : (b === 'sqft' ? 'floor area' : 'staffed hours');
+  }
+  function pctw(f){ return (Math.max(0, f)*100).toFixed(3) + '%'; }
+  // $K, with a decimal where rounding to the whole thousand would hide the number
+  // (books turns on a $6.0K revenue line — '-$4K' is not a reading of it).
+  function fmtKs(v){
+    if (Math.abs(v) >= 10 || Math.round(v*10) === 0) return fmtK(v);
+    return (v > 0 ? '+' : '\u2212') + '$' + Math.abs(v).toFixed(1) + 'K';
+  }
+  // Evidence grade as a chip: contracted and observed read as evidence, an
+  // assumption reads as a warning, a published benchmark sits between them.
+  function evChip(ev){
+    if (!ev) return '';
+    var cls = (ev === 'A' || ev === 'B') ? ' ok' : (ev === 'D' ? ' bad' : '');
+    return '<span class="chip' + cls + '" title="grade ' + ev + ' \u00b7 ' + EV[ev] + '">' + ev + '</span>';
+  }
+  function bdShade(i){ return Math.max(24, 70 - i*12); }
+
+  // One row of the breakdown, in either grouping. `row` is a display descriptor,
+  // not a model node: `bar` is the cost-nature grammar (a single signed bar),
+  // `track`/`segs`/`over`/`whisks` the stream grammar. Both land in the same
+  // .barwrap, so a stream row and a cost-nature row stay the same object.
+  function rowFor(row, depth){
+    var e = h('div','brow' + (row.cls ? ' ' + row.cls : ''));
+    var lab = h('div','lab', row.lab);
+    if (depth) lab.style.paddingLeft = (depth*14) + 'px';
+    e.appendChild(lab);
+    var w = h('div','barwrap');
+    if (row.bar){
+      var bar = h('div','bar '+row.bar.cls);
+      bar.style.width = row.bar.w+'%';
+      w.appendChild(bar);
+    }
+    if (row.track > 0){
+      var tk = h('div','track');
+      tk.style.width = pctw(row.track);
+      w.appendChild(tk);
+    }
+    (row.segs || []).forEach(function(sg){
+      var d = h('div','cseg');
+      d.style.left = pctw(sg.off);
+      d.style.width = pctw(sg.w);
+      d.style.background = 'color-mix(in oklab, var(--neg) ' + sg.shade + '%, var(--card))';
+      w.appendChild(d);
+    });
+    if (row.over){
+      var ov = h('div','cover');
+      ov.style.left = pctw(row.over[0]);
+      ov.style.width = pctw(row.over[1] - row.over[0]);
+      w.appendChild(ov);
+    }
+    (row.whisks || []).forEach(function(k){
+      var wh = h('div','whisk');
+      wh.style.left = pctw(k[0]);
+      wh.style.width = pctw(k[1] - k[0]);
+      w.appendChild(wh);
+    });
+    e.appendChild(w);
+    e.appendChild(h('div','val' + (row.valCls ? ' ' + row.valCls : ''), row.val));
+    if (row.key) e.setAttribute('data-bdrow', row.key);
+    return e;
+  }
+
+  // A node's own geometry: the revenue it books, and the cost segments stacked
+  // over it. A leaf cost is its own single segment; a parent's segments are its
+  // direct cost children, heaviest first so the shading reads as an ordering.
+  function barsFor(node){
+    var rev = 0, segs = [], revs = [], order = null;
+    if (node.kind === 'revenue'){
+      rev = node.value;
+    } else if (node.children.length === 0){
+      segs = [node];
+    } else {
+      node.children.forEach(function(ch){
+        if (ch.kind === 'revenue'){ rev += ch.value; revs.push(ch); } else segs.push(ch);
+      });
+      segs.sort(function(a, b){ return a.value - b.value; });   // most negative first
+      // Opening a row reads as expanding its bar, so the child rows come out in
+      // the order the segments do — revenue first, then costs heaviest down.
+      order = revs.concat(segs);
+    }
+    return {rev:rev, segs:segs, order:order};
+  }
+
+  // One stream row and, when it is open, its children in the same grammar.
+  function bdRows(bd, node, depth, scale, sub){
+    var b = barsFor(node);
+    var open = BDOPEN[node.id] === true;
+    var kids = node.children.length > 0 && depth < 2;
+    var segs = [], whisks = [], off = 0;
+    b.segs.forEach(function(sg, i){
+      var mag = -sg.value;                     // costs are negative; a width is not
+      segs.push({off:off/scale, w:mag/scale, shade:bdShade(i)});
+      if (sg.band) whisks.push([(off + sg.band[0])/scale, (off + sg.band[1])/scale]);
+      off += mag;
+    });
+    // A margin % only where a margin is a real question: a revenue leaf is
+    // trivially 100% of itself, and the cross-cutting row books no revenue.
+    var pc = (b.rev > 0 && node.kind !== 'revenue') ? node.value/b.rev*100 : null;
+    var lab = '<span class="lr"><span class="tw">' + (kids ? (open ? '\u25be' : '\u25b8') : '') + '</span>' +
+      '<span class="lt" title="' + node.label + '">' + node.label + '</span>' + evChip(node.ev) + '</span>' +
+      (sub ? '<span class="lsub" title="' + sub + '">' + sub + '</span>' : '');
+    var e = rowFor({
+      key: node.id,
+      lab: lab,
+      track: b.rev/scale,
+      segs: segs,
+      // costs past the end of the track: the stream spends more than it earns
+      over: (b.rev > 0 && off > b.rev) ? [b.rev/scale, off/scale] : null,
+      whisks: whisks,
+      val: fmtKs(node.value) + (pc === null ? '' :
+        '<span class="pc">' + (pc < 0 ? '\u2212' : '') + Math.abs(pc).toFixed(1) + '%</span>'),
+      valCls: node.value >= 0 ? 'pos' : 'neg'
+    }, depth);
+    if (kids){
+      e.tabIndex = 0;
+      e.setAttribute('role', 'button');
+      e.setAttribute('aria-expanded', open ? 'true' : 'false');
+      e.addEventListener('click', function(){ BDOPEN[node.id] = !open; render(); });
+      e.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter' || ev.key === ' '){
+          ev.preventDefault(); BDOPEN[node.id] = !open; BDFOCUS = node.id; render();
+        }
+      });
+    }
+    bd.appendChild(e);
+    if (open && kids){
+      b.order.forEach(function(ch){ bdRows(bd, ch, depth+1, scale, ''); });
+    }
+  }
+
+  // The P&L grouped by the part of the business each cost serves. Off by default
+  // the cross-cutting row stands on its own — contribution, which states a fact.
+  // On, it is pushed onto the three streams by the chosen basis, and every row
+  // says which basis it was, because the three bases give three different answers.
+  function renderStreamView(bd, c){
+    var t = tree(S.util, S.tx);
+    var absorbed = el('bd-absorb').checked;
+    var nodes = t, sub = '', ab = null;
+    if (absorbed){
+      ab = absorb(BDBASIS, S.util, S.tx);
+      sub = 'absorbed \u00b7 ' + bdBasisLabel(BDBASIS);
+      nodes = [];
+      t.forEach(function(n){
+        if (!ab[n.id]) return;                              // the cross-cutting row is gone
+        var share = ab[n.id].absorbed;
+        nodes.push({id:n.id, label:n.label, kind:'stream', stream:n.id, value:n.value - share,
+                    ev:null, band:null, atomic:false,
+                    children:n.children.concat([{id:'absorbed-' + n.id,
+                      label:'Shared costs absorbed', kind:'cost', stream:n.id, value:-share,
+                      ev:null, band:null, atomic:true, children:[]}])});
+      });
+    }
+    // One linear scale for every row and every row beneath it: the café sets it and
+    // books stays a hairline, which is what the two streams actually are.
+    var scale = 1;
+    nodes.forEach(function(n){
+      var b = barsFor(n), cost = 0;
+      b.segs.forEach(function(sg){ cost -= sg.value; });
+      scale = Math.max(scale, b.rev, cost);
+    });
+    nodes.forEach(function(n){ bdRows(bd, n, 0, scale, sub); });
+    var net = {cls:'netrow', key:'owner-comp',
+               lab:'<span class="lr"><span class="tw"></span><span class="lt">Owner comp</span></span>',
+               val:fmtK(c), valCls:(c >= 0 ? 'pos' : 'neg')};
+    if (c >= 0) net.track = c/scale; else net.segs = [{off:0, w:-c/scale, shade:70}];
+    bd.appendChild(rowFor(net, 0));
+
+    var sm = streamMargins(S.util, S.tx);
+    var hint;
+    if (absorbed){
+      var byBasis = ['revenue','sqft','hours'].map(function(bs){
+        return '$' + Math.round(absorb(bs, S.util, S.tx).cafe.absorbed) + 'K on ' + bdBasisLabel(bs);
+      }).join(', ');
+      hint = 'Fully absorbed: the $' + Math.round(sm.shared.cost) + 'K cross-cutting row is pushed onto the ' +
+        'three streams by <b>' + bdBasisLabel(BDBASIS) + '</b>, so the three margins sum to owner comp and no ' +
+        'row is left uncovered. The basis is a choice, not a fact \u2014 the caf\u00e9 carries ' + byBasis +
+        '. None of those is \u201cthe caf\u00e9\u2019s margin\u201d, which is why contribution is the default and every row ' +
+        'above is labeled with the basis that produced it.';
+    } else {
+      hint = 'Revenue runs the full track; that stream\u2019s own costs stack over it from the left, so the ' +
+        'uncovered remainder is the margin. One linear scale across every row \u2014 the caf\u00e9 at $' +
+        Math.round(sm.cafe.revenue) + 'K sets it, so books at $' + Math.round(sm.books.revenue) +
+        'K is a hairline. Books\u2019 costs run <i>past</i> the end of its track (outlined) because the stream is ' +
+        'net negative by design: D3 makes the wall a draw, not a revenue line, and the $' + Math.round(S.commons) +
+        'K commons budget is philanthropy the plan chose to spend. Cross-cutting costs \u2014 labor, occupancy, ' +
+        'utilities, insurance, marketing \u2014 are charged to no stream: they are what the three have to cover ' +
+        'between them, which is why contribution is the default and absorbing is a control, not an answer. ' +
+        'The four rows sum to owner comp. Open a row to see what it is made of; a chip is the evidence grade ' +
+        '(A contracted \u2192 D assumed) and a whisker is the band a banded cost could be anywhere inside.';
+    }
+    bd.appendChild(h('div','hint', hint));
+  }
+
+  function renderBreakdown(c){
+    var bd = el('breakdown');
+    var streams = BDVIEW === 'streams';
+    document.querySelectorAll('[data-bdview]').forEach(function(b){
+      b.setAttribute('aria-pressed', b.dataset.bdview === BDVIEW);
+    });
+    var absorbed = el('bd-absorb').checked;
+    document.querySelectorAll('[data-bdbasis]').forEach(function(b){
+      b.setAttribute('aria-pressed', b.dataset.bdbasis === BDBASIS);
+      b.disabled = !absorbed;
+    });
+    el('bdabs').hidden = !streams;
+    bd.className = 'breakdown' + (streams ? ' streams' : '');
+    bd.innerHTML = '';
+    if (streams) renderStreamView(bd, c); else renderNatureView(bd, c);
+    if (BDFOCUS){
+      var f = bd.querySelector('[data-bdrow="' + BDFOCUS + '"]');
+      BDFOCUS = null;
+      if (f) f.focus();
+    }
+  }
+
+  // The waterfall as it has always been: one row per kind of cost.
+  function renderNatureView(bd, c){
+    var walkinC = cafeK(S.tx), caterC = cateringK(S.util, S.caClub, S.caEvent, S.events);
+    var roomsC = roomsK(S.util), otherC = otherIncomeK();
+    var varOps = varOpsK(S.util, S.tx), occ = occupancyK(), lab = laborK();
     var parts = [
       {lab:'Café — walk-ins', v: walkinC},
       {lab:'Café — catering attach', v: caterC},
@@ -1200,23 +1490,13 @@
       {lab:'Commons / books', v: -S.commons}
     ];
     var maxa = Math.max.apply(null, parts.map(function(p){return Math.abs(p.v);}).concat([Math.abs(c),1]));
-    var bd = el('breakdown'); bd.innerHTML='';
     parts.concat([{lab:'Owner comp', v:c, net:true}]).forEach(function(p){
-      var row = h('div','brow'+(p.net?' netrow':''));
-      row.appendChild(h('div','lab',p.lab));
-      var w = h('div','barwrap');
-      var bar = h('div','bar '+(p.v>=0?'p':'n'));
-      bar.style.width = (Math.abs(p.v)/maxa*100)+'%';
-      w.appendChild(bar); row.appendChild(w);
-      row.appendChild(h('div','val',fmtK(p.v)));
-      bd.appendChild(row);
+      bd.appendChild(rowFor({cls:(p.net?'netrow':''), lab:p.lab, val:fmtK(p.v),
+        bar:{cls:(p.v>=0?'p':'n'), w:(Math.abs(p.v)/maxa*100)}}, 0));
     });
     bd.appendChild(h('div','hint','Each line is a §5/§6 quantity in its own right — no back-solved residual. Contribution is each stream\u2019s revenue at its own margin (rooms ' +
       Math.round(ROOM_MARGIN*100) + '%, café ' + S.cafeM + '%, catering ' + Math.round(CATER_MARGIN*100) + '%, prints ' + Math.round(PRINT_MARGIN*100) + '%); day rooms and prints are §5 lines the tool holds flat (D13, opportunistic). ' +
       'Card fees &amp; marketing run at ' + (VAR_OPS*100).toFixed(1) + '% of gross revenue (currently $' + Math.round(revenueK(S.util,S.tx)) + 'K); operations \u2014 fixed is utilities, insurance, software and R&amp;M.'));
-
-    renderMatrix();
-    renderPipe(sess, clubs);
   }
 
   function renderMatrix(){
@@ -1332,6 +1612,13 @@
     b.addEventListener('click', function(){ S.wage=+b.dataset.wage; render(); });
   });
   el('in-ev').addEventListener('change', render);
+  document.querySelectorAll('[data-bdview]').forEach(function(b){
+    b.addEventListener('click', function(){ BDVIEW = b.dataset.bdview; render(); });
+  });
+  document.querySelectorAll('[data-bdbasis]').forEach(function(b){
+    b.addEventListener('click', function(){ if(b.disabled) return; BDBASIS = b.dataset.bdbasis; render(); });
+  });
+  el('bd-absorb').addEventListener('change', render);
   el('reset').addEventListener('click', function(){ S=Object.assign({},DEF); syncInputs(); render(); });
 
   syncInputs();
