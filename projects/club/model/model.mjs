@@ -389,6 +389,7 @@ function streamNode(id, label, children){
 // stream, grade and band are declared, and the tree reads them from there.
 function entryNode(id, util, tx){
   var c = costById(id);
+  if (c === null) throw new Error('unknown cost id in the tree: ' + id);
   return costNode(c.id, c.label, c.stream, c.amount(util, tx), c.ev, bandK(id, util, tx));
 }
 // Card fees are a per-stream rule, not one line: each revenue stream pays the same
