@@ -17,7 +17,7 @@ and the prose are both generated from it.
 | `figures.mjs` | The reading side: named scalar `FIGURES` and whole-table `BLOCKS` that the documents and the artifact's notes card consume. |
 | `render.mjs` | Writes both. `node model/render.mjs` regenerates everything; `--check` fails when anything is stale. |
 | `verify.mjs` | The model's invariants — the §6 reproduction on §6's own operations figures, the bottom-up operations line reconciling with those figures, every cost carrying provenance, the occupancy residual staying inside its benchmark band, the P&L tree summing to owner comp under both groupings, the marginals, the levers that must not move owner comp. |
-| `evidence.md` | Generated, with an authored frame: every cost with its grade and band, the operations reconciliation against §6, and the ranking of what each estimate is worth if it turns out wrong. The document that says what to go verify first. |
+| `evidence.md` | Generated, with an authored frame: every cost with its grade and band, the operations reconciliation against §6, and the ranking of what each estimate is worth if it turns out wrong — then the same reading of the capital layer: the uses of cash against D7's cap, the working-capital reconciliation, and the ranking of what to negotiate first. The document that says what to go verify first. |
 
 ## Changing the model
 
@@ -62,6 +62,69 @@ operations over the difference in revenue, which forces the two bases equal for
 any pair of totals. It is deleted. What replaced it compares the built line
 against §6's stated figures — two numbers neither of which is derived from the
 other — and can therefore come out wrong.
+
+## The capital layer
+
+The cost registry answers what the venture spends every year. `USES` answers
+what it spends once, before the doors open, and it is declared the same way: an
+id, what the amount scales with, an evidence grade, a closure returning the
+amount in $K, and a band wherever the number is an estimate. `verify.mjs`
+applies the cost registry's gate to it — a use missing a driver, a grade or an
+amount is refused, and so is a grade-D or derived use with no band.
+`requiredCapitalK()` is the sum; `headroomK()` is D7's cash cap less that sum,
+which is the G2 test computed instead of asserted. `evidence.md` reads the
+registry into the uses table, and `CAP_INPUTS`/`withUse` are `INPUTS`/`withCost`
+for the capital side, which is what the second tornado sweeps.
+
+Two entries changed meaning as a consequence. `S.build` is no longer the fit-out
+budget — it is D7's **scope cap**, and `fitoutScopeK()` (floor area at
+`FITOUT_PSF`) is checked against it by `scopeOverrunK()`, so the larger site's
+extra square feet cost what they cost instead of disappearing into a flat
+number. `S.ti` is in $/sf, #17's own units, so the plan's own ask can be
+expressed at either site.
+
+`rampSeries()` is the model's one time dimension, and the reason working capital
+can be derived at all. It runs month by month from **opening** — the
+construction months are already carried as the `preopen-occ` use, so starting at
+signature would double-count them — to `RAMP_HORIZON_MO`, repricing `comp()` at
+each month's own marks and dividing by twelve, with occupancy waived in the
+abated months that survive construction. Nothing about the stabilized model is
+restated inside it, which is what keeps the ramp and the Year-2 snapshot from
+drifting; `verify.mjs` asserts that month 24 of the ramp annualizes back to
+`comp()` at that month's own marks. `peakDeficitK()`, `monthsToPositive()` and
+`monthsToRecover()` all read the same series. The two month counts return
+**`null`**, not a large number, when the curve never turns inside the horizon —
+the difference between a month count and "not within the horizon" is itself the
+answer, and every consumer renders that null as its own state.
+
+`WC_BASIS` selects what working capital *is*, mirroring `OPS_BASIS` exactly,
+including the reason the stated basis survives. Under `'built'` — the default —
+it is the ramp's peak cash deficit where the ramp turns, and where it does not
+it is `runwayReserveK()`: the reserve that funds `S.runway` months at the
+stabilized burn, which is the existing `bailComp()` relation inverted rather
+than a new idea. Under `'stated'` it is the midpoint of the band §6 states, carried in `WC_BAND`.
+`withWcBasis(basis, fn)` evaluates on either without disturbing global state,
+the same shape as `withOpsBasis`. The reconciliation between the two is
+`evidence.md`'s, and unlike operations it does not agree everywhere: §6's band
+turns out to be a gate-case figure, so `verify.mjs` asserts the structural
+invariants and no tolerance the base case cannot pass. The ramp was not tuned
+toward the band — that was a rule of the work, and the disagreement is the
+finding.
+
+The chain that derives all of this is a DAG, and has to stay one:
+
+```
+comp() → rampSeries() → peakDeficitK() → workingCapitalK()
+       → requiredCapitalK() → capitalAtRiskK() → bandLoK()/bandHiK()
+```
+
+`comp()` reads occupancy, the operations aggregates, labor and the commons
+budget. It never reads the bars, never reads `USES` and never reads working
+capital, so the capital layer can depend on the operating model without the
+operating model depending back. Two changes would close the cycle and must not
+be written: putting the replacement-capex reserve inside `comp()` — it lives in
+`drawK()`, below the operating model, for exactly this reason — and deriving the
+depreciable base from `requiredCapitalK()` rather than from the hard-cost uses.
 
 ## The three kinds of generated region
 

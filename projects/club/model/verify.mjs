@@ -166,9 +166,13 @@ for (const util of [0, 10, 33, 55, 80, 100]) {
   });
 }
 
-// 9 — the levers that must not touch stabilized owner comp do not.
+// 9 — the levers that must not touch stabilized owner comp do not. `equity` is
+// excluded here and checked in its own group (19) below: DEF.equity is now
+// null, and null + 10 === 10 in JS, so leaving it in this loop would pass for
+// the wrong reason — it would exercise `withState({equity: 10}, ...)`, an
+// override, not "equity moved by 10 off its default".
 const baseComp = M.withState({}, () => M.comp(M.S.util, M.S.tx));
-for (const lever of ["churn", "build", "ti", "abate", "grants", "cash", "runway", "equity"]) {
+for (const lever of ["churn", "build", "ti", "abate", "grants", "cash", "runway"]) {
   const moved = M.withState({ [lever]: M.DEF[lever] + 10 }, () => M.comp(M.DEF.util, M.DEF.tx));
   check(`${lever} does not move owner comp`, near(moved, baseComp, 1e-9));
 }
@@ -301,5 +305,282 @@ for (const [name, value] of Object.entries(FIGURES)) {
   check(`figure ${name} resolves`, typeof value === "string" && value.length > 0 && !value.includes("NaN"), value);
 }
 
-console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and 16 invariant groups pass`);
+// ---- the capital layer -------------------------------------------------------
+
+// 17 — `ti`, `grants` and `abate` move the owner's bar; `build` does not. `build`
+// stopped being the fit-out budget and became the scope cap D7 describes: it is
+// *checked* against the derived scope, never spent, so it cannot reach
+// capitalAtRiskK() or bandLoK() at all. `ti`, `grants` and `abate` are still uses
+// (or reduce a use), so moving them moves requiredCapitalK() and, through it,
+// the bar. This is the positive half of the plan's claim that was wrong about
+// `build` — asserted directly rather than left to the comp-invariance loop in 9,
+// which only proves `build` does not touch a *different* number.
+const baseBar = M.withState({}, () => M.bandLoK());
+for (const lever of ["ti", "grants", "abate"]) {
+  const moved = M.withState({ [lever]: M.DEF[lever] + 10 }, () => M.bandLoK());
+  check(`${lever} moves the owner's bar`, Math.abs(moved - baseBar) > 0.5,
+    `base ${baseBar.toFixed(3)} vs moved ${moved.toFixed(3)}`);
+}
+{
+  const moved = M.withState({ build: M.DEF.build + 10 }, () => M.bandLoK());
+  check("build does not move the owner's bar", near(moved, baseBar, 1e-9),
+    `base ${baseBar.toFixed(3)} vs moved ${moved.toFixed(3)}`);
+}
+// `build` is supposed to bite through scopeOverrunK() instead: a cap set below
+// the derived scope reports the shortfall, and one set at or above it reports
+// zero — the check the cap actually gates.
+M.withState({}, () => {
+  const scope = M.fitoutScopeK();
+  check("build at or above the derived scope has no overrun",
+    M.withState({ build: scope }, () => M.scopeOverrunK()) === 0);
+  check("build below the derived scope raises scopeOverrunK by the shortfall",
+    near(M.withState({ build: scope - 20 }, () => M.scopeOverrunK()), 20, 1e-9),
+    `scope ${scope}`);
+});
+
+// 18 — `runway` newly moves the owner's bar. At LI defaults the ramp never
+// turns inside the horizon (group 24 below), so workingCapitalK() falls back to
+// runwayReserveK() — the reserve that funds S.runway months of the stabilized
+// burn — and a longer runway means more required capital, which is a real,
+// intended change in the bar. This is deliberately not folded into group 9's
+// "does not move" list; asserting the movement here keeps the two lists honest
+// about which levers do what.
+{
+  const moved = M.withState({ runway: M.DEF.runway + 10 }, () => M.bandLoK());
+  check("runway moves the owner's bar (via the working-capital fallback)",
+    moved > baseBar + 0.5, `base ${baseBar.toFixed(3)} vs moved ${moved.toFixed(3)}`);
+}
+
+// 19 — `equity`, both halves explicit. DEF.equity is null, meaning "derive it
+// from the uses registry" — so moving it by DEF.equity + 10 is meaningless
+// (null + 10 === 10) and group 9 excludes it for exactly that reason. Here:
+// the null default still does not move owner comp (comp() never reads S.equity
+// at all), and a numeric override *does* move the bar, because bandLoK() charges
+// its return on equityK() and equityK() returns the override verbatim.
+M.withState({}, () => {
+  check("equity's null default does not move owner comp",
+    near(M.comp(M.S.util, M.S.tx), baseComp, 1e-9));
+});
+{
+  const moved = M.withState({ equity: M.DEF.equity === null ? 400 : M.DEF.equity + 10 }, () => M.bandLoK());
+  check("an equity override moves the owner's bar", Math.abs(moved - baseBar) > 0.5,
+    `base ${baseBar.toFixed(3)} vs override ${moved.toFixed(3)}`);
+  const compMoved = M.withState({ equity: 400 }, () => M.comp(M.DEF.util, M.DEF.tx));
+  check("an equity override still does not move owner comp", near(compMoved, baseComp, 1e-9));
+}
+
+// 20 — required capital is the sum of the USES registry, on both finance paths
+// and both sites. On the buy path the registry swaps `deposit` for
+// `downpayment` + `closing` (`deposit` reads zero there); everything else in
+// USES is unchanged. This replaces the plan's original buy-path invariant
+// ("down payment + closing + FF&E + working capital equals required capital"),
+// which measures 142.1 against a required capital of 317.4 — a purchased
+// building still needs fit-out, licenses, staffing and stock, so the true
+// identity is the whole registry, not four of its eleven lines.
+for (const site of ["li", "sn"]) {
+  for (const fin of ["lease", "buy"]) {
+    M.withState({ site, fin }, () => {
+      let sum = 0;
+      M.USES.forEach((u) => { sum += u.amount(); });
+      check(`required capital equals the sum of USES at ${site}/${fin}`,
+        near(sum, M.requiredCapitalK(), 1e-9), `sum ${sum.toFixed(3)} vs requiredCapitalK ${M.requiredCapitalK().toFixed(3)}`);
+      if (fin === "buy") {
+        check(`${site}/buy carries downpayment and closing in place of deposit`,
+          M.useAmountK("deposit") === 0 && M.useAmountK("downpayment") > 0 && M.useAmountK("closing") > 0,
+          `deposit ${M.useAmountK("deposit")} downpayment ${M.useAmountK("downpayment")} closing ${M.useAmountK("closing")}`);
+      } else {
+        check(`${site}/lease carries a deposit and no downpayment or closing`,
+          M.useAmountK("deposit") > 0 && M.useAmountK("downpayment") === 0 && M.useAmountK("closing") === 0,
+          `deposit ${M.useAmountK("deposit")} downpayment ${M.useAmountK("downpayment")} closing ${M.useAmountK("closing")}`);
+      }
+    });
+  }
+}
+check("headroomK is cash less required capital",
+  near(M.withState({}, () => M.headroomK()), M.withState({}, () => M.S.cash - M.requiredCapitalK())), 1e-9);
+
+// 21 — the registry gate, applied to uses. The same four provenance
+// obligations group 4 requires of COSTS: a driver, a known evidence grade, an
+// amount function, and — for a grade-D or a derived entry — a band with a unit.
+// An under-declared use should be refused the same way an under-declared cost
+// already is.
+for (const u of M.USES) {
+  check(`use ${u.id} declares a driver`, isText(u.driver), String(u.driver));
+  check(`use ${u.id} carries a known evidence grade`,
+    Object.prototype.hasOwnProperty.call(M.EV, u.ev), String(u.ev));
+  check(`use ${u.id} carries an amount`, typeof u.amount === "function");
+  if (u.ev === "D" || u.derived === true) {
+    const b = u.band;
+    check(`use ${u.id} is banded (${u.derived === true ? "derived" : "grade D"})`,
+      Array.isArray(b) && b.length === 2 && b[0] < b[1] && isText(u.unit),
+      `band ${JSON.stringify(b)} unit ${String(u.unit)}`);
+  }
+}
+
+// 22 — the peak deficit is the minimum of the cumulative series, negated and
+// floored at zero, and monthsToPositive/monthsToRecover agree with that same
+// series (rather than silently rebuilding their own). Checked at a case that
+// turns (the gate case) and one that does not (LI base), so both branches of
+// the min-search and the null fallback are exercised.
+{
+  const s = M.withState({ util: 55, tx: 110 }, () => M.rampSeries());
+  const lo = s.reduce((m, r) => Math.min(m, r.cumulative), 0);
+  check("peakDeficitK is the negated floored minimum of the cumulative series (gate case)",
+    near(M.peakDeficitK(s), Math.max(0, -lo), 1e-9), `${M.peakDeficitK(s)} vs ${Math.max(0, -lo)}`);
+  const wantPositive = s.find((r) => r.margin >= 0);
+  const wantRecover = s.find((r) => r.cumulative >= 0);
+  check("monthsToPositive agrees with the series (gate case)",
+    M.monthsToPositive(s) === (wantPositive ? wantPositive.m : null));
+  check("monthsToRecover agrees with the series (gate case)",
+    M.monthsToRecover(s) === (wantRecover ? wantRecover.m : null));
+}
+{
+  const s = M.withState({}, () => M.rampSeries());
+  const lo = s.reduce((m, r) => Math.min(m, r.cumulative), 0);
+  check("peakDeficitK is the negated floored minimum of the cumulative series (LI base)",
+    near(M.peakDeficitK(s), Math.max(0, -lo), 1e-9));
+  check("monthsToPositive is null when the series never turns positive (LI base)",
+    M.monthsToPositive(s) === null, `${M.monthsToPositive(s)}`);
+  check("monthsToRecover is null when the series never recovers (LI base)",
+    M.monthsToRecover(s) === null, `${M.monthsToRecover(s)}`);
+}
+
+// 23 — month 24 of the ramp annualizes to comp() at that month's own marks.
+// This is the invariant that keeps the ramp — the model's one time dimension —
+// from drifting away from the stabilized Year-2 snapshot every other figure in
+// the file is built against: by month 24 the linear ramp (rampMo = 18) has long
+// since closed, so the month's util/tx sit at their stabilized marks and the
+// month's margin has to equal comp() at those marks, divided by twelve, exactly
+// — not approximately. Checked at LI base, the LI gate case, and SN base.
+for (const [label, over] of [["LI base", {}], ["LI gate", { util: 55, tx: 110 }], ["SN base", { site: "sn" }]]) {
+  M.withState(over, () => {
+    const m24 = M.rampSeries().find((r) => r.m === 24);
+    const expected = M.comp(m24.util, m24.tx) / 12;
+    check(`month 24 of the ramp annualizes to comp() at ${label}`,
+      Math.abs(m24.margin - expected) < 1e-6,
+      `margin ${m24.margin} vs comp()/12 ${expected}`);
+  });
+}
+
+// 24 — workingCapitalK() takes the peak deficit when the ramp turns cash-flow
+// positive within the horizon, and falls back to the runway reserve when it
+// does not — both branches asserted explicitly, not inferred from one case.
+// LI base never turns inside RAMP_HORIZON_MO; the LI gate case (55% util, 110
+// tx/day) turns at month 15.
+M.withState({}, () => {
+  check("LI base does not turn within the horizon", M.rampTurns() === false);
+  check("workingCapitalK falls back to the runway reserve when the ramp never turns",
+    near(M.workingCapitalK(), M.runwayReserveK(), 1e-9),
+    `${M.workingCapitalK()} vs runway reserve ${M.runwayReserveK()}`);
+});
+M.withState({ util: 55, tx: 110 }, () => {
+  check("the LI gate case turns cash-flow positive within the horizon", M.rampTurns() === true);
+  check("the LI gate case turns at month 15", M.monthsToPositive() === 15, `${M.monthsToPositive()}`);
+  check("workingCapitalK takes the peak deficit once the ramp turns",
+    near(M.workingCapitalK(), M.peakDeficitK(), 1e-9),
+    `${M.workingCapitalK()} vs peak deficit ${M.peakDeficitK()}`);
+});
+
+// 25 — WC_BASIS, mirroring OPS_BASIS (group 3). The stated basis reproduces
+// §6's band exactly, because it just returns WC — the band's own midpoint. The
+// built basis does not reconcile with it at the base case: this is a finding
+// to report (§6's $50–65K is a gate-case figure, not a base-case one — see
+// group 24, where the base case never even turns), not a tolerance to relax
+// until it passes. So this asserts the *structural* relation — built and
+// stated disagree at the base case — never a reconciliation.
+M.withState({}, () => {
+  check("the stated working-capital basis reproduces §6's band",
+    M.withWcBasis("stated", () => M.workingCapitalK()) === M.WC,
+    `${M.withWcBasis("stated", () => M.workingCapitalK())} vs ${M.WC}`);
+  const built = M.workingCapitalK(), stated = M.withWcBasis("stated", () => M.workingCapitalK());
+  check("the built working-capital basis does not reconcile with the stated basis at LI base — a finding, not a bug",
+    Math.abs(built - stated) > 5, `built ${built.toFixed(1)} vs stated ${stated}`);
+});
+
+// 26 — the buy path's Year-2 principal is the loan amortization, not the flat
+// BUY_EQUITY constant it replaces. principalK() hardcodes loan year 2 (the
+// figure the bar's equityBuildK() chip reads); loanPrincipalK(yr) is the
+// general amortization schedule it is built from, and successive years season
+// (more principal, less interest) rather than repeating a flat number.
+M.withState({ site: "sn", fin: "buy" }, () => {
+  const yr1 = M.loanPrincipalK(1), yr2 = M.loanPrincipalK(2), yr3 = M.loanPrincipalK(3);
+  check("principalK() equals loanPrincipalK(2)", near(M.principalK(), yr2, 1e-9), `${M.principalK()} vs ${yr2}`);
+  check("principalK() is not the flat BUY_EQUITY constant",
+    Math.abs(M.principalK() - M.BUY_EQUITY) > 1, `${M.principalK()} vs BUY_EQUITY ${M.BUY_EQUITY}`);
+  check("the amortization schedule seasons: yr1 < yr2 < yr3",
+    yr1 < yr2 && yr2 < yr3, `${yr1.toFixed(3)} < ${yr2.toFixed(3)} < ${yr3.toFixed(3)}`);
+});
+M.withState({ site: "li", fin: "lease" }, () => {
+  check("principalK() is zero on the lease path", M.principalK() === 0);
+});
+
+// 27 — the acyclicity claim, asserted rather than merely commented. comp() is
+// untouched by the whole capital layer: drawK() is comp() less the
+// replacement reserve, the tax distribution and principal — nothing more,
+// nothing less — and replacementReserveK()'s depreciable base is hardCostK()
+// (fit-out + FF&E), never requiredCapitalK(), which would run working capital
+// (and so comp()) back into the reserve it is subtracted from. Pinning working
+// capital to a different value and finding replacementReserveK() unmoved is
+// the check that would catch the cycle if it were ever wired in.
+M.withState({}, () => {
+  const expectedDraw = M.comp(M.S.util, M.S.tx) - M.replacementReserveK() - M.taxDistK() - M.principalK();
+  check("drawK() equals comp() less reserve, tax distribution and principal",
+    near(M.drawK(), expectedDraw, 1e-9), `${M.drawK()} vs ${expectedDraw}`);
+  check("replacementReserveK()'s depreciable base is hardCostK()",
+    near(M.depreciableBaseK(), M.hardCostK(), 1e-9), `${M.depreciableBaseK()} vs ${M.hardCostK()}`);
+  const before = M.replacementReserveK();
+  const after = M.withWcBasis("stated", () => M.replacementReserveK());
+  check("replacementReserveK() is unmoved by a different working-capital basis (acyclicity)",
+    near(before, after, 1e-9), `${before} vs ${after}`);
+});
+
+// 28 — equityK(): a null default derives from capitalAtRiskK(); a number
+// overrides it verbatim, the same override contract every other DEF lever
+// uses. (comp() itself never reads S.equity at all — see group 19.)
+M.withState({}, () => {
+  check("equityK() with the null default equals capitalAtRiskK()",
+    near(M.equityK(), M.capitalAtRiskK(), 1e-9), `${M.equityK()} vs ${M.capitalAtRiskK()}`);
+});
+check("equityK() with a numeric override returns the override verbatim",
+  M.withState({ equity: 123 }, () => M.equityK()) === 123);
+
+// 29 — the deal reaches required capital. This is the defect the capital layer
+// exists to fix: before it, negotiating a term moved nothing downstream. Each
+// term is asserted against its own arithmetic rather than merely "moves it", so
+// a term wired to the wrong driver fails here instead of passing as movement.
+M.withState({}, () => {
+  const mo = M.SITES[M.S.site].occ / 12;
+  const base = M.requiredCapitalK();
+  const deeper = M.withDeal({ depositMo: M.DEAL.depositMo + 1 }, () => M.requiredCapitalK());
+  check("a month of deposit costs one month of occupancy",
+    near(deeper - base, mo, 1e-9), `${deeper - base} vs ${mo}`);
+  const longer = M.withDeal({ constructionMo: M.DEAL.constructionMo + 1 }, () => M.requiredCapitalK());
+  check("a month of construction costs one month of unabated occupancy",
+    near(longer - base, mo, 1e-9), `${longer - base} vs ${mo}`);
+  const abated = M.withDeal({ constructionMo: M.DEAL.constructionMo + 1 }, () =>
+    M.withState({ abate: M.S.abate + 1 }, () => M.requiredCapitalK()));
+  check("abating that month gives it back",
+    near(abated, base, 1e-9), `${abated} vs ${base}`);
+});
+
+// 30 — the loan reaches the buy path. pricePsf is the graded-D input the buy
+// path's whole cost structure hangs off; withLoan is how evidence.md's
+// reconciliation sweeps it, so the sweep's own contract is asserted here.
+M.withState({ fin: "buy" }, () => {
+  const base = M.debtServiceK();
+  const dearer = M.withLoan({ pricePsf: M.LOAN.pricePsf * 2 }, () => M.debtServiceK());
+  check("debt service scales with the purchase price",
+    near(dearer, base * 2, 1e-9), `${dearer} vs ${base * 2}`);
+  const cheaper = M.withLoan({ ltv: M.LOAN.ltv / 2 }, () => M.requiredCapitalK());
+  check("a lower LTV raises required capital (a bigger down payment)",
+    cheaper > M.requiredCapitalK(), `${cheaper} vs ${M.requiredCapitalK()}`);
+  const reconciling = M.buyPricePsfForStated();
+  check("buyPricePsfForStated() reproduces the stated buy occupancy",
+    near(M.withLoan({ pricePsf: reconciling }, () => M.builtBuyOccupancyK()),
+      M.statedBuyOccupancyK(), 1e-6),
+    `at $${reconciling}/sf`);
+});
+
+const groupCount = 30;
+console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and ${groupCount} invariant groups pass`);
 process.exit(failures ? 1 : 0);

@@ -103,11 +103,16 @@ const cogsK = (r) =>
 // printed column adds up to the owner-comp row printed under it.
 export const proFormaCogsK = (site) => cogsK(streamRevK(site));
 
-// The owner's bars at the plan's default capital at risk.
+// The owner's bars at the plan's default capital at risk. `capitalAtRisk` is
+// the derived figure bandLoK()/bandHiK() are already charging their return on
+// (S.equity is null by default, so equityK() derives it from the uses
+// registry) — read here once so FIGURES and the tornado prose below don't
+// each recompute it.
 const bars = M.withState({}, () => ({
   living: M.livingK(),
   bar: M.bandLoK(),
   band: M.bandHiK(),
+  capitalAtRisk: M.capitalAtRiskK(),
   ownerRate: M.WAGES[M.S.wage].cash * (1 + M.FICA) + M.WAGES[M.S.wage].ben,
 }));
 
@@ -186,6 +191,8 @@ const STREAM_LABEL = { cafe: "Café", rooms: "Rooms", books: "Books", shared: "C
 const DRIVER_LABEL = {
   streamRev: "that stream's revenue", revenue: "gross revenue", sqft: "floor area",
   hours: "staffed hours", payroll: "payroll", fixed: "nothing — it is a flat annual cost",
+  months: "months of occupancy", price: "the purchase price", hardCost: "hard cost (fit-out + FF&E)",
+  ramp: "the monthly cash ramp",
 };
 const label = (map, key, what) => {
   if (!(key in map)) throw new Error(`figures: no ${what} label for '${key}'`);
@@ -204,6 +211,8 @@ function bandText(entry) {
   if (entry.unit === "psf") return `$${num(lo, both)}–${num(hi, both)}/sf`;
   if (entry.unit === "sf") return `${num(lo, both)}–${num(hi, both)} sf`;
   if (entry.unit === "hrs") return `${num(lo, both)}–${num(hi, both)} hr`;
+  if (entry.unit === "mo") return `${num(lo, both)}–${num(hi, both)} mo`;
+  if (entry.unit === "wk") return `${num(lo, both)}–${num(hi, both)} wk`;
   throw new Error(`figures: no band format for unit '${entry.unit}'`);
 }
 
@@ -245,6 +254,91 @@ const GEOMETRY = TORNADO.filter((i) => M.costById(i.id) === null);
 const GEOM_BASIS = { "room-sf": "sqft", "session-hrs": "hours" };
 const GEOM_BASIS_LABEL = { sqft: "floor area", hours: "staffed hours" };
 const TOP = SWEPT[0];
+
+// ---- the capital layer: required capital, the ramp, the buy path ---------
+// Read at the same plan marks the rest of this file uses, so the capital
+// figures sit on the same footing as comp(). `planState(site)` already
+// carries every lever DEF doesn't override (site, util, tx and the revenue
+// levers); the capital-layer inputs (build, ti, abate, grants, cash, runway)
+// come from DEF itself either way, so `withState(planState(site), …)` and
+// `withState({}, …)` agree exactly at site 'li' — both are used below,
+// matching how LI/SN are already read elsewhere in this file.
+const CAP = {};
+for (const site of ["li", "sn"]) {
+  CAP[site] = M.withState(planState(site), () => ({
+    required: M.requiredCapitalK(),
+    headroom: M.headroomK(),
+    atRisk: M.capitalAtRiskK(),
+    fitout: M.fitoutScopeK(),
+    scopeOverrun: M.scopeOverrunK(),
+    deposit: M.useAmountK("deposit"),
+    ffe: M.useAmountK("ffe"),
+    wcBuilt: M.withWcBasis("built", () => M.workingCapitalK()),
+    wcStated: M.withWcBasis("stated", () => M.workingCapitalK()),
+  }));
+}
+
+// The ramp at Little Italy's own base case — the plan's own marks, month 1
+// through the horizon. This is the case that does not turn: peak deficit is a
+// number (wherever the horizon was cut), but the two month counts are null,
+// and that null is the finding (1c-bis) — rendered as a distinct state below,
+// never as a number or a dash.
+const RAMP_LI = M.withState({}, () => {
+  const series = M.rampSeries();
+  return {
+    peakDeficit: M.peakDeficitK(series),
+    toPositive: M.monthsToPositive(series),
+    toRecover: M.monthsToRecover(series),
+    runwayReserve: M.runwayReserveK(),
+  };
+});
+const monthsText = (m) => (m === null ? "never, within the horizon" : `month ${num(m)}`);
+
+// Working capital, built vs stated, at a named scenario and site — the pair
+// the reconciliation lives or dies on. §6's $50–65K band is a gate-case
+// figure (1c-bis): it does not reconcile at the base case at either site, and
+// does reconcile at the gate case, closest at SN/HT.
+function wcRow(site, s) {
+  const tx = s.tx === null ? M.SITES[site].mark : s.tx;
+  const state = { site, util: s.util, tx, caClub: s.caClub ?? P.caClub, caEvent: s.caEvent ?? P.caEvent };
+  const built = M.withState(state, () => M.withWcBasis("built", () => M.workingCapitalK()));
+  const stated = M.withWcBasis("stated", () => M.workingCapitalK());
+  return { site, scenario: s.label, built, stated, delta: built - stated, pctDelta: (100 * (built - stated)) / stated };
+}
+const WC_GATE = SCENARIOS.find((s) => s.key === "gate");
+const WC_BASE = SCENARIOS.find((s) => s.key === "base");
+const WC_ROWS = [
+  wcRow("li", WC_BASE), wcRow("li", WC_GATE),
+  wcRow("sn", WC_BASE), wcRow("sn", WC_GATE),
+];
+
+// The buy path — SN/HT only, the only site §6 models it for. What the loan
+// and the building imply for occupancy, against what §6 states, and the
+// price per square foot that would make the two agree (outside the declared
+// $60–150/sf band — the reconciliation fails and is reported, not forced).
+const BUY_RECON = M.withState(planState("sn", "buy"), () => ({
+  built: M.builtBuyOccupancyK(),
+  stated: M.statedBuyOccupancyK(),
+  reconcilePricePsf: M.buyPricePsfForStated(),
+}));
+const psf = (v, d = 1) => "$" + num(v, d) + "/sf";
+
+// The second tornado: what to negotiate first, ranked by the swing in
+// required capital rather than owner comp. CAP_INPUTS/withUse mirror
+// INPUTS/withCost exactly, so this is tornado()'s shape read against a
+// different total.
+function capitalTornado() {
+  const at = () => M.withState(planState("li"), () => M.requiredCapitalK());
+  return M.CAP_INPUTS
+    .map((i) => {
+      const lo = M.withUse(i.id, i.band[0], at);
+      const hi = M.withUse(i.id, i.band[1], at);
+      return { ...i, lo, hi, swing: Math.abs(hi - lo) };
+    })
+    .sort((a, b) => b.swing - a.swing);
+}
+const CAP_TORNADO = capitalTornado();
+const TOP_CAP = CAP_TORNADO[0];
 
 // ---- FIGURES -------------------------------------------------------------
 export const FIGURES = {
@@ -342,7 +436,7 @@ export const FIGURES = {
   livingWageK: k(bars.living, 1),
   ownerBarK: k(bars.bar, 1),
   economicBandK: k(bars.band, 1),
-  capitalAtRiskK: k(M.DEF.equity),
+  capitalAtRiskK: k(bars.capitalAtRisk),
   ownerRatePerHr: "$" + bars.ownerRate.toFixed(2),
   staffRatePerHr: "$" + M.WAGES[M.DEF.wage].rate.toFixed(2),
   staffHrsPerYr: Math.round(M.STAFF_HRS).toLocaleString("en-US"),
@@ -367,12 +461,67 @@ export const FIGURES = {
   cateringMarginK: k(LI.catering, 1),
   cateringOrdersPerWk: num(M.withState({}, () => M.caterOrders(P.util, P.caClub, P.caEvent, P.events)), 1),
   wcBandK: `$${M.WC_BAND[0]}–${M.WC_BAND[1]}K`,
-  wcReserveK: k(M.WC),
+  // Repointed from the stated $50–65K midpoint to the built figure —
+  // workingCapitalK()'s peak-deficit-or-runway-reserve fallback — now that
+  // working capital is a derived output rather than an input. See
+  // wcBuiltLiK/wcStatedLiK below for the reconciliation itself.
+  wcReserveK: k(M.withState({}, () => M.workingCapitalK())),
   buildCapK: k(M.DEF.build),
-  ventureCashK: k(M.DEF.cash),
+  // The D7 cap itself — what the venture has, not what it needs. Three prose
+  // sites read this as the cap ("venture-available cash is under …"), so it
+  // stays S.cash. What the venture needs is requiredCapitalLiK, and the
+  // distance between them is headroomLiK.
+  ventureCashK: k(M.withState({}, () => M.S.cash)),
   runwayMonths: num(M.DEF.runway),
   bailLineK: k(M.withState({}, () => M.bailComp())),
   equityRangeK: `$${M.EQUITY_RANGE[0]}–${M.EQUITY_RANGE[1]}K`,
+
+  // ---- the capital layer: required capital, headroom, the ramp, the buy path ----
+  requiredCapitalLiK: k(CAP.li.required, 1),
+  requiredCapitalSnK: k(CAP.sn.required, 1),
+  headroomLiK: sk(CAP.li.headroom, 1),
+  headroomSnK: sk(CAP.sn.headroom, 1),
+  capitalAtRiskSnK: k(CAP.sn.atRisk, 1),
+
+  fitoutLiK: k(CAP.li.fitout, 1),
+  fitoutSnK: k(CAP.sn.fitout, 1),
+  fitoutDeltaK: sk(CAP.sn.fitout - CAP.li.fitout, 1),
+  scopeOverrunLiK: k(CAP.li.scopeOverrun, 1),
+  scopeOverrunSnK: k(CAP.sn.scopeOverrun, 1),
+
+  depositLiK: k(CAP.li.deposit, 1),
+  depositSnK: k(CAP.sn.deposit, 1),
+  ffeLiK: k(CAP.li.ffe, 1),
+  ffeSnK: k(CAP.sn.ffe, 1),
+
+  peakDeficitK: k(RAMP_LI.peakDeficit, 1),
+  monthsToPositiveText: monthsText(RAMP_LI.toPositive),
+  monthsToRecoverText: monthsText(RAMP_LI.toRecover),
+  runwayReserveK: k(RAMP_LI.runwayReserve, 1),
+
+  wcBuiltLiK: k(CAP.li.wcBuilt, 1),
+  wcStatedLiK: k(CAP.li.wcStated),
+  wcDeltaLiK: sk(CAP.li.wcBuilt - CAP.li.wcStated, 1),
+  wcDeltaPctLiK: pct((100 * (CAP.li.wcBuilt - CAP.li.wcStated)) / CAP.li.wcStated, 1),
+  wcBuiltSnK: k(CAP.sn.wcBuilt, 1),
+  wcStatedSnK: k(CAP.sn.wcStated),
+  wcDeltaSnK: sk(CAP.sn.wcBuilt - CAP.sn.wcStated, 1),
+  wcDeltaPctSnK: pct((100 * (CAP.sn.wcBuilt - CAP.sn.wcStated)) / CAP.sn.wcStated, 1),
+
+  replacementReserveK: k(M.withState({}, () => M.replacementReserveK()), 1),
+  drawK: k(M.withState({}, () => M.drawK()), 1),
+  taxDistK: k(M.withState({}, () => M.taxDistK()), 1),
+
+  builtBuyOccupancyK: k(BUY_RECON.built, 1),
+  statedBuyOccupancyK: k(BUY_RECON.stated),
+  buyOccupancyDeltaK: sk(BUY_RECON.built - BUY_RECON.stated, 1),
+  buyReconcilePricePsf: psf(BUY_RECON.reconcilePricePsf, 1),
+  buyPriceBandPsf: bandText(M.capInputById("downpayment")),
+  loanPricePsf: psf(M.LOAN.pricePsf),
+
+  topCapitalSwingLabel: TOP_CAP.label,
+  topCapitalSwingBand: bandText(TOP_CAP),
+  topCapitalSwingK: k(TOP_CAP.swing, 1),
 
   // gate-clearing arithmetic quoted in §6 and the precedent memo
   gateTx: "110",
@@ -472,7 +621,7 @@ function contours() {
     GEN(), "",
     `- **The $0 line (not losing money, no draw):** Little Italy ${fmt("li", 0)}; SN/HT ${fmt("sn", 0)}. Every cell above/left of it is a business burning cash.`,
     `- **The ${k(M.PLAN_DRAW_FLOOR)} line (the plan's §9 partial-income floor):** Little Italy ${fmt("li", M.PLAN_DRAW_FLOOR)}; SN/HT ${fmt("sn", M.PLAN_DRAW_FLOOR)}. No single-engine cell clears it: café-alone needs ~${num(FIGURES.cafeAloneTx)} walk-ins/day (top-decile), rooms-alone ~${FIGURES.roomsAloneUtil} utilization.`,
-    `- **The owner's bar (a living wage at zero opportunity cost, ${k(bars.bar, 1)} at ${k(M.DEF.equity)} of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the ${k(M.PLAN_DRAW_FLOOR)} line, is what the venture has to close to be worth the owner's labor and capital.`,
+    `- **The owner's bar (a living wage at zero opportunity cost, ${k(bars.bar, 1)} at ${k(bars.capitalAtRisk)} of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the ${k(M.PLAN_DRAW_FLOOR)} line, is what the venture has to close to be worth the owner's labor and capital.`,
     `- **Evidence limits (mark before believing any cell):** columns right of ${num(Math.round(1.1 * M.SITES.li.mark))} walk-ins/day at Little Italy are top-decile café territory; rows below ${FIGURES.gateUtil} utilization are unsupported by any current evidence at the $15–35/hr band (the D&J analog hits ~100% peak at $5–10/hr — a ceiling test, not a forecast). The credible planning region is the middle of the matrix, which is exactly why the dual gate demands proof on both axes before a lease.`,
   ].join("\n");
 }
@@ -584,6 +733,66 @@ function tornadoBlock() {
   ].join("\n");
 }
 
+// The sources-and-uses table — every line the venture has to fund before it
+// opens, at each site, against the D7 cap. Styled on evidenceTable(): same
+// columns (a use is a cost the venture pays once instead of every year), the
+// same provenance obligations, read from the USES registry instead of COSTS.
+function usesTable() {
+  const out = [GEN(), ""];
+  for (const site of ["li", "sn"]) {
+    const amounts = M.withState(planState(site), () => M.USES.map((u) => u.amount()));
+    const required = CAP[site].required, cash = M.DEF.cash, headroom = CAP[site].headroom;
+    out.push(
+      `**${M.SITES[site].label}** — required capital ${k(required, 1)} against the ${k(cash)} cap (${headroom >= 0 ? sk(headroom, 1) + " of headroom" : sk(headroom, 1) + " — over the cap"}).`,
+      "",
+      "| Use | Scales with | Amount | Evidence | Band | Where the number comes from |",
+      "|---|---|---|---|---|---|",
+      ...M.USES.map((u, i) =>
+        `| ${u.label}${u.derived === true ? " *(derived)*" : ""} | ${label(DRIVER_LABEL, u.driver, "driver")} | ${k(amounts[i], 1)} | ${grade(u.ev)} | ${bandText(u)} | ${u.src} |`),
+      `| **Required capital** | | **${k(required, 1)}** | | | |`,
+      "",
+    );
+  }
+  out.push(`*Amounts are at each site's plan marks on the lease path. ${num(M.USES.filter((u) => u.band).length)} of these ${num(M.USES.length)} uses carry a band and ${num(M.USES.filter((u) => u.ev === "D").length)} are graded D. Working capital is the one derived line — the ramp's peak cash deficit, or the runway reserve where the ramp does not turn within its horizon (see the working-capital reconciliation) — everything else above it is an independently sourced estimate.*`);
+  return out.join("\n");
+}
+
+// Built vs stated working capital — the reconciliation that replaced the
+// input. Styled on opsReconciliation(): a small table plus the prose that
+// says what the agreement or disagreement means, computed rather than
+// asserted. Unlike operations, this one does not reconcile everywhere: §6's
+// $50–65K is a gate-case figure, not a base-case one (1c-bis), and the table
+// says so plainly instead of only asserting the structural invariants.
+function wcReconciliation() {
+  const row = (r) => `| ${M.SITES[r.site].label} — ${r.scenario} | ${k(r.built, 1)} | ${k(r.stated)} | ${sk(r.delta, 1)} (${pct(r.pctDelta, 1)}) |`;
+  const gateRows = WC_ROWS.filter((r) => r.scenario === WC_GATE.label);
+  const closestGate = gateRows.reduce((a, b) => (Math.abs(a.pctDelta) < Math.abs(b.pctDelta) ? a : b));
+  return [
+    GEN(), "",
+    "| Site — scenario | Built (ramp peak deficit, or the runway reserve where the ramp never turns) | §6 stated (the $50–65K band's midpoint) | Delta |",
+    "|---|---|---|---|",
+    ...WC_ROWS.map(row), "",
+    `The base case — the marks §6's pro forma prints — does not reconcile at either site. Little Italy's own ramp (opening at ${pct(M.RAMP_OPEN.util * 100)} utilization / ${pct(M.RAMP_OPEN.tx * 100)} of the café mark, closing to plan over ${num(M.DEAL.rampMo)} months) never turns cash-flow positive within the ${num(M.RAMP_HORIZON_MO)}-month horizon at all — cumulative cash is still ${sk(-RAMP_LI.peakDeficit, 1)} and falling at month ${num(M.RAMP_HORIZON_MO)}, so working capital falls back to funding ${num(M.DEF.runway)} months of the stabilized burn instead (${k(RAMP_LI.runwayReserve, 1)}), and "months to positive" / "months to recover" are both **${monthsText(RAMP_LI.toPositive)}**, not a number. The gate case is where the stated band was actually measured: it reconciles within ${pct(closestGate.pctDelta, 1)} at ${M.SITES[closestGate.site].label}.`,
+    "",
+    `\`model/verify.mjs\` asserts the structural invariants that hold regardless of scenario — the peak deficit equals the minimum of the cumulative series, month 24 of the ramp annualizes to \`comp()\` at the same settings — and does not assert a reconciliation tolerance the base case cannot pass.`,
+  ].join("\n");
+}
+
+// The second tornado: what to negotiate first, ranked by what it would cost
+// required capital rather than owner comp — the ranking capital-tornado.md's
+// prose points a reader at before a term sheet. Same shape as tornadoBlock().
+function capitalTornadoBlock() {
+  const rows = CAP_TORNADO.map((i) =>
+    `| ${i.label} | ${grade(i.ev)} | ${bandText(i)} | ${k(i.lo, 1)} | ${k(i.hi, 1)} | **${k(i.swing, 1)}** |`);
+  return [
+    GEN(), "",
+    "| Deal term / use | Evidence | Band | Required capital at the low end | at the high end | Swing |",
+    "|---|---|---|---|---|---|",
+    ...rows, "",
+    `*Required capital at ${M.SITES.li.label}'s plan marks on the lease path — ${k(CAP.li.required, 1)} at the declared values (the uses table above) — with one banded use swept end to end and every other held at its declared value. The purchase-price terms (down payment, closing) swing nothing here because they apply only on the buy path; that absence is itself the finding — a lease negotiation cannot move them. The largest lever is ${TOP_CAP.label}, worth ${k(TOP_CAP.swing, 1)} across its ${bandText(TOP_CAP)} band — that is what to negotiate first.*`,
+  ].join("\n");
+}
+
 export const BLOCKS = {
   "pro-forma": proForma,
   "stream-margins": streamMargins,
@@ -596,6 +805,9 @@ export const BLOCKS = {
   "matrix-tables": matrixTables,
   contours,
   "wage-rungs": wageRungs,
+  "uses-table": usesTable,
+  "wc-reconciliation": wcReconciliation,
+  "capital-tornado": capitalTornadoBlock,
 };
 
 // ---- HTML blocks -----------------------------------------------------------
@@ -687,9 +899,28 @@ function wageRungsHtml() {
   ].join("\n");
 }
 
+// The sources-and-uses table's HTML twin for the notes card — Little Italy's
+// plan marks, mirroring streamMarginsHtml()/siteDecompositionHtml() below the
+// pro forma's line rather than the live view's, so the card states one fixed
+// case instead of chasing whatever the explorer's levers are set to.
+function usesTableHtml() {
+  const amounts = M.withState(planState("li"), () => M.USES.map((u) => u.amount()));
+  const row = (u, i) => `          <tr><th>${u.label}${u.derived === true ? " <i>(derived)</i>" : ""}</th><td>${k(amounts[i], 1)}</td></tr>`;
+  return [
+    GEN_HTML(),
+    `        <table class="mini">`,
+    `          <tr><th>${M.SITES.li.label} — sources &amp; uses</th><th class="hr">Amount</th></tr>`,
+    ...M.USES.map(row),
+    `          <tr><th><b>Required capital</b></th><td><b>${k(CAP.li.required, 1)}</b></td></tr>`,
+    `          <tr><th>${k(M.DEF.cash)} cap — headroom</th><td>${sk(CAP.li.headroom, 1)}</td></tr>`,
+    `        </table>`,
+  ].join("\n");
+}
+
 Object.assign(BLOCKS, {
   "contribution-html": contributionHtml,
   "stream-margins-html": streamMarginsHtml,
   "site-decomposition-html": siteDecompositionHtml,
   "wage-rungs-html": wageRungsHtml,
+  "uses-table-html": usesTableHtml,
 });
