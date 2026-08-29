@@ -1,6 +1,6 @@
 # Business Plan — Albemarle Tea & Odd Prints
 **Third Space: bookable rooms & a café-shaped front door · commons as budgeted philanthropy**
-*Working draft — v0.3.3 (post-adversarial-review reframe + interview clarifications + free-hosting pilot re-sequencing, Aug 27–28 2026)*
+*Working draft — v0.3.4 (post-adversarial-review reframe + interview clarifications + free-hosting pilot re-sequencing, Aug 27–28 2026; §5/§6 figures moved onto the single-source model, Aug 29 2026)*
 
 ---
 
@@ -9,11 +9,13 @@
 v0.2.1 went through an adversarial review (`strategy/adversarial-review.md`) the same day it was written, and the operator resolved every flagged tension by interview. v0.3 is the plan rebuilt around those decisions. The two biggest changes:
 
 1. **The thesis is inverted.** v0.2.1 said "the higher-margin café subsidizes the lower-margin community services." The review showed the margins run the other way: **this is a rooms-and-building business with a café-shaped front door.** The café is the amenity and the draw; the rooms (and eventually the building) are the engine; the commons layer is explicit, budgeted philanthropy the business chooses to fund — not a business line.
-2. **The pro forma is rebuilt honestly** — corrected operations costs, living-wage labor, working capital and Year-1 ramp funded, revenue lines that survived review only where they earned it. The honest result (v0.3.1, after the co-working demotion): **the conservative base case is negative — roughly −$13K (LI) to −$35K (SN/HT) owner comp** — which is why the G1/G2 gates carry hard, precommitted bars (§7, `plan/schedule.md`) and why the recreational-rooms hypothesis (§1a) is the load-bearing claim. The plan's job is no longer to look viable; it is to find out whether it is.
+2. **The pro forma is rebuilt honestly** — corrected operations costs, living-wage labor, working capital and Year-1 ramp funded, revenue lines that survived review only where they earned it. The honest result (v0.3.1, after the co-working demotion): **the conservative base case is negative — roughly <!--m:compLi-->−$13K<!--/m--> (LI) to <!--m:compSn-->−$37K<!--/m--> (SN/HT) owner comp** — which is why the G1/G2 gates carry hard, precommitted bars (§7, `plan/schedule.md`) and why the recreational-rooms hypothesis (§1a) is the load-bearing claim. The plan's job is no longer to look viable; it is to find out whether it is.
 
 **v0.3.1 (same day, evening):** interview clarifications recovered — the motivating market hypothesis recorded as §1a (D14), co-working demoted to a utilization complement (D13), catering add-on rules set (D15), and the pro forma recomposed accordingly.
 
 **v0.3.2 (same day, late):** D16 adopted — Phase 0.5 residence pilot (paid form).
+
+**v0.3.4 (Aug 29):** **the plan's economics moved onto one model.** Every §5/§6 figure — and the benchmark matrix, the explorer artifact, and the figures the pilot and validation docs quote — is now generated from `model/model.mjs` by `node model/render.mjs`, so the documents and the interactive tool can no longer state different numbers. No assumption changed; three published figures did, as consequences of the model reproducing the plan's own lines (§6's reconciliation note has the arithmetic): SN/HT owner comp −$35K → −$37K (a slip in the published column), SN/HT revenue $301K → $300K, and cost of sale $104K → $101K. The marginals are now stated both gross and net of the card fees and marketing that ride on revenue.
 
 **v0.3.3 (Aug 28):** **D16 revised to the free-hosting form, and the venture re-sequenced around it** (`pilot/phase-0.5-spec.md`): ≥6 months of free event hosting at the Little Italy residence — no money changing hands — before any significant capital commitment. The pilot builds coordination experience, format knowledge, and an anchor-group list; the price test moves to a **graduation ask** (deposits/agreements at §1a prices for the future site). **Capital gates (LOI/lease) now sit after the pilot verdict; target opening moves to ~2028** (`plan/schedule.md`). **Amendment A (Aug 28, later same day):** the pilot's operating goal raised to **near-full utilization** (~7 evenings/week at steady state) with two spaces finished for purpose — companion docs `pilot/space-finishing-plan.md` and `pilot/marketing-plan.md`; pilot floors and graduation bars unchanged. **Phase 0.75 interim commercial options recorded (NOT decided)** — `pilot/interim-phase-options.md` — a possible paid bridge between pilot and site, opened for decision at the pilot's month-4 checkpoint at the earliest. *(Same day: project docs reorganized into `plan/`, `pilot/`, `validation/`, `strategy/`, `reference/` folders.)*
 
@@ -106,41 +108,70 @@ Conservative pre-validation marks — the G1/G2 demand tests replace them with e
 
 | Stream | Assumption (Base) | Little Italy | Station North / Highlandtown |
 |---|---|---|---|
-| Café (coffee-led + tea) | $8.25 avg ticket, 360 days | 100 tx/day → **$297K** | 80 tx/day → **$238K** |
-| Rooms — evening/weekend recreational *(the hypothesis, provisional)* | ~5–6 recurring club sessions/wk at recreational rates + one-off sessions + 2–3 larger private events/mo ≈ $39K, + ~$6K optional catering attach (D15) | **$45K** | **$45K** |
-| Rooms — day *(utilization complement, D13)* | spotty bookings + laptop-crowd day-room usage; offices opportunistic, unmodeled | **$12K** | **$12K** |
-| Prints/art consignment | small, curated | **$6K** | **$6K** |
+| Café (coffee-led + tea) | <!--m:avgTicket-->$8.25<!--/m--> avg ticket, 360 days | <!--m:cafeTxLi-->100<!--/m--> tx/day → **<!--m:cafeRevLi-->$297K<!--/m-->** | <!--m:cafeTxSn-->80<!--/m--> tx/day → **<!--m:cafeRevSn-->$238K<!--/m-->** |
+| Rooms — evening/weekend recreational *(the hypothesis, provisional)* | ~5–6 recurring club sessions/wk at recreational rates + one-off sessions + 2–3 larger private events/mo ≈ <!--m:sessionRevK-->$39K<!--/m-->, + ~<!--m:cateringRevK-->$6K<!--/m--> optional catering attach (D15) | **<!--m:eveningRevK-->$45K<!--/m-->** | **<!--m:eveningRevK-->$45K<!--/m-->** |
+| Rooms — day *(utilization complement, D13)* | spotty bookings + laptop-crowd day-room usage; offices opportunistic, unmodeled | **<!--m:dayRoomRevK-->$12K<!--/m-->** | **<!--m:dayRoomRevK-->$12K<!--/m-->** |
+| Prints/art consignment | small, curated | **<!--m:printRevK-->$6K<!--/m-->** | **<!--m:printRevK-->$6K<!--/m-->** |
 | Books | draw, not revenue | $0 | $0 |
-| **Total** | | **~$360K** | **~$301K** |
+| **Total** | | **~<!--m:revenueLi-->$360K<!--/m-->** | **~<!--m:revenueSn-->$300K<!--/m-->** |
 
 *(v0.2.1 base was $429K/$370K; v0.3 was $394K/$335K. The v0.3.1 delta is the co-working demotion (D13): memberships and offices leave the base. The evening line is unchanged in size but recomposed around the recreational session market (§1a) — more club sessions at $60–150, fewer $350 party-scale events. This is the defensible floor, not the hope.)*
 
-**Evening capacity & elasticity (why this stream carries the upside):** 3 bookable rooms × ~6 usable evenings + weekend afternoon slots ≈ **~25 session-slots/week**. At an $90 average session, full utilization is **~$117K/yr**; the $39K base is **~33% utilization**. No other stream has that headroom at that margin — each additional filled weekly session is worth ~$4.4K/yr of owner comp, versus ~$1.8K for an additional café transaction/day.
+**Evening capacity & elasticity (why this stream carries the upside):** 3 bookable rooms × ~6 usable evenings + weekend afternoon slots ≈ **~<!--m:capacitySlots-->25<!--/m--> session-slots/week**. At an <!--m:avgSession-->$90<!--/m--> average session, full utilization is **~<!--m:capacityRevK-->$117K<!--/m-->/yr**; the <!--m:sessionRevK-->$39K<!--/m--> base is **~<!--m:baseUtil-->33%<!--/m--> utilization**. No other stream has that headroom at that margin — each additional filled weekly session contributes ~<!--m:sessionContribK-->$4.4K<!--/m-->/yr, **~<!--m:sessionMarginalK-->$4.2K<!--/m--> of it reaching owner comp** after the card fees and marketing that ride on revenue, versus ~<!--m:txMarginalK-->$1.87K<!--/m--> for an additional café transaction/day.
 
 ## 6. Pro forma (stabilized Year 2, rebuilt) — and the honest headline
 
-Common cost base: café+catering COGS ~33–40%, consignment 60%; **labor at living wage (~$23/hr loaded): ~$115–125K** covering café day + hosted event nights, net of the owner's ~30 floor hours/wk (D5, D6); **operations $64–70K** (bottom-up: card fees ~$10–12K, utilities ~$15K, insurance ~$14K, software ~$5K, marketing ~2.5% of revenue, R&M/misc — replaces v0.2.1's $38K, per review F1); **commons/books line $6K** (D1/D3 — the budgeted philanthropy).
+Common cost base: café cost of sale <!--m:cafeCogsPct-->32%<!--/m--> (a <!--m:cafeMarginPct-->68%<!--/m--> contribution margin), catering 40%, consignment 60%; **labor at a living wage: <!--m:laborPlanK-->$120K<!--/m--> at the ~$23/hr this table assumed**, covering café day + hosted event nights, net of the owner's ~30 floor hours/wk (D5, D6) — priced bottom-up, the same <!--m:staffHrsPerYr-->5,217<!--/m-->-hour grid costs <!--m:laborRungK-->$121K<!--/m--> at a properly loaded MIT living wage (see the rungs below); **operations <!--m:opsSn-->$62K<!--/m-->–<!--m:opsLi-->$65K<!--/m-->**, which the model splits into a <!--m:fixedOpsK-->$46.8K<!--/m--> fixed base (utilities, insurance, software, R&M) and <!--m:varOpsPct-->5.1%<!--/m--> of gross revenue (card fees ~3% + marketing ~2.5%) — replaces v0.2.1's $38K, per review F1; **commons/books line <!--m:commonsK-->$6K<!--/m-->** (D1/D3 — the budgeted philanthropy).
+
+The wage rungs the labor line can be priced at, and what each costs:
+
+<!-- model:begin wage-rungs -->
+*Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
+
+| Rung | Take-home | Payroll | Benefits | Total comp | Labor |
+| --- | --- | --- | --- | --- | --- |
+| Market | $15.00 | $1.55 | — | $16.55 | ~$86K |
+| Market+ | $16.50 | $1.71 | $0.85 | $19.06 | ~$99K |
+| MIT living *(default)* | $21.03 | $2.18 | — | $23.21 | ~$121K |
+| Living+ | $21.03 | $2.18 | $1.50 | $24.71 | ~$129K |
+
+*Payroll is the employer load at 10.35% (FICA 7.65% + FUTA/MD unemployment and workers' comp 2.70%). Labor is that rate over the plan's own staffed grid — 5,217 hr/yr, §6's $120K line at the $23/hr it assumed.*
+<!-- model:end wage-rungs -->
+
+<!-- model:begin pro-forma -->
+*Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
 
 | | **Little Italy lease** (~2,500 sf @ $22 NNN) | **SN/HT lease** (~3,000 sf @ $16) | **SN/HT buy** (SBLP-terms acceleration case) |
 |---|---|---|---|
-| Revenue | $360K | $301K | $301K |
-| COGS | $104K | $85K | $85K |
+| Revenue (§5 streams) | $360K | $300K | $300K |
+| Cost of sale | $101K | $82K | $82K |
 | Labor (living wage) | $120K | $120K | $120K |
 | Operations | $65K | $62K | $62K |
 | Commons/books | $6K | $6K | $6K |
-| Occupancy | $78K | $64K | ~$66K (verify terms) |
-| **Owner compensation** | **~ −$13K** | **~ −$35K** | **~ −$37K + ~$10K equity** |
+| Occupancy | $78K | $64K | $66K (verify terms) |
+| **Owner compensation** | **−$13K** | **−$37K** | **−$39K + ~$10K equity** |
 
-**The honest headline, sharpened by D13: at conservative marks, nothing clears the floor — the venture is carried or killed by the two gated engines outperforming those marks.** The gap to a $30K owner draw is **~$43K in Little Italy** and **~$65K in SN/HT**. What closes it, in incremental owner-comp terms: each additional café tx/day ≈ **+$1.8K/yr**; each additional filled weekly evening session ≈ **+$4.4K/yr**. So plausible gate-clearing paths are *combinations* — e.g., Little Italy at ~110 tx/day (+$18K) plus ~55% evening utilization (+$25K); no single stream plausibly does it alone (café alone needs ~123 tx/day — top-decile; evening alone needs ~75% utilization — near-full). **SN/HT clears only if the arts-district evening culture delivers utilization near capacity AND the café beats its 80 tx/day mark** — the mission-fit markets now carry an explicitly heavier burden of proof.
+Operations is one figure per site in the plan; the model splits it where §6's own bottom-up lines do — 5.1% of gross revenue (card fees + marketing) plus a $46.8K fixed base — and the split is solved from the two sites' published totals, so this row reproduces them. Cost of sale is rebuilt from the per-stream margins (café 68% contribution, catering 60%, consignment 40%) rather than carried as a lump.
+<!-- model:end pro-forma -->
+
+*Reconciliation with the figures this table carried through v0.3.3, all of them consequences of the model rather than new assumptions: **SN/HT revenue** reads <!--m:revenueSn-->$300K<!--/m--> against a printed $301K — its five streams summed, with the rounding gone. **Cost of sale** reads <!--m:cogsLi-->$101K<!--/m--> (LI) against a printed $104K, because it is now built per stream at each stream's own margin instead of quoted as a 33–40% band. **SN/HT owner comp** reads <!--m:compSn-->−$37K<!--/m--> against a printed −$35K: the printed figure was a slip — that column's own arithmetic (301 − 85 − 120 − 62 − 6 − 64) is −$36K, and the last ~$1K is the rounding above. Little Italy ties exactly.*
+
+**The honest headline, sharpened by D13: at conservative marks, nothing clears the floor — the venture is carried or killed by the two gated engines outperforming those marks.** The gap to a <!--m:drawFloorK-->$30K<!--/m--> owner draw (§9's partial-income floor) is **~<!--m:gapLi-->$43K<!--/m--> in Little Italy** and **~<!--m:gapSn-->$67K<!--/m--> in SN/HT**. What closes it, in incremental owner-comp terms: each additional café tx/day ≈ **<!--m:txMarginalSignedK-->+$1.87K<!--/m-->/yr**; each additional filled weekly evening session ≈ **<!--m:sessionMarginalSignedK-->+$4.2K<!--/m-->/yr** on the room line, ~<!--m:sessionMarginalAllInK-->$4.5K<!--/m--> once the catering that attaches to it is counted. So plausible gate-clearing paths are *combinations* — e.g., Little Italy at ~<!--m:gateTx-->110<!--/m--> tx/day (<!--m:gateTxGainK-->+$19K<!--/m-->) plus ~<!--m:gateUtil-->55%<!--/m--> evening utilization (<!--m:gateUtilGainK-->+$23K<!--/m-->); no single stream plausibly does it alone (café alone needs ~<!--m:cafeAloneTx-->123<!--/m--> tx/day — top-decile; evening alone needs ~<!--m:roomsAloneUtil-->74%<!--/m--> utilization — near-full). **SN/HT clears only if the arts-district evening culture delivers utilization near capacity AND the café beats its 80 tx/day mark** — the mission-fit markets now carry an explicitly heavier burden of proof.
 
 ### Sensitivity
 
+<!-- model:begin sensitivity -->
+*Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
+
 | Scenario | LI revenue | LI owner comp |
 |---|---|---|
-| Lean (70 tx/day, evening at half) | ~$240K | **~ −$65 to −$95K** — not survivable; triggers the stop rule |
-| Base (above) | ~$360K | ~ −$13K |
-| Gate-clearing (≈110 tx/day + ≈55% evening utilization) | ~$425K | ~$30K+ |
-| Strong (120 tx/day, ~75% evening utilization, catering attach growing) | ~$500K | **~$85–95K** |
+| Lean (70 walk-ins/day, evening at half) | ~$249K | ~−$88K |
+| Base (the marks above) | ~$360K | ~−$13K |
+| Gate-clearing (110 walk-ins/day, 55% evening utilization) | ~$418K | ~$30K |
+| Strong (120 walk-ins/day, 75% utilization, catering attach growing) | ~$481K | ~$75K |
+<!-- model:end sensitivity -->
+
+The Lean row is **not survivable** — it triggers the stop rule, and it sits far below the bail line the funded venture can absorb (<!--m:bailLineK-->−$32K<!--/m-->/yr at <!--m:ventureCashK-->$150K<!--/m--> of venture cash over a <!--m:runwayMonths-->24<!--/m-->-month runway). The base case, by contrast, is a slow bleed the reserve can carry past an honest verdict.
 
 ### The catering add-on, evaluated (D15)
 
@@ -148,21 +179,21 @@ Common cost base: café+catering COGS ~33–40%, consignment 60%; **labor at liv
 
 **What it creates:** (a) a **licensing-boundary question** — cold catering from the café into the room zone must be confirmed within the cold-service license and the licensed-premises geometry (#22/#23) before it's sold; (b) a **pricing-culture risk** — the §1a customer is price-sensitive by definition, so any catering *minimum* or outside-food ban would break the very affordability the hypothesis rests on. Hence D15: **optional, pre-ordered, never a minimum; BYO snacks always allowed for recreational bookings.** Expect low attach from clubs (~10–20%) and higher attach from private events and daytime business bookings.
 
-**Verdict:** modest but real — **~$6K base revenue, ~$3–4K margin**, low risk under the D15 rules, with upside tracking event mix rather than club mix. It earns its place as an attach line, not a stream.
+**Verdict:** modest but real — **~<!--m:cateringRevK-->$6K<!--/m--> base revenue, ~<!--m:cateringMarginK-->$3.7K<!--/m--> margin** at ~<!--m:cateringOrdersPerWk-->1.7<!--/m--> pre-orders/week, low risk under the D15 rules, with upside tracking event mix rather than club mix. It earns its place as an attach line, not a stream.
 
 ### Why the dual gate weighs both engines — and why the rooms bar is the existential one
 
 Both engines gate G1 at equal weight (D10), because neither alone closes the gap above. But the *stakes* of each bar differ, and the plan should be read that way:
 
 - **The café bar is a market test.** Café economics are well-understood; comparable counters exist in every candidate market; counts validate the assumption cheaply. If the café bar fails, the conclusion is *this block is wrong* (or the co-anchor is wrong-sized) — a site problem.
-- **The rooms bar is a concept test.** The recreational-space hypothesis (§1a) is the novel claim nobody has validated, and it is also the stream with the only real upside headroom (~$117K capacity at ~95% incremental margin, vs ~$1.8K per café tx/day). If the rooms bar fails everywhere, no site fixes it — the §9 trigger's second arm fires, because a café-plus-offices remainder was adversarially reviewed and does not stand alone.
+- **The rooms bar is a concept test.** The recreational-space hypothesis (§1a) is the novel claim nobody has validated, and it is also the stream with the only real upside headroom (~<!--m:capacityRevK-->$117K<!--/m--> capacity at a ~<!--m:roomMarginPct-->94%<!--/m--> contribution margin, vs ~<!--m:txMarginalK-->$1.87K<!--/m--> per café tx/day). If the rooms bar fails everywhere, no site fixes it — the §9 trigger's second arm fires, because a café-plus-offices remainder was adversarially reviewed and does not stand alone.
 - **They are not interchangeable, and they are mutually dependent.** The café cannot rescue failed rooms (it would need top-decile traffic on thin margins), and the rooms cannot exist without the café — it is the vibe, the front door, and the reason a $75 session feels underpriced. The gate is dual because the business is a compound: *rooms carry the margin, the café carries the meaning.*
 
 ### Cash (D7 — the binding constraint)
 
-Venture-available cash is **under $150K**, grant-free, covering **everything**: fit-out, deposits, FF&E, working capital, and Year-1 ramp. Consequences, stated plainly:
+Venture-available cash is **under <!--m:ventureCashK-->$150K<!--/m-->**, grant-free, covering **everything**: fit-out, deposits, FF&E, working capital, and Year-1 ramp. Consequences, stated plainly:
 
-- **Lease path only** from own cash. Build-out budget hard cap **~$85K** (phased fit-out, used FF&E, landlord TI negotiated hard — #17); working capital + Year-1 ramp reserve **~$50–65K** is non-negotiable and comes first.
+- **Lease path only** from own cash. Build-out budget hard cap **~<!--m:buildCapK-->$85K<!--/m-->** (phased fit-out, used FF&E, landlord TI negotiated hard — #17); working capital + Year-1 ramp reserve **~<!--m:wcBandK-->$50–65K<!--/m-->** is non-negotiable and comes first.
 - The **buy path requires SBLP + grants/TI to exist at all** (10% contribution + closing + FF&E exceeds available cash alone). That is consistent with D8: buy is the acceleration case.
 - Grants (Business Boost, façade, Operation Storefront) buy back fit-out scope or reserve depth — never counted on in advance.
 - A **failure-cost paragraph** (guarantee exposure, what is pledged, what is not — the house is not) goes in every financing file. The Albemarle house stays out of the venture's balance sheet entirely.
@@ -184,7 +215,7 @@ Venture-available cash is **under $150K**, grant-free, covering **everything**: 
 
 ## 8. Principal risks (rebuilt)
 
-1. **The base case is negative by design (v0.3.1).** ~ −$13K LI / −$35K SN/HT owner comp at conservative marks — the venture proceeds only on gate evidence that closes the ~$43K/~$65K gap (§6). The Lean stop rule (counts <70 tx/day post-haircut in both markets, or rooms bar failed in both) halts before any LOI. If the recreational-rooms hypothesis (§1a) fails everywhere, no site fixes it: the §9 trigger's second arm fires — that is the trigger working, not a surprise.
+1. **The base case is negative by design (v0.3.1).** ~<!--m:compLi-->−$13K<!--/m--> LI / <!--m:compSn-->−$37K<!--/m--> SN/HT owner comp at conservative marks — the venture proceeds only on gate evidence that closes the ~<!--m:gapLi-->$43K<!--/m-->/~<!--m:gapSn-->$67K<!--/m--> gap (§6). The Lean stop rule (counts <<!--m:leanStop-->70<!--/m--> tx/day post-haircut in both markets, or rooms bar failed in both) halts before any LOI. If the recreational-rooms hypothesis (§1a) fails everywhere, no site fixes it: the §9 trigger's second arm fires — that is the trigger working, not a surprise.
 2. **Café traffic assumptions** still carry the inter-market gap. Counts with 20–25% seasonal haircut; winter validation now banked during the pilot window (D12/D16-r).
 3. **Financing**: plan sized to lease; SBLP is acceleration only (D8). No purchase closes without executed community-development terms in hand.
 4. **Cash constraint**: <$150K covers everything. Overruns come out of fit-out scope, never out of the working-capital reserve. If lease-path all-in costs can't fit ~$150K after TI negotiation, that is a G2 stop, not a stretch. None of it is at stake before the pilot verdict (D16-r).
@@ -199,7 +230,7 @@ Venture-available cash is **under $150K**, grant-free, covering **everything**: 
 
 *Unchanged: Maryland benefit LLC now (decided Aug 27); Phase 2 hybrid — LLC owns building/engine, companion 501(c)(3) or fiscal sponsor carries the free layer (lending collection first). See `strategy/entity-structure.md`.* Two updates from the reframe:
 
-- The **trigger test gains a second arm (D3):** (a) as before — if the base case can't cover debt service + ~$30K owner comp without permanent grant/donation revenue, restructure nonprofit-first; (b) **if the room program fails as a revenue service at G1/G2**, the commercial remainder (café + offices) must be re-tested against arm (a) before proceeding — a café-led version of this venture was reviewed and does not stand on its own.
+- The **trigger test gains a second arm (D3):** (a) as before — if the base case can't cover debt service + ~<!--m:drawFloorK-->$30K<!--/m--> owner comp without permanent grant/donation revenue, restructure nonprofit-first; (b) **if the room program fails as a revenue service at G1/G2**, the commercial remainder (café + offices) must be re-tested against arm (a) before proceeding — a café-led version of this venture was reviewed and does not stand on its own.
 - The **commons/books budget line** (§6) is the natural first transfer to the Phase 2 nonprofit arm — it is already accounted as philanthropy. **D16-r note:** if the free pilot proves easy to fill but the graduation ask fails broadly, that pattern — real community value, no willingness to pay — is direct §9-trigger evidence pointing nonprofit-first; the pilot is designed to surface exactly this honestly (pilot spec §8).
 
 ---
