@@ -6,7 +6,7 @@ statement: "Sweep the load-bearing in-graph references to
   44493733 and correct the prose that still calls the inclusion decision pending
   — so D1's prune strands nothing"
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Filed 2026-08-29 by the author sitting's Part I rulings. D1
   re-authorized the prune of tactic-align-audit-legacy-review, but attempting it
@@ -104,11 +104,28 @@ clarifications:
       resolving through the pruned classification. Scope discipline here is the
       point: the defect is instructions pointing at content that no longer
       exists, not the mere appearance of a pruned id in prose."
+  - question: Why does this node carry no dispatch markers at phase review?
+    answer: "Because it was not produced by the dispatch lane. The sweep was
+      authored interactively during the 2026-08-28/29 author sitting, in the same
+      session that recorded the D1 ruling gating the prune on it, and landed as an
+      ordinary branch and PR (#3122) rather than through a worker. The planned and
+      qa-done markers are lane artifacts; writing them here would misrepresent how
+      the work was produced, so markers is empty by construction rather than by
+      omission. The edits are the whole of the node's scope, so nothing remains
+      for a worker to implement — the node sits at review awaiting the merge that
+      satisfies tactic-align-audit-legacy-review's blocked_by edge."
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: review
+execution:
+  branch: legacy-review-reference-sweep
+  pr: 3122
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -117,6 +134,24 @@ rounds: null
 attributes: {}
 ---
 # Sweep the load-bearing in-graph references to tactic-align-audit-legacy-review so D1's prune strands nothing
+
+**Recommended model:** opus — the work is almost entirely judgment about which
+references are load-bearing and which are dated records that must not be
+rewritten. The edits themselves are trivial; deciding which 8 of 38 to touch is
+the task, and getting it wrong in either direction is a defect (leave a live
+pointer dangling, or falsify a correct historical record).
+
+## Context
+
+The 2026-08-28 author sitting re-authorized D1's prune of
+`tactic-align-audit-legacy-review` and ruled that the retained engine content is
+not wanted in-graph — it may die with the node, its verbatim source surviving at
+`origin/main` commit `44493733`. Attempting the prune surfaced a gate no
+document had recorded: the node is cited by 38 prose lines across 12 other
+nodes, none of them a structural edge, and the prune would strand every one of
+them without CI noticing. This node is that sweep, and the prune target now
+carries a structural `blocked_by` edge to it so the gate is machine-checked
+rather than a sentence in a plan.
 
 ## Why this is not caught by CI
 
@@ -235,3 +270,35 @@ on the surrounding text, not the anchor.
 The prune itself. This tactic clears the way; D1's prune runs after it ships,
 as a separate change. The file-tree residue is likewise out of scope — that is
 `tactic-retire-assessor-contract-docs`, already at phase implement.
+
+## Verification
+
+The graph must stay clean, and the load-bearing pointers must name the commit
+rather than the node:
+
+```verify
+npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+```verify
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
+```
+
+Both surviving content pointers in `tactic-align-entrypoint-consolidation` must
+cite the commit that actually holds the engines:
+
+```verify
+grep -c "44493733" intentions/tactic-align-entrypoint-consolidation.md
+```
+
+Judgment checks, which no fence can carry. Re-read each of the 8 fixed sites and
+confirm it reads correctly to someone who never saw the node — a reader must be
+able to reach the engine source without it. Then re-read a sample of the 30 left
+alone and confirm each is still a dated record of a past decision rather than a
+present-tense claim; if any reads as a live instruction, it belongs in the fixed
+group instead.
+
+Note that `validate-graph` passing after D1's prune proves nothing about this
+sweep: a pruned id is deliberately exempted from the prose check (see "Why this
+is not caught by CI"), so the check is green either way. The verification that
+matters here is the reading, not the fence.
