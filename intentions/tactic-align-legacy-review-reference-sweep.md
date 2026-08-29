@@ -1,9 +1,10 @@
 ---
 id: tactic-align-legacy-review-reference-sweep
 kind: tactic
-statement: "Sweep the 38 in-graph references to tactic-align-audit-legacy-review
-  across 12 nodes — repoint the five live content pointers at commit 44493733,
-  correct the stale-framing references — so D1's prune strands nothing"
+statement: "Sweep the load-bearing in-graph references to
+  tactic-align-audit-legacy-review — repoint the content pointers at commit
+  44493733 and correct the prose that still calls the inclusion decision pending
+  — so D1's prune strands nothing"
 owner: ai
 status: raw
 parent: null
@@ -60,6 +61,49 @@ clarifications:
       44493733'. Verified present 2026-08-29. So the author's ruling that the
       retained engine content needs no new in-graph home does not lose the
       content; it relocates the reader from a curated copy to the source."
+  - question: Does the prune really pass CI silently — and if so, why can no tooling
+      change catch it?
+    answer: "Yes, and the reason is a deliberate exemption rather than a gap.
+      Corrected 2026-08-29: this node originally claimed prose references are
+      unchecked and only structural YAML edges are validated. That is false.
+      validate-graph runs validateGraphProseRefs
+      (packages/intentionsutil/src/schema.ts:1780) over every backticked,
+      id-shaped reference in a node's statement, rationale, attention.rationale,
+      clarification answers and body. But it skips any reference that does not
+      classify as 'missing', and classifyRef consults a 'deleted' set built by
+      deletedNodeIds()
+      (packages/intentionsutil/scripts/lib-deleted-node-ids.ts) from
+      git log --diff-filter=D -- intentions/. So the instant the prune commit
+      lands, the id is in that set and all 38 references classify as 'pruned'
+      and pass. The exemption is correct in general — a prune should not break
+      every node that ever cited the pruned node — and
+      tactic-retire-assessor-contract-docs:103 relies on it explicitly. The
+      consequence is that green CI after the prune carries no information about
+      whether the surviving references still make sense, so a human sweep is the
+      only remedy. Three further references live outside intentions/, where no
+      prose check reaches at all; those belong to
+      tactic-retire-assessor-contract-docs."
+  - question: Should all 38 references be rewritten?
+    answer: "No — 8 of them, in 4 files. Triaged 2026-08-29. The load-bearing
+      group is prose that is false in the present tense or that sends a reader to
+      the node for content it no longer holds: five sites in
+      tactic-align-entrypoint-consolidation, the body paragraph at
+      tactic-align-audit-skill:149-153 whose twin in
+      .claude/skills/align-audit/SKILL.md is quoted at
+      tactic-retire-assessor-contract-docs:185-199 and called false in every
+      clause (that tactic covers the skill file, not the node body, so the node
+      body is left to this sweep), the content pointer at
+      tactic-graph-native-dispatch:190,
+      and the provenance error at tactic-retire-assessor-contract-docs:47. The
+      other 30 are dated records naming the sitting as a historical event, or
+      superseded premises that the same node's own later clarification already
+      corrects in sequence. Rewriting those would falsify a correct record to
+      tidy a reference that is not broken — the decision stays findable through
+      the two surviving records named at
+      tactic-retire-assessor-contract-docs:69-72, and the citations keep
+      resolving through the pruned classification. Scope discipline here is the
+      point: the defect is instructions pointing at content that no longer
+      exists, not the mere appearance of a pruned id in prose."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -72,21 +116,39 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Sweep the 38 in-graph references to tactic-align-audit-legacy-review so D1's prune strands nothing
+# Sweep the load-bearing in-graph references to tactic-align-audit-legacy-review so D1's prune strands nothing
 
 ## Why this is not caught by CI
 
-Only structural YAML edges — a node id as a `  - <id>` list entry under
-`serves`, `blocked_by`, `validates` or `recovers` — are what `validate-graph`
-checks. Every one of the 38 citations is prose: a backticked mention inside a
-`rationale`, a `clarifications` answer, or a body paragraph. Measured
-2026-08-29, a grep for `^  - tactic-align-audit-legacy-review$` across
-`intentions/` returns zero hits.
+**Corrected 2026-08-29.** An earlier draft of this node said prose references
+are unchecked and only structural YAML edges are validated. That is wrong, and
+the real mechanism is worse.
 
-So `graph-commit --prune` on that node deletes the file outright, every check
-passes, and twelve nodes are left citing something that no longer exists. The
-failure is silent by construction, which is why the prune is gated on this
-sweep rather than run alongside it.
+`validate-graph` runs `validateGraphProseRefs`
+(`packages/intentionsutil/src/schema.ts:1780`), which **does** check every
+backticked, id-shaped reference in a node's statement, rationale,
+`attention.rationale`, clarification answers and markdown body. It exists
+precisely to catch a node naming a sibling id that does not resolve.
+
+It will not catch this prune, because a pruned id is **deliberately exempted**.
+The check classifies each reference with `classifyRef(ref, storeIds, deleted)`
+and skips anything that is not `missing`; `deleted` comes from
+`deletedNodeIds()` (`packages/intentionsutil/scripts/lib-deleted-node-ids.ts`),
+which shells out to `git log --diff-filter=D -- intentions/` and so contains
+every id whose file was ever deleted. The moment the prune commit lands, the id
+joins that set and all 38 references classify as `pruned` rather than
+`missing`.
+
+That exemption is correct in general — pruning a node should not break every
+node that ever cited it, and `tactic-retire-assessor-contract-docs` relies on
+exactly this property. But it means **no tooling change would catch this
+particular loss**, and the check being green after the prune says nothing about
+whether the references still make sense. A human sweep is the only remedy,
+which is why the prune is gated on this node rather than run alongside it.
+
+Structural edges are separately irrelevant here: measured 2026-08-29, a grep
+for `^  - tactic-align-audit-legacy-review$` across `intentions/` returns zero
+hits, so there is no structural edge to break either.
 
 ## Measured residue, 2026-08-29
 
@@ -108,16 +170,62 @@ measured it on 2026-08-28 — the residue grows while the prune waits.
 | `tactic-graph-read-at-ref-cli` | 1 | stale framing |
 | `tactic-graph-native-dispatch` | 1 | stale framing |
 
-## Scope
+## Scope — the 8 load-bearing sites, not all 38
 
-1. Rewrite `tactic-align-entrypoint-consolidation:291` — it instructs preserving
-   the content on a premise the 2026-07-23 sitting overturned.
-2. Repoint `tactic-align-entrypoint-consolidation` lines 99, 176, 279 and 349 at
-   commit `44493733` rather than at the node.
-3. Correct `tactic-retire-assessor-contract-docs:47`, which narrates the prune
-   as already performed.
-4. Correct the stale-framing references so they describe the inclusion decision
-   as settled 2026-07-23, not pending.
+Triaging the 38 on 2026-08-29 split them three ways, and only one group is
+load-bearing. **Blanket-rewriting all 38 would be wrong**: most are dated
+records of what was decided at a sitting, and editing those to read as though
+they had always been correct falsifies the record this graph exists to keep.
+
+**Fix (8 sites, 4 files)** — prose that is false in the present tense, or that
+sends a reader to the node for content:
+
+1. `tactic-align-entrypoint-consolidation:99` — content pointer ("both engines'
+   content is retained verbatim in ..."). Repoint at commit `44493733`.
+2. `tactic-align-entrypoint-consolidation:176` — content pointer for the
+   improvement pass. Repoint at `44493733`.
+3. `tactic-align-entrypoint-consolidation` Unit 5 — add a supersession banner:
+   the unit shipped, and `tactic-retire-assessor-contract-docs` now deletes the
+   very files it chose to retain.
+4. `tactic-align-entrypoint-consolidation:279` — a rewrite directive aiming the
+   two docs at the node. Aim it at `44493733` instead.
+5. `tactic-align-entrypoint-consolidation:291` — states the node "is a live plan
+   for a future `/align-audit` that will re-consume this exact contract", and
+   makes that the reason to retain four files. The premise is false; record the
+   refutation rather than silently deleting the recommendation.
+6. `tactic-align-audit-skill:149-153` — body prose describing the inclusion
+   decision as pending and owned by a born-parked sitting. The same false
+   framing was copied into `.claude/skills/align-audit/SKILL.md`, and
+   `tactic-retire-assessor-contract-docs:185-199` quotes *that* copy and says
+   "Every clause of that is now false" — the node body is the twin it did not
+   cover, since that tactic's scope is the skill file. Rewrite it as settled.
+7. `tactic-graph-native-dispatch:190` — content pointer, present tense.
+   Repoint at `44493733`.
+8. `tactic-retire-assessor-contract-docs:47` — narrates the prune as already
+   performed. Correct it, and note at :145 that the prune now carries a
+   structural `blocked_by` edge to this node.
+
+**Leave (the remaining 30)** — dated provenance naming the sitting as an event
+("resolved 2026-07-23 at the `tactic-align-audit-legacy-review` office-hours
+sitting"), and superseded premises that the *same node's* later clarification
+already corrects in sequence. These stay accurate as history, keep resolving
+after the prune via the `pruned` classification above, and the decision itself
+remains findable: `tactic-retire-assessor-contract-docs:69-72` names its two
+surviving records. Rewriting them would destroy a correct record to tidy a
+reference that is not broken. This applies to `strategy-explicit-intent` (5),
+`tactic-condition-review-sweep` (4), `tactic-node-ancestry-context` (2),
+`strategy-graph-review-curriculum` (2), `strategy-graph-native-dispatch` (2),
+`strategy-discovered-requirements` (2), `tactic-validate-graph-ordering-inversion-lint` (1),
+`tactic-graph-read-at-ref-cli` (1), `tactic-align-audit-skill:26` (1), and
+`tactic-align-entrypoint-consolidation:123` (1).
+
+**Not ours (3 sites outside `intentions/`)** — `.claude/docs/delegability.md:11`,
+`.claude/docs/signal-identification.md:11` and
+`.claude/skills/align-audit/SKILL.md:332`. No prose check covers these at all.
+All three belong to `tactic-retire-assessor-contract-docs` (`phase: implement`),
+which deletes the two docs outright and carries a `verify` fence asserting the
+id is gone from the skill. Do not touch them here — that tactic is in flight,
+and `.claude/skills/**` edits are denied under dispatch auto mode anyway.
 
 Line numbers are as measured on `origin/main` 2026-08-29 and will drift; match
 on the surrounding text, not the anchor.

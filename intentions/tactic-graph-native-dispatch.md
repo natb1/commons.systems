@@ -187,8 +187,11 @@ scope is the whole persistent layer (virtues, strategies, traditions,
 delegations), not strategy alone; there is no separate virtue-review phase.
 The scheduled `align` jit and its rung-5 dialectic engine are retired
 outright, along with the old no-prompt corpus-staleness improvement pass;
-their content is retained verbatim in `tactic-align-audit-legacy-review`,
-an office-hours sitting deciding a possible future `/align-audit` skill.
+their content survives verbatim at `origin/main` commit `44493733`
+(`.claude/skills/align-init/SKILL.md`, `.claude/skills/align-strategy/SKILL.md`).
+It was retained on `tactic-align-audit-legacy-review` pending that sitting's
+ruling on a possible future `/align-audit` skill; the sitting resolved against
+inclusion on 2026-07-23 and the node is owed a prune, so read the commit.
 
 ### 2.1 `/align` (no prompt) — fork entrypoint and orientation
 
