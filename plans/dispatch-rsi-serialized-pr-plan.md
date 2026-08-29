@@ -404,7 +404,7 @@ sandboxed.
 | **2b** | **Supersession representation** | PR19 | 3 | needs PR4's write surface |
 | **3** | **Dispatch runtime (cold)** | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD — realized at resumption |
 | **5** | **RSI chain** | PR10 + PR11 + PR12 + PR14 | 10 | COLD |
-| **5b** | **`/align` charter + adversarial review** | PR20 | 8 | must precede the rename |
+| **5b** | **`/align` charter + adversarial review** | PR20 + assessor-doc retirement | 9 | must precede the rename |
 | **6** | **Skill rename** | PR13 | 1 | last, alone |
 | **7** | **Merge queue + scan cadence** | PR17 | 6 | COLD — before the sentinel comes off |
 | **8** | **The four deferred drafts** | #3093, #2856, #3040, #3037 | 4 (already counted in the overhang) | bulk node-content rewrites; invalidate every `--base` CAS manifest. See §"In-flight work outside this plan" |
@@ -3979,6 +3979,20 @@ judgment quality, and three units revise interview skill text where the wording
 > the same disposition covered was ruled **(c) accept with remediation** — the
 > 35% target stands, and this sequence is itself the drain plan. Do not re-open
 > the target.
+
+> **`tactic-retire-assessor-contract-docs` rides this PR — RULED 2026-08-29.**
+> It was in no bundle, so the sequence could have run to completion without
+> anyone noticing it. It rides here because PR20 already rewrites the `/align`
+> skill surface its third unit edits, so the two touch the same files and review
+> together; the freeze means no worker picks it up on its own.
+>
+> `phase: implement`, `owner: ai`, three units: retire `.claude/docs/delegability.md`,
+> `.claude/docs/signal-identification.md` and their `ref-*` skills, plus
+> `.claude/skills/align-audit/SKILL.md`, whose out-of-scope list still frames a
+> decision settled 2026-07-23 as pending and cites a node that no longer exists.
+>
+> **Counting:** PR20 itself still closes the 8 nodes listed below. The *bundle*
+> closes **9**. Close the rider's node with them.
 
 ### Context
 
