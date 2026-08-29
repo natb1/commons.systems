@@ -36,7 +36,7 @@ export var CADENCE = {
 export var FICA = 0.0765;                       // Social Security + Medicare, employer half
 export var UI_WC = 0.0270;                      // FUTA + MD unemployment (capped bases) ~0.7% + workers’ comp ~2.0%
 export var PAYROLL_LOAD = FICA + UI_WC;         // 10.35% — the full employer load on a staff hour
-export var FTE_HRS = 2080;                      // a full-time year — the basis for the per-worker annual column
+var FTE_HRS = 2080;                      // a full-time year — the basis for the per-worker annual column
 export var WAGES = [
   {label:'Market', cash:15.00, ben:0,
    desc:'MD minimum $15.00/hr cash, tips economy, no employer benefits.'},
@@ -52,11 +52,11 @@ WAGES.forEach(function(w){
   w.rate = Math.round((w.cash + w.pay + w.ben)*100)/100;   // total comp/hr — what the labor line spends
 });
 export var MIT_RUNG = 2;            // the comparison baseline
-export var FIN = {
+var FIN = {
   lease:'Own cash, everything under the <$150K cap (D7): fit-out ≤$85K, working capital $50–65K first.',
   buy:'SBLP-terms purchase (§6 models it for SN/HT only): occupancy ≈ +$2K vs the lease, but builds ~$10K/yr of equity — shown as a chip, not counted as draw. Requires SBLP + grants to exist at all (D8); the G2 cash math below no longer applies.'
 };
-export var UTILS = [25,33,40,45,50,55,60,65,70,75,80];
+var UTILS = [25,33,40,45,50,55,60,65,70,75,80];
 export var TXREL = [0.7,0.8,0.9,1.0,1.1,1.2,1.3];   // café columns as multiples of the site's mark
 export var ROWBADGE = {33:'base', 45:'break-even', 55:'gate case', 75:'ceiling'};
 export var RELBADGE = {'1':'site mark', '1.2':'≈ top decile'};
@@ -135,7 +135,7 @@ export function laborK(){ return STAFF_HRS * WAGES[S.wage].rate / 1000; }
 // their own. Pricing the owner’s year at the full staff rate would overstate the bar.
 export function ownerRate(){ var w = WAGES[S.wage]; return w.cash*(1+FICA) + w.ben; }
 export function livingK(){ return OWNER_HRS * 52 * ownerRate() / 1000; }
-export function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
+function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
 export function bandLoK(){ return livingK() + RET_LO*S.equity; }
 export function bandHiK(){ return livingK() + RET_HI*S.equity; }
 export function occupancyK(){ return SITES[S.site].occ + (S.fin==='buy' ? 2 : 0); }   // §6: the buy path runs ≈$2K dearer
@@ -150,7 +150,7 @@ export function clubsFor(util){
   return Math.max(0, sessions(util) - evEqOf(S.events)) / CADENCE[S.cad].avg;
 }
 export function txCols(){ return TXREL.map(function(r){ return Math.round(r*SITES[S.site].mark); }); }
-export function cashK(){ // G2 cash at risk (lease path): net build-out + WC reserve less abatement relief
+function cashK(){ // G2 cash at risk (lease path): net build-out + WC reserve less abatement relief
   if (S.fin==='buy') return null;
   var netBuild = Math.max(0, S.build - S.ti - S.grants);
   var relief = S.abate * SITES[S.site].occ/12;
