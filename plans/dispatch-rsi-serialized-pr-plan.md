@@ -1776,19 +1776,20 @@ same worktree and confirm it is refused while the lock is held.
 **Recommended model: sonnet** — three concrete plumbing fixes; the umbrella
 node records the measurement, it does not require a redesign.
 
-### Run before opening this PR (required)
+### Run before opening this PR — SATISFIED 2026-08-29
 
-```
-/rsi-audit 7d
-```
+The required baseline run was **already taken on 2026-08-29 and recorded on
+both nodes** (`tactic-dispatch-observation-masking`,
+`tactic-dispatch-cache-preserving-context`) — see §"Measurement runs before the
+PRs they gate". Do not re-run it: it had to be taken on a **30d** window,
+because the freeze empties shorter ones (a `7d` window holds 2 sessions and no
+worker sessions at all). Read the recorded results off the nodes instead.
 
-Records the baseline for `tactic-dispatch-observation-masking` and
-`tactic-dispatch-cache-preserving-context` **before** anything changes. The
-`hit_ratio` lens is already shipped (`aggregate-usage.sh:1211`), so the cache
-baseline is readable today. Ship this PR against the masking measurement's
-**cost half only** — its quality half needs dispatch-phase sessions with a
-working ladder, which this same bundle delivers, so it is a follow-up that may
-revise this PR.
+Two recorded results bind this PR: the cache-creation share is **4.3%** of all
+context tokens — the arithmetic ceiling for any append-only layout, which kills
+the imported 41–80% claim — and this PR ships against the masking measurement's
+**cost half only**. Its quality half needs `by_phase_outcome`, which the freeze
+empties; it is a follow-up that may revise this PR.
 
 ### Context
 
@@ -2197,16 +2198,19 @@ in the log with the config values it read.
 
 **Recommended model: opus** — a structural rewrite of two skills.
 
-### Run before opening this PR (required)
+### Run before opening this PR — SATISFIED 2026-08-29
 
-```
-/rsi-audit 14d
-```
+The measurement `tactic-rsi-measure-fanout-and-model-routing` required was
+**taken 2026-08-29 and recorded on `strategy-recursive-self-improvement`** — on
+a **30d** window, because a 14d one returns no fan-out data under the freeze.
+Do not re-run it; read the recorded reading. Two results bind this PR:
 
-Satisfies `tactic-rsi-measure-fanout-and-model-routing`: this catalog declares a
-`model:` per lens, and both imported fan-out/model-routing findings were
-measured on configurations this repo does not run. **Measure before fixing the
-values.**
+- Anchor the per-lens `model:` values on the **measured 1.91× opus-to-sonnet
+  per-turn cost premium**, not the imported ratios (measured on configurations
+  this repo does not run).
+- **Set `model:` from `cost_usd`, never from `price_proxy_usd`** — the proxy
+  holds price constant to isolate token count, so it ranks sonnet *above* opus
+  (37827 vs 31372) and inverts the model ranking.
 
 > **`tradition-agentic-engineering` is verified on the half this PR needs.**
 > Three idioms are recorded as genuine external deference — skill/hook
@@ -2529,8 +2533,10 @@ that file is now the host.
 ### Dependencies
 
 PR3 and PR10. Unit 1 additionally depends on `tactic-attention-namespaced-rank`,
-which is **outside this plan** — if it has not landed, ship Units 2–3 and leave
-Unit 1 open rather than blocking the PR.
+which is **outside this plan** — if it has not landed, leave Unit 1 open rather
+than blocking the PR. Unit 2 is parked on an author ruling (see the readiness
+note above) and ships only if that park has been cleared by the time this PR
+runs. The autonomously shippable floor is **Unit 3 alone**.
 
 **Unit 3 additionally depends on `tactic-rsi-lane-token-attribution`** (status
 `codified`, phase `implement` as of 2026-08-29), which owns correction **C5**.
@@ -2751,14 +2757,16 @@ preserve the reason it gives while widening the condition.
 **PR1** — same file, and PR1's units are correctness fixes that should land
 first so a regression here is bisectable against a known-good writer.
 
-Plus the ref-split decision, above.
+The ref-split decision is discharged — ruled 2026-08-29, split; PR15 no longer
+blocks on anything.
 
 ### Reuse
 
-- `run_merge_node()` — `graph-commit:989`. Unit 2 calls it directly rather than
-  through a manufactured conflict.
 - `.claude/rules/sandbox.md` "Command pattern matching" — the matcher rules Unit
   3 must satisfy.
+
+*(A `run_merge_node()` reuse note for Unit 2 was removed 2026-08-29 with the
+split — Unit 2 is not written.)*
 
 ### Verification
 
@@ -2770,11 +2778,10 @@ npm test --prefix packages/intentionsutil
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
-Manual: with a deliberately dirty unrelated file in the checkout, run a
-`graph-commit` and confirm it lands (Unit 1). From a checkout reset one commit
-behind `origin/main` with nothing staged, confirm the run short-circuits without
-taking the landing lock (Unit 4). Confirm the `graph-commit` invocation is
-auto-approved rather than prompting (Unit 3).
+Manual (shipped units only — Units 1–2 are not written): from a checkout reset
+one commit behind `origin/main` with nothing staged, confirm the run
+short-circuits without taking the landing lock (Unit 4). Confirm the
+`graph-commit` invocation is auto-approved rather than prompting (Unit 3).
 
 **Unit 0** needs a verification the suite above cannot give: a *concurrent*
 removal. Construct it directly — build base/ours/theirs fixture nodes where
@@ -2802,11 +2809,11 @@ product defects:
   CI-only, non-locally-reproducing failure in these harnesses already cost PR1
   dearly. A cascade that misattributes 11 failures is precisely what makes that
   trap expensive to diagnose. Fix the cascade before relying on the suite to
-  judge Units 1–2.
+  judge this PR's shipped units.
 
 ### Closing the nodes
 
-After merge, for each of the 7 ids set `phase: done` and
+After merge, for each of the 5 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
@@ -3214,7 +3221,7 @@ hits after the backfill (Unit 4). Run `test-park-node.sh` in a clone with no
 
 ### Closing the nodes
 
-After merge, for each of the 8 ids set `phase: done` and
+After merge, for each of the 12 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 5's node closes with the author's
 decision recorded in its body **whichever way the decision goes**.
 
@@ -3790,7 +3797,7 @@ confirm the sweep fails at that commit (Unit 3).
 
 ### Closing the nodes
 
-After merge, for each of the 3 ids set `phase: done` and
+After merge, for each of the 4 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
@@ -3969,6 +3976,15 @@ dependency. Land it here because this PR already owns the `/align` +
 > The node's scope covers both halves — the SKILL text *and* reconciling the two
 > units that violate the rule today.
 
+**Unit 9 — the rider, `tactic-retire-assessor-contract-docs`.** The three units
+in the banner above: delete `.claude/docs/delegability.md` and
+`.claude/docs/signal-identification.md`, retire their `ref-delegability` and
+`ref-signal-identification` skills, and fix
+`.claude/skills/align-audit/SKILL.md`'s out-of-scope list, which frames a
+decision settled 2026-07-23 as pending and cites a node that no longer exists.
+The node (`phase: implement`, `owner: ai`) carries any further detail; close it
+with this PR's batch.
+
 ### Dependencies
 
 **PR18** — Unit 5 here is the policy half of the invariant PR18 enforces
@@ -4020,7 +4036,9 @@ Manual, and the first two are the ones that matter:
 
 ### Closing the nodes
 
-After merge, for each of the 7 ids set `phase: done` and
+After merge, for each of the 8 ids listed above — plus
+`tactic-retire-assessor-contract-docs`, the position-9 rider, if it rode this
+PR — set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 7's node closes on the recorded
 outcome, not on a diff.
 
@@ -4190,7 +4208,11 @@ supersession work (PR18, PR19, PR20). Every assigned node was re-verified
 > A fourth pass censused both and routed them; with the overhang retired the
 > total becomes **128** — the 114, plus the 13 the overhang absorbed, plus
 > PR5a's one node, which was never in the original scope. It read 131 against
-> the old 117.
+> the old 117. *(This 13 — nodes absorbed by the overhang retirement — is a
+> different set from the table's 13 surveyed-but-unassigned; that the two are
+> numerically equal is coincidence. Likewise this 128 counts absorbed + PR5a
+> work, where the table's 127 counts surveyed-but-unassigned; they are answers
+> to different questions, not a drifted pair.)*
 
 Of the 114, **36 are on the graph read/write path** — PR1's 8, PR15's 2, PR16's
 11, PR17's 6, PR18's 5, PR19's 3 and PR4's `batchIds` unit — plus PR20's

@@ -413,9 +413,10 @@ mid-window.
 ## Open items that are not positions
 
 Nothing here waits on the author — the two decisions that did were ruled
-2026-08-29 and are recorded below as discharged. What remains is three
-measurement runs, of which one was taken on 2026-08-29 and two are blocked by
-the freeze itself.
+2026-08-29 and are recorded below as discharged. The three measurement runs
+that remained were all taken on 2026-08-29; the only residue is the *quality
+half* of `tactic-dispatch-observation-masking`, which needs `by_phase_outcome`
+data the freeze empties and so waits for the staged resumption.
 
 ### Three measurement runs — TAKEN 2026-08-29
 
@@ -482,6 +483,21 @@ cannot:
    invalidate every CAS manifest.
 6. **The charter split after Bundle 8** (position 13). Same CAS reason, larger
    blast radius — 316 children re-served.
+
+---
+
+## Parallelism, for a batch executor
+
+The window is a serialized waterfall — **merges land one at a time, in position
+order**, and only one post-merge closing batch runs at a time (concurrent
+`graph-commit` invocations conflict-park the loser, and every closing batch
+must re-cut its worktree from the just-moved `origin/main`). Within that,
+*implementation* may overlap exactly where this file already says the order can
+flex: PR2 and PR5–PR9 are mutually independent and may be built in parallel
+worktrees, and Bundles 3 and 4 share no files. Do not overlap two PRs inside
+the same bundle — bundles are grouped *by shared code surface*, so intra-bundle
+parallelism recreates the conflicts the bundling exists to avoid. Everything
+else stays serial; the six hard orderings above are load-bearing either way.
 
 ---
 
@@ -590,8 +606,10 @@ are now `phase: implement` on `origin/main`, moved by `/align-tactics`
 finalization rounds run after the plan was written. Nothing about the
 assignments changed — but *"these nodes are not in the ladder"* is no longer
 true of the phase field, **and the tick reads the phase field**. Outward: the
-same filter is why the plan never saw the ~20 in-charter nodes at
-`phase: implement` with no PR.
+same filter is why the plan originally never saw the ~20 in-charter nodes at
+`phase: implement` with no PR — since censused and routed by the plan's fourth
+coverage pass (see §"Coverage" there); that population is settled, and this
+caveat survives only as the reason the filter can go stale again.
 
 Treat every `path:line` anchor in the plan as a hint, not an address —
 including the anchors carried in node bodies, several of which had already
