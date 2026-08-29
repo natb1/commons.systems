@@ -23,8 +23,8 @@ export var DAYROOM_K = 12, PRINT_K = 6;            // §5 revenue the tool does 
 export var PLAN_LABOR_K = 120;                     // §6’s labor line ($K/yr)
 export var PLAN = {price:90, ticket:8.25, util:33, tx:{li:100,sn:80}, caClub:15, caEvent:50, events:5.5, commons:6, rate:23};
 export var SITES = {
-  li:{label:'Little Italy', base:-13, mark:100, occ:78, ops:65, hint:'~2,500 sf @ $22 NNN · occupancy $78K · operations $65K · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
-  sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, ops:62, hint:'~3,000 sf @ $16 · occupancy $64K · operations $62K · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
+  li:{label:'Little Italy', base:-13, mark:100, occ:78, ops:65, sf:2500, psf:22, hint:'~2,500 sf @ $22 NNN · occupancy $78K · operations $65K · café mark 100 walk-ins/day. Switching location re-anchors the café columns and walk-in default to this mark.'},
+  sn:{label:'Station North / Highlandtown', base:-35, mark:80, occ:64, ops:62, sf:3000, psf:16, hint:'~3,000 sf @ $16 · occupancy $64K · operations $62K · café mark 80 walk-ins/day — cheaper floor, weaker café column. Columns and walk-in default re-anchored to this mark.'}
 };
 export var CADENCE = {
   weekly:{label:'All weekly', avg:1.0, desc:'every club meets weekly (1.0 sessions/club/wk)'},
@@ -106,22 +106,188 @@ export function roomsK(util){ return (util/100)*CAPACITY*sessRevK(S.price)*ROOM_
 // Marginals: what one more unit actually leaves in owner comp, net of the ops that ride on revenue.
 export function msess(p){ return sessRevK(p)*(ROOM_MARGIN - VAR_OPS); }
 export function mtx(t){ return txRevK(t)*(S.cafeM/100 - VAR_OPS); }
-// §6 states one operations figure per site — $65K (LI), $62K (SN). Those two differ in revenue
-// and in nothing else about operations, so the pair solves for a revenue-proportional part (card
-// fees ~3% + marketing ~2.5%) and a fixed base (utilities, insurance, software, R&M/misc). The
-// fixed base falls out the SAME at both sites — $46.8K — which is the check that the split is
-// real rather than fitted. Solved once, at load, from §6’s own two numbers.
+// ---- the cost registry: what the venture spends, declared once --------------
+// Every cost carries four things beyond its amount: the income stream it serves,
+// the driver it scales with, an evidence grade, and — where the number is an
+// estimate rather than a quote — the band it is estimated within. The grades are
+// what lets a reader rank what to go verify; the bands are what a sensitivity
+// sweep moves. `amount(util, tx)` returns $K/yr as a positive magnitude.
+export var EV = {A:'contracted', B:'observed', C:'benchmark', D:'assumed'};
+
+// The banded inputs, each carried at one declared value — the band midpoint,
+// except ROOM_SF. `withCost(id, value, fn)` pins one to a band endpoint for a
+// sweep; nothing else writes them.
+export var CARD_RATE = 0.030;      // card fees, share of the revenue that runs on a card
+export var MKT_RATE = 0.025;       // marketing, share of gross revenue (review F15)
+export var UTILITIES_K = 15;       // gas, electric, water
+export var INSURANCE_K = 15;       // GL + property + liquor (open-questions #20)
+export var SOFTWARE_K = 4.5;       // POS, booking, accounting, email
+export var RM_MISC_K = 12.5;       // repairs, trash, pest, internet, accounting, licenses
+export var ROOM_SF = 300;          // sf per bookable room — the sqft absorption basis
+export var SESSION_HRS = 3.5;      // staffed hours a session occupies — the hours basis
+
+var COST_OVER = {};                // input id → pinned value; written only by withCost
+function pinned(id){ return Object.prototype.hasOwnProperty.call(COST_OVER, id); }
+function inputOf(id, dflt){ return pinned(id) ? COST_OVER[id] : dflt; }
+function cardRateRaw(){ return inputOf('card-fees', CARD_RATE); }
+function mktRateRaw(){ return inputOf('marketing', MKT_RATE); }
+function utilitiesRawK(){ return inputOf('utilities', UTILITIES_K); }
+function insuranceRawK(){ return inputOf('insurance', INSURANCE_K); }
+function softwareRawK(){ return inputOf('software', SOFTWARE_K); }
+function rmMiscRawK(){ return inputOf('rm-misc', RM_MISC_K); }
+export function roomSf(){ return inputOf('room-sf', ROOM_SF); }
+export function sessionHrs(){ return inputOf('session-hrs', SESSION_HRS); }
+// What the built basis publishes: the fixed operations base, and the rate the
+// revenue-proportional part rides at.
+function builtFixedK(){ return utilitiesRawK() + insuranceRawK() + softwareRawK() + rmMiscRawK(); }
+function builtVarRate(){ return cardRateRaw() + mktRateRaw(); }
+// On the stated basis §6's two per-site totals are authoritative, so the
+// components are carried pro rata inside them — the parts still sum to the whole
+// and the tree reconciles on either basis. On the built basis both scales are 1.
+function fixedScale(){ return FIXED_OPS / builtFixedK(); }
+function varScale(){ return VAR_OPS / builtVarRate(); }
+export function cardRate(){ return cardRateRaw() * varScale(); }
+export function mktRate(){ return mktRateRaw() * varScale(); }
+
+// Gross revenue by stream — §5's five lines grouped the way costs are attributed
+// to them. The three revenue-bearing streams sum to revenueK(); shared carries
+// none, which is the point of showing it as its own row.
+export function streamRevenueK(util, tx){
+  return {
+    cafe: tx*txRevK(S.ticket) + caterRevK(util, S.caClub, S.caEvent, S.events),
+    rooms: (util/100)*CAPACITY*sessRevK(S.price) + DAYROOM_K,
+    books: PRINT_K,
+    shared: 0
+  };
+}
+
+// The registry. `stream` is the income stream the cost serves ('shared' where no
+// evidence splits it, 'all' where the same rule applies to each stream on its own
+// revenue). `driver` is what the amount scales with. `band` is in `unit`: 'K' is
+// $K/yr, 'rate' a share of revenue, 'psf' dollars per square foot. `derived`
+// marks a residual — a number that is what is left after the others, honestly
+// labeled and bounded rather than independently sourced.
+export var COSTS = [
+  {id:'cafe-cogs', label:'Cost of sale — café', stream:'cafe', driver:'streamRev', ev:'B',
+   band:null, unit:null, src:'§6 COGS line, carried as the café-margin lever',
+   amount:function(util, tx){ return tx*txRevK(S.ticket)*(1 - S.cafeM/100); }},
+  {id:'cater-cogs', label:'Cost of sale — catering', stream:'cafe', driver:'streamRev', ev:'C',
+   band:null, unit:null, src:'§5 catering margin',
+   amount:function(util, tx){ return caterRevK(util, S.caClub, S.caEvent, S.events)*(1 - CATER_MARGIN); }},
+  {id:'room-cos', label:'Cost of sale — rooms', stream:'rooms', driver:'streamRev', ev:'C',
+   band:null, unit:null, src:'§5 room margin — near-zero cost of sale',
+   amount:function(util, tx){ return ((util/100)*CAPACITY*sessRevK(S.price) + DAYROOM_K)*(1 - ROOM_MARGIN); }},
+  {id:'print-consign', label:'Consignment share', stream:'books', driver:'streamRev', ev:'B',
+   band:null, unit:null, src:'§5: consignment takes 60%',
+   amount:function(util, tx){ return PRINT_K*(1 - PRINT_MARGIN); }},
+  {id:'commons', label:'Commons budget', stream:'books', driver:'fixed', ev:'A',
+   band:null, unit:null, src:'the budgeted philanthropy — a decision, not an estimate',
+   amount:function(util, tx){ return S.commons; }},
+  {id:'card-fees', label:'Card fees', stream:'all', driver:'streamRev', ev:'B', perStream:true,
+   band:[0.027, 0.033], unit:'rate', src:'adversarial review F1 blended ~2.7%; §6 prose ~3%',
+   amount:function(util, tx){ return cardRate()*revenueK(util, tx); }},
+  {id:'marketing', label:'Marketing', stream:'shared', driver:'revenue', ev:'D',
+   band:[0.020, 0.030], unit:'rate', src:'review F15: 2–3% of revenue ($8–13K)',
+   amount:function(util, tx){ return mktRate()*revenueK(util, tx); }},
+  {id:'utilities', label:'Utilities', stream:'shared', driver:'hours', ev:'C',
+   band:[12, 18], unit:'K', src:'review F1',
+   amount:function(util, tx){ return utilitiesRawK()*fixedScale(); }},
+  {id:'insurance', label:'Insurance', stream:'shared', driver:'payroll', ev:'D',
+   band:[10, 20], unit:'K', src:'review F1; open-questions #20',
+   amount:function(util, tx){ return insuranceRawK()*fixedScale(); }},
+  {id:'software', label:'Software & subscriptions', stream:'shared', driver:'fixed', ev:'C',
+   band:[3, 6], unit:'K', src:'review F1',
+   amount:function(util, tx){ return softwareRawK()*fixedScale(); }},
+  {id:'rm-misc', label:'Repairs & misc', stream:'shared', driver:'fixed', ev:'C',
+   band:[10, 15], unit:'K', src:'review F1 — repairs, trash, pest, internet, accounting, licenses',
+   amount:function(util, tx){ return rmMiscRawK()*fixedScale(); }},
+  {id:'base-rent', label:'Base rent', stream:'shared', driver:'sqft', ev:'C',
+   band:null, unit:null, src:'§6 site line: sf × $/sf',
+   amount:function(util, tx){ return baseRentK(); }},
+  {id:'nnn', label:'NNN — CAM, taxes, insurance', stream:'shared', driver:'sqft', ev:'D', derived:true,
+   band:[5, 12], unit:'psf', src:'the remainder of §6 occupancy after base rent; band is the market range',
+   amount:function(util, tx){ return nnnK(); }},
+  {id:'buy-premium', label:'Purchase premium', stream:'shared', driver:'sqft', ev:'C',
+   band:null, unit:null, src:'§6: the buy path runs ≈$2K dearer than the lease',
+   amount:function(util, tx){ return S.fin==='buy' ? 2 : 0; }},
+  {id:'labor', label:'Labor', stream:'shared', driver:'hours', ev:'B',
+   band:null, unit:null, src:'§6 $120K line, repriced as the rung’s rate over the plan’s own staffed grid',
+   amount:function(util, tx){ return laborK(); }}
+];
+export function costById(id){
+  for (var ci=0; ci<COSTS.length; ci++){ if (COSTS[ci].id === id) return COSTS[ci]; }
+  return null;
+}
+// Every input that carries a band — the banded costs plus the two geometry
+// constants the absorption bases stand on. This is the list a sensitivity sweep
+// walks, and the id in each row is the one `withCost` takes.
+export var INPUTS = [];
+COSTS.forEach(function(c){
+  if (c.band) INPUTS.push({id:c.id, label:c.label, ev:c.ev, band:c.band, unit:c.unit});
+});
+INPUTS.push({id:'room-sf', label:'Bookable room area', ev:'D', band:[250, 400], unit:'sf'});
+INPUTS.push({id:'session-hrs', label:'Staffed hours per session', ev:'D', band:[2, 5], unit:'hrs'});
+export function inputById(id){
+  for (var ii=0; ii<INPUTS.length; ii++){ if (INPUTS[ii].id === id) return INPUTS[ii]; }
+  return null;
+}
+// A cost's band restated in $K at the current point, so a bar can carry a whisker
+// in the units it is drawn in. Always a positive magnitude, like a bar's width.
+// Null where the cost has no band.
+export function bandK(id, util, tx){
+  var c = costById(id);
+  if (c === null || c.band === null) return null;
+  if (c.unit === 'K') return [c.band[0], c.band[1]];
+  if (c.unit === 'rate'){
+    var base = revenueK(util, tx);
+    return [c.band[0]*base, c.band[1]*base];
+  }
+  if (c.unit === 'psf'){
+    var ksf = SITES[S.site].sf/1000;
+    return [c.band[0]*ksf, c.band[1]*ksf];
+  }
+  return null;
+}
+
+// The operations line runs on one of two bases. On 'built' it is the registry's own
+// components: a fixed base (utilities, insurance, software, R&M/misc at their band
+// midpoints) plus a revenue-proportional part (card fees + marketing). On 'stated'
+// it is §6's two published totals — $65K (LI), $62K (SN) — which differ in revenue
+// and in nothing else about operations, so the pair solves for one rate and one
+// fixed base. The stated basis is kept because reproducing §6 is still worth
+// asserting, but note what it cannot prove: the solved fixed base lands identically
+// at both sites by construction, for any two (ops, revenue) pairs. The built basis
+// is the one that can be wrong, and reconciling it against §6 is the real check.
+export var OPS_BASIS = 'built';   // 'built' = the registry's components | 'stated' = §6's per-site totals
 export var VAR_OPS = 0, FIXED_OPS = 0;
-(function solveOps(){
+function statedOps(){
   function planRev(site){
     return (PLAN.util/100)*CAPACITY*PLAN.price*52/1000 + SITES[site].mark*PLAN.ticket*360/1000
       + caterOrders(PLAN.util, PLAN.caClub, PLAN.caEvent, PLAN.events)*CATER_ORDER*52/1000
       + DAYROOM_K + PRINT_K;
   }
   var rLi = planRev('li'), rSn = planRev('sn');
-  VAR_OPS = (SITES.li.ops - SITES.sn.ops) / (rLi - rSn);
-  FIXED_OPS = SITES.li.ops - VAR_OPS*rLi;
-})();
+  var v = (SITES.li.ops - SITES.sn.ops) / (rLi - rSn);
+  return {vr:v, fx:SITES.li.ops - v*rLi};
+}
+function applyOpsBasis(){
+  if (OPS_BASIS === 'stated'){
+    var s = statedOps();
+    VAR_OPS = s.vr; FIXED_OPS = s.fx;
+  } else {
+    VAR_OPS = builtVarRate(); FIXED_OPS = builtFixedK();
+  }
+}
+applyOpsBasis();
+// What the built components come to as one operations figure at a site's plan
+// marks — the number that has to reconcile with §6's stated total.
+export function builtOpsK(site){
+  return withOpsBasis('built', function(){
+    return withState({site:site}, function(){
+      return FIXED_OPS + VAR_OPS*revenueK(PLAN.util, SITES[site].mark);
+    });
+  });
+}
 // Labor is hours × rate. The hours are the plan’s own: its $120K line at its $23/hr is
 // ~5,217 staffed hr/yr (~100/wk), already net of the owner’s ~30 floor hours (D5/D6), so
 // the owner’s bar below double-counts nothing. The rung sets the rate; the grid is fixed.
@@ -138,7 +304,18 @@ export function livingK(){ return OWNER_HRS * 52 * ownerRate() / 1000; }
 function equityBuildK(){ return S.fin==='buy' ? BUY_EQUITY : 0; }
 export function bandLoK(){ return livingK() + RET_LO*S.equity; }
 export function bandHiK(){ return livingK() + RET_HI*S.equity; }
-export function occupancyK(){ return SITES[S.site].occ + (S.fin==='buy' ? 2 : 0); }   // §6: the buy path runs ≈$2K dearer
+// Occupancy, built from its parts: base rent is floor area × the site's asking
+// rate; NNN (CAM, taxes, insurance) is what §6's occupancy total leaves after it.
+// NNN is still a residual — §6's total stays authoritative — but it is now a
+// labeled one with a band, so it can be swept and it can be argued about. The
+// per-site totals are unchanged: 55 + 23 = 78 (LI), 48 + 16 = 64 (SN).
+export function baseRentK(){ return SITES[S.site].sf * SITES[S.site].psf / 1000; }
+export function nnnK(){
+  var st = SITES[S.site];
+  return pinned('nnn') ? inputOf('nnn', 0)*st.sf/1000 : st.occ - st.sf*st.psf/1000;
+}
+export function nnnPsf(){ return nnnK() / (SITES[S.site].sf/1000); }   // $9.20/sf LI, $5.33/sf SN
+export function occupancyK(){ return baseRentK() + nnnK() + (S.fin==='buy' ? 2 : 0); }   // §6: the buy path runs ≈$2K dearer
 export function varOpsK(util, tx){ return VAR_OPS * revenueK(util, tx); }
 export function comp(util, tx){
   return roomsK(util) + cafeK(tx) + cateringK(util, S.caClub, S.caEvent, S.events) + otherIncomeK()
@@ -176,6 +353,154 @@ export function txForTarget(target, util){ // walk-ins/day needed at a given uti
   return (target - comp(util, 0)) / mtx(S.ticket);
 }
 
+// ---- the P&L as a tree -------------------------------------------------------
+// The same arithmetic comp() runs, grouped by income stream instead of by cost
+// nature — the grouping that can answer "what does the café earn?".
+//
+// Sign convention: revenue nodes are positive and cost nodes are negative, so
+// summing every leaf across all four depth-0 nodes gives comp() with no per-node
+// sign flips. A parent's `value` is the sum of its children's. `band`, in
+// contrast, is always a positive magnitude in $K — a bar's width, not its sign.
+// `atomic` marks a leaf with no finer breakdown to show (café cost of sale is
+// one: §6 gives a margin, not a bill of materials) as opposed to one not yet
+// built. Depth-0 nodes carry kind 'stream' — they hold both revenue and cost.
+function revNode(id, label, stream, value){
+  return {id:id, label:label, kind:'revenue', stream:stream, value:value,
+          ev:null, band:null, atomic:true, children:[]};
+}
+function costNode(id, label, stream, magnitude, ev, band){
+  return {id:id, label:label, kind:'cost', stream:stream, value:-magnitude,
+          ev:ev, band:band, atomic:true, children:[]};
+}
+function sumNodes(children){
+  var v = 0;
+  children.forEach(function(c){ v += c.value; });
+  return v;
+}
+function groupNode(id, label, stream, children){
+  return {id:id, label:label, kind:'cost', stream:stream, value:sumNodes(children),
+          ev:null, band:null, atomic:false, children:children};
+}
+function streamNode(id, label, children){
+  return {id:id, label:label, kind:'stream', stream:id, value:sumNodes(children),
+          ev:null, band:null, atomic:false, children:children};
+}
+// A leaf straight off the registry — the registry is the only place a cost's
+// stream, grade and band are declared, and the tree reads them from there.
+function entryNode(id, util, tx){
+  var c = costById(id);
+  return costNode(c.id, c.label, c.stream, c.amount(util, tx), c.ev, bandK(id, util, tx));
+}
+// Card fees are a per-stream rule, not one line: each revenue stream pays the same
+// rate on its own revenue, so each carries its own line and its own band.
+function cardNode(stream, base){
+  var c = costById('card-fees');
+  return costNode('card-fees-' + stream, c.label, stream, cardRate()*base, c.ev,
+                  [c.band[0]*base, c.band[1]*base]);
+}
+// Labor drills into the rung's own three parts — the same parts WAGES prices the
+// rate from, so the breakdown shown is the model rather than a gloss on it.
+function laborNodes(){
+  var w = WAGES[S.wage], h = STAFF_HRS/1000;
+  return [
+    costNode('labor-cash', 'Cash wages', 'shared', h*w.cash, 'B', null),
+    costNode('labor-load', 'Employer payroll load', 'shared', h*w.pay, 'B', null),
+    costNode('labor-ben', 'Employer-paid benefits', 'shared', h*w.ben, 'B', null)
+  ];
+}
+export function tree(util, tx){
+  if (util === undefined) util = S.util;
+  if (tx === undefined) tx = S.tx;
+  var rev = streamRevenueK(util, tx);
+  var occKids = [entryNode('base-rent', util, tx), entryNode('nnn', util, tx)];
+  if (S.fin === 'buy') occKids.push(entryNode('buy-premium', util, tx));
+  return [
+    streamNode('cafe', 'Café', [
+      revNode('cafe-walkin', 'Walk-in café', 'cafe', tx*txRevK(S.ticket)),
+      revNode('cafe-catering', 'Catering pre-orders', 'cafe', caterRevK(util, S.caClub, S.caEvent, S.events)),
+      entryNode('cafe-cogs', util, tx),
+      entryNode('cater-cogs', util, tx),
+      cardNode('cafe', rev.cafe)
+    ]),
+    streamNode('rooms', 'Rooms', [
+      revNode('rooms-sessions', 'Club sessions', 'rooms', (util/100)*CAPACITY*sessRevK(S.price)),
+      revNode('rooms-dayroom', 'Day rooms', 'rooms', DAYROOM_K),
+      entryNode('room-cos', util, tx),
+      cardNode('rooms', rev.rooms)
+    ]),
+    streamNode('books', 'Books', [
+      revNode('books-prints', 'Print sales', 'books', PRINT_K),
+      entryNode('print-consign', util, tx),
+      entryNode('commons', util, tx),
+      cardNode('books', rev.books)
+    ]),
+    streamNode('shared', 'Cross-cutting', [
+      entryNode('marketing', util, tx),
+      groupNode('operations', 'Operations — fixed', 'shared', [
+        entryNode('utilities', util, tx),
+        entryNode('insurance', util, tx),
+        entryNode('software', util, tx),
+        entryNode('rm-misc', util, tx)
+      ]),
+      groupNode('occupancy', 'Occupancy', 'shared', occKids),
+      groupNode('labor', 'Labor', 'shared', laborNodes())
+    ])
+  ];
+}
+export function eachLeaf(node, fn){
+  if (node.children.length === 0){ fn(node); return; }
+  node.children.forEach(function(c){ eachLeaf(c, fn); });
+}
+// Revenue, attributed cost and margin per stream. `cost` is a positive magnitude;
+// `margin` is revenue less cost, which is the depth-0 node's own value. The three
+// revenue streams plus cross-cutting sum to comp().
+export function streamMargins(util, tx){
+  var out = {};
+  tree(util, tx).forEach(function(n){
+    var r = 0, c = 0;
+    eachLeaf(n, function(l){ if (l.kind === 'revenue') r += l.value; else c -= l.value; });
+    out[n.id] = {revenue:r, cost:c, margin:r - c};
+  });
+  return out;
+}
+// The share of the cross-cutting row each stream carries, on one of three bases.
+// None of the three is a hand-picked weight: revenue is derived outright, floor
+// area stands on ROOM_SF and hours on SESSION_HRS — both declared, graded D and
+// banded, so the sweep can move them. Rooms are the only stream with a footprint
+// and a staffed hour of their own; books are a wall and a draw, so they take none
+// of either and carry only their revenue share.
+export function absorbWeights(basis, util, tx){
+  var w;
+  if (basis === 'revenue'){
+    var rev = streamRevenueK(util, tx);
+    w = {cafe:rev.cafe, rooms:rev.rooms, books:rev.books};
+  } else if (basis === 'sqft'){
+    var roomArea = 3*roomSf();
+    w = {cafe:Math.max(0, SITES[S.site].sf - roomArea), rooms:roomArea, books:0};
+  } else if (basis === 'hours'){
+    var roomHrs = sessions(util)*sessionHrs()*52;
+    w = {cafe:Math.max(0, STAFF_HRS - roomHrs), rooms:roomHrs, books:0};
+  } else {
+    throw new Error("absorbWeights: unknown basis '" + basis + "'");
+  }
+  var tot = w.cafe + w.rooms + w.books;
+  return {cafe:w.cafe/tot, rooms:w.rooms/tot, books:w.books/tot};
+}
+// The fully-absorbed view: the cross-cutting row pushed onto the three revenue
+// streams. The three margins it returns sum to comp() — absorption moves cost
+// between streams, it never creates or destroys any.
+export function absorb(basis, util, tx){
+  if (util === undefined) util = S.util;
+  if (tx === undefined) tx = S.tx;
+  var m = streamMargins(util, tx), w = absorbWeights(basis, util, tx), out = {};
+  ['cafe', 'rooms', 'books'].forEach(function(id){
+    var share = m.shared.cost * w[id];
+    out[id] = {revenue:m[id].revenue, cost:m[id].cost, absorbed:share,
+               weight:w[id], margin:m[id].margin - share};
+  });
+  return out;
+}
+
 // Evaluate `fn` against a one-off settings object without disturbing the live
 // state — how the document generators read the model at marks other than the
 // current view's. `over` is applied on top of DEF, so every generator states
@@ -184,4 +509,25 @@ export function withState(over, fn){
   var prev = S;
   S = Object.assign({}, DEF, over);
   try { return fn(); } finally { S = prev; }
+}
+
+// The same idea for the operations basis. FIXED_OPS and VAR_OPS are module vars
+// comp() reads, so they are saved and restored alongside the switch itself.
+export function withOpsBasis(basis, fn){
+  var pb = OPS_BASIS, pv = VAR_OPS, pf = FIXED_OPS;
+  OPS_BASIS = basis;
+  applyOpsBasis();
+  try { return fn(); } finally { OPS_BASIS = pb; VAR_OPS = pv; FIXED_OPS = pf; }
+}
+// Pin one banded input to a value — a band endpoint, for a sensitivity sweep —
+// and evaluate `fn` with it. The operations aggregates are recomputed under the
+// pin and restored after, so comp() moves with the input the way it should. The
+// ids are the ones INPUTS lists; an unknown one is an error, not a silent no-op.
+export function withCost(id, value, fn){
+  if (inputById(id) === null) throw new Error("withCost: '" + id + "' is not a banded input");
+  var po = COST_OVER, pv = VAR_OPS, pf = FIXED_OPS;
+  COST_OVER = Object.assign({}, COST_OVER);
+  COST_OVER[id] = value;
+  applyOpsBasis();
+  try { return fn(); } finally { COST_OVER = po; VAR_OPS = pv; FIXED_OPS = pf; }
 }
