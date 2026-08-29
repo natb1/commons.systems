@@ -94,6 +94,24 @@
               ]) ++ [ dispatch office-hours ];
               shellHook = ''
                 export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+
+                # Install the repo's git hooks. .githooks/pre-commit runs the
+                # vendored-skill drift and shadow checks, which CI structurally
+                # cannot run (they need the machine's own Claude skill roots) --
+                # see .claude/rules/vendored-skills.md. Git will not read a
+                # repo-controlled hooks path on its own, and this devshell is the
+                # project's only sanctioned path for environment configuration,
+                # so the claim happens here.
+                #
+                # Claimed only when core.hooksPath is unset, so a developer who
+                # points it somewhere of their own keeps that. Failure is not
+                # fatal to entering the shell: a read-only .git (some sandboxes)
+                # must not make the devshell unusable, but it must say so rather
+                # than leaving the hooks silently uninstalled.
+                if [ -d .githooks ] && [ -z "$(git config --get core.hooksPath 2>/dev/null)" ]; then
+                  git config core.hooksPath .githooks \
+                    || echo "warning: could not set core.hooksPath; run 'git config core.hooksPath .githooks' by hand" >&2
+                fi
               '';
             };
           });

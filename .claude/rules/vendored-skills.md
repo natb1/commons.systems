@@ -81,17 +81,25 @@ skill, check the name against the bundled skills listed in a live session.
 
 ### Installing the hook
 
-Once per clone:
+The devshell installs it. `flake.nix`'s `devShells.default.shellHook` sets
+`core.hooksPath` to `.githooks` on entry, so `nix develop` (or direnv's
+`use flake`) is all a clone needs. Git will not read a repo-controlled hooks
+path on its own, and nix is this repo's single path for environment
+configuration, so the claim belongs there and nowhere else.
+
+It is claimed only when `core.hooksPath` is unset — a developer who points it
+somewhere of their own keeps that. A failed `git config` (a read-only `.git`,
+as in some sandboxes) warns rather than aborting shell entry, so the fallback
+is the same one command by hand:
 
 ```
 git config core.hooksPath .githooks
 ```
 
-Git has no way to install a hook automatically, and this repo deliberately does
-not claim `core.hooksPath` from the devshell `shellHook`: editing `flake.nix`
-turns on the `nixos-build` and `darwin-build` CI jobs, which are gated on nix
-files changing, and dragging those into every skills-related PR costs far more
-than the one command saves.
+Editing `flake.nix` does turn on the nix-gated `nixos-build` and `darwin-build`
+CI jobs. That cost is real and was the reason an earlier revision of this rule
+asked for the manual command instead; it is paid once here rather than by every
+clone forever.
 
 The hook only runs on commits that touch `.claude/skills/`. Drift can also
 appear with no commit at all — upstream moves on its own — and blocking an
