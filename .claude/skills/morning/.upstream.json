@@ -1,0 +1,10 @@
+{
+  "origin": "claude.ai account skill, synced to ~/.claude/skills/synced/<bucket>/morning",
+  "vendored_at": "2026-08-29",
+  "reason": "Cloud routines can only use skills committed to the cloned repository; account-synced skills are absent from a routine-fired session.",
+  "files": {
+    "SKILL.md": "a7c4dbcb745799736991b027cceae39aae4880cc00ff43871ae5e87b38023bdd",
+    "assets/fonts/Fraunces-OFL.txt": "0bc0daaa78b715774d4ad27d7f4ee8b436f48cef8e2f773531a8f22e27c06248",
+    "assets/fonts/fraunces-latin-600-normal.woff2": "3a1de7711d147bad4422825045f87597fd77cca72e7c96d3b0a81735d00dda82"
+  }
+}
