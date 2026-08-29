@@ -30,12 +30,13 @@ were consolidated here and the plan now points at this file.
 
 | | |
 |---|---|
-| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it |
+| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18" |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
 | **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts). **No position waits on the author** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
-| **Next** | **Position 1 — PR18**, the durable-layer write fence. Nothing gates it |
-| **Not started** | Positions 1 through 13. PR2 through PR20 |
+| **Next** | **Position 2 — PR15 (U0/U3/U4) + PR16**, graph plumbing. Nothing gates it |
+| **Open park** | **One**, from Position 1. `tactic-autonomous-body-write-wholesale-replace` is parked, not closed: PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere. Three dispositions are offered in `office_hours.recommendation`. **It gates no position** — the four sibling nodes closed and no later bundle depends on the ruling |
+| **Not started** | Positions 2 through 13. PR2 through PR20 |
 
 The rulings that shape unit work are carried in the position entries below and,
 in full, in the PR sections of the plan. Nothing else from the sitting needs to
@@ -86,7 +87,7 @@ until 2026-08-29; see §"Coverage" in the plan for the reconciliation.
 |---|---|---|---|---|
 | ✅ | 1 · graph read/write path | PR1 | 8 | **SHIPPED `fe0b1c4d`** (#3095) |
 | ✅ | 0 · retire the in-flight overhang | *no new PRs* | +13 | **RETIRED** — cleared the drafts every later bundle would conflict with |
-| **1** | 1c · durable-layer write fence | PR18 | 5 | HOT. The fence ~100 remaining node closures write through |
+| ✅ | 1c · durable-layer write fence | PR18 | 5 | **SHIPPED `478cc324`** (#3134). 4 nodes closed, 1 parked |
 | **2** | 1b · graph plumbing | PR15 (U0/U3/U4) + PR16 | 13 | HOT. The closure toolchain itself. PR15's hold discharged 2026-08-29 — split, U1–2 dropped |
 | **3** | 2a · record-time main-qa routing | PR5a | 1 | Must precede Bundle 2 |
 | **4** | 2 · tick-path reconcilers and sweeps | PR5 + PR9 U2,U6 + PR2 U6 | 10 | HOT. Runs on every tick, paused or not |
@@ -106,10 +107,40 @@ until 2026-08-29; see §"Coverage" in the plan for the reconciliation.
 
 ## Position by position
 
-### Position 1 · Bundle 1c — PR18, the durable-layer write fence
+### Position 1 · Bundle 1c — PR18, the durable-layer write fence ✅ SHIPPED
+
+Merged as **`478cc324`** (#3134), 2026-08-29. Bookkeeping landed `84cc158e`.
 
 5 nodes. `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`,
 `/review-fix`, `router.ts`, `graph-commit`'s park path.
+
+**Four nodes closed, one parked.** `tactic-dispatch-conflict-substance-allowlist`,
+`tactic-review-fix-porcelain-guard-script`,
+`tactic-fleet-alarm-node-park-clobber-loop` and
+`tactic-graph-commit-park-content-durability` carry `phase: done` and an
+`execution.completion` citing the merge. Each also carries a body record of what
+shipped against what is still owed.
+
+`tactic-autonomous-body-write-wholesale-replace` is **parked, not closed**. This
+plan scoped its Unit 1 to one live site and annotated the node "a draft, not a
+plan … no verification block" — which was true of the 2026-08-15 draft but not of
+the node, whose 2026-08-20 `/align-tactics` round finalized it to `phase:
+implement` with seven units and a Verification section. Six of those seven did not
+ship: the shared `node_body_write` primitive does not exist, so
+`dispatch-eval-finding` was hardened in place by a **local** contract instead of
+calling it, and the copy-paste the node exists to eliminate still sits at three
+sites. Grepped across this plan, no PR section claims `node_body_write`,
+`dispatch-diagnose-main`, or `dispatch-invalid-state-followup`'s copy, so closing
+it would have dropped that work out of the graph. Three dispositions —
+split, narrow-and-mint-a-successor, or close-as-superseded — are in the node's
+`office_hours.recommendation`. **Nothing waits on it**; later positions do not
+touch those surfaces.
+
+Two follow-ups came out of PR18's review and are recorded on nodes rather than
+built: the durable-write fence arguably belongs inside `write-node.ts` rather than
+a `/dispatch-conflict` skill step (nothing forces a skill step to run), and
+`/review-fix`'s Unit-1 probe — has the lane ever actually modified a pre-existing
+node? — was not run, so that question is still unmeasured.
 
 Front of the queue for two reasons. Mechanically, its one `blocked_by` edge
 cleared when PR1's nodes closed, so it is ready and nothing else is. By
