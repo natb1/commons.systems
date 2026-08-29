@@ -424,8 +424,9 @@ bookkeeping runs through it, so it landed first and was verified by reading
 **Bundle 1b is separate from Bundle 1 on purpose.** Both touch `graph-commit`,
 but Bundle 1 was correctness and Bundle 1b is simplification. Landing them
 together would mean a regression in the writer could not be bisected against a
-known-good one. Bundle 1b is also the work most exposed to the ref-split
-question — see §"Decisions already taken".
+known-good one. Bundle 1b was also the work most exposed to the ref-split
+question; the 2026-08-29 split ruling removed that exposure by dropping the two
+exposed units — see §"Decisions already taken".
 
 **Bundle 1c is the front of the queue.** Two reasons, and the first is
 mechanical: `tactic-graph-commit-park-content-durability` was `blocked_by` two
@@ -433,8 +434,9 @@ of PR1's own nodes, **both of which closed with PR1**, so it is unblocked and
 ready. The second is Bundle 1's own argument — this bundle is the fence that
 decides what an **autonomous** writer may do to durable node content, and
 roughly a hundred node closures still run through that fence. It is deliberately
-ahead of Bundle 1b, because Bundle 1c carries no ref-split exposure and PR15
-does. PR1's commit message names the seam: candidate (c) of the SNAP_DIR ruling
+ahead of Bundle 1b, because Bundle 1c carried no ref-split exposure and PR15
+did. That asymmetry is now gone — the 2026-08-29 split dropped PR15's two
+exposed units — but the ordering stands on its second reason alone. PR1's commit message names the seam: candidate (c) of the SNAP_DIR ruling
 "was not adopted… The seam for it is deliberately one function: both recovery
 branches call `preservedContent()` and neither composes path wording of its
 own." PR18 Unit 5 is the work that seam was left for.
@@ -499,10 +501,10 @@ live risk precisely because `main` is still moving. PR8 Unit 1 rises too: the
 pace-curve config is untracked and unrecoverable.
 
 **Bundle 1b may be deferred but not skipped.** PR16 (the closure toolchain) is
-worth landing at position 3 as shown. **PR15 carries an explicit hold**: the
-ref-split disposition named it as the one PR its own Unit 2 rewrite would
-subsume, and directed that the disposition be revisited before PR15 starts. PR16
-does not share that exposure and may proceed independently of it.
+worth landing at position 3 as shown. **PR15's hold is discharged**: the
+revisit the ref-split disposition demanded was held 2026-08-29 and ruled a
+**split** — Units 0, 3 and 4 ship, Units 1–2 are not written. PR15 now carries
+no conditional hold and may proceed alongside PR16.
 
 **Bundle 5b must land before Bundle 6, and that ordering is not a preference.**
 PR20 edits `.claude/skills/align-tactics/SKILL.md`; PR13 **renames that skill**
@@ -524,7 +526,7 @@ position is set by the resumption rather than by dependencies.
 PR1  graph read/write integrity (8)    ── ✅ SHIPPED fe0b1c4d (#3095), nodes closed
  │
  ├── PR18 durable-layer write fence    ── its blocked_by cleared WITH PR1 → ready
- ├── PR15 graph-commit simplification  ── same file as PR1; HOLD on ref-split revisit
+ ├── PR15 graph-commit simplification  ── same file as PR1; SPLIT: U0/U3/U4 only
  ├── PR16 node-mutation scripts (11)   ── needs PR1 U4 + U8
  ├── PR2  ladder driver
  ├── PR3  audit instrument ───────────┐
@@ -703,13 +705,20 @@ recorded accepted cost — U1 was the highest-severity item in the plan, and if
 ref-split ever lands this code is *deleted*, not migrated, so nothing has to be
 re-derived.
 
-**PR15 is the PR genuinely at risk** — its Units 1–2 are subsumed by ref-split's
-Unit 2 rewrite. Do not start PR15 before revisiting this disposition.
+**PR15 was the PR genuinely at risk** — its Units 1–2 are subsumed by ref-split's
+Unit 2 rewrite. That revisit was held on **2026-08-29 and is now discharged**:
+**PR15 splits.** Units 1–2 are not written; Units 0, 3 and 4 ship. DEFER stands
+for ref-split itself, and the rider (incremental cutover, blocker re-cut from 23
+to 8) is kept on the record as post-window work rather than adopted into this
+window. See PR15's own section for the full ruling.
 
-Three nodes are deferred with ref-split: `tactic-graph-ref-split` itself,
-`tactic-graph-refsplit-blocker-audit` (the decision session, no diff), and
-`tactic-graph-refsplit-read-coherence` (conditional on ref-split landing,
-meaningless otherwise).
+Five nodes are deferred with ref-split. Three from the original disposition:
+`tactic-graph-ref-split` itself, `tactic-graph-refsplit-blocker-audit` (the
+decision session, no diff), and `tactic-graph-refsplit-read-coherence`
+(conditional on ref-split landing, meaningless otherwise). Two added by the
+2026-08-29 split, being exactly what PR15's dropped units would have closed:
+`tactic-graph-commit-plumbing-default` and
+`tactic-graph-commit-direct-three-way-merge`.
 
 ### The `SNAP_DIR` park contract: freeze plus `.merged.md`
 
@@ -906,18 +915,29 @@ the staged resumption.
 each ruling is recorded on its node and carried into the PR section that
 implements it. Nothing below needs the author.
 
-What remains is three `/rsi-audit` runs. They produce no code, but they must run
-**before** the PR they gate, because each one sets a value the PR would
-otherwise take from an unmeasured source.
+The three `/rsi-audit` runs that remained were **taken on 2026-08-29** and
+recorded on their nodes. They produced no code. Each set a value its PR would
+otherwise have taken from an unmeasured source, and two of the three changed
+what the PR should do.
 
-| Run before | Node | Command and why |
+**The window every one of them names in this plan was wrong.** The freeze hides
+exactly what these runs measure: the pause sentinel is dated 2026-08-10, so a
+`7d` window holds 2 sessions and no dispatch phase at all, and a `14d` window
+returns `by_phase_outcome {}` with `sidecar_present` 0 of 122 eligible workers.
+A **30d** window straddling the freeze (2026-07-30..2026-08-29, 5032 sessions,
+`sidecar_present` 431 of 695) is the narrowest one that reads anything, and is
+what was run. Hold window width constant across the freeze boundary in any
+before/after comparison.
+
+| Run before | Node | Result |
 |---|---|---|
-| PR7 | `tactic-dispatch-cache-preserving-context` | `/rsi-audit 7d` — read `hit_ratio` (`aggregate-usage.sh:1211`) and record the baseline **before** changing prompt-prefix handling |
-| PR7 | `tactic-dispatch-observation-masking` | `/rsi-audit 7d`, then record the masking measurement on the node. **The cost half only** — the quality half needs dispatch-phase sessions with a working ladder, which Bundle 3 itself delivers, so it is a follow-up that may revise PR7. *(The node's rationale calls the third lens `context_lens`; no such key exists — it is `lenses.context_over_120k`. Fix the prose while you are in the node.)* |
-| PR11 | `tactic-rsi-measure-fanout-and-model-routing` | `/rsi-audit 14d` — measure this harness's own fan-out and model routing before the lens catalog fixes a per-lens `model:`. **Load-bearing:** both imported findings were measured on configurations this repo does not run — the CooperBench figures came from shared-code collaboration, and this repo fans out across separate worktrees. Setting those values from unmeasured external numbers is the exact error this node exists to prevent |
+| PR7 | `tactic-dispatch-cache-preserving-context` | **Baseline recorded and the imported claim refused.** `hit_ratio` 0.9570; raw `cache_read:cache_creation` 22.30:1; `cache_creation` is **4.3%** of context tokens, which is the arithmetic ceiling on what an append-only layout can save — against an imported 41–80%. `creation_churn` **0 of 401 staggered** sessions. PR7 must not carry the external magnitude |
+| PR7 | `tactic-dispatch-observation-masking` | **Cost half taken.** `context_over_120k` 1029 sessions / \$48262 proxy; `payload_bytes.total` 329624854 with Bash + Read at 97%. Ingest-time capping is cache-safe; retro-masking is not. Quality half still deferred and now confirmed unreadable — `by_phase_outcome` carries only review and qa, and nothing at 14d. *(The `context_lens` prose fix this row used to ask for was already applied 2026-08-28 — every asserting use reads `lenses.context_over_120k`. Nothing to do.)* |
+| PR11 | `tactic-rsi-measure-fanout-and-model-routing` | **Measured; dated reading recorded on `strategy-recursive-self-improvement`.** Review 68 sessions / 1266 subagents / 31.8% actionable / 6.3 launches per fix at \$12.92; QA 130 / 440 / 7.0 per fix at \$31.87. Opus is 42% of turns and 57% of spend — a **1.91×** measured per-turn premium. **`price_proxy_usd` inverts the model ranking**, so the per-lens `model:` values must be set from `cost_usd` |
 
-**PR3 makes the first two readable.** Run it — position 5 — before trusting a
-lens the instrument may not yet emit correctly.
+**PR3 was expected to make the first two readable; it was not needed.** Every
+lens these runs used already emits correctly. Run PR3 at position 5 regardless —
+it is in the sequence for its own reasons — but it does not gate a re-measurement.
 
 ---
 
@@ -2609,25 +2629,45 @@ when it should, and an invocation shape the auto-mode classifier false-denies.
 None of these is a correctness defect, so none is in PR1. All four are on the
 **hot** path — the writer every node closure in this plan runs.
 
-> **HOLD — this is the PR the ref-split disposition named as genuinely at risk**
-> The 2026-08-14 audit disposed **DEFER**, and PR1 proceeds
-> under it — but it singled this PR out: "**PR15 is the PR genuinely at risk**:
-> its Units 1–2 are subsumed by ref-split's Unit 2 rewrite. Do not start PR15
-> before revisiting this disposition."
+> **RULED 2026-08-29 — PR15 SPLITS. Ship Units 0, 3 and 4. Do not write Units 1–2.**
+> The revisit the 2026-08-14 disposition demanded before PR15 starts was held,
+> and its answer is a split, not a go/no-go.
 >
-> The disposition also carries a rider that could change the answer: ref-split's
-> cutover **can** be made incremental (seed `graph-main` as a mirror and install
-> the `intentions` symlink while `main` still carries the directory), and its
-> blocker set should be **re-cut from 23 open to the 8 with a real mechanism
-> relation** rather than waited out. If that re-cut happens, ref-split becomes
-> reachable inside this window and Units 1–2 here should not be written at all.
+> **DEFER stands for ref-split**, so its Unit 2 rewrite still lands eventually,
+> and Units 1–2 here are still subsumed by it. The ruling refuses to write code
+> with a known deletion date on the hot writer path: Units 1–2 are **not
+> written**, and the simplification they describe arrives with ref-split's Unit 2
+> or not at all. This is deliberately *not* the accepted-cost treatment PR1's U1
+> and U5 got — those had already shipped when the exposure was found, and U1 was
+> the highest-severity item in the plan. Neither is true here.
 >
-> Units 3–4 carry no such exposure and could be split out if PR15 stalls.
+> **What ships:** Unit 0 (the layer-2 REMOVAL fix) ships regardless — it is a
+> correctness fix and already carries its own "ships anyway" note below. Units 3
+> and 4 carry no ref-split exposure and were already identified as splittable.
+>
+> **The rider was considered and declined as a window change.** Ref-split's
+> cutover can be made incremental (seed `graph-main` as a mirror, install the
+> `intentions` symlink while `main` still carries the directory) and its blocker
+> set should be re-cut from 23 open to the 8 with a real mechanism relation.
+> Both remain true and neither is retracted — but doing them pulls a 37-blocker
+> node into a window whose first ground rule is that the freeze does not lift
+> until the plan is done. The re-cut is **not** thereby forbidden: it is ordinary
+> post-window work, and if it happens before this position is reached, Units 1–2
+> were going to be skipped anyway.
+>
+> **Consequence for the sequence:** PR15 no longer blocks on anything. Its
+> remaining units are independent of ref-split, so position 2 carries no
+> conditional hold.
 
-### Nodes closed (7)
+### Nodes closed (5)
 
-- `tactic-graph-commit-plumbing-default`
-- `tactic-graph-commit-direct-three-way-merge`
+*Was 7. The 2026-08-29 split ruling drops Units 1–2, so the two nodes they would
+have closed stay open and travel with ref-split:*
+***`tactic-graph-commit-plumbing-default`*** *and*
+***`tactic-graph-commit-direct-three-way-merge`***. *Neither is abandoned — both
+are subsumed by ref-split's Unit 2 rewrite, which is where they now close. Add
+them to the ref-split deferral set below, which grows from three nodes to five.*
+
 - `tactic-graph-commit-invocation-classifier-bypass`
 - `tactic-graph-commit-noop-shortcircuit-head-behind`
 - `tactic-node-merge-list-removal-loss` *(folded in from the overhang — Unit 0 below)*
@@ -2640,7 +2680,8 @@ None of these is a correctness defect, so none is in PR1. All four are on the
 *Folded in from the overhang, from `tactic-node-merge-list-removal-loss`.
 It is numbered 0 because it is a **correctness** fix and the rest of this PR is
 simplification — if PR15 is ever split or stalled on the ref-split hold, this
-unit ships anyway.*
+unit ships anyway. **PR15 did split, on 2026-08-29, and this is one of the three
+units that ships.***
 
 `graph-commit`'s layer-2 merge shells out via `run_merge_node()` to
 `packages/intentionsutil/scripts/merge-node.ts:83`, which delegates to
@@ -2684,7 +2725,10 @@ its own anchors. Read it before touching anything:
 > verdict line shows. Its `office_hours` park is a stale `provision-node-worktree`
 > exit-2 from 2026-07-31: clear the park, do not re-provision.
 
-**Unit 1 — flip the writer default to plumbing.**
+**Unit 1 — flip the writer default to plumbing.** *NOT WRITTEN — deferred to
+ref-split's Unit 2 by the 2026-08-29 ruling above. Kept here only so the ruling
+names something concrete, and so ref-split's rewrite has the analysis it
+subsumes. Do not implement this unit.*
 `packages/intentionsutil/scripts/graph-commit:406` (verified) —
 `GRAPH_COMMIT_WRITER="${GRAPH_COMMIT_WRITER:-worktree}"`. Flip the default to
 `plumbing` for every caller and delete the then-inert dirty-tree pre-flight
@@ -2693,7 +2737,9 @@ write. A comment at `:875` already notes the guard is "a no-op whenever
 `GRAPH_COMMIT_WRITER` is left at its `worktree` default" — that dependency
 inverts once this lands, so read it before deleting.
 
-**Unit 2 — replace the rebase with a direct three-way merge.** The rebase exists
+**Unit 2 — replace the rebase with a direct three-way merge.** *NOT WRITTEN —
+same ruling, same reason as Unit 1. Do not implement this unit.*
+The rebase exists
 **only to produce a conflict** that layer 2 then unwinds in order to call
 `merge-node.ts` — a merger that already takes `--base`/`--ours`/`--theirs` as
 plain paths and is git-independent (`run_merge_node()`, `graph-commit:989-995`,
@@ -4098,14 +4144,14 @@ All **117** in-scope tactics are assigned; none appears twice.
 | PR12 | 1 | four invalid-state lanes |
 | PR13 | 1 | repo-wide rename |
 | PR14 | 3 | `attention.ts`, `router.ts`, `/rsi-research` |
-| PR15 | 4 | `graph-commit` — writer default, merge path, invocation, short-circuit · **HOLD** |
+| PR15 | 2 | `graph-commit` — invocation, short-circuit (+ Unit 0 removal fix, closed under PR15) · **SPLIT 2026-08-29**: writer default and merge path deferred to ref-split |
 | PR16 | 11 | `transition-node`, `park-node`/`clear-park`, `read-sensors.ts`, `validate-graph`, `verify-landed` |
 | PR17 | 6 | `graph-auto-merge`, `hold-alerts.ts`, `graph-digest.ts`, scratch refs |
 | **PR18** | 5 | `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`, `/review-fix`, `router.ts`, `graph-commit` park path |
 | **PR19** | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
 | **PR20** | 8 | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
 | measurement runs | 3 | no diff — `/rsi-audit`; the sittings that once sat here are all held |
-| deferred | 6 | ref-split cluster (3) + scope-custody (2) + `demote-node-stale-local-read` |
+| deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` |
 | adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) |
 | **total** | **117** | + 11 documented-not-assigned |
 
@@ -4146,8 +4192,10 @@ through.
 
 **Deferred, with reasons:**
 
-- `tactic-graph-ref-split`, `tactic-graph-refsplit-blocker-audit` and
-  `tactic-graph-refsplit-read-coherence` — the ref-split cluster; see
+- `tactic-graph-ref-split`, `tactic-graph-refsplit-blocker-audit`,
+  `tactic-graph-refsplit-read-coherence`, `tactic-graph-commit-plumbing-default`
+  and `tactic-graph-commit-direct-three-way-merge` — the ref-split cluster; the
+  last two joined it on 2026-08-29 when PR15 split. See
   §"Decisions already taken".
 - `tactic-node-scope-files-overlap-gate` — a selector feature gating
   co-dispatch; needs a running fleet to exercise. Resumption work.

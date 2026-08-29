@@ -30,7 +30,36 @@ reading: null
 serves:
   - strategy-recursive-self-improvement
 recovers: []
-clarifications: []
+clarifications:
+  - question: What did this harness's own telemetry actually say about subagent
+      fan-out and model routing, and does either pay for itself here?
+    answer: "(Measured 2026-08-29, fleet 30d window 2026-07-30..2026-08-29:
+      5032 sessions, 225896 turns, 5054 files scanned, 22 failed. 30d rather
+      than the 14d the plan named, because the dispatch freeze -- sentinel
+      dated 2026-08-10 -- empties the shorter windows of the phases that emit
+      the outcome envelope: a 14d run returns by_phase_outcome {} with
+      sidecar_present 0 of 122 eligible, because every envelope-emitting phase
+      shows 0 turns. Only a window straddling the freeze has fan-out data at
+      all; the 30d run has sidecar_present 431 of 695.) FAN-OUT, per
+      by_phase_outcome: REVIEW ran 68 sessions launching 1266 subagents (18.6
+      per session) to surface 736 findings, of which 234 were actionable
+      (31.8%) and 201 were fixed; that is 5.4 subagent launches per actionable
+      finding and 6.3 per fix applied. QA ran 130 sessions launching 440
+      subagents (3.4 per session) to surface 208 findings, all 208 marked
+      actionable, 63 fixed; 7.0 launches per fix. Read against phase cost, a
+      fix costs 12.92 usd in review-fix (2596 usd / 201) and 31.87 usd in
+      qa-fix (2008 usd / 63). MODEL ROUTING, per by_model actual cost: opus
+      94542 turns for 10457 usd, sonnet 130401 turns for 7565 usd, fable 913
+      turns for 294 usd. Opus is 42% of turns but 57% of spend, and costs 0.111
+      usd per turn against sonnet's 0.058 -- a 1.9x per-turn premium, not the
+      larger multiple the list-price proxy suggests (proxy ranks sonnet ABOVE
+      opus at 37827 vs 31372, which is why price_proxy_usd must not be used for
+      routing decisions). VERDICT ON THE NODE'S OWN TERMS: this is the
+      harness's own comparison, so the external fan-out and routing numbers are
+      NOT carried over. Review's 68.2% non-actionable rate is the one figure
+      that looks like recoverable waste and is the natural follow-on. The
+      per-lens model: values PR11 sets should be anchored on the 1.9x measured
+      premium, not on the imported ratios."
 tooling_goals: []
 success_signal:
   observable: a dated reading on strategy-recursive-self-improvement states, from
@@ -83,6 +112,31 @@ office_hours:
 pace_exempt: false
 rounds: null
 attributes:
+  measured_impact:
+    - metric: subagents_launched_per_fix_applied_review
+      value: 6.30
+      unit: count
+      window: fleet 30d 2026-07-30..2026-08-29 (1266 launches, 201 fixes, 68 sessions)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: subagents_launched_per_fix_applied_qa
+      value: 6.98
+      unit: count
+      window: fleet 30d 2026-07-30..2026-08-29 (440 launches, 63 fixes, 130 sessions)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: review_findings_actionability
+      value: 0.318
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29 (234 actionable of 736 surfaced)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
+    - metric: opus_to_sonnet_actual_cost_per_turn
+      value: 1.91
+      unit: ratio
+      window: fleet 30d 2026-07-30..2026-08-29 (0.1106 vs 0.0580 usd per turn)
+      sensor: aggregate-usage.sh
+      measured: 2026-08-29
   reference:
     source: "2026-08-11 /rsi-research dry run: CooperBench (ICLR 2026 workshop);
       Anthropic multi-agent research-agent cost figures; SICA scaffolding
