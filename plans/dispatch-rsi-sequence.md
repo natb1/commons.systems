@@ -11,6 +11,13 @@ it runs in. The executable per-PR detail is in
 `plans/dispatch-rsi-serialized-pr-plan.md` — every section there is
 clean-session-executable, and this file deliberately does not restate it.
 
+**The split is by question, not by topic.** This file answers *what to run
+next, and in what order*; it owns bundle composition, execution order, the hard
+ordering constraints and the cross-PR dependency edges. The plan answers *how to
+run one PR*. The plan carried its own copy of the bundle table, the recommended
+order and the dependency tree until 2026-08-29; the copies had drifted, so they
+were consolidated here and the plan now points at this file.
+
 > **This file carries no history.** Author rulings live on their nodes in
 > `intentions/`; how the window reached its current state is in the commit
 > history. What is written below is only what still governs work that has not
@@ -477,10 +484,70 @@ cannot:
 
 ---
 
+## Cross-PR dependency edges
+
+Moved here from the plan on 2026-08-29, so ordering has one home. The six
+constraints above are the ones that cannot flex; this is the full picture at PR
+granularity.
+
+```
+PR1  graph read/write integrity (8)    ── ✅ SHIPPED fe0b1c4d (#3095), nodes closed
+ │
+ ├── PR18 durable-layer write fence    ── its blocked_by cleared WITH PR1 → ready
+ ├── PR15 graph-commit simplification  ── same file as PR1; SPLIT: U0/U3/U4 only
+ ├── PR16 node-mutation scripts (11)   ── needs PR1 U4 + U8
+ ├── PR2  ladder driver
+ ├── PR3  audit instrument ───────────┐
+ ├── PR4  finding write surface ──────┤──┐
+ ├── PR5  reconciler tick cost        │  │
+ ├── PR6  code-review lock            │  │
+ ├── PR7  review orchestration cost   │  │
+ ├── PR8  config fail-closed          │  │
+ └── PR9  worktree/session lifecycle  │  │
+                                      │  │
+        PR19 supersession repr.  ◄────┼──┘ (needs PR4's write surface)
+        PR10 rsi trigger chain  ◄─────┘ (needs PR2 + PR3)
+        PR11 lens catalog       ◄─────┘ (needs PR3)
+        PR12 intervention core  ◄─────── (needs PR11 + PR4)
+        PR14 rsi prioritization + research lane
+        PR20 /align charter + adversarial review ── MUST precede PR13
+        PR13 dispatch skill rename ── LAST, alone
+        PR17 merge queue + scan cadence ── COLD; before the sentinel comes off
+```
+
+PR2 and PR5–PR9 are mutually independent and may run in any order or in
+parallel. PR1 was the only universal prerequisite, and it has landed.
+
+**PR18** was pinned behind PR1 by a real `blocked_by` edge — now cleared — and
+sits ahead of everything else by argument: it is the fence the remaining ~100
+node closures write through. **PR16** repairs the scripts every node closure in
+this plan runs, so it is worth landing early despite depending on two PR1 units.
+**PR19** is pinned behind PR4 by a real `blocked_by` edge:
+`tactic-persist-greenfield-drops` is `blocked_by
+tactic-finding-search-all-producers`, PR4's central node — the one write surface
+every creation site routes through, and supersession edges are written *by* that
+surface. **PR20** is pinned *ahead* of PR13 because PR13 renames the skill file
+PR20 edits — the one hard ordering constraint whose violation is silent rather
+than a merge conflict. **PR17 is cold**: nothing in it fires while the sentinel
+holds, so it belongs immediately before the staged resumption.
+
+The four `blocked_by` edges landed in `da1c3c7f` are honored:
+`audit-threshold-table → trigger-threshold-gate → session-sweep-trigger →
+ladder-per-phase-evaluation` is the internal unit order inside PR10;
+`eval-finding-ledger → duplicate-finding-sensor` is the internal unit order
+inside PR4; `audit-cache-efficiency-lens → dispatch-cache-preserving-context`
+puts that experiment after PR3; `ladder-worker-unstamped-audit-blind →
+align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
+
+---
+
 ## What this sequence does not cover
 
-- **Six deferred nodes**, with reasons: the ref-split cluster
-  (`tactic-graph-ref-split`, `-blocker-audit`, `-read-coherence`),
+- **Eight deferred nodes**, with reasons: the ref-split cluster — now five, not
+  three (`tactic-graph-ref-split`, `-blocker-audit`, `-read-coherence`, plus
+  `tactic-graph-commit-plumbing-default` and
+  `tactic-graph-commit-direct-three-way-merge`, which joined it on 2026-08-29
+  when PR15 split),
   `tactic-node-scope-files-overlap-gate` and `tactic-scope-stamp-in-graph`
   (both need a running fleet, i.e. resumption work), and
   `tactic-demote-node-stale-local-read` (blocked behind
