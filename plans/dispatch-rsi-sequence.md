@@ -32,7 +32,7 @@ were consolidated here and the plan now points at this file.
 |---|---|
 | **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
-| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. **One position is still waiting on the author: position 8.** PR14's `tactic-rsi-reprioritization-outcome-audit` remains parked on an unanswered ruling about what its observable measures — see position 8 |
+| **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts). **No position waits on the author** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
 | **Next** | **Position 1 — PR18**, the durable-layer write fence. Nothing gates it |
 | **Not started** | Positions 1 through 13. PR2 through PR20 |
@@ -295,15 +295,15 @@ research-mode run**, which an author-invoked pass makes available the day Unit 3
 lands, instead of after two or three weekly cron firings. The circularity that
 made it look unreachable inside the window is gone.
 
-**PR14 is the least-ready work in the window, and this position should not be
-planned as though its 10 nodes were all ready.** Unit 3's node
+**PR14's readiness (updated 2026-08-29 evening).** Unit 3's node
 (`tactic-rsi-research-skill`) had its park cleared 2026-08-29 and is now
-`codified` with its plan in its body — but it carries a `blocked_by` edge onto
-`tactic-rsi-lane-token-attribution`, which owns the token-attribution fix a
-token-targeted lane cannot be calibrated without. Unit 1's node is blocked on
-`tactic-attention-namespaced-rank`, outside this plan. Unit 2's node is **still
-parked on an author ruling** and its own park says the plan cannot be written
-until that ruling lands. Expect to ship a subset.
+`codified` with its plan in its body — its `blocked_by` edge onto
+`tactic-rsi-lane-token-attribution` is satisfied inside this sequence, since
+that node closes with PR3 at position 5. Unit 2's ruling landed the same day
+(disposition (A) — see the status table) and its plan follows via the
+`/align-tactics` finalize. Only Unit 1 can still fall out: its node is blocked
+on `tactic-attention-namespaced-rank`, outside this plan — if that has not
+landed when this position runs, ship Units 2–3 and leave Unit 1 open.
 
 ### Position 9 · Bundle 5b — PR20, the `/align` charter and adversarial review
 
@@ -413,9 +413,10 @@ mid-window.
 ## Open items that are not positions
 
 Nothing here waits on the author — the two decisions that did were ruled
-2026-08-29 and are recorded below as discharged. What remains is three
-measurement runs, of which one was taken on 2026-08-29 and two are blocked by
-the freeze itself.
+2026-08-29 and are recorded below as discharged. The three measurement runs
+that remained were all taken on 2026-08-29; the only residue is the *quality
+half* of `tactic-dispatch-observation-masking`, which needs `by_phase_outcome`
+data the freeze empties and so waits for the staged resumption.
 
 ### Three measurement runs — TAKEN 2026-08-29
 
@@ -482,6 +483,44 @@ cannot:
    invalidate every CAS manifest.
 6. **The charter split after Bundle 8** (position 13). Same CAS reason, larger
    blast radius — 316 children re-served.
+
+---
+
+## Batch execution authority — granted 2026-08-29
+
+Four standing grants from the author, so the batch never stalls on an
+approval it already has:
+
+1. **Auto-merge on green.** The batch merges each PR to `main` once CI is
+   green, strictly serial in position order, runs the closing batch, then
+   starts the next position. No per-PR merge approval is needed.
+2. **Graph and planning writes are pre-authorized.** Park clears whose ruling
+   is already recorded, node closures the plan names, and planning-document
+   updates are the batch's to make; the author's standing instruction is that
+   the batch focuses on implementation and resolves graph/planning bookkeeping
+   itself. The PR16 Unit 5 threshold write on
+   `strategy-exercise-recovery-paths` is explicitly included (its content is
+   fully determined by the reader-then-threshold ruling).
+3. **Decompose-first for thin scopes.** For PR12 (whole Scope), PR10 Units 1,
+   2 and 5, and PR5a / PR20 Units 1–2 (node-body scopes), the batch's first
+   action is writing the unit decomposition into the plan document and
+   committing it, then implementing from it — so the decomposition survives
+   any subagent death and is reviewable.
+4. **PR6's interrupt demonstration is satisfied by the accepted proxy**
+   (ruling recorded in the PR6 section); Units 2–3 need no attended test.
+
+## Parallelism, for a batch executor
+
+The window is a serialized waterfall — **merges land one at a time, in position
+order**, and only one post-merge closing batch runs at a time (concurrent
+`graph-commit` invocations conflict-park the loser, and every closing batch
+must re-cut its worktree from the just-moved `origin/main`). Within that,
+*implementation* may overlap exactly where this file already says the order can
+flex: PR2 and PR5–PR9 are mutually independent and may be built in parallel
+worktrees, and Bundles 3 and 4 share no files. Do not overlap two PRs inside
+the same bundle — bundles are grouped *by shared code surface*, so intra-bundle
+parallelism recreates the conflicts the bundling exists to avoid. Everything
+else stays serial; the six hard orderings above are load-bearing either way.
 
 ---
 
@@ -560,19 +599,19 @@ align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
   sentinel holds and they overlap PR12's surface. Plus
   `tactic-session-reap-authorization-durability` and
   `tactic-park-cause-sensor-instrument`, which need a running fleet.
-- **Five in-scope nodes that no PR closes** —
-  `tactic-review-sitting-code-review-lock-design`,
+- **Five in-scope nodes that no PR closes — CLOSED 2026-08-29 by author
+  disposition.** `tactic-review-sitting-code-review-lock-design`,
   `tactic-review-band-derivation-ratification`,
   `tactic-review-tradition-agentic-engineering`,
   `tactic-review-supersession-derived-subpoints` and
-  `tactic-review-dispatch-charter-split`. These are *inside* the 114, not
-  excluded: their sittings were held at the 2026-08-28 round, which discharged
-  the gates they blocked, but the nodes themselves are still `status: raw`,
-  `phase: null` on `origin/main` and appear in no `### Nodes closed` section.
-  The plan dropped their coverage row on 2026-08-29 on the grounds that the
-  sittings were held, which made them invisible rather than closed; the row is
-  restored. **Route or close them deliberately before the window ends** — they
-  are the one part of the sequence nothing currently drives.
+  `tactic-review-dispatch-charter-split`. Inside the 114; their sittings were
+  held at the 2026-08-28 round, and on 2026-08-29 the author ruled to close
+  all five on the held sittings (band-derivation ratified alongside the
+  observable-(a) ruling, its (b)-half re-validation). Each closes in the
+  schema's precedented no-diff shape: `phase: done`, `execution` stays null,
+  and a frontmatter clarification citing its sitting and the 2026-08-29
+  disposition is the completion record. Nothing in the
+  sequence is undriven anymore.
 - **Those two bullets are the whole surveyed-but-unassigned set — 13 nodes**,
   8 deferred plus 5 adjacent. This list used to end with a third bullet reading
   *"Eleven documented-but-unassigned tactics from the third coverage pass"*,
@@ -590,8 +629,10 @@ are now `phase: implement` on `origin/main`, moved by `/align-tactics`
 finalization rounds run after the plan was written. Nothing about the
 assignments changed — but *"these nodes are not in the ladder"* is no longer
 true of the phase field, **and the tick reads the phase field**. Outward: the
-same filter is why the plan never saw the ~20 in-charter nodes at
-`phase: implement` with no PR.
+same filter is why the plan originally never saw the ~20 in-charter nodes at
+`phase: implement` with no PR — since censused and routed by the plan's fourth
+coverage pass (see §"Coverage" there); that population is settled, and this
+caveat survives only as the reason the filter can go stale again.
 
 Treat every `path:line` anchor in the plan as a hint, not an address —
 including the anchors carried in node bodies, several of which had already

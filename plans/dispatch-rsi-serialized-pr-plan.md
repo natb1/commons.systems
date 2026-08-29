@@ -28,8 +28,9 @@ nodes are surveyed, documented and deliberately unassigned — see §"Coverage".
 > below is waiting on a decision.
 >
 > **PR18 is next, and nothing gates it.** Its one `blocked_by` edge cleared when
-> PR1's nodes closed. The pre-first-PR list is empty apart from one settings
-> change — see §"Retention: the one forward-looking change".
+> PR1's nodes closed. The pre-first-PR list is empty — the one former settings
+> item is already satisfied, see §"Retention — SATISFIED 2026-08-29, no action
+> needed".
 
 ---
 
@@ -713,18 +714,18 @@ established.
 
 ---
 
-## Retention: the one forward-looking change
+## Retention — SATISFIED 2026-08-29, no action needed
 
 `aggregate-usage.sh` reads `$HOME/.claude/projects/**/*.jsonl` and selects its
 window by **file mtime** (`find -newermt "$SINCE" ! -newermt "$UNTIL"`, `:1459`).
-No `cleanupPeriodDays` is configured in either settings file, so Claude Code's
-default retention applies — measured on 2026-08-14, the oldest surviving
-transcript was exactly 31 days back, with nothing older.
 
-**Raise `cleanupPeriodDays` past the window plus the post-resumption measurement
-period**, so the ad-hoc sessions' own transcripts and the staged-resumption data
-survive until PR7 and PR11 read them. If the window runs longer than the default
-retention, the data those PRs need expires before they measure it.
+The original requirement — raise `cleanupPeriodDays` past the window plus the
+post-resumption measurement period, so the transcripts PR7 and PR11 read
+survive until they are measured — is already met: `cleanupPeriodDays: 180` is
+set in the user settings (`~/.claude/settings.json`, verified 2026-08-29). The
+earlier claim that no retention was configured came from a 2026-08-14
+measurement and is stale. 180 days exceeds the 90 the author ruled sufficient;
+do not lower it. **No settings change is required before the first PR.**
 
 **No archive of the pre-pause transcripts.** Preserving them would only matter if
 a pre-pause measurement were worth having, and it is not: the ladder was not
@@ -914,6 +915,8 @@ office-hours sitting after re-verification:
 of stdout strings. Do this unit first — the rest are easier once the codes are
 distinct.
 
+*Model: opus* — exit-code redesign across interacting scripts
+
 **Unit 2 — halt emits timing + cause.** `halt()` at
 `dispatch-ladder-run:708`, whose `log_event halt` call is at `:727` (both
 verified). It currently emits only `{terminus}`:
@@ -930,6 +933,8 @@ Merge its object into halt's. Separately, `ADV_ERR_LAST` is captured at
 `:1329` and folded into the **requeue** event only (`:1502`) — fold it into
 halt's detail too. Both anchors verified; both are the same function, which is
 why they share a PR rather than blocking each other.
+
+*Model: sonnet* — verified anchors, merge existing helper output
 
 **Unit 3 — completion signals that are not a phase change.**
 `dispatch-ladder-await`'s `graph_verdict()` at `:377` decides completion from
@@ -975,11 +980,15 @@ is already fixed**:
 > gaps". That note predates the shipped coverage and is **not** an outstanding
 > obligation.
 
+*Model: opus* — producer-side coordination, false-stall risk
+
 **Unit 4 — blocked node is not honest silence.** `graph-select-target` collapses
 blocked/parked/done/absent/reviewed into one empty answer with the reason only
 in stderr prose, so `dispatch-ladder-run` classifies a permanently blocked node
 as `ci-wait` and re-polls for the full `--ci-wait-s` hour. Emit a distinct
 reason and branch on it.
+
+*Model: sonnet* — emit reason code, branch on it
 
 **Unit 5 — transient main dirt is not a contract breach.** One unrelated
 modified `intentions/` file made `provision-node-worktree` refuse its
@@ -987,6 +996,8 @@ modified `intentions/` file made `provision-node-worktree` refuse its
 `dispatch-ladder-advance:452-455` *(from node body — re-locate)* route it
 through the failed catch-all to exit 11 — classifying a transient environment
 state as `violation`. Give it its own disposition.
+
+*Model: sonnet* — add one disposition, anchors need relocating
 
 **Unit 6 — terminal-without-disposition: RULED OUT OF THIS PR, one
 investigation only.** The measurement stands — neither phase declared a
@@ -1026,6 +1037,8 @@ design**); a batch/strategy-mode land; or a session that died before reaching
 the land at all. This investigation is **unplanned** — run
 `/align-tactics tactic-eval-finding-terminal-without-disposition-dominates-clock`
 before implementing it.
+
+*Model: opus* — unplanned investigation requiring judgment
 
 **Unit 7 — terminus: enforcement residual only.** The instrument already
 shipped as PR #3091 (merge `de347430`, 2026-08-14) and
@@ -1096,6 +1109,8 @@ predicate.
 Re-measure with
 `npx tsx packages/intentionsutil/scripts/ladder-terminus-census.ts intentions --lint`
 before and after, rather than citing any stored figure.
+
+*Model: opus* — step 2 decides wait representations
 
 ### Dependencies
 
@@ -1185,20 +1200,28 @@ that exists. `audit-instrument-scoping` asks for fleet-denominator lenses tagged
 **fleet-only**; the vocabulary appears at `:1164` and `:1463` — confirm every
 fleet-denominator lens carries it.
 
+*Model: sonnet* — verification against explicit criteria table
+
 **Unit 2 — stale path prose.** Six node bodies name
 `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh`. That skill
 does not exist on `main`. Correct the prose to
 `.claude/skills/rsi-audit/scripts/aggregate-usage.sh` in every node body this
 PR touches. (Prose-only; `validate-graph` prose refs must stay at 0 unresolved.)
 
+*Model: sonnet* — mechanical path correction in prose
+
 **Unit 3 — review-effort yield lens.** Confirmed absent (zero matches for
 `review_effort` / `effort_yield`). Add findings and applied fixes per built-in
 `/code-review` run, bucketed by effort level, so the `high` raise can be
 compared against its own `low` baseline.
 
+*Model: sonnet* — additive jq lens, clear spec
+
 **Unit 4 — rsi-lane token attribution.** Confirmed absent (zero matches for
 `rsi_lane`). Make rsi-family and research-lane session spend attributable, so
 the strategy's per-workflow spend condition can be read at all.
+
+*Model: opus* — attribution semantics left open
 
 **Unit 5 — sidecar monitor self-conceals.** `aggregate-usage.sh:1347-1349`
 (verified):
@@ -1214,10 +1237,14 @@ sidecar leaves both numerator and denominator, and the monitor reports
 exactly when the stamping it monitors has failed. Compute the sidecar
 denominator over the **pre-filter** candidate set.
 
+*Model: sonnet* — verified anchor, clear denominator fix
+
 **Unit 6 — ladder workers born unstamped.** Detached ladder phase workers get no
 `.dispatch-stamp.json`, so `--node` scans zero files. The `SessionStart` hook
 (`.claude/hooks/stamp-dispatch-session.sh`) does not mint stamps for
 `claude --bg` workers. Mint at spawn.
+
+*Model: sonnet* — hook extension, rote wiring
 
 **Unit 7 — align-tactics worker transcript unreachable.** `aggregate-usage.sh:1458`
 (verified) restricts candidate project dirs:
@@ -1234,6 +1261,8 @@ main-checkout project dir.
 
 > Unit 6 → Unit 7 is the landed `blocked_by` edge: minting the sidecar is
 > necessary but not sufficient. Do them in that order inside this PR.
+
+*Model: sonnet* — widen one find predicate
 
 ### Dependencies
 
@@ -1309,6 +1338,8 @@ Re-key that prune exemption to **any node carrying
 **40** nodes that carry it (`grep -rl 'ledger_entry: true' intentions/`). Update
 `intentions/kind-tactic.md`.
 
+*Model: sonnet* — verified anchors, scripted 40-node strip
+
 **Unit 2 — retire the namespace as a membership test.** In
 `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`: `ID_PREFIX`
 at `:258`, the prefix+attribute filter at `:422-428`, and the anchored id regex
@@ -1320,6 +1351,8 @@ if [[ ! "$ID" =~ ^tactic-eval-finding-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
 
 Widen mint-or-reuse search from the `tactic-eval-finding-*` namespace to the
 whole open tactic set.
+
+*Model: sonnet* — verified anchors, widen filters
 
 **Unit 3 — one find-or-recur write surface.** Merge the five private follow-up
 writers (`dispatch-invalid-state-followup`, `dispatch-followup-exists`,
@@ -1333,11 +1366,15 @@ key/search **disagreement recorded as a finding** rather than resolved silently.
 > scope — which is Unit 3 here, so keep the skill-body edits minimal and
 > mechanical.
 
+*Model: opus* — five writers collapse into one design
+
 **Unit 4 — in-flight guard is permanent.** `dispatch-eval-finding:936`,
 `:1004`, `:1166` *(from node body — re-locate)*. The guard gates on
 `execution == null`, but `execution` stays non-null after a fix merges, so a
 fixed entry can never record another occurrence. Gate on "execution is
 non-null **and** not yet resolved".
+
+*Model: sonnet* — narrow guard-condition change
 
 **Unit 5 — `--list` reads a stale working tree.** `dispatch-eval-finding:44-51`,
 `:420-424`, `graph-commit:1481` *(from node body — re-locate)*. The plumbing
@@ -1346,17 +1383,23 @@ after a verified land, so the read path cannot see the write path and the
 similarity judgment mints duplicate slugs. Read from `origin/main`, not the
 working tree.
 
+*Model: sonnet* — decision made, redirect the read
+
 **Unit 6 — lost writes exit 0.** `dispatch-eval-finding:205-208`, `:298` *(from
 node body — re-locate)*. `skipped-locked` and `skipped-in-flight` are documented
 lost writes but exit `0` like `landed`, so a chaining caller proceeds as if the
 write succeeded — one `--resolved-by` loss let a chained `--retire` retire an
 entry with no `resolved_by`. Give them distinct non-zero codes.
 
+*Model: sonnet* — exit-code plumbing
+
 **Unit 7 — duplicate-findings sensor.** Count distinct tactics recording the
 same root-cause defect, read over tactics carrying `attributes.measured_impact`,
 attributed to `/rsi`. **Must come after Unit 1** — the node's own
 `## Dependencies` section says the namespace must stop being the membership test
 before the count is meaningful.
+
+*Model: opus* — root-cause similarity semantics undefined
 
 **Unit 8 — wire `batchIds` to a real caller**.
 PR1 Unit 3 taught `validateGraphProseRefs` to resolve a prose ref against the
@@ -1391,6 +1434,8 @@ Unit 3 would mean teaching five writers the same thing and then deleting four.
 > implementation-record note stating the library half landed and the caller half
 > did not — so the record is honest, but the remaining work is **unrepresented
 > in the graph** until this node is filed.
+
+*Model: sonnet* — flag wiring, scope fully specified
 
 ### Dependencies
 
@@ -1468,6 +1513,8 @@ complete seven-unit plan with `Context`, binding author rulings, a target design
 
 The body also carries an explicit **"Out of scope — named follow-ups (Ruling 4)"**
 section. Honour it: those follow-ups are not this PR's work.
+
+*Model: opus* — correctness change to residue routing
 
 ### Dependencies
 
@@ -1574,6 +1621,8 @@ retaining done tactics on disk for the every-tick full-scan callers —
 `packages/intentionsutil/src/store.ts:128`,
 `packages/intentionsutil/scripts/graph-census-debt.ts:160` *(from node body —
 re-locate)*.
+
+*Model: sonnet* — localized efficiency fixes, clear shapes
 
 ### Dependencies
 
@@ -1711,11 +1760,15 @@ graph change. That interrupt test is the confirming step — a re-parenting that
 is not demonstrated against a real interrupt is exactly the on-trust state this
 sitting existed to end.
 
+*Model: opus* — process lifecycle and cgroup subtleties
+
 **Unit 2 — lock for the child's own lifetime.** A kernel-released `flock` held
 by the detached child and honored by every worktree-claim path, so a survivor
 that outlives its session cannot have another worker spawned into the tree it is
 still writing. Depends on Unit 1: a lock held by a child that dies with its
 launcher is not a lock.
+
+*Model: opus* — cross-path locking concurrency
 
 **Unit 3 — concurrent-write attribution.** `dispatch-code-review:141` and
 `:227`, `.claude/skills/review-fix/SKILL.md:263-271`, `review-fix.js:1080`
@@ -1725,12 +1778,16 @@ the nested `claude -p /code-review` has its edits silently attributed to the
 review's `fixed[]` output and committed under review-fix's name. Unit 2's lock
 is the mechanism.
 
+*Model: opus* — attribution race under concurrency
+
 **Unit 4 — rejection-signature self-match.** `dispatch-code-review:190-193`,
 `.claude/skills/dispatch-propagate/scripts/review-fix-instrument-probe.mjs:88`
 *(from node bodies — re-locate)*. The check greps the **entire** combined
 stdout+stderr for literal reject strings with no structural scoping, so a review
 that quotes the literal rejection text false-positives and spuriously hard-stops
 a successful review. Scope the match structurally.
+
+*Model: sonnet* — scoped match, clear fix
 
 ### Dependencies
 
@@ -1751,8 +1808,14 @@ Unit 2** — the design was ratified, the demonstration was not.
 > explicitly *not* survival of a launcher teardown. **Honest limit:** that run
 > killed a *background* task, which is the same class of teardown but not
 > literally a user interrupting a foreground tool call. So Unit 1's interrupt
-> test is now a **confirmation**, not a discovery — but it is still owed before
-> Unit 2 ships.
+> test is now a **confirmation**, not a discovery.
+>
+> **RULED 2026-08-29 — the proxy is accepted.** The author accepted the
+> background-teardown demonstration as satisfying the owed confirmation: it
+> exercises the same re-parenting mechanism, so Units 2–3 ship without an
+> attended interrupt test. The literal foreground-interrupt confirmation is an
+> optional follow-up the author may run at any attended moment; it no longer
+> gates anything.
 
 ### Reuse
 
@@ -1765,9 +1828,11 @@ Unit 2** — the design was ratified, the demonstration was not.
 .claude/skills/dispatch-propagate/scripts/test-dispatch-code-review.sh
 ```
 
-Manual: launch a detached review, interrupt the launching call, and confirm the
-child survives and completes. Then attempt to spawn a second worker into the
-same worktree and confirm it is refused while the lock is held.
+Manual: launch a detached review as a background task, tear the launcher down,
+and confirm the child survives and completes (the accepted proxy for the
+foreground-interrupt test — see the ruling above). Then attempt to spawn a
+second worker into the same worktree and confirm it is refused while the lock
+is held.
 
 ---
 
@@ -1776,19 +1841,20 @@ same worktree and confirm it is refused while the lock is held.
 **Recommended model: sonnet** — three concrete plumbing fixes; the umbrella
 node records the measurement, it does not require a redesign.
 
-### Run before opening this PR (required)
+### Run before opening this PR — SATISFIED 2026-08-29
 
-```
-/rsi-audit 7d
-```
+The required baseline run was **already taken on 2026-08-29 and recorded on
+both nodes** (`tactic-dispatch-observation-masking`,
+`tactic-dispatch-cache-preserving-context`) — see §"Measurement runs before the
+PRs they gate". Do not re-run it: it had to be taken on a **30d** window,
+because the freeze empties shorter ones (a `7d` window holds 2 sessions and no
+worker sessions at all). Read the recorded results off the nodes instead.
 
-Records the baseline for `tactic-dispatch-observation-masking` and
-`tactic-dispatch-cache-preserving-context` **before** anything changes. The
-`hit_ratio` lens is already shipped (`aggregate-usage.sh:1211`), so the cache
-baseline is readable today. Ship this PR against the masking measurement's
-**cost half only** — its quality half needs dispatch-phase sessions with a
-working ladder, which this same bundle delivers, so it is a follow-up that may
-revise this PR.
+Two recorded results bind this PR: the cache-creation share is **4.3%** of all
+context tokens — the arithmetic ceiling for any append-only layout, which kills
+the imported 41–80% claim — and this PR ships against the masking measurement's
+**cost half only**. Its quality half needs `by_phase_outcome`, which the freeze
+empties; it is a follow-up that may revise this PR.
 
 ### Context
 
@@ -1824,12 +1890,16 @@ dumping 80 arg lines plus the script's first 60 into a context already at
 block that **nothing declares authoritative**. Declare it authoritative and add
 a check that fails if it drifts from the script.
 
+*Model: sonnet* — declare authoritative, add drift check
+
 **Unit 2 — phase-log writer param undocumented for the PR lane.**
 `dispatch-write-phase-log:1-38` *(from node body — re-locate)* documents its
 positional argument as `<issue-num>` and errors with "an issue-num argument is
 required", but a node-lane node has no issue and carries only `execution.pr`.
 Every node-lane worker spends ~3 attempts and ~70s rediscovering that the PR
 number is correct. Document it; accept both names.
+
+*Model: sonnet* — docs plus arg alias
 
 **Unit 3 — workflow file writes cost subagent round-trips.** Four of the twelve
 subagents a `/review-fix` pass launches exist only to write two result JSON
@@ -1839,9 +1909,13 @@ records `coverage_incomplete: true` because the size check is not exact. Give
 the script a non-subagent write path, or drop the round-trip and compute the
 check exactly.
 
+*Model: opus* — plan leaves the approach open
+
 **Unit 4 — cheap-fix disposition.** Make the residue classify step fix cheap
 out-of-contract findings in scope and defer only expensive ones (cost as a
 second resolve-in-scope trigger).
+
+*Model: sonnet* — well-specified classify-step tweak
 
 **On closing the umbrella node:** it closes as *measured, floor partially
 reduced*. Its remaining open question — whether the Step 1 classifier sequence,
@@ -1935,17 +2009,23 @@ realistic config-tamper case.
 gitignored-with-a-committed-template, and implement whichever. Either is
 acceptable; the current state — neither — is not.
 
+*Model: sonnet* — small bounded choice, either acceptable
+
 **Unit 2 — fail closed on a corrupt config.** `dispatch-target-workers:227` and
 `:238-262`, `dispatch-select-tick:707` and `:744` *(from node bodies —
 re-locate)*. Surface the failure instead of returning `8`. Per
 `.claude/rules/code-style.md`, a clear error beats a defensive fallback — this
 is that rule's exact case.
 
+*Model: sonnet* — surface error instead of fallback
+
 **Unit 3 — pause becomes a config field.** Replace the pause sentinel file with
 a `dispatch.config/*.json` boolean as the **sole** mechanism, failing closed on
 any config read error. `dispatch-tick:266-300`, `dispatch-config-load:342-344`,
 `.claude/skills/dispatch-propagate/scripts/lib.sh:1837` *(from node body —
 re-locate)*.
+
+*Model: sonnet* — config field swap, fail closed
 
 ### Dependencies
 
@@ -2012,6 +2092,8 @@ having-a-node-worktree **versus** running-at-the-repo-root **before** the sweep
 resolves any worktree path, so the reap never treats a repo-root session's
 checkout as removable.
 
+*Model: opus* — misclassification deletes wrong checkout
+
 **Unit 2 — standdown clear must not race a live session.**
 `.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh:619`,
 `dispatch-graph-execute:185-200` *(from node bodies — re-locate)*. The
@@ -2019,14 +2101,20 @@ cleared-no-worktree branch erases a stand-down while a live session still holds
 the node name, silently re-creating the deadlock the tactic removes for
 `strategy-*` nodes, which never get a pre-provisioned worktree.
 
+*Model: opus* — race against live sessions
+
 **Unit 3 — provision script test coverage.** Add script-level coverage for
 `provision-node-worktree`'s worker-start gate integration (selected-phase arg,
 exit 12/13 pass-through, scope-fingerprint stamp write) in
 `test-provision-node-worktree.sh`.
 
+*Model: sonnet* — test coverage with explicit cases
+
 **Unit 4 — implicit worktree resolution.** A graph-operation wrapper that
 resolves the target node worktree itself, so sessions stop restating absolute
 `.claude/worktrees/<id>` paths in every Bash call.
+
+*Model: sonnet* — wrapper resolving worktree paths
 
 **Unit 5 — document the isolation guard properly.** The Claude Code built-in
 worktree-isolation guard hard-refused **6 worker commands in one align-tactics
@@ -2037,15 +2125,21 @@ passing clause under a `git -C` heading, and frames the cd-and-command variant
 as a permission-prompt cost rather than a hard refusal. Give the guard its own
 section. *(Docs only — but it is the cheapest token win in this plan.)*
 
+*Model: sonnet* — docs-only sandbox rule section
+
 **Unit 6 — reclaim audit is blind to a fourth reason.**
 `dispatch-reclaim-audit:194`, `lib-reservation-ledger.sh:626` *(from node
 bodies — re-locate)*. The RATE source greps exactly two literals —
 `(dead-session-stranded)` and `(live-worker-redundant)` — so
 `spawn-handoff-expired` shows up nowhere. Add it.
 
+*Model: sonnet* — add third literal to grep
+
 **Unit 7 — explicit lane waits out CI.** Make the explicit-node dispatch lane
 wait out in-flight CI up to the reservation TTL instead of skipping, leaving the
 autonomous and `--manual` paths unchanged.
+
+*Model: sonnet* — bounded wait in one lane
 
 **Unit 8 — re-implement the lost deferred unit, and close the hole that lost
 it.** **The diff is gone — see §"The ephemeral
@@ -2065,6 +2159,8 @@ Three parts, none time-critical:
    then revert it, so git history carries the diff permanently. No new mechanism.
 3. Reject an escalation whose recommendation cites a path under
    `$CLAUDE_JOB_DIR` — a string check where the park is written.
+
+*Model: sonnet* — scope preserved on node, rote
 
 ### Dependencies
 
@@ -2144,11 +2240,15 @@ rsi-audit-threshold-table → rsi-trigger-threshold-gate
 cost-per-unit-of-change cut points into config on its fleet pass, so the trigger
 gate reads a cheap table instead of recomputing the distribution.
 
+*Model: opus* — table format shared with gate design
+
 **Unit 2 — the gate.** Gate `/rsi` on four trigger families: outcome
 (unconditional), relative cost-per-unit-of-change, an absolute ceiling, and a
 sampling floor — with `k`, the ceiling and `N` author-owned config. The node is
 explicit that the gate does a **read-and-compare and nothing else**; keep it
 that small.
+
+*Model: sonnet* — read-and-compare only, kept small
 
 **Unit 3 — lane-agnostic session sweep.** Replace the ladder-only
 phase-boundary spawn with a sweep over ended sessions' `dispatch-stamp`
@@ -2157,16 +2257,22 @@ both drivers, scoped to the exact session id. `dispatch-ladder-run:124`,
 `.claude/skills/dispatch-ladder/SKILL.md:365` *(from node body — re-locate)*.
 Apply the gate, then spawn.
 
+*Model: opus* — cross-driver sweep replaces spawn path
+
 **Unit 4 — per-phase evaluation.** Make `/dispatch-ladder` evaluate at every
 phase boundary — the driver spawns a fire-and-forget per-phase evaluation job
 and never waits — and narrow the closing pass to cross-phase synthesis only.
 `dispatch-ladder-run:677` *(from node body — re-locate; note `spawn_phase_eval`
 is already called from `halt()` at `:729`)*.
 
+*Model: opus* — narrowing closing pass needs judgment
+
 **Unit 5 — external acceptance gate.** Gate RSI's own harness changes on an
 acceptance signal outside RSI's control, and record the rate at which
 self-passed changes are refuted by it. This is the safety property for
 everything above: without it, the harness grades its own homework.
+
+*Model: opus* — safety gate design left open
 
 ### Dependencies
 
@@ -2197,16 +2303,19 @@ in the log with the config values it read.
 
 **Recommended model: opus** — a structural rewrite of two skills.
 
-### Run before opening this PR (required)
+### Run before opening this PR — SATISFIED 2026-08-29
 
-```
-/rsi-audit 14d
-```
+The measurement `tactic-rsi-measure-fanout-and-model-routing` required was
+**taken 2026-08-29 and recorded on `strategy-recursive-self-improvement`** — on
+a **30d** window, because a 14d one returns no fan-out data under the freeze.
+Do not re-run it; read the recorded reading. Two results bind this PR:
 
-Satisfies `tactic-rsi-measure-fanout-and-model-routing`: this catalog declares a
-`model:` per lens, and both imported fan-out/model-routing findings were
-measured on configurations this repo does not run. **Measure before fixing the
-values.**
+- Anchor the per-lens `model:` values on the **measured 1.91× opus-to-sonnet
+  per-turn cost premium**, not the imported ratios (measured on configurations
+  this repo does not run).
+- **Set `model:` from `cost_usd`, never from `price_proxy_usd`** — the proxy
+  holds price constant to isolate token count, so it ranks sonnet *above* opus
+  (37827 vs 31372) and inverts the model ranking.
 
 > **`tradition-agentic-engineering` is verified on the half this PR needs.**
 > Three idioms are recorded as genuine external deference — skill/hook
@@ -2245,6 +2354,8 @@ model**, and reduce both skills to thin selectors over it.
 
 Out of scope: changing what any lens measures. This is a re-housing, not a
 re-derivation — a lens whose output changes in this PR is a bug.
+
+*Model: opus* — structural rewrite of two skills
 
 ### Dependencies
 
@@ -2313,6 +2424,8 @@ remediation list declared in its own frontmatter.
 `dispatch-conflict`, `.claude/hooks/dispatch-stop.sh` *(from node body —
 re-locate)*.
 
+*Model: opus* — shared-core extraction, needs in-session decomposition
+
 ### Dependencies
 
 Both are the node's own landed `blocked_by` edges:
@@ -2377,6 +2490,8 @@ Every reference to the three skills: skill directories, `SKILL.md` frontmatter
 `.claude/rules/*.md`, `.claude/settings.json` `allowedTools` patterns, and node
 prose in `intentions/`.
 
+*Model: sonnet* — mechanical rename, exhaustive and atomic
+
 ### Dependencies
 
 **All twelve preceding PRs.** This renames files they edit; running it earlier
@@ -2424,21 +2539,24 @@ scope**.
 - `tactic-rsi-audit-prioritization-writer` — **blocked outside this plan.** Its
   `blocked_by` names `tactic-attention-namespaced-rank`, which is not in this
   scope and has an open branch. Confirm that node has landed before starting.
-- `tactic-rsi-reprioritization-outcome-audit` — **parked on an author ruling.**
-  Its `office_hours` park states plainly that the plan for this node *cannot be
-  written* without a ruling on what observable (a) measures: the serving
-  strategy's `success_signal` names "the median closure interval of tactics the
-  model front-loaded, against the dispatch queue's baseline" and defines
-  neither quantity. Still open as of 2026-08-29.
+- `tactic-rsi-reprioritization-outcome-audit` — **RULED 2026-08-29,
+  disposition (A) ratified as proposed**: baseline = the complement cohort
+  (closed `owner: ai` tactics with no `priority_log` entry in the window);
+  interval = node creation → phase-done commit date for **both** cohorts; the
+  `priority_log` entry date partitions the cohorts and bounds the
+  per-iteration delta but is never a start point. The ruling is recorded as a
+  clarification on `strategy-rsi-delegated-prioritization` and the park is
+  cleared; the node's plan is written by the `/align-tactics` finalize the
+  park recommendation named.
 - `tactic-rsi-research-skill` — **park CLEARED 2026-08-29**; all three owed
   rulings answered. Now `status: codified`, carrying its execution plan in its
   body, with a `blocked_by` edge onto `tactic-rsi-lane-token-attribution`.
 
-> **This PR is the least-ready work in the window; do not read "3 nodes" as
-> "3 plannable nodes."** As of 2026-08-29 one node is parked on an unanswered
-> author ruling (Unit 2), one is blocked on a node outside this plan (Unit 1),
-> and only Unit 3 is ready to build. Sequence accordingly, and expect to ship a
-> subset rather than the whole PR.
+> **Readiness (updated 2026-08-29 after the ruling):** Unit 2's ruling landed
+> and its plan follows via the `/align-tactics` finalize; Unit 3 is ready to
+> build; Unit 1 remains blocked on a node outside this plan — check whether
+> `tactic-attention-namespaced-rank` has landed before starting, and leave
+> Unit 1 open rather than blocking the PR if it has not.
 
 ### Scope
 
@@ -2446,6 +2564,8 @@ scope**.
 tactics, each appended to `attributes.priority_log` with a read-before-write
 anti-thrash check. `packages/intentionsutil/src/attention.ts`, `src/router.ts`,
 `scripts/write-node.ts` *(from node body — re-locate)*.
+
+*Model: opus* — writes attention; ruled opus
 
 **Unit 2 — outcome audit.** Derive the reprioritization delta and the post-hoc
 outcome audit: did tactics `/rsi-evaluate` front-loaded actually close faster
@@ -2466,6 +2586,8 @@ than the queue baseline?
 > is at `:389`, inside dated draft prose its own 2026-08-20 clarification rules
 > historical and forbids rewriting. Leave it alone; see §"Two stale-path
 > classes".
+
+*Model: opus* — judgment-heavy measurement semantics; plan via finalize
 
 **Unit 3 — the research lane, folded.** **RULED 2026-08-29 — do NOT build a
 standalone `/rsi-research` skill and do NOT install a weekly schedule.** The
@@ -2526,11 +2648,16 @@ Full axis list, lane definitions and the calibration loop are on
 `.claude/skills/rsi-audit/SKILL.md`" note is reversed by the same ruling** —
 that file is now the host.
 
+*Model: sonnet* — ruled sonnet; corrections fully recorded
+
 ### Dependencies
 
 PR3 and PR10. Unit 1 additionally depends on `tactic-attention-namespaced-rank`,
-which is **outside this plan** — if it has not landed, ship Units 2–3 and leave
-Unit 1 open rather than blocking the PR.
+which is **outside this plan** — if it has not landed, leave Unit 1 open rather
+than blocking the PR. Unit 2's ruling landed 2026-08-29 (see the readiness note
+above); it ships from the plan the `/align-tactics` finalize writes into its
+node. The autonomously shippable floor is **Units 2–3**, plus Unit 1 if its
+external blocker has landed.
 
 **Unit 3 additionally depends on `tactic-rsi-lane-token-attribution`** (status
 `codified`, phase `implement` as of 2026-08-29), which owns correction **C5**.
@@ -2685,6 +2812,8 @@ its own anchors. Read it before touching anything:
 > verdict line shows. Its `office_hours` park is a stale `provision-node-worktree`
 > exit-2 from 2026-07-31: clear the park, do not re-provision.
 
+*Model: opus* — base-aware merge; silent data loss
+
 **Unit 1 — flip the writer default to plumbing.** *NOT WRITTEN — deferred to
 ref-split's Unit 2 by the 2026-08-29 ruling above. Kept here only so the ruling
 names something concrete, and so ref-split's rewrite has the analysis it
@@ -2737,6 +2866,8 @@ false-denies the sole main-landing graph-write path. See
 known failure shapes; `graph-commit` is already called out there as the
 exception that *requires* `-C`.
 
+*Model: sonnet* — flag shape plus allowlist entry
+
 **Unit 4 — widen the no-op short-circuit.**
 `packages/intentionsutil/scripts/graph-commit:2077` and `:3643-3659` (verified).
 The short-circuit fires only on strict `HEAD == origin/main` SHA equality, so a
@@ -2746,19 +2877,23 @@ parity is already proven. Fix: short-circuit on proven content parity, not SHA
 identity. The `:2066` comment records that the current scoping is deliberate;
 preserve the reason it gives while widening the condition.
 
+*Model: opus* — parity proof on landing-lock path
+
 ### Dependencies
 
 **PR1** — same file, and PR1's units are correctness fixes that should land
 first so a regression here is bisectable against a known-good writer.
 
-Plus the ref-split decision, above.
+The ref-split decision is discharged — ruled 2026-08-29, split; PR15 no longer
+blocks on anything.
 
 ### Reuse
 
-- `run_merge_node()` — `graph-commit:989`. Unit 2 calls it directly rather than
-  through a manufactured conflict.
 - `.claude/rules/sandbox.md` "Command pattern matching" — the matcher rules Unit
   3 must satisfy.
+
+*(A `run_merge_node()` reuse note for Unit 2 was removed 2026-08-29 with the
+split — Unit 2 is not written.)*
 
 ### Verification
 
@@ -2770,11 +2905,10 @@ npm test --prefix packages/intentionsutil
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
-Manual: with a deliberately dirty unrelated file in the checkout, run a
-`graph-commit` and confirm it lands (Unit 1). From a checkout reset one commit
-behind `origin/main` with nothing staged, confirm the run short-circuits without
-taking the landing lock (Unit 4). Confirm the `graph-commit` invocation is
-auto-approved rather than prompting (Unit 3).
+Manual (shipped units only — Units 1–2 are not written): from a checkout reset
+one commit behind `origin/main` with nothing staged, confirm the run
+short-circuits without taking the landing lock (Unit 4). Confirm the
+`graph-commit` invocation is auto-approved rather than prompting (Unit 3).
 
 **Unit 0** needs a verification the suite above cannot give: a *concurrent*
 removal. Construct it directly — build base/ours/theirs fixture nodes where
@@ -2802,11 +2936,11 @@ product defects:
   CI-only, non-locally-reproducing failure in these harnesses already cost PR1
   dearly. A cascade that misattributes 11 failures is precisely what makes that
   trap expensive to diagnose. Fix the cascade before relying on the suite to
-  judge Units 1–2.
+  judge this PR's shipped units.
 
 ### Closing the nodes
 
-After merge, for each of the 7 ids set `phase: done` and
+After merge, for each of the 5 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
@@ -2869,11 +3003,11 @@ argument and then writes unconditionally.
 > `920492be` — PR1's closing batch could not carry a `create` (see the `--base`
 > hazard in §"Closing nodes after each merge").
 >
-> **Unit 10's node is parked and `owner: human`.** Its `office_hours` record
-> carries the (1)/(2) gate-shape question as an open decision rather than a
-> chosen design — deliberately, because shape (1) re-arms the 2026-08-14
-> repo-wide write outage if its `origin/main` read fails closed. Clear the park
-> before implementing Unit 10; Units 9 and 11 are `owner: ai` and unblocked.
+> **Unit 10's park was cleared 2026-08-29 on the author's authority.** Its
+> `office_hours` record carried the (1)/(2) gate-shape question, answered by
+> the recorded ruling (shape (2) first, fatal in the post-merge job); the
+> author authorized the clear so the batch needn't handle it. Units 9 and 11
+> are `owner: ai` and were never blocked.
 
 ### Scope
 
@@ -2888,6 +3022,8 @@ it (`.claude/rules/code-style.md` — clear errors over silent fallbacks).
 *(Anchor from node body — re-locate. `demote-node-to-implement:217` shows the
 same `git show origin/main:… > file` shape and is the closest verified analogue.)*
 
+*Model: sonnet* — clear fix, two sanctioned options
+
 **Unit 2 — extract the duplicated `--base` pin resolution.** `park-node` and
 `clear-park` carry byte-identical `--base` pin-resolution blocks — manifest-file
 branch, `<id>=<sha>` pair branch, bare-sha branch, 40-hex validation, and the
@@ -2900,6 +3036,8 @@ scripts call.
 > fixtures red while staying green locally. Put the helper in a **new** file the
 > two scripts source directly, not in `lib.sh`.
 
+*Model: sonnet* — extract byte-identical helper
+
 **Unit 3 — `read-sensors.ts` accepts any argument, then writes.**
 `packages/intentionsutil/scripts/read-sensors.ts:1719` (verified) — `main()`
 parses only `process.argv.includes("--report")` and silently drops every other
@@ -2910,6 +3048,8 @@ and add a no-write `--check` mode.
 > This compounds with PR1 Unit 8: the script both ignores what you asked for and
 > resolves its own tree. Land PR1 first so the tree half is already explicit.
 
+*Model: sonnet* — arg rejection plus check mode
+
 **Unit 4 — retire the `attributes.phase` squatter.** Backfill the 6 remaining
 `phase: null` + `attributes.phase: main-qa` nodes to first-class `phase`, delete
 the squatter fallback readers, and make `validate-graph` **reject** any
@@ -2919,6 +3059,8 @@ the squatter fallback readers, and make `validate-graph` **reject** any
 > schema tightening — unlike PR4's ledger retirement. It therefore **does** trip
 > the origin/main data test, which is exactly what **PR1 Unit 4** fixes. PR1
 > before this unit, not optional.
+
+*Model: opus* — schema tightening with data migration
 
 **Unit 5 — decide the fate of `readDelegationRecordsReading`.**
 `read-sensors.ts`'s `readDelegationRecordsReading` is unreachable from production
@@ -3035,11 +3177,20 @@ What this unit must do, in order:
 > The node's own park text names both constraints; the ruling text had dropped
 > them.
 
-**This unit also has a parked node**, contrary to the agenda's earlier claim
-that C2 had none: `tactic-orphaned-delegation-records-reading`, `owner: ai`,
-parked since 2026-08-20. Its recommendation pre-plans both branches; this
-ruling selects **branch A (still governs)**. The park must be cleared
-explicitly — recording the ruling here does not clear it.
+**This unit's parked node was cleared 2026-08-29**, contrary to the agenda's
+earlier claim that C2 had none: `tactic-orphaned-delegation-records-reading`,
+`owner: ai`, parked since 2026-08-20. Its recommendation pre-planned both
+branches; the ruling selects **branch A (still governs)**, and the park was
+cleared explicitly on the author's authority citing that ruling.
+
+**The threshold write is delegated.** The step-4 threshold half is an author
+`/align` write on `strategy-exercise-recovery-paths`; the author has
+authorized the batch to perform it on their behalf (2026-08-29), since its
+content is fully determined — the threshold is set to *exactly* the reader's
+new canonical date-free met-state string, in the reader-then-threshold order
+above. No further author input is needed.
+
+*Model: opus* — canonical reading semantics and threshold sequencing
 
 **Unit 6 — `transition-node` scope-stale test coverage.** Add shell-level
 coverage for two behaviors: (a) a scope-stale `main-qa` node transitions to
@@ -3048,11 +3199,15 @@ is read and refreshed at the **main-checkout root**, not the invoking PR-branch
 worktree, when `transition-node` runs with cwd inside a nested
 `.claude/worktrees/<id>`.
 
+*Model: sonnet* — shell coverage, explicit behaviors
+
 **Unit 7 — `test-park-node.sh` precondition guard.** Fail fast with a clear
 "install dependencies first" error when the harness root has no `node_modules`,
 instead of dangling a symlink into every clone and surfacing the missing
 precondition as an opaque `tsx ERR_MODULE_NOT_FOUND` inside one unrelated-looking
 case.
+
+*Model: sonnet* — fail-fast precondition guard
 
 **Unit 8 — the `strategy_fingerprint` sha stamp records the wrong commit.**
 The stamp writes the **pre-commit `HEAD`**, so it pairs a
@@ -3071,6 +3226,8 @@ and Unit 6's test coverage is where this behavior gets pinned.
 > the code path this unit corrects. **Confirm it has merged before starting Unit
 > 8**; if it has not, this unit has no write site to fix yet and should be split
 > out rather than blocking the other seven.
+
+*Model: sonnet* — record post-commit sha instead
 
 **Unit 9 — `validate-graph` still passes on an empty store** *(PR1 residual)*.
 PR1 Unit 8 made `<intentionsDir>` required and made a
@@ -3098,6 +3255,8 @@ pointed me at the wrong place".
 > shape of vacuous pass PR1 Unit 8 existed to eliminate, and every `verify`
 > fence in this plan now runs `validate-graph.ts intentions` from a repo root.
 > A run from the wrong cwd reports a clean graph.
+
+*Model: sonnet* — one guard, specified exit semantics
 
 **Unit 10 — a node prose reword still de-registers a sensor with nothing going
 red** *(PR1 residual — shape ruled below)*. PR1 Unit 2
@@ -3162,6 +3321,8 @@ spot stays ignored, and `validate-graph` stays deliberately **non-fatal on the
 write path**. The fatal behavior is required of the **post-merge job only**,
 which is exactly what keeps the write path unable to deny.
 
+*Model: sonnet* — ruled shape; make existing job fatal
+
 **Unit 11 — `verify-landed`'s unknown-node arm is untested** *(PR1 residual)*.
 PR1's post-merge QA exercised `verify-landed` at 0/4/4/2 and
 confirmed the absent-node path returns **exit 4** rather than a false "landed".
@@ -3170,6 +3331,8 @@ so the QA pass could not cover it. This is the script every closure in this plan
 uses as its second, independent verification, and an untested arm in it is an
 untested arm in the bookkeeping of ~100 remaining node closures. Add shell-level
 coverage that drives it deliberately.
+
+*Model: sonnet* — shell test for known arm
 
 ### Dependencies
 
@@ -3214,7 +3377,7 @@ hits after the backfill (Unit 4). Run `test-park-node.sh` in a clone with no
 
 ### Closing the nodes
 
-After merge, for each of the 8 ids set `phase: done` and
+After merge, for each of the 12 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 5's node closes with the author's
 decision recorded in its body **whichever way the decision goes**.
 
@@ -3260,11 +3423,15 @@ This is the node-lane analogue of a finding this plan already accepts: the
 freeze section measured the queue at **0 mergeable, 2 parked** — a state that is
 currently invisible unless someone queries it by hand.
 
+*Model: sonnet* — surface counts into existing signal
+
 **Unit 2 — decide what `behind` means.** A PR head that is already an ancestor of
 `main` — commits landed out of band — is currently routed into the sync arm,
 where the update-branch call is an empty-diff no-op that the mergeable gate then
 silently declines. Decide the correct disposition (most likely: recognize it as
 already-landed and close the PR) and implement it.
+
+*Model: opus* — disposition decision left open
 
 **Unit 3 — cap the hold-alert scan cadence.**
 `packages/intentionsutil/scripts/list-unclaimed-hold-alerts.ts` (`:113`, calling
@@ -3274,6 +3441,8 @@ timer even though the predicate's own threshold is a **24-hour** age bound —
 ~288 redundant full-store scans/day, growing with the graph. Fix: run it on a
 cadence proportional to its own threshold.
 
+*Model: sonnet* — cadence change, verified anchors
+
 **Unit 4 — cap the alert rows.** `listUnclaimedHoldAlerts` has no cap on rows
 returned, so a backlog of unclaimed manual holds against a few high-attention
 sources scales both the per-pass claim-probe count and the pushed alarm-node body
@@ -3281,11 +3450,15 @@ size without limit. A `topK` parameter already exists at the call site
 (`list-unclaimed-hold-alerts.ts:113`) — make it binding rather than advisory, and
 report what was dropped rather than truncating silently.
 
+*Model: sonnet* — make existing topK binding
+
 **Unit 5 — stop leaking scratch refs.** Sweep origin's orphaned
 `refs/heads/graph/*` scratch branches, and close the reason writers keep leaking
 them: cleanup is a best-effort `EXIT`-trap step that a killed or hard-failing
 writer never reaches. A trap is the wrong mechanism for a guarantee — move the
 sweep to the next writer's startup, where it runs unconditionally.
+
+*Model: sonnet* — move sweep to startup
 
 **Unit 6 — `graph-digest.ts` quality follow-ups.** Deferred from the
 `tactic-graph-digest-tooling` review (#2865): bound NEAR-DUP and CLOSURE below
@@ -3295,6 +3468,8 @@ defaults, factor the repeated table render/truncation shape, and validate that
 
 At 702 nodes the O(n²) passes are the binding cost; do that sub-unit first and
 measure before deciding how much of the rest is worth doing.
+
+*Model: opus* — algorithmic bounding below O(n²)
 
 ### Dependencies
 
@@ -3416,6 +3591,8 @@ write.
 *(The node is a draft, not a plan: it carries the measurement and the shape of
 the fix but no verification block. Decompose before building.)*
 
+*Model: opus* — draft; decompose before building
+
 **Unit 2 — replace `/dispatch-conflict`'s prose doctrine guard with a mechanical
 refusal.** `.claude/skills/dispatch-conflict/SKILL.md`'s reconciliation lane
 tells the subagent to set `.<field>` per resolved field — an **unconstrained `jq`
@@ -3440,6 +3617,8 @@ entire guard.** Two sub-units:
 > `.claude/rules/code-style.md` is the same instinct: refuse clearly rather than
 > fall through.
 
+*Model: opus* — fail-open risk in fence design
+
 **Unit 3 — make `/review-fix`'s Step-5 porcelain guard executable.**
 `.claude/skills/review-fix/SKILL.md` specifies a complete, correct fence — every
 new `git status --porcelain` entry against a pre-fork baseline must be exactly
@@ -3454,6 +3633,8 @@ in the shape the sibling lint scripts use.
 
 > **Carrier change, not a policy change.** Do not tighten or loosen what the
 > guard accepts while moving it.
+
+*Model: sonnet* — extract specified fence to script
 
 **Unit 4 — stop `/align-tactics` selecting mechanically-managed alarm nodes.**
 The selector has no concept of a mechanically-managed tactic, so
@@ -3497,6 +3678,8 @@ on any `tactic-fleet-alarm-*.md`.
 **This unit also has a parked node**, contrary to the agenda's earlier claim
 that C3 had none: `tactic-fleet-alarm-node-park-clobber-loop`, `owner: ai`,
 parked since 2026-08-04. Recording the ruling here does not clear that park.
+
+*Model: sonnet* — both halves ruled and anchored
 
 **Unit 5 — a park must carry the losing writer's content, not a pointer to it.**
 `park_write()` (`graph-commit:3029`, verified) is the fail-closed path whose
@@ -3551,6 +3734,8 @@ this unit to chase it.
 parks have since been cleared, so neither blocks this unit — but recording the
 ruling in this plan is not the same as recording it on the nodes. Check each
 node carries the ruling before closing it.
+
+*Model: opus* — park durability on writer path
 
 ### Dependencies
 
@@ -3727,12 +3912,16 @@ Four things this unit must settle, all of which are graph-wide:
 > data. That fix is what makes this unit landable atomically. Confirm PR1 U4 is
 > in `main` before starting.
 
+*Model: opus* — schema change, migration, router terminal
+
 **Unit 2 — persist `/align-tactics`' `greenfield_drops` as supersession edges.**
 Instead of discarding them into the round report, write them onto the graph
 through the shared creation surface. The two ruled sub-points above govern the
 behavior here: an in-flight node gets the edge, **carrying its expiry event**,
 and no park; only a fully superseded node is parked, and a per-unit drop is
 recorded on the node's own unit list.
+
+*Model: opus* — cross-cutting producer through write surface
 
 **Unit 3 — widen the retirement sweep from verify fences to body prose.**
 `.claude/skills/dispatch-propagate/scripts/lint-verify-fence-paths.sh` (verified)
@@ -3747,6 +3936,8 @@ that later tries to execute it.
 > hits; resolve them or record them deliberately — a silently grown baseline
 > converts this guard into decoration. This repo has already been bitten by a
 > rename that orphaned fences.
+
+*Model: opus* — prose matching risks false positives
 
 ### Dependencies
 
@@ -3790,7 +3981,7 @@ confirm the sweep fails at that commit (Unit 3).
 
 ### Closing the nodes
 
-After merge, for each of the 3 ids set `phase: done` and
+After merge, for each of the 4 ids set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge").
 
 ---
@@ -3900,6 +4091,8 @@ deliverables:
 > other than the router-owned ones (`phase`, `execution`, `office_hours`,
 > `reading`, `attention`), or creates any new node file.
 
+*Model: opus* — review gate, judgment quality core
+
 **Unit 2 — revise `/align-strategy`'s two new Step 2 interview steps.** The 2.3
 doctrinal-consistency gate and the 2.5 steelman challenge: make the gate test the
 **finalized rationale and post-steelman intent** rather than the draft, record
@@ -3907,13 +4100,19 @@ clean passes, define its overlapping-strategies scope, and **cross-reference
 rather than restate** the shared `origin/main`, question-mechanics and
 tradition-record rules. The node carries a full plan (~9 KB).
 
+*Model: opus* — wording is the mechanism
+
 **Unit 3 — `/align` Step 6 gains a self-consistency walk** over the round's own
 output. *(Draft, ~200 bytes — decompose before building.)*
+
+*Model: opus* — draft; needs in-session decomposition
 
 **Unit 4 — pass `office_hours` into the `/align-tactics` drift payload.** The
 drift agent is instructed to weigh the strategy's own `office_hours` and is never
 given the field. Fix all **four dump sites** so the instruction and the data
 agree. *(Draft — decompose.)*
+
+*Model: opus* — draft; needs in-session decomposition
 
 **Unit 5 — redirect `/align-tactics`' immaterial drift observations.** Today they
 are written as **strategy clarifications** — an autonomous lane editing
@@ -3928,9 +4127,13 @@ durable-layer substance. Redirect to a born-parked observation node instead.
 > any strategy write, the park escape is closed by the autonomy contract, and
 > `DRIFT_SCHEMA` emits `{answer}` with no question. Read it before building.
 
+*Model: opus* — durable-layer policy in skill text
+
 **Unit 6 — `validateGraph` ordering-inversion lint.** Warn when node X's body
 names node Y while `Y.blocked_by` contains X. **Warn-level, surfaced for session
 disposition, never a hard fail.** *(Draft — decompose.)*
+
+*Model: opus* — draft; needs in-session decomposition
 
 **Unit 7 — close `tactic-align-tactics-premise-preflight` with the outcome.**
 This node is a **recorded decision, not new work**: it withdraws the preflight
@@ -3938,6 +4141,8 @@ reorder mechanism and redirects the measured cost upstream to Units 3 and 6 —
 `/align-tactics`' premise refusal is Side B of the drift review and cannot
 precede the evidence its three reasoning phases consume. Verify Units 3 and 6
 landed, record that on the node, and close it. **No code.**
+
+*Model: sonnet* — verify and record, no code
 
 **Unit 8 — record the "one PR per migration step" rule** *(PR1 residual)*.
 PR1 Unit 4's node carried a planning-time rule that PR1 deliberately
@@ -3968,6 +4173,19 @@ dependency. Land it here because this PR already owns the `/align` +
 > since PR1's own node closed `done` and its body is now a historical archive.
 > The node's scope covers both halves — the SKILL text *and* reconciling the two
 > units that violate the rule today.
+
+*Model: opus* — doctrine text plus plan reconciliation
+
+**Unit 9 — the rider, `tactic-retire-assessor-contract-docs`.** The three units
+in the banner above: delete `.claude/docs/delegability.md` and
+`.claude/docs/signal-identification.md`, retire their `ref-delegability` and
+`ref-signal-identification` skills, and fix
+`.claude/skills/align-audit/SKILL.md`'s out-of-scope list, which frames a
+decision settled 2026-07-23 as pending and cites a node that no longer exists.
+The node (`phase: implement`, `owner: ai`) carries any further detail; close it
+with this PR's batch.
+
+*Model: sonnet* — mechanical deletions and doc fix
 
 ### Dependencies
 
@@ -4020,7 +4238,9 @@ Manual, and the first two are the ones that matter:
 
 ### Closing the nodes
 
-After merge, for each of the 7 ids set `phase: done` and
+After merge, for each of the 8 ids listed above — plus
+`tactic-retire-assessor-contract-docs`, the position-9 rider, if it rode this
+PR — set `phase: done` and
 the `execution.completion` object — **not** `resolved_by`, which is not a schema field and is dropped silently (see §"Closing nodes after each merge"). Unit 7's node closes on the recorded
 outcome, not on a diff.
 
@@ -4125,7 +4345,7 @@ All **114** in-scope tactics are assigned; none appears twice.
 | **PR19** | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
 | **PR20** | 8 | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
 | measurement runs | 3 | no diff — `/rsi-audit` |
-| sittings held, nodes still open | 5 | no diff — the sitting discharged the *gate*, not the node; all five are `status: raw`, `phase: null` on `origin/main` and in no PR |
+| sittings held, nodes closed 2026-08-29 | 5 | no diff — the sittings discharged the gates, and the author's 2026-08-29 disposition closed the nodes themselves (`phase: done`, `execution` null, a frontmatter clarification citing each sitting as the completion record) |
 | **total — the 114** | **114** | PRs 106 + measurement 3 + sittings 5 |
 | deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` — **outside the 114** |
 | adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) — **outside the 114** |
@@ -4190,7 +4410,11 @@ supersession work (PR18, PR19, PR20). Every assigned node was re-verified
 > A fourth pass censused both and routed them; with the overhang retired the
 > total becomes **128** — the 114, plus the 13 the overhang absorbed, plus
 > PR5a's one node, which was never in the original scope. It read 131 against
-> the old 117.
+> the old 117. *(This 13 — nodes absorbed by the overhang retirement — is a
+> different set from the table's 13 surveyed-but-unassigned; that the two are
+> numerically equal is coincidence. Likewise this 128 counts absorbed + PR5a
+> work, where the table's 127 counts surveyed-but-unassigned; they are answers
+> to different questions, not a drifted pair.)*
 
 Of the 114, **36 are on the graph read/write path** — PR1's 8, PR15's 2, PR16's
 11, PR17's 6, PR18's 5, PR19's 3 and PR4's `batchIds` unit — plus PR20's
