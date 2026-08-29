@@ -315,13 +315,43 @@ clarifications:
       session's call), so it will be lost with the worktree unless someone
       rescues it. Placement is the author's call — see
       office_hours.recommendation."
+  - question: Is the retained engine content still wanted, now that the decision it
+      was held for went against re-consumption — and what must happen before the
+      prune runs?
+    answer: "RULED 2026-08-29, author present, in the Part I author sitting. NOT
+      WANTED IN-GRAPH — the content may die with this node. The 2026-07-23
+      sitting decided against re-consumption, so the two retained engine
+      specifications (Retained engine 1, the rung-5 dialectic; Retained engine 2,
+      the /align-strategy improvement pass) are no longer being held for a
+      decision, and they need no new in-graph home. The content is not lost:
+      their source directories .claude/skills/align-init/ and
+      .claude/skills/align-strategy/ were deleted from the tree by c845d50f, but
+      verbatim source survives at origin/main commit 44493733, verified present
+      2026-08-29 — which the graph already records at
+      tactic-align-entrypoint-consolidation lines 280-281. A prune therefore
+      destroys the curated retention, not the underlying source. TWO GATES REMAIN,
+      both ruled the same day. (1) The five live content pointers in
+      tactic-align-entrypoint-consolidation (lines 99, 176, 279, 291, 349) must be
+      repointed at commit 44493733 first, and line 291 must be REWRITTEN rather
+      than repointed, because it instructs 'PRESERVE the content, not delete' on
+      the premise — now false — that this node is a live plan for a future
+      /align-audit. (2) The 38-line, 12-node in-graph reference sweep is now
+      scoped by tactic-align-legacy-review-reference-sweep, and this node carries
+      a blocked_by edge to it so the gate is structural rather than prose-only.
+      The stated precondition in the body below — 'prune is owed at a future
+      census once the census-line amendment lands' — is MOOT, not satisfied: D1
+      Ruling 2 withdrew that amendment, so it can never be met as written. Do not
+      run graph-commit --prune on this node until the sweep tactic ships. Note
+      that none of the 38 citations is a structural edge, so the prune passes
+      validate-graph green and every stranded citation fails silently."
 tooling_goals: []
 success_signal: null
 attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-align-legacy-review-reference-sweep
 office_hours: null
 pace_exempt: false
 rounds: null

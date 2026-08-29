@@ -34,6 +34,59 @@ clarifications:
       with a serves-edge scan over `git archive origin/main intentions` rather
       than listNodes, which reads the worktree on-disk and absorbs untracked
       strays."
+  - question: How many charters does the split produce, and where do the boundaries
+      fall?
+    answer: "RULED 2026-08-29, author present, in the Part I author sitting. THREE
+      charters, cut along the strategy body's existing sections. (1) RECORDING
+      SURFACE — Serialization & Commit, Other Settled Mechanism. (2) ROUTER AND
+      SELECTION — Router Mechanism, Phase Transitions & Fix State, Fingerprint &
+      Freeze, Pace/Backlog/Attention, Review & QA Disposition. (3) SESSION
+      LIFECYCLE — Worktree Claiming & Liveness, Recovery & Session Lifecycle,
+      Execution Substrate. Two alternatives were declined: a two-way cut
+      separating only session lifecycle, which leaves the largest unlike-work
+      pairing (recording versus router) still averaged into one ratio and so
+      fails to answer the complaint this node was filed for; and a four-way cut
+      promoting Execution Substrate to its own charter, which would give a fourth
+      denominator too few children to measure anything but noise."
+  - question: After the split, do the children keep serving the parent — and what
+      happens to the parent's defect-ratio signal?
+    answer: "RULED 2026-08-29, author present. EXCLUSIVE RE-SERVE: each child
+      serves exactly one charter, and strategy-graph-native-dispatch's
+      defect-ratio success_signal is RETIRED, replaced by per-charter bands. This
+      is the honest fix — averaging unlike work into one population is the
+      complaint this node was filed for, and dual-serving would preserve the
+      denominator only by preserving the defect. THE MECHANICAL REASON THIS
+      MATTERS, measured 2026-08-29 and not previously recorded anywhere:
+      strategyBacklogBand (packages/intentionsutil/src/census.ts:30-32) selects
+      children with n.serves.includes(strategyId) — DIRECT MEMBERSHIP, WITH NO
+      ANCESTRY WALK. So re-serving children onto charters removes them from the
+      parent's denominator outright; the parent's band would not measure the same
+      population re-cut, it would measure a shrinking rump, and at total === 0 it
+      returns pct null rather than erroring. The earlier carve-out of
+      strategy-discovered-requirements (2026-08-13) hid this because it took only
+      5 of 317 children; a three-way charter split will not. Retiring the parent's
+      ratio is therefore not optional bookkeeping — leaving it in place after an
+      exclusive re-serve produces a signal that reads green because it measures
+      almost nothing. A third option, making the census ancestry-aware so the
+      parent still aggregates, was declined: it changes shared band semantics for
+      every strategy in the graph to solve one strategy's problem."
+  - question: What sequencing and paired code changes does executing this split
+      require?
+    answer: "Recorded 2026-08-29. EXECUTION IS DEFERRED PAST POSITION 12 of the
+      Part II sequence, per D1's ruling, so that re-serving ~317 children cannot
+      invalidate the --base CAS manifests in flight. This node records the spec;
+      it is not the execution. The success_signal edit CANNOT GO THROUGH
+      graph-commit, and the reason is stronger than graph-commit merely excluding
+      non-intentions changes: packages/intentionsutil/test/lifecycle-sensor.test.ts:330
+      asserts that LIFECYCLE_SENSOR_NAME
+      (packages/intentionsutil/scripts/read-sensors.ts:485) equals this
+      strategy's success_signal.sensor VERBATIM, and a second guard in the same
+      file requires every registered sensor name to be recorded by some node.
+      Editing either side alone turns CI red. The node edit, the read-sensors.ts
+      constant and the test must land together in one ordinary branch and PR.
+      Note also that read-sensors.ts hardcodes BACKLOG_STRATEGY_ID =
+      'strategy-graph-native-dispatch' and BACKLOG_BAND_PCT = 35, both of which
+      the retirement makes stale."
 tooling_goals: []
 success_signal: null
 attention: null
