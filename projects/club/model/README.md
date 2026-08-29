@@ -18,6 +18,7 @@ and the prose are both generated from it.
 | `render.mjs` | Writes both. `node model/render.mjs` regenerates everything; `--check` fails when anything is stale. |
 | `verify.mjs` | The model's invariants — the §6 reproduction on §6's own operations figures, the bottom-up operations line reconciling with those figures, every cost carrying provenance, the occupancy residual staying inside its benchmark band, the P&L tree summing to owner comp under both groupings, the marginals, the levers that must not move owner comp. |
 | `evidence.md` | Generated, with an authored frame: every cost with its grade and band, the operations reconciliation against §6, and the ranking of what each estimate is worth if it turns out wrong. The document that says what to go verify first. |
+| `capital-proposal.md` | Authored, not generated. The standing proposal to make required capital a derived output of site geometry, deal terms and a ramp — and to connect it to the owner's bar, which today it does not reach. Diagnosis, greenfield design, and a five-PR migration path. |
 
 ## Changing the model
 
