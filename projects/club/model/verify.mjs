@@ -544,6 +544,43 @@ M.withState({}, () => {
 check("equityK() with a numeric override returns the override verbatim",
   M.withState({ equity: 123 }, () => M.equityK()) === 123);
 
-const groupCount = 28;
+// 29 — the deal reaches required capital. This is the defect the capital layer
+// exists to fix: before it, negotiating a term moved nothing downstream. Each
+// term is asserted against its own arithmetic rather than merely "moves it", so
+// a term wired to the wrong driver fails here instead of passing as movement.
+M.withState({}, () => {
+  const mo = M.SITES[M.S.site].occ / 12;
+  const base = M.requiredCapitalK();
+  const deeper = M.withDeal({ depositMo: M.DEAL.depositMo + 1 }, () => M.requiredCapitalK());
+  check("a month of deposit costs one month of occupancy",
+    near(deeper - base, mo, 1e-9), `${deeper - base} vs ${mo}`);
+  const longer = M.withDeal({ constructionMo: M.DEAL.constructionMo + 1 }, () => M.requiredCapitalK());
+  check("a month of construction costs one month of unabated occupancy",
+    near(longer - base, mo, 1e-9), `${longer - base} vs ${mo}`);
+  const abated = M.withDeal({ constructionMo: M.DEAL.constructionMo + 1 }, () =>
+    M.withState({ abate: M.S.abate + 1 }, () => M.requiredCapitalK()));
+  check("abating that month gives it back",
+    near(abated, base, 1e-9), `${abated} vs ${base}`);
+});
+
+// 30 — the loan reaches the buy path. pricePsf is the graded-D input the buy
+// path's whole cost structure hangs off; withLoan is how evidence.md's
+// reconciliation sweeps it, so the sweep's own contract is asserted here.
+M.withState({ fin: "buy" }, () => {
+  const base = M.debtServiceK();
+  const dearer = M.withLoan({ pricePsf: M.LOAN.pricePsf * 2 }, () => M.debtServiceK());
+  check("debt service scales with the purchase price",
+    near(dearer, base * 2, 1e-9), `${dearer} vs ${base * 2}`);
+  const cheaper = M.withLoan({ ltv: M.LOAN.ltv / 2 }, () => M.requiredCapitalK());
+  check("a lower LTV raises required capital (a bigger down payment)",
+    cheaper > M.requiredCapitalK(), `${cheaper} vs ${M.requiredCapitalK()}`);
+  const reconciling = M.buyPricePsfForStated();
+  check("buyPricePsfForStated() reproduces the stated buy occupancy",
+    near(M.withLoan({ pricePsf: reconciling }, () => M.builtBuyOccupancyK()),
+      M.statedBuyOccupancyK(), 1e-6),
+    `at $${reconciling}/sf`);
+});
+
+const groupCount = 30;
 console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and ${groupCount} invariant groups pass`);
 process.exit(failures ? 1 : 0);

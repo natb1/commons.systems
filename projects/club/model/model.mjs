@@ -662,7 +662,10 @@ export function buyPricePsfForStated(){
 }
 
 // ---- the cash gate, on both paths -------------------------------------------
-export function cashK(){ return requiredCapitalK(); }   // G2 cash at risk: the sources-and-uses total
+// The old cashK() lived here. It meant "venture cash at risk on the lease path"
+// and returned an input echo; requiredCapitalK() now derives that number and is
+// the honest name for it, so keeping a second name for the same quantity only
+// invites reading the old meaning into the new figure.
 export function reserveK(){ // cash left to absorb operating losses after the capital spend
   return S.cash - (requiredCapitalK() - workingCapitalK());
 }
