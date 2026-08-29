@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Local-only skill provenance gate. See .claude/rules/vendored-skills.md.
+#
+# Runs the drift and shadow checks that CI structurally cannot: both need this
+# machine's Claude skill roots (~/.claude/skills and its synced buckets), which a
+# CI runner does not have. The integrity half of the same script still runs on
+# every PR through run-lint.sh, so nothing here is CI's only line of defence.
+#
+# Scoped to commits that touch .claude/skills/. Drift can also appear with no
+# commit at all -- upstream moves on its own -- and blocking an unrelated commit
+# on that would stall work nobody involved caused. Run the check by hand to see
+# that case:
+#
+#   .claude/skills/dispatch-propagate/scripts/lint-vendored-skills.sh --local
+#
+# Bypass a single commit with `git commit --no-verify` if you must.
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+LINTER="$REPO_ROOT/.claude/skills/dispatch-propagate/scripts/lint-vendored-skills.sh"
+
+# Absent on a checkout predating the linter; nothing to enforce there.
+[ -x "$LINTER" ] || exit 0
+
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '^\.claude/skills/'; then
+  exit 0
+fi
+
+echo "=== vendored-skill lint (drift + shadow) ==="
+if ! "$LINTER" --local; then
+  echo "pre-commit: vendored-skill lint failed; commit refused." >&2
+  echo "Bypass with 'git commit --no-verify' if this is deliberate." >&2
+  exit 1
+fi

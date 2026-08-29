@@ -5,7 +5,7 @@ statement: Derive the reprioritization delta and the post-hoc outcome audit —
   did tactics /rsi-evaluate front-loaded actually close faster than the queue
   baseline
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Split out 2026-08-11 after adversarial review of the round that
   created strategy-rsi-delegated-prioritization. That strategy names this
@@ -95,202 +95,514 @@ clarifications:
       success_signal, and tooling_goals, and tacticScopeFingerprint hashes
       statement plus body only — so the serving strategy's fingerprint
       conditions on priority_log and measured_impact both hold."
+  - question: Two batch-plan docs still say this node is parked on an open author
+      ruling — is that a live blocker?
+    answer: "(Verified 2026-08-29 by the /align-tactics per-node finalize pass.) The
+      PR14 entries in plans/dispatch-rsi-serialized-pr-plan.md:2427 and the
+      position-8 row in plans/dispatch-rsi-sequence.md:35 still read \"parked on
+      an author ruling ... still open\" for this node. That is stale, not a live
+      blocker: the author ruled observable (a) on 2026-08-29 (disposition A,
+      ratified as proposed, recorded as a clarification on
+      strategy-rsi-delegated-prioritization in commit 2c806848), and this node's
+      office_hours park was cleared in commit 06ba043e with the plan write
+      explicitly handed to /align-tactics. Read the graph, not the plan doc:
+      baseline = closed owner: ai tactics with no priority_log entry in the
+      window, interval = node creation date to phase-done commit date for BOTH
+      cohorts, the priority_log entry date partitions cohorts and bounds the
+      per-iteration delta and is never a start point. Do not re-park this node
+      on the plan doc's word."
+  - question: Who sets the "insufficient data" floor for the outcome audit, and does
+      changing it need an author sitting?
+    answer: (Recorded 2026-08-29 by the /align-tactics per-node finalize pass.) The
+      "insufficient data" floor is set by the plan, not by the author. The
+      body's standing doctrine is the constraint — a median computed from three
+      closures is worse than an admission, because this section exists to be the
+      check on the model's own judgment and a check that always answers is not a
+      check — so the plan names an explicit minimum front-loaded-cohort size,
+      states that number in the section's own output line rather than hiding it,
+      and reports "insufficient data (n=<N>, floor <F>)" below it. The floor is
+      derived on read with no stored state, so revising it later invalidates
+      nothing and needs no author sitting. With priority_log carrying zero
+      entries on main today (zero code, zero schema, zero validate-graph rule;
+      prose in eight node files, re-verified this pass), the section reads
+      "insufficient data" from the day it lands, which is the honest reading and
+      not a failure.
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
-validates: []
+validates:
+  - strategy-rsi-delegated-prioritization
 blocked_by: []
-office_hours:
-  reason: >-
-    Requirement ambiguity — the plan for this node cannot be written without an
-    author ruling on what observable (a) actually measures.
-    strategy-rsi-delegated-prioritization's success_signal says "the median
-    closure interval of tactics the model front-loaded, against the dispatch
-    queue's baseline closure interval" and never defines EITHER of the two
-    quantities this node must compute. (i) The BASELINE COHORT: all closed
-    owner:ai tactics in the window (which includes the front-loaded ones), or
-    the COMPLEMENT set of closed tactics carrying no attributes.priority_log
-    entry? (ii) The INTERVAL START POINT: node creation, first phase entry, or
-    the priority_log entry date itself? Grep across intentions/ finds "closure
-    interval" only in the signal's own restatement
-    (strategy-rsi-delegated-prioritization.md:277 and :287) and in this node's
-    body — no clarification anywhere fixes either quantity. The choice is not
-    cosmetic. A baseline that includes the front-loaded population is
-    self-contaminating and biases the comparison toward parity, weakening the
-    very check this node exists to be. And measuring a front-loaded node's
-    interval from its boost date (the natural "did the boost help" reading) is
-    not commensurable with a control cohort that has no boost date, while
-    measuring from creation charges the boosted node for the queue time the
-    boost was meant to remove. Different admissible readings make the recorded
-    threshold ("front-loaded tactics close at or below the baseline interval
-    across consecutive iterations") easier or harder to meet. This is the
-    author's call and not a delegated one: this strategy's third recorded
-    condition reserves it — "the fitness function stays recorded and
-    author-owned — the model optimizes toward it and never redefines it; a
-    proposed change to the criterion is an /align escalation, not a delegated
-    write". The graph carries direct precedent for escalating exactly this class
-    of gap: clarification 8 records that the (b) half's unnamed quantity
-    "blocked the implementing tactic", was settled by the author at
-    office-hours, and was then enrolled for re-validation as
-    tactic-review-band-derivation-ratification. 
-
-
-    PROPOSED CLARIFICATION, paste-ready — question: "Against which population,
-    and from which start point, is observable (a)'s closure interval measured?"
-    Proposed answer, for the author to ratify or overturn: Against which
-    population, and from which start point, is observable (a)'s closure interval
-    measured? Proposed answer for author ratification: the baseline cohort is
-    the COMPLEMENT — closed owner:ai tactics carrying no attributes.priority_log
-    entry in the window — so the front-loaded set never contaminates its own
-    control; and the interval runs from node creation to the phase-done commit
-    date for BOTH cohorts (the quantity read-sensors.ts:576-599 already
-    derives), with the priority_log entry date used only to partition the two
-    cohorts and to bound the per-iteration delta, never as a start point — a
-    boost-dated start would make the two cohorts incommensurable. Rationale for
-    the author to accept or overturn: this is the stricter of the admissible
-    readings and the only one under which a front-loaded cohort can genuinely
-    score WORSE than baseline, which the node's own body requires ("a sustained
-    result showing front-loaded nodes closing no faster than baseline is
-    evidence the delegated reordering is not earning its authority"). If the
-    author prefers the boost-dated start, the threshold's meaning changes and
-    the strategy's success_signal text should change with it.
-
-
-    NOT blocking, recorded so the resuming pass need not re-derive it. (1) No
-    Side A condition failed: strategyFingerprint
-    (packages/intentionsutil/src/router.ts:103-112) hashes only statement,
-    clarifications, attributes.conditions, serves, success_signal and
-    tooling_goals, so conditions 2 and 5 — attributes.priority_log and
-    attributes.measured_impact staying outside the substance fingerprints — both
-    hold. (2) The deliberate ABSENCE of a blocked_by on
-    tactic-rsi-audit-prioritization-writer is already recorded in this node's
-    body and must be preserved: this node is buildable against the field as
-    written and reads "insufficient data" until entries exist, which is the
-    honest reading and not a failure. (3) The empty attributes.priority_log is
-    empty BY CONSTRUCTION (zero code on main — grep over packages/,
-    .claude/skills, .claude/workflows and .claude/hooks returns only prose at
-    .claude/skills/rsi-audit/SKILL.md:474 and :480), not an unmeasured backlog.
-    (4) The right side of the join DOES exist and needs no new derivation:
-    readLifecyclePhaseHistory
-    (packages/intentionsutil/scripts/read-sensors.ts:536, the per-path
-    phase/date collection at :579-599) already derives a per-tactic latest
-    phase-done date behind an owner:ai gate, and gitEntryDate
-    (packages/intentionsutil/scripts/ledger-census.ts:154) already derives a
-    node's first-add date. (5) Caveat on the other closure source:
-    execution.completion.mergedAt (packages/intentionsutil/src/schema.ts:665) is
-    present on only 103 of the 160 phase:done nodes, so a median over it alone
-    is survivorship-biased — the interface's own comment at :660-663 names that
-    hole. 
-
-
-    MECHANICAL NOTE on this round, not a graph judgment: two of the six Workflow
-    subagents died on a deterministic StructuredOutput retry cap (the
-    clause-coverage evidence agent and one of three reuse hunts). The Opus drift
-    agent itself ran to completion and this park is its verdict, independently
-    corroborated by the caller thread, which flagged the same start-point gap
-    before the Workflow ran. The Side A pass is therefore partly unevidenced by
-    the dead clause agent — but conditions 2 and 5 were verified directly
-    against router.ts as noted above, and the remaining conditions govern
-    attention writes and ledger merging, which this read-only measurement node
-    does not perform.
-  since: 2026-08-20
-  recommendation: "Rule on the proposed clarification above, then clear the park
-    and re-run /align-tactics tactic-rsi-reprioritization-outcome-audit — the
-    finalize needs nothing else. Three dispositions, in the order they are most
-    likely right. (A) RATIFY AS PROPOSED — baseline = the complement cohort
-    (closed owner:ai tactics with no priority_log entry in the window); interval
-    = node creation to phase-done commit date for BOTH cohorts; the priority_log
-    entry date partitions the cohorts and bounds the per-iteration delta but is
-    never a start point. This is the stricter admissible reading and the only
-    one under which the front-loaded cohort can genuinely score WORSE than
-    baseline — which this node's own body demands (\"a sustained result showing
-    front-loaded nodes closing no faster than baseline is evidence the delegated
-    reordering is not earning its authority\"). Record it as a clarification on
-    strategy-rsi-delegated-prioritization via /align. (B) OVERTURN toward a
-    boost-dated start — if you want the interval to measure \"did the boost
-    help\" from the boost forward, say so; but note the two cohorts then become
-    incommensurable (the baseline cohort has no boost date by construction), so
-    the threshold's meaning changes and success_signal.threshold should be
-    rewritten in the same /align round rather than left as-is. (C) DEFER THE
-    WHOLE NODE — if the definition is genuinely not settleable until real
-    priority_log entries exist, say so and leave this node parked; it then waits
-    on tactic-rsi-audit-prioritization-writer (itself blocked_by
-    tactic-attention-namespaced-rank) rather than on a ruling. Note this is a
-    real cost, not a neutral hold: until this node lands,
-    strategy-rsi-delegated-prioritization's outcome half has no carrier and its
-    signal cannot be read at all. Whichever you pick, the ruling belongs on the
-    STRATEGY (the criterion is the strategy's), not on this tactic — a per-node
-    /align-tactics session may not write the serving strategy, which is why this
-    is in front of you rather than already recorded. Related and worth ruling in
-    the same sitting: tactic-review-band-derivation-ratification is the
-    born-parked re-validation of the SAME signal's (b) half, settled on trust in
-    2026-08-12."
-  session_type: requirement-discovery
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # Derive the reprioritization delta and the post-hoc outcome audit — did tactics /rsi-evaluate front-loaded actually close faster than the queue baseline
-## Scope (split out 2026-08-11 after adversarial review)
 
-This is the **sensor** named by `strategy-rsi-delegated-prioritization`'s
-success signal. Until it lands, that strategy's outcome half — observable
-(a), "the median closure interval of tactics the model front-loaded, against
-the dispatch queue's baseline closure interval" — cannot be read at all.
+(The H1 reproduces the frontmatter `statement` verbatim, including the retired
+`/rsi-evaluate` name. Per the 2026-08-13 clarification the statement is left as
+written because it is a dated record; the carrier is `/rsi-audit`, and this body
+is what makes the statement readable as a record rather than an instruction.)
 
-All work is in `packages/intentionsutil/scripts/render-rsi-plan.ts`. It sits
-here rather than under the surface child because *deriving* the measurement
-answers to this strategy; *rendering* it into rsi-plan.md is the surface
-child's concern, and the two happen to share a file.
+## Context
 
-### Per-iteration reprioritization delta
+This is the **sensor** named by `strategy-rsi-delegated-prioritization`'s success
+signal. Its observable (a) — "the median closure interval of tactics the model
+front-loaded, against the dispatch queue's baseline closure interval" — cannot be
+read at all until this node lands. Nothing else in the graph computes it.
 
-Render what `/rsi-evaluate` moved this iteration, from `attributes.priority_log`
-entries dated within it. This is the "what changed" half — it reports the
-model's actions without judging them.
+Three facts set the shape of the work, and each supersedes prose that stood in
+this body before this plan replaced it:
 
-### The outcome audit
+1. **The carrier is `/rsi-audit`, not a renderer.** The original body said "All
+   work is in `packages/intentionsutil/scripts/render-rsi-plan.ts`". That file was
+   deleted by the PR-3074 collapse (`tactic-rsi-plan-render-retire`, phase done),
+   and `/rsi-evaluate` was retired unbuilt. Both halves — the per-iteration
+   reprioritization delta and the post-hoc outcome audit — become an `/rsi-audit`
+   report section in the **unranked, non-lens Step 7 form**
+   (`.claude/skills/rsi-audit/SKILL.md:199-202` for the bullet template,
+   `:240-269` and `:419-486` for the full-section template): *not* a thirteenth
+   lens, *not* ranked by `price_proxy_usd`, rendered on every fleet-scoped run.
+   The original body's Dependencies bullet deferring "Section 6's typing and the
+   renderer's FLAG kinds" to `tactic-rsi-plan-priority-render` names a node pruned
+   from `intentions/` on 2026-08-13; that bullet is deleted, not carried forward.
+2. **The measurement itself is unchanged**, as the 2026-08-13 and 2026-08-20
+   clarifications record it: join `attributes.priority_log` entry dates with node
+   closure dates, derived on read, no new stored state (the same doctrine as rank
+   itself), and report **"insufficient data" honestly** rather than a median
+   computed from three closures.
+3. **The 2026-08-29 author ruling fixes the cohorts and the interval** (strategy
+   clarification, disposition (A) of this node's own office-hours park, ratified
+   as proposed):
+   - **Front-loaded cohort** = closed `owner: ai` tactics carrying at least one
+     `attributes.priority_log` entry dated inside the window.
+   - **Baseline cohort** = the *complement*: closed `owner: ai` tactics with no
+     `priority_log` entry inside the window.
+   - **Interval, for BOTH cohorts** = node creation date → phase-done commit date.
+   - The `priority_log` entry date **partitions the cohorts and bounds the
+     per-iteration delta; it is never a start point.** A boost-dated start would
+     make the two cohorts incommensurable, because the baseline cohort has no
+     boost date by construction. This is the stricter admissible reading and the
+     only one under which the front-loaded cohort can genuinely score **worse**
+     than baseline — which this node's own doctrine requires (below).
 
-Derived at render time by joining `priority_log` entry dates with node closure
-dates: **did the nodes the model front-loaded close faster than the queue's
-baseline closure interval?** No new stored state — derived-on-read, the same
-doctrine as rank itself.
+**The adversarial reading is load-bearing, not a caveat.** A sustained result
+showing front-loaded nodes closing *no faster* than baseline is evidence the
+delegated reordering is not earning its authority, and must be surfaced as such
+rather than buried as a null result. A check that always answers favourably is not
+a check. This is why the verdict line names both directions explicitly and why the
+"insufficient data" branch exists as a first-class outcome rather than a fallback.
 
-Render **"insufficient data"** honestly until enough reprioritized nodes have
-closed to support a median. A confident number computed from three closures is
-worse than an admission, because this section exists to be the check on the
-model's own judgment, and a check that always answers is not a check.
+**What is honestly unreadable today, and why that is not a failure.**
+`attributes.priority_log` has no writer anywhere on `main` — it is prose in eight
+node files, with no schema entry, no `validate-graph` rule, no reader and no
+writer. So the join has an empty left side by construction and this section will
+print "insufficient data" on its first run. That is the correct output, not a
+defect: the actuator (`tactic-rsi-audit-prioritization-writer`, itself blocked on
+`tactic-attention-namespaced-rank`) is deliberately **not** recorded as a
+`blocked_by` here. This node builds against the field as currently specified and
+reads "insufficient data" until entries exist.
 
-This is the post-hoc fitness audit the steelman mitigation on
-`strategy-rsi-delegated-prioritization` names. Its adversarial reading matters
-as much as its favourable one: a sustained result showing front-loaded nodes
-closing *no faster* than baseline is evidence the delegated reordering is not
-earning its authority, and should be surfaced as such rather than buried as a
-null result.
+### Boundaries carried forward
 
-### Dependencies and boundaries
+- **No `blocked_by`, by design.** The field's schema, cap and lint are
+  `tactic-priority-provenance-schema` (also under this strategy). This node can be
+  built against the field as written (`{date, old→new, rationale}`, append-only,
+  capped ~10 — `intentions/tactic-priority-provenance-schema.md:61` region). If
+  that tactic changes the shape, **whichever lands second reconciles**; this plan
+  concentrates every read of the field in one exported function so that
+  reconciliation has a single site (Unit 2).
+- **The integrity half of the strategy's signal is NOT here.** Observable (b) —
+  attention writes onto a strategy's own attention block, plus attention writes
+  carrying no `priority_log` entry — is `validate-graph` lint belonging to
+  `tactic-priority-provenance-schema`. (Note the 2026-08-28 amendment: the old
+  "cross-strategy rank inversion count" framing is retired language, structurally
+  zero and measuring nothing. Do not implement or cite it.)
+- **No fingerprint risk.** `strategyFingerprint`
+  (`packages/intentionsutil/src/router.ts:103`) hashes only statement,
+  clarifications, `attributes.conditions`, serves, success_signal and
+  tooling_goals; `tacticScopeFingerprint` (`:132`) hashes statement plus body
+  only. Neither hashes `attributes.priority_log` or `attributes.measured_impact`,
+  so a derived-on-read join over those fields can never trip scope custody or
+  freeze an open child. Verified 2026-08-20 and re-verified for this plan — this
+  is a fact to rely on, not something to re-check at implementation time.
+- **No new sensor registry entry.** The strategy names *this section of the
+  `/rsi-audit` report* as its sensor, not a `read-sensors.ts` reading. Adding a
+  dated `success_signal.reading` is explicitly out of scope for every unit below.
 
-- **No `blocked_by`.** It reads `attributes.priority_log`, whose schema and
-  lint are `tactic-priority-provenance-schema` (also under this strategy), and
-  it can be built against the field as currently written. If that tactic
-  changes the shape, whichever lands second reconciles.
-- The **integrity** half of this strategy's signal — cross-strategy rank
-  inversions and attention writes carrying no `priority_log` entry — is *not*
-  here. It is `validate-graph` lint, and it belongs to
-  `tactic-priority-provenance-schema`.
-- Section 6's typing and the renderer's FLAG kinds stayed with
-  `tactic-rsi-plan-priority-render` under the surface child.
+---
 
-### Verification
+## Unit 1 — Shared git-derived node lifecycle dates, and one `isAiOwnedAt`
 
-- With no `priority_log` entries anywhere, the section renders "insufficient
-  data" and does not error.
-- Seed a `priority_log` entry for a node that has since closed, and confirm
-  the join finds it and reports its interval against the baseline.
-- Confirm the delta lists only entries dated within the current iteration,
-  not the whole log.
-- Confirm the audit's output is reachable from `/rsi` without hand-computation
-  — it is the reading that fills this strategy's signal, so if a human has to
-  derive the median themselves, the sensor is not built.
+**Scope.** New file `packages/intentionsutil/scripts/lib-node-lifecycle-dates.ts`
+(script layer, not `src/`, because it shells out to git — the same rule that keeps
+`lib-store-at-ref.ts` out of `src/`, stated at
+`packages/intentionsutil/scripts/lib-store-at-ref.ts:1-12`). Exports:
+
+- `assertNotShallowRepository(repoRoot: string): void` — moved verbatim (message
+  included) from the inline guard inside `gitEntryDate`
+  (`packages/intentionsutil/scripts/ledger-census.ts:154-166`): `git rev-parse
+  --is-shallow-repository`, throwing when `true`, because a shallow boundary makes
+  `--diff-filter=A` report every path present there as newly Added and yields a
+  plausible-but-wrong (too-recent) date.
+- `isAiOwnedAt(repoRoot: string, commitHash: string, filePath: string): boolean` —
+  the single home for `git show <commit>:<path>` + `/^owner:\s*ai\s*$/m`, keeping
+  the existing degrade-to-`false`-on-lookup-failure posture (a total-sensor
+  contract, not a silent fallback — the sensors depend on it).
+- `parseCreationDates(log: string): Map<string, string>` — pure parser over
+  `--format=%H %cI --name-only --diff-filter=A` output. git lists newest-first, so
+  **the last add seen for a path wins** (the earliest add). Same last-line-wins
+  rule as `parseEntryDate` (`ledger-census.ts:137`), generalized from one id to a
+  whole-tree pass.
+- `parseDoneDates(patch: string, isAiOwned: (commit: string, path: string) =>
+  boolean): Map<string, string>` — pure parser over `git log -p --diff-filter=AM
+  --no-renames --format=%H %cI` output, collecting per path the **latest**
+  `+phase: done` added line whose commit passes the ownership gate. Loop shape
+  copied from `read-sensors.ts:580-616` (commit line `/^([0-9a-f]{40}) (\S+)$/`,
+  header `/^diff --git a\/(\S+) b\/(\S+)$/`, phase add `/^\+\s*phase:\s*(\S+)\s*$/`,
+  date via `commitDate.slice(0, 10)`).
+- `readTacticLifecycleDates(repoRoot: string): Map<string, { created: string; done:
+  string | null }>` — keyed by repo-relative path (`intentions/tactic-*.md`). Calls
+  `assertNotShallowRepository`, then runs the two git passes above (`maxBuffer: 64
+  * 1024 * 1024`, matching the existing sensors) and folds them.
+
+Refactors, behavior-preserving:
+
+- `packages/intentionsutil/scripts/read-sensors.ts:350` and `:566` — the two
+  verbatim private `isAiOwnedAt` copies — are deleted and both call sites import
+  the shared one, passing `repoDir` as the new first argument.
+- `packages/intentionsutil/scripts/ledger-census.ts:154-166` — the inline shallow
+  guard is replaced by a call to `assertNotShallowRepository(root)`.
+
+**Out of scope.** Do NOT restructure `readTacticVelocity`
+(`read-sensors.ts:314`) or `readLifecyclePhaseHistory` (`:536`) beyond swapping
+the helper. In particular `readLifecyclePhaseHistory` keeps its own patch loop:
+it also collects the full per-path *phase set* for `LIFECYCLE_REQUIRED_PHASES`
+(`:505`), which the new reader does not need, so replacing its loop would either
+add a second git pass or widen the new reader's contract. Do not change
+`gitEntryDate`'s `%as` date kind — its use is a census display, not interval
+arithmetic. Do not touch any sensor's returned string format.
+
+**Note on date kinds.** The new reader uses committer date (`%cI`, sliced to
+`YYYY-MM-DD`) for **both** endpoints, matching `readLifecyclePhaseHistory`. Both
+ends of an interval must come from the same clock; `gitEntryDate`'s author date
+(`%as`) is deliberately not reused for the creation endpoint.
+
+**Recommended model**: opus.
+
+## Unit 2 — Pure derivation module `src/reprioritization.ts`
+
+**Dependencies.** Unit 1 (for the `NodeLifecycle` shape it consumes; the module
+itself imports nothing from Unit 1 at runtime).
+
+**Scope.** New file `packages/intentionsutil/src/reprioritization.ts`, **fs-free,
+git-free and process-free**, exactly like `packages/intentionsutil/src/spend.ts:1-17`
+states its own contract. This is the reuse-first split the audit's own sibling
+already established: derivation in `src/`, I/O and rendering in the thin CLI, so
+the figure has one definition and cannot grow a second denominator.
+
+Exports:
+
+- `interface PriorityLogEntry { date: string; move: string | null; rationale: string
+  | null }`.
+- `readPriorityLog(attributes: unknown): { entries: PriorityLogEntry[]; malformed:
+  number }` — **the single site that knows the field's shape.** Narrow with the
+  `isPlainObject` style already used in `packages/intentionsutil/src/schema.ts:510-513`
+  and `:536-537`; never an `as` cast (avoids a suppression marker under
+  `.claude/rules/type-safety-suppression-marker.md`). An entry is well-formed when
+  it is a plain object with a `date` string matching `/^\d{4}-\d{2}-\d{2}$/`.
+  `rationale` is read when it is a string, else `null`. `move` is built from
+  whichever of `old`/`new`, `from`/`to`, or a single `old_new`/`move` string field
+  is present, else `null` — the recorded shape is prose (`{date, old→new,
+  rationale}`), so read tolerantly and let `tactic-priority-provenance-schema`
+  tighten it later. Entries that are not well-formed are **counted, not silently
+  dropped** (`.claude/rules/code-style.md`); the count surfaces in the report.
+- `interface NodeLifecycle { id: string; created: string; done: string | null;
+  ownerAi: boolean; log: PriorityLogEntry[] }`.
+- `intervalDays(created: string, done: string): number` — both parsed as
+  `Date.parse(\`${d}T00:00:00Z\`)`, difference in whole days, clamped at `>= 0`.
+- `median(values: number[]): number | null` — `null` on empty; mean of the two
+  middles when even.
+- `interface Window { since: string; until: string }` and `inWindow(date, window)`
+  — inclusive on both ends.
+- `deriveDelta(nodes: NodeLifecycle[], window: Window): DeltaRow[]` — one row per
+  `priority_log` entry **dated inside the window**, `{ id, date, move, rationale }`,
+  sorted by date ascending then id ascending. Rows come from every `owner: ai`
+  tactic, closed or not: the delta reports what moved, and an open node that was
+  boosted this window is exactly what it exists to show. It **reports without
+  judging** — no verdict, no ranking.
+- `deriveOutcomeAudit(nodes: NodeLifecycle[], window: Window): OutcomeAudit` —
+  implements the 2026-08-29 ruling literally:
+  - Population = nodes with `ownerAi === true` and `done !== null` and `done`
+    inside the window ("closed … in the window").
+  - `frontLoaded` = population members with ≥1 `priority_log` entry dated inside
+    the window; `baseline` = the exact complement of that population.
+  - Each member's interval is `intervalDays(created, done)`. **The entry date is
+    never a start point.**
+  - Result `{ frontLoaded: { n, medianDays }, baseline: { n, medianDays }, verdict,
+    malformed }` where `verdict` is one of `"insufficient-data"`,
+  `"at-or-below-baseline"`, `"above-baseline"`.
+  - `verdict` is `"insufficient-data"` whenever either cohort has fewer than
+    `MIN_COHORT_N` members. Export `export const MIN_COHORT_N = 5` with a comment
+    recording *why* the constant exists: "a confident number computed from three
+    closures is worse than an admission, because this section is the check on the
+    model's own judgment, and a check that always answers is not a check." Five is
+    a plan-set floor, not an author ruling — it is a single exported constant so a
+    later author decision moves it in one place.
+  - Otherwise `"at-or-below-baseline"` when `frontLoaded.medianDays <=
+    baseline.medianDays`, else `"above-baseline"`.
+
+**Out of scope.** No file reads, no `execFileSync`, no `process.*`, no rendering
+(the strings live in Unit 3, mirroring `attribute-spend.ts`'s split where
+`renderSpendFold` sits in the script and the fold sits in `src/spend.ts`). No
+`validate-graph` rule and no schema entry for `priority_log` — that is
+`tactic-priority-provenance-schema`'s scope.
+
+New test file `packages/intentionsutil/test/reprioritization.test.ts` covering, at
+minimum: empty store → `insufficient-data` with `n: 0` on both cohorts; a
+front-loaded cohort of 5 that beats a baseline of 5 → `at-or-below-baseline`; the
+same data with the medians reversed → `above-baseline` (the adversarial direction
+must be reachable and asserted); a node boosted *before* the window but closed
+inside it landing in the **baseline** cohort, per the literal ruling; malformed
+entries counted rather than dropped; `intervalDays` never negative.
+
+**Recommended model**: opus.
+
+## Unit 3 — Thin CLI `scripts/reprioritization-audit.ts`
+
+**Dependencies.** Units 1 and 2.
+
+**Scope.** New file `packages/intentionsutil/scripts/reprioritization-audit.ts`,
+structured as a **thin CLI over the `src/` module**, exactly as
+`packages/intentionsutil/scripts/attribute-spend.ts:1-35` documents its own shape
+and its reason ("re-deriving the shares here … would give the fitness function two
+denominators that could disagree").
+
+Behavior:
+
+- Flags: `--days <N>` (default `7`, matching `/rsi-audit`'s default window),
+  `--now <YYYY-MM-DD>` (default today UTC — present so tests and backfills are
+  deterministic), `--ref <ref>` (default `origin/main`), `--repo <abs path>`
+  (default: repo root resolved three directories up from this file, the same
+  script-location rule stated at
+  `packages/intentionsutil/scripts/office-hours-select.ts:100-105` and
+  `ledger-census.ts:22-27`; the override exists so a caller can name the checkout
+  explicitly rather than relying on where the script happens to live).
+- Reads the store with `listNodesAtRef(repoRoot, ref)`
+  (`packages/intentionsutil/scripts/lib-store-at-ref.ts`), the same helper
+  `office-hours-select.ts:90` uses — never a hand-parse of `intentions/*.md`, and
+  never the working tree by default (a stale worktree reports stale attention with
+  no signal that the answer is old). Filters to `kind === "tactic"` and
+  `owner === "ai"`.
+- Reads dates with `readTacticLifecycleDates(repoRoot)` from Unit 1, joins by
+  `intentions/<id>.md`, folds with Unit 2.
+- Renders two labeled blocks to stdout, exported as pure functions
+  (`renderDelta`, `renderOutcomeAudit`) so they are testable without a git fixture,
+  the way `renderSpendFold` is:
+  - **Reprioritization delta — `<since>`..`<until>`**: a `node | entry date | move
+    | rationale` table, or the line `No priority_log entries dated in this window.`
+    when empty. Followed by the bound: this reports what moved; it does not judge
+    it.
+  - **Reprioritization outcome audit**: `front-loaded n=<x> median <a>d` /
+    `baseline (complement) n=<y> median <b>d`, then one verdict line —
+    `INSUFFICIENT DATA — need >= 5 closures in each cohort`, or
+    `front-loaded median <a>d vs baseline <b>d — AT OR BELOW baseline`, or
+    `front-loaded median <a>d vs baseline <b>d — ABOVE baseline: the delegated
+    reordering is not earning its authority in this window`. Then three standing
+    caveat lines: (i) the interval is node creation → phase-done commit for both
+    cohorts and the `priority_log` entry date partitions only; (ii) the strategy's
+    threshold is "across consecutive iterations", so one window never settles it;
+    (iii) `malformed priority_log entries: <n>` when nonzero, following the
+    `files_failed if nonzero` posture at `.claude/skills/rsi-audit/SKILL.md:190`.
+- Exit codes mirroring `attribute-spend.ts:26-35`: **`0` when the audit printed,
+  including "insufficient data" and including the `ABOVE baseline` verdict** (a
+  finding is a finding, not a failed run); `1` when the measurement could not be
+  taken (store unreadable at `ref`, shallow checkout) — never a fabricated empty
+  population, since an empty fold would silently read as a clean pass; `2` usage.
+- `main` guarded by the `import.meta.url === pathToFileURL(process.argv[1]).href`
+  idiom already used at the bottom of `attribute-spend.ts`.
+
+New test file `packages/intentionsutil/test/reprioritization-audit.test.ts`
+exercising `renderDelta` / `renderOutcomeAudit` on in-memory fixtures (no git), and
+`packages/intentionsutil/test/node-lifecycle-dates.test.ts` exercising Unit 1's
+pure parsers plus one end-to-end pass over a fixture git repo. Build the fixture
+repo with the `tempDir` / `git` / `initRepo` helpers copied from
+`packages/intentionsutil/test/lifecycle-sensor.test.ts:26-45` — those helpers are
+file-local and already duplicated across the sensor tests, so replicating them is
+the established pattern here, not new duplication to avoid.
+
+**Out of scope.** No writes of any kind: no node file, no `attention`, no
+`priority_log` append, no sensor registry entry, no `success_signal.reading`. The
+writer is `tactic-rsi-audit-prioritization-writer`.
+
+**Recommended model**: sonnet.
+
+## Unit 4 — Wire the section into `/rsi-audit`
+
+**Dependencies.** Unit 3 (the CLI it names must exist and run).
+
+**Scope.** `.claude/skills/rsi-audit/SKILL.md` only. Two edits, both copying the
+existing unranked-section template rather than inventing prose structure:
+
+1. Add one Step 7 bullet immediately after the **Strategy attention
+   recommendations** bullet at `:202`, mirroring the sentence shape of `:199-202`
+   exactly: a separate labeled, **fleet-only** section, rendered on EVERY
+   fleet-scoped run, AFTER the ranked opportunities list; **not** a thirteenth lens
+   and **not** ranked by `price_proxy_usd` (it carries no cost-magnitude figure at
+   all, the same reasoning that keeps the spend fold, the parked survey and routing
+   recommendations out of the numbered list); pointing down to the new section
+   below.
+2. Add a `## Reprioritization delta and outcome audit` section after `## Strategy
+   attention recommendations` (which ends at `:486`) and before `## Per-session
+   artifact join` (`:487`). It must state:
+   - The run command — `npx tsx packages/intentionsutil/scripts/reprioritization-audit.ts
+     --days <N>` — and the instruction to **reproduce its rows and verdict line
+     verbatim**, exactly as the Per-workflow spend fold does at `:199` and
+     `:220-238`.
+   - **Do not recompute this in jq or by hand.** The cohorts, the interval and the
+     `MIN_COHORT_N` floor are defined once, in
+     `packages/intentionsutil/src/reprioritization.ts`; a second copy is a second
+     definition of the strategy's own fitness reading. Same discipline the spend
+     fold states at `:230` and the parked survey at `:267-269`.
+   - **FLEET-ONLY**, for the reason the Parked-population survey gives at
+     `:240-246`: the graph's closure population is a property of the whole store,
+     not of one session, so a `--session`/`--node`-scoped evaluator skips it.
+   - **This section MEASURES, never JUDGES which reorderings were right** — it
+     reports the delta and the interval comparison; whether a given boost was wise
+     is an author call at office hours.
+   - The `ABOVE baseline` verdict is a **finding to surface, not a null result to
+     bury**: it is evidence the delegated reordering is not earning its authority.
+     Say so in the report rather than noting the number and moving on — the same
+     obligation the `SPEND-DEVIATION FLAG` carries at `:234-238`.
+   - The `INSUFFICIENT DATA` escape hatch, and that it is the **expected** output
+     until `tactic-rsi-audit-prioritization-writer` lands (mirroring the honest
+     "no strategy attention recommendations this window" line at `:469-471`).
+     Cross-reference the existing "The write half is deliberately not built here"
+     paragraph at `:472-486` rather than restating it.
+   - The bound: this section reads the *audit* half of
+     `strategy-rsi-delegated-prioritization`'s paired signal. The integrity half
+     (observable (b)) is `validate-graph` lint under
+     `tactic-priority-provenance-schema`, and neither half alone is a pass.
+
+**Out of scope.** No change to the twelve-lens roster, to Step 5's ranking rule, to
+Step 6's ledger write, or to the no-routing-policy bound at `:206`. No change to
+any other skill.
+
+**Recommended model**: sonnet.
+
+---
+
+## Reuse
+
+- `packages/intentionsutil/scripts/read-sensors.ts:314` `readTacticVelocity` and
+  `:536` `readLifecyclePhaseHistory` — the established `git log -p --diff-filter=AM
+  --no-renames --format=%H %cI` + added-`+phase: done`-line + per-commit ownership
+  gate technique. Unit 1 lifts the loop shape from `:580-616`; it does not
+  re-derive commit-date extraction.
+- `packages/intentionsutil/scripts/read-sensors.ts:350` and `:566` `isAiOwnedAt` —
+  two verbatim private copies of `git show <commit>:<path>` +
+  `/^owner:\s*ai\s*$/m`. Unit 1 extracts one shared export instead of adding a
+  third copy.
+- `packages/intentionsutil/scripts/ledger-census.ts:137` `parseEntryDate` (the
+  last-line-wins add-date rule) and `:154-166` `gitEntryDate`'s shallow-checkout
+  guard. Unit 1 generalizes the first to a whole-tree pass and extracts the second.
+- `packages/intentionsutil/scripts/attribute-spend.ts:1-35` + `src/spend.ts:1-17` —
+  the canonical thin-CLI-over-pure-`src`-module architecture for an unranked Step 7
+  section, and the exit-code contract (`0` including a fired flag, `1` for "could
+  not measure", `2` usage). Units 2 and 3 follow it exactly.
+- `packages/intentionsutil/scripts/lib-store-at-ref.ts` `listNodesAtRef`, imported
+  the way `office-hours-select.ts:90` imports it — store enumeration at
+  `origin/main`, strict, erroring rather than returning an empty store.
+- `packages/intentionsutil/src/store.ts:232` `listNodes` / `:249` `listNodesStrict`
+  — reached through `listNodesAtRef`; never a hand-parse of node YAML.
+- `packages/intentionsutil/src/schema.ts:510-513`, `:536-537` — the `isPlainObject`
+  narrowing style for reading free-form `attributes` (`attributes` is
+  `Record<string, unknown>` at `:250`/`:281`, and `priority_log` has no schema rule
+  today), avoiding an `as` cast and its suppression marker.
+- `packages/intentionsutil/src/router.ts:103` `strategyFingerprint` / `:132`
+  `tacticScopeFingerprint` — cited as the reason no fingerprint dependency is
+  introduced; no code change here.
+- `.claude/skills/rsi-audit/SKILL.md:199-202` (bullet template), `:220-238`
+  (Per-workflow spend fold: run-the-CLI-and-reproduce-verbatim, one-denominator
+  rule, deviation-is-a-review-trigger), `:240-269` (Parked-population survey:
+  FLEET-ONLY framing, "measures never judges"), `:419-486` (Strategy attention
+  recommendations: the honest "nothing this window" line, and the write-half
+  paragraph to cross-reference).
+- `packages/intentionsutil/test/lifecycle-sensor.test.ts:26-45` — `tempDir` / `git`
+  / `initRepo` fixture-repo helpers for Unit 3's git-backed test.
+- `packages/intentionsutil/test/spend.test.ts` — the pattern of testing a `src/`
+  fold and its script-side renderer from one file on in-memory fixtures.
+
+## Verification
+
+Auto-runnable:
+
+```verify
+npx vitest run --project packages/intentionsutil --root . packages/intentionsutil/test/reprioritization.test.ts packages/intentionsutil/test/reprioritization-audit.test.ts packages/intentionsutil/test/node-lifecycle-dates.test.ts
+```
+
+The whole package suite must stay green — this is what proves Unit 1's
+`isAiOwnedAt` extraction was behavior-preserving, since `sensors.test.ts`,
+`lifecycle-sensor.test.ts`, `token-economy-sensor.test.ts` and `ledger-census.test.ts`
+all cover the refactored call sites:
+
+```verify
+npx vitest run --project packages/intentionsutil --root .
+```
+
+```verify
+bash .claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+```
+
+```verify
+bash .claude/skills/dispatch-propagate/scripts/run-lint.sh --app packages/intentionsutil
+```
+
+End-to-end against the real store, reading the working tree's own ref so the check
+does not depend on a freshly fetched `origin/main`. It must exit 0 and print both
+labeled blocks; with no `priority_log` entries on main it prints the
+`INSUFFICIENT DATA` verdict, which is the correct output, not a failure:
+
+```verify
+npx tsx packages/intentionsutil/scripts/reprioritization-audit.ts --days 7 --ref HEAD
+```
+
+The skill wiring must name the script and carry the section heading:
+
+```verify
+grep -q 'reprioritization-audit.ts' .claude/skills/rsi-audit/SKILL.md && grep -q '^## Reprioritization delta and outcome audit' .claude/skills/rsi-audit/SKILL.md
+```
+
+Manual / judgment checks:
+
+- Run the default form, `npx tsx packages/intentionsutil/scripts/reprioritization-audit.ts
+  --days 7`, and confirm it reads `origin/main` and prints the same two blocks. If
+  `origin/main` is stale or unfetched it must fail loudly with
+  `listNodesAtRef`'s own message — confirm it does not silently print an empty
+  population.
+- **Seeded join check.** In a scratch clone (never on `main`), add a
+  `priority_log` entry dated inside the window to an `owner: ai` tactic that has
+  since reached `phase: done`, commit it, and confirm the node moves from the
+  baseline cohort to the front-loaded cohort and that its reported interval is
+  creation → phase-done, *not* boost → phase-done. This is the check that the
+  2026-08-29 ruling was implemented as ruled.
+- **Delta window check.** Confirm the delta lists only entries dated inside the
+  window, not the whole log — seed two entries on one node, one inside and one
+  outside, and confirm exactly one row appears.
+- **Adversarial-direction check.** Confirm from the Unit 2 tests, and by reading
+  the rendered text, that an `ABOVE baseline` verdict is reachable and is phrased
+  as a finding ("the delegated reordering is not earning its authority in this
+  window"), not softened into a null result. A section that can only ever report
+  favourably or "insufficient data" has not been built.
+- **Reachability.** The audit's output must be reachable from **`/rsi-audit`** —
+  not `/rsi`, which is the per-phase evaluation skill that lands ledger findings
+  through `dispatch-eval-finding` and is not the report surface. If a human has to
+  compute the median themselves after reading the report, the sensor is not built.
+  Confirm by reading Step 7's bullet list and following it to the new section.
+- Confirm no unit wrote a node file, an `attention` block, a `priority_log` entry,
+  or a `success_signal.reading` — `git status` should show only the four source
+  files, the three test files, and `SKILL.md`.
+

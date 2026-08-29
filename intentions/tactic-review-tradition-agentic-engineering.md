@@ -18,11 +18,20 @@ reading: null
 serves:
   - strategy-recursive-self-improvement
 recovers: []
-clarifications: []
+clarifications:
+  - question: Why is this node phase done with no diff and no execution record?
+    answer: (Closed 2026-08-29 by author disposition during the dispatch/RSI-window
+      pre-batch review.) The review sitting this node exists to hold was held at
+      the 2026-08-28 author round; its ruling is recorded in
+      plans/dispatch-rsi-sequence.md and carried onto the nodes it governs. The
+      author ruled 2026-08-29 to close all five sitting nodes on their held
+      sittings rather than route them to a post-window review. There is no diff
+      and no PR — the node's deliverable was the sitting itself — so execution
+      stays null; this clarification is the completion record.
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
 execution: null
 validates:
   - strategy-recursive-self-improvement
