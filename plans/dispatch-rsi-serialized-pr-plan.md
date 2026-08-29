@@ -1,10 +1,15 @@
 # Dispatch + RSI serialized PR plan
 
-**Covers** the 117 tactics in the dispatch-ladder / RSI / evaluation-machinery /
+**Covers** the 114 tactics in the dispatch-ladder / RSI / evaluation-machinery /
 graph-plumbing / `/align`-charter scope that were `phase: null` **at scope-build
 time (2026-08-14)**: defects, integrity issues, token-efficiency findings,
-ledger entries, and the feature/design nodes that resolve them. A further 11
+ledger entries, and the feature/design nodes that resolve them. A further 13
 nodes are surveyed, documented and deliberately unassigned — see §"Coverage".
+
+> **It was 117 until 2026-08-29.** One node left the graph (`tactic-align-audit-legacy-review`,
+> pruned) and two moved from PR15 into the deferred set, which is counted
+> *outside* this total. The surveyed-but-unassigned figure rose 11 → 13 by the
+> same two. §"Coverage" shows the full reconciliation.
 
 > **The `phase: null` filter is what left work out.** Work already past
 > `phase: null` on 2026-08-14 was never a candidate, so the plan is silent on
@@ -4095,7 +4100,7 @@ Seven hazards on this path, each of which has bitten before:
 
 ## Coverage
 
-All **117** in-scope tactics are assigned; none appears twice.
+All **114** in-scope tactics are assigned; none appears twice.
 
 | PR | Nodes | Surface |
 |---|---|---|
@@ -4119,27 +4124,34 @@ All **117** in-scope tactics are assigned; none appears twice.
 | **PR18** | 5 | `dispatch-eval-finding`, `dispatch-graph-census`, `/dispatch-conflict`, `/review-fix`, `router.ts`, `graph-commit` park path |
 | **PR19** | 3 | `schema.ts` (`superseded_by` + terminal), `/align-tactics` drops, `lint-verify-fence-paths.sh` |
 | **PR20** | 8 | **new** `/align-review` skill + `assemble-review-pack`, `graph-commit --review`, `/align` + `/align-tactics` SKILL text, `validate-graph` lint |
-| measurement runs | 3 | no diff — `/rsi-audit`; the sittings that once sat here are all held |
-| deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` |
-| **subtotal — the 117** | **117** | PRs 106 + measurement 3 + deferred 8 |
-| adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) — **outside the 117** |
-| **total accounted for** | **122** | 117 + the 5 adjacent |
+| measurement runs | 3 | no diff — `/rsi-audit` |
+| sittings held, nodes still open | 5 | no diff — the sitting discharged the *gate*, not the node; all five are `status: raw`, `phase: null` on `origin/main` and in no PR |
+| **total — the 114** | **114** | PRs 106 + measurement 3 + sittings 5 |
+| deferred | 8 | ref-split cluster (5, was 3 — +2 from the PR15 split) + scope-custody (2) + `demote-node-stale-local-read` — **outside the 114** |
+| adjacent, unclaimed | 5 | `/qa-main` node lane (3) + fleet-dependent (2) — **outside the 114** |
+| **the 13 surveyed-but-unassigned** | **13** | deferred 8 + adjacent 5 |
+| **total accounted for** | **127** | 114 + 13 |
 
-> **Reading the arithmetic.** The rows above the subtotal sum to **117**: the
-> twenty PR rows total 106, plus 3 measurement runs and 8 deferred. The 5
-> adjacent-unclaimed nodes are surveyed but never claimed, so they sit *outside*
-> the 117 — the table used to list them above an unqualified `total: 117`, which
-> read as though they were inside it.
+> **Reading the arithmetic — the rule this table has always followed.** The
+> total counts the rows *above* it. `deferred` and `adjacent` sit **below** it
+> and are excluded, and the surveyed-but-unassigned figure is exactly their sum.
+> That rule holds at every revision of this document: 94 with 5+5=10 at Revision
+> 6, 112 with 6+5=11 at Revision 7, 117 with 6+5=11 at #3098. It was never
+> written down, which is how two figures drifted.
 >
-> **Two accounting items are open and are deliberately not guessed at here.**
-> (1) This document says **10** documented-and-deliberately-unassigned in
-> §"Coverage" prose and **11** in this table; the index also says eleven. The
-> 32-node second pass splits 22 assigned + 10 unassigned, so the prose is
-> self-consistent and the source of the eleventh is unrecorded. (2)
-> `tactic-retire-assessor-contract-docs` was in no bundle until the 2026-08-29
-> ruling put it on PR20, but neither the 117 nor the unassigned count moved.
-> Both need the coverage sweep re-run against `origin/main` to settle; neither
-> changes what any PR does.
+> **The 117 lost 3 and the 11 gained 2 on 2026-08-29.** `tactic-align-audit-legacy-review`
+> was pruned from the graph by the D1 prune, so it leaves the count entirely
+> (127 accounted for, down from 128). PR15's split moved 2 nodes into
+> `deferred` — a move from above the line to below it, which is why the total
+> falls by 2 while the surveyed figure rises by the same 2.
+>
+> **The five restored sittings are the reason the rows stopped summing.** Until
+> 2026-08-29 this table carried `pre-PR sessions | 9`. The prune replaced it
+> with `measurement runs | 3` on the grounds that the sittings were all held —
+> but a sitting discharges the *gate*, not the *node*. Five of those nodes are
+> still open on `origin/main` and in no `### Nodes closed` section, so dropping
+> the row made them invisible rather than closed. They have their own row again.
+> The ninth is the pruned node above.
 
 **How the scope was built.** The original sweep was ledger-driven — every open
 `tactic-eval-finding-*` node plus the design nodes resolving them — and was
@@ -4149,10 +4161,18 @@ counted open nodes serving a graph strategy
 `strategy-graph-drives-dispatch`, `strategy-graph-self-description`) whose
 **statement** names a graph read or write path: 32 more, none of them in the
 plan, creation dates spanning 2026-07-12 to 2026-08-14 — a coverage gap, not a
-timing artifact. 22 were assigned (PR1, PR15, PR16, PR17); 10 are documented and
-deliberately unassigned. A third pass added the `/align` charter and supersession
-work (PR18, PR19, PR20). Every assigned node was re-verified `phase: null` on
-`origin/main`.
+timing artifact. 22 were assigned (PR1, PR15, PR16, PR17); 10 were documented
+and deliberately unassigned. A third pass added the `/align` charter and
+supersession work (PR18, PR19, PR20). Every assigned node was re-verified
+`phase: null` on `origin/main`.
+
+> **That "10" is a 2026-08-14 reading of a figure that has moved twice since,
+> and it is not a separate set from the deferred and adjacent lists below.** It
+> is their sum. It became 11 on 2026-08-15 when clarification 243 moved
+> `tactic-demote-node-stale-local-read` out of PR1 into `deferred`, and 13 on
+> 2026-08-29 when the PR15 split moved two more. The sentence above was never
+> restamped, so the document carried 10 in prose and 11 in its table for two
+> weeks and the eleventh looked unaccounted for. The table is the live figure.
 
 > **That `phase: null` re-verification expired on 2026-08-20 — in both
 > directions.**
@@ -4168,14 +4188,16 @@ work (PR18, PR19, PR20). Every assigned node was re-verified `phase: null` on
 > **Outward:** the same filter is why the plan never saw the ~20 in-charter
 > nodes at `phase: implement` with no PR, or the 20 in-charter open draft PRs.
 > A fourth pass censused both and routed them; with the overhang retired the
-> total becomes **131**.
+> total becomes **128** — the 114, plus the 13 the overhang absorbed, plus
+> PR5a's one node, which was never in the original scope. It read 131 against
+> the old 117.
 
-Of the 117, **38 are on the graph read/write path** — PR1's 8, PR15's 2 plus
-the 2 that joined the ref-split deferral when PR15 split on 2026-08-29, PR16's
+Of the 114, **36 are on the graph read/write path** — PR1's 8, PR15's 2, PR16's
 11, PR17's 6, PR18's 5, PR19's 3 and PR4's `batchIds` unit — plus PR20's
 `--review` unit, which adds a receipt gate to that same writer. It is the largest
 single surface in the plan, and the one every other PR's bookkeeping runs
-through.
+through. It was 38 of 117 until the PR15 split moved 2 of them into the deferred
+set, which this total excludes.
 
 **Deferred, with reasons:**
 
@@ -4190,6 +4212,19 @@ through.
 - `tactic-demote-node-stale-local-read` — blocked behind
   `tactic-phase-evidence-fingerprint-bound` (`phase: qa`).
 
+**Sittings held, nodes still open — inside the 114, in no PR:**
+`tactic-review-sitting-code-review-lock-design`,
+`tactic-review-band-derivation-ratification`,
+`tactic-review-tradition-agentic-engineering`,
+`tactic-review-supersession-derived-subpoints` and
+`tactic-review-dispatch-charter-split`. All five are `status: raw`,
+`phase: null` on `origin/main`. Their sittings were held at the 2026-08-28
+author round, which discharged the gate each one blocked — but none of the
+nodes closed, and none appears in a `### Nodes closed` section. A sixth,
+`tactic-align-audit-legacy-review`, was pruned from the graph outright; a
+seventh, `tactic-sensor-deregistration-gate`, is counted under PR16. Close
+these five deliberately or route them; do not assume the sitting closed them.
+
 **Adjacent, surveyed and deliberately not claimed:**
 `tactic-qa-main-node-terminal-declaration`, `tactic-invalid-state-rc-f1c843b1`
 and `tactic-invalid-state-rc-fa3075ec` — all three are `/qa-main` node-lane paths
@@ -4197,6 +4232,15 @@ that write job-dir markers instead of graph state. Genuine write-integrity
 defects, but `/qa-main` does not run while the sentinel holds, and they overlap
 PR12's four-lane surface. Also `tactic-session-reap-authorization-durability` and
 `tactic-park-cause-sensor-instrument` — both need a running fleet.
+
+> **Why `tactic-retire-assessor-contract-docs` moved neither count.** It was
+> created 2026-08-28 (`447fc27d`) as residue from the D1 prune — two weeks after
+> the 2026-08-14 scope build this table counts. It was never a census member, so
+> it is neither in the 114 nor in the 13, and the 2026-08-29 ruling that put it
+> on PR20 correctly changed only the *bundle* count at position 9, 8 → 9. Its
+> earlier "in no bundle" state was a routing gap for a post-census node, not a
+> gap in this table. The plan's scope line is a dated filter, not a live census:
+> nodes minted after 2026-08-14 ride a PR without joining these totals.
 
 **What is done:** PR1 (8 nodes), the ref-split decision and the five residual
 nodes it discovered, the overhang retirement, and every author gate.

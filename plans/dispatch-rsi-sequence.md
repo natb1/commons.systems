@@ -76,10 +76,11 @@ Every position is a **bundle** — PRs grouped by shared code surface, because t
 work is serialized and the cost of a large PR is lower than the cost of two PRs
 touching the same file.
 
-**117 tactics are assigned across the sequence**, none twice, plus 11
-documented-and-deliberately-unassigned and 13 absorbed by the overhang
-retirement. 38 of the 117 sit on the graph read/write path — the largest single
-surface in the window, and the one every other PR's bookkeeping runs through.
+**114 tactics are assigned across the sequence**, none twice, plus 13
+surveyed-but-unassigned and 13 absorbed by the overhang retirement. 36 of the
+114 sit on the graph read/write path — the largest single surface in the window,
+and the one every other PR's bookkeeping runs through. It read 117 / 11 / 38
+until 2026-08-29; see §"Coverage" in the plan for the reconciliation.
 
 | # | Bundle | PRs | Nodes | Why here |
 |---|---|---|---|---|
@@ -559,7 +560,25 @@ align-tactics-worker-transcript-unscanned` is the internal unit order in PR3.
   sentinel holds and they overlap PR12's surface. Plus
   `tactic-session-reap-authorization-durability` and
   `tactic-park-cause-sensor-instrument`, which need a running fleet.
-- **Eleven documented-but-unassigned tactics** from the third coverage pass.
+- **Five in-scope nodes that no PR closes** —
+  `tactic-review-sitting-code-review-lock-design`,
+  `tactic-review-band-derivation-ratification`,
+  `tactic-review-tradition-agentic-engineering`,
+  `tactic-review-supersession-derived-subpoints` and
+  `tactic-review-dispatch-charter-split`. These are *inside* the 114, not
+  excluded: their sittings were held at the 2026-08-28 round, which discharged
+  the gates they blocked, but the nodes themselves are still `status: raw`,
+  `phase: null` on `origin/main` and appear in no `### Nodes closed` section.
+  The plan dropped their coverage row on 2026-08-29 on the grounds that the
+  sittings were held, which made them invisible rather than closed; the row is
+  restored. **Route or close them deliberately before the window ends** — they
+  are the one part of the sequence nothing currently drives.
+- **Those two bullets are the whole surveyed-but-unassigned set — 13 nodes**,
+  8 deferred plus 5 adjacent. This list used to end with a third bullet reading
+  *"Eleven documented-but-unassigned tactics from the third coverage pass"*,
+  which read as a third disjoint set and made the sequence look as though it
+  left 24 nodes uncovered. It was the same eight-plus-five, counted again at its
+  2026-08-18 value of 6+5.
 
 ---
 
