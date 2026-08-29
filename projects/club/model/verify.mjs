@@ -6,7 +6,7 @@
 // not touch owner comp). They live here now so a change to model.mjs either
 // keeps them or says which one it broke.
 import * as M from "./model.mjs";
-import { FIGURES } from "./figures.mjs";
+import { FIGURES, proFormaCogsK } from "./figures.mjs";
 
 let failures = 0;
 const near = (a, b, tol = 0.05) => Math.abs(a - b) <= tol;
@@ -278,11 +278,28 @@ for (const basis of ["revenue", "sqft", "hours"]) {
   check(`absorbing by ${basis} leaves owner comp unchanged`, broke === null, broke ?? "");
 }
 
-// 15 — every figure the documents quote resolves to a number, not a NaN or an
+// 15 — §6's pro forma column adds up to the owner-comp row printed at the
+// bottom of it. This is the one thing a reader does by hand, and it was wrong:
+// the Cost of sale row rebuilt café, catering and prints but not the room
+// line's 6%, so the column came out ~$3K above the row it was supposed to
+// explain. Nothing caught it, because every individual row was right and only
+// their sum was not.
+for (const site of ["li", "sn"]) {
+  M.withState({ site }, () => {
+    const rev = M.revenueK(M.PLAN.util, M.SITES[site].mark);
+    const column = rev - proFormaCogsK(site) - M.PLAN_LABOR_K - M.builtOpsK(site)
+      - M.S.commons - M.occupancyK();
+    const printed = M.comp(M.PLAN.util, M.SITES[site].mark) + (M.laborK() - M.PLAN_LABOR_K);
+    check(`§6's pro forma column sums to its owner-comp row at ${site}`,
+      near(column, printed, 0.01), `column ${column.toFixed(2)} vs row ${printed.toFixed(2)}`);
+  });
+}
+
+// 16 — every figure the documents quote resolves to a number, not a NaN or an
 // empty string. A renamed model constant fails here rather than in the docs.
 for (const [name, value] of Object.entries(FIGURES)) {
   check(`figure ${name} resolves`, typeof value === "string" && value.length > 0 && !value.includes("NaN"), value);
 }
 
-console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and 15 invariant groups pass`);
+console.log(failures ? `\n${failures} invariant(s) failed` : `model: ${Object.keys(FIGURES).length} figures and 16 invariant groups pass`);
 process.exit(failures ? 1 : 0);

@@ -90,11 +90,18 @@ const RLI = streamRevK("li");
 const RSN = streamRevK("sn");
 
 // Cost of sale — §6's COGS line, rebuilt from the per-stream margins the model
-// carries instead of asserted as a lump.
+// carries instead of asserted as a lump. Every stream that has a cost of sale
+// belongs here: the room line's 6% was missing, so the column was ~$3K short of
+// its own owner-comp row.
 const cogsK = (r) =>
   r.cafe * (1 - M.CAFE_MARGIN_DEF / 100) +
   r.catering * (1 - M.CATER_MARGIN) +
-  r.prints * (1 - M.PRINT_MARGIN);
+  r.prints * (1 - M.PRINT_MARGIN) +
+  (r.sessions + r.day) * (1 - M.ROOM_MARGIN);
+
+// The pro forma's Cost of sale row, addressable by site — verify.mjs checks the
+// printed column adds up to the owner-comp row printed under it.
+export const proFormaCogsK = (site) => cogsK(streamRevK(site));
 
 // The owner's bars at the plan's default capital at risk.
 const bars = M.withState({}, () => ({
@@ -393,7 +400,7 @@ function proForma() {
     row("Occupancy", k(LI.occupancy), k(SN.occupancy), k(BUY.occupancy) + " (verify terms)"),
     row("**Owner compensation**", `**${k(LI.comp)}**`, `**${k(SN.comp)}**`, `**${k(BUY.comp)} + ~${k(M.BUY_EQUITY)} equity**`),
     "",
-    `Operations is one figure per site in the plan. This row does not use it: the line is built from named components — a ${k(M.FIXED_OPS, 1)} fixed base (utilities, insurance, software, repairs & misc, each carrying an evidence grade and a band) plus ${pct(M.VAR_OPS * 100, 1)} of gross revenue for card fees and marketing. Built that way it comes to ${k(OPS.li.built, 1)} at Little Italy against §6's stated ${k(OPS.li.stated)} (${sk(OPS.li.delta, 1)}, ${spct(OPS.li.pctDelta, 1)}) and ${k(OPS.sn.built, 1)} at SN/HT against ${k(OPS.sn.stated)} (${sk(OPS.sn.delta, 1)}, ${spct(OPS.sn.pctDelta, 1)}) — close enough to say the two agree, far enough apart that a component drifting would show. \`model/evidence.md\` carries the grades, the bands, and what each one is worth if it is wrong. Cost of sale is rebuilt from the per-stream margins (café ${pct(M.CAFE_MARGIN_DEF)} contribution, catering ${pct(M.CATER_MARGIN * 100)}, consignment ${pct(M.PRINT_MARGIN * 100)}) rather than carried as a lump.`,
+    `Operations is one figure per site in the plan. This row does not use it: the line is built from named components — a ${k(M.FIXED_OPS, 1)} fixed base (utilities, insurance, software, repairs & misc, each carrying an evidence grade and a band) plus ${pct(M.VAR_OPS * 100, 1)} of gross revenue for card fees and marketing. Built that way it comes to ${k(OPS.li.built, 1)} at Little Italy against §6's stated ${k(OPS.li.stated)} (${sk(OPS.li.delta, 1)}, ${spct(OPS.li.pctDelta, 1)}) and ${k(OPS.sn.built, 1)} at SN/HT against ${k(OPS.sn.stated)} (${sk(OPS.sn.delta, 1)}, ${spct(OPS.sn.pctDelta, 1)}) — close enough to say the two agree, far enough apart that a component drifting would show. \`model/evidence.md\` carries the grades, the bands, and what each one is worth if it is wrong. Cost of sale is rebuilt from the per-stream margins (café ${pct(M.CAFE_MARGIN_DEF)} contribution, catering ${pct(M.CATER_MARGIN * 100)}, consignment ${pct(M.PRINT_MARGIN * 100)}, rooms ${pct(M.ROOM_MARGIN * 100)}) rather than carried as a lump, so the column sums to its own owner-comp row.`,
   ].join("\n");
 }
 
