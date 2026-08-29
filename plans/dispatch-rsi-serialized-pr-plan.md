@@ -639,12 +639,8 @@ Ordered so each step reduces the next one's cost. No step opens a new PR.
    > remote branch but failed on the local ref for #3052 and #3084 — `cannot
    > delete branch … used by worktree at …`. Harmless, and *not* a partial merge:
    > both are `MERGED` on GitHub. Clean the stale worktrees with
-   > `git worktree remove <abs path>`, run with `dangerouslyDisableSandbox: true`
-   > on the first attempt (`.claude/rules/sandbox.md`). *(Updated 2026-08-29:
-   > this step originally named a `remove-worktree` wrapper script, which was
-   > deleted as an uncalled orphan whose safety gate false-refused any branch
-   > behind main. Removal is built-in tooling now; the `WorktreeRemove` hook
-   > carries the partial-delete recovery.)*
+   > `.claude/skills/dispatch-propagate/scripts/remove-worktree`, never a bare
+   > `git worktree remove` (`.claude/rules/sandbox.md`).
 
    **#2805 was the one that did not land in this batch** — its blocker was a
    judgement, not a mechanism. That judgement was made on 2026-08-21 and #2805
