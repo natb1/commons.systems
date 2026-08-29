@@ -468,6 +468,10 @@
 <script>
 (function(){
   'use strict';
+  // The model lives in projects/club/model/model.mjs, not here: edit it there and
+  // re-run `node model/render.mjs`, which splices it back into this page and
+  // rewrites the same numbers in business-plan.md and claude/benchmark-matrix.md.
+  // model:begin
   // ---- calibration (business-plan v0.3.3 §5–6; benchmark-matrix Aug 28 2026) ----
   var CAPACITY = 25;                 // session-slots/wk (3 rooms — the matrix's fixed basis)
   // Contribution margin per income stream — revenue less the cost of sale that stream alone incurs.
@@ -517,6 +521,12 @@
   var ROWBADGE = {33:'base', 45:'break-even', 55:'gate case', 75:'ceiling'};
   var RELBADGE = {'1':'site mark', '1.2':'≈ top decile'};
   var LEAN_STOP = 70;                 // absolute, both markets (risk 1) — a pre-signature evidence rule
+  // The plan's §9 partial-income floor — the owner draw the nonprofit trigger test
+  // is written against. The explorer does not draw it as a bar (it is a
+  // household-survival number, not a test of whether the business is worth the
+  // owner's labor and capital — see OWNER_HRS/RET_LO below), but §6 and the
+  // benchmark matrix quote it, so it lives here rather than in their prose.
+  var PLAN_DRAW_FLOOR = 30;
   var WC = 58, WC_FLOOR = 45;         // $K: working-capital reserve band
   var OWNER_HRS = 40;                 // owner’s gridded week: ~30 on the floor + ~10 admin/sales
   var RET_LO = 0.10, RET_HI = 0.20;   // required return on capital at risk: opportunity cost → illiquid-smallco
@@ -526,7 +536,7 @@
   var DEF = {site:'li', fin:'lease', util:33, tx:100, price:90, ticket:8.25, cad:'mixed', cafeM:CAFE_MARGIN_DEF,
              events:5.5, caClub:15, caEvent:50, wage:MIT_RUNG, commons:6, churn:1.4,
              build:85, ti:0, abate:0, grants:0, cash:150, runway:24, equity:240};
-  var S = Object.assign({}, DEF);
+  let S = Object.assign({}, DEF);
 
   function evEqOf(ev){ return ev*12/52; }
   function sessRevK(p){ return p*52/1000; }        // one filled weekly session, per year
@@ -623,6 +633,17 @@
   function txForTarget(target, util){ // walk-ins/day needed at a given util (linear in tx)
     return (target - comp(util, 0)) / mtx(S.ticket);
   }
+
+  // Evaluate `fn` against a one-off settings object without disturbing the live
+  // state — how the document generators read the model at marks other than the
+  // current view's. `over` is applied on top of DEF, so every generator states
+  // only the levers it means to move.
+  function withState(over, fn){
+    var prev = S;
+    S = Object.assign({}, DEF, over);
+    try { return fn(); } finally { S = prev; }
+  }
+  // model:end
 
   function fmtK(v, signed){
     var r = Math.round(v);
