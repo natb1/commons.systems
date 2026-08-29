@@ -439,7 +439,10 @@ GRAPH_COMMIT_WRITER="${GRAPH_COMMIT_WRITER:-worktree}"
 #               SNAP_DIR path contract next to snapshot().
 # KEEP_SNAP   — 1 when SNAP_DIR must survive exit (the fail-closed conflict
 #               path discards the writer's local commit, so the snapshot is the
-#               only remaining copy of the writer's content). Set by
+#               only remaining copy of the writer's content on the DIE paths
+#               below; on the ordinary park path the landed office_hours
+#               recommendation now carries that content too — park_write()'s
+#               ownContentEmbed() — and SNAP_DIR is the convenience copy). Set by
 #               park_and_exit(), and by the fail-closed DIE paths that name
 #               SNAP_DIR in their message — assert_noop_matches_intent()'s
 #               dropped-edit die and run_merge_node()'s "the merge tool could
@@ -3026,6 +3029,14 @@ conflicted_ids() {
 #     Empty/absent (unset global, missing file, or a `[]` array — a park
 #     unrelated to a mechanical-merge attempt) → the plain concurrent-edit reason
 #     and the base recovery recommendation only, with no field breakdown.
+#   - CARRIED CONTENT (tactic-graph-commit-park-content-durability): the losing
+#     writer's frozen original, embedded VERBATIM last, capped. Before it, a park
+#     recorded that content only as a path into SNAP_DIR — a bare `mktemp -d`
+#     that KEEP_SNAP=1 protects from cleanup() but not from the host, the tmp
+#     reaper, or the container. The recommendation is the one part of an ordinary
+#     park that lands on origin/main, so carrying the bytes there is what makes
+#     the preservation durable. Absent for a --prune id (no snapshot exists).
+#     See ownContentEmbed() in the helper for the cap and the truncation notice.
 park_write() {
   local since reason tmpts prune_csv rec_file=""
   since="$(date -u +%Y-%m-%d)"
@@ -3067,7 +3078,9 @@ park_write() {
 // discipline / prune-vs-edit) always applies, and this tactic's field-level
 // breakdown — passed OUT OF BAND via GRAPH_COMMIT_RECOMMENDATION_FILE — is
 // appended after it when a mechanical merge left field divergence
-// (unset/empty env var → base recovery text only).
+// (unset/empty env var → base recovery text only). ownContentEmbed()'s verbatim
+// copy of the losing writer's frozen original is appended last of all, so the
+// landed record carries the content and not merely a path into snapDir.
 import { readFileSync, writeFileSync, lstatSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 const [storePath, intentionsDir, since, reason, snapDir, pruneCsv, ...ids] = process.argv.slice(2);
@@ -3086,10 +3099,10 @@ const lstatOrNull = (p) => { try { return lstatSync(p); } catch { return null; }
 // --- SNAP_DIR path contract (the shell side is snap_intended_file()) --------
 // snapDir holds up to TWO files per id: <id>.md, the writer's FROZEN pre-merge
 // original, and <id>.merged.md, graph-commit's own merge output, written only
-// when a layer-2/3 merge resolved for that id. These four helpers are the ONE
-// place that decides which content a human is pointed at and how the two are
-// described — every recovery branch below calls preservedContent(id) rather
-// than composing its own path wording.
+// when a layer-2/3 merge resolved for that id. The helpers below are the ONE
+// place that decides which content a human is pointed at, which content the
+// record CARRIES, and how the two files are described — every recovery branch
+// below calls preservedContent(id) rather than composing its own path wording.
 const snapOriginal = (id) => join(snapDir, `${id}.md`);
 const snapMerged = (id) => {
   const p = join(snapDir, `${id}.merged.md`);
@@ -3099,6 +3112,60 @@ const snapMerged = (id) => {
 // What this run INTENDED to land for the id: the merge output when there is
 // one, else the frozen original.
 const snapIntended = (id) => snapMerged(id) || snapOriginal(id);
+// --- The park must CARRY the losing writer's content, not point at it -------
+// snapDir is a bare `mktemp -d`. park_and_exit() sets KEEP_SNAP=1 so cleanup()
+// spares it, which survives the PROCESS — not the host, the tmp reaper, or the
+// container. A park whose only record of the losing writer's edit is a path
+// into that directory preserves nothing durable.
+// office_hours.recommendation is the one part of an ordinary park that lands on
+// origin/main, so the frozen original goes in there VERBATIM. The snapDir paths
+// stay in the text as a convenience for a human still on the machine that wrote
+// them, no longer as the sole copy.
+// (The delete/modify branch calls the same helpers, and its record is local
+// only for a reason stated in its own text — that branch's durability is not
+// this seam's to fix, and its control flow is unchanged.)
+//
+// Capped on purpose. A park embeds whatever the losing writer had on disk; on a
+// SECOND park that file can already carry the FIRST park's embedded copy, which
+// without a cap nests without bound. Over the cap the block carries the leading
+// EMBED_LIMIT bytes, cut at a line boundary, and states exactly how many bytes
+// were omitted and where the whole file is — never a silent truncation.
+const EMBED_LIMIT = 65536;
+const embedCache = new Map();
+// { block, truncated, total } for an id that has a frozen original, else null.
+// null is the ordinary answer for a --prune id: a deletion has no snapshot and
+// therefore no content to carry (snapshot() skips prunes).
+const ownContentEmbed = (id) => {
+  if (embedCache.has(id)) return embedCache.get(id);
+  const path = snapOriginal(id);
+  const st = lstatOrNull(path);
+  let result = null;
+  if (st && st.isFile()) {
+    const raw = readFileSync(path);
+    const total = raw.length;
+    const truncated = total > EMBED_LIMIT;
+    let text = raw.subarray(0, EMBED_LIMIT).toString("utf8");
+    if (truncated) {
+      // Cut at the last complete line so the embed is not a half-line (and not
+      // a half-codepoint).
+      const lastNewline = text.lastIndexOf("\n");
+      if (lastNewline > 0) text = text.slice(0, lastNewline + 1);
+    }
+    const omitted = total - Buffer.byteLength(text, "utf8");
+    const note = omitted > 0
+      ? `----- TRUNCATED: ${omitted} of ${total} bytes omitted at the ` +
+        `${EMBED_LIMIT}-byte embed cap; the whole file is at ${path}, on this ` +
+        `machine only -----\n`
+      : "";
+    const block =
+      `----- BEGIN this session's unlanded content for ${id} (verbatim) -----\n` +
+      `${text}${text.endsWith("\n") ? "" : "\n"}${note}` +
+      `----- END this session's unlanded content for ${id} -----`;
+    result = { block, truncated: omitted > 0, total };
+  }
+  embedCache.set(id, result);
+  return result;
+};
 // Names every preserved copy of this node and labels which is which. A losing
 // writer must be able to tell its own edit from graph-commit's partial merge of
 // it: the merge blends this session's delta with the concurrent writer's landed
@@ -3106,17 +3173,27 @@ const snapIntended = (id) => snapMerged(id) || snapOriginal(id);
 // anything that landed.
 const preservedContent = (id) => {
   const merged = snapMerged(id);
+  const embed = ownContentEmbed(id);
+  const carried = !embed
+    ? ""
+    : embed.truncated
+    ? ` Its leading bytes are carried VERBATIM at the end of this ` +
+      `recommendation — the file is ${embed.total} bytes, over the embed cap, ` +
+      `and the carried block states exactly how much was omitted.`
+    : ` A VERBATIM copy of it is carried at the end of this recommendation, so ` +
+      `this record holds the content itself and does not depend on that ` +
+      `directory outliving this session.`;
   const original =
     `This session's OWN unlanded content is preserved at ${snapOriginal(id)} — ` +
-    `a frozen pre-merge copy, written once and never rewritten.`;
+    `a frozen pre-merge copy, written once and never rewritten.${carried}`;
   return merged
     ? `${original} graph-commit's PARTIAL MERGE of it with the concurrent ` +
       `writer's landed edit is beside it at ${merged} — that file is neither ` +
       `this session's content nor anything that landed (this batch landed ` +
-      `nothing); treat it as a starting point only, and ${snapOriginal(id)} as ` +
-      `the record of what this session meant to write. (both on this machine ` +
-      `only — they may not survive past this session)`
-    : `${original} (this machine only — may not survive past this session)`;
+      `nothing); treat it as a starting point only, and the carried copy as ` +
+      `the record of what this session meant to write. (the partial merge is ` +
+      `on this machine only — it may not survive past this session)`
+    : original;
 };
 // PASS 1 — classification and reads only. Performs NO writes to intentionsDir,
 // so an id that fails validation here fails BEFORE anything on disk changed.
@@ -3238,7 +3315,16 @@ for (let i = 0; i < nodes.length; i++) {
       `result — that same commit clears this office_hours park. A third ` +
       `session encountering this park while the loser is still working should ` +
       `wait rather than attempt its own merge (the mailbox discipline).`;
-  const recommendation = fieldBreakdown ? `${base}\n\n${fieldBreakdown}` : base;
+  // Third composition layer (durability): the losing writer's own content,
+  // carried verbatim so the landed record does not depend on snapDir surviving.
+  // Appended LAST, after the prose and the field breakdown, so a human reads the
+  // instructions before the payload. Absent for a --prune id, which has no
+  // snapshot to carry.
+  const embed = ownContentEmbed(id);
+  const parts = [base];
+  if (fieldBreakdown) parts.push(fieldBreakdown);
+  if (embed) parts.push(embed.block);
+  const recommendation = parts.join("\n\n");
   node.office_hours = { reason, since, recommendation };
   writeNode(intentionsDir, node);
   process.stderr.write(

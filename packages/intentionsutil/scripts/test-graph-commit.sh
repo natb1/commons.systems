@@ -17,8 +17,9 @@
 #   3. non-overlapping concurrent edits auto-merge; both writers' edits survive
 #   4. overlapping concurrent edits: exit 1, the other writer's landed content
 #      survives on main, this writer's content is NOT landed, the office_hours
-#      park commit lands, and the losing content is preserved in the kept
-#      snapshot dir
+#      park commit lands, the losing content is preserved in the kept
+#      snapshot dir, and — the durability half — the record ON MAIN still
+#      carries that content verbatim after the snapshot dir is deleted
 #   5. concluded check failure (gh shim reports "3 1"): immediate die, no
 #      retry burn (exactly one poll, no second attempt)
 #   6. gh hard failure (shim exits 1): die surfacing gh's stderr after exactly
@@ -360,7 +361,16 @@
 #      proving the comparison reads snap_intended_file()); and the mirror —
 #      frozen original matching while the merge output does not — still dies
 #
-# No network and no real gh/node needed; requires only bash + git + jq + setsid.
+#  84. THE PARK CARRIES THE CONTENT, run against the REAL park helper — the
+#      tsx module extracted from park_write's own heredoc, driven with the real
+#      store module (every other case runs the node SHIM, so only this one
+#      pins the shipped helper). Two arms: an ordinary snapshot is carried in
+#      office_hours.recommendation byte-exactly and still reads back after
+#      SNAP_DIR is destroyed; an over-cap snapshot is carried as a strict
+#      prefix with a note stating exactly how many bytes were dropped.
+#
+# No network and no real gh needed; requires bash + git + jq + setsid, plus
+# node and this repo's node_modules (tsx + yaml) for case 84's real-helper run.
 
 set -uo pipefail
 
@@ -895,11 +905,39 @@ case "$(basename "$2")" in
     }
     preserved_content() {
       local orig="$snap_dir/$1.md" merged="$snap_dir/$1.merged.md"
+      local carried=""
+      # Mirrors the real helper's preservedContent(): when a frozen original
+      # exists, the recommendation says the content is CARRIED, not merely
+      # pointed at (see own_content_embed below).
+      [[ -f "$orig" ]] && carried="; a VERBATIM copy of it is carried at the end of this recommendation"
       if [[ -f "$merged" ]]; then
-        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy); graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged, which is neither this session's content nor anything that landed"
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)$carried; graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged, which is neither this session's content nor anything that landed"
       else
-        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)"
+        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)$carried"
       fi
+    }
+    # own_content_embed — mirrors the real helper's ownContentEmbed(): the losing
+    # writer's frozen original, carried VERBATIM at the end of the
+    # recommendation so the record that lands on origin/main does not depend on
+    # snap_dir surviving. Emits nothing for an id with no snapshot (a --prune id
+    # has no content to carry), which is why the prune cases still assert the
+    # absence of any snapshot path.
+    # Indented four spaces because the real helper writes through writeNode, and
+    # the YAML emitter indents the whole scalar — so no carried line ever sits at
+    # column 0 on main. Assertions anchored at ^ (e.g. case 4's "the losing
+    # writer's line did NOT land as node content") depend on that.
+    # The real helper also CAPS the embed at 65536 bytes with an explicit
+    # truncation notice; this shim does not, because every harness fixture is a
+    # few hundred bytes. The cap and its notice are covered against the REAL
+    # helper by case 84.
+    own_content_embed() {
+      local orig="$snap_dir/$1.md"
+      [[ -f "$orig" ]] || return 0
+      {
+        printf "%s\n" "----- BEGIN this session's unlanded content for $1 (verbatim) -----"
+        cat "$orig"
+        printf "%s\n" "----- END this session's unlanded content for $1 -----"
+      } | sed 's/^/    /'
     }
     # Delete/modify divergence: a non-prune id whose target file is absent but
     # whose snapshot exists was deleted by another writer's already-landed
@@ -950,6 +988,10 @@ Mailbox discipline."
         rec="$(preserved_content "$id"); mailbox discipline"
       fi
       [[ -n "$field_breakdown" ]] && rec="$rec"$'\n\n'"$field_breakdown"
+      # Carried content last, after the prose and the field breakdown — the
+      # real helper's third composition layer.
+      embed="$(own_content_embed "$id")"
+      [[ -n "$embed" ]] && rec="$rec"$'\n\n'"$embed"
       # SET, not append. The real helper does `node.office_hours = {...}` and
       # writeNode serializes the whole node, so re-parking a node that ALREADY
       # carries an office_hours block REPLACES it — which is what makes the
@@ -1184,6 +1226,22 @@ if [[ -n "$snap" ]] && grep -q 'recommendation' <<<"$content" \
   ok "overlap: office_hours recommendation carries the snapshot path and mailbox instruction"
 else
   no "overlap: recommendation missing snapshot path or mailbox instruction"; printf '%s\n' "$content"
+fi
+# Durability (tactic-graph-commit-park-content-durability): the record that
+# LANDED must carry the losing writer's content, not a pointer into a tempdir.
+# Destroy the tempdir — the thing a reboot, a tmp reaper or a container exit
+# destroys for free — and re-read origin/main. The park path's whole purpose
+# fails if the content is only in the directory just deleted.
+if [[ -n "$snap" ]]; then rm -rf "$snap"; fi
+content_after_snap_gone="$(origin_show t-conflict)"
+if [[ -n "$snap" && ! -e "$snap" ]] \
+   && grep -qF "BEGIN this session's unlanded content for t-conflict (verbatim)" <<<"$content_after_snap_gone" \
+   && grep -qF "END this session's unlanded content for t-conflict" <<<"$content_after_snap_gone" \
+   && grep -q 'line1: B-loses' <<<"$content_after_snap_gone" \
+   && ! grep -q '^line1: B-loses' <<<"$content_after_snap_gone"; then
+  ok "overlap: with SNAP_DIR deleted, the record on origin/main still carries the losing writer's content verbatim (and only inside the recommendation, not as node content)"
+else
+  no "overlap: parked record does not survive SNAP_DIR deletion (snap='$snap')"; printf '%s\n' "$content_after_snap_gone"
 fi
 
 # --- Case 5: concluded check failure — immediate die, no retry burn -------------
@@ -3717,6 +3775,143 @@ else
   no "npx-never-invoked guard (rc=$rc)"; printf '%s
 ' "$out"; printf 'npx-calls.log: %s
 ' "$(cat "$WORK/npx-calls.log" 2>/dev/null || true)"
+fi
+
+# --- Case 84: the REAL park helper carries the losing writer's content ---------
+# Every case above runs the node SHIM, so the shim's mirrored wording is what
+# they pin. This case runs the REAL tsx helper out of park_write's heredoc,
+# against the REAL store module, so the durability claim is made of the shipped
+# code and not of its mirror:
+#   (a) the office_hours.recommendation writeNode serialized carries the losing
+#       writer's frozen original VERBATIM — byte-identical after a YAML
+#       round-trip, which is what makes the record a copy rather than a quote;
+#   (b) it still does after SNAP_DIR is destroyed (the tmp reaper / reboot /
+#       container-exit case KEEP_SNAP=1 does nothing about);
+#   (c) over the embed cap the block says exactly how many bytes it dropped and
+#       where the whole file is — a bounded embed, never a silent truncation.
+# Hard requirements, not skips: a skipped case is a vacuous pass, and this is
+# the only case that reaches the real helper at all.
+[[ -f "$HARNESS_DIR/../src/store.ts" ]] \
+  || { echo "error: real store module not found at $HARNESS_DIR/../src/store.ts (required by case 84)" >&2; exit 1; }
+command -v node >/dev/null \
+  || { echo "error: node not found (required by case 84's real-helper run)" >&2; exit 1; }
+REAL_PARK_DIR="$WORK/realpark"
+mkdir -p "$REAL_PARK_DIR/intentions" "$REAL_PARK_DIR/snap" "$REAL_PARK_DIR/keep"
+# Extract park_write()'s throwaway tsx module from the graph-commit under test.
+# `cat >"$tmpts" <<'TS'` ... `TS` is the heredoc; anything else here would test
+# a copy of the helper rather than the shipped one.
+awk '/^  cat >"\$tmpts" <<.TS.$/{f=1;next} f&&/^TS$/{exit} f' \
+  "$GC_SCRIPT" >"$REAL_PARK_DIR/park-helper.mts"
+if [[ ! -s "$REAL_PARK_DIR/park-helper.mts" ]] \
+   || ! grep -q 'ownContentEmbed' "$REAL_PARK_DIR/park-helper.mts"; then
+  no "case 84 setup: could not extract park_write's tsx helper from $GC_SCRIPT (the heredoc markers moved?)"
+else
+  real_node_file() { # <dir> <id> <statement> <body>
+    printf -- '---\nid: %s\nkind: tactic\nstatement: %s\nowner: ai\nstatus: raw\n---\n%s\n' \
+      "$2" "$3" "$4" >"$1/$2.md"
+  }
+  # On origin/main: the concurrent writer's landed content.
+  real_node_file "$REAL_PARK_DIR/intentions" t-real-carry "landed statement" "Body as it stands on origin/main."
+  # In SNAP_DIR: the losing writer's frozen original, with content shapes a
+  # naive embed mangles — a nested "---" fence, an indented line, a code fence.
+  {
+    printf -- '---\nid: t-real-carry\nkind: tactic\nstatement: REAL-CARRY-STATEMENT\nowner: ai\nstatus: raw\n---\n'
+    printf '%s\n' '# Plan' '' '  indented line' '```verify' 'npx vitest run --root .' '```' '' '--- a bare fence line' '' 'REAL-CARRY-BODY the paragraph nobody asked graph-commit to drop'
+  } >"$REAL_PARK_DIR/snap/t-real-carry.md"
+  # Kept outside SNAP_DIR so the comparison survives SNAP_DIR's destruction.
+  cp "$REAL_PARK_DIR/snap/t-real-carry.md" "$REAL_PARK_DIR/keep/t-real-carry.md"
+  real_carry_bytes="$(wc -c <"$REAL_PARK_DIR/keep/t-real-carry.md" | tr -d ' ')"
+  # Over the cap: 65536 bytes is the embed limit, so a ~120KB snapshot must be
+  # carried in part and must name the omission. The tail marker proves the cut.
+  {
+    printf -- '---\nid: t-real-big\nkind: tactic\nstatement: REAL-BIG-STATEMENT\nowner: ai\nstatus: raw\n---\n'
+    seq 1 4000 | sed 's/^/filler line /'
+    printf '%s\n' 'REAL-BIG-TAIL-MARKER'
+  } >"$REAL_PARK_DIR/snap/t-real-big.md"
+  real_node_file "$REAL_PARK_DIR/intentions" t-real-big "landed statement" "Body as it stands on origin/main."
+  cp "$REAL_PARK_DIR/snap/t-real-big.md" "$REAL_PARK_DIR/keep/t-real-big.md"
+  real_big_bytes="$(wc -c <"$REAL_PARK_DIR/keep/t-real-big.md" | tr -d ' ')"
+  # The real invocation's own shape: cd to the scripts dir (so tsx and `yaml`
+  # resolve from this repo's node_modules) and pass the store module as
+  # ../src/store.js, exactly as park_write does.
+  real_out="$( cd "$HARNESS_DIR" \
+    && node --import tsx/esm "$REAL_PARK_DIR/park-helper.mts" \
+         "$HARNESS_DIR/../src/store.js" "$REAL_PARK_DIR/intentions" \
+         2026-01-02 'graph-commit: concurrent-edit conflict — manual merge needed' \
+         "$REAL_PARK_DIR/snap" '' t-real-carry t-real-big 2>&1 )"; real_rc=$?
+  # Destroy SNAP_DIR before reading anything back: from here on, only what the
+  # park RECORDED can answer.
+  rm -rf "$REAL_PARK_DIR/snap"
+  # Byte-exactness of the carried copy, read back through the real store's
+  # readNode (so a YAML round-trip that folded a newline or ate an indent fails
+  # here rather than passing a substring grep). Reports, per id: whether the
+  # carried text is the whole original or a strict PREFIX of it, how many bytes
+  # it carries, and what the truncation note claims — so the cap arm is checked
+  # against the fixture's real size rather than a magic constant.
+  cat >"$REAL_PARK_DIR/verify-carry.mts" <<'VERIFY'
+import { readFileSync } from "node:fs";
+const [storePath, dir, id, expectedFile] = process.argv.slice(2);
+const { readNode } = await import(storePath);
+const rec = readNode(dir, id).office_hours.recommendation ?? "";
+const begin = `----- BEGIN this session's unlanded content for ${id} (verbatim) -----\n`;
+const end = `\n----- END this session's unlanded content for ${id} -----`;
+const i = rec.indexOf(begin);
+const j = rec.indexOf(end);
+if (i < 0 || j < 0) { console.log("NO-BLOCK"); process.exit(0); }
+// The carried region is the verbatim text, plus the truncation note when the
+// embed hit its cap. Split the note back off so the text can be compared to the
+// original byte for byte.
+let text = rec.slice(i + begin.length, j) + "\n";
+let omitted = 0;
+let notedTotal = 0;
+const note = text.match(/----- TRUNCATED: (\d+) of (\d+) bytes omitted[^\n]*-----\n$/);
+if (note) {
+  omitted = Number(note[1]);
+  notedTotal = Number(note[2]);
+  text = text.slice(0, text.length - note[0].length);
+}
+const original = readFileSync(expectedFile, "utf8");
+const kind = text === original ? "EXACT" : original.startsWith(text) ? "PREFIX" : "DIFFERS";
+console.log(
+  `${kind} carried=${Buffer.byteLength(text, "utf8")} omitted=${omitted} ` +
+    `noted_total=${notedTotal} actual_total=${Buffer.byteLength(original, "utf8")}`,
+);
+VERIFY
+  verify_carry() { # <id> <expected-file>
+    ( cd "$HARNESS_DIR" \
+      && node --import tsx/esm "$REAL_PARK_DIR/verify-carry.mts" \
+           "$HARNESS_DIR/../src/store.ts" "$REAL_PARK_DIR/intentions" "$1" "$2" 2>&1 )
+  }
+  verify_out="$(verify_carry t-real-carry "$REAL_PARK_DIR/keep/t-real-carry.md")"
+  carried_content="$(cat "$REAL_PARK_DIR/intentions/t-real-carry.md")"
+  if [[ $real_rc -eq 0 ]] \
+     && [[ ! -e "$REAL_PARK_DIR/snap" ]] \
+     && [[ "$verify_out" == "EXACT carried=$real_carry_bytes omitted=0 noted_total=0 actual_total=$real_carry_bytes" ]] \
+     && grep -q 'REAL-CARRY-BODY' <<<"$carried_content" \
+     && grep -q 'REAL-CARRY-STATEMENT' <<<"$carried_content" \
+     && grep -q 'carried at the end of this recommendation' <<<"$carried_content" \
+     && grep -q '^statement: landed statement' <<<"$carried_content"; then
+    ok "real park helper: the landed office_hours.recommendation carries the losing writer's content byte-exactly, and still does with SNAP_DIR destroyed"
+  else
+    no "real park helper carry (rc=$real_rc verify='$verify_out')"; printf '%s\n' "$real_out"; printf '%s\n' "$carried_content"
+  fi
+  big_verify="$(verify_carry t-real-big "$REAL_PARK_DIR/keep/t-real-big.md")"
+  big_content="$(cat "$REAL_PARK_DIR/intentions/t-real-big.md")"
+  read -r big_kind big_carried big_omitted big_noted big_actual <<<"$big_verify"
+  big_carried="${big_carried#carried=}"; big_omitted="${big_omitted#omitted=}"
+  big_noted="${big_noted#noted_total=}"; big_actual="${big_actual#actual_total=}"
+  if [[ "$big_kind" == "PREFIX" ]] \
+     && [[ "$big_omitted" -gt 0 ]] \
+     && [[ "$big_noted" == "$big_actual" && "$big_actual" == "$real_big_bytes" ]] \
+     && [[ $((big_carried + big_omitted)) -eq "$real_big_bytes" ]] \
+     && [[ "$big_carried" -le 65536 ]] \
+     && grep -q '65536-byte embed cap' <<<"$big_content" \
+     && grep -q 'REAL-BIG-STATEMENT' <<<"$big_content" \
+     && ! grep -q 'REAL-BIG-TAIL-MARKER' <<<"$big_content"; then
+    ok "real park helper: an over-cap snapshot is carried up to the cap as a strict prefix and states exactly how many bytes it dropped (never a silent truncation)"
+  else
+    no "real park helper cap ('$big_verify' fixture=$real_big_bytes)"; printf '%s\n' "$big_content"
+  fi
 fi
 
 # --- No scratch branches left behind anywhere ------------------------------------

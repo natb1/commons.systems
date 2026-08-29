@@ -820,6 +820,54 @@ describe("frozen-node candidates", () => {
     expect(candidateIds(nodes)).toEqual(["tactic-not-the-wait-id"]);
   });
 
+  it("a tactic-fleet-alarm-<kind> draft is not draft-selectable (tactic-fleet-alarm-node-park-clobber-loop, ruling (a))", () => {
+    // dispatch-fleet-alarm mints these nodes phase-null (draft shape) and
+    // resolves them exclusively via --resolve (phase -> done); /align-tactics
+    // must never treat one as an undecomposed draft, or a worker spawned on
+    // it could only ever freeze (there is nothing for it to decompose).
+    const nodes = [
+      tactic({ id: "tactic-fleet-alarm-unclaimed-hold", phase: null }),
+      tactic({ id: "tactic-fleet-alarm-busy-stall", phase: null }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("a tactic-fleet-alarm-<kind> draft carrying an office_hours park still emits no candidate", () => {
+    // The park-survival half of the fix lives in dispatch-fleet-alarm's
+    // classify() (shell layer, not this pure selector) — but the selector's
+    // own exclusion must hold regardless of office_hours, since the whole
+    // point is these nodes are never worked by /align-tactics at all.
+    const nodes = [
+      tactic({
+        id: "tactic-fleet-alarm-unclaimed-hold",
+        phase: null,
+        office_hours: {
+          reason: "worker session froze",
+          since: "2026-08-01",
+          recommendation: null,
+          session_type: "other",
+        },
+      }),
+    ];
+    expect(candidateIds(nodes)).toEqual([]);
+  });
+
+  it("an id that merely starts with the fleet-alarm prefix, without a kind segment, is treated as an ordinary draft", () => {
+    // Boundary check on the anchored regex: `tactic-fleet-alarm` alone (no
+    // trailing `-<kind>`) is not a member of the reserved id family.
+    const nodes = [tactic({ id: "tactic-fleet-alarm", phase: null })];
+    expect(candidateIds(nodes)).toEqual(["tactic-fleet-alarm"]);
+  });
+
+  it("an id that continues past the fleet-alarm prefix with a different word is treated as an ordinary draft", () => {
+    // `startsWith("tactic-fleet-alarm-")` would wrongly swallow this; the
+    // ANCHORED regex only matches the exact reserved shape, mirroring the
+    // dispatch-graph-main-red-sync bare-prefix incident dispatch-fleet-alarm's
+    // own comments warn against.
+    const nodes = [tactic({ id: "tactic-fleet-alarmist-review", phase: null })];
+    expect(candidateIds(nodes)).toEqual(["tactic-fleet-alarmist-review"]);
+  });
+
   it("a parked draft tactic emits no candidate", () => {
     const nodes = [
       tactic({

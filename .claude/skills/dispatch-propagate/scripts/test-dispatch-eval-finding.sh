@@ -144,7 +144,17 @@ git -C "$FR" config user.name fixture
 printf '.claude/\n' > "$FR/.git/info/exclude"
 printf 'fixture\n' > "$FR/README.md"
 git -C "$FR" add README.md
-git -C "$FR" commit -q -m init
+# Pin the commit timestamps so the fixture's HEAD sha is DETERMINISTIC. Every
+# other input to it is already fixed (tree, author, message), so the clock was
+# the only source of variation — and case (16) asserts that an abbreviated sha
+# is expanded to 40 characters. When the first 8 hex characters happened to be
+# all digits, normalize_resolved_ref() refused the abbreviation as ambiguous
+# (a PR number and an abbreviated sha resolve differently) — which is the
+# CORRECT behaviour, reached by an accidental fixture. That made the assertion
+# fail on roughly 2.3% of runs, (10/16)^8. Pinning the dates fixes the sha at
+# one known-good value rather than re-rolling the dice every run.
+GIT_AUTHOR_DATE="2026-01-01T00:00:00Z" GIT_COMMITTER_DATE="2026-01-01T00:00:00Z" \
+  git -C "$FR" commit -q -m init
 git -C "$FR" update-ref refs/remotes/origin/main HEAD
 
 # --- stubs -------------------------------------------------------------------
@@ -166,7 +176,16 @@ cat > "$BIN/stub-write-node" <<'STUB'
 #!/usr/bin/env bash
 # usage: stub-write-node --file <json>. Records the JSON it was handed, then
 # writes the node markdown the real writeNode would produce — YAML frontmatter
-# between two `---` fences plus the generated `# <statement>` placeholder body.
+# between two `---` fences plus a body.
+#
+# THE BODY IS PRESERVED ACROSS REWRITES, exactly as the real writeNode does
+# (packages/intentionsutil/src/store.ts: `readExistingBody(...) ?? "# ${statement}"`,
+# with assertNoBodyLoss refusing any rewrite that would drop it). Only a
+# BRAND-NEW file gets the generated `# <statement>` placeholder. The stub used
+# to regenerate the placeholder unconditionally, which no writeNode has ever
+# done — under that fiction the SUT's body writer always saw a placeholder on
+# disk, so nothing in this suite could observe whether an existing body survived
+# a write, which is precisely what cases (21a)-(21e) below assert.
 echo "write-node $*" >> "$STUB_LOG/write-node.log"
 file=""
 while [[ $# -gt 0 ]]; do
@@ -176,14 +195,22 @@ cp "$file" "$STUB_LOG/write-node-input.json"
 id=$(jq -r .id "$file")
 statement=$(jq -r '.statement // "placeholder"' "$file")
 phase=$(jq -r '.phase // "null"' "$file")
+node_md="$STUB_INTENTIONS/$id.md"
+body_tmp="$node_md.stub-body"
+if [[ -f "$node_md" ]]; then
+  awk 'p; /^---$/{c++; if(c==2) p=1}' "$node_md" > "$body_tmp"
+else
+  printf '# %s\n' "$statement" > "$body_tmp"
+fi
 {
   printf -- '---\n'
   printf 'id: %s\n' "$id"
   printf 'kind: tactic\n'
   printf 'phase: %s\n' "$phase"
   printf -- '---\n'
-  printf '# %s\n' "$statement"
-} > "$STUB_INTENTIONS/$id.md"
+  cat "$body_tmp"
+} > "$node_md"
+rm -f "$body_tmp"
 STUB
 
 cat > "$BIN/stub-dump-node" <<'STUB'
@@ -307,6 +334,29 @@ SLUG=stop-hook-hold-loop
 ID="tactic-eval-finding-$SLUG"
 NODE_MD="$FR/intentions/$ID.md"
 
+# The three views of a node's markdown body the owned-region contract is stated
+# in (see "THE OWNED BODY REGION" in the SUT header): the whole body, the part
+# the SUT generated, and the part it must never touch.
+REGION_OPEN='<!-- generated:dispatch-eval-finding -->'
+REGION_CLOSE='<!-- /generated:dispatch-eval-finding -->'
+node_body() { # [node.md] -> everything after the closing frontmatter fence
+  awk 'p; /^---$/{c++; if(c==2) p=1}' "${1:-$NODE_MD}"
+}
+node_region() { # [node.md] -> the content BETWEEN the generated markers
+  node_body "${1:-$NODE_MD}" | awk -v om="$REGION_OPEN" -v cm="$REGION_CLOSE" '
+    $0 == cm { inside = 0 }
+    inside   { print }
+    $0 == om { inside = 1 }
+  '
+}
+node_body_outside_region() { # [node.md] -> the body with the region cut out
+  node_body "${1:-$NODE_MD}" | awk -v om="$REGION_OPEN" -v cm="$REGION_CLOSE" '
+    $0 == om { skip = 1 }
+    !skip    { print }
+    $0 == cm { skip = 0 }
+  '
+}
+
 # --- (1) slug shape is an addressing guard, not a taxonomy -------------------
 run_ef -- --slug 'Not A Slug' --statement x --body-file "$BODY" --sensor s
 assert_eq "(1) malformed slug exits 64" "64" "$RC"
@@ -341,9 +391,13 @@ assert_eq "(3) recurrence record is sensor-attributed" "dispatch-phase-eval" \
 assert_eq "(3) attention is never machine-injected" "null" "$(written '.attention')"
 assert_eq "(3) pace_exempt true" "true" "$(written '.pace_exempt')"
 assert_eq "(3) phase null (draft shape)" "null" "$(written '.phase')"
-assert_eq "(3) body spliced over the placeholder" \
-  "The finding.
-Second line." "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_MD")"
+# The mint is the ONE path that writes a whole body, and it writes it wrapped in
+# the marker pair every later write is confined to (PR18 unit 1).
+assert_eq "(3) body spliced over the placeholder, inside the owned region" \
+  "$REGION_OPEN
+The finding.
+Second line.
+$REGION_CLOSE" "$(node_body)"
 
 # --- (4) a second occurrence with an IDENTICAL body still counts -------------
 # fleet-alarm's cmp -s gate would skip this commit entirely. Here the identical
@@ -809,9 +863,15 @@ assert_contains "(16) and the commit message names the resolution" "resolved by 
 run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
   --slug "$SLUG" --resolved-by '#3079' --body-file "$BODY"
 assert_eq "(16) the '#N' form is stored unchanged" "#3079" "$(written '.attributes.resolved_by')"
-assert_eq "(16) --body-file refreshes the body" \
+# The node's body here is case (14)'s hand-written one, restored from
+# origin/main and carrying no marker pair — so the refresh must PRESERVE it and
+# append a region, never replace it (PR18 unit 1).
+assert_eq "(16) --body-file refreshes the generated region" \
   "The finding.
-Second line." "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$NODE_MD")"
+Second line." "$(node_region)"
+assert_eq "(16) and the unmarked body it did not write survives the refresh" \
+  "
+The finding." "$(node_body_outside_region)"
 
 FULL_SHA=$(git -C "$FR" rev-parse HEAD)
 run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$OPEN_JSON" -- \
@@ -1061,6 +1121,153 @@ assert_not_contains "(20) no false post-write verification failure" \
   "post-write verification failed" "$OUT"
 assert_not_contains "(20) the vanished local path is never hashed" \
   "could not hash" "$OUT"
+
+# --- (21) an unattended body write is a REGION write, never a wholesale one ---
+# The defect (tactic-autonomous-body-write-wholesale-replace, PR18 unit 1): the
+# body is half of tacticScopeFingerprint, so writing it is a scope-substance
+# write — and this script used to keep the frontmatter and replace EVERYTHING
+# after it on all three paths, including the two where the node already exists.
+# The in-flight guard (case 8) does not cover this: it fires on a non-null
+# `execution`, which every parked or draft ledger entry — the ones a human has
+# actually been reading — does not have.
+
+# Puts $2.. (read from stdin) on origin/main as the body of node <$1>, so a
+# later pass sees a landed entry with content this script did not author.
+land_node_with_body() { # <id> < <body text>
+  local id="$1" md="$FR/intentions/$1.md"
+  {
+    printf -- '---\n'
+    printf 'id: %s\n' "$id"
+    printf 'kind: tactic\n'
+    printf 'phase: null\n'
+    printf -- '---\n'
+    cat
+  } > "$md"
+  git -C "$FR" add -A intentions >/dev/null 2>&1
+  git -C "$FR" commit -q -m "fixture: land $id" >/dev/null 2>&1
+  git -C "$FR" update-ref refs/remotes/origin/main HEAD
+}
+
+HSLUG=hand-authored-body
+HID="tactic-eval-finding-$HSLUG"
+HMD="$FR/intentions/$HID.md"
+HAND_JSON=$(jq -c --arg id "$HID" '.id = $id' <<<"$OPEN_JSON")
+HAND_PROSE="# The finding this entry is about
+
+An office-hours sitting added this paragraph. It is durable content, and no one
+asked a human whether an evaluator may replace it."
+
+# (21a) a recurrence over an UNMARKED body: the prose is kept verbatim and the
+# region is appended after it. This is the migration — refusing an unmarked body
+# instead would make every entry minted before this fence unwritable, and the
+# recurrence count is the one figure the ledger exists to carry.
+land_node_with_body "$HID" <<MD
+$HAND_PROSE
+MD
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$HAND_JSON" -- \
+  --slug "$HSLUG" --statement 'ignored on an update' --body-file "$BODY" \
+  --sensor dispatch-phase-eval --now 2026-08-20
+assert_eq "(21a) the recurrence lands" "0" "$RC"
+assert_eq "(21a) stdout says landed" "landed" "$SOUT"
+assert_eq "(21a) the hand-authored body survives verbatim" \
+  "$HAND_PROSE" "$(node_body_outside_region "$HMD")"
+assert_eq "(21a) and the generated finding sits inside the owned region" \
+  "The finding.
+Second line." "$(node_region "$HMD")"
+assert_eq "(21a) the occurrence was still counted — preserving is not skipping" "2" \
+  "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
+
+# (21b) a SECOND recurrence with different content replaces the region in place.
+# The generated reading carries its own `##` headings, which is why the region is
+# delimited by a marker pair rather than by "everything under the last heading",
+# and why append-forever was rejected: this body is a latest-reading body, so an
+# append mode would grow it without bound.
+BODY2="$WORK/body2.md"
+printf 'A different finding.\n\n## With its own heading\n\nAnd a paragraph under it.\n' > "$BODY2"
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$HAND_JSON" -- \
+  --slug "$HSLUG" --statement 'ignored on an update' --body-file "$BODY2" \
+  --sensor dispatch-phase-eval --now 2026-08-21
+assert_eq "(21b) the second recurrence lands" "0" "$RC"
+assert_eq "(21b) the region is replaced in place, its own ## headings intact" \
+  "A different finding.
+
+## With its own heading
+
+And a paragraph under it." "$(node_region "$HMD")"
+assert_eq "(21b) the hand-authored body is still there, unchanged" \
+  "$HAND_PROSE" "$(node_body_outside_region "$HMD")"
+assert_eq "(21b) exactly ONE region was ever appended — the body is stable" "1" \
+  "$(grep -cxF "$REGION_OPEN" "$HMD")"
+
+# (21c) the MINT is the only path that writes a whole body, and it is gated
+# rather than trusted: a local file already carrying an authored body means the
+# `absent` classification was wrong, so the create refuses. (Exit 70 is the mint
+# path's pre-existing contract for a local-only file it cannot roll back — there
+# is no origin/main blob to restore, by construction.)
+CSLUG=local-authored-body
+CID="tactic-eval-finding-$CSLUG"
+CMD_MD="$FR/intentions/$CID.md"
+CPROSE="# A draft somebody wrote by hand
+
+It has never reached origin/main, so nothing can roll it back."
+{
+  printf -- '---\n'
+  printf 'id: %s\n' "$CID"
+  printf 'kind: tactic\n'
+  printf 'phase: null\n'
+  printf -- '---\n'
+  printf '%s\n' "$CPROSE"
+} > "$CMD_MD"
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- \
+  --slug "$CSLUG" --statement 'a create may not replace an authored body' \
+  --body-file "$BODY" --sensor dispatch-phase-eval --now 2026-08-20
+assert_eq "(21c) the mint refuses rather than replacing the authored body" "70" "$RC"
+assert_eq "(21c) nothing reached the graph" "" "$(log_lines graph-commit.log)"
+assert_contains "(21c) and it says a create replaces WHOLESALE" \
+  "a create replaces the body WHOLESALE" "$OUT"
+assert_eq "(21c) the authored body is untouched" "$CPROSE" "$(node_body "$CMD_MD")"
+assert_eq "(21c) and no .tmp residue is left behind" "0" \
+  "$([[ -e "$CMD_MD.tmp" ]] && echo 1 || echo 0)"
+
+# (21d) an unbalanced marker pair is REFUSED, never guessed at — the permissive
+# reading (treat a lone opening marker as "the region runs to the end") would
+# swallow everything a human wrote below it.
+UNSLUG=unbalanced-markers
+UNID="tactic-eval-finding-$UNSLUG"
+UNMD="$FR/intentions/$UNID.md"
+UN_JSON=$(jq -c --arg id "$UNID" '.id = $id' <<<"$OPEN_JSON")
+UN_BODY="Prose above.
+
+$REGION_OPEN
+half a region, with no closing marker
+
+Prose below, which a permissive reading would eat."
+land_node_with_body "$UNID" <<MD
+$UN_BODY
+MD
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$UN_JSON" -- \
+  --slug "$UNSLUG" --statement 'ignored on an update' --body-file "$BODY" \
+  --sensor dispatch-phase-eval --now 2026-08-20
+assert_eq "(21d) an unbalanced marker pair is refused" "1" "$RC"
+assert_eq "(21d) nothing reached the graph" "" "$(log_lines graph-commit.log)"
+assert_contains "(21d) and it refuses to guess which bytes it owns" \
+  "refusing to guess which bytes this script owns" "$OUT"
+assert_eq "(21d) the body was rolled back to origin/main, byte for byte" \
+  "$UN_BODY" "$(node_body "$UNMD")"
+assert_eq "(21d) and no .tmp residue is left behind" "0" \
+  "$([[ -e "$UNMD.tmp" ]] && echo 1 || echo 0)"
+
+# (21e) a source ratchet, in the spirit of case 11: the mode is the whole fence,
+# so a call site that loses it is the defect returning. One create (the mint) and
+# two regions (recurrence, --resolved-by refresh) — no fourth spelling.
+assert_eq "(21e) exactly one create call site — the mint" "1" \
+  "$(grep -c '! splice_body create' "$SUT")"
+assert_eq "(21e) and both edit paths write a region" "2" \
+  "$(grep -c '! splice_body region' "$SUT")"
+assert_not_contains "(21e) no mode-less call survives" \
+  '! splice_body;' "$(cat "$SUT")"
+assert_not_contains "(21e) and no mode-less call at the end of a chain" \
+  '! splice_body \' "$(cat "$SUT")"
 
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite

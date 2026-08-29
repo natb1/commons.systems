@@ -147,6 +147,43 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
 }
 
 /**
+ * The id shape reserved for `dispatch-fleet-alarm`'s mechanically-managed
+ * alarm-node family (tactic-fleet-alarm-node-park-clobber-loop, ruling (a)):
+ * `tactic-fleet-alarm-<kind>`, one node per closed-enum condition kind (see
+ * that script's own `KINDS` array and its header comment on the id shape).
+ * These nodes are minted, refreshed, and resolved EXCLUSIVELY by that script
+ * — `--resolve` (phase -> done) is their only terminal, never a human or
+ * `/align-tactics` decomposition — so they must never surface as a draft
+ * candidate here. Before this exclusion, a park landed on one (e.g. because
+ * its worker session froze) was silently wiped the next time the alarm
+ * script re-detected the condition and mint-fresh overwrote the parked node
+ * (see dispatch-fleet-alarm's `classify()` fix alongside this one).
+ *
+ * An ANCHORED full-id match, not a bare `startsWith` prefix test — mirroring
+ * the caution in dispatch-fleet-alarm's own comment about the
+ * `dispatch-graph-main-red-sync` incident, where a bare prefix test matched
+ * an unrelated hand-authored node and mechanically auto-completed it. An id
+ * that merely starts with the reserved string but continues with something
+ * else (e.g. a hand-authored `tactic-fleet-alarmist-review`) does not match.
+ *
+ * Chosen over a general `attributes` marker (the plan's alternative) because
+ * the marker would need either a schema change (out of scope here — another
+ * unit owns schema.ts) or an unvalidated ad hoc `attributes` key, AND a
+ * migration write to every already-minted `tactic-fleet-alarm-*` node before
+ * the exclusion would protect them — including the very node
+ * (`tactic-fleet-alarm-node-park-clobber-loop`) this fix exists to stop
+ * clobbering, which this unit is expressly forbidden from hand-editing. The
+ * id family already IS the durable, zero-migration marker: every node in it
+ * is mechanically managed today, with no exceptions.
+ */
+const FLEET_ALARM_ID_RE = /^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Whether `node` belongs to the reserved `dispatch-fleet-alarm` id family. */
+function isFleetAlarmNode(node: IntentionNode): boolean {
+  return node.kind === "tactic" && FLEET_ALARM_ID_RE.test(node.id);
+}
+
+/**
  * The SIGNAL STRING an open tactic's candidate is emitted at — what the shell
  * layer routes on, which is not always the node's persisted ladder `phase`.
  *
@@ -453,12 +490,18 @@ export function selectGraphTargets(nodes: IntentionNode[]): GraphSelection {
   // against the drifted strategy. Both gate on office_hours null and complete
   // blockers. A tactic that is neither draft nor soft-frozen is already handled
   // by the executable loop above (or is done / not eligible) and skipped here.
+  // A draft in the reserved `tactic-fleet-alarm-<kind>` id family is excluded
+  // (isFleetAlarmNode, tactic-fleet-alarm-node-park-clobber-loop, ruling (a)):
+  // that family is minted and resolved exclusively by dispatch-fleet-alarm,
+  // never decomposed by /align-tactics, so treating it as an undecomposed
+  // draft candidate here spawned a worker that could only ever freeze on it.
   for (const t of tactics) {
     if (t.office_hours !== null) continue;
     if (!blockersComplete(t, byId)) continue;
     if (isDraft(t)) {
       if (subtreeParentIds.has(t.id)) continue; // permanent container, not an undecomposed draft
       if (waitNodeIds.has(t.id)) continue;      // armed calendar WAIT, not an undecomposed draft
+      if (isFleetAlarmNode(t)) continue;        // mechanically managed; --resolve is its only terminal
       candidates.push({
         id: t.id,
         kind: "tactic",
