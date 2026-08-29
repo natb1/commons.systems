@@ -260,6 +260,8 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
+      - name: Run approve-artifact hook tests
+        run: .claude/hooks/test-approve-artifact.sh
       # The suites below guard SUTs that live OUTSIDE
       # .claude/skills/dispatch-propagate/scripts/ — .claude/workflows/*.js,
       # .claude/hooks/*.sh, packages/intentionsutil/scripts/*, and the doctrine
