@@ -13,10 +13,11 @@ and the prose are both generated from it.
 
 | File | What it is |
 |---|---|
-| `model.mjs` | The model: the plan's §5/§6 marks, the wage rungs, the derivations, and the levers. The single source of truth. Written in the artifact's own dialect (`var`, ES5 functions, no imports, DOM-free) because it is spliced into the published page verbatim. |
+| `model.mjs` | The model: the plan's §5/§6 marks, the cost registry, the wage rungs, the derivations, and the levers. The single source of truth. Written in the artifact's own dialect (`var`, ES5 functions, no imports, DOM-free) because it is spliced into the published page verbatim. |
 | `figures.mjs` | The reading side: named scalar `FIGURES` and whole-table `BLOCKS` that the documents and the artifact's notes card consume. |
 | `render.mjs` | Writes both. `node model/render.mjs` regenerates everything; `--check` fails when anything is stale. |
-| `verify.mjs` | The model's invariants — the §6 reproduction, the solved operations split, the marginals, the levers that must not move owner comp. |
+| `verify.mjs` | The model's invariants — the §6 reproduction on §6's own operations figures, the bottom-up operations line reconciling with those figures, every cost carrying provenance, the occupancy residual staying inside its benchmark band, the P&L tree summing to owner comp under both groupings, the marginals, the levers that must not move owner comp. |
+| `evidence.md` | Generated, with an authored frame: every cost with its grade and band, the operations reconciliation against §6, and the ranking of what each estimate is worth if it turns out wrong. The document that says what to go verify first. |
 
 ## Changing the model
 
@@ -33,6 +34,35 @@ and in the meantime the docs and the page disagree, which is the failure this
 directory exists to prevent. `node model/render.mjs --check` is the gate: it
 exits non-zero and names the stale files.
 
+## The cost registry, and the two operations bases
+
+Every cost the venture carries is declared once, in the registry near the top of
+`model.mjs`: an id, the income stream it serves (`cafe` / `rooms` / `books` /
+`shared`), what its amount scales with, an evidence grade — **A** contracted,
+**B** observed, **C** benchmark, **D** assumed — an optional band, and a closure
+returning the amount in $K. `verify.mjs` refuses a cost missing a stream, a grade
+or an amount, and refuses a grade-D cost missing a band, so a new cost cannot be
+added without saying how well it is known. `evidence.md` is the reading of the
+registry: the table, the operations reconciliation, and the band sweep that ranks
+what to go verify.
+
+`OPS_BASIS` selects what the operations line *is*. Under `'built'` — the default,
+and what every document and the published page print — it is the sum of the
+registry's operations components. Under `'stated'` it is §6's two published
+per-site totals solved for a fixed base and a revenue-proportional rate, the way
+the model used to do it always. The stated basis survives for exactly one job:
+showing that the rest of the model's arithmetic lands on §6 when it is given §6's
+own operations figures. `withOpsBasis(basis, fn)` evaluates on either without
+disturbing global state — the same shape as `withState` — and `withCost(id, value,
+fn)` pins one registry entry, which is how `figures.mjs` sweeps a band.
+
+The check this replaced asserted that the fixed base "lands identically at both
+sites." It could not fail: the variable rate was defined as the difference in
+operations over the difference in revenue, which forces the two bases equal for
+any pair of totals. It is deleted. What replaced it compares the built line
+against §6's stated figures — two numbers neither of which is derived from the
+other — and can therefore come out wrong.
+
 ## The three kinds of generated region
 
 - **The model itself**, spliced into `claude/benchmark-explorer-src.html`
@@ -42,8 +72,12 @@ exits non-zero and names the stale files.
   construction.
 - **Blocks** — `<!-- model:begin <name> -->` … `<!-- model:end <name> -->` —
   filled by the matching entry in `BLOCKS`. Whole tables: the pro forma, the
-  sensitivity rows, the matrices, the wage rungs, the notes card's two mini
-  tables. Works in markdown and in the artifact's HTML.
+  sensitivity rows, the matrices, the wage rungs, the notes card's mini tables.
+  Two families joined them with the cost registry — the stream-margin table, in
+  markdown for §6 (`stream-margins`) and in the notes card's HTML idiom
+  (`stream-margins-html`); and `evidence.md`'s three, the evidence table, the
+  operations reconciliation, and the tornado ranking. Works in markdown and in
+  the artifact's HTML.
 - **Spans** — `<!--m:<name>-->$43K<!--/m-->` — filled from `FIGURES`. One number
   inside authored prose. The prose stays hand-written; only the number is
   generated, so a sentence's argument is the author's and its arithmetic is the

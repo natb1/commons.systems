@@ -26,7 +26,16 @@ export function sk(v, d = 0) {
   const r = round(v, d);
   return (r < 0 ? MINUS : "+") + "$" + Math.abs(r).toFixed(d) + "K";
 }
-const pct = (v, d = 0) => round(v, d).toFixed(d) + "%";
+// %, signed only when negative, on the docs' typographic minus — "5.5%", "−63.0%"
+const pct = (v, d = 0) => {
+  const r = round(v, d);
+  return (r < 0 ? MINUS : "") + Math.abs(r).toFixed(d) + "%";
+};
+// %, always signed — "+2.7%", "−1.4%"
+const spct = (v, d = 0) => {
+  const r = round(v, d);
+  return (r < 0 ? MINUS : "+") + Math.abs(r).toFixed(d) + "%";
+};
 const num = (v, d = 0) => round(v, d).toFixed(d);
 
 // ---- the marks the documents quote ---------------------------------------
@@ -35,10 +44,16 @@ const num = (v, d = 0) => round(v, d).toFixed(d);
 // instead of the Wages rung, which is what makes the model reproduce §6 rather
 // than re-price it — the one calibration the whole file rests on.
 const P = M.PLAN;
+// The lever settings §5/§6 are written at, as a state object — so the pro forma,
+// the evidence tables and the sensitivity sweep all read the model at the same
+// point rather than each restating it.
+const planState = (site, fin = "lease") => ({
+  site, fin, util: P.util, tx: M.SITES[site].mark, price: P.price, ticket: P.ticket,
+  events: P.events, caClub: P.caClub, caEvent: P.caEvent, commons: P.commons,
+});
 function atPlanMarks(site, fin = "lease") {
   return M.withState(
-    { site, fin, util: P.util, tx: M.SITES[site].mark, price: P.price, ticket: P.ticket,
-      events: P.events, caClub: P.caClub, caEvent: P.caEvent, commons: P.commons },
+    planState(site, fin),
     () => {
       const labourDelta = M.laborK() - M.PLAN_LABOR_K; // swap the rung back out for §6's line
       return {
@@ -75,11 +90,18 @@ const RLI = streamRevK("li");
 const RSN = streamRevK("sn");
 
 // Cost of sale — §6's COGS line, rebuilt from the per-stream margins the model
-// carries instead of asserted as a lump.
+// carries instead of asserted as a lump. Every stream that has a cost of sale
+// belongs here: the room line's 6% was missing, so the column was ~$3K short of
+// its own owner-comp row.
 const cogsK = (r) =>
   r.cafe * (1 - M.CAFE_MARGIN_DEF / 100) +
   r.catering * (1 - M.CATER_MARGIN) +
-  r.prints * (1 - M.PRINT_MARGIN);
+  r.prints * (1 - M.PRINT_MARGIN) +
+  (r.sessions + r.day) * (1 - M.ROOM_MARGIN);
+
+// The pro forma's Cost of sale row, addressable by site — verify.mjs checks the
+// printed column adds up to the owner-comp row printed under it.
+export const proFormaCogsK = (site) => cogsK(streamRevK(site));
 
 // The owner's bars at the plan's default capital at risk.
 const bars = M.withState({}, () => ({
@@ -146,6 +168,84 @@ function contour(site, target) {
   );
 }
 
+// ---- operations, built and stated ----------------------------------------
+// §6 states one operations figure per site with nothing behind it. The registry
+// builds the same line out of named components — utilities, insurance, software
+// and repairs/misc, plus card fees and marketing on revenue — and every figure
+// below rides on that built total. Both are carried here because the pair *is*
+// the argument: a built line that reconciles with a stated one is evidence, a
+// line solved back out of it is only arithmetic.
+const OPS = {};
+for (const site of ["li", "sn"]) {
+  const built = M.builtOpsK(site), stated = M.SITES[site].ops;
+  OPS[site] = { built, stated, delta: built - stated, pctDelta: (100 * (built - stated)) / stated };
+}
+
+// ---- reading the registry -------------------------------------------------
+const STREAM_LABEL = { cafe: "Café", rooms: "Rooms", books: "Books", shared: "Cross-cutting", all: "Every stream" };
+const DRIVER_LABEL = {
+  streamRev: "that stream's revenue", revenue: "gross revenue", sqft: "floor area",
+  hours: "staffed hours", payroll: "payroll", fixed: "nothing — it is a flat annual cost",
+};
+const label = (map, key, what) => {
+  if (!(key in map)) throw new Error(`figures: no ${what} label for '${key}'`);
+  return map[key];
+};
+const grade = (ev) => `${ev} — ${label(M.EV, ev, "evidence-grade")}`;
+const dec = (v) => (v % 1 === 0 ? 0 : 1); // print $4.5K as $4.5K and $12K as $12K
+// A band in the units it is declared in. `unit` is the registry's own field, so
+// a new unit fails loudly here rather than printing an unlabelled pair.
+function bandText(entry) {
+  if (entry.band === null || entry.band === undefined) return "—";
+  const [lo, hi] = entry.band;
+  const both = Math.max(dec(lo), dec(hi));
+  if (entry.unit === "K") return `$${num(lo, both)}–${num(hi, both)}K`;
+  if (entry.unit === "rate") return `${num(lo * 100, 1)}–${pct(hi * 100, 1)}`;
+  if (entry.unit === "psf") return `$${num(lo, both)}–${num(hi, both)}/sf`;
+  if (entry.unit === "sf") return `${num(lo, both)}–${num(hi, both)} sf`;
+  if (entry.unit === "hrs") return `${num(lo, both)}–${num(hi, both)} hr`;
+  throw new Error(`figures: no band format for unit '${entry.unit}'`);
+}
+
+// ---- the tornado ----------------------------------------------------------
+// What the model does not know, ranked by what it would cost to be wrong. Each
+// banded input is swept from one end of its band to the other with every other
+// input held at its declared value, and the ranking is by the swing in owner
+// comp at Little Italy's plan marks — the figure §6 prints.
+//
+// This lives on the reading side rather than in model.mjs on purpose: the model
+// is spliced verbatim into the published page, and a derivation only the
+// documents read would be dead weight there.
+//
+// The operating levers are deliberately absent. Café margin, wage rung,
+// utilization and walk-ins all move owner comp further than anything below, and
+// the explorer already exposes every one of them. This ranks what is *not* under
+// the operator's control — the numbers the venture has to go verify.
+const compAtLiMarks = () =>
+  M.withState(planState("li"), () => M.comp(P.util, M.SITES.li.mark) + (M.laborK() - M.PLAN_LABOR_K));
+
+function tornado() {
+  return M.INPUTS
+    .map((i) => {
+      const lo = M.withCost(i.id, i.band[0], compAtLiMarks);
+      const hi = M.withCost(i.id, i.band[1], compAtLiMarks);
+      return { ...i, lo, hi, swing: Math.abs(hi - lo) };
+    })
+    .sort((a, b) => b.swing - a.swing);
+}
+const TORNADO = tornado();
+// Two of the nine banded inputs are absorption geometry, not costs: ROOM_SF and
+// SESSION_HRS say how the cross-cutting row is *divided*, so they move no total
+// and swing owner comp by exactly zero. Ranking them alongside the costs would
+// print them as the two safest numbers in the model, which inverts what they
+// are. They are split out structurally — a registry entry is a cost, anything
+// else is geometry — and ranked below on the quantity they do move.
+const SWEPT = TORNADO.filter((i) => M.costById(i.id) !== null);
+const GEOMETRY = TORNADO.filter((i) => M.costById(i.id) === null);
+const GEOM_BASIS = { "room-sf": "sqft", "session-hrs": "hours" };
+const GEOM_BASIS_LABEL = { sqft: "floor area", hours: "staffed hours" };
+const TOP = SWEPT[0];
+
 // ---- FIGURES -------------------------------------------------------------
 export const FIGURES = {
   // capacity and the room engine (§5)
@@ -177,14 +277,34 @@ export const FIGURES = {
   cogsLi: k(cogsK(RLI)),
   cogsSn: k(cogsK(RSN)),
   laborPlanK: k(M.PLAN_LABOR_K),
-  opsLi: k(M.SITES.li.ops),
-  opsSn: k(M.SITES.sn.ops),
+  opsLi: k(OPS.li.built),
+  opsSn: k(OPS.sn.built),
   commonsK: k(P.commons),
   occLi: k(M.SITES.li.occ),
   occSn: k(M.SITES.sn.occ),
   occBuy: k(BUY.occupancy),
   fixedOpsK: k(M.FIXED_OPS, 1),
   varOpsPct: pct(M.VAR_OPS * 100, 1),
+
+  // operations built from components, against §6's stated figure for the same
+  // line — the reconciliation that replaced the solved residual
+  opsBuiltLi: k(OPS.li.built, 1),
+  opsBuiltSn: k(OPS.sn.built, 1),
+  opsStatedLi: k(OPS.li.stated),
+  opsStatedSn: k(OPS.sn.stated),
+  opsDeltaLi: sk(OPS.li.delta, 1),
+  opsDeltaSn: sk(OPS.sn.delta, 1),
+  opsDeltaPctLi: pct(OPS.li.pctDelta, 1),
+  opsDeltaPctSn: pct(OPS.sn.pctDelta, 1),
+
+  // how much of the cost base is an estimate, and what the worst one is worth
+  costCount: num(M.COSTS.length),
+  bandedInputCount: num(M.INPUTS.length),
+  assumedInputCount: num(M.INPUTS.filter((i) => i.ev === "D").length),
+  topSwingLabel: TOP.label,
+  topSwingBand: bandText(TOP),
+  topSwingK: k(TOP.swing, 1),
+
   cafeMarginPct: pct(M.CAFE_MARGIN_DEF),
   roomMarginPct: pct(M.ROOM_MARGIN * 100),
 
@@ -210,13 +330,6 @@ export const FIGURES = {
   }), 1),
   sessionMarginalSignedK: sk(M.withState({}, () => M.msess(P.price)), 1),
   txMarginalSignedK: sk(M.withState({}, () => M.mtx(P.ticket)), 2),
-
-  // exact (one-decimal) statements of the two base cases, where the prose needs
-  // to show that the model reproduces §6 rather than rounds to it
-  compLiExact: k(LI.comp, 1),
-  compSnExact: k(SN.comp, 1),
-  compLiRung: k(M.withState({}, () => M.comp(P.util, M.SITES.li.mark))),
-  wageSpreadK: k(M.withState({ wage: 3 }, () => M.laborK()) - M.withState({ wage: 0 }, () => M.laborK())),
 
   // exact (one-decimal) statements of the two base cases, where the prose shows
   // that the model reproduces §6 rather than merely rounds to it
@@ -282,12 +395,12 @@ function proForma() {
     row("Revenue (§5 streams)", k(LI.revenue), k(SN.revenue), k(BUY.revenue)),
     row("Cost of sale", k(cogsK(RLI)), k(cogsK(RSN)), k(cogsK(RSN))),
     row("Labor (living wage)", k(M.PLAN_LABOR_K), k(M.PLAN_LABOR_K), k(M.PLAN_LABOR_K)),
-    row("Operations", k(M.SITES.li.ops), k(M.SITES.sn.ops), k(M.SITES.sn.ops)),
+    row("Operations", k(OPS.li.built), k(OPS.sn.built), k(OPS.sn.built)),
     row("Commons/books", k(P.commons), k(P.commons), k(P.commons)),
     row("Occupancy", k(LI.occupancy), k(SN.occupancy), k(BUY.occupancy) + " (verify terms)"),
     row("**Owner compensation**", `**${k(LI.comp)}**`, `**${k(SN.comp)}**`, `**${k(BUY.comp)} + ~${k(M.BUY_EQUITY)} equity**`),
     "",
-    `Operations is one figure per site in the plan; the model splits it where §6's own bottom-up lines do — ${pct(M.VAR_OPS * 100, 1)} of gross revenue (card fees + marketing) plus a ${k(M.FIXED_OPS, 1)} fixed base — and the split is solved from the two sites' published totals, so this row reproduces them. Cost of sale is rebuilt from the per-stream margins (café ${pct(M.CAFE_MARGIN_DEF)} contribution, catering ${pct(M.CATER_MARGIN * 100)}, consignment ${pct(M.PRINT_MARGIN * 100)}) rather than carried as a lump.`,
+    `Operations is one figure per site in the plan. This row does not use it: the line is built from named components — a ${k(M.FIXED_OPS, 1)} fixed base (utilities, insurance, software, repairs & misc, each carrying an evidence grade and a band) plus ${pct(M.VAR_OPS * 100, 1)} of gross revenue for card fees and marketing. Built that way it comes to ${k(OPS.li.built, 1)} at Little Italy against §6's stated ${k(OPS.li.stated)} (${sk(OPS.li.delta, 1)}, ${spct(OPS.li.pctDelta, 1)}) and ${k(OPS.sn.built, 1)} at SN/HT against ${k(OPS.sn.stated)} (${sk(OPS.sn.delta, 1)}, ${spct(OPS.sn.pctDelta, 1)}) — close enough to say the two agree, far enough apart that a component drifting would show. \`model/evidence.md\` carries the grades, the bands, and what each one is worth if it is wrong. Cost of sale is rebuilt from the per-stream margins (café ${pct(M.CAFE_MARGIN_DEF)} contribution, catering ${pct(M.CATER_MARGIN * 100)}, consignment ${pct(M.PRINT_MARGIN * 100)}, rooms ${pct(M.ROOM_MARGIN * 100)}) rather than carried as a lump, so the column sums to its own owner-comp row.`,
   ].join("\n");
 }
 
@@ -309,7 +422,7 @@ function matrixAssumptions() {
     `- **One-off private events** (parties/showers, D11 base ${num(P.events, 1)}/mo) contribute ~${num(M.evEqOf(P.events), 1)} weekly-equivalent sessions at every tier; the club roster figures below are net of them.`,
     `- **Club cadence mapping:** a weekly club = 1 session/wk; biweekly = 0.5; monthly ≈ 0.23. "Mixed roster" assumes ${M.CADENCE.mixed.desc.replace(/ — .*/, "")} — the realistic shape the pilot's "monthly or better" retention floor predicts. At the base row that is ~${num(roster.weekly, 0)} weekly-committed clubs or ~${num(roster.mixed, 0)} mixed-cadence ones.`,
     `- **Program-for vs maintain:** the roster numbers are *active clubs to maintain*. Programming must run above them — clubs churn (rate unknown; a pilot deliverable), so the recruiting pipeline needs to be perhaps ${num(M.DEF.churn, 1)}× the maintained roster. Validate the churn rate during Phase 0.5.`,
-    `- **Cost basis:** each site is priced on its own §6 lines — occupancy ${k(M.SITES.li.occ)} (LI) vs ${k(M.SITES.sn.occ)} (SN/HT), operations ${k(M.SITES.li.ops)} vs ${k(M.SITES.sn.ops)} — and its own café mark (${num(M.SITES.li.mark)} vs ${num(M.SITES.sn.mark)} walk-ins/day). The two sites therefore get two matrices below rather than one matrix and a per-cell offset: the cheaper SN/HT floor is worth ${sk(M.SITES.li.occ - M.SITES.sn.occ)} at equal traffic, and its weaker café mark costs it the rest.`,
+    `- **Cost basis:** each site is priced on its own §6 lines — occupancy ${k(M.SITES.li.occ)} (LI) vs ${k(M.SITES.sn.occ)} (SN/HT), operations ${k(OPS.li.built)} vs ${k(OPS.sn.built)}, both built from named components and reconciled against §6's stated ${k(OPS.li.stated)} / ${k(OPS.sn.stated)} within ${pct(Math.max(OPS.li.pctDelta, OPS.sn.pctDelta), 1)} — and its own café mark (${num(M.SITES.li.mark)} vs ${num(M.SITES.sn.mark)} walk-ins/day). The two sites therefore get two matrices below rather than one matrix and a per-cell offset: the cheaper SN/HT floor is worth ${sk(M.SITES.li.occ - M.SITES.sn.occ)} at equal traffic, and its weaker café mark costs it the rest.`,
   ].join("\n");
 }
 
@@ -333,7 +446,7 @@ function matrixTables() {
   const out = [GEN(), ""];
   for (const site of ["li", "sn"]) {
     const m = matrixFor(site);
-    out.push(`**${M.SITES[site].label}** — occupancy ${k(M.SITES[site].occ)}, operations ${k(M.SITES[site].ops)}, café mark ${num(M.SITES[site].mark)} walk-ins/day.`, "");
+    out.push(`**${M.SITES[site].label}** — occupancy ${k(M.SITES[site].occ)}, operations ${k(OPS[site].built)} (built from components; §6 states ${k(OPS[site].stated)}), café mark ${num(M.SITES[site].mark)} walk-ins/day.`, "");
     out.push("| Rooms ↓ / Café → | " + m.cols.map((c) => {
       const rel = c / M.SITES[site].mark;
       const badge = M.RELBADGE[String(round(rel, 1))];
@@ -378,8 +491,105 @@ function wageRungs() {
   ].join("\n");
 }
 
+// The same P&L the pro forma prints, grouped by income stream instead of by
+// cost nature — the grouping that can answer "what does the café earn?".
+function streamRows() {
+  return M.withState(planState("li"), () => {
+    const m = M.streamMargins(P.util, M.SITES.li.mark);
+    return {
+      rows: M.tree(P.util, M.SITES.li.mark).map((n) => ({ label: n.label, ...m[n.id] })),
+      comp: M.comp(P.util, M.SITES.li.mark),
+      labor: M.laborK(),
+      laborDelta: M.laborK() - M.PLAN_LABOR_K,
+    };
+  });
+}
+
+function streamMargins() {
+  const d = streamRows();
+  const row = (r) =>
+    `| ${r.label} | ${r.revenue > 0 ? k(r.revenue) : "—"} | ${k(r.cost)} | ${sk(r.margin)} | ${r.revenue > 0 ? pct((r.margin / r.revenue) * 100, 1) : "—"} |`;
+  return [
+    GEN(), "",
+    `| ${M.SITES.li.label} at plan marks | Revenue | Cost the stream incurs | Margin | Margin % |`,
+    "|---|---|---|---|---|",
+    ...d.rows.map(row),
+    `| **Owner compensation** | | | **${k(d.comp)}** | |`,
+    "",
+    `*A cost is charged to a stream only where the evidence puts it there: each stream's own cost of sale, its own card fees at ${pct(M.withState(planState("li"), () => M.cardRate()) * 100, 1)} of its own revenue, and the ${k(P.commons)} commons budget the books wall exists to fund. The cross-cutting row is deliberately left whole. The three defensible ways to divide it — revenue share, floor area, staffed hours — give three different answers, so the explorer makes the basis a visible control instead of the model picking one. Labor here is the default Wages rung (${k(d.labor)}) rather than §6's ${k(M.PLAN_LABOR_K)} line, which is why this table's owner comp sits ${k(d.laborDelta, 1)} below the pro forma's.*`,
+  ].join("\n");
+}
+
+// Every cost the venture carries, with what is known about it. This is the table
+// the evidence grades exist for: a reader can see in one pass which numbers are
+// quoted, which are observed, which are benchmarks and which are guesses.
+function evidenceTable() {
+  const amounts = M.withState(planState("li"), () => M.COSTS.map((c) => c.amount(P.util, M.SITES.li.mark)));
+  const rows = M.COSTS.map((c, i) =>
+    `| ${c.label}${c.derived === true ? " *(residual)*" : ""} | ${label(STREAM_LABEL, c.stream, "stream")} | ${label(DRIVER_LABEL, c.driver, "driver")} | ${k(amounts[i], 1)} | ${grade(c.ev)} | ${bandText(c)} | ${c.src} |`);
+  return [
+    GEN(), "",
+    "| Cost | Stream | Scales with | Amount | Evidence | Band | Where the number comes from |",
+    "|---|---|---|---|---|---|---|",
+    ...rows, "",
+    `*Amounts are at ${M.SITES.li.label}'s plan marks on the lease path, which is why the purchase premium reads ${k(0, 1)} — it applies only to the SN/HT buy case. ${num(M.COSTS.filter((c) => c.band).length)} of these ${num(M.COSTS.length)} costs carry a band and ${num(M.COSTS.filter((c) => c.ev === "D").length)} are graded D; two further banded inputs are not costs at all — the absorption geometry — and are ranked separately in the sweep. A cost marked as a residual is what is left after the others rather than an independently sourced figure, which is exactly why its band matters.*`,
+  ].join("\n");
+}
+
+// The check that replaced the tautology: the components add up to something §6
+// never told them to add up to, and the two agree anyway.
+function opsReconciliation() {
+  const parts = M.withState(planState("li"), () => {
+    const shared = M.tree(P.util, M.SITES.li.mark).find((n) => n.id === "shared");
+    return shared.children.find((n) => n.id === "operations").children;
+  });
+  const varAt = (site) => M.withState(planState(site), () => M.varOpsK(P.util, M.SITES[site].mark));
+  const rates = M.withState(planState("li"), () => ({ card: M.cardRate(), mkt: M.mktRate() }));
+  const row = (site) =>
+    `| ${M.SITES[site].label} | ${k(OPS[site].built, 1)} | ${k(OPS[site].stated)} | ${sk(OPS[site].delta, 1)} (${spct(OPS[site].pctDelta, 1)}) |`;
+  return [
+    GEN(), "",
+    "| Site | Built from components | §6 states | Delta |",
+    "|---|---|---|---|",
+    row("li"), row("sn"), "",
+    `The built figure is a ${k(M.FIXED_OPS, 1)} fixed base — ${parts.map((p) => `${p.label.toLowerCase()} ${k(-p.value, 1)}`).join(", ")} — plus ${pct(M.VAR_OPS * 100, 1)} of gross revenue for card fees (${pct(rates.card * 100, 1)}) and marketing (${pct(rates.mkt * 100, 1)}), which comes to ${k(varAt("li"), 1)} at ${M.SITES.li.label} and ${k(varAt("sn"), 1)} at ${M.SITES.sn.label}.`,
+    "",
+    `§6's figure is a single number per site with nothing behind it. Neither total is derived from the other, so the agreement above is a result and not an identity — the old split was solved *out of* §6's two totals, which meant it reproduced them no matter what the components were. \`model/verify.mjs\` now asserts the two agree within 6%, and a component drifting far enough breaks it.`,
+  ].join("\n");
+}
+
+// What the model does not know, ranked by what being wrong about it would cost.
+function tornadoBlock() {
+  const rows = SWEPT.map((i) =>
+    `| ${i.label} | ${grade(i.ev)} | ${bandText(i)} | ${k(i.lo, 1)} | ${k(i.hi, 1)} | **${k(i.swing, 1)}** |`);
+  const geomRow = (i) => {
+    const basis = label(GEOM_BASIS, i.id, "absorption-basis");
+    const at = (v) => M.withCost(i.id, v, () => M.withState(planState("li"), () => M.absorb(basis, P.util, M.SITES.li.mark)));
+    const lo = at(i.band[0]), hi = at(i.band[1]);
+    return `| ${i.label} | ${grade(i.ev)} | ${bandText(i)} | ${label(GEOM_BASIS_LABEL, basis, "absorption basis")} | ${k(lo.cafe.absorbed, 1)} → ${k(hi.cafe.absorbed, 1)} | ${k(lo.rooms.absorbed, 1)} → ${k(hi.rooms.absorbed, 1)} | unmoved |`;
+  };
+  return [
+    GEN(), "",
+    "| Input | Evidence | Band | Owner comp at the low end | at the high end | Swing |",
+    "|---|---|---|---|---|---|",
+    ...rows, "",
+    `*Owner comp at ${M.SITES.li.label}'s plan marks with labor held at §6's ${k(M.PLAN_LABOR_K)} line — the ${k(compAtLiMarks())} the pro forma prints — with one input swept end to end and every other held at its declared value. Operating levers are absent on purpose: café margin, wage rung, utilization and walk-ins all move owner comp further than anything here, and the explorer already exposes every one of them. This ranks what is **not** under the operator's control.*`,
+    "",
+    `**The two absorption constants are ranked separately, because they move nothing here.**`,
+    "",
+    "| Input | Evidence | Band | Basis it drives | Café's share of the cross-cutting row | Rooms' share | Owner comp |",
+    "|---|---|---|---|---|---|---|",
+    ...GEOMETRY.map(geomRow), "",
+    `*These two say how the ${k(streamRows().rows.find((r) => r.label === "Cross-cutting").cost)} cross-cutting row is **divided** between streams, not how large it is, so sweeping either one moves owner comp by exactly ${k(Math.max(...GEOMETRY.map((i) => i.swing)), 1)}. Listed with the costs above they would print as the two best-known numbers in the model, which is the reverse of the truth — both are grade D, and between them they move the café's attributed cost further than any single cost line above moves owner comp. What they put at risk is the answer to "what does the café earn?", not the answer to "what does the owner earn?".*`,
+  ].join("\n");
+}
+
 export const BLOCKS = {
   "pro-forma": proForma,
+  "stream-margins": streamMargins,
+  "evidence-table": evidenceTable,
+  "ops-reconciliation": opsReconciliation,
+  tornado: tornadoBlock,
   sensitivity,
   "matrix-assumptions": matrixAssumptions,
   "roster-table": rosterTable,
@@ -426,6 +636,23 @@ function contributionHtml() {
   ].join("\n");
 }
 
+// The same P&L the table above groups by cost nature, grouped by income stream —
+// the two sitting together is the point. Cross-cutting stays whole: allocating it
+// is the explorer's own control, not a default the notes card should assume.
+function streamMarginsHtml() {
+  const d = streamRows();
+  const row = (r) =>
+    `          <tr><th>${r.label}</th><td>${r.revenue > 0 ? k(r.revenue) : "—"}</td><td>${k(r.cost)}</td><td>${sk(r.margin)}</td><td>${r.revenue > 0 ? pct((r.margin / r.revenue) * 100, 1) : "—"}</td></tr>`;
+  return [
+    GEN_HTML(),
+    `        <table class="mini">`,
+    `          <tr><th>${M.SITES.li.label} at plan marks</th><th class="hr">Revenue</th><th class="hr">Cost</th><th class="hr">Margin</th><th class="hr">Margin %</th></tr>`,
+    ...d.rows.map(row),
+    `          <tr><th><b>Owner compensation</b></th><td>—</td><td>—</td><td><b>${k(d.comp)}</b></td><td>—</td></tr>`,
+    `        </table>`,
+  ].join("\n");
+}
+
 // Each site's base case decomposed into the two things "SN/HT: subtract ~$22K"
 // bundled — the cheaper floor, and the weaker expected café column.
 function siteDecompositionHtml() {
@@ -462,6 +689,7 @@ function wageRungsHtml() {
 
 Object.assign(BLOCKS, {
   "contribution-html": contributionHtml,
+  "stream-margins-html": streamMarginsHtml,
   "site-decomposition-html": siteDecompositionHtml,
   "wage-rungs-html": wageRungsHtml,
 });

@@ -10,11 +10,11 @@
 *Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
 
 - **Capacity:** 3 bookable rooms × ~6 usable evenings + weekend-afternoon slots ≈ **25 session-slots/week**. Full utilization ≈ $117K/yr at a $90 average session.
-- **Marginal values:** each filled weekly session ≈ **+$4.2K/yr owner comp** on the room line, **$4.5K** once the catering that attaches to it is counted; each café walk-in/day ≈ **+$1.87K/yr**. All are net of the 5.1% of gross revenue that card fees and marketing take; the plan's §5 quotes the session gross of that, at $4.4K.
+- **Marginal values:** each filled weekly session ≈ **+$4.1K/yr owner comp** on the room line, **$4.4K** once the catering that attaches to it is counted; each café walk-in/day ≈ **+$1.86K/yr**. All are net of the 5.5% of gross revenue that card fees and marketing take; the plan's §5 quotes the session gross of that, at $4.4K.
 - **One-off private events** (parties/showers, D11 base 5.5/mo) contribute ~1.3 weekly-equivalent sessions at every tier; the club roster figures below are net of them.
 - **Club cadence mapping:** a weekly club = 1 session/wk; biweekly = 0.5; monthly ≈ 0.23. "Mixed roster" assumes ½ weekly · ¼ biweekly · ¼ monthly (≈0.68 sessions/club/wk) — the realistic shape the pilot's "monthly or better" retention floor predicts. At the base row that is ~7 weekly-committed clubs or ~10 mixed-cadence ones.
 - **Program-for vs maintain:** the roster numbers are *active clubs to maintain*. Programming must run above them — clubs churn (rate unknown; a pilot deliverable), so the recruiting pipeline needs to be perhaps 1.4× the maintained roster. Validate the churn rate during Phase 0.5.
-- **Cost basis:** each site is priced on its own §6 lines — occupancy $78K (LI) vs $64K (SN/HT), operations $65K vs $62K — and its own café mark (100 vs 80 walk-ins/day). The two sites therefore get two matrices below rather than one matrix and a per-cell offset: the cheaper SN/HT floor is worth +$14K at equal traffic, and its weaker café mark costs it the rest.
+- **Cost basis:** each site is priced on its own §6 lines — occupancy $78K (LI) vs $64K (SN/HT), operations $67K vs $64K, both built from named components and reconciled against §6's stated $65K / $62K within 2.7% — and its own café mark (100 vs 80 walk-ins/day). The two sites therefore get two matrices below rather than one matrix and a per-cell offset: the cheaper SN/HT floor is worth +$14K at equal traffic, and its weaker café mark costs it the rest.
 <!-- model:end matrix-assumptions -->
 
 ## 2. Rooms benchmarks as club rosters
@@ -39,23 +39,23 @@ Rows: rooms performance (utilization / club roster). Columns: café performance 
 <!-- model:begin matrix-tables -->
 *Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
 
-**Little Italy** — occupancy $78K, operations $65K, café mark 100 walk-ins/day.
+**Little Italy** — occupancy $78K, operations $67K (built from components; §6 states $65K), café mark 100 walk-ins/day.
 
 | Rooms ↓ / Café → | **70 tx/day** | **80 tx/day** | **90 tx/day** | **100 tx/day** (site mark) | **110 tx/day** | **120 tx/day** (≈ top decile) | **130 tx/day** |
 |---|---|---|---|---|---|---|---|
-| **33% · ~10 clubs** (base) | −$69K | −$51K | −$32K | −$13K | $5K | $24K | $43K |
-| **45% · ~15 clubs** (break-even) | −$56K | −$37K | −$19K | $0K | $19K | $37K | $56K |
-| **55% · ~18 clubs** (gate case) | −$45K | −$26K | −$8K | $11K | $30K | $49K | $67K |
-| **75% · ~26 clubs** (ceiling) | −$23K | −$4K | $15K | $33K | $52K | $71K | $90K |
+| **33% · ~10 clubs** (base) | −$71K | −$52K | −$34K | −$15K | $3K | $22K | $41K |
+| **45% · ~15 clubs** (break-even) | −$58K | −$39K | −$20K | −$2K | $17K | $35K | $54K |
+| **55% · ~18 clubs** (gate case) | −$46K | −$28K | −$9K | $9K | $28K | $46K | $65K |
+| **75% · ~26 clubs** (ceiling) | −$24K | −$6K | $13K | $31K | $50K | $69K | $87K |
 
-**Station North / Highlandtown** — occupancy $64K, operations $62K, café mark 80 walk-ins/day.
+**Station North / Highlandtown** — occupancy $64K, operations $64K (built from components; §6 states $62K), café mark 80 walk-ins/day.
 
 | Rooms ↓ / Café → | **56 tx/day** | **64 tx/day** | **72 tx/day** | **80 tx/day** (site mark) | **88 tx/day** | **96 tx/day** (≈ top decile) | **104 tx/day** |
 |---|---|---|---|---|---|---|---|
-| **33% · ~10 clubs** (base) | −$82K | −$67K | −$52K | −$37K | −$22K | −$7K | $8K |
-| **45% · ~15 clubs** (break-even) | −$68K | −$53K | −$38K | −$23K | −$8K | $7K | $21K |
-| **55% · ~18 clubs** (gate case) | −$57K | −$42K | −$27K | −$12K | $3K | $18K | $33K |
-| **75% · ~26 clubs** (ceiling) | −$35K | −$20K | −$5K | $10K | $25K | $40K | $55K |
+| **33% · ~10 clubs** (base) | −$83K | −$68K | −$53K | −$38K | −$23K | −$9K | $6K |
+| **45% · ~15 clubs** (break-even) | −$70K | −$55K | −$40K | −$25K | −$10K | $5K | $20K |
+| **55% · ~18 clubs** (gate case) | −$58K | −$44K | −$29K | −$14K | $1K | $16K | $31K |
+| **75% · ~26 clubs** (ceiling) | −$36K | −$21K | −$7K | $8K | $23K | $38K | $53K |
 
 *Rows are evening utilization with the mixed-cadence club roster it implies; columns are walk-ins/day at 70–130% of the site's own mark. Cells are owner comp with labor held at §6's $120K line.*
 <!-- model:end matrix-tables -->
@@ -65,8 +65,8 @@ Rows: rooms performance (utilization / club roster). Columns: café performance 
 <!-- model:begin contours -->
 *Generated from `model/model.mjs` — edit the model, then `node model/render.mjs`.*
 
-- **The $0 line (not losing money, no draw):** Little Italy (33%, ~107 tx) → (45%, ~100 tx) → (55%, ~94 tx) → (75%, ~82 tx); SN/HT (33%, ~100 tx) → (45%, ~93 tx) → (55%, ~87 tx) → (75%, ~75 tx). Every cell above/left of it is a business burning cash.
-- **The $30K line (the plan's §9 partial-income floor):** Little Italy (33%, ~123 tx) → (45%, ~116 tx) → (55%, ~110 tx) → (75%, ~98 tx); SN/HT (33%, ~116 tx) → (45%, ~109 tx) → (55%, ~103 tx) → (75%, ~91 tx). No single-engine cell clears it: café-alone needs ~123 walk-ins/day (top-decile), rooms-alone ~74% utilization.
+- **The $0 line (not losing money, no draw):** Little Italy (33%, ~108 tx) → (45%, ~101 tx) → (55%, ~95 tx) → (75%, ~83 tx); SN/HT (33%, ~101 tx) → (45%, ~93 tx) → (55%, ~87 tx) → (75%, ~76 tx). Every cell above/left of it is a business burning cash.
+- **The $30K line (the plan's §9 partial-income floor):** Little Italy (33%, ~124 tx) → (45%, ~117 tx) → (55%, ~111 tx) → (75%, ~99 tx); SN/HT (33%, ~117 tx) → (45%, ~110 tx) → (55%, ~104 tx) → (75%, ~92 tx). No single-engine cell clears it: café-alone needs ~124 walk-ins/day (top-decile), rooms-alone ~76% utilization.
 - **The owner's bar (a living wage at zero opportunity cost, $71.1K at $240K of capital at risk):** off the grid at both sites — the explorer's derived-gates strip shows how far. That gap, not the $30K line, is what the venture has to close to be worth the owner's labor and capital.
 - **Evidence limits (mark before believing any cell):** columns right of 110 walk-ins/day at Little Italy are top-decile café territory; rows below 55% utilization are unsupported by any current evidence at the $15–35/hr band (the D&J analog hits ~100% peak at $5–10/hr — a ceiling test, not a forecast). The credible planning region is the middle of the matrix, which is exactly why the dual gate demands proof on both axes before a lease.
 <!-- model:end contours -->

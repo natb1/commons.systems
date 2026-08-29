@@ -7,7 +7,7 @@
 The ~$150K splits into two different kinds of cash, and financing substitutes for them very differently:
 
 1. **Assets (~$85K fit-out/FF&E/deposits)** — debt-financeable in principle. Lenders, landlords, and lessors all finance things with salvage value or that attach to their own building.
-2. **Working capital + Year-1 ramp (~$50–65K)** — effectively NOT debt-financeable for this plan. Borrowing to fund operating losses on a venture whose own conservative base case is negative (−$13K LI owner comp) converts the Lean scenario from a contained, survivable loss into insolvency with debt outstanding. The reserve stays cash, first-claim, whatever the financing structure.
+2. **Working capital + Year-1 ramp (~$50–65K)** — effectively NOT debt-financeable for this plan. Borrowing to fund operating losses on a venture whose own conservative base case is negative (−$15K LI owner comp) converts the Lean scenario from a contained, survivable loss into insolvency with debt outstanding. The reserve stays cash, first-claim, whatever the financing structure.
 
 So the realistic floor is roughly **$85–100K cash** (reserve + deposits + un-financeable soft costs), with **$40–65K of the asset side financed** — not a $30K-down business.
 
@@ -24,7 +24,7 @@ So the realistic floor is roughly **$85–100K cash** (reserve + deposits + un-f
 
 ## The cost math
 
-Rule of thumb: **each $10K of CDFI-grade debt (~9–11%, 7–10 yr) costs ~$1.5–2K/yr of owner comp** — against a base case already at −$13K (LI). Examples: $50K @ 10%/7yr ≈ $10K/yr; $50K @ 9%/10yr ≈ $7.6K/yr. Borrowing $60K raises the LI gate-clearing gap from ~$43K to ~$53–55K; ~$22–25K of debt cancels the contribution of one filled weekly evening session (+$4.4K/yr).
+Rule of thumb: **each $10K of CDFI-grade debt (~9–11%, 7–10 yr) costs ~$1.5–2K/yr of owner comp** — against a base case already at −$15K (LI). Examples: $50K @ 10%/7yr ≈ $10K/yr; $50K @ 9%/10yr ≈ $7.6K/yr. Borrowing $60K raises the LI gate-clearing gap from ~$45K to ~$55–57K; ~$22–25K of debt cancels the contribution of one filled weekly evening session (+$4.4K/yr).
 
 ## The guarantee problem (D7 conflict)
 
@@ -36,6 +36,6 @@ Extend D8's logic (debt = acceleration, never assumption) from the buy path to t
 
 - **Pre-gates (now)**: take only no-PG financing — negotiate TI/free rent hard, lease equipment, Kiva, prepaid club slots. This can trim day-one cash toward ~$100–115K without changing the risk shape.
 - **Post-G1/G2 (evidence in hand)**: if the gates clear, that evidence is exactly what a CDFI underwrites — then modest debt ($30–50K) to accelerate fit-out scope or deepen reserve is rational, and the debt service is carried by a validated, not hoped-for, revenue line.
-- **Never**: debt-fund the working-capital reserve, or sign a PG before the dual gate has produced evidence the base case beats −$13K.
+- **Never**: debt-fund the working-capital reserve, or sign a PG before the dual gate has produced evidence the base case beats −$15K.
 
 *Sources: DHCD SSBCI-NBW page; Pursuit Lending (SBA 7(a) equity injection SOP); Baltimore Business Lending; CNBC/Kiva. Figures planning-grade.*
