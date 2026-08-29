@@ -6,6 +6,14 @@
 # pushed) AND no Claude session is REGISTERED against it. Otherwise the worktree
 # is kept. No PR-state check.
 #
+# A failed removal is triaged rather than merely logged. `git worktree remove`
+# updates the working tree non-transactionally, so it can delete part of a
+# checkout and then abort — leaving a half-deleted worktree that no later run
+# can remove, because the retry validates against the `.git` file the first
+# attempt destroyed. This hook detects that torn state and recovers it in place
+# with `rm -rf` + `git worktree prune`; a removal git merely REFUSED (checkout
+# intact) is kept untouched, as before. See `.claude/rules/sandbox.md`.
+#
 # "Registered", not "running": `worktree_has_live_session` reads the REGISTERED
 # view (`claude agents --json --all`), so a session that has STOPPED but has not
 # been `claude rm`'d still holds its worktree and this hook keeps the checkout.
@@ -106,6 +114,62 @@ if git worktree remove "$CANON" 2>>"$LOG_FILE"; then
   git worktree prune 2>/dev/null || true
   log "removed '$CANON' successfully"
 else
-  err "git worktree remove failed for '$CANON' — worktree kept"
+  # The removal did not succeed. That is two different states needing opposite
+  # responses, and telling them apart is the whole point of this branch.
+  #
+  #   REFUSED — git declined before touching anything (untracked residue is the
+  #             usual cause). The checkout is intact, keeping it is correct, and
+  #             a later run can retry safely.
+  #   TORN    — git got in, deleted part of the checkout, then aborted. This is
+  #             the sandbox signature: `git worktree remove` updates the working
+  #             tree NON-transactionally, file by file, so a read-only carve-out
+  #             under .claude/ aborts it midway. Retrying CANNOT recover a torn
+  #             removal: the retry fails validation with `'.../.git' is not a
+  #             .git file, error code 7`, the first attempt having destroyed the
+  #             file the second validates against. The only recovery is
+  #             `rm -rf` + `git worktree prune`.
+  #
+  # Scoring TORN as REFUSED leaves a half-deleted checkout registered and
+  # un-removable by every later run — so this hook performs the recovery itself
+  # rather than logging a failure and leaving the residue for an operator.
+  damaged=0
+  if [ ! -e "$CANON" ]; then
+    # Checkout gone while the registration may survive — the other half of a
+    # torn removal, which deletes the checkout and the admin dir in two
+    # separately-failing steps. Nothing to delete; prune alone clears it.
+    damaged=1
+  elif [ ! -f "$CANON/.git" ]; then
+    # A worktree's `.git` is a FILE holding `gitdir: <common-dir>/worktrees/<n>`.
+    # Test that file directly rather than asking git: this repo's worktrees live
+    # UNDER the main working tree (.claude/worktrees/<name>), so a checkout whose
+    # `.git` was destroyed still answers `rev-parse` — by walking up and finding
+    # the MAIN repository's `.git`. That answer says nothing about the target.
+    damaged=1
+  else
+    # `.git` surviving proves nothing on its own: deletion runs entry-by-entry in
+    # directory order, so the abort can land AFTER much of the tree is gone and
+    # BEFORE `.git` is reached. worktree_in_sync proved the tracked tree clean
+    # moments ago, so any tracked change now — deletions — means the removal got
+    # in and gutted the checkout. Untracked files are excluded deliberately: they
+    # are residue rather than damage, and they are the common cause of a clean
+    # REFUSAL, which must not be scored as a tear.
+    post_status=$(git -C "$CANON" status --porcelain --untracked-files=no 2>>"$LOG_FILE") || post_status=""
+    [ -z "$post_status" ] || damaged=1
+  fi
+
+  if [ "$damaged" -eq 0 ]; then
+    err "git worktree remove failed for '$CANON' — worktree kept"
+  else
+    err "PARTIAL DELETE detected for '$CANON': the removal destroyed part of the checkout before aborting. Recovering with rm -rf + git worktree prune."
+    if rm -rf -- "$CANON" 2>>"$LOG_FILE"; then
+      if git worktree prune 2>>"$LOG_FILE"; then
+        log "recovered '$CANON': half-deleted checkout removed, registration pruned"
+      else
+        err "git worktree prune failed after recovering '$CANON' — a stale registration remains. REMEDIATION: run 'git worktree prune'"
+      fi
+    else
+      err "rm -rf '$CANON' failed — '$CANON' is HALF-DELETED and unusable. REMEDIATION: run \"rm -rf '$CANON' && git worktree prune\""
+    fi
+  fi
 fi
 exit 0

@@ -84,11 +84,26 @@ case "$cmd" in
   "status --porcelain")
     [ -n "${STUB_STATUS:-}" ] && printf '%s\n' "$STUB_STATUS"
     exit "${STUB_STATUS_RC:-0}" ;;
+  "status --porcelain --untracked-files=no")
+    # The hook's POST-removal damage probe. Deliberately a separate stub var
+    # from STUB_STATUS: the pre-removal in-sync check and the post-removal
+    # damage check ask different questions of different tree states, and a
+    # shared var would make it impossible to model "clean before, gutted after".
+    [ -n "${STUB_POST_STATUS:-}" ] && printf '%s\n' "$STUB_POST_STATUS"
+    exit "${STUB_POST_STATUS_RC:-0}" ;;
   "rev-list --count HEAD --not --remotes")
     printf '%s\n' "${STUB_REVLIST:-0}"
     exit "${STUB_REVLIST_RC:-0}" ;;
   "worktree remove "*)
     printf '%s\n' "$cmd" >>"${STUB_REMOVED_LOG:?STUB_REMOVED_LOG unset}"
+    # Real `git worktree remove` updates the working tree NON-transactionally,
+    # so a failure can leave the checkout partly deleted. STUB_REMOVE_TEARS
+    # selects which half-deleted state to leave behind, so the hook's recovery
+    # path can be driven without a read-only mount to abort against.
+    case "${STUB_REMOVE_TEARS:-}" in
+      gitfile) rm -f -- "${STUB_TEAR_TARGET:?STUB_TEAR_TARGET unset}/.git" ;;
+      dir)     rm -rf -- "${STUB_TEAR_TARGET:?STUB_TEAR_TARGET unset}" ;;
+    esac
     exit "${STUB_REMOVE_RC:-0}" ;;
   "worktree prune")
     exit 0 ;;
@@ -120,7 +135,13 @@ setup_root() {
   # with the hook's own wrong arithmetic while both disagreed with reality, so
   # the dead worktrees root never showed up as a failure.
   WT="$ROOT/.claude/worktrees/$BRANCH"
-  mkdir -p "$ROOT/.git" "$ROOT/.claude/worktrees/main" "$WT"
+  mkdir -p "$ROOT/.git/worktrees/$BRANCH" "$ROOT/.claude/worktrees/main" "$WT"
+  # A registered worktree's `.git` is a FILE holding a `gitdir:` pointer, and
+  # the hook's partial-delete detector tests for exactly that file. Without it
+  # the fixture would model a checkout that is ALREADY half-deleted, so every
+  # failed removal would be scored as torn and recovered — destroying the
+  # fixture and hiding the refusal path entirely.
+  printf 'gitdir: %s\n' "$ROOT/.git/worktrees/$BRANCH" >"$WT/.git"
 
   REMOVED_LOG="$ROOT/removed.log"
   HOOK_LOG="$ROOT/tmp/worktree-remove.log"
@@ -135,6 +156,10 @@ worktree $WT"
   export STUB_REVLIST_RC=0
   export STUB_REMOVE_RC=0
   export STUB_REMOVED_LOG="$REMOVED_LOG"
+  export STUB_POST_STATUS=""     # post-removal tree: undamaged by default
+  export STUB_POST_STATUS_RC=0
+  unset STUB_REMOVE_TEARS        # removal does not tear unless a case says so
+  unset STUB_TEAR_TARGET
   export STUB_CLAUDE_JSON="[]"   # no live sessions by default
   export STUB_CLAUDE_RC=0
 }
@@ -178,6 +203,28 @@ assert_remove_not_called() {
   else
     FAIL=$((FAIL + 1))
     echo "FAIL: $desc — 'git worktree remove' was invoked unexpectedly: $(cat "$REMOVED_LOG")"
+  fi
+}
+
+assert_path_gone() {
+  local desc="$1" path="$2"
+  TOTAL=$((TOTAL + 1))
+  if [ ! -e "$path" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: $desc — expected '$path' to be gone, but it still exists"
+  fi
+}
+
+assert_path_present() {
+  local desc="$1" path="$2"
+  TOTAL=$((TOTAL + 1))
+  if [ -e "$path" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: $desc — expected '$path' to survive, but it was deleted"
   fi
 }
 
@@ -378,6 +425,71 @@ assert_exit0              "corroboration: uncorroborated empty read -> exit 0"
 assert_remove_not_called  "corroboration: uncorroborated empty read -> not removed"
 assert_log                "corroboration: uncorroborated empty read -> log shows KEEP" "KEEP:"
 unset STUB_PGREP_RC
+
+# --- Partial-delete (torn removal) detection and recovery -------------------
+#
+# `git worktree remove` updates the working tree NON-transactionally — file by
+# file, aborting on the first failure — so a failed removal is two different
+# states that need opposite responses:
+#
+#   TORN    the removal got in, destroyed part of the checkout, then aborted.
+#           Retrying cannot fix it: the retry fails validation with `'.../.git'
+#           is not a .git file, error code 7`, because the first attempt
+#           destroyed the file the second validates against. Recover in place.
+#   REFUSED git declined before touching anything. The checkout is intact and
+#           must be KEPT.
+#
+# Scoring TORN as REFUSED strands a half-deleted worktree that no later run can
+# remove; scoring REFUSED as TORN destroys a healthy worktree over an untracked
+# file. These cases pin both directions.
+
+# (i) TORN — the `.git` link file was destroyed before the abort.
+setup_root
+export STUB_REMOVE_RC=1
+export STUB_REMOVE_TEARS=gitfile
+export STUB_TEAR_TARGET="$WT"
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0        "torn: .git destroyed -> exit 0"
+assert_remove_called "torn: .git destroyed -> remove attempted"
+assert_log          "torn: .git destroyed -> detected" "PARTIAL DELETE detected"
+assert_log          "torn: .git destroyed -> recovered" "recovered '$WT'"
+assert_path_gone    "torn: .git destroyed -> checkout removed" "$WT"
+
+# (ii) TORN — the checkout directory is already gone while the registration
+# survives (the other half of a torn removal: git deletes the checkout and the
+# admin dir in two separately-failing steps).
+setup_root
+export STUB_REMOVE_RC=1
+export STUB_REMOVE_TEARS=dir
+export STUB_TEAR_TARGET="$WT"
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0        "torn: directory gone -> exit 0"
+assert_log          "torn: directory gone -> detected" "PARTIAL DELETE detected"
+assert_log          "torn: directory gone -> recovered" "recovered '$WT'"
+assert_path_gone    "torn: directory gone -> checkout removed" "$WT"
+
+# (iii) TORN — `.git` survives but the tree was gutted before the abort.
+# Deletion runs entry-by-entry in directory order, so the abort can land AFTER
+# much of the tree is gone and BEFORE `.git` is reached. The in-sync check
+# proved the tracked tree clean moments earlier, so tracked deletions appearing
+# now can only mean the removal got in.
+setup_root
+export STUB_REMOVE_RC=1
+export STUB_POST_STATUS=" D src/file.txt"
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0        "torn: tree gutted -> exit 0"
+assert_log          "torn: tree gutted -> detected" "PARTIAL DELETE detected"
+assert_path_gone    "torn: tree gutted -> checkout removed" "$WT"
+
+# (iv) REFUSED, not torn — git declined and the checkout is intact. The
+# regression guard for the opposite error: recovering here would delete a
+# healthy worktree because of, say, one untracked build artifact.
+setup_root
+export STUB_REMOVE_RC=1
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0        "refused: intact checkout -> exit 0"
+assert_log          "refused: intact checkout -> kept" "git worktree remove failed"
+assert_path_present "refused: intact checkout -> checkout NOT deleted" "$WT"
 
 # --- Summary ----------------------------------------------------------------
 
