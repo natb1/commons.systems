@@ -58,6 +58,15 @@ BIN="$WORK/bin"
 mkdir -p "$INTENTIONS" "$STATE" "$LOG" "$BIN"
 LOCK_FILE="$WORK/graph-write.lock"
 
+# This suite runs the REAL dispatch-fleet-alarm script in place, so anything it
+# invokes that writes a routing decision would land in the PRODUCTION log.
+# Redirect the log into the scratch dir. test-decision-log-isolation.sh enforces
+# that every suite here either sources a fixture helper or makes this exact
+# assignment; this suite defines its own tiny assert helpers rather than
+# sourcing test-helpers.sh, so the assignment is the isolation.
+export DISPATCH_DECISION_LOG_DIR="$WORK/decision-log"
+mkdir -p "$DISPATCH_DECISION_LOG_DIR"
+
 # --- fixture node writer -----------------------------------------------------
 # Same field set as test-assert-node-selection.sh's write_node_fixture (proven
 # to satisfy readNode's validateNode), reused here for the same reason: this

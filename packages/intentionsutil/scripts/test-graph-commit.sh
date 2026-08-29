@@ -905,15 +905,29 @@ case "$(basename "$2")" in
     }
     preserved_content() {
       local orig="$snap_dir/$1.md" merged="$snap_dir/$1.merged.md"
-      local carried=""
-      # Mirrors the real helper's preservedContent(): when a frozen original
-      # exists, the recommendation says the content is CARRIED, not merely
-      # pointed at (see own_content_embed below).
-      [[ -f "$orig" ]] && carried="; a VERBATIM copy of it is carried at the end of this recommendation"
-      if [[ -f "$merged" ]]; then
-        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)$carried; graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged, which is neither this session's content nor anything that landed"
+      # Mirrors the real helper's preservedContent(), including its two
+      # conditionals:
+      #  - the CARRIED-copy claim is made only when a frozen original actually
+      #    exists to carry. snap_dir can hold <id>.merged.md with no <id>.md
+      #    beside it, and a record that promises a verbatim block that is not
+      #    there sends a human looking for content nobody wrote down.
+      #  - the "may not survive past this session" caveat is attached to the
+      #    snap_dir paths and to NOTHING else. The carried copy is inside the
+      #    recommendation, which lands on origin/main; calling that perishable
+      #    would be backwards.
+      local local_only="on this machine only — it may not survive past this session"
+      local own carried_ref
+      if [[ -f "$orig" ]]; then
+        own="this session's OWN unlanded content preserved at $orig ($local_only), a frozen pre-merge copy; a VERBATIM copy of it is carried at the end of this recommendation"
+        carried_ref=", and the carried copy at the end of this recommendation as the record of what this session meant to write"
       else
-        printf '%s' "this session's OWN unlanded content preserved at $orig (frozen pre-merge copy)$carried"
+        own="this session's OWN pre-merge content was NOT preserved: no frozen original exists at $orig, so this record carries no verbatim copy"
+        carried_ref="; nothing verbatim was carried, so that partial merge is the only surviving artifact of this session's edit"
+      fi
+      if [[ -f "$merged" ]]; then
+        printf '%s' "$own; graph-commit's PARTIAL MERGE of it with the concurrent writer's landed edit is beside it at $merged ($local_only), which is neither this session's content nor anything that landed$carried_ref"
+      else
+        printf '%s' "$own"
       fi
     }
     # own_content_embed — mirrors the real helper's ownContentEmbed(): the losing
@@ -3788,7 +3802,12 @@ fi
 #   (b) it still does after SNAP_DIR is destroyed (the tmp reaper / reboot /
 #       container-exit case KEEP_SNAP=1 does nothing about);
 #   (c) over the embed cap the block says exactly how many bytes it dropped and
-#       where the whole file is — a bounded embed, never a silent truncation.
+#       where the whole file is — a bounded embed, never a silent truncation;
+#   (d) that byte figure stays exact when the cap lands mid-codepoint on a file
+#       with no newline in the capped window (one very long multi-byte line);
+#   (e) the record only claims a carried copy when there is one, and the
+#       "may not survive past this session" caveat sits on the SNAP_DIR paths
+#       rather than on the copy that lands on origin/main.
 # Hard requirements, not skips: a skipped case is a vacuous pass, and this is
 # the only case that reaches the real helper at all.
 [[ -f "$HARNESS_DIR/../src/store.ts" ]] \
@@ -3831,6 +3850,28 @@ else
   real_node_file "$REAL_PARK_DIR/intentions" t-real-big "landed statement" "Body as it stands on origin/main."
   cp "$REAL_PARK_DIR/snap/t-real-big.md" "$REAL_PARK_DIR/keep/t-real-big.md"
   real_big_bytes="$(wc -c <"$REAL_PARK_DIR/keep/t-real-big.md" | tr -d ' ')"
+  # Over the cap with NO newline anywhere in the capped window, in multi-byte
+  # UTF-8: one very long line (a YAML-folded recommendation is exactly this
+  # shape) built from U+20AC, three bytes each. 3 * 21845 = 65535, so the
+  # 65536-byte cap lands on the SECOND byte of a codepoint and the line-boundary
+  # cut has no newline to fall back on. A byte-slice-then-decode would end the
+  # embed in a U+FFFD replacement character and then measure the omitted count
+  # against that 3-byte replacement — reporting a byte figure the file never
+  # had, in the one record that is supposed to make truncation loud and exact.
+  {
+    awk 'BEGIN { for (i = 0; i < 30000; i++) printf "%s", "€" }'
+    printf '%s\n' 'REAL-ONELINE-TAIL-MARKER'
+  } >"$REAL_PARK_DIR/snap/t-real-oneline.md"
+  real_node_file "$REAL_PARK_DIR/intentions" t-real-oneline "landed statement" "Body as it stands on origin/main."
+  cp "$REAL_PARK_DIR/snap/t-real-oneline.md" "$REAL_PARK_DIR/keep/t-real-oneline.md"
+  real_oneline_bytes="$(wc -c <"$REAL_PARK_DIR/keep/t-real-oneline.md" | tr -d ' ')"
+  # A frozen original that is ABSENT while the merge output beside it exists.
+  # snapIntended() resolves to <id>.merged.md, so nothing throws and nothing is
+  # carried — the state in which a recommendation that unconditionally promises
+  # "the carried copy" points a human at a block that was never written.
+  printf -- '---\nid: t-real-nocarry\nkind: tactic\nstatement: REAL-NOCARRY-MERGED\nowner: ai\nstatus: raw\n---\nMerge output, not this session content.\n' \
+    >"$REAL_PARK_DIR/snap/t-real-nocarry.merged.md"
+  real_node_file "$REAL_PARK_DIR/intentions" t-real-nocarry "landed statement" "Body as it stands on origin/main."
   # The real invocation's own shape: cd to the scripts dir (so tsx and `yaml`
   # resolve from this repo's node_modules) and pass the store module as
   # ../src/store.js, exactly as park_write does.
@@ -3838,7 +3879,7 @@ else
     && node --import tsx/esm "$REAL_PARK_DIR/park-helper.mts" \
          "$HARNESS_DIR/../src/store.js" "$REAL_PARK_DIR/intentions" \
          2026-01-02 'graph-commit: concurrent-edit conflict — manual merge needed' \
-         "$REAL_PARK_DIR/snap" '' t-real-carry t-real-big 2>&1 )"; real_rc=$?
+         "$REAL_PARK_DIR/snap" '' t-real-carry t-real-big t-real-oneline t-real-nocarry 2>&1 )"; real_rc=$?
   # Destroy SNAP_DIR before reading anything back: from here on, only what the
   # park RECORDED can answer.
   rm -rf "$REAL_PARK_DIR/snap"
@@ -3871,10 +3912,24 @@ if (note) {
   text = text.slice(0, text.length - note[0].length);
 }
 const original = readFileSync(expectedFile, "utf8");
-const kind = text === original ? "EXACT" : original.startsWith(text) ? "PREFIX" : "DIFFERS";
+// The ONLY byte the block ever adds is a single trailing newline, when the cut
+// did not already land on one — the no-newline-in-the-window case. Account for
+// it explicitly (PREFIX+NL) and measure `carried` against the original's own
+// bytes, so `carried + omitted` still has to equal the file size.
+let kind, carriedText;
+if (text === original) { kind = "EXACT"; carriedText = text; }
+else if (original.startsWith(text)) { kind = "PREFIX"; carriedText = text; }
+else if (text.endsWith("\n") && original.startsWith(text.slice(0, -1))) {
+  kind = "PREFIX+NL"; carriedText = text.slice(0, -1);
+} else { kind = "DIFFERS"; carriedText = text; }
+// U+FFFD in the carried text means the cut split a codepoint and Node decoded
+// the dangling bytes to a replacement character — the defect that also makes
+// the omitted count a lie.
+const repl = (text.match(/�/g) ?? []).length;
 console.log(
-  `${kind} carried=${Buffer.byteLength(text, "utf8")} omitted=${omitted} ` +
-    `noted_total=${notedTotal} actual_total=${Buffer.byteLength(original, "utf8")}`,
+  `${kind} carried=${Buffer.byteLength(carriedText, "utf8")} omitted=${omitted} ` +
+    `noted_total=${notedTotal} actual_total=${Buffer.byteLength(original, "utf8")} ` +
+    `repl=${repl}`,
 );
 VERIFY
   verify_carry() { # <id> <expected-file>
@@ -3882,26 +3937,56 @@ VERIFY
       && node --import tsx/esm "$REAL_PARK_DIR/verify-carry.mts" \
            "$HARNESS_DIR/../src/store.ts" "$REAL_PARK_DIR/intentions" "$1" "$2" 2>&1 )
   }
+  # office_hours.recommendation as ONE line, read back through the real store.
+  # The recommendation lands as a folded YAML scalar, so its sentences are
+  # re-wrapped at arbitrary columns on disk: grepping the raw file for a phrase
+  # is a coin flip that silently goes vacuous whenever the prose changes length.
+  # Unfold it once here and assert against that.
+  cat >"$REAL_PARK_DIR/print-rec.mts" <<'PRINTREC'
+const [storePath, dir, id] = process.argv.slice(2);
+const { readNode } = await import(storePath);
+const rec = readNode(dir, id).office_hours?.recommendation ?? "";
+console.log(rec.replace(/\s+/g, " "));
+PRINTREC
+  real_rec() { # <id>
+    ( cd "$HARNESS_DIR" \
+      && node --import tsx/esm "$REAL_PARK_DIR/print-rec.mts" \
+           "$HARNESS_DIR/../src/store.ts" "$REAL_PARK_DIR/intentions" "$1" 2>&1 )
+  }
   verify_out="$(verify_carry t-real-carry "$REAL_PARK_DIR/keep/t-real-carry.md")"
   carried_content="$(cat "$REAL_PARK_DIR/intentions/t-real-carry.md")"
+  carry_rec="$(real_rec t-real-carry)"
   if [[ $real_rc -eq 0 ]] \
      && [[ ! -e "$REAL_PARK_DIR/snap" ]] \
-     && [[ "$verify_out" == "EXACT carried=$real_carry_bytes omitted=0 noted_total=0 actual_total=$real_carry_bytes" ]] \
+     && [[ "$verify_out" == "EXACT carried=$real_carry_bytes omitted=0 noted_total=0 actual_total=$real_carry_bytes repl=0" ]] \
      && grep -q 'REAL-CARRY-BODY' <<<"$carried_content" \
      && grep -q 'REAL-CARRY-STATEMENT' <<<"$carried_content" \
-     && grep -q 'carried at the end of this recommendation' <<<"$carried_content" \
+     && grep -qF 'carried at the end of this recommendation' <<<"$carry_rec" \
      && grep -q '^statement: landed statement' <<<"$carried_content"; then
     ok "real park helper: the landed office_hours.recommendation carries the losing writer's content byte-exactly, and still does with SNAP_DIR destroyed"
   else
     no "real park helper carry (rc=$real_rc verify='$verify_out')"; printf '%s\n' "$real_out"; printf '%s\n' "$carried_content"
   fi
+  # The snapDir caveat sits on the snapDir PATH, and nowhere near the carried
+  # copy. The carried copy is inside this recommendation, which lands on
+  # origin/main; the frozen original is in a `mktemp -d`. Labelling those the
+  # other way round tells a human to distrust the only durable copy and to rely
+  # on the perishable one.
+  if grep -qF "preserved at $REAL_PARK_DIR/snap/t-real-carry.md (on this machine only — it may not survive past this session) — a frozen pre-merge copy" <<<"$carry_rec" \
+     && grep -qF 'does not depend on that directory outliving this session' <<<"$carry_rec"; then
+    ok "real park helper: the 'may not survive past this session' caveat is attached to the SNAP_DIR path, not to the copy embedded in the landed record"
+  else
+    no "real park helper caveat placement"; printf '%s\n' "$carry_rec"
+  fi
   big_verify="$(verify_carry t-real-big "$REAL_PARK_DIR/keep/t-real-big.md")"
   big_content="$(cat "$REAL_PARK_DIR/intentions/t-real-big.md")"
-  read -r big_kind big_carried big_omitted big_noted big_actual <<<"$big_verify"
+  read -r big_kind big_carried big_omitted big_noted big_actual big_repl <<<"$big_verify"
   big_carried="${big_carried#carried=}"; big_omitted="${big_omitted#omitted=}"
   big_noted="${big_noted#noted_total=}"; big_actual="${big_actual#actual_total=}"
+  big_repl="${big_repl#repl=}"
   if [[ "$big_kind" == "PREFIX" ]] \
      && [[ "$big_omitted" -gt 0 ]] \
+     && [[ "$big_repl" -eq 0 ]] \
      && [[ "$big_noted" == "$big_actual" && "$big_actual" == "$real_big_bytes" ]] \
      && [[ $((big_carried + big_omitted)) -eq "$real_big_bytes" ]] \
      && [[ "$big_carried" -le 65536 ]] \
@@ -3911,6 +3996,43 @@ VERIFY
     ok "real park helper: an over-cap snapshot is carried up to the cap as a strict prefix and states exactly how many bytes it dropped (never a silent truncation)"
   else
     no "real park helper cap ('$big_verify' fixture=$real_big_bytes)"; printf '%s\n' "$big_content"
+  fi
+  # Over the cap with no newline in the capped window, in multi-byte UTF-8. The
+  # cut must land on a codepoint boundary (repl=0, and 65535 of the 65536
+  # available bytes carried — the split lead byte dropped), and the omitted
+  # figure in the landed record must be the real one: carried + omitted == the
+  # file size, measured against the fixture, not against a decoded string.
+  one_verify="$(verify_carry t-real-oneline "$REAL_PARK_DIR/keep/t-real-oneline.md")"
+  one_content="$(cat "$REAL_PARK_DIR/intentions/t-real-oneline.md")"
+  read -r one_kind one_carried one_omitted one_noted one_actual one_repl <<<"$one_verify"
+  one_carried="${one_carried#carried=}"; one_omitted="${one_omitted#omitted=}"
+  one_noted="${one_noted#noted_total=}"; one_actual="${one_actual#actual_total=}"
+  one_repl="${one_repl#repl=}"
+  if [[ "$one_kind" == "PREFIX+NL" ]] \
+     && [[ "$one_repl" -eq 0 ]] \
+     && [[ "$one_carried" -eq 65535 ]] \
+     && [[ "$one_noted" == "$one_actual" && "$one_actual" == "$real_oneline_bytes" ]] \
+     && [[ $((one_carried + one_omitted)) -eq "$real_oneline_bytes" ]] \
+     && grep -q '65536-byte embed cap' <<<"$one_content" \
+     && ! grep -q 'REAL-ONELINE-TAIL-MARKER' <<<"$one_content"; then
+    ok "real park helper: a >64KB single line of multi-byte UTF-8 is cut on a codepoint boundary and the omitted byte count is exact (no replacement character, no invented bytes)"
+  else
+    no "real park helper codepoint cut ('$one_verify' fixture=$real_oneline_bytes)"
+  fi
+  # No frozen original, merge output present: nothing could be carried, so the
+  # recommendation must not promise a carried copy — and must not send a human
+  # to a snapshot path that does not exist.
+  nocarry_rec="$(real_rec t-real-nocarry)"
+  if [[ -n "$nocarry_rec" ]] \
+     && grep -qF "no frozen original exists at $REAL_PARK_DIR/snap/t-real-nocarry.md" <<<"$nocarry_rec" \
+     && grep -qF 'PARTIAL MERGE' <<<"$nocarry_rec" \
+     && grep -qF "$REAL_PARK_DIR/snap/t-real-nocarry.merged.md (on this machine only — it may not survive past this session)" <<<"$nocarry_rec" \
+     && ! grep -qF 'carried at the end of this recommendation' <<<"$nocarry_rec" \
+     && ! grep -qF 'the carried copy' <<<"$nocarry_rec" \
+     && ! grep -qF "BEGIN this session's unlanded content for t-real-nocarry" <<<"$nocarry_rec"; then
+    ok "real park helper: with no frozen original to carry, the record says so instead of promising a verbatim block that was never written"
+  else
+    no "real park helper no-carry wording"; printf '%s\n' "$nocarry_rec"
   fi
 fi
 

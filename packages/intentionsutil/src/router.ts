@@ -147,10 +147,34 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
 }
 
 /**
+ * The CLOSED enum of `dispatch-fleet-alarm` condition kinds — the single
+ * source of truth for which `tactic-fleet-alarm-<kind>` ids name a
+ * mechanically-managed alarm node.
+ *
+ * This list is mirrored by that script's own bash `KINDS=(...)` array
+ * (`.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm`), which
+ * needs it in bash array context for its `--kind` membership check. The two
+ * copies cannot silently diverge: `router.test.ts` parses `KINDS=(...)` out of
+ * that file and asserts it equals this list, element for element and in order.
+ * Extending the enum is therefore a deliberate two-file edit, and forgetting
+ * the second file fails the suite rather than quietly un-protecting a node.
+ */
+export const FLEET_ALARM_KINDS = [
+  "tick-stale",
+  "daemon-degraded",
+  "busy-stall",
+  "automerge-suppressed",
+  "unclaimed-hold",
+  "main-checkout-held",
+  "watch-unknown",
+  "heal-fired",
+  "heal-unknown",
+] as const;
+
+/**
  * The id shape reserved for `dispatch-fleet-alarm`'s mechanically-managed
  * alarm-node family (tactic-fleet-alarm-node-park-clobber-loop, ruling (a)):
- * `tactic-fleet-alarm-<kind>`, one node per closed-enum condition kind (see
- * that script's own `KINDS` array and its header comment on the id shape).
+ * `tactic-fleet-alarm-<kind>`, one node per closed-enum condition kind.
  * These nodes are minted, refreshed, and resolved EXCLUSIVELY by that script
  * — `--resolve` (phase -> done) is their only terminal, never a human or
  * `/align-tactics` decomposition — so they must never surface as a draft
@@ -159,24 +183,30 @@ function isOpenTactic(tactic: IntentionNode): tactic is IntentionNode & { phase:
  * script re-detected the condition and mint-fresh overwrote the parked node
  * (see dispatch-fleet-alarm's `classify()` fix alongside this one).
  *
- * An ANCHORED full-id match, not a bare `startsWith` prefix test — mirroring
- * the caution in dispatch-fleet-alarm's own comment about the
- * `dispatch-graph-main-red-sync` incident, where a bare prefix test matched
- * an unrelated hand-authored node and mechanically auto-completed it. An id
- * that merely starts with the reserved string but continues with something
- * else (e.g. a hand-authored `tactic-fleet-alarmist-review`) does not match.
+ * Built from `FLEET_ALARM_KINDS`, so it matches the CLOSED MEMBERSHIP, not
+ * merely the anchored shape. An earlier revision anchored the shape only
+ * (`^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$`), and that over-captured
+ * exactly the way a bare `startsWith` would: the live store carries four
+ * hand-authored `tactic-fleet-alarm-*` work nodes whose slugs are NOT alarm
+ * kinds (`daemon-casualty-list`, `mint-rollback-corruption`,
+ * `node-park-clobber-loop`, `resolve-rollback-latch`), and anchoring the shape
+ * made every one of them permanently unselectable — including
+ * `tactic-fleet-alarm-node-park-clobber-loop`, the node this very fix exists
+ * to close. Anchoring the SHAPE is not anchoring the MEMBERSHIP; only the enum
+ * is. This also keeps the original boundary property that motivated the
+ * anchoring (the `dispatch-graph-main-red-sync` bare-prefix incident, where a
+ * prefix test matched an unrelated hand-authored node and mechanically
+ * auto-completed it): `tactic-fleet-alarmist-review` still does not match.
  *
  * Chosen over a general `attributes` marker (the plan's alternative) because
- * the marker would need either a schema change (out of scope here — another
- * unit owns schema.ts) or an unvalidated ad hoc `attributes` key, AND a
- * migration write to every already-minted `tactic-fleet-alarm-*` node before
- * the exclusion would protect them — including the very node
- * (`tactic-fleet-alarm-node-park-clobber-loop`) this fix exists to stop
- * clobbering, which this unit is expressly forbidden from hand-editing. The
- * id family already IS the durable, zero-migration marker: every node in it
- * is mechanically managed today, with no exceptions.
+ * the marker would need either a schema change or an unvalidated ad hoc
+ * `attributes` key, AND a migration write to every already-minted
+ * `tactic-fleet-alarm-<kind>` node before the exclusion would protect them.
+ * The enum-backed id family already IS the durable, zero-migration marker:
+ * `dispatch-fleet-alarm` refuses any `--kind` outside it, so no node can join
+ * the family except through that script.
  */
-const FLEET_ALARM_ID_RE = /^tactic-fleet-alarm-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const FLEET_ALARM_ID_RE = new RegExp(`^tactic-fleet-alarm-(?:${FLEET_ALARM_KINDS.join("|")})$`);
 
 /** Whether `node` belongs to the reserved `dispatch-fleet-alarm` id family. */
 function isFleetAlarmNode(node: IntentionNode): boolean {

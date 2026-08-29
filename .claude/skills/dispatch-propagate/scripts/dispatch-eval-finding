@@ -877,16 +877,36 @@ splice_body() {
         return 1
       fi
       if (( opens == 1 )); then
+        # A balanced pair (1 open, 1 close) is not yet a well-formed region —
+        # an edit that swaps their order leaves the count balanced but the
+        # close line precedes the open line. Refuse that explicitly instead of
+        # letting the awk below run off the end of the file (see the END guard
+        # there too, as a structural backstop).
+        local open_line close_line
+        open_line=$(grep -nxF "$BODY_REGION_OPEN" "$prior" | cut -d: -f1)
+        close_line=$(grep -nxF "$BODY_REGION_CLOSE" "$prior" | cut -d: -f1)
+        if (( close_line < open_line )); then
+          rm -f "$tmp" "$prior"
+          log "$NODE_FILE's '$BODY_REGION_CLOSE' marker appears before its '$BODY_REGION_OPEN' marker (close at line $close_line, open at line $open_line) — refusing to guess which bytes this script owns; repair the marker order by hand, then re-record"
+          return 1
+        fi
         # Replace in place: every line before the opening marker and every line
         # after the closing one is copied through untouched, so the generated
         # reading may carry its own `##` headings without ambiguity.
+        #
+        # END guard: if the close marker were somehow never hit, `skip` stays
+        # 1 and the loop would otherwise silently drop every remaining line to
+        # EOF. The ordering check above already rules that out, but this is
+        # the structural backstop that makes the truncation impossible even if
+        # that check is ever weakened or bypassed.
         if ! awk -v om="$BODY_REGION_OPEN" -v cm="$BODY_REGION_CLOSE" -v bf="$BODY_FILE" '
           $0 == om { print; while ((getline line < bf) > 0) print line; close(bf); skip = 1; next }
           skip && $0 == cm { print; skip = 0; next }
           !skip { print }
+          END { if (skip) exit 1 }
         ' "$prior" >> "$tmp"; then
           rm -f "$tmp" "$prior"
-          log "could not rewrite the owned region of $NODE_FILE from $BODY_FILE — the body splice was abandoned"
+          log "could not rewrite the owned region of $NODE_FILE from $BODY_FILE — the closing '$BODY_REGION_CLOSE' marker was never reached while rewriting, so the rest of the body would have been dropped — the body splice was abandoned"
           return 1
         fi
         rm -f "$prior"

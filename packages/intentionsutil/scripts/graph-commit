@@ -3128,10 +3128,34 @@ const snapIntended = (id) => snapMerged(id) || snapOriginal(id);
 // Capped on purpose. A park embeds whatever the losing writer had on disk; on a
 // SECOND park that file can already carry the FIRST park's embedded copy, which
 // without a cap nests without bound. Over the cap the block carries the leading
-// EMBED_LIMIT bytes, cut at a line boundary, and states exactly how many bytes
-// were omitted and where the whole file is — never a silent truncation.
+// EMBED_LIMIT bytes, cut at a line boundary — or, when the window holds no line
+// boundary at all, at a UTF-8 codepoint boundary — and states exactly how many
+// bytes were omitted and where the whole file is — never a silent truncation.
 const EMBED_LIMIT = 65536;
 const embedCache = new Map();
+// Largest byte index <= `end` that does NOT fall inside a multi-byte UTF-8
+// sequence. Walk back over continuation bytes (10xxxxxx) to the lead byte that
+// governs them, and keep that whole sequence only when it finishes at or before
+// `end`; otherwise cut in front of it.
+//
+// This exists because a naive byte slice can split a codepoint, and Node then
+// decodes the dangling bytes to a 3-byte U+FFFD. Measuring THAT decoded string
+// reports a byte count the file never had, so the truncation note would state a
+// wrong "N of M bytes omitted" — see utf8CutEnd's caller.
+const utf8CutEnd = (buf, end) => {
+  let i = end - 1;
+  while (i >= 0 && (buf[i] & 0xc0) === 0x80) i--;
+  if (i < 0) return end; // nothing but continuation bytes in the window
+  const lead = buf[i];
+  const len =
+    (lead & 0x80) === 0x00 ? 1 :
+    (lead & 0xe0) === 0xc0 ? 2 :
+    (lead & 0xf0) === 0xe0 ? 3 :
+    (lead & 0xf8) === 0xf0 ? 4 :
+    0; // not a valid lead byte — the file is not UTF-8 here; cut where asked
+  if (len === 0) return end;
+  return i + len <= end ? end : i;
+};
 // { block, truncated, total } for an id that has a frozen original, else null.
 // null is the ordinary answer for a --prune id: a deletion has no snapshot and
 // therefore no content to carry (snapshot() skips prunes).
@@ -3144,14 +3168,27 @@ const ownContentEmbed = (id) => {
     const raw = readFileSync(path);
     const total = raw.length;
     const truncated = total > EMBED_LIMIT;
-    let text = raw.subarray(0, EMBED_LIMIT).toString("utf8");
+    // The cut is decided in BYTES, on `raw`, and `omitted` is derived from that
+    // byte index — never from Buffer.byteLength() of the decoded string. The
+    // whole point of the cap is that truncation is loud and the byte figure in
+    // the landed record is exact; a figure measured after a lossy decode is not.
+    let end = total;
     if (truncated) {
-      // Cut at the last complete line so the embed is not a half-line (and not
-      // a half-codepoint).
-      const lastNewline = text.lastIndexOf("\n");
-      if (lastNewline > 0) text = text.slice(0, lastNewline + 1);
+      // First land on a codepoint boundary, so the embed never ends in a
+      // replacement character.
+      end = utf8CutEnd(raw, EMBED_LIMIT);
+      // Then prefer a whole-line cut, when the window holds a line boundary at
+      // all. A single very long line (a YAML-folded scalar, say) has none —
+      // that case keeps the codepoint boundary above rather than the old
+      // `lastIndexOf("\n") <= 0` no-op that left a split codepoint in place.
+      // `end` is at least EMBED_LIMIT - 3 here (utf8CutEnd only ever backs off
+      // by less than one 4-byte sequence), so the byteOffset below is never
+      // negative — which in Buffer.lastIndexOf would mean "count from the end".
+      const lastNewline = raw.lastIndexOf(0x0a, end - 1);
+      if (lastNewline > 0) end = lastNewline + 1;
     }
-    const omitted = total - Buffer.byteLength(text, "utf8");
+    const text = raw.subarray(0, end).toString("utf8");
+    const omitted = total - end;
     const note = omitted > 0
       ? `----- TRUNCATED: ${omitted} of ${total} bytes omitted at the ` +
         `${EMBED_LIMIT}-byte embed cap; the whole file is at ${path}, on this ` +
@@ -3174,26 +3211,43 @@ const ownContentEmbed = (id) => {
 const preservedContent = (id) => {
   const merged = snapMerged(id);
   const embed = ownContentEmbed(id);
-  const carried = !embed
-    ? ""
+  // The "may not survive" caveat belongs to every copy that exists ONLY under
+  // snapDir — a bare `mktemp -d` that a reboot, a tmp reaper or a container exit
+  // destroys for free. It is attached to those paths and to NOTHING else: the
+  // embedded copy lives inside this recommendation, which lands on origin/main,
+  // and labelling that one perishable would be exactly backwards.
+  const localOnly = "on this machine only — it may not survive past this session";
+  // Three states, because an embed is NOT guaranteed: snapMerged() can exist
+  // with no frozen original beside it (snapIntended() then resolves to the merge
+  // output, so the "cannot park" throw in pass 1 does not fire). Promising a
+  // carried copy in that state points a human at a block that is not there.
+  const own = !embed
+    ? `This session's OWN pre-merge content was NOT preserved: no frozen ` +
+      `original exists at ${snapOriginal(id)}, so this record carries no ` +
+      `verbatim copy of what this session meant to write.`
     : embed.truncated
-    ? ` Its leading bytes are carried VERBATIM at the end of this ` +
+    ? `This session's OWN unlanded content is preserved at ${snapOriginal(id)} ` +
+      `(${localOnly}) — a frozen pre-merge copy, written once and never ` +
+      `rewritten. Its leading bytes are carried VERBATIM at the end of this ` +
       `recommendation — the file is ${embed.total} bytes, over the embed cap, ` +
-      `and the carried block states exactly how much was omitted.`
-    : ` A VERBATIM copy of it is carried at the end of this recommendation, so ` +
-      `this record holds the content itself and does not depend on that ` +
-      `directory outliving this session.`;
-  const original =
-    `This session's OWN unlanded content is preserved at ${snapOriginal(id)} — ` +
-    `a frozen pre-merge copy, written once and never rewritten.${carried}`;
-  return merged
-    ? `${original} graph-commit's PARTIAL MERGE of it with the concurrent ` +
-      `writer's landed edit is beside it at ${merged} — that file is neither ` +
-      `this session's content nor anything that landed (this batch landed ` +
-      `nothing); treat it as a starting point only, and the carried copy as ` +
-      `the record of what this session meant to write. (the partial merge is ` +
-      `on this machine only — it may not survive past this session)`
-    : original;
+      `and the carried block states exactly how much was omitted; only those ` +
+      `omitted bytes depend on that directory surviving.`
+    : `This session's OWN unlanded content is preserved at ${snapOriginal(id)} ` +
+      `(${localOnly}) — a frozen pre-merge copy, written once and never ` +
+      `rewritten. A VERBATIM copy of it is carried at the end of this ` +
+      `recommendation, so this record holds the content itself and does not ` +
+      `depend on that directory outliving this session.`;
+  if (!merged) return own;
+  return `${own} graph-commit's PARTIAL MERGE of this session's delta with ` +
+    `the concurrent writer's landed edit is at ${merged} (${localOnly}) — ` +
+    `that file is neither this session's content nor anything that landed ` +
+    `(this batch landed nothing); treat it as a starting point only` +
+    (embed
+      ? `, and the carried copy at the end of this recommendation as the ` +
+        `record of what this session meant to write.`
+      : `. Nothing verbatim was carried, so that partial merge is the only ` +
+        `surviving artifact of this session's edit — and it survives only on ` +
+        `this machine.`);
 };
 // PASS 1 — classification and reads only. Performs NO writes to intentionsDir,
 // so an id that fails validation here fails BEFORE anything on disk changed.

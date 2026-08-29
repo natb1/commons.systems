@@ -1269,6 +1269,40 @@ assert_not_contains "(21e) no mode-less call survives" \
 assert_not_contains "(21e) and no mode-less call at the end of a chain" \
   '! splice_body \' "$(cat "$SUT")"
 
+# (22) an INVERTED marker pair — the closing marker appears BEFORE the opening
+# one, but the pair is still balanced (1 open, 1 close) — is refused too, and
+# distinctly from the unbalanced case (21d). The count-only guard `opens !=
+# closes || opens > 1` cannot see order, only counts, so it let this through;
+# the replacement awk then printed the stray close line, hit the open marker,
+# started skipping, and — with no further close line ahead of it — dropped
+# every remaining line to EOF, reporting success while silently truncating the
+# body. Both the explicit ordering check and the awk's own END backstop exist
+# to make that impossible (PR18 finding on unit 1).
+INVSLUG=inverted-markers
+INVID="tactic-eval-finding-$INVSLUG"
+INVMD="$FR/intentions/$INVID.md"
+INV_JSON=$(jq -c --arg id "$INVID" '.id = $id' <<<"$OPEN_JSON")
+INV_BODY="Prose above.
+
+$REGION_CLOSE
+$REGION_OPEN
+
+Prose below, which the inverted-order bug would truncate to nothing."
+land_node_with_body "$INVID" <<MD
+$INV_BODY
+MD
+run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$INV_JSON" -- \
+  --slug "$INVSLUG" --statement 'ignored on an update' --body-file "$BODY" \
+  --sensor dispatch-phase-eval --now 2026-08-20
+assert_eq "(22) an inverted marker pair is refused" "1" "$RC"
+assert_eq "(22) nothing reached the graph" "" "$(log_lines graph-commit.log)"
+assert_contains "(22) and it names the ordering problem, not just 'unbalanced'" \
+  "appears before its" "$OUT"
+assert_eq "(22) the body was rolled back to origin/main, byte for byte — nothing truncated" \
+  "$INV_BODY" "$(node_body "$INVMD")"
+assert_eq "(22) and no .tmp residue is left behind" "0" \
+  "$([[ -e "$INVMD.tmp" ]] && echo 1 || echo 0)"
+
 # --- summary -----------------------------------------------------------------
 # report_results is also the decision-log guard's ONLY call site, so the suite
 # must end here rather than tallying by hand.
