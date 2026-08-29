@@ -8,16 +8,45 @@
 # DISPATCH_FLEET_ALARM_CLASSIFY_CMD (a stub), so it never exercises classify()'s
 # real embedded `node --import tsx/esm` logic — and that embedded logic (not
 # the mint/refresh plumbing around it) is exactly what ruling (b) changed. This
-# suite runs the REAL dispatch-fleet-alarm SCRIPT IN PLACE (never copied), the
-# same pattern test-assert-node-selection.sh uses for its real
-# check-node-selection.ts SUT: run from its own real on-disk location so its
-# own SCRIPT_DIR/REPO_ROOT math resolves to the real repo root, which is what
-# lets classify()'s inline `import("./packages/intentionsutil/src/store.js")`
-# actually resolve. Every WRITE path (write-node, dump-node, graph-commit,
-# verify-landed) is still stubbed, so no run in this suite ever mutates the
-# real intentions/ tree, the real git history, or reaches a remote — the only
-# real-repo touches are read-only `git rev-parse` calls inside
-# origin_main_ref_ok/origin_blob, which classify() itself never invokes.
+# suite runs the REAL, UNSTUBBED classify() logic against a COPY of the SUT
+# placed inside a miniature fixture repo root
+# ($WORK/repo/.claude/skills/dispatch-propagate/scripts/dispatch-fleet-alarm),
+# the same pattern test-dispatch-eval-finding.sh uses for dispatch-eval-finding:
+# the copy's own SCRIPT_DIR/../../../.. math then resolves INSIDE the fixture,
+# so this suite supplies its own refs/remotes/origin/main there instead of
+# depending on the ambient checkout carrying one.
+#
+# An earlier version of this suite ran the SUT in place at its real on-disk
+# location instead, specifically so REPO_ROOT would resolve to the real repo
+# root — at the time believed to be the only way to let classify()'s inline
+# `import("./packages/intentionsutil/src/store.js")` actually resolve. That
+# reasoning is superseded: it also made
+# `git -C "$REPO_ROOT" rev-parse --verify --quiet origin/main`
+# (dispatch-fleet-alarm's origin_main_ref_ok, gating classify()'s mint/refresh
+# callers) depend on ambient repository state this suite does not control.
+# `actions/checkout` does not always populate refs/remotes/origin/main — it
+# happened to exist in one CI job's checkout and not in a sibling job's, so the
+# same suite passed in one and exited 69 (environment error, no stub ever
+# reached) in the other. Supplying the ref from a self-contained fixture repo
+# instead of relying on whatever the ambient checkout happens to carry is the
+# fix; see the fixture-repo build below.
+#
+# store.js (really store.ts, resolved by the tsx/esm loader) still needs to
+# resolve from the fixture root, plus its runtime deps (`yaml`, `tsx` itself)
+# — solved cheaply by SYMLINKING `packages/` and `node_modules/` from the
+# fixture root to the real repo's, rather than copying either (store.ts pulls
+# in schema.ts/errors.ts/frontmatter.ts from the same directory, and
+# node_modules is large). A smoke-test import right after the symlinks are
+# made proves this resolves before any test case below trusts classify()'s
+# output.
+#
+# Every WRITE path (write-node, dump-node, graph-commit, verify-landed) is
+# still stubbed, so no run in this suite ever mutates the real intentions/
+# tree, the real git history, or reaches a remote — the fixture repo's own
+# `git fetch --quiet origin main` inside the SUT's verify_landed() (unstubbed,
+# unconditional) fails harmlessly there (no real `origin` remote is
+# configured, only the `refs/remotes/origin/main` ref set below) and is caught
+# non-fatally by the SUT itself. classify() itself never invokes git at all.
 #
 # Coverage: (1) a node with office_hours set and phase NOT done classifies
 # open (routes to the CAS refresh path: dump-node + graph-commit --base, never
@@ -35,8 +64,13 @@
 set -uo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SUT="$HARNESS_DIR/dispatch-fleet-alarm"
-[[ -f "$SUT" ]] || { echo "error: dispatch-fleet-alarm not found at $SUT" >&2; exit 1; }
+SUT_SRC="$HARNESS_DIR/dispatch-fleet-alarm"
+[[ -f "$SUT_SRC" ]] || { echo "error: dispatch-fleet-alarm not found at $SUT_SRC" >&2; exit 1; }
+LIB_SRC="$HARNESS_DIR/lib.sh"
+[[ -f "$LIB_SRC" ]] || { echo "error: lib.sh not found at $LIB_SRC" >&2; exit 1; }
+# scripts -> dispatch-propagate -> skills -> .claude -> repo root (same
+# convention the SUT itself uses for its own SCRIPT_DIR/../../../.. math).
+REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
@@ -58,12 +92,49 @@ BIN="$WORK/bin"
 mkdir -p "$INTENTIONS" "$STATE" "$LOG" "$BIN"
 LOCK_FILE="$WORK/graph-write.lock"
 
-# This suite runs the REAL dispatch-fleet-alarm script in place, so anything it
-# invokes that writes a routing decision would land in the PRODUCTION log.
-# Redirect the log into the scratch dir. test-decision-log-isolation.sh enforces
-# that every suite here either sources a fixture helper or makes this exact
-# assignment; this suite defines its own tiny assert helpers rather than
-# sourcing test-helpers.sh, so the assignment is the isolation.
+# --- fixture repo root: supplies its OWN origin/main, never the ambient one --
+# See the header comment for why this replaced running the SUT in place.
+FR="$WORK/repo"
+FR_SCRIPTS="$FR/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$FR_SCRIPTS"
+cp "$SUT_SRC" "$FR_SCRIPTS/dispatch-fleet-alarm"
+chmod +x "$FR_SCRIPTS/dispatch-fleet-alarm"
+# The SUT sources lib.sh from its own directory for the graph-write mutex.
+cp "$LIB_SRC" "$FR_SCRIPTS/lib.sh"
+SUT="$FR_SCRIPTS/dispatch-fleet-alarm"
+
+# classify()'s inline import needs packages/intentionsutil/src/store.js (really
+# store.ts, resolved by the tsx/esm loader) to resolve from $FR, plus its
+# runtime deps (yaml, tsx). Symlinked rather than copied: store.ts pulls in
+# schema.ts/errors.ts/frontmatter.ts from the same directory, and node_modules
+# is large.
+ln -s "$REAL_REPO_ROOT/packages" "$FR/packages"
+ln -s "$REAL_REPO_ROOT/node_modules" "$FR/node_modules"
+
+git -C "$FR" init -q
+git -C "$FR" config user.email fixture@test
+git -C "$FR" config user.name fixture
+printf 'fixture\n' > "$FR/README.md"
+git -C "$FR" add README.md
+git -C "$FR" -c commit.gpgsign=false commit -q -m init
+git -C "$FR" update-ref refs/remotes/origin/main HEAD
+
+# Smoke-test the symlinked import BEFORE any test case below trusts
+# classify()'s output — a broken symlink or an unresolved runtime dep must
+# fail loudly here, not silently masquerade as "absent" for every fixture.
+CLASSIFY_SMOKE=$(cd "$FR" && node --import tsx/esm -e '
+  const { readNode } = await import("./packages/intentionsutil/src/store.js");
+  process.stdout.write(typeof readNode === "function" ? "ok" : "not-a-function");
+' 2>&1) || { echo "error: classify() smoke test failed to resolve store.js from $FR: $CLASSIFY_SMOKE" >&2; exit 1; }
+[[ "$CLASSIFY_SMOKE" == "ok" ]] || { echo "error: classify() smoke test unexpected output: $CLASSIFY_SMOKE" >&2; exit 1; }
+
+# This suite runs a COPY of dispatch-fleet-alarm (never the real one in place),
+# so anything it invokes that writes a routing decision would otherwise land in
+# the PRODUCTION log if this were unset. Redirect the log into the scratch dir.
+# test-decision-log-isolation.sh enforces that every suite here either sources
+# a fixture helper or makes this exact assignment; this suite defines its own
+# tiny assert helpers rather than sourcing test-helpers.sh, so the assignment
+# is the isolation.
 export DISPATCH_DECISION_LOG_DIR="$WORK/decision-log"
 mkdir -p "$DISPATCH_DECISION_LOG_DIR"
 

@@ -144,17 +144,30 @@ git -C "$FR" config user.name fixture
 printf '.claude/\n' > "$FR/.git/info/exclude"
 printf 'fixture\n' > "$FR/README.md"
 git -C "$FR" add README.md
-# Pin the commit timestamps so the fixture's HEAD sha is DETERMINISTIC. Every
-# other input to it is already fixed (tree, author, message), so the clock was
-# the only source of variation — and case (16) asserts that an abbreviated sha
-# is expanded to 40 characters. When the first 8 hex characters happened to be
-# all digits, normalize_resolved_ref() refused the abbreviation as ambiguous
-# (a PR number and an abbreviated sha resolve differently) — which is the
-# CORRECT behaviour, reached by an accidental fixture. That made the assertion
-# fail on roughly 2.3% of runs, (10/16)^8. Pinning the dates fixes the sha at
-# one known-good value rather than re-rolling the dice every run.
-GIT_AUTHOR_DATE="2026-01-01T00:00:00Z" GIT_COMMITTER_DATE="2026-01-01T00:00:00Z" \
-  git -C "$FR" commit -q -m init
+# Case (16) asserts that an abbreviated sha is EXPANDED to 40 characters. But
+# normalize_resolved_ref() refuses an all-digit reference of 7+ characters as
+# ambiguous — a PR number and an abbreviated sha resolve differently — which is
+# CORRECT behaviour that an accidental fixture can walk into. With an unpinned
+# clock the fixture's HEAD sha varied per run, so the assertion failed whenever
+# the first 8 hex characters came up all digits: roughly (10/16)^8, ~2.3%.
+#
+# Pinning the dates to a single value is NOT the fix. That just freezes the dice
+# at one roll, and the roll is not even stable across environments (local commit
+# signing, git version) — a pinned date that happens to yield an all-digit
+# prefix fails 100% of the time instead of 2.3%, which is how this was found.
+#
+# So: disable signing to remove that variable, then walk the commit date forward
+# until the abbreviation is unambiguous. Same start, same increment, same tree
+# everywhere, and the loop is guaranteed to produce a fixture case (16) can
+# actually use. It converges immediately in the common case.
+fixture_epoch=1767225600  # 2026-01-01T00:00:00Z
+GIT_AUTHOR_DATE="$fixture_epoch +0000" GIT_COMMITTER_DATE="$fixture_epoch +0000" \
+  git -C "$FR" -c commit.gpgsign=false commit -q -m init
+while [[ "$(git -C "$FR" rev-parse HEAD | cut -c1-8)" =~ ^[0-9]+$ ]]; do
+  fixture_epoch=$((fixture_epoch + 1))
+  GIT_AUTHOR_DATE="$fixture_epoch +0000" GIT_COMMITTER_DATE="$fixture_epoch +0000" \
+    git -C "$FR" -c commit.gpgsign=false commit -q --amend --no-edit
+done
 git -C "$FR" update-ref refs/remotes/origin/main HEAD
 
 # --- stubs -------------------------------------------------------------------
