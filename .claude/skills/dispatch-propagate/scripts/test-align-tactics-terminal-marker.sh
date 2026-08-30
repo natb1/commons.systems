@@ -122,13 +122,28 @@ if [[ ! -f "$ALIGN_TACTICS_SKILL" ]]; then
   echo "  FAIL: mechanical-error bullet carries the no-claim marker: file missing"
 else
   # The bullet's own text, up to the next top-level list item.
+  # HERE-STRING, never `printf | grep -q`. Under `set -o pipefail` grep -q
+  # exits on its FIRST match, the writer takes SIGPIPE, the pipeline reports
+  # 141, and a PRESENT marker is scored "absent" — a false failure that grows
+  # more likely as the bullet's prose grows. Same shape already fixed in
+  # test-helpers.sh on 2026-08-13.
   block=$(awk '/any other non-zero/{f=1} f{print} f && /^   \*\*Deliberately not gated/{exit}' "$ALIGN_TACTICS_SKILL")
-  if printf '%s' "$block" | grep -qE 'mark-node-terminal .* no-claim'; then
+  if grep -qE 'mark-node-terminal .* no-claim' <<<"$block"; then
     actual="present"
   else
     actual="absent"
   fi
   assert_eq "align-tactics SKILL.md: the 'any other non-zero' bullet reaps with 'mark-node-terminal ... no-claim'" "present" "$actual"
+
+  # The `13` bullet is the one path the skill explicitly NAMES a mechanical
+  # error, so it is the one most likely to be "tidied" back to report-and-stop.
+  block13=$(awk '/^   - `13` —/{f=1} f{print} f && /^   - `15` —/{exit}' "$ALIGN_TACTICS_SKILL")
+  if grep -qE 'mark-node-terminal .* no-claim' <<<"$block13"; then
+    actual13="present"
+  else
+    actual13="absent"
+  fi
+  assert_eq "align-tactics SKILL.md: the exit-13 bullet also reaps with 'mark-node-terminal ... no-claim'" "present" "$actual13"
 fi
 
 # --- 5. SKILL.md states validate-graph.ts runs AFTER the marker --------------
