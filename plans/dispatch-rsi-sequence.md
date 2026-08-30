@@ -53,12 +53,19 @@
 > `schema.ts`, and `dispatch-derive-node-target` with its test. **What each
 > citation needs is past-tense repair, not a decision.**
 >
-> **The citation list above is the two sites outside `intentions/`, and both
-> already read past-tense — the outstanding repair scope is the 9 `intentions/`
-> sites (re-measured 2026-08-30).** Of those two, PR17 Unit 6 is wrapped in the
-> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4515-4527`,
+> **The citation list above names two non-`intentions/` sites, and both already
+> read past-tense — the outstanding repair scope is the 9 `intentions/` sites
+> (re-measured 2026-08-30).** Of those two, PR17 Unit 6 is wrapped in the
+> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4521-4533`,
 > and `.claude/skills/align-audit/SKILL.md` (a skill, not a plan) was fixed in
-> the E22 commit, as `:4527` there records. `tactic-graph-digest-tooling` is
+> the E22 commit, as `:4533` there records. Do not read "two" as the whole
+> non-`intentions/` grep result: `LC_ALL=C git grep -a -l
+> 'tactic-graph-digest-tooling' origin/main` returns nine files, four of them
+> outside `intentions/` — those two, this index file's own census, and
+> `packages/intentionsutil/prose-ref-baseline.json:24`, where the pruned id
+> appears as a `referencedBy` (a stale grandfather entry naming a node that no
+> longer exists, not a citation of it, so it needs deletion rather than
+> past-tense repair). `tactic-graph-digest-tooling` is
 > cited 13 times under `intentions/`, 9 of them needing repair:
 > `strategy-graph-review-curriculum.md:158`, `strategy-graph-integrity.md:23`
 > and `:138`, `tactic-align-audit-skill.md:76`, `:110` and `:172`,
@@ -73,7 +80,9 @@
 > human reader takes it for a live blocker (the node's real `blocked_by` is
 > `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
 > `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
-> `:47`), in the `rationale:` block scalar — so repair it as a frontmatter field
+> `:47`), in `rationale:` (`:11`) — a **double-quoted multi-line scalar**, not a
+> `|`/`>` block scalar, so any repair text containing a `"` must be escaped `\"`
+> (the field carries no escaped quote today). Repair it as a frontmatter field
 > edit, which `graph-commit` merges structurally. It is **not** unread by
 > tooling either: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,

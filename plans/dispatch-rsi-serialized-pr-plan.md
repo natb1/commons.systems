@@ -3376,8 +3376,14 @@ invent one.
 > 2026-08-30 on `origin/main`: `tactic-dispatch-skill-rename`,
 > `tactic-dispatch-skill-standards-extraction` and
 > `strategy-graph-native-dispatch` all carry `blocked_by: []`. Every reference is
-> **body prose**, which `validateGraph` does not read and the router does not
-> traverse — so it cannot block, and there is nothing to delete from the graph.
+> **prose**, carrying no frontmatter edge, so the router does not traverse it —
+> it cannot block, and there is nothing to delete from the graph. It is not
+> unread by tooling, though: `validateGraph` itself skips prose, but
+> `validate-graph.ts` also runs `validateGraphProseRefs`
+> (`packages/intentionsutil/src/schema.ts:1973`), which scans `statement`,
+> `rationale`, `attention.rationale`, every `clarifications[].answer` and the
+> body — so a prose id that resolves to neither a live nor a pruned node fails
+> the check.
 > The node itself was pruned by `20b0432c` at `status: codified`,
 > `phase: review`, `pr: 2923`, and its work shipped. Only the **rename** half of
 > the "coordinated adjacent PRs" pair is outstanding, and that is this PR.

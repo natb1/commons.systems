@@ -24,8 +24,10 @@ clean session handed the node bodies alone sees only what is on the node.
 > transcription pass — Ruling 1's fourth node plus Rulings 2, 3, 6 and 7).
 > **Commit attribution corrected 2026-08-30:** this list also named `9201fdeb`
 > and `1f5d0909`, neither of which lands any of these five — `9201fdeb` landed
-> the plan-only 35%-band ruling in the table below, and `1f5d0909` landed
-> Ruling 5 (see its paragraph). Re-measured with
+> the 35%-band ruling in the table below (it is a node write, not a plan-side
+> one: its single file is `intentions/strategy-graph-native-dispatch.md`, and it
+> is that ruling's transcription commit — it simply lands none of these five),
+> and `1f5d0909` landed Ruling 5 (see its paragraph). Re-measured with
 > `git show origin/main:intentions/<id>.md | LC_ALL=C grep -ac '2026-08-29'`
 > against each ruling's own named nodes — every one returns ≥ 1 hit
 > (2, 3, 2, 2, 2, 2, 1, 2 across the eight named nodes).
@@ -45,7 +47,8 @@ clean session handed the node bodies alone sees only what is on the node.
 > discharged by the transcriptions themselves. That is refuted by a commit this
 > banner already cites: `1f5d0909` touches exactly one file and adds exactly one
 > thing — an `attributes.conditions:` entry on
-> `intentions/strategy-graph-native-dispatch.md` (`:7140` on `origin/main`)
+> `intentions/strategy-graph-native-dispatch.md` (`:7131-7142` on `origin/main`;
+> the entry opens at `:7131`, and its closing provenance clause is at `:7140`)
 > recording Ruling 5 verbatim and ending *"(Recorded 2026-08-29 as author Ruling 5; see
 > plans/dispatch-rsi-author-rulings.md, which is the index and audit trail and
 > never the authority.)"* Grep `conditions:`, not `clarifications:` — Rulings 4
