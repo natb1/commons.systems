@@ -95,7 +95,7 @@ if [ -z "$REPO_ROOT" ]; then
   # or $0 carried. Comparing the two normalizations makes one checkout reached
   # through a symlink (macOS /tmp -> /private/tmp, a symlinked workspace) read
   # as two different trees and abort on the tree it is standing in. Same
-  # contract, same spelling, as resolve-diff-base.sh:249-256.
+  # contract, same spelling, as resolve-diff-base.sh:283-288.
   SCRIPT_GIT_ROOT="$(git -C "$SCRIPT_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "$SCRIPT_GIT_ROOT" ] && [ "$SCRIPT_GIT_ROOT" != "$REPO_ROOT" ]; then
     echo "check-test-integrity: script lives in $SCRIPT_GIT_ROOT but the CWD resolves to $REPO_ROOT;" >&2
@@ -335,7 +335,7 @@ fi
 #
 # set -e safety: every git grep / git show / grep here either runs in an
 # `if …; then` CONDITION (where a no-match exit 1 is harmless) or carries
-# `|| true`, mirroring the existing guards at :147/:148/:167.
+# `|| true`, mirroring the existing guards at :182/:183/:202.
 # ---------------------------------------------------------------------------
 
 # Pure-exclude pathspecs for the existence check: the post-PR tree minus tests.
@@ -530,7 +530,7 @@ while IFS= read -r F; do
   if [ "$already_exempt" -eq 1 ]; then continue; fi
 
   # Per-file net-removal filter: only files that net-remove declarations have
-  # anything to exempt. Mirror the comment-exclusion filters at :148/:239.
+  # anything to exempt. Mirror the comment-exclusion filters at :183/:274.
   F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
