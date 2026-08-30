@@ -129,7 +129,11 @@ else
   # test-helpers.sh on 2026-08-13.
   # Same reasoning as block13 below: stop at the next top-level bullet or the
   # section break, whichever comes first, rather than at one named literal.
-  block=$(awk '/any other non-zero/{f=1; next} f && (/^   - / || /^   \*\*Deliberately not gated/){exit} f{print}' "$ALIGN_TACTICS_SKILL")
+  # ANCHORED to the bullet's own line start. Unanchored, /any other non-zero/
+  # also matched the prose cross-reference in the 13 bullet, so the extractor
+  # captured the 13 bullet's tail — including ITS marker block — and the
+  # catch-all's marker could be deleted while the row still scored "present".
+  block=$(awk '/^   - any other non-zero/{f=1; next} f && (/^   - / || /^   \*\*Deliberately not gated/){exit} f{print}' "$ALIGN_TACTICS_SKILL")
   if grep -qE 'mark-node-terminal .* no-claim' <<<"$block"; then
     actual="present"
   else
