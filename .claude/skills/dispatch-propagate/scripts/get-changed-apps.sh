@@ -85,11 +85,29 @@ if [ -z "$BASE" ]; then
   BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
 else
   EXPLICIT_BASE="$BASE"
-  if ! BASE=$(git -C "$REPO_ROOT" merge-base "$EXPLICIT_BASE" HEAD 2>&1); then
+  # Capture STDOUT ONLY. `$(git ... 2>&1)` splices git's stderr into the VALUE,
+  # and git writes to stderr on its SUCCESS path too: an ambiguous refname — a
+  # tag and a branch sharing a name, which is exactly the `last-prod-deploy` ref
+  # run-all-prod-deploy-smoke.sh:20 passes here — makes git print
+  # `warning: refname 'last-prod-deploy' is ambiguous.`, exit 0, and hand back a
+  # $BASE whose first line is the warning. The `git diff "$BASE"..HEAD` below
+  # then exits 128 (measured), with a diagnosis pointing at the wrong command.
+  # Errors are still reported in full: stderr goes to a temp file which the
+  # failure path quotes and the success path forwards to the log.
+  MERGE_BASE_ERR=$(mktemp)
+  MERGE_BASE_RC=0
+  BASE=$(git -C "$REPO_ROOT" merge-base "$EXPLICIT_BASE" HEAD 2>"$MERGE_BASE_ERR") \
+    || MERGE_BASE_RC=$?
+  if [ "$MERGE_BASE_RC" -ne 0 ]; then
     echo "ERROR: no merge base between '$EXPLICIT_BASE' and HEAD in $REPO_ROOT" >&2
-    echo "git said: $BASE" >&2
+    echo "git said: $(cat "$MERGE_BASE_ERR")" >&2
+    rm -f "$MERGE_BASE_ERR"
     exit 1
   fi
+  if [ -s "$MERGE_BASE_ERR" ]; then
+    cat "$MERGE_BASE_ERR" >&2
+  fi
+  rm -f "$MERGE_BASE_ERR"
 fi
 
 if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$BASE"..HEAD); then

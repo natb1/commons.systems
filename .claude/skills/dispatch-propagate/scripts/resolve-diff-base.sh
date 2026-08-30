@@ -168,6 +168,36 @@ die() {
   exit "$code"
 }
 
+# Run `git "$@"`, capturing STDOUT ONLY into $GIT_OUT and its stderr into
+# $GIT_ERR, and returning git's exit status.
+#
+# WHY NOT `VAR=$(git ... 2>&1)`: that spelling splices git's stderr into the
+# VALUE, and git writes to stderr on its SUCCESS path too. The live case is an
+# ambiguous refname — a tag and a branch sharing a name, e.g. the
+# `last-prod-deploy` ref run-all-prod-deploy-smoke.sh:20 passes as a base — where
+# git prints `warning: refname 'last-prod-deploy' is ambiguous.`, still exits 0,
+# and the caller's variable comes back as the warning line followed by the SHA.
+# Every later use of that value is then garbage: measured, the following
+# `git diff "$BASE"..HEAD` exits 128. The failure is silent at the point of
+# capture and only surfaces one command later, wearing the wrong diagnosis.
+#
+# Stderr is not discarded: on success it is forwarded to this script's own
+# stderr (so a warning still reaches the log), and on failure it is left for the
+# caller's die() to quote as `git said: $GIT_ERR`.
+GIT_OUT=""
+GIT_ERR=""
+git_capture() {
+  local err_file rc=0
+  err_file=$(mktemp)
+  GIT_OUT=$(git "$@" 2>"$err_file") || rc=$?
+  GIT_ERR=$(cat "$err_file")
+  rm -f "$err_file"
+  if [ "$rc" -eq 0 ] && [ -n "$GIT_ERR" ]; then
+    printf '%s\n' "$GIT_ERR" >&2
+  fi
+  return "$rc"
+}
+
 usage() {
   cat >&2 <<'EOF'
 Usage: resolve-diff-base.sh [--repo-root <dir>] [--head <ref>]
@@ -231,20 +261,22 @@ if [ -n "$REPO_ROOT" ]; then
     die 3 "ERROR: --repo-root '$REPO_ROOT' is not a directory." \
           "Pass a path inside the checkout whose diff base you want."
   fi
-  if ! ROOT=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>&1); then
+  if ! git_capture -C "$REPO_ROOT" rev-parse --show-toplevel; then
     die 3 "ERROR: --repo-root '$REPO_ROOT' is not inside a git work tree." \
-          "git said: $ROOT"
+          "git said: $GIT_ERR"
   fi
+  ROOT="$GIT_OUT"
 else
   # Resolve from the CALLER's CWD, never from this script's own location: a
   # script's path says nothing about which checkout the caller means, and
   # inferring the tree from it is a recurring defect in this repo's tooling
   # (transition-node, graph-commit).
-  if ! ROOT=$(git rev-parse --show-toplevel 2>&1); then
+  if ! git_capture rev-parse --show-toplevel; then
     die 3 "ERROR: could not resolve a git repo root from the current directory ($PWD)." \
-          "git said: $ROOT" \
+          "git said: $GIT_ERR" \
           "Pass --repo-root to name the checkout to resolve against."
   fi
+  ROOT="$GIT_OUT"
   # With no --repo-root, a CWD in a different checkout from this script's own
   # means either guess is silently wrong. Refuse, and name the flag that fixes
   # it — the same contract lint-verify-fence-paths.sh:174-181 applies.
@@ -269,13 +301,14 @@ if ! REMOTE_SHA=$(git -C "$ROOT" rev-parse --verify --quiet "${REMOTE_REF}^{comm
         "Locally, fetch first:  git -C $ROOT fetch origin main"
 fi
 
-if ! BASE=$(git -C "$ROOT" merge-base "$REMOTE_SHA" "$HEAD_SHA" 2>&1); then
+if ! git_capture -C "$ROOT" merge-base "$REMOTE_SHA" "$HEAD_SHA"; then
   die 6 "ERROR: no merge base between '$REMOTE_REF' and '$HEAD_REF' in $ROOT." \
-        "git said: $BASE" \
+        "git said: $GIT_ERR" \
         "Unrelated histories, or a shallow clone whose grafted history does" \
         "not reach the fork point. In CI use fetch-depth: 0." \
         "Locally:  git -C $ROOT fetch --unshallow origin"
 fi
+BASE="$GIT_OUT"
 
 SOURCE="merge-base"
 

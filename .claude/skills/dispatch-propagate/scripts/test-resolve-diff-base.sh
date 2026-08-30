@@ -360,4 +360,65 @@ assert_contains "header: names the working-tree exclusion" \
 assert_contains "header: names the multi-commit-push residual" \
   "github.event.before" "$SUT_SRC"
 
+# ---------------------------------------------------------------------------
+# Test 14: git's STDERR must never ride along in a captured VALUE.
+# ---------------------------------------------------------------------------
+echo "Test 14: git's stderr never rides along in the captured value"
+# REGRESSION. Three captures in this helper used to be spelled
+# `VAR=$(git ... 2>&1)`, which splices git's STDERR into the VALUE. git writes
+# to stderr on its SUCCESS path too, so the corruption happens on a run that
+# never fails: the variable comes back as "<warning text>\n<real value>" and the
+# next command that consumes it dies with a diagnosis pointing somewhere else.
+#
+# GIT_TRACE=1 is the deterministic success-path stderr emitter — it makes every
+# git invocation write trace lines to stderr while still exiting 0, so it fires
+# on all three captures at once. It is also a state a developer debugging git,
+# or a CI runner with it exported, is genuinely in.
+#
+# Measured on the pre-fix spelling: this run exits 7 ("--head 'HEAD' does not
+# resolve to a commit"), because $ROOT came back as trace output rather than a
+# path. The correct behaviour is exit 0 with the SHA on stdout and every trace
+# line on stderr, where it belongs.
+make_repo
+EXPECTED_TRACE_BASE=$(git -C "$REPO" rev-parse refs/remotes/origin/main)
+RC=0; OUT=""; ERR=""
+TRACE_ERR=$(mktemp "$TMP_ROOT/trace.XXXXXX")
+set +e
+OUT=$(GIT_TRACE=1 "$SUT" --repo-root "$REPO" 2>"$TRACE_ERR")
+RC=$?
+set -e
+ERR=$(cat "$TRACE_ERR")
+rm -f "$TRACE_ERR"
+assert_eq "GIT_TRACE: exit 0" "0" "$RC"
+assert_eq "GIT_TRACE: stdout is exactly the merge-base SHA" "$EXPECTED_TRACE_BASE" "$OUT"
+assert_not_contains "GIT_TRACE: no trace text spliced into stdout" "trace:" "$OUT"
+# The trace itself is not swallowed — a diagnostic that vanishes is its own bug.
+assert_contains "GIT_TRACE: the trace still reaches stderr" "trace:" "$ERR"
+
+# The same, for the OTHER capture: the no---repo-root path resolves the root
+# from the CWD instead, and had the identical `2>&1` splice. Only this repo's
+# own checkout can exercise it — a foreign CWD trips the divergence guard first
+# (Test 10) — so it is driven from $SCRIPT_DIR, exactly as Test 11 does.
+#
+# NOT TESTED HERE, deliberately: an ambiguous refname (a tag and a branch of the
+# same name). It reaches this helper through `--remote-ref`, which is consumed
+# by `rev-parse --verify --quiet` — `--quiet` suppresses the warning — and the
+# merge-base call downstream is handed resolved SHAs, so nothing warns. Measured
+# against the PRE-FIX helper: identical exit 0 and identical SHA, i.e. the
+# assertion could not fail either way. The ambiguous shape does discriminate one
+# layer up, where a caller passes the name straight to merge-base, and it is
+# pinned there: test-get-changed-apps.sh Test 3e.
+TRACE_OWN_ERR=$(mktemp "$TMP_ROOT/trace-own.XXXXXX")
+TRACE_PREV=$(pwd)
+cd "$SCRIPT_DIR"
+set +e
+TRACE_OWN_OUT=$(GIT_TRACE=1 "$SUT" --at-remote-tip first-parent 2>"$TRACE_OWN_ERR")
+TRACE_OWN_RC=$?
+set -e
+cd "$TRACE_PREV"
+rm -f "$TRACE_OWN_ERR"
+assert_eq "GIT_TRACE (no --repo-root): exit 0" "0" "$TRACE_OWN_RC"
+assert_eq "GIT_TRACE (no --repo-root): stdout is one bare 40-hex SHA" "yes" \
+  "$(if [[ "$TRACE_OWN_OUT" =~ ^[0-9a-f]{40}$ ]]; then echo yes; else echo "no ($TRACE_OWN_OUT)"; fi)"
+
 report_results

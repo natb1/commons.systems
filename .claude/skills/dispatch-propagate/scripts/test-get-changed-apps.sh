@@ -162,6 +162,44 @@ assert_eq "base ahead of HEAD: exit 0" "0" "$RC"
 assert_eq "base ahead of HEAD: names no app" "" "$OUT"
 
 # ---------------------------------------------------------------------------
+# Test 3e (REGRESSION): an AMBIGUOUS explicit base still resolves.
+#
+# The merge-base capture used to be spelled `BASE=$(git ... 2>&1)`, which
+# splices git's STDERR into the VALUE. git writes to stderr on its SUCCESS path
+# too — an ambiguous refname (a tag AND a branch of the same name) draws
+# `warning: refname '<name>' is ambiguous.` and still exits 0 — so $BASE came
+# back as the warning line followed by the SHA.
+#
+# `last-prod-deploy` is not a hypothetical name: it is the exact ref
+# run-all-prod-deploy-smoke.sh:20 passes as --base, and a branch of that name
+# alongside the tag is one `git branch` away.
+#
+# Measured on the pre-fix spelling: exit 1 with
+# `fatal: invalid object name 'warning'.` and
+# `ERROR: could not diff warning: refname 'last-prod-deploy' is ambiguous.` —
+# a production deploy failing with a diagnosis that names the wrong command.
+# ---------------------------------------------------------------------------
+echo "Test 3e: an ambiguous --base name resolves instead of splicing git's warning"
+make_repo
+git -C "$REPO" tag last-prod-deploy main
+git -C "$REPO" branch last-prod-deploy main
+run_sut --base last-prod-deploy
+assert_eq "ambiguous base: exit 0" "0" "$RC"
+assert_eq "ambiguous base: names myapp" "myapp" "$OUT"
+# stdout must carry the app list and nothing else — the warning belongs on
+# stderr, and it must not be swallowed there either.
+AMBIG_ERR=$(mktemp "$TMP_ROOT/ambig.XXXXXX")
+AMBIG_PREV=$(pwd)
+cd "$REPO"
+set +e
+"$SUT" --base last-prod-deploy >/dev/null 2>"$AMBIG_ERR"
+set -e
+cd "$AMBIG_PREV"
+assert_contains "ambiguous base: git's warning still reaches stderr" \
+  "is ambiguous" "$(cat "$AMBIG_ERR")"
+rm -f "$AMBIG_ERR"
+
+# ---------------------------------------------------------------------------
 # Test 3d: an explicit base that shares no history with HEAD is a hard error,
 # not an empty "nothing to do".
 # ---------------------------------------------------------------------------

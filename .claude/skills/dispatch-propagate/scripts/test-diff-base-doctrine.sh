@@ -281,8 +281,14 @@ scan "sweep B" "$PAT_B"
 echo "=== Self-test: the scan scope covers what it claims ==="
 SCAN_LINES="$(tr '\0' '\n' < "$SCAN_FILE")"
 
+# HERE-STRING, not a pipe. `grep -Fxq` exits at the first match, and once
+# $SCAN_LINES exceeds the 64 KiB pipe buffer the writer takes SIGPIPE and the
+# pipeline returns 141 under `set -o pipefail` — so an anchor that IS in scope
+# reads as absent and this self-test false-fails. The scan list is ~38 KB today,
+# which is why it has not fired yet; it grows with the repo, and the failure
+# would look like a scope regression rather than a plumbing bug.
 in_scope() {
-  printf '%s\n' "$SCAN_LINES" | LC_ALL=C grep -Fxq "$1"
+  LC_ALL=C grep -Fxq "$1" <<<"$SCAN_LINES"
 }
 
 # Each entry is a live file; if one is renamed, fix the entry rather than
