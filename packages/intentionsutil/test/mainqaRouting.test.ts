@@ -235,7 +235,7 @@ describe("buildMainqaNode", () => {
 
   // A destination node is born carrying the source's already-merged PR. Rendering
   // `PR #null` into the statement and body would be a silent-wrong-output
-  // fallback; the payload arrives as JSON, so the null is reachable at runtime.
+  // fallback; the payload arrives in JSON form, so null is reachable at runtime.
   it("refuses a null source PR rather than rendering `PR #null`", () => {
     const nullPr = null as unknown as number; // type-safety-ok: the items payload reaches this module as JSON, so a null pr is reachable at runtime and the guard must be exercised with one
     expect(() => buildMainqaNode(nodeArgs({ pr: nullPr }))).toThrow(

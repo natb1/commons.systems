@@ -91,8 +91,8 @@ export function mainqaNodeId(sourceId: string, lane: MainqaLane): string {
 /**
  * A destination node is born carrying the source's already-merged PR, so the PR
  * number is always known at mint time. Refuse rather than render `PR #null` into
- * a node statement and body — the payload reaches us as JSON, so this is a real
- * runtime possibility, not just a type-level one.
+ * a node statement and body — the payload arrives in JSON form, so this is a
+ * real runtime possibility, not just a type-level one.
  */
 function assertSourcePr(pr: number): void {
   if (!Number.isInteger(pr) || pr <= 0) {
