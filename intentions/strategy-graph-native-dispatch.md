@@ -7668,6 +7668,16 @@ lane does globally. The CI wait is bounded by
 `DISPATCH_RESERVATION_STANDALONE_TTL_S` (default 600s) rather than a constant of
 its own, because selection writes the reservation marker BEFORE the wait — one
 constant governs both the wait and the slot it holds, so they cannot drift apart.
+(AMENDED 2026-08-30, and the sentence above is left standing as the ORIGINAL
+reasoning rather than rewritten. That premise was measured FALSE at the
+SELECTION-TIME surface: `graph-select-target`'s ci-pending skip returns before
+any `reservation_write`, and the explicit lane invokes it without
+`--standalone`, so no marker is held. It holds at the PROVISION-TIME surface
+only. The clarification carrying this same reasoning was amended to OPTION (a)
+— MAKE THE PREMISE TRUE, by having the selection-time wait write a PROVISIONAL
+reservation claim before it waits. So the sentence above states the INTENDED
+post-implementation behavior, NOT today's code. Do not cite it as a
+description of current behavior.)
 
 **A failing signal's resolution ranking is the owning node's authored boost — no
 per-signal rank field.** (Entry 56, 2026-07-13 interview, author-dictated.)

@@ -158,4 +158,7 @@ tactic-review-cheap-fix-disposition."* That sentence is now **false** — the
 implementation merged 2026-07-18 in PR #2887 under
 `tactic-review-phase-trust-builtin-review`, encoded as a prose heuristic at
 `.claude/workflows/review-fix.js:3504-3511` with no mechanical cost signal.
-Leaving it as-is is the record gap that made this node look plannable. See T4b.
+Leaving it as-is is the record gap that made this node look plannable. That
+correction on the serving strategy is OWED AND NOT YET APPLIED — it was held
+back because the park's RULING 1 is unanswered, not because it was judged
+wrong.
