@@ -154,12 +154,12 @@ jobs:
         id: changes
         run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         with:
           node-version-file: .node-version
           cache: 'npm'
       - name: Install workspace dependencies
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       # `--strict-sensors` is gated on `main`, not merely on this job. This
       # workflow's `branches-ignore` only excludes `graph/**`, and
@@ -170,8 +170,18 @@ jobs:
       # The flag's whole justification is that it is the POST-MERGE check;
       # branches keep the stderr warning, exactly as graph-fast-path.yml's
       # guard job does.
+      #
+      # `|| github.ref == 'refs/heads/main'` on all three steps is what makes
+      # that post-merge run EXIST. detect-changes.sh computes its categories
+      # from `git diff origin/main...HEAD`, and on a push to `main` the fetched
+      # `origin/main` IS the pushed commit — the diff is empty, every category
+      # is false, and this job's steps were all skipped. Measured on run
+      # 33288998641 (commit 77bd747, which touched packages/intentionsutil/
+      # heavily): "Validate intention graph" reported `skipped`. Gating the flag
+      # on `main` while leaving the step gated on a category that is never true
+      # on `main` would make the strict check run on no ref at all.
       - name: Validate intention graph
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
 
   dead-code:
