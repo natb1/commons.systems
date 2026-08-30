@@ -2435,135 +2435,6 @@ clarifications:
       node-lane terminal section and must not be planned as one. Nothing was
       held on trust this round — the author endorsed each resolution outright —
       so no born-parked review item is owed."
-  - question: Is `dispatch <node-id>` valid usage, and does it walk the critical
-      path to the named node, wait out in-flight CI, launch /fix-checks on red,
-      and resolve merge conflicts?
-    answer: "(Recorded 2026-07-29 /align-strategy interview; the author's
-      four-clause description checked clause by clause against origin/main.)
-      VALID USAGE — confirmed: `dispatch [<node-id>]` is the manual entry point.
-      The nix-installed wrapper execs
-      `.claude/skills/dispatch-propagate/scripts/dispatch-tick`; bare it passes
-      `--manual` (the rank-first fan-out), with an argument it takes the
-      explicit-node lane, and `dispatch-tick` rejects the two combined as
-      semantically incompatible. CLAUSE-BY-CLAUSE VERDICT. (1) Critical-path
-      walk — NOT current behavior; now adopted as a requirement. Today
-      `graph-select-target --node <id>` filters the candidate list to exactly
-      that id, and a tactic with an incomplete blocker (`blockersComplete`,
-      packages/intentionsutil/src/router.ts) or a strategy with open on-path
-      children is never a candidate at all, so a blocked or parent target yields
-      `node-not-selectable <id>` and `dispatch-tick` exits 1. The lane's
-      documented contract is \"a selection-order override, not a gate bypass\",
-      and substitution is neither — it is a target substitution, a third
-      category. (2) CI wait — NOT current behavior. The author's CONTRAST with
-      the rank lane is accurate, but the explicit lane skips too, at two
-      surfaces: selection-time (`sensor_gate`'s qa/review arm consults
-      `dispatch-ci-ready`, rc 1 → skip reason `ci-pending` →
-      `node-not-selectable`) and provision-time (`provision-node-worktree` exit
-      10 `ci-waiting` → disposition `waiting <id>`, \"retry next tick\"). Under
-      the standing paused/manual-only operating mode there IS no next tick, so
-      the human gets a dead end and must re-run by hand — the asymmetry that
-      justifies the clause: skipping is only cheap when something else comes
-      back. Now adopted, bounded and lane-scoped. (3) Failing checks →
-      /fix-checks — CONFIRMED, already implemented and already reached on this
-      lane. Selection is the sole CI-routing authority: on CONCLUDED-RED at
-      implement/qa/review the fix-interrupt gate writes `execution.fix` (via
-      `apply-fix-state --set-fix` + `graph-commit`) and emits phase `fix`, which
-      `dispatch-graph-execute` maps `tactic:fix` → `/fix-checks`. `--node` does
-      not bypass `sensor_gate`, so the explicit lane gets this verbatim; a
-      persistently-red PR past the fix-attempt cap lands a tracked `hold-node`
-      hold with a `blocked_by` edge rather than retrying forever. (4) Merge
-      conflicts — CONFIRMED, with two corrections the author accepted. The merge
-      attempted is a FULL `git merge --no-edit origin/main` in
-      `provision-node-worktree`, not `--ff-only`; on failure it runs `merge
-      --abort` and exits 11, leaving the tree unmodified and the worktree/branch
-      in place for the resolver. And the resolver is `/dispatch-conflict` Lane 3
-      (\"an origin/main merge conflict on a graph node's own branch\"), kicked
-      by `dispatch-graph-execute` case 11 as first responder — there is no
-      script or skill named `dispatch-merge`. Only if that kick FAILS does it
-      fall back to a consecutive-strike counter and then a tracked `hold-node`
-      hold. Both corrections are description-only: the author declined changing
-      provisioning to `--ff-only` (today's full merge succeeds where ff-only
-      would refuse, for every node whose branch carries commits) and declined
-      renaming Lane 3 (the skill handles conflicts, and \"merge\" would
-      misdescribe its Lanes 1 and 2). WALK SEMANTICS (author, this round):
-      compute the closure of the recursive union of the named node's
-      `blocked_by` and its children (`parent`/`serves`), keep only members
-      passing every existing gate verbatim (claim-safety, `sensor_gate`,
-      `office_hours`, freeze), and dispatch the highest member by the SAME
-      lexicographic (tier, rank) precedence the rank lane already uses. Print
-      the substitution and its reason before launching; refuse only when the
-      whole closure is undispatchable. Reusing the selector's own precedence
-      rather than inventing a walk-specific order is the parsimony the record
-      already paid for once: strategy-graph-drives-dispatch's 2026-07-13
-      clarification superseded backward rank FLOW precisely because unrelated
-      `blocked_by` compounding silently overtook intentionally top-ranked nodes,
-      replacing it with a max-based precedence lift — blockers are RANKED
-      higher, not boosted higher — and its 2026-07-18 extension generalized that
-      lift to the (tier, rank) pair. Because that lift already makes the rank
-      lane drain the critical path to a hot node first, this clause makes the
-      explicit lane do targetedly what the rank lane does globally; a second
-      ordering currency here would re-open the failure mode 2026-07-13 closed.
-      Blockers-before-children and nearest-hop-first were both offered as walk
-      orders and declined for the same reason. CI WAIT (author, this round): on
-      the EXPLICIT-NODE LANE ONLY — never the autonomous path, never `--manual`
-      — poll the CI verdict until it concludes, bounded by
-      `DISPATCH_RESERVATION_STANDALONE_TTL_S` (default 600s), then fall back to
-      today's skip with a message naming the PR. Lane-scoping is load-bearing:
-      `dispatch-tick` is also the systemd/heartbeat entry point and a blocking
-      wait there would stall the chain. The bound is TIED to the reservation TTL
-      rather than given its own constant because selection writes the
-      reservation marker BEFORE the wait, so the wait holds a concurrency slot
-      for its whole duration; one constant governs both and they cannot drift
-      apart, and if real check durations exceed it the fix is raising that one
-      constant rather than adding a second. An unbounded wait (Ctrl-C as the
-      bound) and a separate longer bound were both offered and declined.
-      Recorded consequence, accepted not yet exercised: a manual `dispatch` can
-      now hold a ledger slot for up to the TTL, which is exactly the
-      ledger-consuming behavior the paused-scheduling condition requires to hold
-      under manual-only operation — tying the bound to the TTL is how that
-      condition is honored, not an exception to it. SOVEREIGNTY INHERITANCE
-      (author, this round; extends entries 49 and 76): a node reached by
-      SUBSTITUTION inherits the bypasses the named target would have had — the
-      pace-curve override (entry 49) and the exactly-one-node ceiling bypass
-      (entry 76). Entries 49 and 76 grant the bypass to a NAMED node and say
-      nothing about a substituted one, because substitution did not exist when
-      they were written; this extends their intent rather than restating their
-      text, and the boldness was named to the author before endorsement. Failure
-      scenario it closes: without inheritance, `dispatch <hot-id>` at the worker
-      cap would substitute a blocker and then refuse it on the ceiling — the
-      walk failing exactly when the fleet is busiest, which is when a human
-      reaches for it. The narrow reading (a bypass attaches only to what a human
-      literally typed, per entry 76's \"only conscious, bounded human action may
-      exceed it by one\") was surfaced and diverged from: the substitution IS
-      that conscious action, and the bounded-by-one guarantee is untouched.
-      Splitting the two bypasses — inherit the pace curve but not the ceiling —
-      was offered and declined. STEELMAN, on the walk: keep `dispatch <id>`
-      literal, because naming a node means dispatching that node and a refusal
-      is informative, while conflating \"run this\" with \"run whatever unblocks
-      this\" makes the command's effect unpredictable — and it is what entry
-      49's own recorded disposition implies, since the explicit lane already
-      \"refuses a node already held rather than force-preempting\" rather than
-      substituting. DIVERGED (author, this round) with the cost accepted
-      explicitly: `dispatch <id>` no longer guarantees it ran `<id>`. The
-      mitigation is the loud-substitution requirement above, not a separate
-      surface — the third option offered, keeping bare `dispatch <id>` literal
-      and adding `dispatch --path <id>`, was declined as one more thing to
-      remember. FREEZE MEASUREMENT (this round; a worked example of the
-      measure-with-the-predicate-never-a-grep rule): all 30 open (non-draft,
-      non-done) tactics serving this strategy carry
-      `execution.strategy_fingerprint: null`, which `isFingerprintStale` never
-      treats as stale, so this entry freezes ZERO children and the
-      materiality-scoped-freeze classification has an empty subject set — no
-      re-stamps and no `blocked_by` additions are owed. A `grep -c` over
-      `strategy_fingerprint` would have counted those 30 null-valued key lines
-      and reported a 30-child blast radius. IMPLEMENTATION retained as draft
-      tactic-dispatch-explicit-critical-path-walk and draft
-      tactic-dispatch-explicit-ci-wait; the clause-(4) corrections carry no code
-      change. No delegation edge changed — this strategy's `recovers:
-      [delegation-github]` already covers the owned dispatch machinery and
-      nothing this round shifts it. Nothing was held on trust: each
-      recommendation's boldness was stated inside the question and the author
-      endorsed each outright, so no born-parked review item is owed."
   - question: Is the office_hours park required at all, or can a plain rank-ordered
       decision tree (CI-running skip / CI-failed fix / conflict resolve / else
       execute) replace it?
@@ -6692,6 +6563,186 @@ clarifications:
       cleared on this same ruling (f093e607) only once ALL of its blockers were
       ruled, not on the band alone. A node carrying a second still-open blocker
       stays parked."
+  - question: Is `dispatch <node-id>` valid usage, and does it walk the critical
+      path to the named node, wait out in-flight CI, launch /fix-checks on red,
+      and resolve merge conflicts?
+    answer: "(Recorded 2026-07-29 /align-strategy interview; the author's
+      four-clause description checked clause by clause against origin/main.)
+      VALID USAGE — confirmed: `dispatch [<node-id>]` is the manual entry point.
+      The nix-installed wrapper execs
+      `.claude/skills/dispatch-propagate/scripts/dispatch-tick`; bare it passes
+      `--manual` (the rank-first fan-out), with an argument it takes the
+      explicit-node lane, and `dispatch-tick` rejects the two combined as
+      semantically incompatible. CLAUSE-BY-CLAUSE VERDICT. (1) Critical-path
+      walk — NOT current behavior; now adopted as a requirement. Today
+      `graph-select-target --node <id>` filters the candidate list to exactly
+      that id, and a tactic with an incomplete blocker (`blockersComplete`,
+      packages/intentionsutil/src/router.ts) or a strategy with open on-path
+      children is never a candidate at all, so a blocked or parent target yields
+      `node-not-selectable <id>` and `dispatch-tick` exits 1. The lane's
+      documented contract is \"a selection-order override, not a gate bypass\",
+      and substitution is neither — it is a target substitution, a third
+      category. (2) CI wait — NOT current behavior. The author's CONTRAST with
+      the rank lane is accurate, but the explicit lane skips too, at two
+      surfaces: selection-time (`sensor_gate`'s qa/review arm consults
+      `dispatch-ci-ready`, rc 1 → skip reason `ci-pending` →
+      `node-not-selectable`) and provision-time (`provision-node-worktree` exit
+      10 `ci-waiting` → disposition `waiting <id>`, \"retry next tick\"). Under
+      the standing paused/manual-only operating mode there IS no next tick, so
+      the human gets a dead end and must re-run by hand — the asymmetry that
+      justifies the clause: skipping is only cheap when something else comes
+      back. Now adopted, bounded and lane-scoped. (3) Failing checks →
+      /fix-checks — CONFIRMED, already implemented and already reached on this
+      lane. Selection is the sole CI-routing authority: on CONCLUDED-RED at
+      implement/qa/review the fix-interrupt gate writes `execution.fix` (via
+      `apply-fix-state --set-fix` + `graph-commit`) and emits phase `fix`, which
+      `dispatch-graph-execute` maps `tactic:fix` → `/fix-checks`. `--node` does
+      not bypass `sensor_gate`, so the explicit lane gets this verbatim; a
+      persistently-red PR past the fix-attempt cap lands a tracked `hold-node`
+      hold with a `blocked_by` edge rather than retrying forever. (4) Merge
+      conflicts — CONFIRMED, with two corrections the author accepted. The merge
+      attempted is a FULL `git merge --no-edit origin/main` in
+      `provision-node-worktree`, not `--ff-only`; on failure it runs `merge
+      --abort` and exits 11, leaving the tree unmodified and the worktree/branch
+      in place for the resolver. And the resolver is `/dispatch-conflict` Lane 3
+      (\"an origin/main merge conflict on a graph node's own branch\"), kicked
+      by `dispatch-graph-execute` case 11 as first responder — there is no
+      script or skill named `dispatch-merge`. Only if that kick FAILS does it
+      fall back to a consecutive-strike counter and then a tracked `hold-node`
+      hold. Both corrections are description-only: the author declined changing
+      provisioning to `--ff-only` (today's full merge succeeds where ff-only
+      would refuse, for every node whose branch carries commits) and declined
+      renaming Lane 3 (the skill handles conflicts, and \"merge\" would
+      misdescribe its Lanes 1 and 2). WALK SEMANTICS (author, this round):
+      compute the closure of the recursive union of the named node's
+      `blocked_by` and its children (`parent`/`serves`), keep only members
+      passing every existing gate verbatim (claim-safety, `sensor_gate`,
+      `office_hours`, freeze), and dispatch the highest member by the SAME
+      lexicographic (tier, rank) precedence the rank lane already uses. Print
+      the substitution and its reason before launching; refuse only when the
+      whole closure is undispatchable. Reusing the selector's own precedence
+      rather than inventing a walk-specific order is the parsimony the record
+      already paid for once: strategy-graph-drives-dispatch's 2026-07-13
+      clarification superseded backward rank FLOW precisely because unrelated
+      `blocked_by` compounding silently overtook intentionally top-ranked nodes,
+      replacing it with a max-based precedence lift — blockers are RANKED
+      higher, not boosted higher — and its 2026-07-18 extension generalized that
+      lift to the (tier, rank) pair. Because that lift already makes the rank
+      lane drain the critical path to a hot node first, this clause makes the
+      explicit lane do targetedly what the rank lane does globally; a second
+      ordering currency here would re-open the failure mode 2026-07-13 closed.
+      Blockers-before-children and nearest-hop-first were both offered as walk
+      orders and declined for the same reason. CI WAIT (author, this round): on
+      the EXPLICIT-NODE LANE ONLY — never the autonomous path, never `--manual`
+      — poll the CI verdict until it concludes, bounded by
+      `DISPATCH_RESERVATION_STANDALONE_TTL_S` (default 600s), then fall back to
+      today's skip with a message naming the PR. Lane-scoping is load-bearing:
+      `dispatch-tick` is also the systemd/heartbeat entry point and a blocking
+      wait there would stall the chain. The bound is TIED to the reservation TTL
+      rather than given its own constant because selection writes the
+      reservation marker BEFORE the wait, so the wait holds a concurrency slot
+      for its whole duration; one constant governs both and they cannot drift
+      apart, and if real check durations exceed it the fix is raising that one
+      constant rather than adding a second. An unbounded wait (Ctrl-C as the
+      bound) and a separate longer bound were both offered and declined.
+      Recorded consequence, accepted not yet exercised: a manual `dispatch` can
+      now hold a ledger slot for up to the TTL, which is exactly the
+      ledger-consuming behavior the paused-scheduling condition requires to hold
+      under manual-only operation — tying the bound to the TTL is how that
+      condition is honored, not an exception to it. SOVEREIGNTY INHERITANCE
+      (author, this round; extends entries 49 and 76): a node reached by
+      SUBSTITUTION inherits the bypasses the named target would have had — the
+      pace-curve override (entry 49) and the exactly-one-node ceiling bypass
+      (entry 76). Entries 49 and 76 grant the bypass to a NAMED node and say
+      nothing about a substituted one, because substitution did not exist when
+      they were written; this extends their intent rather than restating their
+      text, and the boldness was named to the author before endorsement. Failure
+      scenario it closes: without inheritance, `dispatch <hot-id>` at the worker
+      cap would substitute a blocker and then refuse it on the ceiling — the
+      walk failing exactly when the fleet is busiest, which is when a human
+      reaches for it. The narrow reading (a bypass attaches only to what a human
+      literally typed, per entry 76's \"only conscious, bounded human action may
+      exceed it by one\") was surfaced and diverged from: the substitution IS
+      that conscious action, and the bounded-by-one guarantee is untouched.
+      Splitting the two bypasses — inherit the pace curve but not the ceiling —
+      was offered and declined. STEELMAN, on the walk: keep `dispatch <id>`
+      literal, because naming a node means dispatching that node and a refusal
+      is informative, while conflating \"run this\" with \"run whatever unblocks
+      this\" makes the command's effect unpredictable — and it is what entry
+      49's own recorded disposition implies, since the explicit lane already
+      \"refuses a node already held rather than force-preempting\" rather than
+      substituting. DIVERGED (author, this round) with the cost accepted
+      explicitly: `dispatch <id>` no longer guarantees it ran `<id>`. The
+      mitigation is the loud-substitution requirement above, not a separate
+      surface — the third option offered, keeping bare `dispatch <id>` literal
+      and adding `dispatch --path <id>`, was declined as one more thing to
+      remember. FREEZE MEASUREMENT (this round; a worked example of the
+      measure-with-the-predicate-never-a-grep rule): all 30 open (non-draft,
+      non-done) tactics serving this strategy carry
+      `execution.strategy_fingerprint: null`, which `isFingerprintStale` never
+      treats as stale, so this entry freezes ZERO children and the
+      materiality-scoped-freeze classification has an empty subject set — no
+      re-stamps and no `blocked_by` additions are owed. A `grep -c` over
+      `strategy_fingerprint` would have counted those 30 null-valued key lines
+      and reported a 30-child blast radius. IMPLEMENTATION retained as draft
+      tactic-dispatch-explicit-critical-path-walk and draft
+      tactic-dispatch-explicit-ci-wait; the clause-(4) corrections carry no code
+      change. No delegation edge changed — this strategy's `recovers:
+      [delegation-github]` already covers the owned dispatch machinery and
+      nothing this round shifts it. Nothing was held on trust: each
+      recommendation's boldness was stated inside the question and the author
+      endorsed each outright, so no born-parked review item is owed. AMENDED
+      2026-08-29 (author batch-execution sitting; recorded in
+      plans/dispatch-rsi-author-rulings.md §\"Ruling 3\"): the CI-WAIT paragraph
+      above asserts as settled fact that \"selection writes the reservation
+      marker BEFORE the wait\", and that premise was measured FALSE at the
+      SELECTION-TIME surface — graph-select-target's ci-pending skip returns
+      before any reservation_write, and the explicit lane invokes it without
+      --standalone, so no marker is held. It is true at the PROVISION-TIME
+      surface. Ruled: OPTION (a), MAKE THE PREMISE TRUE. The selection-time wait
+      writes a PROVISIONAL reservation claim before it waits, so both surfaces
+      genuinely hold a slot and the recorded consequence above (\"a manual
+      dispatch can now hold a ledger slot for up to the TTL, which is exactly
+      the ledger-consuming behavior the paused-scheduling condition requires\")
+      actually obtains. The accepted cost is a new ledger write at a point that
+      has none today, needing rollback-on-timeout semantics —
+      graph-select-target's STANDALONE_CLAIMED EXIT trap is the existing
+      precedent — and getting it wrong leaks a slot per failed explicit
+      dispatch, precisely the failure the origin=explicit stamp was added to
+      prevent. REJECTED: narrowing this entry to the provision-time surface
+      only, where the recorded rationale holds verbatim and no new concurrency
+      semantics are introduced. It was cheaper and needed no new semantics, but
+      it leaves the qa|review phase pair — the very pair
+      tactic-dispatch-explicit-ci-wait was raised for — still dead-ending on
+      node-not-selectable, which is a real scope reduction rather than a
+      shortcut. Also rejected: borrowing the TTL as a bare bound magnitude with
+      no slot held, which keeps the constant while abandoning its stated
+      reason."
+  - question: May an executor clear an office_hours park itself when the park's
+      premise is verifiably dead, or must every clear reach the author?
+    answer: "(Ruled by the author 2026-08-29, batch-execution sitting; recorded in
+      plans/dispatch-rsi-author-rulings.md §\"Ruling 4 — Park-clearing on a
+      verifiably dead premise is delegated\".) DELEGATED. The executor may clear
+      a park itself when the park's premise is verifiably dead, and separately
+      may clear the office-hours parks that block the
+      tactic-mainqa-record-time-routing Unit 7 `Verifiability: WAIT` migration
+      from draining. Every clear is REPORTED AFTER THE FACT, with the evidence
+      that killed the premise — reporting is the accountability, not
+      pre-approval. The author's stated expectation for this batch is that no
+      parked decision is waiting on them. WHY THE SECOND HALF WAS NEEDED:
+      packages/intentionsutil/src/router.ts:482 and :529 skip any tactic with a
+      non-null office_hours, so a parked source node can never drain to done; 12
+      of the 17 WAIT-mark sources are parked, which deadlocks the migration
+      chain for them (source never done -> blockersComplete never passes -> the
+      minted machine node is never selectable either), and Unit 7's own spec
+      never mentions office_hours. BOUND, and it is the whole of the delegation:
+      a DEAD PREMISE is not a DEAD SCOPE. This entry authorizes clearing a park
+      whose stated blocking premise no longer holds; it does NOT authorize
+      making a node selectable whose SCOPE is dead or whose park is the only
+      stop on a bad automated action. Where clear-park is the wrong instrument —
+      a phase: null node whose work already shipped, which clear-park makes
+      router-eligible rather than terminal — the correct act is the completion
+      record (phase: done), never the clear."
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
