@@ -141,17 +141,42 @@ assert_eq "stray id: exit non-zero" "nonzero" "$_t5_rc"
 assert_contains "stray id: names the stray path" "intentions/tactic-stray.md" "$OUT"
 
 # ---------------------------------------------------------------------------
-# Test 6: pre-existing dirt in BOTH baseline and after is never reported —
-# only entries new since the baseline are in scope.
+# Test 6: the guard is judged PER PATH on the AFTER snapshot, not by a
+# whole-line diff against the baseline.
+#
+# This case previously asserted that pre-existing TRACKED dirt is ignored. That
+# was the unsound behavior: a whole-line `comm -13` only sees porcelain lines
+# that are NEW, so a path already dirty in the baseline keeps an identical
+# status line when the subagent modifies it further, produces no new line, and
+# is never inspected. A prompt-injected subagent could flip `phase: done` on an
+# already-modified `intentions/*.md` and be pushed to main — exactly the
+# outcome this fence exists to prevent. Status comparison alone cannot catch it
+# either, since ` M` -> ` M` is unchanged by a further edit.
+#
+# So a tracked-dirty path is now refused outright, and the pre-existing entry
+# can no longer provide cover for a new one. Step 3's commit-merge-push is
+# expected to leave a clean tree; nothing verified that before, and this does.
+# 6b keeps the half of the original intent that remains correct: an untracked
+# stray already present in the baseline is not the subagent's write.
 # ---------------------------------------------------------------------------
-echo "Test 6: pre-existing dirt present in both baseline and after is ignored"
+echo "Test 6a: pre-existing TRACKED dirt is refused, so it cannot mask a further edit"
 write_case \
   $' M some/pre-existing.ts\n' \
   $' M some/pre-existing.ts\n?? intentions/tactic-new-thing.md\n' \
   $'tactic-new-thing\n'
 run_sut
-assert_eq "pre-existing dirt ignored: exit 0" "0" "$RC"
-assert_eq "pre-existing dirt ignored: no output" "" "$OUT"
+assert_eq "pre-existing tracked dirt: exit 1" "1" "$RC"
+assert_contains "pre-existing tracked dirt: names the tracked path" "some/pre-existing.ts" "$OUT"
+assert_contains "pre-existing tracked dirt: names the offending status" "is not an untracked addition" "$OUT"
+
+echo "Test 6b: a pre-existing UNTRACKED stray is still ignored"
+write_case \
+  $'?? .claude/agents\n' \
+  $'?? .claude/agents\n?? intentions/tactic-new-thing.md\n' \
+  $'tactic-new-thing\n'
+run_sut
+assert_eq "pre-existing untracked stray: exit 0" "0" "$RC"
+assert_eq "pre-existing untracked stray: no output" "" "$OUT"
 
 # ---------------------------------------------------------------------------
 # Test 7: usage / input errors are clear, non-zero, and distinct from a

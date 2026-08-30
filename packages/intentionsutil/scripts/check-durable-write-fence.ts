@@ -26,9 +26,16 @@
 // positive form — permit when the field appears in some allowed set — fails
 // OPEN and was corrected out on 2026-08-15 for exactly that reason.
 //
-// The node's kind is read from the BASE document. A candidate that changes
-// `kind` does not escape the fence: `kind` is not a `STATE_FIELDS` member, so
-// the change is itself a refused field.
+// The node's layer is read from BOTH documents, and the refusal is their UNION.
+// Reading the base alone catches the durable-to-anything direction (`kind` is
+// not a `STATE_FIELDS` member, so demoting a `strategy` to a `tactic` is itself
+// a refused field) but NOT the reverse: a base whose kind is `tactic` is not
+// durable, so a candidate that PROMOTES it — `.kind = "strategy"` alongside a
+// model-authored `statement` and `rationale` — would clear a base-only check
+// and land a brand-new piece of durable-layer doctrine on main. `validateNode`
+// does not gate kind-specific fields and `graph-commit` runs no graph
+// validation, so nothing downstream would catch it either. Applying the fence
+// under the candidate's kind as well closes that direction.
 //
 // Exit codes:
 //   0  every changed field is permitted — the caller may land the write
@@ -83,7 +90,17 @@ export function changedFields(
 
 /** The verdict this gate returns: which changed fields the fence refuses. */
 export interface FenceVerdict {
+  /** The BASE document's kind — the layer the node sits in today. */
   kind: string;
+  /**
+   * The CANDIDATE document's kind — the layer the write would move it to.
+   * Equal to `kind` for every ordinary write; different only when the write
+   * rewrites `kind` itself, which the fence must judge under BOTH layers (see
+   * `fenceVerdict`). Falls back to `kind` when the candidate carries no usable
+   * kind at all — that write is already refused on the `kind` field itself when
+   * the base is durable, and `validateNode` rejects it downstream regardless.
+   */
+  candidateKind: string;
   changed: string[];
   refused: string[];
 }
@@ -111,15 +128,36 @@ export function fenceVerdict(base: unknown, candidate: unknown): FenceVerdict {
       `id mismatch: base is ${JSON.stringify(base.id)}, candidate is ${JSON.stringify(candidate.id)}`,
     );
   }
+  // The layer is judged from BOTH documents, and the refusal is their UNION.
+  // The base alone only closes the durable-to-anything direction; a candidate
+  // that PROMOTES a `tactic` into a `strategy` would otherwise be judged under
+  // the base's non-durable kind and land model-authored doctrine. See the
+  // header note above `--base`/`--candidate` for the full reasoning.
+  const rawCandidateKind = candidate.kind;
+  const candidateKind =
+    typeof rawCandidateKind === "string" && rawCandidateKind !== "" ? rawCandidateKind : kind;
   const changed = changedFields(base, candidate);
-  return { kind, changed, refused: refusedDurableFields(kind, changed) };
+  const refusedUnion = new Set([
+    ...refusedDurableFields(kind, changed),
+    ...refusedDurableFields(candidateKind, changed),
+  ]);
+  // Filter `changed` rather than spreading the set, so `refused` keeps the same
+  // sorted order `changedFields` established.
+  return { kind, candidateKind, changed, refused: changed.filter((f) => refusedUnion.has(f)) };
 }
 
 /** The refusal text, naming the node, the fields, and what the caller must do. */
 export function refusalMessage(id: unknown, verdict: FenceVerdict): string {
+  // Name the layer honestly: on a kind-rewriting candidate the refusal may come
+  // from the layer the write moves the node TO, not the one it sits in now.
+  const layer =
+    verdict.kind === verdict.candidateKind
+      ? `a durable-layer "${verdict.kind}" node`
+      : `a "${verdict.kind}" node this write would rewrite as a "${verdict.candidateKind}" ` +
+        `one, and at least one of those two is a durable layer`;
   return (
-    `check-durable-write-fence: REFUSED — ${JSON.stringify(id)} is a durable-layer ` +
-    `"${verdict.kind}" node, and this write changes ${verdict.refused.join(", ")}, ` +
+    `check-durable-write-fence: REFUSED — ${JSON.stringify(id)} is ${layer}` +
+    `, and this write changes ${verdict.refused.join(", ")}, ` +
     `which no unattended writer may set.\n` +
     `  changed fields: ${verdict.changed.join(", ")}\n` +
     `  an unattended writer may set only: ${STATE_FIELDS.join(", ")}\n` +
