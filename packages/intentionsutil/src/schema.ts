@@ -1293,7 +1293,7 @@ function checkGoalLayerOnlyFields(
  * Rules 9, 10 & 12: kind-typed field placement — recovers/rounds are
  * strategy-only, and phase/execution/blocked_by/validates are tactic-only.
  */
-function checkKindTypedFields(node: IntentionNode, problems: string[]): void {
+export function checkKindTypedFields(node: IntentionNode, problems: string[]): void {
   if (node.recovers.length > 0 && node.kind !== "strategy") {
     problems.push(
       `${node.id}: recovers is only valid on kind "strategy" nodes, got kind "${node.kind}"`,

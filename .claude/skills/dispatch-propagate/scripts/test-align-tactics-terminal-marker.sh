@@ -103,6 +103,59 @@ else
   assert_eq "align-tactics SKILL.md still carries the exit-12 'mark-node-terminal ... no-claim' command" "present" "$actual"
 fi
 
+# --- 4b. the MECHANICAL-ERROR path also reaps ------------------------------
+#
+# Row 4 only asserts the marker is present SOMEWHERE, so it stays green even if
+# a path loses it. This pins the specific path that used to lack it.
+#
+# check-node-selection maps every throw to the config-class exit 2 — a
+# malformed store among them. That exit lands in the "any other non-zero"
+# bullet. When that bullet said only "report and stop", the session ended with
+# no terminal disposition: dispatch-self-close then held the node worker alive
+# and graph-select-target skipped the node as `live-session` from that point
+# on, so it became permanently unselectable and consumed a job slot forever.
+# The gate runs at Step 0, before any graph write, so a session that fails it
+# did nothing and lost nothing — the same reasoning the 12 and 15 bullets use.
+
+if [[ ! -f "$ALIGN_TACTICS_SKILL" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: mechanical-error bullet carries the no-claim marker: file missing"
+else
+  # The bullet's own text, up to the next top-level list item.
+  # HERE-STRING, never `printf | grep -q`. Under `set -o pipefail` grep -q
+  # exits on its FIRST match, the writer takes SIGPIPE, the pipeline reports
+  # 141, and a PRESENT marker is scored "absent" — a false failure that grows
+  # more likely as the bullet's prose grows. Same shape already fixed in
+  # test-helpers.sh on 2026-08-13.
+  # Same reasoning as block13 below: stop at the next top-level bullet or the
+  # section break, whichever comes first, rather than at one named literal.
+  # ANCHORED to the bullet's own line start. Unanchored, /any other non-zero/
+  # also matched the prose cross-reference in the 13 bullet, so the extractor
+  # captured the 13 bullet's tail — including ITS marker block — and the
+  # catch-all's marker could be deleted while the row still scored "present".
+  block=$(awk '/^   - any other non-zero/{f=1; next} f && (/^   - / || /^   \*\*Deliberately not gated/){exit} f{print}' "$ALIGN_TACTICS_SKILL")
+  if grep -qE 'mark-node-terminal .* no-claim' <<<"$block"; then
+    actual="present"
+  else
+    actual="absent"
+  fi
+  assert_eq "align-tactics SKILL.md: the 'any other non-zero' bullet reaps with 'mark-node-terminal ... no-claim'" "present" "$actual"
+
+  # The `13` bullet is the one path the skill explicitly NAMES a mechanical
+  # error, so it is the one most likely to be "tidied" back to report-and-stop.
+  # Terminate on the NEXT TOP-LEVEL BULLET, not on the `15` bullet by name.
+  # Naming it made the extractor vacuous under renumbering: delete or reorder
+  # `15` and awk runs to EOF, absorbing the catch-all bullet's marker, so a
+  # REMOVED exit-13 marker would still score "present".
+  block13=$(awk '/^   - `13` —/{f=1; next} f && /^   - /{exit} f{print}' "$ALIGN_TACTICS_SKILL")
+  if grep -qE 'mark-node-terminal .* no-claim' <<<"$block13"; then
+    actual13="present"
+  else
+    actual13="absent"
+  fi
+  assert_eq "align-tactics SKILL.md: the exit-13 bullet also reaps with 'mark-node-terminal ... no-claim'" "present" "$actual13"
+fi
+
 # --- 5. SKILL.md states validate-graph.ts runs AFTER the marker --------------
 #
 # Ordering matters: the marker is written by the land itself, so validation now

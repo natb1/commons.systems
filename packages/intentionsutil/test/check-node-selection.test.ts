@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readNode, writeNode } from "../src/store.js";
-import { strategyFingerprint } from "../src/router.js";
+import { strategyAlignSelectable, strategyFingerprint } from "../src/router.js";
 import type { IntentionNode, Phase } from "../src/schema.js";
 import {
   classifySnapshot,
@@ -580,16 +580,34 @@ describe("evaluateSelection", () => {
       expect(r.stderr[0]).toMatch(/no longer align-eligible/);
     });
 
-    it("exit 12 when the stored phase advanced to a non-null value", () => {
+    it("THROWS (malformed store, exit 2) when a strategy carries a stored phase", () => {
       const dir = tempDir();
-      // The assertion under test is the align-tactics phase-advance guard, not
-      // where the phase is stored. It used to be vehicled on a squatter
-      // `attributes.phase`; with that representation retired the vehicle is the
-      // first-class field, which is the only place a stored phase can now live.
+      // Reclassified from exit 12. A strategy carrying `phase` is not a stale
+      // selection — schema rule 12 makes `phase` tactic-only, so no benign path
+      // produces this node. Exit 12 told the caller "nothing is wrong, the
+      // selection went stale" and sent a re-evaluation worker at a corrupt
+      // node; a throw maps to exit 2, the config-class error.
+      //
+      // The vehicle is the first-class field: the squatter `attributes.phase`
+      // representation is retired, so this is the only place a stored phase
+      // can now live.
       seed(dir, anode({ id: "strategy-a", kind: "strategy", phase: "implement" }));
-      const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
-      expect(r.exitCode).toBe(12);
-      expect(r.stderr[0]).toMatch(/phase advanced to implement/);
+      expect(() =>
+        evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() }),
+      ).toThrow(/malformed store/);
+    });
+
+    it("that guard is NOT redundant: the pure selector would admit the same node", () => {
+      // Pins WHY the guard above must exist, which is the question a reviewer
+      // raised and got wrong ("unreachable in production").
+      //
+      // Rule 12 is enforced only in validateGraph; graph-commit never runs
+      // validateGraph and validateNode accepts the node, so a strategy carrying
+      // a phase really does land. The selector's strategy arm never reads
+      // `phase`, so it still considers the node selectable — meaning without
+      // the guard the gate passes and a worker is launched at a corrupt node.
+      const strategy = anode({ id: "strategy-a", kind: "strategy", phase: "implement" });
+      expect(strategyAlignSelectable(strategy, [strategy])).toBe(true);
     });
 
     it("exit 12 when a non-frozen tactic is passed at align-tactics (advanced past draft, not soft-frozen)", () => {

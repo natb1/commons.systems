@@ -151,7 +151,23 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      writes nothing unless this job's own name is `<target-node-id>`.
    - `13` — not reachable at this phase: the gate's scope-chained-phase
      check only applies to the `fix`/`qa`/`review` phases, not
-     `align-tactics`. Treat it as a mechanical error: report and stop.
+     `align-tactics` (`SCOPE_CHAINED_PHASES = {fix, qa, review}`,
+     `check-node-selection.ts:89`). Treat it as a mechanical error: **STOP**,
+     make no graph write, report it, AND reap — exactly as the
+     `any other non-zero` bullet does:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     Reaping is not permission to continue: **STOP** first, exactly as the
+     `12` and `15` bullets do. Reaping without stopping is worse than either
+     failure alone — the session proceeds into Step 1's graph reads and writes
+     having already declared itself terminal.
+
+     Being "not reachable" is not a reason to skip the marker. If it ever does
+     fire, a session with no terminal disposition is held by
+     `dispatch-self-close` and its node becomes permanently unselectable — an
+     unreachable path that leaks a job slot when reached is worse than one
+     that reports and reaps.
    - `15` — unknown-freshness: the gate could not prove the snapshot is
      fresh. **STOP**, make no graph write, and record the terminal
      disposition with `mark-node-terminal "<target-node-id>" no-claim`,
@@ -163,12 +179,38 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      Do not tell the session to retry with `--allow-stale`: the override is
      an operator act on the manual `dispatch <node-id>` lane, not a
      self-serve escape for an autonomous align-tactics worker.
-   - any other non-zero — mechanical error (unresolvable project root,
-     failed fetch, malformed store): report and stop. A stale selection
-     (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical
-     error is neither of those either — it is a broken environment to report
-     plainly, per this repo's code-style convention of clear errors over
-     defensive fallbacks.
+   - any other non-zero — mechanical error. The bullet is deliberately
+     written as "any other non-zero" and NOT as literal `2`, because these do
+     not share an exit code:
+       - a malformed store exits `2` from `check-node-selection` itself
+         (`main()` maps every throw to it);
+       - an unresolvable project root exits `2` from the WRAPPER,
+         `assert-node-selection:113-116` (the `exit 2` is at `:115`), before
+         the gate is ever invoked;
+       - **a failed `git fetch` exits `1`** (`assert-node-selection:139-142`,
+         the `exit 1` at `:141`) — the common transient case, and the reason
+         narrowing this bullet to `2` would silently leave it unrouted.
+
+     **STOP.** Report the error plainly, and record the terminal disposition
+     exactly as the `12` and `15` bullets do:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     The same reasoning carries: this gate runs at Step 0, before any graph
+     write, so a session that fails it did nothing and lost nothing — reaping
+     it is correct.
+
+     Reaping does NOT suppress the error; it is still on stderr and in the
+     journal. WITHOUT the marker the failure is strictly worse than a reported
+     one: `dispatch-self-close` holds the node worker alive, and
+     `graph-select-target` then skips the node as `live-session` from that
+     point on — permanently unselectable, permanently consuming a job slot. A
+     broken environment should be loud, not silently absorbing capacity.
+
+     A stale selection (`12`) is NOT an `office_hours` park and NOT a defect;
+     a mechanical error is neither of those either — it is a broken
+     environment to report plainly, per this repo's code-style convention of
+     clear errors over defensive fallbacks.
 
    **Deliberately not gated by `assert-node-selection`** — each of these has
    a shape this gate cannot express, so a future session should not "finish

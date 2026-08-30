@@ -9,9 +9,11 @@
 // `writeNodeFromJson` so they are real validated frontmatter, not hand-authored
 // markdown that could drift from the schema.
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 import { mergeNodeFiles } from "../scripts/merge-node.js";
@@ -136,5 +138,64 @@ describe("mergeNodeFiles", () => {
     expect(result.resolved).toBe(false);
     expect(result.conflicts).toEqual([{ field: "<node>", ours: NODE_ID, theirs: null }]);
     expect(existsSync(outPath)).toBe(false);
+  });
+});
+
+// --- the CLI's stdout contract, which only a SPAWNED run can observe --------
+// Every test above imports mergeNodeFiles directly. That cannot see the defect
+// this block pins: it lives in the CLI's exit path and only appears when
+// stdout is a pipe.
+
+const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts");
+
+/** Run the merge-node CLI through tsx with stdout as a PIPE (spawnSync's
+ * default once `encoding` is set) — the shape graph-commit invokes it in. */
+function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx/esm", join(scriptsDir, "merge-node.ts"), ...args],
+    // maxBuffer well above the payload: spawnSync's 1 MB default KILLS the
+    // child (status null), which would mask the truncation this pins.
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/** A body large enough that the emitted JSON cannot fit the pipe buffer. A body
+ * conflict carries BOTH sides verbatim — node-merge.ts reports
+ * `{ field: "body", ours, theirs }` — so ~1.1 MB per side clears the 65536-byte
+ * F_GETPIPE_SZ comfortably. */
+function bigBody(marker: string): string {
+  return "# " + marker + "\n\n" + (marker + " line of prose that exists only to add bytes.\n").repeat(20000);
+}
+
+describe("merge-node CLI stdout contract", () => {
+  it("emits COMPLETE JSON when the result exceeds the pipe buffer", { timeout: 60_000 }, () => {
+    const { base, ours, theirs, outPath } = fixtureDirs();
+    const basePath = seed(base, {});
+    const oursPath = seed(ours, {});
+    const theirsPath = seed(theirs, {});
+    // Diverge the bodies so the merge reports a genuine `body` conflict and
+    // carries both sides into the result.
+    appendFileSync(basePath, bigBody("BASE"));
+    appendFileSync(oursPath, bigBody("OURS"));
+    appendFileSync(theirsPath, bigBody("THEIRS"));
+
+    const run = runCli(["--base", basePath, "--ours", oursPath, "--theirs", theirsPath, "--out", outPath]);
+
+    expect(run.status).toBe(0);
+    // The real assertion FIRST: the JSON is not truncated. `process.exit(0)`
+    // discards whatever is still queued on the pipe, so this throws against the
+    // old form ("Unexpected end of JSON input"). Ordering matters — the size
+    // guard below ALSO fails under truncation (the discarded tail shrinks
+    // stdout to whatever fit the pipe buffer), and if it ran first a returning
+    // regression would be misreported as "the test went vacuous".
+    const parsed = JSON.parse(run.stdout) as { resolved: boolean; conflicts: { field: string }[] };
+    expect(parsed.conflicts.some((c) => c.field === "body")).toBe(true);
+    // The payload must actually be large enough to exercise the defect. If this
+    // stops holding — with the JSON above still parsing cleanly — the fixture
+    // has shrunk and the test has gone vacuous, so it must fail loudly rather
+    // than pass for the wrong reason.
+    expect(run.stdout.length).toBeGreaterThan(1_000_000);
   });
 });
