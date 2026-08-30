@@ -81,84 +81,24 @@
 > `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
 > `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
 > `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
-> not a `|`/`>` block scalar. Repair it as a frontmatter field edit.
+> not a `|`/`>` block scalar.
 >
-> **Run the whole block from `<repo root>`** — every path in it, including the
-> two script paths and `git hash-object`'s argument, is repo-root-relative, and
-> `graph-commit`'s `permissions.allow` entry is that exact repo-relative prefix
-> (`.claude/settings.json:58`), so any other spelling re-exposes it to the
-> auto-mode classifier.
+> **That distinction is the whole point of this correction:** `:53` is an
+> ordinary `.md` text edit, `:21` is a FRONTMATTER FIELD edit and must go
+> through the full `dump-node.ts` -> edit -> `write-node.ts` -> `graph-commit`
+> path. Never hand-build a partial payload — `validateNode` defaults every
+> omitted field, so a minimal payload silently writes `phase: null`,
+> `execution: null` and `serves: []` over this node's live `phase: implement`
+> (`:33`), its `execution` block including `strategy_fingerprint` (`:34-40`)
+> and its one `serves` entry (`:26-27`), exit 0 and no error.
 >
-> ```
-> npx tsx packages/intentionsutil/scripts/dump-node.ts \
->     --dir intentions --out-dir <tmp> tactic-serves-inheritance-full-strip
-> # edit <tmp>/tactic-serves-inheritance-full-strip.json
-> npx tsx packages/intentionsutil/scripts/write-node.ts \
->     --dir intentions --file <tmp>/tactic-serves-inheritance-full-strip.json
-> packages/intentionsutil/scripts/graph-commit \
->     -C <repo root> \
->     --base   <tmp>/base-manifest.txt \
->     --expect tactic-serves-inheritance-full-strip=$(git hash-object \
->              -- intentions/tactic-serves-inheritance-full-strip.md) \
->     tactic-serves-inheritance-full-strip
-> ```
->
-> (`npx tsx` is required for the two `.ts` scripts: neither carries a shebang and
-> both are mode `0644`, so a bare `dump-node.ts` is `command not found`. The cwd
-> mandate above is what makes the `--expect` substitution correct: the shell
-> expands `git hash-object` in *its own* cwd, so run from anywhere but the target
-> checkout it hashes the wrong file and `graph-commit` dies with *"the edit was
-> made in a DIFFERENT checkout"*. Where the cwd cannot be the target checkout,
-> the repair is an **absolute path** — `git hash-object <abs path>`, the spelling
-> `.claude/rules/sandbox.md:180-182` sanctions against a foreign checkout, and
-> the one no cwd can spoil. Not `git -C <repo root> hash-object`: from a
-> worktree-isolated session a Claude Code built-in refuses an agent-typed
-> `git -C` whenever the path is **not that session's own worktree** — exactly
-> this case — and it fires *before* the `permissions.allow` match this block
-> relies on (`.claude/rules/sandbox.md`, "`git -C /path` is auto-approved for
-> worktrees"). That refusal is path-conditional, not outright, and it is not
-> about the surrounding `$( )`: the prescribed bare form sits in that same
-> substitution.)
->
-> **Three of those flags guard a SILENT failure — a run that exits 0 having done
-> nothing or the wrong thing: `-C`, `--base` and `--expect`.** `--dir` and
-> `--out-dir` are required arguments that fail loudly with a usage error and exit
-> 1 (`dump-node.ts:249-259`, `write-node.ts:56-64`), so they need no defending
-> here. `--file` is **not** in that class: it is optional, and omitting it falls
-> back to `readFileSync("/dev/stdin")` (`write-node.ts:73-83`) — the run blocks on
-> stdin until the tool times out, or, at EOF, dies on an uncaught `JSON.parse`
-> syntax error. Never a usage error. Pass it. The three silent ones'
-> individual rationales live in the scripts' own headers (`dump-node.ts:1-7`,
-> `graph-commit:36-40`, `:60-70`, `:430`, `:767-771`) and are deliberately NOT
-> restated here; this passage was rewritten eight times
-> across one review cycle and every recurrence was a re-derived rationale drifting
-> from the script it described, never the command line itself. Read the headers.
->
-> Three hazards are worth stating here because nothing in the command output
-> reveals them:
->
-> 1. **Never hand-build a partial payload.** `validateNode` DEFAULTS every
->    omitted field (`packages/intentionsutil/src/schema.ts:1113-1163` — the
->    single `return` object, where each optional field reads
->    `value.X == null ? <default> : …`), so a minimal payload silently writes
->    `phase: null`, `execution: null` and `serves: []` over this node's live
->    `phase: implement` (`:33`), its whole `execution` block including
->    `strategy_fingerprint` (`:34-40`) and its one `serves` entry (`:26-27`) —
->    exit 0, no error, node out of the ladder. Always start from the full
->    `dump-node.ts` output.
-> 2. **The path is frontmatter-only.** `readNode` drops the body
->    (`packages/intentionsutil/src/store.ts:159-165`), so the dump has no `body`
->    key; `validateNode` drops unknown keys (`write-node.ts:36`), so a `body` key
->    added to the payload is discarded with no error; and `writeNode` re-reads
->    the on-disk body verbatim (`store.ts:57`). The `:53` repair is a plain `.md`
->    text edit made separately; either order is safe, since `writeNode` re-reads
->    the body from disk at write time.
-> 3. **Escape for JSON, not for YAML.** The payload is `JSON.parse`d, so a `"` in
->    the rationale is written `\"` there — one backslash. Do not add a second:
->    `\\\"` is what puts a literal backslash in the field, and the halfway
->    spelling `\\"` closes the JSON string early and dies on a `JSON.parse`
->    syntax error. The YAML emitter picks its own scalar style downstream and
->    needs nothing from you.
+> The flag semantics for that path are documented in the tools' own headers
+> (`dump-node.ts`, `write-node.ts`, `graph-commit`) and in
+> `.claude/rules/sandbox.md`, and are deliberately NOT restated here. An
+> earlier revision of this passage did restate them; it was rewritten across
+> eight review rounds and every single recurrence was the restatement drifting
+> from the tool it described, never the tool changing. The repair itself is
+> owed as separate work — it is not a unit of this plan.
 >
 > Pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
 > whole node through the YAML emitter
