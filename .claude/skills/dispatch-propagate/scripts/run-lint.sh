@@ -53,10 +53,22 @@ done
 # Auto-detect mode: delegate app detection to get-changed-apps.sh,
 # then check nix/rules inline (those aren't app-level concerns).
 if [ "$EXPLICIT" = false ]; then
+  # Captured into a variable rather than read from `< <(...)`.
+  #
+  # A process substitution's exit status is not the status of the enclosing
+  # command and `set -e` never sees it: when get-changed-apps.sh failed — which
+  # it now does, loudly, on an unresolvable baseline instead of printing
+  # nothing — the while loop simply read zero lines and lint proceeded with no
+  # apps. That is the same buried-error shape as the vacuous diff this whole
+  # change exists to remove, one layer up.
+  if ! CHANGED_APPS=$("$SCRIPTS/get-changed-apps.sh"); then
+    echo "ERROR: get-changed-apps.sh failed; cannot determine which apps to lint" >&2
+    exit 1
+  fi
   while IFS= read -r app; do
     [ -z "$app" ] && continue
     DIRTY_APPS["$app"]=1
-  done < <("$SCRIPTS/get-changed-apps.sh")
+  done <<< "$CHANGED_APPS"
 
   # Detect nix and rules changes separately.
   #

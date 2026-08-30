@@ -453,4 +453,20 @@ git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse H
 run_sut
 assert_eq "main-push clean: exit 0" "0" "$RC"
 
+# ---------------------------------------------------------------------------
+# Test 26: a failed baseline resolution must ABORT, not report a clean pass.
+#
+# The second residual of routing through resolve-diff-base: the helper is
+# wired, and its exit code gets swallowed anyway. The call site is a plain
+# assignment rather than an `if ! X=$(...)` precisely so `set -e` sees the
+# helper's non-zero exit; this case is what keeps it that way.
+# ---------------------------------------------------------------------------
+echo "Test 26: an unresolvable baseline aborts the ds-drift linter"
+make_main_push_repo
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_sut
+[ "$RC" -ne 0 ] && _nb_rc=nonzero || _nb_rc=zero
+assert_eq "no baseline: exit non-zero" "nonzero" "$_nb_rc"
+assert_contains "no baseline: names the unresolvable ref" "origin/main" "$OUT"
+
 report_results

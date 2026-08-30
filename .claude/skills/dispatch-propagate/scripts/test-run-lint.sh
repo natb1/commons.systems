@@ -51,14 +51,25 @@ FIXTURE_SHEBANG="#${_BANG}/usr/bin/env bash"
 # extensionless bash-shebang file named dispatch-thing. Sets globals: REPO, BARE.
 # $1 (optional): "with_porcelain" — add a porcelain call to dispatch-thing.
 #
-# get-changed-apps.sh wrinkle (#2260 plan flag): this bare repo has no
-# package.json, so when the diff is non-empty get-changed-apps.sh's
-# resolve_dirty_apps errors (rc=1) and prints an ERROR line. run-lint.sh reads
-# it via process substitution and SWALLOWS that failure — DIRTY_APPS stays
-# empty, no app/dep stage runs (the line-74 guard skips ensure_deps), and only
-# the prose stage is reachable. We lean on that: the empty-DIRTY_APPS property
-# isolates the prose stage as the single observable lint target, which is
-# exactly what we want to assert on. (The ERROR line is benign noise.)
+# The fixtures carry a root package.json declaring ONE workspace, fixture-app,
+# committed in the baseline and never touched afterwards. Nothing in any case's
+# diff lives under it, so DIRTY_APPS comes back empty and no app or dependency
+# stage runs — leaving the prose stage as the single observable lint target,
+# which is what these cases assert on.
+#
+# It has to be a real workspace, not an empty array: lib.sh's resolve_dirty_apps
+# treats "no workspaces in package.json" as a hard error of its own, so an empty
+# array would just swap one failure for another.
+#
+# It used to come for free from a bug. The fixture had no package.json at all,
+# get-changed-apps.sh errored (rc=1) on the missing file, and run-lint.sh read
+# it through `done < <(...)`, whose exit status set -e never sees — so the
+# failure was swallowed and DIRTY_APPS stayed empty as a side effect. The
+# comment here called the ERROR line "benign noise". It was not noise: it was
+# the same buried-error shape this change exists to remove, and these cases
+# were quietly depending on it. Now the failure propagates, so the fixture has
+# to state the empty-workspace property outright instead of arriving at it by
+# accident.
 REPO=""
 BARE=""
 make_repo() {
@@ -77,6 +88,9 @@ make_repo() {
   # extensionless dispatch-thing is NET-NEW on the feature branch only, so it
   # is the sole entry in the origin/main...HEAD diff.
   printf '%s\n' 'baseline' > "$REPO/README"
+  printf '%s\n' '{ "workspaces": ["fixture-app"] }' > "$REPO/package.json"
+  mkdir -p "$REPO/fixture-app"
+  printf '%s\n' '{ "name": "fixture-app" }' > "$REPO/fixture-app/package.json"
   # run-lint.sh runs the type-safety escape-hatch check UNCONDITIONALLY, by an
   # absolute path under the CWD repo's root — and that checker resolves its own
   # repo root (and its origin/main...HEAD baseline) from its own on-disk
@@ -188,6 +202,9 @@ make_main_push_repo() {
   git -C "$REPO" remote add origin "$BARE"
 
   printf '%s\n' 'baseline' > "$REPO/README"
+  printf '%s\n' '{ "workspaces": ["fixture-app"] }' > "$REPO/package.json"
+  mkdir -p "$REPO/fixture-app"
+  printf '%s\n' '{ "name": "fixture-app" }' > "$REPO/fixture-app/package.json"
   mkdir -p "$REPO/.github/scripts"
   cp "$SCRIPT_DIR/../../../../.github/scripts/check-type-safety-escapes.sh" \
      "$REPO/.github/scripts/check-type-safety-escapes.sh"
@@ -239,5 +256,28 @@ assert_contains "main-push: names the file" "dispatch-thing" "$OUT"
 _t3_absent=absent
 [[ "$OUT" == *"No changed-file lint targets matched"* ]] && _t3_absent=present
 assert_eq "main-push: the vacuous-pass message is absent" "absent" "$_t3_absent"
+
+# ---------------------------------------------------------------------------
+# Test 4: a failed baseline resolution must ABORT, not lint zero apps.
+#
+# The second residual failure mode of this whole change: the helper is wired
+# correctly, and its exit code is swallowed on the way out. run-lint.sh read
+# get-changed-apps.sh through `done < <(...)`, whose exit status set -e never
+# sees — so a hard failure downstream produced zero apps and a clean-looking
+# run, which is the exact shape of the bug being fixed, one layer up.
+#
+# Deleting refs/remotes/origin/main makes resolve-diff-base.sh exit 4, which
+# fails get-changed-apps.sh, which must now fail run-lint.sh.
+# ---------------------------------------------------------------------------
+echo "Test 4: an unresolvable baseline aborts run-lint"
+make_main_push_repo
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_sut
+[ "$RC" -ne 0 ] && _t4_rc=nonzero || _t4_rc=zero
+assert_eq "unresolvable baseline: exit non-zero" "nonzero" "$_t4_rc"
+assert_contains "unresolvable baseline: names the ref" "origin/main" "$OUT"
+_t4_absent=absent
+[[ "$OUT" == *"All lint checks passed"* ]] && _t4_absent=present
+assert_eq "unresolvable baseline: did not report a clean pass" "absent" "$_t4_absent"
 
 report_results

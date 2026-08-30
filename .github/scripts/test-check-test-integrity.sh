@@ -84,8 +84,11 @@ run_check() {
   STDERR=""
   BASE_LINE=""
   raw=$(cd "$repo" && "$CHECK_SCRIPT" --repo-root "$repo" 2>&1 >/dev/null) || RC=$?
-  BASE_LINE=$(printf '%s\n' "$raw" | grep '^resolve-diff-base: ' || true)
-  STDERR=$(printf '%s\n' "$raw" | grep -v '^resolve-diff-base: ' || true)
+  # Split on the PROVENANCE line specifically (`base=` is in it), not on the
+  # helper's name: its diagnostics carry the same prefix, and filing those into
+  # BASE_LINE would silently hide a hard failure from every stderr assertion.
+  BASE_LINE=$(printf '%s\n' "$raw" | grep '^resolve-diff-base: base=' || true)
+  STDERR=$(printf '%s\n' "$raw" | grep -v '^resolve-diff-base: base=' || true)
 }
 
 # assert_exit EXPECTED_RC DESCRIPTION
@@ -1202,6 +1205,28 @@ run_check "$REPO"
 assert_base_source "first-parent" "(v) clean push: baseline resolved via first-parent"
 assert_exit 0 "(v) clean push: exit 0"
 assert_stderr_empty "(v) clean push: silent"
+
+# ---------------------------------------------------------------------------
+# Case (w): a failed baseline resolution must ABORT, not report a clean pass.
+#
+# The second residual of routing through resolve-diff-base: the helper is
+# wired, and its exit code gets swallowed anyway. The call site is a plain
+# assignment rather than an `if ! X=$(...)` precisely so `set -e` sees the
+# helper's non-zero exit. On a REQUIRED gate, a swallowed exit code is
+# indistinguishable from the vacuous diff this whole change removes.
+# ---------------------------------------------------------------------------
+echo "--- case (w): unresolvable baseline → abort, not a clean pass ---"
+REPO=$(make_main_push_repo)
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_check "$REPO"
+TOTAL=$((TOTAL + 1))
+if [ "$RC" -ne 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (w) unresolvable baseline: expected a non-zero exit, got 0"
+fi
+assert_stderr_contains "origin/main" "(w) unresolvable baseline: names the ref"
 
 # ---------------------------------------------------------------------------
 # Summary
