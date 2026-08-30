@@ -50,9 +50,12 @@
 #   - a path exactly `intentions/<id>.md` for an `<id>` present in IDS_FILE.
 #     Any other path — under `.claude/`, any source file, or an
 #     `intentions/` file whose id was not returned — fails the guard.
-# Conversely, every id in IDS_FILE must have a matching NEW `??` entry; a
-# returned id with no new file means the return value and the tree disagree,
-# which also fails the guard.
+# Conversely, every id in IDS_FILE must have a matching `??` entry; a returned
+# id with no such entry means the return value and the tree disagree, which
+# also fails the guard. Note "matching", NOT "new since the baseline": a
+# returned id whose file was ALREADY an untracked stray still satisfies it.
+# Requiring newness here is what made the guard fail correct runs, and Test 6c
+# pins that.
 #
 # Usage:
 #   review-fix-write-surface-guard.sh <baseline-file> <after-file> <ids-file>
@@ -86,7 +89,9 @@ done
 
 # --- the subagent's returned ids -------------------------------------------
 # RETURNED_IDS is the set from IDS_FILE; ID_SATISFIED tracks, per id, whether
-# a matching `?? intentions/<id>.md` entry was found among the NEW lines.
+# a matching `?? intentions/<id>.md` entry was found anywhere in AFTER —
+# deliberately NOT restricted to lines new since the baseline. See the ordering
+# note in the judging loop below.
 declare -A RETURNED_IDS=()
 declare -A ID_SATISFIED=()
 # `|| [[ -n "$id" ]]`: read returns the final partial line with exit status 1
@@ -114,11 +119,15 @@ done < "$IDS_FILE"
 #     expectation broke or the subagent wrote outside its surface, and neither
 #     may pass. This is what closes the already-dirty hole: a pre-existing
 #     modification can no longer provide cover for a new one.
-#   - a `??` entry already present in the baseline is pre-existing and not the
-#     subagent's, so it is skipped (untracked strays such as `.claude/agents`
-#     must not fail an otherwise-correct run).
-#   - a `??` entry new since the baseline is the subagent's and must name a
-#     returned id.
+#   - a `??` entry naming a RETURNED id satisfies that id, whether or not the
+#     baseline already carried it. A parked graph-commit leaves
+#     intentions/<id>.md untracked, and the next round's subagent legitimately
+#     writes that same path again; treating it as a pre-existing stray left the
+#     id unsatisfied and failed a correct run. This test runs FIRST.
+#   - a `??` entry already present in the baseline and NOT naming a returned id
+#     is pre-existing and not the subagent's, so it is skipped (untracked
+#     strays such as `.claude/agents` must not fail an otherwise-correct run).
+#   - any other `??` entry is the subagent's and must name a returned id.
 declare -a VIOLATIONS=()
 
 # Baseline paths, keyed by path, so a `??` stray can be recognised regardless

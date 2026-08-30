@@ -383,10 +383,17 @@ if [[ "${#EDIT[@]}" -eq 0 ]]; then
   # it, so this path is reached often. A rare-path bug would be survivable; a
   # routine-path one is not.
   #
-  # Safe because the two planner runs are deterministic over the same states
-  # file: an empty `.edit[]` here means Step 1 planned no edits either, so
-  # BASE_BLOB is empty and the pinned-id set the rollback would restore is
-  # itself empty. Disarming discards no real protection.
+  # Safe because an empty `.edit[]` means the apply run wrote nothing: every
+  # writeNode() in reconcile-graph.ts is paired with an editSet.add(), so
+  # `.edit[]` empty <=> no node file was written. There is nothing to restore.
+  #
+  # NOT "safe because BASE_BLOB is empty". That was the original rationale here
+  # and it is the wrong reason: the destructive
+  # `_graph_discard_stranded_commits` leg runs BEFORE the per-id loop and
+  # restores the STRANDED COMMITS' paths, not the caller's pinned ids. An empty
+  # BASE_BLOB therefore does not make the trap harmless, and stating it that
+  # way reads as if this disarm were cosmetic. It is not — the destructive leg
+  # is exactly what the disarm exists to keep out of a zero-write path.
   RESTORE_ON_FAILURE=0
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0

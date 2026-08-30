@@ -9,24 +9,41 @@ session**: a session handed the node bodies alone builds the un-ruled design.
 not the authority.** That makes transcription onto the node load-bearing: a
 clean session handed the node bodies alone sees only what is on the node.
 
-> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 7 of 7
-> transcribed. This file is NO LONGER operatively binding.**
+> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 5 of 5
+> node-homed rulings transcribed. This file is NO LONGER operatively binding
+> for those five; Ruling 4 still lives ONLY here.**
 > The earlier banner here said "1 of 7 transcribed … this file is operatively
 > binding for the six untranscribed rulings, and any session executing this
 > batch must read it alongside the nodes." That is now false and has been
 > replaced rather than amended, because a stale *binding* claim changes how
 > every executing session reads the batch.
 >
-> All seven rulings are on their nodes on `origin/main`, landed by `9201fdeb`,
-> `4ffbc8b3`, `91bc7cc9`, `60dd2b54` and `1f5d0909`. Re-measured with
+> Rulings 1, 2, 3, 6 and 7 are on their nodes on `origin/main`, landed by
+> `9201fdeb`, `4ffbc8b3`, `91bc7cc9`, `60dd2b54` and `1f5d0909`. Re-measured
+> with
 > `git show origin/main:intentions/<id>.md | LC_ALL=C grep -ac '2026-08-29'`
 > against each ruling's own named nodes — every one returns ≥ 1 hit
 > (2, 3, 2, 2, 2, 2, 1, 2 across the eight named nodes).
 >
-> **The node body is the authority.** This file is now what its own header
-> says it is: the index and the audit trail. A clean session handed the node
-> bodies alone now sees the rulings; it no longer needs this file to execute
-> correctly.
+> **Scope of that measurement, stated because the count is easy to over-read:**
+> the eight named nodes are Ruling 1's four, plus one each for Rulings 2, 3, 6
+> and 7. **Rulings 4 and 5 have no named node** and are not covered by it. The
+> old banner said so itself — Ruling 4 is "*(policy, no single node)* — NOT
+> recorded on any node", and Ruling 5 is this file's own rule. Ruling 5 needs no
+> node: it is discharged by the transcriptions themselves. **Ruling 4 does, and
+> has none.** Re-measured 2026-08-30:
+> `grep -rail 'verifiably dead\|clear a park itself' intentions/` returns
+> nothing, so the executor's delegated authority to clear a park on a
+> verifiably-dead premise — including the office-hours parks that block the
+> Unit 7 `Verifiability: WAIT` migration from draining — exists **only in this
+> file**. A session that stops reading here loses it, which is exactly the
+> failure this file was written to prevent. Until Ruling 4 has a node home,
+> read §"Ruling 4" below alongside the nodes.
+>
+> **For everything else, the node body is the authority.** This file is now
+> what its own header says it is: the index and the audit trail. A clean
+> session handed the node bodies alone sees Rulings 1, 2, 3, 6 and 7; it no
+> longer needs this file for them.
 >
 > Two corrections to the specific claims the old banner made, both measured:
 >
@@ -41,22 +58,30 @@ clean session handed the node bodies alone sees only what is on the node.
 >   original claim rested on a case-sensitivity false negative in its own grep.
 >   The ruling itself is now transcribed regardless.
 >
-> Two items remain owed, and neither makes this file binding again: the PR6
-> interrupt-gate ruling still needs its numbered entry below, and four
-> band-only nodes still need park-reason rescue text at clear time.
+> Three items remain owed. Only the first keeps any part of this file binding:
+>
+> 1. **Ruling 4 needs a node home** (see the scope note above) — until it has
+>    one, this file is still the only carrier of that ruling.
+> 2. The PR6 interrupt-gate ruling still needs its numbered entry below. Its
+>    *node* transcription has landed
+>    (`tactic-eval-finding-detached-code-review-dies-with-launcher`, "RULED
+>    2026-08-29 — the proxy is accepted"); only the entry here is missing.
+> 3. Four band-only nodes still need park-reason rescue text at clear time.
 
 
 > **Plan-only rulings owed transcription, and the ones that must NOT be
-> transcribed** (audited 2026-08-30). Ruling 5 requires each plan-stated ruling
+> transcribed** (audited 2026-08-30; the **TRANSCRIBE** rows re-measured against
+> `origin/main` later the same day — all four have since LANDED, so no row below
+> is still owed a node write). Ruling 5 requires each plan-stated ruling
 > to be folded onto its node; it also warns that transcription canonizes an
 > executor draft mistaken for a ruling. The audit separates the two:
 >
 > | Ruling | Home node | Disposition |
 > |---|---|---|
-> | PR11 model routing — *"set `model:` from `cost_usd`, never from `price_proxy_usd`"* (the proxy holds price constant and **inverts** the model ranking, 37827 vs 31372) plus the measured **1.91×** opus-to-sonnet per-turn premium | `tactic-rsi-lens-catalog-decomposition` | **TRANSCRIBE.** It reached `strategy-recursive-self-improvement` and the measuring node, but not the node PR11 closes — the one an executor reads |
-> | PR2 Unit 7 — the `success_signal` **threshold amendment off 0** | `tactic-ladder-terminus-owns-main-qa` | **TRANSCRIBE the amendment only.** The first clause ("the sensor stays approximate and says so") is already on the node; `success_signal.threshold` still reads `"0 violations. Baseline 2026-08-14 …"` |
-> | PR20 — the 35% band ruled **(c) accept with remediation** | `strategy-graph-native-dispatch` | **TRANSCRIBE.** Genuine, but lives only in `751982b0`'s commit message. The strategy's `reading` already shows `40.5% (band ≤35%)` with no ruling attached |
-> | PR6 — the interrupt-gate proxy accepted | `tactic-eval-finding-detached-code-review-dies-with-launcher` | **TRANSCRIBE.** Genuine — commit `08870461` / PR #3132. Owed both a node transcription and a numbered entry in this file. **Home node corrected 2026-08-30:** this row previously named `tactic-code-review-detached-node-lock`, which contains `interrupt` 0 times and `proxy` 0 times. The gate this ruling discharges is at `intentions/tactic-eval-finding-detached-code-review-dies-with-launcher.md:667-681` (18 `interrupt` hits, `phase: implement`, unparked) |
+> | PR11 model routing — *"set `model:` from `cost_usd`, never from `price_proxy_usd`"* (the proxy holds price constant and **inverts** the model ranking, 37827 vs 31372) plus the measured **1.91×** opus-to-sonnet per-turn premium | `tactic-rsi-lens-catalog-decomposition` | **TRANSCRIBE — ✅ LANDED.** It had reached `strategy-recursive-self-improvement` and the measuring node, but not the node PR11 closes; it now carries *"Set `model:` from `cost_usd`, NEVER from `price_proxy_usd`"* |
+> | PR2 Unit 7 — the `success_signal` **threshold amendment off 0** | `tactic-ladder-terminus-owns-main-qa` | **TRANSCRIBE the amendment only — ✅ LANDED.** The first clause ("the sensor stays approximate and says so") was already on the node; `success_signal.threshold` now reads *"0 violations, EXCLUDING the one deliberately-approximate prose wait … Amended off an unqualified 0 by author ruling 2026-08-19"* |
+> | PR20 — the 35% band ruled **(c) accept with remediation** | `strategy-graph-native-dispatch` | **TRANSCRIBE — ✅ LANDED.** It had lived only in `751982b0`'s commit message; the strategy now carries *"DISPOSITION (c) — ACCEPT THE BREACH WITH REMEDIATION"* beside the `40.5% (band ≤35%)` reading |
+> | PR6 — the interrupt-gate proxy accepted | `tactic-eval-finding-detached-code-review-dies-with-launcher` | **TRANSCRIBE — ✅ NODE LANDED, numbered entry still owed.** Genuine — commit `08870461` / PR #3132. It owed both a node transcription and a numbered entry in this file; the node now carries *"RULED 2026-08-29 — the proxy is accepted, and this check no longer gates …"*, so only the entry here is outstanding. **Home node corrected 2026-08-30:** this row previously named `tactic-code-review-detached-node-lock`, which contains `interrupt` 0 times and `proxy` 0 times. The gate this ruling discharges is at `intentions/tactic-eval-finding-detached-code-review-dies-with-launcher.md:667-681` (18 `interrupt` hits, `phase: implement`, unparked) |
 > | PR3 Unit 1 — "close the four verify-and-close nodes before any implementation" | — | ⚠ **DO NOT TRANSCRIBE.** Two of the four (`tactic-audit-cache-efficiency-lens`, `tactic-rsi-round-trips-lens-carrier`) are `phase: implement`, `status: codified`, carrying live two-unit plans. Transcribing canonizes the contradiction |
 > | PR4 Unit 8 sequencing rationale | — | ⚠ **DO NOT TRANSCRIBE.** Its premise is option 2 of `tactic-graph-prose-ref-batch-wiring`, which that node refutes |
 > | PR4 Unit 3 constraint — "keep the skill-body edits minimal and mechanical" | — | ⚠ **DO NOT TRANSCRIBE.** Contradicted by that node's item 5, which requires a non-mechanical edit |
