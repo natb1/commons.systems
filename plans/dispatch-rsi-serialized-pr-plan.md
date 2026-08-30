@@ -455,7 +455,7 @@ implementation.**
 | Node | Claimed missing | Actually on `main` |
 |---|---|---|
 | `tactic-audit-instrument-scoping` | `--session` / `--node` scoping | **Present** — `aggregate-usage.sh:22,34,42`; scope object emitted at `:1463,1488` |
-| `tactic-audit-permission-friction` | permission-friction lens | **Present** — `lenses.permission_friction`, `aggregate-usage.sh:835` |
+| ~~`tactic-audit-permission-friction`~~ | permission-friction lens | **CLOSED 2026-08-30 on `origin/main` (`91bc7cc9`)** — Ruling-1 completion record against PR #3074. Out of PR3's scope. Lens present in `aggregate-usage.sh`; locate `lenses.permission_friction` by name |
 | `tactic-audit-cache-efficiency-lens` | cache hit-ratio lens | **Present** — `hit_ratio` emitted at `aggregate-usage.sh:1211` |
 | `tactic-rsi-round-trips-lens-carrier` | `scriptable_round_trips` carrier | **Present** — `boot_preamble` block, `aggregate-usage.sh:1335` |
 
@@ -468,14 +468,13 @@ Genuinely absent, confirmed by zero matches in the instrument:
 > paragraph used to read "Close the four as Bundle 4's first unit, before any
 > implementation. For each, read the node's success criteria against the cited
 > anchor, then close with `phase: done` and `execution.completion` set to the
-> commit that actually shipped it."*)* Two of the four are **not** close-only:
+> commit that actually shipped it."*)* Two of the three are **not** close-only:
 > `tactic-audit-cache-efficiency-lens` (`office_hours: null`, `phase: implement`,
 > `status: codified`, units at `:177` and `:254`) and
 > `tactic-rsi-round-trips-lens-carrier` (`office_hours: null`, `phase: implement`,
 > `status: codified`, units at `:160` and `:252`) each carry a full two-unit
 > plan. Closing them to `phase: done` discards planned, selectable work. The
-> other two — `tactic-audit-instrument-scoping` and
-> `tactic-audit-permission-friction` — are `office_hours`-parked and are not
+> other one — `tactic-audit-instrument-scoping` — is `office_hours`-parked and is not
 > executor-dischargeable without clearing the park.
 >
 > Read each node's units *and* success criteria first. Close only the nodes that
@@ -484,8 +483,15 @@ Genuinely absent, confirmed by zero matches in the instrument:
 Two residuals to **check rather than assume**, because they are the plausible
 reason these nodes were never closed:
 
-- `tactic-audit-permission-friction` has a `/fewer-permission-prompts` closing
-  step that may be genuinely outstanding even though the lens ships.
+- ⚠ **Resolved differently than this bullet expected.** The
+  `/fewer-permission-prompts` closing step *is* outstanding — but the node closed
+  anyway on 2026-08-30 (`91bc7cc9`) as a Ruling-1 completion record, and the
+  outstanding half was transcribed into the node body rather than kept as a park.
+  It is clarification 43's owed collision check, and the node body records that
+  the check cannot be performed from here at all. What shipped substitutes an
+  attended `git diff .claude/settings.json` review — a design substitution owed
+  ratification, on a `phase: done` node no router selects. Do not treat it as
+  PR3 work.
 - **⛔ Struck 2026-08-30 — do not ratify the `fleet-only` tag.** This bullet used
   to read "Whether every fleet-denominator lens carries the `fleet-only` tag; the
   vocabulary exists at `aggregate-usage.sh:1164,1463`." Ratifying the binary tag
@@ -1295,7 +1301,7 @@ of re-polling for the full CI-wait window.
 > `dispatch-reclaim-audit` and `lib.sh` appear only under the node's
 > ***"Dispositions of the findings left out of this node's plan"***. The fold is
 > a **disjoint** surface from the rest of this PR — see the matching callout in
-> `### Nodes closed (10)` and Unit 8 in Scope.
+> `### Nodes closed` and Unit 8 in Scope.
 
 **Recommended model: sonnet** — mostly additive jq lenses in one script, with
 one `find` predicate fix. Escalate to opus only if Unit 1 finds the scoping
@@ -1308,15 +1314,27 @@ lines). Three of its lens nodes are already shipped and only need verification
 and closing; two lenses are genuinely missing; and three findings say the
 instrument is blind to the very workers it is meant to measure.
 
-### Nodes closed (10)
+### Nodes closed (9)
 
-*Residual verification — ⚠ NOT close-only. Two of these four are `phase:
+*Residual verification — ⚠ NOT close-only. Two of these three are `phase:
 implement`, `status: codified` and carry full two-unit plans; see Unit 1 in
 Scope before closing anything:*
-- `tactic-audit-instrument-scoping`
-- `tactic-audit-permission-friction`
+- `tactic-audit-instrument-scoping` *(⚠ parked — `office_hours` non-null,
+  `phase: null` on `origin/main` 2026-08-30; not autonomously selectable)*
 - `tactic-audit-cache-efficiency-lens`
 - `tactic-rsi-round-trips-lens-carrier`
+
+> **⛔ `tactic-audit-permission-friction` was REMOVED from this list 2026-08-30.**
+> It closed on `origin/main` as `91bc7cc9` — a Ruling-1 sibling-carrier
+> completion record: `status: codified`, `phase: done`, `office_hours: null`,
+> `execution.completion` against PR #3074. PR3 has nothing to close on it and
+> must not re-stamp it. **Two items its 2026-08-18 park raised are NOT
+> discharged** — the side-A failed condition and clarification 43's
+> never-performed `/fewer-permission-prompts` collision check. Both are
+> transcribed on the node under *"Two items the 2026-08-18 park raised that
+> Ruling 1 does NOT answer"* and are owed to an `/align` pass on
+> `strategy-token-economy`. That node is now `phase: done`, so no router will
+> ever surface them — carry the items forward here or they are lost.
 
 *Real work:*
 - `tactic-audit-review-effort-yield-lens`
@@ -1334,7 +1352,7 @@ Scope before closing anything:*
 > `worktree-remove.sh`, `fetch-psi.sh` and `fetch-analytics.sh` — a disjoint set
 > from everything else in this PR.
 >
-> It also sits in the `### Nodes closed (10)` list above with **no unit in Scope
+> It also sits in the `### Nodes closed` list above with **no unit in Scope
 > implementing it** — see Unit 8 below, added 2026-08-30. If Unit 8 is not built,
 > remove the node from the closed list rather than closing it undone.
 
@@ -1487,7 +1505,7 @@ exactly when the stamping it monitors has failed.
 > the work, not a reason to skip it). Read the node's three units before
 > planning.
 >
-> **Closed-list consequence.** This node sits in `### Nodes closed (10)` above.
+> **Closed-list consequence.** This node sits in `### Nodes closed` above.
 > Apply the same rule stated there for Unit 8: if the three units are not built,
 > **remove the id from the closed list** rather than closing it undone.
 
@@ -1561,7 +1579,7 @@ main-checkout project dir.
 *Model: sonnet* — widen one find predicate
 
 **Unit 8 — the folded `tactic-review-lows-automation` node** *(added 2026-08-30 —
-the node was in `### Nodes closed (10)` with no unit implementing it)*. Its three
+the node was in `### Nodes closed` with no unit implementing it)*. Its three
 units are the 2026-07-05 review lows on the live surface: CI-wrapper false-green
 patterns, hook edge defects, and `fetch-*` error-helper dedup. **Its surface is
 disjoint from the rest of this PR** — `run-lint.sh`, `run-typecheck.sh`,
@@ -3030,9 +3048,22 @@ Do not re-run it; read the recorded reading.
 > `intentions/tactic-rsi-measure-fanout-and-model-routing.md` carries an
 > `office_hours` recommending a redo from scratch. Verified 2026-08-30: **the
 > reading did land**, on `strategy-recursive-self-improvement`. The park's
-> premise is therefore verifiably dead, and **Author Ruling 4 delegates clearing
-> it to the executor** — clear it, cite the landed reading as the evidence that
-> killed the premise, and report the clear after the fact. Do not redo the
+> **SCOPE is dead, not the premise — so do NOT clear this park.** Measured on
+> `origin/main` 2026-08-30: `intentions/tactic-rsi-measure-fanout-and-model-routing.md`
+> is `status: raw`, `phase: null`, `blocked_by: []`, and its `office_hours.reason`
+> is an **invalid-state frozen-session intervention** ("The /align-tactics pass
+> holding this node stopped mid-run on 2026-08-19 at an account session-usage
+> limit…"), whose `recommendation` ends *"the router re-selects the node and
+> /align-tactics redoes the pass from scratch."* The landed reading kills the
+> node's **scope**, not that premise. Author Ruling 4 is explicitly BOUND on
+> exactly this shape: *"a DEAD PREMISE is not a DEAD SCOPE … Where clear-park is
+> the wrong instrument — a phase: null node whose work already shipped, which
+> clear-park makes router-eligible rather than terminal — the correct act is the
+> completion record (phase: done), never the clear."* Clearing here would make
+> the node router-eligible and the tick would re-dispatch a measurement that has
+> already shipped. **Write the completion record instead** (`phase: done`,
+> citing the reading landed on `strategy-recursive-self-improvement`), as a
+> Mechanism-2 `graph-commit`, and report it after the fact. Do not redo the
 > measurement.
 
 Two results bind this PR:
@@ -3251,9 +3282,29 @@ Rename for uniform `/dispatch-*` naming: `/align-tactics` → `/dispatch-plan`,
 common standards are extracted **only if a concrete consumer emerges** — do not
 invent one.
 
-### Nodes closed (1)
+### Nodes closed (2)
 
-- `tactic-dispatch-skill-standards-extraction`
+- `tactic-dispatch-skill-rename` — **the carrier** (D3(a)). `status: raw`,
+  `phase: null`, `blocked_by: []`, `office_hours: null` on `origin/main`
+  2026-08-30 — live, unparked, serving `strategy-graph-native-dispatch`, and its
+  roster table already claims all three renames.
+- `tactic-dispatch-skill-standards-extraction` — closes as a **record**, keeping
+  only the standards-extraction question, whose own body scopes extraction to
+  *"only if a concrete consumer emerges"*; none has.
+
+> **⚠ THE PARK STAYS HELD UNTIL D3 IS IN THE GRAPH, NOT MERELY IN THIS FILE.**
+> Measured 2026-08-30: `tactic-dispatch-skill-standards-extraction` carries a
+> non-null `office_hours` (`since: 2026-08-20`), and no node in `intentions/`
+> records the carrier decision — `LC_ALL=C git grep -a -l 'dispatch-skill-rename'
+> origin/main -- intentions/` returns three files, none of which does. The
+> duplicate-target pair is therefore still live in the graph. The park's own
+> recommendation forbids clearing it by finalizing a plan: doing so *"resolves a
+> duplicate-target pair by omission, the failure mode the 2026-07-19 precedent
+> (clarification 78, commit `4a83dfc1`) was ratified to prevent."* Route the
+> carrier decision through the `/align` pass on `strategy-graph-native-dispatch`
+> the park names, then clear. The position is **not** blocked meanwhile —
+> `tactic-dispatch-skill-rename` is selectable — but this PR cannot close the
+> parked node until that lands.
 
 ### Scope
 
@@ -3303,8 +3354,16 @@ invent one.
 > `.claude/rules/vendored-skills.md` treats as a defect. Rename atomically in one
 > PR, which is what this section already says.
 >
-> **(d) The `blocked_by` `tactic-dispatch-skill-input-contract` is a phantom and
-> is NOT a blocker.** Verified absent from `intentions/` on 2026-08-30. A
+> **(d) There is no `tactic-dispatch-skill-input-contract` edge to honor —
+> it was never a frontmatter `blocked_by` in the first place.** Measured
+> 2026-08-30 on `origin/main`: `tactic-dispatch-skill-rename`,
+> `tactic-dispatch-skill-standards-extraction` and
+> `strategy-graph-native-dispatch` all carry `blocked_by: []`. Every reference is
+> **body prose**, which `validateGraph` does not read and the router does not
+> traverse — so it cannot block, and there is nothing to delete from the graph.
+> The node itself was pruned by `20b0432c` at `status: codified`,
+> `phase: review`, `pr: 2923`, and its work shipped. Only the **rename** half of
+> the "coordinated adjacent PRs" pair is outstanding, and that is this PR. A
 > `blocked_by` naming a node that does not exist can never clear, so honoring it
 > would deadlock the position permanently. Treat it as void; do **not** mint the
 > node on a plan reference alone. It is listed with the other two phantoms in the
@@ -4433,12 +4492,19 @@ review: add stop-word filtering to near-dup tokens, tie STORED-DEFAULTS to schem
 defaults, factor the repeated table render/truncation shape, and validate that
 `DigestInput` bodies/rawTexts are keyed 1:1 with nodes.
 
-> **⚠ `tactic-graph-digest-tooling` DOES NOT EXIST in `intentions/`** (verified
-> 2026-08-30). The deferral is carried by the PR review only. Either mint the
-> node deliberately or cite #2865 directly — do not mint it on this plan
-> reference alone. The same phantom id is also cited in
-> `.claude/skills/align-audit/SKILL.md`, which is a separate defect on that
-> skill.
+> **⚠ WRONG NODE — and this unit is under-scoped by one unit.**
+> `tactic-graph-digest-tooling` was pruned by `afe270a7` at `status: codified`,
+> `phase: done`, `pr: 2865`; its work shipped and
+> `packages/intentionsutil/scripts/graph-digest.ts` is on `main`. **Do not mint
+> it.** The deferral is carried by
+> `intentions/tactic-graph-digest-quality-followups.md` — `status: codified`,
+> `phase: implement`, `blocked_by: []`, `office_hours: null` on `origin/main`
+> 2026-08-30 — which is **already in this PR's `### Nodes closed (6)` list
+> above**. Plan Unit 6 from that node, not from this paragraph. It carries
+> **five** units, and the four named here omit its Unit 3: *one cycle-safe
+> reachability util, adopted in `computeSignalPath` and `tableClosure`*. Add it,
+> or the node cannot close. The stale id is also cited in
+> `.claude/skills/align-audit/SKILL.md` — fixed in the same commit (E22).
 
 > **⚠ The ordering instruction here inverts the node's dependency chain, and the
 > CLOSURE framing is wrong.** The governing node's Unit 4 hard-depends on its

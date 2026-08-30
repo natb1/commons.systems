@@ -139,7 +139,7 @@ node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts --tables-o
 
 The CLI is read-only (local store + `git log`, no `gh`, no network, no committed
 file) and lives in `packages/intentionsutil/scripts/graph-digest.ts`, landed by
-`tactic-graph-digest-tooling`. `--tables-only` emits just the derived check
+`graph-digest.ts` (landed by PR #2865; the node `tactic-graph-digest-tooling` was pruned at `phase: done` and no longer exists). `--tables-only` emits just the derived check
 tables (Section 2); drop the flag for the full per-node summary (Section 1) when
 the sampled content pass (Step 5) needs the per-node lines.
 

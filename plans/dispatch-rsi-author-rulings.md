@@ -9,9 +9,9 @@ session**: a session handed the node bodies alone builds the un-ruled design.
 not the authority.** That makes transcription onto the node load-bearing: a
 clean session handed the node bodies alone sees only what is on the node.
 
-> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 5 of 5
+> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 6 of 6
 > node-homed rulings transcribed. This file is NO LONGER operatively binding
-> for those five; Ruling 4 still lives ONLY here.**
+> for any ruling. It is the index and the audit trail.**
 > The earlier banner here said "1 of 7 transcribed … this file is operatively
 > binding for the six untranscribed rulings, and any session executing this
 > batch must read it alongside the nodes." That is now false and has been
@@ -25,20 +25,16 @@ clean session handed the node bodies alone sees only what is on the node.
 > against each ruling's own named nodes — every one returns ≥ 1 hit
 > (2, 3, 2, 2, 2, 2, 1, 2 across the eight named nodes).
 >
-> **Scope of that measurement, stated because the count is easy to over-read:**
-> the eight named nodes are Ruling 1's four, plus one each for Rulings 2, 3, 6
-> and 7. **Rulings 4 and 5 have no named node** and are not covered by it. The
-> old banner said so itself — Ruling 4 is "*(policy, no single node)* — NOT
-> recorded on any node", and Ruling 5 is this file's own rule. Ruling 5 needs no
-> node: it is discharged by the transcriptions themselves. **Ruling 4 does, and
-> has none.** Re-measured 2026-08-30:
-> `grep -rail 'verifiably dead\|clear a park itself' intentions/` returns
-> nothing, so the executor's delegated authority to clear a park on a
-> verifiably-dead premise — including the office-hours parks that block the
-> Unit 7 `Verifiability: WAIT` migration from draining — exists **only in this
-> file**. A session that stops reading here loses it, which is exactly the
-> failure this file was written to prevent. Until Ruling 4 has a node home,
-> read §"Ruling 4" below alongside the nodes.
+> **Scope of that measurement, corrected 2026-08-30.** The eight named nodes are
+> Ruling 1's four, plus one each for Rulings 2, 3, 6 and 7. **Ruling 4 is
+> covered separately and IS node-homed** — it is a `clarifications:` entry on
+> `intentions/strategy-graph-native-dispatch.md`, landed by `4ffbc8b3`. Measure
+> it with a single-term grep:
+> `LC_ALL=C git grep -a -l 'verifiably dead' origin/main -- intentions/` → 1 file.
+> An earlier audit here reported zero because it ran a BRE alternation
+> (`'verifiably dead\|clear a park itself'`) under ERE/PCRE, where `\|` matches a
+> literal pipe. **Ruling 5 is the only ruling with no node home, and needs none:**
+> it is discharged by the transcriptions themselves.
 >
 > **For everything else, the node body is the authority.** This file is now
 > what its own header says it is: the index and the audit trail. A clean
@@ -58,15 +54,14 @@ clean session handed the node bodies alone sees only what is on the node.
 >   original claim rested on a case-sensitivity false negative in its own grep.
 >   The ruling itself is now transcribed regardless.
 >
-> Three items remain owed. Only the first keeps any part of this file binding:
+> One item remains owed. **It does not keep any part of this file binding.**
 >
-> 1. **Ruling 4 needs a node home** (see the scope note above) — until it has
->    one, this file is still the only carrier of that ruling.
-> 2. The PR6 interrupt-gate ruling still needs its numbered entry below. Its
->    *node* transcription has landed
->    (`tactic-eval-finding-detached-code-review-dies-with-launcher`, "RULED
->    2026-08-29 — the proxy is accepted"); only the entry here is missing.
-> 3. Four band-only nodes still need park-reason rescue text at clear time.
+> 1. Four band-only nodes still need park-reason rescue text at clear time.
+>
+> (The PR6 interrupt-gate ruling was the other owed item. It is discharged in
+> this same commit: its node transcription had already landed on
+> `tactic-eval-finding-detached-code-review-dies-with-launcher`, and its
+> numbered entry lands below as **Ruling 8**.)
 
 
 > **Plan-only rulings owed transcription, and the ones that must NOT be
@@ -81,7 +76,7 @@ clean session handed the node bodies alone sees only what is on the node.
 > | PR11 model routing — *"set `model:` from `cost_usd`, never from `price_proxy_usd`"* (the proxy holds price constant and **inverts** the model ranking, 37827 vs 31372) plus the measured **1.91×** opus-to-sonnet per-turn premium | `tactic-rsi-lens-catalog-decomposition` | **TRANSCRIBE — ✅ LANDED.** It had reached `strategy-recursive-self-improvement` and the measuring node, but not the node PR11 closes; it now carries *"Set `model:` from `cost_usd`, NEVER from `price_proxy_usd`"* |
 > | PR2 Unit 7 — the `success_signal` **threshold amendment off 0** | `tactic-ladder-terminus-owns-main-qa` | **TRANSCRIBE the amendment only — ✅ LANDED.** The first clause ("the sensor stays approximate and says so") was already on the node; `success_signal.threshold` now reads *"0 violations, EXCLUDING the one deliberately-approximate prose wait … Amended off an unqualified 0 by author ruling 2026-08-19"* |
 > | PR20 — the 35% band ruled **(c) accept with remediation** | `strategy-graph-native-dispatch` | **TRANSCRIBE — ✅ LANDED.** It had lived only in `751982b0`'s commit message; the strategy now carries *"DISPOSITION (c) — ACCEPT THE BREACH WITH REMEDIATION"* beside the `40.5% (band ≤35%)` reading |
-> | PR6 — the interrupt-gate proxy accepted | `tactic-eval-finding-detached-code-review-dies-with-launcher` | **TRANSCRIBE — ✅ NODE LANDED, numbered entry still owed.** Genuine — commit `08870461` / PR #3132. It owed both a node transcription and a numbered entry in this file; the node now carries *"RULED 2026-08-29 — the proxy is accepted, and this check no longer gates …"*, so only the entry here is outstanding. **Home node corrected 2026-08-30:** this row previously named `tactic-code-review-detached-node-lock`, which contains `interrupt` 0 times and `proxy` 0 times. The gate this ruling discharges is at `intentions/tactic-eval-finding-detached-code-review-dies-with-launcher.md:667-681` (18 `interrupt` hits, `phase: implement`, unparked) |
+> | PR6 — the interrupt-gate proxy accepted | `tactic-eval-finding-detached-code-review-dies-with-launcher` | **TRANSCRIBE — ✅ LANDED.** Genuine — commit `08870461` / PR #3132. It owed both a node transcription and a numbered entry in this file; the node now carries *"RULED 2026-08-29 — the proxy is accepted, and this check no longer gates …"*, and the numbered entry landed 2026-08-30 as **Ruling 8** below. **Home node corrected 2026-08-30:** this row previously named `tactic-code-review-detached-node-lock`, which contains `interrupt` 0 times and `proxy` 0 times. The gate this ruling discharges is at `intentions/tactic-eval-finding-detached-code-review-dies-with-launcher.md:667-681` (18 `interrupt` hits, `phase: implement`, unparked) |
 > | PR3 Unit 1 — "close the four verify-and-close nodes before any implementation" | — | ⚠ **DO NOT TRANSCRIBE.** Two of the four (`tactic-audit-cache-efficiency-lens`, `tactic-rsi-round-trips-lens-carrier`) are `phase: implement`, `status: codified`, carrying live two-unit plans. Transcribing canonizes the contradiction |
 > | PR4 Unit 8 sequencing rationale | — | ⚠ **DO NOT TRANSCRIBE.** Its premise is option 2 of `tactic-graph-prose-ref-batch-wiring`, which that node refutes |
 > | PR4 Unit 3 constraint — "keep the skill-body edits minimal and mechanical" | — | ⚠ **DO NOT TRANSCRIBE.** Contradicted by that node's item 5, which requires a non-mechanical edit |
@@ -175,6 +170,28 @@ deadlocks the migration chain for them: source never `done` -> `blockersComplete
 never passes -> the minted machine node is never selectable either. Unit 7's
 spec never mentions `office_hours`.
 
+**BOUND — quoted verbatim from the node** (`intentions/strategy-graph-native-dispatch.md`,
+`clarifications:` entry landed by `4ffbc8b3`). No plan document repeated this
+until 2026-08-30, and it changes downstream work:
+
+> BOUND, and it is the whole of the delegation: a DEAD PREMISE is not a DEAD
+> SCOPE. This entry authorizes clearing a park whose stated blocking premise no
+> longer holds; it does NOT authorize making a node selectable whose SCOPE is
+> dead or whose park is the only stop on a bad automated action. Where
+> clear-park is the wrong instrument — a phase: null node whose work already
+> shipped, which clear-park makes router-eligible rather than terminal — the
+> correct act is the completion record (phase: done), never the clear.
+
+Before every clear, ask which of the two is dead. If the *scope* is dead and the
+node is `phase: null`, `clear-park` is the wrong instrument: it makes the node
+router-eligible and the router will re-dispatch the shipped work. Write the
+completion record instead.
+
+*(Footnote on the figures above: this entry reproduces the author's "12 of the
+17" verbatim. The re-census landed 2026-08-30 gives **15 nodes / 22 marks, 12
+parked** — see the "Open parks" row of `plans/dispatch-rsi-sequence.md`. The
+numerator is unchanged; only the denominator was wrong.)*
+
 ---
 
 ## Sitting 2
@@ -221,6 +238,34 @@ The plan never mentions this gate at all.
 **Ruled: DESCOPE UNITS 1 AND 3**, ship the rest of Position 9. The two units
 stay parked pending the strategy and need a follow-up position later. PR20 ships
 partial rather than fabricating a strategy the author has not written.
+
+---
+
+### Ruling 8 — PR6: the interrupt-gate proxy is accepted
+
+**Question.** `tactic-eval-finding-detached-code-review-dies-with-launcher`
+carried an attended check — interrupt a launching Bash tool call by hand and
+confirm the detached review survives — described on the node as "the one check
+that cannot be automated" and "the definitive close of this finding". Does it
+gate PR6 Units 2–3?
+
+**Ruled: the proxy is ACCEPTED and the check no longer gates anything.** The
+author accepted the **background-teardown demonstration** — a detached run
+survived teardown of the launching Bash tool call and wrote its marker 12s later,
+exercising the same `systemd-run --user` re-parenting mechanism.
+
+**Honest limit, stated at the sitting:** the demonstration killed a *background*
+task — the same class of teardown, but not literally a human interrupting a
+foreground tool call. The attended check is therefore a **confirmation, not a
+discovery**, and is an optional follow-up the author may run at any attended
+moment. **Units 2 and 3 ship without it.** The 2026-08-28 sitting had
+established topology only (PPID 314, own `app.slice` cgroup, `flock` released on
+child exit) and explicitly not survival of a launcher teardown; that is the gap
+this ruling closes.
+
+**Node transcription: LANDED.** `intentions/tactic-eval-finding-detached-code-review-dies-with-launcher.md`
+carries *"RULED 2026-08-29 — the proxy is accepted, and this check no longer
+gates anything"* (1 occurrence), recorded in `08870461` / PR #3132.
 
 ---
 
@@ -312,7 +357,11 @@ longer depends on Unit 3.
   remaining `dispatch-<phase>` namespace entries stay outstanding on the carrier.
 - **(c) Transition — ATOMIC, no compatibility aliases.**
 - **(d) The `blocked_by` `tactic-dispatch-skill-input-contract` is a phantom and
-  is void.**
+  is void.** *(Corrected 2026-08-30: the verdict stands, the reason does not.
+  There is no `blocked_by` edge to void — all three nodes carry
+  `blocked_by: []` in frontmatter, measured on `origin/main`. Every reference to
+  that id is BODY PROSE, invisible to `validateGraph` and to the router, so
+  nothing was ever deadlocked and there is nothing to delete.)*
 
 **Reason.** (a) resolves a duplicate-target pair *deliberately* rather than by
 omission, which is what clarification 78 exists to prevent. (b) widening a
@@ -320,7 +369,7 @@ repo-wide atomic rename inside a frozen window multiplies blast radius for no
 benefit. (c) an alias has no implementable mechanism — a skill's identity is its
 directory name plus the `SKILL.md` frontmatter `name:` plus the Workflow
 registration `name:`, so an alias means a duplicate registration, which
-`.claude/rules/vendored-skills.md` treats as a defect. (d) a `blocked_by` naming a
+`.claude/rules/vendored-skills.md` treats as a defect. (d) — as originally reasoned — a `blocked_by` naming a
 node that does not exist can never clear, so honoring it deadlocks the position
 permanently.
 
