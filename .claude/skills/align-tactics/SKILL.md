@@ -164,11 +164,28 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      an operator act on the manual `dispatch <node-id>` lane, not a
      self-serve escape for an autonomous align-tactics worker.
    - any other non-zero — mechanical error (unresolvable project root,
-     failed fetch, malformed store): report and stop. A stale selection
-     (`12`) is NOT an `office_hours` park and NOT a defect; a mechanical
-     error is neither of those either — it is a broken environment to report
-     plainly, per this repo's code-style convention of clear errors over
-     defensive fallbacks.
+     failed fetch, malformed store; `check-node-selection` reports all of
+     these as the config-class `2`, since `main()` maps every throw to it).
+     Report the error plainly, **and record the terminal disposition exactly
+     as the `12` and `15` bullets do**:
+     ```bash
+     packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
+     ```
+     The same reasoning carries: this gate runs at Step 0, before any graph
+     write, so a session that fails it did nothing and lost nothing — reaping
+     it is correct.
+
+     Reaping does NOT suppress the error; it is still on stderr and in the
+     journal. WITHOUT the marker the failure is strictly worse than a reported
+     one: `dispatch-self-close` holds the node worker alive, and
+     `graph-select-target` then skips the node as `live-session` from that
+     point on — permanently unselectable, permanently consuming a job slot. A
+     broken environment should be loud, not silently absorbing capacity.
+
+     A stale selection (`12`) is NOT an `office_hours` park and NOT a defect;
+     a mechanical error is neither of those either — it is a broken
+     environment to report plainly, per this repo's code-style convention of
+     clear errors over defensive fallbacks.
 
    **Deliberately not gated by `assert-node-selection`** — each of these has
    a shape this gate cannot express, so a future session should not "finish

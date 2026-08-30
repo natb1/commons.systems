@@ -184,13 +184,18 @@ describe("merge-node CLI stdout contract", () => {
     const run = runCli(["--base", basePath, "--ours", oursPath, "--theirs", theirsPath, "--out", outPath]);
 
     expect(run.status).toBe(0);
-    // The payload must actually be large enough to exercise the defect. If this
-    // stops holding, the test has gone vacuous and must fail loudly rather than
-    // pass for the wrong reason.
-    expect(run.stdout.length).toBeGreaterThan(1_000_000);
-    // The real assertion: the JSON is not truncated. `process.exit(0)` discards
-    // whatever is still queued on the pipe, so this throws against the old form.
+    // The real assertion FIRST: the JSON is not truncated. `process.exit(0)`
+    // discards whatever is still queued on the pipe, so this throws against the
+    // old form ("Unexpected end of JSON input"). Ordering matters — the size
+    // guard below ALSO fails under truncation (the discarded tail shrinks
+    // stdout to whatever fit the pipe buffer), and if it ran first a returning
+    // regression would be misreported as "the test went vacuous".
     const parsed = JSON.parse(run.stdout) as { resolved: boolean; conflicts: { field: string }[] };
     expect(parsed.conflicts.some((c) => c.field === "body")).toBe(true);
+    // The payload must actually be large enough to exercise the defect. If this
+    // stops holding — with the JSON above still parsing cleanly — the fixture
+    // has shrunk and the test has gone vacuous, so it must fail loudly rather
+    // than pass for the wrong reason.
+    expect(run.stdout.length).toBeGreaterThan(1_000_000);
   });
 });

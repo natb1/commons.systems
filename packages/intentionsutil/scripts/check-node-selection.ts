@@ -41,6 +41,11 @@
 //   1. exists      — intentions/<node-id>.md present (a pruned node is a
 //                    completed/removed selection).            exit 12
 //   2. phase       — persisted phase equals <selected-phase>. exit 12
+//                    EXCEPTION: an `align-tactics` selection on a kind
+//                    "strategy" node that carries a non-null stored `phase`
+//                    is a MALFORMED STORE, not a stale selection (schema rule
+//                    12 makes `phase` tactic-only). It THROWS, which main()
+//                    maps to the config-class                  exit 2
 //   3. not parked  — office_hours null.                       exit 12
 //   4. fingerprint — only when execution.strategy_fingerprint is non-null:
 //                    each serving strategy's current substance hash matches its

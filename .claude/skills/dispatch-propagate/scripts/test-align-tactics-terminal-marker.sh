@@ -103,6 +103,34 @@ else
   assert_eq "align-tactics SKILL.md still carries the exit-12 'mark-node-terminal ... no-claim' command" "present" "$actual"
 fi
 
+# --- 4b. the MECHANICAL-ERROR path also reaps ------------------------------
+#
+# Row 4 only asserts the marker is present SOMEWHERE, so it stays green even if
+# a path loses it. This pins the specific path that used to lack it.
+#
+# check-node-selection maps every throw to the config-class exit 2 — a
+# malformed store among them. That exit lands in the "any other non-zero"
+# bullet. When that bullet said only "report and stop", the session ended with
+# no terminal disposition: dispatch-self-close then held the node worker alive
+# and graph-select-target skipped the node as `live-session` from that point
+# on, so it became permanently unselectable and consumed a job slot forever.
+# The gate runs at Step 0, before any graph write, so a session that fails it
+# did nothing and lost nothing — the same reasoning the 12 and 15 bullets use.
+
+if [[ ! -f "$ALIGN_TACTICS_SKILL" ]]; then
+  TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+  echo "  FAIL: mechanical-error bullet carries the no-claim marker: file missing"
+else
+  # The bullet's own text, up to the next top-level list item.
+  block=$(awk '/any other non-zero/{f=1} f{print} f && /^   \*\*Deliberately not gated/{exit}' "$ALIGN_TACTICS_SKILL")
+  if printf '%s' "$block" | grep -qE 'mark-node-terminal .* no-claim'; then
+    actual="present"
+  else
+    actual="absent"
+  fi
+  assert_eq "align-tactics SKILL.md: the 'any other non-zero' bullet reaps with 'mark-node-terminal ... no-claim'" "present" "$actual"
+fi
+
 # --- 5. SKILL.md states validate-graph.ts runs AFTER the marker --------------
 #
 # Ordering matters: the marker is written by the land itself, so validation now
