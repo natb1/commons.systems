@@ -388,10 +388,15 @@ Work case by case:
   51 (`:2540`), 52 (`:2571`), 78 (`:3468`), 81 (`:3622`)** — these exercise
   `ensure_intentions_only_base` / `replay_snapshot_onto_base`. Delete each **only
   after** checking whether its assertion is about the rebuild or about a property that
-  outlives it. In particular case 52's list-entry-removal guard
-  (`list_entries_dropped_by_ours`, `graph-commit:1245-1259`) is **shared** — it is
-  called by `reconcile_plumbing_base` too (`graph-commit:1817-1830`) — so that
-  assertion must be re-expressed on the plumbing path, not lost. Case 81's
+  outlives it. **SUPERSEDED 2026-08-30 for case 52 (PR #3144).** The list-entry-removal
+  guard is DELETED, along with `list_entries_dropped_by_ours` and
+  `frontmatter_list_entries`, because the base-aware `threeWayList`
+  (`packages/intentionsutil/src/node-merge.ts:151`) already distinguishes "ours dropped
+  an entry" from "theirs never had it" — the exact discrimination the guard existed to
+  substitute for. Case 52 is NOT re-expressed on the plumbing path: it is rewritten in
+  place to assert the OPPOSITE outcome, that the same input LANDS rather than parks
+  (rc 0, `office_hours` absent, the guard's note absent, concurrent edit preserved).
+  Do not re-add the guard to the direct-merge reconciler. Case 81's
   "merge tool unrunnable → die, snapshot kept" likewise has a plumbing counterpart to
   land on (case 80, `:3584`, already covers the layer-3 arm).
 - **Case 48 (`:2417`) — re-express, and say so explicitly.** Strategy clarification 241
@@ -484,9 +489,13 @@ Every item below already exists; none of it is to be re-derived.
   committer date so a retry against an unchanged base re-mints the same SHA.
 - `blob_sha_or_empty()` — `graph-commit:1176-1183`. Blob SHA of `intentions/<id>.md`
   at a commit-ish, empty when absent (mirrors merge-node's empty-arg convention).
-- `list_entries_dropped_by_ours()` / `frontmatter_list_entries()` —
-  `graph-commit:1222`, `:1245-1259`. The shared list-entry-removal guard already called
-  by both reconcilers. Never reimplement it.
+- ~~`list_entries_dropped_by_ours()` / `frontmatter_list_entries()`~~ — **DELETED
+  2026-08-30 (PR #3144). Not available for reuse; do not reimplement.** Both helpers and
+  the guard that called them are gone from `graph-commit`. The behavior they approximated
+  is supplied correctly by the base-aware `threeWayList`
+  (`packages/intentionsutil/src/node-merge.ts:151`), which is base-aware where the guard
+  was not. A plan step that reaches for these will find nothing; a plan step that
+  recreates them re-introduces a refusal on a case the merge now handles.
 - `id_files_differ_from_rev()` — `graph-commit:1855-1870`. Rev-relative (not
   HEAD-relative) "is there anything to land". Unit 1 uses it for the nothing-left-to-land
   test; Unit 2 uses it to replace `id_files_dirty()` in `main()` and `park_and_exit()`.
@@ -548,8 +557,11 @@ before pushing rather than discovering a lint failure in review.
   message which deleted behavior it covered. A case removed without a named deleted
   behavior is a weakened test, which `.claude/rules/test-integrity.md` forbids
   outright. The pairs that most need this written down: 48 → re-expressed on case 75's
-  fixture; 52 → its `list_entries_dropped_by_ours` assertion re-expressed on the
-  plumbing path; 67 → its "lands without moving HEAD" half preserved standalone;
+  fixture; 52 → SUPERSEDED 2026-08-30 (PR #3144): the assertion was not re-expressed
+  elsewhere, it was REWRITTEN IN PLACE to pin the opposite outcome, and the named
+  deleted behavior is "a far-ahead list-entry removal parks". Assertion count held at
+  124 under both behaviors, so nothing was traded away; 67 → its "lands without moving
+  HEAD" half preserved standalone;
   70 → its plumbing half promoted to unconditional.
 - **Case-count sanity.** `test-graph-commit.sh` is 3732 lines and mentions
   `GRAPH_COMMIT_WRITER` 30 times today. After Unit 2 that count must be 0, and the
