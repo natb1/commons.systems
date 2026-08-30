@@ -7128,6 +7128,18 @@ attributes:
       tick and its pause sentinel — the recovery path for a node stranded
       post-merge is invoking /dispatch-ladder directly on it, so a paused fleet
       must never be the only actor that can carry a merged node to terminal
+    - "a binding ruling recorded only in plan prose or in a commit message has
+      not been recorded: the NODE BODY is the authority, and a clean session
+      handed the node bodies alone builds the un-ruled design. Every author
+      ruling is folded onto the node it governs — with its own dated provenance
+      clause — in the same window it is made, and each transcription is listed
+      with its exact wording for the author to confirm or overturn. The flag
+      list is not optional: the acknowledged risk is that a plan sentence which
+      was an EXECUTOR DRAFT rather than an author ruling gets canonized by the
+      transcription, so an unsourced 'ruled' is struck rather than transcribed.
+      (Recorded 2026-08-29 as author Ruling 5; see
+      plans/dispatch-rsi-author-rulings.md, which is the index and audit trail
+      and never the authority.)"
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
