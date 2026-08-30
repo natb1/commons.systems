@@ -92,42 +92,39 @@
 > (`:33`), its `execution` block including `strategy_fingerprint` (`:34-40`)
 > and its one `serves` entry (`:26-27`), exit 0 and no error.
 >
-> The flag semantics for that path are documented in the tools' own headers
+> One flag hazard is NOT in the headers and so is stated here: `write-node.ts`
+> takes `--file <path>`, and omitting it is not a usage error — the header
+> documents stdin as a neutral MODE (`write-node.ts:1`, `:28`), but a
+> non-interactive call with no `--file` blocks on `/dev/stdin` until the tool
+> times out, or dies at EOF on an uncaught `JSON.parse`.
+>
+> The remaining flag semantics are documented in the tools' own headers
 > (`dump-node.ts`, `write-node.ts`, `graph-commit`) and in
 > `.claude/rules/sandbox.md`, and are deliberately NOT restated here. An
 > earlier revision of this passage did restate them; it was rewritten across
 > eight review rounds and every single recurrence was the restatement drifting
-> from the tool it described, never the tool changing. The repair itself is
-> owed as separate work — it is not a unit of this plan.
+> from the tool it described, never the tool changing. The repair itself is not
+> a unit of any position below and nothing in this document schedules it — it
+> rides with the 9-site past-tense repair this banner scopes above, and is owed
+> by whoever executes that pass. Do not read "not a unit of this plan" as
+> "not owed".
 >
-> Pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
-> whole node through the YAML emitter
-> (`packages/intentionsutil/src/store.ts:61`), which picks the scalar style and
-> handles any `"` itself — the style is a property of the value, not something
-> to pre-arrange. Measured on *this* field, whose value carries both `: `
-> (`run: 26`, `:11`) and an apostrophe (`kind-strategy's`, `:16`): the emitter
-> keeps the double-quoted style and writes an embedded quote as `\"` in the
-> `.md`. (The full style rule, measured on yaml 2.9.0 with `stringify`'s
-> defaults: a value plain YAML can hold — no `: `, no leading indicator — comes
-> out plain and unescaped; a value that must be quoted comes out
-> **single**-quoted only when it contains a `"` and no `'`, and double-quoted
-> otherwise. The selector for single quotes is the `"` without an apostrophe,
-> not the absence of an apostrophe: `: ` with neither quote character still
-> emits double-quoted. This field's value carries an apostrophe, so it stays
-> double-quoted whether or not the repair adds a `"`, and the `\"` escaping
-> does not disappear from the file.) Either way that
-> backslash is the emitter's, produced from a bare `"` in the payload.
-> **The one escape still required is JSON, a
-> separate layer**: `write-node.ts` reads the node as a JSON document
-> (`writeNodeFromJson`'s `JSON.parse`,
-> `packages/intentionsutil/scripts/write-node.ts:40`), so a `"` inside the
-> payload is written `\"` *there* — an unescaped one dies on a `JSON.parse`
-> syntax error before `writeNode` is ever reached. That `\"` is consumed by
-> `JSON.parse` and lands as a bare `"` in the field, which is the correct
-> outcome; do **not** add a second backslash to pre-escape it for YAML, since
-> `\\\"` in the payload is what actually lands a literal backslash. Only a
-> by-hand edit of the `.md` YAML text needs a YAML-level escape, and the field
-> carries no escaped quote today. It is **not**
+> Two escaping layers, and only one is yours. **JSON is yours:**
+> `write-node.ts` reads the payload as a JSON document
+> (`writeNodeFromJson`'s `JSON.parse`, `write-node.ts:40`), so a `"` in the
+> repair text is written `\"` THERE — exactly once. An unescaped one dies on a
+> `JSON.parse` syntax error; a doubled `\\"` is what actually lands a literal
+> backslash in the field. **YAML is not yours:** `writeNode` re-serializes the
+> node through the emitter (`store.ts:61`), which picks the scalar style and
+> handles quoting itself. Pass a bare `"` and leave it alone. Only a by-hand
+> edit of the `.md` YAML text would need a YAML-level escape, and the field
+> carries none today.
+>
+> (The emitter's exact style selection is deliberately not derived here — it is
+> a property of the value and of the pinned `yaml` version, and the guidance
+> above is correct whichever style it picks.)
+>
+> The site is **not**
 > unread by tooling either: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
 > `attention.rationale`, every `clarifications[].answer` and the body. Repair
