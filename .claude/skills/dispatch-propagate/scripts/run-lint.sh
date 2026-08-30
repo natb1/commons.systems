@@ -206,9 +206,11 @@ fi
 
 # Run type-safety escape-hatch check — UNCONDITIONALLY, on every PR.
 #
-# Not gated on RUN_PROSE or any app-dir flag: this diffs origin/main...HEAD
-# over TS/JS files itself and is a fast self-noop when that diff is empty, so
-# there is no changed-files flag worth adding just to skip it. See
+# Not gated on RUN_PROSE or any app-dir flag: this resolves its own baseline
+# through resolve-diff-base.sh and diffs TS/JS files itself, and is a fast
+# self-noop when that diff is empty, so there is no changed-files flag worth
+# adding just to skip it. It no longer diffs origin/main...HEAD: that spelling
+# made a branch behind main compare against commits it never had. See
 # .claude/rules/type-safety-suppression-marker.md for the marker that
 # suppresses a flagged line.
 #

@@ -540,7 +540,7 @@ while IFS= read -r F; do
   if [ "$already_exempt" -eq 1 ]; then continue; fi
 
   # Per-file net-removal filter: only files that net-remove declarations have
-  # anything to exempt. Mirror the comment-exclusion filters at :183/:274.
+  # anything to exempt. Mirror the comment-exclusion filters at :183/:284.
   F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
@@ -589,7 +589,12 @@ while IFS= read -r F; do
 
   REMOVED_NAMED=$(printf '%s\n' "$REMOVED_TAGS" | sed -n 's/^N://p' || true)
   HAS_UNVERIFIABLE_REMOVED_IMPORT=0
-  if printf '%s\n' "$REMOVED_TAGS" | grep -q '^U:'; then
+  # HERE-STRING, not a pipe, for the same reason as the co-deletion loop at
+  # :281: `grep -q` exits at the first match and SIGPIPEs its writer, so past
+  # the 64 KiB pipe buffer the pipeline returns 141 under `set -o pipefail` and
+  # this `if` reads FALSE on tags that DID contain a `U:`. That skips the
+  # bias-to-fire guard below — the dangerous direction.
+  if grep -q '^U:' <<<"$REMOVED_TAGS"; then
     HAS_UNVERIFIABLE_REMOVED_IMPORT=1
   fi
 
@@ -630,7 +635,17 @@ while IFS= read -r F; do
       # `git grep -l … HEAD` prefixes each path with `HEAD:`, so XF is already a
       # rev:path spec usable directly by git show (no extra `HEAD:` prefix).
       XF_SRC=$(git -C "$REPO_ROOT" show "$XF" 2>/dev/null || true)
-      if printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK" | grep -qxF -- "$X"; then
+      # The membership test reads a here-string, never a pipe. `grep -qxF`
+      # exits at the FIRST match, closing the pipe while awk is still writing;
+      # once the export list exceeds the 64 KiB pipe buffer awk takes SIGPIPE,
+      # the pipeline returns 141 under `set -o pipefail`, and this `if` reads
+      # FALSE — X reads as ABSENT on a file that EXPORTS it. False-absent is
+      # the direction this block declares dangerous: it wrongly exempts, and a
+      # real test weakening passes the gate. A generated barrel re-exporting a
+      # few thousand names reaches that size. Same fix, same reason, as the
+      # co-deletion loop at :281 and detect-changes.sh's category tests.
+      XF_EXPORTS=$(printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK")
+      if grep -qxF -- "$X" <<<"$XF_EXPORTS"; then
         found=1
         break
       fi
