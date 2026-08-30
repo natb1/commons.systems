@@ -268,7 +268,17 @@ if [ -n "$DELETED_FILES" ]; then
   while IFS= read -r test_file; do
     [ -z "$test_file" ] && continue
     base_name=$(basename "$test_file" | sed -E 's/\.(test|spec)\.(ts|tsx|js|jsx)$//')
-    if printf '%s\n' "$DELETED_IMPL" | grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$"; then
+    # HERE-STRING, not a pipe. `grep -q` exits at the FIRST match, closing the
+    # pipe while the writer is still writing; once $DELETED_IMPL exceeds the
+    # 64 KiB pipe buffer the writer takes SIGPIPE, the pipeline's status under
+    # `set -o pipefail` becomes 141, and this `if` reads FALSE on a list that
+    # MATCHED. Measured: a 618 KB list whose first line matches gives "not
+    # matched" through the pipe and "matched" through the here-string. The
+    # inverted answer denies the co-deletion exemption, so a large feature
+    # removal that deletes implementations alongside their tests fails this
+    # required gate with a bogus Signal 3 violation. Same fix, same reason, as
+    # detect-changes.sh's category tests.
+    if grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$" <<<"$DELETED_IMPL"; then
       FILE_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$test_file")
       if [ -n "$FILE_DIFF" ]; then
         FILE_REMOVED=$(printf '%s\n' "$FILE_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
