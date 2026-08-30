@@ -1,15 +1,21 @@
 name: Main Nix Validate
 
-# Post-merge guard: unit-tests.yml's nixos-build job only runs pre-merge on
-# branch pushes (branches-ignore: [main, 'graph/**']), so origin/main itself
+# Post-merge guard: unit-tests.yml's nixos-build job is pre-merge only — its
+# build steps carry `github.ref != 'refs/heads/main'` — so origin/main itself
 # is never rebuilt there. This workflow closes that gap by rebuilding on
 # every nix-touching push to main. Deliberately a paths-filtered push
 # trigger, not a cron schedule.
 #
-# Scope is the nixos-build half only. unit-tests.yml's darwin-build job sits
-# behind the same branches-ignore trigger and is likewise never run on main;
-# that post-merge gap is knowingly left open here (macos-14 runner cost), so
-# do not read this workflow as covering darwin.
+# That ref guard is the counterpart of this file's 120-minute cap: unit-tests.yml
+# caps the same build at 30 minutes, so letting both fire on a main push would
+# run two concurrent copies of a cold compile and time the shorter one out on
+# origin/main. Sizing is owned here; do not remove the guard there without
+# reconciling the two caps.
+#
+# Scope is the nixos-build half only. unit-tests.yml's darwin-build job carries
+# the same ref guard and is likewise never run on main; that post-merge gap is
+# knowingly left open (macos-14 runner cost), so do not read this workflow as
+# covering darwin.
 
 on:
   push:

@@ -125,8 +125,23 @@ DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-
 # ---------------------------------------------------------------------------
 # Capture diff — exit clearly on failure (never silently narrow to HEAD~1).
 # ---------------------------------------------------------------------------
+# STDOUT ONLY into $DIFF. `$(git … 2>&1)` splices git's stderr into the VALUE,
+# and git writes to stderr on its SUCCESS path too (GIT_TRACE=1, an ambiguous
+# refname, a CRLF advisory). Those lines match neither `^+` nor `^-`, so the
+# signal counters below ignore them — but they make $DIFF non-empty, which
+# defeats the `[ -z "$DIFF" ]` clean-pass early exit and runs the whole gate
+# over text git never meant as diff output. Same contract, same reason, as
+# resolve-diff-base.sh's git_capture and get-changed-apps.sh's merge-base
+# capture. Errors are not swallowed: the failure path quotes the stderr file and
+# the success path forwards it to the log.
 DIFF=""
-if ! DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}" 2>&1); then
+DIFF_ERR_FILE=$(mktemp)
+DIFF_RC=0
+DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}" 2>"$DIFF_ERR_FILE") \
+  || DIFF_RC=$?
+if [ "$DIFF_RC" -ne 0 ]; then
+  DIFF_ERR=$(cat "$DIFF_ERR_FILE")
+  rm -f "$DIFF_ERR_FILE"
   cat >&2 <<EOF
 ERROR: check-test-integrity: 'git diff ${DIFF_BASE}..HEAD' failed in $REPO_ROOT.
 
@@ -137,10 +152,14 @@ present. If this is a local run, fetch first:
   git fetch origin main
 
 Raw error from git:
-$DIFF
+$DIFF_ERR
 EOF
   exit 1
 fi
+if [ -s "$DIFF_ERR_FILE" ]; then
+  cat "$DIFF_ERR_FILE" >&2
+fi
+rm -f "$DIFF_ERR_FILE"
 
 # Empty diff — nothing touched test files. Clean pass.
 if [ -z "$DIFF" ]; then
