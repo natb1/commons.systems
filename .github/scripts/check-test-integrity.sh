@@ -89,8 +89,16 @@ if [ -z "$REPO_ROOT" ]; then
     echo "  pass --repo-root to name the tree to check" >&2
     exit 1
   fi
-  if [ "$SCRIPT_REPO_ROOT" != "$REPO_ROOT" ]; then
-    echo "check-test-integrity: script lives in $SCRIPT_REPO_ROOT but the CWD resolves to $REPO_ROOT;" >&2
+  # Both sides of this comparison must come from `rev-parse --show-toplevel`,
+  # which returns the SYMLINK-RESOLVED path. SCRIPT_REPO_ROOT comes from
+  # `cd … && pwd`, which is LOGICAL — it keeps whatever symlinked spelling $PWD
+  # or $0 carried. Comparing the two normalizations makes one checkout reached
+  # through a symlink (macOS /tmp -> /private/tmp, a symlinked workspace) read
+  # as two different trees and abort on the tree it is standing in. Same
+  # contract, same spelling, as resolve-diff-base.sh:174-181.
+  SCRIPT_GIT_ROOT="$(git -C "$SCRIPT_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$SCRIPT_GIT_ROOT" ] && [ "$SCRIPT_GIT_ROOT" != "$REPO_ROOT" ]; then
+    echo "check-test-integrity: script lives in $SCRIPT_GIT_ROOT but the CWD resolves to $REPO_ROOT;" >&2
     echo "  pass --repo-root to name the tree to check" >&2
     exit 1
   fi

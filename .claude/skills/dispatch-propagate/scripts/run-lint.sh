@@ -216,6 +216,15 @@ fi
 # copy that runs is the one in the tree under test, AND passed --repo-root so
 # the tree it scans is named rather than inferred — same reasoning, and the
 # same flag, as the verify-fence-paths call above.
+#
+# --repo-root is REQUIRED OF THE TREE UNDER TEST, not optional. Running main's
+# copy of this script against a worktree that has not yet merged the commit
+# adding the flag aborts with "Unknown argument: --repo-root". That is
+# deliberate: the failure is loud, names the flag, and clears itself the moment
+# the worktree merges main. Feature-detecting the flag and falling back to an
+# unscoped invocation would be exactly the defensive fallback
+# .claude/rules/code-style.md forbids — it would silently scan a tree nobody
+# named, which is the vacuity this whole change exists to remove.
 echo "=== type-safety escape-hatch check ==="
 if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh" --repo-root "$REPO_ROOT"; then
   echo "PASS: type-safety escapes"

@@ -153,13 +153,17 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      # These two steps carry the same `|| github.ref == 'refs/heads/main'` gate
+      # as the validation step below, and for no independent reason: they are
+      # its prerequisites. Gating them on the diff alone would leave the
+      # validation step running on a main push with no node and no tsx.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         with:
           node-version-file: .node-version
           cache: 'npm'
       - name: Install workspace dependencies
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       # `--strict-sensors` is gated on `main`, not merely on this job. This
       # workflow's `branches-ignore` only excludes `graph/**`, and
@@ -171,20 +175,27 @@ jobs:
       # branches keep the stderr warning, exactly as graph-fast-path.yml's
       # guard job does.
       #
-      # The `|| github.ref == 'refs/heads/main'` disjunct that used to be on all
-      # three steps is gone. It existed only to work around detect-changes.sh
-      # computing its categories from `git diff origin/main...HEAD`: on a push
-      # to `main` the fetched `origin/main` IS the pushed commit, so the diff
-      # was empty, every category read false, and this job's steps were all
-      # skipped (measured on run 33288998641, commit 77bd747, which touched
-      # packages/intentionsutil/ heavily: "Validate intention graph" reported
-      # `skipped`). detect-changes.sh now resolves its baseline through
-      # resolve-diff-base.sh with --at-remote-tip first-parent, so `graph` is
-      # true on a main push whenever the push touched the graph — and the
-      # disjunct became dead code that would force this job to run on every
-      # main push regardless of what it touched.
+      # The `|| github.ref == 'refs/heads/main'` disjunct stays, and it is NOT
+      # a workaround for the vacuous-diff bug that detect-changes.sh has since
+      # fixed. It is the coverage.
+      #
+      # This step's payload is not diff-scoped. `validate-graph.ts intentions
+      # --strict-sensors` validates the WHOLE `intentions/` directory, so what
+      # it checks does not depend on what the push touched: a graph that some
+      # earlier landing left internally inconsistent is caught by the next main
+      # push regardless of that push's contents. Gating a whole-directory
+      # validation behind a diff detector throws that away. The concrete hole:
+      # a multi-commit push to `main` fires one workflow run at the head
+      # commit, detect-changes.sh reads HEAD^1..HEAD, and a graph edit carried
+      # by any commit other than the last is invisible — the step skips and
+      # strict validation never runs for that push at all.
+      #
+      # So the diff detector only decides whether to run this on NON-`main`
+      # refs, where a full-graph validation on every feature branch would be
+      # pure cost. On `main` it runs unconditionally. The two setup steps carry
+      # the same disjunct because this step cannot run without them.
       - name: Validate intention graph
-        if: steps.changes.outputs.graph == 'true'
+        if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
 
   dead-code:

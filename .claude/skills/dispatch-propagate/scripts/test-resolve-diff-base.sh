@@ -28,7 +28,10 @@ TMP_ROOT=$(mktemp -d)
 # $1: "at-tip"   — stay on main with origin/main at HEAD (the push-to-main
 #                  shape; HEAD == origin/main)
 #     "behind"   — check out the baseline commit while origin/main is one ahead
-#                  (the strict-ancestor shape)
+#                  (the strict-ancestor shape; HEAD is the ROOT commit)
+#     "behind-nonroot"
+#                — the strict-ancestor shape with a first parent available
+#                  (the push race on `main`)
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -61,6 +64,20 @@ make_repo() {
       git -C "$REPO" commit -q -m "remote is ahead"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$BASELINE_SHA"
+      ;;
+    behind-nonroot)
+      # Same strict-ancestor shape, but HEAD has a first parent — the push-race
+      # on `main`: this run's commit landed, a second push landed on top, and
+      # actions/checkout has already fetched the newer origin/main.
+      printf 'mine\n' > "$REPO/mine.txt"
+      git -C "$REPO" add mine.txt
+      git -C "$REPO" commit -q -m "the push this run is for"
+      MINE_SHA=$(git -C "$REPO" rev-parse HEAD)
+      printf 'theirs\n' > "$REPO/theirs.txt"
+      git -C "$REPO" add theirs.txt
+      git -C "$REPO" commit -q -m "the second push, landed while this run was in flight"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$MINE_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -147,17 +164,51 @@ assert_eq "at-tip/fail: stdout is empty" "" "$OUT"
 assert_contains "at-tip/fail: names the remedy" "--at-remote-tip first-parent" "$ERR"
 
 # ---------------------------------------------------------------------------
-# Test 4: exit 5 — HEAD is a STRICT ancestor of the remote ref. Always fatal,
-# never governed by --at-remote-tip.
+# Test 4: HEAD is a STRICT ancestor of the remote ref. The two modes diverge.
+#
+# `fail` keeps exit 5: a caller that needs a branch delta has none here, and
+# the cause (already merged / checkout behind) differs from the at-tip cause,
+# so the code stays distinct from 8.
+#
+# `first-parent` resolves to HEAD^1, exactly as it does at the tip. Before this
+# was fixed the exit-5 branch ran BEFORE the --at-remote-tip handling, so a
+# first-parent caller could never reach its own fallback — and every one of the
+# nine call sites runs on `main` pushes, where a second push landing while the
+# first run is in flight makes that run's HEAD a strict ancestor of
+# origin/main. Four required contexts went red on `main` for a benign race,
+# blocking merges repo-wide.
 # ---------------------------------------------------------------------------
-echo "Test 4: strict ancestor is fatal in both modes"
+echo "Test 4: strict ancestor — fatal under fail, HEAD^1 under first-parent"
 make_repo behind
 run_sut --repo-root "$REPO"
 assert_eq "behind/default: exit 5" "yes" "$(rc_of "$RC" 5)"
 assert_contains "behind/default: names the condition" "STRICT ANCESTOR" "$ERR"
+assert_eq "behind/default: stdout is empty" "" "$OUT"
+
+# The `behind` fixture parks HEAD on the ROOT commit, so first-parent has no
+# HEAD^1 there and the root-commit guard (exit 9) fires — proving that guard
+# covers the strict-ancestor shape too, not just the at-tip one.
 run_sut --repo-root "$REPO" --at-remote-tip first-parent
-assert_eq "behind/first-parent: still exit 5" "yes" "$(rc_of "$RC" 5)"
-assert_eq "behind/first-parent: stdout is empty" "" "$OUT"
+assert_eq "behind root commit/first-parent: exit 9" "yes" "$(rc_of "$RC" 9)"
+assert_contains "behind root commit/first-parent: names the condition" "root commit" "$ERR"
+assert_eq "behind root commit/first-parent: stdout is empty" "" "$OUT"
+
+# The real push-race shape: HEAD is a strict ancestor AND has a first parent.
+make_repo behind-nonroot
+BEHIND_PARENT=$(git -C "$REPO" rev-parse 'HEAD^1')
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "behind/first-parent: exit 0" "0" "$RC"
+assert_eq "behind/first-parent: base is HEAD^1" "$BEHIND_PARENT" "$OUT"
+assert_contains "behind/first-parent: provenance names source=first-parent" \
+  "source=first-parent" "$ERR"
+# The point of not failing: the range the caller then diffs is non-empty, so
+# the check examines what this commit introduced instead of going red.
+BEHIND_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "behind/first-parent: the resulting range names the file this commit added" \
+  "mine.txt" "$BEHIND_DELTA"
+# ... and the default mode is untouched by that: still exit 5.
+run_sut --repo-root "$REPO"
+assert_eq "behind-nonroot/default: exit 5" "yes" "$(rc_of "$RC" 5)"
 
 # ---------------------------------------------------------------------------
 # Test 5: exit 4 — the remote ref does not resolve.

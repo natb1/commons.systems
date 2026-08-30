@@ -8,8 +8,10 @@ set -euo pipefail
 #   --base <ref>  Override comparison base (default: origin/main)
 #   --all         List every workspace, without diffing at all
 #
-# The base is resolved by resolve-diff-base.sh, which hard-errors rather than
-# yielding a baseline it cannot justify. See the block above the diff below.
+# With no --base the baseline is resolved by resolve-diff-base.sh, which
+# hard-errors rather than yielding a baseline it cannot justify. An explicit
+# --base is taken at face value under plain merge-base semantics. See the block
+# above the diff below.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -52,15 +54,34 @@ fi
 # build while reporting success. --at-remote-tip first-parent asks the right
 # question there: what did this push introduce.
 #
-# An explicit --base is still honoured; it is routed through the helper as the
-# remote ref so the resolved value is merge-base(BASE, HEAD) — exactly the old
-# side of the three-dot range it replaces, so `--base HEAD~1` (the one explicit
-# caller, run-all-cleanup-preview.sh:13) means precisely what it meant before.
+# An explicit --base is NOT routed through that helper at all. --at-remote-tip
+# is a statement about the REMOTE TIP — "HEAD is sitting where origin/main
+# points, so use HEAD^1" — and an explicit base is not a remote tip, so its
+# fallback must not apply. The two explicit callers show why:
+#
+#   run-all-cleanup-preview.sh:13    --base HEAD~1
+#   run-all-prod-deploy-smoke.sh:20  --base "$DIFF_BASE"  (the last-prod-deploy
+#                                    tag: the last commit successfully deployed)
+#
+# On a re-run where the last-prod-deploy tag already equals HEAD, the correct
+# answer is "nothing new to deploy" — an empty change set, which the `exit 0`
+# below already expresses. Routing it through --at-remote-tip first-parent
+# silently rewrites the base to HEAD^1 and REDEPLOYS the last commit to
+# production; if the tag is ahead of HEAD it deploys backwards.
+#
+# So an explicit base gets plain merge-base semantics — the same left-hand side
+# `"$BASE"...HEAD` used to compute — and an empty range is a legitimate
+# "nothing to do", neither a fallback nor a hard failure. A base that does not
+# resolve, or shares no history with HEAD, still errors loudly (git says why).
 if [ -z "$BASE" ]; then
   BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
 else
-  BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" \
-    --remote-ref "$BASE" --at-remote-tip first-parent)
+  EXPLICIT_BASE="$BASE"
+  if ! BASE=$(git -C "$REPO_ROOT" merge-base "$EXPLICIT_BASE" HEAD 2>&1); then
+    echo "ERROR: no merge base between '$EXPLICIT_BASE' and HEAD in $REPO_ROOT" >&2
+    echo "git said: $BASE" >&2
+    exit 1
+  fi
 fi
 
 if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$BASE"..HEAD); then

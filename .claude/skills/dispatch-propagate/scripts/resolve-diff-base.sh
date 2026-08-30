@@ -50,13 +50,22 @@
 #   a script against a DIFFERENT checkout is a routine dispatch pattern, but it
 #   is only safe when the target is named explicitly.
 #
-#   --at-remote-tip governs ONLY the exact case `HEAD == <remote-ref>`:
-#     fail          (default) exit 8. For checks that are meaningless without a
-#                   branch delta.
-#     first-parent  use HEAD^1 as the base, i.e. "what this push introduced".
-#                   Correct for CI checks that must also run on `main`.
-#   It does NOT govern the strict-ancestor case (HEAD behind the remote ref):
-#   there is no defensible base for that, so it is always fatal (exit 5).
+#   --at-remote-tip governs the case where HEAD carries NO delta against
+#   <remote-ref> — i.e. `merge-base(<remote-ref>, HEAD) == HEAD`. That covers
+#   two shapes: HEAD is exactly the remote tip, and HEAD is a STRICT ANCESTOR
+#   of it.
+#     fail          (default) exit 8 at the tip, exit 5 for a strict ancestor.
+#                   For checks that are meaningless without a branch delta; the
+#                   two codes are kept distinct because the causes and remedies
+#                   differ.
+#     first-parent  use HEAD^1 as the base — "what this commit introduced" — in
+#                   BOTH shapes. Correct for CI checks that must also run on
+#                   `main`. The strict-ancestor shape is not an error for such a
+#                   caller: it is what a second push to `main` produces while an
+#                   earlier run is still in flight, and HEAD^1 answers the
+#                   question just as well after the tip has moved on. Failing it
+#                   would turn a benign push race into a red required context on
+#                   `main`, blocking merges repo-wide.
 #
 # STDOUT CONTRACT
 #
@@ -83,7 +92,10 @@
 #      and the CWD's root diverges from this script's own root
 #   4  --remote-ref does not resolve (not fetched / shallow clone / no remote)
 #   5  HEAD is a STRICT ancestor of --remote-ref (already merged, or the
-#      checkout is behind) — no defensible base exists. Always fatal.
+#      checkout is behind) and --at-remote-tip is `fail` (the default) — no
+#      defensible base exists for a caller that needs a branch delta.
+#      Unreachable under --at-remote-tip first-parent, which resolves this
+#      shape to HEAD^1.
 #   6  no merge base between --remote-ref and --head (unrelated histories, or a
 #      shallow clone whose grafted history does not reach the fork point)
 #   7  --head does not resolve to a commit
@@ -254,17 +266,30 @@ fi
 
 SOURCE="merge-base"
 
+# BASE == HEAD covers BOTH no-delta shapes: HEAD is exactly the remote tip, or
+# HEAD is a STRICT ANCESTOR of it. `fail` mode distinguishes them, because the
+# two states have different causes and different remedies. `first-parent` mode
+# does not need to: the question it asks — "what did this commit introduce" —
+# is answered by HEAD^1 and is well-defined no matter where the remote tip has
+# since moved. Making the strict-ancestor case fatal for first-parent callers
+# would turn a benign push race on `main` (a second push landing while the
+# first run is still in flight, so the run's own HEAD becomes an ancestor of
+# origin/main) into a red required check on `main`, which blocks merges
+# repo-wide.
 if [ "$BASE" = "$HEAD_SHA" ]; then
-  if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
-    die 5 "ERROR: HEAD ($HEAD_SHA) is a STRICT ANCESTOR of $REMOTE_REF ($REMOTE_SHA)." \
-          "The three-dot diff '${REMOTE_REF}...${HEAD_REF}' would be EMPTY, and a" \
-          "check reading that as 'nothing changed' would pass without examining" \
-          "anything. There is no defensible base for this state." \
-          "Cause: this branch is already merged into $REMOTE_REF, or the" \
-          "checkout is behind it. Rebase/merge $REMOTE_REF into the branch, or" \
-          "run the check against the range you actually mean via --head."
-  fi
   if [ "$AT_REMOTE_TIP" = "fail" ]; then
+    if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
+      die 5 "ERROR: HEAD ($HEAD_SHA) is a STRICT ANCESTOR of $REMOTE_REF ($REMOTE_SHA)." \
+            "The three-dot diff '${REMOTE_REF}...${HEAD_REF}' would be EMPTY, and a" \
+            "check reading that as 'nothing changed' would pass without examining" \
+            "anything. There is no defensible base for this state." \
+            "Cause: this branch is already merged into $REMOTE_REF, or the" \
+            "checkout is behind it. Rebase/merge $REMOTE_REF into the branch, or" \
+            "run the check against the range you actually mean via --head." \
+            "If this caller is meant to run on a commit already contained in" \
+            "$REMOTE_REF, pass --at-remote-tip first-parent to diff what that" \
+            "commit introduced."
+    fi
     die 8 "ERROR: HEAD is exactly $REMOTE_REF ($REMOTE_SHA), so there is no branch delta." \
           "The three-dot diff would be EMPTY and this check would pass vacuously." \
           "If this caller is meant to run on $REMOTE_REF too (a post-merge push)," \

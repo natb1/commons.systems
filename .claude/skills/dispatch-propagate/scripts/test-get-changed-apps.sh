@@ -105,17 +105,85 @@ assert_eq "main-push: exit 0" "0" "$RC"
 assert_eq "main-push: names myapp" "myapp" "$OUT"
 
 # ---------------------------------------------------------------------------
-# Test 3: an explicit --base keeps its old meaning.
+# Test 3: an explicit --base keeps its old meaning — plain merge-base
+# semantics, and NOT the --at-remote-tip first-parent fallback.
 #
-# It is routed through the helper as --remote-ref, so the resolved value is
-# merge-base(BASE, HEAD) — exactly the old side of the three-dot range it
-# replaces. run-all-cleanup-preview.sh:13 passes --base HEAD~1.
+# The resolved value is merge-base(BASE, HEAD): exactly the old side of the
+# three-dot range this replaces. run-all-cleanup-preview.sh:13 passes
+# --base HEAD~1; run-all-prod-deploy-smoke.sh:20 passes the last-prod-deploy
+# tag.
 # ---------------------------------------------------------------------------
 echo "Test 3: explicit --base is honoured"
 make_repo
 run_sut --base HEAD~1
 assert_eq "explicit base: exit 0" "0" "$RC"
 assert_eq "explicit base: names myapp" "myapp" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 3b (THE PRODUCTION-DEPLOY GUARD): --base == HEAD is a no-op, not HEAD^1.
+#
+# run-all-prod-deploy-smoke.sh:20 passes the `last-prod-deploy` tag as --base.
+# On a re-run with nothing new landed, that tag IS HEAD, and the only correct
+# answer is an empty change set: there is nothing to deploy. Routing the
+# explicit base through --at-remote-tip first-parent silently rewrote the base
+# to HEAD^1 and named the last commit's apps — a REDEPLOY TO PRODUCTION of work
+# already deployed, triggered by a re-run.
+#
+# This must be an empty result and exit 0, not a fallback and not an error.
+# ---------------------------------------------------------------------------
+echo "Test 3b: --base equal to HEAD yields an empty change set, not HEAD^1"
+make_repo at-tip
+run_sut --base HEAD
+assert_eq "base==HEAD: exit 0" "0" "$RC"
+assert_eq "base==HEAD: names no app" "" "$OUT"
+# A tag spelling of the same state — the literal shape the deploy script uses.
+git -C "$REPO" tag last-prod-deploy HEAD
+run_sut --base last-prod-deploy
+assert_eq "base==HEAD (tag): exit 0" "0" "$RC"
+assert_eq "base==HEAD (tag): names no app" "" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 3c: an explicit base AHEAD of HEAD is also a no-op, not a reverse diff.
+#
+# merge-base(BASE, HEAD) == HEAD here, so the range is empty. Diffing the two
+# commits directly would name the files the newer commits touched and deploy
+# BACKWARDS; first-parent would deploy the last commit again.
+# ---------------------------------------------------------------------------
+echo "Test 3c: an explicit base ahead of HEAD yields an empty change set"
+make_repo at-tip
+AHEAD_HEAD=$(git -C "$REPO" rev-parse HEAD)
+printf 'export const x = 3;\n' > "$REPO/myapp/src/index.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit -q -m "landed after this checkout"
+git -C "$REPO" tag last-prod-deploy HEAD
+git -C "$REPO" checkout -q "$AHEAD_HEAD"
+run_sut --base last-prod-deploy
+assert_eq "base ahead of HEAD: exit 0" "0" "$RC"
+assert_eq "base ahead of HEAD: names no app" "" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 3d: an explicit base that shares no history with HEAD is a hard error,
+# not an empty "nothing to do".
+# ---------------------------------------------------------------------------
+echo "Test 3d: an unrelated explicit base errors rather than reporting nothing"
+make_repo
+git -C "$REPO" checkout -q --orphan orphan-base
+git -C "$REPO" rm -q -rf . >/dev/null 2>&1 || true
+printf 'orphan\n' > "$REPO/ORPHAN"
+git -C "$REPO" add ORPHAN
+git -C "$REPO" commit -q -m "orphan root"
+ORPHAN_SHA=$(git -C "$REPO" rev-parse HEAD)
+git -C "$REPO" checkout -q feature
+run_sut --base "$ORPHAN_SHA"
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "unrelated base: exit non-zero" "nonzero" "$_rc"
+assert_eq "unrelated base: stdout is empty" "" "$OUT"
+
+# A base that does not resolve at all is likewise fatal.
+run_sut --base no-such-ref-at-all
+[ "$RC" -ne 0 ] && _rc=nonzero || _rc=zero
+assert_eq "unresolvable base: exit non-zero" "nonzero" "$_rc"
+assert_eq "unresolvable base: stdout is empty" "" "$OUT"
 
 # --all short-circuits before any diff and must stay unaffected.
 run_sut --all
