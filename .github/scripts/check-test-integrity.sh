@@ -49,8 +49,18 @@
 #     Any test file (*.test.ts, *.test.tsx, *.spec.ts, *.spec.tsx) fully deleted
 #     in this PR.
 #
-# Exit contract: 0 = clean, 1 = violation. Silent on clean pass.
+# Exit contract: 0 = clean, 1 = NOT-CLEAN. Silent on clean pass.
 # On violation: cat >&2 <<EOF remediation block (mirrors check-playwright-version-sync.sh).
+#
+# 1 is deliberately NOT "violation" alone. The same code is returned by a usage
+# error (unknown argument, a missing or empty --repo-root value), an
+# unresolvable repo root, an unresolvable diff baseline, and a git invocation
+# that fails outright — every one of which is a REFUSAL to judge, not a verdict
+# that the branch weakened tests. Those paths are distinguished only by their
+# stderr text, which names the condition. Anything that keys on the exit code
+# alone must read 1 as "this gate did not pass", never as "the author deleted a
+# test": the one thing that must never happen is a refusal being reported as a
+# clean pass, and it is not.
 #
 # Usage: check-test-integrity.sh [--repo-root <dir>]
 #   --repo-root names the checkout to check. It defaults to the repo containing
@@ -382,12 +392,25 @@ fi
 # Double-counting guard: files already exempted by the basename loop are in
 # BASENAME_EXEMPT_FILES and skipped here (see the note at its declaration).
 #
-# set -e safety: every git grep / git show / grep here either runs in an
-# `if …; then` CONDITION (where a no-match exit 1 is harmless) or carries
-# `|| true`, mirroring the existing guards on the ADDED_LINES / REMOVED_LINES
-# extraction and the SKIP_ADDED count. Cited by construct, not by line number:
-# the numbered form of these anchors has already gone stale twice, because every
-# edit above shifts them and the citation has no way to notice.
+# set -e safety, in TWO shapes — and the difference is the point.
+#
+#   * The plain `grep` filters here run in an `if …; then` CONDITION (where a
+#     no-match exit 1 is harmless) or carry `|| true`, mirroring the existing
+#     guards on the ADDED_LINES / REMOVED_LINES extraction and the SKIP_ADDED
+#     count.
+#
+#   * The `git grep` and `git show` calls in the existence check do NEITHER.
+#     They capture the exit status explicitly (`set +e` … `rc=$?` … `set -e`)
+#     and ABORT the gate on a git failure. That asymmetry is deliberate and
+#     load-bearing: for those two calls an empty result means "the symbol is
+#     absent", absent GRANTS the exemption, and `|| true` would make a git
+#     failure indistinguishable from absence — silently exempting a real test
+#     weakening. Do NOT "restore symmetry" by adding `|| true` to them; each
+#     carries its own note saying so at the call site.
+#
+# Cited by construct, not by line number: the numbered form of these anchors
+# has already gone stale twice, because every edit above shifts them and the
+# citation has no way to notice.
 # ---------------------------------------------------------------------------
 
 # Pure-exclude pathspecs for the existence check: the post-PR tree minus tests.
