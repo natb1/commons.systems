@@ -517,4 +517,84 @@ run_sut
 assert_eq "allow-marker-keeps-budget: exit 0" "0" "$RC"
 assert_contains "allow-marker-keeps-budget: PASS printed" "PASS" "$OUT"
 
+# ---------------------------------------------------------------------------
+# THE PUSH-TO-MAIN SHAPE.
+#
+# actions/checkout leaves refs/remotes/origin/main pointing AT the pushed
+# commit, so HEAD == origin/main and the `origin/main...HEAD` range this linter
+# used to carry expanded to HEAD..HEAD — empty. `[ -z "$DIFF" ]` then reported a
+# clean pass without inspecting a single line, on every push to main, inside
+# the REQUIRED `lint` job. A violation committed straight to main was never
+# looked at.
+#
+# Same fixture as make_repo, but the violating commit stays on main and
+# origin/main is moved onto it rather than a feature branch being cut.
+make_main_push_repo() {
+  REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+  BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+
+  git -C "$BARE" init --bare --quiet --initial-branch=main
+
+  git -C "$REPO" init --quiet --initial-branch=main
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test User"
+  git -C "$REPO" remote add origin "$BARE"
+
+  printf '%s\n' '#!/usr/bin/env bash' > "$REPO/script.sh"
+  printf '%s\n' 'jq -r .field <<<"$VAR"' >> "$REPO/script.sh"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "baseline"
+  git -C "$REPO" push --quiet origin main
+
+  # The push under test: the banned pattern, committed on main.
+  printf '%s\n' "$VIOL_CONTENT" >> "$REPO/script.sh"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "add violation (the push)"
+  git -C "$REPO" push --quiet origin main
+  # This is the state actions/checkout leaves on a push to main.
+  git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+}
+
+echo "Test: main-push shape flags the violation"
+make_main_push_repo
+# The reproduction, stated as an assertion: the expression this linter used to
+# carry sees nothing at all in exactly this state.
+assert_eq "main-push: the old three-dot range was empty" "" \
+  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
+run_sut
+[ "$RC" -ne 0 ] && _mp_rc=nonzero || _mp_rc=zero
+assert_eq "main-push: exit non-zero" "nonzero" "$_mp_rc"
+assert_contains "main-push: output names the file" "script.sh" "$OUT"
+assert_contains "main-push: remediation pointer present" "shell-json.md" "$OUT"
+
+# A clean main push must still pass — the fix must not invent violations.
+echo "Test: clean main-push shape passes"
+make_main_push_repo
+printf '%s\n' '# no-op' >> "$REPO/script.sh"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "clean follow-up push"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+run_sut
+assert_eq "main-push clean: exit 0" "0" "$RC"
+
+# ---------------------------------------------------------------------------
+# A failed baseline resolution must ABORT, not report a clean pass.
+#
+# The second residual of routing through resolve-diff-base: the helper is
+# wired, and its exit code gets swallowed anyway. The call site is a plain
+# assignment rather than an `if ! X=$(...)` precisely so `set -e` sees the
+# helper's non-zero exit; this case is what keeps it that way.
+# ---------------------------------------------------------------------------
+echo "Test: an unresolvable baseline aborts the prose linter"
+make_main_push_repo
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_sut
+[ "$RC" -ne 0 ] && _nb_rc=nonzero || _nb_rc=zero
+assert_eq "no baseline: exit non-zero" "nonzero" "$_nb_rc"
+assert_contains "no baseline: names the unresolvable ref" "origin/main" "$OUT"
+_nb_absent=absent
+[[ "$OUT" == *"PASS: no net-new"* ]] && _nb_absent=present
+assert_eq "no baseline: did not print a clean pass" "absent" "$_nb_absent"
+
 report_results

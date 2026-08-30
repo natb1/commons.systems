@@ -33,7 +33,6 @@ rationale: >-
   stops: a virtue is a disposition you always hold but can never complete; a
   goal is a state you can reach and check off.
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -106,6 +105,15 @@ clarifications:
       tactic-reading-chunk-5-aristotle-phronesis — NE VI's phronesis is
       Aristotle's own inter-virtue coordinator. Recorded 2026-07-13
       /reading-review chunk 2."
+  - question: Why does the status vocabulary now carry 'delegated'?
+    answer: "Added 2026-08-30 (sustenance round, via the legacy-null migration's
+      adjacent-doctrine path). The three-state decision model legalizes
+      delegated virtue substance — priced by the capture model, no longer
+      forbidden by the retired floor — so the kind needs a status for a virtue
+      whose articulation the author has not settled. First bearer:
+      virtue-knowledge-as-gift, minted delegated-pending-review as the tension
+      sibling of the ratified virtue-right-livelihood. codified keeps its
+      meaning; delegated is the stamp-visible interim."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -133,5 +141,10 @@ attributes:
       virtue-respect-for-persons)"
   status_vocabulary:
     codified: the author has personally settled this virtue's articulation
+    delegated: the virtue's substance is Claude-drafted and held
+      delegated-pending-review or delegated-review-declined under the
+      three-state decision model (strategy-explicit-intent, 2026-08-30) — not
+      yet author-settled; flips to codified when an /exetasis sitting or an
+      adjacent /align round ratifies it
 ---
 # Virtue — a disposition held and exercised, never completed

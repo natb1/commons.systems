@@ -1,5 +1,32 @@
 #!/usr/bin/env bash
-# Check for test-integrity violations in the current PR vs origin/main.
+# Check for test-integrity violations in the current PR vs the resolved
+# baseline (origin/main on a branch, HEAD^1 on a push to main).
+#
+# THIS GATE HAS NO `<sensor>-ok:` SUPPRESSION MARKER, AND THAT IS DELIBERATE.
+# Its sibling decay sensors carry one (check-type-safety-escapes.sh takes
+# `type-safety-ok:`), so the asymmetry is a decision, not an oversight, and it
+# is recorded here so it is not "fixed" by someone restoring symmetry.
+#
+# .claude/rules/test-integrity.md governs this gate and is explicit: a failing
+# test is fixed or escalated to office-hours, and "there is no self-serve
+# escape hatch". A same-line marker IS a self-serve escape hatch — it is the
+# one move that rule names and forbids, so adding it here would repeal the rule
+# through the gate that enforces it.
+#
+# Know the cost of that choice, because it is real. On a push to `main` this
+# gate now compares HEAD^1..HEAD, which for a squash merge reproduces the
+# merged PR's exact diff. Before the diff-baseline change the range went empty
+# on main, so the gate scanned nothing and passed vacuously; closing that
+# vacuity is the whole point. The consequence is that a PR landed through a
+# human override-merge — carrying a weakening this gate would have blocked —
+# reddens `main` on the next push, and a red main blocks unrelated work until
+# it is resolved.
+#
+# That is the intended signal, not a regression: the override merges the PR, and
+# the red main says the debt is still outstanding. The remedy is to fix the test
+# or escalate, which is exactly what the rule prescribes. If this proves too
+# costly in practice, the change to argue for is the OVERRIDE path or the rule
+# itself — not a quiet marker added here.
 #
 # Three signals — all measured as NET changes across the whole diff so a
 # test moved between files within a single PR nets to zero:
@@ -22,10 +49,26 @@
 #     Any test file (*.test.ts, *.test.tsx, *.spec.ts, *.spec.tsx) fully deleted
 #     in this PR.
 #
-# Exit contract: 0 = clean, 1 = violation. Silent on clean pass.
+# Exit contract: 0 = clean, 1 = NOT-CLEAN. Silent on clean pass.
 # On violation: cat >&2 <<EOF remediation block (mirrors check-playwright-version-sync.sh).
 #
-# Requires: git, grep, bash (no node/nix/npm needed — git diff + grep only).
+# 1 is deliberately NOT "violation" alone. The same code is returned by a usage
+# error (unknown argument, a missing or empty --repo-root value), an
+# unresolvable repo root, an unresolvable diff baseline, and a git invocation
+# that fails outright — every one of which is a REFUSAL to judge, not a verdict
+# that the branch weakened tests. Those paths are distinguished only by their
+# stderr text, which names the condition. Anything that keys on the exit code
+# alone must read 1 as "this gate did not pass", never as "the author deleted a
+# test": the one thing that must never happen is a refusal being reported as a
+# clean pass, and it is not.
+#
+# Usage: check-test-integrity.sh [--repo-root <dir>]
+#   --repo-root names the checkout to check. It defaults to the repo containing
+#   the CWD, and a divergence between that and the repo this script file lives
+#   in is a hard error naming the flag.
+#
+# Requires: git, grep, bash, and the sibling resolve-diff-base.sh (also pure
+# bash + git — no node/nix/npm needed).
 set -euo pipefail
 
 # Test file globs passed as pathspecs to git diff.
@@ -37,24 +80,135 @@ TEST_GLOBS=(
 )
 
 # ---------------------------------------------------------------------------
+# Baseline resolution — see resolve-diff-base.sh.
+#
+# This gate's whole job is to notice a deleted or disabled test, so a vacuous
+# EMPTY diff is the one outcome it must never produce silently. It used to spell
+# its range `origin/main...HEAD` in six places; on a push to `main`
+# actions/checkout leaves origin/main pointing AT the pushed commit, so all six
+# expanded to HEAD..HEAD, the `[ -z "$DIFF" ]` check below returned exit 0, and
+# deleting a test file in a commit pushed to main passed this gate in silence.
+# --at-remote-tip first-parent asks what the push introduced.
+#
+# The tree is NAMED (--repo-root, then -C on every diff) rather than inherited
+# from the process CWD: this script had no repo root at all and was entirely
+# cwd-relative, so invoking it by absolute path from another checkout diffed
+# that checkout instead — usually clean, hence empty, hence green.
+# ---------------------------------------------------------------------------
+REPO_ROOT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo-root)
+      if [ "$#" -lt 2 ]; then
+        echo "check-test-integrity: --repo-root requires an argument" >&2
+        exit 1
+      fi
+      # An EMPTY value is REJECTED, not read as "flag absent". $REPO_ROOT is
+      # the sentinel selecting the explicit-tree branch below, so
+      # `--repo-root "$SOME_UNSET_VAR"` would otherwise fall through to the CWD
+      # default — and when the CWD sits in this script's own checkout the
+      # divergence guard does not fire either, so a caller that NAMED a tree
+      # silently gets a different one. That is the same guess-the-tree vacuity
+      # the flag exists to stop.
+      if [ -z "$2" ]; then
+        echo "check-test-integrity: --repo-root was given an empty value" >&2
+        echo "  pass a path, or omit the flag to default to the CWD's repo" >&2
+        exit 1
+      fi
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "check-test-integrity: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# SCRIPT_REPO_ROOT is the checkout this script FILE lives in. It locates the
+# helper — a tool, which must sit beside this script — and never decides which
+# tree to check. Those are different questions.
+SCRIPT_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+RESOLVE_DIFF_BASE="$SCRIPT_REPO_ROOT/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+
+if [ -z "$REPO_ROOT" ]; then
+  if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-test-integrity: could not resolve a repo root from $PWD" >&2
+    echo "  pass --repo-root to name the tree to check" >&2
+    exit 1
+  fi
+  # Both sides of this comparison must come from `rev-parse --show-toplevel`,
+  # which returns the SYMLINK-RESOLVED path. SCRIPT_REPO_ROOT comes from
+  # `cd … && pwd`, which is LOGICAL — it keeps whatever symlinked spelling $PWD
+  # or $0 carried. Comparing the two normalizations makes one checkout reached
+  # through a symlink (macOS /tmp -> /private/tmp, a symlinked workspace) read
+  # as two different trees and abort on the tree it is standing in. Same
+  # contract, same spelling, as resolve-diff-base.sh's own self-vs-CWD root
+  # compare-and-abort.
+  SCRIPT_GIT_ROOT="$(git -C "$SCRIPT_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$SCRIPT_GIT_ROOT" ] && [ "$SCRIPT_GIT_ROOT" != "$REPO_ROOT" ]; then
+    echo "check-test-integrity: script lives in $SCRIPT_GIT_ROOT but the CWD resolves to $REPO_ROOT;" >&2
+    echo "  pass --repo-root to name the tree to check" >&2
+    exit 1
+  fi
+else
+  # NORMALIZE an explicit --repo-root to the work tree's TOPLEVEL. Every git
+  # call below is `git -C "$REPO_ROOT"`, and git resolves a pathspec relative to
+  # that directory's PREFIX within the repo. A --repo-root naming a
+  # SUBDIRECTORY therefore scopes $TEST_GLOBS and $EXCLUDE_PATHSPECS to that
+  # subdirectory while resolve-diff-base.sh (which normalizes) returns a base
+  # for the whole repo: a test deleted anywhere outside it falls out of $DIFF,
+  # the `[ -z "$DIFF" ]` early exit reads "nothing touched test files", and this
+  # required gate passes having examined part of a tree. Measured: from a
+  # subdirectory prefix, `git diff --diff-filter=D --name-only <base>..HEAD --
+  # '*.test.ts'` returns nothing for a test deleted in a sibling directory.
+  RAW_REPO_ROOT="$REPO_ROOT"
+  if ! REPO_ROOT="$(git -C "$RAW_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-test-integrity: --repo-root '$RAW_REPO_ROOT' is not inside a git work tree" >&2
+    exit 1
+  fi
+fi
+
+DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+
+# ---------------------------------------------------------------------------
 # Capture diff — exit clearly on failure (never silently narrow to HEAD~1).
 # ---------------------------------------------------------------------------
+# STDOUT ONLY into $DIFF. `$(git … 2>&1)` splices git's stderr into the VALUE,
+# and git writes to stderr on its SUCCESS path too (GIT_TRACE=1, an ambiguous
+# refname, a CRLF advisory). Those lines match neither `^+` nor `^-`, so the
+# signal counters below ignore them — but they make $DIFF non-empty, which
+# defeats the `[ -z "$DIFF" ]` clean-pass early exit and runs the whole gate
+# over text git never meant as diff output. Same contract, same reason, as
+# resolve-diff-base.sh's git_capture and get-changed-apps.sh's merge-base
+# capture. Errors are not swallowed: the failure path quotes the stderr file and
+# the success path forwards it to the log.
 DIFF=""
-if ! DIFF=$(git diff --unified=0 origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>&1); then
+DIFF_ERR_FILE=$(mktemp)
+DIFF_RC=0
+DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}" 2>"$DIFF_ERR_FILE") \
+  || DIFF_RC=$?
+if [ "$DIFF_RC" -ne 0 ]; then
+  DIFF_ERR=$(cat "$DIFF_ERR_FILE")
+  rm -f "$DIFF_ERR_FILE"
   cat >&2 <<EOF
-ERROR: check-test-integrity: 'git diff origin/main...HEAD' failed.
+ERROR: check-test-integrity: 'git diff ${DIFF_BASE}..HEAD' failed in $REPO_ROOT.
 
-This is a required blocking gate. The diff against origin/main must be
-computable. CI checks out with fetch-depth: 0 so origin/main is always
+This is a required blocking gate. The diff against the resolved baseline must
+be computable. CI checks out with fetch-depth: 0 so origin/main is always
 present. If this is a local run, fetch first:
 
   git fetch origin main
 
 Raw error from git:
-$DIFF
+$DIFF_ERR
 EOF
   exit 1
 fi
+if [ -s "$DIFF_ERR_FILE" ]; then
+  cat "$DIFF_ERR_FILE" >&2
+fi
+rm -f "$DIFF_ERR_FILE"
 
 # Empty diff — nothing touched test files. Clean pass.
 if [ -z "$DIFF" ]; then
@@ -133,7 +287,7 @@ fi
 # ---------------------------------------------------------------------------
 # Signal 3: Whole test-file deletion
 # ---------------------------------------------------------------------------
-DELETED_FILES=$(git diff --diff-filter=D --name-only origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>/dev/null || true)
+DELETED_FILES=$(git -C "$REPO_ROOT" diff --diff-filter=D --name-only "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}")
 
 # ---------------------------------------------------------------------------
 # Co-deletion exemption: a test file deleted alongside its implementation file
@@ -154,13 +308,27 @@ NON_EXEMPT_DELETED=()
 BASENAME_EXEMPT_FILES=()
 
 if [ -n "$DELETED_FILES" ]; then
-  DELETED_IMPL=$(git diff --diff-filter=D --name-only origin/main...HEAD 2>/dev/null \
+  DELETED_ALL=$(git -C "$REPO_ROOT" diff --diff-filter=D --name-only "$DIFF_BASE"..HEAD)
+  # The `|| true` below guards ONLY grep's no-match exit, never the git call:
+  # under `set -o pipefail` a single `|| true` on the whole pipeline made a git
+  # failure indistinguishable from "no implementation files were deleted".
+  DELETED_IMPL=$(printf '%s\n' "$DELETED_ALL" \
     | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
   while IFS= read -r test_file; do
     [ -z "$test_file" ] && continue
     base_name=$(basename "$test_file" | sed -E 's/\.(test|spec)\.(ts|tsx|js|jsx)$//')
-    if printf '%s\n' "$DELETED_IMPL" | grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$"; then
-      FILE_DIFF=$(git diff --unified=0 origin/main...HEAD -- "$test_file" 2>/dev/null || true)
+    # HERE-STRING, not a pipe. `grep -q` exits at the FIRST match, closing the
+    # pipe while the writer is still writing; once $DELETED_IMPL exceeds the
+    # 64 KiB pipe buffer the writer takes SIGPIPE, the pipeline's status under
+    # `set -o pipefail` becomes 141, and this `if` reads FALSE on a list that
+    # MATCHED. Measured: a 618 KB list whose first line matches gives "not
+    # matched" through the pipe and "matched" through the here-string. The
+    # inverted answer denies the co-deletion exemption, so a large feature
+    # removal that deletes implementations alongside their tests fails this
+    # required gate with a bogus Signal 3 violation. Same fix, same reason, as
+    # detect-changes.sh's category tests.
+    if grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$" <<<"$DELETED_IMPL"; then
+      FILE_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$test_file")
       if [ -n "$FILE_DIFF" ]; then
         FILE_REMOVED=$(printf '%s\n' "$FILE_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
         if [ -n "$FILE_REMOVED" ]; then
@@ -224,9 +392,25 @@ fi
 # Double-counting guard: files already exempted by the basename loop are in
 # BASENAME_EXEMPT_FILES and skipped here (see the note at its declaration).
 #
-# set -e safety: every git grep / git show / grep here either runs in an
-# `if …; then` CONDITION (where a no-match exit 1 is harmless) or carries
-# `|| true`, mirroring the existing guards at :77/:78/:97.
+# set -e safety, in TWO shapes — and the difference is the point.
+#
+#   * The plain `grep` filters here run in an `if …; then` CONDITION (where a
+#     no-match exit 1 is harmless) or carry `|| true`, mirroring the existing
+#     guards on the ADDED_LINES / REMOVED_LINES extraction and the SKIP_ADDED
+#     count.
+#
+#   * The `git grep` and `git show` calls in the existence check do NEITHER.
+#     They capture the exit status explicitly (`set +e` … `rc=$?` … `set -e`)
+#     and ABORT the gate on a git failure. That asymmetry is deliberate and
+#     load-bearing: for those two calls an empty result means "the symbol is
+#     absent", absent GRANTS the exemption, and `|| true` would make a git
+#     failure indistinguishable from absence — silently exempting a real test
+#     weakening. Do NOT "restore symmetry" by adding `|| true` to them; each
+#     carries its own note saying so at the call site.
+#
+# Cited by construct, not by line number: the numbered form of these anchors
+# has already gone stale twice, because every edit above shifts them and the
+# citation has no way to notice.
 # ---------------------------------------------------------------------------
 
 # Pure-exclude pathspecs for the existence check: the post-PR tree minus tests.
@@ -402,9 +586,11 @@ function flush() { if (in_block && block_refs) credited++ }
 END { flush(); print credited + 0 }
 '
 
-# Candidate test files changed vs origin/main (Modified files too, not just
-# deletions). || true guards set -e if the diff is empty.
-IMPORT_CANDIDATES=$(git diff --name-only origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>/dev/null || true)
+# Candidate test files changed vs the resolved baseline (Modified files too,
+# not just deletions). An empty diff is a zero exit, so this needs no guard —
+# and the `|| true` it used to carry hid a genuine git failure as "no
+# candidates".
+IMPORT_CANDIDATES=$(git -C "$REPO_ROOT" diff --name-only "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}")
 
 while IFS= read -r F; do
   [ -z "$F" ] && continue
@@ -419,8 +605,9 @@ while IFS= read -r F; do
   if [ "$already_exempt" -eq 1 ]; then continue; fi
 
   # Per-file net-removal filter: only files that net-remove declarations have
-  # anything to exempt. Mirror the comment-exclusion filters at :78/:160.
-  F_DIFF=$(git diff --unified=0 origin/main...HEAD -- "$F" 2>/dev/null || true)
+  # anything to exempt. Mirror the comment-exclusion filters on ADDED_LINES /
+  # REMOVED_LINES and on the co-deletion loop's FILE_REMOVED.
+  F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
   F_ADDED=$(printf '%s\n' "$F_DIFF" | grep '^+' | grep -v '^+++' | grep -vE '^\+[[:space:]]*//' || true)
@@ -435,12 +622,25 @@ while IFS= read -r F; do
   if [ "$((F_DECL_REMOVED - F_DECL_ADDED))" -le 0 ]; then continue; fi
 
   # Removed-import set via OLD-minus-NEW whole-file parse (NOT raw diff lines).
-  # OLD blob: F changed vs origin/main, so it normally existed there; an empty
-  # OLD (F added-in-PR) yields an empty removed set ⇒ no exemption (fire) — the
-  # no-defensive-fallback path. NEW blob absent ⇒ F deleted in PR ⇒ new set
-  # empty (EXPECTED, not an error).
-  OLD_SRC=$(git show "origin/main:$F" 2>/dev/null || true)
-  NEW_SRC=$(git show "HEAD:$F" 2>/dev/null || true)
+  # OLD blob: F changed vs the RESOLVED BASELINE, so it normally existed there;
+  # an empty OLD (F added-in-PR) yields an empty removed set ⇒ no exemption
+  # (fire) — the no-defensive-fallback path. NEW blob absent ⇒ F deleted in PR ⇒
+  # new set empty (EXPECTED, not an error).
+  #
+  # The old side is $DIFF_BASE, NOT `origin/main`. It must be the SAME revision
+  # F_DIFF above was computed against, or the two disagree: on a push to `main`
+  # $DIFF_BASE is HEAD^1 while origin/main IS HEAD, so `origin/main:$F` returned
+  # the NEW content, OLD_TAGS == NEW_TAGS, the removed-import set came back
+  # empty, and this whole exemption was structurally dead there — a dead-code
+  # cleanup that passed the gate on its branch failed it again on `main` after
+  # merge. Same "second source of truth for one value" defect lint-prose-rules.sh
+  # removed by setting MERGE_BASE="$DIFF_BASE".
+  #
+  # -C "$REPO_ROOT" on every call below for the same reason as the diffs: the
+  # tree read must be the one NAMED, not whichever repository the process CWD
+  # happens to sit in.
+  OLD_SRC=$(git -C "$REPO_ROOT" show "$DIFF_BASE:$F" 2>/dev/null || true)
+  NEW_SRC=$(git -C "$REPO_ROOT" show "HEAD:$F" 2>/dev/null || true)
   OLD_TAGS=$(printf '%s\n' "$OLD_SRC" | awk "$IMPORT_AWK" | sort -u || true)
   NEW_TAGS=$(printf '%s\n' "$NEW_SRC" | awk "$IMPORT_AWK" | sort -u || true)
 
@@ -455,7 +655,13 @@ while IFS= read -r F; do
 
   REMOVED_NAMED=$(printf '%s\n' "$REMOVED_TAGS" | sed -n 's/^N://p' || true)
   HAS_UNVERIFIABLE_REMOVED_IMPORT=0
-  if printf '%s\n' "$REMOVED_TAGS" | grep -q '^U:'; then
+  # HERE-STRING, not a pipe, for the same reason as the co-deletion loop's
+  # $DELETED_IMPL membership test: `grep -q` exits at the first match and
+  # SIGPIPEs its writer, so past
+  # the 64 KiB pipe buffer the pipeline returns 141 under `set -o pipefail` and
+  # this `if` reads FALSE on tags that DID contain a `U:`. That skips the
+  # bias-to-fire guard below — the dangerous direction.
+  if grep -q '^U:' <<<"$REMOVED_TAGS"; then
     HAS_UNVERIFIABLE_REMOVED_IMPORT=1
   fi
 
@@ -476,15 +682,67 @@ while IFS= read -r F; do
   # A MATCH ⇒ symbol present ⇒ NOT exempt (bias to fire).
   all_absent=1
   for X in $REMOVED_NAMED; do
-    X_FILES=$(git grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}" 2>/dev/null || true)
+    # rc 0 = matched, rc 1 = no match (the "absent" answer this step wants),
+    # anything else = git failed. A blanket `|| true` here would render a
+    # failure indistinguishable from "absent", and absent is the direction that
+    # WRONGLY EXEMPTS — the one bias this whole block says it must never take.
+    #
+    # git's stderr is NOT redirected. It was `2>/dev/null` back when the call
+    # carried `|| true` and nothing downstream cared why it failed; now that
+    # rc > 1 aborts a REQUIRED gate, discarding the reason would leave the
+    # operator with a bare `rc=128` and no diagnosis — the same buried-error
+    # shape the DIFF capture above and get-changed-apps.sh's merge-base capture
+    # both exist to avoid. rc 0 and rc 1 write nothing, so nothing is added to
+    # the log on the ordinary paths.
+    set +e
+    X_FILES=$(git -C "$REPO_ROOT" grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}")
+    x_grep_rc=$?
+    set -e
+    if [ "$x_grep_rc" -gt 1 ]; then
+      echo "ERROR: check-test-integrity: 'git grep' failed (rc=$x_grep_rc) in $REPO_ROOT" >&2
+      echo "  while checking whether the removed-import symbol '$X' still exists." >&2
+      echo "  git's own error is immediately above this message." >&2
+      exit 1
+    fi
     [ -z "$X_FILES" ] && continue   # X mentioned nowhere ⇒ absent
     found=0
     while IFS= read -r XF; do
       [ -z "$XF" ] && continue
       # `git grep -l … HEAD` prefixes each path with `HEAD:`, so XF is already a
       # rev:path spec usable directly by git show (no extra `HEAD:` prefix).
-      XF_SRC=$(git show "$XF" 2>/dev/null || true)
-      if printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK" | grep -qxF -- "$X"; then
+      # Same rule as the `git grep` immediately above, which this call was
+      # left out of: a git failure must NOT read as "the symbol is absent".
+      # `2>/dev/null || true` produced exactly that — an empty $XF_SRC on a
+      # non-zero rc makes the membership test below read FALSE, which wrongly
+      # grants the co-deletion exemption and lets a real test weakening through
+      # a REQUIRED gate. Absent is the direction that WRONGLY EXEMPTS, and the
+      # two sibling calls in this one hunk must not disagree about it.
+      #
+      # stderr stays unredirected for the reason given above: now that a
+      # non-zero rc aborts the gate, discarding git's own message would leave
+      # the operator with a bare rc and no diagnosis.
+      set +e
+      XF_SRC=$(git -C "$REPO_ROOT" show "$XF")
+      xf_show_rc=$?
+      set -e
+      if [ "$xf_show_rc" -ne 0 ]; then
+        echo "ERROR: check-test-integrity: 'git show' failed (rc=$xf_show_rc) in $REPO_ROOT" >&2
+        echo "  while reading '$XF' to check whether the symbol '$X' is still exported." >&2
+        echo "  git's own error is immediately above this message." >&2
+        exit 1
+      fi
+      # The membership test reads a here-string, never a pipe. `grep -qxF`
+      # exits at the FIRST match, closing the pipe while awk is still writing;
+      # once the export list exceeds the 64 KiB pipe buffer awk takes SIGPIPE,
+      # the pipeline returns 141 under `set -o pipefail`, and this `if` reads
+      # FALSE — X reads as ABSENT on a file that EXPORTS it. False-absent is
+      # the direction this block declares dangerous: it wrongly exempts, and a
+      # real test weakening passes the gate. A generated barrel re-exporting a
+      # few thousand names reaches that size. Same fix, same reason, as the
+      # co-deletion loop's $DELETED_IMPL membership test and detect-changes.sh's
+      # category tests.
+      XF_EXPORTS=$(printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK")
+      if grep -qxF -- "$X" <<<"$XF_EXPORTS"; then
         found=1
         break
       fi

@@ -292,9 +292,27 @@ coordinated rollout. Skipping straight to the greenfield shape *is* the migratio
   ```
 
 - Behavior equivalence to verify by reading, not by guessing: the skipped path's only
-  observable effect today is the `*)` arm of `case "$ROUTE"`, which is `continue` (**line
-  305**). Nothing between the guard's insertion point and that arm has a side effect. So the
-  guard is observationally identical on the skipped path.
+  observable effect today is the `*)` arm of `case "$ROUTE"`, which is `continue`
+  (locate it by its comment `null — no regression; nothing to route`). Nothing
+  between the guard's insertion point and that arm has a side effect. So the guard
+  is observationally identical on the skipped path.
+
+  > **⚠ That equivalence is CONDITIONAL, and one sibling unit in this same PR
+  > breaks it.** The proof holds only while nothing between the guard and the `*)`
+  > arm has a side effect — it is a statement about `origin/main`, not an
+  > invariant. `tactic-autonomous-ci-pending-liveness-bound` Unit 3 (PR5's U18)
+  > plants a CI-pending strike counter and a `hold-node` route on exactly that
+  > stretch. Landed *below* this guard, that counter is unreachable for its whole
+  > target population — a pending candidate folds to `VERDICT="unknown"` on a
+  > `MERGEABLE` PR, so the guard `continue`s first — and it would be dead code
+  > that reads as shipped. **The resolution is on U18's side, and it is recorded
+  > there**: U18 lands *above* this guard, immediately after the
+  > `case "$RAW_VERDICT"` normalization fold. **Do not widen this guard to
+  > accommodate it** — widening breaks the binding-superset rule the
+  > `transitions.test.ts` "shell pre-filter's superset invariant" case pins, and
+  > fails this node's own verify grep fence. Before landing any further unit into
+  > this loop body, re-read this bullet and re-establish the no-side-effect
+  > premise for the new code; it does not carry itself forward.
 - **Explicitly out of scope in this unit — do not touch:**
   - `graph-select-target` — already carries this guard (lines 765-772). Editing it duplicates
     shipped work.
@@ -324,8 +342,14 @@ coordinated rollout. Skipping straight to the greenfield shape *is* the migratio
 **Scope.**
 
 - **File changed**: `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh`
-  — append new cases after the existing Case 10 block (10a/10b/10c plus the usage-error
-  check span **lines 1226-1465**), before the `Case 11:` banner. No other test file changes.
+  — append new cases **after the whole existing Case 10 block** (its `10a` / `10b` /
+  `10c` sub-cases and the `--node` usage-error tail that closes `10c`) and
+  **immediately before the `# Case 11:` banner comment**. Locate both ends by banner
+  text: `# Case 10c: without the flag, existing behavior is unchanged` opens the
+  last existing sub-case, and
+  `# Case 11: graph-select-target's interrupt gates roll their write back` opens
+  what must stay below you. No line numbers — five sibling PR5 units edit this file,
+  so any number cited here is stale before it is read. No other test file changes.
 - There is **no** standalone `test-reconcile-graph-review-stall.sh`; all coverage of this
   script lives in Case 10 of the above file. Extend it; do not build a new harness.
 - CI discovery is automatic: `run-unit-tests.sh:88` sets `RUN_PR_SCRIPTS=true` on any changed
@@ -335,16 +359,17 @@ coordinated rollout. Skipping straight to the greenfield shape *is* the migratio
 **Reuse verbatim, with no changes** (all in the same file):
 
 - `build_seed_repo` / `new_origin` / `init_and_push` / `clone_with_node_modules`
-  (**lines 118-176**) — build a real repo + bare origin + a clone carrying the *real*
+  (the four fixture builders defined near the top of the file, above `Case 1`) —
+  build a real repo + bare origin + a clone carrying the *real*
   `packages/intentionsutil/src`, so `node --import tsx/esm` runs the **actual**
   `reviewStallRoute`, not a stub. This is what makes a spawn-count assertion meaningful.
-- `review_stall_gh_stub <bin-dir> <fixture-dir>` (**lines 1237-1284**) — the `gh` stub for the
+- `review_stall_gh_stub <bin-dir> <fixture-dir>` (defined under the `# Case 10:` banner) — the `gh` stub for the
   two REST surfaces the sweep polls. It writes `$fixdir/checkruns-red.json` (one failing
   check-run) and serves it for every sha, and serves an inline-defaulted OPEN/MERGEABLE PR
   unless `$fixdir/pr-<n>.json` exists.
-- `review_stall_node <file> <id> <pr>` (**lines 1286-1310**) — a minimal tactic at
+- `review_stall_node <file> <id> <pr>` (defined immediately after `review_stall_gh_stub`, above the `# Case 10a:` banner) — a minimal tactic at
   `phase: review` with the `reviewed` marker, an OPEN pr, `execution.fix: null`.
-- The graph-commit stub + assertion conventions from Case 10c (**lines 1418-1445**): a fake
+- The graph-commit stub + assertion conventions from **Case 10c** (banner `# Case 10c: without the flag, existing behavior is unchanged`): a fake
   `graph-commit` that does `printf '%s\n' "\$@" >"$WORK/t10X-argv.txt"; exit 0`, and
   frontmatter assertions via `grep -qE '^\s*since:' file.md` (the marker that
   `apply-fix-state --set-fix` wrote), plus `ok`/`no` for reporting.
@@ -364,22 +389,28 @@ coordinated rollout. Skipping straight to the greenfield shape *is* the migratio
   calls the sweep makes: the enumeration `-e` script (contains `listNodesStrict`) and
   `apply-fix-state.ts`. Neither contains the string.
 
-**The three cases to add:**
+**The three cases to add.** *Names allocated 2026-08-30 to avoid a collision:* only
+`Case 10`, `10a`, `10b` and `10c` exist on `origin/main`.
+`tactic-review-stall-ci-verdict-cache-miss` Unit 2 (PR5's U10) owns **`10d`**; this
+unit owns **`10e`, `10f`, `10g`**, numbered in run order. Do not rename them back —
+an earlier revision called them `10e` / `10d` / `10f`, which both collided with U10's
+case and required `10e` to run before `10d`. Fixture-dir and bin-dir variables follow
+the case name (`$FIX10E`/`$BIN10E`, `$FIX10F`/`$BIN10F`, `$FIX10G`/`$BIN10G`).
 
 - **Case 10e — the counter is real (run this one FIRST; it is the anti-vacuity control).**
   Two candidates, default **red** `checkruns-red.json`, default MERGEABLE PRs. Assert: rc 0,
   both nodes recovered (`^recovered t-rs1 -> fix`, `^recovered t-rs2 -> fix`), both files
-  gained `since:`, **and the shim log has exactly 2 lines** (`wc -l`). Without this, Case 10d
+  gained `since:`, **and the shim log has exactly 2 lines** (`wc -l`). Without this, Case 10f
   passes vacuously the moment the shim's match string goes stale.
-- **Case 10d — the guard holds: green + MERGEABLE spawns nothing.** Same two candidates, but
-  overwrite `$FIX10D/checkruns-red.json` with a passing run
+- **Case 10f — the guard holds: green + MERGEABLE spawns nothing.** Same two candidates, but
+  overwrite `$FIX10F/checkruns-red.json` with a passing run
   (`{"check_runs":[{"name":"unit-tests","status":"completed","conclusion":"success","id":1,"app":{"slug":"github-actions"}}]}`).
   Assert: rc 0; **the shim log file does not exist** (mirroring
   `test-graph-select-target.sh:1190-1192`'s `[ -f … ] && echo 1 || echo 0` shape); no
   `recovered` line on stdout; neither node file gained `since:`; the graph-commit argv file
   does not exist.
-- **Case 10f — the guard stays a superset: CONFLICTING + green still reaches the predicate.**
-  One candidate, green check-runs, plus a per-PR override `$FIX10F/pr-201.json` in the **raw
+- **Case 10g — the guard stays a superset: CONFLICTING + green still reaches the predicate.**
+  One candidate, green check-runs, plus a per-PR override `$FIX10G/pr-201.json` in the **raw
   REST** shape with `"mergeable": false` (`gh_pr_view_rest` maps `false` → `CONFLICTING`,
   `lib.sh:1232-1238`). Assert: the shim log has exactly 1 line (the guard let it through);
   rc 0; no `recovered` line and no `since:` write (the retired `conflict` arm no-ops). Name
@@ -425,16 +456,20 @@ a defect, not coverage. Also out of scope: `test-dispatch-select-tick.sh` (its s
   `test-dispatch-review-plan-gate.sh:98-99` — the "ONE IMPLEMENTATION, NOT TWO" counter-
   precedent. Read before touching the guard; the Design section above records why a superset
   skip is not the thing that doctrine forbids.
-- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh:118-176`,
-  `:1237-1284` (`review_stall_gh_stub`), `:1286-1310` (`review_stall_node`), `:1418-1445`
-  (Case 10c's stub + assertion shape), `:1545-1561` (the `npx` interception shim — the
-  structural template for the counting `node` shim's `exec`-the-real-one tail).
+- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` — the four
+  top-of-file fixture builders (`new_origin`, `build_seed_repo`, `init_and_push`,
+  `clone_with_node_modules`); `review_stall_gh_stub()` and `review_stall_node()`
+  (both under the `# Case 10:` banner); **Case 10c**'s stub + assertion shape; and
+  the `npx` interception shim inside **Case 11** — the one whose tail is
+  `exec node --import tsx/esm "${args[@]}"`, which is the structural template for
+  the counting `node` shim's `exec`-the-real-one tail. *(All cited by construct:
+  five sibling PR5 units edit this file.)*
 - `.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh:1170-1192` — Cases 3
   and 4 there are the assertion shapes to mirror: "still reaches the cascade" (superset) and
   "spawns no node subprocess" (guard holds).
 - `.claude/skills/dispatch-propagate/scripts/lib.sh:1228-1244` (`gh_pr_view_rest`'s jq
   projection) — the `mergeable: true|false|null` → `MERGEABLE|CONFLICTING|UNKNOWN` mapping
-  the Case 10f fixture depends on.
+  the Case 10g fixture depends on.
 - `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh:88,190-198` — the auto-discovery
   that makes the new cases run in CI with no registration.
 

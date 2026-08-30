@@ -657,6 +657,39 @@ clarifications:
       inherited condition amended to match), and kind-tradition's codified
       vocabulary was re-scoped to reference-accuracy (mounts reviewed for
       faithful reporting and capture pricing, never doctrine status)."
+  - question: Must tradition substantiation be recorded even for author-ratified
+      content, and what did the 2026-08-30 sustenance round record?
+    answer: "Author-ratified 2026-08-30 (sustenance round). SUBSTANTIATION DOCTRINE:
+      when recorded content — in ANY of the three states, ratified included — is
+      substantiated by a tradition, that tradition must be recorded as
+      substantiating it; when contradicted by a tradition, the contradiction
+      must equally be recorded. Ratification does not exempt a decision from
+      tradition accounting: the author's verbatim ruling — 'that tradition must
+      still always be recorded as substantiating the doctrine, even if the
+      content is ratified rather than deferred or delegated.' ROUND RECORD: (1)
+      virtue-right-livelihood ratified as a new root (sustenance as first-class
+      motivation), substantiating and contradicting traditions recorded on the
+      node per this doctrine, with tradition-buddhism and
+      tradition-motivation-psychology minted as their auditable homes (status:
+      delegated — scholarship borrowed). (2) STRUCTURE: two sibling roots paired
+      by tension_with, with virtue-knowledge-as-gift as the second pole — held
+      delegated-pending-review at author direction ('two sibling roots, deferred
+      with review'); the pending stamp is the review record, nothing minted. (3)
+      RATIFY-DESPITE-TENSION SHAPE (author-ratified): derive, don't restate —
+      the ratified stamp plus the decision node's edges ARE the sentence. Worked
+      example, the author's own: 'I ratify this decision to monetize, though it
+      conflicts with an implicit value that knowledge should be free, because I
+      am constrained by my need to eat and the grafted platform delegation' =
+      ratified stamp ('I ratify') + motivation profile touching both poles of
+      the recorded tension pair ('though it conflicts') + serves-flow into
+      virtue-right-livelihood and graft edge to the platform delegation mount
+      ('because constrained'), all priced by strategy-graph-mounts' capture
+      model with no per-decision bookkeeping; prose narrative is an optional
+      clarification, never required. (4) strategy-financial-sustainability
+      re-homed now under the adjacent-doctrine path (author-ratified): serves
+      gains the livelihood root; its motivation profile is genuinely mixed and
+      coherent under the decomposition corollary. This resolves
+      strategy-graph-mounts' sustenance open gap."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

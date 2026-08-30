@@ -283,25 +283,34 @@ non-CONFLICTING path; `graph-select-target`; `dispatch-select-tick`;
 ### Unit 2 — Pin the short-circuit with a behavior test that counts REST calls
 
 **Scope.** One file:
-`.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` (1668
-lines; the review-stall harness is Case 10, lines 1226–1462, with 24 references to
-this sweep — it is the established test home for this script, so **extend it, do not
-add a new file**; per `.claude/rules/sandbox.md`, skill `test-*.sh` files are not
-auto-discovered, and this one is not wired into CI — see Verification).
+`.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` — the
+review-stall harness is the **`Case 10` block**, running from the banner comment
+`# Case 10: reconcile-graph-review-stall --node <id> narrows the sweep to one node`
+down to (not including) the `# Case 11:` banner; it holds sub-cases `10a`, `10b`,
+`10c` and the `--node` usage-error tail. It is the established test home for this
+script, so **extend it, do not add a new file**. *(Anchors here are construct
+citations on purpose: five sibling PR5 units edit this same file, so any line
+number drifts within the PR. Locate by banner text, never by number.)* Per
+`.claude/rules/sandbox.md`, skill `test-*.sh` files are not auto-discovered, and
+this one is not wired into CI — see Verification.
 
 Two edits:
 
-1. **Make the `gh` stub call-countable.** `review_stall_gh_stub` (lines 1244–1285)
+1. **Make the `gh` stub call-countable.** The `review_stall_gh_stub()` function
+   (locate by its definition line `review_stall_gh_stub() {`, immediately under the
+   `# Case 10:` banner)
    already resolves the invoked REST `path` into a shell variable and branches on
    `*/check-runs` vs `*/pulls/*`. Append each resolved `path` to
    `"$GC_FIXTURE_DIR/gh-calls.log"` before the branch. This is additive and cannot
    disturb Cases 10a–10c, which assert on the sweep's stdout and on the
    `graph-commit` argv file, not on the stub's side effects.
 
-2. **Add Case 10e — "a CONFLICTING candidate costs no check-runs fetch, and does not
-   consume the sweep's budget."** Model it on Case 10c (lines 1404–1445): build a
-   seed repo, copy the sweep in, seed **two** nodes with `review_stall_node` (lines
-   1289–1318) whose ids order the conflicting one first in the enumeration —
+2. **Add Case 10d — "a CONFLICTING candidate costs no check-runs fetch, and does not
+   consume the sweep's budget."** Model it on **Case 10c** (locate by the banner
+   `# Case 10c: without the flag, existing behavior is unchanged`): build a seed
+   repo, copy the sweep in, seed **two** nodes with the `review_stall_node()`
+   fixture helper (locate by its definition line `review_stall_node() {`) whose
+   ids order the conflicting one first in the enumeration —
    e.g. `t-rsa` (PR 203) and `t-rsb` (PR 204) — push, clone, install the stub, and
    stub `graph-commit` to record its argv. Write a fixture `pr-203.json` in the
    stub's fixture dir with `mergeable: false`, `mergeable_state: "dirty"`,
@@ -332,7 +341,13 @@ enumeration itself depends on.
 **Explicitly out of scope:** re-testing the CONFLICTING-outranks-CI precedence rule
 (already pinned at `packages/intentionsutil/test/transitions.test.ts:295` — cite,
 do not duplicate); wiring `test-graph-write-rollback.sh` into
-`.github/workflows/unit-tests.yml`; touching Cases 1–9, 10a–10d, or 11.
+`.github/workflows/unit-tests.yml`; touching Cases 1–9, 10a–10c, or 11. *(An earlier
+revision said "10a–10d". Only `10`, `10a`, `10b` and `10c` exist on `origin/main` —
+measured with `LC_ALL=C grep -an '^# Case 10'
+.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh`. `10d` is the
+case **this unit adds**; `10e`–`10g` belong to
+`tactic-review-stall-predicate-subprocess-spawn` Unit 2, and this unit must not touch
+those either.)*
 
 **Recommended model:** sonnet.
 
@@ -364,10 +379,13 @@ do not duplicate); wiring `test-graph-write-rollback.sh` into
 - `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall:216–306` —
   the exact edit site; the `.mergeable` validation `case` at 244–249 is the anchor
   the short-circuit follows.
-- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh:1244–1285`
-  (`review_stall_gh_stub`) and `:1289–1318` (`review_stall_node`) — the existing
-  fixtures Unit 2 extends; Case 10c at `:1404–1445` is the structural template for
-  the new case.
+- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` — the
+  `review_stall_gh_stub()` and `review_stall_node()` fixture helpers (both defined
+  between the `# Case 10:` banner and the `# Case 10a:` banner) are the existing
+  fixtures Unit 2 extends; the **Case 10c** block (banner
+  `# Case 10c: without the flag, existing behavior is unchanged`) is the
+  structural template for the new case. Cited by construct, not by line: five
+  sibling PR5 units edit this file.
 - `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall:118–121`
   (the `GRAPH_REVIEW_STALL_CAP` positive-integer guard) — the house pattern to copy
   **if** a future unit ever adds a tunable. This plan adds none.
@@ -399,7 +417,7 @@ npm test --prefix packages/intentionsutil -- test/transitions.test.ts
 
 **Manual / judgment checks (not auto-runnable):**
 
-- **The new case must have teeth.** Before landing, confirm Case 10e *fails* against
+- **The new case must have teeth.** Before landing, confirm Case 10d *fails* against
   the pre-Unit-1 sweep (stash Unit 1's edit, or temporarily revert the
   short-circuit): it must report a `check-runs` call for PR 203. A case that passes
   both before and after the change is vacuous and does not pin anything.

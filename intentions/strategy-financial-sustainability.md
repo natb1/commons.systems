@@ -35,10 +35,10 @@ rationale: >-
   runway reading itself comes from the owned budgeting pipeline —
   strategy-recover-finance supplies this strategy's sensor.
 reading: null
-gap: null
 serves:
   - virtue-alignment-of-attachments
   - virtue-respect-for-persons
+  - virtue-right-livelihood
 recovers: []
 clarifications:
   - question: How does the round map the two-part sensor (budget app accounts plus
@@ -57,6 +57,21 @@ clarifications:
       Immaterial to gating: the instrument is useful under any account-set
       choice and the ratification is built into the reading tactic. Recorded
       2026-07-11 /align-tactics round."
+  - question: Why does this strategy also serve virtue-right-livelihood?
+    answer: "Re-homed 2026-08-30 (author-ratified, via the legacy-null migration's
+      adjacent-doctrine path — this strategy's original framing predates the
+      three-state model and carried state null). The livelihood motive was
+      always real and unstated: funding the project is also how the author eats,
+      and hiding that flow kept every monetization decision's motivation profile
+      dishonest to the capture model. The serves set is now [alignment, respect,
+      right-livelihood] — a genuinely mixed profile, coherent under
+      strategy-graph-mounts' decomposition corollary (one node, because the
+      motivations rise and fall together here). The rationale's 'paying buys
+      speed and guidance; it never gates the gift' is the strategy-level shadow
+      of the pending virtue-knowledge-as-gift root — the scholastic
+      wage-for-labor resolution (sell the labor, never the truth) already
+      operating; when that sibling's pending review ratifies, the gift clause's
+      root-level home is that node. (decision: author-ratified, 2026-08-30)"
 tooling_goals: []
 success_signal:
   observable: projected runway (available funds / trailing monthly spend) against
@@ -76,6 +91,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - institutions will contract for built-then-handed-over artifacts

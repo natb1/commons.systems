@@ -369,7 +369,7 @@ for bad_target in HEAD c06c7295 origin/main HEAD~3 "HEAD.." "..HEAD"; do
 done
 
 echo "Test: dispatch-code-review accepts both two-dot and three-dot ranges"
-for good_target in "HEAD~1..HEAD" "HEAD~1...HEAD" "origin/main..HEAD"; do
+for good_target in "HEAD~1..HEAD" "HEAD~1...HEAD" "origin/main..HEAD"; do  # diff-base-ok: fixture strings for a target-syntax parser, not a diff baseline
   cr_reset_stubs
   : >"$STUB_DIR/cr-fake-calls.log"
   printf '%s\n' "No findings." >"$STUB_DIR/cr-fake-output"
