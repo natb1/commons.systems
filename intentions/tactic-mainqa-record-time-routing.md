@@ -22,8 +22,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr5a-mainqa-record-time-routing
+  pr: 3140
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T02:52:45Z
+    mergeCommitSha: 77bd747136fcdb3238792dfa43224523ee15c348
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-wait-calendar-release
@@ -66,15 +78,26 @@ most two per source** — instead of a residue body section, and the source goes
 
 - `/qa-fix` Step 3.6's node lane still appends `## needs-main residue` and still
   advances `qa → review` unchanged. The problem is real and unfixed.
-- 76 nodes carry a `## needs-main` H2; by phase: 37 `done`, **28 `main-qa`**, 5
-  `implement`, 3 `review`, 1 `qa`, 2 `null`. The 28 at `main-qa` are the drain
-  tail.
-- `Verifiability: WAIT` marks: 45 occurrences across 26 files, but **only 20
-  marks across 14 nodes are live** (13 nodes at `phase: main-qa`, 1 at `qa`); 9
-  are on `done` nodes (historical), and 3 files mention the string as prose
-  (`strategy-graph-native-dispatch.md`, `tactic-ladder-run-answerable-across-node-boundary.md`,
-  and this node itself). Ruling 3 said to re-measure; this is that measurement,
-  and the live surface is materially smaller than 45/26.
+- 63 nodes carry a `## needs-main` H2; by phase: 38 `done`, **20 `main-qa`**, 4
+  `implement`, 1 `review`, 0 `qa`, 0 `null`. The 20 at `main-qa` are the drain
+  tail. Measured 2026-08-30 at `b76ce953`, after Unit 7's migration landed.
+  The earlier reading here — 76 / 37 `done` / **28 `main-qa`** / 5 / 3 / 1 / 2 —
+  was taken before that landing; Unit 7 emptied 14 of those sections, which is
+  the whole of the difference.
+- `Verifiability: WAIT` marks: **52 occurrences across 28 files** at `74c281dc`,
+  and **none are live** — Unit 7's migration has landed. The 52 partition
+  exactly: **22 marks on the 15 new `tactic-mainqa-*-machine` nodes** (all
+  `phase: main-qa`), carried under `## Verification items`, which is the
+  migrated shape and is why the Unit 7 fence — keyed on `^## needs-main` — no
+  longer matches them; **17 marks on 9 `done` nodes** (historical); and **13
+  marks on 4 non-`done` files that only mention the string**:
+  `strategy-graph-native-dispatch.md` (6, inside clarification text), this node
+  itself (5), `tactic-observation-ladder-terminus-baseline-drift.md` (1) and
+  `tactic-office-hours-select-fresh-main.md` (1) — the last two inside an
+  `office_hours` park reason, not a residue bullet. Immediately before the
+  migration, at `74c281dc^`, the live set was **22 marks across 15 nodes** (14
+  at `phase: main-qa`, 1 at `qa`). Ruling 3 said to re-measure; this is that
+  measurement.
 - `arm-wait` / `release-wait` do **not** exist in code. They are
   `tactic-wait-calendar-release`'s surface (PR #3051, open, CI-red).
 
@@ -109,14 +132,20 @@ These are **binding**. A later round that disagrees parks rather than overrides.
   — `/qa-fix` mints at Step 3.6 inside phase `qa`, **before** Step 4 advances
   `qa → review`. **Ratify what ships.** Record-time triage is this tactic's own
   thesis — the thing it exists to make possible — so the prose is the error, not
-  the code. The follow-up prose correction is **written but NOT yet on
-  `origin/main`** (re-measured 2026-08-30): it is commit `cba77286` on the open
-  PR #3142 branch `plan-reconciliation`. At `origin/main` this node still reads
-  "born at `main-qa` carrying the source's already-merged PR" at `:207-208`, and
-  `packages/intentionsutil/scripts/mint-mainqa-nodes:59` still documents `--pr` as
-  "the source's ALREADY-MERGED PR number". An `LC_ALL=C grep -ac 'already-merged'`
-  on that script returns 0 only because the text is upper-case, so the earlier
-  "already landed, zero hits" reading was a case-sensitivity false negative.
+  the code. The follow-up prose correction is **landed** (re-verified
+  2026-08-30): PR #3142 (`plan-reconciliation`, carrying commit `cba77286`)
+  merged 2026-08-30T06:53:02Z as `35ab0e45`, and its sibling PR #3141 merged
+  2026-08-30T06:30:48Z. The stale wording no longer survives at `origin/main`:
+  an `LC_ALL=C grep -ain 'already.merged'` over this node now hits only this R5
+  paragraph's own quotations of it — the sentence that stood at `:207-208`, "born
+  at `main-qa` carrying the source's already-merged PR", is gone — and over
+  `packages/intentionsutil/scripts/mint-mainqa-nodes` it returns **0 hits**. That
+  script's `--pr` doc line has moved to `:64` and now reads "the source's PR
+  number — STILL OPEN at mint time, since the mint runs at qa record time, not
+  at merge time". The earlier "already landed, zero hits" reading of that script
+  was a case-sensitivity false negative against a then-upper-case
+  `ALREADY-MERGED`; the wording has since been replaced outright, so the zero is
+  now genuine.
   **The ruling stands regardless** — it settles which of the two readings is
   correct — and the prose corrections are owed wherever the stale wording survives
   at `origin/main`. **Do not re-open the mint-time question**; a later round that
@@ -633,8 +662,9 @@ the redaction rule must survive the edit intact.
 
 1. **Re-measure first** — the counts drift. The live set is every node whose
    `phase` is **not** `done` and whose body carries a `Verifiability: WAIT`
-   bullet inside a `## needs-main` section. Measured at `f8bea654`: **20 marks
-   across 14 nodes** — 13 at `phase: main-qa`
+   bullet inside a `## needs-main` section. Re-measured at `74c281dc^`, the state
+   this migration actually ran against: **22 marks across 15 nodes** — 14 at
+   `phase: main-qa`
    (`tactic-attention-namespaced-rank`, `tactic-conflict-outranks-ci-precedence`,
    `tactic-decision-log-append-noncompact-corruption`,
    `tactic-office-hours-select-fresh-main`,
@@ -643,12 +673,19 @@ the redaction rule must survive the edit intact.
    `tactic-review-cross-lane-dedup`, `tactic-review-domain-lens-consolidation`,
    `tactic-review-fix-residue-death-coverage`,
    `tactic-review-skill-body-decomposition`,
+   `tactic-review-verify-per-file-batching`,
    `tactic-terminal-disposition-sweep-park-without-cas`) and 1 at `phase: qa`
-   (`tactic-strategy-fingerprint-stamp-coverage`). **Exclude** the 9 `done` nodes
-   (historical), and exclude the three prose mentions
-   (`strategy-graph-native-dispatch.md`,
-   `tactic-ladder-run-answerable-across-node-boundary.md`, this node) — those are
-   text about the convention, not residue bullets.
+   (`tactic-strategy-fingerprint-stamp-coverage`). The earlier `f8bea654` reading
+   of "20 marks across 14 nodes" was a NUL-byte undercount:
+   `tactic-review-verify-per-file-batching.md` carries a NUL at byte offset
+   15001, which silences a plain `grep`, hiding that file and its 2 marks. Every
+   count under `intentions/` needs `LC_ALL=C grep -a`; re-measured that way,
+   `f8bea654` held 47 marks across 27 files, not 45 across 26. **Excluded** were
+   the 9 `done` nodes (17 marks, historical) and the files that only mention the
+   string as text about the convention (`strategy-graph-native-dispatch.md`,
+   `tactic-observation-ladder-terminus-baseline-drift.md`, this node) —
+   `tactic-ladder-run-answerable-across-node-boundary.md`, named in the earlier
+   reading, no longer carries the string at all.
 2. **Per source node with live WAIT bullet(s):** run `mint-mainqa-nodes` with
    **only that node's WAIT items**, producing exactly one
    `tactic-mainqa-<slug>-machine` node (R1: WAIT is a machine-lane item), then
@@ -870,8 +907,9 @@ test "$(grep -c '"review","main-qa"' .claude/skills/dispatch-propagate/scripts/r
 ```
 
 Unit 7's migration is complete when no node outside `phase: done` still carries a
-live WAIT bullet. This script exits 0 only when that holds (it fails today —
-14 nodes match):
+live WAIT bullet. This script exits 0 only when that holds — and it does at
+`74c281dc`, where **0 nodes match**. Before Unit 7's migration landed, at
+`74c281dc^`, 15 nodes matched:
 
 ```verify
 fail=0; for f in intentions/*.md; do grep -q 'Verifiability: WAIT' "$f" || continue; grep -q '^## needs-main' "$f" || continue; ph=$(sed -n 's/^phase: //p' "$f" | head -1); [ "$ph" = "done" ] && continue; echo "still live: $f (phase=$ph)"; fail=1; done; exit $fail
@@ -899,10 +937,56 @@ fail=0; for f in intentions/*.md; do grep -q 'Verifiability: WAIT' "$f" || conti
   selection, confirm across at least two ticks that neither destination node has
   been written to `phase: done` by the reconciler. This is the Unit 4 hazard;
   a unit test pins it, but the live sweep is the real check.
-- **The drain tail still drains.** Pick one of the 28 legacy residue-carrying
+- **The drain tail still drains.** Pick one of the 20 legacy residue-carrying
   nodes at `phase: main-qa` and confirm `/qa-main` still parses its
   `## needs-main residue` section and reaches a verdict — the legacy parse must
   survive this PR.
 - **`graph-commit` actually landed.** After each land in Units 5/7, confirm
   `pushed` is not `none` and re-read the written nodes from a fresh `origin/main`.
   A `pushed=none context=noop` result is a **failure**, not a no-op.
+## What shipped — 2026-08-30, Units 1-7, in two different places
+
+Landed as #3140 (merge commit `77bd7471`, merged `2026-08-30T02:52:45Z`),
+Position 3 of the dispatch/RSI serialized window. The unit set shipped in two
+places, because Unit 7's subject is node content rather than code:
+
+**Units 1-6 shipped as code in #3140.**
+
+- Unit 1 — `src/mainqaRouting.ts`, the pure routing decision.
+- Unit 2 — `mint-mainqa-nodes`, the landing half.
+- Unit 3 — the `.claude/rules`-conformant prose lint pass over that script.
+- Unit 4 — the reconciler no longer absorbs a node already at `main-qa`.
+- Unit 5 — `/qa-fix` Step 3.6's node lane mints destination nodes instead of
+  appending a residue section.
+- Unit 6 — `/qa-main`'s node lane targets the verification node.
+
+**Unit 7 shipped as two `graph-commit` landings directly on `main`**, under the
+batch's graph-bookkeeping authority, since a node-content migration has no code
+diff to carry through a PR:
+
+- *Landing 1* — 15 `mint-mainqa-nodes` invocations minted 15
+  `tactic-mainqa-*-machine` destination nodes, carrying the 22 migrated
+  verification items under `## Verification items`. All 15 reported
+  `context=push-reported-success`; none returned `pushed=none context=noop`.
+- *Landing 2* — `74c281dc` removed those same 22 WAIT residue
+  bullets from their 15 source nodes, emptying 14 `## needs-main` sections. Each
+  of the 15 rewritten blobs was re-read from a fresh `origin/main` and asserted
+  byte-equal to its `--expect` entry.
+
+Measured across the two landings, at `74c281dc^` then at `b76ce953`: nodes
+carrying a `## needs-main` H2 went **77 -> 63**, and WAIT-mark
+occurrences went **74 -> 52**. The 52 that remain are all non-live, and
+partition exactly: 22 on the 15 new machine nodes (migrated shape, under
+`## Verification items`), 17 on 9 `done` nodes (historical), and 13 across 4
+files that only mention the string. The Unit 7 verify fence, keyed on
+`^## needs-main`, now exits 0 with no output.
+
+**Deliberately not shipped.** Ruling 4's named follow-ups stay out of scope and
+are recorded above rather than executed here. The legacy `## needs-main` parse
+is retained, not removed — 20 nodes at `phase: main-qa` still drain through it.
+
+**Review-gate deviation, recorded rather than smoothed over.** #3140 merged
+before its detached `/code-review` had settled, which is the failure the batch's
+review gate exists to prevent. The review was run retroactively against
+`77bd7471~1..77bd7471` and its findings posted as a comment on #3140 at
+`2026-08-30T03:09:15Z`.
