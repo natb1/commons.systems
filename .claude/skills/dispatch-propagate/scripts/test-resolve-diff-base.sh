@@ -133,7 +133,7 @@ DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
 assert_eq "at-tip/first-parent: the resulting range names the pushed file" \
   "pushed.txt" "$DELTA"
 # ... whereas the expression this helper replaces sees nothing at all.
-OLD_DELTA=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')
+OLD_DELTA=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 assert_eq "at-tip/first-parent: the old three-dot range was empty" "" "$OLD_DELTA"
 
 # ---------------------------------------------------------------------------

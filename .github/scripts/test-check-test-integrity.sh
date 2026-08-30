@@ -1172,7 +1172,7 @@ REPO=$(make_main_push_repo)
 # The reproduction, asserted rather than asserted-about: the range this gate
 # used to carry sees nothing at all in this state.
 TOTAL=$((TOTAL + 1))
-OLD_RANGE_FILES=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD' | grep -c . || true)
+OLD_RANGE_FILES=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD' | grep -c . || true)  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 if [ "$OLD_RANGE_FILES" -eq 0 ]; then
   PASS=$((PASS + 1))
 else

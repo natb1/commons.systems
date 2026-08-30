@@ -122,7 +122,7 @@ assert_contains "branch: the planted suite actually ran" "planted CI suite ran" 
 # ---------------------------------------------------------------------------
 echo "Test 2: main-push shape runs the CI-script suites"
 make_repo at-tip
-OLD_RANGE=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')
+OLD_RANGE=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 assert_eq "main-push: the old three-dot range was empty" "" "$OLD_RANGE"
 run_sut
 assert_eq "main-push: exit 0" "0" "$RC"

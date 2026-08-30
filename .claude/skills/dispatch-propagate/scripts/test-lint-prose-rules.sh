@@ -560,7 +560,7 @@ make_main_push_repo
 # The reproduction, stated as an assertion: the expression this linter used to
 # carry sees nothing at all in exactly this state.
 assert_eq "main-push: the old three-dot range was empty" "" \
-  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"
+  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 run_sut
 [ "$RC" -ne 0 ] && _mp_rc=nonzero || _mp_rc=zero
 assert_eq "main-push: exit non-zero" "nonzero" "$_mp_rc"

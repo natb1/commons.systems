@@ -247,7 +247,7 @@ dc_make_main_push_repo
 # The reproduction, stated as an assertion: the expression this script used to
 # carry sees nothing at all in exactly this state.
 assert_eq "main-push: the old three-dot range was empty" "" \
-  "$(git -C "$DC_REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"
+  "$(git -C "$DC_REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 dc_run_real
 assert_eq "main-push: exit 0" "0" "$DC_RC"
 assert_contains_local "main-push: emits nix=true" "nix=true" "$(cat "$DC_OUT_FILE")"

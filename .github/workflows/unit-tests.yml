@@ -407,6 +407,18 @@ jobs:
         run: .github/scripts/test-check-graph-fast-path.sh
       - name: Run align-tactics tactic-mode target-node context tests
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-target-context.sh
+      # Appended at the END of this list on purpose. The block is being
+      # rewritten as an accumulator in a separate change, and two other PRs are
+      # inserting steps mid-list; a tail append is the position least likely to
+      # conflict with any of them.
+      #
+      # This one needs an explicit step even though it matches the
+      # test-*.sh glob run-unit-tests.sh already sweeps: that glob only fires
+      # when a file under dispatch-propagate/scripts changed, and the whole
+      # point of the ratchet is to catch a three-dot baseline reintroduced
+      # ANYWHERE in the repo.
+      - name: Run diff-base doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-diff-base-doctrine.sh
 
   test-integrity:
     runs-on: ubuntu-latest

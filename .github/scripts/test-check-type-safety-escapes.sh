@@ -543,7 +543,7 @@ echo "=== Git path: main-push shape flags a net-new hatch ==="
   R=$(make_git_repo at-tip)
   # The reproduction: the expression this sensor used to carry sees nothing at
   # all in exactly this state, and the self-noop turned that into exit 0.
-  old=$(git -C "$R" diff --name-only 'refs/remotes/origin/main...HEAD' | wc -l)
+  old=$(git -C "$R" diff --name-only 'refs/remotes/origin/main...HEAD' | wc -l)  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
   run_git_path "$R"
   n=$(err_count)
   if [ "$old" -eq 0 ] && [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && \

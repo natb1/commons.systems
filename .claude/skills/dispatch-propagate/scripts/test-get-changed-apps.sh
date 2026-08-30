@@ -98,7 +98,7 @@ assert_eq "branch: names myapp" "myapp" "$OUT"
 # ---------------------------------------------------------------------------
 echo "Test 2: main-push shape names the dirty app"
 make_repo at-tip
-OLD_RANGE=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')
+OLD_RANGE=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 assert_eq "main-push: the old three-dot range was empty" "" "$OLD_RANGE"
 run_sut
 assert_eq "main-push: exit 0" "0" "$RC"
