@@ -178,6 +178,26 @@ run_sut
 assert_eq "pre-existing untracked stray: exit 0" "0" "$RC"
 assert_eq "pre-existing untracked stray: no output" "" "$OUT"
 
+echo "Test 6c: a returned id whose file was ALREADY an untracked stray is satisfied"
+# Regression pin. The baseline skip used to run BEFORE the returned-id match,
+# so this shape `continue`d past the id, left ID_SATISFIED unset, and the
+# "returned ids with no matching new file" loop failed a CORRECT run with "the
+# return value and the tree disagree".
+#
+# The shape is not hypothetical: a parked graph-commit leaves intentions/<id>.md
+# as an untracked stray, and the NEXT round's subagent legitimately writes that
+# same path again — so the file is in the baseline AND is this round's write.
+#
+# Distinct from 6b: there the stray is NOT a returned id (correctly ignored);
+# here it IS one (must be credited, not ignored).
+write_case \
+  $'?? intentions/tactic-parked-last-round.md\n' \
+  $'?? intentions/tactic-parked-last-round.md\n' \
+  $'tactic-parked-last-round\n'
+run_sut
+assert_eq "returned id already a stray: exit 0" "0" "$RC"
+assert_eq "returned id already a stray: no output" "" "$OUT"
+
 # ---------------------------------------------------------------------------
 # Test 7: usage / input errors are clear, non-zero, and distinct from a
 # violation (exit 2, not exit 1).

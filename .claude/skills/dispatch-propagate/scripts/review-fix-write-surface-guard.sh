@@ -143,17 +143,31 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
 
-  # Pre-existing untracked stray: not this subagent's write.
-  if [[ -n "${BASELINE_PATHS[$path]:-}" ]]; then
-    continue
-  fi
-
+  # ORDER MATTERS: the returned-id match runs BEFORE the baseline skip.
+  #
+  # A returned id's file can legitimately be present in the baseline already —
+  # a prior round's parked graph-commit leaves intentions/<id>.md as an
+  # untracked stray, and the next round's subagent writes that same path again.
+  # When the baseline skip ran first it `continue`d past such a path, so
+  # ID_SATISFIED was never set for that id, and the "returned ids with no
+  # matching new file" loop below then failed a CORRECT run with "the return
+  # value and the tree disagree". Satisfying the id first is what makes the
+  # baseline a pre-existing-stray filter rather than a blind spot.
   if [[ "$path" =~ ^intentions/([^/]+)\.md$ ]]; then
     id="${BASH_REMATCH[1]}"
     if [[ -n "${RETURNED_IDS[$id]:-}" ]]; then
       ID_SATISFIED["$id"]=1
       continue
     fi
+  fi
+
+  # Pre-existing untracked stray the subagent did not claim: not its write.
+  if [[ -n "${BASELINE_PATHS[$path]:-}" ]]; then
+    continue
+  fi
+
+  if [[ "$path" =~ ^intentions/([^/]+)\.md$ ]]; then
+    id="${BASH_REMATCH[1]}"
     VIOLATIONS+=("$path: status '??' but id '$id' is not in the subagent's returned node_ids")
     continue
   fi
@@ -163,7 +177,7 @@ done < "$AFTER_FILE"
 
 # --- returned ids with no matching new file ---------------------------------
 for id in "${!RETURNED_IDS[@]}"; do
-  if [[ "${ID_SATISFIED[$id]}" -ne 1 ]]; then
+  if [[ "${ID_SATISFIED[$id]:-0}" -ne 1 ]]; then
     VIOLATIONS+=("intentions/$id.md: returned node id '$id' has no matching ?? entry — the return value and the tree disagree")
   fi
 done

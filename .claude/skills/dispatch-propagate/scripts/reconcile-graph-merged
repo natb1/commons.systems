@@ -365,6 +365,29 @@ done < <(jq -c '.deferred[]?' <<<"$PLAN")
 # --- Land the plan as one graph-commit ---------------------------------------
 mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
 if [[ "${#EDIT[@]}" -eq 0 ]]; then
+  # DISARM BEFORE EXITING. An empty apply plan means the apply run mutated
+  # nothing, so there is nothing to roll back — but the EXIT trap does not know
+  # that, and would call restore_node_files() anyway. Two harms follow, and the
+  # second is not confined to this sweep:
+  #
+  #   1. It logs "rolled the node write(s) back to HEAD" for a sweep that wrote
+  #      nothing, which is simply false in the journal.
+  #   2. graph_rollback_node_writes() compares HEAD against HEAD_AT_ARM to tell
+  #      an ordinary rollback from graph-commit having moved HEAD. If a
+  #      CONCURRENT graph writer landed a commit while we were planning, that
+  #      comparison sees a moved HEAD, enters _graph_discard_stranded_commits,
+  #      and `git reset --mixed`es away a commit this sweep never made.
+  #
+  # An empty plan is ROUTINE, not exceptional: unprovenMainQa enumerates a
+  # merged record-time mint on every sweep and isMergeAbsorbable then refuses
+  # it, so this path is reached often. A rare-path bug would be survivable; a
+  # routine-path one is not.
+  #
+  # Safe because the two planner runs are deterministic over the same states
+  # file: an empty `.edit[]` here means Step 1 planned no edits either, so
+  # BASE_BLOB is empty and the pinned-id set the rollback would restore is
+  # itself empty. Disarming discards no real protection.
+  RESTORE_ON_FAILURE=0
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0
 fi
