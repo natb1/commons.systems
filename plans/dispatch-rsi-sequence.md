@@ -92,15 +92,11 @@
 > (`:33`), its `execution` block including `strategy_fingerprint` (`:34-40`)
 > and its one `serves` entry (`:26-27`), exit 0 and no error.
 >
-> One flag hazard is NOT in the headers and so is stated here: `write-node.ts`
-> takes `--file <path>`, and omitting it is not a usage error — the header
-> documents stdin as a neutral MODE (`write-node.ts:1`, `:28`), but a
-> non-interactive call with no `--file` blocks on `/dev/stdin` until the tool
-> times out, or dies at EOF on an uncaught `JSON.parse`.
->
-> The remaining flag semantics are documented in the tools' own headers
+> The flag semantics for that path are documented in the tools' own headers
 > (`dump-node.ts`, `write-node.ts`, `graph-commit`) and in
-> `.claude/rules/sandbox.md`, and are deliberately NOT restated here. An
+> `.claude/rules/sandbox.md`, and are deliberately NOT restated here — with the
+> single exception in the first bullet below, which is the one place the headers
+> point the wrong way rather than merely leaving something out. An
 > earlier revision of this passage did restate them; it was rewritten across
 > eight review rounds and every single recurrence was the restatement drifting
 > from the tool it described, never the tool changing.
@@ -117,9 +113,15 @@
 > refuted by a finer measurement of a tool that had not changed. It belongs beside
 > the code it describes, where drift is visible, rather than in a plan document.
 >
-> - **Pass the payload with `--file <path>`, never `echo '<json>' | …`.** This node's
->   value contains shell metacharacters, and the resulting corruption is not reliably
->   loud — some spellings of it produce valid JSON that writes at exit 0.
+> - **Pass the payload with `--file <path>`, never `echo '<json>' | …`.** Both headers
+>   document the pipe form as ordinary usage and neither warns about it —
+>   `write-node.ts:6` gives it as the first usage example, and `dump-node.ts:29-30`
+>   calls the dumped JSON "ready to pipe back into write-node.ts". Do not follow them
+>   here: this node's value contains shell metacharacters, and the resulting corruption
+>   is not reliably loud — some spellings of it produce valid JSON that writes at exit 0.
+>   Omitting `--file` is not a usage error either (the header documents stdin as a
+>   neutral MODE, `write-node.ts:1`, `:28`), so a non-interactive call without it blocks
+>   on `/dev/stdin` until the tool times out, or dies at EOF on an uncaught `JSON.parse`.
 > - **The payload is a JSON document** (`writeNodeFromJson`'s `JSON.parse`,
 >   `write-node.ts:40`), so quote it by JSON's rules and by nothing else. `writeNode`
 >   re-serializes through the emitter (`store.ts:61`), which owns the YAML layer; do
