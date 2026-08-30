@@ -239,7 +239,39 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/run-storybook-smoke.sh
 
   artifact-check:
+    # RUNS POST-MERGE BY DESIGN. This job's own text is unchanged by the PR that
+    # made detect-changes.sh resolve an honest baseline — what changed is that it
+    # now actually fires on `main`, where the old `origin/main...HEAD` range was
+    # empty and every category read false. That is a decision, recorded here, not
+    # a side effect that arrived from a defect.
+    #
+    # It is ruled the way graph-validate is, NOT the way darwin-build and
+    # nixos-build are. Those two carry `!= main` guards because main-nix-validate.yml
+    # already covers main and because the macos-14 runner cost was deliberate.
+    # Neither reason transfers: no second workflow covers artifacts, and this
+    # payload is WHOLE-STORE rather than diff-scoped — run-artifact-check.sh
+    # rebuilds the page from all of `intentions/`, so what it checks does not
+    # depend on what the push touched.
+    #
+    # The coverage is not redundant with anything. Measured over the last 150
+    # first-parent commits on main: this fires on 106 of them, and 97 of those 106
+    # arrived with NO PR at all — direct graph-commit pushes, for which no branch
+    # run of this workflow exists (graph-fast-path.yml's unit-tests/lint/acceptance
+    # jobs are echo stubs). Nor does the vitest job cover it: `intentions/` is not
+    # an npm workspace and no workspace is a prefix of it, so an intentions-only
+    # push marks zero apps dirty and artifacts/plan-view/test/live-store.test.ts —
+    # which exists to test the LIVE store — does not run. graph-validate checks the
+    # graph's schema, not the page built from it. PR #3103 is the precedent for
+    # what goes uncaught: a type moved, lineage.ts broke, and the suite never ran
+    # on main, so it was invisible there.
+    #
+    # Cost, measured: 62s and 87s for two real full runs, against a 295s
+    # hook-tests critical path on the same run. Free minutes on a public repo.
     runs-on: ubuntu-latest
+    # A CAP, because this job drives chromium unattended on ~10.7 main pushes a
+    # day and carried GitHub's 360-minute default until now. Sized well above the
+    # 62-87s measured runs so it catches a hang, not a slow day.
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

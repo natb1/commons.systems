@@ -687,7 +687,27 @@ while IFS= read -r F; do
       [ -z "$XF" ] && continue
       # `git grep -l … HEAD` prefixes each path with `HEAD:`, so XF is already a
       # rev:path spec usable directly by git show (no extra `HEAD:` prefix).
-      XF_SRC=$(git -C "$REPO_ROOT" show "$XF" 2>/dev/null || true)
+      # Same rule as the `git grep` immediately above, which this call was
+      # left out of: a git failure must NOT read as "the symbol is absent".
+      # `2>/dev/null || true` produced exactly that — an empty $XF_SRC on a
+      # non-zero rc makes the membership test below read FALSE, which wrongly
+      # grants the co-deletion exemption and lets a real test weakening through
+      # a REQUIRED gate. Absent is the direction that WRONGLY EXEMPTS, and the
+      # two sibling calls in this one hunk must not disagree about it.
+      #
+      # stderr stays unredirected for the reason given above: now that a
+      # non-zero rc aborts the gate, discarding git's own message would leave
+      # the operator with a bare rc and no diagnosis.
+      set +e
+      XF_SRC=$(git -C "$REPO_ROOT" show "$XF")
+      xf_show_rc=$?
+      set -e
+      if [ "$xf_show_rc" -ne 0 ]; then
+        echo "ERROR: check-test-integrity: 'git show' failed (rc=$xf_show_rc) in $REPO_ROOT" >&2
+        echo "  while reading '$XF' to check whether the symbol '$X' is still exported." >&2
+        echo "  git's own error is immediately above this message." >&2
+        exit 1
+      fi
       # The membership test reads a here-string, never a pipe. `grep -qxF`
       # exits at the FIRST match, closing the pipe while awk is still writing;
       # once the export list exceeds the 64 KiB pipe buffer awk takes SIGPIPE,

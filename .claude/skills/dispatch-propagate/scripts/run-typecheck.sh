@@ -204,10 +204,27 @@ for ws in "${APP_DIRS[@]}"; do
     # tracked at HEAD. `--no-renames` matters: with rename detection on, a file
     # moved within the workspace is reported as R rather than A, so its new path
     # would survive the probe and poison the baseline exactly as before.
+    # Captured into a variable rather than read from `< <(...)`. A process
+    # substitution's exit status is not the status of the enclosing command and
+    # `set -e` never sees it, so a failing `git diff` here read as "this branch
+    # added no files": nothing got removed, the added files poisoned the
+    # baseline probe, the workspace landed in SKIPPED_BASELINE and the run
+    # exited 0. That is a REQUIRED check failing OPEN — the same buried-error
+    # shape run-lint.sh removes at its get-changed-apps.sh call, and the same
+    # one this whole change exists to remove one layer up.
+    if ! ADDED_SINCE_BASE=$(git -C "$REPO_ROOT" diff --name-only --no-renames \
+      --diff-filter=A "$BASE_REF" HEAD -- "$ws"); then
+      echo "ERROR: run-typecheck: 'git diff' failed in $REPO_ROOT while listing" >&2
+      echo "  the files $ws added since $BASE_REF; the baseline probe cannot be" >&2
+      echo "  trusted, so this refuses rather than skipping the workspace." >&2
+      exit 1
+    fi
+    # A here-string, never a pipe: on an empty $ADDED_SINCE_BASE it feeds one
+    # empty line, which the guard below drops.
     while IFS= read -r added_file; do
       [ -z "$added_file" ] && continue
       rm -f "$REPO_ROOT/$added_file"
-    done < <(git -C "$REPO_ROOT" diff --name-only --no-renames --diff-filter=A "$BASE_REF" HEAD -- "$ws")
+    done <<<"$ADDED_SINCE_BASE"
 
     baseline_ok=true
     (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws") >/dev/null 2>&1 || baseline_ok=false
@@ -219,7 +236,12 @@ for ws in "${APP_DIRS[@]}"; do
     # files HEAD does have. Order reset->checkout->clean is required: without the
     # reset, clean is a no-op (file still tracked); without the clean, the file
     # lingers untracked on disk. `-fd` (no `-x`) preserves gitignored files; the
-    # `$ws` scope + the line-78 dirty guard mean clean only removes swap-introduced files.
+    # `$ws` scope + the DIRTY_WORKSPACES pre-flight guard (which refuses to run
+    # at all when a workspace being typechecked has uncommitted changes) mean
+    # clean only removes swap-introduced files. Named, not numbered: the numeric
+    # citation this replaces had already drifted onto the rules-test filter, and
+    # this file's own edits keep moving it. Do not reintroduce a line number
+    # here -- not even to say which one was wrong.
     git -C "$REPO_ROOT" reset -q HEAD -- "$ws"
     git -C "$REPO_ROOT" checkout HEAD -- "$ws"
     git -C "$REPO_ROOT" clean -fdq -- "$ws"
