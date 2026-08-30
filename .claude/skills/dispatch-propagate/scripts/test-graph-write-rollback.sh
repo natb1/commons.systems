@@ -61,6 +61,12 @@
 #      9a: that discard is scoped to the paths its safety gate proved — an
 #      unrelated modified tracked file (flake.lock) elsewhere in the checkout
 #      survives it intact, where the old whole-tree `reset --hard` destroyed it.
+#      9b: the ZERO-WRITE path — an empty apply plan must DISARM the
+#      rollback before its early exit, or the EXIT trap classifies a
+#      CONCURRENT writer's unpushed commit as this sweep's stranded write
+#      and discards it. The empty plan is routine, not exceptional: a
+#      record-time `main-qa` mint is enumerated on every sweep and then
+#      refused by isMergeAbsorbable.
 #   10. `reconcile-graph-review-stall --node <id>` (tactic-dispatch-ladder-skill
 #       Unit 6b): the same selection filter as case 6b, mirrored onto this
 #       sweep's sibling. --node narrows to the named node and leaves an
@@ -1220,6 +1226,157 @@ else
   printf '%s\n' "$out"
   printf 'intentions status: %s\n' "$status9b"
   printf 'flake.lock content: %s\n' "$stray9b_after"
+fi
+
+# ===========================================================================
+# Case 9b: an EMPTY apply plan DISARMS the rollback, so a concurrent writer's
+# unpushed commit SURVIVES a sweep that wrote nothing.
+#
+# The empty-plan early exit (`${#EDIT[@]} -eq 0`) used to `exit` with
+# RESTORE_ON_FAILURE still armed, so the EXIT trap ran restore_node_files() over
+# a sweep that had written NOTHING. graph_rollback_node_writes() reads a HEAD
+# that has moved since HEAD_AT_ARM as "graph-commit landed and stranded a
+# commit", so a CONCURRENT graph writer that committed during this sweep's
+# planning window was handed straight to _graph_discard_stranded_commits and
+# `git reset --mixed`ed away — by a sweep with no write of its own to roll back.
+#
+# The empty plan is ROUTINE, not exceptional, which is why it needs pinning: a
+# record-time mint sitting at `main-qa` with no recorded merge evidence is
+# enumerated by the sweep's `unprovenMainQa` arm on EVERY sweep, and
+# reconcile-graph.ts's isMergeAbsorbable then refuses it — a merged PR, zero
+# writes, an empty `.edit[]`. t-mainqa below is exactly that node.
+#
+# The concurrent commit is injected through a `node` shim rather than case 7's
+# graph-commit wrapper: on this path graph-commit is never reached, and the only
+# thing that executes between HEAD_AT_ARM's capture and the early exit is the
+# apply run of reconcile-graph.ts. The shim lands the other writer's commit once
+# (sentinel guarded), then execs the real node.
+#
+# Assert the COMMIT's survival, not the exit code. The pre-fix sweep also exited
+# 0 — the trap's `exit $rc` preserves the status it inherited — so an
+# exit-code-only assertion would pass with the reset still happening. Verified
+# RED against a copy of reconcile-graph-merged with the `RESTORE_ON_FAILURE=0`
+# disarm line removed: `ahead=0`, the concurrent content gone from disk, and
+# `discarded by moving HEAD back to ...` on stderr.
+# ===========================================================================
+T9C="$WORK/t9c-seed"
+build_seed_repo "$T9C"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9C/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9C/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+# The zero-write enumeration: a record-time mint at `main-qa` carrying a merged
+# PR and no recorded merge evidence.
+cat >"$T9C/intentions/t-mainqa.md" <<'NODE'
+---
+id: t-mainqa
+kind: tactic
+statement: a record-time main-qa mint the sweep enumerates but never writes
+owner: ai
+status: codified
+phase: main-qa
+serves: []
+execution:
+  branch: t-mainqa
+  pr: 919
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  completion: null
+office_hours: null
+---
+# a record-time main-qa mint the sweep enumerates but never writes
+
+## Verification items
+
+- nothing to verify in the harness
+NODE
+# The concurrent writer's own node. It carries no execution.pr, so this sweep
+# never enumerates it — anything that happens to it is the rollback's doing.
+cat >"$T9C/intentions/t-concurrent.md" <<'NODE'
+---
+id: t-concurrent
+kind: tactic
+statement: another graph writer's node, committed during the sweep's window
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# another graph writer's node, committed during the sweep's window
+NODE
+new_origin t9c
+init_and_push "$T9C"
+
+C9C="$WORK/t9c-clone"
+clone_with_node_modules "$C9C"
+BIN9C="$WORK/t9c-bin"; FIX9C="$WORK/t9c-fixtures"
+reconcile_gh_stub "$BIN9C" "$FIX9C"
+# graph-commit must never be reached — the empty-plan exit is ahead of the land.
+# Record any invocation so a fixture that quietly stopped producing an empty
+# plan fails loudly instead of passing for the wrong reason.
+cat >"$C9C/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t9c-graph-commit-invoked.txt"
+exit 1
+SH
+chmod +x "$C9C/packages/intentionsutil/scripts/graph-commit"
+# The injection point (see the header note): wrap `node`, act only on the apply
+# run, and hand every other invocation straight through to the real binary —
+# resolved BEFORE the shim is on PATH, or the shim would exec itself.
+REAL_NODE9C="$(command -v node)"
+cat >"$BIN9C/node" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+saw_script=0; saw_noapply=0
+for a in "$@"; do
+  case "$a" in
+    *reconcile-graph.ts) saw_script=1 ;;
+    --no-apply)          saw_noapply=1 ;;
+  esac
+done
+if [[ "$saw_script" -eq 1 && "$saw_noapply" -eq 0 && ! -f "$GC_SENTINEL" ]]; then
+  : >"$GC_SENTINEL"
+  # Another graph writer commits its own node into the shared checkout while
+  # this sweep plans. Unpushed, single-parent, intentions/-only and NOT a
+  # `graph: park ...` subject — exactly the shape
+  # _graph_discard_stranded_commits classifies as safely discardable.
+  printf '%s\n' 'landed by a concurrent graph writer' >>"$GC_CLONE/intentions/t-concurrent.md"
+  git -C "$GC_CLONE" add -- intentions/t-concurrent.md
+  git -C "$GC_CLONE" commit -qm 'graph: concurrent writer content commit'
+fi
+exec "$GC_REAL_NODE" "$@"
+SH
+chmod +x "$BIN9C/node"
+
+out="$(
+  cd "$C9C" || exit 99
+  export PATH="$BIN9C:$PATH" GC_FIXTURE_DIR="$FIX9C"
+  export GC_CLONE="$C9C" GC_REAL_NODE="$REAL_NODE9C" GC_SENTINEL="$WORK/t9c-concurrent-landed"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+ahead9c="$(git -C "$C9C" rev-list --count origin/main..HEAD)"
+subject9c="$(git -C "$C9C" log -1 --format=%s)"
+committed9c="$(git -C "$C9C" show HEAD:intentions/t-concurrent.md)"
+disk9c="$(cat "$C9C/intentions/t-concurrent.md")"
+status9c="$(git -C "$C9C" status --porcelain intentions/)"
+if [[ $rc -eq 0 ]] \
+   && [[ ! -e "$WORK/t9c-graph-commit-invoked.txt" ]] \
+   && [[ -f "$WORK/t9c-concurrent-landed" ]] \
+   && [[ "$ahead9c" -eq 1 ]] \
+   && [[ "$subject9c" == 'graph: concurrent writer content commit' ]] \
+   && grep -q 'landed by a concurrent graph writer' <<<"$committed9c" \
+   && grep -q 'landed by a concurrent graph writer' <<<"$disk9c" \
+   && [[ -z "$status9c" ]] \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && ! grep -q 'rolled the node write' <<<"$out"; then
+  ok "reconcile-graph-merged empty-plan disarm: a concurrent writer's unpushed commit SURVIVES a zero-write sweep (still ahead by 1, content intact on HEAD and on disk, tree clean, no rollback claim)"
+else
+  no "reconcile-graph-merged empty-plan disarm (rc=$rc, ahead=$ahead9c, subject='$subject9c')"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status9c"
+  printf 'disk:\n%s\n' "$disk9c"
 fi
 
 # ===========================================================================

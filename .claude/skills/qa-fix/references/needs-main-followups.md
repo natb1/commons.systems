@@ -116,9 +116,17 @@ so neither is worked until the source PR merges and the source reconciles to
    every created node in **one** `graph-commit`, and prints one
    `minted <id> (CREATE|EXISTING)` line per non-empty lane. Exit 0 is landed (an
    all-`EXISTING` no-op included), 1 a write/`graph-commit` failure, 2 a usage
-   error. The mint is **idempotent**: a lane whose node already exists on
-   `origin/main` reports `EXISTING` and is not rewritten, so re-running this seam
-   on a later fixing pass is safe.
+   error. A lane whose node already exists on `origin/main` reports `EXISTING`
+   and is not rewritten.
+
+   The mint is idempotent **only while the item set is unchanged**.
+   `assert_existing_covers` hard-errors (exit 1) when the landed node does not
+   already record every item the pass routed to that lane, and its remedy is a
+   manual `write-node.ts` + `graph-commit` append — which an autonomous fixing
+   pass cannot perform. A re-run that discovers a new item therefore REFUSES
+   rather than converging. The refusal is the safe direction, but note it can
+   fire falsely: item ids are LLM-authored, so re-spelling one item reads as an
+   uncovered item.
 4. **Never append to the source body**, and do not set the source's phase here —
    Step 4's `transition-node` write still owns `qa → review`.
 5. **Record** each minted id for the Step 4 comment's filed-follow-ups sub-list.

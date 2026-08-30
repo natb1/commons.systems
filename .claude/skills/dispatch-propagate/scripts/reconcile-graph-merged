@@ -160,9 +160,16 @@ OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   // evidence — the shape a record-time mint is born with. Its PR state is
   // fetched so a closed-WITHOUT-merge source can retire it (reconcile-graph.ts
   // isCloseAbsorbable); a merged one is enumerated but written by nothing,
-  // since isMergeAbsorbable still refuses. A main-qa node reached through this
-  // sweep always has completion.mergedAt stamped, so it drops out immediately
-  // and no already-verified node costs a gh call.
+  // since isMergeAbsorbable still refuses.
+  //
+  // That last part has a standing cost, stated here because the obvious
+  // reading of the line above is the opposite. Nothing in this sweep stamps
+  // `completion.mergedAt` on a main-qa node, so a record-time mint whose PR
+  // has merged never acquires the field that would drop it out of
+  // `unprovenMainQa`. It is re-enumerated and re-fetched from gh on EVERY
+  // sweep for its whole life at `main-qa`. The sweep is therefore not
+  // self-limiting, and its gh cost grows with the number of merged main-qa
+  // nodes rather than with the number of unverified ones.
   const unprovenMainQa = (n) =>
     n.phase === "main-qa" &&
     !(n.execution && n.execution.completion && n.execution.completion.mergedAt);
@@ -358,6 +365,36 @@ done < <(jq -c '.deferred[]?' <<<"$PLAN")
 # --- Land the plan as one graph-commit ---------------------------------------
 mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
 if [[ "${#EDIT[@]}" -eq 0 ]]; then
+  # DISARM BEFORE EXITING. An empty apply plan means the apply run mutated
+  # nothing, so there is nothing to roll back — but the EXIT trap does not know
+  # that, and would call restore_node_files() anyway. Two harms follow, and the
+  # second is not confined to this sweep:
+  #
+  #   1. It logs "rolled the node write(s) back to HEAD" for a sweep that wrote
+  #      nothing, which is simply false in the journal.
+  #   2. graph_rollback_node_writes() compares HEAD against HEAD_AT_ARM to tell
+  #      an ordinary rollback from graph-commit having moved HEAD. If a
+  #      CONCURRENT graph writer landed a commit while we were planning, that
+  #      comparison sees a moved HEAD, enters _graph_discard_stranded_commits,
+  #      and `git reset --mixed`es away a commit this sweep never made.
+  #
+  # An empty plan is ROUTINE, not exceptional: unprovenMainQa enumerates a
+  # merged record-time mint on every sweep and isMergeAbsorbable then refuses
+  # it, so this path is reached often. A rare-path bug would be survivable; a
+  # routine-path one is not.
+  #
+  # Safe because an empty `.edit[]` means the apply run wrote nothing: every
+  # writeNode() in reconcile-graph.ts is paired with an editSet.add(), so
+  # `.edit[]` empty <=> no node file was written. There is nothing to restore.
+  #
+  # NOT "safe because BASE_BLOB is empty". That was the original rationale here
+  # and it is the wrong reason: the destructive
+  # `_graph_discard_stranded_commits` leg runs BEFORE the per-id loop and
+  # restores the STRANDED COMMITS' paths, not the caller's pinned ids. An empty
+  # BASE_BLOB therefore does not make the trap harmless, and stating it that
+  # way reads as if this disarm were cosmetic. It is not — the destructive leg
+  # is exactly what the disarm exists to keep out of a zero-write path.
+  RESTORE_ON_FAILURE=0
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0
 fi
