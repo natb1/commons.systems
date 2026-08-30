@@ -147,7 +147,14 @@ clarifications:
       virtue home — temperance covers nourishment as ordered appetite,
       strategy-financial-sustainability is instrumental ('fund the project') —
       the sustenance/livelihood round's recommendations must defer to
-      philosophical, theological and/or psychology tradition."
+      philosophical, theological and/or psychology tradition. RESOLVED
+      2026-08-30 (same-day sustenance round): virtue-right-livelihood ratified
+      as the first-class home; virtue-knowledge-as-gift held
+      delegated-pending-review as its tension sibling;
+      strategy-financial-sustainability re-homed to serve the new root. The
+      tradition-deference instruction was followed — substantiating and
+      contradicting traditions recorded per strategy-explicit-intent's
+      substantiation doctrine."
 tooling_goals:
   - kind: actuator
     statement: mount schema — mount anchors on delegation/tradition records,
