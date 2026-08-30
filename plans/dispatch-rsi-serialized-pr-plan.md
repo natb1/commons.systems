@@ -448,9 +448,9 @@ were removed.
 
 ## Read this before planning any of it: verify every "missing" claim
 
-The graph says these four nodes are open. The code says otherwise. **Verify
-before implementing — most of PR3 may be a bookkeeping pass, not an
-implementation.**
+The graph says these three nodes are open — a fourth, struck below, closed on
+`origin/main` on 2026-08-30. The code says otherwise. **Verify before
+implementing — most of PR3 may be a bookkeeping pass, not an implementation.**
 
 | Node | Claimed missing | Actually on `main` |
 |---|---|---|
@@ -1359,7 +1359,7 @@ Scope before closing anything:*
 ### Scope
 
 **Unit 1 — residual verification (do first). ⚠ NOT close-only.** Read each of
-the four nodes' units *and* success criteria before deciding anything is
+the three nodes' units *and* success criteria before deciding anything is
 diff-free.
 
 > **Corrected 2026-08-30.** This unit used to be framed as "verify-and-close
@@ -1376,14 +1376,24 @@ Evidence gathered during planning:
 | Node | Evidence on `main` |
 |---|---|
 | `audit-instrument-scoping` | `--session`/`--node` documented `aggregate-usage.sh:21-47`; `scope:{type,id}` emitted `:1463,1488` |
-| `audit-permission-friction` | `lenses.permission_friction` rollup, `:835` |
 | `audit-cache-efficiency-lens` | `hit_ratio: {window, by_phase}`, `:1211` |
 | `rsi-round-trips-lens-carrier` | `boot_preamble` block, `:1335`; `scriptable_round_trips` present |
 
-Residual work actually observed: `audit-permission-friction` also asks for a
-closing `/fewer-permission-prompts` step on the attended audit — check whether
-that exists. `audit-instrument-scoping` asks for fleet-denominator lenses tagged
-**fleet-only**.
+> *(`audit-permission-friction` was the fourth row here until 2026-08-30. It
+> left PR3's scope when the node closed on `origin/main` as `91bc7cc9` — see the
+> ⛔ callout under `### Nodes closed (9)`. Its lens is present in
+> `aggregate-usage.sh`; locate `lenses.permission_friction` by name if you need
+> it, but do not verify or re-stamp the node from here.)*
+
+Residual work actually observed: `audit-instrument-scoping` asks for
+fleet-denominator lenses tagged **fleet-only**.
+
+> *(This paragraph also used to say `audit-permission-friction` "asks for a
+> closing `/fewer-permission-prompts` step on the attended audit — check whether
+> that exists". Struck 2026-08-30: that step is genuinely outstanding, but it is
+> **not PR3 work** — the node closed anyway as a Ruling-1 completion record and
+> the outstanding half was transcribed into the node body. See the bullet under
+> §"Read this before planning any of it".)*
 
 > **⛔ Do NOT ratify the `fleet-only` tag across every fleet-denominator lens.**
 > *(Struck 2026-08-30.* This paragraph used to end "the vocabulary appears at
@@ -3308,7 +3318,14 @@ invent one.
 
 ### Scope
 
-> **⛔ POSITION 10 CANNOT RUN AS ORIGINALLY WRITTEN.** Its only node,
+> **⛔ POSITION 10 CANNOT RUN AS ORIGINALLY WRITTEN — but it is not blocked.**
+> *(Corrected 2026-08-30: this callout used to call the parked node the
+> position's **only** node. It is not — the rival carrier
+> `tactic-dispatch-skill-rename` is `status: raw`, `phase: null`,
+> `blocked_by: []`, `office_hours: null` on `origin/main`, i.e. live and
+> selectable, and this PR's `### Nodes closed (2)` list now names it. What
+> cannot run is the section **as written**, because it plans against the parked
+> node. See the ⚠ callout above that list.)* The node this section names,
 > `intentions/tactic-dispatch-skill-standards-extraction.md`, is **parked**
 > (`office_hours` non-null, `since: 2026-08-20`, `phase: null`, `status: raw`,
 > `session_type: requirement-discovery`) on four unrecorded premises, **the first
@@ -3363,11 +3380,14 @@ invent one.
 > traverse — so it cannot block, and there is nothing to delete from the graph.
 > The node itself was pruned by `20b0432c` at `status: codified`,
 > `phase: review`, `pr: 2923`, and its work shipped. Only the **rename** half of
-> the "coordinated adjacent PRs" pair is outstanding, and that is this PR. A
-> `blocked_by` naming a node that does not exist can never clear, so honoring it
-> would deadlock the position permanently. Treat it as void; do **not** mint the
-> node on a plan reference alone. It is listed with the other two phantoms in the
-> index's phantom block.
+> the "coordinated adjacent PRs" pair is outstanding, and that is this PR.
+> *(As originally reasoned, before the measurement above: "a `blocked_by` naming
+> a node that does not exist can never clear, so honoring it would deadlock the
+> position permanently." The verdict stands, the reason does not — there is no
+> frontmatter edge to honor or to void, so nothing was ever deadlocked.)* Do
+> **not** mint the node on a plan reference alone; the citation needs past-tense
+> repair, not a decision. It is listed with the other two in the index's block
+> of ids cited but no longer present.
 
 Scope: every reference to the renamed skills in skill directories, `SKILL.md`
 frontmatter `name:`, all `.claude/skills/**` cross-references,

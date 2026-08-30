@@ -9,8 +9,8 @@ session**: a session handed the node bodies alone builds the un-ruled design.
 not the authority.** That makes transcription onto the node load-bearing: a
 clean session handed the node bodies alone sees only what is on the node.
 
-> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 6 of 6
-> node-homed rulings transcribed. This file is NO LONGER operatively binding
+> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 8 of 8
+> rulings are on their nodes. This file is NO LONGER operatively binding
 > for any ruling. It is the index and the audit trail.**
 > The earlier banner here said "1 of 7 transcribed … this file is operatively
 > binding for the six untranscribed rulings, and any session executing this
@@ -33,13 +33,27 @@ clean session handed the node bodies alone sees only what is on the node.
 > `LC_ALL=C git grep -a -l 'verifiably dead' origin/main -- intentions/` → 1 file.
 > An earlier audit here reported zero because it ran a BRE alternation
 > (`'verifiably dead\|clear a park itself'`) under ERE/PCRE, where `\|` matches a
-> literal pipe. **Ruling 5 is the only ruling with no node home, and needs none:**
-> it is discharged by the transcriptions themselves.
+> literal pipe.
+>
+> **Ruling 5 is node-homed too — corrected 2026-08-30 (third pass).** An earlier
+> revision of this banner said Ruling 5 "has no node home, and needs none,"
+> discharged by the transcriptions themselves. That is refuted by a commit this
+> banner already cites: `1f5d0909` touches exactly one file and adds exactly one
+> thing — a `clarifications:` entry on
+> `intentions/strategy-graph-native-dispatch.md` recording Ruling 5 verbatim and
+> ending *"(Recorded 2026-08-29 as author Ruling 5; see
+> plans/dispatch-rsi-author-rulings.md, which is the index and audit trail and
+> never the authority.)"* Do **not** re-transcribe it.
+>
+> **Ruling 8 is node-homed too**, on
+> `tactic-eval-finding-detached-code-review-dies-with-launcher` (`:683`, 1
+> occurrence of *"RULED 2026-08-29"*), recorded in `08870461` / PR #3132 — see
+> the discharge note below. So the count is **8 of 8**, not 6 of 6.
 >
 > **For everything else, the node body is the authority.** This file is now
 > what its own header says it is: the index and the audit trail. A clean
-> session handed the node bodies alone sees Rulings 1, 2, 3, 6 and 7; it no
-> longer needs this file for them.
+> session handed the node bodies alone sees every one of Rulings 1 through 8;
+> it no longer needs this file for any of them.
 >
 > Two corrections to the specific claims the old banner made, both measured:
 >
