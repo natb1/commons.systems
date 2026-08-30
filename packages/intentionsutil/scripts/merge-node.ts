@@ -134,8 +134,18 @@ function main(): void {
   const outPath = requireFlag(args, "--out");
 
   const result = mergeNodeFiles(basePath, oursPath, theirsPath, outPath);
+  // `process.exitCode`, never `process.exit()`. When stdout is a PIPE — which
+  // is exactly how graph-commit invokes this script — write() is asynchronous
+  // once the payload exceeds the pipe buffer (F_GETPIPE_SZ = 65536 on this
+  // host). `process.exit()` terminates immediately and DISCARDS whatever is
+  // still queued, so a large merge result reaches the caller truncated.
+  //
+  // The caller then fails `jq -e .` on invalid JSON and reports a broken
+  // environment, so a perfectly ordinary large-node merge is misdiagnosed and
+  // graph-commit DIES WITH NO PARK WRITTEN. Setting exitCode instead lets the
+  // event loop drain the write before the process ends.
   process.stdout.write(JSON.stringify(result) + "\n");
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -146,6 +156,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     // an error on stderr, no JSON on stdout. See the output contract at the top
     // of this file for why the code is 3 and not 1.
     process.stderr.write(`merge-node: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exit(3);
+    // Same reason as the success path above: exitCode, not exit(), so the
+    // diagnostic is not truncated on its way to the caller.
+    process.exitCode = 3;
   }
 }
