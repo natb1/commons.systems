@@ -81,39 +81,44 @@
 > `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
 > `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
 > `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
-> not a `|`/`>` block scalar. Repair it as a frontmatter field edit, and dump
-> the node first: `dump-node.ts --dir intentions --out-dir <tmp>
-> tactic-serves-inheritance-full-strip`, edit the dumped JSON, then
-> `write-node.ts --dir intentions` →
-> `graph-commit -C <repo root> --base <tmp>/base-manifest.txt
-> tactic-serves-inheritance-full-strip`, which merges frontmatter
-> structurally. **Both `graph-commit` flags are load-bearing.** `--base` is
-> opt-in and empty means skip the check (`graph-commit:430`, `:767-771`), and
-> the manifest `dump-node.ts` prints is exactly its compare-and-swap token
-> (`packages/intentionsutil/scripts/dump-node.ts:31-32`) — omit it and the dump
-> buys nothing a plain `readNode` would not, while a concurrent session that
-> moves this live `phase: implement` node on `origin/main` between the dump and
-> the commit gets its state clobbered (the 2026-07-06 near-miss,
-> `dump-node.ts:1-7`). `-C` is required because `graph-commit` resolves its
-> repo root from `-C`/`--repo`, **else cwd** — never from its own location
-> (`graph-commit:36-40`); run bare from a checkout that does not hold the edit
-> and it exits 0 having landed nothing.
-> This is a **frontmatter-only** path: `readNode` deliberately drops the body
-> (`packages/intentionsutil/src/store.ts:159-165`), so the dumped JSON has no
-> `body` key, `validateNode` drops unknown keys (`write-node.ts:35`), and
-> `writeNode` re-reads the on-disk body verbatim (`store.ts:57`). A `body` key
-> added to the payload is discarded with no error. The `:53` repair is a plain
-> `.md` text edit, made separately — either order is safe, since `writeNode`
-> re-reads the body from disk at write time.
-> Never hand-build a partial payload: `validateNode` defaults
-> every omitted field (`packages/intentionsutil/src/schema.ts:1113-1163` — the
-> single `return` object, where each optional field reads
-> `value.X == null ? <default> : …`), so a payload naming only
-> `id`/`kind`/`status`/`statement`/`owner`/`rationale` silently writes
-> `phase: null`, `execution: null` and `serves: []` over this node's
-> `phase: implement` (`:33`), its whole `execution` block
-> (`strategy_fingerprint` included, `:34-40`) and its one `serves` entry
-> (`:26-27`).
+> not a `|`/`>` block scalar. Repair it as a frontmatter field edit.
+>
+> ```
+> dump-node.ts  --dir intentions --out-dir <tmp> tactic-serves-inheritance-full-strip
+> # edit <tmp>/tactic-serves-inheritance-full-strip.json
+> write-node.ts --dir intentions --file <tmp>/tactic-serves-inheritance-full-strip.json
+> graph-commit  -C <repo root> \
+>               --base   <tmp>/base-manifest.txt \
+>               --expect tactic-serves-inheritance-full-strip=$(git hash-object -- \
+>                        intentions/tactic-serves-inheritance-full-strip.md) \
+>               tactic-serves-inheritance-full-strip
+> ```
+>
+> **Every flag above is load-bearing, and each one guards a SILENT failure —
+> a run that exits 0 having done nothing or the wrong thing.** Their individual
+> rationales live in the scripts' own headers (`dump-node.ts:1-7`,
+> `graph-commit:36-40`, `:60-70`, `:430`, `:767-771`, `write-node.ts:73-83`) and
+> are deliberately NOT restated here; this passage was rewritten eight times
+> across one review cycle and every recurrence was a re-derived rationale drifting
+> from the script it described, never the command line itself. Read the headers.
+>
+> Three hazards are worth stating here because nothing in the command output
+> reveals them:
+>
+> 1. **Never hand-build a partial payload.** `validateNode` DEFAULTS every
+>    omitted field, so a minimal payload silently writes `phase: null`,
+>    `execution: null` and `serves: []` over this node's live `phase: implement`
+>    (`:33`), its whole `execution` block including `strategy_fingerprint`
+>    (`:34-40`) and its one `serves` entry (`:26-27`) — exit 0, no error, node
+>    out of the ladder. Always start from the full `dump-node.ts` output.
+> 2. **The path is frontmatter-only.** `readNode` drops the body, so the dump has
+>    no `body` key and a `body` key added to the payload is discarded with no
+>    error. The `:53` repair is a plain `.md` text edit made separately; either
+>    order is safe, since `writeNode` re-reads the body from disk at write time.
+> 3. **Escape for JSON, not for YAML.** The payload is `JSON.parse`d, so a `"` in
+>    the rationale is written `\"` there — one backslash. Do not add a second:
+>    `\\"` is what puts a literal backslash in the field. The YAML emitter picks
+>    its own scalar style downstream and needs nothing from you.
 >
 > Pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
 > whole node through the YAML emitter
@@ -122,9 +127,15 @@
 > to pre-arrange. Measured on *this* field, whose value carries both `: `
 > (`run: 26`, `:11`) and an apostrophe (`kind-strategy's`, `:16`): the emitter
 > keeps the double-quoted style and writes an embedded quote as `\"` in the
-> `.md`. (A value with no `: ` comes out plain and unescaped; one with `: ` but
-> no apostrophe comes out single-quoted. Neither shape is this field's, so do
-> not expect the escaping to disappear from the file.) Either way that
+> `.md`. (The full style rule, measured on yaml 2.9.0 with `stringify`'s
+> defaults: a value plain YAML can hold — no `: `, no leading indicator — comes
+> out plain and unescaped; a value that must be quoted comes out
+> **single**-quoted only when it contains a `"` and no `'`, and double-quoted
+> otherwise. The selector for single quotes is the `"` without an apostrophe,
+> not the absence of an apostrophe: `: ` with neither quote character still
+> emits double-quoted. This field's value carries an apostrophe, so it stays
+> double-quoted whether or not the repair adds a `"`, and the `\"` escaping
+> does not disappear from the file.) Either way that
 > backslash is the emitter's, produced from a bare `"` in the payload.
 > **The one escape still required is JSON, a
 > separate layer**: `write-node.ts` reads the node as a JSON document
