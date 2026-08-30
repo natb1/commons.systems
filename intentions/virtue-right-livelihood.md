@@ -20,17 +20,22 @@ rationale: "A disposition, never completed: the need to eat is permanent, and
   substantiated by Buddhist samma-ajiva — Right Livelihood as the fifth factor
   of the Noble Eightfold Path (tradition-buddhism, minted with this node); by
   Aristotle — NE I.8, external goods as necessary conditions of eudaimonia, and
-  Politics I, condemning only unlimited acquisition (cited in prose; the
-  adoption entry on tradition-aristotle is owed to that record's /exetasis
-  fold-in, since it is codified and must not gain author-unverified entries); by
+  Politics I, condemning only unlimited acquisition (tradition-aristotle,
+  adoption entry landed 2026-08-30 post-review fix H1: that record is status
+  delegated — borrowed, author-unverified scholarship is exactly what a
+  delegated record legally carries — so the earlier withholding, reasoned 'since
+  it is codified', rested on a false premise and is corrected here); by
   motivation psychology — Maslow's prepotent physiological need and Mullainathan
   & Shafir's scarcity capture (tradition-motivation-psychology, minted with this
   node). CONTRADICTED by mendicant and ascetic ideals — Franciscan voluntary
   poverty treats renouncing livelihood-security as the higher path, and Stoic
   apatheia toward externals (tradition-stoicism, already declined) would refuse
-  the premise; recorded per the same doctrine. Ratified 2026-08-30 sustenance
-  round (decision: author-ratified, 2026-08-30). All tradition anchors are
-  Claude-articulated and author-unverified — reading-program coverage pending."
+  the premise; recorded per the same doctrine — structurally since the
+  2026-08-30 post-review fix: tradition-franciscan minted as the contradiction's
+  record home, and tradition-stoicism's diverged list extended to this locus.
+  Ratified 2026-08-30 sustenance round (decision: author-ratified, 2026-08-30).
+  All tradition anchors are Claude-articulated and author-unverified —
+  reading-program coverage pending."
 reading: null
 serves: []
 recovers: []
@@ -46,6 +51,10 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
+  traditions:
+    - tradition-aristotle
+    - tradition-buddhism
+    - tradition-motivation-psychology
   tension_with: virtue-knowledge-as-gift
   conditions:
     - "the tension pair with virtue-knowledge-as-gift, and that sibling itself,
@@ -53,5 +62,13 @@ attributes:
       delegation-anthropic-claude, 2026-08-30) — an /exetasis sitting ratifies,
       amends, or declines the structure; this node's own substance is
       author-ratified"
+    - "what that sitting owes structurally (recorded 2026-08-30 post-review,
+      findings H4): legalize and define ROOT-LEVEL tension pairs in kind-virtue
+      (this pair is the first — prior tension doctrine covers siblings under one
+      parent), articulate both poles' excess-directions as the chunk-2
+      cross-guard doctrine expects, and ratify or amend the gift node's rooting
+      argument; the debt is carried on kind-virtue's matching clarification
+      (decision: delegated-pending-review, delegation-anthropic-claude,
+      2026-08-30)"
 ---
 # Right Livelihood — sustenance held as a legitimate first-class motivation: meet the need to eat through means ordered to the other virtues
