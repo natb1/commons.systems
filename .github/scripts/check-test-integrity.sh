@@ -2,6 +2,32 @@
 # Check for test-integrity violations in the current PR vs the resolved
 # baseline (origin/main on a branch, HEAD^1 on a push to main).
 #
+# THIS GATE HAS NO `<sensor>-ok:` SUPPRESSION MARKER, AND THAT IS DELIBERATE.
+# Its sibling decay sensors carry one (check-type-safety-escapes.sh takes
+# `type-safety-ok:`), so the asymmetry is a decision, not an oversight, and it
+# is recorded here so it is not "fixed" by someone restoring symmetry.
+#
+# .claude/rules/test-integrity.md governs this gate and is explicit: a failing
+# test is fixed or escalated to office-hours, and "there is no self-serve
+# escape hatch". A same-line marker IS a self-serve escape hatch — it is the
+# one move that rule names and forbids, so adding it here would repeal the rule
+# through the gate that enforces it.
+#
+# Know the cost of that choice, because it is real. On a push to `main` this
+# gate now compares HEAD^1..HEAD, which for a squash merge reproduces the
+# merged PR's exact diff. Before the diff-baseline change the range went empty
+# on main, so the gate scanned nothing and passed vacuously; closing that
+# vacuity is the whole point. The consequence is that a PR landed through a
+# human override-merge — carrying a weakening this gate would have blocked —
+# reddens `main` on the next push, and a red main blocks unrelated work until
+# it is resolved.
+#
+# That is the intended signal, not a regression: the override merges the PR, and
+# the red main says the debt is still outstanding. The remedy is to fix the test
+# or escalate, which is exactly what the rule prescribes. If this proves too
+# costly in practice, the change to argue for is the OVERRIDE path or the rule
+# itself — not a quiet marker added here.
+#
 # Three signals — all measured as NET changes across the whole diff so a
 # test moved between files within a single PR nets to zero:
 #
@@ -65,6 +91,18 @@ while [ "$#" -gt 0 ]; do
     --repo-root)
       if [ "$#" -lt 2 ]; then
         echo "check-test-integrity: --repo-root requires an argument" >&2
+        exit 1
+      fi
+      # An EMPTY value is REJECTED, not read as "flag absent". $REPO_ROOT is
+      # the sentinel selecting the explicit-tree branch below, so
+      # `--repo-root "$SOME_UNSET_VAR"` would otherwise fall through to the CWD
+      # default — and when the CWD sits in this script's own checkout the
+      # divergence guard does not fire either, so a caller that NAMED a tree
+      # silently gets a different one. That is the same guess-the-tree vacuity
+      # the flag exists to stop.
+      if [ -z "$2" ]; then
+        echo "check-test-integrity: --repo-root was given an empty value" >&2
+        echo "  pass a path, or omit the flag to default to the CWD's repo" >&2
         exit 1
       fi
       REPO_ROOT="$2"

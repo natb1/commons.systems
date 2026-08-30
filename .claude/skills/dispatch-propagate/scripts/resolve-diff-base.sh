@@ -230,6 +230,19 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo-root)
       if [ "$#" -lt 2 ]; then usage; fi
+      # An EMPTY value is REJECTED, not read as "flag absent". $REPO_ROOT is
+      # the sentinel selecting the explicit-tree branch below, so
+      # `--repo-root "$SOME_UNSET_VAR"` would otherwise fall through to the CWD
+      # default — and when the CWD sits in this script's own checkout the
+      # divergence guard does not fire either, so a caller that NAMED a tree
+      # silently gets a different one. That is the same guess-the-tree vacuity
+      # the flag exists to stop. Same guard, same wording, as the two
+      # .github/scripts gates that take this flag.
+      if [ -z "$2" ]; then
+        echo "resolve-diff-base: --repo-root was given an empty value" >&2
+        echo "  pass a path, or omit the flag to default to the CWD's repo" >&2
+        exit 2
+      fi
       REPO_ROOT="$2"
       shift 2
       ;;

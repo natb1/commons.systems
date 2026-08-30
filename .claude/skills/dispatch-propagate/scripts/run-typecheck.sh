@@ -39,6 +39,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Make sure origin/main is available locally. Idempotent — CI checkouts with
+# fetch-depth: 0 already have it.
+#
+# ORDERING IS LOAD-BEARING: this fetch must precede BOTH readers of
+# `origin/main`, not sit between them. Two independent resolutions happen
+# below — get-changed-apps.sh resolves the WORKSPACE LIST (it does not fetch
+# itself; it reads whatever origin/main is already present), and
+# resolve-diff-base.sh resolves the BASELINE TREE. With the fetch in between,
+# a fetch that advances origin/main mid-run leaves the two answers describing
+# different states of the remote.
+#
+# The damaging case is specific. If the newly-fetched main CONTAINS HEAD, then
+# --at-remote-tip first-parent collapses the baseline to HEAD^1, while the
+# workspace list still came from the older, further-back fork point. Every
+# workspace that is broken at HEAD^1 then fails its baseline probe, lands in
+# SKIPPED_BASELINE, and the run exits 0 — announced only by the WARNING below.
+# That is a check failing OPEN, which is the exact vacuity this whole change
+# exists to remove; a stale-but-CONSISTENT pair is strictly safer than a
+# fresh-but-MIXED one.
+git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || \
+  git -C "$REPO_ROOT" fetch origin main || true
+
 # Auto-detect mode: delegate workspace detection to get-changed-apps.sh.
 if [ "$EXPLICIT" = false ]; then
   if ! CHANGED_APPS=$("$SCRIPTS/get-changed-apps.sh"); then
@@ -97,11 +119,6 @@ cleanup() {
   exit $rc
 }
 trap cleanup EXIT INT TERM
-
-# Make sure origin/main is available locally. Idempotent — CI checkouts
-# with fetch-depth: 0 already have it.
-git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || \
-  git -C "$REPO_ROOT" fetch origin main || true
 
 # THE BASELINE COMMIT — resolved, not hardcoded to `origin/main`.
 #
