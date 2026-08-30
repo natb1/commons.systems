@@ -36,7 +36,6 @@ rationale: "Records the 2026-07-09 requirement: just as strategy-graph-integrity
   inheritance rule (kind-strategy): no virtue claim beyond parent
   strategy-explicit-intent."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -60,7 +59,15 @@ clarifications:
       exemption. Born-parked review-item tactics (reading chunks, deferral
       review items) are the curriculum's entries, not its subjects. Done tactics
       are out of scope by closure (pruned). Result: no node exists outside some
-      review path. Recorded 2026-07-09 interview."
+      review path. Recorded 2026-07-09 interview. AMENDED 2026-08-30:
+      born-parked review items remain the curriculum's entries for review-later
+      deferrals, which still mint their node at deferral time. They are no
+      longer the only entry mechanism. Indifference-delegations
+      (strategy-explicit-intent, 2026-08-30) mint no node at all and are reached
+      by the derived virtual review node; author-owned doctrine is reached the
+      same way rather than by waiting for a frontier expansion to sweep it in.
+      'No node exists outside some review path' now holds by construction rather
+      than by enrollment bookkeeping."
   - question: What are the review modes, and how is a node's mode determined?
     answer: "Two modes, both type-b-style sittings — they differ in what the author
       is prompted to collect beforehand, not in the sitting's form. Mode A,
@@ -81,7 +88,16 @@ clarifications:
       is derivable from the node's own record (held-on-trust/delegated vs
       author-owned), so the curriculum is generated from the graph, never
       hand-maintained. Mode B's machinery is the gap this strategy exists to
-      close. Recorded 2026-07-09 interview."
+      close. Recorded 2026-07-09 interview. AMENDED 2026-08-30: modes A and B
+      survive as CONTENT CLASSES within a single sitting, not as separate
+      enrollment paths. One node review covers both the node's author-owned
+      doctrine and its delegated/deferred content; A and B name what the author
+      collects beforehand for each part — which is this clarification's own
+      original framing, that the modes 'differ in what the author is prompted to
+      collect beforehand, not in the sitting's form'. The per-mode enrollment
+      machinery (mode-A frontier entries at record time, mode-B frontier
+      expansion as the recurrence mechanism) is superseded by the virtual review
+      node's rank-ordered walk."
   - question: Why not review-on-demand only — and is an ever-expanding curriculum
       itself an institutional ratchet?
     answer: "Author-owned steelman disposition. On-demand review is retained, not
@@ -106,7 +122,13 @@ clarifications:
       recursive scope expansion at each sitting. The skill encoding is retained
       as tactic-align-curriculum-maintenance, coordinating with
       tactic-align-interview-type-doctrine's deferral-mechanics clause on the
-      same skill surface. Recorded 2026-07-09 interview."
+      same skill surface. Recorded 2026-07-09 interview. AMENDED 2026-08-30:
+      /align's record-time enrollment role now splits by disposition. Recording
+      a review-later deferral still mints its review node in the same
+      graph-commit. Recording an indifference-delegation mints nothing — it is
+      reached by the virtual review node. Recording author-owned doctrine
+      likewise mints nothing and needs no frontier bookkeeping, since the
+      virtual node reaches every node that has changed since its last review."
   - question: What did the 2026-07-09 /align-tactics round 1 record against the
       machinery references (Side B, immaterial)?
     answer: Two observations that inform but do not gate the round. First,
@@ -248,6 +270,51 @@ clarifications:
       round accordingly minted no tactic (frontier machinery complete, coverage
       total, motion capacity-bound) and stamps last_aligned 2026-07-23. Recorded
       2026-07-23 /align-tactics round."
+  - question: How is the next review sitting selected, and what mints review nodes?
+    answer: "(Recorded 2026-08-30 interview; author-directed design.) A single
+      VIRTUAL review node, not a chain of born-parked ones. It always exists, is
+      derived rather than stored, always carries the rank of the highest-ranked
+      durable-layer node that has not been reviewed since it last changed, and
+      points at that node — so the next sitting is always the most important
+      un-reviewed thing, and no review node is created, ranked, or retired per
+      target. Rank is therefore resolved live at selection time and can never go
+      stale, which is why the design supersedes the earlier born-parked chaining
+      sketch considered this round. The author flagged that this likely requires
+      new mechanism: the router today selects stored nodes, so both projecting a
+      derived candidate and stamping a per-node reviewed marker are new work.
+      SCOPE: one sitting covers a node's author-owned doctrine AND its
+      delegated/deferred content together. ANCESTRY-FIRST: reviewing a node
+      reviews its un-reviewed ancestors first, root-first, before the node
+      itself. CHANGE-GATE: a node needs no further review, as leaf or as
+      ancestor, unless it changes. An ancestor changing does NOT dirty its
+      descendants — the changed ancestor's own sitting is where consequences
+      surface, and a reviewer who finds a descendant now wrong AMENDS it, which
+      changes it, which re-enrolls it by the same rule; propagation is by
+      amendment, never by forced subtree re-review, which would restore the
+      per-node-schedule cost this design exists to avoid (Claude-drafted,
+      author-adopted). FOLD-IN: when the review runs for a node that also
+      carries pending review-later deferral nodes, those are folded into the
+      same session. Review-later deferrals still mint their node at deferral
+      time; indifference-delegations mint nothing and are seen only here
+      (strategy-explicit-intent, 2026-08-30)."
+  - question: Why did the coverage half of the success_signal have to be replaced
+      (2026-08-30)?
+    answer: "(Recorded 2026-08-30 interview.) The recorded threshold was 'zero
+      durable-layer nodes without a review path, and each cycle completes at
+      least one sitting'. Under the virtual review node every node has a review
+      path BY CONSTRUCTION — the node is ranked over all un-reviewed nodes, so
+      nothing can lack one — which makes the coverage half vacuously true
+      forever and measuring nothing. Half a signal that reads as measured but is
+      not is the weak-instrument failure the parent strategy was already flagged
+      for at its 2026-07-28 review cycle. Coverage is therefore replaced by
+      REVIEW DEBT: the count of durable-layer nodes un-reviewed since they last
+      changed, and the rank of the highest such node — which is exactly what the
+      virtual node points at, so it is free to read. The threshold asks that the
+      backlog's top rank trend down across cycles. This measures what can now
+      actually go wrong: important content sitting un-reviewed. is_proxy stays
+      true: the signal measures review activity and backlog, not directly
+      whether the record is still believed. The vacuity finding and the
+      replacement observable were Claude-drafted and author-adopted this round."
 tooling_goals:
   - kind: sensor
     statement: "review-coverage table in the graph digest / align-audit report — per
@@ -258,30 +325,32 @@ tooling_goals:
       (tactic-align-curriculum-maintenance); the generalized office-hours review
       sitting beyond reading chunks (tactic-review-sitting-skill-generalization)
 success_signal:
-  observable: "per review cycle — curriculum coverage (every durable-layer node
-    carries a live review path in its mode: source re-validation or
-    context-broadening confirmation) and curriculum motion (sittings completed,
-    each re-affirming or amending a previously settled node)"
-  sensor: owner review at office-hours; the digest/audit coverage table once it exists
-  threshold: zero durable-layer nodes without a review path, and each cycle
-    completes at least one sitting that re-affirms or amends previously settled
-    content
+  observable: per review cycle — review debt (how many durable-layer nodes are
+    un-reviewed since they last changed, and the rank of the highest such node,
+    which is what the virtual review node currently points at) and curriculum
+    motion (sittings completed, each re-affirming or amending a previously
+    settled node)
+  sensor: owner review at office-hours; the virtual review node's own target and
+    backlog depth, read directly, once the mechanism exists
+  threshold: the review backlog's top rank trends down across cycles, and each
+    cycle completes at least one sitting that re-affirms or amends previously
+    settled content
   is_proxy: true
 attention:
-  boost: 3.5
-  override: null
+  boosts:
+    "1": 3.5
   rationale: "Author-directed 2026-08-11: re-rank the curriculum-frontier /
-    graph-review-coverage machinery to sit after the rsi strategy (boost 4)
-    and before strategy-attention-surface (boost 3) — supersedes the 2026-07-09
+    graph-review-coverage machinery to sit after the rsi strategy (boost 4) and
+    before strategy-attention-surface (boost 3) — supersedes the 2026-07-09
     rationale that elevated this strategy to authored 7. Boosting the strategy
     carries the tier to its whole subtree by inheritance: the three tactics
     serving it (tactic-review-curriculum-coverage-sensor,
     tactic-align-curriculum-maintenance,
     tactic-review-sitting-skill-generalization) inherit authored 3.5 with no
-    per-node boost. Scope is unchanged: the frontier-maintenance machinery,
-    not the curriculum's per-class review mechanisms/entries (reading chunks,
-    deferral items, delegation review windows, the conditions sweep) which
-    stay unboosted."
+    per-node boost. Scope is unchanged: the frontier-maintenance machinery, not
+    the curriculum's per-class review mechanisms/entries (reading chunks,
+    deferral items, delegation review windows, the conditions sweep) which stay
+    unboosted."
 phase: null
 execution: null
 validates: []
@@ -299,10 +368,18 @@ attributes:
       priority, never exhaustive per cycle
     - the curriculum cadence actually recurs — a lapse is the same cadence-lapse
       capture mechanism the parent and sibling strategies name
-    - the curriculum stays graph-encoded — review items are born-parked nodes
-      derived from node status, never a hand-maintained side list
-    - expansion stays reversible and total — curriculum growth archives by
-      inaction (parked nodes), and no node class becomes permanently exempt from
-      enrollment
+    - "the curriculum stays graph-encoded — review targets are derived from node
+      status, never a hand-maintained side list; both forms satisfy this, the
+      born-parked node a review-later deferral mints and the derived virtual
+      review node that selects the next sitting (amended 2026-08-30: the guard
+      is anti-side-list, and a derived target is more graph-encoded than a
+      stored one, not less)"
+    - "expansion stays reversible and total — no node class becomes permanently
+      exempt from review, and the mechanism stands down by being removed rather
+      than by accumulating nodes that archive by inaction (amended 2026-08-30:
+      the virtual review node replaces accumulation with a single derived
+      fixture, so reversibility now rests on that fixture being removable; the
+      born-parked nodes review-later deferrals still mint continue to archive by
+      inaction)"
 ---
 # The entire graph is subject to a recurring, ever-expanding office-hours review curriculum — deferred and delegated content re-validated against its sources, author-owned doctrine re-affirmed against recursively broadened context; the primary standing mechanism against dogma, calcification, atrophy, and forgotten delegation
