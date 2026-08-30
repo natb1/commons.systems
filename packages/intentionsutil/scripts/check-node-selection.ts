@@ -72,6 +72,7 @@ import {
   tacticScopeFingerprint,
 } from "../src/router.js";
 import { isFingerprintStale, REVIEWED_MARKER } from "../src/transitions.js";
+import { checkKindTypedFields } from "../src/schema.js";
 import type { IntentionNode } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
@@ -285,10 +286,33 @@ export function evaluateSelection(opts: SelectionOpts): SelectionResult {
     }
   } else if (selectedPhase === "align-tactics") {
     if (node.kind === "strategy") {
-      // A strategy is align-selected at its native null phase; any non-null
-      // stored first-class phase is a stale advance.
+      // A strategy is align-selected at its native null phase. A non-null
+      // stored phase is NOT a stale advance — it is a MALFORMED NODE, so this
+      // raises rather than returning a staleness verdict.
+      //
+      // Why: schema rule 12 makes `phase` tactic-only, so a strategy can never
+      // legitimately carry one. There is no benign path that produces this
+      // node; a stale advance would have to have written a field the kind does
+      // not have. Reporting exit 12 told the caller "the selection went stale,
+      // nothing is wrong" and sent a re-evaluation worker at a corrupt node.
+      //
+      // This IS reachable in production, which is why the check is not
+      // redundant: rule 12 is enforced only in validateGraph, graph-commit
+      // never runs validateGraph, and validateNode accepts the node — so a
+      // strategy carrying a phase lands and reaches here. Measured: with this
+      // branch removed, the gate exits 0 on such a node and would provision a
+      // worktree and launch an /align-tactics worker against it.
+      //
+      // Rule 12 stays SINGLE-HOMED: the schema's own checkKindTypedFields
+      // decides, rather than this file restating the rule and drifting from it.
       if (phase !== null) {
-        return fail(EXIT_STALE_SELECTION, "phase", `selected align-tactics but strategy ${nodeId} phase advanced to ${phase}`);
+        const problems: string[] = [];
+        checkKindTypedFields(node, problems);
+        throw new Error(
+          problems.length > 0
+            ? `malformed store: ${problems.join("; ")}`
+            : `malformed store: ${nodeId} is kind "strategy" but carries phase "${phase}"`,
+        );
       }
     } else {
       // A frozen tactic is align-selected either at draft (phase null) OR while
