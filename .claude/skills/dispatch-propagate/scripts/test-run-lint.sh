@@ -89,6 +89,15 @@ make_repo() {
   cp "$SCRIPT_DIR/../../../../.github/scripts/check-type-safety-escapes.sh" \
      "$REPO/.github/scripts/check-type-safety-escapes.sh"
   chmod +x "$REPO/.github/scripts/check-type-safety-escapes.sh"
+  # That checker reaches resolve-diff-base.sh through its OWN on-disk location
+  # (the helper is a tool that must sit beside it; the tree to scan is named
+  # separately via --repo-root), so the ephemeral repo must carry the helper
+  # too — otherwise every case here fails on a missing file rather than on what
+  # it asserts. Committed in the BASELINE, so it never appears in the diff.
+  mkdir -p "$REPO/.claude/skills/dispatch-propagate/scripts"
+  cp "$SCRIPT_DIR/resolve-diff-base.sh" \
+     "$REPO/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+  chmod +x "$REPO/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
   git -C "$REPO" add -A
   git -C "$REPO" commit --quiet -m "baseline"
   git -C "$REPO" push --quiet origin main
@@ -183,6 +192,15 @@ make_main_push_repo() {
   cp "$SCRIPT_DIR/../../../../.github/scripts/check-type-safety-escapes.sh" \
      "$REPO/.github/scripts/check-type-safety-escapes.sh"
   chmod +x "$REPO/.github/scripts/check-type-safety-escapes.sh"
+  # That checker reaches resolve-diff-base.sh through its OWN on-disk location
+  # (the helper is a tool that must sit beside it; the tree to scan is named
+  # separately via --repo-root), so the ephemeral repo must carry the helper
+  # too — otherwise every case here fails on a missing file rather than on what
+  # it asserts. Committed in the BASELINE, so it never appears in the diff.
+  mkdir -p "$REPO/.claude/skills/dispatch-propagate/scripts"
+  cp "$SCRIPT_DIR/resolve-diff-base.sh" \
+     "$REPO/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+  chmod +x "$REPO/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
   git -C "$REPO" add -A
   git -C "$REPO" commit --quiet -m "baseline"
   git -C "$REPO" push --quiet origin main

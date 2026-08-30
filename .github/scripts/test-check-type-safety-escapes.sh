@@ -456,6 +456,142 @@ EOF
 )
 
 # ---------------------------------------------------------------------------
+# GIT-PATH CASES: the default (non---scan-stdin) entry point.
+#
+# Everything above pipes a synthetic diff through --scan-stdin, which touches no
+# git state at all — so none of it could ever see the defect that lived in how
+# the BASELINE was chosen. These cases run the real git path against hermetic
+# repos.
+#
+# THE PUSH-TO-MAIN SHAPE. actions/checkout leaves refs/remotes/origin/main
+# pointing AT the pushed commit, so HEAD == origin/main and the
+# `origin/main...HEAD` range this sensor used to carry expanded to HEAD..HEAD —
+# empty. The `[ -z "$diff_output" ]` self-noop then returned exit 0. A hatch
+# committed straight to main passed the REQUIRED `lint` job without being read.
+# ---------------------------------------------------------------------------
+
+# make_git_repo <shape> — build a repo whose tip commit adds an unmarked
+# `as any`. "at-tip" moves origin/main onto that commit (the push-to-main
+# shape); anything else cuts a feature branch. Prints the repo path.
+make_git_repo() {
+  local shape="$1" tmpdir
+  tmpdir=$(mktemp -d "${TEST_TMPDIR}/repo.XXXXXX")
+
+  git -C "$tmpdir" init -q -b main
+  git -C "$tmpdir" config user.email "test@test.local"
+  git -C "$tmpdir" config user.name "Test"
+
+  # The helper must sit where the sensor looks for it: beside its own copy.
+  mkdir -p "$tmpdir/.claude/skills/dispatch-propagate/scripts"
+  cp "$SCRIPT_DIR/../../.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh" \
+     "$tmpdir/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+  chmod +x "$tmpdir/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+  mkdir -p "$tmpdir/.github/scripts"
+  cp "$SCANNER" "$tmpdir/.github/scripts/check-type-safety-escapes.sh"
+  chmod +x "$tmpdir/.github/scripts/check-type-safety-escapes.sh"
+
+  printf 'export const x = 1;\n' > "$tmpdir/src.ts"
+  git -C "$tmpdir" add -A
+  git -C "$tmpdir" commit -q -m "initial"
+  local baseline
+  baseline=$(git -C "$tmpdir" rev-parse HEAD)
+
+  if [ "$shape" = "at-tip" ]; then
+    printf 'const v = raw as any;\n' >> "$tmpdir/src.ts"
+    git -C "$tmpdir" add -A
+    git -C "$tmpdir" commit -q -m "the push"
+    git -C "$tmpdir" update-ref refs/remotes/origin/main "$(git -C "$tmpdir" rev-parse HEAD)"
+  else
+    git -C "$tmpdir" update-ref refs/remotes/origin/main "$baseline"
+    git -C "$tmpdir" checkout -q -b feature
+    printf 'const v = raw as any;\n' >> "$tmpdir/src.ts"
+    git -C "$tmpdir" add -A
+    git -C "$tmpdir" commit -q -m "add hatch"
+  fi
+
+  printf '%s\n' "$tmpdir"
+}
+
+# run_git_path <repo> [extra args...] — run the repo's own copy of the sensor
+# with CWD inside it. Sets RC, OUT_FILE (stdout) and ERR_FILE (stderr).
+ERR_FILE=""
+run_git_path() {
+  local repo="$1"; shift
+  OUT_FILE="${TEST_TMPDIR}/.out"
+  ERR_FILE="${TEST_TMPDIR}/.err"
+  set +e
+  ( cd "$repo" && "./.github/scripts/check-type-safety-escapes.sh" "$@" ) \
+    > "$OUT_FILE" 2> "$ERR_FILE"
+  RC=$?
+  set -e
+}
+
+echo "=== Git path: feature branch flags a net-new hatch ==="
+(
+  R=$(make_git_repo branch)
+  run_git_path "$R"
+  n=$(err_count)
+  if [ "$RC" -eq 1 ] && [ "$n" -eq 1 ]; then
+    pass "git path/branch -> 1 finding, exit 1"
+  else
+    fail "git path/branch (rc=$RC count=$n): $(cat "$OUT_FILE") | $(cat "$ERR_FILE")"
+  fi
+)
+
+echo "=== Git path: main-push shape flags a net-new hatch ==="
+(
+  R=$(make_git_repo at-tip)
+  # The reproduction: the expression this sensor used to carry sees nothing at
+  # all in exactly this state, and the self-noop turned that into exit 0.
+  old=$(git -C "$R" diff --name-only 'refs/remotes/origin/main...HEAD' | wc -l)
+  run_git_path "$R"
+  n=$(err_count)
+  if [ "$old" -eq 0 ] && [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && \
+     grep -q 'source=first-parent' "$ERR_FILE"; then
+    pass "git path/main-push -> old three-dot range empty, now 1 finding, exit 1"
+  else
+    fail "git path/main-push (old=$old rc=$RC count=$n): $(cat "$OUT_FILE") | $(cat "$ERR_FILE")"
+  fi
+)
+
+echo "=== Git path: an unresolvable baseline is a hard error, not a clean pass ==="
+(
+  R=$(make_git_repo at-tip)
+  git -C "$R" update-ref -d refs/remotes/origin/main
+  run_git_path "$R"
+  if [ "$RC" -ne 0 ] && grep -q 'origin/main' "$ERR_FILE"; then
+    pass "git path/no origin/main -> exit non-zero naming the ref"
+  else
+    fail "git path/no origin/main (rc=$RC): $(cat "$ERR_FILE")"
+  fi
+)
+
+echo "=== Git path: --repo-root names the tree, and a divergence is refused ==="
+(
+  R=$(make_git_repo at-tip)
+  OTHER=$(make_git_repo branch)
+  # The sensor's own copy lives in $R; running it from $OTHER's CWD with no
+  # --repo-root is ambiguous and must be refused rather than silently scanning
+  # one of the two. This is the foreign-cwd vacuity the flag exists to stop.
+  OUT_FILE="${TEST_TMPDIR}/.out"; ERR_FILE="${TEST_TMPDIR}/.err"
+  set +e
+  ( cd "$OTHER" && "$R/.github/scripts/check-type-safety-escapes.sh" ) \
+    > "$OUT_FILE" 2> "$ERR_FILE"
+  rc_amb=$?
+  # Named explicitly, it scans the tree it was told to and finds the hatch.
+  ( cd "$OTHER" && "$R/.github/scripts/check-type-safety-escapes.sh" --repo-root "$R" ) \
+    > "$OUT_FILE" 2> "$ERR_FILE"
+  rc_named=$?
+  set -e
+  n=$(err_count)
+  if [ "$rc_amb" -ne 0 ] && [ "$rc_named" -eq 1 ] && [ "$n" -eq 1 ]; then
+    pass "git path/--repo-root -> foreign cwd refused, named tree scanned"
+  else
+    fail "git path/--repo-root (amb=$rc_amb named=$rc_named count=$n): $(cat "$ERR_FILE")"
+  fi
+)
+
+# ---------------------------------------------------------------------------
 # RESULTS + expected-total guard (catches a crashed/early-exiting subshell).
 # ---------------------------------------------------------------------------
 
@@ -467,7 +603,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=20
+EXPECTED=24
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2

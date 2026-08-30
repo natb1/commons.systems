@@ -201,11 +201,11 @@ fi
 # suppresses a flagged line.
 #
 # Invoked by an absolute path under $REPO_ROOT (not $SCRIPTS-relative) so the
-# script's own git-diff baseline resolves against the worktree under test, not
-# against wherever run-lint.sh's copy happens to live — same reasoning as the
-# verify-fence-paths --repo-root flag above.
+# copy that runs is the one in the tree under test, AND passed --repo-root so
+# the tree it scans is named rather than inferred — same reasoning, and the
+# same flag, as the verify-fence-paths call above.
 echo "=== type-safety escape-hatch check ==="
-if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh"; then
+if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh" --repo-root "$REPO_ROOT"; then
   echo "PASS: type-safety escapes"
 else
   echo "FAIL: type-safety escapes" >&2

@@ -36,9 +36,18 @@
 # strings by accident, so the practical risk is low.
 #
 # Invocation:
-#   check-type-safety-escapes.sh
-#       Default (CI) path. Diffs origin/main...HEAD over TS/JS files and scans
-#       the unified diff. Hard-errors if origin/main is unresolvable.
+#   check-type-safety-escapes.sh [--repo-root <dir>]
+#       Default (CI) path. Diffs TS/JS files against the baseline
+#       resolve-diff-base.sh resolves, and scans the unified diff. Hard-errors
+#       if that baseline is unresolvable.
+#
+#       --repo-root names the checkout to scan. It defaults to the repo
+#       containing the CWD, and a divergence between that and the repo this
+#       script file lives in is a hard error naming the flag — running one
+#       checkout's copy of this script against a different checkout is a
+#       routine dispatch pattern, but only safe when the target is named.
+#       run-lint.sh:196 passes it explicitly, mirroring what it already does
+#       for lint-verify-fence-paths.sh at :155.
 #
 #   check-type-safety-escapes.sh --scan-stdin
 #       Core path. Reads a unified diff on STDIN and scans it; no git state is
@@ -166,35 +175,66 @@ if [ "${1:-}" = "--scan-stdin" ]; then
   exit $?
 fi
 
-if [ -n "${1:-}" ]; then
-  echo "Unknown argument: $1" >&2
-  exit 1
-fi
-
 # Default path: thin git wrapper.
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$REPO_ROOT"
+REPO_ROOT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo-root)
+      if [ "$#" -lt 2 ]; then
+        echo "check-type-safety-escapes: --repo-root requires an argument" >&2
+        exit 1
+      fi
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
-# origin/main must be resolvable. No HEAD~1 fallback — CI uses fetch-depth: 0,
-# and an unresolvable baseline is a misconfigured environment, not a no-op.
-if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
-  echo "::error::check-type-safety-escapes: origin/main is not resolvable; cannot compute the net-new diff. Ensure the workflow checks out with fetch-depth: 0 and that origin/main is fetched." >&2
-  cat >&2 <<'EOF'
-ERROR: cannot resolve origin/main
+# SCRIPT_REPO_ROOT is the checkout this script FILE lives in. It is used to
+# locate resolve-diff-base.sh — a tool, which must exist next to this script —
+# and never to decide which tree to scan. Those are different questions, and
+# conflating them is what made this script scan repoA when invoked by absolute
+# path from repoB.
+SCRIPT_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+RESOLVE_DIFF_BASE="$SCRIPT_REPO_ROOT/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
 
-This sensor diffs the branch against origin/main to find net-new type-safety
-escape hatches. `git rev-parse --verify origin/main` failed, so there is no
-baseline to diff against.
-
-In CI this usually means the checkout was shallow. Use `fetch-depth: 0` (or
-explicitly fetch origin/main) before running this script.
-EOF
-  exit 1
+if [ -z "$REPO_ROOT" ]; then
+  # Default to the CALLER's CWD, with a divergence guard — the same contract
+  # lint-verify-fence-paths.sh:168-181 and resolve-diff-base.sh apply. This
+  # script used to pin the tree to its own on-disk location unconditionally,
+  # so `repoA/.github/scripts/check-type-safety-escapes.sh` run from repoB
+  # scanned repoA: usually clean, hence an empty diff, hence a vacuous pass.
+  if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-type-safety-escapes: could not resolve a repo root from $PWD" >&2
+    echo "  pass --repo-root to name the tree to scan" >&2
+    exit 1
+  fi
+  if [ "$SCRIPT_REPO_ROOT" != "$REPO_ROOT" ]; then
+    echo "check-type-safety-escapes: script lives in $SCRIPT_REPO_ROOT but the CWD resolves to $REPO_ROOT;" >&2
+    echo "  pass --repo-root to name the tree to scan" >&2
+    exit 1
+  fi
 fi
+
+# Baseline resolution — see resolve-diff-base.sh. It subsumes the
+# `rev-parse --verify origin/main` guard that used to live here (its diagnostic
+# is strictly more informative), and it additionally refuses the case that
+# guard could not see: HEAD already contained in origin/main, where the old
+# `origin/main...HEAD` range was EMPTY and the `[ -z "$diff_output" ]` self-noop
+# below turned that into exit 0. --at-remote-tip first-parent because this
+# sensor runs on pushes to `main` too, unconditionally, inside the REQUIRED
+# `lint` job (run-lint.sh:196) as well as the type-safety-sensor jobs.
+DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
 
 # Diff the new side of TS/JS changes only. --diff-filter=d drops deletions so
 # we never scan removed files. -U0 keeps the diff to added/removed lines.
-diff_output="$(git diff --no-color -U0 --diff-filter=d origin/main...HEAD \
+# -C "$REPO_ROOT" is what makes the tree scanned the one NAMED, rather than
+# whichever repository the process CWD happens to sit in.
+diff_output="$(git -C "$REPO_ROOT" diff --no-color -U0 --diff-filter=d "$DIFF_BASE"..HEAD \
   -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
 
 # Self-noop: nothing in scope changed.
