@@ -81,19 +81,35 @@
 > `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
 > `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
 > `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
-> not a `|`/`>` block scalar. Repair it as a frontmatter field edit
-> (`write-node.ts` → `graph-commit`, which merges frontmatter structurally) and
-> pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
+> not a `|`/`>` block scalar. Repair it as a frontmatter field edit, and dump
+> the node first: `dump-node.ts --dir intentions --out-dir <tmp>
+> tactic-serves-inheritance-full-strip`, edit the dumped JSON, then
+> `write-node.ts --dir intentions` → `graph-commit`, which merges frontmatter
+> structurally. Never hand-build a partial payload: `validateNode` defaults
+> every omitted field (`packages/intentionsutil/src/schema.ts:1113-1163` — the
+> single `return` object, where each optional field reads
+> `value.X == null ? <default> : …`), so a payload naming only
+> `id`/`kind`/`status`/`statement`/`owner`/`rationale` silently writes
+> `phase: null`, `execution: null` and `serves: []` over this node's
+> `phase: implement` (`:33`), its whole `execution` block
+> (`strategy_fingerprint` included, `:34-40`) and its one `serves` entry
+> (`:26-27`).
+>
+> Pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
 > whole node through the YAML emitter
 > (`packages/intentionsutil/src/store.ts:61`), which picks the scalar style and
-> escapes any `"` itself. A hand-added YAML `\"` lands a literal backslash in the
-> field; only a by-hand edit of the YAML text needs that escape, and the field
-> carries no escaped quote today. **JSON escaping is a separate layer and is
-> still required**: `write-node.ts` reads the node as a JSON document
+> handles any `"` itself — measured, it drops the double-quoted style for a
+> plain scalar and escapes nothing. **The one escape still required is JSON, a
+> separate layer**: `write-node.ts` reads the node as a JSON document
 > (`writeNodeFromJson`'s `JSON.parse`,
 > `packages/intentionsutil/scripts/write-node.ts:40`), so a `"` inside the
-> payload must still be written `\"` *there* — an unescaped one dies on a
-> `JSON.parse` syntax error before `writeNode` is ever reached. It is **not**
+> payload is written `\"` *there* — an unescaped one dies on a `JSON.parse`
+> syntax error before `writeNode` is ever reached. That `\"` is consumed by
+> `JSON.parse` and lands as a bare `"` in the field, which is the correct
+> outcome; do **not** add a second backslash to pre-escape it for YAML, since
+> `\\\"` in the payload is what actually lands a literal backslash. Only a
+> by-hand edit of the `.md` YAML text needs a YAML-level escape, and the field
+> carries no escaped quote today. It is **not**
 > unread by tooling either: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
 > `attention.rationale`, every `clarifications[].answer` and the body. Repair
