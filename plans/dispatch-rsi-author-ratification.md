@@ -73,7 +73,7 @@ this is the index.
 
 | # | entry | the disagreement | status |
 | --- | --- | --- | --- |
-| 1 | **§5.30** (new) | Whether the executor was **permitted to clear** the `tactic-supersession-retirement-sweep` park. R-9: *"clearing a park is an office-hours act, so I have not cleared it."* §1.9: Ruling 4 grants exactly that clear, bounded to a dead **premise**. | **Resolved 2026-08-30 — `clear-park`**, on the strategy's own un-park criterion, which reaches this node by its own terms. R-9's ground was stale authority, not a competing doctrine. See §5.30. |
+| 1 | **§5.30** (new) | Whether the executor was **permitted to clear** the `tactic-supersession-retirement-sweep` park. R-9: *"clearing a park is an office-hours act, so I have not cleared it."* §1.9: Ruling 4 grants exactly that clear, bounded to a dead **premise**. | **Ruled 2026-08-30 — `clear-park` is the correct instrument**, on the strategy's own un-park criterion, which reaches this node by its own terms. R-9's ground was stale authority, not a competing doctrine. **The clear is NOT yet executed**: `intentions/tactic-supersession-retirement-sweep.md` still carries a non-null `office_hours` on `origin/main` at `8ae96615`. It is executor-owed — see the follow-through table above and §5.30. |
 | 2 | **§4.3** | Sibling nodes around `tactic-review-stall-conflict-lane`: **three PR5 nodes built on the retirement** vs **two Position-4 nodes with finalized plans built on the work being live**. Count and direction both differ, and the direction decides whether clearing the park is consistent. | **Resolved 2026-08-30 — moot, by the instrument actually used.** The park was never cleared: `tactic-review-stall-conflict-lane` was closed as a **completion record** (`phase: done`, `execution.completion` = #3038 / `fa9c4338`), landed `e54b64ee`. A completion record is terminal and re-dispatches nothing, so neither sibling direction is disturbed and the count question stops deciding anything. See §4.3. |
 | 3 | **§4.6 / §5.9** | The four sibling-carrier drafts: **four still parked** (earlier record) vs **three now `done` / `office_hours: null`, one remaining** (later re-measurement). | **Settled by the later measurement**, both readings kept in place. |
 | 4 | **§4.13** | `mint-mainqa-nodes` on a second pass carrying a new item: **exits 0 and drops it silently** vs **hard-errors, exit 1**. | **Settled by measurement for this consolidation** — the guard runs before the skip and exits 1. The conflict is chronological: R-2 names the pre-guard shape, §4.13 the current one. Both kept. |
@@ -105,13 +105,14 @@ ratify or overturn when the batch completes"*. Under the standing rule quoted
 above, that framing was wrong: the items were acted on, and the record's job is to
 say what was done. **The legend is retired and does not appear in this document.**
 Where an item was genuinely left unexecuted, the entry says so plainly as a
-decision taken — see §5.30, where the executor decided **not** to clear a park and
-stated its reason, and §4.6's sixth park, where it decided the opposite.
+decision taken — see §5.30, where the executor ruled `clear-park` the correct
+instrument for a dead-premise park and left the clear itself owed rather than
+landed, and §4.6's sixth park.
 
 ## Executor follow-through still sequenced
 
-**This is not an approval queue.** Ten entries carry work that was **decided and
-is sequenced but not yet shipped**. None of it is author-owed and none of it
+**This is not an approval queue.** Eleven entries carry work that was **decided
+and is sequenced but not yet shipped**. None of it is author-owed and none of it
 blocks on a ruling. It is listed so the record is honest about what is decided
 versus what is landed — an earlier revision claimed blanket that *nothing here is
 pending*, which was false about executor work and is withdrawn.
@@ -128,6 +129,7 @@ pending*, which was false about executor work and is withdrawn.
 | §5.9 | one node's transcription (not four — the banner is right, the body stale) | executor |
 | §5.12 | make `hook-tests` required, after a non-fail-fast fix that does not yet exist | executor |
 | §5.25 | the second classifier bypass, live until its unit ships | executor |
+| §5.30 | the `tactic-supersession-retirement-sweep` `clear-park` — ruled correct, never run; `office_hours` is still non-null on `origin/main` at `8ae96615` | executor |
 
 An earlier revision pointed instead at "the two places where executor-owed work
 is still outstanding (Tier 2 note, Tier 5 §5.16)". **That pointer was false when
@@ -237,8 +239,8 @@ Worth reading first within each tier:
 - **Tier 4** — §4.12 and §4.15 (claims about the world measured wrong, twice and
   seven times), §4.14 (a false-positive that caused real mis-deferrals).
 - **Tier 5** — §5.26 (a graph writer dying with no park written), §5.24 (a
-  concurrent-writer data-loss path), §5.30 (the one live doctrine conflict this
-  consolidation could not settle).
+  concurrent-writer data-loss path), §5.30 (a park ruled clearable on a dead
+  premise, with the clear still owed).
 
 **Tier 1 — rule or doctrine changes**
 - 1.1 — The Lane 3 "never a relative helper path" rule now has a live, undocumented exception
@@ -321,7 +323,7 @@ Worth reading first within each tier:
 - 5.27 — Fixing a leaked job slot reached outside the PR, deliberately, because the BREADTH was the point
 - 5.28 — Squash-merge makes a cited sha a perishable address; cite the landed form
 - 5.29 — PR19's binding rulings were folded into the node bodies, because they existed only in plan prose
-- 5.30 — `tactic-supersession-retirement-sweep`: the park premise is withdrawn, and the park was left standing anyway
+- 5.30 — `tactic-supersession-retirement-sweep`: park premise dead, `clear-park` is the correct instrument, R-9's stated reason superseded — the clear itself is still owed
 
 **Errors in this record — the compiler's own**
 
@@ -1526,8 +1528,11 @@ False at **five** positions (4, 6, 7, 8, 9), and the park count undercounted by
 more than an order of magnitude. Replaced with a per-position census.
 Cited: `1eddbc20`; `plans/dispatch-rsi-sequence.md`, "Open parks" row.
 A sub-claim was corrected twice: the WAIT-mark census, re-taken with
-`LC_ALL=C grep -a`, is **15 nodes / 22 marks**, not 17 — "17" counted non-`done`
-tactics that merely mention the string. **Confidence:** high.
+`LC_ALL=C grep -a`, is **22 marks over the `phase: main-qa` cohort**, not 17 —
+"17" counted non-`done` tactics that merely mention the string. **The node count
+is 14, not the 15 an earlier revision of this line carried; see §4.16, which
+settles the census at 14 nodes / 22 marks / 12 parked and rules "15" unsourced.**
+**Confidence:** high.
 
 > **FOLDED IN — consolidation, from `AUTHOR-RATIFICATION-LIST.md` entry R-4**
 > (recorded 2026-08-29, filed there as `NEEDS AUTHOR (five parks)`; the sixth
@@ -3159,8 +3164,11 @@ its confidence line now says so.
   `12716163` at 06:30Z, and PR **#3142** (`plan-reconciliation` — the
   59-contradiction reconciliation and the executor decisions D1–D10) merged as
   `35ab0e45` at 06:53Z. Both branches were deleted; see the third-pass banner.
-- **Next position:** 4. Position 3 shipped, but its Unit 7
-  `Verifiability: WAIT` migration and node closeout are still owed.
+- **Next position:** 4. ~~Position 3 shipped, but its Unit 7
+  `Verifiability: WAIT` migration and node closeout are still owed.~~
+  *(Struck 2026-08-30 — both landed: the migration as `74c281dc` and the host
+  node's closure as `94427773`. See the "Shipped" row of
+  `plans/dispatch-rsi-sequence.md`.)*
 - The batch's working tree HEAD moved during this compilation (a concurrent
   graph write reset it to `origin/main` + `9201fdeb`); the sixteen commits cited
   above remain reachable on `origin/plan-reconciliation` and

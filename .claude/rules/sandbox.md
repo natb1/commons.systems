@@ -152,10 +152,22 @@ override, which costs a permission-classifier round trip on every call and
 spends the signal an override is meant to carry. `node --import tsx/esm` needs
 neither.
 
-The four `packages/intentionsutil/scripts/` tool headers carry the working
-spelling. The rest of the repo is mixed and no sweep has been done — much
-committed prose still says `npx tsx` — so expect to meet the stale form and
-translate it.
+**The repo is mixed, and no sweep has been done.** Measured 2026-08-30 under
+`packages/intentionsutil/scripts/`: 40 files carry `node --import tsx/esm`, 32
+still carry `npx tsx`. Under `intentions/` the stale form leads, 107 node bodies
+to 59. Expect to meet `npx tsx` and translate it rather than assuming the file
+is wrong about something else.
+
+What one PR corrected was four *call sites in tool documentation*, not four
+headers: the `Usage:` headers of `write-node.ts`, `dump-node.ts` and
+`validate-graph.ts`, plus a single in-body citation in `read-sensors.ts` whose
+own header was already correct. Sibling tools such as `merge-node.ts` and
+`graph-commit` document the working spelling too. So do not read "the tool
+headers are fixed" as a guarantee — check the one in front of you.
+
+The practical consequence: when a verification fence goes red with `listen
+EPERM`, this is the cause, and the repair is the fence's spelling, not the
+script it invokes.
 
 ## Network namespace isolation
 
