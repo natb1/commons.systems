@@ -24,6 +24,7 @@ pace_exempt: true
 rounds: null
 attributes: {}
 ---
+<!-- generated:dispatch-fleet-alarm -->
 One or more fleet-health inputs were unreadable on this watcher pass. An
 unreadable input is reported as UNKNOWN, never as clear — a false all-clear is
 the failure this watcher exists to prevent.
@@ -34,3 +35,4 @@ Unreadable inputs:
 Pause state: paused
 Decision log: /home/n8/.local/share/commons-dispatch/routing-decisions.jsonl
 State file: /home/n8/.local/share/commons-dispatch/fleet-watch-state.json
+<!-- /generated:dispatch-fleet-alarm -->

@@ -24,6 +24,7 @@ pace_exempt: true
 rounds: null
 attributes: {}
 ---
+<!-- generated:dispatch-fleet-alarm -->
 daemon liveness: down
 
 Liveness exit code: 3
@@ -33,3 +34,4 @@ Pause state: paused (daemon liveness is evaluated regardless of pause)
 
 The raw dispatch-daemon-liveness --json reading is in this pass's journald
 output, not here: it embeds pids and unit timestamps that change every pass.
+<!-- /generated:dispatch-fleet-alarm -->

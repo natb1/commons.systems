@@ -62,9 +62,11 @@ pace_exempt: true
 rounds: null
 attributes: {}
 ---
+<!-- generated:dispatch-fleet-alarm -->
 zero busy dispatch workers have been observed continuously for longer than the 2700s stall limit
 
 Threshold: DISPATCH_FLEET_WATCH_IDLE_LIMIT=2700s
 State file: /home/n8/.local/share/commons-dispatch/fleet-watch-state.json (busy_zero_since — the live value is in this pass's
 journald output and in --json)
 Pause state: not-paused
+<!-- /generated:dispatch-fleet-alarm -->

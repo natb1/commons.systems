@@ -24,8 +24,10 @@ pace_exempt: true
 rounds: null
 attributes: {}
 ---
+<!-- generated:dispatch-fleet-alarm -->
 tracked hold(s) have blocked top-ranked work while unclaimed by any session or reservation: tactic-hold-conflict-autonomous-ci-pending-liveness-bound -> tactic-autonomous-ci-pending-liveness-bound; tactic-hold-fix-cap-qa-fix-node-terminal-declaration -> tactic-qa-fix-node-terminal-declaration
 
 Thresholds: DISPATCH_FLEET_WATCH_HOLD_MIN_AGE=86400s,
 DISPATCH_FLEET_WATCH_HOLD_TOP_K=10
 Pause state: paused (unclaimed holds are evaluated regardless of pause)
+<!-- /generated:dispatch-fleet-alarm -->
