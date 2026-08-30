@@ -172,9 +172,30 @@ assert_eq "office-hours-parked: exit 12" "12" "$RC"
 
 # ---------------------------------------------------------------------------
 # Test 5: attributes.office_hours squatter populated, top-level office_hours
-# null -> exit 12 (the squatter case today's front door misses entirely).
+# null. The front door IGNORES the squatter (exit 0) — and the park property
+# this row used to pin is now enforced one layer up, at validation time.
+#
+# MIGRATION. This row originally asserted exit 12, pinning `readParked`'s
+# squatter fallback in check-node-selection.ts. PR #3138 (commit 96d22cb1,
+# "graph tooling: node-mutation script hardening and the attributes
+# shadow-ban") DELETED all six squatter-aware readers there — readPhase,
+# readParked, readStrategyFingerprint, readMarkers, readFixState,
+# readConflictState — so the gate now reads `office_hours` first-class only.
+# The guard did not vanish, it moved and got stronger: `validateGraph` rule 23
+# bans any `attributes` key that shadows a first-class IntentionNode field
+# name, and PRESENCE is the violation (any value fails), so a squatter-parked
+# node cannot land on main at all. A worker therefore can never be handed one.
+#
+# The row is retargeted, not deleted, in both halves of that split — matching
+# how the same PR retargeted the vitest sibling ("a stray
+# attributes.office_hours no longer parks — the squatter read is retired",
+# packages/intentionsutil/test/check-node-selection.test.ts):
+#   5a — the reader's inverse: the squatter is invisible to the park gate.
+#   5b — the property at its new home: the REAL validator refuses the very
+#        same on-disk fixture with the rule-23 shadow-ban error.
+# The first-class park (the spelling that IS honored) is Test 4 above.
 # ---------------------------------------------------------------------------
-echo "Test 5: squatter attributes.office_hours populated -> exit 12"
+echo "Test 5: squatter attributes.office_hours -> front door ignores it, validator rejects it"
 make_repo
 ATTRIBUTES_BLOCK=$(cat <<'EOF'
 attributes:
@@ -188,7 +209,31 @@ EOF
 write_node_fixture "$REPO" "tactic-squatter-parked" implement "office_hours: null" "$ATTRIBUTES_BLOCK"
 push_repo
 run_sut "tactic-squatter-parked" implement
-assert_eq "squatter-office-hours-parked: exit 12" "12" "$RC"
+# 5a: the retired reader's inverse — a squatted park does not park.
+assert_eq "squatter-office-hours: park gate reads first-class only, exit 0" "0" "$RC"
+if [[ "$OUT" == *"not-parked"* ]]; then
+  assert_eq "squatter-office-hours: no not-parked verdict (got: $OUT)" "0" "1"
+else
+  assert_eq "squatter-office-hours: no not-parked verdict" "0" "0"
+fi
+
+# 5b: the park property at its new location. Run the REAL validator against
+# the same fixture store the front door just read. Rule 23 rejects the node,
+# so it is unlandable on main and no worker can ever be selected onto it.
+# (The fixture store is a bare two-node tree with no kind-* nodes, so the
+# validator emits kind-edge complaints too; the assertion keys on the rule-23
+# message specifically, which is what this row is about.)
+VALIDATOR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts/validate-graph.ts"
+VALIDATE_OUT=$(npx tsx "$VALIDATOR" "$REPO/intentions" 2>&1)
+VALIDATE_RC=$?
+if [ "$VALIDATE_RC" -eq 0 ]; then
+  assert_eq "squatter-office-hours: validate-graph exits non-zero (rule 23)" "nonzero" "0"
+else
+  assert_eq "squatter-office-hours: validate-graph exits non-zero (rule 23)" "nonzero" "nonzero"
+fi
+assert_contains "squatter-office-hours: rule 23 names the shadowed field" \
+  "tactic-squatter-parked: attributes.office_hours shadows the first-class office_hours field" \
+  "$VALIDATE_OUT"
 
 # ---------------------------------------------------------------------------
 # Test 6: --dir supplied -> no git fetch occurs. Assert by pointing origin at
