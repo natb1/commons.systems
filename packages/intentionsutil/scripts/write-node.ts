@@ -2,9 +2,28 @@
 // through the validated writeNode — the single validation gate. No hand-authored
 // markdown: every node that enters the store passes through writeNode/validateNode.
 //
-// Usage:
-//   echo '<json>' | npx tsx packages/intentionsutil/scripts/write-node.ts --dir <intentions-dir>
-//   npx tsx packages/intentionsutil/scripts/write-node.ts --dir <intentions-dir> --file path/to/node.json
+// Usage — PREFER THE --file FORM; see the corruption warning below:
+//   node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir <intentions-dir> --file path/to/node.json
+//   echo '<json>' | node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir <intentions-dir>
+//
+// Spell it `node --import tsx/esm`, NOT `npx tsx`. The tsx CLI wrapper opens an
+// IPC socket at startup, which the sandbox denies — `listen EPERM: operation
+// not permitted /tmp/.../N.pipe`, thrown in `createIpcServer` before the
+// wrapper parses its arguments, so it fails whatever script you point it at.
+// `node --import tsx/esm` loads the same loader in-process, opens no socket,
+// and runs sandboxed and unsandboxed alike (.claude/rules/sandbox.md,
+// "npx tsx").
+//
+// WARNING — AN INLINE `echo '<json>' | ...` CORRUPTS NODE CONTENT SILENTLY.
+// Shell metacharacters inside a node value are eaten by the shell before this
+// script sees them, and nothing signals the damage: zsh deletes apostrophes and
+// hands over still-valid JSON, so validateNode accepts it, writeNode writes it,
+// and the run exits 0 with mangled content. Measured — the shell argument
+//   '{"statement":"it's the author's call"}'
+// reaches this script as `{"statement":"its the authors call"}`: valid JSON,
+// two apostrophes gone, no warning anywhere. Found on PR #3146. Write the JSON
+// to a file and pass `--file`. Reserve the stdin form for a producer that never
+// routes the JSON through a shell string.
 //
 // `--dir <intentions-dir>` is REQUIRED and has no default
 // (strategy-graph-native-dispatch clarification 194, ADOPTED; clarification 242

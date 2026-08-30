@@ -1490,7 +1490,7 @@ export function makeIntentionStoreSensor(
  * careless answer re-arms the repo-wide denial described above. Until it is
  * ruled, the UNREGISTERED-SENSOR COUNT below is the backstop for this half.
  * Locally, against the merged state:
- * `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`.
+ * `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions`.
  *
  * If a window is ever open anyway, the check for it is read-sensors'
  * UNREGISTERED-SENSOR COUNT (the `skipped (unregistered sensor)` figure and its

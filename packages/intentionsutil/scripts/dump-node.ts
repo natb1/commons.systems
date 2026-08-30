@@ -10,8 +10,16 @@
 // skills used before capturing base state was uniform.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/dump-node.ts --dir <intentions-dir> \
-//     --out-dir <dir> <id> [<id> ...]
+//   node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts \
+//     --dir <intentions-dir> --out-dir <dir> <id> [<id> ...]
+//
+// Spell it `node --import tsx/esm`, NOT `npx tsx`. The tsx CLI wrapper opens an
+// IPC socket at startup, which the sandbox denies — `listen EPERM: operation
+// not permitted /tmp/.../N.pipe`, thrown in `createIpcServer` before the
+// wrapper parses its arguments, so it fails whatever script you point it at.
+// `node --import tsx/esm` loads the same loader in-process, opens no socket,
+// and runs sandboxed and unsandboxed alike (.claude/rules/sandbox.md,
+// "npx tsx").
 //
 // `--dir <intentions-dir>` is REQUIRED and has no default
 // (strategy-graph-native-dispatch clarification 194, ADOPTED; clarification 242
@@ -26,10 +34,20 @@
 // store, and a --dir outside any repository is a clear error rather than a
 // silent mis-hash (.claude/rules/code-style.md).
 //
-// For each <id> it writes `<dir>/<id>.json` (the shape `readNode` returns, ready
-// to pipe back into write-node.ts after reconciliation) and merges a
+// For each <id> it writes `<dir>/<id>.json` (the shape `readNode` returns,
+// which write-node.ts accepts back after reconciliation) and merges a
 // `<id>=<blobsha>` line into `<dir>/base-manifest.txt`. It prints the manifest
 // path on stdout so the caller can pass it straight to `graph-commit --base`.
+//
+// WARNING — FEED THAT JSON BACK AS A FILE, NOT AS AN INLINE `echo '<json>' |`
+// STRING. Shell metacharacters inside a node value are eaten by the shell
+// before write-node.ts sees them, and nothing signals the damage: zsh deletes
+// apostrophes and hands over still-valid JSON, so the write succeeds at exit 0
+// with mangled content. Measured — the shell argument
+//   '{"statement":"it's the author's call"}'
+// arrives as `{"statement":"its the authors call"}`: valid JSON, two
+// apostrophes gone, no warning anywhere. Found on PR #3146. Pass the dumped
+// file straight through with `write-node.ts --file <path>`.
 //
 // The manifest merge (see dumpNodes below) exists because a second dump into an
 // out-dir used to truncate the manifest, silently dropping the earlier ids' base

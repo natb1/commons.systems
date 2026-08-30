@@ -42,8 +42,8 @@ A command that fails loudly under the sandbox — TLS error, `EROFS`,
 `dangerouslyDisableSandbox: true`, never run with it pre-emptively: an
 always-on override carries no signal. The sections below are the known
 exceptions — read them first, since a few must be pre-emptive because the first
-sandboxed attempt already does damage (`git worktree remove`) or fails silently
-with nothing to retry on (`claude agents --json`). Two former entries — `gh`
+sandboxed attempt already does damage (`git worktree remove`, `graph-commit`) or
+fails silently with nothing to retry on (`claude agents --json`). Two former entries — `gh`
 TLS failure and npm-cache `EROFS` — were deleted as **refuted on this host**
 (measured); prose elsewhere still citing either as a reason to pre-empt the
 override is stale.
@@ -95,6 +95,79 @@ carrying unlanded work and could not be removed at all. The live reap path
 (`lib-session-reap.sh`) never had that bug — it checks `rev-list --count
 origin/main..HEAD` first and skips the content diff when the branch is an
 ancestor.
+
+## graph-commit
+
+`graph-commit` lands a node edit by rebasing it onto an `intentions/`-only base.
+That internal rebase is exactly a tree-updating git op of the kind the previous
+section describes, wearing a wrapper — so it meets the same read-only carve-outs
+and aborts the same way. Measured 2026-08-30:
+
+```
+error: unable to unlink old '.claude/skills/align-audit/SKILL.md': Read-only file system
+```
+
+The failure is not what makes this an exception; plenty of commands fail loudly
+and are fine to retry. What makes it one is that the aborted rebase **reverted
+the uncommitted node edit in the working tree**. There is nothing left to retry
+on — the edit a second attempt would land no longer exists. That is the same
+criterion `git worktree remove` meets one section up: the first sandboxed
+attempt has already done the damage, so a retry cannot be the recovery.
+
+**Run `graph-commit` with `dangerouslyDisableSandbox: true` on the first
+attempt.** The cost of getting this wrong is re-authoring a reverted node body
+from memory, and the tree no longer holds a copy to recover it from.
+
+Keep the `-m` message **single-line**. A multi-line message wants a
+`$(cat <file>)` substitution, and the worktree-isolation guard refuses any
+command containing command substitution — measured: a bare `echo hello $(date
++%Y)` draws "this command is too complex to verify that it stays inside the
+worktree". Put the long rationale in the node body, which is where a reader
+looks for it anyway.
+
+## npx tsx
+
+`npx tsx <script>` dies under the sandbox before it runs anything:
+
+```
+Error: listen EPERM: operation not permitted /tmp/claude-1000/tsx-1000/17.pipe
+    at createIpcServer (.../node_modules/tsx/dist/cli.mjs:53:31515)
+```
+
+The `tsx` CLI wrapper opens an IPC socket at startup, which the sandbox's
+network-namespace isolation denies. It throws in `createIpcServer`, before the
+wrapper parses its arguments, so the failure is a property of the spelling and
+not of the script — every `npx tsx` invocation dies identically.
+
+Spell it `node --import tsx/esm <script>` instead. That loads the same tsx ESM
+loader in-process and opens no socket. Measured 2026-08-30 against
+`validate-graph.ts`: unsandboxed the two spellings produce identical output and
+the same exit code, and sandboxed the `node --import` form still produces it
+while `npx tsx` never reaches the script at all.
+
+This is not a workaround to reach for once `npx tsx` has failed — it is the
+better spelling outright, and it **removes** a `dangerouslyDisableSandbox`
+requirement rather than working around one. `npx tsx` can only run with the
+override, which costs a permission-classifier round trip on every call and
+spends the signal an override is meant to carry. `node --import tsx/esm` needs
+neither.
+
+**The repo is mixed, and no sweep has been done.** Measured 2026-08-30 under
+`packages/intentionsutil/scripts/`: 40 files carry `node --import tsx/esm`, 32
+still carry `npx tsx`. Under `intentions/` the stale form leads, 107 node bodies
+to 59. Expect to meet `npx tsx` and translate it rather than assuming the file
+is wrong about something else.
+
+What one PR corrected was four *call sites in tool documentation*, not four
+headers: the `Usage:` headers of `write-node.ts`, `dump-node.ts` and
+`validate-graph.ts`, plus a single in-body citation in `read-sensors.ts` whose
+own header was already correct. Sibling tools such as `merge-node.ts` and
+`graph-commit` document the working spelling too. So do not read "the tool
+headers are fixed" as a guarantee — check the one in front of you.
+
+The practical consequence: when a verification fence goes red with `listen
+EPERM`, this is the cause, and the repair is the fence's spelling, not the
+script it invokes.
 
 ## Network namespace isolation
 
