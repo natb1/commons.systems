@@ -67,9 +67,36 @@
 # approximate, and an approximate signal must not be able to break a build. The
 # path-orphan check above owns the exit status alone.
 #
-# Measured blast radius at introduction: 61 of the 889 executed blocks (45
-# nodes, 124 warning lines) — `done` nodes are exempt from this check too,
-# since they are exempt from the scan loop entirely.
+# KNOWN LIMITATIONS of that line-wise split. Each is RECORDED here rather than
+# fixed because no live block under intentions/ exercises it today, and each
+# produces a FALSE POSITIVE (noise) rather than a miss — none of them can hide a
+# swallowed assertion. Re-read this list before trusting a surprising warning.
+#
+#   1. HEREDOC PAYLOAD. Nothing here knows about `<<WORD` / `<<-WORD`, so every
+#      line of a heredoc body — and the terminator line itself — is parsed as a
+#      top-level statement: `cat <<EOF > f` / `payload` / `EOF` warns on the
+#      payload line and on the literal `EOF`.
+#   2. FUNCTION BODY. `}` is a closer but `{` is not an opener, so an
+#      `f() {` … `}` definition warns on the definition line and on each body
+#      line, though a body line does not run at that point at all. Only a later
+#      CALL to `f` is a true positive. (The `depth > 0` guard on the closer
+#      keeps the unmatched `}` from driving depth negative.)
+#   3. OPERATOR CONTINUATION. Backslash continuations and unbalanced-quote
+#      continuations are rejoined; a statement continued by a TRAILING `|`,
+#      `&&` or `||` is not. `foo |` / `grep -q bar` is split in two and the
+#      continuation half warned as an independent statement, though the
+#      pipeline's status is never independently discarded.
+#
+# Measured blast radius, 2026-08-30, with the anchored exemptions below: 61 of
+# the 585 scanned blocks warn — 45 nodes, 126 warning lines. `done` nodes are
+# exempt from this check too, since they are exempt from the scan loop
+# entirely, so they never reach the 585. That is two warning lines MORE than
+# the 124 this check reported at introduction, on the same 61 blocks and 45
+# nodes: the two `printf … | grep -q …` assertions in
+# tactic-dispatch-pause-config-field that the old head-word exemption swallowed.
+# Every warning it already emitted is unchanged. Any future edit here must move
+# this count UP or leave it flat — a DROP means an exemption widened, which is
+# the one failure this check cannot show you.
 #
 # --no-status-warn silences it (used by this script's own test fixtures, which
 # assert on exactly-empty combined output).
@@ -257,14 +284,99 @@ node_phase() {
   ' "$file"
 }
 
+# --- Shell-shape helpers for the advisory check below ----------------------
+# Both answer a question the obvious one-line test gets WRONG, and both get it
+# wrong in the same direction: they exempt or discard a statement that really is
+# unguarded, so the miss is invisible.
+
+# Is this line's shell quoting closed at end-of-line? Counting quote characters
+# cannot answer it: `grep -q 'AW_DISP" == "pruned"'` has an odd `"` count while
+# being balanced, and `echo "don't panic"` an odd `'` count. A miscount is not
+# cosmetic — the line is then treated as a continuation, absorbing the whole
+# REST of the block, so every statement after it vanishes from the analysis.
+# Track the STATE instead: inside `'…'` only the closing `'` is special; inside
+# `"…"` a backslash escapes the next character.
+quoting_balanced() {
+  local s="$1" in_s=0 in_d=0 ch j
+  for (( j = 0; j < ${#s}; j++ )); do
+    ch="${s:j:1}"
+    if (( in_s )); then
+      [[ "$ch" == "'" ]] && in_s=0
+      continue
+    fi
+    if (( in_d )); then
+      if [[ "$ch" == '\' ]]; then j=$(( j + 1 ))
+      elif [[ "$ch" == '"' ]]; then in_d=0
+      fi
+      continue
+    fi
+    case "$ch" in
+      "'") in_s=1 ;;
+      '"') in_d=1 ;;
+      '\') j=$(( j + 1 )) ;;
+    esac
+  done
+  (( in_s == 0 && in_d == 0 ))
+}
+
+# Is this statement nothing but variable assignments? A leading `^NAME=` cannot
+# say: it also matches an env-var-PREFIXED command (`NODE_ENV=test npx vitest
+# run`, `DISPATCH_CONFIG_DIR="$d" some-script --flag`), a real command whose
+# status is discarded like any other. Plain whitespace splitting cannot say
+# either, because an assignment's value legitimately contains spaces
+# (`out=$(cmd a b)`, `msg="a b"`) and warning on THOSE would be a false positive
+# on the corpus's most common shape. So split into TOP-LEVEL words, honouring
+# quoting and `$( … )` / `${ … }` nesting, and require every word to assign.
+assignments_only() {
+  local s="$1" ch i in_s=0 in_d=0 depth=0 word="" w
+  local -a words=()
+  for (( i = 0; i < ${#s}; i++ )); do
+    ch="${s:i:1}"
+    if (( in_s )); then
+      [[ "$ch" == "'" ]] && in_s=0
+      word+="$ch"; continue
+    fi
+    if (( in_d )); then
+      [[ "$ch" == '"' ]] && in_d=0
+      word+="$ch"; continue
+    fi
+    case "$ch" in
+      "'") in_s=1; word+="$ch" ;;
+      '"') in_d=1; word+="$ch" ;;
+      '\') word+="$ch"; i=$(( i + 1 )); word+="${s:i:1}" ;;
+      '('|'{') depth=$(( depth + 1 )); word+="$ch" ;;
+      ')'|'}') (( depth > 0 )) && depth=$(( depth - 1 )); word+="$ch" ;;
+      ' '|$'\t')
+        if (( depth > 0 )); then
+          word+="$ch"
+        else
+          [[ -n "$word" ]] && words+=("$word")
+          word=""
+        fi ;;
+      *) word+="$ch" ;;
+    esac
+  done
+  [[ -n "$word" ]] && words+=("$word")
+  [[ "${#words[@]}" -ge 1 ]] || return 1
+  for w in "${words[@]}"; do
+    [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || return 1
+  done
+  return 0
+}
+
 # --- Advisory: a non-final statement whose exit status the runner discards ---
 # See the header. WARN only: stderr, never $FOUND. A statement is NOT reported
 # when the author already reasoned about exit status (`!`-prefixed,
 # `&&`/`||`-joined, `$?`-captured), when the block turns on errexit itself, or
-# when it is an assignment or a pure output/control builtin rather than an
-# assertion. Statements are split line-wise, with backslash continuations and
-# unbalanced-quote continuations rejoined and `if/for/while/until/case` bodies
-# treated as one top-level statement.
+# when it is nothing but assignments, or a pure output/control builtin STANDING
+# ALONE, rather than an assertion. Statements are split line-wise, with
+# backslash continuations and unbalanced-quote continuations rejoined and
+# `if/for/while/until/case` bodies treated as one top-level statement.
+#
+# Every exemption below is ANCHORED rather than tested as a raw substring, a
+# head word or a leading regex. Each of those shortcuts exempts a statement
+# whose status really is discarded — a miss in the single direction this check
+# exists to close, and the direction in which a miss is invisible.
 #
 # Two `set -e` traps this function deliberately avoids. The script runs under
 # `set -euo pipefail`, so (1) `(( depth++ ))` is NOT used — it returns rc 1 when
@@ -273,7 +385,15 @@ node_phase() {
 # left side of an `&&` or `||` list, which errexit exempts.
 warn_unguarded_statements() {
   local node_id="$1" block="$2"
-  [[ "$block" == *"set -e"* || "$block" == *"set -o errexit"* ]] && return 0
+  # Anchor the errexit exemption to a line that actually RUNS `set -e`. A raw
+  # substring test over the whole block also matches `set -e` quoted inside
+  # another command — `bash -c 'set -e; …'`, or a fence asserting on the string
+  # with `grep -q 'set -e' <file>`, both live idioms here — and would exempt a
+  # block that never enables errexit at its own top level. That is the worst
+  # shape of miss: the block reads as "the author already handled it".
+  if grep -qE '^[[:space:]]*set[[:space:]]+(-[a-zA-Z]*e|-o[[:space:]]+errexit)' <<<"$block"; then
+    return 0
+  fi
 
   local line s cont="" depth=0 i last
   local -a stmts=()
@@ -282,14 +402,22 @@ warn_unguarded_statements() {
     [[ -n "$cont" ]] && { s="$cont $s"; cont=""; }
     [[ -z "$s" || "$s" == \#* ]] && continue
     if [[ "$s" == *\\ ]]; then cont="${s%\\}"; continue; fi
-    local dq sq
-    dq="${s//[^\"]}"; sq="${s//[^\']}"
-    if (( ${#dq} % 2 == 1 || ${#sq} % 2 == 1 )); then cont="$s"; continue; fi
+    if ! quoting_balanced "$s"; then cont="$s"; continue; fi
     case "$s" in
-      fi|done|esac|'}'|'};'|'fi;'|'done;')
+      fi|done|esac|'}'|'};'|'fi;'|'done;'|'esac;')
         (( depth > 0 )) && depth=$(( depth - 1 )); continue ;;
       if\ *|for\ *|while\ *|until\ *|case\ *)
-        [[ "$depth" -eq 0 ]] && stmts+=("$s"); depth=$(( depth + 1 )); continue ;;
+        [[ "$depth" -eq 0 ]] && stmts+=("$s")
+        # A compound written entirely on ONE line closes itself. Incrementing
+        # for it would leave `depth` permanently above 0, and the `depth -eq 0`
+        # guards below would then silently drop every LATER statement in the
+        # block — including the real final one, so the block stops being
+        # analysed at all from that line on.
+        case "$s" in
+          *[\ \;]fi|*[\ \;]fi\;|*[\ \;]done|*[\ \;]done\;|*[\ \;]esac|*[\ \;]esac\;) ;;
+          *) depth=$(( depth + 1 )) ;;
+        esac
+        continue ;;
     esac
     [[ "$depth" -eq 0 ]] && stmts+=("$s")
   done <<<"$block"
@@ -299,8 +427,14 @@ warn_unguarded_statements() {
   for (( i = 0; i < last; i++ )); do
     s="${stmts[i]}"
     [[ "$s" == '!'* || "$s" == *'&&'* || "$s" == *'||'* || "$s" == *'$?'* ]] && continue
-    [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue
-    [[ "$s" =~ ^(echo|printf|set|shift|exit|return|unset|local|declare|export|:|if|for|while|until|case)([[:space:]]|$) ]] && continue
+    assignments_only "$s" && continue
+    # Output/control builtins carry no assertion — but only when the builtin IS
+    # the whole statement. `printf '%s' "$out" | grep -q x` is an assertion
+    # whose status the runner discards like any other, and it is this repo's
+    # standard "assert on captured output" idiom; matching the HEAD WORD alone
+    # exempts the entire pipeline and misses exactly the class this check
+    # exists to find.
+    [[ "$s" != *'|'* && "$s" =~ ^(echo|printf|set|shift|exit|return|unset|local|declare|export|:|if|for|while|until|case)([[:space:]]|$) ]] && continue
     echo "lint-verify-fence-paths.sh: WARN $node_id: a non-final verify statement's exit status is discarded (the runner adds no 'set -e', so only the last statement decides): $s" >&2
   done
   return 0

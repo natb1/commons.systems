@@ -309,8 +309,8 @@ assert_eq "shipped verify-fence-path-baseline.json has no entries" "0" "$shipped
 # --- 10. swallowed non-final statement status -> WARN on stderr, exit 0 -----
 # The advisory check the linter's header documents: dispatch-run-verification
 # runs a block as plain `bash <file>` with no `set -e`, so only the LAST
-# statement decides pass/fail. These five cases pin the warning's shape and,
-# just as importantly, its inability to change the exit status.
+# statement decides pass/fail. These cases pin the warning's shape and, just as
+# importantly, its inability to change the exit status.
 echo "Test: a non-final unguarded statement warns but does not fail"
 reset_nodes
 write_node warn-unguarded implement '## Verification
@@ -361,6 +361,90 @@ bash packages/keep.ts
 run_lint_warn
 assert_eq "set -e block exits 0" "0" "$RC"
 assert_eq "set -e block prints nothing" "" "$OUT"
+
+# --- 11. the exemptions are ANCHORED, not substring/head-word/leading-regex ---
+# Five defects the line-wise splitter carried at introduction (PR #3145 review,
+# findings 1-5). Each case below was PROVEN red against that splitter: every one
+# emitted NO warning at all, so a genuinely swallowed assertion read as clean.
+# They pin the one direction this check cannot afford to be wrong in — an
+# over-broad exemption is INVISIBLE, whereas a false positive is merely noise on
+# an advisory channel. If one of these ever goes quiet again, the exemption it
+# guards has widened.
+
+echo "Test: an echo/printf-headed PIPELINE is an assertion, not an exempt builtin"
+reset_nodes
+write_node warn-pipeline-head implement $'## Verification\n```verify\nprintf \'%s\' "$out" | grep -q ok\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "printf-headed pipeline still exits 0" "0" "$RC"
+assert_contains_local "the printf-headed pipeline itself is warned" \
+  ": printf '%s' \"\$out\" | grep -q ok" "$OUT"
+
+echo "Test: a one-line compound does not leak depth and drop the rest of the block"
+reset_nodes
+write_node warn-oneline-compound implement '## Verification
+```verify
+if [ -f x ]; then echo y; fi
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "one-line-compound block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a one-line if is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a one-line case closed with 'esac;' does not leak depth either"
+reset_nodes
+write_node warn-oneline-esac implement '## Verification
+```verify
+case x in a) echo a ;; esac;
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "one-line-esac block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a one-line case is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a quote nested inside the other kind does not swallow the block's tail"
+reset_nodes
+write_node warn-nested-quote implement $'## Verification\n```verify\n! grep -q \'AW_DISP" == "pruned"\' packages/keep.ts\nbash .claude/live-script.sh\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "nested-quote block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a nested quote is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+assert_not_contains_local "the !-guarded nested-quote statement is not itself warned" \
+  "AW_DISP" "$OUT"
+
+echo "Test: 'set -e' quoted inside a command does not exempt the whole block"
+reset_nodes
+write_node warn-quoted-set-e implement $'## Verification\n```verify\nbash -c \'set -e; grep -q x packages/keep.ts\'\nbash .claude/live-script.sh\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "quoted set -e block still exits 0" "0" "$RC"
+assert_contains_local "a block whose only 'set -e' is quoted is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: an env-var-prefixed command is not exempted as an assignment"
+reset_nodes
+write_node warn-env-prefix implement '## Verification
+```verify
+NODE_ENV=test npx vitest run
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "env-prefixed command block still exits 0" "0" "$RC"
+assert_contains_local "the env-prefixed command is warned" \
+  ": NODE_ENV=test npx vitest run" "$OUT"
+
+# ...and the converse the anchored assignment test must not break: a REAL
+# assignment whose value legitimately contains spaces stays exempt. Without
+# this, the obvious "warn unless the whole statement is one word" fix would
+# false-positive on `out=$(cmd a b)`, the corpus's most common shape.
+echo "Test: an assignment whose value contains spaces is still exempt"
+reset_nodes
+write_node warn-real-assignment implement $'## Verification\n```verify\nout=$(cat packages/keep.ts)\nmsg="a b"\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "assignment-only statements exit 0" "0" "$RC"
+assert_eq "assignment-only statements print nothing" "" "$OUT"
 
 # ---------------------------------------------------------------------------
 # lib-verify-fence.sh extraction regression: dispatch-run-verification's exit
