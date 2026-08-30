@@ -6664,6 +6664,34 @@ clarifications:
       fails when it is missing — an unchecked provenance field would record the
       handoff while proving nothing, which is worse than the status quo because
       it looks like coverage.
+  - question: The armed maintenance-burden band is measured in breach — 40.5%
+      against a 35% ceiling, and the sensor's series verdict reads "increasing".
+      Is the condition failing, is the band re-declared, or is the breach
+      accepted?
+    answer: "(Ruled by the author 2026-08-28 in the sitting that cleared
+      tactic-align-audit-legacy-review; ruling text in commit 751982b0, indexed
+      in plans/dispatch-rsi-author-rulings.md, transcribed here 2026-08-29 under
+      Ruling 5.) DISPOSITION (c) — ACCEPT THE BREACH WITH REMEDIATION. The 35%
+      ceiling is KEPT as the target and is not re-declared; the remediation is
+      the existing 13-position serialized drain plan, and the charter split
+      ruled in the same sitting is the structural fix behind it. Re-measured at
+      the sitting through classifyTactic/strategyBacklogBand over git archive
+      origin/main intentions: 135/316 = 42.72%; the ceiling limb fails
+      decisively and the non-increasing limb is WITHDRAWN as a ground (43.67% at
+      76abc77a, 44.30% at a5ddeca1, 42.72% now at the same denominator).
+      REJECTED: (a) re-affirming 35% as a halt, which keeps 82 parked nodes
+      parked for the window; and (b) re-declaring the ceiling against the grown
+      population, which re-baselines the signal on the same pooled denominator
+      the charter split has just ruled unfit and would need re-doing after the
+      split re-cuts it. UN-PARK CRITERION, a rule rather than an enumeration:
+      every node parked SOLELY on the maintenance-burden band breach is
+      un-parked on the drain plan. An enumerated list was declined deliberately
+      — the parking round's own text named eleven nodes while 82 tactics serving
+      this strategy are parked, so any hand-list goes stale immediately. THE
+      PRECEDENT for applying it: tactic-graph-commit-park-content-durability was
+      cleared on this same ruling (f093e607) only once ALL of its blockers were
+      ruled, not on the band alone. A node carrying a second still-open blocker
+      stays parked."
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -6688,13 +6716,17 @@ success_signal:
   sensor: the intention store and the router's selection log —
     align-tactics-census.ts enumerates the open machinery-defect population
     serving this strategy; the selection log carries lifecycle completions
-  threshold: the owned path carries tactics through the full lifecycle
+  threshold: "the owned path carries tactics through the full lifecycle
     continuously, and the machinery's own open defect backlog — open (phase set,
     not done) plus born-parked tactics serving this strategy — stays at or below
     35% of all tactics serving this strategy and is non-increasing across
     consecutive samples derived from intentions/ git history at read time, and
     parks attributable to an upstream recording round’s own record gap trend to
-    zero
+    zero (Amended 2026-08-28: the 35% band is in accepted breach under
+    disposition (c) — the ceiling is KEPT as the target and the drain plan is
+    the remediation; see the maintenance-burden condition and the 2026-08-28
+    clarification. A measured breach against this target does not make the
+    signal falsified while the drain plan is in force.)"
   is_proxy: true
 attention:
   boosts:
@@ -6925,7 +6957,36 @@ attributes:
       Measured at arming: 59 of 197 = 30.0% (the 2026-08-04 baseline was 62 of
       178 = 34.8%). A ratio rather than an absolute ceiling, so legitimate
       growth in the strategy's tactic population cannot trip it — only backlog
-      growing faster than the strategy itself does."
+      growing faster than the strategy itself does. (AMENDED 2026-08-28, author
+      sitting; ruling recorded in commit 751982b0 and indexed in
+      plans/dispatch-rsi-author-rulings.md.) THE BAND IS IN BREACH AND THE
+      BREACH IS ACCEPTED: disposition (c), ACCEPT THE BREACH WITH REMEDIATION.
+      The 35% ceiling is KEPT as the target and is NOT re-declared —
+      re-affirming it as a halt, and re-baselining it against the grown
+      population, were both considered and declined (the first keeps 82 parked
+      nodes parked for the whole window; the second re-baselines on the same
+      pooled denominator the charter-split ruling has just declared unfit).
+      Re-measured at the sitting over `git archive origin/main intentions`
+      through classifyTactic and strategyBacklogBand: 135 of 316 = 42.72%. The
+      CEILING limb fails decisively. The NON-INCREASING limb is WITHDRAWN as a
+      ground: the series read 43.67% at 76abc77a and 44.30% at a5ddeca1 and is
+      42.72% now at the same denominator of 316, so the numerator genuinely fell
+      and the monotonic rise is broken — the machine reading's \"(increasing)\"
+      verdict is computed over a 28-day sampling window and does not overturn
+      this. THE REMEDIATION IS THE DRAIN PLAN, which already exists and is not
+      newly authored: the serialized 13-position batch assigns 117 tactics, none
+      twice, plus 11 deliberately unassigned and 13 absorbed by the overhang
+      retirement; the charter split ruled in the same sitting is the structural
+      remediation behind it. CONSEQUENCE FOR A DRIFT REVIEW, stated so it is not
+      re-derived: while the drain plan is in force this condition READS AS
+      HOLDING. A measured breach of the 35% target is NOT this condition failing
+      and is NOT grounds for a Side-A park — the author has already made the
+      decision the FAILING clause above exists to route to them, and re-parking
+      on it adds one to the very numerator the condition measures. UN-PARK
+      CRITERION, stated as a rule rather than an enumeration because any
+      hand-list goes stale immediately: every node parked SOLELY on the
+      maintenance-burden band breach is un-parked on the drain plan. A node
+      carrying a second, still-open blocker is NOT un-parked by this."
     - an author-lane post-merge verification node carries, AT BIRTH, everything
       a fresh office-hours sitting needs — office_hours.reason,
       office_hours.recommendation, and the verification item's url_path /
