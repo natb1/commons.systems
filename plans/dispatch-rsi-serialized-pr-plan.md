@@ -3325,8 +3325,8 @@ invent one.
 > `blocked_by: []`, `office_hours: null` on `origin/main`, i.e. live and
 > selectable, and this PR's `### Nodes closed (2)` list now names it. What
 > cannot run is the section **as written**, because it plans against the parked
-> node. See the ⚠ callout above that list.)* The node this section names,
-> `intentions/tactic-dispatch-skill-standards-extraction.md`, is **parked**
+> node. See the ⚠ callout directly **below** that list.)* The node this section
+> names, `intentions/tactic-dispatch-skill-standards-extraction.md`, is **parked**
 > (`office_hours` non-null, `since: 2026-08-20`, `phase: null`, `status: raw`,
 > `session_type: requirement-discovery`) on four unrecorded premises, **the first
 > of which is disqualifying on its own — a DUPLICATE CARRIER**: the serving

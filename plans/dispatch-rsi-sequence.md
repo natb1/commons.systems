@@ -53,9 +53,13 @@
 > `schema.ts`, and `dispatch-derive-node-target` with its test. **What each
 > citation needs is past-tense repair, not a decision.**
 >
-> **The citation list above is the two plan-side sites only — the repair scope
-> is 11 sites (re-measured 2026-08-30).** `tactic-graph-digest-tooling` is also
-> cited at nine places under `intentions/`:
+> **The citation list above is the two sites outside `intentions/`, and both
+> already read past-tense — the outstanding repair scope is the 9 `intentions/`
+> sites (re-measured 2026-08-30).** Of those two, PR17 Unit 6 is wrapped in the
+> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4515-4527`,
+> and `.claude/skills/align-audit/SKILL.md` (a skill, not a plan) was fixed in
+> the E22 commit, as `:4527` there records. `tactic-graph-digest-tooling` is
+> cited 13 times under `intentions/`, 9 of them needing repair:
 > `strategy-graph-review-curriculum.md:158`, `strategy-graph-integrity.md:23`
 > and `:138`, `tactic-align-audit-skill.md:76`, `:110` and `:172`,
 > `tactic-serves-inheritance-full-strip.md:21`, `:53` and `:112`, plus four
@@ -65,9 +69,16 @@
 > `tactic-serves-inheritance-full-strip.md:21` reads *"the digest's DUP-SERVES
 > table (blocked_by tactic-graph-digest-tooling)"* and `:53` repeats it — the
 > same defect class this window corrects for `tactic-dispatch-skill-input-contract`
-> at PR13 (d): body prose, so `validateGraph` never reads it and the router
-> never traverses it, but a human reader takes it for a live blocker. Repair
-> them in the same past-tense pass. And
+> at PR13 (d): no frontmatter edge, so the router never traverses it, but a
+> human reader takes it for a live blocker (the node's real `blocked_by` is
+> `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
+> `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
+> `:47`), in the `rationale:` block scalar — so repair it as a frontmatter field
+> edit, which `graph-commit` merges structurally. It is **not** unread by
+> tooling either: `validateGraphProseRefs`
+> (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
+> `attention.rationale`, every `clarifications[].answer` and the body. Repair
+> both in the same past-tense pass. And
 > `tactic-graph-digest-tooling`'s deferred review follow-ups already have a live
 > successor carrier: `tactic-graph-digest-quality-followups` (`status: codified`,
 > `phase: implement`, `blocked_by: []`, `office_hours: null`), which is already
