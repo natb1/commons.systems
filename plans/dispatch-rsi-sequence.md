@@ -108,13 +108,17 @@
 > mandate above is what makes the `--expect` substitution correct: the shell
 > expands `git hash-object` in *its own* cwd, so run from anywhere but the target
 > checkout it hashes the wrong file and `graph-commit` dies with *"the edit was
-> made in a DIFFERENT checkout"*. Do **not** repair that by writing
-> `git -C <repo root> hash-object`: an agent-typed `git -C` is refused outright
-> in a worktree-isolated session, and refused again as an unverifiable compound
-> once it sits inside `$( )`, by a Claude Code built-in that fires *before* the
-> `permissions.allow` match this block relies on — see `.claude/rules/sandbox.md`,
-> "`git -C /path` is auto-approved for worktrees", which names bare
-> `git hash-object` as the spelling that works. Fix the cwd, not the command.)
+> made in a DIFFERENT checkout"*. Where the cwd cannot be the target checkout,
+> the repair is an **absolute path** — `git hash-object <abs path>`, the spelling
+> `.claude/rules/sandbox.md:180-182` sanctions against a foreign checkout, and
+> the one no cwd can spoil. Not `git -C <repo root> hash-object`: from a
+> worktree-isolated session a Claude Code built-in refuses an agent-typed
+> `git -C` whenever the path is **not that session's own worktree** — exactly
+> this case — and it fires *before* the `permissions.allow` match this block
+> relies on (`.claude/rules/sandbox.md`, "`git -C /path` is auto-approved for
+> worktrees"). That refusal is path-conditional, not outright, and it is not
+> about the surrounding `$( )`: the prescribed bare form sits in that same
+> substitution.)
 >
 > **Three of those flags guard a SILENT failure — a run that exits 0 having done
 > nothing or the wrong thing: `-C`, `--base` and `--expect`.** `--dir` and
