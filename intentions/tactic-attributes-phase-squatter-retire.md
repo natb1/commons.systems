@@ -36,8 +36,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -620,3 +632,69 @@ is defined from one that is also called.
 **Unit 4 — judgment.** Read the rewritten bullet back and confirm it still
 forbids `/align-tactics` from stamping `main-qa`. The correction must change the
 stated reason without loosening the rule.
+
+## What shipped — 2026-08-30, all three units
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 4. The data half landed separately and first, as
+`5062f90e`.
+
+**Unit 1 — the data backfill. Three nodes, not six.** The serialized plan said
+"the 6 remaining"; the true set was **3**, verified two independent ways (the
+repo's own `listNodes`/`readNode`, and a raw frontmatter scan over all 751
+nodes): `tactic-attention-surface-analytics-collector`,
+`tactic-budget-txn-identity`, `tactic-indieweb-audience`. Each moved from
+`phase: null` + `attributes.phase: main-qa` to first-class `phase: main-qa` with
+`attributes: {}`. The migration refused to guess — it dies if the squatter is
+absent, if the top-level phase is already set, or if the promotion loses the
+value or leaves the key behind.
+
+This had to land **before** the schema tightening, or `graph-validate` would go
+red on the surviving keys.
+
+**Unit 3 — Rule 23, as the general shadow-ban this node specifies.** The
+serialized plan scoped only an `attributes.phase` rejection. That was narrower
+than this node, so it was widened to match: a compiler-enforced
+`FIRST_CLASS_FIELD_PROBE: Record<keyof IntentionNode, true>` derives
+`FIRST_CLASS_FIELD_NAMES`, and `validateGraph` rejects **any** `attributes` key
+colliding with a first-class field name — closing `attributes.execution` and
+`attributes.office_hours` as well. Adding a field to `IntentionNode` without
+updating the probe now fails `tsc`; that was proven three ways (missing field,
+new field, non-field name), not asserted.
+
+Presence is the violation, not shape: it fires on `null` too. Every violating
+key on a node is reported, not just the first.
+
+**Independent census: 50 distinct `attributes` keys across 751 nodes, zero
+collisions** with first-class field names. (This node's own census said 51
+including `phase`; 50 is the consistent successor now that `phase` is migrated.)
+So the wide rule has no false positives on the live store.
+
+**Why `validateGraph` and not `validateAttributes`:** the latter receives only
+`(value, field)`, so it could never name the offending node; and it runs on the
+**read** path, where a rejection makes the file unreadable to every tool that
+merely enumerates the store. `validateGraph` aggregates all problems into one
+error.
+
+**Unit 2 — all six squatter-aware readers deleted** from
+`check-node-selection.ts`: `readPhase`, `readParked`, `readStrategyFingerprint`,
+`readMarkers`, `readFixState` and `readConflictState`. Every one was dead code —
+`attributes.execution` and `attributes.office_hours` are on zero nodes. Tests
+that drove them were **retargeted to their inverse** (a stray
+`attributes.office_hours` no longer parks; a squatted stamp is not read), never
+deleted, and one test that used the squatter as an incidental vehicle for an
+unrelated "phase advanced" assertion was re-vehicled with that assertion
+byte-identical.
+
+### Rule-number collision — read this before landing a new rule
+
+`tactic-supersession-edge-and-terminal` also claims Rules **23 and 24**, for the
+supersession edge and its cycle check. Neither was landed when this shipped, so
+there is no conflict on disk today — but rule numbers are cross-referenced from
+node bodies and are never reused, so **whichever lands second must renumber**.
+Recorded in the schema's ledger paragraph and above the function itself.
+
+**Verification:** `intentionsutil` vitest 1252/1252 across 57 files; `tsc
+--noEmit` exit 0; `validate-graph.ts intentions` ok at 751 nodes with Rule 23
+live; a CLI-level negative control on a copied store confirmed the rule fires on
+the real `validate-graph` path, not merely in unit tests.

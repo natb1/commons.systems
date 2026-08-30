@@ -29,8 +29,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -378,3 +390,54 @@ clarification 242) that every other graph reader/writer now satisfies. Whether
 that residual gap is material — and whether the follow-on
 `buildDefaultRegistry(dir, repoRoot)` parameterization tactic should be filed —
 is a question for the next round, not for this PR.
+
+## What shipped — 2026-08-30
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 3.
+
+`main()` parsed only `--report` and silently dropped every other argument, then
+ran an unconditional write pass. Now:
+
+- **Unknown arguments are rejected by name**, exit non-zero, with usage.
+- **`--dry-run` (synonym `--check`) reads without writing.** `--report` and
+  `--dry-run` are mutually exclusive; `--help` prints usage on stdout, exit 0.
+- **The store in effect is printed on every run**, so the tree is never implicit
+  even though it is not selectable.
+
+### `--dir` was NOT added, and this node is why
+
+The serialized plan instructed the implementer to add a `--dir` here, on the
+premise that PR1 Unit 8's explicit-tree work had covered this script. Two
+corrections:
+
+1. **PR1 did not touch this file's tree resolution.** PR1 changed
+   `read-sensors.ts` by comment only; the explicit-tree work covered
+   `validate-graph.ts`, `dump-node.ts`, `write-node.ts` and `clear-park`. The
+   script still self-resolves from its own file location.
+2. **But adding `--dir` here would have shipped the defect this node exists to
+   close.** This node's own Context already ruled it out and was right:
+   `buildDefaultRegistry()` takes no parameters and four registered sensors
+   close over the module-level `intentionsDir`/`repoRoot` constants, so a
+   `--dir` threaded only through `readStoreSensors` produces a run that **reads
+   one store and writes another** — a silent-wrong-result defect of exactly the
+   family named here.
+
+So the instruction was declined in favour of this node's recorded reasoning.
+`--dir` is rejected *by name* with the reason inline, rather than swallowed, and
+the file header carries the full note: the four closures that force it, and that
+`read-sensors.ts` is deliberately outside clarification 242's scope.
+
+Full parameterization of `buildDefaultRegistry` remains the greenfield design
+and stays filed as a separate opus tactic. It additionally requires touching
+five test files and `validate-graph.ts`'s `registeredSensorNames()` call.
+
+### Naming
+
+This node specifies `--dry-run`, while the serialized plan said `--check`. Both
+work: `--dry-run` is canonical, `--check` is a documented synonym.
+
+**Verification:** `read-sensors.ts --nonsense` exits 1 with usage and writes
+nothing (`git status intentions/` unchanged before and after); `--check` and
+`--dry-run` write nothing; `--report` unchanged. `intentionsutil` vitest
+1252/1252 across 57 files.

@@ -33,8 +33,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -144,3 +156,65 @@ binding depends on, push it the way real writes are pushed — through the graph
 fast path, not a feature branch — and confirm something goes red. A gate that
 only fires on a branch that already runs `unit-tests` has not addressed this
 node, because that branch was never the blind spot.
+
+## What shipped — 2026-08-30, shape (2), fatal
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 10.
+
+The ruling is executed as recorded: **shape (2) — a post-merge check on `main`
+that cannot deny a write — and it is FATAL.** Shape (1), the node-scoped fatal
+inside `guard`, is not shipped and remains deliberately declined until its new
+`origin/main` read has a proven failure-open path.
+
+The fatality is **opt-in**, via a new `--strict-sensors` flag on
+`validate-graph.ts`, armed at exactly one site:
+
+- `.github/workflows/unit-tests.yml` — the post-merge `graph-validate` job,
+  **with** the flag.
+- `.github/workflows/graph-fast-path.yml` — **untouched and unflagged.**
+
+### Why opt-in, and not a flag-free fatal
+
+This is the part the plan did not name, and it is the whole difficulty of the
+unit. `graph-fast-path.yml` runs the **identical** `validate-graph.ts intentions`
+command in its `guard` job, and `acceptance`, `preview-and-smoke`, `lint` and
+`unit-tests` all declare `needs: guard` — those four are exactly the contexts
+`graph-commit` polls. Making the sensor check fatal unconditionally inside
+`validate-graph.ts` would therefore have re-armed the 2026-08-14 repo-wide write
+outage (54 minutes, three blocked writes, none about sensors) that PR1 Unit 2
+exists to prevent.
+
+A flag was chosen over an environment variable specifically so the divergence
+between the two call sites is visible to `grep` and `diff`, rather than hidden in
+a workflow `env:` block where it could silently vanish from one of them.
+
+The write path therefore remains unable to deny, which is what makes shape (2)
+safe; the detection floor is real because the post-merge job now fails rather
+than printing a warning.
+
+### Measured before arming
+
+The live store reports **0 unbound registered sensor names**, so turning this on
+does not put `main` red. Confirmed by running `validate-graph.ts intentions
+--strict-sensors` against the real store: ok at 751 nodes, exit 0.
+
+Both directions were demonstrated with real exit codes on a store seeded with a
+reworded sensor name — default: warning, exit 0; `--strict-sensors`:
+`IntentionSchemaError` naming the unbound name and the node it was probably
+reworded on, exit 1.
+
+### Also corrected
+
+Two comments asserting the dead premise `branches-ignore: [main, 'graph/**']`.
+`main` was removed from that list in #3108; only `graph/**` is ignored.
+
+### Still open, unchanged by this unit
+
+The `graph/**` half of the blind spot stays ignored, and `validate-graph` stays
+deliberately non-fatal on the write path. Both are properties of the ruling, not
+oversights.
+
+**Verification:** `intentionsutil` vitest 1252/1252 across 57 files, including
+two new tests covering the default-non-fatal and strict-fatal paths;
+`run-typecheck.sh` 3/3; `run-lint.sh` clean.

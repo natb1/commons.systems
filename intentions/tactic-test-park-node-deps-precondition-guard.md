@@ -51,8 +51,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -545,3 +557,31 @@ or duplicates this one. `tactic-dispatch-test-monolith-split` decomposes
 `test-dispatch-scripts.sh` — a different file, no overlap.
 `tactic-reconcile-graph-merged-test-harness` adds a brand-new harness — no
 overlap. Do not mint a duplicate.
+
+## What shipped — 2026-08-30
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 7.
+
+`make_clone()` in `test-park-node.sh` symlinked `$REAL_REPO_ROOT/node_modules`
+into every clone with no existence check, so a harness root without dependencies
+dangled a symlink into each clone and the missing precondition surfaced as an
+opaque `tsx ERR_MODULE_NOT_FOUND` inside one unrelated-looking case.
+
+The guard now lives in the harness's existing precondition block — the same one
+that already checks seven scripts and `jq` — and fails fast naming the missing
+directory and the fix.
+
+**Proven non-vacuous**, not asserted: `REAL_REPO_ROOT` was temporarily pointed
+at an empty directory and the harness produced
+
+```
+error: <path>/node_modules not found — install dependencies first (npm install at the repo root)
+EXIT=1
+```
+
+in place of the `ERR_MODULE_NOT_FOUND` that would otherwise have surfaced inside
+case 5. The edit was then reverted and the file confirmed clean via `git diff`.
+
+**Verification:** `test-park-node.sh` 25/0 after the change (unchanged count —
+this unit changes a failure mode, not coverage); `run-lint.sh` clean.

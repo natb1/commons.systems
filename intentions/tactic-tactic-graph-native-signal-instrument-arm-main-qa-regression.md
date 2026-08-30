@@ -16,7 +16,6 @@ status: raw
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -24,8 +23,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -150,3 +161,46 @@ segments (`lifecycle:`, `router selections:`, `backlog:`, `backlog series
 28d:`); `git -C . show --stat origin/main -- intentions/` on the landing
 commit shows exactly one changed node
 (`intentions/strategy-graph-native-dispatch.md`).
+
+## Verified, not re-implemented — 2026-08-30
+
+Closed alongside #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window. The fresh reading landed as `8a823862`.
+
+This is a `main-qa` regression node: the code merged, the post-merge
+verification did not happen. So the question was whether the merged instrument
+arm actually produces a non-null four-segment reading — **not** whether to
+rebuild it.
+
+**The arm works.** It was run read-only against the live store and produced all
+four segments (lifecycle, router selections, backlog, backlog series). A fresh
+reading was then landed on `strategy-graph-native-dispatch` by its own
+single-node write.
+
+### What the fresh reading says, and why it matters
+
+The value that had been sitting on the node was landed 2026-08-10 by a 12-node
+RSI batch rather than the single-node write this node's scope prescribes, and it
+was **19 days stale and flattering**:
+
+```
+backlog: 58/236 = 24.6% (band ≤35%); backlog series 28d: 47.6% → 38.2% → 31.4% → 24.6% (non-increasing)
+```
+
+The measured value now on `origin/main`:
+
+```
+backlog: 128/316 = 40.5% (band ≤35%); backlog series 28d: 28.0% → 20.4% → 44.6% → 40.5% (increasing)
+```
+
+The backlog has regressed **out of its ≤35% band** and the 28-day series has
+turned from non-increasing to **increasing**. That is the signal this node
+existed to make readable, and it is bad news — which is precisely why leaving the
+stale flattering number in place would have been the wrong close.
+
+### Corrections to this node's own text
+
+- The `gap:` language is obsolete — `gap` is derived on read and never stored,
+  so it is absent from frontmatter by design.
+- The verification is complete for the arm itself; the regression it now reports
+  is a separate matter for the strategy, not unfinished work on this node.

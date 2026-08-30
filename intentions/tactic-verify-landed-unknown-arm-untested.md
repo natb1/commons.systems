@@ -44,8 +44,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -399,3 +411,52 @@ scope.
 4. **Lint the new shell lines.** Run
    `.claude/skills/dispatch-propagate/scripts/run-lint.sh` and confirm
    `lint-prose-rules.sh` reports no `echo "$VAR" | jq` on the added lines.
+
+## What shipped — 2026-08-30, rescoped
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 11.
+
+### This node's premise was partly false, and the unit was rescoped
+
+The filing says the exit-1 "unknown" arm "was never reached … it is not
+reachable read-only". That is wrong as written. `verify-landed` has **four**
+`unknown` producers, and one was already covered:
+
+| arm | covered before this? |
+|---|---|
+| `git fetch origin main` fails | **yes** — the existing "unreachable origin is unknown" case |
+| `git rev-parse origin/main` fails | no — shadowed by the fetch arm |
+| jq-mode `readNodeAtRef` fails | no |
+| jq exits non-0/1 (filter runtime error) | no |
+
+All three genuinely-uncovered arms are now driven, and — contrary to the initial
+read — **all three were reachable without modifying `verify-landed`**, which is
+byte-identical to `HEAD`:
+
+- the `rev-parse` arm via a clone with `origin` configured but never fetched,
+  invoked with `--no-fetch` so the fetch step is skipped and the arm is no
+  longer shadowed;
+- the `readNodeAtRef` arm via a seeded node with invalid YAML frontmatter;
+- the jq filter arm via a filter that passes parse-time charset validation but
+  fails at eval (`string + number`).
+
+### Non-vacuity, by mutation
+
+Each new case was proven to discriminate: `verify-landed` was copied to a
+scratch file, the specific arm under test mutated to forge a wrong verdict, and
+the case confirmed to FAIL against the mutant and pass against the real script.
+The jq-filter mutant, for example, turned `verdict=unknown`/exit 1 into
+`not-landed`/exit 4 — caught by all three of that case's assertions. A case that
+passed both ways would have proven nothing, which matters especially here.
+
+### Why it matters
+
+`verify-landed` is the second, independent verification every node closure in
+this window runs. An untested arm in it is an untested arm in the bookkeeping of
+roughly 100 remaining closures, where the failure mode is a node recorded as
+done whose content never reached `main`.
+
+**Verification:** `test-verify-landed.sh` 25/0 → **28/0**, with all 25
+pre-existing cases matched name-for-name against the baseline;
+`test-graph-commit.sh` 124/0; `run-lint.sh` clean.

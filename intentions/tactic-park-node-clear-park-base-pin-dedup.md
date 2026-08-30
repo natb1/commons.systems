@@ -21,8 +21,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: pr16-node-mutation-scripts
+  pr: 3138
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-30T00:43:02Z
+    mergeCommitSha: 96d22cb13f56d4240305033b9ad9af76009f9ceb
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -532,3 +544,43 @@ Repo lint (the prose-rule linter scopes to shell scripts by shebang, so the new
   Confirm nothing in this change alters park-node's accepted `--base` forms or
   its exit-3-before-any-mutation ordering; the stale line anchors in that
   sibling's body are prose decay, not a blocker, and are not repaired here.
+
+## What shipped — 2026-08-30
+
+Landed in #3138 (merge commit `96d22cb1`), Position 2 of the dispatch/RSI
+serialized window, as PR16 Unit 2.
+
+The byte-identical `--base` pin-resolution blocks in `park-node` and
+`clear-park` are extracted to one sourced helper, `lib-base-pin.sh`, living
+beside them in `packages/intentionsutil/scripts/`. It covers the manifest-file
+branch, the `<id>=<sha>` pair branch, the bare-sha branch, 40-hex validation and
+the `BASE_SUPPLIED` empty-value guard — the guard whose hand-application to both
+call sites was the drift this node was filed on.
+
+**Not in `lib.sh`, deliberately.** That file must stay copyable standalone: 36
+test fixtures `cp` it without a `lib-*.sh` glob, so adding a `source` there goes
+red in CI while staying green locally. Measured — the count is 36, where this
+node's text said "~17". `park-node` and `clear-park` do not source `lib.sh` at
+all, so a sibling file in their own directory needed no new plumbing.
+
+**The per-script error prefix is preserved.** Four messages differ only by
+saying `park-node:` versus `clear-park:`; the helper takes the program name and
+substitutes it, so both scripts' operator-visible output is byte-unchanged.
+Verified by running both against a bad `--base` and comparing output, not by
+inspection.
+
+**Fixture wiring was mandatory.** `test-park-node.sh` is the only harness that
+physically copies these two scripts into its clones, so the new sourced file had
+to join that copy block — without it every park case would fail on a missing
+source.
+
+### Scope note
+
+Only the resolution block was extracted. The `--base` / `--base=` case arms in
+each script's flag-parsing loop remain duplicated, because the surrounding
+`while` loops genuinely differ — `clear-park` also parses `-C`/`--repo` — and
+folding them together is a larger restructuring this node did not ask for. The
+drift risk this node names lived entirely in the block that was extracted.
+
+**Verification:** `test-park-node.sh` 25/0; `test-graph-commit.sh` 124/0;
+`test-verify-landed.sh` 28/0; `run-lint.sh` clean.
