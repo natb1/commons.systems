@@ -5,8 +5,49 @@ Rulings the author made during batch execution, in two interview sittings on
 exactly that **binding rulings living only in plan prose do not reach a clean
 session**: a session handed the node bodies alone builds the un-ruled design.
 
-Every ruling below is transcribed into the relevant node body as well. This
-file is the index and the audit trail, not the authority — the node body is.
+**The node body is the authority. This file is the index and the audit trail,
+not the authority.** That makes transcription onto the node load-bearing: a
+clean session handed the node bodies alone sees only what is on the node.
+
+> **⚠ TRANSCRIPTION STATUS, audited 2026-08-30 — 1 of 7 rulings is transcribed.**
+> Measured with `LC_ALL=C grep -ac '2026-08-29'` against each ruling's own named
+> nodes. Until the owed transcriptions land, **this file is operatively binding
+> for the six untranscribed rulings**, and any session executing this batch must
+> read it alongside the nodes.
+>
+> | Ruling | Named node(s) | Transcribed? |
+> |---|---|---|
+> | 1 — sibling-carrier drafts become completion records | `tactic-code-review-detached-node-lock`, `tactic-dispatch-code-review-concurrent-write-attribution`, `tactic-review-cheap-fix-disposition`, `tactic-audit-permission-friction` | **NO** — 0 hits on all four. All four still carry live `office_hours` parks, and `tactic-review-cheap-fix-disposition` still carries *"(a) COMPLETION RECORD. Stamp the node against the carrying PR and retire it."* as an **unanswered park option**, not as the ruling |
+> | 2 — relocate `target-workers.json` under XDG | `tactic-dispatch-config-untracked-pace-curve` | **NO** — the topic is in the node's prose, but not the ruling: `grep -ra 'RELOCATE UNDER XDG\|relocates under XDG' intentions/` → 0 |
+> | 3 — clarification 131 option (a) | `tactic-dispatch-explicit-ci-wait` | **NO** — 0 hits |
+> | 4 — park-clearing delegated on a verified-dead premise | *(policy, no single node)* | **NO** — not recorded on any node |
+> | 5 — plan-only rulings must be transcribed | *(this file's own rule)* | **NOT EXECUTED** — it is the rule the other six violate |
+> | 6 — record-time main-qa routing is correct | `tactic-mainqa-record-time-routing` | **PARTIAL** — the ruling's *prose follow-up* landed (`cba77286`: the node now reads "born at `main-qa` at qa record time, carrying the source's **still-open PR**", `mint-mainqa-nodes` matches, zero `already-merged` hits remain). The **ruling itself** is not on the node |
+> | 7 — PR20 Units 1 and 3 descoped | `tactic-align-review-skill` | **NO** — 0 hits |
+>
+> **Consequence:** a clean session handed only the node bodies sees four parked
+> drafts and an undischarged author question at Position 7, and an unmarked live
+> Unit 1 at Position 9 — with a plan telling it to implement all of them.
+> Discharging Ruling 5 (transcribing 1, 2, 3, 4, 6 and 7 onto their nodes)
+> is the single highest-leverage correction available to this batch.
+
+> **Plan-only rulings owed transcription, and the ones that must NOT be
+> transcribed** (audited 2026-08-30). Ruling 5 requires each plan-stated ruling
+> to be folded onto its node; it also warns that transcription canonizes an
+> executor draft mistaken for a ruling. The audit separates the two:
+>
+> | Ruling | Home node | Disposition |
+> |---|---|---|
+> | PR11 model routing — *"set `model:` from `cost_usd`, never from `price_proxy_usd`"* (the proxy holds price constant and **inverts** the model ranking, 37827 vs 31372) plus the measured **1.91×** opus-to-sonnet per-turn premium | `tactic-rsi-lens-catalog-decomposition` | **TRANSCRIBE.** It reached `strategy-recursive-self-improvement` and the measuring node, but not the node PR11 closes — the one an executor reads |
+> | PR2 Unit 7 — the `success_signal` **threshold amendment off 0** | `tactic-ladder-terminus-owns-main-qa` | **TRANSCRIBE the amendment only.** The first clause ("the sensor stays approximate and says so") is already on the node; `success_signal.threshold` still reads `"0 violations. Baseline 2026-08-14 …"` |
+> | PR20 — the 35% band ruled **(c) accept with remediation** | `strategy-graph-native-dispatch` | **TRANSCRIBE.** Genuine, but lives only in `751982b0`'s commit message. The strategy's `reading` already shows `40.5% (band ≤35%)` with no ruling attached |
+> | PR6 — the interrupt-gate proxy accepted | `tactic-code-review-detached-node-lock` | **TRANSCRIBE.** Genuine — commit `08870461` / PR #3132. Owed both a node transcription and a numbered entry in this file |
+> | PR3 Unit 1 — "close the four verify-and-close nodes before any implementation" | — | ⚠ **DO NOT TRANSCRIBE.** Two of the four (`tactic-audit-cache-efficiency-lens`, `tactic-rsi-round-trips-lens-carrier`) are `phase: implement`, `status: codified`, carrying live two-unit plans. Transcribing canonizes the contradiction |
+> | PR4 Unit 8 sequencing rationale | — | ⚠ **DO NOT TRANSCRIBE.** Its premise is option 2 of `tactic-graph-prose-ref-batch-wiring`, which that node refutes |
+> | PR4 Unit 3 constraint — "keep the skill-body edits minimal and mechanical" | — | ⚠ **DO NOT TRANSCRIBE.** Contradicted by that node's item 5, which requires a non-mechanical edit |
+> | PR5 absorptions (#3002, #3064) and the #3018 conflict-lane coordination | — | ⚠ **DO NOT TRANSCRIBE.** No node rules on either. The absorptions stay as plan-side facts; the conflict-lane coordination sentence is struck outright, since the unit it coordinates with is refuted |
+> | PR14 model tags — "ruled opus" / "ruled sonnet" | — | ⚠ **UNSOURCED.** Neither node declares a model. The word "ruled" is struck; the tags survive as plan-side recommendations with their reasons |
+> | PR13 atomicity — the no-alias atomic rename | `tactic-dispatch-skill-rename` | Folded into the Position 10 carrier decision below — do not transcribe separately |
 
 ## Standing policy in force
 
@@ -156,3 +197,245 @@ Distinct from the rulings above, which the author made directly.
 | D | Rule-number allocation | PR19 takes 24 and 25; a Position 7 rule takes 26. Rule 20 is permanently burned (`schema.ts:1779-1782`). |
 | E | `/rsi-audit` writing a config file (PR10 Unit 1) | Charter bound 8 (`rsi-audit/SKILL.md:204`) reads as forbidding it — "writes no control artifacts". Treated as forbidding; the unit needs a different writer. |
 | F | Seven vacuous or inverted `verify` fences found store-wide | Corrected in place; see the sweep report. Two are **inverted** — they pass only when the property is violated. |
+
+---
+
+## Executor decisions taken during reconciliation (for ratification)
+
+Ten questions the 2026-08-30 plan-reconciliation pass found registered as
+"needs author input". Under the standing policy at the top of this file — a
+labelled author call is triaged, and only genuine doctrine reaches the author —
+each was decided on best judgement and the consequence applied to the plan
+documents. **None is pending.** Listed for the author to confirm or overturn.
+
+Each entry gives the question, the decision, the one-line reason, and what
+changed as a result.
+
+### D1 — PR4 / PR19 ordering: a PR-level cycle
+
+**Question.** `tactic-persist-greenfield-drops` (PR19) is `blocked_by`
+`tactic-finding-search-all-producers` (PR4), and that PR4 node is itself
+`blocked_by` `tactic-supersession-edge-and-terminal` (PR19). PR4 and PR19 cannot
+both be atomic PRs in either order. Split PR19 at the edge, or merge PR4+PR19
+into one PR?
+
+**Decided: SPLIT PR19.** `tactic-supersession-edge-and-terminal` — PR19's Unit 1,
+a pure `packages/intentionsutil/src/schema.ts` addition — ships as **PR19a ahead
+of Position 5**; the two consumer nodes ship as **PR19b at Position 6, behind
+PR4**.
+
+**Reason.** The split runs along an existing seam and Unit 1 has no dependency on
+PR4; the merge produces a 19-node PR spanning three independently reviewable
+surfaces (ledger doctrine migration, five-writer collapse, schema terminal).
+
+**Changed.** `plans/dispatch-rsi-sequence.md` — the Position 6 entry, the
+"PR19 is pinned behind PR4" passage in §"Cross-PR dependency edges", hard-ordering
+constraint 2 in §"The orderings that are not preferences", and the bundle-table
+row for Position 6. `plans/dispatch-rsi-serialized-pr-plan.md` — PR19's
+`### Dependencies`. The node graph itself is acyclic and is not touched.
+
+### D2 — PR4 Unit 8: `batchIds` has no honest wiring
+
+**Question.** Open an `/align` pass on `strategy-graph-integrity` (may an
+integrity guard resolve a reference on a writer-asserted, push-carried
+declaration?), or adopt the node's option 3 and retire `batchIds`?
+
+**Decided: OPTION 3 — retire `batchIds`.**
+
+**Reason.** The node's own recommendation says ruling option 3 directly is
+sufficient and the strategy question need not be opened; options 1 and 2 are both
+verified unimplementable, and `batchIds` is an unwired fifth parameter with no
+production caller, so deleting the affordance is more honest than building a
+declaration channel that cannot be made honest.
+
+**Changed.** PR4 Unit 8's Scope in the serialized plan is rescoped to the node's
+option 3 verbatim: delete the parameter and its exemption from
+`validateGraphProseRefs`, **rewrite** (never delete) the `schema.test.ts` cases
+to document why the exemption is not offered, add the hand-ordering and
+retryable-after-reordering notes to `/rsi` step 6, and keep the two-invocation
+reproduction requirement. The park is cleared in the same change. Unit 8 no
+longer depends on Unit 3.
+
+### D3 — Position 10: the carrier ruling (four questions)
+
+**Question.** PR13's only node is parked on four unrecorded premises, and no
+`/align` pass was scheduled anywhere to settle them.
+
+**Decided, all four:**
+
+- **(a) Carrier — `tactic-dispatch-skill-rename`.** It is live, unparked, serves
+  the same strategy, and its roster table already claims all three renames.
+  `tactic-dispatch-skill-standards-extraction` keeps only the
+  standards-extraction question, whose own body makes extraction conditional on a
+  concrete consumer that has not emerged.
+- **(b) Roster — the three renames this window names, and no more.** The
+  remaining `dispatch-<phase>` namespace entries stay outstanding on the carrier.
+- **(c) Transition — ATOMIC, no compatibility aliases.**
+- **(d) The `blocked_by` `tactic-dispatch-skill-input-contract` is a phantom and
+  is void.**
+
+**Reason.** (a) resolves a duplicate-target pair *deliberately* rather than by
+omission, which is what clarification 78 exists to prevent. (b) widening a
+repo-wide atomic rename inside a frozen window multiplies blast radius for no
+benefit. (c) an alias has no implementable mechanism — a skill's identity is its
+directory name plus the `SKILL.md` frontmatter `name:` plus the Workflow
+registration `name:`, so an alias means a duplicate registration, which
+`.claude/rules/vendored-skills.md` treats as a defect. (d) a `blocked_by` naming a
+node that does not exist can never clear, so honoring it deadlocks the position
+permanently.
+
+**Changed.** PR13's Scope in the serialized plan carries all four answers, and
+its `### Nodes closed` list is flagged for correction to name the carrier.
+`intentions/` node prose and `.claude/settings.json` are struck from the rename
+surface (the node rules the first out; the second was measured to carry no
+matching pattern). The index's Position 10 section carries the prerequisite
+note. Nobody mints any of the three phantom node ids.
+
+### D4 — PR16 Unit 9: the empty-store contract
+
+**Question.** Does `reader-required-dir.test.ts`'s empty-named-store contract
+stand, or does the node's Scope? Inverting the test is forbidden by
+`.claude/rules/test-integrity.md`.
+
+**Decided: THE TEST'S CONTRACT STANDS.** An existing, caller-named, empty store
+is a legitimate graph. Unit 9's original scope is retired.
+
+**Reason.** Beyond the test-integrity bar: the vacuous-pass class PR1 Unit 8 was
+chasing is already closed by its own change (a *missing* directory exits 2), and
+an empty-store error would break graph bootstrap in a fresh instance repo, which
+is a supported case.
+
+**Changed.** Unit 9 is rescoped to the half that ships without weakening
+anything: correct the `validate-graph.ts:111` comment — which is the thing that
+is actually wrong — to state the real contract, and print
+`ok — 0 nodes (store is EMPTY at <resolved absolute path>)` so an empty run is
+visibly distinct from a populated clean one. A case pinning the new output is
+**added** alongside the existing assertion. No test is inverted, skipped or
+deleted. The park is cleared in the same write.
+
+### D5 — PR16 Unit 8: `execution.strategy_fingerprint` shape
+
+**Question.** Does the field keep its `{hash, sha}` object form, or does `sha`
+go?
+
+**Decided: KEEP `{hash, sha}`.**
+
+**Reason.** `sha` is the provenance half — it is what makes a stamp auditable
+against a commit, and dropping it removes the ability to detect the very defect
+the unit exists to fix. There is no write site on `main` yet, so keeping the
+richer shape costs nothing today while dropping it is an irreversible narrowing
+taken before any consumer exists.
+
+**Changed.** PR16 Unit 8 gains the park callout it never had, plus the decision.
+The unit stays carried forward behind #3023 for the write-site reason, not the
+shape one; the index's Carried-forward row and Unit 8 bullet say so.
+
+### D6 — PR8 Unit 1: three destinations for `target-workers.json`
+
+**Question.** Ruling 2 says XDG; the plan offered tracked-with-history vs
+gitignored-with-a-template; `tactic-dispatch-config-template` says it "migrates,
+tracked".
+
+**Decided: Ruling 2 governs the LIVE file; the template node governs a TEMPLATE.
+Ship both.** The live, per-user `target-workers.json` relocates under XDG beside
+the pause sentinel. A **tracked defaults template** (no live values) stays in the
+instance repo.
+
+**Reason.** The two are reconcilable rather than competing, and the combination
+serves Ruling 2's stated rationale exactly: a fork gets a starting point without
+inheriting this deployment's schedule.
+
+**Changed.** PR8 Unit 1 stops offering a choice and directs the XDG relocation
+plus the tracked template, with `target_n` explicitly untouched (zero is the
+weekly pace curve). The template node's "migrates, tracked" wording is flagged
+for correction to say *the template* migrates tracked, not the live file.
+
+### D7 — PR3 Unit 3: `tactic-audit-review-effort-yield-lens`, (a) or (b)
+
+**Question.** The node's park records "AUTHOR RULING NEEDED, (a) or (b)" because
+the findings axis has no admissible input.
+
+**Decided: OPTION (b)** — ship the lens on source-verified figures only
+(`touched_files_count` as the fix-yield term plus effort, model, wall clock and
+price proxy), and record that the findings half of clarification 46's comparison
+is not measurable today.
+
+**Reason.** (a) requires a coordinated write-side instrumentation change across
+five surfaces **and** an explicit ruling that a structuring-subagent-parsed
+findings count clears the "accounting is verified" bar — a doctrine change
+inventing a provenance standard this batch has no mandate to set. (b) ships a
+real lens today and records the unmeasurable half honestly.
+
+**Changed.** PR3 Unit 3's Scope is replaced with option (b) and its consequences:
+the `high` raise stays an unmeasured quality bet on the findings axis, and
+`result.json`'s per-source dispositions stay non-durable — that deliberate design
+choice is left undisturbed. The park is cleared in the same write. The index's
+Position 5 section carries the park census and the decision.
+
+### D8 — PR5: the predicate approach and the retention-scan call sites
+
+**Question.** Registered as needing an author call because the plan's offered
+approaches were refused by name and its three named call sites were the node's
+out-of-scope list.
+
+**Decided: NO AUTHOR CALL IS NEEDED — both nodes state their own approach
+unambiguously.** Re-read on disk 2026-08-30.
+
+- `tactic-review-stall-predicate-subprocess-spawn` rules the **documented
+  superset cost pre-filter** already shipping on `graph-select-target`'s
+  `_gate_maybe_interrupt`, keeping the **full** superset rather than narrowing to
+  `ci == failing`, in two `sonnet` units, with an explicit "do not author a
+  duplicate" of the existing exhaustive invariant test.
+- `tactic-done-node-retention-scan-cost`'s real three call sites are
+  `select-targets.ts`, `dispatch-graph-census` and `dispatch-graph-scope-sweep` —
+  the three `tactic-review-stall-listnodes-duplicate-scan` deliberately left
+  unwired "to be picked up by later tactics".
+
+**Reason.** The questions were artifacts of the plan text, not gaps in the
+graph.
+
+**Changed.** Both PR5 Scope bullets are rewritten to the nodes' own approaches,
+including the `blocked_by` prerequisite on `store-cache.ts` and the explicit
+"do not reimplement the primitive" stop.
+
+### D9 — PR14 model tags and the PR5 absorptions: unsourced "ruled" claims
+
+**Question.** PR14's two "ruled opus" / "ruled sonnet" tags cite no source, and
+no node rules on PR5's #3002 / #3064 absorptions or the #3018 conflict-lane
+coordination.
+
+**Decided: STRIKE the word "ruled" from both PR14 tags, keeping the tags as
+plan-side recommendations with their reasons. KEEP the #3002 / #3064 absorptions
+as plan-side facts. STRIKE the #3018 coordination sentence outright.**
+
+**Reason.** Transcribing an unsourced "ruled" is precisely the risk Ruling 5
+names — it canonizes an executor draft as an author ruling. The absorptions are
+bookkeeping about which drafts a PR converges, not doctrine. The #3018 sentence
+presupposes the conflict-lane unit that `tactic-review-stall-conflict-lane`'s
+dead-premise park deleted, so there is nothing left to coordinate.
+
+**Changed.** Both PR14 model lines, PR5's overhang callout, and the
+DO-NOT-TRANSCRIBE table at the top of this file.
+
+### D10 — Position 13: who mints the carrier, and one PR or staged?
+
+**Question.** `tactic-review-dispatch-charter-split` is `phase: done` and records
+the spec, not the execution, so `isOpenTactic` is false and no router loop can
+select it. No `# PR` section carries the work.
+
+**Decided: THE BATCH MINTS THE CARRIER ITSELF, as the first action of Position
+13, and the ~316-child re-serve ships as ONE PR.**
+
+**Reason.** Minting is a graph write the batch is already pre-authorized to make
+(index §"Batch execution authority", grant 2) and the spec is complete, so no
+author input is needed to author the node. One PR because the
+`lifecycle-sensor.test.ts` coupling guard requires the node edit and the code
+change in the same branch, and because each staged per-charter re-serve would pay
+the `--base` CAS invalidation again for no review benefit.
+
+**Changed.** The index's Position 13 section carries the decision and a
+seven-item minimum contents list for the carrier node; its bundle-table row is
+marked **⚠ NO CARRIER — must be minted first**. The serialized plan's
+"sittings held, nodes still open" paragraph drops the charter-split node from its
+group (five → four) and records why closing it removed the last node that could
+have carried the work.
