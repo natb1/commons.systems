@@ -179,34 +179,3 @@ PR merges on a heartbeat tick with no operator action, and that
 `journalctl --user -t dispatch-tick` still logs
 `paused (sentinel present at ...); no scheduling this tick`. Then re-measure
 resume criterion 1.
-
-## needs-main residue
-
-- id: 10 — Live confirmation that a reviewed node-lane PR merges under the
-  standing pause
-  - URL path: current
-  - Expected outcome: after this PR lands on main, with the pause sentinel
-    still present, a heartbeat tick's journal output shows the paused
-    no-scheduling line coexisting with `merge:`/`reconcile-graph:` lines, and a
-    reviewed green node-lane PR actually merges with no operator action and is
-    absorbed to `done`/`main-qa`.
-  - Finding: this is the PR's own manual test-plan item (unchecked). It is only
-    observable post-merge, against the deployed `dispatch-tick` systemd timer,
-    the real standing pause sentinel, and an actual reviewed green node-lane PR
-    landing in the live queue — none of which this QA pass's isolated
-    worktree/test-suite environment can reproduce. `qa-fix`'s own disposition
-    workflow classified this `needs-main` (planned deferral).
-  - Verifiability: WAIT — awaited event: this PR merging to main, then at
-    least one subsequent heartbeat tick with the pause sentinel present and a
-    reviewed green node-lane PR actually pending merge.
-  - Check: `journalctl --user -t dispatch-tick --since -2h | grep -E 'paused \(sentinel present|merge: |reconcile-graph: '` —
-    (`-t`, the syslog identifier, not `-u`: there is no `dispatch-tick.service`
-    — the units are `dispatch-heartbeat.service` and the transient
-    `dispatch-reseed-<epoch>`, so `-u dispatch-tick` prints `-- No entries --`.
-    No `^` anchors either: journalctl's default short format prefixes every
-    line with `<timestamp> <host> dispatch-tick[<pid>]:`, so a line-anchored
-    pattern can never match.)
-    confirm a `paused (sentinel present` line and at least one `merge:` line
-    appear in the same tick's output block, then confirm via `gh pr view
-    <the-example-PR>` that it actually merged with no operator-initiated
-    action recorded.

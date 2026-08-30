@@ -397,12 +397,3 @@ Autonomous verification stops at the seam: the bash tests use a fake `node`, so 
 - After the conflict resolves and CI is re-read against post-merge code, a genuinely red PR still enters the interrupt normally (the case-2 control's behavior, in production).
 
 A judgment call left to the reviewer, not to the implementer: whether the per-candidate `node --import tsx/esm` boot in the selection hot path is acceptable in practice. The pre-filter bounds it to red-or-conflicted candidates only, but if tick latency regresses noticeably, the fallback is to inline the two-branch cascade in bash and file a follow-up tactic to re-unify — do not silently drop the `CONFLICTING` check.
-
-## needs-main residue
-
-- id: 10 — Real-world confirmation that a CONFLICTING + red PR declines the interrupt in the live fleet
-  - URL path: current
-  - Expected outcome: zero fix-interrupt writes against a conflicted-and-red PR on `main`, with the conflict lane still picking it up — the end-to-end behavior the hermetic fixtures only simulate (real `gh` mergeable state + real `provision-node-worktree` exit-11 handoff, not stubbed sensors).
-  - Finding: all 8 script-verifiable QA items passed (including the full 71/71 hermetic bash-fixture suite covering the decline path, the mergeable-red control, sensor wiring, the cost guard, `qa`-phase non-stranding, and eval-failure fail-safe). The node body's own "Manual / observe-in-production" section above already names the exact checks: `git log --oneline origin/main -- intentions/<id>.md` shows no `graph: enter fix-interrupt on <id>` commit for the episode; the tick journal / selector stderr carries the `declining the fix interrupt` line; the node's `execution.fix` stays `null` and it reaches `/dispatch-conflict` Lane 3.
-  - Verifiability: WAIT — awaits a future tick episode where some tactic's PR is simultaneously `CONFLICTING` and CI-red post-merge; no such episode has occurred yet against this PR's merged code.
-  - Check: `git log --oneline origin/main -- 'intentions/*.md' | xargs -I{} git log -1 --format='%H %s' {} 2>/dev/null | grep 'graph: enter fix-interrupt'` cross-referenced against a concurrently `CONFLICTING` PR at the same commit, plus a `journalctl`/tick-log grep for `declining the fix interrupt`.

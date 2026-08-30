@@ -721,31 +721,3 @@ Manual / judgment checks — the ones a suite cannot make:
   deviating from the normative "distinct locations never merge" rule and
   running many more partition agents. Left out deliberately; revisit only with
   real-instrument data.
-
-## needs-main residue
-
-- **id:** 10 — Observe the first live `/review-fix` run after merge
-  - URL path: current
-  - Expected outcome: End-to-end absorption observed once on real data:
-    `xlane-dedup:`-labelled agents appear (or zero contested locations, also
-    valid), the absorption summary log line is present, residue count drops
-    by exactly the absorbed count, and the posted PR comment shows the
-    absorbed root once under the Lane-B source with both lanes in `sources`.
-  - Finding: this is the PR's own unchecked test-plan box ("Observe in
-    production on the first real review run after merge"). The absorption
-    code path only executes inside the `/review-fix` Workflow tool's real
-    two-lane gather/dedup/verify/fix/residue pipeline against genuine
-    findings from both lanes at the same `path:line` — no standalone `node`
-    invocation, fixture, or pre-merge check can exercise it end-to-end. The
-    probe fixtures (`test-review-fix-xlane-dedup.sh`) already cover the pure
-    functions in isolation; this is the remaining live-integration
-    observation, structurally unreachable before merge.
-  - Verifiability: WAIT — awaiting the next live `/review-fix` run (on any
-    PR, post-merge of this tactic) that produces a genuine cross-lane
-    duplicate finding.
-  - Check: read the `/review-fix` Workflow transcript / PR comment of that
-    next run for an `xlane-dedup:<loc>`-labelled partition agent and the
-    `xlane-dedup: <n> contested location(s), <n> Lane-A item(s) absorbed, ...`
-    summary log line; confirm the PR's `<!-- dispatch:qa-summary -->` (or
-    review-fix's own disposition comment) shows the absorbed root once under
-    the Lane-B source with both lanes listed in `sources`.

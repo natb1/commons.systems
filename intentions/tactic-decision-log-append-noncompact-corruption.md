@@ -148,31 +148,3 @@ Also run the existing suite once unit 2 lands, to confirm no regression in rotat
 ```verify
 .claude/skills/dispatch-propagate/scripts/test-decision-log-isolation.sh
 ```
-
-## needs-main residue
-
-- id: 15
-  title: Silent-drop tradeoff is an acceptable operator tradeoff as documented
-  url_path: current
-  expected_outcome: A human confirms the silent-drop-on-invalid-input tradeoff
-    in `decision_log_append` is acceptable as shipped and documented, or files
-    it as follow-up residue for a non-fatal observability escape hatch.
-  finding: QA triage flagged this as a design-acceptance call rather than a
-    defect — `decision_log_append` now silently drops non-JSON input with no
-    stderr diagnostic and no sentinel record, and the header comment
-    (`lib-decision-log.sh`) documents the rationale (must stay safe inside
-    EXIT-trap handlers under `set -euo pipefail`) and the operator remedy
-    (build payloads with `jq -c -n`). The disposition workflow found no code
-    defect to fix and confirmed the documented rationale matches the
-    implementation; what remains is whether the silent-drop behavior proves
-    acceptable in practice once this ships, since a malformed payload at any
-    call site now vanishes from the decision log with no signal at all.
-  Verifiability: WAIT — the acceptance criterion is "no operator friction from
-    the silent drop," an event that has not occurred (or failed to occur) yet;
-    it needs production time to accumulate before it is checkable.
-  Check: after this has run in production for a while, review
-    `$HOME/.local/share/commons-dispatch/routing-decisions.jsonl` and any
-    `dispatch-fleet-watch` alarms for evidence that a caller's malformed
-    decision-log payload silently vanished and caused operator confusion or a
-    missed audit-trail entry; if none surfaces, the documented tradeoff is
-    confirmed acceptable.

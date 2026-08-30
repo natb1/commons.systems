@@ -518,30 +518,3 @@ own history).
 5. **No-remote posture.** In a clone without `origin/main`, the selector exits
    2 with a message naming the ref and the remedy, and `--ref HEAD` works as
    the documented escape hatch.
-
-## needs-main residue
-
-`/qa-fix` ran the autonomous QA pass on PR #2976 (2026-08-04). All
-script-verifiable items passed (797-test vitest suite; `--list` line contract;
-main-authority invariant against every listed node's origin/main frontmatter;
-working-tree drift ignored; absent-node-id and `--ref` contracts; the
-`park_live_on_main`/`cleared` retirement grep — after this pass's own fix
-landed, see below). The two `needs-browser`/manual items this plan's own
-Verification block calls out as observational are genuine planned deferrals —
-their verification requires live daemon/dispatch-queue state this QA session
-must not touch — so they are deferred here for post-merge verification against
-deployed main:
-
-- id: wrapper-live-dispatch
-  title: Wrapper end-to-end dispatch — targeted launch, queue-head selection, and the reworded not-parked message
-  url_path: current
-  expected_outcome: Targeted and untargeted `office-hours-graph` dispatch both behave as before the refactor; the liveness (`held`) dedup still suppresses already-claimed nodes; the not-parked path prints "office-hours: node <id> is not parked on origin/main — nothing to launch for it." and launches nothing.
-  finding: Executing the wrapper against a live target requires `dangerouslyDisableSandbox: true` and reaches the real Claude daemon socket and dispatch queue; an autonomous QA session must not risk provisioning a worktree or launching a real office-hours session against live state. The collapsed single-`office-hours-select.ts`-call path, the `--ref`/absent-node contracts, and the full retirement of `park_live_on_main`/`cleared` are all covered statically (PASS) by this pass's script-verifiable items 5, 6, and 8. Only the live end-to-end dispatch behavior remains unobserved.
-  Verifiability: WAIT — awaiting a live `office-hours-graph` dispatch run post-merge (a real targeted launch, a real queue-head selection, and a real not-parked target); check via `journalctl` for `office-hours-graph`/`office-hours-select` invocations, or by observing the next `/office-hours` session's launch line.
-
-- id: stale-worktree-live-repro
-  title: Stale-worktree / reverse-staleness live repro, and the no-remote posture
-  url_path: current
-  expected_outcome: A genuinely stale PR-branch worktree (local park state predating an origin/main clear) resolves via `office-hours-select.ts` to the CURRENT origin/main state, not the stale local state, in both directions (a park cleared on main while the worktree still shows it parked, and a park landed on main that the worktree has not yet pulled). A clone with no `origin` remote hits the documented `--ref`-escape-hatch failure mode, not a silent empty-store degrade.
-  finding: The fixture-level equivalent of the stale-worktree direction already passed this pass (item 4 — a local uncommitted edit to a node file left `--list` output unchanged) and is covered unconditionally by `store-at-ref.test.ts`'s 5 tests (all passing, item 1). What remains unobserved is reproducing the *reverse*-staleness direction and the no-remote posture against genuine live multi-session timing, which this session cannot stage safely without touching real dispatch state.
-  Verifiability: WAIT — awaiting a live episode where a background dispatch job lands a park on origin/main that a not-yet-refreshed worktree observes correctly via the ref-based read; check via `journalctl` for a `office-hours-select.ts --list` invocation whose output reflects a park landed by a separate concurrent session.

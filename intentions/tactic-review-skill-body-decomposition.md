@@ -766,62 +766,24 @@ a planned-deferral re-confirmation classified `needs-main` by the Step 3.5
 disposition Workflow rather than dropped as already-satisfied. Drained by
 `tactic-main-qa-phase` after `review → main-qa` fires (post-merge).
 
-### item-13-context-reduction-materializes — Parent-session context reduction actually materializes on live runs
-- URL path: current
-- Expected outcome: Parent-worker peak context drops materially below the
-  184,468-token baseline and the majority of post-merge `/review-fix` runs fall
-  under 150k, with no offsetting blow-up in any subagent.
-- Finding: Cannot be measured pre-merge — no post-merge live `/review-fix` run
-  exists yet. The tactic's own Verification section defers this to a multi-run
-  `/dispatch-token-audit` re-baseline (the original baseline was 18 runs over 5
-  days).
-- Verifiability: WAIT — awaiting at least 5 post-merge `/review-fix` runs to
-  accumulate.
-- Check: `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh --days 7 --json-out tmp/audit.json` then `jq '[.sessions[] | select(.type=="worker" and (.phases|has("review-fix")))] | {n: length, avg_peak: (if length==0 then null else (([.[].peak_context]|add)/length|floor) end), over_150k: ([.[]|select(.peak_context>150000)]|length)}' tmp/audit.json` — target `avg_peak` materially below 184,468 and `over_150k` a minority of `n`.
-
-### item-14-resume-parity — Resume-after-interruption still works through the new subagent boundaries
-- URL path: current
-- Expected outcome: A `/review-fix` session interrupted mid-run (after the
-  Workflow returns but before Step 6 completes) resumes cleanly: exactly one
-  marker PR comment (no duplicate), exactly one set of follow-up nodes (no
-  duplicate filing), and `graph-commit` landing once.
-- Finding: Requires a real interrupted session against a real PR — the tactic's
-  own Verification section defers this to the next live `/review-fix` pass.
-- Verifiability: WAIT — awaiting a post-merge `/review-fix` run that is
-  interrupted mid-run (naturally, e.g. by an API error) so resume behavior can
-  be observed.
-- Check: on the next such interruption, confirm exactly one `<!-- dispatch:review-fix -->` PR comment exists and exactly one set of follow-up draft tactic nodes was created (no duplicates from a resumed Step 5/6 subagent fork).
-
-### item-15-detection-parity — Detection parity: CodeQL and npm-audit findings identical pre/post extraction
-- URL path: current
-- Expected outcome: `dispatch-review-codeql` / `dispatch-review-npm-audit`
-  surface the exact same findings the old inline blocks would have on a
-  comparable diff — same alerts, same severity mapping, same
-  `introduced_by_diff` classification, same omission of pre-existing
-  moderate/low advisories.
-- Finding: Requires live CodeQL alerts and a real dependency-changing diff to
-  compare against — the tactic's own Verification section defers this to the
-  next live `/review-fix` pass on an `app_or_rules` surface.
-- Verifiability: WAIT — awaiting a post-merge `/review-fix` run on a PR with
-  real CodeQL alerts and/or a real dependency-lockfile change.
-- Check: on the next such run, diff the findings the two scripts emit against what the pre-decomposition inline blocks would have produced on the same alerts/advisories (manual comparison; no automated pre/post harness exists).
-
 ### item-12-live-run-parity-reconfirm — needs-main residue filing (items 13/14/15) survives through the qa-fix attempt-2 commits
 - URL path: current
-- Expected outcome: the three items above remain present, unmodified, and
-  discoverable in this section through any later commit on this PR, so
-  `tactic-main-qa-phase` finds all three post-merge.
+- Expected outcome: the three items above were re-homed by Unit 7 onto
+  `tactic-mainqa-review-skill-body-decomposition-machine` and remain
+  present, unmodified, and discoverable THERE, while item-12 itself remains
+  here — so `tactic-main-qa-phase` still finds all four post-merge, now
+  across the two nodes rather than in this one section.
 - Finding: confirmed present and unmodified in the qa-fix session's own working
   tree as of attempt 2/3 — but this recovery commit is the first time the
   section actually lands on `origin/main`: the original filing (local commit
   91862e5a) was never pushed/merged to `origin/main`, so this append also
   restores items 13/14/15, not only item-12.
 - Verifiability: MACHINE
-- Check: `grep -c '^### item-1[2345]-' intentions/tactic-review-skill-body-decomposition.md` — expect `4`.
+- Check: `grep -c '^- \*\*item-1[345]-' intentions/tactic-mainqa-review-skill-body-decomposition-machine.md` — expect `3`; and `grep -c '^### item-12-' intentions/tactic-review-skill-body-decomposition.md` — expect `1`. Four asserted in total, unchanged from the pre-migration `expect 4`: Unit 7 MOVED items 13/14/15, it did not drop them, so this check still fails if any of the four disappears.
 
 ### item-16-post-reimplementation-reconfirm — needs-main residue (items 12/13/14/15) survives the scope-drift demotion and re-implementation cycle
 - URL path: current
-- Expected outcome: items 13 (context reduction), 14 (resume parity), 15 (detection parity), and 12 (their prior survival confirmation) remain present, unmodified, and discoverable in this section after the node was demoted to `implement` for scope drift and fully re-implemented, so `tactic-main-qa-phase` still finds all four post-merge.
+- Expected outcome: items 13 (context reduction), 14 (resume parity) and 15 (detection parity) were re-homed by Unit 7 onto `tactic-mainqa-review-skill-body-decomposition-machine` and remain present and unmodified there; items 12 (their prior survival confirmation) and 16 remain here. All five survived the scope-drift demotion and re-implementation cycle, so `tactic-main-qa-phase` still finds all five post-merge, now across the two nodes rather than in this one section.
 - Finding: confirmed present and unmodified at `origin/main` as of this qa-fix pass (a fresh 15-item triage authored against the re-implemented code, same three units/design as the original filing). This pass's own independent triage separately verified: the two new scan scripts (`dispatch-review-codeql`, `dispatch-review-npm-audit`) match the pre-change `inline-scans.md` prose with no detected narrowing, and the Workflow's own detection machinery (instrument gate, adversarial-verify vote counts, disposition buckets) is unchanged — both were classified `already-satisfied` by the Step 3.5 disposition Workflow and dropped as PASS, so neither required a new needs-main entry. Only the live-run context-reduction measurement (this pass's own triage item, re-classified `needs-main`) remains genuinely un-verifiable pre-merge, and it duplicates item-13 above rather than warranting a sixth distinct entry.
 - Verifiability: MACHINE
-- Check: `grep -c '^### item-1[23456]-' intentions/tactic-review-skill-body-decomposition.md` — expect `5`.
+- Check: `grep -c '^- \*\*item-1[345]-' intentions/tactic-mainqa-review-skill-body-decomposition-machine.md` — expect `3`; and `grep -c '^### item-1[26]-' intentions/tactic-review-skill-body-decomposition.md` — expect `2`. Five asserted in total, unchanged from the pre-migration `expect 5`.

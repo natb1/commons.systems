@@ -850,27 +850,3 @@ strategy's frontmatter.
    a run of `resolveAttention` over the whole node set. Nothing contradicts
    them; they are unverified statically, not falsified. Any verification step
    that needs one of them must **execute the resolver**, never a grep.
-
-## needs-main residue
-
-Recorded by `/qa-fix` (PR #3075, attempt 1, 2026-08-13). One item, classified
-`needs-main` (planned deferral, not a defect):
-
-1. **Removal of the two legacy `boost:`/`override:` compat parse branches**
-   (`packages/intentionsutil/src/schema.ts`'s `validateAttention`).
-   - Expected outcome: the two legacy-form compat branches are eventually
-     deleted once node files are rewritten onto the canonical `boosts:` form.
-   - Finding: this PR deliberately keeps both legacy parse branches alive so
-     the live store — 91 nodes on the legacy `boost:` form, 1 on `override:`
-     — keeps parsing under the new sparse per-tier `boosts` map shape. This
-     node's own "Explicitly out of scope" section assigns the branches'
-     removal to the sibling `tactic-attention-per-tier-boost-migration`,
-     which rewrites node files onto the canonical form and then deletes the
-     compat branches. Both branches are already commented in `schema.ts`
-     naming that sibling as their removal owner (grep-verified this pass).
-     Removal is not assertable at this PR's merge time.
-   - Verifiability: WAIT — awaited event: `tactic-attention-per-tier-boost-migration`
-     lands (rewrites the 92 attention-carrying node files onto the canonical
-     `boosts:` form). Once it lands, `grep -n 'tactic-attention-per-tier-boost-migration' packages/intentionsutil/src/schema.ts`
-     returning no hits (both compat branches and their removal-owner comments
-     deleted) is the machine check.
