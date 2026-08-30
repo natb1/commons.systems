@@ -537,6 +537,42 @@ assert_eq "quoted-heredoc block still exits 0" "0" "$RC"
 assert_contains_local "the statement after a quoted <<EOF is still analysed" \
   ": bash .claude/live-script.sh" "$OUT"
 
+echo "Test: a multi-line compound closed by 'done > /dev/null' does not leak depth"
+reset_nodes
+write_node warn-multiline-redirect-closer implement '## Verification
+```verify
+for f in a b; do
+  bash "$f"
+done > /dev/null
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "redirected multi-line closer block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a redirected 'done' closer is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a comment introduced by ';#' does not swallow the block"
+reset_nodes
+write_node warn-semicolon-comment implement $'## Verification\n```verify\nbash .claude/live-script.sh;# it\'s fine\nbash .claude/live-script.sh\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "semicolon-comment block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a ';#' comment is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: an arithmetic left shift opens no heredoc"
+reset_nodes
+write_node warn-arith-shift implement '## Verification
+```verify
+x=$(( 1 << SHIFT ))
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "arith-shift block still exits 0" "0" "$RC"
+assert_contains_local "the statement after an arithmetic shift is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
 echo "Test: an assignment carrying an escaped quote is still exempt"
 reset_nodes
 write_node warn-escaped-quote-assignment implement $'## Verification\n```verify\nmsg="a\\" b"\nbash packages/keep.ts\n```'

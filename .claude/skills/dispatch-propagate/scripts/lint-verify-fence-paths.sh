@@ -354,11 +354,21 @@ strip_trailing_comment() {
       '"') in_d=1 ;;
       '\') i=$(( i + 1 )); prev="x"; continue ;;
       '#')
-        if (( i == 0 )) || [[ "$prev" == " " || "$prev" == $'\t' ]]; then
-          STRIPPED="${s:0:i}"
-          STRIPPED="${STRIPPED%"${STRIPPED##*[![:space:]]}"}"
-          return 0
-        fi ;;
+        # A word STARTS at the line start, after unquoted whitespace, or after
+        # one of the word-terminating operators `;`, `&`, `|` — so
+        # `bash x.sh;# it's fine` is a comment to bash and must be one here too.
+        # Miss it and the apostrophe leaves the line quote-UNBALANCED, so the
+        # line becomes a continuation and absorbs the block's whole tail: the
+        # exact vanish this helper exists to prevent. `)` is deliberately NOT in
+        # the set — it also closes `$( … )`, after which `#` is a literal
+        # character of the SAME word (`echo $(date)#tag`).
+        if (( i == 0 )); then STRIPPED=""; return 0; fi
+        case "$prev" in
+          ' '|$'\t'|';'|'&'|'|')
+            STRIPPED="${s:0:i}"
+            STRIPPED="${STRIPPED%"${STRIPPED##*[![:space:]]}"}"
+            return 0 ;;
+        esac ;;
     esac
     prev="$ch"
   done
@@ -447,7 +457,7 @@ stmt_closes_compound() {
 # inside quotes and opens nothing, and consuming the block's tail as its payload
 # would be the invisible kind of miss. `<<<` is a here-STRING, not a heredoc.
 heredoc_tag() {
-  local s="$1" ch i in_s=0 in_d=0 rest
+  local s="$1" ch i in_s=0 in_d=0 arith=0 rest
   HEREDOC_TAG=""
   for (( i = 0; i < ${#s}; i++ )); do
     ch="${s:i:1}"
@@ -466,7 +476,17 @@ heredoc_tag() {
       '"') in_d=1; continue ;;
       '\') i=$(( i + 1 )); continue ;;
     esac
-    if [[ "${s:i:2}" == '<<' ]]; then
+    # `<<` inside `$(( … ))` is a left SHIFT, not a redirection: `x=$(( 1 <<
+    # SHIFT ))` would otherwise open a heredoc tagged `SHIFT` and swallow the
+    # block's whole tail as its payload — the invisible kind of miss. Only `((`
+    # is tracked; a lone `(` (a subshell, `$( … )`, a `case` pattern) leaves the
+    # count alone, so a heredoc opened inside one is still seen.
+    if [[ "${s:i:2}" == '((' ]]; then arith=$(( arith + 1 )); i=$(( i + 1 )); continue; fi
+    if [[ "${s:i:2}" == '))' ]]; then
+      (( arith > 0 )) && arith=$(( arith - 1 ))
+      i=$(( i + 1 )); continue
+    fi
+    if (( arith == 0 )) && [[ "${s:i:2}" == '<<' ]]; then
       rest="${s:i+2}"
       if [[ "$rest" != '<'* && "$rest" =~ ^-?[[:space:]]*[\"\']?([A-Za-z_][A-Za-z0-9_]*) ]]; then
         HEREDOC_TAG="${BASH_REMATCH[1]}"
@@ -520,15 +540,17 @@ warn_unguarded_statements() {
     if [[ "$s" == *\\ ]]; then cont="${s%\\}"; continue; fi
     if ! quoting_balanced "$s"; then cont="$s"; continue; fi
     if [[ "$s" == *'<<'* ]]; then heredoc_tag "$s"; heredoc_end="$HEREDOC_TAG"; fi
-    # A closer standing alone, whatever its spacing and however many trailing
-    # `;` it carries: `fi`, `fi;`, `fi ;`. Enumerating literal spellings misses
-    # one sooner or later, and a missed closer leaves `depth` stuck above 0 —
-    # which drops the rest of the block from the analysis.
-    closer="$s"
-    while [[ "$closer" == *';' ]]; do
-      closer="${closer%;}"
-      closer="${closer%"${closer##*[![:space:]]}"}"
-    done
+    # A closer is the statement's FIRST top-level word, whatever follows it:
+    # `fi`, `fi;`, `fi ;`, and `done > /dev/null` / `done | tail -20` alike.
+    # Matching the WHOLE line against literal spellings misses every redirected
+    # or piped closer — the same suffix trap stmt_closes_compound documents,
+    # arriving at the closing end — and a missed closer leaves `depth` stuck
+    # above 0, which drops the rest of the block, the real final statement
+    # included, from the analysis. Keying on the first word is safe in the other
+    # direction too: no command is named `fi`, `done`, `esac` or `}`.
+    stmt_words "$s"
+    closer="${STMT_WORDS[0]:-}"
+    while [[ "$closer" == *';' ]]; do closer="${closer%;}"; done
     case "$closer" in
       fi|done|esac|'}')
         (( depth > 0 )) && depth=$(( depth - 1 )); continue ;;
