@@ -479,11 +479,13 @@ advance/await primitives, `log_event` shapes.
   already logs to `$STUB_DIR/gh-pr-view-rest-calls.log` and serves
   `$STUB_DIR/view-pr-<N>.json`, so Unit 1's tests need **no stub changes**;
   reserve a fresh `9xxx` number.
-- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh:641-700`
-  (`reconcile_gh_stub`), `:1237-1284` (`review_stall_gh_stub`), `:1289-1313`
-  (`review_stall_node`), and the case-10 assertions at `:1314-1457` — the only
-  harness that runs both reconcilers as real separate processes. Unit 2's e2e
-  case is built on these.
+- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` — the
+  `reconcile_gh_stub()` helper (defined in the Case 6 region, above the
+  `# Case 6b:` banner), the `review_stall_gh_stub()` and `review_stall_node()`
+  helpers (both defined under the `# Case 10:` banner), and the Case 10a/10b/10c
+  assertions — the only harness that runs both reconcilers as real separate
+  processes. Unit 2's e2e case is built on these. *(Construct citations, not line
+  numbers: five sibling PR5 units edit this file in the same PR.)*
 - `.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh:126-140`
   (`make_seq_fake`) and `:88-97` (the `${VAR:-<unset>}` env-recording pattern) —
   Unit 3's assertion mechanism.

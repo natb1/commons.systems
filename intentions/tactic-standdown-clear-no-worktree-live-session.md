@@ -251,12 +251,22 @@ The full dispatch-scripts lane exactly as CI runs it:
 bash .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
 ```
 
-The contract change itself — the first assertion fails today because the tag does not exist; the second fails today because the string is present in both files:
+The contract change itself — the first assertion fails today because the tag does not exist; the second and third fail today because the string is present in both files.
+
+**Every non-final statement gates its own exit.** `dispatch-run-verification` runs
+a fence body as `bash "$tmp"` with no `set -e`
+(`.claude/skills/dispatch-propagate/scripts/dispatch-run-verification:109-111`), so
+a bare multi-statement block is decided by its **last** line alone and the earlier
+assertions are silently discarded — a fence that greens on unimplemented work.
+`set -e` would not fix it either: errexit is exempt for a command preceded by `!`,
+so `! grep -q …` would still not abort. Hence the explicit `|| exit 1` / `&& exit 1`
+on every line, and the terminal `exit 0`:
 
 ```verify
-grep -q 'standdown-winner-dead-node-held-no-worktree' .claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh
-! grep -q 'cleared-no-worktree' .claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh
-! grep -q 'cleared-no-worktree' .claude/skills/dispatch-propagate/scripts/test-lib-standdown-recheck.sh
+grep -q 'standdown-winner-dead-node-held-no-worktree' .claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh || exit 1
+grep -q 'cleared-no-worktree' .claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh && exit 1
+grep -q 'cleared-no-worktree' .claude/skills/dispatch-propagate/scripts/test-lib-standdown-recheck.sh && exit 1
+exit 0
 ```
 
 Manual review, not auto-runnable:

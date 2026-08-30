@@ -407,29 +407,69 @@ the same bound at its own observer.
    `MAIN_ROOT=$(resolve_main_worktree "$REPO_ROOT"); MAIN_ROOT="${MAIN_ROOT:-$REPO_ROOT}"`
    — verbatim the shape at `graph-select-target:433-434`.
 
-2. In the per-candidate loop, keep the verdict fold at `:214-217` unchanged
-   (`reviewStallRoute` stays a pure closed-union function over `passing|failing|unknown`
-   — do **not** widen its signature or return type; a pending verdict is not a
-   *route*, it is a liveness observation, and widening it would force every caller
-   to handle a state that has no lane). Instead, act on `RAW_VERDICT` directly,
-   after the `ROUTE` computation and inside the `case "$ROUTE"` block's `*)` arm
-   (`:262-265`, the `null` / no-regression branch), which is exactly where a
-   perpetually-pending node lands today:
+2. In the per-candidate loop, keep the `RAW_VERDICT` → `VERDICT` normalization
+   fold unchanged (`reviewStallRoute` stays a pure closed-union function over
+   `passing|failing|unknown` — do **not** widen its signature or return type; a
+   pending verdict is not a *route*, it is a liveness observation, and widening it
+   would force every caller to handle a state that has no lane). Instead, act on
+   `RAW_VERDICT` directly.
 
-   - If `RAW_VERDICT` is **not** the literal string `pending`, call
-     `ci_pending_strike_clear "$MAIN_ROOT" "$id"` and `continue` (unchanged
-     behaviour otherwise). A call failure leaves `RAW_VERDICT` empty (`:214`) and
-     must NOT be counted and must NOT clear — guard that case first and `continue`.
+   **Landing site — a construct citation, deliberately not a line number** (five
+   sibling units edit this same ~340-line script in the same PR, so any number
+   here would drift before it was read). Place the strike bump/clear:
+
+   - **immediately after** the normalization fold
+     `case "$RAW_VERDICT" in passing|failing) VERDICT="$RAW_VERDICT" ;; *)
+     VERDICT="unknown" ;; esac` — locate it by the string `RAW_VERDICT`; and
+   - **before** the superset cost guard that
+     `tactic-review-stall-predicate-subprocess-spawn` Unit 1 inserts
+     (`if [[ "$VERDICT" != "failing" && "$MERGEABLE" != "CONFLICTING" ]]; then
+     continue; fi` — locate it by the string
+     `MUST stay a superset of reviewStallRoute`), and therefore before the
+     `ROUTE=` `reviewStallRoute` spawn.
+
+   `HEAD_SHA` is assigned above the fold, so `ci_pending_strike_bump` has its
+   third argument available at the new site.
+
+   > **⛔ Do NOT land this in the `case "$ROUTE"` block's `*)` no-regression arm.**
+   > An earlier revision of this plan did, and that produces dead code the moment
+   > the sibling guard lands. A CI-pending candidate has `RAW_VERDICT="pending"`,
+   > which the fold maps to `VERDICT="unknown"`, and a pending-CI PR is normally
+   > `MERGEABLE` — so the guard's condition holds, the loop `continue`s, `ROUTE`
+   > is never computed, and the `*)` arm is unreachable for exactly the population
+   > this unit exists to detect. The counter and the hold would never fire.
+   >
+   > **And do not "fix" it by widening the guard.** That guard is a *binding
+   > superset* of `reviewStallRoute`'s non-null conditions (`transitions.ts`'s
+   > `interruptRoute` doc comment, pinned by the `transitions.test.ts` case named
+   > *"the shell pre-filter's superset invariant"*), and its own node carries a
+   > verify fence grepping for its exact text. Widening it breaks the invariant
+   > and fails that fence. The correct move is the one above: sit **upstream** of
+   > the guard.
+
+   The behaviour at the new site — note that a non-pending candidate must **fall
+   through**, not `continue`, because the guard and the routing still have to run:
+
+   - If `RAW_VERDICT` is empty — the `dispatch_ci_verdict_rest` call failed — do
+     **not** count and do **not** clear. Fall through untouched.
+   - If `RAW_VERDICT` is neither empty nor the literal string `pending`, call
+     `ci_pending_strike_clear "$MAIN_ROOT" "$id"` and **fall through** to the
+     guard and the existing routing. Behaviour is otherwise unchanged.
    - If `RAW_VERDICT` is `pending`:
      `strikes=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA")`. Below the
      cap: `continue` (a sidecar write is free, so it must NOT consume the `ACTED`
-     budget — `ACTED`/`CAP` at `:177`/`:182` exist to bound *lock-holding* work).
-     At or above the cap: record the node in a new `CI_STALL_IDS` array exactly the
-     way `CONFLICT_IDS` is recorded at `:256-261` — **recorded, not landed**, for the
-     same reason stated in the loop header (`:169-174`): `hold-node` refreshes from
-     `origin/main` and lands its own `graph-commit`, whose `assert_clean_outside_ids`
-     guard would trip on the still-uncommitted `--set-fix` writes staged by this
-     loop. Increment `ACTED` here (a hold *is* lock-holding work).
+     budget — `ACTED`/`CAP` exist to bound *lock-holding* work). At or above the
+     cap: record the node in a new `CI_STALL_IDS` array — **recorded, not
+     landed**, for the reason stated in the loop header: `hold-node` refreshes
+     from `origin/main` and lands its own `graph-commit`, whose
+     `assert_clean_outside_ids` guard would trip on the still-uncommitted
+     `--set-fix` writes staged by this loop. Increment `ACTED` here (a hold *is*
+     lock-holding work), then `continue`.
+
+   *(The `CONFLICT_IDS` array this item used to say to copy no longer exists — see
+   "Unit 3 — the conflict-hold route it reuses no longer exists" in the Re-landing
+   brief. Build `CI_STALL_IDS` fresh, on `graph-select-target`'s
+   `_hold_node_fix_cap` shape.)*
 
 3. Land at most **one** `hold-node` call per sweep run **across both hold routes
    combined**. The existing conflict route already self-limits to one
@@ -712,9 +752,11 @@ header goes from "at most one graph-commit" to "at most one graph-commit plus at
 Remaining Unit 3 anchors in that script: `REPO_ROOT` `:110`; `CAP`
 (`GRAPH_REVIEW_STALL_CAP`) `:118`; `refresh_lock` `:127-130`; the single `EXIT` trap `:159`;
 `ACTED=0` `:215`; `HEAD_SHA` `:250`; `RAW_VERDICT` `:252` (empty on call failure, as the
-plan assumes); the `passing|failing` fold `:253-256`; the `reviewStallRoute` eval `:258-263`;
-the `case "$ROUTE"` `*)` no-regression arm — where a perpetually-pending node lands —
-`:305-307`. `resolve_main_worktree` is defined at
+plan assumes); the `passing|failing` fold `:253-256` — **this fold, not the `case "$ROUTE"`
+arm, is Unit 3's landing site; see the ⛔ box in Unit 3 step 2**; the `reviewStallRoute` eval
+`:258-263`; the `case "$ROUTE"` `*)` no-regression arm `:305-307`, which a pending candidate
+**stops reaching** once `tactic-review-stall-predicate-subprocess-spawn` Unit 1's superset
+guard lands above it. `resolve_main_worktree` is defined at
 `.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27`, and the two-line
 `NATIVE_ROOT` idiom to copy is `graph-select-target:500-501`, not `:433-434`. The script
 does not source `lib-graph-worktree.sh` today, so step 1 still applies: add the source next

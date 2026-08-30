@@ -453,9 +453,13 @@ proof the `--node` contract survived.
   thing this design deliberately does not repeat.
 - `.claude/skills/dispatch-ladder/scripts/dispatch-ladder-run:255-268, 471-473, 1128, 1161,
   1195` — the ladder's cache-unset discipline and single-node reconciler calls.
-- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh:114, 122, 158,
-  172` and cases 6b (:796-845) / 10 (:1226) — the real-store fixture builders and the case
-  shape Unit 4 follows.
+- `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` — the four
+  real-store fixture builders defined near the top of the file (`new_origin`,
+  `build_seed_repo`, `init_and_push`, `clone_with_node_modules`) plus the `ok()` /
+  `no()` reporters beside them, and the **Case 6b** and **Case 10** blocks (locate by
+  the banners `# Case 6b: reconcile-graph-merged --node <id> narrows the sweep` and
+  `# Case 10: reconcile-graph-review-stall --node <id> narrows the sweep`) — the case
+  shape Unit 4 follows. *(Construct citations: five sibling PR5 units edit this file.)*
 - `.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh:141, ~860` — the
   stub-install loop for both reconcilers and the existing review-stall wiring assertions.
 - `.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh:190` — the auto-glob that
