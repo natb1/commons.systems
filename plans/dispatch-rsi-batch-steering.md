@@ -253,19 +253,80 @@ something has been sitting unbuilt awaiting their word.
 
 ---
 
+## S-17 — The stopping check covers rate and quality, not just parallelism (standing) — EXTENDS S-9/S-12
+
+> whenever stopping, in addition to running a check for parallelization
+> opportunities (existing guidance) also evaluate efficiency/efficacy of batch
+> execution more generally and act on opportunities to self steer to improve
+> rate and quality of progress.
+
+S-9 and S-12 made the parallelism check a hard gate at every stop. S-17 widens
+that gate: parallelism is one lever among several, and on this batch it is
+frequently the *wrong* one — graph landings serialize on a global lock, so
+adding agents to them buys nothing (see "Parallelism cannot beat `graph-commit`
+invocation count" in `plans/dispatch-rsi-sequence.md`).
+
+**"Act" is the operative word, and "self steer" means write it down.** A
+stopping check that produces observations and no change is the failure this
+instruction corrects; so is one that reports an improvement to the author
+instead of making it. At every stopping point, run the S-9 parallelism check,
+then these three, and land whatever they turn up:
+
+- **Rate.** What actually took longest, and what was the binding constraint —
+  invocation count, a serialized gate, re-measuring something already measured,
+  or a decision left un-ruled that standing authority already covers?
+- **Quality.** What went wrong or nearly went wrong, and is the guard against a
+  repeat durable, or does it live only in the conversation?
+- **Steering.** Where would a written steer pay most, and in which durable home:
+  this file for batch conduct, `.claude/rules/` for repo-wide practice, a memory
+  file for cross-session judgement, `plans/dispatch-rsi-sequence.md` for how to
+  execute this specific window.
+
+The operating detail this produced lives in `plans/dispatch-rsi-sequence.md`
+under "The stopping check — parallelism first, then rate and quality", so the
+executor reads it from the index it already reads first.
+
+---
+
 ## Safety constraints held throughout (self-imposed, not author-issued)
 
 Recorded here so they survive with the rest, and because violating any of them
-would damage state outside this session:
+would damage state outside this session.
+
+**Each carries its SOURCE and SCOPE**, because a prohibition carried forward
+without both becomes indistinguishable from a standing author rule at the next
+compaction — and one item on this very list was wrong for exactly that reason
+(see the struck bullet below). Source is one of: author instruction, project
+rule, an executor-written subagent prompt, or inference. Scope is one of: this
+subagent, this worktree, this session, global.
 
 - **Never `git stash`** in a shared worktree — the stash stack is global across
   worktrees and other live sessions may pop it. Every subagent brief carries this.
-- **Never run `mint-mainqa-nodes`** outside a throwaway repo with a stubbed
-  remote — it fetches and pushes to the real repository.
-- **Never commit `.claude/agents`** — a documented phantom, always untracked.
+  *(Source: project rule, `.claude/rules/sandbox.md` and the environment brief.
+  Scope: global.)*
+- ~~**Never run `mint-mainqa-nodes`** outside a throwaway repo with a stubbed
+  remote — it fetches and pushes to the real repository.~~ **REFUTED 2026-08-30.
+  Source: an executor-written read-only subagent prompt. Scope: that subagent —
+  never the executor.** It was carried onto this list by mistake and nearly
+  blocked PR5a Unit 7 outright. The tell was in the prompt it came from: the
+  same block also forbade `graph-commit`, `write-node.ts`, `clear-park`,
+  `park-node`, `transition-node` and `git push`, every one of which the executor
+  had been running all session under the authority in
+  `plans/dispatch-rsi-sequence.md`. A prohibition naming one script while the
+  same list forbids sibling tools you are demonstrably using under authority was
+  scoped to a different actor. The real property is unremarkable and shared by
+  every graph tool here: `mint-mainqa-nodes` fetches and pushes to the real
+  repository, which is what it is *for*. Kept struck rather than deleted so the
+  next reader sees the failure mode, not just its absence.
+- **Never commit `.claude/agents`** — a documented phantom, always untracked. Use
+  explicit per-file `git add`; never `git add -A` or `git add .`.
+  *(Source: inference from the persistent untracked entry. Scope: global.)*
 - **No file edits in the worktree while a detached `--fix` review is running** —
   every subagent spawned during a run carries an explicit read-only warning.
 - **Closing keywords** (`close/closes/closed`, `fix/fixes/fixed`,
   `resolve/resolves/resolved`) may appear only on deliberate `Closes #N` lines;
   GitHub scans the whole body, so a keyword next to any other `#N` fires.
 - **Never push to main/master, never force-push, never merge by hand.**
+  *(Source: project rule / environment brief. Scope: global. Note this does NOT
+  forbid `graph-commit`, which lands node edits on `main` by design and is
+  granted in the authority section.)*
