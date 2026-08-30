@@ -21,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: main-qa
+phase: done
 execution:
   branch: tactic-indieweb-audience
   pr: 2802
@@ -31,7 +31,10 @@ execution:
   strategy_fingerprint: null
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-10T15:59:49Z
+    mergeCommitSha: f5d26f9c12630266afaeeb6d9fbdfa08e72c3011
+    graphCommitSha: null
   lane_pass: null
 validates: []
 blocked_by: []

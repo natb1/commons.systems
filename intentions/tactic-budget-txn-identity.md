@@ -31,7 +31,10 @@ execution:
   strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
   fix: null
   conflict: null
-  completion: null
+  completion:
+    mergedAt: 2026-07-11T06:44:37Z
+    mergeCommitSha: fb572eed2eda02214440dbd9ec884b7cb6f71a3e
+    graphCommitSha: null
   lane_pass: null
 validates: []
 blocked_by: []
