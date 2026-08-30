@@ -199,6 +199,7 @@ seed_source tactic-src-rerun
 seed_source tactic-src-gcfail
 seed_source tactic-src-silent
 seed_source tactic-src-usage
+seed_source tactic-src-multiline
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -260,6 +261,19 @@ cat >"$WORK/items-wait.json" <<'JSON'
     "expected_outcome": "the dialog is legible at 125% zoom",
     "finding": "judgment call",
     "verifiability": "AUTHOR" }
+]
+JSON
+
+# A finding carrying an embedded newline whose continuation line opens an H2.
+# Rendered verbatim this would break the `  - Finding:` sub-line the /qa-main
+# node lane parses AND inject a `## needs-main` heading into a destination
+# node — the one heading a destination node must never carry.
+cat >"$WORK/items-multiline.json" <<'JSON'
+[
+  { "id": "V1", "title": "Landing hero renders", "url_path": "/",
+    "expected_outcome": "the hero copy reads the new headline",
+    "finding": "preview showed the old headline\n## needs-main\n- injected",
+    "verifiability": "MACHINE" }
 ]
 JSON
 
@@ -526,6 +540,25 @@ if [[ $rc -eq 2 ]] && grep -q 'usage: mint-mainqa-nodes' <<<"$out" \
   ok "usage error (missing --pr): exit 2, nothing written, graph-commit never invoked"
 else
   no "usage error (rc=$rc status='$status_after')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10: an item field carrying an embedded newline is REFUSED at the payload
+# edge (exit 2), nothing written, graph-commit never invoked. Rendered verbatim
+# it would break the one-line-per-field bullet structure /qa-main parses back
+# out, and here it would also inject a `## needs-main` heading into a
+# destination node.
+# ---------------------------------------------------------------------------
+K="$WORK/k"; make_clone "$K" writer-k
+GCLOG_K="$WORK/gclog-k"
+out="$(run_mint "$K" "$GCLOG_K" land tactic-src-multiline --pr "$SRC_PR" \
+        --items "$WORK/items-multiline.json" --now "$NOW" 2>&1)"; rc=$?
+status_after="$(git -C "$K" status --porcelain -- intentions/)"
+if [[ $rc -eq 2 ]] && grep -q 'must be a single line' <<<"$out" \
+   && [[ -z "$status_after" ]] && [[ ! -e "$GCLOG_K" ]]; then
+  ok "multi-line item field: exit 2, nothing written, graph-commit never invoked"
+else
+  no "multi-line item field (rc=$rc status='$status_after')"; printf '%s\n' "$out"
 fi
 
 echo
