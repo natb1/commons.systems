@@ -95,7 +95,7 @@ if [ -z "$REPO_ROOT" ]; then
   # or $0 carried. Comparing the two normalizations makes one checkout reached
   # through a symlink (macOS /tmp -> /private/tmp, a symlinked workspace) read
   # as two different trees and abort on the tree it is standing in. Same
-  # contract, same spelling, as resolve-diff-base.sh:174-181.
+  # contract, same spelling, as resolve-diff-base.sh:249-256.
   SCRIPT_GIT_ROOT="$(git -C "$SCRIPT_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "$SCRIPT_GIT_ROOT" ] && [ "$SCRIPT_GIT_ROOT" != "$REPO_ROOT" ]; then
     echo "check-test-integrity: script lives in $SCRIPT_GIT_ROOT but the CWD resolves to $REPO_ROOT;" >&2
@@ -300,7 +300,7 @@ fi
 #
 # set -e safety: every git grep / git show / grep here either runs in an
 # `if …; then` CONDITION (where a no-match exit 1 is harmless) or carries
-# `|| true`, mirroring the existing guards at :77/:78/:97.
+# `|| true`, mirroring the existing guards at :147/:148/:167.
 # ---------------------------------------------------------------------------
 
 # Pure-exclude pathspecs for the existence check: the post-PR tree minus tests.
@@ -495,7 +495,7 @@ while IFS= read -r F; do
   if [ "$already_exempt" -eq 1 ]; then continue; fi
 
   # Per-file net-removal filter: only files that net-remove declarations have
-  # anything to exempt. Mirror the comment-exclusion filters at :78/:160.
+  # anything to exempt. Mirror the comment-exclusion filters at :148/:239.
   F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
@@ -511,12 +511,25 @@ while IFS= read -r F; do
   if [ "$((F_DECL_REMOVED - F_DECL_ADDED))" -le 0 ]; then continue; fi
 
   # Removed-import set via OLD-minus-NEW whole-file parse (NOT raw diff lines).
-  # OLD blob: F changed vs origin/main, so it normally existed there; an empty
-  # OLD (F added-in-PR) yields an empty removed set ⇒ no exemption (fire) — the
-  # no-defensive-fallback path. NEW blob absent ⇒ F deleted in PR ⇒ new set
-  # empty (EXPECTED, not an error).
-  OLD_SRC=$(git show "origin/main:$F" 2>/dev/null || true)
-  NEW_SRC=$(git show "HEAD:$F" 2>/dev/null || true)
+  # OLD blob: F changed vs the RESOLVED BASELINE, so it normally existed there;
+  # an empty OLD (F added-in-PR) yields an empty removed set ⇒ no exemption
+  # (fire) — the no-defensive-fallback path. NEW blob absent ⇒ F deleted in PR ⇒
+  # new set empty (EXPECTED, not an error).
+  #
+  # The old side is $DIFF_BASE, NOT `origin/main`. It must be the SAME revision
+  # F_DIFF above was computed against, or the two disagree: on a push to `main`
+  # $DIFF_BASE is HEAD^1 while origin/main IS HEAD, so `origin/main:$F` returned
+  # the NEW content, OLD_TAGS == NEW_TAGS, the removed-import set came back
+  # empty, and this whole exemption was structurally dead there — a dead-code
+  # cleanup that passed the gate on its branch failed it again on `main` after
+  # merge. Same "second source of truth for one value" defect lint-prose-rules.sh
+  # removed by setting MERGE_BASE="$DIFF_BASE".
+  #
+  # -C "$REPO_ROOT" on every call below for the same reason as the diffs: the
+  # tree read must be the one NAMED, not whichever repository the process CWD
+  # happens to sit in.
+  OLD_SRC=$(git -C "$REPO_ROOT" show "$DIFF_BASE:$F" 2>/dev/null || true)
+  NEW_SRC=$(git -C "$REPO_ROOT" show "HEAD:$F" 2>/dev/null || true)
   OLD_TAGS=$(printf '%s\n' "$OLD_SRC" | awk "$IMPORT_AWK" | sort -u || true)
   NEW_TAGS=$(printf '%s\n' "$NEW_SRC" | awk "$IMPORT_AWK" | sort -u || true)
 
@@ -552,14 +565,26 @@ while IFS= read -r F; do
   # A MATCH ⇒ symbol present ⇒ NOT exempt (bias to fire).
   all_absent=1
   for X in $REMOVED_NAMED; do
-    X_FILES=$(git grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}" 2>/dev/null || true)
+    # rc 0 = matched, rc 1 = no match (the "absent" answer this step wants),
+    # anything else = git failed. A blanket `|| true` here would render a
+    # failure indistinguishable from "absent", and absent is the direction that
+    # WRONGLY EXEMPTS — the one bias this whole block says it must never take.
+    set +e
+    X_FILES=$(git -C "$REPO_ROOT" grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}" 2>/dev/null)
+    x_grep_rc=$?
+    set -e
+    if [ "$x_grep_rc" -gt 1 ]; then
+      echo "ERROR: check-test-integrity: 'git grep' failed (rc=$x_grep_rc) in $REPO_ROOT" >&2
+      echo "  while checking whether the removed-import symbol '$X' still exists." >&2
+      exit 1
+    fi
     [ -z "$X_FILES" ] && continue   # X mentioned nowhere ⇒ absent
     found=0
     while IFS= read -r XF; do
       [ -z "$XF" ] && continue
       # `git grep -l … HEAD` prefixes each path with `HEAD:`, so XF is already a
       # rev:path spec usable directly by git show (no extra `HEAD:` prefix).
-      XF_SRC=$(git show "$XF" 2>/dev/null || true)
+      XF_SRC=$(git -C "$REPO_ROOT" show "$XF" 2>/dev/null || true)
       if printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK" | grep -qxF -- "$X"; then
         found=1
         break

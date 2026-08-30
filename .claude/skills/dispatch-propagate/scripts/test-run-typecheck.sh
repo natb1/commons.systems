@@ -292,4 +292,109 @@ run_sut --app ws
 assert_eq "good --app: exit 0" "0" "$RC"
 assert_contains "good --app: workspace reported as passing" "ws: typecheck passed" "$OUT"
 
+# --- Test 10: HEAD is the remote tip (a push to `main`) ---------------------
+# The vacuous-baseline case, for run-typecheck.sh's OWN baseline rather than
+# for its changed-file list. On a push to `main`, actions/checkout leaves
+# refs/remotes/origin/main pointing AT the pushed commit. A baseline spelled
+# `git checkout origin/main -- <ws>` then writes back exactly what is already on
+# disk, so the "baseline" compile is a second compile of HEAD and the two agree
+# by construction: a real regression compiles dirty in BOTH probes, gets
+# classified "pre-existing typecheck errors", and the run exits 0 having
+# reported a skip. Routing the baseline through resolve-diff-base.sh
+# --at-remote-tip first-parent compares against HEAD^1 instead — what the tree
+# looked like before this push — so the regression surfaces.
+#
+# Note this test stays on `main` with origin/main == HEAD; every other test in
+# this file runs from a feature branch, where the resolved base is the ordinary
+# merge-base and behavior is unchanged.
+echo "Test 10: HEAD == origin/main (push to main) -> regression detected, not skipped"
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+cat > "$REPO/package.json" <<JSON
+{
+  "name": "test-repo",
+  "private": true,
+  "workspaces": ["ws"]
+}
+JSON
+mkdir -p "$REPO/ws/src"
+cat > "$REPO/ws/package.json" <<JSON
+{ "name": "@commons-systems/ws", "version": "0.0.0", "private": true }
+JSON
+cat > "$REPO/ws/tsconfig.json" <<'JSON'
+{ "include": ["src"] }
+JSON
+# Parent commit: clean. Then a second commit on `main` introduces the error and
+# is pushed, so origin/main == HEAD == the breaking commit.
+write_state clean "$REPO/ws/src/index.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "clean parent"
+write_state dirty "$REPO/ws/src/index.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "the regression, pushed straight to main"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" fetch --quiet origin main
+# Pin the precondition: without it this test could pass for the wrong reason.
+assert_eq "on-main: origin/main is exactly HEAD" \
+  "$(git -C "$REPO" rev-parse HEAD)" "$(git -C "$REPO" rev-parse origin/main)"
+make_shims "$REPO"
+run_sut
+[ "$RC" -ne 0 ] && _t10_rc=nonzero || _t10_rc=zero
+assert_eq "on-main: exit non-zero" "nonzero" "$_t10_rc"
+assert_contains "on-main: reported as a regression" "Typecheck regressions" "$OUT"
+case "$OUT" in
+  *pre-existing*) _t10_skip=skipped ;;
+  *) _t10_skip=not-skipped ;;
+esac
+assert_eq "on-main: not misreported as a pre-existing baseline failure" \
+  "not-skipped" "$_t10_skip"
+assert_eq "on-main: working tree clean after run" "" "$(git -C "$REPO" status --porcelain)"
+
+# --- Test 11: on-main baseline that is ITSELF broken still skips ------------
+# The complement of Test 10, so the fix is not read as "always report a
+# regression on main". When the parent commit was already broken, the push did
+# not introduce the failure and the skip is the correct answer — the same
+# contract Test 3 pins on a branch.
+echo "Test 11: HEAD == origin/main with a broken parent -> still a skip, not a regression"
+REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+git -C "$BARE" init --bare --quiet --initial-branch=main
+git -C "$REPO" init --quiet --initial-branch=main
+git -C "$REPO" config user.email "test@example.com"
+git -C "$REPO" config user.name "Test User"
+git -C "$REPO" remote add origin "$BARE"
+cat > "$REPO/package.json" <<JSON
+{
+  "name": "test-repo",
+  "private": true,
+  "workspaces": ["ws"]
+}
+JSON
+mkdir -p "$REPO/ws/src"
+cat > "$REPO/ws/package.json" <<JSON
+{ "name": "@commons-systems/ws", "version": "0.0.0", "private": true }
+JSON
+cat > "$REPO/ws/tsconfig.json" <<'JSON'
+{ "include": ["src"] }
+JSON
+write_state dirty "$REPO/ws/src/index.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "already-broken parent"
+echo "// unrelated second commit" >> "$REPO/ws/src/index.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "unrelated change, pushed to main"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" fetch --quiet origin main
+make_shims "$REPO"
+run_sut
+assert_eq "on-main broken parent: exit 0" "0" "$RC"
+assert_contains "on-main broken parent: marked skipping" "skipping" "$OUT"
+assert_contains "on-main broken parent: mentions pre-existing" "pre-existing" "$OUT"
+assert_eq "on-main broken parent: working tree clean" "" "$(git -C "$REPO" status --porcelain)"
+
 report_results

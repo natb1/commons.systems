@@ -373,7 +373,8 @@ assert_contains "jsx-clean-battery: PASS printed" "PASS" "$OUT"
 # Test 23: real JSX violation carrying the inline // escape hatch is NOT
 # flagged. Mirrors Test 13 (the CSS /* ... */ form) for the TSX-appropriate
 # `// ds-lint-disable-line: <reason>` single-line comment form documented at
-# lint-ds-drift.sh:215. Guards the escape-hatch check (`*ds-lint-disable-line*`)
+# lint-ds-drift.sh:225. Guards the escape-hatch check (lint-ds-drift.sh:153,
+# `*ds-lint-disable-line*`)
 # against a regression that broke it specifically for TSX-style // comments.
 # ---------------------------------------------------------------------------
 echo "Test 23: escaped JSX violation (// form) is not flagged"

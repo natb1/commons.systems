@@ -54,6 +54,14 @@ fi
 # build while reporting success. --at-remote-tip first-parent asks the right
 # question there: what did this push introduce.
 #
+# SCOPE — this fixes the WORKSPACE LIST those consumers receive, and nothing
+# else about how they use it. run-typecheck.sh in particular carries a SECOND,
+# independent baseline: it stages a reference copy of each workspace with
+# `git checkout <base> -- <ws>` to tell a regression from a pre-existing
+# failure. That is a tree, not a file list, and it went vacuous on a push to
+# `main` for the same reason. It is resolved separately, at
+# run-typecheck.sh:131 — fixing this call site would not have fixed it.
+#
 # An explicit --base is NOT routed through that helper at all. --at-remote-tip
 # is a statement about the REMOTE TIP — "HEAD is sitting where origin/main
 # points, so use HEAD^1" — and an explicit base is not a remote tip, so its

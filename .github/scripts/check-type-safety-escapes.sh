@@ -46,8 +46,8 @@
 #       script file lives in is a hard error naming the flag — running one
 #       checkout's copy of this script against a different checkout is a
 #       routine dispatch pattern, but only safe when the target is named.
-#       run-lint.sh:196 passes it explicitly, mirroring what it already does
-#       for lint-verify-fence-paths.sh at :155.
+#       run-lint.sh:229 passes it explicitly, mirroring what it already does
+#       for lint-verify-fence-paths.sh at :179.
 #
 #   check-type-safety-escapes.sh --scan-stdin
 #       Core path. Reads a unified diff on STDIN and scans it; no git state is
@@ -234,7 +234,7 @@ fi
 # `origin/main...HEAD` range was EMPTY and the `[ -z "$diff_output" ]` self-noop
 # below turned that into exit 0. --at-remote-tip first-parent because this
 # sensor runs on pushes to `main` too, unconditionally, inside the REQUIRED
-# `lint` job (run-lint.sh:196) as well as the type-safety-sensor jobs.
+# `lint` job (run-lint.sh:229) as well as the type-safety-sensor jobs.
 DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
 
 # Diff the new side of TS/JS changes only. --diff-filter=d drops deletions so

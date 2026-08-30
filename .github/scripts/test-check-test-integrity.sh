@@ -1187,7 +1187,20 @@ run_check "$REPO"
 assert_base_source "first-parent" "(u) push-to-main: baseline resolved via first-parent"
 assert_exit 1 "(u) push-to-main: exit 1"
 assert_stderr_contains "Test-integrity violation" "(u) push-to-main: remediation text present"
-assert_stderr_contains "Signal 2" "(u) push-to-main: Signal 2 fires"
+# Signal 3 (whole test-file deletion), which is the signal a deletion of
+# feat.test.ts produces — and it is the SAME signal the identical deletion
+# produces on a feature branch. That parity is the actual claim: after the fix
+# the push-to-main shape is not a second, differently-behaving code path.
+#
+# It deliberately does NOT assert Signal 2. Signal 2's declaration removals are
+# credited away here by the import-based co-deletion exemption (feat.test.ts's
+# only imports are vitest's `it`/`expect`, neither of which is exported by the
+# fixture's non-test tree), exactly as they are on a branch. An earlier revision
+# of this case did assert Signal 2, and it passed only because the exemption's
+# old blob was read from `origin/main` instead of the resolved baseline — on a
+# push to main that returned the NEW content, so the exemption could never fire
+# there. Asserting Signal 2 would pin that asymmetry back in place.
+assert_stderr_contains "Signal 3" "(u) push-to-main: Signal 3 fires (same signal as the branch shape)"
 assert_stderr_contains "feat.test.ts" "(u) push-to-main: names the deleted test file"
 
 # ---------------------------------------------------------------------------
@@ -1227,6 +1240,68 @@ else
   echo "FAIL: (w) unresolvable baseline: expected a non-zero exit, got 0"
 fi
 assert_stderr_contains "origin/main" "(w) unresolvable baseline: names the ref"
+
+# ---------------------------------------------------------------------------
+# Case (x): the import-based co-deletion exemption must give the SAME answer on
+# a branch and on the push that merges it.
+#
+# The exemption reads the test file's OLD blob to compute which imports the PR
+# dropped. That old side must be the SAME revision the diff was taken against —
+# $DIFF_BASE — not `origin/main`. On a push to main $DIFF_BASE is HEAD^1 while
+# origin/main IS HEAD, so reading `origin/main:$F` returned the NEW content, the
+# OLD-minus-NEW set difference came back empty, and the exemption could never
+# fire. Consequence: a dead-code cleanup that passed this REQUIRED gate on its
+# branch failed it again on `main` after merge, turning main red for work that
+# was already approved.
+#
+# Shape: `beta` is deleted from a MODIFIED src.ts (no whole-file deletion, so
+# the basename path does not apply) together with the test that imported it.
+# ---------------------------------------------------------------------------
+make_cleanup_repo() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  TMPDIRS+=("$tmpdir")
+
+  git -C "$tmpdir" init -q -b main
+  git -C "$tmpdir" config user.email "test@test.local"
+  git -C "$tmpdir" config user.name "Test"
+
+  printf 'export function alpha() { return 1; }\nexport function beta() { return 2; }\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/src.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { alpha, beta } from './src';
+it('alpha', () => { expect(alpha()).toBe(1); });
+it('beta', () => { expect(beta()).toBe(2); });
+EOF
+  git -C "$tmpdir" add -A
+  git -C "$tmpdir" commit -q -m "initial"
+
+  # The cleanup commit: drop `beta` from the modified impl and its test.
+  printf 'export function alpha() { return 1; }\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/src.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { alpha } from './src';
+it('alpha', () => { expect(alpha()).toBe(1); });
+EOF
+  git -C "$tmpdir" add -A
+  git -C "$tmpdir" commit -q -m "drop dead beta + its test"
+
+  printf '%s\n' "$tmpdir"
+}
+
+echo "--- case (x): dead-code cleanup is exempt on the branch AND on the push ---"
+REPO=$(make_cleanup_repo)
+# Branch shape: origin/main is the fork point.
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD~1)"
+run_check "$REPO"
+assert_base_source "merge-base" "(x) branch: baseline resolved via merge-base"
+assert_exit 0 "(x) branch: dead-code cleanup exempt, exit 0"
+
+# Push-to-main shape: same commit, origin/main now AT it.
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+run_check "$REPO"
+assert_base_source "first-parent" "(x) push: baseline resolved via first-parent"
+assert_exit 0 "(x) push: same commit, same verdict — exit 0"
 
 # ---------------------------------------------------------------------------
 # Summary

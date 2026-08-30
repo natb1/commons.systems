@@ -178,10 +178,32 @@ trap 'rm -f "$SCAN_FILE" "$HITS_FILE"' EXIT
 # are recorded node bodies, history that must not be rewritten to satisfy a
 # linter.
 #
+# EXTENSION GLOBS ALONE ARE NOT ENOUGH. Most of this repo's executables carry
+# NO extension — `dispatch-tick`, `graph-select-target`, `commit-merge-push`,
+# `transition-node`, `.githooks/pre-commit` and 140-odd siblings are bash with a
+# `#!/usr/bin/env bash` line and a bare name. `*.sh` cannot see any of them, so
+# a scope written only in extensions leaves the single largest body of runnable
+# shell in the repo outside the ratchet: a new three-dot baseline landing in
+# `dispatch-tick` would pass this suite silently. The intentionsutil scripts
+# were already covered by a whole-DIRECTORY pathspec for exactly this reason;
+# the entries below extend that treatment to every other directory whose
+# contents are executed.
+#
+# Whole-directory pathspecs also pull in .mjs/.js/.json siblings. That is not
+# collateral — the workflow .js files under .claude/workflows/ are executed by
+# the Workflow tool, and a .json fixture that pins a baseline string is a call
+# site by proxy.
+#
 # Only TRACKED files, so an untracked scratch script never fails the ratchet.
 git -C "$REPO_ROOT" ls-files -z \
   -- '*.sh' '*.bash' '*.yml' '*.yaml' \
-     'packages/intentionsutil/scripts/*' '.claude/skills/*.md' \
+     'packages/intentionsutil/scripts/*' \
+     '.claude/skills/*/scripts/*' \
+     '.claude/hooks/*' \
+     '.claude/workflows/*' \
+     '.github/scripts/*' \
+     '.githooks/*' \
+     '.claude/skills/*.md' \
   > "$SCAN_FILE"
 
 # A line that is entirely a comment (first non-blank char is `#`) is prose, not
@@ -246,6 +268,58 @@ scan "sweep A" "$PAT_A"
 
 echo "=== Sweep B: three-dot range with no git on the line ==="
 scan "sweep B" "$PAT_B"
+
+# ---------------------------------------------------------------------------
+# Self-test: the SCOPE. Two green sweeps say nothing about what was swept, and
+# the failure this guards is exactly that — the pathspecs above once listed
+# only extension globs, so every extensionless executable in the repo (the
+# majority of its runnable shell) was outside the ratchet and a new three-dot
+# baseline there would have passed silently. Pin representative members of each
+# class the scope claims to cover, and one deliberate exclusion, so a pathspec
+# edit that narrows coverage fails here instead of going quietly green.
+# ---------------------------------------------------------------------------
+echo "=== Self-test: the scan scope covers what it claims ==="
+SCAN_LINES="$(tr '\0' '\n' < "$SCAN_FILE")"
+
+in_scope() {
+  printf '%s\n' "$SCAN_LINES" | LC_ALL=C grep -Fxq "$1"
+}
+
+# Each entry is a live file; if one is renamed, fix the entry rather than
+# dropping it — a missing anchor is how a scope check stops checking.
+for scoped in \
+  ".claude/skills/dispatch-propagate/scripts/dispatch-tick" \
+  ".claude/skills/dispatch-propagate/scripts/transition-node" \
+  ".claude/skills/dispatch-ladder/scripts/dispatch-ladder-run" \
+  ".claude/workflows/align-tactics.js" \
+  ".githooks/pre-commit" \
+  "packages/intentionsutil/scripts/graph-commit" \
+  ".github/scripts/check-test-integrity.sh" \
+  ".claude/skills/qa-fix/SKILL.md"
+do
+  if [ ! -f "$REPO_ROOT/$scoped" ]; then
+    fail "scope anchor no longer exists (repoint it): $scoped"
+  elif in_scope "$scoped"; then
+    pass "in scope: $scoped"
+  else
+    fail "NOT scanned — the pathspecs no longer reach it: $scoped"
+  fi
+done
+
+# The exclusions are a decision, not an oversight: plans/ and intentions/ quote
+# this defect constantly while explaining it, and intentions/ node bodies are
+# recorded history. Pin them out so a broadening edit has to be deliberate.
+for unscoped in \
+  "plans/dispatch-rsi-sequence.md"
+do
+  if [ ! -f "$REPO_ROOT/$unscoped" ]; then
+    fail "exclusion anchor no longer exists (repoint it): $unscoped"
+  elif in_scope "$unscoped"; then
+    fail "wrongly in scope — prose about the defect will bury the signal: $unscoped"
+  else
+    pass "excluded as intended: $unscoped"
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # Self-test: the patterns must actually match the shapes they claim to, or the

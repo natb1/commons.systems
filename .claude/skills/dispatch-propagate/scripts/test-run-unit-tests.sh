@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests for run-unit-tests.sh's auto-detect baseline.
 #
-# THE GATE ON THE GATES. run-unit-tests.sh:78 used to spell its baseline
-# `origin/main...HEAD` inline. On a push to `main` actions/checkout leaves
+# THE GATE ON THE GATES. The baseline now resolved at run-unit-tests.sh:89 used
+# to be spelt `origin/main...HEAD` inline. On a push to `main` actions/checkout leaves
 # refs/remotes/origin/main pointing AT the pushed commit, so that range was
 # HEAD..HEAD — empty. RUN_CI_SCRIPTS / RUN_PR_SCRIPTS / RUN_NIX / RUN_RULES all
 # stayed false, get-changed-apps.sh returned nothing, and the script printed
