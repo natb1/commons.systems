@@ -101,10 +101,15 @@
 > eight review rounds and every single recurrence was the restatement drifting
 > from the tool it described, never the tool changing.
 >
-> **Who owns the `:21`/`:53` repair:** not a unit of any position below, and
-> nothing in this document schedules it separately. The two sites are 2 of the
-> 9 this banner scopes above, so they are owed by whoever executes that pass.
-> Do not read "not a unit of this plan" as "not owed".
+> **Who owns the `:21`/`:53` repair:** `tactic-graph-digest-quality-followups`,
+> Unit 6 — landed on `main` 2026-08-30 as `b4df1b61`. That node is the pruned
+> predecessor's live successor carrier, so all nine stale citations are its
+> scope, and the unit carries every site by path and line plus the split
+> instrument `:21` (frontmatter) and `:53` (body) require. It is still not a unit
+> of any position below and is not scheduled by this document — the graph owns
+> it, which is the resolution rather than a gap. Three review rounds found the
+> earlier wording, which could only say the repair was owed "by whoever executes
+> that pass", and that is nobody.
 >
 > Two mechanical constraints on that path. Both are stated as instructions and NOT
 > derived here, for the same reason the flag semantics above are not — and this
