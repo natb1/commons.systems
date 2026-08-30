@@ -60,15 +60,40 @@ make_temp_repo() {
   printf '%s\n' "$tmpdir"
 }
 
-# run_check REPO_DIR — run check-test-integrity.sh with CWD=repo dir.
-# Sets RC and STDERR for assertion helpers.
+# run_check REPO_DIR [REPO_ROOT_ARG] — run check-test-integrity.sh against
+# REPO_DIR. Sets RC and STDERR for assertion helpers.
+#
+# REPO_ROOT_ARG is what gets passed to --repo-root, defaulting to REPO_DIR (so
+# every existing call is unchanged). Cases (y) and (z) pass a DIFFERENT value —
+# a subdirectory of the repo, and a path in no repo at all — because the flag's
+# argument and the tree it must resolve to are exactly what those cases test.
+#
+# --repo-root is REQUIRED here, not optional politeness: $CHECK_SCRIPT lives in
+# THIS repo while the fixture is a temp repo elsewhere, and the script refuses
+# to guess between the two. That refusal is the point — running one checkout's
+# copy against another used to silently diff the wrong tree, come up clean, and
+# pass. CWD is still set to the repo so nothing that reads it can drift.
+#
+# STDERR is the gate's OWN stderr: resolve-diff-base.sh's one-line provenance
+# record is split off into BASE_LINE first. Both are asserted on — STDERR by
+# assert_stderr_empty (the gate stayed silent) and BASE_LINE by
+# assert_base_source (the baseline was resolved, and by which route) — so
+# nothing is being dropped to keep a case green; the two claims are just
+# separated because they are different claims.
 RC=0
 STDERR=""
+BASE_LINE=""
 run_check() {
-  local repo="$1"
+  local repo="$1" root="${2:-$1}" raw
   RC=0
   STDERR=""
-  STDERR=$(cd "$repo" && "$CHECK_SCRIPT" 2>&1 >/dev/null) || RC=$?
+  BASE_LINE=""
+  raw=$(cd "$repo" && "$CHECK_SCRIPT" --repo-root "$root" 2>&1 >/dev/null) || RC=$?
+  # Split on the PROVENANCE line specifically (`base=` is in it), not on the
+  # helper's name: its diagnostics carry the same prefix, and filing those into
+  # BASE_LINE would silently hide a hard failure from every stderr assertion.
+  BASE_LINE=$(printf '%s\n' "$raw" | grep '^resolve-diff-base: base=' || true)
+  STDERR=$(printf '%s\n' "$raw" | grep -v '^resolve-diff-base: base=' || true)
 }
 
 # assert_exit EXPECTED_RC DESCRIPTION
@@ -84,10 +109,20 @@ assert_exit() {
 }
 
 # assert_stderr_contains PATTERN DESCRIPTION
+#
+# A quoted `[[ == *…* ]]` match, never `printf "$STDERR" | grep -qF`. This file
+# runs under `set -o pipefail`, and `grep -q` exits the instant it matches — so
+# on a $STDERR big enough that printf is still writing when that happens, the
+# writer takes SIGPIPE, the pipeline reports 141, and a MATCHING assertion is
+# reported as a FAILURE. check-test-integrity.sh's violation block prints one
+# line per offending file, so a large removal grows $STDERR past the 64 KiB pipe
+# buffer. Quoting makes the needle literal exactly as `grep -F` did; this is the
+# same spelling test-helpers.sh's shared assert_contains already uses, for the
+# same reason.
 assert_stderr_contains() {
   local pattern="$1" desc="$2"
   TOTAL=$((TOTAL + 1))
-  if printf '%s\n' "$STDERR" | grep -qF -- "$pattern"; then
+  if [[ "$STDERR" == *"$pattern"* ]]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
@@ -111,6 +146,24 @@ assert_stderr_empty() {
     echo "FAIL: $desc — expected silent output, got:"
     printf '%s\n' "$STDERR" | sed 's/^/    /'
   fi
+}
+
+# assert_base_source EXPECTED_SOURCE DESCRIPTION — assert the baseline was
+# resolved, and by the expected route. "merge-base" is the ordinary branch
+# case; "first-parent" is the push-to-main shape, where the whole point is
+# that a baseline exists at all.
+assert_base_source() {
+  local expected="$1" desc="$2"
+  TOTAL=$((TOTAL + 1))
+  case "$BASE_LINE" in
+    *"source=$expected"*)
+      PASS=$((PASS + 1))
+      ;;
+    *)
+      FAIL=$((FAIL + 1))
+      echo "FAIL: $desc — expected source=$expected, got: ${BASE_LINE:-<no provenance line>}"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -1084,6 +1137,268 @@ run_check "$REPO"
 assert_exit 1 "(t) symbol-granular credit: exit 1"
 assert_stderr_contains "Test-integrity violation" "(t) symbol-granular credit: remediation text present"
 assert_stderr_contains "Signal 2" "(t) symbol-granular credit: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (u): THE PUSH-TO-MAIN SHAPE — the defect this whole change exists for.
+#
+# Every case above cuts a feature branch, which is the one shape where
+# `origin/main...HEAD` happened to work. On a push to `main`, actions/checkout
+# leaves refs/remotes/origin/main pointing AT the pushed commit, so
+# merge-base(origin/main, HEAD) == HEAD and the three-dot range expands to
+# HEAD..HEAD — EMPTY. The `[ -z "$DIFF" ]` early return then reported success.
+#
+# Before the fix: exit 0. Deleting a test file in a commit pushed to main
+# passed this required gate in silence. After: --at-remote-tip first-parent
+# resolves the baseline to HEAD^1 ("what this push introduced"), the deletion
+# is visible, and the gate fires.
+#
+# make_main_push_repo builds make_temp_repo's shape with the
+# `checkout -q -b feature` OMITTED, so HEAD stays on main and origin/main is
+# moved onto the tip commit.
+# ---------------------------------------------------------------------------
+make_main_push_repo() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  TMPDIRS+=("$tmpdir")
+
+  git -C "$tmpdir" init -q -b main
+  git -C "$tmpdir" config user.email "test@test.local"
+  git -C "$tmpdir" config user.name "Test"
+
+  printf 'export const x = 1;\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('works', () => { expect(1).toBe(1); });
+EOF
+  git -C "$tmpdir" add src.ts feat.test.ts
+  git -C "$tmpdir" commit -q -m "initial"
+
+  # The pushed commit: delete the test file, keep its implementation. No branch
+  # is cut — HEAD is main, exactly as on a push.
+  git -C "$tmpdir" rm -q "$tmpdir/feat.test.ts"
+  git -C "$tmpdir" commit -q -m "the push: delete a test"
+
+  # actions/checkout's post-push state.
+  git -C "$tmpdir" update-ref refs/remotes/origin/main "$(git -C "$tmpdir" rev-parse HEAD)"
+
+  printf '%s\n' "$tmpdir"
+}
+
+echo "--- case (u): push-to-main test deletion → flag (was a silent exit 0) ---"
+REPO=$(make_main_push_repo)
+
+# The reproduction, asserted rather than asserted-about: the range this gate
+# used to carry sees nothing at all in this state.
+TOTAL=$((TOTAL + 1))
+OLD_RANGE_FILES=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD' | grep -c . || true)  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
+if [ "$OLD_RANGE_FILES" -eq 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (u) reproduction: expected the old three-dot range to be empty, got $OLD_RANGE_FILES files"
+fi
+
+run_check "$REPO"
+assert_base_source "first-parent" "(u) push-to-main: baseline resolved via first-parent"
+assert_exit 1 "(u) push-to-main: exit 1"
+assert_stderr_contains "Test-integrity violation" "(u) push-to-main: remediation text present"
+# Signal 3 (whole test-file deletion), which is the signal a deletion of
+# feat.test.ts produces — and it is the SAME signal the identical deletion
+# produces on a feature branch. That parity is the actual claim: after the fix
+# the push-to-main shape is not a second, differently-behaving code path.
+#
+# It deliberately does NOT assert Signal 2. Signal 2's declaration removals are
+# credited away here by the import-based co-deletion exemption (feat.test.ts's
+# only imports are vitest's `it`/`expect`, neither of which is exported by the
+# fixture's non-test tree), exactly as they are on a branch. An earlier revision
+# of this case did assert Signal 2, and it passed only because the exemption's
+# old blob was read from `origin/main` instead of the resolved baseline — on a
+# push to main that returned the NEW content, so the exemption could never fire
+# there. Asserting Signal 2 would pin that asymmetry back in place.
+assert_stderr_contains "Signal 3" "(u) push-to-main: Signal 3 fires (same signal as the branch shape)"
+assert_stderr_contains "feat.test.ts" "(u) push-to-main: names the deleted test file"
+
+# ---------------------------------------------------------------------------
+# Case (v): a clean push to main stays green — the fix must not flag every push.
+# ---------------------------------------------------------------------------
+echo "--- case (v): clean push to main → exit 0 ---"
+REPO=$(make_main_push_repo)
+git -C "$REPO" checkout -q HEAD~1 -- feat.test.ts
+printf 'export const y = 2;\n' >> "$REPO/src.ts"
+git -C "$REPO" add src.ts feat.test.ts
+git -C "$REPO" commit -q -m "the push: restore the test, touch impl"
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+
+run_check "$REPO"
+assert_base_source "first-parent" "(v) clean push: baseline resolved via first-parent"
+assert_exit 0 "(v) clean push: exit 0"
+assert_stderr_empty "(v) clean push: silent"
+
+# ---------------------------------------------------------------------------
+# Case (w): a failed baseline resolution must ABORT, not report a clean pass.
+#
+# The second residual of routing through resolve-diff-base: the helper is
+# wired, and its exit code gets swallowed anyway. The call site is a plain
+# assignment rather than an `if ! X=$(...)` precisely so `set -e` sees the
+# helper's non-zero exit. On a REQUIRED gate, a swallowed exit code is
+# indistinguishable from the vacuous diff this whole change removes.
+# ---------------------------------------------------------------------------
+echo "--- case (w): unresolvable baseline → abort, not a clean pass ---"
+REPO=$(make_main_push_repo)
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_check "$REPO"
+TOTAL=$((TOTAL + 1))
+if [ "$RC" -ne 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (w) unresolvable baseline: expected a non-zero exit, got 0"
+fi
+assert_stderr_contains "origin/main" "(w) unresolvable baseline: names the ref"
+
+# ---------------------------------------------------------------------------
+# Case (x): the import-based co-deletion exemption must give the SAME answer on
+# a branch and on the push that merges it.
+#
+# The exemption reads the test file's OLD blob to compute which imports the PR
+# dropped. That old side must be the SAME revision the diff was taken against —
+# $DIFF_BASE — not `origin/main`. On a push to main $DIFF_BASE is HEAD^1 while
+# origin/main IS HEAD, so reading `origin/main:$F` returned the NEW content, the
+# OLD-minus-NEW set difference came back empty, and the exemption could never
+# fire. Consequence: a dead-code cleanup that passed this REQUIRED gate on its
+# branch failed it again on `main` after merge, turning main red for work that
+# was already approved.
+#
+# Shape: `beta` is deleted from a MODIFIED src.ts (no whole-file deletion, so
+# the basename path does not apply) together with the test that imported it.
+# ---------------------------------------------------------------------------
+make_cleanup_repo() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  TMPDIRS+=("$tmpdir")
+
+  git -C "$tmpdir" init -q -b main
+  git -C "$tmpdir" config user.email "test@test.local"
+  git -C "$tmpdir" config user.name "Test"
+
+  printf 'export function alpha() { return 1; }\nexport function beta() { return 2; }\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/src.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { alpha, beta } from './src';
+it('alpha', () => { expect(alpha()).toBe(1); });
+it('beta', () => { expect(beta()).toBe(2); });
+EOF
+  git -C "$tmpdir" add -A
+  git -C "$tmpdir" commit -q -m "initial"
+
+  # The cleanup commit: drop `beta` from the modified impl and its test.
+  printf 'export function alpha() { return 1; }\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/src.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+import { alpha } from './src';
+it('alpha', () => { expect(alpha()).toBe(1); });
+EOF
+  git -C "$tmpdir" add -A
+  git -C "$tmpdir" commit -q -m "drop dead beta + its test"
+
+  printf '%s\n' "$tmpdir"
+}
+
+echo "--- case (x): dead-code cleanup is exempt on the branch AND on the push ---"
+REPO=$(make_cleanup_repo)
+# Branch shape: origin/main is the fork point.
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD~1)"
+run_check "$REPO"
+assert_base_source "merge-base" "(x) branch: baseline resolved via merge-base"
+assert_exit 0 "(x) branch: dead-code cleanup exempt, exit 0"
+
+# Push-to-main shape: same commit, origin/main now AT it.
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+run_check "$REPO"
+assert_base_source "first-parent" "(x) push: baseline resolved via first-parent"
+assert_exit 0 "(x) push: same commit, same verdict — exit 0"
+
+# ---------------------------------------------------------------------------
+# Case (y): a --repo-root naming a SUBDIRECTORY must still check the WHOLE tree.
+#
+# Every git call in the gate is `git -C "$REPO_ROOT"`, and git resolves a
+# pathspec relative to that directory's PREFIX within the repo. So a
+# --repo-root naming a subdirectory scoped $TEST_GLOBS to that subdirectory
+# while resolve-diff-base.sh (which normalizes) handed back a base for the
+# WHOLE repo. A test deleted anywhere outside the subdirectory fell out of
+# $DIFF, the `[ -z "$DIFF" ]` early exit read "nothing touched test files", and
+# this REQUIRED gate exited 0 having examined part of a tree — a vacuous pass,
+# the same failure shape case (u) covers for the push-to-main range.
+#
+# The subdirectory spelling is one a caller reaches for: resolve-diff-base.sh's
+# own error text invites "a path inside the checkout".
+#
+# Measured against fd53e1e4 (pre-fix): exit 0, silent. With the toplevel
+# normalization: exit 1, Signal 3, naming other/outside.test.ts.
+# ---------------------------------------------------------------------------
+echo "--- case (y): subdirectory --repo-root still sees the whole tree ---"
+REPO=$(make_temp_repo)
+mkdir -p "$REPO/other" "$REPO/sub"
+
+cat > "$REPO/other/outside.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('outside the subdirectory', () => { expect(1).toBe(1); });
+EOF
+printf 'export const s = 1;\n' > "$REPO/sub/keep.ts"
+git -C "$REPO" add other/outside.test.ts sub/keep.ts
+git -C "$REPO" commit -q -m "add a test outside sub/"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+git -C "$REPO" rm -q other/outside.test.ts
+git -C "$REPO" commit -q -m "delete the test outside sub/"
+
+# The reproduction, asserted rather than asserted-about: run from the sub/
+# prefix, the gate's OWN Signal 3 pathspec sees nothing at all in this state.
+TOTAL=$((TOTAL + 1))
+NARROWED=$(git -C "$REPO/sub" diff --diff-filter=D --name-only \
+  'refs/remotes/origin/main'..HEAD -- '*.test.ts' | grep -c . || true)
+if [ "$NARROWED" -eq 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (y) reproduction: expected the sub/-prefixed pathspec to see nothing, got $NARROWED files"
+fi
+
+run_check "$REPO" "$REPO/sub"
+assert_exit 1 "(y) subdirectory --repo-root: exit 1"
+assert_stderr_contains "Test-integrity violation" "(y) subdirectory --repo-root: remediation text present"
+assert_stderr_contains "Signal 3" "(y) subdirectory --repo-root: Signal 3 fires"
+assert_stderr_contains "other/outside.test.ts" "(y) subdirectory --repo-root: names the test deleted outside sub/"
+
+# ---------------------------------------------------------------------------
+# Case (z): a --repo-root in no git work tree at all must fail LOUDLY, in this
+# gate's own voice.
+#
+# The exit code alone does not discriminate: pre-fix the path was handed
+# straight to resolve-diff-base.sh, which refused it with exit 3 and a message
+# of its own that happens to use the same phrase. What the normalization adds
+# is that the GATE rejects the argument it was given, before any helper runs —
+# so the assertion is on the gate's own prefixed line, naming the offending
+# path. Measured against fd53e1e4 (pre-fix): stderr carries only
+# `resolve-diff-base: ERROR: …`, and this assertion fails.
+# ---------------------------------------------------------------------------
+echo "--- case (z): --repo-root outside any git work tree → loud failure ---"
+REPO=$(make_temp_repo)
+NON_REPO=$(mktemp -d)
+TMPDIRS+=("$NON_REPO")
+
+run_check "$REPO" "$NON_REPO"
+TOTAL=$((TOTAL + 1))
+if [ "$RC" -ne 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (z) non-repo --repo-root: expected a non-zero exit, got 0"
+fi
+assert_stderr_contains \
+  "check-test-integrity: --repo-root '$NON_REPO' is not inside a git work tree" \
+  "(z) non-repo --repo-root: the GATE refuses it, naming the path"
 
 # ---------------------------------------------------------------------------
 # Summary

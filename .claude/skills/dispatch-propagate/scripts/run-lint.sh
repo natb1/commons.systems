@@ -53,14 +53,38 @@ done
 # Auto-detect mode: delegate app detection to get-changed-apps.sh,
 # then check nix/rules inline (those aren't app-level concerns).
 if [ "$EXPLICIT" = false ]; then
+  # Captured into a variable rather than read from `< <(...)`.
+  #
+  # A process substitution's exit status is not the status of the enclosing
+  # command and `set -e` never sees it: when get-changed-apps.sh failed — which
+  # it now does, loudly, on an unresolvable baseline instead of printing
+  # nothing — the while loop simply read zero lines and lint proceeded with no
+  # apps. That is the same buried-error shape as the vacuous diff this whole
+  # change exists to remove, one layer up.
+  if ! CHANGED_APPS=$("$SCRIPTS/get-changed-apps.sh"); then
+    echo "ERROR: get-changed-apps.sh failed; cannot determine which apps to lint" >&2
+    exit 1
+  fi
   while IFS= read -r app; do
     [ -z "$app" ] && continue
     DIRTY_APPS["$app"]=1
-  done < <("$SCRIPTS/get-changed-apps.sh")
+  done <<< "$CHANGED_APPS"
 
-  # Detect nix and rules changes separately
-  if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
-    echo "ERROR: could not diff against origin/main" >&2
+  # Detect nix and rules changes separately.
+  #
+  # The baseline comes from resolve-diff-base.sh rather than being spelt
+  # `origin/main...HEAD` inline. --at-remote-tip first-parent because this
+  # script runs on pushes to `main` too, where actions/checkout leaves
+  # origin/main pointing AT the pushed commit: the three-dot diff was then
+  # EMPTY and RUN_NIX / RUN_RULES / RUN_PROSE / RUN_DS_DRIFT all stayed false —
+  # five of this script's eight check blocks silently switched off, under the
+  # informational-looking "No changed-file lint targets matched." message.
+  #
+  # A plain assignment, not `if ! X=$(...)`, so the helper's non-zero exit
+  # propagates under `set -e` rather than being swallowed.
+  DIFF_BASE=$("$SCRIPTS/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+  if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$DIFF_BASE"..HEAD); then
+    echo "ERROR: could not diff ${DIFF_BASE}..HEAD in $REPO_ROOT" >&2
     exit 1
   fi
   while IFS= read -r file; do
@@ -182,18 +206,29 @@ fi
 
 # Run type-safety escape-hatch check — UNCONDITIONALLY, on every PR.
 #
-# Not gated on RUN_PROSE or any app-dir flag: this diffs origin/main...HEAD
-# over TS/JS files itself and is a fast self-noop when that diff is empty, so
-# there is no changed-files flag worth adding just to skip it. See
+# Not gated on RUN_PROSE or any app-dir flag: this resolves its own baseline
+# through resolve-diff-base.sh and diffs TS/JS files itself, and is a fast
+# self-noop when that diff is empty, so there is no changed-files flag worth
+# adding just to skip it. It no longer diffs origin/main...HEAD: that spelling
+# made a branch behind main compare against commits it never had. See
 # .claude/rules/type-safety-suppression-marker.md for the marker that
 # suppresses a flagged line.
 #
 # Invoked by an absolute path under $REPO_ROOT (not $SCRIPTS-relative) so the
-# script's own git-diff baseline resolves against the worktree under test, not
-# against wherever run-lint.sh's copy happens to live — same reasoning as the
-# verify-fence-paths --repo-root flag above.
+# copy that runs is the one in the tree under test, AND passed --repo-root so
+# the tree it scans is named rather than inferred — same reasoning, and the
+# same flag, as the verify-fence-paths call above.
+#
+# --repo-root is REQUIRED OF THE TREE UNDER TEST, not optional. Running main's
+# copy of this script against a worktree that has not yet merged the commit
+# adding the flag aborts with "Unknown argument: --repo-root". That is
+# deliberate: the failure is loud, names the flag, and clears itself the moment
+# the worktree merges main. Feature-detecting the flag and falling back to an
+# unscoped invocation would be exactly the defensive fallback
+# .claude/rules/code-style.md forbids — it would silently scan a tree nobody
+# named, which is the vacuity this whole change exists to remove.
 echo "=== type-safety escape-hatch check ==="
-if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh"; then
+if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh" --repo-root "$REPO_ROOT"; then
   echo "PASS: type-safety escapes"
 else
   echo "FAIL: type-safety escapes" >&2

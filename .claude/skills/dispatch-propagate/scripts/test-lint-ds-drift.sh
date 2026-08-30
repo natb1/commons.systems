@@ -372,8 +372,9 @@ assert_contains "jsx-clean-battery: PASS printed" "PASS" "$OUT"
 # ---------------------------------------------------------------------------
 # Test 23: real JSX violation carrying the inline // escape hatch is NOT
 # flagged. Mirrors Test 13 (the CSS /* ... */ form) for the TSX-appropriate
-# `// ds-lint-disable-line: <reason>` single-line comment form documented at
-# lint-ds-drift.sh:215. Guards the escape-hatch check (`*ds-lint-disable-line*`)
+# `// ds-lint-disable-line: <reason>` single-line comment form documented in
+# lint-ds-drift.sh's usage header. Guards its escape-hatch check (the
+# `*ds-lint-disable-line*` case)
 # against a regression that broke it specifically for TSX-style // comments.
 # ---------------------------------------------------------------------------
 echo "Test 23: escaped JSX violation (// form) is not flagged"
@@ -389,5 +390,84 @@ git -C "$REPO" commit --quiet -m "add escaped JSX violation"
 run_sut
 assert_eq "jsx-escaped: exit 0" "0" "$RC"
 assert_contains "jsx-escaped: PASS printed" "PASS" "$OUT"
+
+# ---------------------------------------------------------------------------
+# THE PUSH-TO-MAIN SHAPE.
+#
+# actions/checkout leaves refs/remotes/origin/main pointing AT the pushed
+# commit, so HEAD == origin/main and the `origin/main...HEAD` range this linter
+# used to carry expanded to HEAD..HEAD — empty. The linter then reported a
+# clean pass without inspecting a single line, on every push to main, inside
+# the REQUIRED `lint` job.
+#
+# Same fixture as make_repo, but the violating commit stays on main and
+# origin/main is moved onto it rather than a feature branch being cut.
+# ---------------------------------------------------------------------------
+make_main_push_repo() {
+  REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+  BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+
+  git -C "$BARE" init --bare --quiet --initial-branch=main
+
+  git -C "$REPO" init --quiet --initial-branch=main
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test User"
+  git -C "$REPO" remote add origin "$BARE"
+
+  mkdir -p "$REPO/myapp/src/style"
+  printf '%s\n' '.theme {' > "$REPO/myapp/src/style/theme.css"
+  printf '%s\n' '  display: block;' >> "$REPO/myapp/src/style/theme.css"
+  printf '%s\n' '}' >> "$REPO/myapp/src/style/theme.css"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "baseline"
+  git -C "$REPO" push --quiet origin main
+
+  # The push under test: a raw hex colour, committed on main.
+  printf '%s\n' "  $VIOL_HEX" >> "$REPO/myapp/src/style/theme.css"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "add hex violation (the push)"
+  git -C "$REPO" push --quiet origin main
+  # This is the state actions/checkout leaves on a push to main.
+  git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+}
+
+echo "Test 24: main-push shape flags the violation"
+make_main_push_repo
+# The reproduction, stated as an assertion: the expression this linter used to
+# carry sees nothing at all in exactly this state.
+assert_eq "main-push: the old three-dot range was empty" "" \
+  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
+run_sut
+[ "$RC" -ne 0 ] && _mp_rc=nonzero || _mp_rc=zero
+assert_eq "main-push: exit non-zero" "nonzero" "$_mp_rc"
+assert_contains "main-push: output names the file" "theme.css" "$OUT"
+assert_contains "main-push: raw hex detector tag" "[raw hex]" "$OUT"
+
+# A clean main push must still pass — the fix must not invent violations.
+echo "Test 25: clean main-push shape passes"
+make_main_push_repo
+printf '%s\n' '/* no-op */' >> "$REPO/myapp/src/style/theme.css"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "clean follow-up push"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+run_sut
+assert_eq "main-push clean: exit 0" "0" "$RC"
+
+# ---------------------------------------------------------------------------
+# Test 26: a failed baseline resolution must ABORT, not report a clean pass.
+#
+# The second residual of routing through resolve-diff-base: the helper is
+# wired, and its exit code gets swallowed anyway. The call site is a plain
+# assignment rather than an `if ! X=$(...)` precisely so `set -e` sees the
+# helper's non-zero exit; this case is what keeps it that way.
+# ---------------------------------------------------------------------------
+echo "Test 26: an unresolvable baseline aborts the ds-drift linter"
+make_main_push_repo
+git -C "$REPO" update-ref -d refs/remotes/origin/main
+run_sut
+[ "$RC" -ne 0 ] && _nb_rc=nonzero || _nb_rc=zero
+assert_eq "no baseline: exit non-zero" "nonzero" "$_nb_rc"
+assert_contains "no baseline: names the unresolvable ref" "origin/main" "$OUT"
 
 report_results

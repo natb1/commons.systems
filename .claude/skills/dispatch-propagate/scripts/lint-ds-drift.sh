@@ -56,10 +56,21 @@ SPACING_GAP_CSS_RE='(^|[^-A-Za-z])(gap|row-gap|column-gap)[[:space:]]*:[^;}]*[0-
 SPACING_JSX_RE='(^|[^A-Za-z])(margin|padding)(Top|Right|Bottom|Left|Block|Inline)?((Start|End))?[[:space:]]*:[^,}]*[0-9]*[1-9][0-9]*px'
 SPACING_GAP_JSX_RE='(^|[^A-Za-z])(gap|rowGap|columnGap)[[:space:]]*:[^,}]*[0-9]*[1-9][0-9]*px'
 
-# Compute the unified-0 diff of added lines in CSS/TSX files against origin/main.
-# Run from REPO_ROOT so that relative paths in diff output are consistent.
-if ! DIFF=$(git -C "$REPO_ROOT" diff origin/main...HEAD --unified=0 -- '*.css' '*.tsx'); then
-  echo "ERROR: could not diff origin/main...HEAD for *.css *.tsx files" >&2
+# Compute the unified-0 diff of added lines in CSS/TSX files against the
+# resolved baseline. Run from REPO_ROOT so that relative paths in diff output
+# are consistent.
+#
+# The baseline comes from resolve-diff-base.sh rather than being spelt
+# `origin/main...HEAD` inline. --at-remote-tip first-parent because this linter
+# runs on pushes to `main` too (run-lint.sh invokes this linter inside the
+# required `lint` job), where actions/checkout leaves origin/main pointing AT
+# the pushed
+# commit: the three-dot diff was then EMPTY and the linter reported a clean
+# pass without inspecting a single line.
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+DIFF_BASE=$("$SCRIPTS/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+if ! DIFF=$(git -C "$REPO_ROOT" diff "$DIFF_BASE"..HEAD --unified=0 -- '*.css' '*.tsx'); then
+  echo "ERROR: could not diff ${DIFF_BASE}..HEAD for *.css *.tsx files in $REPO_ROOT" >&2
   exit 1
 fi
 

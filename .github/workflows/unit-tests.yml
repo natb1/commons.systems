@@ -153,6 +153,10 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      # These two steps carry the same `|| github.ref == 'refs/heads/main'` gate
+      # as the validation step below, and for no independent reason: they are
+      # its prerequisites. Gating them on the diff alone would leave the
+      # validation step running on a main push with no node and no tsx.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         with:
@@ -171,15 +175,25 @@ jobs:
       # branches keep the stderr warning, exactly as graph-fast-path.yml's
       # guard job does.
       #
-      # `|| github.ref == 'refs/heads/main'` on all three steps is what makes
-      # that post-merge run EXIST. detect-changes.sh computes its categories
-      # from `git diff origin/main...HEAD`, and on a push to `main` the fetched
-      # `origin/main` IS the pushed commit — the diff is empty, every category
-      # is false, and this job's steps were all skipped. Measured on run
-      # 33288998641 (commit 77bd747, which touched packages/intentionsutil/
-      # heavily): "Validate intention graph" reported `skipped`. Gating the flag
-      # on `main` while leaving the step gated on a category that is never true
-      # on `main` would make the strict check run on no ref at all.
+      # The `|| github.ref == 'refs/heads/main'` disjunct stays, and it is NOT
+      # a workaround for the vacuous-diff bug that detect-changes.sh has since
+      # fixed. It is the coverage.
+      #
+      # This step's payload is not diff-scoped. `validate-graph.ts intentions
+      # --strict-sensors` validates the WHOLE `intentions/` directory, so what
+      # it checks does not depend on what the push touched: a graph that some
+      # earlier landing left internally inconsistent is caught by the next main
+      # push regardless of that push's contents. Gating a whole-directory
+      # validation behind a diff detector throws that away. The concrete hole:
+      # a multi-commit push to `main` fires one workflow run at the head
+      # commit, detect-changes.sh reads HEAD^1..HEAD, and a graph edit carried
+      # by any commit other than the last is invisible — the step skips and
+      # strict validation never runs for that push at all.
+      #
+      # So the diff detector only decides whether to run this on NON-`main`
+      # refs, where a full-graph validation on every feature branch would be
+      # pure cost. On `main` it runs unconditionally. The two setup steps carry
+      # the same disjunct because this step cannot run without them.
       - name: Validate intention graph
         if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
         run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
@@ -225,7 +239,39 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/run-storybook-smoke.sh
 
   artifact-check:
+    # RUNS POST-MERGE BY DESIGN. This job's own text is unchanged by the PR that
+    # made detect-changes.sh resolve an honest baseline — what changed is that it
+    # now actually fires on `main`, where the old `origin/main...HEAD` range was
+    # empty and every category read false. That is a decision, recorded here, not
+    # a side effect that arrived from a defect.
+    #
+    # It is ruled the way graph-validate is, NOT the way darwin-build and
+    # nixos-build are. Those two carry `!= main` guards because main-nix-validate.yml
+    # already covers main and because the macos-14 runner cost was deliberate.
+    # Neither reason transfers: no second workflow covers artifacts, and this
+    # payload is WHOLE-STORE rather than diff-scoped — run-artifact-check.sh
+    # rebuilds the page from all of `intentions/`, so what it checks does not
+    # depend on what the push touched.
+    #
+    # The coverage is not redundant with anything. Measured over the last 150
+    # first-parent commits on main: this fires on 106 of them, and 97 of those 106
+    # arrived with NO PR at all — direct graph-commit pushes, for which no branch
+    # run of this workflow exists (graph-fast-path.yml's unit-tests/lint/acceptance
+    # jobs are echo stubs). Nor does the vitest job cover it: `intentions/` is not
+    # an npm workspace and no workspace is a prefix of it, so an intentions-only
+    # push marks zero apps dirty and artifacts/plan-view/test/live-store.test.ts —
+    # which exists to test the LIVE store — does not run. graph-validate checks the
+    # graph's schema, not the page built from it. PR #3103 is the precedent for
+    # what goes uncaught: a type moved, lineage.ts broke, and the suite never ran
+    # on main, so it was invisible there.
+    #
+    # Cost, measured: 62s and 87s for two real full runs, against a 295s
+    # hook-tests critical path on the same run. Free minutes on a public repo.
     runs-on: ubuntu-latest
+    # A CAP, because this job drives chromium unattended on ~10.7 main pushes a
+    # day and carried GitHub's 360-minute default until now. Sized well above the
+    # 62-87s measured runs so it catches a hang, not a slow day.
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -404,6 +450,18 @@ jobs:
         run: .github/scripts/test-check-graph-fast-path.sh
       - name: Run align-tactics tactic-mode target-node context tests
         run: .claude/skills/dispatch-propagate/scripts/test-align-tactics-target-context.sh
+      # Appended at the END of this list on purpose. The block is being
+      # rewritten as an accumulator in a separate change, and two other PRs are
+      # inserting steps mid-list; a tail append is the position least likely to
+      # conflict with any of them.
+      #
+      # This one needs an explicit step even though it matches the
+      # test-*.sh glob run-unit-tests.sh already sweeps: that glob only fires
+      # when a file under dispatch-propagate/scripts changed, and the whole
+      # point of the ratchet is to catch a three-dot baseline reintroduced
+      # ANYWHERE in the repo.
+      - name: Run diff-base doctrine ratchet
+        run: .claude/skills/dispatch-propagate/scripts/test-diff-base-doctrine.sh
 
   test-integrity:
     runs-on: ubuntu-latest
@@ -517,15 +575,24 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      # PRE-MERGE ONLY. `github.ref != 'refs/heads/main'` is load-bearing, not
+      # belt-and-braces: until detect-changes.sh resolved its baseline, the
+      # `origin/main...HEAD` range was empty on a push to `main`, so
+      # `outputs.nix` was never true there and this step could not run
+      # post-merge. main-nix-validate.yml's own scope note records the
+      # resulting darwin gap as knowingly left open on macos-14 runner
+      # cost. Making the detector
+      # honest on `main` would silently reverse that cost decision — so the
+      # decision is now stated here instead of arriving from a defect.
       - name: Install nix (if nix files changed)
-        if: steps.changes.outputs.nix == 'true'
+        if: steps.changes.outputs.nix == 'true' && github.ref != 'refs/heads/main'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
         with:
           extra-conf: |
             extra-substituters = https://claude-code.cachix.org
             extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
       - name: Build darwinConfigurations.default
-        if: steps.changes.outputs.nix == 'true'
+        if: steps.changes.outputs.nix == 'true' && github.ref != 'refs/heads/main'
         run: .github/scripts/build-darwin-config.sh
 
   nixos-build:
@@ -544,15 +611,25 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch-propagate/scripts/detect-changes.sh
+      # PRE-MERGE ONLY, and the ref guard is load-bearing. `main` is covered by
+      # main-nix-validate.yml, which runs this exact script at a 120-minute cap
+      # sized against a cold from-source Rust compile that neither cachix nor
+      # cache.nixos.org can serve. This job's cap is 30. Until detect-changes.sh
+      # resolved its baseline, `outputs.nix` was never true on a push to `main`
+      # and the contradiction was inert; making the detector honest there would
+      # start a second, concurrent copy of the same build under a cap the normal
+      # cold build exceeds — reddening origin/main on every nix-touching merge,
+      # which is the outcome the timeout-cap rationale in main-nix-validate.yml
+      # exists to avoid.
       - name: Install nix (if nix files changed)
-        if: steps.changes.outputs.nix == 'true'
+        if: steps.changes.outputs.nix == 'true' && github.ref != 'refs/heads/main'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
         with:
           extra-conf: |
             extra-substituters = https://claude-code.cachix.org
             extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=
       - name: Build nixosConfigurations.nixos
-        if: steps.changes.outputs.nix == 'true'
+        if: steps.changes.outputs.nix == 'true' && github.ref != 'refs/heads/main'
         run: .github/scripts/build-nixos-config.sh
 
   firebase-audit:

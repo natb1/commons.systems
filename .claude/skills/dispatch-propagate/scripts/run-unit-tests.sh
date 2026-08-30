@@ -74,9 +74,21 @@ if [ "$EXPLICIT" = false ]; then
     DIRTY_APPS["$app"]=1
   done <<< "$CHANGED_APPS"
 
-  # Detect nix, rules, and ci-scripts changes separately
-  if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
-    echo "ERROR: could not diff against origin/main" >&2
+  # Detect nix, rules, and ci-scripts changes separately.
+  #
+  # The baseline comes from resolve-diff-base.sh rather than being spelt
+  # `origin/main...HEAD` inline. --at-remote-tip first-parent because this
+  # script runs on pushes to `main` too, where actions/checkout leaves
+  # origin/main pointing AT the pushed commit: the three-dot diff is then
+  # EMPTY, RUN_CI_SCRIPTS/RUN_PR_SCRIPTS stay false, and the run falls through
+  # to "No test suites matched changed files. Nothing to check." with exit 0.
+  # That made the post-merge unit-tests run structurally vacuous.
+  #
+  # This is a plain assignment, not `if ! X=$(...)`, so the helper's non-zero
+  # exit propagates under `set -e` instead of being swallowed.
+  DIFF_BASE=$("$SCRIPTS/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+  if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$DIFF_BASE"..HEAD); then
+    echo "ERROR: could not diff ${DIFF_BASE}..HEAD in $REPO_ROOT" >&2
     exit 1
   fi
   while IFS= read -r file; do
