@@ -2455,7 +2455,7 @@ describe("validateGraph", () => {
     try {
       validateGraph(tierNodes({ attributes: { phase: null, execution: null, rounds: null } }));
     } catch (err) {
-      message = (err as Error).message;
+      message = err instanceof Error ? err.message : String(err);
     }
     expect(message).toMatch(/attributes\.phase shadows the first-class phase field/);
     expect(message).toMatch(/attributes\.execution shadows the first-class execution field/);
