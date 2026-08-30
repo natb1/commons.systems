@@ -560,6 +560,59 @@ there) and Unit 2 (the render tail).
 
 ---
 
+## Unit 6 — Repair the nine stale citations of the pruned predecessor
+
+`tactic-graph-digest-tooling` was pruned; this node is its live successor. Nine
+citations of the pruned id survive under `intentions/` and read as live
+references to a node that no longer exists. They are recorded here because this
+node is the successor carrier — recorded 2026-08-30, after three review rounds
+on `plans/dispatch-rsi-sequence.md` found the repair scheduled by no position
+and carried by no node. Plan prose is not an owner; this section is.
+
+The nine sites, all repaired to **past tense** naming this node as successor:
+
+- `strategy-graph-review-curriculum.md:158`
+- `strategy-graph-integrity.md:23`, `:138`
+- `tactic-align-audit-skill.md:76`, `:110`, `:172`
+- `tactic-serves-inheritance-full-strip.md:21`, `:53`, `:112`
+
+**Two of the nine need a different instrument from the rest, and getting this
+wrong silently destroys data.** On `tactic-serves-inheritance-full-strip`, `:53`
+is ordinary body prose — an `.md` text edit. But `:21` sits **inside the
+frontmatter** (delimiters `:1` and `:47`), in `rationale:` (`:11`), so it must go
+through `dump-node.ts` → edit → `write-node.ts` → `graph-commit`. Never
+hand-build a partial payload for it: `validateNode` defaults every omitted
+field, so a minimal payload writes `phase: null`, `execution: null` and
+`serves: []` over that node's live `phase: implement` (`:33`), its `execution`
+block including `strategy_fingerprint` (`:34-40`) and its one `serves` entry
+(`:26-27`) — at exit 0, with no error.
+
+`:21` and `:53` are also **prose `blocked_by` references** — `:21` reads *"the
+digest's DUP-SERVES table (blocked_by tactic-graph-digest-tooling)"* and `:53`
+repeats it. There is no frontmatter edge, so the router never traverses it, but
+a human reader takes it for a live blocker; that node's real `blocked_by` is
+`[]` (`:42`). Repair the phrasing, not just the id.
+
+Both are machine-read: `validateGraphProseRefs`
+(`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
+`attention.rationale`, every `clarifications[].answer` and the body — so it
+reads `:21` (inside `rationale`) and `:53` (body) alike.
+
+**One site outside `intentions/` needs deletion, not repair.**
+`packages/intentionsutil/prose-ref-baseline.json:24` carries the pruned id as a
+`referencedBy` entry — a stale grandfather naming a node that no longer exists,
+not a citation of it.
+
+**Explicitly out of scope:** the four mentions on this node's own `## Provenance`
+section (`:5`, `:15`, `:57`, `:682`) are correct as history and need nothing.
+Do not "repair" them.
+
+**Recommended model:** sonnet
+
+**Dependencies:** none.
+
+---
+
 ## Reuse
 
 - `renderId` — `packages/intentionsutil/src/digest.ts:56-68`. The single
