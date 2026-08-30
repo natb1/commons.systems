@@ -110,28 +110,20 @@
 > 9 this banner scopes above, so they are owed by whoever executes that pass.
 > Do not read "not a unit of this plan" as "not owed".
 >
-> Two escaping layers on the `--file` path this banner prescribes, and only one
-> is yours (the shell would be a third — see "Keep the shell out of it" below).
-> **JSON is yours:** `write-node.ts` reads the payload as a JSON document
-> (`writeNodeFromJson`'s `JSON.parse`, `write-node.ts:40`), so a `"` in the
-> repair text is written `\"` THERE — exactly once. An unescaped one dies on a
-> `JSON.parse` syntax error; a doubled `\\\"` is what actually lands a literal
-> backslash in the field — `\\"` is not that, it closes the string early and
-> dies on the same syntax error. **YAML is not yours:** that single JSON `\"` is
-> all you write — do not add anything on top of it to pre-escape for YAML.
-> `JSON.parse` consumes it and hands `writeNode` a bare `"`, and `writeNode`
-> re-serializes the node through the emitter (`store.ts:61`), which picks the
-> scalar style and handles quoting itself. Only a by-hand edit of the `.md` YAML
-> text would need a YAML-level escape, and the field carries none today.
+> Two mechanical constraints on that path. Both are stated as instructions and NOT
+> derived here, for the same reason the flag semantics above are not — and this
+> passage is the second proof of that reason, not a fresh claim: the derivation
+> that used to sit here was rewritten in every round that followed, each time
+> refuted by a finer measurement of a tool that had not changed. It belongs beside
+> the code it describes, where drift is visible, rather than in a plan document.
 >
-> Keep the shell out of it: write the payload to a file and pass `--file`. This
-> field's value carries an apostrophe (`kind-strategy's`, `:16`), so the
-> header's `echo '<json>' | …` form breaks on shell quoting before `JSON.parse`
-> is ever reached.
->
-> (The emitter's exact style selection is deliberately not derived here — it is
-> a property of the value and of the pinned `yaml` version, and the guidance
-> above is correct whichever style it picks.)
+> - **Pass the payload with `--file <path>`, never `echo '<json>' | …`.** This node's
+>   value contains shell metacharacters, and the resulting corruption is not reliably
+>   loud — some spellings of it produce valid JSON that writes at exit 0.
+> - **The payload is a JSON document** (`writeNodeFromJson`'s `JSON.parse`,
+>   `write-node.ts:40`), so quote it by JSON's rules and by nothing else. `writeNode`
+>   re-serializes through the emitter (`store.ts:61`), which owns the YAML layer; do
+>   not pre-escape for it, and do not hand-correct what it writes back.
 >
 > Both sites are read by tooling: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
