@@ -3,18 +3,33 @@ set -euo pipefail
 
 # Detect changed file categories for CI conditional tool installation.
 # Outputs "nix=true", "playwright=true", "rules=true", "graph=true", and/or
-# "go=true" to $GITHUB_OUTPUT when relevant files changed on the branch relative
-# to origin/main.
+# "go=true" to $GITHUB_OUTPUT when relevant files changed relative to the
+# baseline resolve-diff-base.sh resolves (origin/main on a branch, HEAD^1 on a
+# push to main).
 
-# Try origin/main first; fall back to HEAD~1 when origin/main is unavailable
-# (e.g., shallow clones or direct pushes to non-feature branches).
-if CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
-  : # success
-elif CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
-  echo "::warning::Could not diff against origin/main, falling back to HEAD~1"
-else
-  echo "::error::Could not determine changed files via git diff; tool install conditions will not trigger"
-  CHANGED=""
+# Baseline resolution is delegated to resolve-diff-base.sh, which fails loudly
+# rather than substituting a base it cannot justify.
+#
+# --at-remote-tip first-parent: this script runs on pushes to `main` too, where
+# actions/checkout leaves origin/main pointing AT the pushed commit. The
+# `origin/main...HEAD` range this used to carry was then EMPTY, so every
+# category went unset and the 29 `steps.changes.outputs.*` gates across this
+# repo's workflows all read false — the post-merge run skipped everything.
+#
+# What was here before was a two-step fallback ladder: HEAD~1...HEAD on any
+# origin/main failure, then `CHANGED=""` with a `::warning::`. Both rungs are
+# deleted rather than converted. HEAD~1 answers a DIFFERENT question ("what did
+# the last commit change"), and the empty-string rung turned an unresolvable
+# baseline into a green run that installed no tools and ran no gated job —
+# precisely the buried-error shape .claude/rules/code-style.md forbids. An
+# unresolvable base is now a named non-zero exit, carrying the helper's own
+# diagnostic.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+DIFF_BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$DIFF_BASE"..HEAD); then
+  echo "::error::detect-changes: git diff ${DIFF_BASE}..HEAD failed in $REPO_ROOT"
+  exit 1
 fi
 
 if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then

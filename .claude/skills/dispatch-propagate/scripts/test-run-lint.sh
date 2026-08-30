@@ -153,4 +153,72 @@ assert_contains "clean: reached prose stage" "=== Prose-rule lint ===" "$OUT"
 assert_eq "clean: exit 0" "0" "$RC"
 assert_contains "clean: prose PASS printed" "PASS: prose" "$OUT"
 
+# ---------------------------------------------------------------------------
+# Test 3 (THE FIX): the PUSH-TO-MAIN shape reaches the prose stage.
+#
+# actions/checkout leaves refs/remotes/origin/main pointing AT the pushed
+# commit, so HEAD == origin/main and the `origin/main...HEAD` range run-lint.sh
+# used to carry was empty. RUN_NIX / RUN_RULES / RUN_PROSE / RUN_DS_DRIFT all
+# stayed false — five of run-lint.sh's eight check blocks silently off — and
+# the run printed "No changed-file lint targets matched. Only the unconditional
+# checks ran." and exited 0. A violation committed straight to main was never
+# looked at.
+#
+# Same fixture as make_repo, but the violating file lands in the commit that
+# origin/main and HEAD both point at, rather than on a feature branch.
+# ---------------------------------------------------------------------------
+make_main_push_repo() {
+  REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+  BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+
+  git -C "$BARE" init --bare --quiet --initial-branch=main
+
+  git -C "$REPO" init --quiet --initial-branch=main
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test User"
+  git -C "$REPO" remote add origin "$BARE"
+
+  printf '%s\n' 'baseline' > "$REPO/README"
+  mkdir -p "$REPO/.github/scripts"
+  cp "$SCRIPT_DIR/../../../../.github/scripts/check-type-safety-escapes.sh" \
+     "$REPO/.github/scripts/check-type-safety-escapes.sh"
+  chmod +x "$REPO/.github/scripts/check-type-safety-escapes.sh"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "baseline"
+  git -C "$REPO" push --quiet origin main
+
+  # The push under test: an extensionless bash-shebang script carrying a
+  # porcelain violation, committed on main and pushed. No feature branch.
+  printf '%s\n' "$FIXTURE_SHEBANG" > "$REPO/dispatch-thing"
+  printf '%s\n' 'set -euo pipefail' >> "$REPO/dispatch-thing"
+  printf '%s\n' "$PORC_ISSUE_VIEW" >> "$REPO/dispatch-thing"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "add extensionless script (the push)"
+  git -C "$REPO" push --quiet origin main
+  git -C "$REPO" fetch --quiet origin main
+  # This is the state actions/checkout leaves on a push to main.
+  git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+}
+
+#
+# SCOPE OF THIS CASE. It asserts that run-lint.sh's own GATE opens — that
+# RUN_PROSE fires and the prose stage is reached. It deliberately does NOT yet
+# assert that the violation is reported: lint-prose-rules.sh carries its OWN
+# `origin/main...HEAD` baseline, which is equally empty in this shape, so the
+# linter still runs vacuously once reached. Both layers have to be fixed for
+# the violation to surface, and the second is a separate commit; this case is
+# strengthened there.
+echo "Test 3: main-push shape reaches the prose stage"
+make_main_push_repo
+# The reproduction, stated as an assertion: the expression run-lint.sh used to
+# carry sees nothing at all in exactly this state.
+assert_eq "main-push: the old three-dot range was empty" "" \
+  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"
+run_sut
+assert_contains "main-push: reached prose stage" "=== Prose-rule lint ===" "$OUT"
+assert_contains "main-push: baseline came from first-parent" "source=first-parent" "$OUT"
+_t3_absent=absent
+[[ "$OUT" == *"No changed-file lint targets matched"* ]] && _t3_absent=present
+assert_eq "main-push: the vacuous-pass message is absent" "absent" "$_t3_absent"
+
 report_results

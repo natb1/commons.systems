@@ -28,6 +28,24 @@ dc_setup() {
   cp "$SCRIPT_DIR/list-go-modules.sh" "$TEST_TMP/"
   chmod +x "$TEST_TMP/detect-changes.sh" "$TEST_TMP/list-go-modules.sh"
 
+  # Stub resolve-diff-base.sh alongside the copied SUT. These cases exercise
+  # the CATEGORY regexes against a stubbed git, not baseline resolution, so the
+  # base is a fixed sentinel; resolve-diff-base.sh has its own suite
+  # (test-resolve-diff-base.sh) and the real-repo cases at the bottom of this
+  # file exercise the two wired together. $DC_BASE_RC lets a case make the
+  # helper fail, which must abort detect-changes.sh rather than yield "no
+  # categories".
+  export DC_BASE_RC=0
+  cat > "$TEST_TMP/resolve-diff-base.sh" <<BASEEOF
+#!/usr/bin/env bash
+if [ "\${DC_BASE_RC:-0}" -ne 0 ]; then
+  echo "resolve-diff-base: stubbed failure" >&2
+  exit "\$DC_BASE_RC"
+fi
+echo "0000000000000000000000000000000000000000"
+BASEEOF
+  chmod +x "$TEST_TMP/resolve-diff-base.sh"
+
   # Fake repo root whose go.mod files drive genuine module discovery.
   FAKE_REPO="$TEST_TMP/repo"
   mkdir -p "$FAKE_REPO/budget-etl" \
@@ -51,9 +69,12 @@ dc_setup() {
 
   # Stub git: diff cats the per-test changed-files list; show-toplevel echoes
   # the fake repo root (so list-go-modules.sh discovers the fake modules).
+  # A leading `-C <dir>` is skipped: detect-changes.sh now names the tree it
+  # diffs explicitly rather than relying on the process CWD.
   cat > "$STUB_BIN/git" <<GITEOF
 #!/usr/bin/env bash
 set -euo pipefail
+if [ "\${1:-}" = "-C" ]; then shift 2; fi
 cmd="\$1"; shift || true
 case "\$cmd" in
   diff)
@@ -150,6 +171,97 @@ assert_eq "detect-changes: empty diff leaves graph unset"      "false" "$(dc_run
 assert_eq "detect-changes: empty diff leaves go unset"         "false" "$(dc_run go)"
 dc_teardown
 
+# --- the helper's failure must abort, never yield "no categories" ---
+# Before, an unresolvable origin/main fell back to HEAD~1 and then to
+# CHANGED="" with only a ::warning:: — a green run that installed no tools and
+# skipped every gated job.
+dc_setup
+export DC_BASE_RC=4
+printf '%s\n' 'flake.nix' > "$DC_CHANGED"
+: > "$GITHUB_OUTPUT"
+set +e
+"$TEST_TMP/detect-changes.sh" >/dev/null 2>&1
+_rc=$?
+set -e
+[ "$_rc" -ne 0 ] && _v=nonzero || _v=zero
+assert_eq "detect-changes: a failed base resolution aborts" "nonzero" "$_v"
+assert_eq "detect-changes: no categories emitted on abort" "" "$(cat "$GITHUB_OUTPUT")"
+export DC_BASE_RC=0
+dc_teardown
+
 # <<< END MOVED <<<
+
+# ---------------------------------------------------------------------------
+# Real-repo cases: detect-changes.sh + the REAL resolve-diff-base.sh, against
+# hermetic git repos. The stubbed cases above cannot see baseline resolution at
+# all, and baseline resolution is where the defect lived.
+#
+# THE PUSH-TO-MAIN SHAPE. actions/checkout leaves refs/remotes/origin/main
+# pointing AT the pushed commit, so HEAD == origin/main and the
+# `origin/main...HEAD` range this script used to carry was empty. Every
+# category read false, and the 29 `steps.changes.outputs.*` gates across this
+# repo's workflows all skipped their jobs on every post-merge run.
+# ---------------------------------------------------------------------------
+DC_REAL_TMP=""
+dc_real_cleanup() { [ -n "${DC_REAL_TMP:-}" ] && rm -rf "$DC_REAL_TMP"; }
+trap dc_real_cleanup EXIT INT TERM
+DC_REAL_TMP=$(mktemp -d)
+
+# Build a repo whose tip commit adds flake.nix and firestore.rules, with
+# origin/main pointing at that same commit. Sets DC_REPO.
+DC_REPO=""
+dc_make_main_push_repo() {
+  DC_REPO=$(mktemp -d "$DC_REAL_TMP/repo.XXXXXX")
+  git -C "$DC_REPO" init -q -b main
+  git -C "$DC_REPO" config user.email "test@example.com"
+  git -C "$DC_REPO" config user.name "Test User"
+  printf 'baseline\n' > "$DC_REPO/README"
+  git -C "$DC_REPO" add README
+  git -C "$DC_REPO" commit -q -m "baseline"
+  printf '{ }\n' > "$DC_REPO/flake.nix"
+  printf 'service cloud.firestore { }\n' > "$DC_REPO/firestore.rules"
+  git -C "$DC_REPO" add -A
+  git -C "$DC_REPO" commit -q -m "the push"
+  git -C "$DC_REPO" update-ref refs/remotes/origin/main "$(git -C "$DC_REPO" rev-parse HEAD)"
+}
+
+# Run the REAL detect-changes.sh with CWD inside $DC_REPO. Sets DC_RC, DC_ERR
+# and writes categories to $DC_OUT_FILE.
+DC_RC=0
+DC_ERR=""
+DC_OUT_FILE=""
+dc_run_real() {
+  local prev
+  prev=$(pwd)
+  DC_OUT_FILE=$(mktemp "$DC_REAL_TMP/gh_output.XXXXXX")
+  cd "$DC_REPO"
+  set +e
+  DC_ERR=$(GITHUB_OUTPUT="$DC_OUT_FILE" "$SCRIPT_DIR/detect-changes.sh" 2>&1 >/dev/null)
+  DC_RC=$?
+  set -e
+  cd "$prev"
+}
+
+echo "Real-repo: main-push shape emits categories"
+dc_make_main_push_repo
+# The reproduction, stated as an assertion: the expression this script used to
+# carry sees nothing at all in exactly this state.
+assert_eq "main-push: the old three-dot range was empty" "" \
+  "$(git -C "$DC_REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"
+dc_run_real
+assert_eq "main-push: exit 0" "0" "$DC_RC"
+assert_contains_local "main-push: emits nix=true" "nix=true" "$(cat "$DC_OUT_FILE")"
+assert_contains_local "main-push: emits rules=true" "rules=true" "$(cat "$DC_OUT_FILE")"
+assert_contains_local "main-push: provenance names source=first-parent" \
+  "source=first-parent" "$DC_ERR"
+
+echo "Real-repo: an unresolvable origin/main is a named failure"
+dc_make_main_push_repo
+git -C "$DC_REPO" update-ref -d refs/remotes/origin/main
+dc_run_real
+[ "$DC_RC" -ne 0 ] && _v=nonzero || _v=zero
+assert_eq "no origin/main: exit non-zero" "nonzero" "$_v"
+assert_contains_local "no origin/main: names the unresolvable ref" "origin/main" "$DC_ERR"
+assert_eq "no origin/main: emitted no categories" "" "$(cat "$DC_OUT_FILE")"
 
 report_results
