@@ -66,6 +66,17 @@
 #                   question just as well after the tip has moved on. Failing it
 #                   would turn a benign push race into a red required context on
 #                   `main`, blocking merges repo-wide.
+#                     Every first-parent call site today is ALSO a
+#                   developer-invoked script (run-lint.sh, run-unit-tests.sh,
+#                   lint-prose-rules.sh, lint-ds-drift.sh, detect-changes.sh).
+#                   The strict-ancestor shape there usually just means a stale
+#                   local checkout, and used to be exit 5 — the developer's only
+#                   signal their tree was behind. Silently narrowing to HEAD^1
+#                   would destroy that signal, so this mode prints a same-shape
+#                   warning to stderr (not fatal) whenever HEAD != --remote-ref,
+#                   naming the narrowed range and telling the reader to fetch and
+#                   rebase if this is a local checkout. It is silent only in the
+#                   one case that needs to be: HEAD exactly at the remote tip.
 #
 # STDOUT CONTRACT
 #
@@ -95,7 +106,9 @@
 #      checkout is behind) and --at-remote-tip is `fail` (the default) — no
 #      defensible base exists for a caller that needs a branch delta.
 #      Unreachable under --at-remote-tip first-parent, which resolves this
-#      shape to HEAD^1.
+#      shape to HEAD^1 instead — but still prints a non-fatal stderr warning
+#      naming the narrowed range, since this is the one signal a developer on a
+#      stale local checkout gets that their tree is behind.
 #   6  no merge base between --remote-ref and --head (unrelated histories, or a
 #      shallow clone whose grafted history does not reach the fork point)
 #   7  --head does not resolve to a commit
@@ -299,6 +312,21 @@ if [ "$BASE" = "$HEAD_SHA" ]; then
     die 9 "ERROR: --at-remote-tip first-parent was requested but HEAD ($HEAD_SHA)" \
           "is a root commit with no first parent, so 'what this push introduced'" \
           "is undefined."
+  fi
+  # first-parent mode deliberately absorbs a state `fail` mode treats as
+  # exit 5: HEAD is a STRICT ancestor of --remote-ref, not just equal to it.
+  # In CI that is the benign push race the mode exists for (a second push
+  # landing on `main` while an earlier run is still in flight), and HEAD^1
+  # answers "what did this commit introduce" correctly either way. But every
+  # first-parent call site is ALSO a developer-invoked script, and on a
+  # developer's checkout the old exit 5 was the only signal that their tree
+  # was behind — silently narrowing to one commit here would destroy that
+  # signal without telling anyone. So warn (non-fatal) whenever HEAD is
+  # strictly behind the remote ref; stay silent when HEAD is exactly at the
+  # tip, which is the ordinary, expected post-merge push.
+  if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
+    printf '%s: WARNING: HEAD (%s) is behind %s (%s).\n%s: Diffing only HEAD^1..HEAD — what this commit introduced — not the full range since %s.\n%s: If this is a local checkout, it is stale: fetch and rebase. This check is examining far less than the reader expects.\n' \
+      "$SELF" "$HEAD_SHA" "$REMOTE_REF" "$REMOTE_SHA" "$SELF" "$REMOTE_REF" "$SELF" >&2
   fi
   BASE="$PARENT"
   SOURCE="first-parent"

@@ -118,6 +118,24 @@ run_sut_in() {
 
 rc_of() { if [ "$1" -eq "$2" ]; then echo "yes"; else echo "no (rc=$1)"; fi; }
 
+# Local, matching assert_contains's own [[ == * ]] form (test-helpers.sh) rather
+# than an `echo | grep` pipe: this suite's haystacks are single ERR captures,
+# but a subprocess pipe under `set -o pipefail` is the same SIGPIPE trap that
+# comment warns about, so there is no reason to reintroduce it here.
+assert_not_contains() {  # <label> <needle> <haystack>
+  local label="$1" needle="$2" haystack="$3"
+  TOTAL=$((TOTAL + 1))
+  if [[ "$haystack" == *"$needle"* ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label"
+    echo "    expected NOT to contain: $needle"
+    echo "    actual: $haystack"
+  else
+    PASS=$((PASS + 1))
+    echo "  PASS: $label"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Test 1: the ordinary branch case resolves to the merge base.
 # ---------------------------------------------------------------------------
@@ -152,6 +170,10 @@ assert_eq "at-tip/first-parent: the resulting range names the pushed file" \
 # ... whereas the expression this helper replaces sees nothing at all.
 OLD_DELTA=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')  # diff-base-ok: the reproduction: asserts the old vacuous range sees nothing
 assert_eq "at-tip/first-parent: the old three-dot range was empty" "" "$OLD_DELTA"
+# HEAD is exactly the remote tip — the ordinary, expected post-merge push —
+# so the stale-checkout warning must stay silent here.
+assert_not_contains "at-tip/first-parent: no stale-checkout warning at the tip" \
+  "WARNING" "$ERR"
 
 # ---------------------------------------------------------------------------
 # Test 3: exit 8 — at the remote tip under the default `fail` mode.
@@ -206,6 +228,17 @@ assert_contains "behind/first-parent: provenance names source=first-parent" \
 BEHIND_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
 assert_eq "behind/first-parent: the resulting range names the file this commit added" \
   "mine.txt" "$BEHIND_DELTA"
+# The fallback is loud, not silent: HEAD is strictly behind $REMOTE_REF, so a
+# developer running this locally (every first-parent call site is ALSO a
+# developer-invoked script) still gets told the checkout is stale, even though
+# the exit code is 0.
+assert_contains "behind/first-parent: warns the checkout is behind" \
+  "WARNING" "$ERR"
+assert_contains "behind/first-parent: warning names HEAD" "$MINE_SHA" "$ERR"
+assert_contains "behind/first-parent: warning names the remote ref" \
+  "origin/main" "$ERR"
+assert_contains "behind/first-parent: warning tells the reader to fetch/rebase" \
+  "fetch and rebase" "$ERR"
 # ... and the default mode is untouched by that: still exit 5.
 run_sut --repo-root "$REPO"
 assert_eq "behind-nonroot/default: exit 5" "yes" "$(rc_of "$RC" 5)"
