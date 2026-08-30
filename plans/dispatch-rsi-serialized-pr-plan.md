@@ -464,18 +464,33 @@ Genuinely absent, confirmed by zero matches in the instrument:
 - `review_effort` / `effort_yield` → `tactic-audit-review-effort-yield-lens` is real work.
 - `rsi_lane` → `tactic-rsi-lane-token-attribution` is real work.
 
-**Close the four as Bundle 4's first unit, before any implementation.** For each,
-read the node's success criteria against the cited anchor, then close with
-`phase: done` and `execution.completion` set to the commit that actually shipped
-it — recoverable with `git log -S` on the lens key rather than guessed.
+> **⛔ DO NOT CLOSE THE FOUR AS A FIRST UNIT.** *(Struck 2026-08-30.* This
+> paragraph used to read "Close the four as Bundle 4's first unit, before any
+> implementation. For each, read the node's success criteria against the cited
+> anchor, then close with `phase: done` and `execution.completion` set to the
+> commit that actually shipped it."*)* Two of the four are **not** close-only:
+> `tactic-audit-cache-efficiency-lens` (`office_hours: null`, `phase: implement`,
+> `status: codified`, units at `:177` and `:254`) and
+> `tactic-rsi-round-trips-lens-carrier` (`office_hours: null`, `phase: implement`,
+> `status: codified`, units at `:160` and `:252`) each carry a full two-unit
+> plan. Closing them to `phase: done` discards planned, selectable work. The
+> other two — `tactic-audit-instrument-scoping` and
+> `tactic-audit-permission-friction` — are `office_hours`-parked and are not
+> executor-dischargeable without clearing the park.
+>
+> Read each node's units *and* success criteria first. Close only the nodes that
+> genuinely have no unit left to build; build the rest. See PR3 Unit 1 in Scope.
 
 Two residuals to **check rather than assume**, because they are the plausible
 reason these nodes were never closed:
 
 - `tactic-audit-permission-friction` has a `/fewer-permission-prompts` closing
   step that may be genuinely outstanding even though the lens ships.
-- Whether every fleet-denominator lens carries the `fleet-only` tag; the
-  vocabulary exists at `aggregate-usage.sh:1164,1463`.
+- **⛔ Struck 2026-08-30 — do not ratify the `fleet-only` tag.** This bullet used
+  to read "Whether every fleet-denominator lens carries the `fleet-only` tag; the
+  vocabulary exists at `aggregate-usage.sh:1164,1463`." Ratifying the binary tag
+  is the exact move PR3 Unit 1 and PR11's Reuse both strike. Record the scoping
+  question as answered by the sibling node and move on.
 
 **The root cause is in scope.** These nodes stayed open because the ledger read
 path cannot see the write path — recorded as
@@ -1268,8 +1283,19 @@ of re-polling for the full CI-wait window.
 > **In-flight overhang.** Planned, no PR:
 > **`tactic-review-lows-automation`** — the 2026-07-05 review lows on the live
 > surface (CI-wrapper false-green patterns, hook edge defects, `fetch-*`
-> error-helper dedup), touching `aggregate-usage.sh`, `dispatch-reclaim-audit`
-> and `lib.sh`. See §"In-flight work outside this plan".
+> error-helper dedup). See §"In-flight work outside this plan".
+>
+> **⚠ Corrected 2026-08-30 — the named surface was wrong.** This banner used to
+> end "touching `aggregate-usage.sh`, `dispatch-reclaim-audit` and `lib.sh`".
+> Its three units touch **none** of those:
+> `intentions/tactic-review-lows-automation.md` (`office_hours: null`,
+> `phase: implement`, `status: codified`) scopes Unit 1 to `run-lint.sh` and
+> `run-typecheck.sh`, Unit 2 to `statusline.sh` and `worktree-remove.sh`, and
+> Unit 3 to `fetch-psi.sh` and `fetch-analytics.sh`. `aggregate-usage.sh`,
+> `dispatch-reclaim-audit` and `lib.sh` appear only under the node's
+> ***"Dispositions of the findings left out of this node's plan"***. The fold is
+> a **disjoint** surface from the rest of this PR — see the matching callout in
+> `### Nodes closed (10)` and Unit 8 in Scope.
 
 **Recommended model: sonnet** — mostly additive jq lenses in one script, with
 one `find` predicate fix. Escalate to opus only if Unit 1 finds the scoping
@@ -1284,7 +1310,9 @@ instrument is blind to the very workers it is meant to measure.
 
 ### Nodes closed (10)
 
-*Verify-and-close (likely no diff):*
+*Residual verification — ⚠ NOT close-only. Two of these four are `phase:
+implement`, `status: codified` and carry full two-unit plans; see Unit 1 in
+Scope before closing anything:*
 - `tactic-audit-instrument-scoping`
 - `tactic-audit-permission-friction`
 - `tactic-audit-cache-efficiency-lens`
@@ -1342,10 +1370,19 @@ that exists. `audit-instrument-scoping` asks for fleet-denominator lenses tagged
 > **⛔ Do NOT ratify the `fleet-only` tag across every fleet-denominator lens.**
 > *(Struck 2026-08-30.* This paragraph used to end "the vocabulary appears at
 > `:1164` and `:1463` — confirm every fleet-denominator lens carries it".*)*
-> That is the exact tag `tactic-rsi-round-trips-lens-carrier` **ruled wrong**:
-> the binary `any-scope`/`fleet-only` vocabulary cannot hold, because four ruled
-> lenses are `[node]`-only and fit neither term. That node rules a **new
-> `scope: [node, fleet]` list** instead. Ratifying the binary tag here would
+> That is the exact tag `tactic-rsi-lens-catalog-decomposition` **rules
+> insufficient** (`:159-161`): the binary `any-scope`/`fleet-only` vocabulary
+> cannot hold, because four ruled lenses are `[node]`-only and are exactly the
+> ones ***"the binary vocabulary had no word for"***. That node rules the **new
+> `scope: [node, fleet]` list** in its place.
+>
+> *(Citation corrected 2026-08-30. This paragraph used to attribute both the
+> ruling and the new list to `tactic-rsi-round-trips-lens-carrier`. It rules
+> neither: that node keeps the binary vocabulary and refines it — its Unit 1 at
+> `:160` re-tags a lens **`any-scope`**, its Reuse at `:325` says ***"do not
+> invent a new tag vocabulary"***, and `:310` puts the bracket-tag column out of
+> scope. The list is `tactic-rsi-lens-catalog-decomposition`'s, which is PR11's
+> own node.)* Ratifying the binary tag here would
 > canonize a vocabulary PR10 then has to unpick — see PR10's Reuse note. Record
 > the scoping question as answered by the sibling node and move on.
 
@@ -1423,17 +1460,38 @@ sidecar leaves both numerator and denominator, and the monitor reports
 `eligible:0 / rate:null` — indistinguishable from "no workers scanned" —
 exactly when the stamping it monitors has failed.
 
-> **⛔ Do NOT apply the pre-filter denominator remedy. The node PARKS it.**
-> *(Struck 2026-08-30.* This unit used to mandate "Compute the sidecar
-> denominator over the **pre-filter** candidate set."*)*
+> **⛔ Do NOT apply the pre-filter denominator remedy — but the node is NOT
+> parked, and this unit IS built.** *(Corrected 2026-08-30; the earlier
+> 2026-08-30 pass itself got this wrong and said "The node PARKS it … Ship PR3
+> without this unit and leave the node parked", tagged "Model: n/a — parked, not
+> implemented in this PR". Both halves are false.)*
 > `intentions/tactic-eval-finding-sidecar-monitor-post-filter-self-conceals.md`
-> rules that this remedy needs an author ruling and **must park**, and says
-> ***"Do not change"*** those two fields. The diagnosis above is correct and
-> stands; the remedy is not the executor's to pick. Ship PR3 without this unit
-> and leave the node parked, or route it to office hours — do not implement it
-> from this section.
+> is `status: codified` (`:11`), `phase: implement` (`:27`),
+> **`office_hours: null`** (`:31`) — unparked and selectable — and carries a full
+> three-unit plan (`:223`, `:301`, `:362`, plus Reuse at `:396` and Verification
+> at `:445`).
+>
+> What the node rules out is the **pre-filter remedy specifically**: at `--node`
+> scope it would report a window-wide population as the denominator of a
+> node-scoped field, which "silently changes what a documented field means and
+> would need an author ruling" (`:169-170`). The "must park" clause at `:176-178`
+> is conditional and prospective — *"A **future round** that instead redefines
+> the node-scope denominator owes an author ruling and must park for it"* — and
+> does not describe this node.
+>
+> **Build the node's ruled shape instead.** It is deliberately additive precisely
+> so that no ruling is owed: emit a distinguishable count of candidates dropped
+> for want of a stamp, plus a `sidecar_coverage_measurable` flag, leaving
+> `sidecar_eligible` / `sidecar_present` / `sidecar_present_rate` untouched at
+> `:1346-1354` (that is the node's own Unit 1 item 5 at `:255` — a guard inside
+> the work, not a reason to skip it). Read the node's three units before
+> planning.
+>
+> **Closed-list consequence.** This node sits in `### Nodes closed (10)` above.
+> Apply the same rule stated there for Unit 8: if the three units are not built,
+> **remove the id from the closed list** rather than closing it undone.
 
-*Model: n/a — parked, not implemented in this PR*
+*Model: sonnet* — additive jq fields plus regression tests, per the node's ruled shape
 
 **Unit 6 — ladder workers born unstamped.** Detached ladder phase workers get no
 `.dispatch-stamp.json`, so `--node` scans zero files.
@@ -1552,7 +1610,16 @@ turn appears, not just its subagents.
 # PR4 — Finding write surface: retire the ledger primitive
 
 **Recommended model: opus** — a doctrine change with a 40-node data migration
-and five writers collapsing into one.
+and the private finding-writers collapsing into one write surface.
+
+> **⚠ "Five writers" is struck (2026-08-30).** This line used to end "and five
+> writers collapsing into one".
+> `intentions/tactic-finding-search-all-producers.md:377-380` records that census
+> as measured wrong — the real figures are **16 CREATE sites / 47 write calls /
+> 27 callers** — and says in terms: ***"The census's 'five writers' was wrong
+> about both."*** Enumerate the CREATE sites from the node's measured census
+> before scoping the collapse; a five-writer scope silently leaves eleven
+> producers minting outside the surface. See PR4 Unit 1 in Scope.
 
 ### Context
 
@@ -2462,8 +2529,19 @@ PR1. Independent of PR2–PR6.
 
 ### Reuse
 
-- `.claude/skills/review-fix/SKILL.md` already carries the args block — Unit 1
-  makes it authoritative rather than writing a new one.
+- **⛔ Do NOT "make the existing args block authoritative".** *(Corrected
+  2026-08-30.* This bullet used to read: "`.claude/skills/review-fix/SKILL.md`
+  already carries the args block — Unit 1 makes it authoritative rather than
+  writing a new one."*)* The node rules that approach **"prose discipline with no
+  gate"** and calls a bare "authoritative" sentence **"a lie the moment it
+  landed"** — the block enshrines three phantom fields that are not in the
+  script. See Unit 1 in Scope and
+  `intentions/tactic-eval-finding-review-fix-workflow-args-rederived-each-pass.md`
+  (`:33-40`, `:206-208`).
+- `.claude/workflows/review-fix.js`'s entry point — the node's ruled primary is an
+  entry-time args validation that fails loudly on a missing/unknown field. The
+  SKILL.md block is the cheap complement that follows the gate, reconciled against
+  the script's real 20 fields, never the whole fix.
 
 ### Verification
 
@@ -3027,10 +3105,16 @@ do not exist.
   bullet used to read: "The scope vocabulary already exists in the instrument
   (`any-scope` / `fleet-only`, `aggregate-usage.sh:1164`, `:1463`) — the
   catalog's `scope tag` should use that vocabulary, not a new one."*)*
-  `tactic-rsi-round-trips-lens-carrier` rules a **new `scope: [node, fleet]`
-  list** and explains why the binary tag cannot hold: four ruled lenses are
-  `[node]`-only and fit neither `any-scope` nor `fleet-only`. The catalog takes
-  the list form. See also PR3 Unit 1, where ratifying the binary tag is struck.
+  `tactic-rsi-lens-catalog-decomposition` — **this PR's own node** — rules the
+  **new `scope: [node, fleet]` list** at `:159-161` and explains why the binary
+  tag cannot hold: four ruled lenses are `[node]`-only, fit neither `any-scope`
+  nor `fleet-only`, and are exactly the ones ***"the binary vocabulary had no
+  word for"***. The catalog takes the list form. See also PR3 Unit 1, where
+  ratifying the binary tag is struck.
+  *(Citation corrected 2026-08-30: this bullet used to attribute the ruling to
+  `tactic-rsi-round-trips-lens-carrier`. That node rules the opposite — it keeps
+  the binary vocabulary and refines it, saying at `:325` ***"do not invent a new
+  tag vocabulary"*** and putting the bracket-tag column out of scope at `:310`.)*
 
 ### Verification
 
@@ -3060,8 +3144,19 @@ implementation. See Scope.)*
 > **In-flight overhang.** Open draft: **#2993**
 > (`tactic-qa-main-park-base-cas`) — `.claude/hooks/dispatch-stop.sh` is named
 > verbatim in this PR's Scope. Planned, no PR: **`tactic-dispatch-stop-backstop-comment`**
-> (parked; one stale comment at `dispatch-stop.sh:62-63`, now that `graph-commit`
-> is far-ahead-safe). Fold both — see §"In-flight work outside this plan".
+> (parked). Fold both — see §"In-flight work outside this plan".
+>
+> **⚠ Corrected 2026-08-30 — the comment this banner sends you to fix does not
+> exist.** It used to read "one stale comment at `dispatch-stop.sh:62-63`, now
+> that `graph-commit` is far-ahead-safe".
+> `intentions/tactic-dispatch-stop-backstop-comment.md`'s park records that the
+> comment ***"was already deleted by commit `c06c7295` … nothing remains to
+> reword"***. Verified again 2026-08-30: `.claude/hooks/dispatch-stop.sh:62-63`
+> carries no such comment — the only surviving mentions are the header note at
+> `:17` narrating the removal and the back-reference at `:90`. Following the old
+> instruction means **inventing a comment in order to fix it**. Close the node as
+> a completion record against `c06c7295` and clear its park; there is no code
+> change. See the matching callout in `### Nodes closed (2)`.
 
 **Recommended model: opus** — extracting a shared core from four lanes.
 
@@ -4363,9 +4458,20 @@ Unit 1 overlaps PR5's reconciler surface only conceptually, not in code.
 
 ### Reuse
 
-- `listUnclaimedHoldAlerts`'s existing `topK` option
+- **⛔ Do NOT reuse `topK` as a row cap.** *(Corrected 2026-08-30.* This bullet
+  used to read: "`listUnclaimedHoldAlerts`'s existing `topK` option
   (`src/hold-alerts.ts:91`) — Unit 4 makes it binding rather than adding a
-  parameter.
+  parameter."*)* `topK` is a **rank cutoff on the source pool**, not an advisory
+  row cap; the emitted `alerts` array has no `slice`, no counter and no cap, so
+  there is nothing to "make binding". A library-level cap would sit **before**
+  `dispatch-fleet-watch`'s claimed-row filter and could yield a false all-clear
+  that fires `--resolve --kind unclaimed-hold` and closes a live alarm node. See
+  Unit 4 in Scope, and `intentions/tactic-hold-alerts-uncapped-alert-rows.md`
+  (`:259-262` out-of-scope, `:448-451` rationale). The bound Unit 4 builds is
+  `DISPATCH_FLEET_WATCH_HOLD_MAX_PROBES`, in the watcher.
+- `.claude/skills/dispatch-propagate/scripts/dispatch-fleet-watch` predicate 5's
+  existing per-pass probe loop — Unit 4 budgets it rather than adding a second
+  pass.
 - The tick alarm/health signal PR2 touches — Unit 1 emits into it.
 
 ### Verification

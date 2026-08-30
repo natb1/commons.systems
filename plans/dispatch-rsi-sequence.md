@@ -425,9 +425,19 @@ every tick, and PR5's base-pin unit prevents a concurrently landed write being
 clobbered — a live risk precisely because `main` is still moving under the
 window. PR5 reads as pure efficiency work for a paused system and is not.
 
-PR5 absorbs #3002 and the already-landed half of #3064. Its conflict-lane unit
-must be coordinated with #3018's conflict-lane work, now in PR8 — **one policy,
-not two**.
+PR5 absorbs #3002 and the already-landed half of #3064.
+
+> **⛔ PR5 has NO conflict-lane unit; there is nothing to coordinate.**
+> *(Struck 2026-08-30.* This paragraph used to end "Its conflict-lane unit must
+> be coordinated with #3018's conflict-lane work, now in PR8 — one policy, not
+> two."*)* The unit it presupposes was **deleted** — see the serialized plan,
+> PR5 Scope, where it is struck outright.
+> `intentions/tactic-review-stall-conflict-lane.md` is `status: raw`,
+> `phase: null` and **`office_hours`-parked on a dead premise**: *"the recorded
+> defect no longer exists, and the fix actually shipped went the opposite way"* —
+> the sweep's `conflict` arm was retired to a bare `continue` in `fa9c4338`, and
+> three sibling PR5 nodes build on that retirement, so re-adding the lane breaks
+> them. **PR8 owns the single conflict policy.**
 
 ### Position 5 · Bundle 4 — PR3 + PR4, instrument and finding surface
 
@@ -448,13 +458,24 @@ both depend on it.
 > citing the decisions.
 
 **PR4** retires the ledger primitive: a doctrine change with a 40-node data
-migration and five writers collapsing into one write surface. That surface is
-what PR19 writes supersession edges through, which is the hard edge into
-position 6. **PR3** repairs the audit instrument's residual lenses and
-measurement blind spots — and most of it may be a bookkeeping pass rather than
-an implementation, because the graph says four of its nodes are open and the
-code says otherwise. **Verify every "missing" claim before implementing**; see
-the plan's section of that name.
+migration and the private finding-writers collapsing into one write surface
+(**not "five"** — `intentions/tactic-finding-search-all-producers.md:377-380`
+measures **16 CREATE sites / 47 write calls / 27 callers** and rules the
+five-writer census wrong; struck 2026-08-30, see the plan's PR4 section).
+That surface is what PR19 writes supersession edges through, which is the hard
+edge into position 6. **PR3** repairs the audit instrument's residual lenses and
+measurement blind spots. **Verify every "missing" claim before implementing**;
+see the plan's section of that name.
+
+> **⚠ Not a bookkeeping pass (restamped 2026-08-30).** This paragraph used to
+> add "most of it may be a bookkeeping pass rather than an implementation,
+> because the graph says four of its nodes are open and the code says otherwise".
+> Two of those four are genuinely open with work left:
+> `tactic-audit-cache-efficiency-lens` and `tactic-rsi-round-trips-lens-carrier`
+> are each `office_hours: null`, `phase: implement`, `status: codified`, carrying
+> **full two-unit plans**. The other two are `office_hours`-parked. Closing any
+> of the four on the strength of the code check discards planned work — see the
+> plan's PR3 Unit 1 and its ⛔ callout in §"Read this before planning any of it".
 
 The baselines this position was expected to unblock were **already taken on
 2026-08-29** — see §"Three measurement runs". PR3 turned out not to gate them:
@@ -498,7 +519,8 @@ edges are written *by* that write surface.
 > ```
 >
 > Why split rather than merge: merging PR4 and PR19 produces a 19-node change
-> spanning the ledger doctrine migration, the five-writer collapse and the schema
+> spanning the ledger doctrine migration, the finding-writer collapse (the
+> "five-writer" count is struck — see above) and the schema
 > terminal — three independently reviewable surfaces — and PR19's Unit 1 has no
 > dependency on either. The split runs along an existing seam; the merge does
 > not. The rejected alternative was a single PR4+PR19 with the internal order
