@@ -98,22 +98,32 @@
 > packages/intentionsutil/scripts/graph-commit \
 >     -C <repo root> \
 >     --base   <tmp>/base-manifest.txt \
->     --expect tactic-serves-inheritance-full-strip=$(git -C <repo root> hash-object \
+>     --expect tactic-serves-inheritance-full-strip=$(git hash-object \
 >              -- intentions/tactic-serves-inheritance-full-strip.md) \
 >     tactic-serves-inheritance-full-strip
 > ```
 >
 > (`npx tsx` is required for the two `.ts` scripts: neither carries a shebang and
-> both are mode `0644`, so a bare `dump-node.ts` is `command not found`. The
-> `git -C <repo root>` on the `--expect` substitution is not decoration: the
-> shell expands it in *its own cwd*, so without `-C` a run from anywhere but the
-> target checkout hashes the wrong file and `graph-commit` dies accusing you of
-> editing a different checkout.)
+> both are mode `0644`, so a bare `dump-node.ts` is `command not found`. The cwd
+> mandate above is what makes the `--expect` substitution correct: the shell
+> expands `git hash-object` in *its own* cwd, so run from anywhere but the target
+> checkout it hashes the wrong file and `graph-commit` dies with *"the edit was
+> made in a DIFFERENT checkout"*. Do **not** repair that by writing
+> `git -C <repo root> hash-object`: an agent-typed `git -C` is refused outright
+> in a worktree-isolated session, and refused again as an unverifiable compound
+> once it sits inside `$( )`, by a Claude Code built-in that fires *before* the
+> `permissions.allow` match this block relies on — see `.claude/rules/sandbox.md`,
+> "`git -C /path` is auto-approved for worktrees", which names bare
+> `git hash-object` as the spelling that works. Fix the cwd, not the command.)
 >
 > **Three of those flags guard a SILENT failure — a run that exits 0 having done
-> nothing or the wrong thing: `-C`, `--base` and `--expect`.** The rest
-> (`--dir`, `--out-dir`, `--file`) are required arguments that fail loudly with a
-> usage error and exit 1, so they need no defending here. The three silent ones'
+> nothing or the wrong thing: `-C`, `--base` and `--expect`.** `--dir` and
+> `--out-dir` are required arguments that fail loudly with a usage error and exit
+> 1 (`dump-node.ts:249-259`, `write-node.ts:56-64`), so they need no defending
+> here. `--file` is **not** in that class: it is optional, and omitting it falls
+> back to `readFileSync("/dev/stdin")` (`write-node.ts:73-83`) — the run blocks on
+> stdin until the tool times out, or, at EOF, dies on an uncaught `JSON.parse`
+> syntax error. Never a usage error. Pass it. The three silent ones'
 > individual rationales live in the scripts' own headers (`dump-node.ts:1-7`,
 > `graph-commit:36-40`, `:60-70`, `:430`, `:767-771`) and are deliberately NOT
 > restated here; this passage was rewritten eight times
