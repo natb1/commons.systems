@@ -1183,36 +1183,31 @@ node count** — and check first whether the work can collapse into one direct
 `graph-commit` instead of N wrapper calls. Do not promise a speedup from
 parallelism on graph landings; there is none.
 
-### Trust a measurement that shows its work
+### Measurement trust and constraint provenance — see the rule, not this file
 
-A figure that arrives with the exact command that produced it *and* that
-command's real output is trusted, and is not re-measured. Re-measure only when:
-the claim is asserted without its command; it is a `path:line` anchor (line
-numbers drift — conclusions do not); something contradicts it; or acting on it
-wrongly would be expensive or irreversible.
+Both conventions were promoted out of this document on 2026-08-30. Their single
+canonical home is `.claude/rules/measurement-and-provenance.md`, which every
+session in this repo loads as a project instruction; this document is read only
+by a batch executor, and the two rules bind everyone. **Do not restate them
+here** — a second copy drifts from the first, and the copy a reader trusts is
+whichever they happened to open.
 
-A **predicted** figure is not a measurement. Pre-staged kits in this batch
-carried predictions that measurement refuted more than once — a "26 → 27 files"
-prediction measured 28, and a ruling premise of "41 of 124" measured 13. Kits
-are drafts; `origin/main` is the fact.
+What stays here is the batch evidence that paid for them, because it is specific
+to this window and belongs with the rest of its record:
 
-### Record SOURCE and SCOPE with every carried constraint
-
-A prohibition carried forward without both loses, at the next compaction, the
-context that made it sensible, and becomes indistinguishable from a standing
-author rule. Source is one of: author instruction, project rule, my own subagent
-prompt, or inference. Scope is one of: this subagent, this worktree, this
-session, global.
-
-This is not hypothetical. Unit 7 was nearly blocked outright by "never execute
-`mint-mainqa-nodes`", carried in a standing constraints list. It came from a
-read-only prep **subagent prompt written by the executor**, whose same block
-also forbade `graph-commit`, `write-node.ts`, `clear-park`, `park-node`,
-`transition-node` and `git push` — every one of which the executor had been
-running all session under the authority granted above. The tell is exactly that
-asymmetry: a prohibition naming one script while the same list forbids sibling
-tools you are demonstrably using under authority was scoped to a different
-actor. Check provenance before obeying or overriding; it is cheap and decisive.
+- **Predictions refuted by measurement, twice.** A pre-staged Unit 7 kit
+  predicted a "26 → 27 files" migration; measurement returned 28. A ruling
+  premise of "41 of 124" measured 13. Every pre-stage report in
+  `/tmp/claude-1000/` is a draft in exactly this sense — useful for finding the
+  work, never authoritative about its size. `origin/main` is the fact.
+- **A carried constraint that was scoped to the wrong actor.** Unit 7 was nearly
+  blocked outright by *"never execute `mint-mainqa-nodes`"*, which had reached
+  the standing constraints list in `plans/dispatch-rsi-batch-steering.md` from a
+  read-only prep **subagent prompt the executor wrote itself**. That prompt's
+  same block also forbade `graph-commit`, `write-node.ts`, `clear-park`,
+  `park-node`, `transition-node` and `git push` — every one of which the
+  executor had been running all session under the authority granted above. The
+  bullet is struck in place there, with its provenance, rather than deleted.
 
 ### Scratch files are not a record
 
@@ -1223,14 +1218,20 @@ repository. During a landing sequence, prefer memory first and migrate here
 afterwards — an uncommitted file under `plans/` trips `graph-commit`'s
 `assert_clean_outside_ids` and blocks the next landing.
 
-### `node --import tsx/esm`, not `npx tsx`
+### `node --import tsx/esm`, not `npx tsx` — see `.claude/rules/sandbox.md`
 
-`npx tsx` fails under this sandbox with `listen EPERM … /tmp/claude-1000/tsx-*/N.pipe`,
-thrown by the tsx CLI wrapper before it parses arguments. `node --import tsx/esm
-<script>` runs the same script sandboxed, which removes both the
-`dangerouslyDisableSandbox` requirement and the permission-classifier round
-trip. Verified repeatedly across this batch on `write-node.ts`,
-`validate-graph.ts` and `dump-node.ts`.
+Promoted out of this document on 2026-08-30, for the same reason as the two
+conventions above: it binds every session, not just a batch executor. The
+canonical home is the `npx tsx` section of `.claude/rules/sandbox.md`, which
+carries the measurement both ways. **Do not restate it here.**
+
+The batch-specific part that stays: the tool headers were themselves teaching
+the broken spelling, so every clean session walked into it. `write-node.ts`,
+`dump-node.ts` and `validate-graph.ts` were corrected in the same PR;
+`read-sensors.ts` already used the working spelling in its header. No corpus
+sweep was done — node bodies remain mixed between the two — so when a
+verification fence goes red on `listen EPERM`, that is this, and the fix is the
+fence's spelling rather than the script.
 
 ---
 

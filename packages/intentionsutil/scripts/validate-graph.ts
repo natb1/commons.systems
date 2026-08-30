@@ -37,7 +37,19 @@
 // prose-dangling reference is a violation to fix, not a baseline entry to add.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/validate-graph.ts <intentionsDir> [--strict-sensors]
+//   node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts <intentionsDir> [--strict-sensors]
+//
+// Spell it `node --import tsx/esm`, NOT `npx tsx`. The tsx CLI wrapper opens an
+// IPC socket at startup, which the sandbox denies — `listen EPERM: operation
+// not permitted /tmp/.../N.pipe`, thrown in `createIpcServer` before the
+// wrapper parses its arguments, so it fails whatever script you point it at.
+// `node --import tsx/esm` loads the same loader in-process, opens no socket,
+// and runs sandboxed and unsandboxed alike (.claude/rules/sandbox.md,
+// "npx tsx").
+//
+// <intentionsDir> is a POSITIONAL argument, not a flag — there is no `--dir`
+// here. Omitting it exits 2 with
+// `validate-graph: <intentionsDir> is required and has no default`.
 //
 // `--strict-sensors` makes pass 3 (sensor registration) fatal instead of a
 // stderr warning. It must be set ONLY on the post-merge push to `main`
