@@ -212,10 +212,13 @@
 #      on main carrying the concurrent edit
 #  52. far-ahead, NO --base, LIST-ENTRY REMOVAL racing a concurrent edit: this
 #      writer clears one `blocked_by` entry while another writer lands an
-#      unrelated field edit to the same node. The replay's merge unions list
-#      fields base-free and would silently restore the removed entry, so the
-#      guard refuses instead — exit 1, park naming the dropped entry, the entry
-#      still present on main, and HEAD restored to the PR tip
+#      unrelated field edit to the same node. `threeWayList` is base-aware and
+#      honors the removal, so the replay's merge resolves and this LANDS —
+#      exit 0, no office_hours on the landed node, the concurrent edit
+#      preserved, the PR's code commit still excluded, HEAD restored to the PR
+#      tip. Which entries survive is asserted against the real merge by
+#      test/node-merge.test.ts and test/merge-node-cli.test.ts, not here: the
+#      harness shim discards YAML list-item lines
 #
 # Cases 53-57 are the SIGKILL cases (tactic-graph-commit-landing-signal-
 # unreliable). A SIGKILL fires no trap, so cleanup() never runs and no
@@ -2685,13 +2688,40 @@ else
 fi
 
 # --- Case 52: far-ahead list-entry removal racing a concurrent edit ----------
-# The interim list-removal guard in replay_snapshot_onto_base. This writer clears
-# one satisfied `blocked_by` entry (the routine drain operation) from a far-ahead
-# PR worktree; another writer lands an unrelated field edit to the same node
-# first, so the replay takes its MERGE branch. The merge unions list fields
-# base-free — it would restore the cleared entry and report a clean auto-resolve
-# — so the guard parks instead. Asserted on the landed node rather than on the
-# npx shim's behavior: the guard runs before merge-node.ts is ever invoked.
+# This writer clears one satisfied `blocked_by` entry (the routine drain
+# operation) from a far-ahead PR worktree; another writer lands an unrelated
+# field edit to the same node first, so the replay takes its MERGE branch.
+#
+# Until tactic-node-merge-list-removal-loss landed, mergeIntentionNodes merged
+# list fields with a BASE-FREE union that would have restored the cleared entry
+# while reporting a clean auto-resolve, so replay_snapshot_onto_base carried an
+# interim guard that PARKED this shape rather than hand the removal to that
+# merge. `threeWayList` (packages/intentionsutil/src/node-merge.ts) is now
+# base-aware and drops an entry present in base and theirs but absent from
+# ours, so the guard was deleted and this shape must LAND.
+#
+# WHAT THIS CASE ASSERTS, AND WHAT IT DELIBERATELY DOES NOT. It asserts the
+# graph-commit-level ROUTING property that replaced the guard: a far-ahead
+# replay whose snapshot drops a frontmatter list entry now reaches the
+# field-level merge and lands — exit 0, no office_hours and no park text on the
+# landed node, the concurrent writer's edit preserved, the PR's non-intentions
+# commit still absent from main, and HEAD restored to the PR tip.
+#
+# It does NOT assert which list entries survive the merge. The harness's
+# merge-node.ts shim merges bare `key: value` lines and discards every YAML
+# list-ITEM line on all three sides, so it emits NEITHER the removed entry nor
+# the one that must survive: `! grep t-satisfied-blocker` would pass vacuously
+# here and `grep t-other-blocker` — the control that would make it non-vacuous
+# — would fail against the shim, not against the product. That is the same
+# reason cases 49-51 give for not testing a concurrent prune at this layer.
+# The removal-is-honored property is asserted against the REAL code, at the two
+# layers that can run it:
+#   - packages/intentionsutil/test/node-merge.test.ts (i)/(j)/(p)/(q) — the
+#     primitive, including the survivor: base [x,y], ours [y], theirs [x,y]
+#     merges to [y].
+#   - packages/intentionsutil/test/merge-node-cli.test.ts, "a removed
+#     blocked_by entry survives validateNode + stringify to --out" — the exact
+#     CLI run_merge_node invokes, end to end through the file round-trip.
 set_mode green
 W52="$WORK/w52"
 make_clone "$W52" writer-52
@@ -2710,19 +2740,17 @@ git -C "$OTHERRACE4" push -q origin main
 
 out="$(run_gc "$W52" -m 'test: far-ahead list-entry removal' t-farahead-list-removal 2>&1)"; rc=$?
 content="$(origin_show t-farahead-list-removal 2>/dev/null)"
+main_tree52="$(git -C "$ORIGIN" ls-tree -r --name-only main)"
 restored52="$(git -C "$W52" rev-parse HEAD)"
-snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
-[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
-if [[ $rc -eq 1 ]] \
-   && grep -q 'mechanical-unresolved' <<<"$content" \
-   && grep -q 'list-entry removal vs. concurrent edit' <<<"$content" \
-   && grep -q 'blocked_by\[t-satisfied-blocker\]' <<<"$content" \
-   && grep -q '  - t-satisfied-blocker' <<<"$content" \
+if [[ $rc -eq 0 ]] \
+   && ! grep -q 'office_hours' <<<"$content" \
+   && ! grep -q 'list-entry removal vs. concurrent edit' <<<"$content" \
    && grep -q 'fieldB: concurrent-edit' <<<"$content" \
+   && ! grep -q 'src/farahead-list-removal-feature.js' <<<"$main_tree52" \
    && [[ "$restored52" == "$list_removal_tip" ]]; then
-  ok "far-ahead list-entry removal: the guard parks instead of letting the base-free union silently restore the removed entry, HEAD restored"
+  ok "far-ahead list-entry removal: reaches the base-aware merge and LANDS instead of parking, concurrent edit preserved, HEAD restored"
 else
-  no "far-ahead list-entry removal guard (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
+  no "far-ahead list-entry removal lands (rc=$rc restored52=$restored52 list_removal_tip=$list_removal_tip)"; printf '%s\n' "$out"; printf '%s\n' "$content"
 fi
 
 # ---------------------------------------------------------------------------
