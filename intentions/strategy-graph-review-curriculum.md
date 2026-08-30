@@ -71,7 +71,12 @@ clarifications:
       by the derived virtual review node; author-owned doctrine is reached the
       same way rather than by waiting for a frontier expansion to sweep it in.
       'No node exists outside some review path' now holds by construction rather
-      than by enrollment bookkeeping."
+      than by enrollment bookkeeping. AMENDED 2026-08-30 (continuation round,
+      applied post-review): the minting split above is superseded — review-later
+      deferrals no longer mint either. Review items are FULLY VIRTUAL for every
+      disposition: the pending-review stamp is the record and the queue derives
+      from stamps. Only content-bearing nodes (reading chunks, dialog exercises)
+      are stored, minted lazily by the reading program."
   - question: What are the review modes, and how is a node's mode determined?
     answer: "Two modes, both type-b-style sittings — they differ in what the author
       is prompted to collect beforehand, not in the sitting's form. Mode A,
@@ -123,7 +128,10 @@ clarifications:
       that holds no state stands down by being deleted, which is a cleaner
       answer to the ratchet objection than transience was. The rest of the
       disposition — on-demand review retained, the curriculum itself subject to
-      the same review — is unchanged."
+      the same review — is unchanged. AMENDED 2026-08-30 (continuation round,
+      applied post-review): the born-parked class named above no longer exists —
+      nothing mints, so the derived fixture leaves NO nodes behind at all, which
+      completes the stands-down-by-deletion answer to the ratchet objection."
   - question: What role does /align (the align-strategy interview) play in the
       curriculum?
     answer: "Maintaining the curriculum is one of /align's roles: enrollment happens
@@ -142,7 +150,11 @@ clarifications:
       graph-commit. Recording an indifference-delegation mints nothing — it is
       reached by the virtual review node. Recording author-owned doctrine
       likewise mints nothing and needs no frontier bookkeeping, since the
-      virtual node reaches every node that has changed since its last review."
+      virtual node reaches every node that has changed since its last review.
+      AMENDED 2026-08-30 (continuation round, applied post-review): the
+      disposition split above is superseded — record-time enrollment mints
+      NOTHING for any disposition. /align records decision stamps; the queue
+      derives from them."
   - question: What did the 2026-07-09 /align-tactics round 1 record against the
       machinery references (Side B, immaterial)?
     answer: Two observations that inform but do not gate the round. First,
@@ -322,35 +334,47 @@ clarifications:
       per-node-schedule cost this design exists to avoid (Claude-drafted,
       author-adopted). FOLD-IN: when the review runs for a node that also
       carries pending review-later deferral nodes, those are folded into the
-      same session. Review-later deferrals still mint their node at deferral
-      time; indifference-delegations mint nothing and are seen only here
-      (strategy-explicit-intent, 2026-08-30). AMENDED 2026-08-30 (continuation
-      round): review items are FULLY VIRTUAL — nothing mints a stored review
-      node, review-later deferrals included (superseding the same-day minting
-      split; author-ratified). A delegated-pending-review stamp is its own
-      review record; the queue derives from stamps. The virtual review node's
-      priority is f(graph position, unreviewed-change state, pending-review
-      stamp density) — the stamp-density term is LOAD-BEARING, not optional: it
-      is what surfaces held-on-trust content sooner than declined content now
-      that no dedicated queue entry exists. Fold-in becomes automatic — the
-      sitting reads the node's stamps. SITTING OUTCOMES (author-directed): a
-      sitting's own bookkeeping — what the author learned (to be reinforced
-      later) and the frontier extensions it identifies — must be recorded in the
+      same session. [Superseded within this entry by the continuation amendment
+      below: nothing mints for any disposition; fold-in is automatic because the
+      sitting reads stamps.] AMENDED 2026-08-30 (continuation round): review
+      items are FULLY VIRTUAL — nothing mints a stored review node, review-later
+      deferrals included (superseding the same-day minting split;
+      author-ratified). A delegated-pending-review stamp is its own review
+      record; the queue derives from stamps. The virtual review node's priority
+      is f(graph position, unreviewed-change state, pending-review stamp
+      density) — the stamp-density term is LOAD-BEARING, not optional: it is
+      what surfaces held-on-trust content sooner than declined content now that
+      no dedicated queue entry exists. Fold-in becomes automatic — the sitting
+      reads the node's stamps. SITTING OUTCOMES (author-directed): a sitting's
+      own bookkeeping — what the author learned (to be reinforced later) and how
+      it extends the (now virtual) review frontier — must be recorded in the
       metadata model so virtual derivation can read it; specifics fold into the
       delegated stamp schema. DETECTION (Claude-owned,
-      delegated-review-declined, resolved by greenfield merit): the changed
-      node's own sitting takes one bounded step downward — each DIRECT child's
-      statement and conditions read against the change, one level only, attest
-      or amend; amendment re-enrolls the child. 'Changed' is defined by a
-      per-kind REVIEW FINGERPRINT (author-ratified): for strategies the
-      freeze-substance set PLUS rationale; for other durable kinds statement +
-      rationale + clarifications + kind-normative attributes; router-owned
+      delegated-review-declined; re-derived 2026-08-30 post-review under the
+      fully-virtual architecture, superseding the reviewer-drafted procedural
+      one-step-down read adopted earlier the same day — the standing greenfield
+      instruction obliged the re-derivation): staleness is DERIVED from stamps,
+      never performed as a manual sitting step. The reviewed stamp records,
+      besides {fingerprint, date}, the fingerprints of the node's DIRECT
+      ancestors it attested against; when an ancestor's current fingerprint
+      diverges from an attested one, every node holding the stale attestation
+      mechanically gains a consistency-unknown term in the review-priority
+      function — no read step, no new storage beyond the stamp. The sitting that
+      then runs the flagged node re-attests. The one-level bound survives as the
+      blast-radius bound: only direct-ancestor fingerprints are attested, so an
+      ancestor change flags exactly its direct dependents first. 'Changed' is
+      defined by a per-kind REVIEW FINGERPRINT (author-ratified): for strategies
+      the freeze-substance set PLUS rationale; for other durable kinds statement
+      + rationale + clarifications + kind-normative attributes; router-owned
       stamps excluded everywhere; the reviewed stamp is {fingerprint, date},
       stale iff they differ. Virtues are reviewed as ANCESTORS rather than
       ranked directly (author-ratified), preserving kind-kind's
       virtues-stay-unranked doctrine. Content-bearing curriculum nodes (reading
       chunks, dialog exercises) remain stored, minted lazily when the reading
-      program schedules them."
+      program schedules them. PRIORITY DIRECTION (Claude-owned, under the same
+      review-declined grant): 'graph position' in the priority function is the
+      same root-distance weighting the capture model uses — closer to the roots
+      is reviewed sooner."
   - question: Why did the coverage half of the success_signal have to be replaced
       (2026-08-30)?
     answer: "(Recorded 2026-08-30 interview.) The recorded threshold was 'zero
@@ -394,8 +418,8 @@ tooling_goals:
     statement: the /node-review sitting over a node's own doctrine and its
       delegated/deferred content, ancestry-first and change-gated, selected by
       the virtual review node (tactic-node-review-skill); record-time enrollment
-      in /align is now limited to review-later deferrals minting their node
-      (tactic-align-indifference-option)
+      in /align mints nothing — decision stamps are recorded and the queue
+      derives from them (tactic-align-indifference-option)
 success_signal:
   observable: per review cycle — whether the cycle's completed sitting reviewed
     the node the virtual review node then pointed at, and the count of
@@ -406,7 +430,9 @@ success_signal:
   threshold: each cycle's sitting reviews the then-pointed node, and the
     un-reviewed-across-2+-cycles count trends down (Claude-owned replacement,
     delegated-review-declined 2026-08-30 — churn-invariant successor to the
-    trends-down-top-rank form)
+    trends-down-top-rank form; re-examined 2026-08-30 post-review against the
+    fully-virtual architecture and retained — it reads only stamps and the
+    derived pointer)
   is_proxy: true
 attention:
   boosts:

@@ -126,7 +126,12 @@ attributes:
     record's hand-assessed verdict as the comparison the drift signal fires
     against. First members: the review-priority threshold and the change-gate
     detection step on strategy-graph-review-curriculum (review-declined), and
-    the decision-stamp schema + enforcing lint (pending-review)"
+    the decision-stamp schema + enforcing lint (pending-review); and — stamped
+    post-review 2026-08-30, having landed marked Claude-owned without
+    disposition — three sitting-mechanics resolutions on
+    tactic-node-review-skill: non-goal-layer position handling, the
+    unpenalized-rank queue entry, and the root-first-prefix/30-minute discharge
+    rule (all pending-review)"
   origin: chosen
   divergence:
     level: moderate — raised 2026-08-13 from low-moderate when the delegation

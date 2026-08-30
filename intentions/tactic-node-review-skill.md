@@ -124,18 +124,29 @@ capture-model clarification, both 2026-08-30.
   is load-bearing — it is the only thing that surfaces held-on-trust content
   sooner than declined content.
 - **Virtues are reviewed as ancestors, never ranked directly** (author-ratified)
-  — preserves kind-kind's virtues-stay-unranked doctrine and resolves the F1
-  rank-domain problem for virtues. Kinds/traditions/delegations get position via
-  the capture model's dependents-based weighting where needed.
+  — preserves kind-kind's virtues-stay-unranked doctrine and resolves the
+  rank-domain problem for virtues (non-goal-layer kinds all default to rank
+  zero, mutually unordered). How kinds/traditions/delegations get position is a
+  dependents-count metric of its own (decision: delegated-pending-review,
+  delegation-anthropic-claude, 2026-08-30) — NOT the capture model, which
+  weights by root-distance and has no dependents term; a landed citation
+  claiming otherwise was a defect, corrected post-review. Whether
+  traditions/delegations are review subjects at all is open under the
+  mount-point ruling — schema-sitting scope.
 - **"Changed" = per-kind review fingerprint** (author-ratified): strategies →
   freeze-substance set PLUS rationale; other durable kinds → statement +
   rationale + clarifications + kind-normative attributes; router-owned stamps
   excluded. Reviewed stamp = {fingerprint, date}; stale iff they differ (mirror
   `isFingerprintStale`). This supersedes the body's open "reviewed stamp" piece.
-- **Detection** (Claude-owned, review-declined): the changed node's sitting
-  takes one bounded step downward — direct children only, attest or amend.
+- **Detection** (Claude-owned, review-declined; re-derived 2026-08-30
+  post-review): staleness is DERIVED from stamps — the reviewed stamp attests
+  the direct ancestors' fingerprints, and ancestor motion mechanically flags
+  holders of stale attestations via a consistency-unknown priority term. No
+  manual read step. Full statement: strategy-graph-review-curriculum's
+  selection clarification.
 - **Threshold** (Claude-owned, review-declined): the pointer-based two-clause
-  form now in the strategy's success_signal.
+  form now in the strategy's success_signal; re-examined post-review against
+  the fully-virtual architecture and retained (stamps and pointer only).
 - **Sitting outcomes in metadata** (author-directed): what the author learned
   (reinforcement material) and the frontier extensions a sitting identifies must
   be recorded in the metadata model so virtual derivation reads them — schema
@@ -144,8 +155,10 @@ capture-model clarification, both 2026-08-30.
   office-hours queue at its target's unpenalized rank (the 0.5x penalty demotes
   re-picks among minted parks; a derived singleton is not that), and a sitting
   may discharge any root-first prefix of the owed ancestor chain, the stamp
-  advancing per node completed. (Claude-owned resolutions carried from the
-  review round.)
+  advancing per node completed. (decision: delegated-pending-review,
+  delegation-anthropic-claude, 2026-08-30 — these landed marked Claude-owned
+  without ever being dispositioned by the author; stamped pending-review by the
+  post-hoc adversarial review, and listed in the delegation class entry.)
 
 **Schema scope (delegated-pending-review — the one review sitting this design
 still owes):** the decision-stamp schema — {state: doctrine |
@@ -156,6 +169,18 @@ extensions); graft-edge readability for the capture derivation; and the
 enforcing lint (a pending-review stamp survives revision of its content — never
 silently doctrine or declined). Weight tables for the capture function's
 position/state gradients are schema detail and land here too.
+
+**Capture call-out scope (author-directed refinement, restored post-review):**
+the author's replacement for the rejected virtue-alarm was that this skill "can
+be further refined to also call out especially high capture signals in the node
+under review or transiently via its ancestors." Buildable scope: during a
+sitting, read the target's decision stamps and graft edges plus its ancestors',
+and flag position-weighted outliers per strategy-graph-mounts' capture model.
+
+**Bootstrap ordering (stated post-review):** the queue derives from stamps that
+cannot exist until the stamp schema lands — the schema delegation is the
+critical path for every pending-review sitting minted by the 2026-08-30 rounds,
+including ratification of this design's own pending items.
 
 **Bootstrap note update:** with fully-virtual items the bootstrap question in
 the body above ("seed the stamps or accept a cold start") now also covers

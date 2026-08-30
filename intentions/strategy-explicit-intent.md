@@ -293,7 +293,14 @@ clarifications:
       ask is ratify/amend/decline, never defend-as-yours;
       delegated-review-declined content never compels and appears in a probe
       only as Claude's account, clearly attributed. The three-state decision
-      model's stamps make the boundary mechanical. Author-ratified."
+      model's stamps make the boundary mechanical. Author-ratified. AMENDED
+      2026-08-30 (post-review fix): the earlier amendment's phrase 'minting no
+      review node, subject to the virtue/strategy-core floor' predates the
+      continuation round and is superseded — the floor is RETIRED, and review
+      items are fully virtual for EVERY disposition (nothing mints; the decision
+      stamp is the record). The three options are stated in three-state
+      vocabulary: the recommendation (author-ratified doctrine if accepted),
+      delegate-pending-review, delegate-review-declined."
   - question: What does a deferral commit the author to — and do deferrals without a
       grounding text get lighter treatment?
     answer: "Deferral is always defer-until-later-review — a conscious, temporary
@@ -536,9 +543,12 @@ clarifications:
       recorded on a native node — virtue, strategy, tactic, kind — is in exactly
       one of three states: AUTHOR-RATIFIED DOCTRINE, DELEGATED-PENDING-REVIEW
       (held on trust, a sitting will ratify/amend/decline), or
-      DELEGATED-REVIEW-DECLINED (Claude-owned, reached only by the wholesale
-      node-review mechanism). Tradition and delegation nodes are MOUNT POINTS —
-      never doctrine; they serve as reference for delegated decisions
+      DELEGATED-REVIEW-DECLINED (Claude-owned, reached only by a wholesale
+      review of all graph doctrine and delegations — the author's verbatim
+      carve-out; where that wholesale review lives (the /align-audit remit, or
+      its own mechanism) is an OPEN ITEM recorded 2026-08-30 post-review, owed
+      to the stamp-schema sitting). Tradition and delegation nodes are MOUNT
+      POINTS — never doctrine; they serve as reference for delegated decisions
       (strategy-graph-mounts). The floor is RETIRED — the model supersedes it:
       any decision may be delegated, but delegation depth is PRICED, not
       forbidden — a delegated decision on a virtue is a stronger capture signal
@@ -546,21 +556,34 @@ clarifications:
       strategy-graph-mounts' capture model. The author rejected special-case
       guards (a virtue-layer alarm, a mandated-consumer clause) as parsimony
       violations: capture surfaces through the two mechanisms the design already
-      carries — the node-review process, which calls out high capture signals in
-      the node under review or transiently via its ancestors, and capture
-      telemetry on the office-hours dashboard, a function of node position where
-      virtues-at-roots produce strong signal by structure. Claude's adversarial
-      verdict (strongest attack: legalized erosion plus an unwatched dashboard;
-      survives because the floor prevented erosion invisibly while priced
-      delegation is queryable, ancestry-first review re-sees owned virtue
-      content whenever any descendant review runs, and compel-from-doctrine-only
-      closes the type-b channel) was that the design stands on those mechanisms.
-      STAMP SCHEMA: the structured decision-stamp schema (state, delegatee mount
-      id, dates) and its enforcing lint are delegated to Claude,
-      delegated-pending-review — until it lands, dated prose ownership tags are
-      the interim carrier. STANDING INSTRUCTION (author-directed, 2026-08-30):
-      Claude exercises every delegated decision by greenfield design merit,
-      never by cheapest-thing-that-works."
+      carries — the node-review process, to be further refined to also call out
+      high capture signals in the node under review or transiently via its
+      ancestors, and capture telemetry on the office-hours dashboard (the live
+      surface recorded on strategy-graph-native-dispatch; the capture-telemetry
+      panel itself is buildable scope under tactic-node-review-skill, specified
+      nowhere else yet), a function of node position where virtues-at-roots
+      produce strong signal by structure. Claude's adversarial verdict
+      (strongest attack: legalized erosion plus an unwatched dashboard; survives
+      because the floor prevented erosion invisibly while priced delegation is
+      queryable, ancestry-first review re-sees owned virtue content whenever any
+      descendant review runs, and compel-from-doctrine-only closes the type-b
+      channel) was that the design stands on those mechanisms. STAMP SCHEMA: the
+      structured decision-stamp schema (state, delegatee mount id, dates) and
+      its enforcing lint are delegated to Claude, delegated-pending-review —
+      until it lands, dated prose ownership tags are the interim carrier.
+      STANDING INSTRUCTION (author-directed, 2026-08-30): Claude exercises every
+      delegated decision by greenfield design merit, never by
+      cheapest-thing-that-works. INTERIM TAG GRAMMAR (Claude-owned, under the
+      schema delegation): a decision's ownership tag is '(decision:
+      <author-ratified | delegated-pending-review | delegated-review-declined>,
+      delegation-anthropic-claude, YYYY-MM-DD)' appended to the owned text;
+      pre-existing 2026-08-30 prose tags are conformed opportunistically, not
+      swept. ACCEPTED GAP (author override, recorded 2026-08-30 post-review):
+      Claude's adversarial verdict held the two rejected guards load-bearing ('I
+      would not ratify the design without them'); the author's override stands,
+      and the accepted residual exposure is that virtue-layer drift between
+      sittings surfaces only through the two priced mechanisms above — no
+      dedicated alarm exists by deliberate choice."
   - question: What is the provenance of the 2026-08-30 continuation round (the
       adversarial-review disposition interview)?
     answer: "(Recorded 2026-08-30.) The fdcd17cf round's post-hoc adversarial review
@@ -582,7 +605,27 @@ clarifications:
       ruled on; a full pack review of this commit's drafted record text did not
       re-run pre-commit — residue for the schema tactic's pending-review
       sitting. Open item for a dedicated round: the sustenance/livelihood virtue
-      gap (strategy-graph-mounts, 2026-08-30 clarification)."
+      gap (strategy-graph-mounts, 2026-08-30 clarification). AMENDED 2026-08-30
+      (post-hoc adversarial review): the disclosed residue is discharged — a
+      fable-subagent pack review of this commit's record ran post-hoc at author
+      order (verdict: mostly-greenfield). Defect-class findings were fixed in
+      the follow-up graph-commit: stale minting-as-live spots on this node and
+      strategy-graph-review-curriculum; a fabricated doctrine citation on
+      tactic-node-review-skill ('the capture model's dependents-based weighting'
+      — the capture model has no dependents term); the author's
+      future-refinement clause restored from present tense; a dangling
+      review-finding reference spelled out; and three sitting-mechanics
+      resolutions on tactic-node-review-skill (non-goal-layer position handling,
+      unpenalized-rank queue entry, root-first-prefix/30-minute discharge)
+      stamped delegated-pending-review — they had landed marked Claude-owned
+      without ever being dispositioned, the invisible-capture failure the
+      delegation class entry exists to prevent. The detection step was
+      re-derived stamp-native under the standing greenfield instruction (see
+      strategy-graph-review-curriculum). Three design questions go to interview:
+      the still-live human-authored-substance condition contradicting the
+      retired floor; the wholesale-review mechanism's home; and reconciling
+      mounts-are-never-doctrine with kind-tradition's codified vocabulary and
+      the curriculum's enrollment of traditions/delegations as review subjects."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
