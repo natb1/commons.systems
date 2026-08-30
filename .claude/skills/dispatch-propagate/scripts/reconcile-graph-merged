@@ -10,15 +10,23 @@
 # store mutations:
 #   - merged, needs-main residue on the node → `main-qa` (verified post-merge),
 #     recording the merge evidence (mergedAt + mergeCommitSha) on the node.
-#   - a tactic ALREADY at `main-qa` is never enumerated at all. It is post-merge
-#     by construction — the phase exists precisely because its PR already merged,
-#     so there is no out-of-band merge left to absorb and the completion evidence
-#     was already recorded on the transition that put it there. Re-processing it
-#     could only mis-classify it: a node minted at `main-qa` without a
-#     `## needs-main` heading would read as residue-free and be swept to `done`,
-#     destroying the verification node before `/qa-main` ever runs. Advancing a
-#     `main-qa` node is `/qa-main`'s job, not this sweep's. This exclusion
-#     mirrors `isMergeAbsorbable` in reconcile-graph.ts — keep the two in step.
+#   - a tactic ALREADY at `main-qa` is not enumerated for a merge — EXCEPT while
+#     its recorded merge evidence is still absent, which is how a node minted at
+#     qa record time is born. Such a node is enumerated purely so a
+#     CLOSED-WITHOUT-MERGE source can retire it; a MERGE is still never absorbed
+#     into it (reconcile-graph.ts's isMergeAbsorbable refuses, and this sweep
+#     writes nothing). A node whose completion.mergedAt is recorded is never
+#     enumerated, so the common case costs no gh call at all.
+#     A node at `main-qa` has no merge left to absorb: either its merge evidence
+#     was already recorded on the transition that put it there, or it was minted
+#     directly at `main-qa` and the merge in question is its SOURCE's, recorded
+#     on the source node. Re-processing it could only mis-classify it: a node
+#     minted at `main-qa` carries `## Verification items`, not a
+#     `## needs-main` heading, so it would read as residue-free and be swept to
+#     `done`, destroying the verification node before `/qa-main` ever runs.
+#     Advancing a `main-qa` node on a MERGE is `/qa-main`'s job, not this
+#     sweep's. This exclusion mirrors `isMergeAbsorbable` in reconcile-graph.ts
+#     — keep the two in step, along with `isCloseAbsorbable` beside it.
 #   - merged without residue, or closed-not-merged → `done`. The node is NO
 #     LONGER pruned at the done-transition: it is left present on disk with its
 #     phase set to `done` and completion evidence recorded — for a genuine merge,
@@ -143,15 +151,26 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
   // Merge-absorbable phases. `main-qa` is deliberately ABSENT: it is an open
-  // phase, but a node sitting at it is post-merge by construction and has
-  // nothing left to absorb. Mirrors `isMergeAbsorbable` in reconcile-graph.ts.
+  // phase, but a node sitting at it has no merge of its own left to absorb.
+  // Mirrors `isMergeAbsorbable` in reconcile-graph.ts.
   const absorbable = new Set(["implement","fix","qa","review"]);
   const idOk = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
   const only = process.argv[1] || "";
+  // A main-qa node is enumerated ONLY while it carries no recorded merge
+  // evidence — the shape a record-time mint is born with. Its PR state is
+  // fetched so a closed-WITHOUT-merge source can retire it (reconcile-graph.ts
+  // isCloseAbsorbable); a merged one is enumerated but written by nothing,
+  // since isMergeAbsorbable still refuses. A main-qa node reached through this
+  // sweep always has completion.mergedAt stamped, so it drops out immediately
+  // and no already-verified node costs a gh call.
+  const unprovenMainQa = (n) =>
+    n.phase === "main-qa" &&
+    !(n.execution && n.execution.completion && n.execution.completion.mergedAt);
   for (const n of listNodesStrict("./intentions")) {
     if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
-    if (n.phase === null || !absorbable.has(n.phase)) continue;
+    if (n.phase === null) continue;
+    if (!absorbable.has(n.phase) && !unprovenMainQa(n)) continue;
     const pr = n.execution && n.execution.pr;
     if (pr === null || pr === undefined) continue;
     if (!idOk.test(n.id)) {

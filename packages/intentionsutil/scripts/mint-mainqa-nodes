@@ -25,7 +25,11 @@
 # oversight. A lane whose destination file already exists on origin/main is
 # dispositioned EXISTING and SKIPPED ENTIRELY (below) — `/qa-fix` may cross this
 # seam more than once on a fixing pass, and re-minting is not an edit, it is a
-# no-op. So the id set handed to graph-commit only ever contains BORN-FRESH
+# no-op — SO LONG AS the re-run carries the items already recorded. It is not a
+# no-op when a LATER pass carries an item the landed node does not have; that
+# case is refused, not skipped (see assert_existing_covers). The refusal writes
+# nothing either, so the id set handed to graph-commit still only ever contains
+# BORN-FRESH
 # files, which have no prior origin/main blob to compare against — exactly
 # hold-node's "a born-fresh NONE hold has no prior blob" case. Consequently this
 # script has no base-pin logic to share, and deliberately does NOT source
@@ -38,7 +42,8 @@
 # Fresh-origin/main invariant (mirrors park-node/hold-node): every read below
 # operates on origin/main's CURRENT content, never a possibly-stale local
 # worktree copy — this script routinely runs from a far-behind PR-branch
-# worktree, since it is called at the moment a PR merges.
+# worktree, since it is called from `/qa-fix` Step 3.6 at qa record time, while
+# the source's PR is still OPEN and its branch has yet to catch up with main.
 #
 # Landing-signal invariant (the layer-2 caveat, mirroring resolve-hold's
 # "Verify A"/"Verify B"): graph-commit's own report is NOT trusted as the
@@ -56,8 +61,9 @@
 #                     [--dir <intentions-dir>] [-C <repo-path>]
 #                     [--now <YYYY-MM-DD>]
 #
-# --pr <n>   the source's ALREADY-MERGED PR number. Required: a destination node
-#            is born carrying it, and rendering `PR #null` into a statement is
+# --pr <n>   the source's PR number — STILL OPEN at mint time, since the mint
+#            runs at qa record time, not at merge time. Required: a destination
+#            node is born carrying it, and rendering `PR #null` into a statement is
 #            refused upstream in ../src/mainqaRouting.ts. This script stays
 #            gh-free — the number is passed in, never resolved here.
 # --items <f> a JSON ARRAY of verification items, one object each:
@@ -332,6 +338,58 @@ done
 run_decide ${EXISTING_ARGS[@]+"${EXISTING_ARGS[@]}"}
 printf '%s\n' "$DECIDE_OUT" > "$TMPD/decisions.jsonl"
 
+# assert_existing_covers <id> <decision-json>
+#
+# The EXISTING skip is the idempotency contract and it is correct for a re-run
+# carrying the items the landed node already records. It is NOT correct when a
+# LATER `/qa-fix` pass discovers a NEW needs-main item for a lane whose node
+# already exists: the skip would drop that item, and `/qa-fix` Step 6 has
+# already excluded needs-main residue from its escalation set on the strength of
+# Step 3.6 having recorded it (.claude/skills/qa-fix/SKILL.md), so the item
+# would end up in no node, no queue and no escalation, with the run exiting 0.
+# Refuse loudly instead — a clear error beats a silent fallback
+# (.claude/rules/code-style.md).
+#
+# The node is STILL not rewritten. Appending to a born-parked node a human may
+# be mid-sitting on is exactly the hazard the EXISTING skip exists to prevent
+# (see this script's header), so the disposition is a human's, not this
+# script's: append by hand via write-node.ts + graph-commit, or resolve the
+# landed node first and let the next pass mint a fresh one.
+#
+# The item ids are read out of the DECIDE TOOL's rendered body, never derived in
+# bash: `buildMainqaBody` (../src/mainqaRouting.ts) owns the bullet shape
+# `- **<id> — <title>**`, and this script makes no routing or rendering
+# decisions of its own.
+#
+# KNOWN COST — the join key is the item `id`, and item ids are LLM-authored:
+# `.claude/skills/qa-fix/references/execution-lanes.md` calls `id` "a stable
+# identifier", which is a convention, not something enforced. If a later pass
+# RENAMES the id of an item the landed node already records, this produces a
+# FALSE REFUSAL. That is deliberate: under .claude/rules/code-style.md a loud,
+# human-visible refusal routing to a human beats a silent loss, and the join is
+# on the same key /qa-fix Step 3.5 and Step 3 already depend on. But it is a
+# real behavioral cost, not a free check — the next reader should know it.
+assert_existing_covers() { # <id> <decision-json>
+  local id="$1" decision="$2" landed item
+  local -a missing=()
+  landed="$TMPD/$id.landed.md"
+  if ! git -C "$REPO_ROOT" show "origin/main:intentions/$id.md" > "$landed" 2>/dev/null; then
+    echo "mint-mainqa-nodes: $id was dispositioned EXISTING but could not be read back from origin/main — the existence probe and this read disagree; refusing rather than guessing" >&2
+    exit 1
+  fi
+  while IFS= read -r item; do
+    [[ -z "$item" ]] && continue
+    if ! LC_ALL=C grep -qaF -- "- **$item — " "$landed"; then
+      missing+=("$item")
+    fi
+  done < <(jq -r '.body' <<<"$decision" | LC_ALL=C grep -a '^- \*\*' | sed 's/^- \*\*//; s/ — .*//')
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "mint-mainqa-nodes: $id already exists on origin/main but does NOT record verification item(s): ${missing[*]}" >&2
+    echo "mint-mainqa-nodes: a later /qa-fix pass found needs-main item(s) this lane's node does not carry. Skipping them as an 'idempotent re-run' would drop them silently, and /qa-fix Step 6 excludes needs-main residue from its escalation set, so nothing else would report them. Nothing was written. Append the item(s) to $id by hand (write-node.ts + graph-commit), or resolve $id and re-run so a fresh node is minted." >&2
+    exit 1
+  fi
+}
+
 # --- Write each CREATE lane --------------------------------------------------
 REPORT=()
 EXPECT_ARGS=()
@@ -347,7 +405,12 @@ while IFS= read -r decision; do
   # EXISTING lanes are skipped ENTIRELY: no write, no id in the commit set, no
   # --base token. This is what makes a repeated `/qa-fix` pass over this seam a
   # true no-op rather than a rewrite of a node a human may already be acting on.
-  [[ "$disposition" == "EXISTING" ]] && continue
+  # First prove the skip is genuinely a no-op — that the landed node already
+  # records every item this pass routed to the lane.
+  if [[ "$disposition" == "EXISTING" ]]; then
+    assert_existing_covers "$id" "$decision"
+    continue
+  fi
 
   md="$INTENTIONS_DIR/$id.md"
   if ! jq -c '.node' <<<"$decision" > "$TMPD/$id.node.json"; then

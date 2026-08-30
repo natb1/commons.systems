@@ -304,6 +304,24 @@ describe("decideMint", () => {
     expect(decisions[0].node.office_hours?.recommendation?.trim()).not.toBe("");
   });
 
+  it("leads the author lane's born recommendation with the merge precondition", () => {
+    // This node is born PARKED at qa record time, before its source PR merges,
+    // and officeHoursQueue applies no blocked_by gate — openBlockers is
+    // "Advisory only — never a gate" (src/officeHours.ts), and
+    // .claude/skills/office-hours/SKILL.md makes that doctrine. So the node
+    // CAN be handed to a human sitting while PR #3132 is still open, and this
+    // text is the only thing that tells them not to verify yet. Pin it.
+    const decisions = decideMint(
+      mintArgs({ items: [item({ id: "a1", verifiability: "AUTHOR" })] }),
+    );
+    const rec = decisions[0].node.office_hours?.recommendation ?? "";
+    expect(rec).toMatch(/^PRECONDITION — do NOT verify until PR #3132 has MERGED/);
+    expect(rec).toContain("tactic-some-work");
+    // …and the actionable instruction still follows it.
+    expect(rec).toContain("resolve this node");
+    expect(rec).toContain("a1");
+  });
+
   it("yields exactly TWO entries for a mixed source, and NEVER three", () => {
     const decisions = decideMint(
       mintArgs({
