@@ -103,14 +103,16 @@
 > `.claude/rules/sandbox.md`, and are deliberately NOT restated here. An
 > earlier revision of this passage did restate them; it was rewritten across
 > eight review rounds and every single recurrence was the restatement drifting
-> from the tool it described, never the tool changing. The repair itself is not
-> a unit of any position below and nothing in this document schedules it — it
-> rides with the 9-site past-tense repair this banner scopes above, and is owed
-> by whoever executes that pass. Do not read "not a unit of this plan" as
-> "not owed".
+> from the tool it described, never the tool changing.
 >
-> Two escaping layers, and only one is yours. **JSON is yours:**
-> `write-node.ts` reads the payload as a JSON document
+> **Who owns the `:21`/`:53` repair:** not a unit of any position below, and
+> nothing in this document schedules it separately. The two sites are 2 of the
+> 9 this banner scopes above, so they are owed by whoever executes that pass.
+> Do not read "not a unit of this plan" as "not owed".
+>
+> Two escaping layers on the `--file` path this banner prescribes, and only one
+> is yours (the shell would be a third — see "Keep the shell out of it" below).
+> **JSON is yours:** `write-node.ts` reads the payload as a JSON document
 > (`writeNodeFromJson`'s `JSON.parse`, `write-node.ts:40`), so a `"` in the
 > repair text is written `\"` THERE — exactly once. An unescaped one dies on a
 > `JSON.parse` syntax error; a doubled `\\\"` is what actually lands a literal
@@ -131,10 +133,10 @@
 > a property of the value and of the pinned `yaml` version, and the guidance
 > above is correct whichever style it picks.)
 >
-> The site is **not**
-> unread by tooling either: `validateGraphProseRefs`
+> Both sites are read by tooling: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
-> `attention.rationale`, every `clarifications[].answer` and the body. Repair
+> `attention.rationale`, every `clarifications[].answer` and the body — so it
+> reads `:21` (inside `rationale`) and `:53` (in the body) alike. Repair
 > both in the same past-tense pass. And
 > `tactic-graph-digest-tooling`'s deferred review follow-ups already have a live
 > successor carrier: `tactic-graph-digest-quality-followups` (`status: codified`,
