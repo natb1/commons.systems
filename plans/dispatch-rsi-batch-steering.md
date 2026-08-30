@@ -116,6 +116,76 @@ something an "author decision" is an opinion to be tested, not a routing order.
 
 This file. Keep it current as new directives arrive.
 
+<!-- S-15a..S-15d were recorded retroactively, after S-15. They precede it
+     chronologically and are placed in message order here. -->
+
+## S-15a — No parks were expected; interview to resolve them (discharged)
+
+> There are not expected to be any parked decisions needed from the author for
+> this batch. Interview me now to resolve all parks. Before parking any
+> decisions apply the same triage as when executing code-review: does this
+> really require author input - is it a doctrine ambiguity or just an
+> implementation detail?
+
+The premise was **false** and saying so was the substance of the reply: parks
+existed. The interview that followed produced Rulings 1–7 in
+`plans/dispatch-rsi-author-rulings.md`, which is where its output lives. The
+second sentence extends S-13's triage from review findings to *every* park
+decision — the bar for parking is the same bar as for forwarding an "author
+call", and it is high.
+
+## S-15b — Resume prompt restating the review gate (standing) — restates S-10/S-11
+
+A session-resume prompt that re-issued the two binding rules by name rather
+than adding new ones:
+
+> Every PR in this batch must get `/code-review high --fix --comment` run
+> against it as a DETACHED process before it merges. […] NEVER enable
+> auto-merge before the review has settled: that is exactly how PR #3140 merged
+> unreviewed.
+
+It also fixed the four retroactive targets as squashed-diff rev-ranges —
+`77bd7471~1..77bd7471` (#3140), `96d22cb1~1..96d22cb1` (#3138),
+`a4a964b8~1..a4a964b8` (#3136), `478cc324~1..478cc324` (#3134) — and recorded
+why reopening is not an option: GitHub cannot reopen merged PRs and all four
+head branches are deleted on origin.
+
+Its operational traps are binding and are repeated here because they have each
+already cost real time:
+
+- `LC_ALL=C grep -a` under `intentions/` — one node carries a NUL byte that
+  silences plain `grep`'s line output (exit status and `-c`/`-l`/`-q` stay
+  correct, which is what makes it easy to miss).
+- Never `git stash` — see the safety constraints below.
+- Run `run-lint.sh` and `run-typecheck.sh` only **after** committing; they diff
+  `origin/main...HEAD` and are vacuous on uncommitted work.
+- Write shell scripts to files under `/tmp/claude-1000/` and `bash` them; a
+  worktree-isolated session refuses inline compound commands and redirects.
+
+## S-15c — Reload a skill lost to compaction (discharged)
+
+> reload the /batch skill that appears to have been lost during compaction. Act
+> on the tasks that completed during compaction.
+
+Two obligations, not one: restore the lost instruction context, **and** drain
+the agent results that arrived while it was gone. Completed work that is never
+collected is indistinguishable from work never done.
+
+## S-15d — Verify the detachment claim, don't assert it (discharged)
+
+> confirm that that code review can run as a background task and not as a
+> detached process. Won't it be killed on the 5-min background task timeout?
+
+A correct challenge to an unproven assumption, answered by measurement rather
+than assertion. `dispatch-code-review` launches through `setsid` and `disown`
+(and hard-fails if `setsid` is absent — "there is no synchronous fallback"), so
+the review child is a **different session leader** from the shell that launched
+it and signals to the Bash job's process group stop at that boundary. What gets
+backgrounded is only the await wrapper, a poll loop; killing it costs nothing,
+because run state lives outside the worktree and re-invoking with identical
+arguments re-attaches. The standing lesson is the method: verify a survival
+claim with session IDs, never with confidence.
+
 ## S-15 — "File for ratification" means ship it, not defer it (standing) — QUALIFIES S-13
 
 > "Filing for ratification" mean executing the change using your best judgement,
