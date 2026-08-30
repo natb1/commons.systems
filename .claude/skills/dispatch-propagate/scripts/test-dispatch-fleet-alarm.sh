@@ -307,11 +307,27 @@ cat > "$EXPECTED_JSON" <<'JSON'
 JSON
 assert_eq "(2) node JSON matches the required shape" \
   "$(jq -S . "$EXPECTED_JSON")" "$(jq -S . "$LOG/write-node-input.json")"
+# body_region — the lines between this script's owned-region markers, i.e. the
+# part of a node body dispatch-fleet-alarm generates. The body may also carry
+# authored content OUTSIDE the region, which the script preserves; these
+# assertions are about the generated half, so they read the region rather than
+# the whole body.
+body_region() {
+  awk -v om='<!-- generated:dispatch-fleet-alarm -->' \
+      -v cm='<!-- /generated:dispatch-fleet-alarm -->' '
+    $0 == om { inr = 1; next }
+    $0 == cm { inr = 0; next }
+    inr { print }
+  ' "$1"
+}
+
 # The body placeholder was spliced away and replaced with the reading.
 MINTED="$FR/intentions/tactic-fleet-alarm-tick-stale.md"
 assert_eq "(2) body spliced over the placeholder" \
   "The reading.
-Second line." "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINTED")"
+Second line." "$(body_region "$MINTED")"
+assert_contains "(2) the reading is bounded by the owned-region markers" \
+  "<!-- /generated:dispatch-fleet-alarm -->" "$(cat "$MINTED")"
 
 # --- (3) open + identical body -> NO commit ----------------------------------
 # The node minted in (2) already carries exactly $BODY, so a re-detection with
@@ -331,7 +347,34 @@ assert_eq "(4) differing-body re-detection exits 0" "0" "$RC"
 assert_contains "(4) graph-commit ran with --base" "--base" "$(log_lines graph-commit.log)"
 assert_contains "(4) --base points at the dumped manifest" "base-manifest.txt" "$(log_lines graph-commit.log)"
 assert_eq "(4) refreshed body landed on disk" "A different reading." \
-  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINTED")"
+  "$(body_region "$MINTED")"
+
+# --- (4b) authored body content survives a refresh ---------------------------
+# A parked alarm node (`office_hours != null`, `phase != "done"`) classifies
+# `open`, so re-detection routes through this refresh path — and the common
+# reason such a node is parked is that a human is looking at it. Their diagnosis
+# lives OUTSIDE this script's owned region and must survive. Before the region
+# existed, splice_body replaced everything after the closing frontmatter fence
+# wholesale, so the diagnosis was discarded on the next detection tick and the
+# discard was pushed to main. The guard comment above classify() claims "the
+# alarm's own re-detection path still refreshes its body underneath the park, so
+# nothing is lost by waiting"; this is the case that makes that true.
+awk -v om='<!-- generated:dispatch-fleet-alarm -->' '
+  $0 == om && !ins { print "## Human diagnosis"; print ""; print "The tick host lost its network route."; print ""; ins = 1 }
+  { print }
+' "$MINTED" > "$MINTED.authored" && mv "$MINTED.authored" "$MINTED"
+
+BODY3="$WORK/body3.md"
+printf 'A third reading.\n' > "$BODY3"
+run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
+  --kind tick-stale --statement 'dispatch-tick has not run for 90m' --body-file "$BODY3"
+assert_eq "(4b) refresh with an authored body exits 0" "0" "$RC"
+assert_eq "(4b) the owned region carries the new reading" "A third reading." \
+  "$(body_region "$MINTED")"
+assert_contains "(4b) the human's heading survived the refresh" \
+  "## Human diagnosis" "$(cat "$MINTED")"
+assert_contains "(4b) the human's text survived the refresh" \
+  "lost its network route" "$(cat "$MINTED")"
 
 # --- (5) --resolve with a non-null execution -> no write ---------------------
 run_alarm STUB_STATE=open STUB_GC_LAND=1 \
@@ -419,7 +462,7 @@ assert_eq "(9) rate-limited refresh exits 0" "0" "$RC"
 assert_eq "(9) rate-limited refresh made NO commit" "" "$(log_lines graph-commit.log)"
 assert_contains "(9) diagnostic names the rate limit" "rate-limited, no commit" "$OUT"
 assert_eq "(9) the churning body was NOT spliced in" "Reading at pass one." \
-  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINTED")"
+  "$(body_region "$MINTED")"
 assert_eq "(9) tree left clean" "" "$(git -C "$FR" status --porcelain)"
 
 # The stamp is per KIND, not global: a different kind is not gated by it.
@@ -624,7 +667,7 @@ assert_eq "(21) node id" "tactic-fleet-alarm-main-checkout-held" \
   "$(jq -r .id "$LOG/write-node-input.json")"
 assert_eq "(21) body spliced over the placeholder" \
   "A stuck session is holding the shared main checkout." \
-  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINT21")"
+  "$(body_region "$MINT21")"
 
 # Re-detection with an IDENTICAL body must not churn a commit...
 run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
@@ -642,7 +685,7 @@ run_alarm STUB_STATE=open STUB_GC_LAND=1 -- \
 assert_eq "(21) differing-body refresh exits 0" "0" "$RC"
 assert_contains "(21) refresh ran with --base" "--base" "$(log_lines graph-commit.log)"
 assert_eq "(21) refreshed body landed on disk" "A different set of offending sessions." \
-  "$(awk 'p; /^---$/{c++; if(c==2) p=1}' "$MINT21")"
+  "$(body_region "$MINT21")"
 
 # ...and the condition resolves to phase done.
 git -C "$FR" checkout -- intentions

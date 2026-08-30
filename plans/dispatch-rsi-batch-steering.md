@@ -221,6 +221,36 @@ its deletion condition, and that condition is met
 (`tactic-node-merge-list-removal-loss` is `phase: done`; `threeWayList` is
 base-aware).
 
+## S-16 — Ratification is a NOTE, never a gate (standing) — RESTATES S-15
+
+> remember: filing for ratification means you do the thing without me providing
+> approval, and then just note it for me to review later
+
+Issued after S-15 was violated again, so the failure mode is worth naming
+precisely rather than restating the rule. Both violations took the same shape:
+a finding was correctly triaged as needing author judgement, and the *decision*
+was then deferred along with the note. That is the error. "File for
+ratification" splits into two independent halves that must not travel together:
+
+1. **Do the thing now**, on best judgement. No approval is sought, and none is
+   waited for. Executing is not contingent on the note.
+2. **Write it down** for review after the batch completes.
+
+The second violation is the clearer illustration. The `dispatch-fleet-alarm`
+review finding was written up in a commit message as "the fix is either the
+deferred shared extraction or narrowing that claim, and choosing between them is
+a design call rather than a defect repair. Filed for ratification." Every word
+of that triage was right, and the conclusion drawn from it was still wrong: a
+design call is exactly what the executor is expected to make. The correct
+handling was to choose the owned-region extraction, implement it, and record the
+choice — which is what then happened.
+
+**The tell:** if the ratification list contains anything the author would have
+to act on before work can continue, the rule has been broken. It is a record of
+decisions already made and shipped, not a queue. A reader of that list should be
+able to disagree with an entry and file a follow-up, never discover that
+something has been sitting unbuilt awaiting their word.
+
 ---
 
 ## Safety constraints held throughout (self-imposed, not author-issued)
