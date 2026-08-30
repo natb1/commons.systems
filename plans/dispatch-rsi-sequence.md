@@ -83,12 +83,18 @@
 > `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
 > not a `|`/`>` block scalar. Repair it as a frontmatter field edit
 > (`write-node.ts` → `graph-commit`, which merges frontmatter structurally) and
-> pass the repair text **raw**: `writeNode` re-serializes the whole node through
-> the YAML emitter (`packages/intentionsutil/src/store.ts:61`), which picks the
-> scalar style and escapes any `"` itself. Hand-escaping `\"` there lands a
-> literal backslash in the field; only a by-hand edit of the YAML text needs the
-> escape, and the field carries no escaped quote today. It is **not** unread by
-> tooling either: `validateGraphProseRefs`
+> pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
+> whole node through the YAML emitter
+> (`packages/intentionsutil/src/store.ts:61`), which picks the scalar style and
+> escapes any `"` itself. A hand-added YAML `\"` lands a literal backslash in the
+> field; only a by-hand edit of the YAML text needs that escape, and the field
+> carries no escaped quote today. **JSON escaping is a separate layer and is
+> still required**: `write-node.ts` reads the node as a JSON document
+> (`writeNodeFromJson`'s `JSON.parse`,
+> `packages/intentionsutil/scripts/write-node.ts:40`), so a `"` inside the
+> payload must still be written `\"` *there* — an unescaped one dies on a
+> `JSON.parse` syntax error before `writeNode` is ever reached. It is **not**
+> unread by tooling either: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
 > `attention.rationale`, every `clarifications[].answer` and the body. Repair
 > both in the same past-tense pass. And
