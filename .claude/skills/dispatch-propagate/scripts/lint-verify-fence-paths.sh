@@ -51,9 +51,32 @@
 # remediation (it names exactly what to fix and where). Exit 1 if any miss
 # survives the baseline, else exit 0 with no output.
 #
+# SECOND, ADVISORY CHECK — swallowed statement status. dispatch-run-verification
+# runs each block as plain `bash <tmpfile>` with NO `set -e`, so in a
+# multi-statement block only the LAST statement decides pass/fail. An earlier
+# assertion can fail while the fence reports PASS. Measured 2026-08-30: 7 such
+# false-passing fences under intentions/, two of them on nodes that had already
+# reached a terminal phase behind the gate. That 7 counts THIS mechanism only —
+# a discarded non-final status. It is deliberately not a corpus-wide false-pass
+# count: at least one further fence passes falsely by INVERTED POLARITY (a
+# negated grep whose intent is absence, exiting 0 while printing violating
+# hits), which this check does not and cannot detect.
+#
+# This check WARNS on stderr and NEVER changes the exit status. That is
+# deliberate and load-bearing: the statement split is line-wise and therefore
+# approximate, and an approximate signal must not be able to break a build. The
+# path-orphan check above owns the exit status alone.
+#
+# Measured blast radius at introduction: 61 of the 889 executed blocks (45
+# nodes, 124 warning lines) — `done` nodes are exempt from this check too,
+# since they are exempt from the scan loop entirely.
+#
+# --no-status-warn silences it (used by this script's own test fixtures, which
+# assert on exactly-empty combined output).
+#
 # Usage:
 #   lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR]
-#                              [--baseline FILE]
+#                              [--baseline FILE] [--no-status-warn]
 #
 # --repo-root defaults to the repo containing the CWD (not the one containing
 # this script). When the script is invoked from a checkout other than the one
@@ -72,6 +95,7 @@ source "$SCRIPT_DIR/lib-verify-fence.sh"
 REPO_ROOT=""
 INTENTIONS_DIR=""
 BASELINE_FILE="$SCRIPT_DIR/verify-fence-path-baseline.json"
+STATUS_WARN=true
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,13 +108,15 @@ while [[ $# -gt 0 ]]; do
     --baseline)
       [[ $# -lt 2 ]] && { echo "lint-verify-fence-paths.sh: --baseline requires an argument" >&2; exit 2; }
       BASELINE_FILE="$2"; shift 2 ;;
+    --no-status-warn)
+      STATUS_WARN=false; shift ;;
     -h|--help)
-      echo "usage: lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR] [--baseline FILE]"
+      echo "usage: lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR] [--baseline FILE] [--no-status-warn]"
       echo "  0  no violations   1  at least one new violation   2  bad usage"
       exit 0 ;;
     *)
       echo "lint-verify-fence-paths.sh: unexpected argument: $1" >&2
-      echo "usage: lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR] [--baseline FILE]" >&2
+      echo "usage: lint-verify-fence-paths.sh [--intentions-dir DIR] [--repo-root DIR] [--baseline FILE] [--no-status-warn]" >&2
       exit 2 ;;
   esac
 done
@@ -231,6 +257,55 @@ node_phase() {
   ' "$file"
 }
 
+# --- Advisory: a non-final statement whose exit status the runner discards ---
+# See the header. WARN only: stderr, never $FOUND. A statement is NOT reported
+# when the author already reasoned about exit status (`!`-prefixed,
+# `&&`/`||`-joined, `$?`-captured), when the block turns on errexit itself, or
+# when it is an assignment or a pure output/control builtin rather than an
+# assertion. Statements are split line-wise, with backslash continuations and
+# unbalanced-quote continuations rejoined and `if/for/while/until/case` bodies
+# treated as one top-level statement.
+#
+# Two `set -e` traps this function deliberately avoids. The script runs under
+# `set -euo pipefail`, so (1) `(( depth++ ))` is NOT used — it returns rc 1 when
+# `depth` is 0 (post-increment yields the OLD value) and would abort the script;
+# `depth=$(( depth + 1 ))` is used instead. (2) Every bare `[[ … ]]` test is the
+# left side of an `&&` or `||` list, which errexit exempts.
+warn_unguarded_statements() {
+  local node_id="$1" block="$2"
+  [[ "$block" == *"set -e"* || "$block" == *"set -o errexit"* ]] && return 0
+
+  local line s cont="" depth=0 i last
+  local -a stmts=()
+  while IFS= read -r line; do
+    s="${line#"${line%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"
+    [[ -n "$cont" ]] && { s="$cont $s"; cont=""; }
+    [[ -z "$s" || "$s" == \#* ]] && continue
+    if [[ "$s" == *\\ ]]; then cont="${s%\\}"; continue; fi
+    local dq sq
+    dq="${s//[^\"]}"; sq="${s//[^\']}"
+    if (( ${#dq} % 2 == 1 || ${#sq} % 2 == 1 )); then cont="$s"; continue; fi
+    case "$s" in
+      fi|done|esac|'}'|'};'|'fi;'|'done;')
+        (( depth > 0 )) && depth=$(( depth - 1 )); continue ;;
+      if\ *|for\ *|while\ *|until\ *|case\ *)
+        [[ "$depth" -eq 0 ]] && stmts+=("$s"); depth=$(( depth + 1 )); continue ;;
+    esac
+    [[ "$depth" -eq 0 ]] && stmts+=("$s")
+  done <<<"$block"
+
+  [[ "${#stmts[@]}" -ge 2 ]] || return 0
+  last=$(( ${#stmts[@]} - 1 ))
+  for (( i = 0; i < last; i++ )); do
+    s="${stmts[i]}"
+    [[ "$s" == '!'* || "$s" == *'&&'* || "$s" == *'||'* || "$s" == *'$?'* ]] && continue
+    [[ "$s" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue
+    [[ "$s" =~ ^(echo|printf|set|shift|exit|return|unset|local|declare|export|:|if|for|while|until|case)([[:space:]]|$) ]] && continue
+    echo "lint-verify-fence-paths.sh: WARN $node_id: a non-final verify statement's exit status is discarded (the runner adds no 'set -e', so only the last statement decides): $s" >&2
+  done
+  return 0
+}
+
 FOUND=0
 declare -A SEEN=()
 
@@ -264,6 +339,11 @@ for file in "$INTENTIONS_DIR"/*.md; do
   [[ "${#blocks[@]}" -eq 0 ]] && continue
 
   for block in "${blocks[@]}"; do
+    # Advisory only; must be an `if`, not `[[ … ]] && f`, because a false test
+    # would return 1 mid-loop-body and errexit would abort the scan.
+    if [[ "$STATUS_WARN" == true ]]; then
+      warn_unguarded_statements "$node_id" "$block"
+    fi
     while IFS= read -r line; do
       declare -a tokens=()
       read -r -a tokens <<<"$line" || true

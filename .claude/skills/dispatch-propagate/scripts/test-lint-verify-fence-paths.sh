@@ -62,7 +62,18 @@ write_node() {
 reset_nodes() { rm -f "$FIXTURE_REPO"/intentions/*.md; }
 
 # Run the checker over the fixture; sets RC and OUT.
+# `--no-status-warn` by default: every existing case here asserts on exactly-
+# empty COMBINED output (2>&1), and the advisory swallowed-status warning writes
+# to stderr. The warning has its own cases below, which call run_lint_warn.
 run_lint() {
+  local baseline="${1:-$EMPTY_BASELINE}"
+  if OUT=$("$LINT" --repo-root "$FIXTURE_REPO" \
+                   --intentions-dir "$FIXTURE_REPO/intentions" \
+                   --baseline "$baseline" --no-status-warn 2>&1); then RC=0; else RC=$?; fi
+}
+
+# Same, but with the advisory warning ENABLED (the default in production).
+run_lint_warn() {
   local baseline="${1:-$EMPTY_BASELINE}"
   if OUT=$("$LINT" --repo-root "$FIXTURE_REPO" \
                    --intentions-dir "$FIXTURE_REPO/intentions" \
@@ -294,6 +305,62 @@ assert_eq "no Verification section prints nothing" "" "$OUT"
 echo "Test: the shipped baseline is empty"
 shipped=$(jq -r 'length' "$SCRIPT_DIR/verify-fence-path-baseline.json")
 assert_eq "shipped verify-fence-path-baseline.json has no entries" "0" "$shipped"
+
+# --- 10. swallowed non-final statement status -> WARN on stderr, exit 0 -----
+# The advisory check the linter's header documents: dispatch-run-verification
+# runs a block as plain `bash <file>` with no `set -e`, so only the LAST
+# statement decides pass/fail. These five cases pin the warning's shape and,
+# just as importantly, its inability to change the exit status.
+echo "Test: a non-final unguarded statement warns but does not fail"
+reset_nodes
+write_node warn-unguarded implement '## Verification
+```verify
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "unguarded non-final statement still exits 0" "0" "$RC"
+case "$OUT" in *"WARN warn-unguarded"*) : ;; *) echo "FAIL: expected a WARN, got: $OUT"; exit 1 ;; esac
+
+echo "Test: --no-status-warn silences it"
+run_lint
+assert_eq "--no-status-warn exits 0" "0" "$RC"
+assert_eq "--no-status-warn prints nothing" "" "$OUT"
+
+echo "Test: a single-statement block never warns"
+reset_nodes
+write_node warn-single implement '## Verification
+```verify
+bash .claude/live-script.sh
+```'
+run_lint_warn
+assert_eq "single statement exits 0" "0" "$RC"
+assert_eq "single statement prints nothing" "" "$OUT"
+
+echo "Test: guarded non-final statements never warn"
+reset_nodes
+write_node warn-guarded implement '## Verification
+```verify
+bash .claude/live-script.sh || exit 1
+! bash .claude/live-script.sh
+bash packages/keep.ts; rc=$?
+bash .claude/live-script.sh
+```'
+run_lint_warn
+assert_eq "guarded statements exit 0" "0" "$RC"
+assert_eq "guarded statements print nothing" "" "$OUT"
+
+echo "Test: a block that sets errexit itself never warns"
+reset_nodes
+write_node warn-errexit implement '## Verification
+```verify
+set -euo pipefail
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "set -e block exits 0" "0" "$RC"
+assert_eq "set -e block prints nothing" "" "$OUT"
 
 # ---------------------------------------------------------------------------
 # lib-verify-fence.sh extraction regression: dispatch-run-verification's exit
