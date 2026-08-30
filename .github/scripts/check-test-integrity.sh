@@ -346,7 +346,10 @@ fi
 #
 # set -e safety: every git grep / git show / grep here either runs in an
 # `if …; then` CONDITION (where a no-match exit 1 is harmless) or carries
-# `|| true`, mirroring the existing guards at :182/:183/:202.
+# `|| true`, mirroring the existing guards on the ADDED_LINES / REMOVED_LINES
+# extraction and the SKIP_ADDED count. Cited by construct, not by line number:
+# the numbered form of these anchors has already gone stale twice, because every
+# edit above shifts them and the citation has no way to notice.
 # ---------------------------------------------------------------------------
 
 # Pure-exclude pathspecs for the existence check: the post-PR tree minus tests.
@@ -541,7 +544,8 @@ while IFS= read -r F; do
   if [ "$already_exempt" -eq 1 ]; then continue; fi
 
   # Per-file net-removal filter: only files that net-remove declarations have
-  # anything to exempt. Mirror the comment-exclusion filters at :183/:284.
+  # anything to exempt. Mirror the comment-exclusion filters on ADDED_LINES /
+  # REMOVED_LINES and on the co-deletion loop's FILE_REMOVED.
   F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
@@ -590,8 +594,9 @@ while IFS= read -r F; do
 
   REMOVED_NAMED=$(printf '%s\n' "$REMOVED_TAGS" | sed -n 's/^N://p' || true)
   HAS_UNVERIFIABLE_REMOVED_IMPORT=0
-  # HERE-STRING, not a pipe, for the same reason as the co-deletion loop at
-  # :281: `grep -q` exits at the first match and SIGPIPEs its writer, so past
+  # HERE-STRING, not a pipe, for the same reason as the co-deletion loop's
+  # $DELETED_IMPL membership test: `grep -q` exits at the first match and
+  # SIGPIPEs its writer, so past
   # the 64 KiB pipe buffer the pipeline returns 141 under `set -o pipefail` and
   # this `if` reads FALSE on tags that DID contain a `U:`. That skips the
   # bias-to-fire guard below — the dangerous direction.
@@ -653,7 +658,8 @@ while IFS= read -r F; do
       # the direction this block declares dangerous: it wrongly exempts, and a
       # real test weakening passes the gate. A generated barrel re-exporting a
       # few thousand names reaches that size. Same fix, same reason, as the
-      # co-deletion loop at :281 and detect-changes.sh's category tests.
+      # co-deletion loop's $DELETED_IMPL membership test and detect-changes.sh's
+      # category tests.
       XF_EXPORTS=$(printf '%s\n' "$XF_SRC" | awk "$EXPORT_AWK")
       if grep -qxF -- "$X" <<<"$XF_EXPORTS"; then
         found=1

@@ -109,10 +109,20 @@ assert_exit() {
 }
 
 # assert_stderr_contains PATTERN DESCRIPTION
+#
+# A quoted `[[ == *…* ]]` match, never `printf "$STDERR" | grep -qF`. This file
+# runs under `set -o pipefail`, and `grep -q` exits the instant it matches — so
+# on a $STDERR big enough that printf is still writing when that happens, the
+# writer takes SIGPIPE, the pipeline reports 141, and a MATCHING assertion is
+# reported as a FAILURE. check-test-integrity.sh's violation block prints one
+# line per offending file, so a large removal grows $STDERR past the 64 KiB pipe
+# buffer. Quoting makes the needle literal exactly as `grep -F` did; this is the
+# same spelling test-helpers.sh's shared assert_contains already uses, for the
+# same reason.
 assert_stderr_contains() {
   local pattern="$1" desc="$2"
   TOTAL=$((TOTAL + 1))
-  if printf '%s\n' "$STDERR" | grep -qF -- "$pattern"; then
+  if [[ "$STDERR" == *"$pattern"* ]]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))

@@ -150,10 +150,17 @@ assert_contains "main-push/failing: names the failed lane" "Failed suites: ci-sc
 # ---------------------------------------------------------------------------
 # Test 4: an unresolvable baseline is a hard error, not a vacuous pass.
 #
-# The helper's exit code must propagate. run-unit-tests.sh assigns it in a plain
-# assignment under `set -e`; get-changed-apps.sh (reached first, at :68) is
-# checked with `if !`. Either way the run must go red rather than print
-# "Nothing to check" and exit 0.
+# The helper's exit code must propagate. BOTH callers spell it as a plain
+# assignment under `set -e` -- run-unit-tests.sh at its own resolve-diff-base.sh
+# call, and get-changed-apps.sh (reached first) at the no-explicit-base branch
+# of its BASE resolution. Neither wraps the helper in `if !`; the `if !` forms
+# further down get-changed-apps.sh guard a `git diff` and resolve_dirty_apps,
+# not this helper, so do not read them as a second propagation shape. The run
+# must go red rather than print "Nothing to check" and exit 0.
+#
+# Cited by construct rather than by line number, and the mechanism stated
+# rather than assumed: the numbered form of this anchor claimed an `if !` that
+# was never there, and pointed into a file this same PR edits.
 # ---------------------------------------------------------------------------
 echo "Test 4: unresolvable baseline exits non-zero rather than passing vacuously"
 make_repo

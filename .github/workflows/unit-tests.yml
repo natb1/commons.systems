@@ -547,8 +547,9 @@ jobs:
       # belt-and-braces: until detect-changes.sh resolved its baseline, the
       # `origin/main...HEAD` range was empty on a push to `main`, so
       # `outputs.nix` was never true there and this step could not run
-      # post-merge. main-nix-validate.yml:15-18 records the resulting darwin gap
-      # as knowingly left open on macos-14 runner cost. Making the detector
+      # post-merge. main-nix-validate.yml's own scope note records the
+      # resulting darwin gap as knowingly left open on macos-14 runner
+      # cost. Making the detector
       # honest on `main` would silently reverse that cost decision — so the
       # decision is now stated here instead of arriving from a defect.
       - name: Install nix (if nix files changed)
@@ -586,7 +587,8 @@ jobs:
       # and the contradiction was inert; making the detector honest there would
       # start a second, concurrent copy of the same build under a cap the normal
       # cold build exceeds — reddening origin/main on every nix-touching merge,
-      # which is the outcome main-nix-validate.yml:50-53 exists to avoid.
+      # which is the outcome the timeout-cap rationale in main-nix-validate.yml
+      # exists to avoid.
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true' && github.ref != 'refs/heads/main'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
