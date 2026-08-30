@@ -114,6 +114,20 @@ clarifications:
       virtue-knowledge-as-gift, minted delegated-pending-review as the tension
       sibling of the ratified virtue-right-livelihood. codified keeps its
       meaning; delegated is the stamp-visible interim."
+  - question: What structural doctrine do root-level tension pairs still owe
+      (2026-08-30 post-review)?
+    answer: "The sustenance round paired two ROOTS by tension_with
+      (virtue-right-livelihood / virtue-knowledge-as-gift) — the first
+      root-level pair, while recorded tension doctrine covers sibling virtues
+      under one parent and defines the cross-guard by excess-directions falling
+      in each other's fields. The 2026-07-09 trigger ('a second such pair
+      emerging is the trigger to design structure for it') has now fired. Owed
+      to the /exetasis sitting that reviews the pair: legalize and define
+      root-level tension pairs in this kind's doctrine, and articulate the
+      pair's excess-directions in cross-guard form (which excess of each falls
+      in the other's field). Debt recorded Claude-drafted (decision:
+      delegated-pending-review, delegation-anthropic-claude, 2026-08-30); the
+      pair itself stands delegated-pending-review per its own nodes."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -144,7 +158,7 @@ attributes:
     delegated: the virtue's substance is Claude-drafted and held
       delegated-pending-review or delegated-review-declined under the
       three-state decision model (strategy-explicit-intent, 2026-08-30) — not
-      yet author-settled; flips to codified when an /exetasis sitting or an
-      adjacent /align round ratifies it
+      yet author-settled; flips to codified if an /exetasis sitting or an
+      adjacent /align round ratifies it (a sitting may also amend or decline)
 ---
 # Virtue — a disposition held and exercised, never completed

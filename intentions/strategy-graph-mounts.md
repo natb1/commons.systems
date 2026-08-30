@@ -193,12 +193,18 @@ rounds:
   last_aligned: null
 attributes:
   conditions:
-    - mounted content is the author's model of the counterparty — substance
+    - "mounted content is the author's model of the counterparty — substance
       defaults to author authorship with agent assistance as drafting, extending
       strategy-explicit-intent's amended authorship condition to mounts;
-      delegating it carries a decision stamp and the capture model's steepest
-      position price (amended 2026-08-30 with the parent condition, under the
-      legacy-null migration rule)
+      delegating it carries a decision stamp and a position price from the MOUNT
+      position metric — pending: mounts get position from the
+      dependents-count-style metric, not the capture model, whose root-distance
+      weighting is undefined for mount substance; this pricing extension is
+      Claude-drafted (decision: delegated-pending-review,
+      delegation-anthropic-claude, 2026-08-30), where the parent virtue/strategy
+      condition's 'steepest position price' is author-ratified (amended
+      2026-08-30 with the parent condition, under the legacy-null migration
+      rule)"
     - mounts are modeled to the depth the audit needs — the graph including
       mounts stays enumerable and maintainable at individual scale, so
       strategy-complete-ledger's completeness sweep still fits an office-hours

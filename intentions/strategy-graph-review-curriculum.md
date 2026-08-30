@@ -413,6 +413,25 @@ clarifications:
       pointed at, and the count of durable nodes un-reviewed across two or more
       consecutive cycles trends down — both decidable from reviewed stamps
       alone."
+  - question: How does the adjacent-/align path discharge review debt, what makes
+      doctrine 'adjacent', and how does stampless null content rank (2026-08-30
+      post-review, H8)?
+    answer: "Three Claude-drafted rulings, each (decision: delegated-pending-review,
+      delegation-anthropic-claude, 2026-08-30), closing the incoherence the
+      post-hoc review found (path (2) converted null to doctrine but never
+      discharged review debt, leaving adjacent-ratified content atop the queue
+      forever). (a) ATTESTATION: an /align adjacent-doctrine ratification also
+      writes the /exetasis reviewed stamp {fingerprint, date} for the node it
+      ratifies — both paths end in the same attestation, so the virtual node's
+      predicate drops the node either way. (b) ADJACENCY: a legacy-null node is
+      adjacent to an /align round iff the round quotes it, amends it, or touches
+      an edge incident to it; nothing else qualifies, so a round cannot ratify
+      arbitrary content by declaring it adjacent — the criterion is auditable
+      from the round's own diff. (c) NULL ORDERING: stampless legacy-null
+      content scores zero on the stamp-density priority term and competes on the
+      remaining terms, root-distance first — the initial whole-durable-layer
+      queue is therefore ordered root-out, matching the author-ratified priority
+      direction. An /exetasis sitting ratifies, amends, or declines all three."
 tooling_goals:
   - kind: sensor
     statement: review debt, read off the virtual review node — the count of
