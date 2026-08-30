@@ -1,0 +1,471 @@
+#!/usr/bin/env bash
+# mint-mainqa-nodes — land the main-qa DESTINATION nodes for one source tactic's
+# post-merge verification items, recorded by `/qa-fix` at qa record time. The
+# LANDING half of the decision/land split whose DECISION half is the
+# network-free `mint-mainqa-nodes-decide.ts` (this script makes no routing
+# decisions of its own: it refreshes from origin/main, asks that tool what to
+# mint, writes what it says, and lands it). Structurally this is `hold-node`
+# with one difference spelled out below — there is no source-side edit.
+#
+# Doctrine (binding author ruling R1): the items split into at most TWO lanes —
+# machine and author. A WAIT verifiability mark is a hold ON the machine node,
+# never a third lane. `laneFor` in ../src/mainqaRouting.ts encodes that; nothing
+# in this script re-decides it.
+#
+# WHY THIS LAND IS A PURE CREATE. The `blocked_by` edge points DESTINATION →
+# SOURCE (each minted node carries `blocked_by: [<source-id>]`), so unlike
+# hold-node there is no reciprocal edge to write back onto the source. This
+# script therefore NEVER opens intentions/<source-id>.md in the working tree —
+# not for read, not for write. The source's own origin/main content is read out
+# of a throwaway temp store (see the refresh below), so a mint leaves the
+# source's file byte-identical, and no compare-and-swap token on it is needed
+# or emitted.
+#
+# NO `--base` TOKEN IS EVER EMITTED, and that is by construction, not an
+# oversight. A lane whose destination file already exists on origin/main is
+# dispositioned EXISTING and SKIPPED ENTIRELY (below) — `/qa-fix` may cross this
+# seam more than once on a fixing pass, and re-minting is not an edit, it is a
+# no-op. So the id set handed to graph-commit only ever contains BORN-FRESH
+# files, which have no prior origin/main blob to compare against — exactly
+# hold-node's "a born-fresh NONE hold has no prior blob" case. Consequently this
+# script has no base-pin logic to share, and deliberately does NOT source
+# `lib-base-pin.sh`: if a future change ever does put a pre-existing id into the
+# commit set, take its token from `dump-node.ts --out-dir`'s base-manifest.txt
+# handed straight to `graph-commit --base`, and resolve a caller-supplied
+# `--base` through `resolve_base_pin` from that library rather than
+# reinventing it.
+#
+# Fresh-origin/main invariant (mirrors park-node/hold-node): every read below
+# operates on origin/main's CURRENT content, never a possibly-stale local
+# worktree copy — this script routinely runs from a far-behind PR-branch
+# worktree, since it is called at the moment a PR merges.
+#
+# Landing-signal invariant (the layer-2 caveat, mirroring resolve-hold's
+# "Verify A"/"Verify B"): graph-commit's own report is NOT trusted as the
+# verdict. Its layer-2 field merge has a documented history of silently dropping
+# or duplicating parts of a write, and a `pushed=none context=noop` verdict is a
+# FAILURE dressed as an exit 0 (success is `context=push-reported-success`). So
+# after the commit this script re-fetches origin/main, re-reads every node it
+# wrote off that fresh ref, and asserts the landed bytes are EXACTLY the bytes
+# it wrote. For a pure create there is nothing on the far side to merge with, so
+# byte equality is precisely the invariant — a dropped field, a duplicated list
+# element, or a lost body all fail it.
+#
+# Usage:
+#   mint-mainqa-nodes <source-node-id> --pr <n> --items <file>
+#                     [--dir <intentions-dir>] [-C <repo-path>]
+#                     [--now <YYYY-MM-DD>]
+#
+# --pr <n>   the source's ALREADY-MERGED PR number. Required: a destination node
+#            is born carrying it, and rendering `PR #null` into a statement is
+#            refused upstream in ../src/mainqaRouting.ts. This script stays
+#            gh-free — the number is passed in, never resolved here.
+# --items <f> a JSON ARRAY of verification items, one object each:
+#            { id, title, url_path, expected_outcome, finding,
+#              verifiability?, check? }.  `verifiability` defaults to MACHINE;
+#            see mint-mainqa-nodes-decide.ts.
+# -C <path>  (alias --repo) the checkout to mint into. THE REPO ROOT IS RESOLVED
+#            FROM THIS PATH, ELSE FROM CWD — never from this script's own
+#            location, and the same root is passed to `graph-commit -C`. Without
+#            an explicit -C, graph-commit resolves from cwd and can exit 0
+#            having landed nothing in the wrong checkout. (Sibling SCRIPTS —
+#            the decide tool, write-node.ts, graph-commit — are still located
+#            next to THIS file, which is the established convention; only the
+#            repo being written is caller-named.)
+# --dir <d>  the intentions store, defaulting to <repo-root>/intentions. Named
+#            explicitly per clarification 194's doctrine; it must resolve TO
+#            that directory, because graph-commit stages `intentions/<id>.md`
+#            relative to the repo root it resolved.
+# --now <d>  YYYY-MM-DD stamped as the author lane's `office_hours.since`;
+#            defaults to today (UTC). Present for deterministic tests.
+#
+# Stdout: one line per NON-EMPTY lane — `minted <id> (<disposition>)`, where
+# <disposition> is CREATE (born fresh and landed) or EXISTING (already on
+# origin/main; skipped, nothing written).
+#
+# Exit codes (park-node's scheme): 0 landed on main — including an
+# all-EXISTING run, which lands nothing and is a legitimate no-op; 1 the write,
+# the graph-commit, or the post-land re-read failed; 2 usage error.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DECIDE_TS="$SCRIPT_DIR/mint-mainqa-nodes-decide.ts"
+WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
+GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
+
+USAGE="usage: mint-mainqa-nodes <source-node-id> --pr <n> --items <file> [--dir <intentions-dir>] [-C <repo-path>] [--now <YYYY-MM-DD>]"
+
+SOURCE_ID=""
+PR_ARG=""
+ITEMS_FILE=""
+DIR_ARG=""
+REPO_ARG=""
+NOW_ARG=""
+
+need_value() { # <flag> <remaining-count>
+  if [[ "$2" -lt 2 ]]; then
+    echo "mint-mainqa-nodes: $1 requires a value" >&2
+    echo "$USAGE" >&2
+    exit 2
+  fi
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr) need_value --pr $#; PR_ARG="$2"; shift 2 ;;
+    --items) need_value --items $#; ITEMS_FILE="$2"; shift 2 ;;
+    --dir) need_value --dir $#; DIR_ARG="$2"; shift 2 ;;
+    -C|--repo) need_value "$1" $#; REPO_ARG="$2"; shift 2 ;;
+    --now) need_value --now $#; NOW_ARG="$2"; shift 2 ;;
+    -*)
+      echo "mint-mainqa-nodes: unknown option \"$1\"" >&2
+      echo "$USAGE" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$SOURCE_ID" ]]; then
+        echo "mint-mainqa-nodes: unexpected extra positional argument \"$1\"" >&2
+        echo "$USAGE" >&2
+        exit 2
+      fi
+      SOURCE_ID="$1"; shift
+      ;;
+  esac
+done
+
+if [[ -z "$SOURCE_ID" || -z "$PR_ARG" || -z "$ITEMS_FILE" ]]; then
+  echo "$USAGE" >&2
+  exit 2
+fi
+# The id is interpolated into a path and into graph-commit's --expect pairs, so
+# validate it in FULL here (park-node's charset): src/store.ts's
+# assertPathSafeId rejects only `/`, `\`, `.` and `..`, leaving `@`, `#` and
+# whitespace legal upstream.
+if [[ ! "$SOURCE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "mint-mainqa-nodes: malformed source node id '$SOURCE_ID' — ids must match ^[A-Za-z0-9._-]+\$" >&2
+  exit 2
+fi
+if [[ ! "$PR_ARG" =~ ^[0-9]+$ ]] || [[ "$PR_ARG" == 0 ]]; then
+  echo "mint-mainqa-nodes: --pr must be a positive integer, got '$PR_ARG'" >&2
+  exit 2
+fi
+if [[ ! -f "$ITEMS_FILE" ]]; then
+  echo "mint-mainqa-nodes: no such --items file: $ITEMS_FILE" >&2
+  exit 2
+fi
+if [[ -n "$NOW_ARG" && ! "$NOW_ARG" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "mint-mainqa-nodes: --now must be YYYY-MM-DD, got '$NOW_ARG'" >&2
+  exit 2
+fi
+command -v jq >/dev/null || { echo "mint-mainqa-nodes: jq is required" >&2; exit 1; }
+
+# --- Repo root: from -C, else cwd; NEVER from this script's location ---------
+if [[ -n "$REPO_ARG" ]]; then
+  if [[ ! -d "$REPO_ARG" ]]; then
+    echo "mint-mainqa-nodes: -C '$REPO_ARG' is not a directory" >&2
+    exit 2
+  fi
+  if ! REPO_ROOT="$(git -C "$REPO_ARG" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "mint-mainqa-nodes: -C '$REPO_ARG' is not inside a git repository" >&2
+    exit 2
+  fi
+else
+  if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "mint-mainqa-nodes: cwd is not inside a git repository — run from the checkout to mint into, or pass -C <repo-path>" >&2
+    exit 2
+  fi
+fi
+
+CANONICAL_INTENTIONS="$REPO_ROOT/intentions"
+if [[ ! -d "$CANONICAL_INTENTIONS" ]]; then
+  echo "mint-mainqa-nodes: $CANONICAL_INTENTIONS does not exist — '$REPO_ROOT' does not look like the intention-graph checkout" >&2
+  exit 2
+fi
+CANONICAL_ABS="$(cd "$CANONICAL_INTENTIONS" && pwd -P)"
+if [[ -n "$DIR_ARG" ]]; then
+  if [[ ! -d "$DIR_ARG" ]]; then
+    echo "mint-mainqa-nodes: --dir '$DIR_ARG' is not a directory" >&2
+    exit 2
+  fi
+  DIR_ABS="$(cd "$DIR_ARG" && pwd -P)"
+  # A --dir naming some OTHER checkout's store is the exact clarification-194
+  # bug: the write would land in one tree while graph-commit commits another.
+  # graph-commit stages `intentions/<id>.md` under the root resolved from
+  # -C/cwd, so the two must be the same directory.
+  if [[ "$DIR_ABS" != "$CANONICAL_ABS" ]]; then
+    echo "mint-mainqa-nodes: --dir '$DIR_ARG' resolves to $DIR_ABS, but graph-commit stages intentions/<id>.md under the repo root resolved from -C/cwd ($CANONICAL_ABS). Pass -C to name the checkout you mean to mint into." >&2
+    exit 2
+  fi
+  INTENTIONS_DIR="$DIR_ABS"
+else
+  INTENTIONS_DIR="$CANONICAL_ABS"
+fi
+
+TMPD="$(mktemp -d)" || { echo "mint-mainqa-nodes: mktemp -d failed" >&2; exit 1; }
+
+# --- Rollback machinery (park-node's conditional-restore guard) ---------------
+# CREATED_IDS is armed BEFORE each write, so a file that appears on disk is
+# always a rollback candidate even if the write only partially completed. A
+# failed land must leave NO dirty intentions/*.md — otherwise graph-commit's
+# assert_clean_outside_ids guard trips for every OTHER unrelated node on the
+# next run from this checkout, and dispatch-tick's `git merge --ff-only` sync is
+# blocked fleet-wide for as long as the residue persists.
+CREATED_IDS=()
+declare -A WROTE_BLOB=()
+MUTATED=0
+HEAD_BEFORE="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+
+# restore_created — delete the born-fresh node files this script wrote. Both
+# guards below detect "graph-commit has already committed or reset these files,
+# so removing them would be an uncommitted REVERT of a landed commit" (the very
+# dirty tree this rollback exists to prevent) and decline, printing a
+# diagnostic. An empty HEAD_BEFORE (unborn HEAD, or git unavailable) disables
+# the first comparison rather than failing the rollback.
+restore_created() {
+  local head_now id blob_now
+  head_now="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$HEAD_BEFORE" && -n "$head_now" && "$head_now" != "$HEAD_BEFORE" ]]; then
+    echo "mint-mainqa-nodes: HEAD moved from $HEAD_BEFORE to $head_now during the mint — graph-commit already committed or reset intentions/, so deleting the files this script wrote would revert a landed commit; leaving them as graph-commit left them (check 'git -C $REPO_ROOT log -1' and whether the mint needs a retry)" >&2
+    return
+  fi
+  for id in "${CREATED_IDS[@]}"; do
+    blob_now="$(git -C "$REPO_ROOT" hash-object -- "intentions/$id.md" 2>/dev/null || true)"
+    if [[ -n "$blob_now" && -n "${WROTE_BLOB[$id]:-}" && "$blob_now" != "${WROTE_BLOB[$id]}" ]]; then
+      echo "mint-mainqa-nodes: intentions/$id.md is no longer the content mint-mainqa-nodes wrote ($blob_now != ${WROTE_BLOB[$id]}) — graph-commit already committed or reset it; leaving it in place rather than deleting it" >&2
+      continue
+    fi
+    if git -C "$REPO_ROOT" ls-files --error-unmatch -- "intentions/$id.md" >/dev/null 2>&1; then
+      # Born fresh here but TRACKED now: graph-commit reset the checkout onto an
+      # origin/main that already carries this node. `rm -f` would manufacture a
+      # deletion of a live node file — one that blocks `git merge --ff-only` and
+      # that the next graph-commit naming this id from this checkout would stage
+      # and land, pruning the node off main. Restore from the index instead.
+      if ! git -C "$REPO_ROOT" checkout -- "intentions/$id.md"; then
+        echo "mint-mainqa-nodes: CRITICAL — intentions/$id.md is tracked but could not be restored with git checkout; the working tree is left dirty and will block git merge --ff-only until cleaned" >&2
+      fi
+    else
+      rm -f "$INTENTIONS_DIR/$id.md"
+    fi
+  done
+}
+
+trap '
+  rc=$?
+  if [[ "$MUTATED" == 1 && $rc -ne 0 ]]; then
+    restore_created
+  fi
+  rm -rf "$TMPD"
+' EXIT
+
+# --- Fresh-origin/main refresh (SOURCE, into a throwaway store) ---------------
+# The source is materialized into a TEMP store rather than over its working-tree
+# file. hold-node overwrites the source in place because it must then EDIT it;
+# this script only ever READS the source, so overwriting the worktree copy would
+# leak a dirty tracked file for no benefit — and would break the invariant that
+# a mint leaves the source byte-identical. An unreachable origin/main, or a
+# source absent from it, is genuine environment breakage: fail with a clear
+# error, never fall back to the local copy (.claude/rules/code-style.md).
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "mint-mainqa-nodes: could not fetch origin/main to read $SOURCE_ID before minting" >&2
+  exit 1
+fi
+FRESH_STORE="$TMPD/origin-store"
+mkdir -p "$FRESH_STORE" || { echo "mint-mainqa-nodes: could not create the temp store" >&2; exit 1; }
+if ! git -C "$REPO_ROOT" show "origin/main:intentions/$SOURCE_ID.md" > "$FRESH_STORE/$SOURCE_ID.md" 2>/dev/null; then
+  echo "mint-mainqa-nodes: intentions/$SOURCE_ID.md does not exist on origin/main — cannot mint main-qa destinations for a source that is not landed" >&2
+  exit 1
+fi
+
+# --- Compose the decide payload ----------------------------------------------
+# jq reads the items file DIRECTLY (no captured-variable round trip through
+# echo) — .claude/rules/shell-json.md.
+if ! jq --arg sid "$SOURCE_ID" --argjson pr "$PR_ARG" \
+      '{source_id: $sid, pr: $pr, items: .}' "$ITEMS_FILE" > "$TMPD/payload.json"; then
+  echo "mint-mainqa-nodes: --items file '$ITEMS_FILE' is not a valid JSON array of items" >&2
+  exit 2
+fi
+
+DECIDE_BASE_ARGS=(--dir "$FRESH_STORE" --file "$TMPD/payload.json")
+[[ -n "$NOW_ARG" ]] && DECIDE_BASE_ARGS+=(--now "$NOW_ARG")
+
+# Sets DECIDE_OUT to the decide tool's stdout. Deliberately NOT a
+# command-substitution helper: it exits on failure, and an `exit` inside `$(...)`
+# would only kill the substitution subshell, leaving the caller running with an
+# empty decision.
+DECIDE_OUT=""
+run_decide() { # [extra decide args...]
+  DECIDE_OUT="$( (cd "$REPO_ROOT" && node --import tsx/esm "$DECIDE_TS" "${DECIDE_BASE_ARGS[@]}" "$@") )"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    # mint-mainqa-nodes-decide.ts exits 2 on its own usage/payload errors;
+    # anything else is an environment/read failure. Preserve the distinction so
+    # a caller sees the same 2-means-usage contract.
+    echo "mint-mainqa-nodes: mint-mainqa-nodes-decide failed for $SOURCE_ID (rc=$rc)" >&2
+    exit $(( rc == 2 ? 2 : 1 ))
+  fi
+}
+
+# --- Pass 1: learn the candidate ids, then probe origin/main for each ---------
+# The ids are DETERMINISTIC but derived by ../src/mainqaRouting.ts's
+# `mainqaNodeId`, and duplicating that rule in bash would be a second source of
+# truth. So run the decide tool once purely to learn the ids (hold-node does the
+# same dance for its hold id), probe each against origin/main, then run it again
+# for the decision that is actually acted on.
+run_decide --ids-only
+CANDIDATE_IDS=()
+while IFS= read -r cand; do
+  [[ -n "$cand" ]] && CANDIDATE_IDS+=("$cand")
+done <<<"$DECIDE_OUT"
+if [[ ${#CANDIDATE_IDS[@]} -eq 0 ]]; then
+  echo "mint-mainqa-nodes: no destination lanes derived for $SOURCE_ID — the items list produced no lane" >&2
+  exit 1
+fi
+
+EXISTING_ARGS=()
+for cand in "${CANDIDATE_IDS[@]}"; do
+  if git -C "$REPO_ROOT" rev-parse -q --verify "origin/main:intentions/$cand.md" >/dev/null 2>&1; then
+    EXISTING_ARGS+=(--existing "$cand")
+  fi
+done
+
+# --- Pass 2: the decision that is acted on -----------------------------------
+run_decide ${EXISTING_ARGS[@]+"${EXISTING_ARGS[@]}"}
+printf '%s\n' "$DECIDE_OUT" > "$TMPD/decisions.jsonl"
+
+# --- Write each CREATE lane --------------------------------------------------
+REPORT=()
+EXPECT_ARGS=()
+while IFS= read -r decision; do
+  [[ -z "$decision" ]] && continue
+  if ! id="$(jq -r '.id' <<<"$decision")" \
+     || ! disposition="$(jq -r '.disposition' <<<"$decision")"; then
+    echo "mint-mainqa-nodes: could not parse a decision line from mint-mainqa-nodes-decide" >&2
+    exit 1
+  fi
+  REPORT+=("minted $id ($disposition)")
+
+  # EXISTING lanes are skipped ENTIRELY: no write, no id in the commit set, no
+  # --base token. This is what makes a repeated `/qa-fix` pass over this seam a
+  # true no-op rather than a rewrite of a node a human may already be acting on.
+  [[ "$disposition" == "EXISTING" ]] && continue
+
+  md="$INTENTIONS_DIR/$id.md"
+  if ! jq -c '.node' <<<"$decision" > "$TMPD/$id.node.json"; then
+    echo "mint-mainqa-nodes: could not extract the node frontmatter for $id" >&2
+    exit 1
+  fi
+  # -j (not -r): emit the body's exact bytes with no trailing newline of jq's
+  # own — the body already ends with one.
+  if ! jq -j '.body' <<<"$decision" > "$TMPD/$id.body.md"; then
+    echo "mint-mainqa-nodes: could not extract the node body for $id" >&2
+    exit 1
+  fi
+
+  CREATED_IDS+=("$id")
+  MUTATED=1
+
+  # Step 1 of the three-step mint recipe (.claude/skills/qa-main/SKILL.md, the
+  # bug-tactic mint): frontmatter through write-node.ts, the SINGLE validation
+  # gate. This script authors no markdown frontmatter of its own.
+  if ! (cd "$REPO_ROOT" && node --import tsx/esm "$WRITE_NODE_TS" --dir "$INTENTIONS_DIR" --file "$TMPD/$id.node.json") >/dev/null; then
+    echo "mint-mainqa-nodes: write-node failed for $id" >&2
+    exit 1
+  fi
+  if [[ ! -f "$md" ]]; then
+    echo "mint-mainqa-nodes: expected $md after the write-node call, not found" >&2
+    exit 1
+  fi
+
+  # Step 2: replace the generated `# <statement>` placeholder with the real
+  # body. writeNode does not leave a new node body-less — it generates that
+  # placeholder (src/store.ts:57) — so APPENDING here would produce a malformed
+  # two-H1 body. Keep the frontmatter through the closing `---` fence, drop the
+  # placeholder, and write the body directly after the fence (the store's
+  # convention: the body starts on the line after the fence, no blank line).
+  # This survives any later frontmatter-only rewrite, because writeNode calls
+  # readExistingBody (src/store.ts:57) and reuses an existing body verbatim.
+  frontmatter="$(awk '{print} /^---$/{c++; if(c==2) exit}' "$md")"
+  if [[ "$(tail -n1 <<<"$frontmatter")" != "---" ]]; then
+    echo "mint-mainqa-nodes: could not locate the closing frontmatter fence in $md" >&2
+    exit 1
+  fi
+  # Composed in the temp dir, then copied over: a failed compose must not leave
+  # an untracked stray inside intentions/.
+  if ! { printf '%s\n' "$frontmatter"; cat "$TMPD/$id.body.md"; } > "$TMPD/$id.final.md"; then
+    echo "mint-mainqa-nodes: could not compose the node file for $id" >&2
+    exit 1
+  fi
+  if ! cp "$TMPD/$id.final.md" "$md"; then
+    echo "mint-mainqa-nodes: could not write the body of $md" >&2
+    exit 1
+  fi
+
+  if ! blob="$(git -C "$REPO_ROOT" hash-object -- "intentions/$id.md" 2>/dev/null)"; then
+    echo "mint-mainqa-nodes: could not hash intentions/$id.md after the body write" >&2
+    exit 1
+  fi
+  WROTE_BLOB["$id"]="$blob"
+  # --expect is the wrong-repo targeting assertion (graph-commit's header): the
+  # blob is hashed under the SAME root passed as -C, so it catches a -C that
+  # does not resolve to the tree these writes went to, plus a concurrent writer
+  # touching the file between this hash and graph-commit's staging.
+  EXPECT_ARGS+=(--expect "$id=$blob")
+done < "$TMPD/decisions.jsonl"
+
+# --- All-EXISTING: a legitimate no-op ----------------------------------------
+if [[ ${#CREATED_IDS[@]} -eq 0 ]]; then
+  printf '%s\n' "${REPORT[@]}"
+  exit 0
+fi
+
+# --- Step 3: land EVERY created node in ONE graph-commit ----------------------
+# All ids positional in a single invocation (graph-commit:32 — multi-id is
+# supported), so a mixed source's two destination nodes appear on main together
+# or not at all. `-C "$REPO_ROOT"` is mandatory, not cosmetic: graph-commit
+# resolves its repo from -C if given, else from cwd, and this script's writes
+# went to "$INTENTIONS_DIR" under "$REPO_ROOT" — without -C the two can resolve
+# to DIFFERENT checkouts and graph-commit exits 0 having landed nothing.
+GC_OUT="$( (cd "$REPO_ROOT" && "$GRAPH_COMMIT" -C "$REPO_ROOT" ${EXPECT_ARGS[@]+"${EXPECT_ARGS[@]}"} \
+      -m "graph: mint main-qa destination nodes for $SOURCE_ID (PR #$PR_ARG)" "${CREATED_IDS[@]}") 2>&1 )"
+GC_RC=$?
+printf '%s\n' "$GC_OUT" >&2
+
+if [[ $GC_RC -ne 0 ]]; then
+  echo "mint-mainqa-nodes: graph-commit failed (exit=$GC_RC) for ${CREATED_IDS[*]}; the node writes were rolled back" >&2
+  exit 1
+fi
+# A `pushed=none context=noop` verdict is graph-commit reporting that it found
+# nothing to do — a FAILURE for a mint, whose whole point is that these files
+# are new. Success looks like `context=push-reported-success`.
+if grep -q 'context=noop' <<<"$GC_OUT"; then
+  echo "mint-mainqa-nodes: graph-commit reported 'pushed=none context=noop' for ${CREATED_IDS[*]} — it landed NOTHING (a noop verdict is a failure for a mint, not a success); check that -C resolved to the checkout these writes went to" >&2
+  exit 1
+fi
+
+# --- Post-land verification off a FRESH origin/main --------------------------
+# resolve-hold's Verify A/B, applied per created node. graph-commit's layer-2
+# field merge has silently dropped and duplicated parts of a reported-success
+# write before; only origin/main itself is evidence.
+if ! git -C "$REPO_ROOT" fetch origin main >&2; then
+  echo "mint-mainqa-nodes: could not fetch origin/main to verify the mint of ${CREATED_IDS[*]}" >&2
+  exit 1
+fi
+VERIFY_DIR="$TMPD/verify"
+mkdir -p "$VERIFY_DIR" || { echo "mint-mainqa-nodes: could not create the verify dir" >&2; exit 1; }
+for id in "${CREATED_IDS[@]}"; do
+  if ! git -C "$REPO_ROOT" show "origin/main:intentions/$id.md" > "$VERIFY_DIR/$id.md" 2>/dev/null; then
+    echo "mint-mainqa-nodes: $id is absent from origin/main after the mint reported success — the write did not survive" >&2
+    exit 1
+  fi
+  # Byte equality is exactly the right assertion for a pure CREATE: there was
+  # nothing on origin/main to merge with, so any difference IS a dropped or
+  # duplicated field, or a lost body.
+  if ! cmp -s "$VERIFY_DIR/$id.md" "$TMPD/$id.final.md"; then
+    echo "mint-mainqa-nodes: post-land verification failed for $id — origin/main's content is not the content this script wrote (a reported-success land whose write was altered; see this script's header on graph-commit's layer-2 merge). Diff (landed vs written):" >&2
+    diff -u "$VERIFY_DIR/$id.md" "$TMPD/$id.final.md" 2>&1 | sed -n '1,60p' >&2
+    exit 1
+  fi
+done
+
+printf '%s\n' "${REPORT[@]}"
+exit 0

@@ -341,6 +341,10 @@ jobs:
         run: packages/intentionsutil/scripts/test-graph-commit.sh
       - name: Run verify-landed tests
         run: packages/intentionsutil/scripts/test-verify-landed.sh
+      - name: Run mint-mainqa-nodes tests
+        run: packages/intentionsutil/scripts/test-mint-mainqa-nodes.sh
+      - name: Run hold-node tests
+        run: packages/intentionsutil/scripts/test-hold-node.sh
       - name: Run dispatch-ladder-advance tests
         run: .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
       - name: Run dispatch-ladder-await tests

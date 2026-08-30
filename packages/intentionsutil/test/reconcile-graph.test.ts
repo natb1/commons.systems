@@ -347,4 +347,148 @@ describe("reconcileGraph", () => {
     });
     expect(plan.reconciled).toEqual([]);
   });
+
+  it("leaves a tactic already at main-qa with NO residue heading completely untouched", () => {
+    // The silent regression this pins. A destination node minted directly at
+    // `main-qa` carries its source's already-merged PR and, by design, NO
+    // `## needs-main` heading. `main-qa` is an OPEN phase, so without the
+    // merge-absorbable narrowing the pass-1 enumeration picks the node up,
+    // reads it as residue-free, and reconcileMergedPhase(false) routes it
+    // straight to `done` — destroying the verification node before /qa-main
+    // ever runs, with nothing in the output to signal it happened.
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(
+      dir,
+      {
+        id: "tactic-minted-at-main-qa",
+        kind: "tactic",
+        phase: "main-qa",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\nNo residue heading: verification is the whole point of this node.\n",
+    );
+    const file = join(dir, "tactic-minted-at-main-qa.md");
+    const before = readFileSync(file, "utf8");
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-minted-at-main-qa": {
+          state: "merged",
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "sha-minted",
+        },
+      }),
+      date: "2026-07-10",
+    });
+
+    // Not reconciled, not edited, not deferred — the node is simply not this
+    // sweep's business.
+    expect(plan.reconciled).toEqual([]);
+    expect(plan.edit).toEqual([]);
+    expect(plan.deferred).toEqual([]);
+    // And not written: the phase survives, no completion evidence is stamped,
+    // and the file is byte-for-byte what it was.
+    expect(readNode(dir, "tactic-minted-at-main-qa").phase).toBe("main-qa");
+    expect(readNode(dir, "tactic-minted-at-main-qa").execution?.completion ?? null).toBe(null);
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
+
+  it("leaves a tactic already at main-qa WITH a residue heading untouched (the drain tail is /qa-main's to advance)", () => {
+    // Same rule from the other side: being at `main-qa` — not the presence or
+    // absence of the heading — is what takes the node out of this sweep. A
+    // residue-bearing main-qa node would otherwise be re-stamped with merge
+    // evidence and re-announced as reconciled on every single tick.
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(
+      dir,
+      {
+        id: "tactic-draining",
+        kind: "tactic",
+        phase: "main-qa",
+        execution: { branch: "b", pr: 2, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\n## needs-main\n\nverify prod\n",
+    );
+    const file = join(dir, "tactic-draining.md");
+    const before = readFileSync(file, "utf8");
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-draining": {
+          state: "merged",
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "sha-draining",
+        },
+      }),
+      date: "2026-07-10",
+    });
+
+    expect(plan.reconciled).toEqual([]);
+    expect(plan.edit).toEqual([]);
+    expect(plan.deferred).toEqual([]);
+    expect(readNode(dir, "tactic-draining").phase).toBe("main-qa");
+    expect(readNode(dir, "tactic-draining").execution?.completion ?? null).toBe(null);
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
+
+  it("still reconciles a merged tactic at phase review to both targets (the narrowing is main-qa-only)", () => {
+    // The over-narrowing guard. Excluding `main-qa` from the enumeration must
+    // not disturb any other open phase, and in particular `review` must still
+    // be able to route INTO main-qa when it carries residue.
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(
+      dir,
+      {
+        id: "tactic-review-residue",
+        kind: "tactic",
+        phase: "review",
+        execution: { branch: "r1", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\n## needs-main\n\nverify prod\n",
+    );
+    node(
+      dir,
+      {
+        id: "tactic-review-clean",
+        kind: "tactic",
+        phase: "review",
+        execution: { branch: "r2", pr: 2, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\nnothing to verify on main\n",
+    );
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, {
+        "tactic-review-residue": {
+          state: "merged",
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "sha-r1",
+        },
+        "tactic-review-clean": {
+          state: "merged",
+          mergedAt: "2026-07-11T12:00:00Z",
+          mergeCommitSha: "sha-r2",
+        },
+      }),
+      date: "2026-07-10",
+    });
+
+    expect(plan.reconciled).toContainEqual({ id: "tactic-review-residue", target: "main-qa" });
+    expect(plan.reconciled).toContainEqual({ id: "tactic-review-clean", target: "done" });
+    expect(readNode(dir, "tactic-review-residue").phase).toBe("main-qa");
+    expect(readNode(dir, "tactic-review-clean").phase).toBe("done");
+    expect(readNode(dir, "tactic-review-residue").execution?.completion).toEqual({
+      mergedAt: "2026-07-11T12:00:00Z",
+      mergeCommitSha: "sha-r1",
+      graphCommitSha: null,
+    });
+    expect(plan.edit).toContain("tactic-review-residue");
+    expect(plan.edit).toContain("tactic-review-clean");
+  });
 });

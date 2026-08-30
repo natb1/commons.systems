@@ -4,11 +4,21 @@
 # dispatch-reconcile-merged: it absorbs out-of-band PR events for open
 # graph-native tactics into the graph state.
 #
-# For every open graph-native tactic (phase set, neither draft nor done) that
-# carries an execution.pr, it reads the PR state via gh and hands the terminal
-# ones to reconcile-graph.ts, which decides and applies the store mutations:
+# For every merge-absorbable graph-native tactic (phase set; neither draft, done,
+# nor main-qa) that carries an execution.pr, it reads the PR state via gh and
+# hands the terminal ones to reconcile-graph.ts, which decides and applies the
+# store mutations:
 #   - merged, needs-main residue on the node → `main-qa` (verified post-merge),
 #     recording the merge evidence (mergedAt + mergeCommitSha) on the node.
+#   - a tactic ALREADY at `main-qa` is never enumerated at all. It is post-merge
+#     by construction — the phase exists precisely because its PR already merged,
+#     so there is no out-of-band merge left to absorb and the completion evidence
+#     was already recorded on the transition that put it there. Re-processing it
+#     could only mis-classify it: a node minted at `main-qa` without a
+#     `## needs-main` heading would read as residue-free and be swept to `done`,
+#     destroying the verification node before `/qa-main` ever runs. Advancing a
+#     `main-qa` node is `/qa-main`'s job, not this sweep's. This exclusion
+#     mirrors `isMergeAbsorbable` in reconcile-graph.ts — keep the two in step.
 #   - merged without residue, or closed-not-merged → `done`. The node is NO
 #     LONGER pruned at the done-transition: it is left present on disk with its
 #     phase set to `done` and completion evidence recorded — for a genuine merge,
@@ -107,9 +117,9 @@ GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 GRACE=${GRAPH_RECONCILE_GRACE:-600}
 NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 
-# --- Enumerate open graph-native tactics carrying a PR -----------------------
-# One node pass: print `<id>\t<pr>` for every open tactic (phase set, not
-# draft/done) whose execution.pr is non-null.
+# --- Enumerate merge-absorbable graph-native tactics carrying a PR -----------
+# One node pass: print `<id>\t<pr>` for every merge-absorbable tactic (phase set,
+# not draft/done/main-qa) whose execution.pr is non-null.
 # Enumeration is STRICT (`listNodesStrict`): a corrupt node file dropped by the
 # tolerant reader would silently never be reconciled, stranding its merged PR at
 # a stale phase. Abort the pass loudly instead.
@@ -132,13 +142,16 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 # no bearing on it.
 OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
-  const open = new Set(["implement","fix","qa","review","main-qa"]);
+  // Merge-absorbable phases. `main-qa` is deliberately ABSENT: it is an open
+  // phase, but a node sitting at it is post-merge by construction and has
+  // nothing left to absorb. Mirrors `isMergeAbsorbable` in reconcile-graph.ts.
+  const absorbable = new Set(["implement","fix","qa","review"]);
   const idOk = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
   const only = process.argv[1] || "";
   for (const n of listNodesStrict("./intentions")) {
     if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
-    if (n.phase === null || !open.has(n.phase)) continue;
+    if (n.phase === null || !absorbable.has(n.phase)) continue;
     const pr = n.execution && n.execution.pr;
     if (pr === null || pr === undefined) continue;
     if (!idOk.test(n.id)) {
@@ -312,7 +325,11 @@ RESTORE_ON_FAILURE=1
 PLAN="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE") )" || {
   echo "reconcile-graph-merged: reconcile-graph.ts failed" >&2; exit 1; }
 
-# Report deferrals (residue→main-qa, inert until tactic-main-qa-phase).
+# Report deferrals. Nothing in reconcile-graph.ts pushes to `deferred` anymore —
+# its only producer was a main-qa schema-migration guard that has since landed —
+# but the key stays part of the stable output contract, so keep draining it. A
+# node routed to `main-qa` is handed off to /qa-main's node lane, which owns
+# advancing it from there; this sweep never touches it again.
 while IFS= read -r d; do
   [[ -n "$d" ]] || continue
   did=$(jq -r '.id' <<<"$d"); dreason=$(jq -r '.reason' <<<"$d")

@@ -141,6 +141,30 @@ function isOpen(phase: string | null): boolean {
   return phase !== null && phase !== "draft" && phase !== "done";
 }
 
+/**
+ * Whether an out-of-band merge event may still be ABSORBED into this tactic —
+ * a strictly narrower question than `isOpen`, which only asks whether the
+ * tactic is in flight. `main-qa` is open (it is a live phase a node sits at
+ * awaiting `/qa-main`) but it is NOT merge-absorbable.
+ *
+ * A node already at `main-qa` is post-merge by construction — the phase exists
+ * precisely because its PR already merged. There is no out-of-band merge left
+ * to absorb, and the completion evidence was already recorded on the transition
+ * that put it there. Re-processing it can only mis-classify it.
+ *
+ * Concretely, without this narrowing a node minted directly at `main-qa` and
+ * carrying no `## needs-main` heading would be read as `hasResidue === false`
+ * by `reconcileMergedPhase` and written straight to `done` on the very next
+ * sweep — destroying the verification node before `/qa-main` ever runs. The
+ * residue heading is NOT the protection; being at `main-qa` is.
+ *
+ * Advancing a `main-qa` node (drain tail included) is `/qa-main`'s job, not
+ * this reconciler's.
+ */
+function isMergeAbsorbable(phase: string | null): boolean {
+  return isOpen(phase) && phase !== "main-qa";
+}
+
 export function reconcileGraph(args: Args): Plan {
   const prStates: Record<string, PrState> = JSON.parse(readFileSync(args.prStatesFile, "utf8"));
   // STRICT enumeration: reconciliation writes phase transitions back to disk,
@@ -172,7 +196,7 @@ export function reconcileGraph(args: Args): Plan {
   const mainQaTargets: { id: string; entry: PrState }[] = [];
   for (const [id, entry] of Object.entries(prStates)) {
     const node = byId.get(id);
-    if (node === undefined || node.kind !== "tactic" || !isOpen(node.phase)) continue;
+    if (node === undefined || node.kind !== "tactic" || !isMergeAbsorbable(node.phase)) continue;
     const residue = hasNeedsMainResidue(readNodeBody(args.dir, id));
     const target = entry.state === "merged" ? reconcileMergedPhase(residue) : reconcileClosedPhase();
     if (target === "main-qa") {
