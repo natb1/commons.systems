@@ -14,7 +14,6 @@ rationale: "Finalized 2026-07-06 by /align-tactics round 1, split: the draft's
   self-hosted receiver on owned infrastructure (strategy clarification: no
   third-party endpoint service)."
 reading: null
-gap: null
 serves:
   - strategy-own-audience
 recovers: []
@@ -22,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: main-qa
 execution:
   branch: tactic-indieweb-audience
   pr: 2802
@@ -30,13 +29,16 @@ execution:
   markers:
     - reviewed
   strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # Self-hosted webmention endpoint — the platform-free response path for landing and fellspiral
 

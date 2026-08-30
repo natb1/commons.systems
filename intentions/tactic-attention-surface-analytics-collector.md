@@ -13,7 +13,6 @@ rationale: "Replaces the pruned born-parked analytics-drop tactic per strategy
   firebase-functions-free, so it moves into the local producer; scheduling stays
   in the repo's nix config per the office-hours.nix precedent."
 reading: null
-gap: null
 serves:
   - strategy-attention-surface
 recovers: []
@@ -21,7 +20,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: main-qa
 execution:
   branch: tactic-attention-surface-analytics-collector
   pr: 2783
@@ -30,13 +29,16 @@ execution:
   markers:
     - reviewed
   strategy_fingerprint: 900e05682e9367b9bd821dd98976ac9edf41f0ab3e1cafed10a5bdab6f91301f
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # analytics collector — local scheduled job (nix-managed timer) gathers GA4/Search Console/PageSpeed/GitHub signals into the snapshot, replacing the Firestore function
 

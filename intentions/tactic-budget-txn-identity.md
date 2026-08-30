@@ -14,7 +14,6 @@ rationale: "Strategy clarification 3 (2026-07-06): a transaction is identified
   transactions. Off the minimum signal path this round; selectable on its own
   merits."
 reading: null
-gap: null
 serves:
   - strategy-recover-finance
 recovers: []
@@ -22,7 +21,7 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: main-qa
 execution:
   branch: tactic-budget-txn-identity
   pr: 2832
@@ -30,13 +29,16 @@ execution:
   markers:
     - reviewed
   strategy_fingerprint: 3178ea5e04e119ed9cce5cb1e0b573e7e011aef2e70dbd39c0449a854a61a204
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes:
-  phase: main-qa
+attributes: {}
 ---
 # budget-etl: statement-independent transaction identity — (institution, account, FITID) doc IDs, with legacy-ID migration and edit remapping
 
