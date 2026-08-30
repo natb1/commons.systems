@@ -147,22 +147,54 @@ function isOpen(phase: string | null): boolean {
  * tactic is in flight. `main-qa` is open (it is a live phase a node sits at
  * awaiting `/qa-main`) but it is NOT merge-absorbable.
  *
- * A node already at `main-qa` is post-merge by construction — the phase exists
- * precisely because its PR already merged. There is no out-of-band merge left
- * to absorb, and the completion evidence was already recorded on the transition
- * that put it there. Re-processing it can only mis-classify it.
+ * A node at `main-qa` has nothing to absorb from a merge. Either it arrived by
+ * the reconciler's own main-qa transition, which already recorded the merge
+ * evidence, or it was minted directly at `main-qa` at qa record time, in which
+ * case the merge it would absorb is its SOURCE's and belongs to the source
+ * node, not to it. Re-processing it can only mis-classify it.
  *
  * Concretely, without this narrowing a node minted directly at `main-qa` and
  * carrying no `## needs-main` heading would be read as `hasResidue === false`
  * by `reconcileMergedPhase` and written straight to `done` on the very next
  * sweep — destroying the verification node before `/qa-main` ever runs. The
- * residue heading is NOT the protection; being at `main-qa` is.
+ * destination node carries no residue heading BY DESIGN (buildMainqaBody uses
+ * `## Verification items`), so the residue heading is NOT the protection;
+ * being at `main-qa` is.
  *
  * Advancing a `main-qa` node (drain tail included) is `/qa-main`'s job, not
- * this reconciler's.
+ * this reconciler's — for a MERGE. See `isCloseAbsorbable` for the one event
+ * that is not a merge and that `/qa-main` structurally cannot handle.
  */
 function isMergeAbsorbable(phase: string | null): boolean {
   return isOpen(phase) && phase !== "main-qa";
+}
+
+/**
+ * Whether a CLOSED-WITHOUT-MERGE event may be absorbed into this tactic. Every
+ * open phase qualifies — `main-qa` INCLUDED, which is the one way this differs
+ * from `isMergeAbsorbable`.
+ *
+ * The two events are categorically different and the caller already
+ * distinguishes them: `--pr-states` carries `state: "merged"` only when GitHub
+ * reported a non-null `mergedAt`, and `state: "closed"` means terminal AND
+ * never merged (reconcile-graph-merged's terminal arm; an OPEN PR never reaches
+ * it). The narrowing above is about a MERGE — "there is no out-of-band merge
+ * left to absorb" — and a close-without-merge absorbs no merge. Nothing landed,
+ * so there is nothing to verify against deployed main and the verification node
+ * is moot.
+ *
+ * Without this, a destination node born at `main-qa` whose source PR is closed
+ * unmerged is stranded FOREVER: `graph-select-target`'s `main-qa` arm gates on
+ * `mergedAt` and returns `pr-not-merged` on every tick, so `/qa-main` can never
+ * receive it, and `isMergeAbsorbable` keeps this sweep from ever enumerating it
+ * again. Assigning the advance to `/qa-main` is vacuous in exactly this case.
+ *
+ * The outcome is the SAME rule every other closed-unmerged tactic already gets
+ * (see this file's header): `phase: "done"` with `completion` left null — the
+ * deliberate census-flaggable integrity-defect signal, not silent deletion.
+ */
+function isCloseAbsorbable(phase: string | null): boolean {
+  return isOpen(phase);
 }
 
 export function reconcileGraph(args: Args): Plan {
@@ -196,9 +228,14 @@ export function reconcileGraph(args: Args): Plan {
   const mainQaTargets: { id: string; entry: PrState }[] = [];
   for (const [id, entry] of Object.entries(prStates)) {
     const node = byId.get(id);
-    if (node === undefined || node.kind !== "tactic" || !isMergeAbsorbable(node.phase)) continue;
+    if (node === undefined || node.kind !== "tactic") continue;
+    // Merge and close are absorbable into DIFFERENT phase sets — `main-qa` is
+    // excluded from the first and included in the second. See the two
+    // predicates above.
+    const merged = entry.state === "merged";
+    if (!(merged ? isMergeAbsorbable(node.phase) : isCloseAbsorbable(node.phase))) continue;
     const residue = hasNeedsMainResidue(readNodeBody(args.dir, id));
-    const target = entry.state === "merged" ? reconcileMergedPhase(residue) : reconcileClosedPhase();
+    const target = merged ? reconcileMergedPhase(residue) : reconcileClosedPhase();
     if (target === "main-qa") {
       mainQaTargets.push({ id, entry });
     } else {

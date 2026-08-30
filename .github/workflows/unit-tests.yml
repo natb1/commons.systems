@@ -161,9 +161,18 @@ jobs:
       - name: Install workspace dependencies
         if: steps.changes.outputs.graph == 'true'
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
+      # `--strict-sensors` is gated on `main`, not merely on this job. This
+      # workflow's `branches-ignore` only excludes `graph/**`, and
+      # detect-changes.sh sets `graph=true` for ANY `packages/intentionsutil/`
+      # or `intentions/` change — so without the ref gate the fatal sensor
+      # check would also run on every ordinary feature branch, turning a PR red
+      # for a sensor de-registration some other `/align` round landed on main.
+      # The flag's whole justification is that it is the POST-MERGE check;
+      # branches keep the stderr warning, exactly as graph-fast-path.yml's
+      # guard job does.
       - name: Validate intention graph
         if: steps.changes.outputs.graph == 'true'
-        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions --strict-sensors
+        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
 
   dead-code:
     runs-on: ubuntu-latest

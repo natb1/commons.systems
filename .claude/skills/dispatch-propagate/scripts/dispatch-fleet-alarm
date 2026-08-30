@@ -433,11 +433,30 @@ restore_from_blob() {
   mv "$tmp" "$NODE_FILE"
 }
 
-# splice_body — replace everything after the closing frontmatter fence with the
-# reading. write-node.ts gives a brand-new file the generated `# <statement>`
-# placeholder body; bodies are durable and preserved on every later rewrite, so
-# the splice is what puts the reading in. (The two-fence awk idiom, verbatim
-# from dispatch-diagnose-main/SKILL.md:178-187.)
+# The owned-region markers. Everything BETWEEN them is this script's to rewrite;
+# everything outside is somebody else's and is copied through untouched. Same
+# contract, and the same whole-line matching, as dispatch-eval-finding's region.
+BODY_REGION_OPEN='<!-- generated:dispatch-fleet-alarm -->'
+BODY_REGION_CLOSE='<!-- /generated:dispatch-fleet-alarm -->'
+
+# splice_body — rewrite THIS SCRIPT'S OWNED REGION of the body, preserving
+# everything else. write-node.ts gives a brand-new file the generated
+# `# <statement>` placeholder body, which is this script's to replace; anything
+# else in the body belongs to whoever wrote it.
+#
+# This used to replace everything after the closing frontmatter fence
+# wholesale. That was safe only while a re-detection could not land on a node a
+# human had written in. It can: a parked alarm node (`office_hours != null`,
+# `phase != "done"`) now classifies `open` and routes re-detection here, and the
+# common reason such a node is parked is that a human is looking at it. The
+# guard above claims "the alarm's own re-detection path still refreshes its body
+# underneath the park, so nothing is lost by waiting" — that holds for
+# frontmatter, which this function never touches, but it was false for the body:
+# a human's diagnosis written into the parked node was discarded on the next
+# detection tick and the discard was pushed to main.
+#
+# Bounding the generated content in a marker pair is what makes the guard's
+# claim true as stated, rather than narrowing the claim to match the defect.
 splice_body() {
   local tmp="$NODE_FILE.tmp"
   # Step 1 — frontmatter through the closing fence. awk's OWN status must gate
@@ -457,10 +476,101 @@ splice_body() {
     log "$NODE_FILE has no complete YAML frontmatter — refusing to splice a malformed node file"
     return 1
   fi
-  # Step 3 — append the reading, then publish atomically.
-  if ! cat "$BODY_FILE" >> "$tmp"; then
+  # Step 3 — refuse a reading that carries either marker on a line of its own.
+  # The generated content is wrapped in the pair unconditionally below, so such
+  # a reading would leave the body unbalanced and every later pass would refuse
+  # it. Whole-line match only, so a marker quoted inline or indented inside a
+  # fenced block — invisible to the region parser — stays legal.
+  if [[ ! -r "$BODY_FILE" ]]; then
+    rm -f "$tmp"
+    log "$BODY_FILE cannot be read — the body splice was abandoned; NOTHING WAS WRITTEN"
+    return 1
+  fi
+  if grep -qxF -e "$BODY_REGION_OPEN" -e "$BODY_REGION_CLOSE" "$BODY_FILE"; then
+    rm -f "$tmp"
+    log "$BODY_FILE carries a marker line of its own, and this script wraps the reading in that pair — writing it would leave $NODE_FILE with an unbalanced pair that every later pass refuses; NOTHING WAS WRITTEN. Indent or reword that line"
+    return 1
+  fi
+
+  # Step 4 — the prior body: everything AFTER the closing frontmatter fence.
+  local prior="$NODE_FILE.prior"
+  if ! awk 'f{print} /^---$/{c++; if(c==2) f=1}' "$NODE_FILE" > "$prior"; then
+    rm -f "$tmp" "$prior"
+    log "could not read the existing body of $NODE_FILE — the body splice was abandoned"
+    return 1
+  fi
+
+  local opens closes
+  opens=$(grep -cxF "$BODY_REGION_OPEN" "$prior")
+  closes=$(grep -cxF "$BODY_REGION_CLOSE" "$prior")
+  if (( opens != closes || opens > 1 )); then
+    rm -f "$tmp" "$prior"
+    log "$NODE_FILE carries $opens opening and $closes closing '$BODY_REGION_OPEN' marker(s) — refusing to guess which bytes this script owns; repair the marker pair by hand"
+    return 1
+  fi
+
+  if (( opens == 1 )); then
+    # A balanced pair is not yet a well-formed region: an edit that swaps the
+    # two leaves the count balanced with the close before the open.
+    local open_line close_line
+    open_line=$(grep -nxF "$BODY_REGION_OPEN" "$prior" | cut -d: -f1)
+    close_line=$(grep -nxF "$BODY_REGION_CLOSE" "$prior" | cut -d: -f1)
+    if (( close_line < open_line )); then
+      rm -f "$tmp" "$prior"
+      log "$NODE_FILE's '$BODY_REGION_CLOSE' marker appears before its '$BODY_REGION_OPEN' (close at line $close_line, open at line $open_line) — refusing to guess which bytes this script owns; repair the marker order by hand"
+      return 1
+    fi
+    # Replace in place. The END guard makes truncation impossible even if the
+    # ordering check above is ever weakened: were the close marker never hit,
+    # `skip` would stay 1 and the loop would silently drop every line to EOF.
+    if ! awk -v om="$BODY_REGION_OPEN" -v cm="$BODY_REGION_CLOSE" -v bf="$BODY_FILE" '
+      $0 == om { print; while ((getline line < bf) > 0) print line; close(bf); skip = 1; next }
+      skip && $0 == cm { print; skip = 0; next }
+      !skip { print }
+      END { if (skip) exit 1 }
+    ' "$prior" >> "$tmp"; then
+      rm -f "$tmp" "$prior"
+      log "could not rewrite the owned region of $NODE_FILE from $BODY_FILE — the closing marker was never reached, so the rest of the body would have been dropped — the body splice was abandoned"
+      return 1
+    fi
+    rm -f "$prior"
+    mv "$tmp" "$NODE_FILE"
+    return 0
+  fi
+
+  # No region yet. write-node.ts's placeholder body is a single `# <statement>`
+  # heading and is this script's to replace; anything else was authored by
+  # somebody and is kept, with the region appended after it.
+  local authored
+  authored=$(grep -v '^[[:space:]]*$' "$prior")
+  if [[ -n "$authored" && ( "$authored" == *$'\n'* || "$authored" != '# '* ) ]]; then
+    if ! cat "$prior" >> "$tmp"; then
+      rm -f "$tmp" "$prior"
+      log "could not preserve the existing body of $NODE_FILE — the body splice was abandoned"
+      return 1
+    fi
+    # A prior body with no trailing newline would run its last line into the
+    # opening marker.
+    if [[ -s "$prior" && -n "$(tail -c 1 "$prior")" ]]; then
+      printf '\n' >> "$tmp"
+    fi
+  fi
+  rm -f "$prior"
+
+  # Step 5 — the reading, wrapped in the pair, then publish atomically.
+  if ! { printf '%s\n' "$BODY_REGION_OPEN" && cat "$BODY_FILE"; } >> "$tmp"; then
     rm -f "$tmp"
     log "could not read the reading from $BODY_FILE — the body splice was abandoned"
+    return 1
+  fi
+  # A reading that does not end in a newline would glue the closing marker to
+  # its last line and leave the pair unparseable on the next pass.
+  if [[ -s "$BODY_FILE" && -n "$(tail -c 1 "$BODY_FILE")" ]]; then
+    printf '\n' >> "$tmp"
+  fi
+  if ! printf '%s\n' "$BODY_REGION_CLOSE" >> "$tmp"; then
+    rm -f "$tmp"
+    log "could not close the owned region of $NODE_FILE — the body splice was abandoned"
     return 1
   fi
   mv "$tmp" "$NODE_FILE"
@@ -805,7 +915,29 @@ case "$STATE" in
       log "could not read the on-disk body of $NODE_FILE"
       exit 1
     }
-    if cmp -s "$BODY_FILE" "$ONDISK_BODY"; then
+    # Compare against THIS SCRIPT'S OWNED REGION, not the whole body. The body
+    # may also carry authored content outside the region (a human's diagnosis on
+    # a parked node, which splice_body now preserves), and that content is not
+    # ours — including it here would make an unchanged reading look changed and
+    # churn a commit on every re-detection tick.
+    ONDISK_REGION="$TMP_DIR/$ID.ondisk-region"
+    if grep -qxF "$BODY_REGION_OPEN" "$ONDISK_BODY"; then
+      awk -v om="$BODY_REGION_OPEN" -v cm="$BODY_REGION_CLOSE" '
+        $0 == om { inr = 1; next }
+        $0 == cm { inr = 0; next }
+        inr { print }
+      ' "$ONDISK_BODY" > "$ONDISK_REGION" || {
+        log "could not read the owned region of $NODE_FILE"
+        exit 1
+      }
+    else
+      # A node written before the region existed: the whole body was ours.
+      cp "$ONDISK_BODY" "$ONDISK_REGION" || {
+        log "could not read the on-disk body of $NODE_FILE"
+        exit 1
+      }
+    fi
+    if cmp -s "$BODY_FILE" "$ONDISK_REGION"; then
       log "$ID is already open with an identical reading — no commit"
       printf 'noop\n'
       exit 0

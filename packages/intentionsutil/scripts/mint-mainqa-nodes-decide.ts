@@ -86,11 +86,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Every item field this CLI accepts is rendered by `buildMainqaBody` into
+ * exactly one markdown line (`- **<id> — <title>**`, `  - Finding: <finding>`, …). A value
+ * carrying a newline therefore does not merely look untidy — it breaks the
+ * bullet structure `/qa-main`'s node lane parses back out (`.claude/skills/
+ * qa-main/SKILL.md`, "New shape"), silently orphaning every sub-line after the
+ * break, and a continuation line beginning `## ` would inject a heading into
+ * the node body — including a `## needs-main…` one, which is exactly the
+ * heading a destination node must never carry (`hasNeedsMainResidue`,
+ * src/transitions.ts). Reject at the edge with a clear error rather than
+ * silently collapsing the author's text (.claude/rules/code-style.md).
+ */
+function assertSingleLine(value: string, key: string, where: string): void {
+  if (/[\r\n]/.test(value)) {
+    fail(
+      `${where}: "${key}" must be a single line — it is rendered as one markdown ` +
+        `line on the destination node and a newline breaks the item parse; got ` +
+        `${JSON.stringify(value)}`,
+    );
+  }
+}
+
 function requireString(record: Record<string, unknown>, key: string, where: string): string {
   const value = record[key];
   if (typeof value !== "string" || value === "") {
     fail(`${where}: "${key}" must be a non-empty string, got ${JSON.stringify(value)}`);
   }
+  assertSingleLine(value, key, where);
   return value;
 }
 
@@ -104,6 +127,7 @@ function optionalString(
   if (typeof value !== "string") {
     fail(`${where}: "${key}" must be a string when present, got ${JSON.stringify(value)}`);
   }
+  assertSingleLine(value, key, where);
   return value;
 }
 

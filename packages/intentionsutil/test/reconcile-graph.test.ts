@@ -350,7 +350,7 @@ describe("reconcileGraph", () => {
 
   it("leaves a tactic already at main-qa with NO residue heading completely untouched", () => {
     // The silent regression this pins. A destination node minted directly at
-    // `main-qa` carries its source's already-merged PR and, by design, NO
+    // `main-qa` at qa record time carries its source's PR and, by design, NO
     // `## needs-main` heading. `main-qa` is an OPEN phase, so without the
     // merge-absorbable narrowing the pass-1 enumeration picks the node up,
     // reads it as residue-free, and reconcileMergedPhase(false) routes it
@@ -433,6 +433,46 @@ describe("reconcileGraph", () => {
     expect(readNode(dir, "tactic-draining").phase).toBe("main-qa");
     expect(readNode(dir, "tactic-draining").execution?.completion ?? null).toBe(null);
     expect(readFileSync(file, "utf8")).toBe(before);
+  });
+
+  it("routes a main-qa node whose source PR closed WITHOUT merging to done — nothing landed, so the verification is moot", () => {
+    // The narrowing above forbids absorbing a MERGE into a main-qa node
+    // ("there is no out-of-band merge left to absorb"). A close-without-merge
+    // is a different event and absorbs no merge. It has to be handled HERE
+    // because /qa-main structurally cannot: graph-select-target's main-qa arm
+    // gates on the PR's `mergedAt`, which stays empty forever, so it answers
+    // `pr-not-merged` on every tick. Without this the node is stranded at
+    // main-qa permanently — never dispatched, never enumerated again.
+    const dir = tempDir();
+    node(dir, { id: "kind-tactic", kind: "kind" });
+    node(
+      dir,
+      {
+        id: "tactic-mainqa-abandoned-machine",
+        kind: "tactic",
+        phase: "main-qa",
+        blocked_by: [],
+        execution: { branch: "b", pr: 9, attempts: {}, markers: [], strategy_fingerprint: null },
+      },
+      "# body\n\n## Verification items\n\n- **V1 — check it**\n",
+    );
+
+    const plan = reconcileGraph({
+      dir,
+      prStatesFile: prStates(dir, { "tactic-mainqa-abandoned-machine": { state: "closed" } }),
+      date: "2026-07-10",
+    });
+
+    expect(plan.reconciled).toContainEqual({
+      id: "tactic-mainqa-abandoned-machine",
+      target: "done",
+    });
+    expect(readNode(dir, "tactic-mainqa-abandoned-machine").phase).toBe("done");
+    // No completion evidence — the same deliberate census-flaggable
+    // integrity-defect signal every other closed-unmerged tactic gets.
+    expect(
+      readNode(dir, "tactic-mainqa-abandoned-machine").execution?.completion ?? null,
+    ).toBe(null);
   });
 
   it("still reconciles a merged tactic at phase review to both targets (the narrowing is main-qa-only)", () => {

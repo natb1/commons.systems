@@ -1152,10 +1152,11 @@ run_merge_node() {
 #     theirs = origin/main's blob). A resolved merge is written to the working
 #     tree and to SNAP_DIR/<id>.merged.md, never over the frozen
 #     SNAP_DIR/<id>.md — see the SNAP_DIR path contract. One class of
-#     edit is withheld from that merge and parked instead: a frontmatter LIST
-#     entry this invocation REMOVED that origin/main still carries — the merge's
-#     list rule is a base-free union that cannot express a deletion and would
-#     silently restore it (see the guard above frontmatter_list_entries).
+#     edit is still withheld from that merge and parked instead: a frontmatter
+#     LIST entry this invocation REMOVED that origin/main still carries. That
+#     guard is now REDUNDANT — the merge's list rule became base-aware and
+#     honors the removal — but it is retained until its test case is rewritten
+#     (see the guard above frontmatter_list_entries).
 # A prune is guarded the same way: main carrying a post-fork edit to a node this
 # invocation means to delete is a prune-vs-concurrent-edit conflict, not a
 # deletion to force through. Any divergence the merge cannot resolve parks the
@@ -1185,35 +1186,44 @@ blob_sha_or_empty() {
   fi
 }
 
-# --- List-entry removal guard (interim) ------------------------------------
-# The field-level merge primitive (mergeIntentionNodes, via run_merge_node)
-# merges every frontmatter LIST field — serves, recovers, clarifications,
-# tooling_goals, validates, blocked_by, and attributes.conditions — with a
-# BASE-FREE union (packages/intentionsutil/src/node-merge.ts:102-112, 161-166).
-# A union cannot express a deletion: "this entry is in theirs and absent from
-# ours because ours DELETED it" is indistinguishable from "it is in theirs
-# because theirs just added it", and the union keeps it either way. No
-# FieldConflict is ever produced for a list field, so the merge reports a clean
-# resolve and graph-commit exits 0 claiming the write landed — with the removal
-# silently reverted.
+# --- List-entry removal guard (interim, now REDUNDANT — pending removal) ----
+# WHY IT EXISTS. The field-level merge primitive (mergeIntentionNodes, via
+# run_merge_node) used to merge every frontmatter LIST field — serves, recovers,
+# clarifications, tooling_goals, validates, blocked_by, and
+# attributes.conditions — with a BASE-FREE union. A union cannot express a
+# deletion: "this entry is in theirs and absent from ours because ours DELETED
+# it" is indistinguishable from "it is in theirs because theirs just added it",
+# and the union kept it either way. No FieldConflict is ever produced for a list
+# field, so the merge reported a clean resolve and graph-commit exited 0 claiming
+# the write landed — with the removal silently reverted.
 #
-# That defect predates this script's far-ahead replay and is owned by
-# `tactic-node-merge-list-removal-loss`, which makes the primitive base-aware so
-# a removal is HONORED (not parked). But the replay below newly routes any node
-# whose origin/main blob moved since the fork point through that primitive,
+# That defect predated this script's far-ahead replay and was owned by
+# `tactic-node-merge-list-removal-loss`. But the replay below newly routed any
+# node whose origin/main blob moved since the fork point through that primitive,
 # where the pre-existing code path was a blind `cp` that honored the deletion.
 # Without a guard, a far-ahead writer clearing a satisfied `blocked_by` edge or
-# repointing `serves` loses the removal whenever ANY concurrent writer touches
+# repointing `serves` lost the removal whenever ANY concurrent writer touched
 # the same node (an `attention` bump is enough) — silently, repeatably, and with
-# no per-field diagnostic naming what was dropped.
+# no per-field diagnostic naming what was dropped. So the replay refuses
+# instead: when the snapshot drops a frontmatter list entry that origin/main
+# still carries, park (fail closed, the discipline layers 1-3 already follow)
+# rather than hand the removal to a merge that would revert it.
 #
-# So the replay refuses instead: when the snapshot drops a frontmatter list
-# entry that origin/main still carries, park (fail closed, the discipline layers
-# 1-3 already follow) rather than hand the removal to a merge that would revert
-# it. This is INTERIM. When `tactic-node-merge-list-removal-loss` lands and the
-# primitive honors removals, delete this guard and its call site — parking a
-# satisfied-blocked_by cleanup is exactly the mechanical park that node's design
-# decision rejects.
+# WHY IT IS NOW REDUNDANT. `tactic-node-merge-list-removal-loss` has LANDED
+# (phase: done). `threeWayList` in packages/intentionsutil/src/node-merge.ts is
+# base-aware: an entry present in base and theirs but absent from ours is
+# recognized as OUR removal and dropped — precisely the set
+# list_entries_dropped_by_ours() computes. So every case this guard parks on is
+# now one the primitive resolves correctly, and parking a satisfied-blocked_by
+# cleanup is exactly the mechanical park that node's design decision rejects.
+#
+# NOT YET DELETED. Removing the guard and its two call sites is a behavior
+# change (park -> auto-resolve) that also requires rewriting the case asserting
+# it — the "far-ahead list-entry removal" case in test-graph-commit.sh, which
+# today asserts the park. Do that as its own change with the replacement
+# assertion (the removal survives the far-ahead rebuild and lands), not as a
+# silent deletion. Until then this guard costs correctness nothing; it only
+# costs an avoidable park.
 #
 # frontmatter_list_entries <file> — print one "<top-level field><TAB><raw line>"
 # per YAML list-item line inside the file's FRONTMATTER (never the body, whose
@@ -1234,11 +1244,12 @@ frontmatter_list_entries() {
 # list_entries_dropped_by_ours <base-file> <ours-file> <theirs-file> — print the
 # "<field><TAB><line>" entries present at BOTH the fork point and on origin/main
 # but absent from this invocation's snapshot: exactly the set the base-free union
-# would restore. Empty output (and a caller that ignores the exit status) means
-# no removal is at risk. Deliberately conservative in the safe direction — an
-# entry EDITED in place by this writer reads as a removal plus an addition, and
-# the union would resurrect the pre-edit variant alongside the new one, so
-# parking on it is right too.
+# used to restore — and exactly the set the base-aware `threeWayList` now drops
+# correctly, which is why the guard reading this is redundant. Empty output (and
+# a caller that ignores the exit status) means no removal is at risk.
+# Deliberately conservative in the safe direction — an entry EDITED in place by
+# this writer reads as a removal plus an addition, which the union resurrected
+# alongside the new one, so parking on it was right too.
 #
 # LC_ALL=C on both the sort (above) and the comm: `comm` verifies its inputs are
 # ordered under the SAME collation it compares with, so a locale-collated sort
@@ -1287,12 +1298,13 @@ replay_snapshot_onto_base() {
     theirs_f="$SNAP_DIR/.replay-$id.theirs"
     git cat-file -p "$main_blob" >"$theirs_f"
   fi
-  # Interim list-entry removal guard (see the block above frontmatter_list_entries):
-  # the merge below unions list fields base-free and would silently restore any
-  # entry this invocation removed. Only meaningful with BOTH a fork blob (there is
-  # a base to have removed something FROM) and an origin/main blob (there is a
-  # landed side still carrying it); an absent theirs is the delete/modify case
-  # merge-node.ts already refuses.
+  # Interim list-entry removal guard (see the block above
+  # frontmatter_list_entries, which records that it is now REDUNDANT — the merge
+  # below became base-aware and honors the removal — and why it is retained
+  # until its test case is rewritten). Only meaningful with BOTH a fork blob
+  # (there is a base to have removed something FROM) and an origin/main blob
+  # (there is a landed side still carrying it); an absent theirs is the
+  # delete/modify case merge-node.ts already refuses.
   if [[ -n "$base_f" && -n "$theirs_f" ]]; then
     local dropped summary
     dropped="$(list_entries_dropped_by_ours "$base_f" "$(snap_intended_file "$id")" "$theirs_f")"
@@ -1304,7 +1316,7 @@ replay_snapshot_onto_base() {
         END { if (NR > 8) printf "; +%d more", NR - 8 }
       ' <<<"$dropped")"
       append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
-        '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), and the field-level merge unions list fields base-free, so auto-merging would silently restore them")}]')"
+        '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), so this write is withheld from the field-level auto-merge by the interim list-entry removal guard rather than auto-resolved")}]')"
       return 1
     fi
   fi
@@ -1813,10 +1825,11 @@ reconcile_plumbing_base() { # <prev-base> <new-base>
         || die "origin/main blob $new_blob for '$id' is unreadable in the local object database — cannot attempt automatic reconciliation against the fresh base"
     fi
     # Interim list-entry removal guard, identical in force and in reason to
-    # replay_snapshot_onto_base()'s (see the block above frontmatter_list_entries):
-    # the merge below unions frontmatter list fields base-free and would silently
-    # restore an entry this invocation removed. Only meaningful with BOTH sides
-    # present; an absent theirs is the delete/modify case merge-node.ts refuses.
+    # replay_snapshot_onto_base()'s — including in being REDUNDANT now that the
+    # merge below is base-aware (see the block above frontmatter_list_entries for
+    # why it is retained until its test case is rewritten). Only meaningful with
+    # BOTH sides present; an absent theirs is the delete/modify case
+    # merge-node.ts refuses.
     if [[ -n "$base_f" && -n "$theirs_f" ]]; then
       local dropped summary
       dropped="$(list_entries_dropped_by_ours "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f")"
@@ -1826,7 +1839,7 @@ reconcile_plumbing_base() { # <prev-base> <new-base>
           END { if (NR > 8) printf "; +%d more", NR - 8 }
         ' <<<"$dropped")"
         append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
-          '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), and the field-level merge unions list fields base-free, so auto-merging would silently restore them")}]')"
+          '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), so this write is withheld from the field-level auto-merge by the interim list-entry removal guard rather than auto-resolved")}]')"
         unresolved=1
         continue
       fi
@@ -2361,7 +2374,16 @@ print_verdict() { # <context>
     # in step 1: this writer's own content was NOT landed, and `landed*` are the
     # only statuses that exit 0.
     verdict="parked"
-    reason="${PUSHED_SHA:-no push} did not reach origin/main, but origin/main already carries exactly this park's office_hours content for every parked id (the node was already parked byte-identically — nothing needed pushing)"
+    # Same PUSHED_SHA-empty honesty split the `landed-equivalent` arm below
+    # makes, applied here too: park_and_exit()'s idempotent retry finds the node
+    # already parked byte-identically, commits and pushes NOTHING, and leaves
+    # PUSHED_SHA empty — so "${PUSHED_SHA:-no push} did not reach origin/main"
+    # reads as a failed push that never happened.
+    if [[ -z "$PUSHED_SHA" ]]; then
+      reason="no push was attempted, and origin/main already carries exactly this park's office_hours content for every parked id (the node was already parked byte-identically — nothing needed pushing)"
+    else
+      reason="$PUSHED_SHA did not reach origin/main, but origin/main already carries exactly this park's office_hours content for every parked id (the node was already parked byte-identically — nothing needed pushing)"
+    fi
   elif [[ "$unsatisfied" -eq 0 ]]; then
     verdict="landed-equivalent"
     # Same status either way — the caller's intent IS on origin/main — but the

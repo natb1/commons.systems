@@ -237,7 +237,17 @@ fi
 # Shared with park-node via lib-base-pin.sh (see that file for the full
 # branch-by-branch description); resolve_base_pin exits 2 itself on any usage
 # error, using "clear-park:" as the message prefix.
-source "$SCRIPT_DIR/lib-base-pin.sh"
+# The source is checked: this script runs under `set -uo pipefail` with no
+# `-e`, so an unchecked `source` of a missing file would print an ENOENT, carry
+# on past an ignored `resolve_base_pin: command not found`, do the origin/main
+# fetch and refresh, and only die at the `-n "$PINNED_BASE"` compare below with
+# an opaque `unbound variable` — turning the cheap pre-network usage error this
+# block promises into a mid-flight failure. A missing sibling is a real case:
+# every harness that clones these scripts must copy lib-base-pin.sh too.
+source "$SCRIPT_DIR/lib-base-pin.sh" || {
+  echo "clear-park: could not source $SCRIPT_DIR/lib-base-pin.sh — the --base pin resolver is missing from this checkout; nothing was written" >&2
+  exit 1
+}
 resolve_base_pin "clear-park" "$NODE_ID"
 
 TMPTS="$(mktemp --suffix=.mts)" \

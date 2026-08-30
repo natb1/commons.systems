@@ -857,6 +857,40 @@ splice_body() {
     return 1
   fi
 
+  # An unreadable-but-present --body-file must not produce an EMPTY region.
+  # The awk region rewrite below reads it with `while ((getline line < bf) > 0)`,
+  # which returns -1 — indistinguishable from end-of-file — so the loop simply
+  # ends, the marker pair is written around nothing, and splice_body returns 0.
+  # graph-commit then lands a ledger entry with a blank generated region and
+  # reports success. Every other read failure in this function is caught; only
+  # that one is silent. The `-f` check at argument parse does not cover
+  # present-but-unreadable.
+  if [[ -n "$BODY_FILE" && ! -r "$BODY_FILE" ]]; then
+    rm -f "$tmp" "$prior"
+    log "$BODY_FILE exists but cannot be read — the body splice was abandoned; NOTHING WAS WRITTEN"
+    return 1
+  fi
+
+  # A --body-file that itself carries either marker on a line of its own would
+  # permanently brick the entry. The generated content is wrapped in the marker
+  # pair UNCONDITIONALLY below (and by the region awk), so such a body leaves
+  # the node with an unbalanced pair; every later occurrence then takes the
+  # `opens != closes` branch, rolls back, and exits 1 — the recurrence count,
+  # the one figure this ledger exists to carry, can never move again without a
+  # hand edit. The trigger is ordinary: a finding recorded ABOUT this ledger's
+  # own owned-region contract quotes the marker on its own line as a matter of
+  # course. Refusing the INPUT keeps the failure in the caller's hands, before
+  # anything is written, where a reword fixes it.
+  #
+  # Whole-line match only (`grep -x`), so a marker quoted inline or indented
+  # inside a fenced block — invisible to the region parser — stays legal.
+  if [[ -n "$BODY_FILE" ]] \
+     && grep -qxF -e "$BODY_REGION_OPEN" -e "$BODY_REGION_CLOSE" "$BODY_FILE"; then
+    rm -f "$tmp" "$prior"
+    log "$BODY_FILE carries a marker line of its own, and this script wraps the generated content in that pair — writing it would leave $NODE_FILE with an unbalanced pair that every later occurrence refuses; NOTHING WAS WRITTEN. Indent or reword that line, then re-record"
+    return 1
+  fi
+
   case "$mode" in
     create)
       local authored

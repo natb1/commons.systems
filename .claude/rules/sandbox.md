@@ -201,10 +201,19 @@ only when no static rule matches. Only a static `permissions.allow` rule resolve
 at step 1 and skips the classifier — a PreToolUse hook `allow`, including
 `approve-workflow-commands.sh`'s own approvals, does not. Consequently the allow
 rule must be a prefix of the literal command string as typed, so each sanctioned
-script gets exactly one canonical agent-typed spelling: repo-relative, with `-C
-<path>`, never `"$VAR/…"`, never absolute, never a `cd &&` compound. Both
-`graph-commit` and `land-align-round` are in `permissions.allow` in that spelling
-— re-spelling a call site silently re-exposes it to the classifier. This was
+script gets exactly one canonical agent-typed spelling: repo-relative,
+never `"$VAR/…"`, never absolute, never a `cd &&` compound. Both
+`graph-commit` and `land-align-round` are in `permissions.allow` at that path
+prefix — re-spelling a call site silently re-exposes it to the classifier.
+
+Those entries match the **path only**. They are bare prefixes —
+`Bash(packages/intentionsutil/scripts/graph-commit:*)` — whose trailing `:*`
+matches any argument string, so the matcher never inspects the flags. `-C
+<path>` is required by `graph-commit`'s own contract (it resolves its repo root
+from `-C`/`--repo`, else **cwd** — see above), not by the permission gate, and
+nothing mechanical rejects a call that omits it. `land-align-round` is the
+standing proof: it carries the same allow entry and its documented call sites
+pass no `-C` at all, so they silently target cwd. This was
 observed live on 2026-07-21: a worktree-cwd compound — `cd` into the worktree,
 then invoke `graph-commit` joined with `&&` — was firmly denied ("Blocked by
 classifier"), and bare invocations drew transient "Stage 2 classifier error"

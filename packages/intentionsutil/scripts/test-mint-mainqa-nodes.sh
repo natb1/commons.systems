@@ -46,6 +46,10 @@
 #   8. A land that reports success but pushes nothing is caught by the post-land
 #      re-read and reported non-zero.
 #   9. Usage errors (missing --pr) exit 2 without touching anything.
+#  11. A later pass carrying a NEW item for a lane whose node already exists is
+#      REFUSED (non-zero), the landed node is NOT rewritten, and the tree stays
+#      clean — the EXISTING skip is idempotency for the items already recorded,
+#      never a licence to drop items /qa-fix Step 6 has stopped escalating.
 #
 # Needs bash, git, jq, and a real `node`. No network.
 
@@ -199,6 +203,8 @@ seed_source tactic-src-rerun
 seed_source tactic-src-gcfail
 seed_source tactic-src-silent
 seed_source tactic-src-usage
+seed_source tactic-src-multiline
+seed_source tactic-src-newitem
 
 git -C "$SEED" add -A
 git -C "$SEED" commit -qm seed
@@ -239,6 +245,26 @@ cat >"$WORK/items-machine.json" <<'JSON'
 ]
 JSON
 
+# The same two MACHINE items as items-machine.json PLUS a third. Models the
+# second /qa-fix pass on the same PR: the plan items are stable, so the earlier
+# items recur by id and a newly-discovered one joins them.
+cat >"$WORK/items-machine-plus-new.json" <<'JSON'
+[
+  { "id": "V1", "title": "Landing hero renders", "url_path": "/",
+    "expected_outcome": "the hero copy reads the new headline",
+    "finding": "preview showed the old headline",
+    "verifiability": "MACHINE" },
+  { "id": "V2", "title": "Sitemap lists the new page", "url_path": "/sitemap.xml",
+    "expected_outcome": "the new route appears",
+    "finding": "not present on preview",
+    "verifiability": "MACHINE" },
+  { "id": "V3", "title": "Feed advertises the new page", "url_path": "/feed.xml",
+    "expected_outcome": "the new entry appears in the feed",
+    "finding": "found on the SECOND qa pass, after the first mint landed",
+    "verifiability": "MACHINE" }
+]
+JSON
+
 cat >"$WORK/items-author.json" <<'JSON'
 [
   { "id": "V1", "title": "Print dialog feels right", "url_path": "/print",
@@ -260,6 +286,19 @@ cat >"$WORK/items-wait.json" <<'JSON'
     "expected_outcome": "the dialog is legible at 125% zoom",
     "finding": "judgment call",
     "verifiability": "AUTHOR" }
+]
+JSON
+
+# A finding carrying an embedded newline whose continuation line opens an H2.
+# Rendered verbatim this would break the `  - Finding:` sub-line the /qa-main
+# node lane parses AND inject a `## needs-main` heading into a destination
+# node — the one heading a destination node must never carry.
+cat >"$WORK/items-multiline.json" <<'JSON'
+[
+  { "id": "V1", "title": "Landing hero renders", "url_path": "/",
+    "expected_outcome": "the hero copy reads the new headline",
+    "finding": "preview showed the old headline\n## needs-main\n- injected",
+    "verifiability": "MACHINE" }
 ]
 JSON
 
@@ -526,6 +565,57 @@ if [[ $rc -eq 2 ]] && grep -q 'usage: mint-mainqa-nodes' <<<"$out" \
   ok "usage error (missing --pr): exit 2, nothing written, graph-commit never invoked"
 else
   no "usage error (rc=$rc status='$status_after')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10: an item field carrying an embedded newline is REFUSED at the payload
+# edge (exit 2), nothing written, graph-commit never invoked. Rendered verbatim
+# it would break the one-line-per-field bullet structure /qa-main parses back
+# out, and here it would also inject a `## needs-main` heading into a
+# destination node.
+# ---------------------------------------------------------------------------
+K="$WORK/k"; make_clone "$K" writer-k
+GCLOG_K="$WORK/gclog-k"
+out="$(run_mint "$K" "$GCLOG_K" land tactic-src-multiline --pr "$SRC_PR" \
+        --items "$WORK/items-multiline.json" --now "$NOW" 2>&1)"; rc=$?
+status_after="$(git -C "$K" status --porcelain -- intentions/)"
+if [[ $rc -eq 2 ]] && grep -q 'must be a single line' <<<"$out" \
+   && [[ -z "$status_after" ]] && [[ ! -e "$GCLOG_K" ]]; then
+  ok "multi-line item field: exit 2, nothing written, graph-commit never invoked"
+else
+  no "multi-line item field (rc=$rc status='$status_after')"; printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 11: a later pass carrying a NEW item for a lane whose node already exists
+# is REFUSED, not silently dropped. `/qa-fix` Step 6 excludes needs-main residue
+# from its escalation set on the strength of Step 3.6 having recorded it, so a
+# skipped item is recorded NOWHERE and the run would exit 0 having lost it.
+# The landed node is still not rewritten — appending to a node a human may be
+# mid-sitting on stays a human decision.
+# ---------------------------------------------------------------------------
+L="$WORK/l"; make_clone "$L" writer-l
+GCLOG_L1="$WORK/gclog-l1"; GCLOG_L2="$WORK/gclog-l2"
+SRC_L=tactic-src-newitem
+MACH_L="tactic-mainqa-src-newitem-machine"
+out1="$(run_mint "$L" "$GCLOG_L1" land "$SRC_L" --pr "$SRC_PR" \
+         --items "$WORK/items-machine.json" --now "$NOW" 2>&1)"; rc1=$?
+blob_l1="$(git -C "$L" hash-object -- "intentions/$MACH_L.md" 2>/dev/null)"
+out2="$(run_mint "$L" "$GCLOG_L2" land "$SRC_L" --pr "$SRC_PR" \
+         --items "$WORK/items-machine-plus-new.json" --now "$NOW" 2>&1)"; rc2=$?
+blob_l2="$(git -C "$L" hash-object -- "intentions/$MACH_L.md" 2>/dev/null)"
+status_l="$(git -C "$L" status --porcelain -- intentions/)"
+if [[ $rc1 -eq 0 && $rc2 -ne 0 ]] \
+   && grep -q 'does NOT record verification item' <<<"$out2" \
+   && grep -q 'V3' <<<"$out2" \
+   && ! grep -q 'V1' <<<"$out2" \
+   && [[ ! -e "$GCLOG_L2" ]] \
+   && [[ -n "$blob_l1" && "$blob_l1" == "$blob_l2" ]] \
+   && [[ -z "$status_l" ]]; then
+  ok "a NEW item for an EXISTING lane is refused loudly, naming only the missing item; the landed node is not rewritten and the tree stays clean"
+else
+  no "new-item-on-existing-lane refusal (rc1=$rc1 rc2=$rc2 blob1=$blob_l1 blob2=$blob_l2 status='$status_l')"
+  printf '%s\n' "$out2"; [[ -e "$GCLOG_L2" ]] && cat "$GCLOG_L2"
 fi
 
 echo

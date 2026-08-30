@@ -225,8 +225,9 @@ pass 1 enumerates every open tactic whose `execution.pr` is terminal on GitHub
 and routes it through `reconcileMergedPhase(hasResidue)`
 (`packages/intentionsutil/src/transitions.ts:361`).
 
-A destination node is **born at `main-qa` carrying the source's already-merged
-PR** and, by design, carries **no** `## needs-main` heading. So on the very next
+A destination node is **born at `main-qa` at qa record time, carrying the
+source's still-open PR** and, by design, carries **no** `## needs-main`
+heading. So on the very next
 tick the reconciler would classify it `hasResidue === false` → `done` and write
 `phase: "done"` — destroying the verification node before `/qa-main` ever runs.
 Today the residue heading is the only thing keeping a `main-qa` node alive
@@ -234,9 +235,21 @@ through that sweep; the new shape removes the heading, so the protection has to
 become explicit. Unit 4 makes it so.
 
 This is **not** old Unit 4's retirement of the `review → main-qa` edge (still out
-of scope). It is a narrower, independently-correct rule: **a node already at
-`main-qa` is post-merge by construction and has nothing to absorb**, so the
-merged-reconcile sweep must not act on it.
+of scope). It is a narrower, independently-correct rule: **a node at `main-qa`
+has no merge of its own to absorb**, so the merged-reconcile sweep must not act
+on it. Either the node arrived by the reconciler's own `main-qa` transition,
+which already recorded the merge evidence, or it was minted directly at
+`main-qa` at qa record time, in which case the merge in question is its
+**source's** and is absorbed onto the source node, not this one. And the
+destination node **carries no `## needs-main` heading by design** — it renders
+`## Verification items` — so were the sweep to act on it, it would read
+`hasResidue === false` and write `phase: "done"`, destroying the verification
+node before `/qa-main` ever runs. Being at `main-qa`, not the residue heading,
+is the protection.
+
+Note the scope of this rule: it is about a **merge**. A source PR **closed
+without merging** is a different event, it absorbs no merge, and the reconciler
+handles it separately — see Unit 4's `isCloseAbsorbable`.
 
 ---
 
@@ -458,11 +471,15 @@ none; if one is genuinely correct, suppress it with a same-line
   tail is `/qa-main`'s to advance, not the reconciler's); a node at `review` with
   a merged PR still reconciles exactly as today.
 
-**Rationale to record in the diff comment.** A node at `main-qa` is post-merge by
-construction — the phase exists precisely because its PR already merged. There is
-no out-of-band merge left to absorb, and the completion evidence was already
-recorded on the transition that put it there. Re-processing it can only
-mis-classify it.
+**Rationale to record in the diff comment.** A node at `main-qa` has no merge of
+its own to absorb. Either it arrived by the reconciler's own `main-qa`
+transition, which already recorded the merge evidence, or it was minted directly
+at `main-qa` at qa record time, in which case the merge in question is its
+**source's** and is absorbed onto the source node. Re-processing it can only
+mis-classify it: it carries `## Verification items`, not a `## needs-main`
+heading, so it would read as residue-free and be swept to `done`. This narrowing
+is about a **merge** only — a source PR closed **without** merging absorbs no
+merge and is handled by its own predicate beside it.
 
 **Recommended model.** opus — this is the correctness hinge of the whole design,
 and the failure mode (a destination node silently `done`'d before it is ever

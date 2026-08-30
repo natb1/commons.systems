@@ -231,6 +231,37 @@ describe("fenceVerdict", () => {
     expect(verdict.refused).toEqual(["kind"]);
   });
 
+  it("REFUSES a PROMOTION of a tactic into a durable kind, judging the candidate's layer too", () => {
+    // The reverse direction of the case above, and the one a base-only read
+    // misses entirely: the base is a `tactic`, which is not durable, so a fence
+    // that only ever asks about `base.kind` returns "permitted" for a candidate
+    // that rewrites `kind` to `strategy` alongside a model-authored `statement`
+    // and `rationale`. validateNode gates no kind-specific fields and
+    // graph-commit runs no graph validation, so that write would land brand-new
+    // durable-layer doctrine on main. The refusal is the UNION over both kinds.
+    const base = doc({ id: "tactic-example", kind: "tactic" });
+    const candidate = doc({
+      id: "tactic-example",
+      kind: "strategy",
+      statement: "Smuggled doctrine.",
+      rationale: "Smuggled rationale.",
+      office_hours: null,
+    });
+    const verdict = fenceVerdict(base, candidate);
+    expect(verdict.kind).toBe("tactic");
+    expect(verdict.candidateKind).toBe("strategy");
+    expect(verdict.refused).toEqual(["kind", "rationale", "statement"]);
+  });
+
+  it("names both layers in the refusal text when the write rewrites kind", () => {
+    const base = doc({ id: "tactic-example", kind: "tactic" });
+    const message = refusalMessage(
+      "tactic-example",
+      fenceVerdict(base, doc({ id: "tactic-example", kind: "strategy" })),
+    );
+    expect(message).toContain('"tactic" node this write would rewrite as a "strategy"');
+  });
+
   it("REFUSES a novel field the schema will drop anyway", () => {
     // write-node.ts's validateNode drops unknown keys, so this particular write
     // would be harmless — but the fence must not depend on that. It refuses on

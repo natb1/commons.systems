@@ -89,10 +89,10 @@ export function mainqaNodeId(sourceId: string, lane: MainqaLane): string {
 // --- Body rendering ------------------------------------------------------------
 
 /**
- * A destination node is born carrying the source's already-merged PR, so the PR
- * number is always known at mint time. Refuse rather than render `PR #null` into
- * a node statement and body — the payload arrives in JSON form, so this is a
- * real runtime possibility, not just a type-level one.
+ * A destination node is born at qa record time carrying the source's still-open
+ * PR, so the PR number is always known at mint time. Refuse rather than render
+ * `PR #null` into a node statement and body — the payload arrives in JSON form,
+ * so this is a real runtime possibility, not just a type-level one.
  */
 function assertSourcePr(pr: number): void {
   if (!Number.isInteger(pr) || pr <= 0) {
@@ -233,14 +233,41 @@ function composeAuthorReason(items: readonly MainqaItem[]): string {
   ].join("\n");
 }
 
-/** Compose the author lane's `office_hours.recommendation` from its items. */
-function composeAuthorRecommendation(items: readonly MainqaItem[], id: string): string {
+/**
+ * Compose the author lane's `office_hours.recommendation` from its items.
+ *
+ * It LEADS with the merge precondition, and that is load-bearing. This node is
+ * born at qa record time — BEFORE `sourceId`'s PR merges — and it is born
+ * PARKED, so it enters the office-hours queue immediately. The queue applies no
+ * `blocked_by` gate and must not: `openBlockers` (src/officeHours.ts) is
+ * "Advisory only — never a gate", and .claude/skills/office-hours/SKILL.md
+ * makes the same rule doctrine for every disposition ("a signal, not a gate —
+ * the human judges readiness"). The selector's stderr `NOTE —` advisory
+ * (scripts/office-hours-select.ts) names the open blocker but not what it
+ * MEANS for this node. So the only thing standing between a human sitting and a
+ * verification run against code that has not landed is this text — and a
+ * born-parked node must carry at birth everything a fresh sitting needs (see
+ * composeAuthorReason above).
+ */
+function composeAuthorRecommendation(
+  items: readonly MainqaItem[],
+  id: string,
+  sourceId: string,
+  pr: number,
+): string {
   const lines = items.map(
     (item) => `- ${item.id}: verify \`${item.url_path}\` — expected ${item.expected_outcome}`,
   );
   return [
-    `Verify each item below against the deployed main, then resolve this node ` +
-      `(\`${id}\`) to \`phase: done\`:`,
+    `PRECONDITION — do NOT verify until PR #${pr} has MERGED and deployed to ` +
+      `\`main\`. This node was recorded at qa record time, before its source ` +
+      `landed; it is \`blocked_by: [${sourceId}]\`, and the office-hours queue ` +
+      `surfaces that blocker as an advisory only, never as a gate. If ` +
+      `\`${sourceId}\` is not yet \`phase: done\`, leave this node parked and ` +
+      `pick up another item.`,
+    ``,
+    `Once PR #${pr} is merged and deployed, verify each item below against the ` +
+      `deployed main, then resolve this node (\`${id}\`) to \`phase: done\`:`,
     ...lines,
   ].join("\n");
 }
@@ -276,6 +303,12 @@ export interface MainqaMintDecision {
  * not a lane.
  */
 export function decideMint(args: DecideMintArgs): MainqaMintDecision[] {
+  // Validate the PR at the boundary, not only inside buildMainqaNode: the
+  // author-lane recommendation is composed BEFORE that call and interpolates
+  // the number, so a bad `pr` would otherwise be rendered into human-facing
+  // text on its way to the throw. A defensive check at a public API boundary
+  // (.claude/rules/code-style.md).
+  assertSourcePr(args.pr);
   const grouped = groupByLane(args.items);
   const decisions: MainqaMintDecision[] = [];
   for (const lane of MAINQA_LANES) {
@@ -297,7 +330,7 @@ export function decideMint(args: DecideMintArgs): MainqaMintDecision[] {
     };
     if (lane === "author") {
       nodeArgs.reason = composeAuthorReason(items);
-      nodeArgs.recommendation = composeAuthorRecommendation(items, id);
+      nodeArgs.recommendation = composeAuthorRecommendation(items, id, args.sourceId, args.pr);
     }
 
     decisions.push({
