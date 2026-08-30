@@ -24,8 +24,10 @@ get `undefined` for their class, and wrongly include them because
   - a multi-app demo choice (Step 1),
   - a failed pre-QA acceptance check (Step 3b, a bug needing a plan-mode fix).
 
-`needs-main`-class residue items are in **neither** part of the set — they were
-filed as follow-ups in Step 3.6, always carrying `main-qa`. Each carries
+`needs-main`-class residue items are in **neither** part of the set — Step 3.6
+recorded them for post-merge verification (minted as standalone
+`tactic-mainqa-*` destination nodes on the node lane; filed as follow-ups
+carrying `main-qa` on the legacy issue lane). Each carries
 `dispatch:office-hours` **only** when its Step-3.6.1 determination is `human`,
 routing it to office-hours human review; `autonomous` follow-ups withhold
 `dispatch:office-hours` and route to the `/qa-main` handler. Either way they
@@ -155,8 +157,10 @@ non-residue blocker — a malformed or empty triage plan (Step 3 plan
 validation), the pre-QA acceptance check failed (a bug needing a plan-mode fix,
 Step 3b), the Chrome extension unavailable so browser items could not run (Step
 3c), a multi-app demo choice (Step 1), or the `origin/main` merge conflicted
-(Step 0.5). A `needs-main`-class residue item is **not** a member — it was filed
-as a follow-up in Step 3.6 and does not, on its own, trigger this blocker. An
+(Step 0.5). A `needs-main`-class residue item is **not** a member — Step 3.6
+recorded it for post-merge verification (a minted destination node on the node
+lane, a filed follow-up on the legacy lane) and it does not, on its own, trigger
+this blocker. An
 `already-satisfied`-class residue item is likewise **not** a member — it was
 dropped as PASS by the Workflow (absent from `result.dispositions`) and does not
 trigger this blocker.

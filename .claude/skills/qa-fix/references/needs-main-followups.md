@@ -1,54 +1,50 @@
 # Step 3.6 — File needs-main follow-ups
 
-This reference carries the full needs-main follow-up filing procedure for Step
-3.6 of `SKILL.md`. The body holds the guard (run only when Step 3.5 ran and
+This reference carries the full needs-main recording procedure for Step 3.6 of
+`SKILL.md`. The body holds the guard (run only when Step 3.5 ran and
 `result.dispositions` contains a `class === "needs-main"` item) and the terse
-"file a `blocked_by` follow-up per needs-main item" control flow.
+per-lane control flow — mint the destination nodes on the node lane, file a
+`blocked_by` follow-up per needs-main item on the legacy lane.
 
 This step fires whenever a `needs-main` disposition exists — independent of
 whether the run will ultimately fix, park, or pass on some *other* class. It runs
-**before** the Step 3.7 auto-fix lane, so a mixed fixing pass files its
-needs-main follow-ups here and the Step 4 comment (posted from inside Step 3.7's
+**before** the Step 3.7 auto-fix lane, so a mixed fixing pass records its
+needs-main items here and the Step 4 comment (posted from inside Step 3.7's
 fix finalize path) can truthfully list them. A run that carries both a
-`needs-main` item and an `opus-fixable`/`needs-human` item files the needs-main
-follow-up here, and "drop from escalation" (Step 6) stops a `needs-main` item
+`needs-main` item and an `opus-fixable`/`needs-human` item records the needs-main
+item here, and "drop from escalation" (Step 6) stops a `needs-main` item
 from triggering a park on its own account, never suppresses a park caused by
 another class.
 
 ## Node-target lane (`TARGET_KIND=node`) — supersedes the gh filing below
 
-A node target files **nothing anywhere**. Instead, append a `## needs-main
-residue` section to the tactic's **own body** (`intentions/<node-id>.md` —
-bodies are authoritative for tactics), one entry per `needs-main` item with
-its `id`, `title`, `url_path`, `expected_outcome`, `finding`, and a
-`Verifiability:` sub-line (see below). That append rides in the Step-4
-state-only completion commit (the `transition-node` write),
-which still advances `qa → review` — the residue section does **not** divert the
-phase, and there is no `qa → main-qa` edge. `main-qa` is post-merge by
-definition, so the residue is drained only after review merges the PR: the
-`review → main-qa` edge fires (`forwardPhase` in
-`packages/intentionsutil/src/transitions.ts`, or the reconciler's
-`reconcileMergedPhase` when the merge lands out of band), and
-`tactic-main-qa-phase`'s handler owns verification there.
+A node target files **nothing on GitHub** and appends **nothing** to the source
+tactic's own body. Instead it **mints standalone `tactic-mainqa-*` destination
+nodes** that carry the post-merge verification themselves: at most **two** per
+source PR — one per lane, never three — grouped by who can verify the items.
 
-Verifiability is triaged here at record time (the `route` computation below
-already classifies every item). Machine-verifiable means checkable by **any**
-tool the autonomous lane can run — a deployed-URL browser observation, but
-equally a `git`, `journalctl`, log, `jq`, `grep`, `ls`, filesystem or test-run
-check. Reachability by Claude-in-Chrome is **not** the criterion: an item whose
-check is a repo/journal/log/shell observation — and whose `url_path` is
-therefore a placeholder such as `current` rather than a route — **is**
-machine-verifiable and **does** become residue. An item is author-required
-(`needs-human` → `office_hours`, the Escalation seam, never residue) **only if
-it cannot be machine-checked at all**: it needs private credentials/accounts
-Claude lacks, a subjective product/UX judgment, or the user's product intent.
-This makes the legacy boot-then-reject waste structurally impossible on the
-node lane.
+The source tactic is not written by this step at all. Step 4's
+`transition-node "$N" --set-pr "$PR_NUM"` still advances it `qa → review`
+exactly as before, and because its body carries no residue section it then goes
+`review → done`. `main-qa` is post-merge by definition and is now reached only
+by the destination nodes, which are **born** at that phase carrying the source's
+PR.
 
-### The `Verifiability:` sub-line (interim convention)
+### Sort each item by its `Verifiability:` mark
 
-Each residue bullet carries a `Verifiability:` sub-line alongside its expected
-outcome and finding. It is valued exactly one of:
+Verifiability is triaged here at record time. Machine-verifiable means checkable
+by **any** tool the autonomous lane can run — a deployed-URL browser
+observation, but equally a `git`, `journalctl`, log, `jq`, `grep`, `ls`,
+filesystem or test-run check. Reachability by Claude-in-Chrome is **not** the
+criterion: an item whose check is a repo/journal/log/shell observation — and
+whose `url_path` is therefore a placeholder such as `current` rather than a
+route — **is** machine-verifiable. An item is author-required **only if it
+cannot be machine-checked at all**: it needs private credentials/accounts Claude
+lacks, a subjective product/UX judgment, or the user's product intent. This
+makes the legacy boot-then-reject waste structurally impossible on the node
+lane.
+
+Every joined item carries exactly one mark:
 
 - `MACHINE` — settleable by a check the autonomous lane can run (browser **or**
   shell/git/journal/log/filesystem).
@@ -60,17 +56,94 @@ outcome and finding. It is valued exactly one of:
 **Default:** `MACHINE`. `AUTHOR` requires naming which of the three barriers
 applies. "The browser cannot reach it" is never a barrier.
 
-**Optional `Check:` sub-line** for a `MACHINE` item — the concrete command or
-observation recipe (e.g. `journalctl -u dispatch-tick --since -2h | grep
-'sweep'`), so the drain runs it rather than re-deriving it. Optional because
-residue already on `origin/main` predates this convention; a lane that finds no
-`Check:` derives one from the expected outcome.
+A `WAIT` item is a **hold on the machine node**: `WAIT` is never a third lane
+and never an author item. `MACHINE` and `WAIT` items both group to the machine
+lane; only `AUTHOR` items group to the author lane.
 
-**Retirement:** this sub-line retires **with** the `## needs-main residue` body
-section itself, when the standalone `tactic-mainqa-*` node shape
-(`intentions/tactic-mainqa-record-time-routing.md`) is live and `owner: ai` /
-`owner: human` carries the sort per node. It is an interim convention, not a
-second permanent mechanism.
+A `MACHINE` item may also carry a `check` value — the concrete command or
+observation recipe (e.g. `journalctl -u dispatch-tick --since -2h | grep
+'sweep'`) — which rides onto the destination node so the drain runs it rather
+than re-deriving it.
+
+### The destination nodes
+
+| field | machine lane | author lane |
+|---|---|---|
+| `id` | `tactic-mainqa-<slug>-machine` | `tactic-mainqa-<slug>-author` |
+| `kind` | `tactic` | `tactic` |
+| `phase` | `main-qa` | `main-qa` |
+| `owner` | `ai` | `human` |
+| `status` | `codified` | `delegated` |
+| `office_hours` | `null` | `{reason, since, recommendation, session_type: "other"}` |
+| `serves` | copied verbatim from the source | copied verbatim from the source |
+| `parent` | `null` | `null` |
+| `blocked_by` | `[<source-id>]` | `[<source-id>]` |
+| `execution` | `{branch: <source branch>, pr: <source PR>, attempts: {}, markers: [], strategy_fingerprint: null}` | same |
+| queue | dispatch (`/qa-main`) | office-hours only |
+
+`<slug>` is the source id with a **single** leading `tactic-` stripped. **A lane
+with no items is omitted**: a run whose items are all `MACHINE`/`WAIT` mints one
+node, and so does a run whose items are all `AUTHOR`.
+
+The machine node is dispatch-selectable and routes to `/qa-main`'s node lane,
+which owns verification there. The author node is never selectable (the selector
+skips any node with a non-null `office_hours`) and reaches the human only via
+the office-hours queue — so it is born parked with a non-empty `reason` and
+`recommendation` composed from its own items. Both are `blocked_by` the source,
+so neither is worked until the source PR merges and the source reconciles to
+`done`.
+
+### Procedure
+
+1. **Select and join.** Take the dispositions whose `class === "needs-main"` and
+   join each back to the in-memory residue list from Step 3 **by `id`** — the
+   dispositions array carries only `{id, title, kind, class, aesthetic, verify,
+   rationale}`, not `url_path` / `expected_outcome` / `finding`. This is the
+   same join the legacy lane's step 1 below performs.
+2. **Mark** each joined item `MACHINE`, `AUTHOR` or `WAIT` per the sort above.
+3. **Mint.** Write the joined, marked items to `tmp/mainqa-items-<n>.json` as a
+   JSON array — one object per item, `{id, title, url_path, expected_outcome,
+   finding, verifiability}` plus an optional `check` — and run, from the
+   worktree root (use `dangerouslyDisableSandbox: true`; the script fetches and
+   pushes):
+
+   ```bash
+   packages/intentionsutil/scripts/mint-mainqa-nodes "$N" --pr "$PR_NUM" \
+     --items tmp/mainqa-items-<n>.json
+   ```
+
+   It groups the items by lane, builds each node's frontmatter and body, lands
+   every created node in **one** `graph-commit`, and prints one
+   `minted <id> (CREATE|EXISTING)` line per non-empty lane. Exit 0 is landed (an
+   all-`EXISTING` no-op included), 1 a write/`graph-commit` failure, 2 a usage
+   error. The mint is **idempotent**: a lane whose node already exists on
+   `origin/main` reports `EXISTING` and is not rewritten, so re-running this seam
+   on a later fixing pass is safe.
+4. **Never append to the source body**, and do not set the source's phase here —
+   Step 4's `transition-node` write still owns `qa → review`.
+5. **Record** each minted id for the Step 4 comment's filed-follow-ups sub-list.
+   This seam forks **no** subagents — add **zero** to `SKILL_SUBAGENTS`.
+
+### The `Verifiability:` sub-line (interim convention, now read-only)
+
+Source nodes recorded before this shape carry the same three values as a
+`Verifiability:` sub-line on each bullet of a `## needs-main residue` body
+section, alongside an optional `Check:` sub-line. `Check:` is optional because
+residue already on `origin/main` predates the convention; a drain that finds
+none derives the recipe from the expected outcome.
+
+**Retirement:** the standalone `tactic-mainqa-*` node shape is live as of this
+PR **for newly-recorded items**, and a companion unit migrates the live `WAIT`
+marks — but **39** source nodes still carry a `## needs-main residue` section at
+a phase other than `done` (measured at `bb5e7f3f`; **34** of them already at
+`main-qa` or `review`) and drain **in place**. Count these with
+`LC_ALL=C grep -al`: one residue-carrying node holds a literal NUL byte, and
+plain `grep -l` silently omits it. So the sub-line is now a
+**read-only** convention for that drain tail — `/qa-main` still parses it on
+legacy source nodes — and is **no longer written** by `/qa-fix`. It retires
+fully, together with the `## needs-main residue` section itself, once the last
+residue-carrying node drains. **Do not delete either while any node still
+carries residue.**
 
 Skip the rest of this step; the legacy lane (`TARGET_KIND=issue`) runs it
 unchanged.

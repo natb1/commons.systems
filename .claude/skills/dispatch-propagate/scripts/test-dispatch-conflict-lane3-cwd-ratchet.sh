@@ -19,7 +19,10 @@
 # Consequence for the skill text, which this ratchet enforces: after that --cwd
 # change, EVERY implicit-cwd dependency in Lane 3 must be explicit —
 #   * git operations on the node's branch go through `git -C "$WT"`,
-#   * helper scripts are invoked by absolute path under $PROJECT_ROOT,
+#   * helper scripts are invoked by absolute path under $PROJECT_ROOT — except
+#     the $PROJECT_ROOT bootstrap itself and `graph-commit`, whose repo-relative
+#     spelling is load-bearing for the permissions.allow prefix match; each
+#     exception carries its own compensating assertion (see section 6/6b),
 #   * the contamination guard is passed the explicit "$WT" worktree path,
 #   * the resolver subagent's worktree root comes from the resolved $WT, NEVER
 #     from `git rev-parse --show-toplevel` (which from the primary checkout
@@ -144,10 +147,42 @@ assert_eq "lane3: dispatch-run-verification is named by a \$PROJECT_ROOT-prefixe
 # the block has — potentially $WT, the stale tree this change exists to stop
 # reading from. The one deliberate exception is the bootstrap that resolves
 # $PROJECT_ROOT itself, which cannot yet reference it.
+#
+# The SECOND deliberate exception is `graph-commit`. PR #3136 (a4a964b8,
+# 2026-08-29) spelled that call repo-relative ON PURPOSE: `.claude/settings.json`
+# carries `"Bash(packages/intentionsutil/scripts/graph-commit:*)"` in
+# `permissions.allow`, and that matcher is a PREFIX match against the literal
+# command string as typed. A `"$PROJECT_ROOT/packages/…"` spelling does not match
+# it, so the call falls through to the auto-mode permission classifier — the
+# bypass #3136 exists to close (`.claude/rules/sandbox.md`, "Command pattern
+# matching": "re-spelling a call site silently re-exposes it to the classifier").
+# The expectation legitimately changed; the PROPERTY this row guards — the
+# invocation cannot be pointed at the node's stale worktree — did not, and is
+# re-asserted for graph-commit in section 6b below via its `-C "$PROJECT_ROOT"`.
 RELATIVE_INVOCATIONS=$(grep -nE '(^|[|(&] *)(\.claude/skills|packages/intentionsutil/scripts)/' <<<"$LANE3_FENCED" \
-  | grep -v 'lib-graph-worktree.sh' || true)
+  | grep -v 'lib-graph-worktree.sh' \
+  | grep -v 'packages/intentionsutil/scripts/graph-commit' || true)
 assert_eq "lane3: no bare relative helper-script invocation in a fenced block" \
   "" "$RELATIVE_INVOCATIONS"
+
+# --- 6b. the graph-commit exception is compensated by -C "$PROJECT_ROOT" ----
+# graph-commit resolves its repo root from `-C`/`--repo`, else **cwd** — never
+# from its own location (packages/intentionsutil/scripts/graph-commit:38). With
+# the relative spelling excepted above, `-C "$PROJECT_ROOT"` is the ONLY thing
+# keeping the write off whatever cwd the block has, i.e. potentially $WT. So
+# every fenced graph-commit invocation must carry it, on the SAME line as the
+# command (that one canonical agent-typed spelling is also what the
+# permissions.allow prefix match and section 6's exception key on).
+GRAPH_COMMIT_CALLS=$(count_matches '(^|[|(&] *)packages/intentionsutil/scripts/graph-commit( |$)' "$LANE3_FENCED")
+# Non-vacuity: if Lane 3 ever stops invoking graph-commit, the exception carved
+# above is dead weight and this row says so rather than passing silently.
+assert_eq "lane3: the graph-commit exception is non-vacuous (Lane 3 still invokes it)" \
+  "yes" "$([[ "$GRAPH_COMMIT_CALLS" -ge 1 ]] && echo yes || echo no)"
+GRAPH_COMMIT_UNSCOPED=$(grep -nE '(^|[|(&] *)packages/intentionsutil/scripts/graph-commit( |$)' <<<"$LANE3_FENCED" \
+  | grep -vE 'graph-commit +(-C|--repo) +"\$PROJECT_ROOT"' || true)
+assert_eq "lane3: every fenced graph-commit invocation carries -C \"\$PROJECT_ROOT\"" \
+  "" "$GRAPH_COMMIT_UNSCOPED"
+
 assert_eq "lane3: the \$PROJECT_ROOT bootstrap sources lib-graph-worktree.sh" \
   "yes" "$(at_least_one '^PROJECT_ROOT=\$\(source \.claude/skills/dispatch-propagate/scripts/lib-graph-worktree\.sh && resolve_main_worktree\)' "$LANE3_FENCED")"
 assert_eq "lane3: \$WT is derived from \$PROJECT_ROOT and a source id" \

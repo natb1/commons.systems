@@ -14,8 +14,9 @@ on an `opus-fixable` item) — it escalates to office-hours via the standard pat
 `dispatch-tick`'s `terminal_without_disposition_sweep` parks the session).
 
 The Step 3.5 disposition Workflow classifies residue on a **four-class axis**:
-`opus-fixable` bugs are auto-fixed (Step 3.7); `needs-main` bugs are filed as
-`blocked_by` follow-ups (Step 3.6) and do not escalate; `already-satisfied` items
+`opus-fixable` bugs are auto-fixed (Step 3.7); `needs-main` bugs are recorded for
+post-merge verification (Step 3.6 — standalone `tactic-mainqa-*` destination
+nodes on the node lane) and do not escalate; `already-satisfied` items
 are **dropped as PASS**; `needs-human` residue runs later via `/office-hours`.
 
 The QA plan (Step 2) is authored by a **single bounded Opus triage subagent**
@@ -201,11 +202,13 @@ each fork site.
    - **Completion.** On a clean pass do **not** apply `dispatch:qa-done` or call
      `dispatch-mark-complete` / `dispatch-finalize-phase`. Instead invoke the
      graph-native transition writer, which records the `qa-done` marker and
-     advances the phase `qa → review` — **always**, residue or not — as one
-     state-only graph-commit. `main-qa` is post-merge by definition, so it is
-     never reachable directly from `qa`: needs-main residue appended in Step 3.6
-     is drained after review merges, via `review → main-qa` (`forwardPhase` in
-     `packages/intentionsutil/src/transitions.ts`):
+     advances the phase `qa → review` — **always**, needs-main items or not — as
+     one state-only graph-commit. `main-qa` is post-merge by definition, so it is
+     never reachable directly from `qa` — and the source node no longer carries
+     the post-merge work at all: it goes `qa → review` here and then
+     `review → done`. The verification lives on the standalone `tactic-mainqa-*`
+     destination nodes Step 3.6 minted, each `blocked_by` this source and so held
+     until it reaches `done`:
 
      ```bash
      .claude/skills/dispatch-propagate/scripts/transition-node "$N" --set-pr "$PR_NUM"
@@ -361,7 +364,7 @@ each fork site.
    for the full `args` build, the `result` schema, and the four-class axis.
 
    The Workflow stays **report-only** (acts on nothing): the skill acts — Step 3.6
-   files `needs-main` follow-ups, Step 3.7 auto-fixes `opus-fixable`, `needs-human`
+   records `needs-main` items, Step 3.7 auto-fixes `opus-fixable`, `needs-human`
    escalates under Step 6, `already-satisfied` drops as PASS. Consume
    `result.dispositions` / `result.verify_report` for the Step 4 comment, and
    `result.fix_plan` / `result.deviation` for Step 3.7.
@@ -370,24 +373,56 @@ each fork site.
 
    Run this step only when Step 3.5 ran **and** `result.dispositions` contains a
    `class === "needs-main"` item; else skip. It runs **before** the Step 3.7
-   auto-fix lane, so a mixed fixing pass files its needs-main follow-ups here (the
-   Step 4 comment can then list them). Filing here drops a `needs-main` item from
-   the Step 6 escalation set on its own account, never suppressing a park caused by
-   another class.
+   auto-fix lane, so a mixed fixing pass records its needs-main items here (the
+   Step 4 comment can then list them). Recording here drops a `needs-main` item
+   from the Step 6 escalation set on its own account, never suppressing a park
+   caused by another class.
 
-   **Node-target lane (`TARGET_KIND=node`):** files **nothing anywhere**. Instead
-   append a `## needs-main residue` section to the tactic's **own body**
-   (`intentions/<node-id>.md`), one entry per `needs-main` item (`id`, `title`,
-   `url_path`, `expected_outcome`, `finding`, `Verifiability:`). An item becomes
-   residue when it is machine-checkable **at all** — by any tool the autonomous
-   lane can run, browser **or** shell/git/journal/log/filesystem — not merely
-   when the browser can reach it; only an item that cannot be machine-checked at
-   all is author-required. See the reference for the `Verifiability:` values and
-   full rules. That append rides in the Step-4
-   `transition-node` commit, which still advances `qa → review` — the residue
-   section does **not** divert the phase. The residue is drained later, after
-   review merges the PR, when `review → main-qa` fires and `tactic-main-qa-phase`
-   owns verification. Skip the rest of this step.
+   **Node-target lane (`TARGET_KIND=node`):** files **nothing on GitHub** and
+   appends **nothing** to the source node's body. Instead it **mints standalone
+   `tactic-mainqa-*` destination nodes** that carry the post-merge verification
+   themselves — at most **two** per source PR, one per lane, never three:
+
+   1. **Join.** Take the dispositions whose `class === "needs-main"` and join each
+      back to the in-memory residue list from Step 3 **by `id`** to recover
+      `url_path` / `expected_outcome` / `finding` — the dispositions array carries
+      only `{id, title, kind, class, aesthetic, verify, rationale}`. This is the
+      same join the legacy lane runs ("Select and join" in the reference).
+   2. **Mark.** Give each joined item a `verifiability` of `MACHINE`, `AUTHOR` or
+      `WAIT` by the **`owner` sort criterion**, not by browser reachability. An
+      item is author-required **only if it cannot be machine-checked at all**: it
+      needs private credentials/accounts Claude lacks, a subjective product/UX
+      judgment, or the user's product intent. Anything settleable by *any* tool
+      the autonomous lane can run (browser **or** `git`/`journalctl`/log/`jq`/
+      `grep`/`ls`/filesystem/a test run) is `MACHINE`. An otherwise-sound machine
+      check whose event has not happened yet is `WAIT` — a hold on the **machine**
+      node, never a third lane and never an author item. **Default `MACHINE`**;
+      `AUTHOR` requires naming which of the three barriers applies. **"The browser
+      cannot reach it" is never a barrier.**
+   3. **Mint.** Write the joined, marked items to `tmp/mainqa-items-<n>.json` as a
+      JSON array and run, from the worktree root (use
+      `dangerouslyDisableSandbox: true` — it fetches and pushes):
+
+      ```bash
+      packages/intentionsutil/scripts/mint-mainqa-nodes "$N" --pr "$PR_NUM" \
+        --items tmp/mainqa-items-<n>.json
+      ```
+
+      It groups the items (`MACHINE`/`WAIT` → the `owner: ai` machine node,
+      dispatched to `/qa-main`; `AUTHOR` → the `owner: human` node, born parked to
+      office-hours), omits a lane with no items, lands every created node in one
+      `graph-commit`, and prints one `minted <id> (CREATE|EXISTING)` line per
+      lane. It is idempotent — an already-existing lane node reports `EXISTING`
+      and is not rewritten — so re-running this seam on a fixing pass is safe.
+   4. **Leave the source alone.** Append nothing to its body and do **not** set
+      its phase here: Step 4's `transition-node "$N" --set-pr "$PR_NUM"` still
+      advances `qa → review`, exactly as today. The destination nodes are
+      `blocked_by` the source, so they are held until it reaches `done`.
+   5. **Record** each `minted <id>` for the Step 4 comment's filed-follow-ups
+      sub-list, and count **zero** forked subagents — this seam forks none.
+
+   See the reference for the full sort criterion, the destination-node field
+   table, and the drain tail. Skip the rest of this step.
 
    **Legacy lane (`TARGET_KIND=issue`):** file one `blocked_by` follow-up per
    `needs-main` item (mirrors `/review-fix` Step 5a/5b). Join each disposition back
@@ -473,7 +508,8 @@ each fork site.
    includes items executed, PASS/FAIL/SKIP counts, items **deferred to office-hours**
    (only `needs-human`-class), bugs found, the walkthrough GIF, a **disposition
    triage** section (only when Step 3.5 ran), a **filed follow-ups** sub-list (only
-   when Step 3.6 ran, with each route), and an **Assessed by Opus (already
+   when Step 3.6 ran — the minted `tactic-mainqa-*` node ids on the node lane, each
+   follow-up with its route on the legacy lane), and an **Assessed by Opus (already
    satisfied)** sub-list. **See
    [`references/pr-comment-summary.md`](references/pr-comment-summary.md)** for the
    full composition, the verify-source join rules, and the finalize bash.
@@ -505,8 +541,9 @@ each fork site.
    1. **Auto-fix applied** (Step 3.7's fix finalize path already STOPPED) — **Step 6
       is not reached on a fixing pass**; a fixing pass escalates nothing.
    2. **Escalate residue** (non-fixing pass, or a Step 3.7 escalate-finalize STOPPED
-      before here). The escalation set **excludes** `needs-main` residue (filed as
-      follow-ups in Step 3.6) and `already-satisfied` residue (dropped as PASS);
+      before here). The escalation set **excludes** `needs-main` residue (minted
+      as standalone destination nodes in Step 3.6 — filed as follow-up issues
+      there on the legacy lane) and `already-satisfied` residue (dropped as PASS);
       `opus-fixable` and `needs-human` residue still escalate (see below).
    3. **Clean pass** — no residue (or only `needs-main` / only `already-satisfied`
       residue): `dispatch-complete-phase qa` + `dispatch-mark-complete` (see **Clean
@@ -516,7 +553,8 @@ each fork site.
    re-deriving class from the raw residue list) plus the **non-residue terminal
    blockers** (malformed/empty triage plan [Step 3], `origin/main` merge conflict
    [Step 0.5], Chrome unavailable [Step 3c], multi-app choice [Step 1], failed pre-QA
-   acceptance check [Step 3b]). `needs-main` residue (filed in Step 3.6) and
+   acceptance check [Step 3b]). `needs-main` residue (recorded in Step 3.6 —
+   minted as standalone `tactic-mainqa-*` nodes on the node lane) and
    `already-satisfied` residue (dropped as PASS) are in **neither** part. **See
    [`references/terminal-disposition.md`](references/terminal-disposition.md)** for
    the full set-derivation and the user-input-blocker membership rules.
