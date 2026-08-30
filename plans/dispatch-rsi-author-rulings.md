@@ -9,27 +9,42 @@ session**: a session handed the node bodies alone builds the un-ruled design.
 not the authority.** That makes transcription onto the node load-bearing: a
 clean session handed the node bodies alone sees only what is on the node.
 
-> **⚠ TRANSCRIPTION STATUS, audited 2026-08-30 — 1 of 7 rulings is transcribed.**
-> Measured with `LC_ALL=C grep -ac '2026-08-29'` against each ruling's own named
-> nodes. Until the owed transcriptions land, **this file is operatively binding
-> for the six untranscribed rulings**, and any session executing this batch must
-> read it alongside the nodes.
+> **✅ TRANSCRIPTION STATUS, re-audited 2026-08-30 after landing — 7 of 7
+> transcribed. This file is NO LONGER operatively binding.**
+> The earlier banner here said "1 of 7 transcribed … this file is operatively
+> binding for the six untranscribed rulings, and any session executing this
+> batch must read it alongside the nodes." That is now false and has been
+> replaced rather than amended, because a stale *binding* claim changes how
+> every executing session reads the batch.
 >
-> | Ruling | Named node(s) | Transcribed? |
-> |---|---|---|
-> | 1 — sibling-carrier drafts become completion records | `tactic-code-review-detached-node-lock`, `tactic-dispatch-code-review-concurrent-write-attribution`, `tactic-review-cheap-fix-disposition`, `tactic-audit-permission-friction` | **NO** — 0 hits on all four. All four still carry live `office_hours` parks, and `tactic-review-cheap-fix-disposition` still carries *"(a) COMPLETION RECORD. Stamp the node against the carrying PR and retire it."* as an **unanswered park option**, not as the ruling |
-> | 2 — relocate `target-workers.json` under XDG | `tactic-dispatch-config-untracked-pace-curve` | **NO** — the topic is in the node's prose, but not the ruling: `grep -ra 'RELOCATE UNDER XDG\|relocates under XDG' intentions/` → 0 |
-> | 3 — clarification 131 option (a) | `tactic-dispatch-explicit-ci-wait` | **NO** — 0 hits |
-> | 4 — park-clearing delegated on a verified-dead premise | *(policy, no single node)* | **NO** — not recorded on any node |
-> | 5 — plan-only rulings must be transcribed | *(this file's own rule)* | **NOT EXECUTED** — it is the rule the other six violate |
-> | 6 — record-time main-qa routing is correct | `tactic-mainqa-record-time-routing` | **PARTIAL** — the ruling's *prose follow-up* landed (`cba77286`: the node now reads "born at `main-qa` at qa record time, carrying the source's **still-open PR**", `mint-mainqa-nodes` matches, zero `already-merged` hits remain). The **ruling itself** is not on the node |
-> | 7 — PR20 Units 1 and 3 descoped | `tactic-align-review-skill` | **NO** — 0 hits |
+> All seven rulings are on their nodes on `origin/main`, landed by `9201fdeb`,
+> `4ffbc8b3`, `91bc7cc9`, `60dd2b54` and `1f5d0909`. Re-measured with
+> `git show origin/main:intentions/<id>.md | LC_ALL=C grep -ac '2026-08-29'`
+> against each ruling's own named nodes — every one returns ≥ 1 hit
+> (2, 3, 2, 2, 2, 2, 1, 2 across the eight named nodes).
 >
-> **Consequence:** a clean session handed only the node bodies sees four parked
-> drafts and an undischarged author question at Position 7, and an unmarked live
-> Unit 1 at Position 9 — with a plan telling it to implement all of them.
-> Discharging Ruling 5 (transcribing 1, 2, 3, 4, 6 and 7 onto their nodes)
-> is the single highest-leverage correction available to this batch.
+> **The node body is the authority.** This file is now what its own header
+> says it is: the index and the audit trail. A clean session handed the node
+> bodies alone now sees the rulings; it no longer needs this file to execute
+> correctly.
+>
+> Two corrections to the specific claims the old banner made, both measured:
+>
+> - Ruling 1's row asserted *"0 hits on all four. All four still carry live
+>   `office_hours` parks."* Both halves are refuted. Hits are 2, 3, 2, 2. Three
+>   of the four — `tactic-code-review-detached-node-lock`,
+>   `tactic-review-cheap-fix-disposition`, `tactic-audit-permission-friction`
+>   — are now `phase: done` with `office_hours: null`. Only
+>   `tactic-dispatch-code-review-concurrent-write-attribution` is still parked.
+> - Ruling 6's row called the prose follow-up landed via `cba77286`. That
+>   commit is on the **open** PR #3142 branch, not on `origin/main`; the
+>   original claim rested on a case-sensitivity false negative in its own grep.
+>   The ruling itself is now transcribed regardless.
+>
+> Two items remain owed, and neither makes this file binding again: the PR6
+> interrupt-gate ruling still needs its numbered entry below, and four
+> band-only nodes still need park-reason rescue text at clear time.
+
 
 > **Plan-only rulings owed transcription, and the ones that must NOT be
 > transcribed** (audited 2026-08-30). Ruling 5 requires each plan-stated ruling

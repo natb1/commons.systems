@@ -412,8 +412,22 @@ each fork site.
       dispatched to `/qa-main`; `AUTHOR` → the `owner: human` node, born parked to
       office-hours), omits a lane with no items, lands every created node in one
       `graph-commit`, and prints one `minted <id> (CREATE|EXISTING)` line per
-      lane. It is idempotent — an already-existing lane node reports `EXISTING`
-      and is not rewritten — so re-running this seam on a fixing pass is safe.
+      lane. An already-existing lane node reports `EXISTING` and is not
+      rewritten.
+
+      **That is conditional idempotence, not unconditional.** Re-running is a
+      true no-op only while the item set is UNCHANGED. `assert_existing_covers`
+      re-runs on every `EXISTING` lane and hard-errors (exit 1) if the landed
+      node does not already record every item this pass routed to it — its
+      stated remedy is a manual `write-node.ts` + `graph-commit` append. So a
+      second pass that discovers a NEW item for an existing lane REFUSES; it
+      does not converge. An autonomous fixing pass has no handler for that
+      refusal and cannot perform the hand-append.
+
+      Two consequences worth knowing before you rely on the re-run: the refusal
+      is the safe direction (it prevents a silent under-covering), and it can
+      fire FALSELY — item ids are LLM-authored, so a mere re-spelling of the
+      same item reads as an uncovered one. See the script's own header.
    4. **Leave the source alone.** Append nothing to its body and do **not** set
       its phase here: Step 4's `transition-node "$N" --set-pr "$PR_NUM"` still
       advances `qa → review`, exactly as today. The destination nodes are
