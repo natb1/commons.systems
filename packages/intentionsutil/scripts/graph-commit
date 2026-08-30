@@ -1151,12 +1151,7 @@ run_merge_node() {
 #     fork blob, ours = what this run intends to land per snap_intended_file(),
 #     theirs = origin/main's blob). A resolved merge is written to the working
 #     tree and to SNAP_DIR/<id>.merged.md, never over the frozen
-#     SNAP_DIR/<id>.md — see the SNAP_DIR path contract. One class of
-#     edit is still withheld from that merge and parked instead: a frontmatter
-#     LIST entry this invocation REMOVED that origin/main still carries. That
-#     guard is now REDUNDANT — the merge's list rule became base-aware and
-#     honors the removal — but it is retained until its test case is rewritten
-#     (see the guard above frontmatter_list_entries).
+#     SNAP_DIR/<id>.md — see the SNAP_DIR path contract.
 # A prune is guarded the same way: main carrying a post-fork edit to a node this
 # invocation means to delete is a prune-vs-concurrent-edit conflict, not a
 # deletion to force through. Any divergence the merge cannot resolve parks the
@@ -1184,83 +1179,6 @@ blob_sha_or_empty() {
   else
     printf '%s'
   fi
-}
-
-# --- List-entry removal guard (interim, now REDUNDANT — pending removal) ----
-# WHY IT EXISTS. The field-level merge primitive (mergeIntentionNodes, via
-# run_merge_node) used to merge every frontmatter LIST field — serves, recovers,
-# clarifications, tooling_goals, validates, blocked_by, and
-# attributes.conditions — with a BASE-FREE union. A union cannot express a
-# deletion: "this entry is in theirs and absent from ours because ours DELETED
-# it" is indistinguishable from "it is in theirs because theirs just added it",
-# and the union kept it either way. No FieldConflict is ever produced for a list
-# field, so the merge reported a clean resolve and graph-commit exited 0 claiming
-# the write landed — with the removal silently reverted.
-#
-# That defect predated this script's far-ahead replay and was owned by
-# `tactic-node-merge-list-removal-loss`. But the replay below newly routed any
-# node whose origin/main blob moved since the fork point through that primitive,
-# where the pre-existing code path was a blind `cp` that honored the deletion.
-# Without a guard, a far-ahead writer clearing a satisfied `blocked_by` edge or
-# repointing `serves` lost the removal whenever ANY concurrent writer touched
-# the same node (an `attention` bump is enough) — silently, repeatably, and with
-# no per-field diagnostic naming what was dropped. So the replay refuses
-# instead: when the snapshot drops a frontmatter list entry that origin/main
-# still carries, park (fail closed, the discipline layers 1-3 already follow)
-# rather than hand the removal to a merge that would revert it.
-#
-# WHY IT IS NOW REDUNDANT. `tactic-node-merge-list-removal-loss` has LANDED
-# (phase: done). `threeWayList` in packages/intentionsutil/src/node-merge.ts is
-# base-aware: an entry present in base and theirs but absent from ours is
-# recognized as OUR removal and dropped — precisely the set
-# list_entries_dropped_by_ours() computes. So every case this guard parks on is
-# now one the primitive resolves correctly, and parking a satisfied-blocked_by
-# cleanup is exactly the mechanical park that node's design decision rejects.
-#
-# NOT YET DELETED. Removing the guard and its two call sites is a behavior
-# change (park -> auto-resolve) that also requires rewriting the case asserting
-# it — the "far-ahead list-entry removal" case in test-graph-commit.sh, which
-# today asserts the park. Do that as its own change with the replacement
-# assertion (the removal survives the far-ahead rebuild and lands), not as a
-# silent deletion. Until then this guard costs correctness nothing; it only
-# costs an avoidable park.
-#
-# frontmatter_list_entries <file> — print one "<top-level field><TAB><raw line>"
-# per YAML list-item line inside the file's FRONTMATTER (never the body, whose
-# markdown bullets are not node fields), sorted and deduped for `comm`. Keying
-# each entry by its owning top-level field keeps an entry MOVED between two list
-# fields (e.g. serves → validates) visible as a removal from the field it left.
-# A file with no `---` fence on line 1 yields nothing: it is not a node file, so
-# there is no list field to reason about.
-frontmatter_list_entries() {
-  awk '
-    NR == 1 { if ($0 != "---") exit; in_fm = 1; next }
-    in_fm && $0 == "---" { exit }
-    in_fm && /^[A-Za-z_][A-Za-z0-9_]*:/ { field = $0; sub(/:.*/, "", field); next }
-    in_fm && /^[[:space:]]+-[[:space:]]/ { print field "\t" $0 }
-  ' "$1" | LC_ALL=C sort -u
-}
-
-# list_entries_dropped_by_ours <base-file> <ours-file> <theirs-file> — print the
-# "<field><TAB><line>" entries present at BOTH the fork point and on origin/main
-# but absent from this invocation's snapshot: exactly the set the base-free union
-# used to restore — and exactly the set the base-aware `threeWayList` now drops
-# correctly, which is why the guard reading this is redundant. Empty output (and
-# a caller that ignores the exit status) means no removal is at risk.
-# Deliberately conservative in the safe direction — an entry EDITED in place by
-# this writer reads as a removal plus an addition, which the union resurrected
-# alongside the new one, so parking on it was right too.
-#
-# LC_ALL=C on both the sort (above) and the comm: `comm` verifies its inputs are
-# ordered under the SAME collation it compares with, so a locale-collated sort
-# feeding a comm can trip "file N is not in sorted order" — which exits non-zero
-# and, under `set -e`, would kill graph-commit mid-rebuild. Byte order on both
-# sides is deterministic and locale-independent.
-list_entries_dropped_by_ours() {
-  local base_f="$1" ours_f="$2" theirs_f="$3"
-  LC_ALL=C comm -12 \
-    <(LC_ALL=C comm -23 <(frontmatter_list_entries "$base_f") <(frontmatter_list_entries "$ours_f")) \
-    <(frontmatter_list_entries "$theirs_f")
 }
 
 # replay_snapshot_onto_base <id> <fork-sha> — re-materialize one snapshotted node
@@ -1297,28 +1215,6 @@ replay_snapshot_onto_base() {
   if [[ -n "$main_blob" ]]; then
     theirs_f="$SNAP_DIR/.replay-$id.theirs"
     git cat-file -p "$main_blob" >"$theirs_f"
-  fi
-  # Interim list-entry removal guard (see the block above
-  # frontmatter_list_entries, which records that it is now REDUNDANT — the merge
-  # below became base-aware and honors the removal — and why it is retained
-  # until its test case is rewritten). Only meaningful with BOTH a fork blob
-  # (there is a base to have removed something FROM) and an origin/main blob
-  # (there is a landed side still carrying it); an absent theirs is the
-  # delete/modify case merge-node.ts already refuses.
-  if [[ -n "$base_f" && -n "$theirs_f" ]]; then
-    local dropped summary
-    dropped="$(list_entries_dropped_by_ours "$base_f" "$(snap_intended_file "$id")" "$theirs_f")"
-    if [[ -n "$dropped" ]]; then
-      # Render at most 8 dropped entries as `<field>[<entry>]`, joined with "; ",
-      # so a wholesale list rewrite cannot blow up the parked recommendation.
-      summary="$(awk -F'\t' '
-        NR <= 8 { e = $2; sub(/^[[:space:]]*-[[:space:]]*/, "", e); printf "%s%s[%s]", (NR > 1 ? "; " : ""), $1, e }
-        END { if (NR > 8) printf "; +%d more", NR - 8 }
-      ' <<<"$dropped")"
-      append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
-        '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), so this write is withheld from the field-level auto-merge by the interim list-entry removal guard rather than auto-resolved")}]')"
-      return 1
-    fi
   fi
   if run_merge_node "$id" "$base_f" "$(snap_intended_file "$id")" "$theirs_f" "$out_f"; then
     cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
@@ -1823,26 +1719,6 @@ reconcile_plumbing_base() { # <prev-base> <new-base>
       theirs_f="$SNAP_DIR/.plumb-merge-$id.theirs"
       git cat-file -p "$new_blob" >"$theirs_f" \
         || die "origin/main blob $new_blob for '$id' is unreadable in the local object database — cannot attempt automatic reconciliation against the fresh base"
-    fi
-    # Interim list-entry removal guard, identical in force and in reason to
-    # replay_snapshot_onto_base()'s — including in being REDUNDANT now that the
-    # merge below is base-aware (see the block above frontmatter_list_entries for
-    # why it is retained until its test case is rewritten). Only meaningful with
-    # BOTH sides present; an absent theirs is the delete/modify case
-    # merge-node.ts refuses.
-    if [[ -n "$base_f" && -n "$theirs_f" ]]; then
-      local dropped summary
-      dropped="$(list_entries_dropped_by_ours "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f")"
-      if [[ -n "$dropped" ]]; then
-        summary="$(awk -F'\t' '
-          NR <= 8 { e = $2; sub(/^[[:space:]]*-[[:space:]]*/, "", e); printf "%s%s[%s]", (NR > 1 ? "; " : ""), $1, e }
-          END { if (NR > 8) printf "; +%d more", NR - 8 }
-        ' <<<"$dropped")"
-        append_conflicts "$(jq -cn --arg id "$id" --arg summary "$summary" \
-          '[{id: $id, note: ("list-entry removal vs. concurrent edit — this write removes frontmatter list entries that origin/main still carries (" + $summary + "), so this write is withheld from the field-level auto-merge by the interim list-entry removal guard rather than auto-resolved")}]')"
-        unresolved=1
-        continue
-      fi
     fi
     if run_merge_node "$id" "$base_f" "$INTENTIONS_DIR/$id.md" "$theirs_f" "$out_f"; then
       cp -- "$out_f" "$INTENTIONS_DIR/$id.md"
