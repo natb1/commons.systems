@@ -399,7 +399,11 @@ Confirm no functional `-u dispatch-tick` site survives anywhere (this should pri
 nothing):
 
 ```verify
-! grep -rn 'journalctl.*-u dispatch-tick' .claude/
+raw=$(LC_ALL=C git grep -an 'journalctl.*-u dispatch-tick' -- .claude); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+hits=$(printf '%s\n' "$raw" | LC_ALL=C grep -av ':[[:space:]]*#' | LC_ALL=C grep -av '`')
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: functional -u dispatch-tick journal sites remain under .claude/"; exit 1; }
+echo OK
 ```
 
 Manual, on the live host (requires systemd and `dangerouslyDisableSandbox: true` — a

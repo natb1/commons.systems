@@ -709,9 +709,13 @@ a source-tree grep is meaningful here because the *instruction* lives in committ
 prompt text (unlike the rejection string, which only ever appears in tool results):
 
 ```verify
-if grep -rn -i 'skill tool' .claude/workflows/ | grep -qi 'code-review'; then
+test -d .claude/workflows || { echo "FAIL: .claude/workflows missing"; exit 1; }
+raw=$(LC_ALL=C git grep -ani 'skill tool' -- .claude/workflows); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+hits=$(printf '%s\n' "$raw" | LC_ALL=C grep -i 'code-review')
+if [ -n "$hits" ]; then
   echo "FAIL: a Skill-tool code-review instruction is still present in .claude/workflows/"
-  grep -rn -i 'skill tool' .claude/workflows/ | grep -i 'code-review'
+  printf '%s\n' "$hits"
   exit 1
 fi
 echo "PASS: no Skill-tool code-review instruction in .claude/workflows/"

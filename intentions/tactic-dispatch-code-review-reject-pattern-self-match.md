@@ -362,13 +362,16 @@ against a fix that merely edits comments, and against the loop reverting to a
 bare match-and-exit):
 
 ```verify
-grep -q 'REJECT_NOTICE_MAX_LINES' .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-grep -q 'OUTPUT_NONBLANK_LINES' .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-grep -q 'treated as quoted text' .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-grep -qF "'cannot be used with Skill tool due to disable-model-invocation'" .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-grep -qF "'use /review for a local review instead'" .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-grep -qF "'^Unknown command: '" .claude/skills/dispatch-propagate/scripts/dispatch-code-review
-bash -n .claude/skills/dispatch-propagate/scripts/dispatch-code-review
+CR=.claude/skills/dispatch-propagate/scripts/dispatch-code-review
+test -f "$CR" || { echo "FAIL: $CR missing"; exit 1; }
+LC_ALL=C grep -aq 'REJECT_NOTICE_MAX_LINES' "$CR" || { echo "FAIL: REJECT_NOTICE_MAX_LINES bound absent from dispatch-code-review"; exit 1; }
+LC_ALL=C grep -aq 'OUTPUT_NONBLANK_LINES' "$CR" || { echo "FAIL: OUTPUT_NONBLANK_LINES factor absent from dispatch-code-review"; exit 1; }
+LC_ALL=C grep -aq 'treated as quoted text' "$CR" || { echo "FAIL: the quoted-text diagnostic is absent from dispatch-code-review"; exit 1; }
+LC_ALL=C grep -aqF "'cannot be used with Skill tool due to disable-model-invocation'" "$CR" || { echo "FAIL: reject literal 1 absent from dispatch-code-review"; exit 1; }
+LC_ALL=C grep -aqF "'use /review for a local review instead'" "$CR" || { echo "FAIL: reject literal 2 absent from dispatch-code-review"; exit 1; }
+LC_ALL=C grep -aqF "'^Unknown command: '" "$CR" || { echo "FAIL: reject literal 3 absent from dispatch-code-review"; exit 1; }
+bash -n "$CR" || { echo "FAIL: dispatch-code-review is not syntactically valid"; exit 1; }
+echo OK
 ```
 
 ```verify

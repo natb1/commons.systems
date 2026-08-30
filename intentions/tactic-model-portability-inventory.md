@@ -140,11 +140,20 @@ this summary is what the office-hours review reads next to drill reports.
 ## Verification
 
 ```verify
-test -f ops/model-portability.md
+# `ops/model-portability.md` is Unit 1's OWN deliverable — a forward reference.
+# Until Unit 1 lands, this fence is RED, and that is the correct reading.
+# As written it was GREEN with the file absent: `test -f` was non-final so its
+# status was discarded, and the missing operand made `grep -oE` exit 2 into an
+# empty stream whose trailing `while` loop then exited 0.
+DOC=ops/model-portability.md
+test -f "$DOC" || { echo "FAIL: $DOC does not exist (Unit 1 has not landed)"; exit 1; }
 # every repo path cited in the inventory resolves
-grep -oE '(\.claude|dispatch\.config|packages|intentions|ops)/[A-Za-z0-9_./-]+' ops/model-portability.md \
-  | sed 's/:[0-9]*$//' | sort -u \
-  | while read -r p; do [ -e "$p" ] || { echo "MISSING: $p"; exit 1; }; done
+cited=$(LC_ALL=C grep -aoE '(\.claude|dispatch\.config|packages|intentions|ops)/[A-Za-z0-9_./-]+' "$DOC"); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: grep errored (rc=$rc)"; exit 1; }
+missing=$(printf '%s\n' "$cited" | LC_ALL=C sed 's/:[0-9]*$//' | sort -u \
+  | while IFS= read -r p; do [ -n "$p" ] || continue; [ -e "$p" ] || echo "$p"; done)
+[ -z "$missing" ] || { printf '%s\n' "$missing" | sed 's/^/MISSING: /'; echo "FAIL: the inventory cites paths that do not resolve"; exit 1; }
+echo OK
 ```
 
 Prose checks (judgment, at review): the inventory covers all five classes

@@ -136,8 +136,19 @@ only executes it.
 **Precondition to re-verify before deleting** (the tree may have moved since
 2026-08-18): confirm no live consumer has appeared. Run
 
-```verify
-grep -rn "ref-delegability\|ref-signal-identification\|delegability\.eval\.v1\|signal\.eval\.v1\|docs/delegability\|docs/signal-identification" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.direnv
+```bash
+LC_ALL=C git grep -an \
+  -e 'ref-delegability' \
+  -e 'ref-signal-identification' \
+  -e 'delegability\.eval\.v1' \
+  -e 'signal\.eval\.v1' \
+  -e 'docs/delegability' \
+  -e 'docs/signal-identification' \
+  -- .
+rc=$?
+[ "$rc" -le 1 ] || { echo "sweep ERRORED (git grep rc=$rc) — re-run before judging"; exit 1; }
+[ "$rc" -eq 1 ] && echo "(no hits)"
+exit 0
 ```
 
 and read every hit. As of 2026-08-18 the only hits outside the four
@@ -272,7 +283,15 @@ Unit 1's `grep` after both units land and confirm every remaining hit is inside
 `intentions/` prose or git history, never an executable path:
 
 ```verify
-grep -rn "ref-delegability\|ref-signal-identification\|docs/delegability\|docs/signal-identification" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.direnv --exclude-dir=intentions
+hits=$(LC_ALL=C git grep -an \
+  -e 'ref-delegability' \
+  -e 'ref-signal-identification' \
+  -e 'docs/delegability' \
+  -e 'docs/signal-identification' \
+  -- . ':(exclude)intentions'); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: residual references to the retired assessor contract docs remain outside intentions/"; exit 1; }
+echo OK
 ```
 
 Manual/judgment checks, which no suite covers:

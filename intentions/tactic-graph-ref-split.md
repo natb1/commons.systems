@@ -994,16 +994,30 @@ them.
 ```verify
 # Units 4a, 4b, 5 — no ref-qualified read of the graph at origin/main survives
 # outside node bodies (which describe the old mechanic as prose, not code).
-! grep -rn "origin/main:intentions\|origin/main intentions\|origin/main -- intentions" \
-    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=intentions . \
-  || { echo "FAIL: ref-qualified origin/main graph reads remain"; exit 1; }
+# git grep, not `grep -r .`: grep exits 2 on the sandbox's unreadable phantom
+# entries EVEN WHEN it also matched, and `!` maps 2 -> 0, so the negated form
+# passed unconditionally. git grep walks tracked files only (so the
+# node_modules/.git excludes are unnecessary) and rc>1 is a hard failure here.
+hits=$(LC_ALL=C git grep -an \
+  -e 'origin/main:intentions' \
+  -e 'origin/main intentions' \
+  -e 'origin/main -- intentions' \
+  -- . ':(exclude)intentions'); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: ref-qualified origin/main graph reads remain"; exit 1; }
+echo OK
 ```
 
 ```verify
 # Unit 5 — no ^intentions/ path anchor survives outside node bodies.
-! grep -rn '\^intentions\\\?/' \
-    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=intentions . \
-  || { echo "FAIL: ^intentions/ path anchors remain"; exit 1; }
+# git grep, not `grep -r .`: see the exit-2 note on the sibling fence above.
+# ERE '\^intentions\\?/' is the exact equivalent of the original BRE
+# '\^intentions\\\?/': a literal ^, then "intentions", then an OPTIONAL literal
+# backslash, then /.
+hits=$(LC_ALL=C git grep -anE '\^intentions\\?/' -- . ':(exclude)intentions'); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: ^intentions/ path anchors remain"; exit 1; }
+echo OK
 ```
 
 ```verify

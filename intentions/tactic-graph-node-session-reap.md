@@ -309,8 +309,17 @@ whole (it takes no filter/subset argument — `SCRIPT_DIR` is derived from `$0`
 only, no `--filter`/pattern mechanism exists):
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
-echo "exit code: $?"
+# The monolithic test-dispatch-scripts.sh named here was DELETED by
+# tactic-dispatch-test-monolith-split (58e5bc34, 2026-07-30), which split it
+# into per-script suites — one day AFTER this node reached phase done
+# (1657ef09, 2026-07-29). The two successors that carry this node's cases are
+# named below; each one's header records the move verbatim.
+for t in test-dispatch-stop-hook.sh test-lib-claude-agents.sh; do
+  f=".claude/skills/dispatch-propagate/scripts/$t"
+  test -f "$f" || { echo "FAIL: successor suite missing: $f"; exit 1; }
+  bash "$f" || { echo "FAIL: $t failed"; exit 1; }
+done
+echo OK
 ```
 
 The suite's final `report_results` call prints

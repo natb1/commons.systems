@@ -150,10 +150,15 @@ and this tactic must not touch `.claude/skills` at all.
 ## Verification
 
 ```verify
-test ! -f packages/intentionsutil/SCHEMA.md
-! grep -rn "SCHEMA.md" intentions/README.md packages/intentionsutil/src packages/intentionsutil/scripts
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
-npx vitest run --project intentionsutil --root .
+test ! -f packages/intentionsutil/SCHEMA.md || { echo "FAIL: packages/intentionsutil/SCHEMA.md still exists"; exit 1; }
+for p in intentions/README.md packages/intentionsutil/src packages/intentionsutil/scripts; do
+  test -e "$p" || { echo "FAIL: verify path missing: $p"; exit 1; }
+done
+hits=$(LC_ALL=C git grep -an 'SCHEMA.md' -- intentions/README.md packages/intentionsutil/src packages/intentionsutil/scripts); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: SCHEMA.md references survive in live code/docs"; exit 1; }
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions || exit 1
+npx vitest run --project packages/intentionsutil --root . || exit 1
 ```
 
 Prose checks: `grep -rn "SCHEMA.md" .claude/skills` should already be empty

@@ -666,11 +666,23 @@ bodies under `intentions/` legitimately retain the historical string and are
 deliberately excluded:
 
 ```verify
-! grep -rn 'commons-dispatch/paused' .claude/skills .claude/workflows packages .github
+for p in .claude/skills .claude/workflows packages .github; do
+  test -e "$p" || { echo "FAIL: verify path missing: $p"; exit 1; }
+done
+hits=$(LC_ALL=C git grep -an 'commons-dispatch/paused' -- .claude/skills .claude/workflows packages .github); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: live-code references to commons-dispatch/paused remain"; exit 1; }
+echo OK
 ```
 
 ```verify
-! grep -rn 'DISPATCH_PAUSE_FLAG' .claude/skills .claude/workflows packages .github
+for p in .claude/skills .claude/workflows packages .github; do
+  test -e "$p" || { echo "FAIL: verify path missing: $p"; exit 1; }
+done
+hits=$(LC_ALL=C git grep -an 'DISPATCH_PAUSE_FLAG' -- .claude/skills .claude/workflows packages .github); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$hits" ] || { printf '%s\n' "$hits"; echo "FAIL: live-code references to DISPATCH_PAUSE_FLAG remain"; exit 1; }
+echo OK
 ```
 
 The four-part loader edit must be complete — the type must appear in all three

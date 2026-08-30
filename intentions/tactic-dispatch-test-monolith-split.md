@@ -698,17 +698,26 @@ echo "V5 OK: assertion count preserved exactly"
 **V6 — no executable reference to the deleted file survives:**
 
 ```verify
-set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
-hits=$(grep -rn 'test-dispatch-scripts\.sh' \
-  --include='*.yml' --include='*.yaml' --include='*.sh' \
-  .github .claude 2>/dev/null || true)
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+hits=$(LC_ALL=C git grep -an 'test-dispatch-scripts\.sh' -- \
+  '.github/*.yml' '.github/*.yaml' '.github/*.sh' \
+  '.claude/*.yml' '.claude/*.yaml' '.claude/*.sh'); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
 if [ -n "$hits" ]; then
   echo "Remaining references (each must be a PROSE comment, never a run: / exec):"
   printf '%s\n' "$hits"
-  printf '%s\n' "$hits" | grep -E 'run: |^\s*bash |^\s*\./' && { echo "FAIL: executable reference"; exit 1; }
+  # Strip git grep's leading `path:line:` before applying the ^-anchored
+  # executable shapes: without this the anchors can never match and the guard
+  # is dead.
+  execs=$(printf '%s\n' "$hits" | LC_ALL=C sed 's/^[^:]*:[0-9]*://' \
+    | LC_ALL=C grep -nE 'run:[[:space:]]|^[[:space:]]*(bash|sh|source|\.)[[:space:]]|^[[:space:]]*\./')
+  if [ -n "$execs" ]; then printf '%s\n' "$execs"; echo "FAIL: executable reference"; exit 1; fi
 fi
-grep -n 'test-dispatch-scripts' .github/workflows/unit-tests.yml && { echo "FAIL: workflow still invokes it"; exit 1; }
+test -f .github/workflows/unit-tests.yml || { echo "FAIL: .github/workflows/unit-tests.yml missing"; exit 1; }
+wf=$(LC_ALL=C git grep -an 'test-dispatch-scripts' -- .github/workflows/unit-tests.yml); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$wf" ] || { printf '%s\n' "$wf"; echo "FAIL: workflow still invokes it"; exit 1; }
 echo "V6 OK"
 ```
 

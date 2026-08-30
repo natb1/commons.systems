@@ -407,15 +407,23 @@ No agent-typed invocation carries a variable or absolute prefix any more (positi
 assertion first so a line-wrap cannot make this fence vacuous):
 
 ```verify
-grep -rn 'packages/intentionsutil/scripts/graph-commit -C "\$PROJECT_ROOT"' .claude/skills/dispatch-conflict/SKILL.md || { echo "FAIL: canonical relative graph-commit form missing from dispatch-conflict Lane 3"; exit 1; }
-if grep -rn 'PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit' .claude/skills/ ; then echo "FAIL: variable-prefixed graph-commit invocation still present"; exit 1; fi
+test -f .claude/skills/dispatch-conflict/SKILL.md || { echo "FAIL: dispatch-conflict/SKILL.md missing"; exit 1; }
+canon=$(LC_ALL=C git grep -an 'packages/intentionsutil/scripts/graph-commit -C "\$PROJECT_ROOT"' -- .claude/skills/dispatch-conflict/SKILL.md); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -n "$canon" ] || { echo "FAIL: canonical relative graph-commit form missing from dispatch-conflict Lane 3"; exit 1; }
+printf '%s\n' "$canon"
+bad=$(LC_ALL=C git grep -an 'PROJECT_ROOT/packages/intentionsutil/scripts/graph-commit' -- .claude/skills); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$bad" ] || { printf '%s\n' "$bad"; echo "FAIL: variable-prefixed graph-commit invocation still present"; exit 1; }
 echo OK
 ```
 
 No agent-facing doc instructs a `cd`-compound graph write:
 
 ```verify
-if grep -rnE 'cd [^&|;]*&&[^&|;]*(graph-commit|land-align-round)' .claude/skills --include='*.md' .claude/rules ; then echo "FAIL: cd-compound graph write in agent-facing prose"; exit 1; fi
+bad=$(LC_ALL=C git grep -anE 'cd [^&|;]*&&[^&|;]*(graph-commit|land-align-round)' -- '.claude/skills/*.md' '.claude/rules/*.md'); rc=$?
+[ "$rc" -le 1 ] || { echo "FAIL: git grep errored (rc=$rc)"; exit 1; }
+[ -z "$bad" ] || { printf '%s\n' "$bad"; echo "FAIL: cd-compound graph write in agent-facing prose"; exit 1; }
 echo OK
 ```
 

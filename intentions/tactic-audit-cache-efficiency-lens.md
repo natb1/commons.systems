@@ -379,10 +379,13 @@ fix), so it is checked by grep for the carrier field names and the retitled
 heading:
 
 ```verify
-grep -q 'lenses\.cache_efficiency' .claude/skills/rsi/SKILL.md
-grep -q 'creation_churn' .claude/skills/rsi/SKILL.md
-grep -q 'Step 5 — The evaluation lenses' .claude/skills/rsi/SKILL.md
-grep -q 'Friction and adherence' .claude/skills/rsi/SKILL.md
+RSI=.claude/skills/rsi/SKILL.md
+test -f "$RSI" || { echo "FAIL: $RSI missing"; exit 1; }
+LC_ALL=C grep -aq 'lenses\.cache_efficiency' "$RSI" || { echo "FAIL: rsi/SKILL.md does not carry the lenses.cache_efficiency carrier field"; exit 1; }
+LC_ALL=C grep -aq 'creation_churn' "$RSI" || { echo "FAIL: rsi/SKILL.md does not carry creation_churn"; exit 1; }
+LC_ALL=C grep -aq 'Step 5 — The evaluation lenses' "$RSI" || { echo "FAIL: the Step 5 retitle is missing from rsi/SKILL.md"; exit 1; }
+LC_ALL=C grep -aq 'Friction and adherence' "$RSI" || { echo "FAIL: lens 7 (Friction and adherence) was dropped by the retitle"; exit 1; }
+echo OK
 ```
 
 The last line is the non-weakening check: lens 7 must still be present after the
