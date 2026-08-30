@@ -84,8 +84,28 @@
 > not a `|`/`>` block scalar. Repair it as a frontmatter field edit, and dump
 > the node first: `dump-node.ts --dir intentions --out-dir <tmp>
 > tactic-serves-inheritance-full-strip`, edit the dumped JSON, then
-> `write-node.ts --dir intentions` → `graph-commit`, which merges frontmatter
-> structurally. Never hand-build a partial payload: `validateNode` defaults
+> `write-node.ts --dir intentions` →
+> `graph-commit -C <repo root> --base <tmp>/base-manifest.txt
+> tactic-serves-inheritance-full-strip`, which merges frontmatter
+> structurally. **Both `graph-commit` flags are load-bearing.** `--base` is
+> opt-in and empty means skip the check (`graph-commit:430`, `:767-771`), and
+> the manifest `dump-node.ts` prints is exactly its compare-and-swap token
+> (`packages/intentionsutil/scripts/dump-node.ts:31-32`) — omit it and the dump
+> buys nothing a plain `readNode` would not, while a concurrent session that
+> moves this live `phase: implement` node on `origin/main` between the dump and
+> the commit gets its state clobbered (the 2026-07-06 near-miss,
+> `dump-node.ts:1-7`). `-C` is required because `graph-commit` resolves its
+> repo root from `-C`/`--repo`, **else cwd** — never from its own location
+> (`graph-commit:36-40`); run bare from a checkout that does not hold the edit
+> and it exits 0 having landed nothing.
+> This is a **frontmatter-only** path: `readNode` deliberately drops the body
+> (`packages/intentionsutil/src/store.ts:159-165`), so the dumped JSON has no
+> `body` key, `validateNode` drops unknown keys (`write-node.ts:35`), and
+> `writeNode` re-reads the on-disk body verbatim (`store.ts:57`). A `body` key
+> added to the payload is discarded with no error. The `:53` repair is a plain
+> `.md` text edit, made separately — either order is safe, since `writeNode`
+> re-reads the body from disk at write time.
+> Never hand-build a partial payload: `validateNode` defaults
 > every omitted field (`packages/intentionsutil/src/schema.ts:1113-1163` — the
 > single `return` object, where each optional field reads
 > `value.X == null ? <default> : …`), so a payload naming only
@@ -98,8 +118,15 @@
 > Pass the repair text with **no YAML escaping**: `writeNode` re-serializes the
 > whole node through the YAML emitter
 > (`packages/intentionsutil/src/store.ts:61`), which picks the scalar style and
-> handles any `"` itself — measured, it drops the double-quoted style for a
-> plain scalar and escapes nothing. **The one escape still required is JSON, a
+> handles any `"` itself — the style is a property of the value, not something
+> to pre-arrange. Measured on *this* field, whose value carries both `: `
+> (`run: 26`, `:11`) and an apostrophe (`kind-strategy's`, `:16`): the emitter
+> keeps the double-quoted style and writes an embedded quote as `\"` in the
+> `.md`. (A value with no `: ` comes out plain and unescaped; one with `: ` but
+> no apostrophe comes out single-quoted. Neither shape is this field's, so do
+> not expect the escaping to disappear from the file.) Either way that
+> backslash is the emitter's, produced from a bare `"` in the payload.
+> **The one escape still required is JSON, a
 > separate layer**: `write-node.ts` reads the node as a JSON document
 > (`writeNodeFromJson`'s `JSON.parse`,
 > `packages/intentionsutil/scripts/write-node.ts:40`), so a `"` inside the
