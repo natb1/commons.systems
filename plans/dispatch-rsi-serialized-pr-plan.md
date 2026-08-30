@@ -1282,10 +1282,10 @@ PR1 (node bookkeeping). Units 1 → 2/3/4/5 within the PR.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh || exit 1
 .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-spawn.sh
 ```
 
@@ -1662,8 +1662,8 @@ any order.
 ### Verification
 
 ```verify
-.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
-.claude/skills/rsi-audit/scripts/test-audit-aggregate-writer.sh
+.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh || exit 1
+.claude/skills/rsi-audit/scripts/test-audit-aggregate-writer.sh || exit 1
 .claude/skills/rsi-audit/scripts/test-topic-usage-writer.sh
 ```
 
@@ -2126,13 +2126,17 @@ PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
 call, and a fresh `node --import tsx/esm` subprocess **per candidate per tick**
 to evaluate a pure two-string predicate.
 
-### Nodes closed (8)
+### Nodes closed (8 listed — 7 for this PR to close, 1 already closed)
 
 - `tactic-review-stall-listnodes-duplicate-scan`
 - `tactic-review-stall-pr-json-duplicate-fetch`
 - `tactic-review-stall-ci-verdict-cache-miss`
 - `tactic-review-stall-predicate-subprocess-spawn`
-- `tactic-review-stall-conflict-lane`
+- `tactic-review-stall-conflict-lane` *(⛔ **already `phase: done` on
+  `origin/main`**, closed as a completion record by `e54b64ee`. It contributes
+  **zero units** — see the struck Conflict-lane bullet in Scope. Listed here only
+  so the position's node inventory stays at 11; **do not re-stamp it** when
+  closing this PR. This PR's own closures are the other seven.)*
 - `tactic-reconcile-review-stall-base-pin`
 - `tactic-done-node-retention-scan-cost`
 - `tactic-autonomous-ci-pending-liveness-bound` *(absorbed from #3002, closed
@@ -2316,12 +2320,23 @@ PR1. Independent of PR2–PR4.
 npx vitest run --project packages/intentionsutil --root .
 ```
 
-*(Corrected 2026-08-30 — the fence used to read
-`npm test --prefix packages/intentionsutil`. `vitest.config.ts:18` names each
-project by its workspace **directory**, `test: { name: dir, … }`, so the short
-form `--project intentionsutil` matches no project and the run passes
-**vacuously** with zero tests. Use the full workspace path, and root at the repo
-root — that is what CI's `run-unit-tests.sh` does.)*
+*(Re-spelled 2026-08-30 — the fence used to read
+`npm test --prefix packages/intentionsutil`. **That form was not broken**, and
+this is a parity change, not a repair: the new spelling is exactly what CI's
+`run-unit-tests.sh:137` runs (`npx vitest run --project <dir> --root
+"$REPO_ROOT"`), so the fence and CI exercise the same runner.
+`vitest.config.ts:18` names each project by its workspace **directory**
+(`test: { name: dir, root: "./" + dir }`), so the **full workspace path** is the
+only accepted `--project` value.)*
+
+*(Rationale corrected — an earlier revision of the note above claimed the
+bare-name short form `--project intentionsutil` "passes **vacuously** with zero
+tests". Both halves are wrong, and neither described the fence being replaced:
+that fence carried no `--project` at all, and the bare name fails **loudly** —
+`Error: No projects matched the filter "intentionsutil".  (Startup Error)`,
+non-zero exit. There is no vacuous-pass hazard here. **Do not "correct" the
+other `npm test --prefix packages/intentionsutil` fences in this document on
+that premise** — six of them remain, and all six are valid.)*
 
 Manual: run one tick with timing before and after; confirm the `intentions/`
 scan count drops from 2 to 1 and the per-candidate `node` subprocess count
@@ -2822,7 +2837,7 @@ PR1. Independent of the rest.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-config-scope.sh
 ```
 
@@ -3012,9 +3027,18 @@ PR1.
 ```
 
 *(Corrected 2026-08-30 — the `|| exit 1` guards were added. A ```verify fence
-runs as a plain script with no `set -e`, so without them only the **last**
-command's status becomes the fence's verdict and the first three failures are
-swallowed silently.)*
+runs as a plain script with no `set -e` — `dispatch-run-verification` executes
+each block as `bash <tmpfile>` — so without them only the **last** command's
+status becomes the fence's verdict and the first three failures are swallowed
+silently. `lint-verify-fence-paths.sh` documents the same mechanism and warns
+on it (advisory only; it never changes the exit status), and that warning does
+not reach `plans/` at all — it scans `intentions/` node bodies.)*
+
+*(Swept document-wide on review: the guards were originally added to these two
+fences only, leaving the identical defect in seven other multi-statement fences
+in this file — PR2, PR3 Units 1–7, PR8, PR10, PR13, PR14, PR15, PR16 and PR17.
+All are now guarded. **Every new multi-statement ```verify fence in this
+document must carry `|| exit 1` on all but its last line.**)*
 
 Manual: with a live repo-root session running, run the reap sweep and confirm
 its checkout is classified as not-removable.
@@ -3140,7 +3164,7 @@ reads, and the sidecar minting Unit 3 sweeps). Strict internal unit order 1→4.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh || exit 1
 .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
 ```
 
@@ -3542,8 +3566,8 @@ Nothing — this is a rename.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-rules-check.sh
-.claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+.claude/skills/dispatch-propagate/scripts/run-rules-check.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/run-rules-test.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4468,7 +4492,7 @@ node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentio
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4684,7 +4708,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4986,7 +5010,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -5221,7 +5245,7 @@ node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentio
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
