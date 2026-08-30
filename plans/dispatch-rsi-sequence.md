@@ -178,9 +178,15 @@ were consolidated here and the plan now points at this file.
 
 **Seven further rulings were made 2026-08-29**, in two interview sittings called because the "no position waits on the author" claim this row used to carry was false at five positions. They are recorded in `plans/dispatch-rsi-author-rulings.md`. **Corrected 2026-08-30 (second pass): all seven are transcribed onto their nodes on `origin/main`** — landed by `9201fdeb`, `4ffbc8b3`, `91bc7cc9`, `60dd2b54` and `1f5d0909`, all confirmed ancestors of `origin/main`. An intermediate correction here claimed "only 1 of 7"; it rested on a BRE-alternation-under-ERE false negative. `plans/dispatch-rsi-author-rulings.md` is **no longer operatively binding** — it is the index and the audit trail. The node body is the authority. In summary: a sibling-carrier draft becomes a **completion record**, not a prune; `dispatch.config/target-workers.json` **relocates under XDG**; strategy clarification 131 is amended to **make its premise true** at the selection-time surface; **park-clearing on a verifiably dead premise is delegated** to the executor, as is clearing the parks that block Unit 7's migration from draining; plan-prose rulings absent from the graph are **transcribed into node bodies and flagged**; **record-time minting is correct** and the "already-merged" prose is stale; and PR20 **Units 1 and 3 are descoped** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
-| **Next** | **Position 4**. Position 3 is fully discharged — shipped as #3140, and its Unit 7 migration plus every node closure landed 2026-08-30 (see the Shipped row for the five commits). Position 4's pre-verification found three blockers; **all three are now written down** in §"Position 4 · Bundle 2" below, which is the source. Two are discharged and one is an ordering rule, so the position is clear to plan — but §"Position 4 · Bundle 2" carries an **action-order hazard that must be read before anything is closed** |
+| **Next** | **Position 4 — still Next; every one of its 22 units is unbuilt.** What changed 2026-08-30 is that the position is now *unblocked*, not that it is done. Position 3 is fully discharged — shipped as #3140, and its Unit 7 migration plus every node closure landed 2026-08-30 (see the Shipped row for the five commits). Position 4's pre-verification found three blockers; **all three are ruled and written down** in §"Position 4 · Bundle 2" below, which is the source (two discharged, one an ordering rule: listnodes-scan first, retention-scan last). The **action-order hazard that row used to warn about has been executed and avoided** — one `graph-commit` landed `4d66566f` first (the ci-pending node reset to `phase: null` / `execution: null` / `blocked_by: []`, its hold carrier discharged to `phase: done`), then the node was verified out of `reconcile-graph-merged`'s absorbable set, and only then was **#3002 closed unmerged** with its branch preserved at `24bc8cee`. The same commit cleared the **two band-blocked parks** (`tactic-supersession-retirement-sweep`, `tactic-align-tactics-drift-dump-office-hours`), so Position 4 carries **no open park**. The position is now **11 nodes / 22 units** and is clear to build; see §"Position 4 · Bundle 2" for the executed order and for the per-unit model tags in the plan's PR5 section — it is **not** a uniformly-sonnet PR |
 | **Carried forward** | **Four PR16 units and the #3023 absorption**, none of which gate a later position. Units 1 and 6 hold live `blocked_by` edges. Units 8 and 9 were parked on unmade author rulings; **both were decided by executor judgement on 2026-08-30** and are recorded for ratification in `plans/dispatch-rsi-author-rulings.md` §"Executor decisions taken during reconciliation" — Unit 8 keeps `{hash, sha}` (still sequenced behind #3023), Unit 9 keeps the empty-named-store contract and is rescoped to a comment correction plus an explicit empty-store message. #3023 is wholly unlanded and is a PR-sized change of its own — see §"Position 2 — PR16" |
-| **Open parks** | **Far more than one.** This row read "One, from Position 1" until 2026-08-29; per-position pre-staging disproved it. Confirmed live parks: **Position 1** — `tactic-autonomous-body-write-wholesale-replace` (PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere; three dispositions are in `office_hours.recommendation`; it gates no position). **Position 4** — 1. **Position 5** — 3 (was 4; `tactic-audit-permission-friction` closed on `origin/main` by `91bc7cc9` — `phase: done`, `office_hours: null`, a Ruling-1 completion record against PR #3074), recorded nowhere in either document until 2026-08-30: `tactic-audit-instrument-scoping`, `tactic-audit-review-effort-yield-lens` (both PR3) and `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8, which the plan text called "unparked and unblocked" — it is neither). **Position 6** — 1. **Position 7** — 6, five of them on one owed ruling. **Position 8** — 3, where the position entry claims one. **Position 9** — 6, where the plan banner claims none. **Position 10** — 1, `tactic-dispatch-skill-standards-extraction`, parked since 2026-08-20 on four unrecorded premises, the first (a duplicate carrier) disqualifying on its own. **It is NOT the position's only usable node and the position is NOT blocked outright:** the rival carrier `tactic-dispatch-skill-rename` is `status: raw`, `phase: null`, `blocked_by: []`, `office_hours: null` on `origin/main` — live and unparked. **But state both halves.** The executor decision naming it the carrier (D3) exists **only in plan prose**: `LC_ALL=C git grep -a -l 'dispatch-skill-rename' origin/main -- intentions/` returns three files (`tactic-dispatch-skill-rename.md`, `tactic-dispatch-skill-standards-extraction.md`, `strategy-graph-native-dispatch.md`) and **none records the decision** — `carrier` appears 0× on the rename node, `2026-08-30` 0× on either. So the duplicate-target pair is still live in the graph, and this park **correctly stays held**: its own recommendation forbids the workaround verbatim — *"Do NOT clear this park by finalizing a plan without the carrier decision: that resolves a duplicate-target pair by omission, the failure mode the 2026-07-19 precedent (clarification 78, commit `4a83dfc1`) was ratified to prevent."* Clearing it requires the `/align` pass on `strategy-graph-native-dispatch` the park names, not this window's prose. Separately, **12 of the 14 nodes carrying live `Verifiability: WAIT` marks are parked** (re-censused 2026-08-30 with `LC_ALL=C grep -a` over the `phase: main-qa` cohort: **14 nodes / 22 marks / 12 parked**, not the 17 this row used to claim, and not the 15 an intermediate revision carried — see §4.16 of `plans/dispatch-rsi-author-ratification.md`, which rules "15" unsourced because no scoping reaches 15 nodes with 22 marks; "17" counts non-`done` tactics that merely mention the string), and `packages/intentionsutil/src/router.ts:482` and `:529` skip any parked tactic — so those sources can never drain to `done`, deadlocking Unit 7's chain for them. Clearing is delegated to the executor by the 2026-08-29 ruling, on a verified-dead premise only, each clear reported after the fact — **and the ruling is BOUND: "a DEAD PREMISE is not a DEAD SCOPE … Where clear-park is the wrong instrument — a `phase: null` node whose work already shipped, which clear-park makes router-eligible rather than terminal — the correct act is the completion record (`phase: done`), never the clear."** Quoted from `intentions/strategy-graph-native-dispatch.md`. Check which of the two is dead before every clear |
+| **Open parks** | **Far more than one.** This row read "One, from Position 1" until 2026-08-29; per-position pre-staging disproved it. Confirmed live parks: **Position 1** — `tactic-autonomous-body-write-wholesale-replace` (PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere; three dispositions are in `office_hours.recommendation`; it gates no position). **Position 4** — **0 as of 2026-08-30**. The count of 1
+was right; the identity was not. This row's "1" was read as
+`tactic-review-stall-conflict-lane`, which was never parked at this point — it
+is `phase: done` on `origin/main` via `e54b64ee`. Position 4's one park was the
+hold carrier `tactic-hold-conflict-autonomous-ci-pending-liveness-bound`, and
+`4d66566f` discharged it to `phase: done` / `office_hours: null` per the 13
+`tactic-hold-*` precedents. **Position 5** — 3 (was 4; `tactic-audit-permission-friction` closed on `origin/main` by `91bc7cc9` — `phase: done`, `office_hours: null`, a Ruling-1 completion record against PR #3074), recorded nowhere in either document until 2026-08-30: `tactic-audit-instrument-scoping`, `tactic-audit-review-effort-yield-lens` (both PR3) and `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8, which the plan text called "unparked and unblocked" — it is neither). **Position 6** — 1. **Position 7** — 6, five of them on one owed ruling. **Position 8** — 3, where the position entry claims one. **Position 9** — 6, where the plan banner claims none. **Position 10** — 1, `tactic-dispatch-skill-standards-extraction`, parked since 2026-08-20 on four unrecorded premises, the first (a duplicate carrier) disqualifying on its own. **It is NOT the position's only usable node and the position is NOT blocked outright:** the rival carrier `tactic-dispatch-skill-rename` is `status: raw`, `phase: null`, `blocked_by: []`, `office_hours: null` on `origin/main` — live and unparked. **But state both halves.** The executor decision naming it the carrier (D3) exists **only in plan prose**: `LC_ALL=C git grep -a -l 'dispatch-skill-rename' origin/main -- intentions/` returns three files (`tactic-dispatch-skill-rename.md`, `tactic-dispatch-skill-standards-extraction.md`, `strategy-graph-native-dispatch.md`) and **none records the decision** — `carrier` appears 0× on the rename node, `2026-08-30` 0× on either. So the duplicate-target pair is still live in the graph, and this park **correctly stays held**: its own recommendation forbids the workaround verbatim — *"Do NOT clear this park by finalizing a plan without the carrier decision: that resolves a duplicate-target pair by omission, the failure mode the 2026-07-19 precedent (clarification 78, commit `4a83dfc1`) was ratified to prevent."* Clearing it requires the `/align` pass on `strategy-graph-native-dispatch` the park names, not this window's prose. Separately, **12 of the 14 nodes carrying live `Verifiability: WAIT` marks are parked** (re-censused 2026-08-30 with `LC_ALL=C grep -a` over the `phase: main-qa` cohort: **14 nodes / 22 marks / 12 parked**, not the 17 this row used to claim, and not the 15 an intermediate revision carried — see §4.16 of `plans/dispatch-rsi-author-ratification.md`, which rules "15" unsourced because no scoping reaches 15 nodes with 22 marks; "17" counts non-`done` tactics that merely mention the string), and `packages/intentionsutil/src/router.ts:482` and `:529` skip any parked tactic — so those sources can never drain to `done`, deadlocking Unit 7's chain for them. Clearing is delegated to the executor by the 2026-08-29 ruling, on a verified-dead premise only, each clear reported after the fact — **and the ruling is BOUND: "a DEAD PREMISE is not a DEAD SCOPE … Where clear-park is the wrong instrument — a `phase: null` node whose work already shipped, which clear-park makes router-eligible rather than terminal — the correct act is the completion record (`phase: done`), never the clear."** Quoted from `intentions/strategy-graph-native-dispatch.md`. Check which of the two is dead before every clear |
 | **Not started** | Positions 4 through 13. PR2 through PR20 |
 
 The rulings that shape unit work are carried in the position entries below and,
@@ -516,7 +522,10 @@ and it must precede Bundle 2's reconciler work.
 
 ### Position 4 · Bundle 2 — tick-path reconcilers and sweeps
 
-10 nodes: PR5 plus PR9 Units 2 and 6 and PR2 Unit 6.
+11 nodes / 22 units: PR5 plus PR9 Units 2 and 6 and PR2 Unit 6. *(Was "10
+nodes" until 2026-08-30 — the count omitted the absorbed
+`tactic-autonomous-ci-pending-liveness-bound`, which `4d66566f` reset to draft
+so PR5 can rebuild its scope as U18.)*
 
 **This is the only bundle that is hot because it is running right now.** The
 sentinel does not stop the tick: `reconcile-graph-merged` is in the drain on
@@ -534,7 +543,7 @@ a code review correctly flagged as unverifiable.
    was closed as a **completion record** (`phase: done`, `execution.completion`
    = #3038 / `fa9c4338`), not `clear-park` and not a prune: for a `phase: null`
    node whose work already shipped, clearing would make it router-eligible and
-   re-dispatch finished work. See the struck conflict-lane paragraph above.
+   re-dispatch finished work. See the struck conflict-lane paragraph below.
 2. **`packages/intentionsutil/src/store-cache.ts` is absent from `origin/main`
    — an ORDERING RULE, not a blocker.** No edit exists to make. PR5's
    listnodes-scan unit creates it and the retention-scan unit consumes it, so:
@@ -574,6 +583,53 @@ a code review correctly flagged as unverifiable.
 > (**7 → 8 closed**, **10 → 11 total**); (5) build the CI-stall unit last;
 > (6) write the completion record only after PR5 merges.
 
+**EXECUTED 2026-08-30 — the hazard was avoided, in this order.** Recorded so a
+future session does not re-derive it.
+
+1. **Graph write first.** One `graph-commit` landed `4d66566f` on `main`,
+   writing four nodes together:
+   `tactic-autonomous-ci-pending-liveness-bound` reset to `phase: null`,
+   `execution: null`, `blocked_by: []` (a frontmatter reset — **not** a
+   completion record, the work is unshipped, and **not** a `clear-park`, it
+   carried no park), body gaining a `## Re-landing brief`;
+   `tactic-hold-conflict-autonomous-ci-pending-liveness-bound` discharged to
+   `phase: done` / `office_hours: null` per the 13 `tactic-hold-*` precedents,
+   body gaining a `## Resolved 2026-08-30` note; and the two band-blocked parks
+   below.
+2. **Then verified the node had left the absorbable set** — on `origin/main`
+   it reads `status: codified`, `phase: null`, `execution: null`,
+   `blocked_by: []`, `office_hours: null`. With `phase` outside
+   `{implement, fix, qa, review}` and no `execution.pr`,
+   `reconcile-graph-merged` has nothing to absorb.
+3. **Only then the PR.** #3002 is now closed unmerged, with its branch
+   deliberately preserved at `24bc8cee` so U18 can read the abandoned work.
+
+Had the order been reversed, `reconcile-graph-merged` would have driven the node
+to `phase: done` with a **null completion** on the next tick and silently retired
+a live scope — the failure sibling #3064 already demonstrates.
+
+**Two band-blocked parks cleared in the same commit**, under the author's
+2026-08-28 ruling on `strategy-graph-native-dispatch` (every node parked *solely*
+on the maintenance-burden band breach is un-parked). A census of all 203 parked
+nodes found exactly two in that bucket, and both parks stated in terms that
+nothing else blocked the node:
+
+- `tactic-supersession-retirement-sweep` — `office_hours: null`. Its body gained
+  `## Measurements preserved from the office-hours park, cleared 2026-08-30`,
+  because those measurements existed **only** in `office_hours.reason` and its
+  `clarifications` array is empty — clearing the park without copying them out
+  would have destroyed them.
+- `tactic-align-tactics-drift-dump-office-hours` — `office_hours: null`. Its
+  `## Status — PARKED to office_hours, 2026-08-21` section was rewritten to
+  `## Status — un-parked 2026-08-30, still a draft (no plan authored)`.
+
+**Also settled**, and recorded in the ci-pending node's `## Re-landing brief`:
+`ci-pending-stalled`'s `KIND_RECHECK` entry is ruled **`policy: "manual"`**.
+`holds.ts:117-132` defines `KIND_RECHECK: Record<HoldKind, HoldRecheck>`, whose
+mapped type makes an entry **mandatory** at typecheck, and `manual` is the only
+value that lands without rewriting `holds.test.ts:27-29`'s "exactly one
+auto-re-checkable kind" assertion.
+
 Two further findings, neither blocking. `tactic-autonomous-ci-pending-liveness-bound`
 carries a **stale `blocked_by`** edge to `tactic-flake-preview-and-smoke-dpkg-lock`,
 `phase: done` since 2026-08-03 (#3020). And #3064's node is `phase: done` on
@@ -583,13 +639,18 @@ unshipped work while appearing in no PR's closing list.
 > *(Struck 2026-08-30.* This paragraph used to end "Its conflict-lane unit must
 > be coordinated with #3018's conflict-lane work, now in PR8 — one policy, not
 > two."*)* The unit it presupposes was **deleted** — see the serialized plan,
-> PR5 Scope, where it is struck outright.
-> `intentions/tactic-review-stall-conflict-lane.md` is `status: raw`,
-> `phase: null` and **`office_hours`-parked on a dead premise**: *"the recorded
-> defect no longer exists, and the fix actually shipped went the opposite way"* —
-> the sweep's `conflict` arm was retired to a bare `continue` in `fa9c4338`, and
+> PR5 Scope, where it is struck outright. The premise it rested on is dead: the
+> sweep's `conflict` arm was retired to a bare `continue` in `fa9c4338`, and
 > three sibling PR5 nodes build on that retirement, so re-adding the lane breaks
 > them. **PR8 owns the single conflict policy.**
+>
+> *(State corrected 2026-08-30.* This paragraph used to describe
+> `intentions/tactic-review-stall-conflict-lane.md` as `status: raw`,
+> `phase: null` and "**`office_hours`-parked on a dead premise**". It is none of
+> those now: on `origin/main` it is `status: codified`, **`phase: done`**,
+> `office_hours: null`, closed as a completion record by `e54b64ee` — the same
+> discharge blocker 1 above records. It contributes **zero units**. The
+> conclusion is untouched: PR5 has no conflict-lane unit.*)*
 
 ### Position 5 · Bundle 4 — PR3 + PR4, instrument and finding surface
 
