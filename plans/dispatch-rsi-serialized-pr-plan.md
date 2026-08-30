@@ -951,7 +951,10 @@ false-succeeds depending on which rung it is on.
 - `tactic-eval-finding-main-dirt-halts-ladder-as-violation`
 - `tactic-eval-finding-terminal-without-disposition-dominates-clock`
   *(reduced to measurement — see Unit 6; the only implementable residual is the
-  owed investigation, and it is unplanned)*
+  owed investigation, and it **is planned**. Corrected 2026-08-30: this used to
+  read "and it is unplanned". On `origin/main` the node is `status: codified`,
+  `phase: implement`, `office_hours: null`, and carries a full Unit 1 in its own
+  body with its own `### Recommended model` section rating it `opus`.)*
 
 Already `phase: done` at `origin/main` as of `aee9b0cf`. **Do not re-implement
 either one** — both shipped out-of-band and were closed by the 2026-08-19
@@ -1176,11 +1179,22 @@ actually took. `land-align-round --terminal` shipped 2026-08-05 and
 a missing-instruction gap. Live candidates: an exit-12 no-claim path; a
 `graph-commit` park whose own push failed (documented as writing no marker **by
 design**); a batch/strategy-mode land; or a session that died before reaching
-the land at all. This investigation is **unplanned** — run
-`/align-tactics tactic-eval-finding-terminal-without-disposition-dominates-clock`
-before implementing it.
+the land at all.
 
-*Model: opus* — unplanned investigation requiring judgment
+This investigation is **already planned — do not re-plan it.** *(Corrected
+2026-08-30.* This paragraph used to read "This investigation is **unplanned** —
+run `/align-tactics tactic-eval-finding-terminal-without-disposition-dominates-clock`
+before implementing it." That `/align-tactics` pass is unnecessary and would be a
+no-op on an already-finalized node.*)* On `origin/main` the node is
+`status: codified`, `phase: implement`, `office_hours: null`, and its body
+carries a full **Unit 1** — "Establish the 2026-08-14 `align-tactics` write path,
+settle the completion instant, and correct or confirm this entry's own figures" —
+with scope, reuse, verification and its own `### Recommended model` section.
+Implement from the node body.
+
+*Model: opus* — per the node's own `### Recommended model`: judgment-heavy
+forensics over a partly-destroyed evidence corpus, with an open discriminating
+question and an "undetermined is an acceptable answer" contract
 
 **Unit 7 — terminus: enforcement residual only.** The instrument already
 shipped as PR #3091 (merge `de347430`, 2026-08-14) and
@@ -1268,10 +1282,10 @@ PR1 (node bookkeeping). Units 1 → 2/3/4/5 within the PR.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-await.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-status.sh || exit 1
 .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-spawn.sh
 ```
 
@@ -1297,7 +1311,9 @@ of re-polling for the full CI-wait window.
 > `intentions/tactic-review-lows-automation.md` (`office_hours: null`,
 > `phase: implement`, `status: codified`) scopes Unit 1 to `run-lint.sh` and
 > `run-typecheck.sh`, Unit 2 to `statusline.sh` and `worktree-remove.sh`, and
-> Unit 3 to `fetch-psi.sh` and `fetch-analytics.sh`. `aggregate-usage.sh`,
+> Unit 3 to `fetch-psi.sh` and `fetch-analytics.sh` — **both of which
+> `c845d50f` deleted; that sub-unit's premise is dead, see Unit 8 in Scope**.
+> `aggregate-usage.sh`,
 > `dispatch-reclaim-audit` and `lib.sh` appear only under the node's
 > ***"Dispositions of the findings left out of this node's plan"***. The fold is
 > a **disjoint** surface from the rest of this PR — see the matching callout in
@@ -1350,7 +1366,9 @@ Scope before closing anything:*
 > `dispatch-reclaim-audit` and `lib.sh`. Its three units touch **none** of those.
 > Its real surface is `run-lint.sh`, `run-typecheck.sh`, `statusline.sh`,
 > `worktree-remove.sh`, `fetch-psi.sh` and `fetch-analytics.sh` — a disjoint set
-> from everything else in this PR.
+> from everything else in this PR. **The last two no longer exist**: `c845d50f`
+> deleted `.claude/skills/align-init/` and both scripts with it, so the node's
+> Unit 3 is a dead premise. See Unit 8 in Scope.
 >
 > It also sits in the `### Nodes closed` list above with **no unit in Scope
 > implementing it** — see Unit 8 below, added 2026-08-30. If Unit 8 is not built,
@@ -1597,10 +1615,38 @@ disjoint from the rest of this PR** — `run-lint.sh`, `run-typecheck.sh`,
 so it neither reuses nor conflicts with the instrument work. Read the node's own
 three units; do not re-derive them from this sentence.
 
+> **⛔ The third sub-unit's premise is DEAD — `fetch-*` error-helper dedup has no
+> surface left.** *(Found 2026-08-30.)* `fetch-psi.sh` and `fetch-analytics.sh`
+> were **deleted** by `c845d50f`, "Consolidate /align-strategy + /align-init into
+> /align", which removed `.claude/skills/align-init/` entirely — SKILL.md plus
+> `fetch-psi.sh`, `fetch-analytics.sh`, `fetch-forks.sh` and
+> `gather-context.sh`. Neither file exists anywhere in the repo today
+> (`find . -name 'fetch-psi.sh' -o -name 'fetch-analytics.sh'` returns nothing),
+> and they were **not** re-homed: the surviving align skills are exactly
+> `.claude/skills/align`, `.claude/skills/align-audit` and
+> `.claude/skills/align-tactics`, and `.claude/skills/align/scripts/` holds only
+> `validate-deployment.sh`.
+>
+> **Do not re-point this sub-unit at `.claude/skills/align` — there is nothing
+> there to dedup.** The sub-unit needs **re-scoping or dropping**, which is a
+> node-level call, not a path rewrite; no scope is invented here. Sub-units 1
+> (`run-lint.sh`, `run-typecheck.sh`) and 2 (`statusline.sh`,
+> `worktree-remove.sh`) are unaffected — all four files are on disk. If the
+> third is dropped, this unit is two sub-units, and the node cannot be closed as
+> fully implemented without saying so.
+>
+> **This is a class, not a one-off.** `c845d50f` is one of the four commits in
+> the deleted-path measurement now preserved on
+> `tactic-supersession-retirement-sweep` (9 hits attributed to it). It is exactly
+> the orphaned-path failure that node's widened lint exists to catch, and it is
+> invisible to CI today because the shipped lint scans only ` ```verify ` fences,
+> never body prose — which is where all three references here live.
+
 > If this unit is not built, **remove the node from the `### Nodes closed` list**
 > rather than closing work that did not ship. Do not close it undone.
 
-*Model: sonnet* — three localized script fixes on a disjoint surface
+*Model: sonnet* — two localized script fixes on a disjoint surface; the third
+sub-unit is blocked on the dead-premise call above
 
 ### Dependencies
 
@@ -1616,8 +1662,8 @@ any order.
 ### Verification
 
 ```verify
-.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
-.claude/skills/rsi-audit/scripts/test-audit-aggregate-writer.sh
+.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh || exit 1
+.claude/skills/rsi-audit/scripts/test-audit-aggregate-writer.sh || exit 1
 .claude/skills/rsi-audit/scripts/test-topic-usage-writer.sh
 ```
 
@@ -2049,8 +2095,28 @@ in this plan.
 > either; treated as executor bookkeeping and left in place (recorded for
 > ratification in `plans/dispatch-rsi-author-rulings.md`).
 
-**Recommended model: sonnet** — five localized efficiency fixes in one
-340-line script, plus one CAS pin.
+**Recommended model: per unit — this PR is NOT uniformly sonnet.**
+*(Corrected 2026-08-30.* This line used to read "**Recommended model: sonnet** —
+five localized efficiency fixes in one 340-line script, plus one CAS pin." A
+PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
+4's 22 units carry on their own nodes.*)* The assignment:
+
+| Units | Work | Model |
+|---|---|---|
+| U1–U2 | listnodes-duplicate-scan 1–2 | opus |
+| U3–U5 | listnodes-duplicate-scan 3–5 | sonnet |
+| U6–U7 | pr-json-duplicate-fetch 1–2 | opus |
+| U8 | pr-json-duplicate-fetch 3 | sonnet |
+| U9–U10 | ci-verdict-cache-miss 1–2 | sonnet |
+| U11–U12 | predicate-subprocess-spawn 1–2 | sonnet |
+| U13 | base-pin 1 | sonnet |
+| U14–U15 | base-pin 2–3 | opus |
+| U16–U17 | retention-scan 1–2 | opus |
+| U18 | the absorbed ci-pending liveness bound (3 sub-units) | opus |
+| U19 | PR9 Unit 2 standdown | opus |
+| U20 | PR9 Unit 6 reclaim audit 1 | opus |
+| U21 | PR9 Unit 6 reclaim audit 2 | sonnet |
+| U22 | PR2 Unit 6 terminal-disposition investigation | opus |
 
 ### Context
 
@@ -2060,15 +2126,22 @@ in this plan.
 call, and a fresh `node --import tsx/esm` subprocess **per candidate per tick**
 to evaluate a pure two-string predicate.
 
-### Nodes closed (7)
+### Nodes closed (8 listed — 7 for this PR to close, 1 already closed)
 
 - `tactic-review-stall-listnodes-duplicate-scan`
 - `tactic-review-stall-pr-json-duplicate-fetch`
 - `tactic-review-stall-ci-verdict-cache-miss`
 - `tactic-review-stall-predicate-subprocess-spawn`
-- `tactic-review-stall-conflict-lane`
+- `tactic-review-stall-conflict-lane` *(⛔ **already `phase: done` on
+  `origin/main`**, closed as a completion record by `e54b64ee`. It contributes
+  **zero units** — see the struck Conflict-lane bullet in Scope. Listed here only
+  so the position's node inventory stays at 11; **do not re-stamp it** when
+  closing this PR. This PR's own closures are the other seven.)*
 - `tactic-reconcile-review-stall-base-pin`
 - `tactic-done-node-retention-scan-cost`
+- `tactic-autonomous-ci-pending-liveness-bound` *(absorbed from #3002, closed
+  unmerged; its scope is rebuilt as U18. Added 2026-08-30 — the heading read
+  `(7)` and omitted it.)*
 
 ### Scope
 
@@ -2116,11 +2189,19 @@ All anchors *(from node bodies — re-locate)* in
 - ~~**Conflict lane**~~ — **⛔ DELETED 2026-08-30. Do not build this unit.**
   It read: "enter conflict resolution on a `CONFLICTING` reviewed node instead of
   holding it, converging the two conflict producers on one policy."
-  `intentions/tactic-review-stall-conflict-lane.md` is **parked on a dead
-  premise** and its recommendation is to prune: the arm was retired to a bare
-  `continue` in `fa9c4338`, and **three sibling PR5 nodes build on that
-  retirement** — re-adding the lane breaks them. (This is Position 4's one park,
-  which the index does carry.) PR8 owns the single conflict policy.
+  `intentions/tactic-review-stall-conflict-lane.md` was parked on a **dead
+  premise**: the arm was retired to a bare `continue` in `fa9c4338`, and **three
+  sibling PR5 nodes build on that retirement** — re-adding the lane breaks them.
+  PR8 owns the single conflict policy.
+
+  *(State corrected 2026-08-30.* This bullet used to call the node "parked" and
+  to add "(This is Position 4's one park, which the index does carry.)" Both are
+  false now. The node is **`phase: done`** on `origin/main`, closed as a
+  completion record by `e54b64ee`, and it contributes **zero units**. Position
+  4's one park was never this node — it was the hold carrier
+  `tactic-hold-conflict-autonomous-ci-pending-liveness-bound`, and `4d66566f`
+  discharged that to `phase: done` / `office_hours: null`, so **Position 4 now
+  carries no open park.** The conclusion is unchanged: do not build this unit.*)*
 - **Base pin** — pin the diagnosis-time base blob on the landing
   `graph-commit` so a concurrently landed write is three-way merged rather than
   clobbered by a stale in-memory node.
@@ -2135,12 +2216,22 @@ retaining done tactics on disk for the every-tick full-scan callers.
 > and never edit the four call sites it wires"* (the reconcile band belongs to
 > `tactic-review-stall-listnodes-duplicate-scan`).
 >
-> **The node's real three call sites**, which
+> **The node's real call sites**, which
 > `tactic-review-stall-listnodes-duplicate-scan` deliberately left unwired "to be
-> picked up by later tactics" — and this node *is* that later tactic — are:
-> `packages/intentionsutil/scripts/select-targets.ts` (the enumeration near
-> `:58`), `dispatch-graph-census`, and `dispatch-graph-scope-sweep`. Locate each
-> by content.
+> picked up by later tactics" — and this node *is* that later tactic — are two
+> TypeScript scripts, verified 2026-08-30:
+>
+> - `packages/intentionsutil/scripts/graph-census-debt.ts:343` —
+>   `const nodes = listNodes(intentionsDir);` in `main()`.
+> - `packages/intentionsutil/scripts/list-scope-stale-tactics.ts:78` —
+>   `const nodes = listNodes(dir);` in `main()`.
+>
+> *(Corrected 2026-08-30.* This paragraph used to name shell scripts —
+> `dispatch-graph-census` and `dispatch-graph-scope-sweep` — plus
+> `select-targets.ts` "near `:58`", and called them "the node's real three call
+> sites". The census and scope-sweep work is done in the two `.ts` scripts above,
+> which are where `listNodes` is actually called; the shell scripts invoke them.
+> Re-check both line anchors before editing — they drift.*)*
 >
 > **Two units, per the node:**
 > 1. **A *tolerant* cached read** — `listNodesCached(dir, cacheDir)` added to
@@ -2159,12 +2250,20 @@ retaining done tactics on disk for the every-tick full-scan callers.
 > leave the edge in place — do not park, and do not reimplement the primitive
 > here.**
 
-*Model: per unit — read each node's own `**Recommended model**` line; do NOT
-apply one PR-level tag.* This line used to read "*Model: sonnet* — localized
-efficiency fixes, clear shapes". Corrected 2026-08-30: **8 of the node-authored
-units in this PR are rated `opus` by their own nodes**, and a PR-level `sonnet`
-silently overrides every one of them. The predicate-spawn node's two units are
-genuinely `sonnet`; the retention-scan, base-pin and CI-verdict units are not.
+*Model: per unit — read the table under the PR heading, and each node's own
+`**Recommended model**` line; do NOT apply one PR-level tag.* This line used to
+read "*Model: sonnet* — localized efficiency fixes, clear shapes". Corrected
+2026-08-30: **12 of Position 4's 22 units are rated `opus`**, and a PR-level
+`sonnet` silently overrides every one of them.
+
+*(Attribution corrected again 2026-08-30.* An intermediate revision of this
+paragraph said "8 … units are rated `opus`" and named "the retention-scan,
+base-pin and CI-verdict units" as the opus ones, omitting the listnodes and
+pr-json pairs entirely. Against the table: the **CI-verdict pair (U9–U10) is
+`sonnet`**, and **base-pin U1 (U13) is `sonnet`** — only base-pin U2–U3 are
+opus. The opus units the paragraph missed are the **listnodes pair (U1–U2)** and
+the **pr-json pair (U6–U7)**. The predicate-spawn pair is genuinely `sonnet`, as
+stated.*)*
 
 ### Dependencies
 
@@ -2218,8 +2317,26 @@ PR1. Independent of PR2–PR4.
 ### Verification
 
 ```verify
-npm test --prefix packages/intentionsutil
+npx vitest run --project packages/intentionsutil --root .
 ```
+
+*(Re-spelled 2026-08-30 — the fence used to read
+`npm test --prefix packages/intentionsutil`. **That form was not broken**, and
+this is a parity change, not a repair: the new spelling is exactly what CI's
+`run-unit-tests.sh:137` runs (`npx vitest run --project <dir> --root
+"$REPO_ROOT"`), so the fence and CI exercise the same runner.
+`vitest.config.ts:18` names each project by its workspace **directory**
+(`test: { name: dir, root: "./" + dir }`), so the **full workspace path** is the
+only accepted `--project` value.)*
+
+*(Rationale corrected — an earlier revision of the note above claimed the
+bare-name short form `--project intentionsutil` "passes **vacuously** with zero
+tests". Both halves are wrong, and neither described the fence being replaced:
+that fence carried no `--project` at all, and the bare name fails **loudly** —
+`Error: No projects matched the filter "intentionsutil".  (Startup Error)`,
+non-zero exit. There is no vacuous-pass hazard here. **Do not "correct" the
+other `npm test --prefix packages/intentionsutil` fences in this document on
+that premise** — six of them remain, and all six are valid.)*
 
 Manual: run one tick with timing before and after; confirm the `intentions/`
 scan count drops from 2 to 1 and the per-candidate `node` subprocess count
@@ -2720,7 +2837,7 @@ PR1. Independent of the rest.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-config-scope.sh
 ```
 
@@ -2898,16 +3015,30 @@ PR1.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-lib-session-reap.sh
-.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
-.claude/skills/dispatch-propagate/scripts/test-reclaim-audit.sh
+.claude/skills/dispatch-propagate/scripts/test-lib-session-reap.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-reclaim-audit.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-ci-ready.sh
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-rules-check.sh
+.claude/skills/dispatch-propagate/scripts/run-rules-check.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-rules-test.sh
 ```
+
+*(Corrected 2026-08-30 — the `|| exit 1` guards were added. A ```verify fence
+runs as a plain script with no `set -e` — `dispatch-run-verification` executes
+each block as `bash <tmpfile>` — so without them only the **last** command's
+status becomes the fence's verdict and the first three failures are swallowed
+silently. `lint-verify-fence-paths.sh` documents the same mechanism and warns
+on it (advisory only; it never changes the exit status), and that warning does
+not reach `plans/` at all — it scans `intentions/` node bodies.)*
+
+*(Swept document-wide on review: the guards were originally added to these two
+fences only, leaving the identical defect in seven other multi-statement fences
+in this file — PR2, PR3 Units 1–7, PR8, PR10, PR13, PR14, PR15, PR16 and PR17.
+All are now guarded. **Every new multi-statement ```verify fence in this
+document must carry `|| exit 1` on all but its last line.**)*
 
 Manual: with a live repo-root session running, run the reap sweep and confirm
 its checkout is classified as not-removable.
@@ -3033,7 +3164,7 @@ reads, and the sidecar minting Unit 3 sweeps). Strict internal unit order 1→4.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh || exit 1
 .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
 ```
 
@@ -3435,8 +3566,8 @@ Nothing — this is a rename.
 ### Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-rules-check.sh
-.claude/skills/dispatch-propagate/scripts/run-rules-test.sh
+.claude/skills/dispatch-propagate/scripts/run-rules-check.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/run-rules-test.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4361,7 +4492,7 @@ node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentio
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4577,7 +4708,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -4879,7 +5010,7 @@ npm test --prefix packages/intentionsutil
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
@@ -5114,7 +5245,7 @@ node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentio
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
