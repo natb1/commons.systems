@@ -57,29 +57,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Both needs-main residue items (item-9, item-10) are Verifiability:
-    WAIT, requiring accumulation of real review-fix runs against live findings
-    after PR #3027 merged (2026-08-04T00:47:17Z). Journal shows zero review-fix
-    activity in the ~17 minutes since merge (journalctl --since merge time,
-    dispatch* units: 0 matches for review-fix) -- no post-merge data exists yet
-    to compare against the pre-change baseline (131 agents / 41 (run,file)
-    groups / 18 runs, 69% refutation rate). Earliest useful re-check: after
-    several review-fix runs complete post-merge -- the original baseline itself
-    spanned 18 runs over 5 days, so a comparable window is the realistic bar."
-  since: 2026-08-04
-  recommendation: "No author decision needed -- re-selection only. When
-    re-checked, run /dispatch-token-audit over the post-merge window and read
-    the new verify:/residue: log lines review-fix now emits (this PR's Unit 2/3
-    changes). Compare observed subagent count per run against the pre-change
-    baseline (131 agents / 41 distinct (run,file) groups / 18 runs) -- note the
-    plan's Verification section states the 3.2x reduction is an upper bound, not
-    a threshold, since the high-confidence-per-file-group distribution was never
-    measured pre-change. Also compare refutation rate against the ~69% baseline
-    (91 refuted / 37 upheld) and check verify_report blocks in PR comments for
-    any verdict:\"unverified\" spike (would indicate batched agents dying and
-    fail-closing whole groups)."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

@@ -116,24 +116,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "needs-main item 12 awaits the next live node-lane /qa-fix or
-    /review-fix session reaching terminal disposition post-merge (PR #3030
-    merged 2026-08-04T02:45:28Z, ~20min ago); journalctl -u dispatch-tick since
-    the merge shows no qa-fix/review-fix/node-id/dispatch:outcome activity yet
-    -- re-check after a node-lane qa-fix or review-fix session has completed
-    post-merge (likely several hours out, once one is next selected)"
-  since: 2026-08-04
-  recommendation: "No author decision needed, only re-selection once a node-lane
-    /qa-fix or /review-fix session has completed post-merge. Then: grep that
-    session's transcript for a <!-- dispatch:outcome:v1 --> block and confirm
-    issue is null and node_id is the node's slug; run aggregate-usage.sh over
-    the projects root and confirm .sessions[].outcome.node_id matches for that
-    session id. Unit-level mechanics (dispatch-emit-outcome --node-id emission,
-    aggregate-usage.sh passthrough) already pass their own test suites
-    (test-emit-outcome.sh, test-aggregate-usage.sh) -- only the live end-to-end
-    effect remains unconfirmed."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

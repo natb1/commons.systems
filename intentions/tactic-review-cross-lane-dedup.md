@@ -76,35 +76,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "needs-main item 10 (WAIT) still awaits its event: a live /review-fix
-    run producing a genuine cross-lane duplicate finding, observed end-to-end
-    via an xlane-dedup:-labelled agent + absorption summary log line. Checked:
-    the two runs the prior park cleared for -- PR #3049 (fix commit 0e953cad,
-    merged 2026-08-05T21:47:40Z) and PR #2990 (fix commit 156ce3a1, merged
-    2026-08-05T21:47:35Z) -- both confirmed via 'git merge-base --is-ancestor
-    0710dc0e <sha>' to descend from the absorption-logic merge, so the code path
-    did execute. But neither PR's '<!-- dispatch:review-fix -->' comment nor
-    journalctl (searched for xlane, both empty) shows any xlane-dedup label or
-    absorption-summary line. Each PR surfaced exactly one Lane-A (code-review)
-    residue item after the pre-gate skeptic: #3049's was independently fixed
-    under its own id (residue-0, not merged into any Lane-B sources union);
-    #2990's was refuted by the pre-gate skeptic (code-review-residue-refuted-0),
-    so it never reached the cross-lane block at all. Both outcomes are
-    consistent with zero contested locations on both runs -- the 'also valid'
-    branch of the expected outcome -- rather than with a genuine duplicate being
-    absorbed. Earliest useful re-check: the next live /review-fix run (branched
-    from current origin/main, so still post-0710dc0e) whose Lane-A residue
-    survives the pre-gate at the same path:line as a Lane-B finding this run
-    actually fixed."
-  since: 2026-08-05
-  recommendation: "No author decision needed -- re-selection only. When
-    re-checked, search the run's PR comment and, if inaccessible there, the
-    review-fix Workflow's own transcript/journal.jsonl (not journalctl --
-    workflow log() output does not reach journald) for an xlane-dedup:<loc>
-    label and the 'xlane-dedup: <n> contested location(s), <n> absorbed' summary
-    line."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

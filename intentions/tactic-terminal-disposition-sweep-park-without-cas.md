@@ -92,55 +92,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "qa-main WAIT re-check — carried forward from the phase session's own
-    escalation markers by the invalid-state lane. The session reached this
-    verdict, wrote its office-hours reason and recommendation, and stopped
-    without declaring a terminal disposition, so the terminal-disposition sweep
-    deferred the node here rather than parking it and left the markers intact;
-    this park is that text landed durably, not a synthesized boilerplate park.
-    Root cause filed as tactic-invalid-state-rc-fa3075ec. SESSION'S OWN REASON
-    FOLLOWS: qa-main WAIT re-check (~26h since PR 3042 merged
-    2026-08-04T16:48:30Z; main worktree HEAD includes the merge, dispatch-tick
-    is running the fixed sweeps). Residue items 1 and 3 are now decisively
-    MACHINE-resolved (see recommendation). Item 2 (a 'stale-diagnosis' skip line
-    appearing in production tick logs) has NOT occurred: 104 frozen-sweep and
-    104 terminal-disposition-sweep completions, including 25 successful ordinary
-    parks, produced zero stale-diagnosis lines in journalctl since the merge.
-    The event item 2 awaits genuinely has not happened yet — re-check after
-    several more days of tick volume, since the race needs a concurrent
-    office_hours park landing inside a sweeps guard-to-write window, which is
-    inherently rare."
-  since: 2026-08-06
-  recommendation: "TWO SEPARATE THINGS ARE OWED HERE — one is a slot release, the
-    other is a later re-check. (A) RELEASE THE SLOT. The node is still
-    physically held by the terminal phase session; the invalid-state lane parked
-    rather than reaped so the session's escalation text survived long enough to
-    land in this park. Now that it has landed, the job dir is no longer the only
-    copy and the slot can be freed. Run verbatim: git worktree remove
-    /home/n8/natb1/commons.systems/.claude/worktrees/tactic-terminal-dispositio\
-    n-sweep-park-without-cas && claude rm 5063052d-a0ae-4445-abe0-5e856a5d4474 —
-    then clear this park with clear-park
-    tactic-terminal-disposition-sweep-park-without-cas only when (B) is also
-    satisfied. Do not attach or resume the session; attach/resume is not a
-    recovery path. (B) THE SUBSTANTIVE RE-CHECK, from the session verbatim: No
-    author decision needed — re-selection only. Lane-M results this pass, all
-    via journalctl/git against origin/main since the 2026-08-04T16:48:30Z merge:
-    (1) 'no new clobbers' — MATCH: the state-aware UNHEALED detect
-    (specific-park-then-generic-park pattern, current live text checked) found
-    zero UNHEALED rows; one specific-then-generic pair was found for a different
-    node (gap ~2759s, exceeding both sweep grace windows of 900s/300s) but its
-    current live text is not generic, so it is a legitimate later re-park, not
-    this defect. (2) 'ordinary park success path unaffected' — MATCH: 104
-    frozen-sweep + 104 terminal-disposition-sweep 'sweep complete' lines; summed
-    parked= totals (1 + 24 = 25) exactly equal the count of individual 'parked
-    <id>' lines (25); zero 'park failed for' lines. (3) 'stale-diagnosis hits
-    rare but present, each self-heals' — still WAIT: zero stale-diagnosis lines
-    despite the sweep/park volume above. Re-run the same journalctl greps (grep
-    -c stale-diagnosis; grep -c 'lib-frozen-session-park: parked ') after
-    several more days of tick volume; if a hit ever appears, confirm the node
-    kept its specific park text and a later tick converged."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

@@ -61,24 +61,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "id 20 (needs-main residue): awaits post-merge review-fix run history to
-    measure the api-cost lens's realized fire rate and draw against the
-    pre-merge 5-of-18 baseline. PR #3031 merged 2026-08-04T16:57:43Z; journalctl
-    since merge shows 0 review-fix runs and 0 find:api-cost entries — no sample
-    has accumulated yet. Re-check once several post-merge review-fix runs have
-    occurred (aim for a sample comparable to the pre-merge 18-run window, e.g.
-    after a few days of dispatch activity)."
-  since: 2026-08-04
-  recommendation: "No author decision needed — re-selection only. On re-check:
-    grep accumulated run logs for 'find:api-cost', compare the fire rate against
-    the pre-merge 5-of-18 baseline, and record the realized draw (expected range
-    ~$25-30 proxy per 4-day window per the 2026-08-03 ruling, not a threshold).
-    Confirm no recurring 'classify: COST CLAMP' log line (a recurring clamp
-    would mean the section-wrapper Source-assignment wording needs tightening).
-    Also confirm tactic-mainqa-review-cost-finder's downstream observation
-    checklist still passes against the merged lens."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

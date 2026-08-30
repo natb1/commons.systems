@@ -34,26 +34,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "needs-main item 7 awaits a live /review-fix Workflow run whose Lane-A
-    residue-disposition subagent dies after retries (total death, short items
-    list, or refs mapping to no original item); checked journalctl and recent PR
-    history since PR #3022 merged (2026-08-03T16:00:23Z) for the 'Lane-A residue
-    disposition degraded' coverage note or any residue-disposition failure
-    signal — none found in the ~17 minutes elapsed, consistent with this being a
-    rare failure mode by design; re-check after several more /review-fix runs
-    have occurred naturally"
-  since: 2026-08-03
-  recommendation: No author decision needed — this item needs only re-selection
-    once the awaited production event occurs. The helper
-    (undispositionedResidueRecords) is already covered offline by the
-    qa-fix-time shell-test fixtures (all-triaged, total-death, partial-drop,
-    empty-residue, fields, independent-blockers), all of which passed. When a
-    real disposition-agent death is next observed, check that run's PR comment
-    for a Deferred-bucket entry per untriaged finding, the partial-coverage note
-    naming the residue-disposition cause, and the corresponding filed follow-up
-    issues with expected Backlink and blocker linkage.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:

@@ -57,21 +57,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "residue item 15 (silent-drop tradeoff acceptance) is WAIT: the
-    acceptance criterion is absence of operator friction from
-    decision_log_append's silent-drop-on-invalid-input behavior in production,
-    an event that has not had time to occur or fail to occur yet -- PR #3061
-    merged 2026-08-10T12:55:13Z, so no production window has elapsed; earliest
-    useful re-check is after roughly 2 weeks of production dispatch-tick
-    activity (~2026-08-24), reviewing routing-decisions.jsonl and
-    dispatch-fleet-watch alarm history for any sign a malformed decision-log
-    payload silently vanished and caused operator confusion or a missed
-    audit-trail entry"
-  since: 2026-08-10
-  recommendation: no author decision needed at this time -- re-selection only,
-    once the production window above has elapsed
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}

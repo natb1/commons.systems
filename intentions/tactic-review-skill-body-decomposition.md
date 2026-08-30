@@ -76,37 +76,7 @@ execution:
   lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Three needs-main items (13, 14, 15) await post-merge accumulation, not
-    an author decision. Item-13 needs 5+ post-merge /review-fix runs to
-    re-baseline avg peak context against the 184,468 pre-change baseline; a
-    --days 7 aggregate-usage.sh scan today found ~39 review-fix worker sessions
-    in the window but timestamps are not exposed per-session so post-merge-only
-    runs cannot be isolated yet, and a narrower --days 3 window found only 1
-    candidate session (peak_context 225,488) -- too few to draw a conclusion per
-    the tactic's own 5-run threshold. Item-14 needs a naturally-occurring
-    mid-run interruption (e.g. an API error) on a post-merge /review-fix run to
-    observe resume behavior through the new Step 5/6 subagent forks. Item-15
-    needs a post-merge /review-fix run on a PR with real CodeQL alerts and/or a
-    real dependency-lockfile change to compare
-    dispatch-review-codeql/dispatch-review-npm-audit output against the old
-    inline-block behavior. Earliest useful re-check: after several more days of
-    /review-fix traffic have accumulated post-merge (PR #3025 merged
-    2026-08-10T00:00:19Z, mergeCommit 7d64646b)."
-  since: 2026-08-10
-  recommendation: "No author decision needed here -- re-selection only, once more
-    post-merge /review-fix runs have accumulated. The two MACHINE items on this
-    node (item-12, item-16) both verified: grep -c '^### item-1[2345]-'
-    intentions/tactic-review-skill-body-decomposition.md returned 4 (expected
-    4), and grep -c '^### item-1[23456]-'
-    intentions/tactic-review-skill-body-decomposition.md returned 5 (expected 5)
-    -- the needs-main residue section is intact and undamaged through this pass.
-    When re-selected: re-run item-13's check via
-    .claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh --days 7 once
-    5+ post-merge review-fix sessions are distinguishable, wait for a natural
-    mid-run interruption for item-14, and wait for a post-merge run touching
-    CodeQL alerts or a dependency lockfile for item-15."
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
