@@ -151,11 +151,18 @@ checkout: a concurrent session's dirty tracked file blocks this run's
      writes nothing unless this job's own name is `<target-node-id>`.
    - `13` — not reachable at this phase: the gate's scope-chained-phase
      check only applies to the `fix`/`qa`/`review` phases, not
-     `align-tactics`. Treat it as a mechanical error — which means reporting
-     it AND reaping, exactly as the bullet below:
+     `align-tactics` (`SCOPE_CHAINED_PHASES = {fix, qa, review}`,
+     `check-node-selection.ts:89`). Treat it as a mechanical error: **STOP**,
+     make no graph write, report it, AND reap — exactly as the
+     `any other non-zero` bullet does:
      ```bash
      packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
      ```
+     Reaping is not permission to continue: **STOP** first, exactly as the
+     `12` and `15` bullets do. Reaping without stopping is worse than either
+     failure alone — the session proceeds into Step 1's graph reads and writes
+     having already declared itself terminal.
+
      Being "not reachable" is not a reason to skip the marker. If it ever does
      fire, a session with no terminal disposition is held by
      `dispatch-self-close` and its node becomes permanently unselectable — an
@@ -178,12 +185,14 @@ checkout: a concurrent session's dirty tracked file blocks this run's
        - a malformed store exits `2` from `check-node-selection` itself
          (`main()` maps every throw to it);
        - an unresolvable project root exits `2` from the WRAPPER,
-         `assert-node-selection:111-114`, before the gate is ever invoked;
-       - **a failed `git fetch` exits `1`** (`assert-node-selection:137-140`)
-         — the common transient case, and the reason narrowing this bullet to
-         `2` would silently leave it unrouted.
-     Report the error plainly, **and record the terminal disposition exactly
-     as the `12` and `15` bullets do**:
+         `assert-node-selection:113-116` (the `exit 2` is at `:115`), before
+         the gate is ever invoked;
+       - **a failed `git fetch` exits `1`** (`assert-node-selection:139-142`,
+         the `exit 1` at `:141`) — the common transient case, and the reason
+         narrowing this bullet to `2` would silently leave it unrouted.
+
+     **STOP.** Report the error plainly, and record the terminal disposition
+     exactly as the `12` and `15` bullets do:
      ```bash
      packages/intentionsutil/scripts/mark-node-terminal "<target-node-id>" no-claim
      ```

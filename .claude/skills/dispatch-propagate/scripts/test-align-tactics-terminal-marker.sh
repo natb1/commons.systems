@@ -127,7 +127,9 @@ else
   # 141, and a PRESENT marker is scored "absent" — a false failure that grows
   # more likely as the bullet's prose grows. Same shape already fixed in
   # test-helpers.sh on 2026-08-13.
-  block=$(awk '/any other non-zero/{f=1} f{print} f && /^   \*\*Deliberately not gated/{exit}' "$ALIGN_TACTICS_SKILL")
+  # Same reasoning as block13 below: stop at the next top-level bullet or the
+  # section break, whichever comes first, rather than at one named literal.
+  block=$(awk '/any other non-zero/{f=1; next} f && (/^   - / || /^   \*\*Deliberately not gated/){exit} f{print}' "$ALIGN_TACTICS_SKILL")
   if grep -qE 'mark-node-terminal .* no-claim' <<<"$block"; then
     actual="present"
   else
@@ -137,7 +139,11 @@ else
 
   # The `13` bullet is the one path the skill explicitly NAMES a mechanical
   # error, so it is the one most likely to be "tidied" back to report-and-stop.
-  block13=$(awk '/^   - `13` —/{f=1} f{print} f && /^   - `15` —/{exit}' "$ALIGN_TACTICS_SKILL")
+  # Terminate on the NEXT TOP-LEVEL BULLET, not on the `15` bullet by name.
+  # Naming it made the extractor vacuous under renumbering: delete or reorder
+  # `15` and awk runs to EOF, absorbing the catch-all bullet's marker, so a
+  # REMOVED exit-13 marker would still score "present".
+  block13=$(awk '/^   - `13` —/{f=1; next} f && /^   - /{exit} f{print}' "$ALIGN_TACTICS_SKILL")
   if grep -qE 'mark-node-terminal .* no-claim' <<<"$block13"; then
     actual13="present"
   else
