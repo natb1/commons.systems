@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+# resolve-diff-base.sh — resolve the single commit a branch-scoped check must
+# diff against, or fail loudly saying why it cannot.
+#
+# WHY THIS EXISTS
+#
+#   Every change-gated check in this repo used to spell its baseline inline as
+#   `git diff ... origin/main...HEAD`. The three-dot form expands to
+#   `merge-base(origin/main, HEAD)..HEAD`, so it silently produces an EMPTY
+#   diff whenever `merge-base == HEAD` — i.e. whenever HEAD is already
+#   contained in origin/main. Every caller reads "empty diff" as "nothing
+#   changed, clean pass". The check therefore passes without examining
+#   anything: a VACUOUS pass.
+#
+#   The three live ways that happens:
+#     1. On a push to `main`. actions/checkout leaves refs/remotes/origin/main
+#        pointing AT the pushed commit, so HEAD == origin/main and the diff is
+#        empty. Every change gate reads false and the job goes green having
+#        run nothing.
+#     2. On a branch already merged into main (a post-merge re-run, a stale
+#        worktree, a `--fix` pass after the PR landed).
+#     3. From a foreign cwd. A bare `git diff` (no `-C`) resolves against the
+#        CURRENT DIRECTORY's repository, not the script's. Invoked by absolute
+#        path from another checkout, it diffs the wrong tree — usually clean,
+#        hence empty, hence green.
+#
+#   Per .claude/rules/code-style.md this helper never substitutes a "safe
+#   default" for a base it cannot justify. Every unresolvable situation exits
+#   non-zero with a named reason.
+#
+#   Prior art for the same defect class, in this repo:
+#   .github/scripts/check-graph-fast-path.sh:5 carries a
+#   `# WHY NOT a three-dot git diff origin/main...HEAD:` note, pinned by
+#   .github/scripts/test-check-graph-fast-path.sh.
+#
+# INTERFACE
+#
+#   resolve-diff-base.sh [--repo-root <dir>]
+#                        [--head <ref>]                       (default: HEAD)
+#                        [--remote-ref <ref>]                 (default: origin/main)
+#                        [--at-remote-tip fail|first-parent]  (default: fail)
+#
+#   --repo-root names the checkout to resolve against. It defaults to the repo
+#   containing the CWD — NOT the one containing this script — and when it is
+#   omitted the CWD's root is compared against this script's own root and a
+#   divergence is a hard error naming the flag. That is the shape the nearest
+#   neighbour in this directory already uses (lint-verify-fence-paths.sh:168-181):
+#   it costs no churn at call sites whose cwd is already right, and it still
+#   refuses to guess when the two trees disagree. Running one checkout's copy of
+#   a script against a DIFFERENT checkout is a routine dispatch pattern, but it
+#   is only safe when the target is named explicitly.
+#
+#   --at-remote-tip governs ONLY the exact case `HEAD == <remote-ref>`:
+#     fail          (default) exit 8. For checks that are meaningless without a
+#                   branch delta.
+#     first-parent  use HEAD^1 as the base, i.e. "what this push introduced".
+#                   Correct for CI checks that must also run on `main`.
+#   It does NOT govern the strict-ancestor case (HEAD behind the remote ref):
+#   there is no defensible base for that, so it is always fatal (exit 5).
+#
+# STDOUT CONTRACT
+#
+#   On success: exactly one line, the 40-hex base commit SHA, and nothing else.
+#   Callers may safely do BASE=$(resolve-diff-base.sh ...).
+#   On failure: stdout is empty.
+#
+# STDERR CONTRACT
+#
+#   On success: exactly one provenance line, always, e.g.
+#     resolve-diff-base: base=<sha> source=merge-base repo=<root> \
+#       head=HEAD@<sha> remote=origin/main@<sha>
+#   This line is the audit trail: a run whose base came from the wrong tree or
+#   the wrong ref is visible in the CI log instead of silently green.
+#   On failure: a multi-line diagnostic naming the condition and the remedy.
+#
+# EXIT CODES
+#
+#   0  base resolved; printed on stdout
+#   2  usage error (unknown argument, missing argument value, bad
+#      --at-remote-tip value)
+#   3  the repo root could not be resolved unambiguously: --repo-root is not a
+#      directory, or is not inside a git work tree, or --repo-root was omitted
+#      and the CWD's root diverges from this script's own root
+#   4  --remote-ref does not resolve (not fetched / shallow clone / no remote)
+#   5  HEAD is a STRICT ancestor of --remote-ref (already merged, or the
+#      checkout is behind) — no defensible base exists. Always fatal.
+#   6  no merge base between --remote-ref and --head (unrelated histories, or a
+#      shallow clone whose grafted history does not reach the fork point)
+#   7  --head does not resolve to a commit
+#   8  HEAD == --remote-ref and --at-remote-tip is `fail` (the default)
+#   9  --at-remote-tip first-parent was requested but HEAD is a root commit
+#
+# NOT IN SCOPE (deliberately)
+#
+#   The WORKING TREE. This helper resolves a COMMIT base and says nothing about
+#   uncommitted work. `<base>..HEAD` is a commit range, so a working-tree
+#   modification is in no commit and is invisible to it — every changed-file
+#   tier in run-lint.sh and run-unit-tests.sh is therefore still vacuous on
+#   uncommitted work, exactly as it was before. That is a SEPARATE defect with
+#   a separate fix (union the range with `git status --porcelain` in a
+#   local-invocation mode); it is recorded in
+#   plans/dispatch-rsi-batch-steering.md and plans/dispatch-rsi-sequence.md and
+#   is not addressed here. CI always runs on a committed tree, so this is a
+#   developer-ergonomics gap, not a CI-correctness one.
+#
+#   MULTI-COMMIT PUSHES. `--at-remote-tip first-parent` answers "what did this
+#   push introduce" EXACTLY when the push carried one commit. PR merges do:
+#   this repo is squash-only with a linear main. A direct multi-commit push
+#   (graph-commit pushes HEAD, and a batched landing can carry more than one
+#   commit) fires ONE workflow run at the head commit, so HEAD^1..HEAD sees
+#   only the last commit of that push and the earlier ones stay invisible. The
+#   exact answer for a push event is GitHub's `github.event.before`; wiring it
+#   through the workflow to every consumer is deliberately left out of this
+#   change rather than shipped as an unused flag. Narrower hole, same class.
+#
+#   FETCHING. This helper performs no network I/O and never mutates refs. A
+#   STALE origin/main (present locally but behind the true remote) yields a
+#   base that is too old — a diff that is too BROAD, never vacuous — and the
+#   provenance line prints the origin/main SHA so staleness is diagnosable from
+#   the log. Keeping the remote ref current is the caller's job; in CI that is
+#   `actions/checkout` with `fetch-depth: 0`.
+#
+#   Detached HEAD needs no special handling and gets none: this script resolves
+#   `--head` through `rev-parse --verify <ref>^{commit}` and never reads a
+#   branch name, `@{upstream}`, or `HEAD`'s symbolic target.
+#
+#   Worktrees need no special handling either: `git -C <worktree>` resolves
+#   `--show-toplevel` to that worktree's checkout, while remote-tracking refs
+#   live in the shared common dir and resolve normally.
+
+set -euo pipefail
+
+SELF="resolve-diff-base"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+die() {
+  local code="$1"
+  shift
+  local line
+  for line in "$@"; do
+    printf '%s: %s\n' "$SELF" "$line" >&2
+  done
+  exit "$code"
+}
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: resolve-diff-base.sh [--repo-root <dir>] [--head <ref>]
+                            [--remote-ref <ref>]
+                            [--at-remote-tip fail|first-parent]
+
+  --repo-root <dir>       The checkout to resolve against. Defaults to the repo
+                          containing the CWD; REQUIRED when the CWD's repo is
+                          not the one this script lives in.
+  --head <ref>            Default: HEAD
+  --remote-ref <ref>      Default: origin/main
+  --at-remote-tip <mode>  fail (default) | first-parent
+
+Prints the base commit SHA on stdout. See the header comment for exit codes.
+EOF
+  exit 2
+}
+
+REPO_ROOT=""
+HEAD_REF="HEAD"
+REMOTE_REF="origin/main"
+AT_REMOTE_TIP="fail"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo-root)
+      if [ "$#" -lt 2 ]; then usage; fi
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    --head)
+      if [ "$#" -lt 2 ]; then usage; fi
+      HEAD_REF="$2"
+      shift 2
+      ;;
+    --remote-ref)
+      if [ "$#" -lt 2 ]; then usage; fi
+      REMOTE_REF="$2"
+      shift 2
+      ;;
+    --at-remote-tip)
+      if [ "$#" -lt 2 ]; then usage; fi
+      case "$2" in
+        fail|first-parent) AT_REMOTE_TIP="$2" ;;
+        *) usage ;;
+      esac
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      printf '%s: unknown argument: %s\n' "$SELF" "$1" >&2
+      usage
+      ;;
+  esac
+done
+
+if [ -n "$REPO_ROOT" ]; then
+  if [ ! -d "$REPO_ROOT" ]; then
+    die 3 "ERROR: --repo-root '$REPO_ROOT' is not a directory." \
+          "Pass a path inside the checkout whose diff base you want."
+  fi
+  if ! ROOT=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>&1); then
+    die 3 "ERROR: --repo-root '$REPO_ROOT' is not inside a git work tree." \
+          "git said: $ROOT"
+  fi
+else
+  # Resolve from the CALLER's CWD, never from this script's own location: a
+  # script's path says nothing about which checkout the caller means, and
+  # inferring the tree from it is a recurring defect in this repo's tooling
+  # (transition-node, graph-commit).
+  if ! ROOT=$(git rev-parse --show-toplevel 2>&1); then
+    die 3 "ERROR: could not resolve a git repo root from the current directory ($PWD)." \
+          "git said: $ROOT" \
+          "Pass --repo-root to name the checkout to resolve against."
+  fi
+  # With no --repo-root, a CWD in a different checkout from this script's own
+  # means either guess is silently wrong. Refuse, and name the flag that fixes
+  # it — the same contract lint-verify-fence-paths.sh:174-181 applies.
+  SELF_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$SELF_ROOT" ] && [ "$SELF_ROOT" != "$ROOT" ]; then
+    die 3 "ERROR: this script lives in $SELF_ROOT but the CWD resolves to $ROOT." \
+          "Either tree could be the one you mean, and guessing is how a check" \
+          "ends up diffing a tree nobody looked at." \
+          "Pass --repo-root to name the checkout to resolve against."
+  fi
+fi
+
+if ! HEAD_SHA=$(git -C "$ROOT" rev-parse --verify --quiet "${HEAD_REF}^{commit}"); then
+  die 7 "ERROR: --head '$HEAD_REF' does not resolve to a commit in $ROOT." \
+        "An unborn branch or an empty repository has no diff base."
+fi
+
+if ! REMOTE_SHA=$(git -C "$ROOT" rev-parse --verify --quiet "${REMOTE_REF}^{commit}"); then
+  die 4 "ERROR: --remote-ref '$REMOTE_REF' does not resolve in $ROOT." \
+        "There is no baseline to diff against, so this check cannot run." \
+        "In CI this means the checkout was shallow: use fetch-depth: 0." \
+        "Locally, fetch first:  git -C $ROOT fetch origin main"
+fi
+
+if ! BASE=$(git -C "$ROOT" merge-base "$REMOTE_SHA" "$HEAD_SHA" 2>&1); then
+  die 6 "ERROR: no merge base between '$REMOTE_REF' and '$HEAD_REF' in $ROOT." \
+        "git said: $BASE" \
+        "Unrelated histories, or a shallow clone whose grafted history does" \
+        "not reach the fork point. In CI use fetch-depth: 0." \
+        "Locally:  git -C $ROOT fetch --unshallow origin"
+fi
+
+SOURCE="merge-base"
+
+if [ "$BASE" = "$HEAD_SHA" ]; then
+  if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
+    die 5 "ERROR: HEAD ($HEAD_SHA) is a STRICT ANCESTOR of $REMOTE_REF ($REMOTE_SHA)." \
+          "The three-dot diff '${REMOTE_REF}...${HEAD_REF}' would be EMPTY, and a" \
+          "check reading that as 'nothing changed' would pass without examining" \
+          "anything. There is no defensible base for this state." \
+          "Cause: this branch is already merged into $REMOTE_REF, or the" \
+          "checkout is behind it. Rebase/merge $REMOTE_REF into the branch, or" \
+          "run the check against the range you actually mean via --head."
+  fi
+  if [ "$AT_REMOTE_TIP" = "fail" ]; then
+    die 8 "ERROR: HEAD is exactly $REMOTE_REF ($REMOTE_SHA), so there is no branch delta." \
+          "The three-dot diff would be EMPTY and this check would pass vacuously." \
+          "If this caller is meant to run on $REMOTE_REF too (a post-merge push)," \
+          "pass --at-remote-tip first-parent to diff what the push introduced."
+  fi
+  if ! PARENT=$(git -C "$ROOT" rev-parse --verify --quiet "${HEAD_SHA}^1^{commit}"); then
+    die 9 "ERROR: --at-remote-tip first-parent was requested but HEAD ($HEAD_SHA)" \
+          "is a root commit with no first parent, so 'what this push introduced'" \
+          "is undefined."
+  fi
+  BASE="$PARENT"
+  SOURCE="first-parent"
+fi
+
+printf '%s: base=%s source=%s repo=%s head=%s@%s remote=%s@%s\n' \
+  "$SELF" "$BASE" "$SOURCE" "$ROOT" "$HEAD_REF" "$HEAD_SHA" "$REMOTE_REF" "$REMOTE_SHA" >&2
+
+printf '%s\n' "$BASE"
