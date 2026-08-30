@@ -160,9 +160,16 @@ OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   // evidence — the shape a record-time mint is born with. Its PR state is
   // fetched so a closed-WITHOUT-merge source can retire it (reconcile-graph.ts
   // isCloseAbsorbable); a merged one is enumerated but written by nothing,
-  // since isMergeAbsorbable still refuses. A main-qa node reached through this
-  // sweep always has completion.mergedAt stamped, so it drops out immediately
-  // and no already-verified node costs a gh call.
+  // since isMergeAbsorbable still refuses.
+  //
+  // That last part has a standing cost, stated here because the obvious
+  // reading of the line above is the opposite. Nothing in this sweep stamps
+  // `completion.mergedAt` on a main-qa node, so a record-time mint whose PR
+  // has merged never acquires the field that would drop it out of
+  // `unprovenMainQa`. It is re-enumerated and re-fetched from gh on EVERY
+  // sweep for its whole life at `main-qa`. The sweep is therefore not
+  // self-limiting, and its gh cost grows with the number of merged main-qa
+  // nodes rather than with the number of unverified ones.
   const unprovenMainQa = (n) =>
     n.phase === "main-qa" &&
     !(n.execution && n.execution.completion && n.execution.completion.mergedAt);

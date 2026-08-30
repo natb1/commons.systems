@@ -1074,8 +1074,10 @@ empty.
   work; run `graph-commit` in THIS thread after it returns.**
 
   **Capture the working-tree baseline in this thread BEFORE forking** — the
-  Step-5 write-surface guard below diffs against it, so pre-existing dirt
-  cannot mask a stray edit the subagent made:
+  Step-5 write-surface guard below uses it to tell a pre-existing untracked
+  stray from one the subagent created. It does NOT use it to excuse a tracked
+  modification: those are refused on the AFTER snapshot whether or not the
+  baseline already carried them, so pre-existing dirt cannot mask a stray edit:
 
   ```bash
   git -C <root> status --porcelain > "tmp/step5-baseline-$N.txt"
@@ -1150,10 +1152,10 @@ empty.
   ```
 
   Write the returned `node_ids`, one per line, to
-  `tmp/step5-node-ids-$N.txt`. Then run the extracted guard script — it
-  computes "only entries new since the baseline" itself (the same `comm -13`
-  over the sorted baseline/after files the fence used to specify by hand) and
-  enforces the full contract:
+  `tmp/step5-node-ids-$N.txt`. Then run the extracted guard script — it judges
+  every AFTER entry per path, refusing any tracked modification outright and
+  skipping only untracked strays the baseline already carried, and enforces
+  the full contract:
 
   ```bash
   .claude/skills/dispatch-propagate/scripts/review-fix-write-surface-guard.sh \
