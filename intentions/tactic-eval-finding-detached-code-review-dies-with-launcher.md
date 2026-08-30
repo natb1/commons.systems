@@ -679,6 +679,23 @@ Confirm the falsified claim is gone from the code comment:
   second review. This is the one check that cannot be automated — it needs a
   human to trigger the interrupt — and it is the definitive close of this
   finding.
+
+  **RULED 2026-08-29 — the proxy is accepted, and this check no longer gates
+  anything.** *(Author batch-execution sitting; recorded in commit `08870461` /
+  PR #3132, whose body states "PR6 interrupt gate ruled: proxy accepted, Units 2-3
+  ship without the attended interrupt test", and indexed in
+  `plans/dispatch-rsi-author-rulings.md`.)* The author accepted the
+  **background-teardown demonstration** as satisfying the owed confirmation: a
+  detached run survived the teardown of the launching Bash tool call and ran to
+  completion, writing its marker 12s later. That exercises the same
+  `systemd-run --user` re-parenting mechanism. **Honest limit, stated at the
+  sitting:** the demonstration killed a *background* task — the same class of
+  teardown, but not literally a human interrupting a foreground tool call. So the
+  attended check above is a **confirmation, not a discovery**, and it is an
+  optional follow-up the author may run at any attended moment. **Units 2 and 3
+  ship without it.** The 2026-08-28 sitting had established topology only (PPID
+  314, own `app.slice` cgroup, `flock` released on child exit) and explicitly not
+  survival of a launcher teardown; that is the gap this ruling closes.
 - **Live smoke test of the unit's environment**, run once before trusting Unit 2
   in production. A systemd unit does **not** inherit the launching session's
   environment; only `PATH` and `HOME` are forwarded. Run one real `low`-effort

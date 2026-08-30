@@ -114,3 +114,52 @@ attributes:
   pre_namespacing_boost: 20
 ---
 # dispatch.config/target-workers.json is untracked and not gitignored, so the fleet's throughput dial has no version history or recovery
+
+
+## Author ruling, 2026-08-29 — RELOCATE UNDER XDG
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 2 — `dispatch.config/target-workers.json`
+relocates under XDG").**
+
+The live, per-user `dispatch.config/target-workers.json` **relocates under XDG,
+beside the pause sentinel**, following clarification 107's direction. Options (a)
+tracked and (b) explicitly gitignored — the other two the 2026-08-05 park put on
+the table — are **rejected**. The reason is who each binds: a tracked file is
+shared by every checkout, an ignored file is per-machine, and an XDG file is
+per-user. This repo is intended to be forked, and a fork must inherit **no**
+scheduling knob from upstream. That is why the park called it an author call, and
+it is what the ruling turns on.
+
+**A tracked defaults TEMPLATE ships alongside it** (executor decision D6,
+2026-08-30, recorded in the same file). The template carries no live values and
+stays in the instance repo, so a fork gets a starting point without inheriting
+this deployment's schedule. Ruling 2 governs the **live file**; the template node
+governs a **template**. The two are reconcilable, not competing.
+
+**This overturns the competing record on `tactic-dispatch-config-template`.** That
+node's `## Context` at `intentions/tactic-dispatch-config-template.md:59-64` reads
+*"Human-edited fleet-behavior config migrates, tracked — `target-workers.json`,
+`auto-merge.json`, `epic.json` …"*. As of this ruling that sentence is corrected
+in scope: **the template** migrates tracked; the **live** `target-workers.json`
+does not — it goes to XDG. The other files named in that bullet are untouched by
+this ruling.
+
+**DO NOT change the `target_n` VALUE as part of this work.** Zero is the weekly
+pace curve — a deliberate pause, never a defect to fix.
+
+### State a fresh session needs
+
+Retained from the 2026-08-05 park's recommendation, because clearing the park
+destroys the field.
+
+- The reader is `.claude/skills/dispatch-propagate/scripts/dispatch-target-workers`,
+  consumed by `graph-select-target` where it sets `TARGET_N` (the pace/ceiling
+  block that also carries the "standalone selection is paced to zero" exit).
+- The pause sentinel path and its `dispatch-tick` read are cited in the
+  2026-07-31 fleet-instrument clarification on the serving strategy; the prior
+  config doctrine is clarifications 107 and 108 there.
+- **Verify the current state before acting** — the file may have been tracked,
+  ignored or moved in the interim — with `git status --porcelain dispatch.config/`
+  and `git check-ignore -v dispatch.config` from the **MAIN checkout**, since the
+  directory is invisible from a graph worktree.
