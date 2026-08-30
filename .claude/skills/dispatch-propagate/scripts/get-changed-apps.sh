@@ -4,8 +4,12 @@ set -euo pipefail
 # Outputs one changed app name per line based on git diff.
 # An "app" is a workspace listed in the root package.json.
 #
-# Usage: get-changed-apps.sh [--base <ref>]
+# Usage: get-changed-apps.sh [--base <ref>] [--all]
 #   --base <ref>  Override comparison base (default: origin/main)
+#   --all         List every workspace, without diffing at all
+#
+# The base is resolved by resolve-diff-base.sh, which hard-errors rather than
+# yielding a baseline it cannot justify. See the block above the diff below.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -39,12 +43,28 @@ if [ "$ALL" = true ]; then
   exit 0
 fi
 
+# Resolve the baseline through resolve-diff-base.sh instead of spelling it
+# `"$BASE"...HEAD` inline. The three-dot form goes EMPTY whenever HEAD is
+# already contained in the base — on every push to `main`, where
+# actions/checkout leaves origin/main pointing at the pushed commit. This
+# script's consumers (run-lint.sh, run-unit-tests.sh, run-typecheck.sh) read an
+# empty result as "no dirty apps", so that pass ran no vitest, no eslint and no
+# build while reporting success. --at-remote-tip first-parent asks the right
+# question there: what did this push introduce.
+#
+# An explicit --base is still honoured; it is routed through the helper as the
+# remote ref so the resolved value is merge-base(BASE, HEAD) — exactly the old
+# side of the three-dot range it replaces, so `--base HEAD~1` (the one explicit
+# caller, run-all-cleanup-preview.sh:13) means precisely what it meant before.
 if [ -z "$BASE" ]; then
-  BASE="origin/main"
+  BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+else
+  BASE=$("$SCRIPT_DIR/resolve-diff-base.sh" --repo-root "$REPO_ROOT" \
+    --remote-ref "$BASE" --at-remote-tip first-parent)
 fi
 
-if ! CHANGED=$(git diff --name-only "$BASE"...HEAD); then
-  echo "ERROR: could not diff against $BASE" >&2
+if ! CHANGED=$(git -C "$REPO_ROOT" diff --name-only "$BASE"..HEAD); then
+  echo "ERROR: could not diff ${BASE}..HEAD in $REPO_ROOT" >&2
   exit 1
 fi
 
