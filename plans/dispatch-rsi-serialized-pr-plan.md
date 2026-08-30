@@ -3382,8 +3382,12 @@ invent one.
 > `validate-graph.ts` also runs `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`), which scans `statement`,
 > `rationale`, `attention.rationale`, every `clarifications[].answer` and the
-> body — so a prose id that resolves to neither a live nor a pruned node fails
-> the check.
+> body. A prose id fails that check only when it clears every exemption: it
+> resolves to neither a live nor a **pruned** node, is not a planned forward
+> reference (`mentionsRef`), and is not grandfathered by
+> `packages/intentionsutil/prose-ref-baseline.json`. This id is pruned, so it
+> resolves and the check passes today — the repair is prose accuracy, not a
+> green-CI requirement.
 > The node itself was pruned by `20b0432c` at `status: codified`,
 > `phase: review`, `pr: 2923`, and its work shipped. Only the **rename** half of
 > the "coordinated adjacent PRs" pair is outstanding, and that is this PR.

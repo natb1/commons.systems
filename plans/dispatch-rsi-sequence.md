@@ -56,9 +56,9 @@
 > **The citation list above names two non-`intentions/` sites, and both already
 > read past-tense — the outstanding repair scope is the 9 `intentions/` sites
 > (re-measured 2026-08-30).** Of those two, PR17 Unit 6 is wrapped in the
-> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4521-4533`,
+> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4525-4537`,
 > and `.claude/skills/align-audit/SKILL.md` (a skill, not a plan) was fixed in
-> the E22 commit, as `:4533` there records. Do not read "two" as the whole
+> the E22 commit, as `:4537` there records. Do not read "two" as the whole
 > non-`intentions/` grep result: `LC_ALL=C git grep -a -l
 > 'tactic-graph-digest-tooling' origin/main` returns nine files, four of them
 > outside `intentions/` — those two, this index file's own census, and
@@ -80,10 +80,14 @@
 > human reader takes it for a live blocker (the node's real `blocked_by` is
 > `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
 > `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
-> `:47`), in `rationale:` (`:11`) — a **double-quoted multi-line scalar**, not a
-> `|`/`>` block scalar, so any repair text containing a `"` must be escaped `\"`
-> (the field carries no escaped quote today). Repair it as a frontmatter field
-> edit, which `graph-commit` merges structurally. It is **not** unread by
+> `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
+> not a `|`/`>` block scalar. Repair it as a frontmatter field edit
+> (`write-node.ts` → `graph-commit`, which merges frontmatter structurally) and
+> pass the repair text **raw**: `writeNode` re-serializes the whole node through
+> the YAML emitter (`packages/intentionsutil/src/store.ts:61`), which picks the
+> scalar style and escapes any `"` itself. Hand-escaping `\"` there lands a
+> literal backslash in the field; only a by-hand edit of the YAML text needs the
+> escape, and the field carries no escaped quote today. It is **not** unread by
 > tooling either: `validateGraphProseRefs`
 > (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
 > `attention.rationale`, every `clarifications[].answer` and the body. Repair
