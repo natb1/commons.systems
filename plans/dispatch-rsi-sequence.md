@@ -1016,9 +1016,14 @@ cannot:
 Four standing grants from the author, so the batch never stalls on an
 approval it already has:
 
-1. **Auto-merge on green.** The batch merges each PR to `main` once CI is
-   green, strictly serial in position order, runs the closing batch, then
-   starts the next position. No per-PR merge approval is needed.
+1. **Auto-merge on green, but never before the review gate settles.** The batch
+   merges each PR to `main` once CI is green, strictly serial in position
+   order, runs the closing batch, then starts the next position. No per-PR
+   merge approval is needed. **Arming auto-merge before the code-review gate
+   has settled defeats the gate** — that is exactly how PR #3140 merged
+   unreviewed on 2026-08-30, auto-merge having fired the instant CI went green;
+   the retroactive review then found a real injection defect. See
+   §"The code-review gate" below for what "settled" means.
 2. **Graph and planning writes are pre-authorized.** Park clears whose ruling
    is already recorded, node closures the plan names, and planning-document
    updates are the batch's to make; the author's standing instruction is that
@@ -1033,6 +1038,80 @@ approval it already has:
    any subagent death and is reviewable.
 4. **PR6's interrupt demonstration is satisfied by the accepted proxy**
    (ruling recorded in the PR6 section); Units 2–3 need no attended test.
+
+## The code-review gate — how it runs, and when it stops
+
+Every PR in this batch gets `/code-review high --fix --comment` as a **detached**
+process before it merges, via
+`.claude/skills/dispatch-propagate/scripts/dispatch-code-review --target
+<merge-base>..HEAD --out-dir tmp/code-review-<n> --effort high`. `--fix` and
+`--comment` stay on and `--model opus` is pinned. The launch call **and every
+await call** need `dangerouslyDisableSandbox: true` — a sandboxed launch gets its
+own PID namespace and the child dies.
+
+**Exit 5 is the only "not done yet"** — call again with identical args. *Every*
+other non-zero exit means no review completed, and none of them clears a PR to
+merge; exit 6 in particular ("another detached run holds this worktree's lock —
+nothing was launched") must never be fed back into the poll loop. The full
+contract is `.claude/skills/review-fix/SKILL.md:713-730`; do not re-derive it
+here (rule 3). Note the lock is taken **only** when the reviewed tree sits
+directly under a `.claude/worktrees` root
+(`.claude/skills/dispatch-propagate/scripts/dispatch-code-review:406-414`), so
+it does not serialize anything for a retroactive run made from the main
+checkout — run those strictly one at a time by hand, since two concurrent
+`--fix` runs in one tree cross-attribute each other's edits.
+
+**Four rules govern when it stops.** Parts 1–3 were adopted by the executor on
+2026-08-30 and part 4 was approved by the author the same day, after the gate
+thrashed for sixteen rounds on PR #3146.
+
+1. **Settle on blocking severity, not on zero findings.** A round is settled
+   when it produces no finding that changes behaviour, breaks an anchor, or
+   would lead an executor to a wrong action. Everything else — clarity,
+   redundancy, a sharper phrasing — is recorded on the PR and **dropped**, not
+   fixed in-branch. "Review before merge" is the standing rule; "iterate to zero
+   findings" was never part of it, and adding it is what caused the thrash.
+   Because `--fix` is on, dropping is an **action, not an omission**: the tool
+   has already written those edits into the tree before you triage, so reverting
+   them (`git checkout -- <path>`, or dropping the hunks) *is* the triage.
+   `--comment` is what leaves them recorded on the PR.
+2. **Two-strike rule on self-inflicted findings.** Track whether a finding lands
+   on text the *previous round's fix* introduced. Two consecutive rounds of that
+   mean the passage is the defect — **cut it, do not repair it again.** "Cut it"
+   is a remedy for *explanatory prose*, which is what thrashes; on a code diff
+   the same two-strike signal means the design is wrong — redesign the hunk or
+   escalate, never delete a guard or a check to silence the finding
+   (`.claude/rules/test-integrity.md`).
+3. **Cite tool behaviour, never derive it.** A plan document carries the
+   decision and a `path:line` pointer. The derivation belongs beside the code,
+   where drift is visible.
+4. **Tier by diff kind.** Code and scripts: `high` + `opus` until a round is
+   blocking-clean. **Docs-only diffs: exactly one `high` round**, triaged per
+   rule 1, then merge. The gate is never skipped — this changes its depth, not
+   its existence. This rule also **completes the definition of "settled"** that
+   grant 1 defers to: for code, settled means a blocking-clean round; for a
+   docs-only diff, settled means that one round has been triaged, whether or not
+   it was blocking-clean, with any blocking finding fixed in-branch and merged
+   without a second round. Rule 4 wins where the two readings differ — a
+   docs-only diff never earns a second round on the strength of rule 1 alone.
+
+**Why, in one measurement.** PR #3146's findings per round ran
+`11, 6, 5, 2, 1, 2, 4, 4, 6, 2, 3, 2, 2, 1, 3, 2` — 56 across 16 rounds, with no
+downward trend. Rounds 1–3 found genuine latent defects. **Rounds 4–16 were all
+one paragraph of explanatory prose**, and every recurrence was a derived claim
+about tool behaviour refuted by a finer measurement of a tool that had not
+changed. One sentence was wrong in seven consecutive rounds *in both
+directions* — round 15 restored as load-bearing a fact round 16 measured as
+false. Prose that derives semantics has no fixed point to iterate toward: each
+fix is new unreviewed prose of the same kind, so the reviewed surface grows as
+fast as it is cleaned. Code review converges because tests, types and behaviour
+anchor it; nothing anchored that.
+
+Rule 2's trigger fired at round 6. Honoring it would have saved ten rounds and
+roughly 75 minutes of `opus`-`high` review on one paragraph, which was still
+factually wrong when it was finally cut.
+
+---
 
 ## Parallelism, for a batch executor
 
