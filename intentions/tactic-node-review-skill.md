@@ -168,7 +168,21 @@ reviewed stamp; sitting-outcome metadata (learned/reinforcement, frontier
 extensions); graft-edge readability for the capture derivation; and the
 enforcing lint (a pending-review stamp survives revision of its content — never
 silently doctrine or declined). Weight tables for the capture function's
-position/state gradients are schema detail and land here too.
+position/state gradients are schema detail and land here too. The lint also
+carries the migration's drain rule (author-directed): NULL is a valid state
+only while legacy declarations remain; upon draining them all, null becomes an
+invalid value and the lint forbids it.
+
+**Skill name (author-chosen, 2026-08-30 migration round): /exetasis** — the
+Socratic examination (ho anexetastos bios, Apology 38a), chosen by the author
+over the recommended /examen. A NEW function, distinct from the deprecated
+/align-audit; this node's id stays as-is. /exetasis IS the wholesale review:
+its whole-graph coverage over cycles is the sole re-entry path for
+review-declined content — no second mechanism (author-ratified, including that
+merge). Queue semantics under the legacy-null migration: every decision
+recorded before the three-state model carries state null (not doctrine);
+'unreviewed' includes all of it, and 'touched' means a reviewed stamp from
+/exetasis exists.
 
 **Capture call-out scope (author-directed refinement, restored post-review):**
 the author's replacement for the rejected virtue-alarm was that this skill "can

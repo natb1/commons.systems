@@ -546,9 +546,12 @@ clarifications:
       DELEGATED-REVIEW-DECLINED (Claude-owned, reached only by a wholesale
       review of all graph doctrine and delegations — the author's verbatim
       carve-out; where that wholesale review lives (the /align-audit remit, or
-      its own mechanism) is an OPEN ITEM recorded 2026-08-30 post-review, owed
-      to the stamp-schema sitting). Tradition and delegation nodes are MOUNT
-      POINTS — never doctrine; they serve as reference for delegated decisions
+      its own mechanism) was an open item recorded 2026-08-30 post-review and is
+      RESOLVED the same day (author-ratified): the wholesale review is the same
+      /exetasis sitting mechanism — its whole-graph coverage over cycles is the
+      wholesale review; no second mechanism exists (see the legacy-null
+      migration clarification)). Tradition and delegation nodes are MOUNT POINTS
+      — never doctrine; they serve as reference for delegated decisions
       (strategy-graph-mounts). The floor is RETIRED — the model supersedes it:
       any decision may be delegated, but delegation depth is PRICED, not
       forbidden — a delegated decision on a virtue is a stronger capture signal
@@ -626,6 +629,34 @@ clarifications:
       retired floor; the wholesale-review mechanism's home; and reconciling
       mounts-are-never-doctrine with kind-tradition's codified vocabulary and
       the curriculum's enrollment of traditions/delegations as review subjects."
+  - question: How does content recorded before the three-state model migrate into
+      it, and what is the wholistic review skill?
+    answer: "Author-ratified 2026-08-30 (post-review interview round). MIGRATION
+      (brownfield path to the three-state model): every decision recorded before
+      the model existed carries state NULL — neither author-ratified,
+      delegated-pending-review, nor delegated-review-declined; NOT doctrine;
+      subject to review. Null content becomes doctrine only by review, through
+      exactly two paths: (1) the /exetasis sitting touching its node, or (2)
+      /align ratifying it when minting adjacent doctrine. NULL IS TRANSITIONAL
+      (author-directed, verbatim intent): upon draining all legacy declarations,
+      null becomes an INVALID value for the category — the stamp-schema lint
+      forbids it post-drain. /EXETASIS (author-chosen name, over the recommended
+      /examen; Socratic exetasis — ho anexetastos bios, Apology 38a): the
+      wholistic review skill, a NEW function defined this session, distinct from
+      the deprecated /align-audit. It is the node-review sitting itself — one
+      mechanism, invoked by the virtual review node on the office-hours queue,
+      focused on the highest-priority node not yet touched by the skill (no
+      reviewed stamp), folding in explicitly deferred reviews (tradition
+      readings) at the relevant node. Its whole-graph coverage over cycles IS
+      the wholesale review of all graph doctrine and delegations — the sole
+      re-entry path for review-declined content, ratified including that merge
+      (the round's load-bearing parsimony move, flagged as Claude's inference
+      and ratified explicitly). Same round, under this rule's own
+      adjacent-doctrine path: the legacy human-authored-substance condition on
+      this node was amended to three-state form (strategy-graph-mounts'
+      inherited condition amended to match), and kind-tradition's codified
+      vocabulary was re-scoped to reference-accuracy (mounts reviewed for
+      faithful reporting and capture pricing, never doctrine status)."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -650,8 +681,12 @@ attributes:
   conditions:
     - graph maintenance stays cheap enough that nodes track reality rather than
       decorating it
-    - virtue and strategy substance stays human-authored; agent assistance is
-      drafting, not derivation
+    - virtue and strategy substance defaults to author authorship, with agent
+      assistance as drafting; delegating substance is legal under the
+      three-state model but carries a decision stamp and the capture model's
+      steepest position price (amended 2026-08-30 under the legacy-null
+      migration rule, from the legacy 'stays human-authored' form the retired
+      floor contradicted)
     - the delegatee-education claim holds only while the graph is actually
       injected into the delegatee's harness (rules, memory, node bodies, plans
       carrying graph doctrine); an injection lapse reverts the delegatee to

@@ -37,12 +37,11 @@ rationale: >-
   Recorded 2026-07-04 interview (the first strategy-philosophical-grounding
   round).
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
   - question: What does status mean on a tradition record?
-    answer: Epistemic provenance of the doctrine detail (recorded 2026-07-05
+    answer: "Epistemic provenance of the doctrine detail (recorded 2026-07-05
       interview). codified = the author has personally verified the record's
       adopted/diverged/chosen_over content against the cited texts. delegated =
       the detail is held on trust from delegation-philosophical-articulation
@@ -50,7 +49,16 @@ clarifications:
       supports are the author's, the scholarship is borrowed. Records flip
       delegated → codified one at a time as tactic-tradition-reading-program
       covers their texts; a still-delegated record's empty contradictions list
-      means unverified, not clean.
+      means unverified, not clean. AMENDED 2026-08-30 (three-state
+      reconciliation, author-ratified): status attests REFERENCE-ACCURACY only.
+      Mount points — tradition and delegation nodes — are never doctrine
+      (strategy-explicit-intent's three-state model, strategy-graph-mounts):
+      codified means the author verified the record REPORTS faithfully
+      (adopted/diverged/chosen_over accurate against the cited texts), never
+      that its content binds. The decisions a record supports carry their own
+      three-state stamps on the native nodes that made them. /exetasis reviews
+      mount records for reference-accuracy and capture pricing; their review
+      fingerprint fingerprints the record itself."
   - question: Does kind-tradition cover non-philosophical bodies of thought?
     answer: "Yes — generalized in the 2026-07-07 /align-strategy interview
       (strategy-complete-grounding): any examined body of thought — a research
@@ -114,6 +122,8 @@ attributes:
       delegation-philosophical-articulation — the decisions the record supports
       are the author's, the scholarship is borrowed
     codified: the author has personally verified the record's
-      adopted/diverged/chosen_over content against the cited texts
+      adopted/diverged/chosen_over content against the cited texts — attests
+      reference-accuracy of the record, never doctrine status (mounts are never
+      doctrine; amended 2026-08-30)
 ---
 # Tradition — an examined intellectual attachment; where philosophical alignment and divergence stay auditable

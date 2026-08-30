@@ -374,7 +374,17 @@ clarifications:
       program schedules them. PRIORITY DIRECTION (Claude-owned, under the same
       review-declined grant): 'graph position' in the priority function is the
       same root-distance weighting the capture model uses — closer to the roots
-      is reviewed sooner."
+      is reviewed sooner. AMENDED 2026-08-30 (migration round, author-ratified):
+      the sitting skill is named /EXETASIS — a new function, distinct from the
+      deprecated /align-audit. 'Unreviewed' now includes ALL legacy-null
+      content: every decision recorded before the three-state model carries
+      state null (not doctrine) until a sitting or an adjacent /align
+      ratification reaches it, so the queue's initial population is the whole
+      durable layer. 'Touched' = a reviewed stamp from /exetasis exists. The
+      skill's whole-graph coverage over cycles is also the wholesale review that
+      re-opens review-declined content — one mechanism, no second path. Null is
+      transitional: once legacy declarations drain, the stamp-schema lint
+      forbids the null state."
   - question: Why did the coverage half of the success_signal have to be replaced
       (2026-08-30)?
     answer: "(Recorded 2026-08-30 interview.) The recorded threshold was 'zero

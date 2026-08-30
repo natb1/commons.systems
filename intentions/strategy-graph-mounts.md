@@ -187,8 +187,11 @@ rounds:
 attributes:
   conditions:
     - mounted content is the author's model of the counterparty — substance
-      stays human-authored, agent assistance is drafting, extending
-      strategy-explicit-intent's authorship condition to mounts
+      defaults to author authorship with agent assistance as drafting, extending
+      strategy-explicit-intent's amended authorship condition to mounts;
+      delegating it carries a decision stamp and the capture model's steepest
+      position price (amended 2026-08-30 with the parent condition, under the
+      legacy-null migration rule)
     - mounts are modeled to the depth the audit needs — the graph including
       mounts stays enumerable and maintainable at individual scale, so
       strategy-complete-ledger's completeness sweep still fits an office-hours
