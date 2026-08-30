@@ -2173,9 +2173,22 @@ All anchors *(from node bodies — re-locate)* in
   one subprocess". `intentions/tactic-review-stall-predicate-subprocess-spawn.md`
   **refuses both by name**: *"Do not reimplement the routing rule in bash, and do
   not batch."*)*
-  - Copy `graph-select-target`'s `_gate_maybe_interrupt` guard verbatim in
-    shape: skip the spawn when
-    `[[ "$_CI_VERDICT" != "failing" && "$_CI_MERGEABLE" != "CONFLICTING" ]]`.
+  - Copy `graph-select-target`'s `_gate_maybe_interrupt` guard **in shape only,
+    rebinding its variables to this script's own names**: skip the spawn when
+    `[[ "$VERDICT" != "failing" && "$MERGEABLE" != "CONFLICTING" ]]`.
+    *(Corrected 2026-08-30.* This bullet used to say "verbatim in shape" and quote
+    the sibling's `[[ "$_CI_VERDICT" != "failing" && "$_CI_MERGEABLE" !=
+    "CONFLICTING" ]]`. Taken literally that **aborts the sweep**:
+    `reconcile-graph-review-stall` runs `set -uo pipefail` and contains **zero**
+    occurrences of `_CI_VERDICT` or `_CI_MERGEABLE` — they are
+    `_gate_maybe_interrupt`'s own globals, populated by `graph-select-target`'s
+    `_ci_read` helper — so under `set -u` the first expansion exits before any
+    candidate is routed. This sweep's normalized names are `$VERDICT` (from the
+    `case "$RAW_VERDICT"` fold) and `$MERGEABLE` (from the closed-union validation
+    `case`), which is exactly what
+    `intentions/tactic-review-stall-predicate-subprocess-spawn.md` writes in its
+    own guard block — **the node was already right; only this prose was wrong**,
+    per rule 2 of the index banner.*)
     This decides nothing — `interruptRoute`'s published doc comment and the
     exhaustive `transitions.test.ts` case named *"the shell pre-filter's superset
     invariant"* pin that the answer is `null` outside those two conditions.
