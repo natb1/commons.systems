@@ -60,15 +60,32 @@ make_temp_repo() {
   printf '%s\n' "$tmpdir"
 }
 
-# run_check REPO_DIR — run check-test-integrity.sh with CWD=repo dir.
+# run_check REPO_DIR — run check-test-integrity.sh against REPO_DIR.
 # Sets RC and STDERR for assertion helpers.
+#
+# --repo-root is REQUIRED here, not optional politeness: $CHECK_SCRIPT lives in
+# THIS repo while the fixture is a temp repo elsewhere, and the script refuses
+# to guess between the two. That refusal is the point — running one checkout's
+# copy against another used to silently diff the wrong tree, come up clean, and
+# pass. CWD is still set to the repo so nothing that reads it can drift.
+#
+# STDERR is the gate's OWN stderr: resolve-diff-base.sh's one-line provenance
+# record is split off into BASE_LINE first. Both are asserted on — STDERR by
+# assert_stderr_empty (the gate stayed silent) and BASE_LINE by
+# assert_base_source (the baseline was resolved, and by which route) — so
+# nothing is being dropped to keep a case green; the two claims are just
+# separated because they are different claims.
 RC=0
 STDERR=""
+BASE_LINE=""
 run_check() {
-  local repo="$1"
+  local repo="$1" raw
   RC=0
   STDERR=""
-  STDERR=$(cd "$repo" && "$CHECK_SCRIPT" 2>&1 >/dev/null) || RC=$?
+  BASE_LINE=""
+  raw=$(cd "$repo" && "$CHECK_SCRIPT" --repo-root "$repo" 2>&1 >/dev/null) || RC=$?
+  BASE_LINE=$(printf '%s\n' "$raw" | grep '^resolve-diff-base: ' || true)
+  STDERR=$(printf '%s\n' "$raw" | grep -v '^resolve-diff-base: ' || true)
 }
 
 # assert_exit EXPECTED_RC DESCRIPTION
@@ -111,6 +128,24 @@ assert_stderr_empty() {
     echo "FAIL: $desc — expected silent output, got:"
     printf '%s\n' "$STDERR" | sed 's/^/    /'
   fi
+}
+
+# assert_base_source EXPECTED_SOURCE DESCRIPTION — assert the baseline was
+# resolved, and by the expected route. "merge-base" is the ordinary branch
+# case; "first-parent" is the push-to-main shape, where the whole point is
+# that a baseline exists at all.
+assert_base_source() {
+  local expected="$1" desc="$2"
+  TOTAL=$((TOTAL + 1))
+  case "$BASE_LINE" in
+    *"source=$expected"*)
+      PASS=$((PASS + 1))
+      ;;
+    *)
+      FAIL=$((FAIL + 1))
+      echo "FAIL: $desc — expected source=$expected, got: ${BASE_LINE:-<no provenance line>}"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -1084,6 +1119,89 @@ run_check "$REPO"
 assert_exit 1 "(t) symbol-granular credit: exit 1"
 assert_stderr_contains "Test-integrity violation" "(t) symbol-granular credit: remediation text present"
 assert_stderr_contains "Signal 2" "(t) symbol-granular credit: Signal 2 fires"
+
+# ---------------------------------------------------------------------------
+# Case (u): THE PUSH-TO-MAIN SHAPE — the defect this whole change exists for.
+#
+# Every case above cuts a feature branch, which is the one shape where
+# `origin/main...HEAD` happened to work. On a push to `main`, actions/checkout
+# leaves refs/remotes/origin/main pointing AT the pushed commit, so
+# merge-base(origin/main, HEAD) == HEAD and the three-dot range expands to
+# HEAD..HEAD — EMPTY. The `[ -z "$DIFF" ]` early return then reported success.
+#
+# Before the fix: exit 0. Deleting a test file in a commit pushed to main
+# passed this required gate in silence. After: --at-remote-tip first-parent
+# resolves the baseline to HEAD^1 ("what this push introduced"), the deletion
+# is visible, and the gate fires.
+#
+# make_main_push_repo builds make_temp_repo's shape with the
+# `checkout -q -b feature` OMITTED, so HEAD stays on main and origin/main is
+# moved onto the tip commit.
+# ---------------------------------------------------------------------------
+make_main_push_repo() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  TMPDIRS+=("$tmpdir")
+
+  git -C "$tmpdir" init -q -b main
+  git -C "$tmpdir" config user.email "test@test.local"
+  git -C "$tmpdir" config user.name "Test"
+
+  printf 'export const x = 1;\n' > "$tmpdir/src.ts"
+  cat > "$tmpdir/feat.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('works', () => { expect(1).toBe(1); });
+EOF
+  git -C "$tmpdir" add src.ts feat.test.ts
+  git -C "$tmpdir" commit -q -m "initial"
+
+  # The pushed commit: delete the test file, keep its implementation. No branch
+  # is cut — HEAD is main, exactly as on a push.
+  git -C "$tmpdir" rm -q "$tmpdir/feat.test.ts"
+  git -C "$tmpdir" commit -q -m "the push: delete a test"
+
+  # actions/checkout's post-push state.
+  git -C "$tmpdir" update-ref refs/remotes/origin/main "$(git -C "$tmpdir" rev-parse HEAD)"
+
+  printf '%s\n' "$tmpdir"
+}
+
+echo "--- case (u): push-to-main test deletion → flag (was a silent exit 0) ---"
+REPO=$(make_main_push_repo)
+
+# The reproduction, asserted rather than asserted-about: the range this gate
+# used to carry sees nothing at all in this state.
+TOTAL=$((TOTAL + 1))
+OLD_RANGE_FILES=$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD' | grep -c . || true)
+if [ "$OLD_RANGE_FILES" -eq 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (u) reproduction: expected the old three-dot range to be empty, got $OLD_RANGE_FILES files"
+fi
+
+run_check "$REPO"
+assert_base_source "first-parent" "(u) push-to-main: baseline resolved via first-parent"
+assert_exit 1 "(u) push-to-main: exit 1"
+assert_stderr_contains "Test-integrity violation" "(u) push-to-main: remediation text present"
+assert_stderr_contains "Signal 2" "(u) push-to-main: Signal 2 fires"
+assert_stderr_contains "feat.test.ts" "(u) push-to-main: names the deleted test file"
+
+# ---------------------------------------------------------------------------
+# Case (v): a clean push to main stays green — the fix must not flag every push.
+# ---------------------------------------------------------------------------
+echo "--- case (v): clean push to main → exit 0 ---"
+REPO=$(make_main_push_repo)
+git -C "$REPO" checkout -q HEAD~1 -- feat.test.ts
+printf 'export const y = 2;\n' >> "$REPO/src.ts"
+git -C "$REPO" add src.ts feat.test.ts
+git -C "$REPO" commit -q -m "the push: restore the test, touch impl"
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+
+run_check "$REPO"
+assert_base_source "first-parent" "(v) clean push: baseline resolved via first-parent"
+assert_exit 0 "(v) clean push: exit 0"
+assert_stderr_empty "(v) clean push: silent"
 
 # ---------------------------------------------------------------------------
 # Summary

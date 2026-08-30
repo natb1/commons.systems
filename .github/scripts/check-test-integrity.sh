@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Check for test-integrity violations in the current PR vs origin/main.
+# Check for test-integrity violations in the current PR vs the resolved
+# baseline (origin/main on a branch, HEAD^1 on a push to main).
 #
 # Three signals — all measured as NET changes across the whole diff so a
 # test moved between files within a single PR nets to zero:
@@ -25,7 +26,13 @@
 # Exit contract: 0 = clean, 1 = violation. Silent on clean pass.
 # On violation: cat >&2 <<EOF remediation block (mirrors check-playwright-version-sync.sh).
 #
-# Requires: git, grep, bash (no node/nix/npm needed — git diff + grep only).
+# Usage: check-test-integrity.sh [--repo-root <dir>]
+#   --repo-root names the checkout to check. It defaults to the repo containing
+#   the CWD, and a divergence between that and the repo this script file lives
+#   in is a hard error naming the flag.
+#
+# Requires: git, grep, bash, and the sibling resolve-diff-base.sh (also pure
+# bash + git — no node/nix/npm needed).
 set -euo pipefail
 
 # Test file globs passed as pathspecs to git diff.
@@ -37,15 +44,70 @@ TEST_GLOBS=(
 )
 
 # ---------------------------------------------------------------------------
+# Baseline resolution — see resolve-diff-base.sh.
+#
+# This gate's whole job is to notice a deleted or disabled test, so a vacuous
+# EMPTY diff is the one outcome it must never produce silently. It used to spell
+# its range `origin/main...HEAD` in six places; on a push to `main`
+# actions/checkout leaves origin/main pointing AT the pushed commit, so all six
+# expanded to HEAD..HEAD, the `[ -z "$DIFF" ]` check below returned exit 0, and
+# deleting a test file in a commit pushed to main passed this gate in silence.
+# --at-remote-tip first-parent asks what the push introduced.
+#
+# The tree is NAMED (--repo-root, then -C on every diff) rather than inherited
+# from the process CWD: this script had no repo root at all and was entirely
+# cwd-relative, so invoking it by absolute path from another checkout diffed
+# that checkout instead — usually clean, hence empty, hence green.
+# ---------------------------------------------------------------------------
+REPO_ROOT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --repo-root)
+      if [ "$#" -lt 2 ]; then
+        echo "check-test-integrity: --repo-root requires an argument" >&2
+        exit 1
+      fi
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    *)
+      echo "check-test-integrity: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# SCRIPT_REPO_ROOT is the checkout this script FILE lives in. It locates the
+# helper — a tool, which must sit beside this script — and never decides which
+# tree to check. Those are different questions.
+SCRIPT_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+RESOLVE_DIFF_BASE="$SCRIPT_REPO_ROOT/.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh"
+
+if [ -z "$REPO_ROOT" ]; then
+  if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-test-integrity: could not resolve a repo root from $PWD" >&2
+    echo "  pass --repo-root to name the tree to check" >&2
+    exit 1
+  fi
+  if [ "$SCRIPT_REPO_ROOT" != "$REPO_ROOT" ]; then
+    echo "check-test-integrity: script lives in $SCRIPT_REPO_ROOT but the CWD resolves to $REPO_ROOT;" >&2
+    echo "  pass --repo-root to name the tree to check" >&2
+    exit 1
+  fi
+fi
+
+DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+
+# ---------------------------------------------------------------------------
 # Capture diff — exit clearly on failure (never silently narrow to HEAD~1).
 # ---------------------------------------------------------------------------
 DIFF=""
-if ! DIFF=$(git diff --unified=0 origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>&1); then
+if ! DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}" 2>&1); then
   cat >&2 <<EOF
-ERROR: check-test-integrity: 'git diff origin/main...HEAD' failed.
+ERROR: check-test-integrity: 'git diff ${DIFF_BASE}..HEAD' failed in $REPO_ROOT.
 
-This is a required blocking gate. The diff against origin/main must be
-computable. CI checks out with fetch-depth: 0 so origin/main is always
+This is a required blocking gate. The diff against the resolved baseline must
+be computable. CI checks out with fetch-depth: 0 so origin/main is always
 present. If this is a local run, fetch first:
 
   git fetch origin main
@@ -133,7 +195,7 @@ fi
 # ---------------------------------------------------------------------------
 # Signal 3: Whole test-file deletion
 # ---------------------------------------------------------------------------
-DELETED_FILES=$(git diff --diff-filter=D --name-only origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>/dev/null || true)
+DELETED_FILES=$(git -C "$REPO_ROOT" diff --diff-filter=D --name-only "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}")
 
 # ---------------------------------------------------------------------------
 # Co-deletion exemption: a test file deleted alongside its implementation file
@@ -154,13 +216,17 @@ NON_EXEMPT_DELETED=()
 BASENAME_EXEMPT_FILES=()
 
 if [ -n "$DELETED_FILES" ]; then
-  DELETED_IMPL=$(git diff --diff-filter=D --name-only origin/main...HEAD 2>/dev/null \
+  DELETED_ALL=$(git -C "$REPO_ROOT" diff --diff-filter=D --name-only "$DIFF_BASE"..HEAD)
+  # The `|| true` below guards ONLY grep's no-match exit, never the git call:
+  # under `set -o pipefail` a single `|| true` on the whole pipeline made a git
+  # failure indistinguishable from "no implementation files were deleted".
+  DELETED_IMPL=$(printf '%s\n' "$DELETED_ALL" \
     | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx)$' || true)
   while IFS= read -r test_file; do
     [ -z "$test_file" ] && continue
     base_name=$(basename "$test_file" | sed -E 's/\.(test|spec)\.(ts|tsx|js|jsx)$//')
     if printf '%s\n' "$DELETED_IMPL" | grep -qE "(^|/)${base_name}\.(ts|tsx|js|jsx)$"; then
-      FILE_DIFF=$(git diff --unified=0 origin/main...HEAD -- "$test_file" 2>/dev/null || true)
+      FILE_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$test_file")
       if [ -n "$FILE_DIFF" ]; then
         FILE_REMOVED=$(printf '%s\n' "$FILE_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
         if [ -n "$FILE_REMOVED" ]; then
@@ -402,9 +468,11 @@ function flush() { if (in_block && block_refs) credited++ }
 END { flush(); print credited + 0 }
 '
 
-# Candidate test files changed vs origin/main (Modified files too, not just
-# deletions). || true guards set -e if the diff is empty.
-IMPORT_CANDIDATES=$(git diff --name-only origin/main...HEAD -- "${TEST_GLOBS[@]}" 2>/dev/null || true)
+# Candidate test files changed vs the resolved baseline (Modified files too,
+# not just deletions). An empty diff is a zero exit, so this needs no guard —
+# and the `|| true` it used to carry hid a genuine git failure as "no
+# candidates".
+IMPORT_CANDIDATES=$(git -C "$REPO_ROOT" diff --name-only "$DIFF_BASE"..HEAD -- "${TEST_GLOBS[@]}")
 
 while IFS= read -r F; do
   [ -z "$F" ] && continue
@@ -420,7 +488,7 @@ while IFS= read -r F; do
 
   # Per-file net-removal filter: only files that net-remove declarations have
   # anything to exempt. Mirror the comment-exclusion filters at :78/:160.
-  F_DIFF=$(git diff --unified=0 origin/main...HEAD -- "$F" 2>/dev/null || true)
+  F_DIFF=$(git -C "$REPO_ROOT" diff --unified=0 "$DIFF_BASE"..HEAD -- "$F")
   [ -z "$F_DIFF" ] && continue
   F_REMOVED=$(printf '%s\n' "$F_DIFF" | grep '^-' | grep -v '^---' | grep -vE '^-[[:space:]]*//' || true)
   F_ADDED=$(printf '%s\n' "$F_DIFF" | grep '^+' | grep -v '^+++' | grep -vE '^\+[[:space:]]*//' || true)
