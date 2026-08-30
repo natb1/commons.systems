@@ -619,13 +619,22 @@ while IFS= read -r F; do
     # anything else = git failed. A blanket `|| true` here would render a
     # failure indistinguishable from "absent", and absent is the direction that
     # WRONGLY EXEMPTS — the one bias this whole block says it must never take.
+    #
+    # git's stderr is NOT redirected. It was `2>/dev/null` back when the call
+    # carried `|| true` and nothing downstream cared why it failed; now that
+    # rc > 1 aborts a REQUIRED gate, discarding the reason would leave the
+    # operator with a bare `rc=128` and no diagnosis — the same buried-error
+    # shape the DIFF capture above and get-changed-apps.sh's merge-base capture
+    # both exist to avoid. rc 0 and rc 1 write nothing, so nothing is added to
+    # the log on the ordinary paths.
     set +e
-    X_FILES=$(git -C "$REPO_ROOT" grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}" 2>/dev/null)
+    X_FILES=$(git -C "$REPO_ROOT" grep -lF -e "$X" HEAD -- "${EXCLUDE_PATHSPECS[@]}")
     x_grep_rc=$?
     set -e
     if [ "$x_grep_rc" -gt 1 ]; then
       echo "ERROR: check-test-integrity: 'git grep' failed (rc=$x_grep_rc) in $REPO_ROOT" >&2
       echo "  while checking whether the removed-import symbol '$X' still exists." >&2
+      echo "  git's own error is immediately above this message." >&2
       exit 1
     fi
     [ -z "$X_FILES" ] && continue   # X mentioned nowhere ⇒ absent

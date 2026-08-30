@@ -46,8 +46,12 @@
 #       script file lives in is a hard error naming the flag — running one
 #       checkout's copy of this script against a different checkout is a
 #       routine dispatch pattern, but only safe when the target is named.
-#       run-lint.sh:229 passes it explicitly, mirroring what it already does
-#       for lint-verify-fence-paths.sh at :179.
+#       run-lint.sh passes it explicitly at its call site for this script,
+#       mirroring what it already does at its lint-verify-fence-paths.sh call
+#       site. Cited by construct rather than by line number on purpose: the
+#       line-numbered form of these two anchors went stale in consecutive
+#       review rounds, because every edit to run-lint.sh shifts them and the
+#       citation has no way to notice.
 #
 #   check-type-safety-escapes.sh --scan-stdin
 #       Core path. Reads a unified diff on STDIN and scans it; no git state is
@@ -204,7 +208,8 @@ RESOLVE_DIFF_BASE="$SCRIPT_REPO_ROOT/.claude/skills/dispatch-propagate/scripts/r
 
 if [ -z "$REPO_ROOT" ]; then
   # Default to the CALLER's CWD, with a divergence guard — the same contract
-  # lint-verify-fence-paths.sh:168-181 and resolve-diff-base.sh apply. This
+  # lint-verify-fence-paths.sh's own --repo-root default and
+  # resolve-diff-base.sh apply. This
   # script used to pin the tree to its own on-disk location unconditionally,
   # so `repoA/.github/scripts/check-type-safety-escapes.sh` run from repoB
   # scanned repoA: usually clean, hence an empty diff, hence a vacuous pass.
@@ -251,7 +256,8 @@ fi
 # `origin/main...HEAD` range was EMPTY and the `[ -z "$diff_output" ]` self-noop
 # below turned that into exit 0. --at-remote-tip first-parent because this
 # sensor runs on pushes to `main` too, unconditionally, inside the REQUIRED
-# `lint` job (run-lint.sh:229) as well as the type-safety-sensor jobs.
+# `lint` job (run-lint.sh's call site for this script) as well as the
+# type-safety-sensor jobs.
 DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
 
 # Diff the new side of TS/JS changes only. --diff-filter=d drops deletions so

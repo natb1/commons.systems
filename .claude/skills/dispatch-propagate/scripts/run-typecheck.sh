@@ -122,8 +122,16 @@ git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || \
 #
 # --at-remote-tip first-parent asks the right question there: compare against
 # what the tree looked like BEFORE this push (HEAD^1). On a branch, HEAD is not
-# contained in origin/main, so the helper returns the ordinary merge-base and
-# behavior is unchanged.
+# contained in origin/main, so the helper returns the ordinary merge-base.
+#
+# That is NOT the old behavior, and this comment used to claim it was. The
+# baseline was origin/main's TIP; it is now the fork point. The move is what
+# makes the regression/pre-existing split attributable to THIS branch, but it
+# carries a cost worth stating: a branch forked at a commit where a workspace
+# was broken, and that main has since fixed, now fails the baseline probe and
+# lands in SKIPPED_BASELINE — so that workspace is not typechecked at all, and
+# a new error the branch introduces there goes unreported. The skip is
+# announced by the WARNING below rather than silent, but it is still a skip.
 #
 # No fallback (.claude/rules/code-style.md): a baseline this script cannot
 # justify would silently downgrade every workspace to the "new workspace"

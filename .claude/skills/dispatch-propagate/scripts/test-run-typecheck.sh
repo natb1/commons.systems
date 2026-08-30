@@ -306,7 +306,10 @@ assert_contains "good --app: workspace reported as passing" "ws: typecheck passe
 #
 # Note this test stays on `main` with origin/main == HEAD; every other test in
 # this file runs from a feature branch, where the resolved base is the ordinary
-# merge-base and behavior is unchanged.
+# merge-base. That equivalence is a property of THESE fixtures, not a general
+# rule: make_repo() pushes main and then branches, and main never advances
+# afterwards, so the fork point and origin/main's tip coincide. See the
+# baseline comment in run-typecheck.sh for where they diverge.
 echo "Test 10: HEAD == origin/main (push to main) -> regression detected, not skipped"
 REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
 BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
