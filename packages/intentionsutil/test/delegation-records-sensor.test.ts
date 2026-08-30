@@ -8,10 +8,11 @@ import { SensorRegistry, deriveGap } from "../src/sensors.js";
 import { listNodes, readNode, writeNode } from "../src/store.js";
 import type { IntentionNodeInput } from "../src/schema.js";
 import {
+  EXERCISE_RECOVERY_PATHS_MET_READING,
   buildDefaultRegistry,
   makeDelegationRecordsSensor,
   readDelegationRecords,
-  readDelegationRecordsReading,
+  readExerciseRecoveryPathsReading,
   readStoreSensors,
   renderDelegationRecordsReport,
 } from "../scripts/read-sensors.js";
@@ -140,8 +141,18 @@ describe("readDelegationRecords", () => {
   });
 });
 
-describe("readDelegationRecordsReading", () => {
-  it("counts exercised, declined-class, and oldest last_assessed", () => {
+// The declined-origin rule, asserted against the reader that actually lands a
+// reading on a node. These two cases were written for the id-blind
+// `readDelegationRecordsReading`, which had zero production callers and has now
+// been deleted; they are RETARGETED here rather than removed, because they hold
+// the only assertions of the declined-origin rule in the repo. The rule is
+// load-bearing, not cosmetic: a `origin: declined` delegation was never entered,
+// so its `last_exercised` can never be set, and counting it as unexercised makes
+// this strategy's absolute threshold permanently unsatisfiable.
+const PINNED_NOW = new Date("2026-07-11T00:00:00Z");
+
+describe("readExerciseRecoveryPathsReading", () => {
+  it("counts exercised over ACTIVE records and breaks out the declined class", () => {
     const dir = tempStore();
     writeNode(
       dir,
@@ -160,25 +171,88 @@ describe("readDelegationRecordsReading", () => {
       }),
     );
 
-    const reading = readDelegationRecordsReading(dir, new Date("2026-07-11T00:00:00Z"));
+    const reading = readExerciseRecoveryPathsReading(dir, PINNED_NOW);
+    // 3 records, 1 declined → 2 active, 1 of them exercised, 1 null. The
+    // declined record is in neither the numerator nor the null count.
     expect(reading).toBe(
-      "1 of 3 delegation records exercised (last_exercised set); " +
-        "1 declined-origin (no entered path to exercise); " +
-        "oldest last_assessed 2026-06-20 (sensor read 2026-07-11)",
+      "exercised: 1/2 active records (1 declined-origin excluded); 1 null last_exercised; " +
+        "review_trigger firing not recorded (sensor read 2026-07-11)",
     );
     rmSync(dir, { recursive: true, force: true });
   });
 
   it("never counts a declined record as unexercised (its own class)", () => {
     const dir = tempStore();
-    // Only a declined record: 0 exercised, 1 declined — not 1 unexercised.
+    // Only a declined record: 0 active, 1 declined — not 1 unexercised.
     writeNode(
       dir,
       delegationNode("delegation-declined", { origin: "declined", lastExercised: null }),
     );
-    const reading = readDelegationRecordsReading(dir, new Date("2026-07-11T00:00:00Z"));
-    expect(reading).toContain("0 of 1 delegation records exercised");
-    expect(reading).toContain("1 declined-origin");
+    const reading = readExerciseRecoveryPathsReading(dir, PINNED_NOW);
+    expect(reading).toContain("1 declined-origin excluded");
+    expect(reading).toContain("0 null last_exercised");
+    expect(reading).not.toContain("1 null last_exercised");
+    // ...and a store with no ACTIVE record is never reported met: "every active
+    // record is exercised" is vacuously true over zero records, and a green off
+    // zero measured paths would be a false all-clear.
+    expect(reading).not.toBe(EXERCISE_RECOVERY_PATHS_MET_READING);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("emits the canonical date-free MET literal once every ACTIVE record is exercised", () => {
+    const dir = tempStore();
+    writeNode(dir, delegationNode("delegation-a", { lastExercised: "2026-06-30" }));
+    writeNode(dir, delegationNode("delegation-b", { lastExercised: "2026-07-01" }));
+    // The declined record stays null forever and must NOT hold the met state back.
+    writeNode(
+      dir,
+      delegationNode("delegation-declined", { origin: "declined", lastExercised: null }),
+    );
+
+    const reading = readExerciseRecoveryPathsReading(dir, PINNED_NOW);
+    // Hardcoded, not derived from the exported constant: this is the byte-exact
+    // string that must be copied into `success_signal.threshold`, and asserting
+    // it against the constant would pass for any value the constant took.
+    expect(reading).toBe(
+      "exercised: every non-declined delegation record has last_exercised set; " +
+        "review_trigger firing not recorded",
+    );
+    // No date, no counts — the two things that make a reading unable to equal a
+    // fixed threshold.
+    expect(reading).not.toMatch(/\d/);
+    // The exported constant is the same literal, so a node authored from it is
+    // authored from what the sensor emits.
+    expect(EXERCISE_RECOVERY_PATHS_MET_READING).toBe(reading);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("MET state drives deriveGap to null on a node whose threshold is that literal", () => {
+    // The assertion that proves the whole unit: `deriveGap` is trimmed,
+    // case-insensitive string EQUALITY, so a met state is only reachable if the
+    // reader emits a fixed literal a threshold can equal.
+    const dir = tempStore();
+    writeNode(dir, delegationNode("delegation-a", { lastExercised: "2026-06-30" }));
+    writeNode(
+      dir,
+      delegationNode("delegation-declined", { origin: "declined", lastExercised: null }),
+    );
+    writeNode(dir, {
+      ...strategyNode("strategy-exercise-recovery-paths"),
+      success_signal: {
+        observable: "last_exercised on every delegation record",
+        sensor: DELEGATION_SENSOR_NAME,
+        threshold: EXERCISE_RECOVERY_PATHS_MET_READING,
+        is_proxy: false,
+      },
+    });
+
+    const registry = new SensorRegistry();
+    registry.register(makeDelegationRecordsSensor(() => listNodes(dir), dir, FIXED_NOW));
+    readStoreSensors(dir, registry);
+
+    const strategy = readNode(dir, "strategy-exercise-recovery-paths");
+    expect(strategy.reading).toBe(EXERCISE_RECOVERY_PATHS_MET_READING);
+    expect(deriveGap(strategy)).toBeNull();
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -244,10 +318,10 @@ function delegationWithDivergence(
 
 describe("makeDelegationRecordsSensor", () => {
   describe("strategy-exercise-recovery-paths branch", () => {
-    it("matches the format: exercised k/n; m null; fixed review_trigger prose", () => {
-      // Fixture store: 2 of 3 delegation records exercised, 1 null. The
-      // expectation is hardcoded from those fixtures — never derived by
-      // re-running the helper under test.
+    it("matches the UNMET format: exercised k/n active; m null; fixed review_trigger prose", () => {
+      // Fixture store: 2 of 3 delegation records exercised, 1 null, none
+      // declined. The expectation is hardcoded from those fixtures — never
+      // derived by re-running the helper under test.
       const dir = tempStore();
       writeNode(dir, delegationNode("delegation-a", { lastExercised: "2026-06-30" }));
       writeNode(dir, delegationNode("delegation-b", { lastExercised: "2026-07-01" }));
@@ -255,7 +329,7 @@ describe("makeDelegationRecordsSensor", () => {
       // A non-delegation node in the same store must not be counted.
       writeNode(dir, strategyNode("strategy-ignored"));
       const expected =
-        "exercised: 2/3 records; 1 null last_exercised; " +
+        "exercised: 2/3 active records (0 declined-origin excluded); 1 null last_exercised; " +
         `review_trigger firing not recorded (sensor read ${FIXED_READ_DATE})`;
 
       // loadNodes is irrelevant to this branch, but still supplied per the
@@ -461,11 +535,12 @@ describe("readStoreSensors end-to-end", () => {
 
     const summary = readStoreSensors(dir, registry);
     expect(summary.read).toBe(1);
+    expect(summary.written).toBe(1);
     expect(summary.unregistered).toHaveLength(0);
 
     const strategy = readNode(dir, "strategy-exercise-recovery-paths");
     expect(strategy.reading).toBe(
-      "exercised: 1/2 records; 1 null last_exercised; " +
+      "exercised: 1/2 active records (0 declined-origin excluded); 1 null last_exercised; " +
         `review_trigger firing not recorded (sensor read ${FIXED_READ_DATE})`,
     );
     // The persisted reading carries the date the router's fresh-reading gate

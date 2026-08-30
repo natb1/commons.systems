@@ -16,8 +16,39 @@
 // registered here rather than living behind an opt-in flag like the FLAGGED
 // external sensors described below.
 //
-// Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/read-sensors.ts
+// Three invocations, run from anywhere (the store dir is resolved relative to
+// this file, not cwd — see the no-`--dir` note below):
+//
+//   node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts
+//       Bare run. Reads every registered sensor and WRITES each fresh reading
+//       back into the store. This is the only form that mutates `intentions/`.
+//   node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts --dry-run
+//       (`--check` is an accepted synonym.) Pure read of every sensor, with the
+//       identical READ pass and identical reported counts. Makes NO write.
+//   node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts --report
+//       Pure read: prints the per-record delegation portfolio table. Makes NO
+//       write, reads no sensor.
+//
+// Any other argument is a usage error (stderr + exit 1) — this driver never
+// silently drops a flag it does not understand.
+//
+// THERE IS DELIBERATELY NO `--dir`. Unlike `validate-graph.ts` /
+// `write-node.ts` / `dump-node.ts` / `clear-park` (the four scripts
+// `strategy-graph-native-dispatch` clarification 242 scopes to the
+// required-explicit-tree contract of clarification 194), this driver's store is
+// FIXED to the checkout the script file itself lives in — `intentionsDir`
+// below. The reason is mechanical, not a preference: `buildDefaultRegistry`
+// takes no parameters and four registered sensors close over the module-level
+// `intentionsDir`/`repoRoot` constants (`rsiSensor`, the delegation-records
+// sensor, the ladder-terminus sensor, and the intention-store sensor). A
+// `--dir` threaded only through `readStoreSensors` would produce a run that
+// READS one store and WRITES another — strictly worse than an honest
+// single-store driver, and the exact silent-wrong-result defect this file's
+// argument handling exists to prevent. Honoring `--dir` properly means
+// parameterizing `buildDefaultRegistry` and all four closures; that is filed as
+// its own follow-on tactic, not done here. Until then the store in effect is
+// printed on every run so it is never implicit, and `--dir` is rejected by name
+// with that explanation rather than swallowed.
 //
 // SENSOR REGISTRATION PATTERN (documented once here, not enumerated per sensor):
 // A Sensor is registered under the name nodes put in `success_signal.sensor`. A
@@ -957,33 +988,12 @@ export function readDelegationRecords(dir: string): DelegationRecordReading[] {
   return records;
 }
 
-/**
- * The compact aggregate reading that lands on the strategy's `reading`. Declined
- * records (`origin: declined`) are counted as their own class — never as
- * unexercised: per the strategy's 2026-07-11 clarification and kind-delegation's
- * abstention doctrine a declined delegation has no entered path to walk, so the
- * portfolio review (not a drill) is its exercise. The denominator M is the total
- * record count so the reader sees how many of ALL records are exercised, with
- * the declined class broken out. Includes the read date so the fresh-reading
- * gate can compare against the strategy's `rounds.last_completed`.
- */
-export function readDelegationRecordsReading(dir: string, today: Date = new Date()): string {
-  const records = readDelegationRecords(dir);
-  const total = records.length;
-  const declined = records.filter((r) => r.origin === "declined");
-  const active = records.filter((r) => r.origin !== "declined");
-  const exercised = active.filter((r) => r.lastExercised !== null);
-  const oldestAssessed = records.reduce<string | null>(
-    (min, r) => (min === null || r.lastAssessed < min ? r.lastAssessed : min),
-    null,
-  );
-  const readDate = today.toISOString().slice(0, 10);
-  return (
-    `${exercised.length} of ${total} delegation records exercised (last_exercised set); ` +
-    `${declined.length} declined-origin (no entered path to exercise); ` +
-    `oldest last_assessed ${oldestAssessed ?? "none"} (sensor read ${readDate})`
-  );
-}
+// `readDelegationRecordsReading` lived here: a second, id-blind aggregate over
+// the same records that no production path ever called. Its one live idea — the
+// declined-origin class — now lives in `readExerciseRecoveryPathsReading` below,
+// which is the reading that actually lands on a node. Deleted rather than kept
+// as a spare renderer: two functions computing "how exercised is the portfolio"
+// is two answers that can drift.
 
 /** Escape a free-form prose cell so it cannot break the markdown table. */
 function escapeReportCell(value: string): string {
@@ -1009,30 +1019,76 @@ export function renderDelegationRecordsReport(dir: string): string {
 }
 
 /**
- * The `strategy-exercise-recovery-paths` branch: a plain count over ALL
- * `kind: delegation` records (no declined-origin special-casing — this
- * strategy's threshold, unlike `readDelegationRecordsReading`'s clarification-7
- * aggregate, just asks how many records have `last_exercised` set). The
- * `review_trigger firing not recorded` clause is fixed prose: there is no
- * firing/actioned surface on the records to mechanically detect a "fired
- * review_trigger left unactioned", so the reading says so rather than guessing.
+ * The canonical MET reading for `strategy-exercise-recovery-paths` — the exact
+ * string a satisfied threshold must equal.
  *
- * Ends with the read date in the same `(sensor read <YYYY-MM-DD>)` form
- * `readDelegationRecordsReading` uses, and for the same reason: the router's
- * fresh-reading gate (`readingDate`, `src/router.ts`) scrapes the newest ISO
- * date out of the reading prose and, once `rounds.last_aligned` is stamped,
- * drops any strategy whose reading carries no parseable date with a
- * `stale-reading` event — permanently and silently starving an undated strategy
- * out of align selection no matter how often the sensor re-runs.
+ * `deriveGap` (`src/sensors.ts`) is trimmed, case-insensitive STRING EQUALITY
+ * and nothing else ("Equality is the only 'met' condition — no numeric or fuzzy
+ * parsing"). So a reading that always carries live counts and the read date can
+ * never equal any fixed threshold, and the strategy's gap would stay non-null
+ * however complete the underlying work got. The met state therefore gets its
+ * own frozen, DATE-FREE, COUNT-FREE literal — the same shape
+ * `strategy-main-health` and `tactic-main-red-<sha>` use for their green
+ * readings (`readMainHealth` above), and for the same reason.
+ *
+ * Copy this literal verbatim into the node's `success_signal.threshold`; do not
+ * re-compose it by hand, or the equality silently never fires.
+ *
+ * On the missing date: the router's fresh-reading gate (`readingDate`,
+ * `src/router.ts`) drops a strategy whose reading carries no parseable date,
+ * but only once `rounds.last_aligned` is stamped, and only from ALIGN
+ * SELECTION — the queue of strategies still owing decomposition rounds. A met
+ * signal has no gap to decompose, so being passed over there is the correct
+ * outcome, not starvation. The UNMET reading below keeps the date clause,
+ * which is the state where selection matters.
  */
-function readExerciseRecoveryPathsReading(dir: string, today: Date): string {
+export const EXERCISE_RECOVERY_PATHS_MET_READING =
+  "exercised: every non-declined delegation record has last_exercised set; " +
+  "review_trigger firing not recorded";
+
+/**
+ * The `strategy-exercise-recovery-paths` branch, in two states.
+ *
+ * DECLINED-ORIGIN RECORDS ARE THEIR OWN CLASS and are never counted as
+ * unexercised. Per `kind-delegation`'s abstention doctrine and this strategy's
+ * 2026-07-11 clarification, a `origin: declined` delegation was never entered,
+ * so there is no recovery path to walk and its `last_exercised` can never be
+ * set. Counting it as unexercised makes the strategy's absolute threshold ("no
+ * record's `last_exercised` is null") permanently unsatisfiable — the rule is
+ * load-bearing, not a nicety. An earlier revision of this docstring rationalized
+ * dropping it here ("this strategy's threshold just asks how many records have
+ * `last_exercised` set"); that reasoning is overturned and must not come back.
+ *
+ * - MET (at least one active record, and no active record with a null
+ *   `last_exercised`): the frozen `EXERCISE_RECOVERY_PATHS_MET_READING` literal
+ *   above — no counts, no date, so it can equal a fixed threshold.
+ *   The "at least one active record" conjunct is deliberate: an empty or
+ *   all-declined store satisfies "every active record is exercised" vacuously,
+ *   and reporting green off zero measured paths would be a false all-clear on
+ *   exactly the condition this strategy exists to detect.
+ * - UNMET: the live counts, over ACTIVE (non-declined) records with the declined
+ *   class broken out, plus the read date the router's fresh-reading gate parses.
+ *
+ * The `review_trigger firing not recorded` clause is fixed prose in both states:
+ * there is no firing/actioned surface on the records to mechanically detect a
+ * "fired review_trigger left unactioned", so the reading says so rather than
+ * guessing.
+ */
+export function readExerciseRecoveryPathsReading(dir: string, today: Date): string {
   const records = readDelegationRecords(dir);
-  const n = records.length;
-  const k = records.filter((r) => r.lastExercised !== null).length;
-  const m = n - k;
+  const declined = records.filter((r) => r.origin === "declined");
+  const active = records.filter((r) => r.origin !== "declined");
+  const exercised = active.filter((r) => r.lastExercised !== null);
+  const unexercised = active.length - exercised.length;
+
+  if (active.length > 0 && unexercised === 0) {
+    return EXERCISE_RECOVERY_PATHS_MET_READING;
+  }
+
   const readDate = today.toISOString().slice(0, 10);
   return (
-    `exercised: ${k}/${n} records; ${m} null last_exercised; ` +
+    `exercised: ${exercised.length}/${active.length} active records ` +
+    `(${declined.length} declined-origin excluded); ${unexercised} null last_exercised; ` +
     `review_trigger firing not recorded (sensor read ${readDate})`
   );
 }
@@ -1422,8 +1478,11 @@ export function makeIntentionStoreSensor(
  *
  * The other half is NOT caught. A node PROSE reword — an `/align` round
  * rewriting some node's `success_signal.sensor` — lands through a `graph/**`
- * push, and `unit-tests.yml` declares `branches-ignore: [main, 'graph/**']`, so
- * neither the unit suite nor `graph-validate` ever runs for it. The reword
+ * push, and `unit-tests.yml` declares `branches-ignore: ['graph/**']`, so
+ * neither the unit suite nor `graph-validate` ever runs for it. (`main` was in
+ * that ignore list when this note was written; #3108 removed it, so the suite
+ * DOES now run on `main` — the `graph/**` half, which is the half this note
+ * turns on, is unchanged.) The reword
  * lands, CI is green, and the sensor reads `null` from then on with only a
  * stderr line in the fast path's `guard` log. Restoring a failing gate on that
  * half is deliberately deferred, not overlooked: the shape has to be ruled
@@ -1662,7 +1721,8 @@ export const UNBOUND_SENSOR_NAMES: ReadonlySet<string> = new Set([
 
 /** Summary of one store-sensor pass, returned for testability and printing. */
 export interface ReadSummary {
-  read: number; // nodes whose sensor was read and written back
+  read: number; // nodes whose sensor was read (counted in the READ pass, write or not)
+  written: number; // nodes whose fresh reading was persisted; 0 under `write: false`
   skippedNoSignal: number; // store nodes with no success_signal (nothing to read)
   unregistered: { id: string; sensor: string }[]; // named a sensor not in the registry
 }
@@ -1684,8 +1744,15 @@ export interface ReadSummary {
  * is a parent; strategy-exercise-recovery-paths is codified). Frontier filtering
  * stays correct for goal projection; it was only wrong as the READ scope.
  */
-export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSummary {
-  const summary: ReadSummary = { read: 0, skippedNoSignal: 0, unregistered: [] };
+export function readStoreSensors(
+  dir: string,
+  registry: SensorRegistry,
+  options: { write?: boolean } = {},
+): ReadSummary {
+  // Optional third parameter, defaulting to the historical write-through
+  // behavior, so every existing two-argument caller is unchanged.
+  const write = options.write ?? true;
+  const summary: ReadSummary = { read: 0, written: 0, skippedNoSignal: 0, unregistered: [] };
 
   // READ pass: compute every node's fresh reading against a single consistent
   // pre-run store snapshot, accumulating the updated nodes without writing any.
@@ -1696,6 +1763,10 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
   // be an artifact of node iteration order rather than a clean snapshot. With
   // no writes during this pass, every such re-read sees the same unmutated
   // pre-run store.
+  //
+  // Under `write: false` the WRITE pass below is skipped entirely and this READ
+  // pass is byte-for-byte the same work, so the reported counts are identical to
+  // a real run's — a dry run is a truthful preview, not a different measurement.
   const updates: IntentionNode[] = [];
   for (const node of listNodes(dir)) {
     if (node.success_signal === null) {
@@ -1719,12 +1790,19 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
 
     const reading = sensor.read(node);
     updates.push({ ...node, reading });
+    // Counted here, not in the WRITE loop below: a dry run reads exactly as
+    // much as a real one, and reporting `0 read` for it would be the same
+    // plausible-but-false summary this driver's argument handling exists to
+    // prevent.
+    summary.read += 1;
   }
 
   // WRITE pass: persist every updated node now that all readings are computed.
-  for (const updated of updates) {
-    writeNode(dir, updated);
-    summary.read += 1;
+  if (write) {
+    for (const updated of updates) {
+      writeNode(dir, updated);
+      summary.written += 1;
+    }
   }
 
   return summary;
@@ -1732,21 +1810,84 @@ export function readStoreSensors(dir: string, registry: SensorRegistry): ReadSum
 
 // --- Main ------------------------------------------------------------------
 
+const USAGE =
+  "usage: read-sensors.ts [--dry-run | --check | --report | --help]\n" +
+  "  (no flag)   Read every registered sensor and WRITE each fresh reading back\n" +
+  "              into the store. This is the only form that mutates the store.\n" +
+  "  --dry-run   Pure read: same sensors, same reported counts, NO write.\n" +
+  "  --check     Synonym for --dry-run.\n" +
+  "  --report    Pure read: print the delegation portfolio table. NO write.\n" +
+  "  --help, -h  Print this usage on stdout and exit 0.\n" +
+  "\n" +
+  "  There is deliberately NO --dir. This driver's store is fixed to the\n" +
+  "  checkout the script file lives in, because buildDefaultRegistry takes no\n" +
+  "  parameters and four registered sensors close over the module-level\n" +
+  "  intentionsDir/repoRoot constants; a --dir threaded only through\n" +
+  "  readStoreSensors would read one store and write another. The store in\n" +
+  "  effect is printed on every run. See the file header for the full note.\n";
+
+/**
+ * The flags this driver accepts. Exported so the happy paths are unit-testable
+ * — the failure paths below call `process.exit` and are covered by spawning the
+ * CLI instead.
+ *
+ * Rejection is by ALLOWLIST, not by `arg.startsWith("-")`: read-sensors takes no
+ * positional arguments, so ANY token outside the known set is an error. That is
+ * what makes `--dir intentions` fail loudly on `--dir` rather than swallowing
+ * both tokens and writing the wrong store — the defect this parser exists to
+ * close.
+ */
+export function parseArgs(args: string[]): { report: boolean; dryRun: boolean } {
+  let report = false;
+  let dryRun = false;
+  for (const arg of args) {
+    if (arg === "--report") {
+      report = true;
+      continue;
+    }
+    if (arg === "--dry-run" || arg === "--check") {
+      dryRun = true;
+      continue;
+    }
+    process.stderr.write(`read-sensors: unknown argument '${arg}'\n` + USAGE);
+    process.exit(1);
+  }
+  if (report && dryRun) {
+    // Neither may silently win: silent precedence between two read-only modes
+    // is the same "plausible summary for work that did not happen" family the
+    // unknown-argument rejection above closes.
+    process.stderr.write("read-sensors: --report and --dry-run are mutually exclusive\n" + USAGE);
+    process.exit(1);
+  }
+  return { report, dryRun };
+}
+
 function main(): void {
+  const args = process.argv.slice(2);
+
+  if (args.includes("--help") || args.includes("-h")) {
+    process.stdout.write(USAGE);
+    return;
+  }
+
+  const { report, dryRun } = parseArgs(args);
+
   // `--report`: print the per-record delegation portfolio table and exit. No
   // frontier read, no writes — a read-only view for the human portfolio review.
-  if (process.argv.includes("--report")) {
+  if (report) {
     process.stdout.write(renderDelegationRecordsReport(intentionsDir) + "\n");
     return;
   }
 
   const registry = buildDefaultRegistry();
-  const summary = readStoreSensors(intentionsDir, registry);
+  const summary = readStoreSensors(intentionsDir, registry, { write: !dryRun });
 
   process.stdout.write(
-    `read-sensors: ${summary.read} read/written, ` +
+    `read-sensors: ${summary.read} read, ${summary.written} written, ` +
       `${summary.skippedNoSignal} skipped (no signal), ` +
-      `${summary.unregistered.length} skipped (unregistered sensor)\n`,
+      `${summary.unregistered.length} skipped (unregistered sensor)` +
+      (dryRun ? ` (--dry-run: nothing written to ${intentionsDir})` : ` [store: ${intentionsDir}]`) +
+      "\n",
   );
 
   if (summary.unregistered.length > 0) {

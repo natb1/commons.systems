@@ -163,7 +163,7 @@ jobs:
         run: .claude/skills/dispatch-propagate/scripts/npm-ci-with-retry.sh
       - name: Validate intention graph
         if: steps.changes.outputs.graph == 'true'
-        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions --strict-sensors
 
   dead-code:
     runs-on: ubuntu-latest

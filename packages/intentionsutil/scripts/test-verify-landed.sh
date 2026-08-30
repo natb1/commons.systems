@@ -31,6 +31,13 @@
 #  10. --json emits one parseable object with the documented shape
 #  11. multi-spec: one unsatisfied spec decides the whole verdict
 #  12. the working tree is never written (no fetch-into-tree, no index touch)
+#  13. `git rev-parse origin/main` fails (a configured-but-never-fetched clone,
+#      --no-fetch) → unknown, exit 1 — the arm at verify-landed's
+#      `MAIN_SHA=...` rev-parse, distinct from case 5's fetch-failure arm
+#  14. jq-mode readNodeAtRef failure (malformed frontmatter on the node as of
+#      origin/main) → unknown, exit 1
+#  15. jq filter runtime error (a type mismatch jq itself rejects, e.g. exit 5)
+#      → unknown, exit 1, distinct from a false predicate (case 7)
 set -uo pipefail
 
 HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,6 +88,23 @@ office_hours:
   recommendation: null
 ---
 # harness node that is parked to office hours
+NODE
+
+# t-broken: invalid YAML frontmatter, so readNodeAtRef's readNode parse throws
+# — the only way to drive verify-landed's jq-mode readNodeAtRef-failure arm
+# (case 14) without editing verify-landed itself. Nothing in this harness
+# enumerates the whole store (verify-landed only ever reads ONE node at a
+# time via readNodeAtRef), so a permanently-malformed node here cannot affect
+# any other case.
+cat >"$SEED/intentions/t-broken.md" <<'NODE'
+---
+id: t-broken
+kind: tactic
+statement: [this is not valid: yaml: because of bad nesting
+owner: ai
+status: codified
+---
+# broken node — malformed frontmatter, deliberately
 NODE
 
 git -C "$SEED" add -A
@@ -203,6 +227,59 @@ if [[ "$BEFORE_STATUS" == "$AFTER_STATUS" && "$BEFORE_HEAD" == "$AFTER_HEAD" ]];
 else
   no "case 12: verify-landed mutated the checkout (status or HEAD changed)"
 fi
+
+# --- 13. rev-parse origin/main fails → unknown (distinct from case 5) --------
+# Case 5 drives the FETCH-failure arm (verify-landed:~205-208) by pointing
+# `origin` at a nonexistent path and letting the fetch itself fail. This case
+# drives the SEPARATE rev-parse arm a few lines below it (~211-214): a repo
+# with `origin` configured but that has never run a single fetch has no
+# `refs/remotes/origin/main` at all, so `git rev-parse origin/main` fails even
+# though nothing about the remote is unreachable. `--no-fetch` skips the fetch
+# step entirely, so this is the only way to reach the rev-parse arm without
+# going through (and being shadowed by) the fetch arm first.
+NEVERFETCHED="$WORK/never-fetched"
+mkdir -p "$NEVERFETCHED"
+git -C "$NEVERFETCHED" init -q -b main
+git -C "$NEVERFETCHED" remote add origin "$ORIGIN"
+if git -C "$NEVERFETCHED" rev-parse origin/main >/dev/null 2>&1; then
+  no "case 13 setup: never-fetched clone unexpectedly already has origin/main"
+fi
+run 1 "rev-parse origin/main fails on a never-fetched clone" -- \
+  -C "$NEVERFETCHED" --no-fetch --node t-plain --blob "$PLAIN_BLOB"
+if grep -q "not-landed" <<<"$OUT"; then
+  no "case 13: the word 'not-landed' appears in an UNKNOWN result"
+fi
+grep -q "verdict=unknown" <<<"$OUT" || no "case 13: terminal line does not say verdict=unknown"
+grep -q "could not resolve origin/main" <<<"$OUT" || no "case 13: missing the rev-parse-specific diagnostic"
+
+# --- 14. jq-mode readNodeAtRef failure → unknown ------------------------------
+# t-broken has invalid YAML frontmatter as of origin/main. readNodeAtRef's
+# parse throws, node_json_at_main's `node --import tsx/esm` subprocess exits
+# non-zero, and verify-landed must report `unknown` — never treat a read
+# failure as "the predicate was false" (that would be case 7's arm, and would
+# silently misreport a corrupt node as a definite not-landed).
+run 1 "jq-mode readNodeAtRef failure on a malformed node is unknown" -- \
+  -C "$CLONE" --no-fetch --node t-broken --jq '.office_hours != null'
+if grep -q "not-landed" <<<"$OUT"; then
+  no "case 14: the word 'not-landed' appears in an UNKNOWN result"
+fi
+grep -q "verdict=unknown" <<<"$OUT" || no "case 14: terminal line does not say verdict=unknown"
+grep -q "readNodeAtRef failed" <<<"$OUT" || no "case 14: missing the readNodeAtRef-specific diagnostic"
+
+# --- 15. jq filter runtime error → unknown (distinct from a false predicate) -
+# `.owner + 1` is a well-formed filter (passes the `#`/env charset checks at
+# parse time) that jq itself rejects at evaluation time — t-parked's `owner`
+# is the string "ai", and jq refuses `string + number` (exit 5, not 0 or 1).
+# A filter error must report `unknown`, never collapse into `not-landed`
+# (case 7's false-predicate arm) — a broken predicate says nothing about
+# whether the node landed.
+run 1 "a jq filter type error is unknown, not a false predicate" -- \
+  -C "$CLONE" --no-fetch --node t-parked --jq '.owner + 1 == 1'
+if grep -q "not-landed" <<<"$OUT"; then
+  no "case 15: the word 'not-landed' appears in an UNKNOWN result"
+fi
+grep -q "verdict=unknown" <<<"$OUT" || no "case 15: terminal line does not say verdict=unknown"
+grep -q "jq filter '.owner + 1 == 1' failed" <<<"$OUT" || no "case 15: missing the jq-filter-specific diagnostic"
 
 echo
 echo "test-verify-landed: $PASS passed, $FAIL failed"
