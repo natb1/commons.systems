@@ -114,7 +114,19 @@ attributes:
     of a bounded class of production surfaces — pages published as claude
     artifacts to claude.ai, whose availability, viewer access and runtime
     contract are the vendor's (extended 2026-08-13, strategy-owned-web-platform
-    artifact-delivery round)"
+    artifact-delivery round); extended 2026-08-30 with the DELEGATED-DECISION
+    CLASS (delegated-pending-review — this class entry itself awaits a ratifying
+    sitting): decisions on native nodes the author declines to hold a view on
+    (delegated-review-declined) or holds pending review
+    (delegated-pending-review), per strategy-explicit-intent's three-state
+    model. Individually recorded only as stamps on the native nodes naming this
+    mount as delegatee — never itemized here by design; the aggregate is priced
+    by strategy-graph-mounts' capture model (position-weighted authority flows)
+    and surfaced via the node-review process and dashboard telemetry, with this
+    record's hand-assessed verdict as the comparison the drift signal fires
+    against. First members: the review-priority threshold and the change-gate
+    detection step on strategy-graph-review-curriculum (review-declined), and
+    the decision-stamp schema + enforcing lint (pending-review)"
   origin: chosen
   divergence:
     level: moderate — raised 2026-08-13 from low-moderate when the delegation

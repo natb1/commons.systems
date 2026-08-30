@@ -287,7 +287,13 @@ clarifications:
       accept-as-deferral, AND an indifference option for a decision the author
       does not care to form a view on — recorded as a Claude-owned delegation,
       minting no review node, subject to the virtue/strategy-core floor. See the
-      2026-08-30 clarifications on this node."
+      2026-08-30 clarifications on this node. AMENDED 2026-08-30 (continuation
+      round): type-b probes COMPEL only from author-ratified doctrine.
+      Delegated-pending-review content may be probed, but the probe's legitimate
+      ask is ratify/amend/decline, never defend-as-yours;
+      delegated-review-declined content never compels and appears in a probe
+      only as Claude's account, clearly attributed. The three-state decision
+      model's stamps make the boundary mechanical. Author-ratified."
   - question: What does a deferral commit the author to — and do deferrals without a
       grounding text get lighter treatment?
     answer: "Deferral is always defer-until-later-review — a conscious, temporary
@@ -313,7 +319,20 @@ clarifications:
       virtual review node on strategy-graph-review-curriculum; and when that
       review runs for a node that also carries pending review-later items, those
       items are folded into the same session rather than sat separately.
-      Author-directed 2026-08-30."
+      Author-directed 2026-08-30. AMENDED 2026-08-30 (continuation round,
+      superseding this same date's earlier amendment): review items are FULLY
+      VIRTUAL. A review-later deferral no longer mints a born-parked node at
+      deferral time — the deferral's delegated-pending-review stamp IS the
+      review record (what is held, since when, on which node), and the review
+      queue derives from stamps (strategy-graph-review-curriculum's virtual
+      review node, whose priority function weights pending-review stamp
+      density). The review-later/don't-care asymmetry dissolves: neither mints;
+      they differ only in stamp state. Content-bearing curriculum nodes (reading
+      chunks, dialog exercises) remain stored — they carry authored passages and
+      questions, not bookkeeping — and their minting goes lazy: the stamp
+      records the grounding text, the chunk is authored when the reading program
+      schedules it. Author-ratified with the explicit caveat that it supersedes
+      the author's own same-day ruling."
   - question: Is the author's own alignment with the record maintained by argument
       alone — and if not, what is the human-side habituation mechanism?
     answer: "Held as a deferral: argument alone does not maintain it. The graph
@@ -437,7 +456,13 @@ clarifications:
       answerable, or the author's declining to hold a view is itself recorded,
       as author doctrine. The floor and its no-compulsion carve-out were
       Claude-drafted and author-adopted this round; the three-option requirement
-      is author-directed."
+      is author-directed. AMENDED 2026-08-30 (continuation round): the options
+      rename to the three-state vocabulary — the recommendation (becoming
+      author-ratified doctrine if accepted), delegate-pending-review, and
+      delegate-review-declined. The FLOOR half of this entry is RETIRED: the
+      three-state model supersedes it (see the 2026-08-30 three-state
+      clarification on this node) — any decision may be delegated; depth is
+      priced by the capture model, not forbidden. Author-directed."
   - question: What standing does deferred or delegated content have — is it author
       doctrine, and may Claude revise it?
     answer: "(Recorded 2026-08-30 interview; author-directed.) Neither deferred nor
@@ -462,7 +487,15 @@ clarifications:
       by the review-debt signal on strategy-graph-review-curriculum, which
       measures the un-reviewed backlog's depth and top rank. This
       aggregate-rather-than-per-decision accounting was Claude-drafted and
-      author-adopted this round."
+      author-adopted this round. AMENDED 2026-08-30 (continuation round):
+      restated in the three-state vocabulary. Delegated-review-declined content
+      is Claude-owned and freely revisable as ordinary design work.
+      Delegated-pending-review content is revisable with carry-forward — under
+      the fully-virtual review model, carry-forward means the pending-review
+      stamp survives the revision (the revised content re-stamps pending-review,
+      never silently doctrine or declined), so the sitting that reaches the node
+      reviews what is live. Enforcement folds into the stamp schema and lint
+      delegated below."
   - question: What is the round provenance of the 2026-08-30 indifference-option
       round, and did it pass its own draft-review gate?
     answer: "(Recorded 2026-08-30, post-hoc, discharging the sole-carrier condition
@@ -496,6 +529,60 @@ clarifications:
       ENROLLMENT: no review item minted and none owed; the author deferred
       nothing, answering every question with a selected option or a written
       counter-design."
+  - question: What is the three-state decision model, and what happened to the
+      virtue/strategy-core floor?
+    answer: "(Recorded 2026-08-30 continuation round; author-directed model,
+      adversarially evaluated in-round at author direction.) Every decision
+      recorded on a native node — virtue, strategy, tactic, kind — is in exactly
+      one of three states: AUTHOR-RATIFIED DOCTRINE, DELEGATED-PENDING-REVIEW
+      (held on trust, a sitting will ratify/amend/decline), or
+      DELEGATED-REVIEW-DECLINED (Claude-owned, reached only by the wholesale
+      node-review mechanism). Tradition and delegation nodes are MOUNT POINTS —
+      never doctrine; they serve as reference for delegated decisions
+      (strategy-graph-mounts). The floor is RETIRED — the model supersedes it:
+      any decision may be delegated, but delegation depth is PRICED, not
+      forbidden — a delegated decision on a virtue is a stronger capture signal
+      than one on a tactic, weighted structurally by graph position under
+      strategy-graph-mounts' capture model. The author rejected special-case
+      guards (a virtue-layer alarm, a mandated-consumer clause) as parsimony
+      violations: capture surfaces through the two mechanisms the design already
+      carries — the node-review process, which calls out high capture signals in
+      the node under review or transiently via its ancestors, and capture
+      telemetry on the office-hours dashboard, a function of node position where
+      virtues-at-roots produce strong signal by structure. Claude's adversarial
+      verdict (strongest attack: legalized erosion plus an unwatched dashboard;
+      survives because the floor prevented erosion invisibly while priced
+      delegation is queryable, ancestry-first review re-sees owned virtue
+      content whenever any descendant review runs, and compel-from-doctrine-only
+      closes the type-b channel) was that the design stands on those mechanisms.
+      STAMP SCHEMA: the structured decision-stamp schema (state, delegatee mount
+      id, dates) and its enforcing lint are delegated to Claude,
+      delegated-pending-review — until it lands, dated prose ownership tags are
+      the interim carrier. STANDING INSTRUCTION (author-directed, 2026-08-30):
+      Claude exercises every delegated decision by greenfield design merit,
+      never by cheapest-thing-that-works."
+  - question: What is the provenance of the 2026-08-30 continuation round (the
+      adversarial-review disposition interview)?
+    answer: "(Recorded 2026-08-30.) The fdcd17cf round's post-hoc adversarial review
+      returned 12 MATERIAL findings; six defect-class corrections landed at
+      9f48d645; the six design questions ran through a six-round interview whose
+      rulings this commit records: the three-state model superseding the floor
+      (author), type-b compel-from-doctrine-only (author), fully-virtual review
+      items superseding same-day minting doctrine (author), the capture model
+      with graft-edge motivation flows and no influenced_by field (author), the
+      motivation-coherence decomposition clause (author), sitting outcomes
+      recorded in metadata for virtual derivation (author). Delegated to Claude
+      and resolved by greenfield merit: the review-priority threshold
+      (pointer-based two-clause form; review-declined), the change-gate
+      detection step (one bounded step downward; review-declined), the
+      conditions-floor question (mooted by floor retirement; recorded), the
+      stamp schema and lint (pending-review), the mount-record dual-carry pair
+      (pending-review). GATE DISCLOSURE: the load-bearing design change
+      (no-floor) was adversarially evaluated in-round at author direction and
+      ruled on; a full pack review of this commit's drafted record text did not
+      re-run pre-commit — residue for the schema tactic's pending-review
+      sitting. Open item for a dedicated round: the sustenance/livelihood virtue
+      gap (strategy-graph-mounts, 2026-08-30 clarification)."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

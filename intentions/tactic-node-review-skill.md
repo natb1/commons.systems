@@ -104,3 +104,60 @@ completed, dated clarifications) or to accept a cold start and say so.
 twice as the sensor deriving curriculum-frontier linkage by id-matching. That
 node no longer exists in `intentions/`. Since the review-debt signal replaces the
 coverage table it fed, the fix is part of this work rather than a separate node.
+
+## SUPERSEDING UPDATE — 2026-08-30 continuation round (read this first)
+
+The adversarial-review disposition interview resolved this node's open design
+questions and reshaped parts of the body above. Where they conflict, this
+section wins. Authoritative doctrine: `strategy-graph-review-curriculum`'s
+amended virtual-review-node clarification (cl 11) and `strategy-graph-mounts`'
+capture-model clarification, both 2026-08-30.
+
+**Resolved design inputs (with ownership):**
+
+- **Fully virtual review items** (author-ratified): nothing mints stored review
+  nodes — review-later deferrals included. The queue derives from decision
+  stamps. The body's born-parked references and the fold-in rule as a special
+  case are superseded: fold-in is automatic because the sitting reads stamps.
+- **Priority function** (author-ratified shape): f(graph position,
+  unreviewed-change state, pending-review stamp density). The stamp-density term
+  is load-bearing — it is the only thing that surfaces held-on-trust content
+  sooner than declined content.
+- **Virtues are reviewed as ancestors, never ranked directly** (author-ratified)
+  — preserves kind-kind's virtues-stay-unranked doctrine and resolves the F1
+  rank-domain problem for virtues. Kinds/traditions/delegations get position via
+  the capture model's dependents-based weighting where needed.
+- **"Changed" = per-kind review fingerprint** (author-ratified): strategies →
+  freeze-substance set PLUS rationale; other durable kinds → statement +
+  rationale + clarifications + kind-normative attributes; router-owned stamps
+  excluded. Reviewed stamp = {fingerprint, date}; stale iff they differ (mirror
+  `isFingerprintStale`). This supersedes the body's open "reviewed stamp" piece.
+- **Detection** (Claude-owned, review-declined): the changed node's sitting
+  takes one bounded step downward — direct children only, attest or amend.
+- **Threshold** (Claude-owned, review-declined): the pointer-based two-clause
+  form now in the strategy's success_signal.
+- **Sitting outcomes in metadata** (author-directed): what the author learned
+  (reinforcement material) and the frontier extensions a sitting identifies must
+  be recorded in the metadata model so virtual derivation reads them — schema
+  scope below.
+- **Session-type penalty and 30-minute bound**: the virtual node enters the
+  office-hours queue at its target's unpenalized rank (the 0.5x penalty demotes
+  re-picks among minted parks; a derived singleton is not that), and a sitting
+  may discharge any root-first prefix of the owed ancestor chain, the stamp
+  advancing per node completed. (Claude-owned resolutions carried from the
+  review round.)
+
+**Schema scope (delegated-pending-review — the one review sitting this design
+still owes):** the decision-stamp schema — {state: doctrine |
+delegated-pending-review | delegated-review-declined, delegatee: <mount-id>,
+dates} on native-node decision fields; the per-kind review fingerprint and
+reviewed stamp; sitting-outcome metadata (learned/reinforcement, frontier
+extensions); graft-edge readability for the capture derivation; and the
+enforcing lint (a pending-review stamp survives revision of its content — never
+silently doctrine or declined). Weight tables for the capture function's
+position/state gradients are schema detail and land here too.
+
+**Bootstrap note update:** with fully-virtual items the bootstrap question in
+the body above ("seed the stamps or accept a cold start") now also covers
+stamping existing recorded deferrals and delegations into the three-state form
+— the migration is part of this node's decomposition, not decided here.

@@ -1,9 +1,11 @@
 ---
 id: tactic-align-indifference-option
 kind: tactic
-statement: Encode the three-option interview round — recommendation,
-  accept-as-deferral, indifference-as-delegation — plus the virtue/strategy-core
-  floor and the revision-authority rule, into the /align skill surface
+statement: Encode the three-state decision model into the /align skill surface —
+  question rounds offering recommendation / delegate-pending-review /
+  delegate-review-declined, stamps not minted review nodes, the
+  motivation-coherence separation dual, and compel-from-doctrine-only type-b
+  probes
 owner: ai
 status: raw
 parent: null
@@ -144,3 +146,49 @@ The tension, stated fairly both ways:
 This goes to the design-question interview following the 2026-08-30 review, along
 with the review-priority metric, the floor boundary, the change-gate detection
 path, the Claude-owned marker convention, and the review-debt threshold.
+
+## SUPERSEDING UPDATE — 2026-08-30 continuation round (read this first)
+
+The adversarial-review disposition interview reshaped this node's scope. The
+sections above are retained as history; where they conflict with this section,
+this section wins. Authoritative doctrine: `strategy-explicit-intent`'s
+2026-08-30 three-state clarification and the amended entries it names.
+
+**What changed:**
+
+- **The floor is retired.** The "What to encode / The floor" section above is
+  superseded: no decision class is barred from delegation. Delegation depth is
+  priced by `strategy-graph-mounts`' capture model, not forbidden.
+- **Three-state vocabulary.** The question-round options are now: the
+  recommendation (author-ratified doctrine if accepted),
+  **delegate-pending-review**, and **delegate-review-declined**. "Accept-as-
+  deferral" and "indifference" map onto the two delegated states.
+- **Nothing mints.** Review items are fully virtual — a delegated-pending-review
+  stamp IS the review record; the queue derives from stamps. The "Deferral
+  mechanics" subsection of `/align`'s SKILL.md (born-parked minting, the
+  reading-chunk/office-hours-sitting typology at deferral time) rewrites
+  entirely. Reading chunks survive as stored content nodes, minted lazily by the
+  reading program.
+- **The marker convention is resolved by the schema delegation.** The "Marker
+  convention is undecided" section above is superseded: the structured
+  decision-stamp schema (state, delegatee mount id, dates) plus its enforcing
+  lint are delegated to Claude, pending review. Interim carrier: dated prose
+  ownership tags.
+- **The open delegation-record decision is RESOLVED** (pending review): the
+  dual-carry pair landed — a class-level hand-assessed entry on
+  `delegation-anthropic-claude`, with the derived side implied by stamps naming
+  the mount.
+- **Type-b probes compel from doctrine only** — the interview-types section of
+  the skill gains this rule.
+- **Multi-topic separation gains its dual**: decompose along motivation
+  profiles (different `serves` set or graft constraints), not only along
+  independent success signals — the motivation-coherence clause on
+  `strategy-graph-mounts`.
+
+**Encoding checklist for the implementing round** (all in
+`.claude/skills/align/SKILL.md` unless noted): Question mechanics item 3 →
+three options in state vocabulary; Deferral mechanics → stamps, no minting,
+lazy reading chunks; Step 1.1 → motivation-coherence dual; interview-types
+section → compel-from-doctrine-only; Step 5 Mode A enrollment → superseded by
+stamps; Step 5 record construction → write ownership tags (interim) or stamps
+(once schema lands).

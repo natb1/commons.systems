@@ -36,7 +36,6 @@ rationale: "kind-delegation and kind-tradition already describe mounting in
   delegation-and-capture views; landing mount structure first keeps that page
   from baking in a prose-attribute rendering that would be redone."
 reading: null
-gap: null
 serves:
   - virtue-alignment-of-attachments
   - virtue-respect-for-persons
@@ -111,6 +110,44 @@ clarifications:
       amends or approves the mounted structure at office-hours and produces the
       strategy's first reading. Informative, not gating. Recorded 2026-07-11
       /align-tactics round."
+  - question: What is the capture model — capture as a function of delegation — and
+      what does it require of node composition?
+    answer: "(Recorded 2026-08-30 interview; author-ratified, Claude-drafted from
+      the author's worked example.) DEFINITION: capture(mount) = the weighted
+      share of decision-motivation flowing across that mount's boundary, derived
+      from two flow classes read off existing structure — AUTHORITY flows
+      (decision stamps in strategy-explicit-intent's three-state model naming
+      the mount as delegatee; review-declined weighs more than pending-review)
+      and MOTIVATION flows (this strategy's graft edges into native nodes) —
+      weighted by graph position (root-distance: virtues at the roots produce
+      the strongest signal structurally, per the author's parsimony ruling
+      rejecting special-case alarms), with the reading's consumer being the
+      comparison against the mount's hand-assessed divergence verdict — the
+      dual-carry doctrine already recorded here, disagreement being the drift
+      signal. NO influenced_by field: the author's example ('Kantian respect and
+      Socratic education would compel me to offer this knowledge for free, but
+      the technology platform fees compel me to monetize') decomposes as native
+      serves motivation (no capture), a graft-edge constraint from the strategy
+      to the platform mount (influence flow — still the author's decision), and,
+      had the pricing decision been handed over, a delegated stamp (authority
+      flow, heavier); the platform reshaping the virtue itself would be a
+      virtue-layer flow, loudest. Influence is node-shaped — if any decision on
+      a node stands under a constraint, the node does — so the graft edge this
+      strategy already promises carries it, and per-decision granularity is
+      reserved for authority, where review rights actually differ. DECOMPOSITION
+      COROLLARY (author-ratified): node-level influence granularity is accurate
+      only while nodes are motivation-coherent, so — decompose a node when its
+      decisions would carry materially different motivation profiles (a
+      different serves set or different graft constraints); compose or merge
+      only when profiles match. This is the structural dual of /align's
+      multi-topic separation rule (which keys on independent success signals;
+      this keys on motivation) and is the load-bearing justification for having
+      no per-decision influence field. OPEN GAP (author-directed, for a
+      dedicated /align round): 'my need to feed myself' has no first-class
+      virtue home — temperance covers nourishment as ordered appetite,
+      strategy-financial-sustainability is instrumental ('fund the project') —
+      the sustenance/livelihood round's recommendations must defer to
+      philosophical, theological and/or psychology tradition."
 tooling_goals:
   - kind: actuator
     statement: mount schema — mount anchors on delegation/tradition records,
@@ -146,6 +183,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - mounted content is the author's model of the counterparty — substance

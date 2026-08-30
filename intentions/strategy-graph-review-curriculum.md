@@ -324,7 +324,33 @@ clarifications:
       carries pending review-later deferral nodes, those are folded into the
       same session. Review-later deferrals still mint their node at deferral
       time; indifference-delegations mint nothing and are seen only here
-      (strategy-explicit-intent, 2026-08-30)."
+      (strategy-explicit-intent, 2026-08-30). AMENDED 2026-08-30 (continuation
+      round): review items are FULLY VIRTUAL — nothing mints a stored review
+      node, review-later deferrals included (superseding the same-day minting
+      split; author-ratified). A delegated-pending-review stamp is its own
+      review record; the queue derives from stamps. The virtual review node's
+      priority is f(graph position, unreviewed-change state, pending-review
+      stamp density) — the stamp-density term is LOAD-BEARING, not optional: it
+      is what surfaces held-on-trust content sooner than declined content now
+      that no dedicated queue entry exists. Fold-in becomes automatic — the
+      sitting reads the node's stamps. SITTING OUTCOMES (author-directed): a
+      sitting's own bookkeeping — what the author learned (to be reinforced
+      later) and the frontier extensions it identifies — must be recorded in the
+      metadata model so virtual derivation can read it; specifics fold into the
+      delegated stamp schema. DETECTION (Claude-owned,
+      delegated-review-declined, resolved by greenfield merit): the changed
+      node's own sitting takes one bounded step downward — each DIRECT child's
+      statement and conditions read against the change, one level only, attest
+      or amend; amendment re-enrolls the child. 'Changed' is defined by a
+      per-kind REVIEW FINGERPRINT (author-ratified): for strategies the
+      freeze-substance set PLUS rationale; for other durable kinds statement +
+      rationale + clarifications + kind-normative attributes; router-owned
+      stamps excluded everywhere; the reviewed stamp is {fingerprint, date},
+      stale iff they differ. Virtues are reviewed as ANCESTORS rather than
+      ranked directly (author-ratified), preserving kind-kind's
+      virtues-stay-unranked doctrine. Content-bearing curriculum nodes (reading
+      chunks, dialog exercises) remain stored, minted lazily when the reading
+      program schedules them."
   - question: Why did the coverage half of the success_signal have to be replaced
       (2026-08-30)?
     answer: "(Recorded 2026-08-30 interview.) The recorded threshold was 'zero
@@ -342,7 +368,17 @@ clarifications:
       actually go wrong: important content sitting un-reviewed. is_proxy stays
       true: the signal measures review activity and backlog, not directly
       whether the record is still believed. The vacuity finding and the
-      replacement observable were Claude-drafted and author-adopted this round."
+      replacement observable were Claude-drafted and author-adopted this round.
+      AMENDED 2026-08-30 (continuation round): the trends-down threshold was
+      itself replaced — the round's adversarial review showed rank churn makes
+      it structurally unlikely to ever read true (author reranks move it with
+      zero review activity; healthy amendments re-enroll top nodes each cycle).
+      The author delegated the replacement (review-declined); Claude resolved it
+      by greenfield merit to the churn-invariant two-clause form now in the
+      success_signal: each cycle's sitting reviews what the virtual node then
+      pointed at, and the count of durable nodes un-reviewed across two or more
+      consecutive cycles trends down — both decidable from reviewed stamps
+      alone."
 tooling_goals:
   - kind: sensor
     statement: review debt, read off the virtual review node — the count of
@@ -361,16 +397,16 @@ tooling_goals:
       in /align is now limited to review-later deferrals minting their node
       (tactic-align-indifference-option)
 success_signal:
-  observable: per review cycle — review debt (how many durable-layer nodes are
-    un-reviewed since they last changed, and the rank of the highest such node,
-    which is what the virtual review node currently points at) and curriculum
-    motion (sittings completed, each re-affirming or amending a previously
-    settled node)
-  sensor: owner review at office-hours; the virtual review node's own target and
-    backlog depth, read directly, once the mechanism exists
-  threshold: the review backlog's top rank trends down across cycles, and each
-    cycle completes at least one sitting that re-affirms or amends previously
-    settled content
+  observable: per review cycle — whether the cycle's completed sitting reviewed
+    the node the virtual review node then pointed at, and the count of
+    durable-layer nodes un-reviewed (per their review fingerprint) across two or
+    more consecutive cycles
+  sensor: the reviewed stamps and the virtual review node's pointer, read directly
+    once the stamp schema lands; owner review at office-hours in the interim
+  threshold: each cycle's sitting reviews the then-pointed node, and the
+    un-reviewed-across-2+-cycles count trends down (Claude-owned replacement,
+    delegated-review-declined 2026-08-30 — churn-invariant successor to the
+    trends-down-top-rank form)
   is_proxy: true
 attention:
   boosts:
@@ -404,18 +440,17 @@ attributes:
       priority, never exhaustive per cycle
     - the curriculum cadence actually recurs — a lapse is the same cadence-lapse
       capture mechanism the parent and sibling strategies name
-    - "the curriculum stays graph-encoded — review targets are derived from node
-      status, never a hand-maintained side list; both forms satisfy this, the
-      born-parked node a review-later deferral mints and the derived virtual
-      review node that selects the next sitting (amended 2026-08-30: the guard
-      is anti-side-list, and a derived target is more graph-encoded than a
-      stored one, not less)"
+    - "the curriculum stays graph-encoded — review targets and the review queue
+      are DERIVED from decision stamps and node state, never a hand-maintained
+      side list and (amended 2026-08-30 continuation) never stored bookkeeping
+      nodes: review items are fully virtual, and the only stored curriculum
+      artifacts are content-bearing nodes (reading chunks, dialog exercises)
+      carrying authored material"
     - "expansion stays reversible and total — no node class becomes permanently
       exempt from review, and the mechanism stands down by being removed rather
-      than by accumulating nodes that archive by inaction (amended 2026-08-30:
-      the virtual review node replaces accumulation with a single derived
-      fixture, so reversibility now rests on that fixture being removable; the
-      born-parked nodes review-later deferrals still mint continue to archive by
-      inaction)"
+      than by accumulating nodes (amended 2026-08-30 continuation: with fully
+      virtual review items nothing accumulates at all; reversibility rests on
+      the derived fixture and the stamp schema both being removable, and the
+      stamps archive with their nodes by inaction)"
 ---
 # The entire graph is subject to a recurring, ever-expanding office-hours review curriculum — deferred and delegated content re-validated against its sources, author-owned doctrine re-affirmed against recursively broadened context; the primary standing mechanism against dogma, calcification, atrophy, and forgotten delegation
