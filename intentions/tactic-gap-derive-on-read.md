@@ -117,9 +117,9 @@ load-bearing.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
-! grep -n '"gap"' packages/intentionsutil/src/schema.ts
+npx vitest run --project intentionsutil --root . || exit 1
+npx tsx packages/intentionsutil/scripts/validate-graph.ts || exit 1
+if grep -n '"gap"' packages/intentionsutil/src/schema.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/src/schema.ts"; exit 1; fi
 ```
 
 Prose: `git grep -n "\.gap\b" packages/intentionsutil/src` returns only

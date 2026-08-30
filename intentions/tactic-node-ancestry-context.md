@@ -703,7 +703,7 @@ branch and their checks are regression cover.
 # a failed `cd`. That was a plan-text defect, not a code defect: it failed
 # identically on every run. Ratified as a false positive at the 2026-08-09
 # office-hours sitting.
-npx vitest run --project packages/intentionsutil --root . node-ancestry
+npx vitest run --project packages/intentionsutil --root . node-ancestry || exit 1
 # Full package suite (no regressions in siblings):
 npx vitest run --project packages/intentionsutil --root .
 ```
@@ -711,7 +711,7 @@ npx vitest run --project packages/intentionsutil --root .
 ```verify
 # Unit 1 — CLI smoke test against the real store (stdout Markdown; exercises the
 # tactic→strategy→virtue walk on this very node, whose serves chain reaches a virtue root):
-npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-node-ancestry-context --dir intentions
+npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-node-ancestry-context --dir intentions || exit 1
 # --out write smoke test (creates parent dir, writes Markdown, prints nothing to stdout):
 npx tsx packages/intentionsutil/scripts/node-ancestry.ts tactic-node-ancestry-context --dir intentions --out "$TMPDIR/ancestry-context.md" && test -s "$TMPDIR/ancestry-context.md"
 ```
@@ -727,7 +727,7 @@ name is the workspace directory (`vitest.config.ts:18` sets
 and root at the worktree root — do not root at the package directory:
 
 ```verify
-npx vitest run --project packages/intentionsutil --root . node-ancestry
+npx vitest run --project packages/intentionsutil --root . node-ancestry || exit 1
 npx vitest run --project packages/intentionsutil --root .
 ```
 

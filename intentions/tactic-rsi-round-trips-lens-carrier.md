@@ -373,8 +373,9 @@ grep -Fq '**Per-phase standup cost (SKILL.md body + boot preamble)** — **[any-
 grep -Fq '**Per-session boot/baseline context** — **[fleet-only]**' .claude/skills/rsi-audit/SKILL.md
 grep -Fq 'scriptable_round_trips' .claude/skills/rsi/SKILL.md
 grep -Fq 'phase_standup' .claude/skills/rsi/SKILL.md
-! grep -Fq 'lenses.phase_standup' .claude/skills/rsi-audit/scripts/aggregate-usage.sh.orig 2>/dev/null || true
-! grep -n 'lenses.baseline_context' .claude/skills/rsi-audit/scripts/aggregate-usage.sh | sed -n '1p' | grep -q 'phase_standup'
+test ! -e .claude/skills/rsi-audit/scripts/aggregate-usage.sh.orig || { echo "FAIL: the aggregate-usage.sh.orig scratch backup was committed"; exit 1; }
+grep -q 'lenses.baseline_context' .claude/skills/rsi-audit/scripts/aggregate-usage.sh || { echo "FAIL: lenses.baseline_context absent from aggregate-usage.sh"; exit 1; }
+if grep -n 'lenses.baseline_context' .claude/skills/rsi-audit/scripts/aggregate-usage.sh | sed -n '1p' | grep -q 'phase_standup'; then echo "FAIL: the first lenses.baseline_context line still mentions phase_standup"; exit 1; fi
 echo OK
 ```
 

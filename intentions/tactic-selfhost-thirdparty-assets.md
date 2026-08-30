@@ -119,8 +119,8 @@ local).
 ## Verification
 
 ```verify
-npx vitest run --project budget --root .
-npx vitest run --project audio --root .
+npx vitest run --project budget --root . || exit 1
+npx vitest run --project audio --root . || exit 1
 npx vitest run --project print --root .
 ```
 

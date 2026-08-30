@@ -235,7 +235,7 @@ Whichever direction is chosen, the graph must still validate and the package
 suite must stay green:
 
 ```verify
-node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions || exit 1
 npm test --prefix packages/intentionsutil
 ```
 

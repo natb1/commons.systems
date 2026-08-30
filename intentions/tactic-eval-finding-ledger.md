@@ -497,22 +497,22 @@ Baselines confirmed green before any change: `177/177` in the shell suite and
 The class marker is no longer read or written anywhere in code:
 
 ```verify
-! grep -q 'ledger_entry: true' .claude/skills/dispatch-propagate/scripts/dispatch-eval-finding
+if grep -q 'ledger_entry: true' .claude/skills/dispatch-propagate/scripts/dispatch-eval-finding; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/dispatch-eval-finding"; exit 1; fi
 ```
 
 ```verify
-! grep -q 'export function isLedgerEntry' packages/intentionsutil/src/schema.ts
+if grep -q 'export function isLedgerEntry' packages/intentionsutil/src/schema.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/src/schema.ts"; exit 1; fi
 ```
 
 The stale `rsi.ts` / `rsi-plan.md` citations are gone from both places that carry
 them (the same defect in the doc and in the code comment):
 
 ```verify
-! grep -qE 'rsi\.ts|rsi-plan\.md' intentions/kind-tactic.md
+if grep -qE 'rsi\.ts|rsi-plan\.md' intentions/kind-tactic.md; then echo "FAIL: the forbidden pattern is still present in intentions/kind-tactic.md"; exit 1; fi
 ```
 
 ```verify
-! grep -qE 'rsi\.ts' packages/intentionsutil/src/schema.ts
+if grep -qE 'rsi\.ts' packages/intentionsutil/src/schema.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/src/schema.ts"; exit 1; fi
 ```
 
 The owed-prune census exempts a `phase: done` node **because it carries

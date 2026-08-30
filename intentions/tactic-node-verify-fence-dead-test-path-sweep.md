@@ -496,7 +496,7 @@ mass-demote in-flight nodes):
 cd "$(git rev-parse --show-toplevel)"
 mkdir -p /tmp/claude
 npx tsx packages/intentionsutil/scripts/list-scope-stale-tactics.ts \
-  --dir intentions --stamp-dir .claude/worktrees > /tmp/claude/stale.txt
+  --dir intentions --stamp-dir .claude/worktrees > /tmp/claude/stale.txt || exit 1
 rc=0
 for id in tactic-graph-select-target-node-tests tactic-qa-main-park-base-cas \
           tactic-align-tactics-tactic-mode-drift-gate \
@@ -513,7 +513,7 @@ Unit 3's guard and its tests:
 
 ```verify
 cd "$(git rev-parse --show-toplevel)"
-bash .claude/skills/dispatch-propagate/scripts/test-lint-verify-fence-paths.sh
+bash .claude/skills/dispatch-propagate/scripts/test-lint-verify-fence-paths.sh || exit 1
 bash .claude/skills/dispatch-propagate/scripts/lint-verify-fence-paths.sh
 ```
 
@@ -522,7 +522,7 @@ extraction, and the graph still validates:
 
 ```verify
 cd "$(git rev-parse --show-toplevel)"
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-run-verification.sh
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-run-verification.sh || exit 1
 npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 

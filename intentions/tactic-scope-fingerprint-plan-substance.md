@@ -363,7 +363,7 @@ untouched on that error.
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil || exit 1
 npx vitest run --project packages/intentionsutil --root .
 ```
 

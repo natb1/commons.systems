@@ -244,14 +244,14 @@ Out of scope: any change to `reconcile-graph-merged` or `graph-census-debt.ts`'s
 ## Verification
 
 ```verify
-npx vitest run --project packages/intentionsutil packages/intentionsutil/test/census-decide.test.ts
-npx vitest run --project packages/intentionsutil packages/intentionsutil/test/census-tick.test.ts
+npx vitest run --project packages/intentionsutil packages/intentionsutil/test/census-decide.test.ts || exit 1
+npx vitest run --project packages/intentionsutil packages/intentionsutil/test/census-tick.test.ts || exit 1
 npx vitest run --project packages/intentionsutil
 ```
 
 ```verify
-! grep -rn "dispatch-graph-census" .claude/skills/dispatch-propagate/scripts/dispatch-select-tick
-test ! -e .claude/skills/dispatch-propagate/scripts/dispatch-graph-census
+if grep -rn "dispatch-graph-census" .claude/skills/dispatch-propagate/scripts/dispatch-select-tick; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/dispatch-select-tick"; exit 1; fi
+test ! -e .claude/skills/dispatch-propagate/scripts/dispatch-graph-census || exit 1
 grep -q "dispatch-census-tick" .claude/skills/dispatch-propagate/scripts/dispatch-select-tick
 ```
 

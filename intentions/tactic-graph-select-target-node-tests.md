@@ -186,7 +186,7 @@ do not begin implementation until that tactic reaches `phase: done` and the
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh
 ```
 

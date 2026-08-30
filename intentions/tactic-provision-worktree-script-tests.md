@@ -484,11 +484,11 @@ header's lines 44–45, so a `grep -F` for it matches nothing even now and the
 negated check would pass vacuously:
 
 ```verify
-! grep -qF 'that this file does NOT cover' .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
+if grep -qF 'that this file does NOT cover' .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh"; exit 1; fi
 ```
 
 ```verify
-! grep -qF 'Does NOT cover the check-node-selection gate plumbing' .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
+if grep -qF 'Does NOT cover the check-node-selection gate plumbing' .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh"; exit 1; fi
 ```
 
 Manual / judgment checks (not auto-runnable):

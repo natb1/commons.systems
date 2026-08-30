@@ -250,9 +250,9 @@ alive is now broken."
 Machine checks:
 
 ```verify
-test ! -e .claude/docs/delegability.md
-test ! -e .claude/docs/signal-identification.md
-test ! -e .claude/skills/ref-delegability
+test ! -e .claude/docs/delegability.md || exit 1
+test ! -e .claude/docs/signal-identification.md || exit 1
+test ! -e .claude/skills/ref-delegability || exit 1
 test ! -e .claude/skills/ref-signal-identification
 ```
 
@@ -263,7 +263,7 @@ phrase-level `! grep` falls into). Unit 3's rewrite cites the two surviving
 records instead of this node, so the id must be gone:
 
 ```verify
-! grep -n "tactic-align-audit-legacy-review" .claude/skills/align-audit/SKILL.md
+if grep -n "tactic-align-audit-legacy-review" .claude/skills/align-audit/SKILL.md; then echo "FAIL: the forbidden pattern is still present in .claude/skills/align-audit/SKILL.md"; exit 1; fi
 ```
 
 ```verify

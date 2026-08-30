@@ -642,24 +642,24 @@ throwaway bare origin, so they exercise the new default end to end. They are the
 strongest signal that the flip is behaviorally neutral for the primitives:
 
 ```verify
-bash packages/intentionsutil/scripts/test-park-node.sh
-bash packages/intentionsutil/scripts/test-transition-node.sh
-bash packages/intentionsutil/scripts/test-hold-node.sh
-bash packages/intentionsutil/scripts/test-land-align-round.sh
-bash packages/intentionsutil/scripts/test-arm-wait.sh
-bash packages/intentionsutil/scripts/test-release-wait.sh
-bash packages/intentionsutil/scripts/test-demote-node-to-implement.sh
+bash packages/intentionsutil/scripts/test-park-node.sh || exit 1
+bash packages/intentionsutil/scripts/test-transition-node.sh || exit 1
+bash packages/intentionsutil/scripts/test-hold-node.sh || exit 1
+bash packages/intentionsutil/scripts/test-land-align-round.sh || exit 1
+bash packages/intentionsutil/scripts/test-arm-wait.sh || exit 1
+bash packages/intentionsutil/scripts/test-release-wait.sh || exit 1
+bash packages/intentionsutil/scripts/test-demote-node-to-implement.sh || exit 1
 bash packages/intentionsutil/scripts/test-verify-landed.sh
 ```
 
 The rollback library and the callers whose reasoning the flip changes:
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh
-bash .claude/skills/dispatch-propagate/scripts/test-resolve-hold.sh
-bash .claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-main-red-sync.sh
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-invalid-state-followup.sh
+bash .claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-resolve-hold.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-main-red-sync.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-invalid-state-followup.sh || exit 1
 bash .claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-alarm.sh
 ```
 

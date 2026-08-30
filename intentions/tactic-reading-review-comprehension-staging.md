@@ -187,8 +187,8 @@ the diff shape is small.
 ## Verification
 
 ```verify
-grep -n "Stage 1 — comprehension test" .claude/skills/reading-review/SKILL.md
-grep -n "Stage 2 — ratification interview" .claude/skills/reading-review/SKILL.md
+grep -n "Stage 1 — comprehension test" .claude/skills/reading-review/SKILL.md || exit 1
+grep -n "Stage 2 — ratification interview" .claude/skills/reading-review/SKILL.md || exit 1
 grep -n "Never let Stage 2 verdict" .claude/skills/reading-review/SKILL.md
 ```
 

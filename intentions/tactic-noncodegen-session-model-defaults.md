@@ -124,7 +124,7 @@ None between units; one PR.
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-phase-model.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-phase-model.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
 ```
 

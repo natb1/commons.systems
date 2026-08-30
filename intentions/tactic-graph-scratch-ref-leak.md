@@ -544,8 +544,8 @@ sonnet
 ## Verification
 
 ```verify
-bash -n packages/intentionsutil/scripts/graph-scratch-sweep
-bash -n packages/intentionsutil/scripts/graph-commit
+bash -n packages/intentionsutil/scripts/graph-scratch-sweep || exit 1
+bash -n packages/intentionsutil/scripts/graph-commit || exit 1
 packages/intentionsutil/scripts/test-graph-commit.sh
 ```
 

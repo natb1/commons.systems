@@ -269,10 +269,10 @@ already normalized).
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
-! grep -rn "^  classification:" intentions/delegation-*.md
-! grep -rnE "^    gated: (true|false|partially|largely)" intentions/delegation-*.md
+npx vitest run --project intentionsutil --root . || exit 1
+npx tsx packages/intentionsutil/scripts/validate-graph.ts || exit 1
+if grep -rn "^  classification:" intentions/delegation-*.md; then echo "FAIL: the forbidden pattern is still present in intentions/delegation-*.md"; exit 1; fi
+if grep -rnE "^    gated: (true|false|partially|largely)" intentions/delegation-*.md; then echo "FAIL: the forbidden pattern is still present in intentions/delegation-*.md"; exit 1; fi
 ```
 
 The fourth check asserts the legacy scalar `gated` spellings are gone — all 22

@@ -114,8 +114,8 @@ commit the refreshed `intentions/*.md` reading+gap writes in this same PR.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
-npx tsx packages/intentionsutil/scripts/read-sensors.ts
+npx vitest run --project intentionsutil --root . || exit 1
+npx tsx packages/intentionsutil/scripts/read-sensors.ts || exit 1
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 

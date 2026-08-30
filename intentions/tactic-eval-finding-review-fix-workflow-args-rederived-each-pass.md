@@ -721,14 +721,14 @@ Units 1, 2, 3.
 ## Verification
 
 ```verify
-node --check .claude/workflows/review-fix.js
-node --check .claude/workflows/qa-fix.js
+node --check .claude/workflows/review-fix.js || exit 1
+node --check .claude/workflows/qa-fix.js || exit 1
 node --check .claude/workflows/align-tactics.js
 ```
 
 ```verify
-node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs review-fix.js
-node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs qa-fix.js
+node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs review-fix.js || exit 1
+node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs qa-fix.js || exit 1
 node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs align-tactics.js
 ```
 
@@ -737,11 +737,11 @@ node .claude/skills/dispatch-propagate/scripts/workflow-args-contract-probe.mjs 
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-review-fix-xlane-dedup.sh
-.claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh
-.claude/skills/dispatch-propagate/scripts/test-review-fix-residue-death.sh
-.claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh
-.claude/skills/dispatch-propagate/scripts/test-review-fix-diff-context.sh
+.claude/skills/dispatch-propagate/scripts/test-review-fix-xlane-dedup.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-review-fix-instrument.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-review-fix-residue-death.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-review-fix-domain-sweep.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-review-fix-diff-context.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-review-fix-skeptic-batch.sh
 ```
 
@@ -758,9 +758,9 @@ change.** Confirm it fails first, or it is vacuous
 (`.claude/rules/planning.md` / the negated-fence trap):
 
 ```verify
-grep -q 'ARGS_CONTRACT' .claude/skills/review-fix/SKILL.md
-grep -q 'ARGS_CONTRACT' .claude/skills/qa-fix/references/disposition-workflow.md
-grep -q 'ARGS_CONTRACT' .claude/skills/align-tactics/SKILL.md
+grep -q 'ARGS_CONTRACT' .claude/skills/review-fix/SKILL.md || exit 1
+grep -q 'ARGS_CONTRACT' .claude/skills/qa-fix/references/disposition-workflow.md || exit 1
+grep -q 'ARGS_CONTRACT' .claude/skills/align-tactics/SKILL.md || exit 1
 grep -q 'ARGS_CONTRACT' .claude/skills/align-tactics/references/tactic-target.md
 ```
 

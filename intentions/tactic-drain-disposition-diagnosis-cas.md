@@ -501,9 +501,9 @@ shipped, with a one-line note that it lands with
 Shell syntax and executability (Units 1, 3):
 
 ```verify
-bash -n packages/intentionsutil/scripts/park-node
-bash -n packages/intentionsutil/scripts/test-park-node.sh
-test -x packages/intentionsutil/scripts/park-node
+bash -n packages/intentionsutil/scripts/park-node || exit 1
+bash -n packages/intentionsutil/scripts/test-park-node.sh || exit 1
+test -x packages/intentionsutil/scripts/park-node || exit 1
 if [ -f packages/intentionsutil/scripts/clear-park ]; then
   bash -n packages/intentionsutil/scripts/clear-park && test -x packages/intentionsutil/scripts/clear-park
 fi

@@ -148,9 +148,9 @@ correct), the shared `@commons-systems/components` hero package, sign-in.
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app print
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app budget
-npx vitest run --project print --root .
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app print || exit 1
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app budget || exit 1
+npx vitest run --project print --root . || exit 1
 npx vitest run --project budget --root .
 ```
 

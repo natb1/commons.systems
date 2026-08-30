@@ -298,8 +298,8 @@ already state the intent.
 Auto-runnable:
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-emit-outcome.sh
-bash .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh
+bash .claude/skills/dispatch-propagate/scripts/test-emit-outcome.sh || exit 1
+bash .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 

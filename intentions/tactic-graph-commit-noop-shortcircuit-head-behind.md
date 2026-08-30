@@ -356,9 +356,9 @@ step 5 edits), and Case 48 (far-ahead + stale `--base` layer-3 merge).
 Sibling suites that exercise the same writer and the verdict contract:
 
 ```verify
-packages/intentionsutil/scripts/test-park-node.sh
-packages/intentionsutil/scripts/test-land-align-round.sh
-packages/intentionsutil/scripts/test-verify-landed.sh
+packages/intentionsutil/scripts/test-park-node.sh || exit 1
+packages/intentionsutil/scripts/test-land-align-round.sh || exit 1
+packages/intentionsutil/scripts/test-verify-landed.sh || exit 1
 packages/intentionsutil/scripts/test-transition-node.sh
 ```
 

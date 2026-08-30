@@ -90,7 +90,7 @@ Scope:
 ## Verification
 
 ```verify
-npx vitest run --project office-hours --root .
+npx vitest run --project office-hours --root . || exit 1
 npx vitest run --project office-hours-snapshot --root .
 ```
 

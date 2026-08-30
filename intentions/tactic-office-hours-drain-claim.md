@@ -337,13 +337,17 @@ control-flow blocks that PR is concurrently rewriting.
 ## Verification
 
 ```verify
-bash -n .claude/skills/dispatch-propagate/scripts/lib-reservation-ledger.sh
+bash -n .claude/skills/dispatch-propagate/scripts/lib-reservation-ledger.sh || exit 1
 bash -n packages/intentionsutil/scripts/office-hours-graph
 ```
 
 ```verify
-bash .claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh 2>&1 | tail -20
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh 2>&1 | tail -20
+bash .claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh > "${TMPDIR:-/tmp}/test-lib-reservation-ledger.sh.log" 2>&1; rc=$?
+tail -20 "${TMPDIR:-/tmp}/test-lib-reservation-ledger.sh.log"
+[ "$rc" -eq 0 ] || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh > "${TMPDIR:-/tmp}/test-dispatch-sweep.sh.log" 2>&1; rc=$?
+tail -20 "${TMPDIR:-/tmp}/test-dispatch-sweep.sh.log"
+[ "$rc" -eq 0 ] || exit 1
 ```
 
 Expect `0 failed`, with the new `reservation_owner` assertions passing and

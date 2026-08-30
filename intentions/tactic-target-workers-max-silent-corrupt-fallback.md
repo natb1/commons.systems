@@ -328,7 +328,7 @@ bash .claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh
 Structural checks on Unit 1's edit. The first fence **must fail before the fix** (the string is present at `dispatch-target-workers:238` today) and pass after — it is not vacuous:
 
 ```verify
-! grep -q 'dispatch-config-load" target-workers 2>/dev/null' .claude/skills/dispatch-propagate/scripts/dispatch-target-workers
+if grep -q 'dispatch-config-load" target-workers 2>/dev/null' .claude/skills/dispatch-propagate/scripts/dispatch-target-workers; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/dispatch-target-workers"; exit 1; fi
 ```
 
 ```verify

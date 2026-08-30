@@ -145,7 +145,7 @@ Keep the parenthetical at lines 92-93 ("same as `/implement`'s node-lane complet
 Existing harnesses that exercise the `--base` primitive and the exact refresh-then-CAS pattern both fixes mirror — these must stay green:
 
 ```verify
-packages/intentionsutil/scripts/test-park-node.sh
+packages/intentionsutil/scripts/test-park-node.sh || exit 1
 packages/intentionsutil/scripts/test-graph-commit.sh
 ```
 

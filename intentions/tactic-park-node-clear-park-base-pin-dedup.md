@@ -497,9 +497,9 @@ packages/intentionsutil/scripts/test-graph-commit.sh
 Syntax gate on the new sourced file and its three consumers:
 
 ```verify
-bash -n packages/intentionsutil/scripts/lib-base-pin.sh
-bash -n packages/intentionsutil/scripts/park-node
-bash -n packages/intentionsutil/scripts/clear-park
+bash -n packages/intentionsutil/scripts/lib-base-pin.sh || exit 1
+bash -n packages/intentionsutil/scripts/park-node || exit 1
+bash -n packages/intentionsutil/scripts/clear-park || exit 1
 bash -n packages/intentionsutil/scripts/release-wait
 ```
 

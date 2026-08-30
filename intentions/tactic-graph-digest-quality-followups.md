@@ -664,7 +664,7 @@ npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh --app packages/intentionsutil
 ```
 
@@ -672,7 +672,7 @@ End-to-end against the real store — the digest still renders and still validat
 clean:
 
 ```verify
-node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts --tables-only | grep -q '^\[VALIDATE\] pass'
+node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts --tables-only | grep -q '^\[VALIDATE\] pass' || exit 1
 node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts --tables-only | grep -q '^\[CLOSURE\] pass'
 ```
 
@@ -680,22 +680,22 @@ Determinism is a documented property of this module (`digest.ts:13-15`); two
 runs on the same store must be byte-identical:
 
 ```verify
-node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts > "${TMPDIR:-/tmp}/digest-a.txt"
-node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts > "${TMPDIR:-/tmp}/digest-b.txt"
+node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts > "${TMPDIR:-/tmp}/digest-a.txt" || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/graph-digest.ts > "${TMPDIR:-/tmp}/digest-b.txt" || exit 1
 cmp "${TMPDIR:-/tmp}/digest-a.txt" "${TMPDIR:-/tmp}/digest-b.txt"
 ```
 
 Per-unit structural checks (each passes only after its unit lands):
 
 ```verify
-grep -q 'assertDigestInput' packages/intentionsutil/src/digest.ts
-grep -q 'assertPathSafeId' packages/intentionsutil/scripts/graph-digest.ts
-grep -q 'renderCappedTable' packages/intentionsutil/src/digest.ts
-grep -q 'reachableSet' packages/intentionsutil/src/digest.ts
-grep -q 'reachableSet' packages/intentionsutil/src/attention.ts
-grep -q 'STATEMENT_STOP_WORDS' packages/intentionsutil/src/digest.ts
-grep -q 'NEAR_DUP_COMPARISON_BUDGET' packages/intentionsutil/src/digest.ts
-grep -q 'NODE_FIELD_DEFAULTS' packages/intentionsutil/src/schema.ts
+grep -q 'assertDigestInput' packages/intentionsutil/src/digest.ts || exit 1
+grep -q 'assertPathSafeId' packages/intentionsutil/scripts/graph-digest.ts || exit 1
+grep -q 'renderCappedTable' packages/intentionsutil/src/digest.ts || exit 1
+grep -q 'reachableSet' packages/intentionsutil/src/digest.ts || exit 1
+grep -q 'reachableSet' packages/intentionsutil/src/attention.ts || exit 1
+grep -q 'STATEMENT_STOP_WORDS' packages/intentionsutil/src/digest.ts || exit 1
+grep -q 'NEAR_DUP_COMPARISON_BUDGET' packages/intentionsutil/src/digest.ts || exit 1
+grep -q 'NODE_FIELD_DEFAULTS' packages/intentionsutil/src/schema.ts || exit 1
 grep -q 'equalsFieldDefault' packages/intentionsutil/src/digest.ts
 ```
 

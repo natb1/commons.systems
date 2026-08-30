@@ -179,7 +179,7 @@ protection yet).
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project intentionsutil --root . || exit 1
 npx tsx packages/intentionsutil/scripts/voice-review.ts
 ```
 

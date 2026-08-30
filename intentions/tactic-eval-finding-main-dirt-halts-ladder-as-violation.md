@@ -684,9 +684,9 @@ The new terminus token reaches all four surfaces that enumerate the vocabulary
 (each grep fails today):
 
 ```verify
-grep -q 'excused-environment' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run
-grep -q 'excused-environment' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-status
-grep -q 'excused-environment' .claude/skills/dispatch-ladder/SKILL.md
+grep -q 'excused-environment' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run || exit 1
+grep -q 'excused-environment' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-status || exit 1
+grep -q 'excused-environment' .claude/skills/dispatch-ladder/SKILL.md || exit 1
 grep -q 'excused-environment' .claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-run.sh
 ```
 

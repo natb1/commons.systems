@@ -488,7 +488,7 @@ test "$(grep -c 'review-fix-write-surface-guard' .claude/skills/review-fix/SKILL
 ```
 
 ```verify
-! grep -qE 'step5-baseline|step5-after|step5-new|step5-node-ids' .claude/skills/review-fix/SKILL.md
+if grep -qE 'step5-baseline|step5-after|step5-new|step5-node-ids' .claude/skills/review-fix/SKILL.md; then echo "FAIL: the forbidden pattern is still present in .claude/skills/review-fix/SKILL.md"; exit 1; fi
 ```
 
 Prose / judgment checks:

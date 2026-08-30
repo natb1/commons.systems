@@ -629,10 +629,10 @@ adds its CI step as well as its cases.
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
-.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh
-.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh
+.claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh || exit 1
+.claude/skills/dispatch-ladder/scripts/test-dispatch-ladder-advance.sh || exit 1
 packages/intentionsutil/scripts/test-transition-node.sh
 ```
 

@@ -663,13 +663,13 @@ point of Unit 2, and a silent fallback that reinstates them would otherwise be
 invisible:
 
 ```verify
-! grep -nE '^\s*(dispositions|deferred_filings|security_followup_input|verify_report),\s*$' .claude/workflows/review-fix.js
+if grep -nE '^\s*(dispositions|deferred_filings|security_followup_input|verify_report),\s*$' .claude/workflows/review-fix.js; then echo "FAIL: the forbidden pattern is still present in .claude/workflows/review-fix.js"; exit 1; fi
 ```
 
 The pack must no longer be teed into the parent's context:
 
 ```verify
-! grep -n 'tee "tmp/pack-' .claude/skills/review-fix/SKILL.md
+if grep -n 'tee "tmp/pack-' .claude/skills/review-fix/SKILL.md; then echo "FAIL: the forbidden pattern is still present in .claude/skills/review-fix/SKILL.md"; exit 1; fi
 ```
 
 ### Manual / observe-in-production

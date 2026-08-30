@@ -425,7 +425,7 @@ whole suite must pass, not just the new cases (Unit 2 changes a shared setup
 helper).
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-self-close.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-config-load.sh
 ```
 

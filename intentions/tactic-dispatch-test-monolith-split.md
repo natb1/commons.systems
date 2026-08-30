@@ -686,9 +686,10 @@ are the two integers recorded from origin/main above):**
 
 ```verify
 set -euo pipefail
-read -r AFTER_PASS AFTER_TOTAL < <(
+AFTER_COUNTS=$(
   grep -oE '^Results: [0-9]+/[0-9]+ passed, [0-9]+ failed' /tmp/pr-scripts.log \
   | awk -F'[ /,]' '{p+=$2; t+=$3} END{printf "%d %d\n", p, t}')
+read -r AFTER_PASS AFTER_TOTAL <<<"$AFTER_COUNTS"
 echo "after: $AFTER_PASS/$AFTER_TOTAL   before(origin/main): $BEFORE_PASS/$BEFORE_TOTAL"
 [ "$AFTER_TOTAL" -eq "$BEFORE_TOTAL" ] || { echo "FAIL: assertion count changed by $((AFTER_TOTAL-BEFORE_TOTAL))"; exit 1; }
 [ "$AFTER_PASS"  -eq "$AFTER_TOTAL"  ] || { echo "FAIL: $((AFTER_TOTAL-AFTER_PASS)) assertions failing"; exit 1; }

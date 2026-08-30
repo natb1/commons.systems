@@ -811,11 +811,11 @@ All suites stub `claude` via `CLAUDE_AGENTS_CMD`/`PATH` and need no live daemon,
 so they run correctly sandboxed.
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-lib-claude-agents.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-alarm.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-watch.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh
+.claude/skills/dispatch-propagate/scripts/test-lib-claude-agents.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-alarm.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-dispatch-fleet-watch.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-dispatch-select-tick.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 

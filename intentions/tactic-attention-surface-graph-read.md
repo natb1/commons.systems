@@ -131,7 +131,7 @@ None — first leaf of the round.
 ## Verification
 
 ```verify
-npm test --prefix packages/intentionsutil
+npm test --prefix packages/intentionsutil || exit 1
 npx vitest run --project office-hours --root .
 ```
 

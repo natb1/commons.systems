@@ -501,7 +501,7 @@ grep -q 'test-review-fix-dump-bytes.sh' .github/workflows/unit-tests.yml
 ```
 
 ```verify
-! grep -q 'resultBytesExact\|TextEncoder' .claude/workflows/review-fix.js
+if grep -q 'resultBytesExact\|TextEncoder' .claude/workflows/review-fix.js; then echo "FAIL: the forbidden pattern is still present in .claude/workflows/review-fix.js"; exit 1; fi
 ```
 
 Regression fences — these PASS today and must keep passing (the second is the

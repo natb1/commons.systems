@@ -137,7 +137,7 @@ golden guard; unification is future work if drift recurs.
 ## Verification
 
 ```verify
-npx vitest run --project packages/crypto-core --root .
+npx vitest run --project packages/crypto-core --root . || exit 1
 go test -C projects/budget-etl ./internal/export/
 ```
 

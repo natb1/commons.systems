@@ -273,7 +273,7 @@ that comment or leave it, but do not delete the surrounding test).
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-office-hours-select-target.sh
+.claude/skills/dispatch-propagate/scripts/test-office-hours-select-target.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-office-hours.sh
 ```
 

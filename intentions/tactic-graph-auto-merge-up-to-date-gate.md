@@ -406,8 +406,8 @@ failure cases do not sleep. Follow the existing assertion idiom exactly:
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh
-.claude/skills/dispatch-propagate/scripts/test-lib-gh-rest.sh
+.claude/skills/dispatch-propagate/scripts/test-graph-auto-merge.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-lib-gh-rest.sh || exit 1
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
 ```
 

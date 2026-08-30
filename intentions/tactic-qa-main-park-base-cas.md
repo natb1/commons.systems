@@ -279,7 +279,7 @@ If the author judges `graph-commit` too broad to auto-approve, land the list **w
 
 ```verify
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/test-dispatch-derive-node-target.sh
-.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh || exit 1
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/hooks/test-approve-workflow-commands.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && packages/intentionsutil/scripts/test-park-node.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/run-lint.sh

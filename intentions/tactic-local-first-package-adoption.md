@@ -141,7 +141,7 @@ removed only when its subject is removed in the same change).
 ## Verification
 
 ```verify
-npx vitest run --project budget --root .
+npx vitest run --project budget --root . || exit 1
 .claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app budget
 ```
 

@@ -525,7 +525,7 @@ grep -q -- '--lane fix-checks --phase fix' .claude/skills/fix-checks/SKILL.md
 ```
 
 ```verify
-! grep -q 'Known gap, deliberately left alone here' .claude/skills/dispatch-conflict/SKILL.md
+if grep -q 'Known gap, deliberately left alone here' .claude/skills/dispatch-conflict/SKILL.md; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-conflict/SKILL.md"; exit 1; fi
 ```
 
 The stale "unreachable rather than fixed" narration is gone from both doc homes.
@@ -538,11 +538,11 @@ Verified against `origin/main` at authoring time: each string below matches
 exactly once today, so each fence genuinely flips.
 
 ```verify
-! grep -q 'defect is filed separately' packages/intentionsutil/src/schema.ts
+if grep -q 'defect is filed separately' packages/intentionsutil/src/schema.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/src/schema.ts"; exit 1; fi
 ```
 
 ```verify
-! grep -q 'currently unreachable rather' packages/intentionsutil/scripts/apply-lane-pass.ts
+if grep -q 'currently unreachable rather' packages/intentionsutil/scripts/apply-lane-pass.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/scripts/apply-lane-pass.ts"; exit 1; fi
 ```
 
 The `DISPATCH_PHASE_NAMES` set and its do-not-simplify warning survive:

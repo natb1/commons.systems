@@ -239,16 +239,16 @@ bash .claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
 Guard that the completion field and its passthrough are wired (fast static checks):
 
 ```verify
-grep -q "completion" packages/intentionsutil/src/schema.ts
-grep -q "mergeCommitSha: .merge_commit_sha" .claude/skills/dispatch-propagate/scripts/lib.sh
+grep -q "completion" packages/intentionsutil/src/schema.ts || exit 1
+grep -q "mergeCommitSha: .merge_commit_sha" .claude/skills/dispatch-propagate/scripts/lib.sh || exit 1
 grep -q "mergedAt" .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged
 ```
 
 Guard that the dead-code prune path is gone from the driver:
 
 ```verify
-! grep -q "rmSync" packages/intentionsutil/scripts/reconcile-graph.ts
-! grep -qE "^\s*prune:" packages/intentionsutil/scripts/reconcile-graph.ts
+if grep -q "rmSync" packages/intentionsutil/scripts/reconcile-graph.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/scripts/reconcile-graph.ts"; exit 1; fi
+if grep -qE "^\s*prune:" packages/intentionsutil/scripts/reconcile-graph.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/scripts/reconcile-graph.ts"; exit 1; fi
 ```
 
 **Manual / observational (run against a scratch intentions dir, never the live `intentions/`):**

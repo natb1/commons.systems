@@ -630,7 +630,7 @@ each must print a matching line, so a rename or a mis-indented step fails here
 rather than silently never running):
 
 ```verify
-grep -n 'run: .claude/skills/dispatch-propagate/scripts/test-preserve-deferred-work.sh' .github/workflows/unit-tests.yml
+grep -n 'run: .claude/skills/dispatch-propagate/scripts/test-preserve-deferred-work.sh' .github/workflows/unit-tests.yml || exit 1
 grep -n 'run: .claude/skills/dispatch-propagate/scripts/test-dispatch-mark-node-park.sh' .github/workflows/unit-tests.yml
 ```
 
@@ -639,8 +639,8 @@ consumers source it, and neither carries its own copy of the ephemeral-path
 regexes:
 
 ```verify
-grep -n 'lib-ephemeral-citation.sh' packages/intentionsutil/scripts/park-node
-grep -n 'lib-ephemeral-citation.sh' .claude/skills/dispatch-propagate/scripts/dispatch-mark-node-park
+grep -n 'lib-ephemeral-citation.sh' packages/intentionsutil/scripts/park-node || exit 1
+grep -n 'lib-ephemeral-citation.sh' .claude/skills/dispatch-propagate/scripts/dispatch-mark-node-park || exit 1
 grep -n 'lib-ephemeral-citation.sh' packages/intentionsutil/scripts/test-park-node.sh
 ```
 

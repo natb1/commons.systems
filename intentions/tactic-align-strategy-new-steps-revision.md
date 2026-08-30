@@ -460,7 +460,7 @@ grep -q '^5\. \*\*Steelman-alternative challenge\.\*\*' "$F"
 grep -q '^8\. \*\*Edge cases and consequences\.\*\*' "$F"
 grep -q '^10\. \*\*Persistent-layer ownership gate\.\*\*' "$F"
 grep -q '^11\. \*\*Layer-placement gate\.\*\*' "$F"
-! grep -qE '^1[2-9]\. \*\*' "$F"
+if grep -qE '^1[2-9]\. \*\*' "$F"; then echo "FAIL: the forbidden pattern is still present"; exit 1; fi
 grep -q 'dialectic step 5' intentions/strategy-discovered-requirements.md
 grep -q 'dialectic step 2\.5' intentions/strategy-graph-native-dispatch.md
 echo "dialectic ordinals 1-11 preserved; graph cross-references still resolve"

@@ -425,11 +425,11 @@ any new wiring. Run them from the worktree root.
 The string-matched control flow is gone — both greps must find nothing:
 
 ```verify
-! grep -n 'AW_DISP" == "pruned"' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run
+if grep -n 'AW_DISP" == "pruned"' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run"; exit 1; fi
 ```
 
 ```verify
-! grep -n 'case "$REASON" in' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run
+if grep -n 'case "$REASON" in' .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-ladder/scripts/dispatch-ladder-run"; exit 1; fi
 ```
 
 Every carved-out code is emitted by exactly the site it was carved from:

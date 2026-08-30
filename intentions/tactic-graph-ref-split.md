@@ -927,16 +927,16 @@ gh api repos/natb1/commons.systems/rulesets/12884700 --jq '.conditions.ref_name.
 ```verify
 # Unit 1 — subtree-split produced a non-empty, history-bearing graph-main and
 # the shared graph worktree resolves to it.
-git rev-parse --verify graph-main
-git -C .claude/worktrees/.graph-store rev-parse --abbrev-ref HEAD | grep -qx graph-main
+git rev-parse --verify graph-main || exit 1
+git -C .claude/worktrees/.graph-store rev-parse --abbrev-ref HEAD | grep -qx graph-main || exit 1
 test "$(git -C .claude/worktrees/.graph-store log --oneline | wc -l)" -gt 1
 ```
 
 ```verify
 # Units 2, 7 — end to end: rewritten graph-commit harness and provisioning
 # test suites both green.
-bash packages/intentionsutil/scripts/test-graph-commit.sh
-bash .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
+bash packages/intentionsutil/scripts/test-graph-commit.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh || exit 1
 bash .claude/skills/dispatch-propagate/scripts/test-assert-worktree-fresh.sh
 ```
 
@@ -944,7 +944,7 @@ bash .claude/skills/dispatch-propagate/scripts/test-assert-worktree-fresh.sh
 # Unit 3 — a freshly provisioned worktree gets a working intentions/ symlink
 # pointed at the resolved graph worktree.
 GRAPH_WT=$(git worktree list --porcelain | awk '/^worktree /{wt=substr($0,10)} /^branch refs\/heads\/graph-main$/{if(!f){print wt; f=1}}')
-test -L .claude/worktrees/<freshly-provisioned-node-id>/intentions
+test -L .claude/worktrees/<freshly-provisioned-node-id>/intentions || exit 1
 test "$(readlink -f .claude/worktrees/<freshly-provisioned-node-id>/intentions)" = "$(readlink -f "$GRAPH_WT")"
 ```
 

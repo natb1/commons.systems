@@ -104,7 +104,7 @@ adopted/diverged/chosen_over prose, rendering.
 ## Verification
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+npx tsx packages/intentionsutil/scripts/validate-graph.ts || exit 1
 npm test --prefix packages/intentionsutil
 ```
 

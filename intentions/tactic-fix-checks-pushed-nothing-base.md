@@ -295,8 +295,8 @@ count must rise by exactly the number of assertions added (4 with the four keys
 above) with zero failures.
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh
-.claude/skills/dispatch-propagate/scripts/run-lint.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-scripts.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/run-lint.sh || exit 1
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 

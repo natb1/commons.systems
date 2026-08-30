@@ -729,16 +729,16 @@ Unit 1 — the negated grep **fails today** (`assert-node-selection:118` contain
 `npx tsx`), so it is not a vacuous assertion:
 
 ```verify
-! grep -n 'npx tsx' .claude/skills/dispatch-propagate/scripts/assert-node-selection
-grep -n 'node --import tsx/esm' .claude/skills/dispatch-propagate/scripts/assert-node-selection
+if grep -n 'npx tsx' .claude/skills/dispatch-propagate/scripts/assert-node-selection; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/assert-node-selection"; exit 1; fi
+grep -n 'node --import tsx/esm' .claude/skills/dispatch-propagate/scripts/assert-node-selection || exit 1
 .claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh
 ```
 
 Unit 2:
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-dispatch-review-scan.sh
-.claude/skills/dispatch-propagate/scripts/test-review-fix-orchestration-floor.sh
+.claude/skills/dispatch-propagate/scripts/test-dispatch-review-scan.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-review-fix-orchestration-floor.sh || exit 1
 grep -n 'test-review-fix-orchestration-floor.sh' .github/workflows/unit-tests.yml
 ```
 
@@ -751,7 +751,7 @@ Unit 3 (the same suite, extended with the Step 7 ordering assertion):
 Whole-change gates, both run from the worktree root:
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
+.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts || exit 1
 .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 

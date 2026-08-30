@@ -621,8 +621,8 @@ guard's explicit worktree-path argument the prose calls).
 Auto-runnable:
 
 ```verify
-bash -n .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute
-bash -n .claude/skills/dispatch-propagate/scripts/subagent-contamination-guard
+bash -n .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute || exit 1
+bash -n .claude/skills/dispatch-propagate/scripts/subagent-contamination-guard || exit 1
 bash -n .claude/skills/dispatch-propagate/scripts/test-dispatch-conflict-lane3-cwd-ratchet.sh
 ```
 
@@ -643,8 +643,8 @@ Regression sweep — every other consumer of the two changed scripts must still 
 `run-unit-tests.sh` runs the whole `test-*.sh` glob anyway):
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh
-.claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh
+.claude/skills/dispatch-propagate/scripts/test-provision-node-worktree.sh || exit 1
+.claude/skills/dispatch-propagate/scripts/test-mark-node-terminal.sh || exit 1
 .claude/skills/dispatch-propagate/scripts/test-dispatch-stop-hook.sh
 ```
 

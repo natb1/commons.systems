@@ -661,7 +661,7 @@ grep -q 'systemd-run' .claude/skills/dispatch-propagate/scripts/dispatch-code-re
 Confirm the falsified claim is gone from the code comment:
 
 ```verify
-! grep -q 'so it survives both a clean return of' .claude/skills/dispatch-propagate/scripts/dispatch-code-review
+if grep -q 'so it survives both a clean return of' .claude/skills/dispatch-propagate/scripts/dispatch-code-review; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/dispatch-code-review"; exit 1; fi
 ```
 
 **Manual / observe-in-production checks.**

@@ -569,8 +569,8 @@ npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
-bash -n .claude/skills/dispatch-propagate/scripts/graph-select-target
-bash -n .claude/skills/dispatch-propagate/scripts/dispatch-auto-merge
+bash -n .claude/skills/dispatch-propagate/scripts/graph-select-target || exit 1
+bash -n .claude/skills/dispatch-propagate/scripts/dispatch-auto-merge || exit 1
 bash -n .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute
 ```
 

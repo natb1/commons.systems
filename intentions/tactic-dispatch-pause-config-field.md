@@ -630,13 +630,13 @@ fence FAILS today — `pause` is not an accepted type — and passes after Unit 
 d=$(mktemp -d)
 printf '{"paused": false}' > "$d/pause.json"
 out=$(DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause)
-printf '%s' "$out" | grep -q '"paused": false'
+printf '%s' "$out" | grep -q '"paused": false' || exit 1
 printf '{"paused": true}' > "$d/pause.json"
 out=$(DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause)
-printf '%s' "$out" | grep -q '"paused": true'
+printf '%s' "$out" | grep -q '"paused": true' || exit 1
 rm -f "$d/pause.json"
 out=$(DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause)
-[ "$out" = "no-config" ]
+[ "$out" = "no-config" ] || exit 1
 printf 'not json' > "$d/pause.json"
 DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause && exit 1
 rm -rf "$d"
@@ -649,13 +649,13 @@ the helper reads a sentinel file and ignores `DISPATCH_CONFIG_DIR`):
 d=$(mktemp -d)
 printf '{"paused": true}' > "$d/pause.json"
 s=$(DISPATCH_CONFIG_DIR="$d" bash -c 'source .claude/skills/dispatch-propagate/scripts/lib-pause-state.sh && dispatch_pause_state')
-[ "$s" = "paused" ]
+[ "$s" = "paused" ] || exit 1
 printf '{"paused": false}' > "$d/pause.json"
 s=$(DISPATCH_CONFIG_DIR="$d" bash -c 'source .claude/skills/dispatch-propagate/scripts/lib-pause-state.sh && dispatch_pause_state')
-[ "$s" = "not-paused" ]
+[ "$s" = "not-paused" ] || exit 1
 printf 'not json' > "$d/pause.json"
 s=$(DISPATCH_CONFIG_DIR="$d" bash -c 'source .claude/skills/dispatch-propagate/scripts/lib-pause-state.sh && dispatch_pause_state')
-[ "$s" = "unknown" ]
+[ "$s" = "unknown" ] || exit 1
 rm -rf "$d"
 ```
 
@@ -689,10 +689,10 @@ The four-part loader edit must be complete — the type must appear in all three
 lists, have an example sibling, and have a schema prose block (FAILS today):
 
 ```verify
-test -f .claude/skills/dispatch-propagate/scripts/pause.example.json
-grep -c 'pause' .claude/skills/dispatch-propagate/scripts/dispatch-config-load
-sed -n '1,20p' .claude/skills/dispatch-propagate/scripts/dispatch-config-load | grep -q 'pause'
-grep -q 'Schema: pause.json' .claude/skills/dispatch-propagate/scripts/dispatch-config-load
+test -f .claude/skills/dispatch-propagate/scripts/pause.example.json || exit 1
+grep -c 'pause' .claude/skills/dispatch-propagate/scripts/dispatch-config-load || exit 1
+sed -n '1,20p' .claude/skills/dispatch-propagate/scripts/dispatch-config-load | grep -q 'pause' || exit 1
+grep -q 'Schema: pause.json' .claude/skills/dispatch-propagate/scripts/dispatch-config-load || exit 1
 awk '/^case "\$CONFIG_TYPE" in/,/^esac/' .claude/skills/dispatch-propagate/scripts/dispatch-config-load | grep -q 'pause'
 ```
 

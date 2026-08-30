@@ -626,23 +626,23 @@ Units 2 and 4 fully define.
 ## Verification
 
 ```verify
-npx vitest run --project packages/intentionsutil --root .
-npx tsc --noEmit -p packages/intentionsutil
-bash packages/intentionsutil/scripts/test-hold-node.sh
-bash packages/intentionsutil/scripts/test-park-node.sh
-bash .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh
+npx vitest run --project packages/intentionsutil --root . || exit 1
+npx tsc --noEmit -p packages/intentionsutil || exit 1
+bash packages/intentionsutil/scripts/test-hold-node.sh || exit 1
+bash packages/intentionsutil/scripts/test-park-node.sh || exit 1
+bash .claude/skills/dispatch-propagate/scripts/test-dispatch-graph-execute.sh || exit 1
 npx tsx packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 ```verify
 # Doctrine regression guard: no producer converted by this tactic may still
 # write office_hours. Each grep must find NOTHING.
-! grep -n 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute | grep -n '11)'
-! grep -n 'office_hours' packages/intentionsutil/scripts/apply-fix-state.ts
-! grep -n 'park-if-capped\|park-node' .claude/skills/dispatch-propagate/scripts/graph-select-target
+if grep -n 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute | grep -n '11)'; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute"; exit 1; fi
+if grep -n 'office_hours' packages/intentionsutil/scripts/apply-fix-state.ts; then echo "FAIL: the forbidden pattern is still present in packages/intentionsutil/scripts/apply-fix-state.ts"; exit 1; fi
+if grep -n 'park-if-capped\|park-node' .claude/skills/dispatch-propagate/scripts/graph-select-target; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/graph-select-target"; exit 1; fi
 # The three out-of-scope park producers must still park:
-grep -q 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute
-grep -q 'office_hours' packages/intentionsutil/scripts/graph-census-debt.ts
+grep -q 'PARK_NODE' .claude/skills/dispatch-propagate/scripts/dispatch-graph-execute || exit 1
+grep -q 'office_hours' packages/intentionsutil/scripts/graph-census-debt.ts || exit 1
 grep -q 'office_hours' packages/intentionsutil/scripts/graph-commit
 ```
 
