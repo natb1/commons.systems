@@ -1,0 +1,142 @@
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { validateNode, type IntentionNode } from "./schema.js";
+import { listNodesStrict } from "./store.js";
+
+/**
+ * Content-addressed materialization of `listNodesStrict`, so several processes
+ * in one dispatch tick can share a single parse of `intentions/`.
+ *
+ * WHY CONTENT ADDRESSING. The tick's merge-and-reconcile band runs five strict
+ * enumerations of the same directory (`graph-auto-merge`,
+ * `reconcile-graph-merged`'s pre-scan, `reconcile-graph.ts`'s two inner scans,
+ * and `reconcile-graph-review-stall`), and those sweeps WRITE node files
+ * between their own reads — through `graph-commit`, `apply-node-transition`
+ * and `apply-fix-state`. A "materialize once, pass a file path" share would
+ * therefore hand a later consumer a stale node set. Keying the cache on a hash
+ * of the store's bytes turns that hazard into an automatic miss: the entry is a
+ * pure function of the store state, so it can never describe a state the store
+ * has left.
+ *
+ * That is the difference from `DISPATCH_CI_VERDICT_CACHE`
+ * (`.claude/skills/dispatch-propagate/scripts/lib.sh`, the
+ * `dispatch_ci_verdict_rest` header): that cache memoizes a network verdict
+ * with no TTL and no invalidation, so an inherited directory pins a poll loop
+ * forever, which is why `dispatch-ladder-run` must `unset` the variable before
+ * every reconciler call. This cache keys on the very bytes it summarizes, so it
+ * needs no such discipline.
+ *
+ * WHAT IS PRESERVED. Strictness is load-bearing at every consumer: a corrupt
+ * node file dropped by the tolerant reader silently satisfies
+ * `blockersComplete` (`router.ts`) or strands a merged PR at a stale phase. So
+ * a corrupt store still throws `IntentionSchemaError` out of this helper, cached
+ * or not, and nothing is written on that path. A corrupt or unreadable CACHE
+ * entry degrades to a fresh STRICT enumeration — never to the tolerant
+ * `listNodes`, never to an empty set. An entry always holds the complete store,
+ * never a filtered subset, because both `graph-auto-merge` and the review-stall
+ * sweep build a `byId` map and an id absent from it reads as `COMPLETE`.
+ *
+ * The caller owns the cache directory's lifecycle: this module never creates it
+ * and never prunes it, mirroring `dispatch_ci_verdict_rest`.
+ *
+ * MEASURED COST (2026-08-19, 717 files in `intentions/`, 716 parsed nodes):
+ * in-process store parse alone 376 ms; `JSON.stringify` of the node array 45 ms
+ * for 2.91 MB; `JSON.parse` plus `validateNode` over all 716 nodes 3-6 ms; a
+ * content hash of every file in the directory 10-18 ms. So a hit costs ~20 ms
+ * against a ~500 ms miss. If those numbers move far enough that the hash
+ * approaches the parse, the trade no longer holds and this layer should go.
+ */
+
+/**
+ * sha256 over every entry in `dir`, sorted by name — each entry's name, a
+ * file/directory marker, and, for files, the file's bytes.
+ *
+ * Hashes EVERY entry, not just `*.md`. That is a superset of what
+ * `listNodesResilient` reads (it filters to `*.md` minus `README.md`), so the
+ * key cannot miss a change the enumeration would see; the cost is a spurious
+ * miss when an unrelated companion file changes, which is the safe direction.
+ *
+ * Each field is framed with a NUL separator and file bytes carry an explicit
+ * byte count, so no rename or content shuffle can produce a colliding stream.
+ * Read errors PROPAGATE: an unreadable store directory must abort the caller
+ * rather than fingerprint as empty, which would be a cache key that outlives
+ * the failure.
+ */
+export function storeFingerprint(dir: string): string {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const hash = createHash("sha256");
+  for (const entry of entries) {
+    const marker = entry.isFile() ? "f" : entry.isDirectory() ? "d" : "o";
+    hash.update(`${entry.name}\0${marker}\0`);
+    if (entry.isFile()) {
+      const bytes = readFileSync(join(dir, entry.name));
+      hash.update(`${bytes.length}\0`);
+      hash.update(bytes);
+    }
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Read a cache entry back into nodes, or return null when it cannot be trusted.
+ *
+ * Every failure mode — missing file, unreadable file, malformed JSON, a
+ * non-array payload, an element `validateNode` rejects — is one answer: null,
+ * meaning "no usable entry". The caller then re-enumerates strictly. This
+ * function never throws and never returns a partial set, so a damaged entry
+ * costs one parse and nothing else.
+ */
+function readCacheEntry(file: string): IntentionNode[] | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed)) return null;
+    const items: unknown[] = parsed;
+    return items.map((item) => validateNode(item));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `listNodesStrict`, memoized on the store's content when `cacheDir` names a
+ * directory the caller has created.
+ *
+ * With an empty `cacheDir` this IS `listNodesStrict` — byte-for-byte the same
+ * behavior, no file touched. That degradation is what keeps `/dispatch-ladder`'s
+ * single-node `--node` path working unchanged: it runs each reconciler as a
+ * separate process with no tick around it, so it supplies no cache directory.
+ *
+ * The key pairs the resolved directory path with the store fingerprint, so two
+ * stores with coincidentally identical contents never share an entry.
+ *
+ * Writing the entry is best-effort: a temp file renamed onto the final name, so
+ * a concurrent writer either wins or loses with identical content, and a write
+ * failure is swallowed rather than failing a sweep. Whether the write lands
+ * changes only the cost of the next call, never its answer.
+ */
+export function listNodesStrictCached(dir: string, cacheDir: string): IntentionNode[] {
+  if (!cacheDir) return listNodesStrict(dir);
+
+  const dirKey = createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 12);
+  const file = join(cacheDir, `nodes-${dirKey}-${storeFingerprint(dir).slice(0, 32)}.json`);
+
+  const cached = readCacheEntry(file);
+  if (cached !== null) return cached;
+
+  // A corrupt store throws here — the fail-closed path — and nothing below
+  // runs, so no entry is written for a store that cannot be enumerated.
+  const nodes = listNodesStrict(dir);
+
+  try {
+    const tmp = `${file}.tmp.${process.pid}`;
+    writeFileSync(tmp, JSON.stringify(nodes));
+    renameSync(tmp, file);
+  } catch {
+    // The caller owns the directory; a missing or unwritable one costs a
+    // repeated parse, not a failed sweep.
+  }
+
+  return nodes;
+}
