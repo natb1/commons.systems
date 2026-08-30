@@ -44,8 +44,8 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention:
-  boost: 0.04
-  override: null
+  boosts:
+    "1": 0.04
   rationale: >-
     Bootstrap re-scale 2026-07-30: Waves B-D of a three-band interim scale (50 /
     20 / 10) - dispatch-containment and evidence-custody work that follows the
@@ -64,25 +64,10 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-  tier: 1
-phase: qa
-execution:
-  branch: tactic-autonomous-ci-pending-liveness-bound
-  pr: 3002
-  attempts: {}
-  markers:
-    - planned
-  strategy_fingerprint: null
-  fix:
-    since: 2026-07-31
-    attempt: 2
-    pushed_sha: null
-  conflict: null
-  completion: null
+phase: null
+execution: null
 validates: []
-blocked_by:
-  - tactic-flake-preview-and-smoke-dpkg-lock
-  - tactic-hold-conflict-autonomous-ci-pending-liveness-bound
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -599,3 +584,147 @@ Manual and judgment checks:
   constant is the single place to raise — but raise it in `lib.sh` only; do not
   reintroduce a per-call-site literal.
 
+## Re-landing brief — what moved under this plan (2026-08-30)
+
+The branch `tactic-autonomous-ci-pending-liveness-bound` and its PR #3002 were abandoned
+unmerged, and the node reset to `phase: null` so the router re-plans from this body. The
+branch was cut before three siblings landed: `tactic-stale-hold-auto-resolve` moved the
+hold-kind vocabulary into a new module and added a per-kind re-check classification;
+`tactic-graph-router-conflict-routing` retired the conflict-hold route Unit 3 was written
+against; and REST/verdict work renumbered `lib.sh`. The three units are still the plan, but
+every `path:line` they cite predates those landings — read them against the anchors below.
+Start a fresh branch off `origin/main`; nothing from #3002 is worth salvaging.
+
+### Unit 1 — the hold-kind vocabulary now lives in `packages/intentionsutil/src/holds.ts`
+
+`HOLD_KINDS`, `HoldKind`, `KIND_SLUGS`, `isHoldKind`, `RESERVED_KIND_SLUGS`, `NODE_ID_RE`,
+`RESOLUTION_SENTENCE` and `holdIdFor` all moved out of
+`packages/intentionsutil/scripts/hold-node-decide.ts` into
+`packages/intentionsutil/src/holds.ts` (132 lines on main): `HOLD_KINDS` `:36` — still
+exactly `["provision-conflict", "fix-attempt-cap", "worktree-residue"]`, no
+`ci-pending-stalled`; kinds doc comment `:8-35` with the reserved `no-progress` paragraph
+at `:30-34`; `KIND_SLUGS` `:44`; `isHoldKind` `:55`; `RESERVED_KIND_SLUGS` `:60`;
+`RESOLUTION_SENTENCE` `:66`; `holdIdFor` `:76`.
+
+So every vocabulary edit Unit 1 assigns to `hold-node-decide.ts` — appending to
+`HOLD_KINDS`, the `KIND_SLUGS` entry, the doc-comment bullet, the reserved-slug sentence —
+relocates to `holds.ts`. `hold-node-decide.ts` now only imports (`:34-41`) and re-exports
+(`:45-52`), so its public surface is unchanged. What still changes there: the header usage
+line `:21` and the missing-`--kind` failure string `:246`, both hardcoding
+`<provision-conflict|fix-attempt-cap|worktree-residue>`. The invalid-value failure `:249`
+already interpolates `HOLD_KINDS.join("|")`. `decideHold` `:173` and `buildHoldBody` `:134`
+are still here and kind-agnostic.
+
+Other usage strings: `packages/intentionsutil/scripts/hold-node:35` (header) and `:70`
+(`USAGE=` — the plan's `:64` is now the `DECIDE_TS` assignment); it still forwards the kind
+unvalidated to the decider (`:107-116`). `packages/intentionsutil/scripts/resolve-hold:78`
+(header) and `:122` (`USAGE=`); main added `[--hold-id <hold-node-id>]`, documented at
+`:79` and `:88-98` — preserve it. `--kind` still defaults to `provision-conflict` at `:125`.
+Two stale `resolve-hold` header cross-references to fix here: `:25-26` points
+`RESOLUTION_SENTENCE` and `KIND_SLUGS` at `hold-node-decide.ts:105-119`/`:57-60`, and `:83`
+names `hold-node-decide.ts`'s `HOLD_KINDS`; both now mean `src/holds.ts`.
+
+Test anchors: `packages/intentionsutil/test/hold-node-decide.test.ts` (277 lines) has the
+`holdIdFor` per-kind block at `:59-88` and `hold_kind` assertions at `:42`, `:110`, `:153`,
+`:162` — the shape to mirror.
+
+### The `KIND_RECHECK` entry for `ci-pending-stalled` (settled — do not re-litigate at implementation time)
+
+`holds.ts:103-105` defines `HoldRecheck`; `:117-132` defines
+`KIND_RECHECK: Record<HoldKind, HoldRecheck>`. Because the type is a `Record` over
+`HoldKind`, appending `ci-pending-stalled` to `HOLD_KINDS` without a matching entry fails
+typecheck. The plan never decided a value. It is now ruled: **`policy: "manual"`**, because
+
+1. deciding whether CI concluded needs a live PR-verdict fetch from GitHub — a network
+   call that spends rate limit, whose answer can legitimately stay `pending` forever, which
+   is the exact held condition; not a local predicate the sweep can run every tick on every
+   hold;
+2. the `auto` arm's `predicate` is a closed union with one member, `"worktree-clean"`
+   (`holds.ts:104`). Classifying `auto` would mean widening that union, implementing a new
+   predicate in `packages/intentionsutil/src/hold-sweep.ts` (which gates at `:131-132` on
+   `KIND_RECHECK[kind].policy === "auto"`), and rewriting
+   `packages/intentionsutil/test/holds.test.ts:27-29`
+   (`expect(auto).toEqual(["worktree-residue"])`, confirmed verbatim) — a separate tactic's
+   work, not a line in this plan;
+3. the hold fires on an exhausted strike ladder, like `fix-attempt-cap`, not on an
+   externally observable state that flips back on its own.
+
+Write it beside the two existing `manual` entries at `holds.ts:119-131`, matching their
+`+`-concatenated `why` style:
+
+```ts
+"ci-pending-stalled": {
+  policy: "manual",
+  why:
+    "checking whether CI concluded requires a live PR-verdict fetch, not a " +
+    "local predicate the auto-resolve sweep can run without a network call; " +
+    "and the hold fires on an exhausted strike ladder, not on a condition " +
+    "that flips back on its own",
+},
+```
+
+Downstream, all intended: `.claude/skills/dispatch-propagate/scripts/lib-stale-hold-recheck.sh`
+reports and never acts (`skip-manual-policy`, documented `:76-78`, implemented `:323-328`).
+`packages/intentionsutil/src/hold-alerts.ts` surfaces the kind in unclaimed-hold alerting
+beside `provision-conflict` and `fix-attempt-cap` — its doc comment `:11-14` names today's
+two manual kinds inline and must be updated. `holds.test.ts:9-14` requires every kind
+classified and `:17-25` a non-empty `why`; the entry satisfies both.
+
+### Unit 2 — scope holds; only the anchors moved
+
+- `graph-select-target` still skips with a bare, uncounted `ci-pending`. The `qa|review`
+  arm is `.claude/skills/dispatch-propagate/scripts/graph-select-target:1117-1142`; it calls
+  `dispatch-ci-ready` at `:1136` and maps exit 1 to `echo "ci-pending"; return 1` at `:1140`.
+  `dispatch-ci-ready:11-13` still documents exit 1 as a draft PR whose verdict is pending.
+- `dispatch_classify_rollup` is `.claude/skills/dispatch-propagate/scripts/lib.sh:708`; an
+  empty rollup still returns `pending` at `:713-717`. `CANCELLED` is still in the
+  failing-conclusions jq branch (`:719-741`, conclusion list at `:728`), so decision (f) —
+  cancelled runs out of scope — still holds; the body's `lib.sh:712-721` is stale.
+- `dispatch_ci_verdict_rest` is `lib.sh:840-925` (not ~`:792`/`:820`), with per-SHA
+  `DISPATCH_CI_VERDICT_CACHE` memoisation at `:845-846` and `:920`; `gh_pr_view_rest` is
+  `lib.sh:1195` (not `:1097`). Insert the new helper and cap after `lib.sh:925`.
+- `CONFLICT_STRIKE_CAP` is `dispatch-graph-execute:165`, not `:145` — value still 5.
+  `FIX_ATTEMPT_CAP` confirmed at `packages/intentionsutil/src/transitions.ts:101`, value 3.
+- The `OnCalendar=*:0/15` cadence comment is `lib.sh:4019` (also `:3859`), not `:3082`.
+- `lib.sh` reachability from both call sites still holds: `graph-select-target:200` sources
+  `lib-reservation-ledger.sh`, which sources `lib.sh` at `lib-reservation-ledger.sh:299`
+  (not `:263`); `reconcile-graph-review-stall:91` sources `lib.sh` directly (not `:81`).
+
+### Unit 3 — the conflict-hold route it reuses no longer exists
+
+In `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall` (now 340 lines)
+the `conflict)` arm at `:297-304` is a documented no-op that `continue`s without staging;
+the rationale is in the header at `:23-29`. The whole hold apparatus is gone — no
+`hold-node` invocation, no `CONFLICT_IDS`, no `TMPDIR_HOLD`, no reason/recommendation file
+writes; the only surviving `hold-node` mention is prose at `:29`. The lock-budget header
+`:71-80` now says **at most one** `graph-commit` per tick, not two, and that call is
+`:321-332`.
+
+That invalidates Unit 3's steps 3 and 4: there is no conflict route to share a hold slot
+with and no block to copy. Rewrite them as — the ci-stall hold is the sweep's only hold
+producer, so it self-limits to one per run with no shared-slot guard, and the lock-budget
+header goes from "at most one graph-commit" to "at most one graph-commit plus at most one
+`hold-node`". Build the scratch reason/recommendation files from scratch, copying
+`graph-select-target:684-717` (`_hold_node_fix_cap`: `mktemp -d`, two `printf` files,
+`( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node … ) >/dev/null 2>&1`,
+`rm -rf`, return rc) — the surviving in-repo example.
+
+Remaining Unit 3 anchors in that script: `REPO_ROOT` `:110`; `CAP`
+(`GRAPH_REVIEW_STALL_CAP`) `:118`; `refresh_lock` `:127-130`; the single `EXIT` trap `:159`;
+`ACTED=0` `:215`; `HEAD_SHA` `:250`; `RAW_VERDICT` `:252` (empty on call failure, as the
+plan assumes); the `passing|failing` fold `:253-256`; the `reviewStallRoute` eval `:258-263`;
+the `case "$ROUTE"` `*)` no-regression arm — where a perpetually-pending node lands —
+`:305-307`. `resolve_main_worktree` is defined at
+`.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27`, and the two-line
+`NATIVE_ROOT` idiom to copy is `graph-select-target:500-501`, not `:433-434`. The script
+does not source `lib-graph-worktree.sh` today, so step 1 still applies: add the source next
+to `:91` and the `MAIN_ROOT` assignment next to `:110`.
+
+### Reuse-section anchors that moved
+
+- Strike-sidecar ladder in `dispatch-graph-execute`: `STRIKE_FILE` `:328`, cleared on
+  success `:256` and `:372`, below-cap bump/print `:399-405`, cap `:165`. The plan's
+  `:289,320-370` and `:230-235` are stale.
+- Sidecar-assertion fixture idiom: `test-dispatch-graph-execute.sh:283-298`, not `:207-290`.
+- `packages/intentionsutil/test/holds.test.ts` (37 lines) is a new file this plan does not
+  know about; the fourth kind must satisfy its assertions at `:9-14`, `:17-25`, `:27-29`.

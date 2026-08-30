@@ -151,187 +151,36 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "SIDE A — MAJOR SCOPE DEVIATION. The serving strategy's ARMED
-    maintenance-burden band condition is measured FALSE on BOTH limbs, so this
-    node's plan cannot be authored against it. WHAT FAILED:
-    strategy-graph-native-dispatch's condition declares 'the open
-    machinery-defect population — open (phase set, not done) plus born-parked
-    tactics serving this strategy — stays at or below 35% of all tactics serving
-    this strategy, and is non-increasing across consecutive samples' (armed
-    2026-08-05, measured at arming 59/197 = 30.0%). MEASUREMENT: at origin/main
-    3313bc46 on 2026-08-21, 316 tactics serve this strategy — 97 done, 91 draft,
-    84 open, 44 born-parked — giving backlog 128/316 = 40.5%. Limb one (≤35%
-    ceiling) is breached by 5.5 points. Limb two (non-increasing) fails against
-    the strategy's own recorded descent 47.6% → 38.2% → 31.4% → 24.6% and
-    against the same-day prior sample of 39.4%. METHOD, so a fresh session need
-    not re-derive it: `intentions/` extracted at origin/main via `git archive`,
-    classified verbatim per packages/intentionsutil/src/census.ts:13-40
-    (classifyTactic / strategyBacklogBand); the canonical
-    align-tactics-census.ts could not be shelled out because `npx tsx` fails
-    EPERM binding its IPC pipe under the sandbox, so the classification was
-    reimplemented from the census.ts source. This is the FOURTH independent
-    measurement of the same failure on this strategy within 24 hours (39.4% at
-    481572f1, 38.5% at fd98fd26, 41.1% by this round's gather agent, 40.5% here)
-    — agreement within 2 points cross-validates the method and establishes a
-    worsening trend, not a sampling artifact. WHY THIS PARKS RATHER THAN
-    PROCEEDS: the condition itself states that a burden growing without bound IS
-    the condition failing and parks the strategy for an author decision, not
-    merely more work to do. Conditions are human-decided; a per-node session may
-    not re-resolve one, and may not write the strategy — hence this park lands
-    on the tactic and names the strategy-level failure inside it. Precedent on
-    this same strategy: 481572f1 (tactic-supersession-retirement-sweep) and the
-    sibling escalation on tactic-graph-commit-park-content-durability. AUTHOR
-    DECISION OWED: rule the band — re-affirm 35%, re-declare a different
-    ceiling, or accept the breach with a stated remediation — and refresh the
-    strategy's `reading`, which still records 58/236 = 24.6% and is stale by ~16
-    points and 80 tactics against the live corpus. RECOMMENDATION / STATE FOR A
-    FRESH SESSION: nothing about THIS node is defective — its premise was
-    independently verified live at origin/main 3313bc46, and its plan is
-    otherwise ready to author. `office_hours` is absent from all four
-    strategy-record payloads in .claude/workflows/align-tactics.js while the
-    strategy-mode eligibility prose at :743 still requires it. Once the band is
-    ruled, re-run /align-tactics tactic-align-tactics-drift-dump-office-hours;
-    five clarifications landed on this node by this round carry the corrected
-    anchors (prose :726 and :743; asJson dumps :798-808, :901-908, :977-986; the
-    fourth site buildCorpusPrompt :656-663 is a string join, not asJson), the
-    inert-without-caller-side finding (SKILL.md:252-259 and
-    tactic-target.md:91-98 must change or the fix forwards `undefined`), the
-    per-mode asymmetry (tactic mode is instructed at :726 NOT to evaluate
-    office_hours, so only the strategy-mode dump restores a real gate), the
-    expired motivating example (the strategy now carries office_hours: null at
-    intentions/strategy-graph-native-dispatch.md:6710), and the CI-wiring trap
-    (`.claude/workflows/*` is not in run-unit-tests.sh's auto-detect at lines
-    84-90, so any new test must be wired unconditionally in the hook-tests job
-    of .github/workflows/unit-tests.yml). No re-derivation of any of that is
-    needed. CALLER-THREAD RE-VERIFICATION (2026-08-21): before accepting this
-    park the caller thread re-measured the band independently using the
-    CANONICAL code path the subagent could not reach — `listNodes` and
-    `strategyBacklogBand` imported directly from
-    packages/intentionsutil/src/census.ts, over `intentions/` extracted at
-    origin/main 3313bc46 via `git archive` — and reproduced the subagent counts
-    EXACTLY (97 done / 91 draft / 84 open / 44 born-parked; band 128/316 =
-    40.5%; ceiling limb FAILS). The park is therefore confirmed by the canonical
-    census functions themselves, not only by a reimplementation of their rules.
-    NOTE ON WHERE THE OBSERVATIONS LANDED, recorded so the placement does not
-    read as an error: the round's five immaterial Side-B observations were
-    folded into this node's own `clarifications` and body round-record rather
-    than minted as a separate born-parked carrier node. That is deliberate.
-    Clarification 245/V1 forbids only an autonomous write to the STRATEGY's
-    clarifications, which this is not; and minting a carrier when the park's own
-    reason is a backlog-band breach would add a fresh born-parked tactic to the
-    very numerator the park is about (strategyBacklogBand, census.ts:26-40,
-    scores born-parked as backlog). Since this node is itself now in the
-    office-hours queue, the observations reach the same sitting a carrier would
-    have routed them to."
-  since: 2026-08-21
-  recommendation: >-
-    AUTHOR DECISION OWED — rule the maintenance-burden band on
-    strategy-graph-native-dispatch.
-
-    Three dispositions, all legal; pick one in an /align round on the STRATEGY
-    (this per-node
-
-    session may not write it):
-
-    (a) RE-AFFIRM 35% and treat the 40.5% breach as a backlog-reduction mandate
-    — then the
-        remediation itself needs a named carrier, because parking nodes is what raised the number;
-    (b) RE-DECLARE the ceiling against the live corpus (128/316 = 40.5% at
-    3313bc46) with a stated
-        descent target, if 35% was calibrated against a 197-tactic population that has since grown
-        to 316;
-    (c) ACCEPT the breach with a stated remediation and re-arm later, recording
-    why the band is
-        not currently the right instrument.
-
-    READ THIS FIRST — the band is now a compounding gate, not a single reading.
-    Every per-node
-
-    /align-tactics round on this strategy now parks on this same condition, and
-    each park converts
-
-    a `draft` tactic into a `born-parked` one. classifyTactic
-    (packages/intentionsutil/src/census.ts:13-18)
-
-    scores born-parked as BACKLOG and draft as neither, so each park moves one
-    tactic INTO the
-
-    numerator the condition measures. Four nodes were parked on this condition
-    within 24 hours
-
-    (tactic-supersession-retirement-sweep at 481572f1, tactic-align-review-skill
-    at a89740c2,
-
-    tactic-graph-commit-park-content-durability at fd98fd26, and this node), and
-    the samples rose
-
-    monotonically across them: 38.5% -> 39.4% -> 40.5%. The autonomy contract is
-    behaving
-
-    correctly at each step; the aggregate is a positive feedback loop that no
-    autonomous lane can
-
-    exit. Whichever disposition is chosen, it should be chosen soon and it
-    should say what the
-
-    lane does with the already-parked cohort.
-
-
-    ALSO OWED, cheap, independent of the ruling: refresh the strategy's stored
-    `reading`. It still
-
-    records `58/236 = 24.6%` — stale by ~16 points and 80 tactics against the
-    live corpus — and it
-
-    is the field a reader would naturally trust.
-
-
-    ON THIS NODE SPECIFICALLY — nothing about it is defective and no
-    re-derivation is owed. Its
-
-    premise was independently verified LIVE this round at origin/main 3313bc46:
-    `office_hours`
-
-    appears in none of the four strategy-record payloads in
-    .claude/workflows/align-tactics.js,
-
-    while the strategy-mode eligibility prose at :743 still names "office_hours
-    is null" as one of
-
-    five criteria the drift agent must apply. Once the band is ruled, re-run
-
-    `/align-tactics tactic-align-tactics-drift-dump-office-hours` and it can be
-    planned straight
-
-    from its own body: the five clarifications landed on this node by this round
-    carry the
-
-    corrected anchors, the inert-without-the-caller-side finding, the per-mode
-    asymmetry, the
-
-    expired motivating example, and the CI-wiring trap. Sequence it against
-
-    tactic-eval-finding-review-fix-workflow-args-rederived-each-pass (phase
-    implement), which edits
-
-    the same three args-contract anchors.
-  session_type: requirement-discovery
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
 # the /align-tactics drift agent is instructed to weigh the strategy's own office_hours but is never given the field -- pass office_hours into the drift payload at all four dump sites so the instruction and the data agree
 
-## Status — PARKED to office_hours, 2026-08-21 (no plan authored)
+## Status — un-parked 2026-08-30, still a draft (no plan authored)
 
 This node is **still a draft**. The 2026-08-21 `/align-tactics` per-node round ran
 its two-sided drift review and parked before authoring a plan: Side A found the
 serving strategy's **armed maintenance-burden band condition measured false on
-both limbs**, and conditions are human-decided. `office_hours.reason` carries the
-measurement and `office_hours.recommendation` carries the decision owed. Nothing
-about *this* node is defective — its premise was verified live this round, and it
-can be planned straight from the record below once the band is ruled.
+both limbs**, and conditions are human-decided. Nothing about *this* node was
+defective — its premise was verified live that round, and it can be planned
+straight from the record below.
+
+**The park is cleared.** The author ruled the band on 2026-08-28, and that ruling
+un-parks every node held *solely* on the maintenance-burden band breach. This node
+was held on nothing else — the park's own text says so — so `office_hours` was
+cleared on 2026-08-30 as part of the dispatch/RSI serialized PR batch.
+
+Nothing was lost with it. The band measurement the park carried (128/316 = 40.5%,
+ceiling limb fails, measured at origin/main `3313bc46`) is clarification 1 on this
+node; the four corrected dump-site anchors, the inert-without-caller-side finding,
+the per-mode asymmetry, and the CI-wiring trap are clarifications 2-5. Read the
+clarifications — `office_hours` is null by disposition, not by loss.
+
+**Next step:** `/align-tactics tactic-align-tactics-drift-dump-office-hours` to
+author the plan. That resumes a round rather than starting one: the five
+clarifications carry the corrected anchors, and none of it needs re-deriving.
 
 **Where this round's observations live, and why.** The round's five immaterial
 Side-B observations were folded into this node's own `clarifications` array and
