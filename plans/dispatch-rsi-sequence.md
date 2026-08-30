@@ -1152,18 +1152,55 @@ cannot:
      ascending case order; reversed, `10d` ends up below `10g`. U9 also removes the
      `conflict)` arm that U11's guard comment reasons about, so that comment is
      written against the post-U9 shape.
+
+     **This reverses the order `tactic-review-stall-predicate-subprocess-spawn.md`
+     assumes.** Its "Composition with the adjacent CI-verdict tactic" section calls
+     the predicate tactic landing first "the expected order" and specifies both
+     directions; the ordering above deliberately takes its *second* branch ("if the
+     CI tactic lands first"), so read that branch, not the first one.
+
+     **And the substantive consequence, which the test-ordering reason above does
+     not cover: U9 voids Case 10g's premise.** U9 inserts its `CONFLICTING`
+     short-circuit immediately after the `.mergeable` validation `case`, i.e.
+     *above* `HEAD_SHA`, `RAW_VERDICT` and the guard — so a CONFLICTING candidate
+     `continue`s without ever reaching the `ROUTE=` spawn. Case 10g as specified
+     ("CONFLICTING + green still reaches the predicate … the shim log has exactly 1
+     line") therefore asserts a path that no longer exists, and goes red the moment
+     both units are in the tree. Because both land in the **same PR**, reversing the
+     order does not save it — U12 must write 10g against the post-U9 shape. Both
+     nodes already record the interaction (`tactic-review-stall-ci-verdict-cache-miss.md`
+     "Note the interaction: this node's Unit 1 already removes that spawn for the
+     CONFLICTING subset"; the predicate node's second composition branch, "on
+     whichever path still reaches that spawn"), but neither re-scopes the case.
+     Re-scope it as part of U12 rather than discovering it in CI.
    - **U13–U15 before U18.** U18 appends a new `hold-node` landing block after the
-     sweep's `graph-commit` landing block — the same block U14 rewrites to thread
-     the `--base` pin through. Reversed, U18's new block is written against a
-     landing shape U14 then replaces underneath it.
+     sweep's `graph-commit` landing block (`:321-338`) — the same block U14 rewrites
+     to thread the `--base` pin through. Reversed, U18's new block is written against
+     a landing shape U14 then replaces underneath it.
+
+     **"After the landing block" is not sufficient on its own: U18 must also amend
+     the early exit above it.** `reconcile-graph-review-stall:311` is
+     `[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0`, and a CI-pending candidate never
+     enters `RECOVERED_IDS` — below the strike cap it `continue`s, at cap it is
+     recorded in `CI_STALL_IDS` and `continue`s. So on the sweep runs U18 exists to
+     serve, `RECOVERED_IDS` is empty and the script exits at `:311` before any block
+     placed after `:321`. That is the same dead-code trap as the ⛔ box in the node's
+     own Unit 3 step 2, one exit earlier: widen `:311` to
+     `[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0`
+     (or land the hold before it). The node's re-landing brief does not mention
+     `:311` — its steps 3 and 4 still describe a conflict-hold block at `:307-331`
+     that no longer exists.
    - **U2 rebases over the merged PR5a.** PR5a shipped as **#3140** and
      `tactic-mainqa-record-time-routing` is `phase: done` on `origin/main`. Its
-     Unit 4 moved both of U2's call-site anchors: in `reconcile-graph-merged` the
-     inline enumeration block is now `:150-190` with
-     `listNodesStrict("./intentions")` at `:176` (U2's plan says `:133-151` /
-     `:138`), and in `reconcile-graph.ts` `listNodesStrict(args.dir)` is now at
-     `:207` (U2's plan says `:151`). Merge `origin/main` and re-locate by symbol
-     before editing either file.
+     Unit 4 moved two of U2's four call-site anchors — U2 routes **five**
+     enumerations across four files, and the other two are unchanged
+     (`reconcile-graph-review-stall:188-207` / `:192` and `graph-auto-merge:261-279`
+     / `:264`, both re-measured 2026-08-30; do not narrow U2's scope to the two
+     below). The two that moved: in `reconcile-graph-merged` the inline enumeration
+     block is now `:151-190` with `listNodesStrict("./intentions")` at `:176` (U2's
+     plan says `:133-151` / `:138`), and in `reconcile-graph.ts`
+     `listNodesStrict(args.dir)` is now at `:207` (U2's plan says `:151`). Merge
+     `origin/main` and re-locate by symbol before editing either file.
 
 ---
 
