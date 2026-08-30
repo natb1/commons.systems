@@ -87,8 +87,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Every item field this CLI accepts is rendered by `buildMainqaBody` as ONE
- * markdown line (`- **<id> — <title>**`, `  - Finding: <finding>`, …). A value
+ * Every item field this CLI accepts is rendered by `buildMainqaBody` into
+ * exactly one markdown line (`- **<id> — <title>**`, `  - Finding: <finding>`, …). A value
  * carrying a newline therefore does not merely look untidy — it breaks the
  * bullet structure `/qa-main`'s node lane parses back out (`.claude/skills/
  * qa-main/SKILL.md`, "New shape"), silently orphaning every sub-line after the
