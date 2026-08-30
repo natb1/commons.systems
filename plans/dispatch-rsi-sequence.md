@@ -30,11 +30,12 @@ were consolidated here and the plan now points at this file.
 
 | | |
 |---|---|
-| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18". **PR15 (U0/U3/U4)** — the graph-commit simplification half of Position 2, `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`: all five of its nodes closed — see §"Position 2 — PR15" |
+| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18". **PR15 (U0/U3/U4)** — the graph-commit simplification half of Position 2, `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`: all five of its nodes closed — see §"Position 2 — PR15". **PR16 (7 of 12 units)** — the node-mutation half, `96d22cb1` (#3138). Bookkeeping landed `c55710c4`: eight of its twelve nodes closed, four carried forward — see §"Position 2 — PR16" |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
 | **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts). **No position waits on the author** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
-| **Next** | **Position 2 — PR16**, the remaining half of the graph plumbing. PR15 (U0/U3/U4) shipped 2026-08-29; PR16 is independent of it and nothing gates it. **PR16 must absorb #3023, which is still open**, as a new unit ahead of Unit 8 |
+| **Next** | **Position 3 — PR5a**, record-time main-qa routing. Position 2 is complete: both PR15 and PR16 shipped 2026-08-30. Nothing gates Position 3 |
+| **Carried forward** | **Four PR16 units and the #3023 absorption**, none of which gate a later position. Units 1 and 6 hold live `blocked_by` edges; Units 8 and 9 are parked on unmade author rulings; #3023 is wholly unlanded and is a PR-sized change of its own — see §"Position 2 — PR16" |
 | **Open park** | **One**, from Position 1. `tactic-autonomous-body-write-wholesale-replace` is parked, not closed: PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere. Three dispositions are offered in `office_hours.recommendation`. **It gates no position** — the four sibling nodes closed and no later bundle depends on the ruling |
 | **Not started** | Positions 2 through 13. PR2 through PR20 |
 
@@ -156,7 +157,7 @@ Two rulings shape its units:
 - **Unit 5** (park content, delete/modify) takes the **ordinary branch only**,
   and records the delete/modify residue rather than handling it.
 
-### Position 2 · Bundle 1b — PR15 ✅ SHIPPED + PR16, the graph plumbing
+### Position 2 · Bundle 1b — PR15 ✅ SHIPPED + PR16 ✅ SHIPPED, the graph plumbing
 
 15 nodes; the closure toolchain every later bundle's bookkeeping runs through.
 
@@ -260,6 +261,98 @@ sync path; do not add a compensating fast-forward.
 `run-typecheck.sh` 3/3, `run-lint.sh` clean. Note for anyone citing these later:
 node bodies across this set carried stale figures (711/38, 43, 84, "Case 84")
 that were corrected at closing — the regression case is **Case 85**.
+
+#### PR16 — what shipped, 2026-08-30
+
+Merged as `96d22cb1` (#3138). Two graph writes landed alongside it: the sensor
+and threshold writes as `8a823862`, and the closing batch as `c55710c4`.
+**Eight of the twelve nodes are closed; four are carried forward.**
+
+Shipped: **Units 2, 3, 4, 5, 7, 10, 11** plus the folded class-B instrument-arm
+verification.
+
+**Corrections that changed the work**, all found by auditing the units against
+the nodes before implementing rather than after:
+
+- **Unit 4's data set was 3 nodes, not the 6 the plan claimed** — verified two
+  independent ways across all 751 nodes. A naive `grep` for `phase: main-qa`
+  returns 68 files, almost all of them nodes with a legitimate *first-class*
+  phase; backfilling against that set would have corrupted 65 healthy nodes.
+- **Unit 4 was widened to match its node.** The plan scoped an
+  `attributes.phase`-only rejection; the node specifies a general shadow-ban
+  over every first-class field name, plus deleting all six squatter readers.
+  Shipping the plan's version would have left the node half-done while looking
+  complete. Census taken first: 50 distinct `attributes` keys, zero collisions.
+- **Unit 11's premise was false.** The exit-1 `unknown` arm it calls untested
+  was already covered; the real gaps were two jq-mode arms and the `rev-parse`
+  arm. Rescoped, and all three proven non-vacuous by mutation.
+- **Unit 5's verification step cannot pass and must not be treated as failure.**
+  It says to confirm `deriveGap` returns `null`; 17 of 21 active records are
+  unexercised, so the gap is correctly non-null. What was verified instead: the
+  threshold is byte-identical to the reader's exported literal, and the gap goes
+  `null` when the reading *is* that literal. The signal was **permanently
+  unsatisfiable** before and is now merely unmet.
+- **Unit 3 shipped without `--dir`, against the plan and per its node.** The
+  plan's premise that PR1 had made this script's tree explicit is false — PR1
+  touched it by comment only — but adding `--dir` would have shipped the defect
+  the unit exists to close, because four sensors close over module-level store
+  constants and a partial `--dir` reads one store while writing another.
+
+**Rule-number collision, live.** PR16 took **Rule 23** for the attributes
+shadow-ban. `tactic-supersession-edge-and-terminal` — Position 6's PR19 — claims
+Rules **23 and 24**. Rule numbers are cross-referenced from node bodies and are
+never reused, so **PR19 must renumber**. Recorded in `schema.ts`'s ledger
+paragraph and above the function.
+
+**Unit 10's fatal is opt-in by necessity.** `graph-fast-path.yml` runs the same
+`validate-graph.ts intentions` command in the `guard` job that four required
+contexts depend on, so an unconditional fatal would re-arm the 2026-08-14
+repo-wide write outage. The `--strict-sensors` flag is armed only in the
+post-merge job. Any later unit touching this validator must preserve that split.
+
+**A regression is now on the record.** The class-B verification landed a fresh
+reading on `strategy-graph-native-dispatch`, replacing a 19-day-old flattering
+one: backlog moved `24.6% (non-increasing)` → **`40.5% (increasing)`**, outside
+its ≤35% band. The instrument arm is confirmed working; the band breach is a
+separate matter for that strategy.
+
+##### Carried forward — four units and the #3023 absorption
+
+None gate a later position.
+
+- **Unit 1** (`transition-node` clobbers an uncommitted body edit) — its node
+  holds a live `blocked_by` on `tactic-scope-fingerprint-plan-substance`, and
+  the behavior is *documented in `transition-node` as intentional*, so "fixing"
+  it would revert a recorded decision. Needs the contradiction ruled first.
+- **Unit 6** (scope-stale shell coverage) — live `blocked_by` on
+  `tactic-strategy-fingerprint-stamp-coverage`, i.e. on #3023.
+- **Unit 8** (`strategy_fingerprint` sha provenance) — **there is no write site
+  on `main`**: `transition-node` never writes a strategy-fingerprint stamp at
+  all, so there is nothing to correct until #3023 lands. Its node is *also*
+  parked on an unmade ruling — whether that field keeps its `{hash, sha}` form
+  or drops `sha`. The plan does not mention that park.
+- **Unit 9** (`validate-graph` passes on an empty store) — its node is parked,
+  and the plan's claim that "Units 9 and 11 were never blocked" is **false for
+  Unit 9**. Implementing it as scoped requires inverting
+  `reader-required-dir.test.ts`'s currently-passing, deliberately-authored
+  assertion that an empty *named* store is a legitimate graph — landed by PR1
+  itself. That is the weakening `.claude/rules/test-integrity.md` forbids;
+  it needs an author ruling, not a workaround.
+- **#3023** — **none of its scope is on `main`.** Its clean-half spin-off #3100
+  closed *without merging*, so this is a 20-file, roughly +1571/−90 change, not
+  a conflicting remainder. Its only consumers here are Units 6 and 8, and Unit 8
+  is blocked on a ruling regardless, so absorbing it now buys nothing.
+
+**Verification at merge:** `intentionsutil` vitest 1252/1252 across 57 files
+(from 1230/56), `test-graph-commit.sh` 124/0, `test-park-node.sh` 25/0,
+`test-verify-landed.sh` 28/0 (from 25/0), `tsc --noEmit` exit 0,
+`run-typecheck.sh` 3/3, `run-lint.sh` clean, and `validate-graph.ts intentions`
+ok at 751 nodes both with and without `--strict-sensors`.
+
+> Note for later positions: `run-lint.sh` and `run-typecheck.sh` diff
+> `origin/main...HEAD`, so they are **vacuous on uncommitted work**. Running
+> lint only after committing is what caught a net-new `as` cast every
+> subagent's own run had reported clean.
 
 ### Position 3 · Bundle 2a — PR5a, record-time main-qa routing
 
