@@ -11,12 +11,12 @@ rationale: "Retained from the 2026-08-30 /align interview that added the
   indifference option to the interview round. The graph now records the doctrine
   (strategy-graph-review-curriculum's 2026-08-30 virtual-review-node
   clarification, and the amended conditions and success_signal); this tactic
-  carries the encoding. Two-entry serves is the honest cross-cutting case
-  (strategy clarification 27): the sitting skill is a curriculum artifact, but
-  the derived rank-ordered candidate is router selection machinery, which
-  strategy-graph-native-dispatch owns. The author flagged at the interview that
-  this 'likely requires new mechanisms' — the router selects stored nodes
-  today."
+  carries the encoding. Two-entry serves is the honest cross-cutting case (the
+  artifact-owner rule, strategy-graph-native-dispatch clarification 27): the
+  sitting skill is a curriculum artifact, but the derived rank-ordered candidate
+  is router selection machinery, which strategy-graph-native-dispatch owns. The
+  author flagged at the interview that this 'likely requires new mechanisms' —
+  the router selects stored nodes today."
 reading: null
 serves:
   - strategy-graph-review-curriculum

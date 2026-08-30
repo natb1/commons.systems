@@ -463,6 +463,39 @@ clarifications:
       measures the un-reviewed backlog's depth and top rank. This
       aggregate-rather-than-per-decision accounting was Claude-drafted and
       author-adopted this round."
+  - question: What is the round provenance of the 2026-08-30 indifference-option
+      round, and did it pass its own draft-review gate?
+    answer: "(Recorded 2026-08-30, post-hoc, discharging the sole-carrier condition
+      on strategy-discovered-requirements. Landed here rather than in session
+      narrative because attributes.align_round — tactic-align-review-skill item
+      9 — does not exist yet; this clarification is the interim carrier.) GATE:
+      SKIPPED at commit time. The round landed as fdcd17cf (base 77bd7471)
+      without running the adversarial draft review its own governing condition
+      requires. The gate reads not-yet-armed (tactic-align-review-skill unbuilt:
+      no /align-review skill, no assemble-review-pack, no graph-commit
+      --review), so the owed discharge was the inline-pack bootstrap subagent,
+      which the round did not run. Per the condition, that is a defect of the
+      round. The review was run afterwards at the author's instruction, against
+      an inline-assembled pack, and returned verdict mostly-greenfield with 12
+      MATERIAL and 1 MINOR finding; its six defect-class findings are corrected
+      in this same commit and its six design-question findings go to a following
+      interview. DEVIATION: the reviewer ran with model fable, not the model
+      opus tactic-align-review-skill item 1 specifies — author-directed. FREEZE
+      CLASSIFICATION: computed with the authoritative predicate (listNodes +
+      per-child execution.strategy_fingerprint read), not a grep. Exactly one
+      stamped open child across both edited strategies:
+      tactic-graph-function-docs (phase implement, legacy bare-string stamp),
+      classified MATERIALLY AFFECTED because it documents the graph's function
+      at the entry points and this round introduces the distinction that some
+      graph content is not author doctrine, which a reader of those entry points
+      needs; its stamp was left stale so the freeze fires. Zero orthogonal, zero
+      re-stamped, no must-land-first migration. SCOPE-INERT RE-STAMP: not
+      applicable — no open tactic's body was edited. DELEGATION SWEEP: PARTIAL —
+      the census ran but its Delegations section was not walked entry-by-entry
+      and no recovers edge was proposed, contrary to /align step 3. CURRICULUM
+      ENROLLMENT: no review item minted and none owed; the author deferred
+      nothing, answering every question with a selected option or a written
+      counter-design."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

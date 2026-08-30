@@ -23,15 +23,19 @@ rationale: "Records the 2026-07-09 requirement: just as strategy-graph-integrity
   beyond readings, by pointer, never duplication. On-demand review (a node
   re-examined when it blocks work or an interview touches it) continues, but
   structurally never reaches settled, unchanged doctrine — the exact site where
-  dogma lives; the curriculum is what does. Its economics: the recursively
-  broadening scope keeps the review frontier growing slower than the graph,
-  unlike per-node scheduled review. Capture note: the curriculum makes Claude
-  the recurring conductor of reviews that re-affirm a record Claude helps draft
-  (delegation-anthropic-claude's framing-risk import). The loop is controlled,
-  not unwound — no recovers edge: the type-b sitting rules (probes cite the
-  record and the collected sources, the author articulates first) and the
-  cadence conditions hold it, mirroring strategy-graph-integrity's recorded
-  reasoning; delegation-philosophical-articulation's recovery stays owned by
+  dogma lives; the curriculum is what does. Its economics (amended 2026-08-30,
+  the recursively-broadening account having described the enrollment mechanism
+  this node replaced): a single derived virtual review node, O(1) rather than
+  accumulating, walks the durable layer in rank order and re-enters a node only
+  when it changes — so review cost tracks the graph's rate of change, not its
+  size, which is what keeps it cheaper than per-node scheduled review. Capture
+  note: the curriculum makes Claude the recurring conductor of reviews that
+  re-affirm a record Claude helps draft (delegation-anthropic-claude's
+  framing-risk import). The loop is controlled, not unwound — no recovers edge:
+  the type-b sitting rules (probes cite the record and the collected sources,
+  the author articulates first) and the cadence conditions hold it, mirroring
+  strategy-graph-integrity's recorded reasoning;
+  delegation-philosophical-articulation's recovery stays owned by
   strategy-philosophical-grounding. serves is empty by the sub-strategy
   inheritance rule (kind-strategy): no virtue claim beyond parent
   strategy-explicit-intent."
@@ -109,7 +113,17 @@ clarifications:
       calling any institutional audit a ratchet — institutions naturally reject
       audit. The curriculum is largely implemented through transient (though
       recursive) review nodes, and the curriculum mechanism is itself subject to
-      the same review. Recorded 2026-07-09 interview."
+      the same review. Recorded 2026-07-09 interview. AMENDED 2026-08-30: the
+      sentence 'the curriculum is largely implemented through transient (though
+      recursive) review nodes' no longer describes the implementation, and the
+      ratchet answer is now stronger rather than weaker. The node-review
+      mechanism is a single DERIVED fixture that stores nothing and accumulates
+      nothing; the only nodes it leaves behind are the born-parked items
+      review-later deferrals mint, which still archive by inaction. A mechanism
+      that holds no state stands down by being deleted, which is a cleaner
+      answer to the ratchet objection than transience was. The rest of the
+      disposition — on-demand review retained, the curriculum itself subject to
+      the same review — is unchanged."
   - question: What role does /align (the align-strategy interview) play in the
       curriculum?
     answer: "Maintaining the curriculum is one of /align's roles: enrollment happens
@@ -196,7 +210,21 @@ clarifications:
       recording time) must encode the dialog-exercise sitting type and the
       three-movement reading-sitting structure on the generalized skill surface
       — flagged here rather than edited onto the live node. Recorded 2026-07-18
-      /reading-review chunk 5."
+      /reading-review chunk 5. AMENDED 2026-08-30: this entry's
+      frontier-construction half is superseded; its exercise-type half is not.
+      The clause that 'the recursive tracking of follow-up resources and the
+      recall of vocabulary and key concepts/quotes must be the primary mechanism
+      for establishing the curriculum frontier', and the two-feeder construction
+      account beside it, described the enrollment design the virtual review node
+      replaces. What survives, and is unchanged: the two exercise types (reading
+      and dialog), the production rule that reading sessions always produce a
+      dialog session prioritized before new reading, the deferral option, and
+      the retention mechanism. Those order the READING curriculum, whose
+      apparatus stays owned by strategy-philosophical-grounding. They no longer
+      determine the node-review order, which the virtual review node owns by
+      rank. Recorded so a fresh session does not read both frontier designs as
+      concurrently binding — the defect this round's adversarial review found
+      (F8)."
   - question: Can the attention/boost mechanism manage curriculum-frontier
       priorities, replacing the integer numbering (author question, 2026-07-18)?
     answer: "Author-ratified 2026-07-18 /align-strategy round, pulled forward from
@@ -317,13 +345,21 @@ clarifications:
       replacement observable were Claude-drafted and author-adopted this round."
 tooling_goals:
   - kind: sensor
-    statement: "review-coverage table in the graph digest / align-audit report — per
-      durable-layer node: mode, review path, last reviewed
-      (tactic-review-curriculum-coverage-sensor)"
+    statement: review debt, read off the virtual review node — the count of
+      durable-layer nodes un-reviewed since they last changed, and the rank of
+      the highest such node (tactic-node-review-skill). Replaces 2026-08-30 the
+      review-coverage table (mode, review path, last reviewed), whose observable
+      this round deleted as vacuous under the virtual-node design; its three
+      cited carriers — tactic-review-curriculum-coverage-sensor,
+      tactic-align-curriculum-maintenance,
+      tactic-review-sitting-skill-generalization — are all pruned nodes and were
+      dangling here.
   - kind: actuator
-    statement: record-time curriculum maintenance in the /align interview
-      (tactic-align-curriculum-maintenance); the generalized office-hours review
-      sitting beyond reading chunks (tactic-review-sitting-skill-generalization)
+    statement: the /node-review sitting over a node's own doctrine and its
+      delegated/deferred content, ancestry-first and change-gated, selected by
+      the virtual review node (tactic-node-review-skill); record-time enrollment
+      in /align is now limited to review-later deferrals minting their node
+      (tactic-align-indifference-option)
 success_signal:
   observable: per review cycle — review debt (how many durable-layer nodes are
     un-reviewed since they last changed, and the rank of the highest such node,
