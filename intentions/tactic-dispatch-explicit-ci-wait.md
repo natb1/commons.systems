@@ -287,3 +287,73 @@ should expect a merge in that region.
 Unit-test the wait loop against a stubbed verdict source (concludes green, concludes red, never
 concludes → timeout). Assert the autonomous and `--manual` paths do not wait. Manual: run
 `dispatch <id>` against a node whose PR has checks in flight and confirm it waits, then dispatches.
+
+
+## Author ruling, 2026-08-29 — clarification 131 amended to option (a)
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 3", and landed as an amendment on
+`strategy-graph-native-dispatch` clarification 131).**
+
+**OPTION (a) — MAKE THE PREMISE TRUE.** The selection-time wait writes a
+**provisional reservation claim before it waits**, so both surfaces genuinely hold
+a concurrency slot and the Scope bullet's rationale above becomes true rather than
+being narrowed away. This accepts the cost of a new ledger write at a point that
+has none today, needing rollback-on-timeout semantics; model it on
+`graph-select-target`'s `STANDALONE_CLAIMED` EXIT trap. Getting it wrong leaks a
+slot per failed explicit dispatch — the failure the `origin=explicit` stamp exists
+to prevent.
+
+**Rejected: option (c), narrowing this tactic to the provision-time surface only.**
+Cheaper, and it needed no new concurrency semantics, but it left the `qa|review`
+phase pair — the very pair this tactic was raised for — still dead-ending on
+`node-not-selectable`. Also rejected: option (b), borrowing the TTL as a bare bound
+magnitude with no slot held.
+
+**This node's central design decision is therefore settled and it is plannable.**
+Scope item "Cover both surfaces above, or establish and document which single
+surface the wait belongs at" resolves to **both surfaces**, with the selection-time
+one taking a provisional reservation.
+
+### Three immaterial observations, retained from the 2026-08-19 park
+
+None blocks the plan; recorded here so they are not rediscovered when the park
+clears and the field is destroyed.
+
+1. **Bound magnitude.** The tree's other detached CI wait, `dispatch-ladder-run`,
+   budgets `CI_WAIT_S=3600` at
+   `.claude/skills/dispatch-ladder/scripts/dispatch-ladder-run:375` — six times
+   the `DISPATCH_RESERVATION_STANDALONE_TTL_S` default of 600
+   (`lib-reservation-ledger.sh:629`). (The park cited the script bare; it lives
+   under the `dispatch-ladder` skill, not `dispatch-propagate`. Re-anchored
+   2026-08-30; the line number is unchanged.) Real check durations here routinely
+   exceed 600s, so at the default this wait will often reach its timeout fallback
+   rather than its success path. Clarification 131 already records the disposition
+   ("if real check durations exceed it the fix is raising that one constant rather
+   than adding a second"), so no new decision is owed — but raising it also
+   lengthens how long a leaked `origin=explicit` marker occupies a slot under
+   `reservation_sweep` rule (c-ttl).
+2. **Pause mechanism.** This node's rationale leans on the standing
+   paused/manual-only operating mode. The **mode** holds; its **mechanism** differs
+   from the strategy condition's 2026-07-26 parenthetical — at HEAD
+   `lib-pause-state.sh` still implements the file sentinel (`DISPATCH_PAUSE_FLAG`
+   under `$XDG_DATA_HOME/commons-dispatch/paused`), and the JSON-field replacement
+   is tracked at `tactic-dispatch-pause-config-field`, `phase: implement`.
+   Immaterial here — the wait reads no pause state under either mechanism.
+3. **Progress output and drifted anchors.** The Scope item "emit progress while
+   waiting" must go to **STDERR, never stdout**: `dispatch-tick` captures the whole
+   of `dispatch-select-tick`'s stdout as the decision-line protocol (the three
+   `SEL_OUT=$(...)` capture sites at `dispatch-tick:877-881`), and
+   `dispatch-select-tick` likewise captures `graph-select-target`'s stdout (the
+   `GRAPH_OUT=$(...)` captures at `dispatch-select-tick:1215-1216` and
+   `:1221-1222`), so a progress line on stdout corrupts the protocol instead of
+   reaching the terminal. (The park's `dispatch-tick:821` and
+   `dispatch-select-tick:1112-1116` no longer resolve; re-measured 2026-08-30.)
+   Current anchors: `sensor_gate` ci-pending is `graph-select-target:1136-1142`
+   (clarification 136 cites `:628`); provision exit 10 is
+   `provision-node-worktree:412-424` (cited `:138`).
+   `DISPATCH_RESERVATION_STANDALONE_TTL_S` has exactly one read site,
+   `lib-reservation-ledger.sh:629`, a function-local inside `reservation_sweep` —
+   so this node's "the SAME constant, not a copy" requirement means reading the env
+   var with the identical `:-600` default and numeric guard, unless the plan adds a
+   shared accessor.

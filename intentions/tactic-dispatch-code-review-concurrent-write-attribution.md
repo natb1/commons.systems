@@ -322,3 +322,46 @@ land as graph nodes, never journald or plan prose alone.
 
 1. Take an exclusive lock (e.g. `flock` on a lockfile under `$OUT_DIR`, or reuse `worktree_has_live_session`) around the invoke/verify window in `dispatch-code-review`, and abort with a distinct exit code if it cannot be acquired.
 2. Consider whether the before-image should also record a hash/manifest of tracked files outside the diff, so an unexpected mutation to an untouched file is detectable even without a lock.
+
+
+## Author ruling, 2026-08-29 — the sibling-carrier convention, and what it does NOT settle here
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 1").** The standing convention
+for a draft whose substance shipped under a sibling carrier is: **completion
+record** — stamp `execution.completion` with the carrier PR's merge facts, move
+`status: raw → codified` and `phase: null → done`, do not prune. That discharges
+this park's RULING 2, and it is the same ruling applied to
+`tactic-code-review-detached-node-lock`, `tactic-review-cheap-fix-disposition`
+and `tactic-audit-permission-friction`.
+
+**It does NOT discharge this park's RULING 1.** This is the partially-landed
+case: the ratified fix shape shipped, but the ratified failure mode is **narrowed,
+not eliminated**, and both residual windows are verified live at origin/main —
+not speculative:
+
+- **(a) PRE-LAUNCH.** The `BEFORE` image (`git stash create`) and the untracked
+  snapshot are computed in the parent at `dispatch-code-review:967-995`, **before**
+  `"${LAUNCH_CMD[@]}" &` at `:1102` forks — so the child's `flock` is not yet held.
+  Exposure = fork/exec + `flock -w 1` + a <=10s `RUN_PIDFILE` poll (`:1111-1127`).
+- **(b) POST-RELEASE.** Step 6's derivation at `:1338-1370` runs in the
+  **collecting** invocation and takes no lock — the child's flock released on exit.
+  Covered only by prose caller discipline in `.claude/skills/review-fix/SKILL.md`
+  — section "1b. Run the built-in `/code-review` as an exclusive pre-stage", the
+  paragraph beginning "Between the launching call and the collecting call the
+  session must do nothing else". (That prose was formerly under a section titled
+  "the detached await contract"; the SKILL was rewritten 2026-08-29 and the old
+  anchor no longer resolves. Re-anchored 2026-08-30.)
+- **The consumer trusts the derivation completely.**
+  `.claude/workflows/review-fix.js:1893-1909` does
+  `allowedTouched = new Set(cr.touched_files || [])`, so a concurrent writer's
+  edits are indistinguishable from the review's own.
+
+Until RULING 1 is answered, **this node is not closed** and planning it as written
+is dead work — authoring units that rebuild a shipped lock. The three options, in
+ascending cost, stay on the park unchanged: (i) accept (a) and (b) on the same
+ground (c) is already accepted, and retire this node as a completion record;
+(ii) add a fail-closed re-check in the shape of the existing "ABSENT is not CLEAN"
+guard at `dispatch-code-review:883-920`; (iii) widen the lock's span so the PARENT
+acquires the sidecar flock before the before-image capture and holds it through
+Step 6.

@@ -367,6 +367,28 @@ mandated_category: round-trips
 Subagent lens: same, plus `execution: subagent`, `model: sonnet`,
 `context: fork`.
 
+### Binding constraint on every `model:` value — ruled 2026-08-29
+
+*(Author batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md`, plan-only rulings table, home node = this
+one. The measurement it rests on is the `tactic-rsi-measure-fanout-and-model-routing`
+30d reading landed on `strategy-recursive-self-improvement`.)*
+
+- **Set `model:` from `cost_usd`, NEVER from `price_proxy_usd`.** The proxy holds
+  price constant to isolate token count, so it ranks **sonnet above opus** (37827
+  vs 31372) and **inverts** the model ranking. A routing decision taken off the
+  proxy is backwards by construction, not merely imprecise.
+- **Anchor each value on the measured 1.91x opus-to-sonnet per-turn cost
+  premium**, not on imported ratios — those were measured on configurations this
+  repo does not run. Opus is 42% of turns and 57% of spend in the measured window.
+- **Do not re-run the measurement.** It was taken 2026-08-29 on a 30d window (a
+  14d window returns no fan-out data under the freeze) and is recorded on
+  `strategy-recursive-self-improvement`. Read the recorded reading.
+
+The `subagent/sonnet` values in the roster below are the extraction's starting
+point, not an independent judgment — each must be re-checked against `cost_usd`
+before it ships.
+
 ### The roster — authoritative
 
 | skill | carrier | source | scope | execution | condition-14 category | from |

@@ -209,3 +209,30 @@ so a carrier would add a node to the queue to say what this node can say
 itself. They are **not** on the serving strategy, because a per-node session may
 not write strategy `clarifications` — if the sitting judges any of them worth
 promoting there, the text is paste-ready as written.
+
+
+## Author ruling, 2026-08-29 — DESCOPED from PR20; this node stays parked
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 7 — Position 9 Units 1 and 3 are
+descoped").**
+
+> **Ruled: DESCOPE UNITS 1 AND 3**, ship the rest of Position 9. The two units
+> stay parked pending the strategy and need a follow-up position later. PR20 ships
+> partial rather than fabricating a strategy the author has not written.
+
+This node is PR20 Unit 3. **It is not built in that PR, and its 2026-08-21 park
+stands** — parked on `strategy-discovered-requirements`' authored-boost-of-8
+condition, whose encoded relation this round measured inverted (two rsi-cluster
+tactics at band 11.333 against this strategy's children at 8.000), and which the
+strategy has not re-derived since.
+
+**Two independent stops.** The 2026-08-28 maintenance-burden band ruling — (c)
+accept with remediation — un-parks only nodes parked **solely** on the band. This
+node is not one of them. **Do not clear this park on the strength of that ruling.**
+
+**And this unit is not a "~200 byte draft".** That annotation was struck from the
+plan on 2026-08-30. This node carries four planning clarifications and its work is
+real and unduplicated: no self-consistency walk exists in
+`.claude/skills/align/SKILL.md`, and neither `validateGraph` rule 15 nor
+`align-tactics.js`'s `resolveTempRefs` performs a scope-versus-order check.

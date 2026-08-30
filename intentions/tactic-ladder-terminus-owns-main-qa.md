@@ -139,8 +139,23 @@ success_signal:
     carry neither office_hours nor a non-empty blocked_by"
   sensor: ladder-terminus census over the intention store (merged-but-not-terminal
     count)
-  threshold: "0 violations. Baseline 2026-08-14 at origin/main 206a6994: 29
-    merged-not-done, 24 excused, 5 violations."
+  threshold: "0 violations, EXCLUDING the one deliberately-approximate prose wait
+    the sensor declares in its own output. Amended off an unqualified 0 by
+    author ruling 2026-08-19 over the PR2 park cohort
+    (plans/dispatch-rsi-serialized-pr-plan.md §\"PR2 Unit 7\"; indexed in
+    plans/dispatch-rsi-author-rulings.md): closing the wait gap means converting
+    prose waits to real blocked_by edges, never loosening the predicate — and
+    tactic-pause-disables-merge-lane's wait is on an EPISODE (a heartbeat tick
+    with the pause sentinel present and a reviewed green node-lane PR pending
+    merge), which is neither a node nor a calendar deadline, so neither
+    blocked_by nor tactic-wait-calendar-release's wait_until shape fits it.
+    Inventing a shape for it deserves its own tactic. Clarification 232's
+    recorded escape is therefore taken for that one wait: the sensor stays
+    approximate and SAYS SO, in ladder-terminus-census.ts's own output, rather
+    than leaving readers to infer it. Baseline 2026-08-14 at origin/main
+    206a6994: 29 merged-not-done, 24 excused, 5 violations. Re-measure with `npx
+    tsx packages/intentionsutil/scripts/ladder-terminus-census.ts intentions
+    --lint` before and after; never cite a stored figure."
   is_proxy: true
 attention: null
 phase: done
@@ -273,3 +288,37 @@ Note for whoever implements: the five violations are recoverable today by
 invoking `/dispatch-ladder <id>` directly on each, since the ladder picks up
 wherever its target stands. Doing so would move the baseline, so re-measure
 before and after rather than trusting the figure above.
+
+
+## Amendment 2026-08-19 — `success_signal.threshold` moves off an unqualified 0
+
+*(Author ruling over the PR2 park cohort; carried into
+`plans/dispatch-rsi-serialized-pr-plan.md` §"PR2 Unit 7" and indexed in
+`plans/dispatch-rsi-author-rulings.md`. Transcribed onto this node 2026-08-29
+under Ruling 5.)*
+
+The clarification above records the author's decision that clarification 232's
+resolution is folded into PR2 and executed ad hoc. **The consequence for this
+node's own signal was never written down:** its recorded threshold of **0
+violations** was not met at `phase: done` (census re-measured 2026-08-19 at
+origin/main `cfd3b4f0`: merged-not-done 29, excused 24, violations 5, unstructured
+waits 2), and one of the two remaining prose waits is structurally unclosable
+today. So the threshold is **amended off an unqualified 0**: it becomes 0
+violations *excluding the one deliberately-approximate prose wait the sensor
+declares in its own output*.
+
+**What that does and does not license.** It does **not** loosen the predicate:
+`findUnstructuredWaits` must never feed back into `classifyTerminus` to reclassify
+a prose wait as excused (`packages/intentionsutil/src/terminus.ts:153-162`), and
+`classifyTerminus` keeps its strict predicate unchanged. Note the enumeration
+asymmetry recorded at `packages/intentionsutil/src/terminus.ts:46-55`: because
+`classifyTerminus` and `router.ts`'s `blockersComplete` fail open in *opposite*
+directions on a missing `byId` entry, the tolerant-enumerating census sensor may
+call this predicate **without** adopting the router's strict-enumeration
+precondition — a dropped blocker file makes it OVER-report a violation rather than
+hide one. (The PR2 prose said `classifyTerminus` "keeps its strict enumeration
+(`listNodesStrict`)"; re-measured 2026-08-30 that is inverted — `terminus.ts` is
+fs-free and never calls `listNodesStrict`. Corrected here.) What the amendment
+licenses is `ladder-terminus-census.ts` stating the approximation in its own
+output — and only then wiring `--strict`, which is unwired today by the script's
+own deliberate choice.

@@ -101,6 +101,26 @@ These are **binding**. A later round that disagrees parks rather than overrides.
 - **R4 — scope is the writer plus the reader, landing together.** The old
   indicative Units 3, 4 and 5 are named out-of-scope follow-ups. **This node does
   not split** — a split would contradict the writer and reader landing together.
+- **R5 — record-time minting is correct; the "already-merged" prose was the
+  error.** *(Ruled 2026-08-29, author batch-execution sitting; recorded in
+  `plans/dispatch-rsi-author-rulings.md` §"Ruling 6".)* The question was whether
+  the destination node is born carrying the source's **already-merged** PR, as an
+  earlier plan sentence said, or its **still-open** one, as the shipped code does
+  — `/qa-fix` mints at Step 3.6 inside phase `qa`, **before** Step 4 advances
+  `qa → review`. **Ratify what ships.** Record-time triage is this tactic's own
+  thesis — the thing it exists to make possible — so the prose is the error, not
+  the code. The follow-up prose correction is **written but NOT yet on
+  `origin/main`** (re-measured 2026-08-30): it is commit `cba77286` on the open
+  PR #3142 branch `plan-reconciliation`. At `origin/main` this node still reads
+  "born at `main-qa` carrying the source's already-merged PR" at `:207-208`, and
+  `packages/intentionsutil/scripts/mint-mainqa-nodes:59` still documents `--pr` as
+  "the source's ALREADY-MERGED PR number". An `LC_ALL=C grep -ac 'already-merged'`
+  on that script returns 0 only because the text is upper-case, so the earlier
+  "already landed, zero hits" reading was a case-sensitivity false negative.
+  **The ruling stands regardless** — it settles which of the two readings is
+  correct — and the prose corrections are owed wherever the stale wording survives
+  at `origin/main`. **Do not re-open the mint-time question**; a later round that
+  disagrees parks rather than overrides.
 
 The units below are an implementation decomposition of R4's in-scope work (one
 PR). They are **not** a re-scoping: Units 1–7 all serve "the `/qa-fix` writer and

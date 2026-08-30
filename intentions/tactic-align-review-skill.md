@@ -446,3 +446,35 @@ ii. `graph-commit` today has only `--base`/`--expect` manifest-argument
     refusing, and never exits 3 despite the script's own header claiming
     so at `:169`/`:1952`. Correct that stale header line in the same
     change.
+
+
+## Author ruling, 2026-08-29 — DESCOPED from PR20; this node stays parked
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 7 — Position 9 Units 1 and 3 are
+descoped").**
+
+> **Ruled: DESCOPE UNITS 1 AND 3**, ship the rest of Position 9. The two units
+> stay parked pending the strategy and need a follow-up position later. PR20 ships
+> partial rather than fabricating a strategy the author has not written.
+
+This node is PR20 Unit 1. **It is not built in that PR, and its park stands.** The
+blocker is the one the section above already names as *"Still owed by the SERVING
+STRATEGY, not by this node"*: `strategy-discovered-requirements`' authored-boost-of-8
+condition holds that the boost encodes a **relation** — "ranks above the rsi
+cluster's band" — and the relation is measured inverted, with two rsi-cluster
+tactics banding at 11.333 while this strategy's children sit at 8.000. That
+strategy has not been written since the park, and a per-node session may not write
+strategy substance.
+
+**Two independent stops, and neither is discharged here.** The maintenance-burden
+band ruling of 2026-08-28 — (c) accept with remediation, whose un-park criterion
+un-parks every node parked **solely** on the band — does **not** reach this node,
+because the band is not its blocker. **Do not clear this park**, and do not treat
+the band ruling as covering it.
+
+**The follow-up.** These two units need their own later position, entered after an
+`/align` round on `strategy-discovered-requirements` re-derives the authored boost
+against the measured field. Until then the four deliverables recorded in
+`plans/dispatch-rsi-serialized-pr-plan.md` under PR20 Unit 1 are a **reference
+spec for that follow-up only**, not anyone's current scope.

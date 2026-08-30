@@ -74,7 +74,6 @@ reading: "review cycle 2026-07-28: 2 decisions traced to node changes — (1) th
   strategy' clause firing literally. Threshold met. Taken from the
   trace-decisions digest (--since 2026-07-11, 133 candidate events) plus a
   hand-search of the intentions/ patch for causal-reversal language."
-gap: null
 serves:
   - virtue-philosophical-mobility
   - virtue-alignment-of-attachments
@@ -282,7 +281,13 @@ clarifications:
       responded to; the author reads neither Claude's thinking nor same-turn
       preamble text emitted before the question call (found live this round), so
       context living only there has not been provided, and a question must never
-      reference material the author has not seen."
+      reference material the author has not seen. AMENDED 2026-08-30: item (c)'s
+      loop is now three options, not two. Every question round in both interview
+      types offers the recommendation with its boldness assessment,
+      accept-as-deferral, AND an indifference option for a decision the author
+      does not care to form a view on — recorded as a Claude-owned delegation,
+      minting no review node, subject to the virtue/strategy-core floor. See the
+      2026-08-30 clarifications on this node."
   - question: What does a deferral commit the author to — and do deferrals without a
       grounding text get lighter treatment?
     answer: "Deferral is always defer-until-later-review — a conscious, temporary
@@ -296,7 +301,19 @@ clarifications:
       text exists (most deferrals are expected to have one), an office-hours
       review sitting when the author deferred to something text-less, such as
       Claude's logical analysis of internal consistency. No deferral gets
-      lighter treatment for lacking a text. Recorded 2026-07-09 interview."
+      lighter treatment for lacking a text. Recorded 2026-07-09 interview.
+      AMENDED 2026-08-30: the universality claim is now scoped to deferrals
+      proper, and a third disposition sits beside them. A deferral — the author
+      holding a recommendation on trust — still mints its review node at
+      deferral time, text-grounded or not, and still gets no lighter treatment
+      for lacking a text: that half is unchanged. What is new is that an author
+      who does not care is not making a deferral at all; they are delegating
+      (2026-08-30 clarifications on this node), and an indifference-delegation
+      mints nothing. Indifference-delegated content is reached only by the
+      virtual review node on strategy-graph-review-curriculum; and when that
+      review runs for a node that also carries pending review-later items, those
+      items are folded into the same session rather than sat separately.
+      Author-directed 2026-08-30."
   - question: Is the author's own alignment with the record maintained by argument
       alone — and if not, what is the human-side habituation mechanism?
     answer: "Held as a deferral: argument alone does not maintain it. The graph
@@ -396,6 +413,89 @@ clarifications:
       the trigger to revisit this gap. The author-owned doctrine (the cadence
       must actually recur or recorded doctrine calcifies into dogma) is ratified
       unchanged."
+  - question: What options does every interview question round offer — and what is
+      the third one, for a decision the author does not care about?
+    answer: "(Recorded 2026-08-30 interview.) Three, always, in both interview
+      types. (1) The recommendation — Claude's best answer, listed first,
+      carrying its honest boldness assessment. (2) Accept-as-deferral — the
+      author holds the recommendation on trust and it is reviewed later. (3)
+      New: indifference — the author does not hold a view and does not want to
+      form one. The third option is recorded as a DELEGATION, not as a third
+      kind of deferral (author-chosen 2026-08-30 over the 'third deferral kind'
+      framing): the decision is handed to Claude's judgment and lands as a dated
+      clarification marked Claude-owned, which reuses the graph's existing
+      capture vocabulary instead of minting a parallel one, and makes the
+      revision rule below follow by definition rather than by a separate
+      stipulation. It mints no review node. FLOOR: indifference is unavailable
+      for virtue substance and for a strategy's statement, rationale, and
+      success_signal — the human-authored core this node's own condition names
+      ('virtue and strategy substance stays human-authored; agent assistance is
+      drafting, not derivation'). It is available everywhere else: mechanism,
+      encoding, tactic shape, naming, sequencing, and the clarifications that
+      resolve those. At the floor Claude still may not compel — compulsion is
+      argument only — so a question that hits the floor is re-framed until it is
+      answerable, or the author's declining to hold a view is itself recorded,
+      as author doctrine. The floor and its no-compulsion carve-out were
+      Claude-drafted and author-adopted this round; the three-option requirement
+      is author-directed."
+  - question: What standing does deferred or delegated content have — is it author
+      doctrine, and may Claude revise it?
+    answer: "(Recorded 2026-08-30 interview; author-directed.) Neither deferred nor
+      indifference-delegated content is author doctrine. Both are therefore
+      revisable by Claude for better greenfield design as information
+      accumulates or requirements are added — but asymmetrically.
+      Indifference-delegated content is Claude-owned: freely and silently
+      revisable as ordinary design work, with no interview or sitting owed.
+      Review-deferred content is also revisable, but the revision carries
+      forward — the pending review node re-points at the revised content and the
+      fact of the revision is recorded — so a sitting reviews what is actually
+      live rather than a superseded draft, and is never quietly mooted by a
+      revision it cannot see. The asymmetry was Claude-drafted and
+      author-adopted. CAPTURE ACCOUNTING: an indifference-delegation does NOT
+      extend a delegation record's delegated scope in the round that records it
+      — unlike a deferral to Claude's philosophical articulation, which extends
+      delegation-philosophical-articulation's scope in-round. Per-decision
+      extension would reintroduce exactly the per-decision graph pollution the
+      third option exists to avoid. The accumulation hazard
+      virtue-alignment-of-attachments records — that individually reasonable
+      delegations still drift toward capture in aggregate — is answered instead
+      by the review-debt signal on strategy-graph-review-curriculum, which
+      measures the un-reviewed backlog's depth and top rank. This
+      aggregate-rather-than-per-decision accounting was Claude-drafted and
+      author-adopted this round."
+  - question: What is the round provenance of the 2026-08-30 indifference-option
+      round, and did it pass its own draft-review gate?
+    answer: "(Recorded 2026-08-30, post-hoc, discharging the sole-carrier condition
+      on strategy-discovered-requirements. Landed here rather than in session
+      narrative because attributes.align_round — tactic-align-review-skill item
+      9 — does not exist yet; this clarification is the interim carrier.) GATE:
+      SKIPPED at commit time. The round landed as fdcd17cf (base 77bd7471)
+      without running the adversarial draft review its own governing condition
+      requires. The gate reads not-yet-armed (tactic-align-review-skill unbuilt:
+      no /align-review skill, no assemble-review-pack, no graph-commit
+      --review), so the owed discharge was the inline-pack bootstrap subagent,
+      which the round did not run. Per the condition, that is a defect of the
+      round. The review was run afterwards at the author's instruction, against
+      an inline-assembled pack, and returned verdict mostly-greenfield with 12
+      MATERIAL and 1 MINOR finding; its six defect-class findings are corrected
+      in this same commit and its six design-question findings go to a following
+      interview. DEVIATION: the reviewer ran with model fable, not the model
+      opus tactic-align-review-skill item 1 specifies — author-directed. FREEZE
+      CLASSIFICATION: computed with the authoritative predicate (listNodes +
+      per-child execution.strategy_fingerprint read), not a grep. Exactly one
+      stamped open child across both edited strategies:
+      tactic-graph-function-docs (phase implement, legacy bare-string stamp),
+      classified MATERIALLY AFFECTED because it documents the graph's function
+      at the entry points and this round introduces the distinction that some
+      graph content is not author doctrine, which a reader of those entry points
+      needs; its stamp was left stale so the freeze fires. Zero orthogonal, zero
+      re-stamped, no must-land-first migration. SCOPE-INERT RE-STAMP: not
+      applicable — no open tactic's body was edited. DELEGATION SWEEP: PARTIAL —
+      the census ran but its Delegations section was not walked entry-by-entry
+      and no recovers edge was proposed, contrary to /align step 3. CURRICULUM
+      ENROLLMENT: no review item minted and none owed; the author deferred
+      nothing, answering every question with a selected option or a written
+      counter-design."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

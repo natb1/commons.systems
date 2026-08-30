@@ -5,7 +5,7 @@ statement: Measure permission friction (denials, approval round-trips, sandbox
   retries) as an audit lens, and give the attended periodic audit a closing
   /fewer-permission-prompts step
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Drafted 2026-08-12 /align round, carrying the attended-only
   execution ruling of the same day. Two halves that must ship together: the lens
@@ -20,157 +20,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: strategy-recursive-self-improvement
+  pr: 3074
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T03:26:48Z
+    mergeCommitSha: c3c229f0de63db09df7dc01ce02177f3d1b56c95
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: >-
-    SCOPE ALREADY LANDED, PLUS TWO RECORD CORRECTIONS THE AUTHOR MUST RATIFY.
-    Parked by the 2026-08-18 /align-tactics per-node run (disposition:
-    escalated; two drift parks, categories major-scope-deviation and
-    requirement-ambiguity; no plan authored). No graph write was made other than
-    this park, and the node body is unchanged.
-
-
-    (1) MAJOR SCOPE DEVIATION — both halves this node asks for are implemented
-    and merged, so there is no PR-sized claude-eligible work left to plan. The
-    lens ships at .claude/skills/rsi-audit/scripts/aggregate-usage.sh:1215-1252
-    (window rollup; its own comment names this node) and :835-846 (per-session
-    .permission_friction), with the four-bucket denial classifier at :386-426
-    reusing the err_signature normalizer plus the toolDenialKind/toolUseResult
-    fallback exactly as this node's "Resolved: denials ARE separable" section
-    specifies. It is catalogued as lens 12, tagged [any-scope], at
-    .claude/skills/rsi-audit/SKILL.md:138-154, including the documented
-    non-derivability of approval round-trips and prompt latency. The
-    attended-only closing /fewer-permission-prompts remediation is step 9 at
-    :208-218, gated on lens 12's automode_denials. The unattended consumer is
-    /rsi lens 7 (.claude/skills/rsi/SKILL.md:48-51), which forbids running the
-    step and names this node by id as the remediation's home. Regression
-    coverage:
-    .claude/skills/rsi-audit/scripts/test-aggregate-usage.sh:2176-2307. Landed
-    by f9af1a69 (introduced the permission_friction identifier, 2026-08-12) and
-    c3c229f0 / PR #3074, under sibling carriers tactic-rsi-audit-skill-rename
-    and tactic-rsi-audit-ledger-findings (both phase done). Yet this node still
-    carries status: raw, phase: null, execution: null, and its body is written
-    in completed past-tense "Resolved:" voice. Authoring an implementation plan
-    here would plan merged work.
-
-
-    (2) UNRECORDED PREMISE, material — the strategy records no convention for a
-    draft tactic whose substance shipped under a SIBLING carrier's PR. Proposed
-    clarification for strategy-token-economy: "(Recorded 2026-08-18
-    /align-tactics drift review.) How is a draft tactic whose substance already
-    merged under a sibling carrier's PR to be finalized?
-    tactic-audit-permission-friction is the live case. The two dispositions are
-    (a) record it as landed — stamp execution against the carrying PR and
-    transition to done, treating the node as a record of a decision rather than
-    a unit of work — or (b) re-scope it to its genuine residual, which is the
-    attended verification named in clarification 43's honest limit and is not
-    autonomously executable. Author picks; a per-node finalize must not choose
-    unilaterally, because (a) is a phase write against work this node never
-    dispatched and (b) plans an attended act." The same finalization-lag pattern
-    already appears on tactic-code-review-detached-node-lock, which carries a
-    "What shipped (PR #3078)" heading at phase null.
-
-
-    (3) SIDE-A FAILED CONDITION — the 2026-08-12 execution condition's narrowing
-    half is dead as written. It records report-only as "writes no routing policy
-    and no graph or product files", but the shipped skill states the bound in
-    all three canonical places as "writes no routing policy and no product
-    files" (.claude/skills/rsi-audit/SKILL.md:3 frontmatter description, :8 body
-    opener, :204 numbered bound 8) and deliberately carves the graph OUT: step 6
-    lands top-ranked opportunities as tactic-eval-finding-<slug> nodes through
-    dispatch-eval-finding (carrier tactic-rsi-audit-ledger-findings, phase done,
-    PR #3074), with :204 stating "Step 6's graph ledger write is not covered by
-    this bound." The attended-only half of the condition still holds, and the
-    no-auto-apply bound on routing policy is intact — only the "no graph" clause
-    is dead. This bears on THIS node because its own "Contract narrowing this
-    depends on" section carries the same dead phrasing and instructs writing it
-    into SKILL.md prose; planned as written it would forbid a write that already
-    ships. Proposed clarification: "(Recorded 2026-08-18 /align-tactics drift
-    review.) The report-only narrowing is corrected to its shipped form:
-    /rsi-audit writes no routing policy and no product files. The graph is NOT
-    inside the bound — step 6 writes tactic-eval-finding-<slug> nodes through
-    dispatch-eval-finding, a measurement record on the evaluation-finding
-    ledger, a different graph surface than routing policy (dispatch-phase-model
-    / dispatch-phase-effort), carrying a finding statement with its measured
-    magnitude, never a phase-to-model mapping. This supersedes the 'no graph or
-    product files' phrasing in the 2026-08-12 execution condition and
-    clarification 43. The no-auto-apply bound on routing policy is untouched,
-    and .claude/settings.json remains outside it as a permissions file rather
-    than routing policy. Canonical text sites:
-    .claude/skills/rsi-audit/SKILL.md:3, :8, :204."
-
-
-    (4) REQUIREMENT AMBIGUITY — clarification 43's owed check was never
-    discharged and the step was wired anyway. Clarification 43 says
-    "/fewer-permission-prompts is a built-in and its implementation was not read
-    this round, so how it merges into an existing settings.json, and whether it
-    can collide with a concurrent worker's commit, are unverified —
-    tactic-audit-permission-friction owes that check before the step is wired."
-    The check was never performed; step 9 is already wired (SKILL.md:212-216);
-    and the built-in has no readable implementation anywhere in the repo tree or
-    ~/.claude (confirmed 2026-08-18), so the owed check cannot be performed from
-    here at all. The shipped step substitutes an attended `git diff
-    .claude/settings.json` review — with an instruction to drop the change
-    rather than hand-patch it if the review is not clean — for the verification.
-    Proposed clarification: "(Recorded 2026-08-18 /align-tactics drift review.)
-    Clarification 43's owed check on /fewer-permission-prompts is discharged by
-    design substitution rather than by verification: the built-in's merge
-    semantics and concurrent-commit collision risk are not readable from this
-    repo, so step 9 is written as run it, review the resulting git diff
-    .claude/settings.json, commit deliberately as its own commit, and drop the
-    change rather than hand-patch it if the review is not clean. The attended
-    human review of that diff — specifically checking that the hand-authored
-    permissions.allow rules are present and unmodified and that nothing added
-    grants more than a read-only call — IS the guard, and needs no knowledge of
-    the built-in's internals. The 'owes that check before the step is wired'
-    framing in clarification 43 is superseded. If the author instead wants the
-    verification performed, step 9 must be re-gated until it is." Both (3) and
-    (4) are strategy-record corrections a per-node tactic-target session may not
-    write (references/tactic-target.md: no strategy edit from this path), so
-    they are named here per the unrecorded-context park framing —
-    record-completeness defects of the 2026-08-12 /align round, fixable only by
-    an author /align pass.
-
-
-    (5) PROSE DRIFT IN THIS NODE, no author decision needed — the body names
-    /dispatch-token-audit (lines 47 and 61) and cites the report-only clause as
-    "step 7". Both are stale: the skill was renamed to /rsi-audit in c3c229f0 /
-    PR #3074 (carrier tactic-rsi-audit-skill-rename, phase done) and
-    .claude/skills/dispatch-token-audit/ no longer exists; in the current
-    SKILL.md the report-only bound is step 8 (line 204) and the remediation is
-    step 9 (lines 208-218). About 34 other intentions/*.md bodies carry the same
-    stale name and are deliberately NOT rewritten — graph history is not
-    retroactively edited; only this node's own prose needs correcting, and it is
-    a prose fix, not a defect in the shipped instrument.
-
-
-    (6) THE ONE GENUINELY OPEN ITEM, unchanged — approval counts and prompt-wait
-    time remain unmeasured (a transcript records denials, never grants, and
-    nothing timestamps a prompt's open/close). This node's body scopes closing
-    that to "a separate tactic against the harness, not an extension of this
-    lens." No such node exists in the store as of 2026-08-18; if the author
-    picks disposition (a) below, that follow-up needs filing so the gap does not
-    leave the graph with this node.
-
-
-    Recommend: an author /align pass on strategy-token-economy that (i) ratifies
-    or rejects the three proposed clarifications in (2), (3) and (4) above and
-    amends the 2026-08-12 execution condition's dead "no graph" clause, then
-    (ii) picks this node's disposition — most likely (a): stamp execution
-    against PR #3074, correct the /dispatch-token-audit and "step 7" references
-    in the body, transition the node to done, and file the harness-side
-    permission-decision-log follow-up named in (6) as its own tactic. Choose (b)
-    instead only if the attended verification of /fewer-permission-prompts'
-    merge semantics is still wanted, in which case re-scope this node to that
-    attended act and re-gate step 9 until it is done. Do not re-run
-    /align-tactics on this node before the strategy record is corrected — the
-    same two parks will recur.
-  since: 2026-08-19
-  recommendation: null
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -272,3 +138,65 @@ change rather than hand-patch it if the review is not clean. The attended review
 is the guard against clobbering the hand-authored `permissions.allow` rules, and
 it needs no knowledge of the built-in's internals. The concurrent-commit
 collision question is answered the same way: the human is looking at the diff.
+
+
+## Author ruling, 2026-08-29 — this node is a COMPLETION RECORD
+
+**Ruled (author, 2026-08-29 batch-execution sitting; recorded in
+`plans/dispatch-rsi-author-rulings.md` §"Ruling 1").** A draft whose substance
+shipped under a sibling carrier becomes a **completion record**: stamp
+`execution.completion` against the carrier PR, `status: raw → codified`,
+`phase: null → done`, **do not prune**. This discharges item (2) of the
+2026-08-18 park — the unrecorded convention for a sibling-carrier draft — which
+that park proposed as a clarification and could not write.
+
+**Applied here.** Both halves this node asked for are merged. The lens ships at
+`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:1215-1252` (window rollup;
+its own comment names this node) and `:835-846` (per-session
+`.permission_friction`), with the four-bucket denial classifier at `:386-426`
+reusing the `err_signature` normalizer plus the `toolDenialKind`/`toolUseResult`
+fallback exactly as this node's "Resolved: denials ARE separable" section
+specifies. Catalogued as lens 12, tagged `[any-scope]`, at
+`.claude/skills/rsi-audit/SKILL.md:138-154`. The attended-only closing
+`/fewer-permission-prompts` remediation is step 9 at `:208-218`, gated on lens
+12's `automode_denials`. The unattended consumer is `/rsi` lens 7
+(`.claude/skills/rsi/SKILL.md:48-51`), which forbids running the step and names
+this node by id. Regression coverage:
+`.claude/skills/rsi-audit/scripts/test-aggregate-usage.sh:2176-2307`. Landed by
+`f9af1a69` (2026-08-12, introduced the `permission_friction` identifier) and
+`c3c229f0` / PR #3074, under sibling carriers `tactic-rsi-audit-skill-rename`
+and `tactic-rsi-audit-ledger-findings` (both `phase: done`).
+
+### Two items the 2026-08-18 park raised that Ruling 1 does NOT answer
+
+Retained verbatim in substance because clearing the park destroys them, and
+**neither is discharged by the completion record**. Both are owed to an `/align`
+pass on `strategy-token-economy`; a per-node run may not write a serving
+strategy.
+
+1. **SIDE-A FAILED CONDITION — the 2026-08-12 execution condition's narrowing
+   half is dead as written.** It records report-only as *"writes no routing
+   policy and no graph or product files"*, but the shipped skill states the bound
+   in all three canonical places as *"writes no routing policy and no product
+   files"* (`.claude/skills/rsi-audit/SKILL.md:3` frontmatter description, `:8`
+   body opener, `:204` numbered bound 8) and deliberately carves the graph **out**:
+   step 6 lands top-ranked opportunities as `tactic-eval-finding-<slug>` nodes
+   through `dispatch-eval-finding` (carrier `tactic-rsi-audit-ledger-findings`,
+   `phase: done`, PR #3074), with `:204` stating *"Step 6's graph ledger write is
+   not covered by this bound."* The attended-only half still holds and the
+   no-auto-apply bound on routing policy is intact — only the "no graph" clause is
+   dead. This bears on this node because its own "Contract narrowing this depends
+   on" section carries the same dead phrasing and instructs writing it into
+   SKILL.md prose; planned as written it would forbid a write that already ships.
+2. **REQUIREMENT AMBIGUITY — clarification 43's owed check was never discharged
+   and the step was wired anyway.** Clarification 43 names this node as owing a
+   check on how `/fewer-permission-prompts` merges into an existing
+   `settings.json` and whether it can collide with a concurrent worker's commit.
+   The check was never performed; step 9 is already wired
+   (`.claude/skills/rsi-audit/SKILL.md:212-216`); and the built-in has no readable
+   implementation anywhere in the repo tree or `~/.claude` (confirmed 2026-08-18),
+   so the owed check **cannot be performed from here at all**. What shipped
+   substitutes an attended `git diff .claude/settings.json` review — with an
+   instruction to drop the change rather than hand-patch it if the review is not
+   clean — for the verification. That is a design substitution, not a discharge,
+   and it is owed ratification.
