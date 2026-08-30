@@ -72,20 +72,30 @@
 # produces a FALSE POSITIVE (noise) rather than a miss — none of them can hide a
 # swallowed assertion. Re-read this list before trusting a surprising warning.
 #
-#   1. HEREDOC PAYLOAD. Nothing here knows about `<<WORD` / `<<-WORD`, so every
-#      line of a heredoc body — and the terminator line itself — is parsed as a
-#      top-level statement: `cat <<EOF > f` / `payload` / `EOF` warns on the
-#      payload line and on the literal `EOF`.
-#   2. FUNCTION BODY. `}` is a closer but `{` is not an opener, so an
+# The bar for this list is DEMONSTRATED noise-only, not assumed noise-only.
+# Heredoc payloads sat here once and did not meet it: a payload line reading
+# `set -euo pipefail` — the shape a fence that WRITES a script emits — matched
+# the errexit exemption and silenced the entire block. `<<WORD` / `<<-WORD` is
+# parsed and its payload skipped for that reason, and the errexit exemption is
+# tested against collected top-level STATEMENTS rather than raw block lines.
+#
+#   1. FUNCTION BODY. `}` is a closer but `{` is not an opener, so an
 #      `f() {` … `}` definition warns on the definition line and on each body
 #      line, though a body line does not run at that point at all. Only a later
 #      CALL to `f` is a true positive. (The `depth > 0` guard on the closer
-#      keeps the unmatched `}` from driving depth negative.)
-#   3. OPERATOR CONTINUATION. Backslash continuations and unbalanced-quote
+#      keeps the unmatched `}` from driving depth negative.) A multi-line
+#      `( … )` subshell behaves the same way, for the same reason.
+#   2. OPERATOR CONTINUATION. Backslash continuations and unbalanced-quote
 #      continuations are rejoined; a statement continued by a TRAILING `|`,
 #      `&&` or `||` is not. `foo |` / `grep -q bar` is split in two and the
 #      continuation half warned as an independent statement, though the
 #      pipeline's status is never independently discarded.
+#   3. COMPOUND CONDITION NAMING A CLOSER. Whether a compound closes on its own
+#      line is decided by looking for a top-level `fi` / `done` / `esac` WORD
+#      anywhere in it, so `if [ "$x" = done ]; then` reads as self-closing and
+#      its body lines are analysed as top-level statements. That direction is
+#      deliberate: over-detecting a self-close is noise, while under-detecting
+#      one leaves `depth` stuck above 0 and drops the block's whole tail.
 #
 # Measured blast radius, 2026-08-30, with the anchored exemptions below: 61 of
 # the 585 scanned blocks warn — 45 nodes, 126 warning lines. `done` nodes are
@@ -285,7 +295,7 @@ node_phase() {
 }
 
 # --- Shell-shape helpers for the advisory check below ----------------------
-# Both answer a question the obvious one-line test gets WRONG, and both get it
+# Each answers a question the obvious one-line test gets WRONG, and each gets it
 # wrong in the same direction: they exempt or discard a statement that really is
 # unguarded, so the miss is invisible.
 
@@ -319,17 +329,49 @@ quoting_balanced() {
   (( in_s == 0 && in_d == 0 ))
 }
 
-# Is this statement nothing but variable assignments? A leading `^NAME=` cannot
-# say: it also matches an env-var-PREFIXED command (`NODE_ENV=test npx vitest
-# run`, `DISPATCH_CONFIG_DIR="$d" some-script --flag`), a real command whose
-# status is discarded like any other. Plain whitespace splitting cannot say
-# either, because an assignment's value legitimately contains spaces
-# (`out=$(cmd a b)`, `msg="a b"`) and warning on THOSE would be a false positive
-# on the corpus's most common shape. So split into TOP-LEVEL words, honouring
-# quoting and `$( … )` / `${ … }` nesting, and require every word to assign.
-assignments_only() {
-  local s="$1" ch i in_s=0 in_d=0 depth=0 word="" w
-  local -a words=()
+# Drop a trailing `# …` comment, into $STRIPPED. Not cosmetic: `bash x.sh  # it's
+# fine` carries an apostrophe that leaves the line quote-UNBALANCED, so without
+# this the line becomes a continuation and absorbs every statement after it —
+# the same vanish quoting_balanced exists to prevent, arriving by another door.
+# Only a `#` that is OUTSIDE quotes and STARTS a word opens a comment; neither
+# `curl host/a#b` nor `grep -q '#' f` does.
+strip_trailing_comment() {
+  local s="$1" ch i in_s=0 in_d=0 prev="x"
+  STRIPPED="$s"
+  for (( i = 0; i < ${#s}; i++ )); do
+    ch="${s:i:1}"
+    if (( in_s )); then
+      [[ "$ch" == "'" ]] && in_s=0
+      prev="$ch"; continue
+    fi
+    if (( in_d )); then
+      if [[ "$ch" == '\' ]]; then i=$(( i + 1 )); prev="x"; continue; fi
+      [[ "$ch" == '"' ]] && in_d=0
+      prev="$ch"; continue
+    fi
+    case "$ch" in
+      "'") in_s=1 ;;
+      '"') in_d=1 ;;
+      '\') i=$(( i + 1 )); prev="x"; continue ;;
+      '#')
+        if (( i == 0 )) || [[ "$prev" == " " || "$prev" == $'\t' ]]; then
+          STRIPPED="${s:0:i}"
+          STRIPPED="${STRIPPED%"${STRIPPED##*[![:space:]]}"}"
+          return 0
+        fi ;;
+    esac
+    prev="$ch"
+  done
+  return 0
+}
+
+# Split a statement into TOP-LEVEL words, into $STMT_WORDS — honouring quoting
+# and `$( … )` / `${ … }` nesting, so an assignment's value keeps its spaces
+# (`out=$(cmd a b)`, `msg="a b"`) and stays ONE word. Shared by the two tests
+# below, which must agree on what a word is.
+stmt_words() {
+  local s="$1" ch i in_s=0 in_d=0 depth=0 word=""
+  STMT_WORDS=()
   for (( i = 0; i < ${#s}; i++ )); do
     ch="${s:i:1}"
     if (( in_s )); then
@@ -337,6 +379,10 @@ assignments_only() {
       word+="$ch"; continue
     fi
     if (( in_d )); then
+      # A backslash escapes the next character, `\"` included. Without this,
+      # `msg="a\" b"` reads as quote-CLOSED at the `\"`, splits into two words,
+      # and stops looking like the pure assignment it is.
+      if [[ "$ch" == '\' ]]; then word+="$ch"; i=$(( i + 1 )); word+="${s:i:1}"; continue; fi
       [[ "$ch" == '"' ]] && in_d=0
       word+="$ch"; continue
     fi
@@ -350,16 +396,84 @@ assignments_only() {
         if (( depth > 0 )); then
           word+="$ch"
         else
-          [[ -n "$word" ]] && words+=("$word")
+          [[ -n "$word" ]] && STMT_WORDS+=("$word")
           word=""
         fi ;;
       *) word+="$ch" ;;
     esac
   done
-  [[ -n "$word" ]] && words+=("$word")
-  [[ "${#words[@]}" -ge 1 ]] || return 1
-  for w in "${words[@]}"; do
+  [[ -n "$word" ]] && STMT_WORDS+=("$word")
+  return 0
+}
+
+# Is this statement nothing but variable assignments? A leading `^NAME=` cannot
+# say: it also matches an env-var-PREFIXED command (`NODE_ENV=test npx vitest
+# run`, `DISPATCH_CONFIG_DIR="$d" some-script --flag`), a real command whose
+# status is discarded like any other. Plain whitespace splitting cannot say
+# either, because an assignment's value legitimately contains spaces
+# (`out=$(cmd a b)`, `msg="a b"`) and warning on THOSE would be a false positive
+# on the corpus's most common shape. So require every TOP-LEVEL word to assign.
+assignments_only() {
+  local w
+  stmt_words "$1"
+  [[ "${#STMT_WORDS[@]}" -ge 1 ]] || return 1
+  for w in "${STMT_WORDS[@]}"; do
     [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || return 1
+  done
+  return 0
+}
+
+# Does this compound-opening line also CLOSE itself? The line's SUFFIX cannot
+# say: `… done > /dev/null`, `… done | tail -20` and `… fi  # note` all close on
+# their own line while ending in something else, and reading them as still-open
+# leaves `depth` permanently above 0 — which silently drops every LATER
+# statement in the block, the real final one included, so the block stops being
+# analysed from that line on. Look for a top-level closer WORD anywhere in the
+# statement instead. The two errors are not symmetric: over-detecting merely
+# re-analyses a compound's body as top-level statements (noise on an advisory
+# channel), while under-detecting hides assertions.
+stmt_closes_compound() {
+  local w
+  stmt_words "$1"
+  for w in "${STMT_WORDS[@]}"; do
+    while [[ "$w" == *';' ]]; do w="${w%;}"; done
+    case "$w" in fi|done|esac) return 0 ;; esac
+  done
+  return 1
+}
+
+# The heredoc tag this statement opens, into $HEREDOC_TAG (empty when none).
+# Only a TOP-LEVEL `<<` / `<<-` counts: `grep -q '<<EOF' f` names the digraph
+# inside quotes and opens nothing, and consuming the block's tail as its payload
+# would be the invisible kind of miss. `<<<` is a here-STRING, not a heredoc.
+heredoc_tag() {
+  local s="$1" ch i in_s=0 in_d=0 rest
+  HEREDOC_TAG=""
+  for (( i = 0; i < ${#s}; i++ )); do
+    ch="${s:i:1}"
+    if (( in_s )); then
+      [[ "$ch" == "'" ]] && in_s=0
+      continue
+    fi
+    if (( in_d )); then
+      if [[ "$ch" == '\' ]]; then i=$(( i + 1 ))
+      elif [[ "$ch" == '"' ]]; then in_d=0
+      fi
+      continue
+    fi
+    case "$ch" in
+      "'") in_s=1; continue ;;
+      '"') in_d=1; continue ;;
+      '\') i=$(( i + 1 )); continue ;;
+    esac
+    if [[ "${s:i:2}" == '<<' ]]; then
+      rest="${s:i+2}"
+      if [[ "$rest" != '<'* && "$rest" =~ ^-?[[:space:]]*[\"\']?([A-Za-z_][A-Za-z0-9_]*) ]]; then
+        HEREDOC_TAG="${BASH_REMATCH[1]}"
+        return 0
+      fi
+      i=$(( i + 1 ))
+    fi
   done
   return 0
 }
@@ -370,13 +484,14 @@ assignments_only() {
 # `&&`/`||`-joined, `$?`-captured), when the block turns on errexit itself, or
 # when it is nothing but assignments, or a pure output/control builtin STANDING
 # ALONE, rather than an assertion. Statements are split line-wise, with
-# backslash continuations and unbalanced-quote continuations rejoined and
-# `if/for/while/until/case` bodies treated as one top-level statement.
+# backslash continuations and unbalanced-quote continuations rejoined, trailing
+# comments stripped, heredoc payloads skipped, and `if/for/while/until/case`
+# bodies treated as one top-level statement.
 #
 # Every exemption below is ANCHORED rather than tested as a raw substring, a
-# head word or a leading regex. Each of those shortcuts exempts a statement
-# whose status really is discarded — a miss in the single direction this check
-# exists to close, and the direction in which a miss is invisible.
+# head word, a leading regex or a line SUFFIX. Each of those shortcuts exempts a
+# statement whose status really is discarded — a miss in the single direction
+# this check exists to close, and the direction in which a miss is invisible.
 #
 # Two `set -e` traps this function deliberately avoids. The script runs under
 # `set -euo pipefail`, so (1) `(( depth++ ))` is NOT used — it returns rc 1 when
@@ -385,44 +500,65 @@ assignments_only() {
 # left side of an `&&` or `||` list, which errexit exempts.
 warn_unguarded_statements() {
   local node_id="$1" block="$2"
-  # Anchor the errexit exemption to a line that actually RUNS `set -e`. A raw
-  # substring test over the whole block also matches `set -e` quoted inside
-  # another command — `bash -c 'set -e; …'`, or a fence asserting on the string
-  # with `grep -q 'set -e' <file>`, both live idioms here — and would exempt a
-  # block that never enables errexit at its own top level. That is the worst
-  # shape of miss: the block reads as "the author already handled it".
-  if grep -qE '^[[:space:]]*set[[:space:]]+(-[a-zA-Z]*e|-o[[:space:]]+errexit)' <<<"$block"; then
-    return 0
-  fi
 
-  local line s cont="" depth=0 i last
+  local line s cont="" closer depth=0 i last heredoc_end=""
   local -a stmts=()
   while IFS= read -r line; do
     s="${line#"${line%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"
+    # Heredoc payload: not statements at all. Skipping it is not cosmetic — a
+    # payload line reading `set -euo pipefail` (a fence that WRITES a script)
+    # would otherwise satisfy the errexit exemption below and silence the whole
+    # block, the worst shape of miss.
+    if [[ -n "$heredoc_end" ]]; then
+      [[ "$s" == "$heredoc_end" ]] && heredoc_end=""
+      continue
+    fi
     [[ -n "$cont" ]] && { s="$cont $s"; cont=""; }
     [[ -z "$s" || "$s" == \#* ]] && continue
+    if [[ "$s" == *'#'* ]]; then strip_trailing_comment "$s"; s="$STRIPPED"; fi
+    [[ -z "$s" ]] && continue
     if [[ "$s" == *\\ ]]; then cont="${s%\\}"; continue; fi
     if ! quoting_balanced "$s"; then cont="$s"; continue; fi
-    case "$s" in
-      fi|done|esac|'}'|'};'|'fi;'|'done;'|'esac;')
+    if [[ "$s" == *'<<'* ]]; then heredoc_tag "$s"; heredoc_end="$HEREDOC_TAG"; fi
+    # A closer standing alone, whatever its spacing and however many trailing
+    # `;` it carries: `fi`, `fi;`, `fi ;`. Enumerating literal spellings misses
+    # one sooner or later, and a missed closer leaves `depth` stuck above 0 —
+    # which drops the rest of the block from the analysis.
+    closer="$s"
+    while [[ "$closer" == *';' ]]; do
+      closer="${closer%;}"
+      closer="${closer%"${closer##*[![:space:]]}"}"
+    done
+    case "$closer" in
+      fi|done|esac|'}')
         (( depth > 0 )) && depth=$(( depth - 1 )); continue ;;
+    esac
+    case "$s" in
       if\ *|for\ *|while\ *|until\ *|case\ *)
         [[ "$depth" -eq 0 ]] && stmts+=("$s")
-        # A compound written entirely on ONE line closes itself. Incrementing
-        # for it would leave `depth` permanently above 0, and the `depth -eq 0`
-        # guards below would then silently drop every LATER statement in the
-        # block — including the real final one, so the block stops being
-        # analysed at all from that line on.
-        case "$s" in
-          *[\ \;]fi|*[\ \;]fi\;|*[\ \;]done|*[\ \;]done\;|*[\ \;]esac|*[\ \;]esac\;) ;;
-          *) depth=$(( depth + 1 )) ;;
-        esac
+        # A compound written entirely on ONE line closes itself; incrementing
+        # for it would leave `depth` permanently above 0. See
+        # stmt_closes_compound for why the test is not a suffix match.
+        stmt_closes_compound "$s" || depth=$(( depth + 1 ))
         continue ;;
     esac
     [[ "$depth" -eq 0 ]] && stmts+=("$s")
   done <<<"$block"
 
   [[ "${#stmts[@]}" -ge 2 ]] || return 0
+
+  # Anchor the errexit exemption to a TOP-LEVEL STATEMENT that actually RUNS
+  # `set -e`. A raw substring test over the block also matches `set -e` quoted
+  # inside another command — `bash -c 'set -e; …'`, or a fence asserting on the
+  # string with `grep -q 'set -e' <file>`, both live idioms here — and a
+  # line-anchored grep over the raw block additionally matches a heredoc
+  # payload. Either exempts a block that never enables errexit at its own top
+  # level, which is the worst shape of miss: the block reads as "the author
+  # already handled it".
+  for s in "${stmts[@]}"; do
+    [[ "$s" =~ ^set[[:space:]]+(-[a-zA-Z]*e|-o[[:space:]]+errexit) ]] && return 0
+  done
+
   last=$(( ${#stmts[@]} - 1 ))
   for (( i = 0; i < last; i++ )); do
     s="${stmts[i]}"

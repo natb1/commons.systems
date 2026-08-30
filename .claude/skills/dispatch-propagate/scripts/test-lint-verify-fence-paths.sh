@@ -446,6 +446,104 @@ run_lint_warn
 assert_eq "assignment-only statements exit 0" "0" "$RC"
 assert_eq "assignment-only statements print nothing" "" "$OUT"
 
+
+# --- 12. the SPLITTER cannot be made to drop the block's tail ----------------
+# The exemptions above are anchored; these pin the other half — the statement
+# SPLIT itself. Each shape below leaked `depth`, opened a phantom continuation,
+# or matched the errexit exemption from a place that never runs, and the result
+# was the same in every case: the rest of the block silently left the analysis
+# and a swallowed assertion read as clean. Every case was PROVEN red before the
+# fix. Each asserts on a statement that comes AFTER the awkward line, because
+# that is what a leak destroys.
+
+echo "Test: a one-line compound with a trailing redirect does not leak depth"
+reset_nodes
+write_node warn-oneline-redirect implement '## Verification
+```verify
+for f in a b; do bash "$f"; done > /dev/null
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "trailing-redirect compound block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a redirected one-line loop is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a one-line compound with a trailing comment does not leak depth"
+reset_nodes
+write_node warn-oneline-comment implement '## Verification
+```verify
+if [ -f x ]; then echo y; fi  # sanity
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "trailing-comment compound block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a commented one-line if is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a closer written 'fi ;' still closes the compound"
+reset_nodes
+write_node warn-spaced-closer implement '## Verification
+```verify
+if [ -f x ]; then
+  bash .claude/live-script.sh
+fi ;
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "spaced-closer block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a 'fi ;' closer is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: an apostrophe in a trailing comment does not swallow the block"
+reset_nodes
+write_node warn-comment-apostrophe implement $'## Verification\n```verify\nbash .claude/live-script.sh  # it\'s fine\nbash .claude/live-script.sh\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "comment-apostrophe block still exits 0" "0" "$RC"
+assert_contains_local "the statement after an apostrophe comment is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: a heredoc payload's 'set -e' does not exempt the whole block"
+reset_nodes
+write_node warn-heredoc-set-e implement '## Verification
+```verify
+cat > f <<EOF
+set -euo pipefail
+EOF
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "heredoc set -e block still exits 0" "0" "$RC"
+assert_contains_local "a block whose only 'set -e' is a heredoc payload is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+assert_not_contains_local "the heredoc payload line is not itself a statement" \
+  "set -euo pipefail" "$OUT"
+
+# ...and the converse: `<<EOF` named inside quotes opens no heredoc, so the rest
+# of the block must not be consumed as its payload.
+echo "Test: a quoted <<EOF opens no heredoc"
+reset_nodes
+write_node warn-quoted-heredoc implement '## Verification
+```verify
+grep -q "<<EOF" packages/keep.ts
+bash .claude/live-script.sh
+bash packages/keep.ts
+```'
+run_lint_warn
+assert_eq "quoted-heredoc block still exits 0" "0" "$RC"
+assert_contains_local "the statement after a quoted <<EOF is still analysed" \
+  ": bash .claude/live-script.sh" "$OUT"
+
+echo "Test: an assignment carrying an escaped quote is still exempt"
+reset_nodes
+write_node warn-escaped-quote-assignment implement $'## Verification\n```verify\nmsg="a\\" b"\nbash packages/keep.ts\n```'
+run_lint_warn
+assert_eq "escaped-quote assignment exits 0" "0" "$RC"
+assert_eq "escaped-quote assignment prints nothing" "" "$OUT"
+
 # ---------------------------------------------------------------------------
 # lib-verify-fence.sh extraction regression: dispatch-run-verification's exit
 # codes must be unchanged now that it calls the shared parser.
