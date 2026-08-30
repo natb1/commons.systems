@@ -116,6 +116,41 @@ something an "author decision" is an opinion to be tested, not a routing order.
 
 This file. Keep it current as new directives arrive.
 
+## S-15 — "File for ratification" means ship it, not defer it (standing) — QUALIFIES S-13
+
+> "Filing for ratification" mean executing the change using your best judgement,
+> then filing for ratification when the whole batch is done. If the behavior
+> change is the scope of the PR, then you have the authority to bypass the
+> integrity check.
+
+S-13 said to triage every "author call" and keep a ratification list. This
+corrects how that list was being used: it is a **record of what was already
+done**, never a queue of work held back pending approval. The executor decides
+and ships; the author confirms afterward.
+
+Second clause, narrower and more consequential: when the behavior change **is
+the scope of the PR**, the executor may bypass the test-integrity check — that
+is, may rewrite a test assertion that pins the *old* behavior. This is a real
+carve-out from `.claude/rules/test-integrity.md`, which otherwise forbids
+touching a failing or blocking assertion. It is bounded by its own precondition:
+
+- The behavior change must be **what the PR is for**, not a side effect
+  discovered while doing something else. A test that blocks an incidental
+  cleanup still wins.
+- The replacement assertion must assert the **new correct behavior positively**
+  and be at least as strong as the one it replaces. Deleting the case, skipping
+  it, or loosening it to "does not crash" is still forbidden — the rule against
+  weakening a test to make CI green is untouched.
+- Say plainly in the commit which assertion changed and why the precondition
+  holds.
+
+First application: deleting `graph-commit`'s interim list-entry removal guard
+and rewriting the "far-ahead list-entry removal" case in `test-graph-commit.sh`,
+which today asserts the park the deletion removes. The guard's own header names
+its deletion condition, and that condition is met
+(`tactic-node-merge-list-removal-loss` is `phase: done`; `threeWayList` is
+base-aware).
+
 ---
 
 ## Safety constraints held throughout (self-imposed, not author-issued)
