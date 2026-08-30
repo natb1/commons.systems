@@ -30,11 +30,11 @@ were consolidated here and the plan now points at this file.
 
 | | |
 |---|---|
-| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18" |
+| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18". **PR15 (U0/U3/U4)** — the graph-commit simplification half of Position 2, `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`: all five of its nodes closed — see §"Position 2 — PR15" |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
 | **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts). **No position waits on the author** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
-| **Next** | **Position 2 — PR15 (U0/U3/U4) + PR16**, graph plumbing. Nothing gates it |
+| **Next** | **Position 2 — PR16**, the remaining half of the graph plumbing. PR15 (U0/U3/U4) shipped 2026-08-29; PR16 is independent of it and nothing gates it. **PR16 must absorb #3023, which is still open**, as a new unit ahead of Unit 8 |
 | **Open park** | **One**, from Position 1. `tactic-autonomous-body-write-wholesale-replace` is parked, not closed: PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere. Three dispositions are offered in `office_hours.recommendation`. **It gates no position** — the four sibling nodes closed and no later bundle depends on the ruling |
 | **Not started** | Positions 2 through 13. PR2 through PR20 |
 
@@ -156,9 +156,13 @@ Two rulings shape its units:
 - **Unit 5** (park content, delete/modify) takes the **ordinary branch only**,
   and records the delete/modify residue rather than handling it.
 
-### Position 2 · Bundle 1b — PR15 + PR16, the graph plumbing
+### Position 2 · Bundle 1b — PR15 ✅ SHIPPED + PR16, the graph plumbing
 
 15 nodes; the closure toolchain every later bundle's bookkeeping runs through.
+
+**PR15 (U0/U3/U4) shipped 2026-08-29** as `a4a964b8` (#3136); its bookkeeping
+landed as `1f56e0c2`. PR16 is the remaining half of this position. Details in
+§"PR15 — what shipped" at the end of this section.
 
 **PR16** (11 nodes — `transition-node`, `park-node`/`clear-park`,
 `read-sensors.ts`, `validate-graph`, `verify-landed`) is the half worth landing
@@ -199,6 +203,63 @@ PR15 split. PR16 never shared the exposure and proceeds independently.
 Kept separate from Bundle 1 deliberately: both touch `graph-commit`, but Bundle
 1 was correctness and this is simplification. Landing them together would mean a
 regression in the writer could not be bisected against a known-good one.
+
+#### PR15 — what shipped, 2026-08-29
+
+Merged as `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`, closing **five**
+nodes. Units 1–2 were not written, per the split ruling, so the
+`GRAPH_COMMIT_WRITER` default remains `worktree`.
+
+**The five closed nodes** — `tactic-graph-commit-invocation-classifier-bypass`
+(Unit 0), `tactic-node-merge-list-removal-loss` (Unit 3),
+`tactic-graph-commit-noop-shortcircuit-head-behind` (Unit 4),
+`tactic-tactic-graph-commit-rebuild-snapshot-stale-revert-main-qa-regression`,
+and `tactic-flake-hook-tests-graph-commit-fixture-clone`.
+
+**Reconciling the node count.** The paragraph above says PR15 "now closes 2
+nodes, not 4." That count is about the four *graph-commit tactic* nodes only,
+two of which moved to the ref-split deferral set. The other three closed nodes —
+list-removal, citation drift, fixture-clone flake — were never in that four and
+are assigned to PR15 by the serialized plan. Five is the correct total; each was
+audited unit-by-unit against the shipped diff before being closed.
+
+**No node's closure depended on the unwritten Units 1–2.** This was checked
+specifically. The one that could plausibly have depended on the default flip,
+`tactic-graph-commit-noop-shortcircuit-head-behind`, was scoped from the outset
+to close the *worktree*-writer gap **while** `worktree` remains the default, and
+listed the default as out of scope. The two nodes Units 1–2 would have closed,
+`tactic-graph-commit-plumbing-default` and
+`tactic-graph-commit-direct-three-way-merge`, remain open and travel with
+ref-split — they were not silently absorbed.
+
+**One stale park cleared, not re-provisioned.**
+`tactic-node-merge-list-removal-loss` carried an `office_hours` park since
+2026-07-31 (`provision-node-worktree failed … exit 2`) — an environment failure,
+not a substantive one. It was cleared in the same write that set `phase: done`.
+
+**One GitHub-side action.** #2990's merged body cites its five regression cases
+as "36-40"; they are at 48-52, having been shifted by an unrelated commit. The
+body is deliberately left as historical text, and a correction comment was
+posted on that PR instead. This mattered because no later plan section claims
+that correction — closing the node with nothing posted would have dropped it
+from the graph owed by nobody. The repo half re-anchors three in-file citations
+to assertion text and establishes name-over-ordinal as the convention.
+
+**Two residues carried as observe-in-production items**, not owed code: a
+*contended* list removal actually landing on `main`, and a live tick showing a
+behind-main worker skip the landing cycle (`pushed=none … context=noop`, no
+landing-lock claim).
+
+**Accepted behavior change** worth knowing before PR16 touches this writer: a
+behind-but-clean worktree-writer run no longer fast-forwards the caller's
+checkout as a side effect of `land()`'s rebase. `sync_main_checkout()` is the
+sync path; do not add a compensating fast-forward.
+
+**Verification at merge:** `test-graph-commit.sh` 124/0, `intentionsutil` vitest
+1230/1230 across 56 files, `test-approve-workflow-commands.sh` 71/71,
+`run-typecheck.sh` 3/3, `run-lint.sh` clean. Note for anyone citing these later:
+node bodies across this set carried stale figures (711/38, 43, 84, "Case 84")
+that were corrected at closing — the regression case is **Case 85**.
 
 ### Position 3 · Bundle 2a — PR5a, record-time main-qa routing
 
