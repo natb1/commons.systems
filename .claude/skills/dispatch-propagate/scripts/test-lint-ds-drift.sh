@@ -390,4 +390,67 @@ run_sut
 assert_eq "jsx-escaped: exit 0" "0" "$RC"
 assert_contains "jsx-escaped: PASS printed" "PASS" "$OUT"
 
+# ---------------------------------------------------------------------------
+# THE PUSH-TO-MAIN SHAPE.
+#
+# actions/checkout leaves refs/remotes/origin/main pointing AT the pushed
+# commit, so HEAD == origin/main and the `origin/main...HEAD` range this linter
+# used to carry expanded to HEAD..HEAD — empty. The linter then reported a
+# clean pass without inspecting a single line, on every push to main, inside
+# the REQUIRED `lint` job.
+#
+# Same fixture as make_repo, but the violating commit stays on main and
+# origin/main is moved onto it rather than a feature branch being cut.
+# ---------------------------------------------------------------------------
+make_main_push_repo() {
+  REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
+  BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
+
+  git -C "$BARE" init --bare --quiet --initial-branch=main
+
+  git -C "$REPO" init --quiet --initial-branch=main
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test User"
+  git -C "$REPO" remote add origin "$BARE"
+
+  mkdir -p "$REPO/myapp/src/style"
+  printf '%s\n' '.theme {' > "$REPO/myapp/src/style/theme.css"
+  printf '%s\n' '  display: block;' >> "$REPO/myapp/src/style/theme.css"
+  printf '%s\n' '}' >> "$REPO/myapp/src/style/theme.css"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "baseline"
+  git -C "$REPO" push --quiet origin main
+
+  # The push under test: a raw hex colour, committed on main.
+  printf '%s\n' "  $VIOL_HEX" >> "$REPO/myapp/src/style/theme.css"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit --quiet -m "add hex violation (the push)"
+  git -C "$REPO" push --quiet origin main
+  # This is the state actions/checkout leaves on a push to main.
+  git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+}
+
+echo "Test 24: main-push shape flags the violation"
+make_main_push_repo
+# The reproduction, stated as an assertion: the expression this linter used to
+# carry sees nothing at all in exactly this state.
+assert_eq "main-push: the old three-dot range was empty" "" \
+  "$(git -C "$REPO" diff --name-only 'refs/remotes/origin/main...HEAD')"
+run_sut
+[ "$RC" -ne 0 ] && _mp_rc=nonzero || _mp_rc=zero
+assert_eq "main-push: exit non-zero" "nonzero" "$_mp_rc"
+assert_contains "main-push: output names the file" "theme.css" "$OUT"
+assert_contains "main-push: raw hex detector tag" "[raw hex]" "$OUT"
+
+# A clean main push must still pass — the fix must not invent violations.
+echo "Test 25: clean main-push shape passes"
+make_main_push_repo
+printf '%s\n' '/* no-op */' >> "$REPO/myapp/src/style/theme.css"
+git -C "$REPO" add -A
+git -C "$REPO" commit --quiet -m "clean follow-up push"
+git -C "$REPO" push --quiet origin main
+git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+run_sut
+assert_eq "main-push clean: exit 0" "0" "$RC"
+
 report_results

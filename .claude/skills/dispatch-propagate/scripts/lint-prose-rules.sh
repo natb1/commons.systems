@@ -31,17 +31,29 @@ ALLOW_RE='^[[:space:]]*#[[:space:]]*lint-allow:[[:space:]]*gh-rest-porcelain\b'
 # are net-new-only (only this PR's added lines are scanned; pre-existing sites in
 # extensionless shell scripts are not retroactively flagged).
 # Run from REPO_ROOT so that relative paths in diff output are consistent.
-if ! DIFF=$(git -C "$REPO_ROOT" diff origin/main...HEAD --unified=0); then
-  echo "ERROR: could not diff origin/main...HEAD" >&2
+#
+# The baseline comes from resolve-diff-base.sh rather than being spelt
+# `origin/main...HEAD` inline. --at-remote-tip first-parent because this linter
+# runs on pushes to `main` too (run-lint.sh:121, inside the required `lint`
+# job), where actions/checkout leaves origin/main pointing AT the pushed
+# commit: the three-dot diff was then EMPTY and the linter reported a clean
+# pass without inspecting a single line. A violation committed straight to main
+# was never looked at.
+DIFF_BASE=$("$SCRIPTS/resolve-diff-base.sh" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)
+if ! DIFF=$(git -C "$REPO_ROOT" diff "$DIFF_BASE"..HEAD --unified=0); then
+  echo "ERROR: could not diff ${DIFF_BASE}..HEAD in $REPO_ROOT" >&2
   exit 1
 fi
 
-# Old-side revision of that three-dot diff. Needed to classify removals from
-# files the branch deleted or renamed away: their content is only on this side.
-if ! MERGE_BASE=$(git -C "$REPO_ROOT" merge-base origin/main HEAD); then
-  echo "ERROR: could not resolve merge-base of origin/main and HEAD" >&2
-  exit 1
-fi
+# Old-side revision of that diff. Needed to classify removals from files the
+# branch deleted or renamed away: their content is only on this side.
+#
+# This REUSES the already-resolved base rather than recomputing it. It used to
+# call `git merge-base origin/main HEAD` independently — a second source of
+# truth for the same value, which disagrees with the first if refs move
+# mid-run, and which had no answer at all in the push-to-main shape where the
+# diff base is HEAD^1 rather than a merge base.
+MERGE_BASE="$DIFF_BASE"
 
 # Shebang test for old-side paths, mirroring lib.sh's is_shell_script. Kept
 # local because is_shell_script reads the WORKING TREE, which no longer has the

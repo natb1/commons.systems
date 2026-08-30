@@ -201,14 +201,11 @@ make_main_push_repo() {
 }
 
 #
-# SCOPE OF THIS CASE. It asserts that run-lint.sh's own GATE opens — that
-# RUN_PROSE fires and the prose stage is reached. It deliberately does NOT yet
-# assert that the violation is reported: lint-prose-rules.sh carries its OWN
-# `origin/main...HEAD` baseline, which is equally empty in this shape, so the
-# linter still runs vacuously once reached. Both layers have to be fixed for
-# the violation to surface, and the second is a separate commit; this case is
-# strengthened there.
-echo "Test 3: main-push shape reaches the prose stage"
+# TWO LAYERS. run-lint.sh's own gate (RUN_PROSE) and lint-prose-rules.sh's own
+# baseline were BOTH vacuous in this shape, and both have to be fixed for the
+# violation to surface — reaching the prose stage is not the same as the prose
+# stage looking at anything. This case asserts the whole path end to end.
+echo "Test 3: main-push shape reaches the prose stage and fails"
 make_main_push_repo
 # The reproduction, stated as an assertion: the expression run-lint.sh used to
 # carry sees nothing at all in exactly this state.
@@ -217,6 +214,10 @@ assert_eq "main-push: the old three-dot range was empty" "" \
 run_sut
 assert_contains "main-push: reached prose stage" "=== Prose-rule lint ===" "$OUT"
 assert_contains "main-push: baseline came from first-parent" "source=first-parent" "$OUT"
+[ "$RC" -ne 0 ] && _t3_rc=nonzero || _t3_rc=zero
+assert_eq "main-push: exit non-zero" "nonzero" "$_t3_rc"
+assert_contains "main-push: prose failure surfaced" "FAIL: prose" "$OUT"
+assert_contains "main-push: names the file" "dispatch-thing" "$OUT"
 _t3_absent=absent
 [[ "$OUT" == *"No changed-file lint targets matched"* ]] && _t3_absent=present
 assert_eq "main-push: the vacuous-pass message is absent" "absent" "$_t3_absent"
