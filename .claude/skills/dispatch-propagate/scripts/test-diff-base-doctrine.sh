@@ -52,6 +52,12 @@ set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Shared assertion helpers and report_results. Sourcing this is also what
+# satisfies test-decision-log-isolation.sh, the meta-check that every suite in
+# this directory route its routing-decision-log writes into a tmp sandbox.
+# shellcheck source=test-helpers.sh
+source "$SELF_DIR/test-helpers.sh"
+
 REPO_ROOT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -114,7 +120,7 @@ ALLOWLIST=(
 # ---------------------------------------------------------------------------
 # KNOWN_UNMIGRATED — NOT an allowlist. These carry the defect.
 #
-# Four skill documents instruct an agent to run a three-dot range for
+# Five skill documents instruct an agent to run a three-dot range for
 # changed-file detection. They are genuine instances, out of scope for the
 # change that introduced this ratchet (which converted the nine executable call
 # sites), and listed here so the ratchet can go green on that work without
@@ -144,12 +150,12 @@ is_skipped() {
   return 1
 }
 
-PASS=0
-FAIL=0
-TOTAL=0
-
-pass() { PASS=$((PASS + 1)); TOTAL=$((TOTAL + 1)); echo "PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); TOTAL=$((TOTAL + 1)); echo "FAIL: $1" >&2; }
+# Thin wrappers over test-helpers.sh's shared counters. This suite's checks are
+# predicates rather than expected/actual comparisons, so assert_eq would just
+# make every call site say "yes"/"yes"; these keep the same tally and the same
+# PASS:/FAIL: output shape that report_results totals up.
+pass() { PASS=$((PASS + 1)); TOTAL=$((TOTAL + 1)); echo "  PASS: $1"; }
+fail() { FAIL=$((FAIL + 1)); TOTAL=$((TOTAL + 1)); echo "  FAIL: $1" >&2; }
 
 # Sweep A — a three-dot range on a line that also invokes git.
 PAT_A='git[^|;&]*(diff|rev-list|log|merge-base|cherry)[^|;&]*[A-Za-z0-9_"$}{/.^~-]\.\.\.'
@@ -362,9 +368,4 @@ for entry in "${KNOWN_UNMIGRATED[@]}"; do
   fi
 done
 
-echo ""
-echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
-echo "All tests passed."
+report_results
