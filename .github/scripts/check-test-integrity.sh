@@ -102,6 +102,22 @@ if [ -z "$REPO_ROOT" ]; then
     echo "  pass --repo-root to name the tree to check" >&2
     exit 1
   fi
+else
+  # NORMALIZE an explicit --repo-root to the work tree's TOPLEVEL. Every git
+  # call below is `git -C "$REPO_ROOT"`, and git resolves a pathspec relative to
+  # that directory's PREFIX within the repo. A --repo-root naming a
+  # SUBDIRECTORY therefore scopes $TEST_GLOBS and $EXCLUDE_PATHSPECS to that
+  # subdirectory while resolve-diff-base.sh (which normalizes) returns a base
+  # for the whole repo: a test deleted anywhere outside it falls out of $DIFF,
+  # the `[ -z "$DIFF" ]` early exit reads "nothing touched test files", and this
+  # required gate passes having examined part of a tree. Measured: from a
+  # subdirectory prefix, `git diff --diff-filter=D --name-only <base>..HEAD --
+  # '*.test.ts'` returns nothing for a test deleted in a sibling directory.
+  RAW_REPO_ROOT="$REPO_ROOT"
+  if ! REPO_ROOT="$(git -C "$RAW_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-test-integrity: --repo-root '$RAW_REPO_ROOT' is not inside a git work tree" >&2
+    exit 1
+  fi
 fi
 
 DIFF_BASE=$("$RESOLVE_DIFF_BASE" --repo-root "$REPO_ROOT" --at-remote-tip first-parent)

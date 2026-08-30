@@ -225,6 +225,23 @@ if [ -z "$REPO_ROOT" ]; then
     echo "  pass --repo-root to name the tree to scan" >&2
     exit 1
   fi
+else
+  # NORMALIZE an explicit --repo-root to the work tree's TOPLEVEL. Every git
+  # invocation below is `git -C "$REPO_ROOT"`, and git resolves a pathspec
+  # relative to that directory's PREFIX within the repo. So a --repo-root
+  # naming a SUBDIRECTORY silently scopes `-- '*.ts' '*.tsx' …` to that
+  # subdirectory while resolve-diff-base.sh (which normalizes) hands back a
+  # base for the whole repo: a hatch added anywhere outside the subdirectory
+  # falls out of the diff, `[ -z "$diff_output" ]` reads "nothing in scope
+  # changed", and the sensor exits 0 — the same silent narrowing this file's
+  # other guards exist to refuse. resolve-diff-base.sh's own error text invites
+  # "a path inside the checkout", so a subdirectory is a spelling callers will
+  # reach for.
+  RAW_REPO_ROOT="$REPO_ROOT"
+  if ! REPO_ROOT="$(git -C "$RAW_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "check-type-safety-escapes: --repo-root '$RAW_REPO_ROOT' is not inside a git work tree" >&2
+    exit 1
+  fi
 fi
 
 # Baseline resolution — see resolve-diff-base.sh. It subsumes the

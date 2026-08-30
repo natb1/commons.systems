@@ -433,15 +433,65 @@ done
 # to-do rather than a second allowlist: the moment one is converted, this fails
 # and says to delete the entry, so the list only ever shrinks.
 # ---------------------------------------------------------------------------
+# still_unmigrated FILE — true when FILE holds at least one unmarked,
+# non-comment occurrence of the defect.
+#
+# HERE-STRING on the `-q` stage, not a pipe — the same plumbing hazard
+# in_scope() above documents. `grep -vqE` exits at the first non-matching line,
+# so once the upstream output exceeds the 64 KiB pipe buffer the writer takes
+# SIGPIPE, the pipeline returns 141 under `set -o pipefail`, and a file that
+# STILL CARRIES the defect reads as migrated. The caller's failure text then
+# tells an executor to "DELETE its KNOWN_UNMIGRATED entry" — deleting a live
+# defect record. Latent today (the largest entry's hit list is well under
+# 64 KiB); it grows with the entries.
+#
+# The two upstream greps stay a pipe: neither is `-q`, so neither exits early
+# and neither can SIGPIPE its writer. `|| true` covers grep's no-match exit 1.
+#
+# The `-n` guard is load-bearing. `<<<""` feeds one EMPTY line, which does not
+# match $MARKER, so `grep -v` would match it and report an unmigrated file with
+# zero occurrences — the exact inversion this check exists to catch. An empty
+# hit list means migrated; say so before the here-string is built.
+still_unmigrated() {
+  local unmarked
+  unmarked=$(LC_ALL=C grep -anE "$PAT_A|$PAT_B" "$1" 2>/dev/null \
+    | LC_ALL=C grep -vE "$COMMENT_ONLY" || true)
+  [ -n "$unmarked" ] || return 1
+  LC_ALL=C grep -vqE "$MARKER" <<<"$unmarked"
+}
+
+# Self-test: a hit list past the 64 KiB pipe buffer must still read as
+# unmigrated. Under the old pipe spelling this case returned 141 and inverted
+# the verdict; it is the whole reason still_unmigrated exists as a function.
+echo "=== Self-test: still_unmigrated survives a >64 KiB hit list ==="
+BIG_FILE="$(mktemp)"
+BIG_LINE='CHANGED=$(git diff --name-only origin/main'"...HEAD)"
+for _ in $(seq 1 3000); do printf '%s\n' "$BIG_LINE"; done > "$BIG_FILE"
+BIG_BYTES=$(LC_ALL=C grep -anE "$PAT_A|$PAT_B" "$BIG_FILE" | wc -c)
+if [ "$BIG_BYTES" -le 65536 ]; then
+  fail "self-test fixture is only $BIG_BYTES bytes — under the 64 KiB pipe buffer, so it proves nothing"
+elif still_unmigrated "$BIG_FILE"; then
+  pass "still_unmigrated reads a $BIG_BYTES-byte hit list as unmigrated (no SIGPIPE inversion)"
+else
+  fail "still_unmigrated wrongly reported a $BIG_BYTES-byte hit list as migrated (SIGPIPE/pipefail)"
+fi
+# The paired negative: an empty hit list must read as MIGRATED, or the -n guard
+# has turned every clean file into a false "still unmigrated".
+: > "$BIG_FILE"
+if still_unmigrated "$BIG_FILE"; then
+  fail "still_unmigrated wrongly reported a file with no occurrences as unmigrated"
+else
+  pass "still_unmigrated reads a file with no occurrences as migrated"
+fi
+rm -f "$BIG_FILE"
+
 echo "=== Known-unmigrated entries still carry the defect ==="
 for entry in "${KNOWN_UNMIGRATED[@]}"; do
   if [ ! -f "$REPO_ROOT/$entry" ]; then
     fail "known-unmigrated path is gone (remove the entry): $entry"
     continue
   fi
-  if LC_ALL=C grep -anE "$PAT_A|$PAT_B" "$REPO_ROOT/$entry" 2>/dev/null \
-       | LC_ALL=C grep -vE "$COMMENT_ONLY" \
-       | LC_ALL=C grep -vqE "$MARKER"; then
+  if still_unmigrated "$REPO_ROOT/$entry"; then
     pass "still unmigrated (entry earns its place): $entry"
   else
     fail "$entry no longer matches — it was migrated. DELETE its KNOWN_UNMIGRATED entry."

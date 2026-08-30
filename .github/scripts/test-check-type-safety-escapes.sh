@@ -591,6 +591,51 @@ echo "=== Git path: --repo-root names the tree, and a divergence is refused ==="
   fi
 )
 
+echo "=== Git path: --repo-root naming a SUBDIRECTORY still scans the whole tree ==="
+(
+  R=$(make_git_repo branch)
+  # A real directory below the toplevel. Untracked on purpose: it must not
+  # appear in the commit-range diff, or it would change what is being measured.
+  mkdir -p "$R/sub"
+
+  # The reproduction. Every git invocation in the sensor is `git -C
+  # "$REPO_ROOT"`, and git resolves a pathspec relative to that directory's
+  # PREFIX within the repo — so from sub/ the sensor's own `-- '*.ts' …`
+  # pathspec sees NOTHING, while resolve-diff-base.sh (which normalizes) still
+  # hands back a base for the whole repo. The `[ -z "$diff_output" ]` self-noop
+  # then turned that into exit 0: a hatch added anywhere outside the
+  # subdirectory passed a required gate that had examined part of a tree.
+  narrowed=$(git -C "$R/sub" diff --no-color -U0 --diff-filter=d \
+    'refs/remotes/origin/main'..HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx' | wc -c)
+  run_git_path "$R" --repo-root "$R/sub"
+  n=$(err_count)
+  if [ "$narrowed" -eq 0 ] && [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && \
+     grep -q 'file=src.ts' "$OUT_FILE"; then
+    pass "git path/subdir --repo-root -> narrowed pathspec empty, still 1 finding in src.ts, exit 1"
+  else
+    fail "git path/subdir --repo-root (narrowed=$narrowed rc=$RC count=$n): $(cat "$OUT_FILE") | $(cat "$ERR_FILE")"
+  fi
+)
+
+echo "=== Git path: --repo-root outside any git work tree is a loud failure ==="
+(
+  R=$(make_git_repo branch)
+  NONREPO=$(mktemp -d "${TEST_TMPDIR}/nonrepo.XXXXXX")
+  run_git_path "$R" --repo-root "$NONREPO"
+  # The exit code alone does not discriminate: pre-fix the path went straight
+  # to resolve-diff-base.sh, which refused it with exit 3 and a message using
+  # the same phrase. What the normalization adds is that the SENSOR rejects the
+  # argument it was handed, before any helper runs — so assert its own prefixed
+  # line, naming the offending path.
+  if [ "$RC" -ne 0 ] && grep -qF \
+       "check-type-safety-escapes: --repo-root '$NONREPO' is not inside a git work tree" \
+       "$ERR_FILE"; then
+    pass "git path/non-repo --repo-root -> the sensor refuses it, naming the path"
+  else
+    fail "git path/non-repo --repo-root (rc=$RC): $(cat "$ERR_FILE")"
+  fi
+)
+
 # ---------------------------------------------------------------------------
 # RESULTS + expected-total guard (catches a crashed/early-exiting subshell).
 # ---------------------------------------------------------------------------
@@ -603,7 +648,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=24
+EXPECTED=26
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2

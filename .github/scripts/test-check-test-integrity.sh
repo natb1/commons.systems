@@ -60,8 +60,13 @@ make_temp_repo() {
   printf '%s\n' "$tmpdir"
 }
 
-# run_check REPO_DIR — run check-test-integrity.sh against REPO_DIR.
-# Sets RC and STDERR for assertion helpers.
+# run_check REPO_DIR [REPO_ROOT_ARG] — run check-test-integrity.sh against
+# REPO_DIR. Sets RC and STDERR for assertion helpers.
+#
+# REPO_ROOT_ARG is what gets passed to --repo-root, defaulting to REPO_DIR (so
+# every existing call is unchanged). Cases (y) and (z) pass a DIFFERENT value —
+# a subdirectory of the repo, and a path in no repo at all — because the flag's
+# argument and the tree it must resolve to are exactly what those cases test.
 #
 # --repo-root is REQUIRED here, not optional politeness: $CHECK_SCRIPT lives in
 # THIS repo while the fixture is a temp repo elsewhere, and the script refuses
@@ -79,11 +84,11 @@ RC=0
 STDERR=""
 BASE_LINE=""
 run_check() {
-  local repo="$1" raw
+  local repo="$1" root="${2:-$1}" raw
   RC=0
   STDERR=""
   BASE_LINE=""
-  raw=$(cd "$repo" && "$CHECK_SCRIPT" --repo-root "$repo" 2>&1 >/dev/null) || RC=$?
+  raw=$(cd "$repo" && "$CHECK_SCRIPT" --repo-root "$root" 2>&1 >/dev/null) || RC=$?
   # Split on the PROVENANCE line specifically (`base=` is in it), not on the
   # helper's name: its diagnostics carry the same prefix, and filing those into
   # BASE_LINE would silently hide a hard failure from every stderr assertion.
@@ -1302,6 +1307,88 @@ git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse H
 run_check "$REPO"
 assert_base_source "first-parent" "(x) push: baseline resolved via first-parent"
 assert_exit 0 "(x) push: same commit, same verdict — exit 0"
+
+# ---------------------------------------------------------------------------
+# Case (y): a --repo-root naming a SUBDIRECTORY must still check the WHOLE tree.
+#
+# Every git call in the gate is `git -C "$REPO_ROOT"`, and git resolves a
+# pathspec relative to that directory's PREFIX within the repo. So a
+# --repo-root naming a subdirectory scoped $TEST_GLOBS to that subdirectory
+# while resolve-diff-base.sh (which normalizes) handed back a base for the
+# WHOLE repo. A test deleted anywhere outside the subdirectory fell out of
+# $DIFF, the `[ -z "$DIFF" ]` early exit read "nothing touched test files", and
+# this REQUIRED gate exited 0 having examined part of a tree — a vacuous pass,
+# the same failure shape case (u) covers for the push-to-main range.
+#
+# The subdirectory spelling is one a caller reaches for: resolve-diff-base.sh's
+# own error text invites "a path inside the checkout".
+#
+# Measured against fd53e1e4 (pre-fix): exit 0, silent. With the toplevel
+# normalization: exit 1, Signal 3, naming other/outside.test.ts.
+# ---------------------------------------------------------------------------
+echo "--- case (y): subdirectory --repo-root still sees the whole tree ---"
+REPO=$(make_temp_repo)
+mkdir -p "$REPO/other" "$REPO/sub"
+
+cat > "$REPO/other/outside.test.ts" <<'EOF'
+import { it, expect } from 'vitest';
+it('outside the subdirectory', () => { expect(1).toBe(1); });
+EOF
+printf 'export const s = 1;\n' > "$REPO/sub/keep.ts"
+git -C "$REPO" add other/outside.test.ts sub/keep.ts
+git -C "$REPO" commit -q -m "add a test outside sub/"
+git -C "$REPO" update-ref refs/remotes/origin/main HEAD
+
+git -C "$REPO" checkout -q -b feature2
+git -C "$REPO" rm -q other/outside.test.ts
+git -C "$REPO" commit -q -m "delete the test outside sub/"
+
+# The reproduction, asserted rather than asserted-about: run from the sub/
+# prefix, the gate's OWN Signal 3 pathspec sees nothing at all in this state.
+TOTAL=$((TOTAL + 1))
+NARROWED=$(git -C "$REPO/sub" diff --diff-filter=D --name-only \
+  'refs/remotes/origin/main'..HEAD -- '*.test.ts' | grep -c . || true)
+if [ "$NARROWED" -eq 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (y) reproduction: expected the sub/-prefixed pathspec to see nothing, got $NARROWED files"
+fi
+
+run_check "$REPO" "$REPO/sub"
+assert_exit 1 "(y) subdirectory --repo-root: exit 1"
+assert_stderr_contains "Test-integrity violation" "(y) subdirectory --repo-root: remediation text present"
+assert_stderr_contains "Signal 3" "(y) subdirectory --repo-root: Signal 3 fires"
+assert_stderr_contains "other/outside.test.ts" "(y) subdirectory --repo-root: names the test deleted outside sub/"
+
+# ---------------------------------------------------------------------------
+# Case (z): a --repo-root in no git work tree at all must fail LOUDLY, in this
+# gate's own voice.
+#
+# The exit code alone does not discriminate: pre-fix the path was handed
+# straight to resolve-diff-base.sh, which refused it with exit 3 and a message
+# of its own that happens to use the same phrase. What the normalization adds
+# is that the GATE rejects the argument it was given, before any helper runs —
+# so the assertion is on the gate's own prefixed line, naming the offending
+# path. Measured against fd53e1e4 (pre-fix): stderr carries only
+# `resolve-diff-base: ERROR: …`, and this assertion fails.
+# ---------------------------------------------------------------------------
+echo "--- case (z): --repo-root outside any git work tree → loud failure ---"
+REPO=$(make_temp_repo)
+NON_REPO=$(mktemp -d)
+TMPDIRS+=("$NON_REPO")
+
+run_check "$REPO" "$NON_REPO"
+TOTAL=$((TOTAL + 1))
+if [ "$RC" -ne 0 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: (z) non-repo --repo-root: expected a non-zero exit, got 0"
+fi
+assert_stderr_contains \
+  "check-test-integrity: --repo-root '$NON_REPO' is not inside a git work tree" \
+  "(z) non-repo --repo-root: the GATE refuses it, naming the path"
 
 # ---------------------------------------------------------------------------
 # Summary
