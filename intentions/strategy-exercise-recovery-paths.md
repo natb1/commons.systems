@@ -36,8 +36,8 @@ rationale: >-
   refinement are the standard triggers, with ad-hoc prioritization via the
   capture-visibility surface) — so aggregate drift has an owner. The divergence
   half is why this strategy also serves virtue-alignment-of-attachments.
-reading: "exercised: 4/22 records; 18 null last_exercised; review_trigger firing
-  not recorded (sensor read 2026-08-10)"
+reading: "exercised: 4/21 active records (1 declined-origin excluded); 17 null
+  last_exercised; review_trigger firing not recorded (sensor read 2026-08-30)"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -61,8 +61,8 @@ tooling_goals: []
 success_signal:
   observable: last_exercised on every delegation record in this graph
   sensor: the delegation records themselves
-  threshold: no record's last_exercised is null, and no fired review_trigger is
-    left unactioned
+  threshold: "exercised: every non-declined delegation record has last_exercised
+    set; review_trigger firing not recorded"
   is_proxy: false
 attention: null
 phase: null

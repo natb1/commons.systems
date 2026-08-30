@@ -39,10 +39,10 @@ rationale: "strategy-graph-drives-dispatch made the loop real — intent enters
   superseded migration-completion threshold could not read. success_signal was
   amended this round accordingly; see the threshold-shape and steelman
   clarifications below."
-reading: "lifecycle: tactic-gap-derive-on-read implement→qa→review→done
-  (2026-08-10); router selections: 2374 records, 281 nodes; backlog: 58/236 =
-  24.6% (band ≤35%); backlog series 28d: 47.6% → 38.2% → 31.4% → 24.6%
-  (non-increasing)"
+reading: "lifecycle: tactic-indieweb-audience implement→qa→review→done
+  (2026-08-29); router selections: 2487 records, 287 nodes; backlog: 128/316 =
+  40.5% (band ≤35%); backlog series 28d: 28.0% → 20.4% → 44.6% → 40.5%
+  (increasing)"
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
