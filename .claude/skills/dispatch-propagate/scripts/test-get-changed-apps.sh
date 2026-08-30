@@ -4,8 +4,9 @@
 # The case that matters is the PUSH-TO-MAIN shape. actions/checkout leaves
 # refs/remotes/origin/main pointing AT the pushed commit, so HEAD == origin/main
 # and the `"$BASE"...HEAD` three-dot range this script used to spell inline
-# expanded to HEAD..HEAD — empty. Every consumer (run-lint.sh:64,
-# run-unit-tests.sh:68, run-typecheck.sh:44) reads an empty result as "no dirty
+# expanded to HEAD..HEAD — empty. Every consumer (run-lint.sh, run-unit-tests.sh
+# and run-typecheck.sh, at their get-changed-apps.sh call sites) reads an empty
+# result as "no dirty
 # apps", so the post-merge run did no vitest, no eslint and no build, and
 # reported success.
 #

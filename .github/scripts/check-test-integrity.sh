@@ -95,7 +95,8 @@ if [ -z "$REPO_ROOT" ]; then
   # or $0 carried. Comparing the two normalizations makes one checkout reached
   # through a symlink (macOS /tmp -> /private/tmp, a symlinked workspace) read
   # as two different trees and abort on the tree it is standing in. Same
-  # contract, same spelling, as resolve-diff-base.sh:283-288.
+  # contract, same spelling, as resolve-diff-base.sh's own self-vs-CWD root
+  # compare-and-abort.
   SCRIPT_GIT_ROOT="$(git -C "$SCRIPT_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "$SCRIPT_GIT_ROOT" ] && [ "$SCRIPT_GIT_ROOT" != "$REPO_ROOT" ]; then
     echo "check-test-integrity: script lives in $SCRIPT_GIT_ROOT but the CWD resolves to $REPO_ROOT;" >&2

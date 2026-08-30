@@ -60,7 +60,8 @@ fi
 # `git checkout <base> -- <ws>` to tell a regression from a pre-existing
 # failure. That is a tree, not a file list, and it went vacuous on a push to
 # `main` for the same reason. It is resolved separately, at
-# run-typecheck.sh:131 — fixing this call site would not have fixed it.
+# run-typecheck.sh's own resolve-diff-base.sh call — fixing this call site
+# would not have fixed it.
 #
 # An explicit --base is NOT routed through that helper at all. --at-remote-tip
 # is a statement about the REMOTE TIP — "HEAD is sitting where origin/main
@@ -87,11 +88,13 @@ else
   EXPLICIT_BASE="$BASE"
   # Capture STDOUT ONLY. `$(git ... 2>&1)` splices git's stderr into the VALUE,
   # and git writes to stderr on its SUCCESS path too: an ambiguous refname — a
-  # tag and a branch sharing a name, which is exactly the `last-prod-deploy` ref
-  # run-all-prod-deploy-smoke.sh:20 passes here — makes git print
-  # `warning: refname 'last-prod-deploy' is ambiguous.`, exit 0, and hand back a
+  # tag and a branch sharing a name — makes git print
+  # `warning: refname '<name>' is ambiguous.`, exit 0, and hand back a
   # $BASE whose first line is the warning. The `git diff "$BASE"..HEAD` below
   # then exits 128 (measured), with a diagnosis pointing at the wrong command.
+  # No caller reaches that today — the production one passes a pre-resolved
+  # 40-hex SHA, which git can never call ambiguous — so this is the spelling
+  # that forecloses the class, not a fix for a live break.
   # Errors are still reported in full: stderr goes to a temp file which the
   # failure path quotes and the success path forwards to the log.
   MERGE_BASE_ERR=$(mktemp)

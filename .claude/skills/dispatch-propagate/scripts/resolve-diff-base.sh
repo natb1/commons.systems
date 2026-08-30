@@ -172,14 +172,19 @@ die() {
 # $GIT_ERR, and returning git's exit status.
 #
 # WHY NOT `VAR=$(git ... 2>&1)`: that spelling splices git's stderr into the
-# VALUE, and git writes to stderr on its SUCCESS path too. The live case is an
-# ambiguous refname — a tag and a branch sharing a name, e.g. the
-# `last-prod-deploy` ref run-all-prod-deploy-smoke.sh:20 passes as a base — where
-# git prints `warning: refname 'last-prod-deploy' is ambiguous.`, still exits 0,
+# VALUE, and git writes to stderr on its SUCCESS path too. The case defended
+# against is an ambiguous refname — a tag and a branch sharing a name — where
+# git prints `warning: refname '<name>' is ambiguous.`, still exits 0,
 # and the caller's variable comes back as the warning line followed by the SHA.
 # Every later use of that value is then garbage: measured, the following
 # `git diff "$BASE"..HEAD` exits 128. The failure is silent at the point of
 # capture and only surfaces one command later, wearing the wrong diagnosis.
+#
+# NO CURRENT CALLER CAN REACH IT, and this comment used to claim one did. The
+# only explicit-base path resolves its ref to a 40-hex SHA before any of this
+# runs, and git cannot call a SHA ambiguous. The capture spelling is kept
+# because it is what makes the whole class impossible, not because something
+# live exercises it — do not delete it as dead on the strength of that.
 #
 # Stderr is not discarded: on success it is forwarded to this script's own
 # stderr (so a warning still reaches the log), and on failure it is left for the
