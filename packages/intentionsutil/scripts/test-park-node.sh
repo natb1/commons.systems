@@ -186,6 +186,7 @@ DEMOTE_SCRIPT="$HARNESS_DIR/demote-node-to-implement"
 APPLY_TS="$HARNESS_DIR/apply-node-transition.ts"
 VL_SCRIPT="$HARNESS_DIR/verify-landed"
 LIB_STORE_AT_REF_TS="$HARNESS_DIR/lib-store-at-ref.ts"
+LIB_BASE_PIN_SH="$HARNESS_DIR/lib-base-pin.sh"
 [[ -f "$PN_SCRIPT" ]] || { echo "error: park-node not found at $PN_SCRIPT" >&2; exit 1; }
 [[ -f "$GC_SCRIPT" ]] || { echo "error: graph-commit not found at $GC_SCRIPT" >&2; exit 1; }
 [[ -f "$RP_SCRIPT" ]] || { echo "error: resolve-park not found at $RP_SCRIPT" >&2; exit 1; }
@@ -193,7 +194,9 @@ LIB_STORE_AT_REF_TS="$HARNESS_DIR/lib-store-at-ref.ts"
 [[ -f "$DEMOTE_SCRIPT" ]] || { echo "error: demote-node-to-implement not found at $DEMOTE_SCRIPT" >&2; exit 1; }
 [[ -f "$VL_SCRIPT" ]] || { echo "error: verify-landed not found at $VL_SCRIPT" >&2; exit 1; }
 [[ -f "$LIB_STORE_AT_REF_TS" ]] || { echo "error: lib-store-at-ref.ts not found at $LIB_STORE_AT_REF_TS" >&2; exit 1; }
+[[ -f "$LIB_BASE_PIN_SH" ]] || { echo "error: lib-base-pin.sh not found at $LIB_BASE_PIN_SH" >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found (required by the gh shim)" >&2; exit 1; }
+[[ -d "$REAL_REPO_ROOT/node_modules" ]] || { echo "error: $REAL_REPO_ROOT/node_modules not found — install dependencies first (npm install at the repo root)" >&2; exit 1; }
 
 WORK="$(mktemp -d)" || { echo "error: mktemp failed" >&2; exit 1; }
 harness_cleanup() { rm -rf "$WORK"; }
@@ -221,6 +224,10 @@ cp "$PN_SCRIPT" "$SEED/packages/intentionsutil/scripts/park-node"
 cp "$GC_SCRIPT" "$SEED/packages/intentionsutil/scripts/graph-commit"
 cp "$RP_SCRIPT" "$SEED/packages/intentionsutil/scripts/resolve-park"
 cp "$CP_SCRIPT" "$SEED/packages/intentionsutil/scripts/clear-park"
+# park-node and clear-park both source this at their own SCRIPT_DIR for
+# --base pin resolution (lib-base-pin.sh); without this copy the clones can't
+# find it and every --base-exercising case fails.
+cp "$LIB_BASE_PIN_SH" "$SEED/packages/intentionsutil/scripts/lib-base-pin.sh"
 cp "$DEMOTE_SCRIPT" "$SEED/packages/intentionsutil/scripts/demote-node-to-implement"
 cp "$APPLY_TS" "$SEED/packages/intentionsutil/scripts/apply-node-transition.ts"
 # verify-landed + its lib-store-at-ref.ts dependency: park-node/clear-park now

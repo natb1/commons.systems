@@ -15,14 +15,19 @@
 //     node's verbatim `success_signal.sensor`. This catches the 2026-08-12
 //     incident class: an /align round appended a clause to a recorded sensor,
 //     whose exact-match registration then resolved to nothing and read null in
-//     silence. REPORTED, NOT FATAL — see the call site's comment for why.
+//     silence. NOT FATAL BY DEFAULT — see the call site's comment for why —
+//     but fatal under `--strict-sensors`, the post-merge-on-main opt-in; see
+//     the same comment for the ruling.
 //     (`lintTacticBodies` also runs, on tactic plan bodies.)
 //
 // Used as the guard step of the graph/** CI fast path — an intentions/-only
 // push validates its own state in seconds, rather than waiting on the full PR
 // CI lane. The graph passes throw IntentionSchemaError on any problem, which
 // this script lets propagate, so a bad graph exits non-zero with the error
-// message. The sensor pass is the deliberate exception: it prints and exits 0.
+// message. The sensor pass is the deliberate exception by default: it prints
+// and exits 0, unless `--strict-sensors` is passed (see below) — that flag
+// must never be set at the graph-fast-path guard call site; it is for the
+// post-merge check on `main` only.
 //
 // The prose baseline (`../prose-ref-baseline.json`) exists PURELY to
 // grandfather prose-dangling references that already existed on main when this
@@ -32,7 +37,13 @@
 // prose-dangling reference is a violation to fix, not a baseline entry to add.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/validate-graph.ts <intentionsDir>
+//   npx tsx packages/intentionsutil/scripts/validate-graph.ts <intentionsDir> [--strict-sensors]
+//
+// `--strict-sensors` makes pass 3 (sensor registration) fatal instead of a
+// stderr warning. It must be set ONLY at the post-merge-on-main call site
+// (.github/workflows/unit-tests.yml's graph-validate job) and NEVER at the
+// graph-fast-path guard call site (.github/workflows/graph-fast-path.yml) —
+// see the pass-3 comment in `main` below for why.
 //
 // <intentionsDir> is REQUIRED and has no default (strategy-graph-native-dispatch
 // clarification 194, ADOPTED; clarification 242 scopes the conversion to this
@@ -54,6 +65,7 @@ import {
   findUnboundRegisteredSensorNames,
   formatUnboundSensorNames,
 } from "../src/sensors.js";
+import { IntentionSchemaError } from "../src/errors.js";
 import { deletedNodeIds } from "./lib-deleted-node-ids.js";
 import { UNBOUND_SENSOR_NAMES, registeredSensorNames } from "./read-sensors.js";
 
@@ -105,6 +117,16 @@ function parseIntentionsDir(argv: string[]): string {
 }
 
 /**
+ * Whether `--strict-sensors` was passed. See the header note and the pass-3
+ * comment in `main`: this flips sensor-registration integrity (pass 3) from a
+ * stderr warning to a fatal `IntentionSchemaError`, and must be set only at
+ * the post-merge-on-main call site, never at the graph-fast-path guard site.
+ */
+function parseStrictSensors(argv: string[]): boolean {
+  return argv.includes("--strict-sensors");
+}
+
+/**
  * Fail loudly when the named directory is not a readable directory. Without
  * this the store enumeration below would surface the same condition as a bare
  * ENOENT stack trace, and — before <intentionsDir> became required — as an
@@ -132,7 +154,9 @@ function assertIsDirectory(intentionsDir: string): void {
 }
 
 function main(): void {
-  const intentionsDir = parseIntentionsDir(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const intentionsDir = parseIntentionsDir(argv);
+  const strictSensors = parseStrictSensors(argv);
   assertIsDirectory(intentionsDir);
   const nodes = listNodesStrict(intentionsDir);
 
@@ -153,13 +177,13 @@ function main(): void {
   // recorded sensor. The reverse is NOT asserted — most recorded sensors in the
   // store are deliberately unimplemented prose.
   //
-  // REPORTED, NEVER FATAL HERE. This script is the `guard` job of
+  // NOT FATAL HERE BY DEFAULT. This script is also the `guard` job of
   // graph-fast-path.yml, and that workflow's four other required contexts each
-  // declare `needs: guard` — so throwing here leaves EVERY graph writer in the
-  // repo with four non-success required checks and `graph-commit` refusing to
-  // land, over a registry defect that says nothing about the node being
-  // written. That is the 2026-08-14 outage: 54 minutes, three blocked writes,
-  // none of them about sensors
+  // declare `needs: guard` — so throwing here unconditionally would leave
+  // EVERY graph writer in the repo with four non-success required checks and
+  // `graph-commit` refusing to land, over a registry defect that says nothing
+  // about the node being written. That is the 2026-08-14 outage: 54 minutes,
+  // three blocked writes, none of them about sensors
   // (tactic-eval-finding-sensor-validator-red-main-blocks-all-graph-writes).
   //
   // For a REGISTRY edit the signal is not lost, it moves to where the change
@@ -169,18 +193,21 @@ function main(): void {
   // the PR CI of any branch touching packages/intentionsutil — the home of both
   // the registered constants and this rule.
   //
-  // For a NODE PROSE reword the signal IS lost, and saying so is the point of
-  // this paragraph. An `/align` round that rewrites a node's
-  // `success_signal.sensor` lands through a `graph/**` push;
-  // .github/workflows/unit-tests.yml declares
-  // `branches-ignore: [main, 'graph/**']`, so neither that suite nor its
-  // `graph-validate` job (which runs THIS script, and so cannot go red on this
-  // condition anyway) ever runs for such a write. The stderr line below is all
-  // that fires. Restoring a failing gate on that half needs a ruling on its
-  // shape — node-scoped fatal here, versus a post-merge check on `main` — and
-  // is deferred rather than guessed at, because the careless version re-arms
-  // exactly the repo-wide denial described above. See read-sensors.ts's
-  // UNBOUND_SENSOR_NAMES docstring, which carries the same warning.
+  // For a NODE PROSE reword the signal used to be lost outright: an `/align`
+  // round that rewrites a node's `success_signal.sensor` lands through a
+  // `graph/**` push, which .github/workflows/unit-tests.yml does NOT ignore
+  // (only `graph/**` itself is ignored there — `main` deliberately is not, see
+  // that workflow's `branches-ignore` comment) — but `graph/**` pushes don't
+  // trigger that workflow at all (its `on.push.branches-ignore` excludes them),
+  // so neither that suite nor its `graph-validate` job (which runs THIS
+  // script) ran for such a write. The push that follows and lands the reword
+  // on `main` DOES trigger unit-tests.yml, so `--strict-sensors` is passed ONLY
+  // at that job's call site (unit-tests.yml's `graph-validate` job) to close
+  // the gap: a node-prose reword that de-registers a sensor now turns `main`
+  // red at the next push, without ever risking the write-path denial above,
+  // because graph-fast-path.yml's guard job never passes the flag. See
+  // read-sensors.ts's UNBOUND_SENSOR_NAMES docstring, which carries the same
+  // warning.
   const registered = registeredSensorNames();
   const unboundRegistered = findUnboundRegisteredSensorNames(
     nodes,
@@ -188,12 +215,16 @@ function main(): void {
     UNBOUND_SENSOR_NAMES,
   );
   if (unboundRegistered.length > 0) {
+    if (strictSensors) {
+      throw new IntentionSchemaError(formatUnboundSensorNames(unboundRegistered));
+    }
     process.stderr.write(
       `warning — sensor registration\n${formatUnboundSensorNames(unboundRegistered)}\n` +
         `Not fatal here: denying the graph write path over a registry/store pairing ` +
         `defect blocks every writer in the repo over content that has nothing to do ` +
         `with sensors (2026-08-14). The same rule IS fatal in packages/intentionsutil's ` +
-        `unit CI — test/lifecycle-sensor.test.ts, on any branch touching that package.\n`,
+        `unit CI — test/lifecycle-sensor.test.ts, on any branch touching that package, and ` +
+        `(post-merge, via --strict-sensors) in unit-tests.yml's graph-validate job on main.\n`,
     );
   }
 
@@ -212,8 +243,9 @@ function main(): void {
   process.stdout.write(
     `ok — sensors: ${registered.size} registered, ` +
       `${UNBOUND_SENSOR_NAMES.size} node-agnostic, ` +
-      `${unboundRegistered.length} unbound (reported on stderr, never fatal), ` +
-      `rest recorded verbatim\n`,
+      `${unboundRegistered.length} unbound (` +
+      (strictSensors ? "fatal under --strict-sensors" : "reported on stderr, not fatal here") +
+      `), rest recorded verbatim\n`,
   );
 }
 

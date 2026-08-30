@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
-import { validateGraph, validateGraphProseRefs, validateNode } from "../src/schema.js";
+import {
+  FIRST_CLASS_FIELD_NAMES,
+  validateGraph,
+  validateGraphProseRefs,
+  validateNode,
+} from "../src/schema.js";
 import { readNode, writeNode } from "../src/store.js";
 import { WAIT_MAX_HORIZON_MS } from "../src/waits.js";
 
@@ -2386,6 +2391,92 @@ describe("validateGraph", () => {
   it("Rule 22: accepts a WAIT node with no wait_armed_since at all", () => {
     // Waits minted before the field existed stay landable.
     expect(() => validateGraph(waitNodes())).not.toThrow();
+  });
+
+  // Rule 23: no attributes key shadows a first-class field (presence, not shape).
+
+  it("Rule 23: rejects the historical attributes.phase squatter, naming the node", () => {
+    const nodes = tierNodes({ attributes: { phase: "main-qa" } });
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-under-test: attributes\.phase shadows the first-class phase field — the attributes squatter representation is retired; move the value to the node's own phase field and delete attributes\.phase/,
+    );
+  });
+
+  it("Rule 23: rejects attributes.execution and attributes.office_hours", () => {
+    // The other two keys the retired check-node-selection.ts fallback readers
+    // honored. The ban is the whole first-class field set, not just `phase`.
+    expect(() =>
+      validateGraph(
+        tierNodes({
+          attributes: {
+            execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+          },
+        }),
+      ),
+    ).toThrow(
+      /strategy-under-test: attributes\.execution shadows the first-class execution field — the attributes squatter representation is retired; move the value to the node's own execution field and delete attributes\.execution/,
+    );
+    expect(() =>
+      validateGraph(
+        tierNodes({
+          attributes: { office_hours: { reason: "author park", since: "2026-07-07" } },
+        }),
+      ),
+    ).toThrow(
+      /strategy-under-test: attributes\.office_hours shadows the first-class office_hours field — the attributes squatter representation is retired; move the value to the node's own office_hours field and delete attributes\.office_hours/,
+    );
+  });
+
+  it("Rule 23: rejects EVERY first-class field name under attributes", () => {
+    // The forbidden set is derived from the compiler-enforced
+    // FIRST_CLASS_FIELD_PROBE, so this walks the schema's own field list rather
+    // than a hand-copied one — a field added to IntentionNode is covered here
+    // the moment the probe admits it.
+    expect(FIRST_CLASS_FIELD_NAMES.length).toBeGreaterThan(0);
+    for (const key of FIRST_CLASS_FIELD_NAMES) {
+      expect(() => validateGraph(tierNodes({ attributes: { [key]: "x" } }))).toThrow(
+        new RegExp(`attributes\\.${key} shadows the first-class ${key} field`),
+      );
+    }
+  });
+
+  it("Rule 23: rejects a shadowing key whatever its value — presence is the violation", () => {
+    // null, a non-string, and a well-formed phase string all fail identically:
+    // there is no correct way to spell a first-class field under `attributes`.
+    for (const value of [null, 42, "implement"]) {
+      expect(() => validateGraph(tierNodes({ attributes: { phase: value } }))).toThrow(
+        /attributes\.phase shadows the first-class phase field/,
+      );
+    }
+  });
+
+  it("Rule 23: reports every violating key on one node, not just the first", () => {
+    let message = "";
+    try {
+      validateGraph(tierNodes({ attributes: { phase: null, execution: null, rounds: null } }));
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toMatch(/attributes\.phase shadows the first-class phase field/);
+    expect(message).toMatch(/attributes\.execution shadows the first-class execution field/);
+    expect(message).toMatch(/attributes\.rounds shadows the first-class rounds field/);
+  });
+
+  it("Rule 23: is inert on a node with no shadowing key", () => {
+    // Empty attributes and legitimate non-shadowing keys both pass — the rule
+    // bans the first-class field names, it does not police `attributes`.
+    // `pre_namespacing_boost`, `bug_fix`, `tier` and `measured_impact` are all
+    // real keys in the live store's attributes census. (The first-class `phase`
+    // field itself is exercised by every tactic fixture in this file; rule 12
+    // keeps it off the strategy `tierNodes` builds.)
+    expect(() => validateGraph(tierNodes({ attributes: {} }))).not.toThrow();
+    expect(() =>
+      validateGraph(
+        tierNodes({
+          attributes: { bug_fix: true, tier: 2, measured_impact: [], pre_namespacing_boost: 40 },
+        }),
+      ),
+    ).not.toThrow();
   });
 });
 

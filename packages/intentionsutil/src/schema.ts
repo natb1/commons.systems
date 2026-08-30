@@ -251,6 +251,51 @@ export interface IntentionNode {
 }
 
 /**
+ * Every first-class `IntentionNode` field name, as a compiler-enforced probe.
+ *
+ * The `Record<keyof IntentionNode, true>` annotation makes this object wrong in
+ * BOTH directions the moment the interface above moves: omitting a field is a
+ * missing-property error, and naming something that is not a field is an
+ * excess-property error. So the derived `FIRST_CLASS_FIELD_NAMES` — and with it
+ * `validateGraph`'s rule 23 shadow-ban — cannot drift from the schema. Adding a
+ * field to `IntentionNode` extends the ban automatically, or fails the build;
+ * there is no second list to keep in sync by hand.
+ *
+ * Declared here rather than beside the other rule vocabularies at the top of the
+ * file so whoever edits the interface meets the obligation immediately below it.
+ */
+const FIRST_CLASS_FIELD_PROBE: Record<keyof IntentionNode, true> = {
+  id: true,
+  kind: true,
+  statement: true,
+  owner: true,
+  status: true,
+  parent: true,
+  serves: true,
+  recovers: true,
+  rationale: true,
+  reading: true,
+  clarifications: true,
+  tooling_goals: true,
+  success_signal: true,
+  attention: true,
+  phase: true,
+  execution: true,
+  validates: true,
+  blocked_by: true,
+  office_hours: true,
+  pace_exempt: true,
+  rounds: true,
+  attributes: true,
+};
+
+/**
+ * The first-class field names no `attributes` key may shadow (rule 23). Derived
+ * from `FIRST_CLASS_FIELD_PROBE`, so it is exactly the schema's own field list.
+ */
+export const FIRST_CLASS_FIELD_NAMES: readonly string[] = Object.keys(FIRST_CLASS_FIELD_PROBE);
+
+/**
  * Input type for writeNode. Only the required core is mandatory; optional
  * fields may be omitted and validateNode will apply their defaults. This lets
  * callers omit dialectic fields (clarifications, tooling_goals, etc.) that
@@ -1401,6 +1446,44 @@ function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
 }
 
 /**
+ * Rule 23: no `attributes` key may shadow a first-class `IntentionNode` field
+ * name. Re-spelling a field inside the free-form `attributes` bag gives one
+ * state two spellings, and every reader has to choose — so a node whose real
+ * phase sat under `attributes.phase` was invisible to any consumer that read
+ * `node.phase`, which is how the router misrouted squatter nodes.
+ *
+ * The ban is deliberately the whole field set, not just `phase`: `phase` is the
+ * only key that ever squatted in the store, but the class of defect is "a
+ * first-class field re-spelled inside the free-form bag", and banning the class
+ * also closes `attributes.execution` and `attributes.office_hours` — the other
+ * two keys the retired `check-node-selection.ts` fallback readers honored. The
+ * forbidden set is `FIRST_CLASS_FIELD_NAMES`, derived from a compiler-enforced
+ * probe over `keyof IntentionNode`, so it cannot drift from the schema.
+ *
+ * Unlike rules 19/21/22, PRESENCE is the violation: a shadowing key is rejected
+ * whatever its value (including `null` and a well-formed one), because there is
+ * no correct way to spell a first-class field under `attributes` — the correct
+ * spelling is the field itself. Every violating key on a node is reported, not
+ * just the first, so one run tells the author the whole edit to make.
+ *
+ * NOTE — RULE NUMBER COLLISION. `intentions/tactic-supersession-edge-and-terminal.md`
+ * also claims rules **23 and 24**, for the supersession edge and its cycle check.
+ * Neither is landed as of 2026-08-29, and neither is this one at the time of
+ * writing. Rule numbers are cross-referenced from node bodies and are NEVER
+ * reused (see the burned rule 20 in the ledger above `validateGraph`), so
+ * whichever of the two lands second must renumber its rules — and update the
+ * claiming node body — rather than sharing a number.
+ */
+function checkAttributesShadowing(node: IntentionNode, problems: string[]): void {
+  for (const key of FIRST_CLASS_FIELD_NAMES) {
+    if (!Object.prototype.hasOwnProperty.call(node.attributes, key)) continue;
+    problems.push(
+      `${node.id}: attributes.${key} shadows the first-class ${key} field — the attributes squatter representation is retired; move the value to the node's own ${key} field and delete attributes.${key}`,
+    );
+  }
+}
+
+/**
  * The four string-valued fields every `attributes.measured_impact` entry
  * carries. `value` (a finite number) and `measured` (a `YYYY-MM-DD` date) are
  * checked separately because their types differ.
@@ -1726,6 +1809,26 @@ function checkBlockedByCycles(
  *      work, and enforcing that here is what makes a separate router
  *      exclusion for the executable-tactic loop unnecessary. The rule is
  *      entirely inert on any node without `attributes.wait_for`.
+ *  23. No `attributes` key shadows a first-class `IntentionNode` field name.
+ *      The retired squatter convention let a node spell a first-class field
+ *      inside the free-form `attributes` bag instead — `attributes.phase`,
+ *      `attributes.execution`, `attributes.office_hours`. That gives one state
+ *      two spellings and silently splits every reader: a consumer reading
+ *      `node.phase` saw `null` on a node that was really at `main-qa`, which is
+ *      how squatter nodes were misrouted. The forbidden set is the schema's own
+ *      field list (`FIRST_CLASS_FIELD_NAMES`, derived from a compiler-enforced
+ *      `Record<keyof IntentionNode, true>` probe), so adding a field to the
+ *      interface extends the ban and it can never drift. Unlike rules 19, 21
+ *      and 22 — which are inert when their key is absent and constrain its
+ *      SHAPE when present — presence alone violates this rule, at any value
+ *      including `null`: there is no well-formed way to author a first-class
+ *      field under `attributes`. Every violating key on a node is reported.
+ *      `attributes` stays free-form for every key that is not a field name.
+ *
+ *      RULE NUMBER COLLISION: `intentions/tactic-supersession-edge-and-terminal.md`
+ *      also claims 23 and 24 (supersession edge + its cycle check), unlanded as
+ *      of 2026-08-29. Numbers are cross-referenced from node bodies and never
+ *      reused — see burned rule 20 above — so whichever lands second renumbers.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1778,6 +1881,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkMeasuredImpactShape(node, problems);
     // Rule 22: a WAIT node's id, calendar predicate and hold fields are well-shaped.
     checkWaitNodeShape(node, problems);
+    // Rule 23: no attributes key shadows a first-class field name.
+    checkAttributesShadowing(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkBlockedByCycles(nodes, byId, problems);

@@ -201,42 +201,11 @@ fi
 
 # Resolve --base (if supplied) to a 40-hex blob sha, before any network call,
 # so a malformed base is a cheap usage error rather than a mid-flight failure.
-PINNED_BASE=""
-if [[ $BASE_SUPPLIED -eq 1 && -z "$BASE_ARG" ]]; then
-  echo "park-node: --base requires a non-empty <blobsha>|<id>=<blobsha>|<manifest-file> value" >&2
-  exit 2
-fi
-if [[ $BASE_SUPPLIED -eq 1 ]]; then
-  if [[ -f "$BASE_ARG" ]]; then
-    while IFS= read -r line || [[ -n "$line" ]]; do
-      [[ -z "$line" ]] && continue
-      line_id="${line%%=*}"
-      line_sha="${line#*=}"
-      if [[ "$line_id" == "$NODE_ID" ]]; then
-        PINNED_BASE="$line_sha"
-        break
-      fi
-    done <"$BASE_ARG"
-    if [[ -z "$PINNED_BASE" ]]; then
-      echo "park-node: manifest '$BASE_ARG' has no entry for node id '$NODE_ID'" >&2
-      exit 2
-    fi
-  elif [[ "$BASE_ARG" == *=* ]]; then
-    pair_id="${BASE_ARG%%=*}"
-    pair_sha="${BASE_ARG#*=}"
-    if [[ "$pair_id" != "$NODE_ID" ]]; then
-      echo "park-node: --base id '$pair_id' does not match node id '$NODE_ID'" >&2
-      exit 2
-    fi
-    PINNED_BASE="$pair_sha"
-  else
-    PINNED_BASE="$BASE_ARG"
-  fi
-  if [[ ! "$PINNED_BASE" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "park-node: --base resolved to '$PINNED_BASE', not a full 40-hex blob sha" >&2
-    exit 2
-  fi
-fi
+# Shared with clear-park via lib-base-pin.sh (see that file for the full
+# branch-by-branch description); resolve_base_pin exits 2 itself on any usage
+# error, using "park-node:" as the message prefix.
+source "$SCRIPT_DIR/lib-base-pin.sh"
+resolve_base_pin "park-node" "$NODE_ID"
 
 TMPTS="$(mktemp --suffix=.mts)" \
   || { echo "park-node: could not create temp file for the parking write" >&2; exit 1; }

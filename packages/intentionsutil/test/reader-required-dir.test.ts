@@ -84,6 +84,34 @@ describe("validate-graph.ts requires an explicit intentions directory", () => {
   });
 });
 
+// `--strict-sensors` (tactic-eval-finding-sensor-validator-red-main-blocks-all-
+// graph-writes's ruling: shape (2), a post-merge check on `main`, and it must
+// be FATAL). An empty store already exercises this deterministically: with no
+// nodes at all, every node-bound registered sensor name is unbound by
+// construction, with no need to fabricate a specific sensor/node pairing.
+//
+// The property under test is the opt-in split itself: the default path stays
+// exit-0 (never denies the graph write path — graph-fast-path.yml's guard job
+// must keep passing no flag), while `--strict-sensors` (passed only by
+// unit-tests.yml's post-merge graph-validate job) turns the same condition
+// fatal.
+describe("validate-graph.ts --strict-sensors", () => {
+  it("is non-fatal by default, even with unbound registered sensor names", { timeout: 30_000 }, () => {
+    const { intentionsDir } = fixtureRepo();
+    const run = runScript("validate-graph.ts", [intentionsDir]);
+    expect(run.status).toBe(0);
+    expect(run.stderr).toContain("warning — sensor registration");
+    expect(run.stderr).toContain("Not fatal here");
+  });
+
+  it("is fatal under --strict-sensors, naming the unbound sensor(s)", { timeout: 30_000 }, () => {
+    const { intentionsDir } = fixtureRepo();
+    const run = runScript("validate-graph.ts", [intentionsDir, "--strict-sensors"]);
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("Registered sensor name(s) not recorded by any node's success_signal.sensor");
+  });
+});
+
 describe("write-node.ts requires an explicit --dir", () => {
   it("refuses a write with no --dir instead of resolving one from its own location", { timeout: 30_000 }, () => {
     const { repoRoot, intentionsDir } = fixtureRepo();

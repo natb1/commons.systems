@@ -83,21 +83,35 @@ describe("evaluateSelection", () => {
     expect(r.stderr[0]).toMatch(/phase: selected qa but node is now implement/);
   });
 
-  it("exit 12 on a squatter (attributes.phase) mismatch — and reads the squatter phase", () => {
+  it("exit 12 on a first-class phase mismatch against a non-implement phase", () => {
     const dir = tempDir();
-    // phase:null first-class, real phase squatted under attributes (pre-migration subtree).
-    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
+    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: "qa" }));
     const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(12);
-    // Proves the squatter value was read, not the null first-class field.
     expect(r.stderr[0]).toMatch(/node is now qa/);
   });
 
-  it("passes when the selected phase matches the squatter phase", () => {
+  it("passes when the selected phase matches the first-class phase", () => {
     const dir = tempDir();
-    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
+    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: "qa" }));
     const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
     expect(r.exitCode).toBe(0);
+  });
+
+  it("ignores a stray attributes.phase — the squatter fallback read is retired", () => {
+    const dir = tempDir();
+    // `validateGraph` rule 23 now rejects this key outright, but a hand-edited
+    // file could still carry it; `readPhase` must not resurrect it. phase:null
+    // first-class means the node reads as phase-less, so an implement selection
+    // fails on "node is now draft/null" rather than matching the squatted "qa".
+    seed(dir, anode({ id: "tactic-sq", kind: "tactic", phase: null, attributes: { phase: "qa" } }));
+    const r = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
+    expect(r.exitCode).toBe(12);
+    expect(r.stderr[0]).toMatch(/node is now draft\/null/);
+    expect(r.stderr[0]).not.toMatch(/node is now qa/);
+    // And the squatted value is not selectable either.
+    const q = evaluateSelection({ nodeId: "tactic-sq", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(q.exitCode).toBe(12);
   });
 
   it("exit 12 when a review-phase node already carries the reviewed marker", () => {
@@ -232,7 +246,11 @@ describe("evaluateSelection", () => {
     expect(r.stderr[0]).toMatch(/not-parked:.*parked to office_hours/);
   });
 
-  it("exit 12 when parked via the squatter convention (attributes.office_hours)", () => {
+  it("a stray attributes.office_hours no longer parks — the squatter read is retired", () => {
+    // Inverse of the retired behavior: the park gate reads first-class
+    // `office_hours` only, so a squatted park is invisible and the node stays
+    // selectable. The positive case above (first-class park -> exit 12) is what
+    // now carries the park assertion.
     const dir = tempDir();
     seed(
       dir,
@@ -244,8 +262,8 @@ describe("evaluateSelection", () => {
       }),
     );
     const r = evaluateSelection({ nodeId: "tactic-ps", selectedPhase: "implement", dir, stamp: null, snapshot: fresh() });
-    expect(r.exitCode).toBe(12);
-    expect(r.stderr[0]).toMatch(/not-parked/);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr.join("\n")).not.toMatch(/not-parked/);
   });
 
   it("exit 12 on a stale strategy fingerprint (soft-freeze)", () => {
@@ -449,26 +467,14 @@ describe("evaluateSelection", () => {
     expect(staleCase.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
   });
 
-  it("a squatter object-form {hash, sha} stamp (attributes.execution) survives the reader and participates in staleness", () => {
+  it("a squatted attributes.execution stamp is not read — a stale squat no longer freezes", () => {
+    // Inverse of the retired behavior. The fingerprint gate reads
+    // `node.execution.strategy_fingerprint` only, so a stamp squatted under
+    // `attributes.execution` is invisible: there is no stamp to compare, and
+    // "null is never stale" lets the node through. The first-class object-form
+    // {hash, sha} staleness path is covered by the test above.
     const dir = tempDir();
     seed(dir, anode({ id: "strategy-a", kind: "strategy", statement: "Strategy A." }));
-    const fpA = strategyFingerprint(readNode(dir, "strategy-a"));
-    seed(
-      dir,
-      anode({
-        id: "tactic-squat-fresh",
-        kind: "tactic",
-        phase: "qa",
-        serves: ["strategy-a"],
-        // First-class execution absent; the stamp is squatted under attributes.
-        attributes: {
-          execution: { strategy_fingerprint: { "strategy-a": { hash: fpA, sha: "some-sha" } } },
-        },
-      }),
-    );
-    const freshCase = evaluateSelection({ nodeId: "tactic-squat-fresh", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
-    expect(freshCase.exitCode).toBe(0);
-
     seed(
       dir,
       anode({
@@ -476,6 +482,8 @@ describe("evaluateSelection", () => {
         kind: "tactic",
         phase: "qa",
         serves: ["strategy-a"],
+        // First-class execution absent; the (stale) stamp is squatted under
+        // attributes, which the reader no longer consults.
         attributes: {
           execution: {
             strategy_fingerprint: { "strategy-a": { hash: "0".repeat(64), sha: "some-sha" } },
@@ -483,9 +491,9 @@ describe("evaluateSelection", () => {
         },
       }),
     );
-    const staleCase = evaluateSelection({ nodeId: "tactic-squat-stale", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
-    expect(staleCase.exitCode).toBe(12);
-    expect(staleCase.stderr[0]).toMatch(/fingerprint:.*strategy-a substance changed/);
+    const r = evaluateSelection({ nodeId: "tactic-squat-stale", selectedPhase: "qa", dir, stamp: null, snapshot: fresh() });
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr.join("\n")).not.toMatch(/fingerprint:/);
   });
 
   it("scope fingerprint is stable across state-field edits and changes on a body edit", () => {
@@ -574,8 +582,11 @@ describe("evaluateSelection", () => {
 
     it("exit 12 when the stored phase advanced to a non-null value", () => {
       const dir = tempDir();
-      // A squatter phase advance stands in for any non-null stored phase.
-      seed(dir, anode({ id: "strategy-a", kind: "strategy", attributes: { phase: "implement" } }));
+      // The assertion under test is the align-tactics phase-advance guard, not
+      // where the phase is stored. It used to be vehicled on a squatter
+      // `attributes.phase`; with that representation retired the vehicle is the
+      // first-class field, which is the only place a stored phase can now live.
+      seed(dir, anode({ id: "strategy-a", kind: "strategy", phase: "implement" }));
       const r = evaluateSelection({ nodeId: "strategy-a", selectedPhase: "align-tactics", dir, stamp: null, snapshot: fresh() });
       expect(r.exitCode).toBe(12);
       expect(r.stderr[0]).toMatch(/phase advanced to implement/);
