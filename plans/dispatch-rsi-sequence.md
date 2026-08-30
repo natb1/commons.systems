@@ -40,8 +40,107 @@
 > `tactic-dispatch-skill-input-contract` (a phantom `blocked_by` on
 > `strategy-graph-native-dispatch`). A fourth, `tactic-align-audit-legacy-review`,
 > was pruned deliberately and is already acknowledged in the plan — not a defect.
-> Do not mint any of the three on a plan reference alone; each needs an author
-> call on whether the work is still wanted.
+> **Corrected 2026-08-30: no author call is owed on any of the three, and none
+> may be minted.** All three existed, completed, and were deleted by routine
+> census-reconcile prunes *after* their PRs merged. Measured on `origin/main`
+> (`git log --diff-filter=D` then `git show <sha>^:intentions/<id>.md`):
+> `tactic-graph-digest-tooling` — `status: codified`, `phase: done`, `pr: 2865`,
+> pruned by `afe270a7`; `tactic-status-kind-vocabularies` — `status: codified`,
+> `phase: review`, `pr: 2876`, pruned by `a7273245`;
+> `tactic-dispatch-skill-input-contract` — `status: codified`, `phase: review`,
+> `pr: 2923`, pruned by `20b0432c`. The shipped artifacts are on `main`:
+> `packages/intentionsutil/scripts/graph-digest.ts`, `checkStatusVocabulary` in
+> `schema.ts`, and `dispatch-derive-node-target` with its test. **What each
+> citation needs is past-tense repair, not a decision.**
+>
+> **The citation list above names two non-`intentions/` sites, and both already
+> read past-tense — the outstanding repair scope is the 9 `intentions/` sites
+> (re-measured 2026-08-30).** Of those two, PR17 Unit 6 is wrapped in the
+> past-tense ⚠ callout at `plans/dispatch-rsi-serialized-pr-plan.md:4525-4537`,
+> and `.claude/skills/align-audit/SKILL.md` (a skill, not a plan) was fixed in
+> the E22 commit, as `:4537` there records. Do not read "two" as the whole
+> non-`intentions/` grep result: `LC_ALL=C git grep -a -l
+> 'tactic-graph-digest-tooling' origin/main` returns nine files, four of them
+> outside `intentions/` — those two, this index file's own census, and
+> `packages/intentionsutil/prose-ref-baseline.json:24`, where the pruned id
+> appears as a `referencedBy` (a stale grandfather entry naming a node that no
+> longer exists, not a citation of it, so it needs deletion rather than
+> past-tense repair). `tactic-graph-digest-tooling` is
+> cited 13 times under `intentions/`, 9 of them needing repair:
+> `strategy-graph-review-curriculum.md:158`, `strategy-graph-integrity.md:23`
+> and `:138`, `tactic-align-audit-skill.md:76`, `:110` and `:172`,
+> `tactic-serves-inheritance-full-strip.md:21`, `:53` and `:112`, plus four
+> historical provenance mentions on `tactic-graph-digest-quality-followups.md`
+> (`:5`, `:15`, `:57`, `:682`), which are correct as history and need nothing.
+> Two of the nine are **prose `blocked_by` references** —
+> `tactic-serves-inheritance-full-strip.md:21` reads *"the digest's DUP-SERVES
+> table (blocked_by tactic-graph-digest-tooling)"* and `:53` repeats it — the
+> same defect class this window corrects for `tactic-dispatch-skill-input-contract`
+> at PR13 (d): no frontmatter edge, so the router never traverses it, but a
+> human reader takes it for a live blocker (the node's real `blocked_by` is
+> `[]`, `:42`). **The two sites are in different places, corrected 2026-08-30:**
+> `:53` is body prose, but `:21` is inside the frontmatter (delimiters `:1` and
+> `:47`), in `rationale:` (`:11`) — today a **double-quoted multi-line scalar**,
+> not a `|`/`>` block scalar.
+>
+> **That distinction is the whole point of this correction:** `:53` is an
+> ordinary `.md` text edit, `:21` is a FRONTMATTER FIELD edit and must go
+> through the full `dump-node.ts` -> edit -> `write-node.ts` -> `graph-commit`
+> path. Never hand-build a partial payload — `validateNode` defaults every
+> omitted field, so a minimal payload silently writes `phase: null`,
+> `execution: null` and `serves: []` over this node's live `phase: implement`
+> (`:33`), its `execution` block including `strategy_fingerprint` (`:34-40`)
+> and its one `serves` entry (`:26-27`), exit 0 and no error.
+>
+> The flag semantics for that path are documented in the tools' own headers
+> (`dump-node.ts`, `write-node.ts`, `graph-commit`) and in
+> `.claude/rules/sandbox.md`, and are deliberately NOT restated here — with the
+> single exception in the first bullet below, which is the one place the headers
+> point the wrong way rather than merely leaving something out. An
+> earlier revision of this passage did restate them; it was rewritten across
+> eight review rounds and every single recurrence was the restatement drifting
+> from the tool it described, never the tool changing.
+>
+> **Who owns the `:21`/`:53` repair:** `tactic-graph-digest-quality-followups`,
+> Unit 6 — landed on `main` 2026-08-30 as `b4df1b61`. That node is the pruned
+> predecessor's live successor carrier, so all nine stale citations are its
+> scope, and the unit carries every site by path and line plus the split
+> instrument `:21` (frontmatter) and `:53` (body) require. It is still not a unit
+> of any position below and is not scheduled by this document — the graph owns
+> it, which is the resolution rather than a gap. Three review rounds found the
+> earlier wording, which could only say the repair was owed "by whoever executes
+> that pass", and that is nobody.
+>
+> Two mechanical constraints on that path. Both are stated as instructions and NOT
+> derived here, for the same reason the flag semantics above are not — and this
+> passage is the second proof of that reason, not a fresh claim: the derivation
+> that used to sit here was rewritten in every round that followed, each time
+> refuted by a finer measurement of a tool that had not changed. It belongs beside
+> the code it describes, where drift is visible, rather than in a plan document.
+>
+> - **Pass the payload with `--file <path>`, never `echo '<json>' | …`.** Both headers
+>   document the pipe form as ordinary usage and neither warns about it —
+>   `write-node.ts:6` gives it as the first usage example, and `dump-node.ts:29-30`
+>   calls the dumped JSON "ready to pipe back into write-node.ts". Do not follow them
+>   here: this node's value contains shell metacharacters, and the resulting corruption
+>   is not reliably loud — some spellings of it produce valid JSON that writes at exit 0.
+>   Omitting `--file` is not a usage error either (the header documents stdin as a
+>   neutral MODE, `write-node.ts:1`, `:28`), so a non-interactive call without it blocks
+>   on `/dev/stdin` until the tool times out, or dies at EOF on an uncaught `JSON.parse`.
+> - **The payload is a JSON document** (`writeNodeFromJson`'s `JSON.parse`,
+>   `write-node.ts:40`), so quote it by JSON's rules and by nothing else. `writeNode`
+>   re-serializes through the emitter (`store.ts:61`), which owns the YAML layer; do
+>   not pre-escape for it, and do not hand-correct what it writes back.
+>
+> Both sites are read by tooling: `validateGraphProseRefs`
+> (`packages/intentionsutil/src/schema.ts:1973`) scans `statement`, `rationale`,
+> `attention.rationale`, every `clarifications[].answer` and the body — so it
+> reads `:21` (inside `rationale`) and `:53` (in the body) alike. Repair
+> both in the same past-tense pass. And
+> `tactic-graph-digest-tooling`'s deferred review follow-ups already have a live
+> successor carrier: `tactic-graph-digest-quality-followups` (`status: codified`,
+> `phase: implement`, `blocked_by: []`, `office_hours: null`), which is already
+> in PR17's own `### Nodes closed (6)` list.
 
 **The scope of the window:** retire the open in-flight bugs, then land the
 greenfield design for the RSI, for `/align` graph management (its tooling and
@@ -77,11 +176,11 @@ were consolidated here and the plan now points at this file.
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
 | **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts).
 
-**Seven further rulings were made 2026-08-29**, in two interview sittings called because the "no position waits on the author" claim this row used to carry was false at five positions. They are recorded in `plans/dispatch-rsi-author-rulings.md`. **Correction 2026-08-30: this row used to claim "each is transcribed onto its node". Audited — only 1 of 7 is (Ruling 6, and only partially).** Until the owed transcriptions land, `plans/dispatch-rsi-author-rulings.md` is **operatively binding** and must be read alongside the nodes; its transcription-status table is the audit trail. In summary: a sibling-carrier draft becomes a **completion record**, not a prune; `dispatch.config/target-workers.json` **relocates under XDG**; strategy clarification 131 is amended to **make its premise true** at the selection-time surface; **park-clearing on a verifiably dead premise is delegated** to the executor, as is clearing the parks that block Unit 7's migration from draining; plan-prose rulings absent from the graph are **transcribed into node bodies and flagged**; **record-time minting is correct** and the "already-merged" prose is stale; and PR20 **Units 1 and 3 are descoped** |
+**Seven further rulings were made 2026-08-29**, in two interview sittings called because the "no position waits on the author" claim this row used to carry was false at five positions. They are recorded in `plans/dispatch-rsi-author-rulings.md`. **Corrected 2026-08-30 (second pass): all seven are transcribed onto their nodes on `origin/main`** — landed by `9201fdeb`, `4ffbc8b3`, `91bc7cc9`, `60dd2b54` and `1f5d0909`, all confirmed ancestors of `origin/main`. An intermediate correction here claimed "only 1 of 7"; it rested on a BRE-alternation-under-ERE false negative. `plans/dispatch-rsi-author-rulings.md` is **no longer operatively binding** — it is the index and the audit trail. The node body is the authority. In summary: a sibling-carrier draft becomes a **completion record**, not a prune; `dispatch.config/target-workers.json` **relocates under XDG**; strategy clarification 131 is amended to **make its premise true** at the selection-time surface; **park-clearing on a verifiably dead premise is delegated** to the executor, as is clearing the parks that block Unit 7's migration from draining; plan-prose rulings absent from the graph are **transcribed into node bodies and flagged**; **record-time minting is correct** and the "already-merged" prose is stale; and PR20 **Units 1 and 3 are descoped** |
 | **Measured** | **All three `/rsi-audit` runs, 2026-08-29**, recorded on their nodes. Two changed what their PR should do: PR7 must not carry the imported cache claim (measured ceiling **4.3%**, against 41–80%), and PR11 must set per-lens `model:` from `cost_usd`, since `price_proxy_usd` inverts the model ranking. See §"Three measurement runs" |
 | **Next** | **Position 4**. Position 3 shipped as #3140, but its Unit 7 migration and node closeout are **still owed** and must land before Position 4's bookkeeping, since Unit 7 rewrites nodes later positions also touch |
 | **Carried forward** | **Four PR16 units and the #3023 absorption**, none of which gate a later position. Units 1 and 6 hold live `blocked_by` edges. Units 8 and 9 were parked on unmade author rulings; **both were decided by executor judgement on 2026-08-30** and are recorded for ratification in `plans/dispatch-rsi-author-rulings.md` §"Executor decisions taken during reconciliation" — Unit 8 keeps `{hash, sha}` (still sequenced behind #3023), Unit 9 keeps the empty-named-store contract and is rescoped to a comment correction plus an explicit empty-store message. #3023 is wholly unlanded and is a PR-sized change of its own — see §"Position 2 — PR16" |
-| **Open parks** | **Far more than one.** This row read "One, from Position 1" until 2026-08-29; per-position pre-staging disproved it. Confirmed live parks: **Position 1** — `tactic-autonomous-body-write-wholesale-replace` (PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere; three dispositions are in `office_hours.recommendation`; it gates no position). **Position 4** — 1. **Position 5** — 4, recorded nowhere in either document until 2026-08-30: `tactic-audit-instrument-scoping`, `tactic-audit-permission-friction`, `tactic-audit-review-effort-yield-lens` (all PR3) and `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8, which the plan text called "unparked and unblocked" — it is neither). **Position 6** — 1. **Position 7** — 6, five of them on one owed ruling. **Position 8** — 3, where the position entry claims one. **Position 9** — 6, where the plan banner claims none. **Position 10** — 1, `tactic-dispatch-skill-standards-extraction`, and it is the position's **only** node, so the park blocks the whole position; its first premise (a duplicate carrier) is disqualifying on its own. Separately, **12 of the 15 nodes carrying live `Verifiability: WAIT` marks are parked** (re-censused 2026-08-30 with `LC_ALL=C grep -a`: **15 nodes / 22 marks**, not the 17 this row used to claim — the numerator is right, the denominator was not; "17" counts non-`done` tactics that merely mention the string), and `packages/intentionsutil/src/router.ts:482` and `:529` skip any parked tactic — so those sources can never drain to `done`, deadlocking Unit 7's chain for them. Clearing is delegated to the executor by the 2026-08-29 ruling, on a verified-dead premise only, each clear reported after the fact |
+| **Open parks** | **Far more than one.** This row read "One, from Position 1" until 2026-08-29; per-position pre-staging disproved it. Confirmed live parks: **Position 1** — `tactic-autonomous-body-write-wholesale-replace` (PR18 shipped one of its four surfaces by a local contract rather than the shared primitive the node exists to introduce, and six of its seven units are assigned nowhere; three dispositions are in `office_hours.recommendation`; it gates no position). **Position 4** — 1. **Position 5** — 3 (was 4; `tactic-audit-permission-friction` closed on `origin/main` by `91bc7cc9` — `phase: done`, `office_hours: null`, a Ruling-1 completion record against PR #3074), recorded nowhere in either document until 2026-08-30: `tactic-audit-instrument-scoping`, `tactic-audit-review-effort-yield-lens` (both PR3) and `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8, which the plan text called "unparked and unblocked" — it is neither). **Position 6** — 1. **Position 7** — 6, five of them on one owed ruling. **Position 8** — 3, where the position entry claims one. **Position 9** — 6, where the plan banner claims none. **Position 10** — 1, `tactic-dispatch-skill-standards-extraction`, parked since 2026-08-20 on four unrecorded premises, the first (a duplicate carrier) disqualifying on its own. **It is NOT the position's only usable node and the position is NOT blocked outright:** the rival carrier `tactic-dispatch-skill-rename` is `status: raw`, `phase: null`, `blocked_by: []`, `office_hours: null` on `origin/main` — live and unparked. **But state both halves.** The executor decision naming it the carrier (D3) exists **only in plan prose**: `LC_ALL=C git grep -a -l 'dispatch-skill-rename' origin/main -- intentions/` returns three files (`tactic-dispatch-skill-rename.md`, `tactic-dispatch-skill-standards-extraction.md`, `strategy-graph-native-dispatch.md`) and **none records the decision** — `carrier` appears 0× on the rename node, `2026-08-30` 0× on either. So the duplicate-target pair is still live in the graph, and this park **correctly stays held**: its own recommendation forbids the workaround verbatim — *"Do NOT clear this park by finalizing a plan without the carrier decision: that resolves a duplicate-target pair by omission, the failure mode the 2026-07-19 precedent (clarification 78, commit `4a83dfc1`) was ratified to prevent."* Clearing it requires the `/align` pass on `strategy-graph-native-dispatch` the park names, not this window's prose. Separately, **12 of the 15 nodes carrying live `Verifiability: WAIT` marks are parked** (re-censused 2026-08-30 with `LC_ALL=C grep -a`: **15 nodes / 22 marks**, not the 17 this row used to claim — the numerator is right, the denominator was not; "17" counts non-`done` tactics that merely mention the string), and `packages/intentionsutil/src/router.ts:482` and `:529` skip any parked tactic — so those sources can never drain to `done`, deadlocking Unit 7's chain for them. Clearing is delegated to the executor by the 2026-08-29 ruling, on a verified-dead premise only, each clear reported after the fact — **and the ruling is BOUND: "a DEAD PREMISE is not a DEAD SCOPE … Where clear-park is the wrong instrument — a `phase: null` node whose work already shipped, which clear-park makes router-eligible rather than terminal — the correct act is the completion record (`phase: done`), never the clear."** Quoted from `intentions/strategy-graph-native-dispatch.md`. Check which of the two is dead before every clear |
 | **Not started** | Positions 4 through 13. PR2 through PR20 |
 
 The rulings that shape unit work are carried in the position entries below and,
@@ -444,10 +543,10 @@ PR5 absorbs #3002 and the already-landed half of #3064.
 16 nodes. COLD in itself, but it comes before Bundle 3 because positions 6 and 8
 both depend on it.
 
-> **Four of this position's 16 nodes are parked** and none of them is
+> **Three of this position's 16 nodes are parked** and none of them is
 > autonomously selectable: `tactic-audit-instrument-scoping`,
-> `tactic-audit-permission-friction`, `tactic-audit-review-effort-yield-lens`
-> (PR3) and `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8). Two of the four
+> `tactic-audit-review-effort-yield-lens` (PR3) and
+> `tactic-graph-prose-ref-batch-wiring` (PR4 Unit 8). Two of the three
 > were author calls; both are now decided by executor judgement and recorded in
 > `plans/dispatch-rsi-author-rulings.md` §"Executor decisions taken during
 > reconciliation" — `tactic-audit-review-effort-yield-lens` takes **option (b)**
@@ -456,6 +555,19 @@ both depend on it.
 > `batchIds`). Plan the position as PR3 with Unit 3 rescoped to option (b) and
 > PR4 with Unit 8 rescoped to option 3; clear both parks in the same writes,
 > citing the decisions.
+>
+> *(It was four of 17 until 2026-08-30, when `tactic-audit-permission-friction`
+> closed on `origin/main` as `91bc7cc9` — a Ruling-1 completion record,
+> `phase: done`, `execution.completion` against PR #3074. It leaves PR3's
+> closing list entirely. The "16" above was already off by one before that
+> closure: PR3's `### Nodes closed` list (10 ids before this closure; the
+> heading now reads `(9)`) and PR4's `### Nodes closed (7)` list
+> **17 disjoint ids**; after the closure the true total is exactly 16.*
+> **Two items its 2026-08-18 park raised remain undischarged and now sit on a
+> `phase: done` node no router can select** — the side-A failed condition and
+> clarification 43's never-performed `/fewer-permission-prompts` collision
+> check, both owed to an `/align` pass on `strategy-token-economy` that nothing
+> in this window schedules.)*
 
 **PR4** retires the ledger primitive: a doctrine change with a 40-node data
 migration and the private finding-writers collapsing into one write surface
