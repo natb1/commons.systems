@@ -1875,6 +1875,11 @@ function main(): void {
   // `--report`: print the per-record delegation portfolio table and exit. No
   // frontier read, no writes — a read-only view for the human portfolio review.
   if (report) {
+    // The store goes to stderr, not stdout: "the store in effect is printed on
+    // every run" is the property that makes the no-`--dir` decision safe, and
+    // the summary line that carries it on the other paths is never reached
+    // here. stderr keeps the stdout table pipeable as-is.
+    process.stderr.write(`read-sensors: --report over [store: ${intentionsDir}]\n`);
     process.stdout.write(renderDelegationRecordsReport(intentionsDir) + "\n");
     return;
   }

@@ -40,10 +40,15 @@
 //   npx tsx packages/intentionsutil/scripts/validate-graph.ts <intentionsDir> [--strict-sensors]
 //
 // `--strict-sensors` makes pass 3 (sensor registration) fatal instead of a
-// stderr warning. It must be set ONLY at the post-merge-on-main call site
-// (.github/workflows/unit-tests.yml's graph-validate job) and NEVER at the
-// graph-fast-path guard call site (.github/workflows/graph-fast-path.yml) —
+// stderr warning. It must be set ONLY on the post-merge push to `main`
+// (.github/workflows/unit-tests.yml's graph-validate job, ref-gated on
+// `refs/heads/main` — that workflow also runs on feature branches) and NEVER at
+// the graph-fast-path guard call site (.github/workflows/graph-fast-path.yml) —
 // see the pass-3 comment in `main` below for why.
+//
+// Flags are matched EXACTLY: an unrecognized `-`-prefixed token is a usage
+// error (exit 2), never silently ignored, because a near-miss spelling would
+// leave the post-merge check non-fatal while still exiting 0.
 //
 // <intentionsDir> is REQUIRED and has no default (strategy-graph-native-dispatch
 // clarification 194, ADOPTED; clarification 242 scopes the conversion to this
@@ -94,7 +99,17 @@ function loadBaseline(): Set<string> {
   return new Set(parsed.map((e) => `${e.ref}|${e.referencedBy}`));
 }
 
-const USAGE = "usage: validate-graph.ts <intentionsDir>";
+const USAGE = "usage: validate-graph.ts <intentionsDir> [--strict-sensors]";
+
+/**
+ * Every flag this script understands. An ALLOWLIST, not a `startsWith("-")`
+ * skip: `--strict-sensors` decides whether pass 3 is fatal, so a token that
+ * merely looks like it (`--strict-sensor`, `--strict-sensors=true`) must be a
+ * loud usage error. Swallowed silently it would degrade the post-merge check to
+ * the non-fatal warning path and exit 0 — a green run asserting nothing, the
+ * same silently-dropped-argument defect `read-sensors.ts`'s `parseArgs` closes.
+ */
+const KNOWN_FLAGS: ReadonlySet<string> = new Set(["--strict-sensors"]);
 
 /**
  * The intentions directory this run validates, taken verbatim from argv. There
@@ -103,6 +118,16 @@ const USAGE = "usage: validate-graph.ts <intentionsDir>";
  * silent exit 0. Exits 2 (usage) rather than returning a fallback.
  */
 function parseIntentionsDir(argv: string[]): string {
+  const unknownFlags = argv.filter((a) => a.startsWith("-") && !KNOWN_FLAGS.has(a));
+  if (unknownFlags.length > 0) {
+    process.stderr.write(
+      `validate-graph: unknown argument(s) ${unknownFlags.map((a) => `'${a}'`).join(", ")}. ` +
+        "Flags are matched exactly — a near-miss spelling of --strict-sensors would " +
+        "silently leave the sensor pass non-fatal, so it is rejected instead.\n" +
+        `${USAGE}\n`,
+    );
+    process.exit(2);
+  }
   const positional = argv.filter((a) => !a.startsWith("-"));
   if (positional.length !== 1 || positional[0] === "") {
     process.stderr.write(
@@ -195,19 +220,22 @@ function main(): void {
   //
   // For a NODE PROSE reword the signal used to be lost outright: an `/align`
   // round that rewrites a node's `success_signal.sensor` lands through a
-  // `graph/**` push, which .github/workflows/unit-tests.yml does NOT ignore
-  // (only `graph/**` itself is ignored there — `main` deliberately is not, see
-  // that workflow's `branches-ignore` comment) — but `graph/**` pushes don't
-  // trigger that workflow at all (its `on.push.branches-ignore` excludes them),
-  // so neither that suite nor its `graph-validate` job (which runs THIS
-  // script) ran for such a write. The push that follows and lands the reword
-  // on `main` DOES trigger unit-tests.yml, so `--strict-sensors` is passed ONLY
-  // at that job's call site (unit-tests.yml's `graph-validate` job) to close
-  // the gap: a node-prose reword that de-registers a sensor now turns `main`
-  // red at the next push, without ever risking the write-path denial above,
-  // because graph-fast-path.yml's guard job never passes the flag. See
-  // read-sensors.ts's UNBOUND_SENSOR_NAMES docstring, which carries the same
-  // warning.
+  // `graph/**` push, and .github/workflows/unit-tests.yml declares
+  // `branches-ignore: ['graph/**']` — so neither that suite nor its
+  // `graph-validate` job (which runs THIS script) ran for such a write.
+  // (`main` is deliberately NOT in that ignore list; see that workflow's
+  // `branches-ignore` comment.) The push that follows and lands the reword on
+  // `main` DOES trigger unit-tests.yml, which is where `--strict-sensors` is
+  // passed — and it is gated there on `github.ref == 'refs/heads/main'`, not
+  // merely on the job, because that workflow also runs on ordinary feature
+  // branches and detect-changes.sh sets `graph=true` for any
+  // `packages/intentionsutil/` or `intentions/` change. Without the ref gate a
+  // de-registration landed by someone else's `/align` round would turn every
+  // such branch red too. So: a node-prose reword that de-registers a sensor
+  // turns `main` red at the next push, without risking the write-path denial
+  // above (graph-fast-path.yml's guard job never passes the flag) and without
+  // leaking onto unrelated branches. See read-sensors.ts's
+  // UNBOUND_SENSOR_NAMES docstring, which carries the same warning.
   const registered = registeredSensorNames();
   const unboundRegistered = findUnboundRegisteredSensorNames(
     nodes,
