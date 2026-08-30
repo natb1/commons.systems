@@ -115,11 +115,12 @@
 > repair text is written `\"` THERE — exactly once. An unescaped one dies on a
 > `JSON.parse` syntax error; a doubled `\\\"` is what actually lands a literal
 > backslash in the field — `\\"` is not that, it closes the string early and
-> dies on the same syntax error. **YAML is not yours:** `writeNode` re-serializes
-> the node through the emitter (`store.ts:61`), which picks the scalar style and
-> handles quoting itself. Pass a bare `"` and leave it alone. Only a by-hand
-> edit of the `.md` YAML text would need a YAML-level escape, and the field
-> carries none today.
+> dies on the same syntax error. **YAML is not yours:** that single JSON `\"` is
+> all you write — do not add anything on top of it to pre-escape for YAML.
+> `JSON.parse` consumes it and hands `writeNode` a bare `"`, and `writeNode`
+> re-serializes the node through the emitter (`store.ts:61`), which picks the
+> scalar style and handles quoting itself. Only a by-hand edit of the `.md` YAML
+> text would need a YAML-level escape, and the field carries none today.
 >
 > Keep the shell out of it: write the payload to a file and pass `--file`. This
 > field's value carries an apostrophe (`kind-strategy's`, `:16`), so the
