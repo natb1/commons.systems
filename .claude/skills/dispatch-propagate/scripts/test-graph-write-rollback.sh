@@ -1415,6 +1415,7 @@ for a in "$@"; do
     */pulls/*|*/check-runs) path="$a" ;;
   esac
 done
+echo "$path" >> "$GC_FIXTURE_DIR/gh-calls.log"
 case "$path" in
   */check-runs)
     cat "$GC_FIXTURE_DIR/checkruns-red.json" ;;
@@ -1616,6 +1617,84 @@ if [[ $rc_usage -eq 2 && $rc_bogus -eq 2 ]]; then
   ok "reconcile-graph-review-stall: --node without an id, and an unknown flag, are usage errors (exit 2)"
 else
   no "reconcile-graph-review-stall usage errors (--node rc=$rc_usage, --bogus rc=$rc_bogus)"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10d: a CONFLICTING candidate costs no check-runs fetch, and does not
+# consume the sweep's budget.
+#
+# interruptRoute (the delegate behind reviewStallRoute) returns "conflict"
+# BEFORE it consults CI at all, and that `conflict` route is a retired no-op
+# (tactic-graph-router-conflict-routing). So the sweep skips a CONFLICTING
+# candidate before reading .headRefOid and before the paginated check-runs
+# fetch, rather than paying for a verdict it discards.
+#
+# PR 203 is overridden to the raw-REST CONFLICTING shape (`mergeable: false`,
+# which gh_pr_view_rest's jq projection maps to the porcelain "CONFLICTING")
+# with its own distinct head sha. PR 204 keeps the stub's inline OPEN/MERGEABLE
+# default and its red check-runs, so the untouched path is proved alongside.
+# The assertions are order-independent by construction: both `/pulls/` log
+# lines are required, so neither conclusion can be an artefact of enumeration
+# order or of the cap.
+# ---------------------------------------------------------------------------
+T10D="$WORK/t10d-seed"
+build_seed_repo "$T10D"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10D/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10D/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10D/intentions/t-rsa.md" t-rsa 203
+review_stall_node "$T10D/intentions/t-rsb.md" t-rsb 204
+new_origin t10d
+init_and_push "$T10D"
+
+C10D="$WORK/t10d-clone"
+clone_with_node_modules "$C10D"
+BIN10D="$WORK/t10d-bin"; FIX10D="$WORK/t10d-fixtures"
+review_stall_gh_stub "$BIN10D" "$FIX10D"
+cat >"$FIX10D/pr-203.json" <<'JSON'
+{
+  "number": 203,
+  "title": "harness pr",
+  "body": "",
+  "state": "open",
+  "merged_at": null,
+  "merge_commit_sha": null,
+  "mergeable": false,
+  "mergeable_state": "dirty",
+  "head": {"ref": "harness-branch", "sha": "cccc203cccc203"},
+  "labels": []
+}
+JSON
+cat >"$C10D/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10d-argv.txt"
+exit 0
+SH
+chmod +x "$C10D/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C10D" || exit 99
+  export PATH="$BIN10D:$PATH" GC_FIXTURE_DIR="$FIX10D"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+calls10d="$(cat "$FIX10D/gh-calls.log" 2>/dev/null || true)"
+argv10d="$(cat "$WORK/t10d-argv.txt" 2>/dev/null || true)"
+
+if [[ $rc -eq 0 ]] \
+   && grep -q '/pulls/203$' <<<"$calls10d" \
+   && grep -q '/pulls/204$' <<<"$calls10d" \
+   && ! grep -q 'cccc203cccc203/check-runs' <<<"$calls10d" \
+   && grep -q 'deadbeef204/check-runs' <<<"$calls10d" \
+   && ! grep -q 't-rsa' <<<"$out" \
+   && grep -q '^recovered t-rsb -> fix' <<<"$out" \
+   && grep -qE '^\s*since:' "$C10D/intentions/t-rsb.md" \
+   && ! grep -qE '^\s*since:' "$C10D/intentions/t-rsa.md" \
+   && grep -q '^t-rsb$' <<<"$argv10d"; then
+  ok "reconcile-graph-review-stall: a CONFLICTING candidate pays NO check-runs fetch and is skipped silently, while the sweep still recovers the red MERGEABLE candidate behind it"
+else
+  no "reconcile-graph-review-stall CONFLICTING short-circuit (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'gh calls:\n%s\n' "$calls10d"
+  printf 'argv: %s\n' "$argv10d"
 fi
 
 # ===========================================================================
