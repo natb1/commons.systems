@@ -49,5 +49,12 @@ attributes:
   review_trigger: the /exetasis sitting on virtue-right-livelihood or on the
     pending virtue-knowledge-as-gift
   last_assessed: 2026-08-30
+  diverged:
+    - Maslow's full hierarchy apparatus — the self-actualization apex and strict
+      stage progression are not adopted; only the prepotency of unmet
+      physiological need is taken (fields added 2026-08-30 post-review fix H10)
+    - SDT beyond the crowding result — the full autonomy/competence/relatedness
+      framework is not engaged; only motivational crowding is adopted
+  chosen_over: []
 ---
 # Motivation psychology — adopted: prepotent need and scarcity capture ground why unmet sustenance corrupts other motives; motivational crowding cautions the monetization boundary

@@ -25,7 +25,6 @@ rationale: "The deepest structural inheritance in the graph. kind-virtue's
   recorded (2026-07-09, on tradition-plato) pending the NE VI reading. Recorded
   2026-07-04 interview."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -106,6 +105,13 @@ attributes:
       VIII) and philia (NE VIII-IX) → strategy-tabletop-storytelling
     - "the human as political animal (Politics I.2) → community as calibration:
       strategy-join-existing-practice, the practitioner tier"
+    - "external goods as necessary conditions of eudaimonia (NE I.8), and
+      oikonomia's natural acquisition bounded by the household's need — only
+      unlimited chrematistike condemned (Politics I.8-10) →
+      virtue-right-livelihood: sustenance as legitimate first-class motivation
+      under a temperance-shaped bound (entry added 2026-08-30 post-review fix
+      H1; borrowed scholarship, author-unverified, legal on this delegated
+      record; verification owed to this record's /exetasis fold-in)"
   diverged:
     - eudaimonia as single apex — the root layer is a forest; the tacit-apex
       question is held open as a standing review trigger, not resolved in

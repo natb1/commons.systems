@@ -43,5 +43,12 @@ attributes:
   review_trigger: the /exetasis sitting on virtue-right-livelihood, or
     reading-program coverage of the cited suttas
   last_assessed: 2026-08-30
+  diverged:
+    - the path's soteriological frame (release from dukkha, rebirth) —
+      deliberately not adopted rather than refused; carried explicitly because
+      kind-tradition rules an absent/empty diverged list on a delegated record
+      reads as unverified, and this boundary is the record's actual audit
+      content (fields added 2026-08-30 post-review fix H10)
+  chosen_over: []
 ---
 # Buddhist Right Livelihood — adopted narrowly: samma-ajiva grounds sustenance as first-class ethical substance; the broader path and its soteriology are not engaged

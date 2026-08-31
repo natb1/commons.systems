@@ -674,22 +674,55 @@ clarifications:
       delegated — scholarship borrowed). (2) STRUCTURE: two sibling roots paired
       by tension_with, with virtue-knowledge-as-gift as the second pole — held
       delegated-pending-review at author direction ('two sibling roots, deferred
-      with review'); the pending stamp is the review record, nothing minted. (3)
-      RATIFY-DESPITE-TENSION SHAPE (author-ratified): derive, don't restate —
-      the ratified stamp plus the decision node's edges ARE the sentence. Worked
-      example, the author's own: 'I ratify this decision to monetize, though it
-      conflicts with an implicit value that knowledge should be free, because I
-      am constrained by my need to eat and the grafted platform delegation' =
-      ratified stamp ('I ratify') + motivation profile touching both poles of
-      the recorded tension pair ('though it conflicts') + serves-flow into
-      virtue-right-livelihood and graft edge to the platform delegation mount
-      ('because constrained'), all priced by strategy-graph-mounts' capture
-      model with no per-decision bookkeeping; prose narrative is an optional
-      clarification, never required. (4) strategy-financial-sustainability
-      re-homed now under the adjacent-doctrine path (author-ratified): serves
-      gains the livelihood root; its motivation profile is genuinely mixed and
-      coherent under the decomposition corollary. This resolves
-      strategy-graph-mounts' sustenance open gap."
+      with review'); the pending stamp is the review record — no review node is
+      minted; the content nodes themselves are stored, per the fully-virtual
+      doctrine. (3) RATIFY-DESPITE-TENSION SHAPE (author-ratified): derive,
+      don't restate — the ratified stamp plus the decision node's edges ARE the
+      sentence. Worked example, the author's own: 'I ratify this decision to
+      monetize, though it conflicts with an implicit value that knowledge should
+      be free, because I am constrained by my need to eat and the grafted
+      platform delegation' = ratified stamp ('I ratify') + motivation profile
+      touching both poles of the recorded tension pair ('though it conflicts') +
+      serves-flow into virtue-right-livelihood and graft edge to the platform
+      delegation mount ('because constrained'), all priced by
+      strategy-graph-mounts' capture model with no per-decision bookkeeping;
+      prose narrative is an optional clarification, never required. (4)
+      strategy-financial-sustainability re-homed now under the adjacent-doctrine
+      path (author-ratified): serves gains the livelihood root; its motivation
+      profile is genuinely mixed and coherent under the decomposition corollary.
+      This resolves strategy-graph-mounts' sustenance open gap."
+  - question: How were the migration and sustenance rounds (3267e474, b51df73f)
+      reviewed, given the draft-review gate?
+    answer: "(Recorded 2026-08-30, post-review fix commit.) GATE: SKIPPED at commit
+      time for both commits — a defect of the round under
+      strategy-discovered-requirements' standing condition, disclosed here
+      rather than only out-of-band. Discharge: post-hoc adversarial pack review
+      by an independent fable subagent over base 1014fd23 → landed b51df73f
+      (verbatim author rulings, base and landed renders of all eleven touched
+      nodes), findings H1–H15 plus ten fresh-session gaps; the highest-stakes
+      findings were independently re-verified against origin/main before acting
+      (all probed findings confirmed). Defect-class fixes landed same-day in the
+      post-review commit; structural questions the author must settle are
+      stamped delegated-pending-review on their owning nodes and routed to
+      /exetasis sittings. Grammar note (H11): the interim stamp grammar is
+      amended so an author-ratified decision may use the two-element form
+      '(decision: author-ratified, YYYY-MM-DD)' — the delegatee element is
+      required only for the two delegated states; this matches round practice
+      and is a Claude-owned grammar choice under the recorded interim-tag
+      authority."
+  - question: Where exactly is a substantiating or contradicting tradition recorded
+      (the locus the substantiation doctrine left open)?
+    answer: "Claude-drafted locus rule, (decision: delegated-pending-review,
+      delegation-anthropic-claude, 2026-08-30), post-review H2: a SUBSTANTIATING
+      tradition is recorded as an attributes.traditions pointer on the
+      substantiated node PLUS an adopted entry on the tradition record naming
+      the graph locus; a CONTRADICTING tradition is recorded as a diverged or
+      chosen_over entry on the tradition record PLUS a named mention in the
+      node's rationale. Prose citation alone is never sufficient — that is the
+      brownfield reflex the post-hoc review caught (the sustenance round applied
+      the author's doctrine by prose while attributes.traditions and the record
+      entries sat unused). An /exetasis sitting ratifies, amends, or declines
+      this locus rule."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

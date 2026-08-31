@@ -19,7 +19,6 @@ rationale: "The root virtue's own name is the refusal: Philosophical Mobility
   recovery drills are premeditatio malorum in engineering dress. Recorded
   2026-07-04 interview."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -71,6 +70,12 @@ attributes:
       even aligned ones are audited rather than renounced
     - detachment as telos — mobility is recoverability, not retention; 'the test
       is never how detached am I but can I still move when I choose'
+    - "apatheia toward sustenance-anxiety — refused at virtue-right-livelihood
+      (2026-08-30): the need to eat is held as a legitimate first-class
+      motivation, not an indifferent to be dissolved; extends the standing
+      apatheia divergence to the livelihood locus, recorded under the
+      tradition-substantiation doctrine (contradicting traditions must be
+      recorded)"
   chosen_over: []
   texts:
     - Epictetus, Enchiridion 1 (the dichotomy of control)

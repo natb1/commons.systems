@@ -1,9 +1,10 @@
 ---
 id: tactic-node-review-skill
 kind: tactic
-statement: Build the /node-review skill and the virtual review node — a derived,
-  rank-ordered review target over durable-layer nodes un-reviewed since they
-  last changed, with a per-node reviewed stamp
+statement: Build the /exetasis skill (author-named; formerly drafted as
+  /node-review) and the virtual review node — a derived, rank-ordered review
+  target over durable-layer nodes un-reviewed since they last changed, with a
+  per-node reviewed stamp
 owner: ai
 status: raw
 parent: null
@@ -71,8 +72,7 @@ amended conditions and `success_signal` on the same node:
    Sibling of `/reading-review` (which runs reading and dialog chunks); it is
    *not* `/align-review`, which is already claimed by
    `tactic-align-review-skill` for adversarial review of drafts at record time.
-   The name `/node-review` is a Claude-owned choice under the 2026-08-30 floor
-   (naming sits below it) — revise it freely if a better one appears.
+   The name is /exetasis — author-chosen at the 2026-08-30 migration round over the recommended /examen; the earlier /node-review draft name survives only in this node's id.
 2. **The derived candidate projection** — router selection machinery. The
    router selects *stored* nodes today, which is the new mechanism the author
    flagged. Sittings are human office-hours work, so the intended reading is
@@ -130,9 +130,12 @@ capture-model clarification, both 2026-08-30.
   dependents-count metric of its own (decision: delegated-pending-review,
   delegation-anthropic-claude, 2026-08-30) — NOT the capture model, which
   weights by root-distance and has no dependents term; a landed citation
-  claiming otherwise was a defect, corrected post-review. Whether
-  traditions/delegations are review subjects at all is open under the
-  mount-point ruling — schema-sitting scope.
+  claiming otherwise was a defect, corrected post-review. Whether traditions/delegations are review subjects was
+RESOLVED by kind-tradition's 2026-08-30 amendment (landed 3267e474):
+/exetasis reviews mount records for reference-accuracy and capture pricing,
+and their review fingerprint fingerprints the record itself — this line
+updated 2026-08-30 post-review (H6), which caught the same commit both
+resolving and leaving open the question.
 - **"Changed" = per-kind review fingerprint** (author-ratified): strategies →
   freeze-substance set PLUS rationale; other durable kinds → statement +
   rationale + clarifications + kind-normative attributes; router-owned stamps
@@ -168,10 +171,12 @@ reviewed stamp; sitting-outcome metadata (learned/reinforcement, frontier
 extensions); graft-edge readability for the capture derivation; and the
 enforcing lint (a pending-review stamp survives revision of its content — never
 silently doctrine or declined). Weight tables for the capture function's
-position/state gradients are schema detail and land here too. The lint also
-carries the migration's drain rule (author-directed): NULL is a valid state
-only while legacy declarations remain; upon draining them all, null becomes an
-invalid value and the lint forbids it.
+position/state gradients are schema detail and land here too. The lint also carries the migration's drain rule: the null
+marker — stamp ABSENCE, not a fourth enum state — is tolerated only while
+legacy declarations remain; upon draining them all the lint forbids it. The
+drain rule itself is author-directed; the lint as its enforcement home is
+Claude's choice (decision: delegated-pending-review,
+delegation-anthropic-claude, 2026-08-30).
 
 **Skill name (author-chosen, 2026-08-30 migration round): /exetasis** — the
 Socratic examination (ho anexetastos bios, Apology 38a), chosen by the author
