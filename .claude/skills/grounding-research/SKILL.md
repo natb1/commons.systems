@@ -53,7 +53,7 @@ is not a `gh` call, so it does not conflict with this).
 Regenerate the ranking at session start — never trust a stale report:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/grounding-gap.ts
+node --import tsx/esm packages/intentionsutil/scripts/grounding-gap.ts
 ```
 
 (`tactic-grounding-gap-analysis`.) It prints the durable-layer census and the
@@ -113,7 +113,7 @@ Every frontmatter write goes through `write-node.ts` on a readNode-dumped,
 jq-patched JSON — **never hand-edit YAML**:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions --file "$TMPDIR/<node>.json"
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions --file "$TMPDIR/<node>.json"
 ```
 
 Land **everything this session produced in ONE `graph-commit` bundle** at
@@ -157,6 +157,6 @@ No automated test surface — a SKILL.md is model instructions. Manual dry-run i
 an interactive session (stop before `graph-commit`): confirm the skill
 refreshes the gap report, walks nodes in report order, asks circumstantial
 before sourcing, produces mark JSON and one candidate-chunk node that
-`npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` accepts, and plans
+`node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions` accepts, and plans
 exactly one `graph-commit` bundle. Confirm no `gh` invocation appears in the
 flow and the skill states it is never tick-invoked.

@@ -422,7 +422,10 @@ auto-relocate; follow the guard's printed `Repair:` line):
 
 ### 6. `resolved` — stage, verify, commit, push, mark
 
-Run every `gh`/`git` network call here with `dangerouslyDisableSandbox: true`.
+Sandbox posture here is the preamble's: `git add`, `git commit` and `git push` in
+this step run **sandboxed**, and Step 6 makes no `gh` call of its own. Do **not**
+set `dangerouslyDisableSandbox: true` pre-emptively — `.claude/rules/sandbox.md`
+reserves it for a **retry** after a loud failure.
 
 Stage **only** the Step-2 conflicted files (so a file the subagent touched outside the
 conflict scope is never silently committed):
@@ -653,7 +656,7 @@ path's dump further down — one out-dir per `graph-commit`:
 git checkout origin/main -- "intentions/$NODE_ID.md"
 SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-resolved-$NODE_ID"
 mkdir -p "$SCRATCH"
-npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir "$SCRATCH" "$NODE_ID"
 ```
 
@@ -713,7 +716,7 @@ then land it with a **normal-edit** `graph-commit` call, **deliberately without
 `--base`** (`dangerouslyDisableSandbox: true` — npm cache + network):
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
   --file "$SCRATCH/$NODE_ID.reconciled.json"
 if packages/intentionsutil/scripts/graph-commit \
      -m "graph: reconcile mechanical-unresolved conflict on $NODE_ID" "$NODE_ID"; then
@@ -722,6 +725,38 @@ else
   echo "/dispatch-conflict: graph-commit did not land $NODE_ID (a concurrent write re-parked it, or busy-main) — no phase marker written; Lane 2 will be re-invoked later" >&2
 fi
 ```
+
+**Why no `-C`.** The spelling here is **repo-relative**, and that is what makes
+the bare call correct. A relative path resolves against cwd, so this command only
+*runs at all* when cwd is already the root of a checkout containing
+`packages/intentionsutil/scripts/graph-commit`; from any other cwd it fails
+loudly with `no such file or directory` rather than landing something. When it
+does run, `graph-commit`'s cwd fallback resolves the **same** root the script was
+read from. Every other command in this lane is cwd-relative too — the
+`git checkout origin/main -- "intentions/$NODE_ID.md"` above, and the
+`dump-node.ts --dir intentions` / `write-node.ts --dir intentions` calls — so the
+lane reads and writes one checkout and the commit cannot diverge from it. This is
+what distinguishes these sites from the recorded `land-align-round` failure,
+where the wrapper was invoked by an **absolute** path from a foreign cwd: an
+absolute invocation resolves regardless of cwd, so it can silently land the wrong
+checkout. A repo-relative one cannot.
+
+That matters because `graph-commit` resolves its repo root from `-C`/`--repo`
+else **cwd**, never from its own location
+(`packages/intentionsutil/scripts/graph-commit:37`). A bare call is therefore
+normally a defect per `.claude/rules/sandbox.md` ("Command pattern matching") —
+it is not one here, for the reason above.
+
+Do **not** "fix" this by passing `-C` a `--show-toplevel` command substitution.
+It is unnecessary given the above, and it is also unrunnable on one of this
+lane's two documented entry paths: "from the node's own worktree" (see
+"### Who enters each lane") is a worktree-isolated session, which refuses any
+Bash command containing a command substitution. Note that this lane's fences
+already carry `$(id -u)` in the `SCRATCH` assignments, so that entry path needs a
+substitution-free rewrite of the whole block, not of this one flag — adding
+another substitution moves the problem in the wrong direction. And do **not**
+reach for `-C "$PROJECT_ROOT"`: `PROJECT_ROOT` is a Lane 3 variable, first
+assigned in Lane 3's Step 1, and expands empty here.
 
 **Why no `--base`.** `--base`'s compare-and-swap is the wrong tool for a write
 that is *itself* resolving a park. The node is already parked **on**
@@ -798,7 +833,7 @@ the two never share an out-dir:
 git checkout origin/main -- "intentions/$NODE_ID.md"
 SCRATCH="/tmp/claude-$(id -u)/dispatch-conflict-note-$NODE_ID"
 mkdir -p "$SCRATCH"
-npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir "$SCRATCH" "$NODE_ID"
 jq --arg extra "$NEXT_STEP" \
   '.office_hours.recommendation = (.office_hours.recommendation + "\n\n" + $extra)' \
@@ -806,11 +841,14 @@ jq --arg extra "$NEXT_STEP" \
 node --import tsx/esm packages/intentionsutil/scripts/check-durable-write-fence.ts \
   --base "$SCRATCH/$NODE_ID.json" \
   --candidate "$SCRATCH/$NODE_ID.appended.json" || exit 3
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
   --file "$SCRATCH/$NODE_ID.appended.json"
 packages/intentionsutil/scripts/graph-commit \
   -m "graph: note next step on parked $NODE_ID" "$NODE_ID"
 ```
+
+The bare `graph-commit` here is deliberate for the same reason as the `resolved`
+path above — see "Why no `-C`".
 
 Even on this enhancement path the node **stays parked** and **no** phase-completed
 marker is written — the append only enriches the recommendation a human will
@@ -929,6 +967,12 @@ Never carry a value forward by assuming a previous call's shell is still alive.
   `.claude/…` or `packages/…` path. A relative path resolves against whatever
   cwd the invoking block has, which could be `$WT` — precisely the stale tree
   this whole arrangement exists to stop reading from.
+  *Two invocations are deliberately exempt and spelled repo-relative —
+  `graph-commit` in Step 7b and `dispatch-mark-complete` in Step 9 — because
+  `.claude/settings.json`'s `permissions.allow` prefix-matches only that
+  spelling; each carries its own compensating note at the call site, and the
+  Lane 3 ratchet asserts both compensations (sections 6b and 6c of
+  `test-dispatch-conflict-lane3-cwd-ratchet.sh`).*
 - **If `$WT` does not exist, stop loudly.** It is a should-never-happen: exit 11
   leaves the worktree in place. Write the node-terminal marker **first** (see the
   terminal-marker rule below), then report and stop.
@@ -1385,7 +1429,7 @@ and substitute it as a **literal**, the way this lane substitutes `$SOURCE_ID`,
 `$WT` and `$PROJECT_ROOT`: no shell variable survives from an earlier Bash call.
 
 ```bash
-( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-lane-pass.ts \
+( cd "$PROJECT_ROOT" && node --import tsx/esm packages/intentionsutil/scripts/apply-lane-pass.ts \
     "$SOURCE_ID" --stamp --lane conflict --phase "$NODE_PHASE" \
     --sha "$(git -C "$WT" rev-parse HEAD)" --dir "$PROJECT_ROOT/intentions" )
 ```
@@ -1455,7 +1499,7 @@ writes the npm cache).
 `graph-auto-merge` lands the PR once GitHub reports MERGEABLE:
 
 ```bash
-( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
+( cd "$PROJECT_ROOT" && node --import tsx/esm packages/intentionsutil/scripts/apply-conflict-state.ts \
     "$SOURCE_ID" --clear-conflict-mechanical --dir "$PROJECT_ROOT/intentions" )
 ```
 
@@ -1465,7 +1509,7 @@ the review pass actually re-runs against the resolved tree:
 
 ```bash
 gh pr ready --undo "$PR_NUM"
-( cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/apply-conflict-state.ts \
+( cd "$PROJECT_ROOT" && node --import tsx/esm packages/intentionsutil/scripts/apply-conflict-state.ts \
     "$SOURCE_ID" --clear-conflict-intention --dir "$PROJECT_ROOT/intentions" )
 ```
 
@@ -1562,8 +1606,19 @@ Write the **standard** phase-completed marker. No `--pr` on the node lane, the
 same marker discipline Lane 2's `resolved` path uses:
 
 ```bash
-"$PROJECT_ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete" --phase fix-conflicts
+.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete --phase fix-conflicts
 ```
+
+The relative prefix (not `"$PROJECT_ROOT/…"`) is deliberate, for the same reason
+as the `graph-commit` call above: `.claude/settings.json`'s `permissions.allow`
+carries `Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete:*)`,
+a prefix match against the literal command string as typed, and a
+`"$PROJECT_ROOT/…"` spelling cannot match it. Unlike `graph-commit` this call
+needs no `-C` compensation — it writes only the phase-completed marker under
+`$CLAUDE_JOB_DIR` and touches no checkout, so a relative *resolution* cannot
+point a write at the node's stale worktree. The `mark-node-terminal` call below
+keeps its `"$PROJECT_ROOT/…"` spelling: it has no `permissions.allow` entry, so
+there is nothing for a re-spelling to buy.
 
 Then write the **node-terminal** marker. It is a *different* marker with a
 *different* consumer, and both are required:

@@ -20,9 +20,10 @@
 # change, EVERY implicit-cwd dependency in Lane 3 must be explicit —
 #   * git operations on the node's branch go through `git -C "$WT"`,
 #   * helper scripts are invoked by absolute path under $PROJECT_ROOT — except
-#     the $PROJECT_ROOT bootstrap itself and `graph-commit`, whose repo-relative
-#     spelling is load-bearing for the permissions.allow prefix match; each
-#     exception carries its own compensating assertion (see section 6/6b),
+#     the $PROJECT_ROOT bootstrap itself and, for the permissions.allow prefix
+#     match, `graph-commit` and `dispatch-mark-complete`, whose repo-relative
+#     spelling is load-bearing; each exception carries its own compensating
+#     assertion (see sections 6/6b/6c),
 #   * the contamination guard is passed the explicit "$WT" worktree path,
 #   * the resolver subagent's worktree root comes from the resolved $WT, NEVER
 #     from `git rev-parse --show-toplevel` (which from the primary checkout
@@ -159,9 +160,30 @@ assert_eq "lane3: dispatch-run-verification is named by a \$PROJECT_ROOT-prefixe
 # The expectation legitimately changed; the PROPERTY this row guards — the
 # invocation cannot be pointed at the node's stale worktree — did not, and is
 # re-asserted for graph-commit in section 6b below via its `-C "$PROJECT_ROOT"`.
+#
+# The THIRD deliberate exception is `dispatch-mark-complete`, by the same
+# mechanism: `.claude/settings.json` carries
+# `"Bash(.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete:*)"` in
+# `permissions.allow`, a PREFIX match against the literal command string as
+# typed, so a `"$PROJECT_ROOT/.claude/skills/…"` spelling misses it and the call
+# falls through to the auto-mode classifier. The PROPERTY this row guards — the
+# invocation cannot be pointed at the node's stale worktree — still holds, but by
+# a DIFFERENT compensation from graph-commit's: dispatch-mark-complete writes
+# only the phase-completed marker under $CLAUDE_JOB_DIR and touches no checkout
+# at all, so there is no write to mis-target and no `-C` to pass. The
+# *resolution* of the relative path is safe for the separate reason that Lane 3's
+# session cwd IS the primary checkout — the very property section 7 of this suite
+# enforces. Section 6c below asserts that compensation.
+#
+# Note, pre-answered: this `grep -v` is unanchored, so a future line carrying
+# both `dispatch-mark-complete` and a second, genuinely-bad relative invocation
+# would be filtered whole. The `graph-commit` exclusion above has the identical
+# shape; matching it is deliberate, so the exceptions stay legible as one pattern
+# rather than three.
 RELATIVE_INVOCATIONS=$(grep -nE '(^|[|(&] *)(\.claude/skills|packages/intentionsutil/scripts)/' <<<"$LANE3_FENCED" \
   | grep -v 'lib-graph-worktree.sh' \
-  | grep -v 'packages/intentionsutil/scripts/graph-commit' || true)
+  | grep -v 'packages/intentionsutil/scripts/graph-commit' \
+  | grep -v '\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete' || true)
 assert_eq "lane3: no bare relative helper-script invocation in a fenced block" \
   "" "$RELATIVE_INVOCATIONS"
 
@@ -182,6 +204,25 @@ GRAPH_COMMIT_UNSCOPED=$(grep -nE '(^|[|(&] *)packages/intentionsutil/scripts/gra
   | grep -vE 'graph-commit +(-C|--repo) +"\$PROJECT_ROOT"' || true)
 assert_eq "lane3: every fenced graph-commit invocation carries -C \"\$PROJECT_ROOT\"" \
   "" "$GRAPH_COMMIT_UNSCOPED"
+
+# --- 6c. the dispatch-mark-complete exception is compensated by cwd-independence
+# Unlike graph-commit there is no `-C` to assert: dispatch-mark-complete writes
+# only under $CLAUDE_JOB_DIR and touches no checkout, so the compensation is that
+# there is no checkout-targeted write to get wrong. What must be guarded instead
+# is that the bypass really is closed (no $PROJECT_ROOT-prefixed spelling comes
+# back) and that the cwd-independence claim is stated where an executing agent
+# reads it — in the lane's own prose, not only here.
+MARK_COMPLETE_CALLS=$(count_matches '(^|[|(&] *)\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete( |$)' "$LANE3_FENCED")
+# Non-vacuity, mirroring 6b: if Lane 3 ever stops invoking it, the exception
+# carved in section 6 is dead weight and this row says so.
+assert_eq "lane3: the dispatch-mark-complete exception is non-vacuous (Lane 3 still invokes it)" \
+  "yes" "$([[ "$MARK_COMPLETE_CALLS" -ge 1 ]] && echo yes || echo no)"
+# The bypass itself: no $PROJECT_ROOT-prefixed spelling may survive.
+assert_eq "lane3: no \$PROJECT_ROOT-prefixed dispatch-mark-complete invocation remains" \
+  "0" "$(count_matches '"\$PROJECT_ROOT/\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete"' "$LANE3_FENCED")"
+# The compensating property must be stated in the lane's prose, not only here.
+assert_eq "lane3: prose states the phase markers are cwd-independent" \
+  "yes" "$(at_least_one 'cwd-independent' "$LANE3")"
 
 assert_eq "lane3: the \$PROJECT_ROOT bootstrap sources lib-graph-worktree.sh" \
   "yes" "$(at_least_one '^PROJECT_ROOT=\$\(source \.claude/skills/dispatch-propagate/scripts/lib-graph-worktree\.sh && resolve_main_worktree\)' "$LANE3_FENCED")"

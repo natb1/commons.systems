@@ -95,7 +95,7 @@ checkout: a concurrent session's dirty tracked file blocks this run's
    proceed on unverified state.
 4. **Load the ancestry projection.** After entering the worktree, load the
    ancestry projection for the claimed node: read `.claude/ancestry-context.md`
-   if `provision-node-worktree` wrote it, otherwise run `npx tsx
+   if `provision-node-worktree` wrote it, otherwise run `node --import tsx/esm
    packages/intentionsutil/scripts/node-ancestry.ts <node-id> --dir
    "$(pwd)/intentions"` and hold its output.
 
@@ -265,7 +265,7 @@ per-tactic, not a single strategy-level marker: before planning, enumerate the
 strategy's existing children with the census script
 
 ```
-npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
+node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
 ```
 
 and skip any already at `phase: implement` with a landed plan; a partial prior
@@ -297,7 +297,7 @@ authoritative): `statement`, `rationale`, `success_signal`, `reading`,
 stored field — it is derived on every read via `deriveGap`
 (`packages/intentionsutil/src/sensors.ts`). Take the strategy's derived gap from
 the `=== Serving strategy ===` block the Idempotency section's census script
-prints (`npx tsx packages/intentionsutil/scripts/align-tactics-census.ts
+prints (`node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts
 <strategy-id> intentions`); never read it off frontmatter. Read its draft child
 tactics (their bodies carry retained tactical context from `/align`)
 and its existing non-draft children — the Idempotency section's census script
@@ -504,7 +504,7 @@ verified by re-running against a small strategy with a null `reading`:
   per-unit `Recommended model` tags and, where applicable, fenced ` ```verify `
   blocks.
 - The written nodes pass
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` (the
+  `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions` (the
   store directory is a required argument, clarification 194/242) — in particular
   `serves` resolves to the strategy (rule 7), `validates` to the strategy
   (rule 14), `blocked_by` to tactics with no cycle (rules 13, 15), and no

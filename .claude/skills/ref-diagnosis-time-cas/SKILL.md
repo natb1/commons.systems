@@ -57,7 +57,7 @@ for a later write to invalidate.
 **1. Capture** — at diagnosis time, dump every node under consideration:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir <dir> <id>...
 ```
 

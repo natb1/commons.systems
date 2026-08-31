@@ -6,9 +6,9 @@
 #
 #   1. Workspace installed — `npm test --prefix packages/intentionsutil`.
 #      FATAL on failure: the intentionsutil workspace is not installed (tests
-#      fail, or `npx tsx` cannot resolve). Remediation: run `npm ci` at the
+#      fail, or `node --import tsx/esm` cannot resolve). Remediation: run `npm ci` at the
 #      repo root and rerun this script.
-#   2. Graph clean — `npx tsx packages/intentionsutil/scripts/validate-graph.ts
+#   2. Graph clean — `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 #      "$REPO_ROOT/intentions"`. The store directory is a REQUIRED argument
 #      (strategy-graph-native-dispatch clarification 194/242): passing it
 #      explicitly is what makes a missing/unreadable intentions/ a loud failure
@@ -48,13 +48,13 @@ echo "=== 1/3: Workspace installed (npm test --prefix packages/intentionsutil) =
 if npm test --prefix packages/intentionsutil; then
   echo "validate-deployment: workspace installed — OK"
 else
-  echo "validate-deployment: FATAL — packages/intentionsutil workspace is not installed (tests failed, or npx tsx could not resolve). Run 'npm ci' at the repo root ($REPO_ROOT) and rerun this script." >&2
+  echo "validate-deployment: FATAL — packages/intentionsutil workspace is not installed (tests failed, or node --import tsx/esm could not resolve). Run 'npm ci' at the repo root ($REPO_ROOT) and rerun this script." >&2
   overall_rc=1
 fi
 echo
 
-echo "=== 2/3: Graph clean (npx tsx packages/intentionsutil/scripts/validate-graph.ts \"$REPO_ROOT/intentions\") ==="
-if npx tsx packages/intentionsutil/scripts/validate-graph.ts "$REPO_ROOT/intentions"; then
+echo "=== 2/3: Graph clean (node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts \"$REPO_ROOT/intentions\") ==="
+if node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts "$REPO_ROOT/intentions"; then
   echo "validate-deployment: graph clean — OK"
 else
   echo "validate-deployment: FATAL — the intentions graph failed validation (dangling refs, cycles, schema violation, or a missing/unreadable intentions/ directory). See the validate-graph.ts output above for the exact error. Do not proceed to interview over a broken store." >&2

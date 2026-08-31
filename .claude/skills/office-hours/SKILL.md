@@ -489,7 +489,7 @@ an explicit `/office-hours <node-id>` naming an already-live node errors (the
    `gh`, no daemon (use `dangerouslyDisableSandbox: true` for `npx`):
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/office-hours-select.ts <node-id>
+   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts <node-id>
    ```
 
    Relay the `NOTE —` line when present. Open-blocker status is a **signal, not

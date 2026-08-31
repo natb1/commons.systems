@@ -177,7 +177,7 @@ every later rewrite, so this is a one-time splice):
 ```bash
 node_file="intentions/$id.md"
 printf '%s' "$node_json" > "$CLAUDE_JOB_DIR/tmp/$id.json"
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
   --file "$CLAUDE_JOB_DIR/tmp/$id.json"
 # Replace the placeholder body (everything after the closing frontmatter fence)
 # with the redacted diagnosis prose.
@@ -203,7 +203,7 @@ existing body — so splice the new body directly, then land with `--base`:
 
 ```bash
 # Capture the base manifest (CAS token) against the node as currently on origin/main.
-manifest=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+manifest=$(node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --dir intentions \
   --out-dir "$CLAUDE_JOB_DIR/tmp/base" "$id")
 # Compare fresh redacted body against the on-disk body; only rewrite + commit on a diff.
 node_file="intentions/$id.md"
