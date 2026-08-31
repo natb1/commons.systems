@@ -212,6 +212,11 @@ SH
   cat >"$RGS_ROOT/packages/intentionsutil/scripts/hold-node" <<SH
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$RGS_FIX/hold-node-calls.log"
+# Records the label this child INHERITED, so the sweep's env -u GRAPH_WRITER is
+# pinned by an assertion rather than by a comment 600 lines from the export.
+# NOTE: this heredoc is UNQUOTED, so no backticks here -- they would run as
+# command substitution when the stub is written, not appear in it.
+printf 'GRAPH_WRITER=%s\n' "\${GRAPH_WRITER-<unset>}" >> "$RGS_FIX/hold-node-env.log"
 printf 'hold\n' >> "$RGS_FIX/lock-order.log"
 if [[ -f "$RGS_FIX/hold-node-fail" ]]; then
   echo "hold-node stub: simulated failure" >&2
@@ -329,6 +334,12 @@ rgs_node "$RGS_ROOT/intentions/t-rs1.md" t-rs1 201
 rgs_seal
 rgs_seed_sidecar deadbee201 7
 c2_out=$(rgs_run)
+# The sweep exports GRAPH_WRITER for its OWN graph-commits, but hold-node lands
+# its own; inheriting the label would let a concurrent sweep read the hold commit
+# as `mine` and discard it. `env -u GRAPH_WRITER` at the call site prevents that,
+# and this is what holds it in place.
+assert_eq "review-stall ci-stall: hold-node does NOT inherit the sweep's GRAPH_WRITER" \
+  "GRAPH_WRITER=<unset>" "$(cat "$RGS_FIX/hold-node-env.log")"
 assert_eq "review-stall ci-stall: hold-node is invoked with the new kind and the node id" \
   "1" "$(case "$(rgs_holds)" in *"t-rs1 --kind ci-pending-stalled"*) printf 1 ;; *) printf 0 ;; esac)"
 assert_eq "review-stall ci-stall: exactly one held line on stdout" \

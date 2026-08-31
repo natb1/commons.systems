@@ -794,6 +794,27 @@ clarifications:
       held for review. EXPLICITLY LEFT DEFERRED from earlier in the session (not
       re-asked): virtue-knowledge-as-gift's substance ('two sibling roots,
       deferred with review')."
+  - question: What is the overrule algebra across disposition states
+      (rsi-graph-review finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31, tactic-rsi-graph-review finalize interview.) Four
+      rules: (1) A ratified disposition is overruled only in interview - /align
+      or /exetasis - never during execution or rsi. (2) Delegated and deferred
+      dispositions may be overruled by AI during either execution or rsi
+      (iterative or batch). (3) A disposition that overrules a DEFERRED one
+      inherits the deferred stamp - it is subject to review in lieu of the
+      disposition it superseded. (4) An AI disposition that overrules a
+      DELEGATED one becomes DEFERRED (author refinement of Claude's proposal,
+      which had kept it delegated): every AI override enters the author review
+      queue. The superseded stamp survives in the record - clarifications
+      append, never rewrite. Corollary rulings from the same interview:
+      delegated dispositions sit in BOTH review queues - the rsi batch
+      (tactic-rsi-graph-review) as their primary quality-review home and
+      /exetasis as the lowest-priority author re-confirmation lane per the
+      ratified priority ordering; and in the greenfield model the author
+      recognizes no function for the node-level owner schema - ownership
+      categories live on dispositions, with node-level status: delegated and
+      owner: ai retained only as brownfield carriers whose migration is
+      delegated to Claude. (decision: author-ratified, 2026-08-31)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
@@ -808,6 +829,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

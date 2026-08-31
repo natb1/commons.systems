@@ -247,6 +247,32 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# The durable writer identity graph-commit stamps onto every commit it makes for
+# this script, and the string _rollback_node_write's graph_rollback_node_writes
+# call compares each unpushed commit's `Graph-Writer:` trailer against — so a
+# CONCURRENT writer's commit is recognised as not-ours and kept. It MUST stay
+# identical to the <label> argument passed at that call site (see
+# lib-graph-rollback.sh's header). This script has no RESTORE_ON_FAILURE flag at
+# all — its five gate call sites invoke the rollback directly — so the
+# attribution is the ONLY thing standing between a peer writer's commit and the
+# discard.
+#
+# NOT `export`ed, and that is load-bearing. graph-commit reads the label from
+# the environment (GRAPH_WRITER_LABEL="${GRAPH_WRITER:-graph-commit}",
+# packages/intentionsutil/scripts/graph-commit), so an exported value is
+# inherited by every child process — and this script runs two OTHER graph
+# writers as children: hold-node (_hold_node_fix_cap, _hold_node_ci_pending)
+# and park-node (_park_conflict_cap), each of which lands its own
+# graph-commit. Exporting stamped THEIR commits `Graph-Writer:
+# graph-select-target` too, so a CONCURRENT graph-select-target would read a
+# peer's stranded hold or park commit as `mine` and discard it — precisely
+# the destruction this trailer exists to prevent, widened from one tool to
+# three. So the label is applied PER INVOCATION, on the commands that land
+# THIS script's own writes, and nowhere else. hold-node's and park-node's
+# commits keep graph-commit's own default label, which the rollback
+# classifies as another writer's and KEEPS (and a park is kept by the park
+# subject test regardless).
+GRAPH_WRITER_LABEL=graph-select-target
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.
@@ -675,7 +701,7 @@ _apply_fix() {
 # _graph_commit_fix <message> <id> — land the on-disk fix-state write on main.
 _graph_commit_fix() {
   ( cd "$NATIVE_ROOT" \
-    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
+    && GRAPH_WRITER="$GRAPH_WRITER_LABEL" packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1
 }
 
 # --- The write/land rollback -------------------------------------------------
@@ -715,7 +741,7 @@ _arm_node_rollback() {
 # what it did on stderr (never on stdout — sensor_gate's stdout is captured
 # whole as the emitted phase).
 _rollback_node_write() {
-  graph_rollback_node_writes "$NATIVE_ROOT" "$1" graph-select-target "$2" || true
+  graph_rollback_node_writes "$NATIVE_ROOT" "$1" "$GRAPH_WRITER_LABEL" "$2" || true
 }
 
 # --- Merge-conflict interrupt helpers (tactic-graph-router-conflict-routing) --
@@ -807,7 +833,7 @@ _graph_commit_conflict() {
   local rc=0
   _conflict_budget_charge
   ( cd "$NATIVE_ROOT" \
-    && packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1 || rc=$?
+    && GRAPH_WRITER="$GRAPH_WRITER_LABEL" packages/intentionsutil/scripts/graph-commit -m "$1" "$2" ) >/dev/null 2>&1 || rc=$?
   _refresh_lock
   return $rc
 }

@@ -618,26 +618,39 @@ export function ownTier(node: IntentionNode): number {
 }
 
 /**
- * Whether a node is an EVALUATION FINDING LEDGER ENTRY — a tactic carrying
- * `attributes.ledger_entry: true`, minted by
- * `.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding`.
+ * Whether a tactic HOLDS MEASUREMENTS — a non-empty
+ * `attributes.measured_impact` array.
  *
- * A ledger entry is a durable record of a recurring evaluation finding: its
- * `attributes.measured_impact` carries the recurrence count and impact figures
- * that inform ranking. Retirement is `phase: "done"` WITH those figures intact,
- * so a later recurrence resumes the count instead of restarting it — which is
- * only true if a retired entry is never deleted. Every consumer that treats
- * `phase: "done"` as "finished, delete or drop it" must therefore exempt these:
- * the owed-prune census (`scripts/graph-census-debt.ts`) and `rsi.ts`'s §6 task
- * plan both call this. `intentions/kind-tactic.md`'s `ledger_entry` section is
- * the normative contract.
+ * The rule this encodes is general and names no namespace: never prune a node
+ * that holds measurements, whoever wrote it. Such a node retires to
+ * `phase: "done"` WITH its summary figures intact, so a later recurrence
+ * resumes the count instead of restarting it — which is only true if a retired
+ * node is never deleted. Every consumer that treats `phase: "done"` as
+ * "finished, delete or drop it" must therefore exempt these. The one live
+ * consumer is the owed-prune census (`scripts/graph-census-debt.ts`).
+ *
+ * This REPLACES `isLedgerEntry`, which keyed the same exemption on
+ * `attributes.ledger_entry: true` — a class marker for one producer's records.
+ * Keying on the measurements themselves covers every producer and needs no
+ * marker to be written. `intentions/tactic-eval-finding-ledger.md` Unit 1 is
+ * the governing decision.
  *
  * One implementation rather than a predicate re-spelled at each call site: a
- * consumer that spells it differently silently un-exempts the ledger.
+ * consumer that spells it differently silently un-exempts the measurements.
+ *
+ * SCOPE: "names no namespace" is about the PRODUCER, not the kind — this
+ * returns `false` for a non-tactic node however many measurements it holds.
+ * Rule 21 (`checkMeasuredImpactShape`) validates `attributes.measured_impact`
+ * on ANY kind, so that shape is legal elsewhere; the narrowing is safe for the
+ * one live consumer only because rule 10 makes `phase` tactic-only, so no other
+ * kind can reach `phase: "done"` and be a prune candidate at all. A future
+ * consumer that can delete or drop a non-tactic node must widen this predicate
+ * rather than assume it already covers one.
  */
-export function isLedgerEntry(node: IntentionNode): boolean {
+export function hasMeasurements(node: IntentionNode): boolean {
   const attributes = isPlainObject(node.attributes) ? node.attributes : {};
-  return node.kind === "tactic" && attributes.ledger_entry === true;
+  const measured = attributes.measured_impact;
+  return node.kind === "tactic" && Array.isArray(measured) && measured.length > 0;
 }
 
 // --- Durable-layer write fence ----------------------------------------------

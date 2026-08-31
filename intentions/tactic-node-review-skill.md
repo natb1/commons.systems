@@ -111,6 +111,26 @@ clarifications:
       the ratified four-term disposition ranking (node rank, graph position with
       keystone dispositions prioritized, timestamp, disposition category)
       supersedes the penalty machinery that clause rode on."
+  - question: Does /exetasis's queue include delegated dispositions, and which
+      validateGraph number does the reviewed-stamp rule claim (2026-08-31)?
+    answer: "(Recorded 2026-08-31, tactic-rsi-graph-review finalize interview; two
+      amendments to this plan, body updated in the same edit.) (a) BOTH QUEUES:
+      the boundary sentence that read '/exetasis reviews author dispositions
+      only' is amended - delegated dispositions sit in both queues, with the rsi
+      batch (tactic-rsi-graph-review, finalized the same day) their primary
+      quality-review home and /exetasis keeping them as its lowest-priority
+      re-confirmation lane exactly where the ratified priority ordering already
+      placed them. This resolves the measured contradiction between this plan's
+      boundary sentence and the priority ordering ratified on
+      strategy-explicit-intent (deferred > null > ratified > delegated).
+      (decision: author-ratified, 2026-08-31) (b) RULE RENUMBER, mechanical:
+      tactic-supersession-edge-and-terminal landed validateGraph rules 24/25/26
+      on main (commit f0603ff7, 2026-08-31) after this plan claimed 25, so the
+      reviewed-stamp rule claims 27 - re-check the schema.ts collision note at
+      implementation time; burned numbers are never reused. Also relevant to
+      Unit 3: the overrule algebra recorded on strategy-explicit-intent
+      (2026-08-31) - any AI overrule of a delegated or deferred disposition
+      produces a deferred one."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -118,6 +138,8 @@ phase: implement
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -263,10 +285,14 @@ stderr**, never rank them and never drop them silently.
   `delegated-pending-review → deferred`, `delegated-review-declined →
   delegated`. **Out of scope here.** The parser in Unit 2 therefore reads both
   spellings tolerantly rather than pre-empting the sweep.
-- `tactic-rsi-graph-review` (parked to office_hours) owns batch review of
-  **delegated**-state dispositions. `/exetasis` reviews **author** dispositions
-  only — deferred, null, and ratified re-queues. The boundary doctrine stands
-  unchanged even though that node is parked.
+- `tactic-rsi-graph-review` (finalized 2026-08-31, phase implement) is the
+  primary quality-review home for **delegated**-state dispositions. AMENDED
+  2026-08-31 (author-ratified, this node's 2026-08-31 clarification): delegated
+  dispositions sit in BOTH queues — the rsi batch reviews their quality, and
+  `/exetasis` keeps them as its lowest-priority re-confirmation lane exactly
+  where the ratified priority ordering already placed them. `/exetasis`'s
+  primary queue remains the author dispositions — deferred, null, and ratified
+  re-queues.
 - `tactic-align-audit-retirement` (phase: implement) deletes
   `.claude/skills/align-audit/`. **Do not delete it here** — it is still on
   disk and that removal is that node's diff.
@@ -377,11 +403,12 @@ deliberate: an /exetasis sitting is author-attended, and no autonomous path may
 manufacture an attestation. Do not add `attributes` to `STATE_FIELDS`, and do
 not add a fence exemption.
 
-**New `validateGraph` rule — claim number 25, not 24.** The rule-number
-collision note at `packages/intentionsutil/src/schema.ts:1827-1831` records
-that `tactic-supersession-edge-and-terminal` already claims 23 and 24 (unlanded
-as of 2026-08-29), and burned numbers are never reused. Claim 25 and extend the
-collision note to record this claim so the next claimant sees it. Rule 25
+**New `validateGraph` rule — claim number 27** (renumbered 2026-08-31: this
+plan originally claimed 25, but `tactic-supersession-edge-and-terminal` landed
+rules 24/25/26 on main first — commit f0603ff7 — and burned numbers are never
+reused). Re-check the rule-number collision note in
+`packages/intentionsutil/src/schema.ts` for later claims at implementation
+time, and extend it to record this claim so the next claimant sees it. Rule 27
 shape, following rules 19/21/22 (inert when the key is absent, shape-checked
 when present): `attributes.reviewed`, when present, is an object with
 `fingerprint` a non-empty 64-char lowercase hex string, `date` a `YYYY-MM-DD`
@@ -796,7 +823,7 @@ after `validateGraph` and needs no new CI registration.
 `delegated-pending-review → deferred` vocabulary rename
 (`tactic-substantiation-edge-migration`).
 
-**Dependencies:** Unit 1 (rule 25), Unit 2 (the parser the census uses).
+**Dependencies:** Unit 1 (rule 27), Unit 2 (the parser the census uses).
 
 **Recommended model:** opus.
 
@@ -835,7 +862,7 @@ repo root; anchors are symbol-first because line numbers drift.
   `DURABLE_LAYER_KINDS` (:629), `isDurableWriteRefused` (:657), and the
   numbered `validateGraph` rule docs (:1719–:1831, rule 23 at :1812, the
   rule-number collision note at :1827). Rules 19/21/22 are the shape-rule
-  template Unit 1's rule 25 follows.
+  template Unit 1's rule 27 follows.
 - `packages/intentionsutil/src/store.ts` — `readNode` (:153), `readNodeBody`
   (:166), `listNodes` (:232), `listNodesStrict` (:249), `writeNode` (:52): the
   single frontmatter write gate and read primitives. Never hand-roll

@@ -5,7 +5,7 @@ statement: Build the RSI-family delegated-review batch function — the charter
   home for graph-digest, reading its check tables as strategy-graph-integrity's
   sensor and batch-reviewing Claude-owned (delegated) graph content
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from the 2026-08-30 resolution round. The author's review
   split: /exetasis is for AUTHOR review (dispositions); the RSI family is for
@@ -70,69 +70,167 @@ clarifications:
       and nothing in building the RSI-family batch function depends on it. If
       this node ever emits a report intended for the author's reading pass, that
       is the natural moment to repoint item 7 at it."
+  - question: Which selector defines the review surface (finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview.) The author's ruling:
+      brownfield migration concerns are accepted as delegated; in the greenfield
+      the author recognizes no function for the node-level owner schema;
+      conceptually this node's concerns may be either ratified or
+      delegated/deferred dispositions - the implemented node's function may be
+      autonomous delegated operations while ratified doctrine is recorded for
+      how that is done. Delegated dispositions sit in BOTH review queues: this
+      batch function is their primary quality-review home, and /exetasis keeps
+      them as its lowest-priority re-confirmation lane per the ratified priority
+      ordering. (decision: author-ratified, 2026-08-31) Claude's operational
+      encoding: the batch review queue enumerates dispositions in the
+      AI-overrulable states - delegated and deferred, per the overrule algebra
+      recorded on strategy-explicit-intent (2026-08-31) - with ratified
+      dispositions read-only context the review may flag to /exetasis but never
+      overrule. Brownfield carriers of the delegated surface: explicit
+      (decision: delegated, ...) stamps; the 92 status: delegated nodes as
+      whole-node interim carriers; and unstamped content on AI-authored nodes
+      treated delegated-by-default as an interim heuristic (not doctrine - owner
+      has no ratified greenfield function). Mounts (kind: delegation) remain
+      excluded per the 2026-08-30 mounts ruling; owner: ai as a SELECTOR is
+      retired - the function is distinguished from rsi/rsi-audit by what it
+      evaluates (graph content quality vs dispatch efficiency), not by node set.
+      (decision: deferred, delegation-anthropic-claude, 2026-08-31)"
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
-blocked_by: []
-office_hours:
-  reason: "Requirement ambiguity blocks authoring this node's plan: the batch
-    function's review surface is undefined. 'Claude-owned (delegated) graph
-    content' resolves to three incompatible selectors, measured against
-    intentions/ this round — `owner: ai` (539 nodes), `status: delegated` (92
-    nodes, perfectly disjoint from owner:ai and entirely owner:human), or `kind:
-    delegation` (22 records, already read by readDelegationRecords at
-    packages/intentionsutil/scripts/read-sensors.ts:948-989). The statement, the
-    rationale, and the reuse evidence each point at a different one, and neither
-    this node nor strategy-graph-integrity records a ruling. Since the author
-    drew the /exetasis (author dispositions) vs RSI-family (delegated
-    dispositions) split, which queue this function enumerates is an author
-    ruling, not a Claude choice — and the sets are disjoint, so a wrong guess
-    builds the reviewer over the wrong graph rather than a merely larger one.
-    Awaiting author ratification of the proposed clarification: 'which node set
-    does Claude-owned (delegated) graph content denote?' — one selector, or a
-    named union. Nothing else blocks: no strategy condition failed, the sensor
-    re-homing and the author-accepted no-office-hours-interim signal lapse are
-    already recorded on the strategy (2026-08-30 resolution round), and the
-    digest reuse surface (packages/intentionsutil/src/digest.ts renderTables, 7
-    check tables) is identified and ready to read rather than reimplement.
-    Recommend (Claude, from the ratified record): the review surface is
-    delegated-STATE content — the 92 status: delegated nodes today, plus
-    delegated-stamped dispositions ((decision: delegated, ...)) once the stamp
-    schema lands — NOT owner: ai (dispatch work products, the existing
-    rsi/rsi-audit territory) and NOT kind: delegation records (mounts, which the
-    2026-08-30 mounts ruling excludes from disposition review entirely). Ratify
-    one selector or a named union, then re-run /align-tactics
-    tactic-rsi-graph-review."
-  since: 2026-08-30
-  recommendation: null
-  session_type: other
+blocked_by:
+  - tactic-node-review-skill
+superseded_by: []
+supersession_expiry: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Build the RSI-family delegated-review batch function — the charter home for graph-digest, reading its check tables as strategy-graph-integrity's sensor and batch-reviewing Claude-owned (delegated) graph content
+# Build the RSI-family delegated-review batch function — the charter home for graph-digest, reading its check tables as strategy-graph-integrity's sensor and batch-reviewing delegated graph content
 
-## Parked 2026-08-30 — the review surface is undefined, three disjoint selectors
+## Context
 
-The charter itself (digest ownership, sensor home, the exetasis/RSI split) is
-author-ratified and unchallenged. What blocks planning is the enumeration
-scope: which node set is the batch function's review queue. Measured this
-round and independently re-verified: owner: ai selects 539 nodes; status:
-delegated selects 92 nodes, every one owner: human, intersection with
-owner: ai exactly 0; kind: delegation selects the 22 mount records that
-readDelegationRecords already reads. The statement pulls toward the owner
-reading, the rationale toward the status/stamp reading, the reuse evidence
-toward the kind reading — and the sets are disjoint, so a wrong guess builds
-the reviewer over the wrong graph.
+The charter is author-ratified and was never in dispute: /align-audit is
+deprecated-and-removed (tactic-align-audit-retirement, phase implement), and
+this node re-homes its two orphaned artifacts — strategy-graph-integrity's
+success_signal sensor (now the graph-digest check tables,
+`packages/intentionsutil/scripts/graph-digest.ts` with the pure module
+`packages/intentionsutil/src/digest.ts`) and the digest tooling's charter. The
+2026-08-30 park (review surface undefined, three disjoint selectors) was
+resolved by the 2026-08-31 finalize interview at the DISPOSITION level, not as
+a node-set selector: the batch review queue enumerates dispositions in the
+AI-overrulable states — delegated and deferred, per the overrule algebra
+recorded on strategy-explicit-intent (2026-08-31 clarification) — with
+ratified dispositions read-only context that the review may flag to /exetasis
+but never overrule. Delegated dispositions sit in BOTH queues
+(author-ratified 2026-08-31): this function is their primary quality-review
+home; /exetasis keeps them as its lowest-priority re-confirmation lane.
+Brownfield carriers of the delegated surface (delegated to Claude): explicit
+`(decision: delegated, ...)` stamps; `status: delegated` nodes as whole-node
+interim carriers; unstamped content on AI-authored nodes treated
+delegated-by-default as an interim heuristic. Mounts (`kind: delegation`)
+are excluded (2026-08-30 mounts ruling). Distinct from the existing
+rsi/rsi-audit skills by what it evaluates — graph content quality, not
+dispatch efficiency.
 
-The office_hours reason carries Claude's recommendation (the
-delegated-state reading: status: delegated nodes today plus delegated-stamped
-dispositions once the stamp schema lands, with mounts excluded by the
-2026-08-30 mounts ruling and owner: ai left to the dispatch-efficiency
-skills). The clarifications carry the full measured selector breakdown and a
-stale cross-strategy pointer the sensor re-homing left on
-tactic-owner-review-reading-pass-a (its office-hours reading list still sends
-the author to the retired /align-audit report).
+This node is blocked_by tactic-node-review-skill: Units 2–3 below consume that
+plan's Unit 1–2 artifacts (`reviewFingerprint`, `parseDispositions`), and the
+stamp schema those units land is what makes the disposition surface
+machine-readable. Unit 1 has no such dependency, but the node ships as one
+build.
+
+## Unit 1 — the /rsi-graph-review skill and the digest sensor re-home
+
+**Recommended model:** opus
+
+- New autonomous skill `.claude/skills/rsi-graph-review/SKILL.md` (park-to-
+  office_hours contract per
+  `.claude/skills/align-tactics/references/autonomy.md`; never
+  AskUserQuestion). Its first phase runs the digest
+  (`packages/intentionsutil/src/digest.ts` `renderTables`, 7 check tables) as
+  strategy-graph-integrity's success_signal sensor reading, and dispositions
+  every objective integrity finding (consistency, closure, parsimony): fix
+  mechanically, draft a tactic node, or record an exception as a dated
+  clarification.
+- Charter prose in the skill: this node owns the digest tooling — maintenance
+  and table extensions live here.
+- Out of scope for this unit: the disposition queue (Units 2–3).
+
+## Unit 2 — the delegated/deferred disposition enumerator
+
+**Recommended model:** opus
+
+Dependencies: tactic-node-review-skill Units 1–2 landed (carried by this
+node's blocked_by edge).
+
+- Enumerate the review queue with `parseDispositions` over the full corpus,
+  filtered to state delegated or deferred; add the brownfield carriers —
+  `status: delegated` nodes as whole-node queue items, and (behind an explicit
+  opt-in flag, since it sweeps the entire AI-authored corpus) the
+  delegated-by-default heuristic for unstamped content on AI-authored nodes.
+- Rank ordering reuses the /exetasis priority function's axes (node rank,
+  graph position, timestamp) with the category axis serving this queue's
+  purpose: delegated first, deferred after (deferred items are primarily
+  /exetasis's; this lane touches them only where execution-grade overrule is
+  warranted).
+- Mounts are excluded from the queue; mount-hosted decision stamps are
+  reported through the same defect channel tactic-node-review-skill's plan
+  defines (`mountDispositionDefects`), never ranked.
+
+## Unit 3 — the batch review loop and overrule mechanics
+
+**Recommended model:** opus
+
+Dependencies: Unit 2.
+
+- Per queued disposition: quality review against the digest's integrity lenses
+  and the node's ancestry projection
+  (`packages/intentionsutil/scripts/node-ancestry.ts`). Outcomes: leave
+  (recorded pass), overrule, or flag-to-/exetasis (for findings adjacent to
+  ratified content or carrying capture risk).
+- Overrule writes follow the overrule algebra recorded on
+  strategy-explicit-intent (2026-08-31): ANY AI overrule — of a delegated or a
+  deferred disposition — produces a DEFERRED disposition, stamped
+  `(decision: deferred, delegation-anthropic-claude, YYYY-MM-DD)`, entering
+  the /exetasis queue; the superseded stamp survives in the record
+  (clarifications append, never rewrite).
+- The batch's findings land as dated clarifications and drafted tactic nodes
+  via the write-node.ts → graph-commit path. If the batch emits an
+  author-facing report, repoint
+  `intentions/tactic-owner-review-reading-pass-a.md:80` item 7 at it (the
+  stale /align-audit-report pointer recorded in this node's 2026-08-30
+  clarification).
+
+## Reuse
+
+- `packages/intentionsutil/src/digest.ts` (`renderTables`, 7 check tables) and
+  `packages/intentionsutil/scripts/graph-digest.ts` — read, never
+  reimplement.
+- tactic-node-review-skill's landed artifacts: `reviewFingerprint`,
+  `parseDispositions`, the priority-function axes, `mountDispositionDefects`.
+- `packages/intentionsutil/scripts/node-ancestry.ts` — ancestry projection for
+  review context.
+- `packages/intentionsutil/scripts/read-sensors.ts` `readDelegationRecords` —
+  reused only to confirm mount exclusion and for the defect channel, never as
+  the queue.
+- `.claude/skills/align-tactics/references/autonomy.md` — the park model the
+  skill inherits.
+
+## Verification
+
+```verify
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+Manual checks: run the skill once over the live store — the queue must contain
+no `kind: delegation` records and no ratified-stamped dispositions; an
+overrule write must produce a deferred stamp with the superseded stamp still
+present; the digest reading must appear in the run report as
+strategy-graph-integrity's sensor value.

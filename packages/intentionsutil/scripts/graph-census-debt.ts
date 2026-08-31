@@ -9,9 +9,9 @@
 //   - owed prunes    — done-but-present nodes (phase === "done", still in the
 //                      store, not yet pruned by the reconciler). This is the
 //                      dominant, network-free signal the tick +3 (2026-07-10)
-//                      observation flagged as re-accumulating. Evaluation
-//                      finding ledger entries (attributes.ledger_entry) are
-//                      EXEMPT: a retired entry keeps its summary metrics on
+//                      observation flagged as re-accumulating. Nodes holding
+//                      measurements (a non-empty attributes.measured_impact)
+//                      are EXEMPT: such a node keeps its summary metrics on
 //                      purpose, so it is done-but-present forever by design.
 //   - unverified PR-merges — nodes carrying execution.pr whose PR is merged but
 //                      the node is not yet absorbed to done. Computed only when
@@ -67,7 +67,7 @@
 // this tool's answer is identical cached or not, and an unset or empty var is
 // byte-for-byte today's `listNodes` call.
 //
-// Nothing else changes: computeDebt, the isLedgerEntry exemption, decideCensus,
+// Nothing else changes: computeDebt, the hasMeasurements exemption, decideCensus,
 // the threshold/latch logic and the JSON output shape are untouched.
 
 import { readFileSync } from "node:fs";
@@ -75,7 +75,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listNodesCached } from "../src/store-cache.js";
 import { isWaitNode } from "../src/waits.js";
-import { isLedgerEntry } from "../src/schema.js";
+import { hasMeasurements } from "../src/schema.js";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
 
 const CENSUS_SERVES = "strategy-graph-native-dispatch";
@@ -187,10 +187,10 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
   const openCensus: string[] = [];
 
   for (const n of nodes) {
-    // The owed-prune exemption for evaluation finding ledger entries.
+    // The owed-prune exemption for nodes that hold measurements.
     // `donePresent` is not a report — it is the batch a census drains with
-    // `graph-commit --prune <id>`, which deletes the node file outright. A
-    // ledger entry retires to `phase: "done"` while KEEPING its summary
+    // `graph-commit --prune <id>`, which deletes the node file outright. Such a
+    // node retires to `phase: "done"` while KEEPING its summary
     // metrics, precisely so a later recurrence resumes the occurrence count
     // instead of restarting at 1 (intentions/tactic-eval-finding-ledger.md,
     // "Durability"); pruning it sends those metrics to git history where no
@@ -199,11 +199,16 @@ export function computeDebt(nodes: IntentionNode[], mergedIds: Set<string>): Cen
     // is content-blind (it only checks the file is already deleted on disk and
     // existed in HEAD), so nothing downstream can honour a convention the
     // query does not encode. Same shape as isCensusNode's exclusion below.
+    // The predicate keys on the MEASUREMENTS, not on a class marker: it was
+    // `isLedgerEntry` (attributes.ledger_entry === true) until PR4 Unit 1, so
+    // it exempted only one producer's records and depended on that producer
+    // writing the marker. Every node holding measurements is now exempt,
+    // whoever wrote it and whatever namespace it is in.
     // The live-re-arm exemption above (isLiveRearmTarget) is the same shape,
     // for a different reason: a released WAIT node re-arms in place, so
     // pruning it in the released window destroys its attempt counter and the
     // hold it applies.
-    if (n.phase === "done" && !isLedgerEntry(n) && !isLiveRearmTarget(n)) {
+    if (n.phase === "done" && !hasMeasurements(n) && !isLiveRearmTarget(n)) {
       donePresent.push(n.id);
     }
 

@@ -416,9 +416,11 @@ three things:
 
 **It records; it never executes.** Every finding lands in the graph in this same
 session, through the same ledger the per-phase evaluator uses
-(`dispatch-eval-finding`: `--list` first, judge whether the finding in hand IS
-an existing entry, then record against that slug) — one entry per distinct
-finding, never one per occurrence. Findings left in session prose only are a
+(`dispatch-eval-finding`: `--list --like '<the finding statement>'` first —
+always with the `--like`, since bare `--list` prints the whole ~490-row
+candidate population and the bound is what keeps this read cheap — judge whether
+the finding in hand IS an existing entry, then record against that slug) — one
+entry per distinct finding, never one per occurrence. Findings left in session prose only are a
 defect: the graph is the sole tracker, so an unrecorded finding is
 indistinguishable from one never made.
 
